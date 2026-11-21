@@ -3,6 +3,8 @@
 // after Cancel, when the wait runs out) and never says "That took too long" then; the pilot email goes from the
 // address he signs in with (Gmail's compose page for a Gmail address); the steps tick themselves when they are really
 // known, so the one vermilion is the real next step; and a failed read says so on the Set up posting card.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -166,8 +168,8 @@ describe("the steps tick themselves when they are really known (gap 3)", () => {
     expect(host.querySelector(".setup-head")!.textContent).toContain("1/3");
     await click(button("I added them"));
     expect(vermilion()).toEqual(["Connect Content Rewards"]);
-    // The email went: the card never pushes him to send it again.
-    expect(pilot().querySelector("[data-cr='open-email']")).toBeNull();
+    // The email went: the card never pushes him to send it again (Open email stays, glass, for sending it again).
+    expect(pilot().querySelector("[data-cr='open-email']")!.className).toContain("btn--glass");
     expect(pilot().querySelector("[data-cr='login']")).toBeNull();
     expect(pilot().textContent).toContain("Content Rewards will email you back.");
     expect(button("I sent it")).toBeUndefined();
@@ -548,6 +550,200 @@ describe("the pilot email goes from his Content Rewards login (gap 2)", () => {
     expect(new URL(lib.pilotOpen("a+b@gmail.com", evil).href).searchParams.get("to")).toBe("support@contentrewards.com");
     expect(lib.pilotOpen("a+b@gmail.com", null).href).toContain("authuser=a%2Bb%40gmail.com");
     expect(lib.pilotOpen("", null)).toEqual({ href: guide.pilotMailto(), gmail: false });
+  });
+});
+
+describe("the Connect leftovers (final check of the Connect fixes)", () => {
+  const SENT = "2026-11-21T17:25:26Z";
+  const type = async (input: HTMLInputElement, value: string) => {
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      set.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => void input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  };
+  const open = () => pilot().querySelector<HTMLAnchorElement>("[data-cr='open-email']");
+
+  it("after I sent it, Open email stays where it was, glass, from his Gmail; nothing pushes him to send it again", async () => {
+    localStorage.setItem("cf.crLoginEmail", "faze.clips@gmail.com");
+    fakeApi(conn({ lastResult: "not_allowed", stepsDone: ["ready-account"] }));
+    await draw(<CrSetup />);
+    expect(vermilion()).toEqual(["Open email (opens Gmail in a new tab)"]);
+    await click(button("I sent it"));
+    expect(pilot().textContent).toContain("Content Rewards will email you back.");
+    const a = open()!;
+    expect(a.tagName).toBe("A");
+    expect(a.className).toContain("btn--glass");
+    expect(a.className).not.toContain("btn--primary");
+    expect(a.hasAttribute("data-help-clear")).toBe(false);
+    const u = new URL(a.getAttribute("href")!);
+    expect(`${u.origin}${u.pathname}`).toBe("https://mail.google.com/mail/");
+    expect(u.searchParams.get("authuser")).toBe("faze.clips@gmail.com");
+    expect(u.searchParams.get("to")).toBe("support@contentrewards.com");
+    expect(a.getAttribute("target")).toBe("_blank");
+    // No email question, no "Send it from", no Change, no I sent it, and Open email is never the vermilion.
+    expect(pilot().querySelector("input[type='email']")).toBeNull();
+    expect(pilot().querySelector("[data-cr='login']")).toBeNull();
+    expect(pilot().textContent).not.toContain("Send it from");
+    expect(button("Change")).toBeUndefined();
+    expect(button("I sent it")).toBeUndefined();
+    expect(vermilion().some((v) => v.startsWith("Open email"))).toBe(false);
+    // It stays above the email's own line, where it was before sending.
+    const actions = a.closest(".gstep__actions")!;
+    expect(actions.compareDocumentPosition(pilot().querySelector(".cr-email")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("after sending, any other address keeps the mailto with the bold Check the From line", async () => {
+    localStorage.setItem("cf.crLoginEmail", "faze.clips@outlook.com");
+    fakeApi(conn({ lastResult: "not_allowed", stepsDone: ["ready-account"], pilotSentAt: SENT }));
+    await draw(<CrSetup />);
+    expect(open()!.getAttribute("href")).toBe(guide.pilotMailto());
+    expect(open()!.className).toContain("btn--glass");
+    expect(open()!.getAttribute("target")).toBeNull();
+    expect([...pilot().querySelectorAll("strong")].map((x) => x.textContent)).toEqual(["Check the From line says faze.clips@outlook.com."]);
+    expect(pilot().textContent).not.toContain("Send it from");
+    expect(pilot().querySelector("input[type='email']")).toBeNull();
+  });
+
+  it("after sending from another device (no email kept here): Open email asks for the box only when he taps it", async () => {
+    fakeApi(conn({ lastResult: "not_allowed", stepsDone: ["ready-account"], pilotSentAt: SENT }));
+    await draw(<CrSetup />);
+    expect(open()!.tagName).toBe("BUTTON");
+    expect(open()!.hasAttribute("href")).toBe(false);
+    expect(open()!.className).toContain("btn--glass");
+    expect(pilot().querySelector("input[type='email']")).toBeNull();
+    expect(pilot().textContent).not.toContain(CR_LOGIN_FIRST);
+    await click(open());
+    const box = pilot().querySelector<HTMLInputElement>("input[type='email']")!;
+    expect(document.activeElement).toBe(box);
+    expect(pilot().querySelector("[role='alert']")!.textContent).toBe(CR_LOGIN_FIRST);
+    // The next step is still step 2's Open, never the email again.
+    expect(vermilion()).toEqual(["Open Content Rewards settings (opens in a new tab)"]);
+    await type(box, "faze.clips@gmail.com");
+    expect(open()!.tagName).toBe("A");
+    expect(new URL(open()!.getAttribute("href")!).searchParams.get("authuser")).toBe("faze.clips@gmail.com");
+    expect(open()!.className).toContain("btn--glass");
+    // Still no "Send it from" line or Change after sending; the box folds once Open email opens it.
+    expect(pilot().textContent).not.toContain("Send it from");
+    expect(button("Change")).toBeUndefined();
+    host.addEventListener("click", (e) => e.preventDefault());
+    await click(open());
+    expect(pilot().querySelector("input[type='email']")).toBeNull();
+    expect(pilot().querySelector("[data-cr='login']")).toBeNull();
+    expect(button("Change")).toBeUndefined();
+    expect(open()!.className).toContain("btn--glass");
+  });
+
+  it("he tapped Open email before typing, then sent it from Gmail: no email question after I sent it", async () => {
+    fakeApi(conn({ lastResult: "not_allowed", stepsDone: ["ready-account"] }));
+    await draw(<CrSetup />);
+    await click(open());
+    expect(pilot().querySelector("[role='alert']")!.textContent).toBe(CR_LOGIN_FIRST);
+    await type(pilot().querySelector<HTMLInputElement>("input[type='email']")!, "faze.clips@gmail.com");
+    host.addEventListener("click", (e) => e.preventDefault());
+    await click(open());
+    await click(button("I sent it"));
+    expect(pilot().textContent).toContain("Content Rewards will email you back.");
+    expect(pilot().querySelector("input[type='email']")).toBeNull();
+    expect(pilot().querySelector("[data-cr='login']")).toBeNull();
+    expect(pilot().querySelector("[role='alert']")).toBeNull();
+    expect(pilot().textContent).not.toContain("Send it from");
+    expect(button("Change")).toBeUndefined();
+    expect(open()!.tagName).toBe("A");
+    expect(open()!.className).toContain("btn--glass");
+    expect(new URL(open()!.getAttribute("href")!).searchParams.get("authuser")).toBe("faze.clips@gmail.com");
+  });
+
+  it("he tapped Open email before typing, typed another address, then I sent it: no box, only the Check the From line", async () => {
+    fakeApi(conn({ lastResult: "not_allowed", stepsDone: ["ready-account"] }));
+    await draw(<CrSetup />);
+    await click(open());
+    await type(pilot().querySelector<HTMLInputElement>("input[type='email']")!, "faze.clips@outlook.com");
+    await click(button("I sent it"));
+    expect(pilot().querySelector("input[type='email']")).toBeNull();
+    expect(pilot().textContent).not.toContain(CR_LOGIN_ASK);
+    expect(pilot().textContent).not.toContain("Send it from");
+    expect(button("Change")).toBeUndefined();
+    expect([...pilot().querySelectorAll("strong")].map((x) => x.textContent)).toEqual(["Check the From line says faze.clips@outlook.com."]);
+    expect(open()!.getAttribute("href")).toBe(guide.pilotMailto());
+    expect(open()!.className).toContain("btn--glass");
+  });
+
+  it("he tapped Open email before typing, then I sent it with no email typed: no box until he taps Open email again", async () => {
+    fakeApi(conn({ lastResult: "not_allowed", stepsDone: ["ready-account"] }));
+    await draw(<CrSetup />);
+    await click(open());
+    expect(pilot().querySelector("[role='alert']")!.textContent).toBe(CR_LOGIN_FIRST);
+    await click(button("I sent it"));
+    expect(pilot().querySelector("input[type='email']")).toBeNull();
+    expect(pilot().querySelector("[role='alert']")).toBeNull();
+    expect(pilot().textContent).not.toContain(CR_LOGIN_FIRST);
+    await click(open());
+    const box = pilot().querySelector<HTMLInputElement>("input[type='email']")!;
+    expect(document.activeElement).toBe(box);
+    expect(pilot().querySelector("[role='alert']")!.textContent).toBe(CR_LOGIN_FIRST);
+  });
+
+  it("Change is a glass button, at least 48 px tall, that shows the box again", async () => {
+    localStorage.setItem("cf.crLoginEmail", "faze.clips@gmail.com");
+    fakeApi(conn({ lastResult: "not_allowed", stepsDone: ["ready-account"] }));
+    await draw(<CrSetup />);
+    const change = button("Change")!;
+    expect(change.className).toContain("btn--glass");
+    expect(change.className).toContain("cr-login__change");
+    expect(change.className).not.toContain("text-link");
+    // Outside the bold line, so the box's description is only "Send it from …".
+    expect(change.closest("p")).toBeNull();
+    const css = readFileSync(join(import.meta.dirname, "..", "src", "styles", "contentrewards.css"), "utf8");
+    const at = css.indexOf("\n.cr-login__change {");
+    expect(at).toBeGreaterThanOrEqual(0);
+    const px = Number(/--btn-h:\s*(\d+)px/.exec(css.slice(at, css.indexOf("}", at)))?.[1]);
+    expect(px).toBeGreaterThanOrEqual(48);
+    await click(change);
+    expect(pilot().querySelector<HTMLInputElement>("input[type='email']")!.value).toBe("faze.clips@gmail.com");
+    expect(button("Change")).toBeUndefined();
+  });
+
+  it("while Connect waits for the browser (before the question shows) nothing is the vermilion", async () => {
+    door();
+    fakeApi(conn());
+    await draw(<CrSetup />);
+    expect(vermilion()).toEqual(["Open Content Rewards (opens in a new tab)"]);
+    await click(host.querySelector('[data-step="connect"] .gstep__head'));
+    await click(button("Connect Content Rewards"));
+    expect(host.textContent).toContain("Waiting for you in the browser…");
+    expect(host.querySelector("[data-cr='ask']")).toBeNull();
+    expect(vermilion()).toEqual([]);
+    // Cancel: the question, still no vermilion; Something else: Connect is.
+    await click(button("Cancel"));
+    expect(vermilion()).toEqual([]);
+    await click(button(CR_ASK.other));
+    expect(vermilion()).toEqual(["Connect Content Rewards"]);
+  });
+
+  it("while Connect waits, the pilot email's Open email is glass too", async () => {
+    door();
+    fakeApi(conn({ lastResult: "not_allowed", stepsDone: ["ready-account", "ready-socials"] }));
+    await draw(<CrSetup />);
+    expect(vermilion()).toEqual(["Open email"]);
+    await click(host.querySelector('[data-step="connect"] .gstep__head'));
+    await click(button("Connect Content Rewards"));
+    expect(host.textContent).toContain("Waiting for you in the browser…");
+    expect(vermilion()).toEqual([]);
+    expect(open()!.className).toContain("btn--glass");
+  });
+
+  it("a good answer after the wait: the vermilion comes back (Add a campaign)", async () => {
+    door([{ status: "waiting" }, { status: "done", code: "c0de", state: "s1" }]);
+    fakeApi(conn({ stepsDone: ["ready-account", "ready-socials"] }));
+    await draw(<CrSetup />);
+    await click(button("Connect Content Rewards"));
+    expect(vermilion()).toEqual([]);
+    await act(async () => void (await new Promise((r) => setTimeout(r, 700))));
+    await flush();
+    expect(host.querySelector(".result-card")!.textContent).toContain("Content Rewards is connected!");
+    expect(vermilion()).toEqual(["Add a campaign"]);
   });
 });
 
