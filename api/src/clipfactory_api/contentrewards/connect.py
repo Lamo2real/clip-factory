@@ -172,6 +172,7 @@ def finish(  # noqa: PLR0915 (the steps of §38.9 Connect finish, in order)
         tools = client.tools()
     except CrError as e:
         log("info", "cr.connect_read_failed", code=e.code)
+        oauth.revoke(deps.net, cid, fresh["refreshToken"])  # this sign-in is never kept: end it at CR too
         if e.code == "permission_denied":
             return _result(deps, user_id, now, "not_allowed")
         return _result(deps, user_id, now, "cr_down" if e.retryable else "error")

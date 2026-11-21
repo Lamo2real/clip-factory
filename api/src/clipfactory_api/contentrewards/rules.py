@@ -230,6 +230,11 @@ def brief_text(item: Mapping[str, Any]) -> str:
     return "\n\n".join(p for p in parts if p.strip())
 
 
+def read_input(item: Mapping[str, Any]) -> str:
+    """What a rules read reads from the item: the brief and the owner's pasted rules (its ``briefHash`` covers both)."""
+    return brief_text(item) + "\n" + str(item.get("pastedRules") or "")
+
+
 def blocks(item: Mapping[str, Any], docs: Iterable[tuple[str, str]] = ()) -> list[tuple[str, str]]:
     """``[(label, raw text)]`` in order: name, brand, brief, pasted rules, linked docs, toggles."""
     out = [("campaign_name", str(item.get("name") or "")), ("brand", str(item.get("brand") or ""))]
@@ -385,14 +390,14 @@ def validate(  # noqa: PLR0915 (every rule of §38.10, in order)
     hashtags: list[str] = []
     for tag in _list(src.get("requiredHashtags")):
         text = _text(tag, 61)
-        if not text or not HASHTAG.match(text) or not verbatim(text) or len(hashtags) >= MAX_HASHTAGS:
+        if not text or not HASHTAG.fullmatch(text) or not verbatim(text) or len(hashtags) >= MAX_HASHTAGS:
             doubt(tag)
         elif text not in hashtags:
             hashtags.append(text)
     tags: list[str] = []
     for tag in _list(src.get("requiredTags")):
         text = _text(tag, 61)
-        if not text or not TAG.match(text) or not verbatim(text) or len(tags) >= MAX_TAGS:
+        if not text or not TAG.fullmatch(text) or not verbatim(text) or len(tags) >= MAX_TAGS:
             doubt(tag)
         elif text not in tags:
             tags.append(text)
@@ -433,7 +438,7 @@ def validate(  # noqa: PLR0915 (every rule of §38.10, in order)
     on_screen = disclosure.get("onScreen")
     out["disclosure"] = {
         "caption": caption if caption in DISCLOSURES else "#Ad",
-        "onScreen": on_screen if isinstance(on_screen, str) and ON_SCREEN.match(on_screen) else DEFAULT_ON_SCREEN,
+        "onScreen": on_screen if isinstance(on_screen, str) and ON_SCREEN.fullmatch(on_screen) else DEFAULT_ON_SCREEN,
         "spoken": _bool(disclosure.get("spoken")),
     }
 

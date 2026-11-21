@@ -69,7 +69,8 @@ def _cr_tick(cr: Callable[[], Any], now: Any, budget: float) -> None:
             return
         from ..contentrewards import poll
 
-        cr_deps.remaining = lambda: budget + CR_MARGIN_SECONDS
+        # Counts down from this tick's start: the refresh guard (≥ 20 s left) must see the time really left.
+        cr_deps.until(budget + CR_MARGIN_SECONDS)
         poll.run_tick(cr_deps, now, budget)
     except Exception as e:  # the platform poll's work is done; CR checking never fails the tick
         log("error", "stats.cr_tick_failed", error=type(e).__name__)
@@ -87,7 +88,7 @@ def _content_rewards(event: dict[str, Any], cr: Callable[[], Any], now: Any) -> 
     from ..contentrewards import poll
 
     deadline = time.monotonic() + CR_OWNER_SECONDS
-    cr_deps.remaining = lambda: max(0.0, deadline - time.monotonic() + CR_MARGIN_SECONDS)
+    cr_deps.until(CR_OWNER_SECONDS + CR_MARGIN_SECONDS)
     report = poll.run_owner(cr_deps, user_id, now, what=str(what), deadline=deadline)
     return {"action": "contentrewards", "report": report}
 

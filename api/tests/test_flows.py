@@ -1196,3 +1196,20 @@ def test_clip_flow_a_cr_step_that_raises_still_settles_the_clip(store: db.Store,
         "settle-clip",
         "metrics",
     ]
+
+
+def test_the_clip_flow_gives_content_rewards_its_real_time_left() -> None:
+    """§38.9 step 1 in cf-prod-clip-flow: the refresh guard reads this invocation's time left from Lambda."""
+    from types import SimpleNamespace
+
+    from clipfactory_api.flows import clip_flow
+
+    cr = SimpleNamespace(remaining=lambda: 900.0)
+    context = SimpleNamespace(lambda_context=SimpleNamespace(get_remaining_time_in_millis=lambda: 15_000))
+    clip_flow._time_left(SimpleNamespace(cr=cr), context)  # type: ignore[arg-type]
+    assert cr.remaining() == 15.0
+    off = SimpleNamespace(cr=None)
+    clip_flow._time_left(off, context)  # type: ignore[arg-type]  # switched off: nothing to set
+    plain = SimpleNamespace(remaining=lambda: 900.0)
+    clip_flow._time_left(SimpleNamespace(cr=plain), SimpleNamespace())  # type: ignore[arg-type]  # no Lambda context
+    assert plain.remaining() == 900.0

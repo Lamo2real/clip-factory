@@ -70,14 +70,22 @@ def reset_limit() -> None:
     _reads.clear()
 
 
-def _get(net: Net, url: str, accept: str) -> HttpResponse:
+def _get(
+    net: Net, url: str, accept: str, *, end: float | None = None, monotonic: Callable[[], float] = time.monotonic
+) -> HttpResponse:
+    """``end``: a monotonic time every hop must finish by (a job start's 8 s, §38.10); else 6 s a hop."""
     current = url
     for _ in range(MAX_REDIRECTS + 1):
         if not _allowed(current):
             raise PublicDown("redirect off contentrewards.com")
+        timeout = TIMEOUT
+        if end is not None:
+            timeout = min(TIMEOUT, end - monotonic())
+            if timeout < 1.0:
+                raise PublicDown("no time")
         request = HttpRequest("GET", current, {"Accept": accept, "User-Agent": config.USER_AGENT})
         try:
-            response = net(request, TIMEOUT)
+            response = net(request, timeout)
         except NetworkError as e:
             raise PublicDown("network") from e
         if response.status in {301, 302, 303, 307, 308}:
@@ -127,13 +135,21 @@ def strip(raw: Mapping[str, Any]) -> Item:
     return out
 
 
-def read(net: Net, uuid: str, *, monotonic: Callable[[], float] = time.monotonic) -> Item:
+def read(
+    net: Net,
+    uuid: str,
+    *,
+    monotonic: Callable[[], float] = time.monotonic,
+    end: float | None = None,
+    open_graph: bool = True,
+) -> Item:
     """The stripped public JSON; ``PublicGone`` on CR's 404; ``PublicDown`` when neither the JSON nor the page's
-    Open Graph line could be read. An Open Graph answer is marked ``{"og": true}``."""
+    Open Graph line could be read. An Open Graph answer is marked ``{"og": true}``. ``end`` (monotonic) bounds the
+    whole read; ``open_graph=False`` skips the page fallback (a job start keeps the stored copy instead)."""
     if _limited(monotonic):
         raise PublicDown("limited")
     try:
-        response = _get(net, config.PUBLIC_JSON.format(uuid=uuid), "application/json")
+        response = _get(net, config.PUBLIC_JSON.format(uuid=uuid), "application/json", end=end, monotonic=monotonic)
     except PublicDown:
         response = None
     if response is not None:
@@ -146,6 +162,8 @@ def read(net: Net, uuid: str, *, monotonic: Callable[[], float] = time.monotonic
             data = body.get("data") if isinstance(body.get("data"), Mapping) else body
             if isinstance(data, Mapping) and data.get("name"):
                 return strip(data)
+    if not open_graph:
+        raise PublicDown("no json")
     found = _open_graph(net, uuid)
     if found is None:
         raise PublicDown("no json and no page")

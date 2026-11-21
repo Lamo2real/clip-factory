@@ -39,7 +39,17 @@ class CrDeps:
     _lists: dict[str, tuple[float, list[dict[str, Any]], bool]] = field(default_factory=dict, repr=False)
 
     def tokens(self) -> CrTokens:
-        return CrTokens(self.store, self.secrets, self.net, self.clock, self.sleep, self.remaining)
+        # Late-bound: an McpClient cached for the container keeps this CrTokens, while each invocation sets its own
+        # ``remaining`` (the time left of *that* invocation), so the refresh guard always reads the current one.
+        return CrTokens(self.store, self.secrets, self.net, self.clock, self.sleep, self.time_left)
+
+    def time_left(self) -> float:
+        return self.remaining()
+
+    def until(self, seconds: float) -> None:
+        """This invocation has ``seconds`` left from now (``remaining`` counts down from them)."""
+        deadline = self.monotonic() + max(0.0, seconds)
+        self.remaining = lambda: max(0.0, deadline - self.monotonic())
 
     def mcp(self, user_id: str) -> McpClient:
         """One client per owner per container (``initialize`` once: the server is sessionless)."""

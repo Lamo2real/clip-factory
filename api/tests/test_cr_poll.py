@@ -383,3 +383,84 @@ def test_typeid_is_verified_once(world: Any) -> None:
     fake.answer("list_my_campaigns", page([listed_campaign(access="open")]))
     poll.membership(deps, USER, NOW)
     assert (deps.store.get(db.user_pk(USER), db.CRCONN_SK) or {})["typeidVerified"] is True
+
+
+# --- the review's fixes ---------------------------------------------------------------------------------------------
+
+
+def test_checks_keep_working_after_the_stats_action_in_a_warm_container(world: Any) -> None:
+    """Connect finish's stats action makes the cached McpClient; the ticks after it (in the same container, with
+    the access token due again) still refresh: the time left is each invocation's own."""
+    deps, fake, clock = world
+    no_money(fake)
+    event = {"action": "contentrewards", "userId": USER, "what": "money"}
+    assert stats_handler.handle(event, _stats_deps(), cr=lambda: deps)["report"]["money"] == "read"
+    clock.now += timedelta(minutes=15)  # the 75 s of that invocation are long over; the token is due
+    deps.store.update(db.user_pk(USER), db.CRMONEY_SK, {"nextCheckAt": iso(clock.now - timedelta(minutes=1))})
+    forms = len(fake.token_forms())
+    started = iso(clock.now)
+    tick_deps = _stats_deps()
+    tick_deps.clock = clock
+    stats_handler.handle({"source": "aws.events"}, tick_deps, cr=lambda: deps)
+    assert len(fake.token_forms()) == forms + 1  # refreshed, not "platform_down"
+    assert money.load(deps.store, USER)["updatedAt"] >= started  # the money was read again
+
+
+def test_a_cleared_hold_stays_cleared(world: Any) -> None:
+    deps, fake, _clock = world
+    seed_campaign(
+        deps.store,
+        USER,
+        NOW,
+        held={"at": iso(NOW - timedelta(days=2)), "pending": 3},
+        nextCheckAt=iso(NOW - timedelta(minutes=1)),
+    )
+    fake.answer("list_my_campaigns", page([listed_campaign(access="open")]))
+    poll.membership(deps, USER, NOW)
+    item = deps.store.get(db.user_pk(USER), db.campaign_sk(UUID)) or {}
+    assert "held" not in item
+    assert item["heldClearedAt"] == iso(NOW)
+
+
+def test_a_stuck_read_is_failed_only_if_it_is_still_that_read(world: Any) -> None:
+    deps, _fake, _clock = world
+    seed_campaign(deps.store, USER, NOW, rulesState="reading", readStartedAt=iso(NOW - timedelta(minutes=4)))
+    stale = poll.campaigns.all_for(deps.store, USER)
+    newer = iso(NOW)
+    deps.store.update(db.user_pk(USER), db.campaign_sk(UUID), {"readStartedAt": newer})  # a new read started
+    original = poll.campaigns.all_for
+    poll.campaigns.all_for = lambda *_a, **_k: stale  # type: ignore[assignment]
+    try:
+        assert poll.time_only(deps, USER, NOW)["failedReads"] == 0
+    finally:
+        poll.campaigns.all_for = original  # type: ignore[assignment]
+    assert (deps.store.get(db.user_pk(USER), db.campaign_sk(UUID)) or {})["rulesState"] == "reading"
+
+
+def test_a_money_read_never_undoes_a_seen_celebration_or_the_refresh_mark(world: Any) -> None:
+    deps, fake, _clock = world
+    deps.store.put(
+        {
+            "pk": db.user_pk(USER),
+            "sk": db.CRMONEY_SK,
+            "type": "crmoney",
+            "userId": USER,
+            "firstReadDone": True,
+            "paidTotalCents": 500,
+            "paidMark": {"id": "pay_1", "createdAt": iso(NOW)},
+            "celebrations": [{"key": "money:pay_1", "kind": "first_money", "text": "Your first money!"}],
+        }
+    )
+
+    def balance(_args: dict[str, Any]) -> dict[str, Any]:  # meanwhile: the owner saw it and tapped Refresh
+        assert money.seen(deps, USER, "money:pay_1")
+        deps.store.update(db.user_pk(USER), db.CRMONEY_SK, {"lastManualAt": iso(NOW)})
+        return {"available": usd(0), "withdrawal_pending": usd(0), "as_of": iso(NOW)}
+
+    fake.answer("get_my_balance", balance)
+    fake.answer("list_my_payouts", page([payout("pay_2", 300), payout("pay_1", 500)]), page([]))
+    money.read(deps, USER, NOW)
+    item = money.load(deps.store, USER)
+    assert [c["key"] for c in item["celebrations"]] == ["money:pay_2"]  # the new one only
+    assert item["lastManualAt"] == iso(NOW)
+    assert item["paidTotalCents"] == 800

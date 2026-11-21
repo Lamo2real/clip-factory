@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 import urllib.parse
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from . import config, fetch
@@ -63,6 +63,19 @@ def brand_key(user_id: str, uuid: str, ext: str) -> str:
 
 def campaign_prefix(user_id: str, uuid: str) -> str:
     return f"campaigns/{user_id}/{uuid}/"
+
+
+def campaign_files(user_id: str, uuid: str, item: Mapping[str, Any]) -> list[str]:
+    """Every file a campaign can have, named without listing the bucket (the api has no ``s3:ListBucket`` on
+    ``campaigns/``): its logo and brand picture, the current logo revision and an upload not finished yet. Each new
+    logo deletes the one before it, so older revisions are already gone."""
+    prefix = campaign_prefix(user_id, uuid)
+    rev = int(item.get("logoRev") or 0)
+    keys = {str(item.get(name)) for name in ("logoKey", "brandKey") if isinstance(item.get(name), str)}
+    for ext in CONTENT_TYPES:
+        keys.add(brand_key(user_id, uuid, ext))
+        keys.update(upload_key(user_id, uuid, r, ext) for r in (rev, rev + 1) if r > 0)
+    return sorted(k for k in keys if k.startswith(prefix))
 
 
 def job_logo_key(job_id: str, ext: str) -> str:

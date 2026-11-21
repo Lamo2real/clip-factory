@@ -756,6 +756,16 @@ def get_deps(factory: Callable[[], ClipFlowDeps] = _from_env) -> ClipFlowDeps:
     return _deps
 
 
+def _time_left(deps: ClipFlowDeps, context: Any) -> None:
+    """The CR refresh guard (≥ 20 s of the Lambda left, §38.9) reads this invocation's real time left."""
+    lambda_context = getattr(context, "lambda_context", None)
+    remaining = getattr(lambda_context, "get_remaining_time_in_millis", None)
+    if deps.cr is not None and callable(remaining):
+        deps.cr.remaining = lambda: max(0.0, float(remaining()) / 1000.0)
+
+
 @durable_execution
 def handler(event: Any, context: DurableContext) -> dict[str, Any]:
-    return run_clip_flow(context, event, get_deps())
+    deps = get_deps()
+    _time_left(deps, context)
+    return run_clip_flow(context, event, deps)

@@ -43,6 +43,8 @@ def prepare(  # noqa: PLR0917 (one call site: the job route)
     hash_before = item.get("briefHash")
     conn = connection.load(deps.store, user_id)
     note = None if _fresh(deps, user_id, item, conn, now) else NOT_CHECKED
+    if campaigns.retry_read(item, now):
+        campaigns.start_read(deps, user_id, item, now)  # a failed (or stuck) read is tried again: 409 below
     accepted = sorted(
         {*(str(c) for c in item.get("anyway") or []), *(str(c) for c in anyway or [])}
         & (gates.SOFT - {"not_connected"})
@@ -80,22 +82,33 @@ def prepare(  # noqa: PLR0917 (one call site: the job route)
 
 
 def _fresh(deps: CrDeps, user_id: str, item: Item, conn: Mapping[str, Any], now: datetime) -> bool:
-    """A job start reads CR's list and the public JSON (an owner action). False when CR could not be read: the job
-    starts with the stored rules and status (§38.10)."""
+    """A job start reads the public JSON and CR's list (an owner action), at most 8 s together (§38.10). False when
+    CR could not be read in that time: the job starts with the stored rules and status ("Couldn't check the campaign
+    just now.")."""
+    end = deps.monotonic() + config.JOB_CHECK_SECONDS
     ok = True
     try:
-        campaigns.apply_public(item, public.read(deps.net, str(item["campaignId"]), monotonic=deps.monotonic), now)
+        pub = public.read(deps.net, str(item["campaignId"]), monotonic=deps.monotonic, end=end, open_graph=False)
+        campaigns.apply_public(item, pub, now)
     except public.PublicGone:
         item["state"] = "ended"
     except public.PublicDown:
         ok = False
-    if connection.signed_in(conn) and not conn.get("blocked"):
+    if not connection.signed_in(conn) or conn.get("blocked"):
+        return ok
+    found = None
+    left = end - deps.monotonic()
+    if left >= config.JOB_LIST_MIN_SECONDS:
         try:
-            rows, complete = campaigns.list_campaigns(deps, user_id, fresh=True)
+            with deps.mcp(user_id).within(left):
+                found = campaigns.list_campaigns(deps, user_id, fresh=True)
         except CrError as e:
             log("info", "cr.job_check_failed", code=e.code)
-            return False
-        campaigns.settle_membership(item, conn, rows, complete, now)
-        if campaigns.needs_read(item):
-            campaigns.start_read(deps, user_id, item, now)
+    if found is None:
+        found = campaigns.cached_list(deps, user_id)  # read in the last 2 minutes: still fresh enough
+    if found is None:
+        return False
+    campaigns.settle_membership(item, conn, found[0], found[1], now)
+    if campaigns.needs_read(item):
+        campaigns.start_read(deps, user_id, item, now)
     return ok

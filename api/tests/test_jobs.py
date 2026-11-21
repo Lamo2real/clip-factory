@@ -693,3 +693,49 @@ def test_campaign_job_unknown_campaign_and_cr_down(call: Call, cr_on: Any) -> No
     status, body = call("POST", "/v1/jobs", {"source": VIDEO, "campaignId": CAMPAIGN_ID})
     assert status == 201, body
     assert body["job"]["campaignNote"] == "Couldn't check the campaign just now."
+
+
+def test_campaign_job_tries_a_failed_rules_read_again(call: Call, cr_on: Any) -> None:
+    _ready(cr_on, rulesState="failed")
+    status, body = call("POST", "/v1/jobs", {"source": VIDEO, "campaignId": CAMPAIGN_ID})
+    assert (status, body["error"]["retryAfter"]) == (409, 30)
+    assert body["error"]["message"] == "Reading the rules… (about 30 seconds)"
+    assert ("read_campaign", (USER, CAMPAIGN_ID)) in cr_on.invoker.calls
+    assert _campaign_item(cr_on)["rulesState"] == "reading"
+
+
+class _SlowCR:
+    """CR that never answers: every request waits its whole timeout (the test clock moves on by it)."""
+
+    def __init__(self, clock: Any, fast: Any, *, only_mcp: bool = False) -> None:
+        self.clock = clock
+        self.fast = fast
+        self.only_mcp = only_mcp
+        self.waited: list[float] = []
+
+    def __call__(self, request: Any, timeout: float) -> Any:
+        from datetime import timedelta
+
+        from clipfactory_api.contentrewards import config
+        from clipfactory_api.contentrewards.net import NetworkError
+
+        if request.url == config.TOKEN_URL or (self.only_mcp and request.url != config.MCP_URL):
+            return self.fast(request, timeout)
+        self.waited.append(timeout)
+        self.clock.now += timedelta(seconds=timeout)
+        raise NetworkError("timed out", sent=True)
+
+
+@pytest.mark.parametrize("only_mcp", [False, True])
+def test_a_slow_cr_never_holds_a_job_start_past_8_seconds(call: Call, cr_on: Any, only_mcp: bool) -> None:
+    """§38.10: the job start's check (public JSON + list_my_campaigns) takes ≤ 8 s together; CR slow → the job
+    starts with the stored rules and "Couldn't check the campaign just now." (never the gateway's 504)."""
+    _ready(cr_on)
+    slow = _SlowCR(cr_on.clock, cr_on.net, only_mcp=only_mcp)
+    cr_on.net = slow
+    cr_on._clients.clear()
+    status, body = call("POST", "/v1/jobs", {"source": VIDEO, "campaignId": CAMPAIGN_ID})
+    assert status == 201, body
+    assert body["job"]["campaignNote"] == "Couldn't check the campaign just now."
+    assert slow.waited
+    assert sum(slow.waited) <= 8.0 + 0.1

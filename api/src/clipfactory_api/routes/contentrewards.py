@@ -23,9 +23,12 @@ UNDO_SECONDS = 8
 
 
 def _deps(app: App) -> Any:
+    from ..contentrewards import config
+
     deps = getattr(app, "contentrewards", None)
     if deps is None:
         raise ApiError(503, "unavailable", UNAVAILABLE)
+    deps.until(config.API_SECONDS)  # this request's time: a token refresh starts only with ≥ 20 s of it left
     return deps
 
 
@@ -184,7 +187,9 @@ def read_campaign(app: App, req: Request) -> Response:
     campaigns.refresh_public(deps, req.user_id, item, now, max_age=timedelta(0))
     conn = connection.load(deps.store, req.user_id)
     campaigns.check_membership(deps, req.user_id, item, conn, now)
-    if changed_paste and item.get("rulesState") != "reading":
+    if changed_paste or campaigns.retry_read(item, now):
+        # New pasted rules always get their own read, even while one runs (that older read then can't write its
+        # answer: its briefHash no longer matches); a failed or stuck read is tried again ("Tap Check now").
         campaigns.start_read(deps, req.user_id, item, now)
     item = campaigns.save(deps, req.user_id, item)
     return ok({"campaign": campaigns.View(deps, req.user_id, now).full(item)}, 202)
@@ -260,7 +265,8 @@ def delete_campaign(app: App, req: Request) -> Response:
     deps.store.delete(item["pk"], item["sk"])
     if deps.media is not None:
         try:
-            deps.media.delete_prefix(logo.campaign_prefix(req.user_id, uuid))
+            for name in logo.campaign_files(req.user_id, uuid, item):
+                deps.media.delete(name)  # a missing file is fine: S3 answers 204
         except Exception as e:  # the item is gone; a stray picture is harmless
             log("warning", "cr.campaign_files_failed", error=type(e).__name__)
     log("info", "cr.campaign_removed")
@@ -321,7 +327,7 @@ def logo_done(app: App, req: Request) -> Response:
     current.update({"state": "ready"})
     current.pop("error", None)
     item.update({"logo": current, "logoKey": key, "logoRev": max(int(found.group(1)), int(item.get("logoRev") or 0))})
-    item = campaigns.save(deps, req.user_id, item, mine=campaigns.LOGO_FIELDS)
+    item = campaigns.save(deps, req.user_id, item)
     if isinstance(old, str) and old.startswith(prefix) and old != key:
         deps.media.delete(old)  # jobs hold their own copy (§38.5)
     return ok({"campaign": campaigns.View(deps, req.user_id, _now(app)).full(item)})
@@ -342,7 +348,7 @@ def logo_link(app: App, req: Request) -> Response:
     current.update({"state": "fetching"})
     current.pop("error", None)
     item["logo"] = current
-    item = campaigns.save(deps, req.user_id, item, mine=campaigns.LOGO_FIELDS)
+    item = campaigns.save(deps, req.user_id, item)
     try:
         if deps.invoker is None:
             raise RuntimeError("no invoker")
@@ -352,7 +358,7 @@ def logo_link(app: App, req: Request) -> Response:
         current["state"] = "failed"
         current["error"] = "Clip Factory couldn't get that file. Try again, or drop the file."
         item["logo"] = current
-        item = campaigns.save(deps, req.user_id, item, mine=campaigns.LOGO_FIELDS)
+        item = campaigns.save(deps, req.user_id, item)
     return ok({"campaign": campaigns.View(deps, req.user_id, _now(app)).full(item)}, 202)
 
 
@@ -362,7 +368,7 @@ def logo_delete(app: App, req: Request) -> Response:
     deps, item = _campaign(app, req)
     old = item.pop("logoKey", None)
     item["logo"] = {"needed": bool((item.get("logo") or {}).get("needed")), "state": "none"}
-    item = campaigns.save(deps, req.user_id, item, mine=campaigns.LOGO_FIELDS)
+    item = campaigns.save(deps, req.user_id, item)
     if isinstance(old, str) and old.startswith(logo.campaign_prefix(req.user_id, str(item["campaignId"]))):
         deps.media.delete(old)
     return ok({"campaign": campaigns.View(deps, req.user_id, _now(app)).full(item)})

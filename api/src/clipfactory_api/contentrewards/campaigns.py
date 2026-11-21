@@ -22,7 +22,7 @@ from ..stats import STATS_ORDER
 from . import config, connection, gates, ids, links, public, rules
 from .deps import CrDeps
 from .mcp import CrError
-from .util import obj
+from .util import Loaded, changes, obj
 
 Item = dict[str, Any]
 PLATFORMS = frozenset(STATS_ORDER)
@@ -71,9 +71,11 @@ def key(user_id: str, uuid: str) -> tuple[str, str]:
 
 
 def get(store: db.Store, user_id: str, uuid: str) -> Item | None:
+    """The item as read (``Loaded``: ``save`` then writes only what this request changed)."""
     if not links.UUID.match(uuid or ""):
         return None
-    return store.get(*key(user_id, uuid.lower()))
+    found = store.get(*key(user_id, uuid.lower()))
+    return Loaded(found) if found is not None else None
 
 
 def get_or_404(store: db.Store, user_id: str, uuid: str) -> Item:
@@ -85,7 +87,7 @@ def get_or_404(store: db.Store, user_id: str, uuid: str) -> Item:
 
 def all_for(store: db.Store, user_id: str) -> list[Item]:
     rows = store.query_all(db.user_pk(user_id), db.CAMPAIGN_PREFIX, consistent=True)
-    return [r for r in rows if r.get("type") == "campaign"]
+    return [Loaded(r) for r in rows if r.get("type") == "campaign"]
 
 
 # The campaign's ``type`` (cpm, per_post, pool, retainer, other) is stored as ``campaignType``: the table's own ``type``
@@ -138,6 +140,32 @@ def pay_from_listed(row: Mapping[str, Any]) -> tuple[list[Item], list[str]]:
     return out, [e["platform"] for e in out]
 
 
+def _geo_public(cfg: Mapping[str, Any], platform: str) -> Item | None:
+    """``configuration.geoRates`` ``{tiers: [{label, countries, platform, rate}], restOfWorld: [{platform, rate}]}``
+    for one platform, as ``CrPay``'s country fields (the public JSON names no unknown-country rate)."""
+    geo = obj(cfg.get("geoRates"))
+    tiers = [
+        {
+            "name": str(t.get("label") or "")[:60],
+            "per1kCents": _cents(t.get("rate")),
+            "countries": [str(c) for c in t.get("countries") or []][:60],
+        }
+        for t in geo.get("tiers") or []
+        if isinstance(t, Mapping) and t.get("platform") == platform and _cents(t.get("rate")) is not None
+    ]
+    rest = next(
+        (
+            _cents(r.get("rate"))
+            for r in geo.get("restOfWorld") or []
+            if isinstance(r, Mapping) and r.get("platform") == platform
+        ),
+        None,
+    )
+    if not tiers and rest is None:
+        return None
+    return {"countryRates": tiers, "otherCountriesPer1kCents": rest, "unknownCountryPer1kCents": None}
+
+
 def pay_from_public(pub: Mapping[str, Any]) -> tuple[list[Item], list[str]]:
     cfg = obj(pub.get("configuration"))
     kind = str(pub.get("type") or "")
@@ -147,16 +175,18 @@ def pay_from_public(pub: Mapping[str, Any]) -> tuple[list[Item], list[str]]:
         if not isinstance(p, Mapping) or p.get("platform") not in PLATFORMS:
             continue
         rate = _cents(p.get("rate"))
-        out.append(
-            {
-                "platform": p["platform"],
-                "per1kCents": rate if kind in {"cpm", ""} else None,
-                "perPostCents": rate if kind == "per_post" else None,
-                "minPayoutCents": _cents(p.get("minPayout")),
-                "maxPayoutCents": _cents(p.get("maxPayout")),
-                "minViews": min_views,
-            }
-        )
+        entry: Item = {
+            "platform": p["platform"],
+            "per1kCents": rate if kind in {"cpm", ""} else None,
+            "perPostCents": rate if kind == "per_post" else None,
+            "minPayoutCents": _cents(p.get("minPayout")),
+            "maxPayoutCents": _cents(p.get("maxPayout")),
+            "minViews": min_views,
+        }
+        geo = _geo_public(cfg, str(p["platform"]))
+        if geo is not None:
+            entry.update(geo)
+        out.append(entry)
     if not out and pub.get("og") and isinstance(pub.get("ogRateCents"), int):
         out.append(
             {
@@ -203,6 +233,18 @@ def campaign_type(value: Any) -> str:
 
 def apply_public(item: Item, pub: Mapping[str, Any], now: datetime) -> Item:
     at = iso(now)
+    stored = obj(item.get("public"))
+    if pub.get("og") and stored and not stored.get("og"):
+        # Only the page's Open Graph line answered: keep the full copy (CR's toggles, organization and access) and
+        # fill only what is missing. ``publicAt`` stays, so the next owner action reads the JSON again.
+        if not item.get("name"):
+            item["name"] = str(pub.get("name") or "Campaign")[:200]
+        if not item.get("pay"):
+            item["pay"] = pay_from_public(pub)[0]
+        budget = obj(item.get("budget"))
+        if budget.get("leftCents") is None and isinstance(pub.get("ogLeftCents"), int):
+            item["budget"] = {**budget, "leftCents": pub["ogLeftCents"], "asOf": at}
+        return item
     org = obj(pub.get("organization"))
     item["public"] = dict(pub)
     item["publicAt"] = at
@@ -247,8 +289,8 @@ def apply_listed(item: Item, row: Mapping[str, Any], how: str) -> Item:
         item["access"] = row["access"]
     item["campaignType"] = campaign_type(row.get("type"))
     item["state"] = state_from(row.get("status"))
-    pay, paid = pay_from_listed(row)
-    item["pay"], item["platformsPaid"] = pay, paid
+    if isinstance(row.get("platforms"), list):  # null on a brand account's campaigns: unknown, the public copy stays
+        item["pay"], item["platformsPaid"] = pay_from_listed(row)
     description = row.get("description")
     if isinstance(description, str) and description.strip():
         item["brief"] = description[: config.MAX_BRIEF]
@@ -258,11 +300,19 @@ def apply_listed(item: Item, row: Mapping[str, Any], how: str) -> Item:
 # --- membership --------------------------------------------------------------------------------------------------
 
 
+def cached_list(deps: CrDeps, user_id: str) -> tuple[list[Item], bool] | None:
+    """The list read in the last 2 minutes by this container, else None."""
+    cached = deps._lists.get(user_id)
+    if cached and deps.monotonic() - cached[0] < config.LIST_CACHE.total_seconds():
+        return list(cached[1]), cached[2]
+    return None
+
+
 def list_campaigns(deps: CrDeps, user_id: str, *, fresh: bool = False) -> tuple[list[Item], bool]:
     """``list_my_campaigns`` (active + paused) to the end (≤ 20 pages), cached 2 minutes per container."""
-    cached = deps._lists.get(user_id)
-    if cached and not fresh and deps.monotonic() - cached[0] < config.LIST_CACHE.total_seconds():
-        return list(cached[1]), cached[2]
+    cached = None if fresh else cached_list(deps, user_id)
+    if cached is not None:
+        return cached
     rows, complete = deps.mcp(user_id).list_all(
         "list_my_campaigns", {"status": ["active", "paused"]}, config.CAMPAIGN_PAGES
     )
@@ -274,8 +324,8 @@ def _next_check(item: Mapping[str, Any], now: datetime) -> str | None:
     membership = item.get("membership")
     if membership in ("in", "manual"):
         return iso(now + config.SLOW_EVERY)
-    if membership in WAITING:
-        since = parse(item.get("waitingSince")) or now
+    if membership in WAITING or (membership == "unknown" and item.get("firstCheckFailedAt")):
+        since = parse(item.get("waitingSince") if membership in WAITING else item.get("firstCheckFailedAt")) or now
         if now - since < config.FAST_FOR:
             return iso(now + config.TICK)
         if now - since < config.STOP_AFTER:
@@ -301,8 +351,11 @@ def settle_membership(  # noqa: PLR0915 (the membership table of §38.4, one pla
             org_matches=conn.get("orgMatched") is not False,
         )
     if how == "ambiguous":
+        if item.get("idMatch") != "ambiguous":
+            log("warning", "cr.match_ambiguous")
         item["idMatch"] = "ambiguous"
         item.pop("crId", None)
+    looking = connection.signed_in(conn) and not conn.get("blocked")
     if row is not None:
         apply_listed(item, row, how)
         item["lastListedAt"] = iso(now)
@@ -311,11 +364,13 @@ def settle_membership(  # noqa: PLR0915 (the membership table of §38.4, one pla
         new = "in"
     elif said == "not_eligible":
         new = "not_accepted"
-    elif listed is None or not connection.signed_in(conn) or conn.get("blocked"):
+    elif listed is None or not looking:
         if said == "joined_by_hand":
             new = "manual"
         elif before in ("in", "manual", "not_accepted"):
             new = str(before) if before != "in" else ("manual" if said == "joined_by_hand" else "in")
+        elif looking and before in WAITING:
+            new = str(before)  # connected, but CR didn't answer this time: what we knew stays, and so do its checks
         else:
             new = "unknown"
     elif said == "joined_by_hand":
@@ -342,6 +397,10 @@ def settle_membership(  # noqa: PLR0915 (the membership table of §38.4, one pla
             item["canSayInBy"] = iso(max(now, added + config.SAY_NOT_JOINED_AFTER))
     item["membership"] = new
     item["checkedAt"] = iso(now)
+    if listed is not None or not looking or new != "unknown":
+        item.pop("firstCheckFailedAt", None)
+    else:
+        item.setdefault("firstCheckFailedAt", iso(now))  # connected but CR didn't answer: the next tick looks again
     found = _next_check(item, now)
     if found:
         item["nextCheckAt"] = found
@@ -369,7 +428,7 @@ def needs_read(item: Mapping[str, Any]) -> bool:
     """A rules read is due: the brief (or the pasted rules) changed since the last read."""
     if item.get("rulesState") == "reading":
         return False
-    text = rules.brief_text(item) + "\n" + str(item.get("pastedRules") or "")
+    text = rules.read_input(item)
     if not text.strip():
         return False
     if item.get("membership") not in ("in", "manual") and item.get("access") == "open" and not item.get("pastedRules"):
@@ -377,10 +436,23 @@ def needs_read(item: Mapping[str, Any]) -> bool:
     return item.get("briefHash") != brief_hash(text)
 
 
+def retry_read(item: Mapping[str, Any], now: datetime) -> bool:
+    """A read that failed (or is stuck ``reading`` past 3 minutes) is tried again on the owner's Check now or a job
+    start, when there is text to read and the rules are not hidden (an open campaign before joining)."""
+    state = item.get("rulesState")
+    started = parse(item.get("readStartedAt"))
+    stuck = state == "reading" and (started is None or now - started > config.READ_STALE)
+    if state != "failed" and not stuck:
+        return False
+    if not (rules.brief_text(item) + str(item.get("pastedRules") or "")).strip():
+        return False
+    hidden = item.get("membership") not in ("in", "manual") and item.get("access") == "open"
+    return not hidden or bool(item.get("pastedRules"))
+
+
 def start_read(deps: CrDeps, user_id: str, item: Item, now: datetime) -> Item:
     """Marks the item ``reading`` and starts ``cf-prod-campaigns`` ``read`` (async). The caller writes the item."""
-    text = rules.brief_text(item) + "\n" + str(item.get("pastedRules") or "")
-    item["briefHash"] = brief_hash(text)
+    item["briefHash"] = brief_hash(rules.read_input(item))
     item["rulesState"] = "reading"
     item["readStartedAt"] = iso(now)
     item["readPending"] = True
@@ -414,40 +486,28 @@ def initial_rules_state(item: Mapping[str, Any]) -> str:
     return "waiting_for_join"
 
 
-# Written by cf-prod-campaigns (or a logo route) while a request may hold an older copy of the item.
-HANDLER_FIELDS = (
-    "rules",
-    "rulesState",
-    "rulesVersion",
-    "rulesAt",
-    "plainRules",
-    "uncertain",
-    "logo",
-    "logoKey",
-    "logoRev",
-    "brandKey",
-)
-LOGO_FIELDS = ("logo", "logoKey", "logoRev")
-
-
-def save(deps: CrDeps, user_id: str, item: Item, *, mine: tuple[str, ...] = ()) -> Item:
-    """Writes the item and starts a pending rules read. The fields ``cf-prod-campaigns`` writes (the rules, the
-    logo, the brand picture) keep their stored values unless this caller changed them (``mine``, or a rules read it
-    just started), so a request that read the item before a rules read finished never undoes that read."""
-    current = deps.store.get(str(item["pk"]), str(item["sk"]))
-    if current is not None:
-        keep = set(HANDLER_FIELDS) - set(mine)
-        if item.get("readPending"):
-            keep.discard("rulesState")  # this request started a read
-        for name in keep:
-            if name in current:
-                item[name] = current[name]
-            else:
-                item.pop(name, None)
-    item = {k: v for k, v in item.items() if v is not None}
-    deps.store.put(item)
-    kick_read(deps, user_id, item)
-    return item
+def save(deps: CrDeps, user_id: str, item: Item) -> Item:
+    """Writes the item and starts a pending rules read. An item read from the table (``Loaded``) is written as an
+    UpdateItem of only what this caller changed, so a write made meanwhile (a rules read or logo by
+    ``cf-prod-campaigns``, a cleared hold, a seen celebration, the owner's answer) is never undone; a removed
+    campaign is not brought back. A new item is put whole."""
+    before = getattr(item, "before", None)
+    if before is None:
+        item = {k: v for k, v in item.items() if v is not None}
+        deps.store.put(item)
+        kick_read(deps, user_id, item)
+        return item
+    sets, remove = changes(before, item)
+    if not sets and not remove:
+        return item
+    try:
+        saved: Item = Loaded(deps.store.update(str(item["pk"]), str(item["sk"]), sets, remove=remove))
+    except db.ConditionFailed:
+        log("info", "cr.campaign_gone_meanwhile")
+        return item
+    if saved.get("readPending") and ("readPending" in sets or "readStartedAt" in sets):
+        kick_read(deps, user_id, saved)  # only a read this request started (a stale flag never blocks a new one)
+    return saved
 
 
 def check_membership(

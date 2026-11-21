@@ -176,8 +176,13 @@ class CrTokens:
                 raise TokenError("dead") from first
             if first.kind == "down" and first.sent:
                 pass  # the answer was lost: CR treats a reuse within seconds as the same call
-            elif first.kind == "rate" and first.retry_after is not None and first.retry_after <= MAX_RATE_WAIT:
-                self.sleep(first.retry_after)
+            elif (
+                first.kind == "rate"
+                and first.retry_after is not None
+                and first.retry_after <= MAX_RATE_WAIT
+                and self.remaining() - first.retry_after >= config.MIN_LAMBDA_SECONDS_TO_REFRESH
+            ):
+                self.sleep(first.retry_after)  # 429: nothing was used, so the 20 s rule holds after the wait too
             else:
                 raise TokenError("down") from first
         try:

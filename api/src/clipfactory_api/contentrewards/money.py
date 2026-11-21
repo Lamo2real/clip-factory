@@ -19,7 +19,7 @@ from . import config, connection
 from .deps import CrDeps
 from .gates import money as dollars
 from .mcp import CrError
-from .util import obj
+from .util import Loaded, changes, obj, update_parts
 
 Item = dict[str, Any]
 TAG = "Content Rewards' numbers"
@@ -105,12 +105,8 @@ def _celebrate(item: Item, key_: str, kind: str, text: str) -> None:
 def read(deps: CrDeps, user_id: str, now: datetime, *, calls_left: int = 25) -> Item:
     """One money read (balance, paid, pending). Returns the stored item. ``CrError`` stops the read where it is
     (what was read so far is kept)."""
-    item = load(deps.store, user_id) or {
-        "pk": db.user_pk(user_id),
-        "sk": db.CRMONEY_SK,
-        "type": "crmoney",
-        "userId": user_id,
-    }
+    found = load(deps.store, user_id)
+    item: Item = Loaded(found) if found else {"type": "crmoney", "userId": user_id}
     client = deps.mcp(user_id)
     start_calls = client.calls
     try:
@@ -131,8 +127,27 @@ def read(deps: CrDeps, user_id: str, now: datetime, *, calls_left: int = 25) -> 
         )
         item["nextCheckAt"] = iso(now + _cadence(deps, user_id, now))
         item["updatedAt"] = iso(now)
-        deps.store.put({k: v for k, v in item.items() if v is not None})
+        item = _write(deps, user_id, item)
     return item
+
+
+def _write(deps: CrDeps, user_id: str, item: Item) -> Item:
+    """Only the fields this read changed (``lastManualAt`` and a celebration seen meanwhile are never undone); new
+    celebrations are added to the ones stored now."""
+    before = getattr(item, "before", {})
+    sets, remove = changes(before, item)
+    if "celebrations" in sets:
+        old_keys = {c.get("key") for c in before.get("celebrations") or [] if isinstance(c, Mapping)}
+        new_rows = [
+            c for c in item.get("celebrations") or [] if isinstance(c, Mapping) and c.get("key") not in old_keys
+        ]
+        current = [c for c in load(deps.store, user_id).get("celebrations") or [] if isinstance(c, Mapping)]
+        kept = [c for c in current if c.get("key") not in {r.get("key") for r in new_rows}]
+        sets["celebrations"] = [*kept, *new_rows][-10:]
+    if not sets and not remove:
+        return item
+    expression, names, values = update_parts(sets, remove)
+    return Loaded(deps.store.update_expr(*key(user_id), expression, names=names, values=values))
 
 
 def _cadence(deps: CrDeps, user_id: str, now: datetime) -> timedelta:

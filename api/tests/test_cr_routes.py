@@ -11,7 +11,7 @@ import pytest
 
 from clipfactory_api import db
 from clipfactory_api.app import App
-from clipfactory_api.clock import iso
+from clipfactory_api.clock import iso, parse
 from clipfactory_api.contentrewards import connection, public
 from conftest import USER, Call, Clock
 from cr_support import (
@@ -694,7 +694,7 @@ def test_a_request_never_undoes_a_rules_read(call: Call, cr: Any) -> None:
     from clipfactory_api.contentrewards import campaigns, rules
 
     seed_campaign(cr.store, USER, cr.clock.now, rulesState="reading", rules=None)
-    stale = cr.store.get(db.user_pk(USER), db.campaign_sk(UUID)) or {}
+    stale = campaigns.get(cr.store, USER, UUID) or {}
     cr.store.update(
         db.user_pk(USER), db.campaign_sk(UUID), {"rulesState": "ready", "rules": rules.empty(), "rulesVersion": 1}
     )
@@ -702,3 +702,173 @@ def test_a_request_never_undoes_a_rules_read(call: Call, cr: Any) -> None:
     campaigns.save(cr, USER, stale)
     item = cr.store.get(db.user_pk(USER), db.campaign_sk(UUID)) or {}
     assert (item["rulesState"], item["rulesVersion"], item["anyway"]) == ("ready", 1, ["face_needed"])
+
+
+# --- the review's fixes ---------------------------------------------------------------------------------------------
+
+
+def _stored(cr: Any) -> dict[str, Any]:
+    return cr.store.get(db.user_pk(USER), db.campaign_sk(UUID)) or {}
+
+
+def _reads(cr: Any) -> int:
+    return sum(1 for name, _args in cr.invoker.calls if name == "read_campaign")
+
+
+def test_im_in_read_these_rules_reads_the_pasted_rules(call: Call, cr: Any) -> None:
+    """§38.4's one step: PATCH said joined_by_hand (it starts a read of the public text) and at once POST …/read with
+    the pasted rules: that paste gets its own read, and the briefHash the reads are judged by covers it."""
+    from clipfactory_api.contentrewards import campaigns, rules
+
+    seed_campaign(
+        cr.store,
+        USER,
+        cr.clock.now,
+        membership="not_joined",
+        rulesState="waiting_for_join",
+        rules=None,
+        public=public_campaign(application=False),
+        lastListedAt=None,
+        listed=None,
+        crId=None,
+    )
+    fake_of(cr).public[JSON_URL] = public_campaign(application=False)
+    status, body = call("PATCH", f"{BASE}/campaigns/{UUID}", {"said": "joined_by_hand"})
+    assert (status, body["campaign"]["membership"], body["campaign"]["rulesState"]) == (200, "manual", "reading")
+    assert _reads(cr) == 1
+    first_hash = _stored(cr)["briefHash"]
+    pasted = "Every caption has #FaZe and @FaZeClan. Clips 15 to 60 seconds."
+    status, body = call("POST", f"{BASE}/campaigns/{UUID}/read", {"pastedRules": pasted})
+    assert (status, body["campaign"]["rulesState"]) == (202, "reading")
+    assert _reads(cr) == 2  # the paste is read even though a read was running
+    item = _stored(cr)
+    assert item["pastedRules"] == pasted
+    assert item["briefHash"] == campaigns.brief_hash(rules.read_input(item)) != first_hash
+
+
+def test_check_now_tries_a_failed_read_again(call: Call, cr: Any) -> None:
+    seed_connection(cr, USER, cr.clock.now)
+    seed_campaign(cr.store, USER, cr.clock.now, rulesState="failed", brief="Caption must include #FaZe.")
+    fake_of(cr).public[JSON_URL] = public_campaign()
+    fake_of(cr).answer("list_my_campaigns", page([listed_campaign(description="Caption must include #FaZe.")]))
+    status, body = call("POST", f"{BASE}/campaigns/{UUID}/read", {})
+    assert (status, body["campaign"]["rulesState"]) == (202, "reading")
+    assert _reads(cr) == 1
+    assert "rules_failed" not in {s["code"] for s in body["campaign"]["stops"]}
+
+
+def test_check_now_while_cr_is_down_keeps_a_waiting_campaign(call: Call, cr: Any) -> None:
+    seed_connection(cr, USER, cr.clock.now)
+    seed_setup(cr.store, USER, "youtube")
+    now = cr.clock.now
+    seed_campaign(
+        cr.store,
+        USER,
+        now,
+        membership="waiting",
+        access="application",
+        said="applied",
+        waitingSince=iso(now),
+        nextCheckAt=iso(now + timedelta(minutes=15)),
+        lastListedAt=None,
+        listed=None,
+        crId=None,
+    )
+    fake_of(cr).public[JSON_URL] = public_campaign()
+    fake_of(cr).answer("list_my_campaigns", response(503, {}))
+    status, body = call("POST", f"{BASE}/campaigns/{UUID}/read", {})
+    assert status == 202
+    shown = body["campaign"]
+    assert (shown["membership"], shown["nextStep"]["kind"]) == ("waiting", "wait")
+    assert _stored(cr)["nextCheckAt"]
+
+
+def test_adding_while_cr_is_down_checks_again_next_tick(call: Call, cr: Any) -> None:
+    seed_connection(cr, USER, cr.clock.now)
+    seed_setup(cr.store, USER, "youtube")
+    fake_of(cr).public[JSON_URL] = public_campaign(application=False)
+    fake_of(cr).answer("list_my_campaigns", response(503, {}))
+    status, body = call("POST", f"{BASE}/campaigns", {"url": f"https://contentrewards.com/c/campaigns/{UUID}"})
+    assert status == 201, body
+    shown = body["campaign"]
+    assert shown["membership"] == "unknown"
+    assert shown["nextStep"]["text"] == "Content Rewards didn't answer. Tap Check now in a minute."
+    assert shown["nextStep"]["chip"] == "Not checked yet"
+    assert "button" not in shown["nextStep"]  # never "Connect Content Rewards" to a connected owner
+    item = _stored(cr)
+    failed, nxt = parse(item["firstCheckFailedAt"]), parse(item["nextCheckAt"])
+    assert failed is not None
+    assert nxt is not None
+    assert nxt - failed == timedelta(minutes=15)
+
+
+def test_a_save_writes_only_what_it_changed(call: Call, cr: Any) -> None:
+    """A request holding an older copy never puts back a celebration seen, a hold cleared or the owner's answer."""
+    from clipfactory_api.contentrewards import campaigns
+
+    seed_campaign(cr.store, USER, cr.clock.now, celebrate="in", held={"at": iso(cr.clock.now), "pending": 3})
+    stale = campaigns.get(cr.store, USER, UUID) or {}
+    assert call("POST", f"{BASE}/seen", {"key": f"in:{UUID}"})[0] == 200
+    cr.store.update(db.user_pk(USER), db.campaign_sk(UUID), {"heldClearedAt": iso(cr.clock.now)}, remove=["held"])
+    cr.store.update(db.user_pk(USER), db.campaign_sk(UUID), {"said": "applied"})
+    stale["publicAt"] = iso(cr.clock.now)
+    stale["anyway"] = ["face_needed"]
+    campaigns.save(cr, USER, stale)
+    item = _stored(cr)
+    assert "celebrate" not in item
+    assert "held" not in item
+    assert (item["heldClearedAt"], item["said"], item["anyway"]) == (iso(cr.clock.now), "applied", ["face_needed"])
+    cr.store.delete(db.user_pk(USER), db.campaign_sk(UUID))
+    stale["anyway"] = []
+    campaigns.save(cr, USER, stale)
+    assert cr.store.get(db.user_pk(USER), db.campaign_sk(UUID)) is None  # a removed campaign is not brought back
+
+
+def test_no_refresh_without_20_seconds_of_the_request(call: Call, cr: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """§38.9 step 1 in cf-prod-api: CR's refresh token is single use, so it is never spent with < 20 s left."""
+    from clipfactory_api.contentrewards import config
+
+    seed_connection(cr, USER, cr.clock.now, expires_in=timedelta(seconds=30))  # due
+    seed_campaign(cr.store, USER, cr.clock.now)
+    fake_of(cr).public[JSON_URL] = public_campaign()
+    fake_of(cr).answer("list_my_campaigns", page([listed_campaign()]))
+    monkeypatch.setattr(config, "API_SECONDS", 15.0)
+    status, body = call("POST", f"{BASE}/campaigns/{UUID}/read", {})
+    assert status == 202
+    assert fake_of(cr).token_forms() == []  # no refresh, so no rotating token spent
+    assert body["campaign"]["membership"] == "in"  # what was known stays
+    monkeypatch.setattr(config, "API_SECONDS", 28.5)
+    cr.clock.now += timedelta(seconds=31)
+    assert call("POST", f"{BASE}/campaigns/{UUID}/read", {})[0] == 202
+    assert len(fake_of(cr).token_forms()) == 1
+
+
+def test_removing_a_campaign_deletes_its_files_by_name(call: Call, cr: Any, s3_client: FakeS3) -> None:
+    prefix = f"campaigns/{USER}/{UUID}/"
+    seed_campaign(
+        cr.store, USER, cr.clock.now, logoKey=f"{prefix}logo-2.webp", logoRev=2, brandKey=f"{prefix}brand.jpg"
+    )
+    for name in ("logo-2.webp", "brand.jpg", "logo-3.png"):  # logo-3: an upload never finished
+        s3_client.objects[prefix + name] = PNG
+    s3_client.objects[f"campaigns/{USER}/{UUID2}/brand.png"] = PNG
+    assert call("DELETE", f"{BASE}/campaigns/{UUID}")[0] == 204
+    assert not [k for k in s3_client.objects if k.startswith(prefix)]
+    assert f"campaigns/{USER}/{UUID2}/brand.png" in s3_client.objects
+
+
+def test_connect_finish_revokes_the_new_sign_in_when_cr_cannot_be_read(call: Call, cr: Any) -> None:
+    fake = fake_of(cr)
+    fake.answer("get_me", response(503, {}))
+    status, body = _finish(call, _start(call))
+    assert (status, body["result"]) == (200, "cr_down")
+    assert fake.revoked == ["rt_1"]  # the refresh token the code exchange just gave is ended at CR
+
+
+def test_a_stale_read_flag_never_blocks_a_new_read(call: Call, cr: Any) -> None:
+    """A Lambda that stopped between saving and invoking left readPending behind: Check now still starts the read."""
+    seed_campaign(cr.store, USER, cr.clock.now, rulesState="failed", readPending=True, brief="Use #FaZe.")
+    fake_of(cr).public[JSON_URL] = public_campaign()
+    status, body = call("POST", f"{BASE}/campaigns/{UUID}/read", {})
+    assert (status, body["campaign"]["rulesState"]) == (202, "reading")
+    assert _reads(cr) == 1
+    assert "readPending" not in _stored(cr)

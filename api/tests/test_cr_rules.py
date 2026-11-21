@@ -541,3 +541,96 @@ def test_brand_picture_only_from_crusercontent() -> None:
     )
     assert handler.handle({"action": "brand_picture", "userId": USER, "campaignId": UUID}, deps)["outcome"] == "ready"
     assert f"campaigns/{USER}/{UUID}/brand.png" in media_client.objects
+
+
+# --- the review's fixes ---------------------------------------------------------------------------------------------
+
+
+def test_a_trailing_newline_never_passes_a_pattern() -> None:
+    """Python's ``$`` also matches before a final newline: every pattern is a full match."""
+    brief = "Caption must include #FaZe @FaZeClan"
+    out = rules.validate(
+        {
+            "disclosure": {"caption": "#Ad", "onScreen": "Paid partnership\n", "spoken": False},
+            "requiredHashtags": ["#FaZe\n"],
+            "requiredTags": ["@FaZeClan\n"],
+        },
+        brief,
+        {},
+    )
+    assert out["disclosure"]["onScreen"] == "Paid partnership"
+    assert (out["requiredHashtags"], out["requiredTags"]) == (["#FaZe"], ["@FaZeClan"])  # trimmed, never with "\n"
+    assert rules.ON_SCREEN.fullmatch("Paid partnership\n") is None
+    assert rules.HASHTAG.fullmatch("#FaZe\n") is None
+    assert rules.TAG.fullmatch("@FaZeClan\n") is None
+
+
+class _Racing(Bedrock):
+    """A newer read starts (new pasted rules) while this one is still asking the model."""
+
+    def __init__(self, answer: dict[str, Any], store: db.Store) -> None:
+        super().__init__(answer)
+        self.store = store
+
+    def converse(self, **kw: Any) -> dict[str, Any]:
+        self.store.update(db.user_pk(USER), db.campaign_sk(UUID), {"briefHash": "newer", "pastedRules": "#New"})
+        return super().converse(**kw)
+
+
+def test_an_older_read_never_overwrites_a_newer_one() -> None:
+    store = db.Store(FakeTable())
+    clock = Clock()
+    seed_campaign(store, USER, clock.now, rulesState="reading", rules=None, briefHash="older", brief="#FaZe only")
+    deps = handler.CampaignsDeps(
+        store=store,
+        media=s3.Media(FakeS3(), "b"),
+        bedrock=_Racing({"requiredHashtags": ["#FaZe"]}, store),
+        model_id="m",
+        clock=clock,
+    )
+    out = handler.handle({"action": "read", "userId": USER, "campaignId": UUID}, deps)
+    assert out["outcome"] == "superseded"
+    item = store.get(db.user_pk(USER), db.campaign_sk(UUID)) or {}
+    assert (item["rulesState"], item.get("rules"), item["briefHash"]) == ("reading", None, "newer")
+
+    class Broken:
+        def converse(self, **kw: Any) -> dict[str, Any]:
+            store.update(db.user_pk(USER), db.campaign_sk(UUID), {"briefHash": "newest"})
+            raise RuntimeError("model down")
+
+    store.update(db.user_pk(USER), db.campaign_sk(UUID), {"briefHash": "older"})
+    deps.bedrock = Broken()
+    assert handler.handle({"action": "read", "userId": USER, "campaignId": UUID}, deps)["outcome"] == "superseded"
+    assert (store.get(db.user_pk(USER), db.campaign_sk(UUID)) or {})["rulesState"] == "reading"  # not "failed"
+
+
+def test_public_geo_rates_become_country_rates() -> None:
+    from clipfactory_api.contentrewards import campaigns
+
+    pub = public_campaign(payout=[{"platform": "tiktok", "rate": 0}, {"platform": "instagram", "rate": 150}])
+    pub["configuration"]["geoRates"] = {
+        "restOfWorld": [{"platform": "tiktok", "rate": 200}],
+        "tiers": [{"countries": ["PK", "IN"], "label": "COD Specific", "platform": "tiktok", "rate": 0}],
+    }
+    pay, paid = campaigns.pay_from_public(pub)
+    by = {p["platform"]: p for p in pay}
+    assert paid == ["tiktok", "instagram"]
+    assert by["tiktok"]["countryRates"] == [{"name": "COD Specific", "per1kCents": 0, "countries": ["PK", "IN"]}]
+    assert (by["tiktok"]["otherCountriesPer1kCents"], by["tiktok"]["unknownCountryPer1kCents"]) == (200, None)
+    assert "countryRates" not in by["instagram"]
+
+
+def test_an_open_graph_answer_keeps_the_full_public_copy() -> None:
+    from clipfactory_api.contentrewards import campaigns
+    from conftest import NOW
+
+    item: dict[str, Any] = {"campaignId": UUID}
+    full = public_campaign(rules={"branding": {"logoRequired": True}, "faceOnCamera": False, "sound": {}})
+    campaigns.apply_public(item, full, NOW)
+    kept, at = dict(item["public"]), item["publicAt"]
+    campaigns.apply_public(item, {"name": "FaZe", "og": True, "ogRateCents": 100, "ogLeftCents": 5}, NOW)
+    assert item["public"] == kept  # CR's toggles, organization and access stay
+    assert item["publicAt"] == at  # the next owner action reads the JSON again
+    assert rules.toggles(item["public"])["logoRequired"] is True
+    assert item["access"] == "application"
+    assert item["name"] == "$8,500 FaZe Tournament Clipping Campaign"

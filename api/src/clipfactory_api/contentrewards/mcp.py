@@ -11,11 +11,12 @@ Untrusted text in results (names, briefs, links, review comments) is data: never
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import time
 from collections import deque
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from typing import Any
 
 from ..clock import Clock
@@ -150,6 +151,18 @@ class McpClient:
         self._ids = 0
         self._recent: deque[float] = deque(maxlen=config.CALLS_PER_SECOND)
         self._tools: set[str] | None = None
+        self.deadline: float | None = None  # a monotonic end for every request (``within``), else each its own timeout
+
+    @contextlib.contextmanager
+    def within(self, seconds: float) -> Iterator[None]:
+        """Every request made inside ends by ``seconds`` from now (a job start's check, §38.10); one with less than a
+        second left is not sent (``CrError("timeout", sent=False)``)."""
+        old = self.deadline
+        self.deadline = self.monotonic() + max(0.0, seconds)
+        try:
+            yield
+        finally:
+            self.deadline = old
 
     # --- public ------------------------------------------------------------------------------------------------
 
@@ -309,6 +322,11 @@ class McpClient:
         if tool:
             headers["Mcp-Name"] = tool
         self._pace()
+        if self.deadline is not None:
+            left = self.deadline - self.monotonic()
+            if left < 1.0:
+                raise CrError("timeout", sent=False)
+            timeout = min(timeout, left)
         try:
             return self.net(HttpRequest("POST", config.MCP_URL, headers, json.dumps(body).encode()), timeout)
         except NetworkError as e:

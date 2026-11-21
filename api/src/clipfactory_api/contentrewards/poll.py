@@ -134,7 +134,15 @@ def time_only(deps: CrDeps, user_id: str, now: datetime) -> dict[str, int]:
     for item in by_campaign.values():
         started = parse(item.get("readStartedAt"))
         if item.get("rulesState") == "reading" and started is not None and now - started > config.READ_STALE:
-            deps.store.update(item["pk"], item["sk"], {"rulesState": "failed"})
+            try:  # only that same read: one started since (or its answer) is left alone
+                deps.store.update(
+                    item["pk"],
+                    item["sk"],
+                    {"rulesState": "failed"},
+                    expect_in={"rulesState": ["reading"], "readStartedAt": [item["readStartedAt"]]},
+                )
+            except db.ConditionFailed:
+                continue
             counts["failedReads"] += 1
     conn = connection.load(deps.store, user_id)
     sent_at = parse(conn.get("pilotSentAt"))

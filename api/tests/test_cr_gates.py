@@ -239,14 +239,15 @@ def test_the_priority_order() -> None:
     assert _button(soft) == "Make clips anyway"
     accepted = step(campaign(rules={**rules.empty(), "faceOnCamera": True}, anyway=["face_needed"]))
     assert accepted["kind"] == "make_clips"
-    # footage only → pick a video
+    # footage only → pick a video (the read writes the videos into rules.sourceVideos, never at the top level)
     pick = step(
         campaign(
             rules={
                 **rules.empty(),
                 "allowedSources": {**rules.empty()["allowedSources"], "campaignProvidedOnly": True},
+                "sourceVideos": [{"url": "https://www.youtube.com/watch?v=abc", "kind": "youtube", "note": None}],
             },
-            sourceVideos=[{"url": "https://www.youtube.com/watch?v=abc"}],
+            sourceVideos=[],
         )
     )
     assert pick["kind"] == "pick_video"
@@ -305,3 +306,109 @@ def test_you_can_post_again_after_a_hold() -> None:
     found = step(campaign(heldClearedAt=iso(NOW - timedelta(hours=1))))
     assert (found["kind"], found["sub"]) == ("make_clips", "You can post again.")
     assert "sub" not in step(campaign(heldClearedAt=iso(NOW - timedelta(days=2))))
+
+
+# --- the review's fixes ---------------------------------------------------------------------------------------------
+
+
+def test_cr_switches_stop_an_open_campaign_before_joining() -> None:
+    """ "Paste its link here first. I'll check it before you join.": CR's own preApproval and sound switches stop the
+    campaign before any rules read (only a joined campaign is read), and send him elsewhere first."""
+    public = {
+        "configuration": {
+            "requirement": {"preApproval": True},
+            "rules": {"sound": {"mustUseProvided": True}, "faceOnCamera": True},
+        }
+    }
+    item = campaign(membership="not_joined", rulesState="waiting_for_join", rules=None, public=public)
+    found = codes(item)
+    assert {"drafts_first", "sound_needed", "face_needed"} <= set(found)
+    first = step(item)
+    assert (first["kind"], first["chip"]) == ("pick_another", "Can't do this one")
+    assert first["button"]["label"] == gates.FIND_ANOTHER
+    assert "drafts_first" not in codes(campaign())  # no switch, no brief: no stop
+
+
+def test_no_paid_place_known_is_a_stop() -> None:
+    item = campaign(platformsPaid=[], pay=[])
+    found = gates.stops(item, CONNECTED, [], NOW)
+    stop = next(s for s in found if s["code"] == "no_place")
+    assert (stop["hard"], stop["text"]) == (True, "I can't tell where this campaign pays yet. Tap Check now.")
+    first = step(item, places=[])
+    assert (first["kind"], "button" in first) == ("stop", False)
+    assert "no_place" not in codes(campaign(membership="not_joined", platformsPaid=[], pay=[]))
+
+
+def test_connected_but_cr_did_not_answer() -> None:
+    item = campaign(membership="unknown")
+    found = gates.stops(item, CONNECTED, ["youtube"], NOW)
+    assert found[0]["code"] == "not_checked"
+    assert found[0]["text"] == "Content Rewards didn't answer. Tap Check now in a minute."
+    shown = step(item)
+    assert (shown["kind"], shown["chip"], "button" in shown) == ("stop", "Not checked yet", False)
+    assert shown["glass"][0]["label"] == gates.OPEN_CAMPAIGN
+    # not connected: still "Connect Content Rewards"
+    assert step(item, NOT_CONNECTED)["button"]["label"] == "Connect Content Rewards"
+
+
+def test_checks_stopped_after_30_days_say_check_now() -> None:
+    old = iso(NOW - timedelta(days=31))
+    waiting = campaign(membership="waiting", access="application", waitingSince=old, nextCheckAt=None)
+    assert step(waiting)["text"] == "Still waiting? Tap Check now."
+    fresh = campaign(membership="waiting", access="application", waitingSince=iso(NOW), nextCheckAt=iso(NOW))
+    assert step(fresh)["text"] == "Nothing to do. I'll tell you when you're in."
+    joined = campaign(membership="not_joined", waitingSince=old, nextCheckAt=None)
+    assert step(joined)["text"].endswith("Then tap Check now.")
+
+
+def test_sends_by_itself_note_shows_for_a_day() -> None:
+    assert (
+        step(campaign(autoSince=iso(NOW - timedelta(hours=2))))["sub"]
+        == "Clip Factory can send these clips by itself now."
+    )
+    assert "sub" not in step(campaign(autoSince=iso(NOW - timedelta(days=2))))
+
+
+def test_country_rates_count_for_the_low_rate_stop() -> None:
+    geo = [{"platform": "youtube", "per1kCents": 0, "otherCountriesPer1kCents": 200, "countryRates": []}]
+    assert "low_rate" not in codes(campaign(pay=geo, platformsPaid=["youtube"]))
+    assert "low_rate" in codes(campaign(pay=[{"platform": "youtube", "per1kCents": 50}], platformsPaid=["youtube"]))
+
+
+def test_connected_cr_failure_keeps_what_was_known() -> None:
+    waiting = campaign(membership="waiting", access="application", said="applied", waitingSince=iso(NOW))
+    campaigns.settle_membership(waiting, CONNECTED, None, False, NOW)
+    assert waiting["membership"] == "waiting"
+    assert waiting["nextCheckAt"] == iso(NOW + timedelta(minutes=15))
+    new = campaign(membership="unknown", lastListedAt=None)
+    campaigns.settle_membership(new, CONNECTED, None, False, NOW)
+    assert (new["membership"], new["firstCheckFailedAt"]) == ("unknown", iso(NOW))
+    assert new["nextCheckAt"] == iso(NOW + timedelta(minutes=15))  # the next tick looks again
+    campaigns.settle_membership(new, CONNECTED, [], True, NOW + timedelta(minutes=15))
+    assert new["membership"] == "not_joined"
+    assert "firstCheckFailedAt" not in new
+    offline = campaign(membership="unknown", lastListedAt=None)
+    campaigns.settle_membership(offline, NOT_CONNECTED, None, False, NOW)
+    assert "nextCheckAt" not in offline
+    assert "firstCheckFailedAt" not in offline
+
+
+def test_a_listed_campaign_without_platforms_keeps_the_public_pay() -> None:
+    listed = [
+        {
+            "id": "cmp_x",
+            "name": "x",
+            "status": "active",
+            "access": "open",
+            "type": "cpm",
+            "platforms": None,  # CR: "Null on a brand account's campaigns"
+            "description": "Brief",
+        }
+    ]
+    item = campaign(membership="not_joined")
+    item["crId"] = "cmp_x"
+    campaigns.apply_listed(item, listed[0], "typeid")
+    assert item["platformsPaid"] == ["youtube", "instagram"]
+    assert [p["platform"] for p in item["pay"]] == ["youtube", "instagram"]
+    campaigns.apply_listed(item, {**listed[0], "platforms": []}, "typeid")
+    assert item["platformsPaid"] == []  # an empty list is CR saying it pays nowhere

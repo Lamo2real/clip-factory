@@ -27,6 +27,7 @@ MEMBERSHIP_STOPS = {
     "not_accepted": "not_accepted",
 }
 CAN_MAKE = ("in", "manual")
+WAITING = ("not_joined", "apply_first", "waiting", "left")
 SOFT = frozenset({"not_connected", "budget_half", "low_rate", "face_needed", "spoken_needed", "audience"})
 ELSEWHERE = frozenset(
     {"ended", "deadline", "budget_gone", "tiktok_only", "drafts_first", "sound_needed", "cap_reached", "not_accepted"}
@@ -96,13 +97,16 @@ def _stop(code: str, text: str, fix: str | None = None, accepted: Iterable[str] 
 def stops(  # noqa: PLR0915 (every stop of §38.4, in the table's order)
     item: Mapping[str, Any], conn: Mapping[str, Any], places: list[str], now: datetime
 ) -> list[Item]:
+    from .rules import toggles
+
     rules = obj(item.get("rules"))
+    toggled = toggles(obj(item.get("public")))  # CR's own switches stop a campaign before its rules are read too
     membership = str(item.get("membership") or "unknown")
     accepted = [str(c) for c in item.get("anyway") or []]
     paid = [str(p) for p in item.get("platformsPaid") or []]
     out: list[Item] = []
     if membership in MEMBERSHIP_STOPS:
-        out.append(_stop(MEMBERSHIP_STOPS[membership], membership_text(item, conn)))
+        out.append(_stop(MEMBERSHIP_STOPS[membership], membership_text(item, conn, now)))
     if membership == "manual" and not connection.signed_in(conn):
         out.append(
             _stop(
@@ -147,9 +151,10 @@ def stops(  # noqa: PLR0915 (every stop of §38.4, in the table's order)
             )
         )
     rates: list[int] = [
-        int(p["per1kCents"])
+        rate
         for p in item.get("pay") or []
-        if isinstance(p, Mapping) and isinstance(p.get("per1kCents"), int) and p.get("platform") in paid
+        if isinstance(p, Mapping) and p.get("platform") in paid
+        for rate in _rates(p)
     ]
     if item.get("campaignType") == "cpm" and rates and max(rates) < config.MIN_RATE_CENTS:
         out.append(
@@ -171,6 +176,8 @@ def stops(  # noqa: PLR0915 (every stop of §38.4, in the table's order)
                 "app, and private posts can't earn. Pick a campaign that pays for YouTube, Instagram, X or Facebook.",
             )
         )
+    elif not paid and membership in CAN_MAKE:
+        out.append(_stop("no_place", "I can't tell where this campaign pays yet. Tap Check now."))
     elif paid and not places:
         first = next((p for p in STATS_ORDER if p in paid and p != "tiktok"), paid[0])
         names = [LABELS.get(p, p) for p in STATS_ORDER if p in paid]
@@ -190,7 +197,7 @@ def stops(  # noqa: PLR0915 (every stop of §38.4, in the table's order)
         )
     if item.get("capReached"):
         out.append(_stop("cap_reached", "You reached the most you can earn on this campaign. Pick another one."))
-    if rules.get("draftsFirst"):
+    if rules.get("draftsFirst") or toggled["preApproval"]:
         out.append(
             _stop(
                 "drafts_first",
@@ -198,14 +205,14 @@ def stops(  # noqa: PLR0915 (every stop of §38.4, in the table's order)
                 "campaign.",
             )
         )
-    if rules.get("soundRequired"):
+    if rules.get("soundRequired") or toggled["sound"]:
         out.append(
             _stop(
                 "sound_needed",
                 "This campaign needs one of its own sounds. Clip Factory can't add it yet. Pick another campaign.",
             )
         )
-    if rules.get("faceOnCamera"):
+    if rules.get("faceOnCamera") or toggled["faceOnCamera"]:
         out.append(
             _stop(
                 "face_needed",
@@ -235,6 +242,14 @@ def stops(  # noqa: PLR0915 (every stop of §38.4, in the table's order)
     return out
 
 
+def _rates(pay: Mapping[str, Any]) -> list[int]:
+    """Every per-1,000-views rate a platform pays: its own and its country rates (a geo campaign's own rate can be
+    $0 while its countries pay more)."""
+    found = [pay.get("per1kCents"), pay.get("otherCountriesPer1kCents")]
+    found += [g.get("per1kCents") for g in pay.get("countryRates") or [] if isinstance(g, Mapping)]
+    return [int(r) for r in found if isinstance(r, int) and not isinstance(r, bool)]
+
+
 def logo_needed(item: Mapping[str, Any]) -> bool:
     rules = obj(item.get("rules"))
     if (rules.get("logo") or {}).get("required"):
@@ -248,7 +263,27 @@ def logo_needed(item: Mapping[str, Any]) -> bool:
 # --- membership words --------------------------------------------------------------------------------------------
 
 
-def membership_text(item: Mapping[str, Any], conn: Mapping[str, Any]) -> str:
+DIDNT_ANSWER = "Content Rewards didn't answer. Tap Check now in a minute."
+
+
+def looking(conn: Mapping[str, Any]) -> bool:
+    """Clip Factory can read CR's list: connected and not blocked."""
+    return connection.signed_in(conn) and not conn.get("blocked")
+
+
+def checks_stopped(item: Mapping[str, Any], now: datetime | None) -> bool:
+    """A waiting campaign's re-checks ended (30 days from ``waitingSince``, §38.4): only Check now looks again."""
+    since = parse(item.get("waitingSince"))
+    return (
+        now is not None
+        and item.get("membership") in WAITING
+        and not item.get("nextCheckAt")
+        and since is not None
+        and now - since >= config.STOP_AFTER
+    )
+
+
+def membership_text(item: Mapping[str, Any], conn: Mapping[str, Any], now: datetime | None = None) -> str:
     membership = item.get("membership")
     if membership == "unknown":
         if connection.refused(conn):
@@ -256,11 +291,15 @@ def membership_text(item: Mapping[str, Any], conn: Mapping[str, Any]) -> str:
                 "Content Rewards hasn't let Clip Factory look yet. Open the campaign. Does it say **Submit clip**? Then "
                 "you're in."
             )
+        if looking(conn):
+            return DIDNT_ANSWER
         return "Connect Content Rewards so I can see if you're in."
+    stopped = checks_stopped(item, now)
     return {
-        "not_joined": "Not joined yet: tap **Join Campaign** on Content Rewards. I'll see it by myself.",
+        "not_joined": "Not joined yet: tap **Join Campaign** on Content Rewards. "
+        + ("Then tap Check now." if stopped else "I'll see it by myself."),
         "apply_first": "Did you tap **Submit application** on Content Rewards? Then tap Yes, I applied.",
-        "waiting": "Nothing to do. I'll tell you when you're in.",
+        "waiting": "Still waiting? Tap Check now." if stopped else "Nothing to do. I'll tell you when you're in.",
         "left": (
             "Content Rewards doesn't show this campaign for you any more. Open it to check: you may have left, or the "
             "brand removed you."
@@ -272,7 +311,9 @@ def membership_text(item: Mapping[str, Any], conn: Mapping[str, Any]) -> str:
 def chip(item: Mapping[str, Any], conn: Mapping[str, Any]) -> str:
     membership = item.get("membership")
     if membership == "unknown":
-        return "Check it yourself" if connection.refused(conn) else "Connect first"
+        if connection.refused(conn):
+            return "Check it yourself"
+        return "Not checked yet" if looking(conn) else "Connect first"
     if membership == "in" and item.get("state") == "paused":
         return "Paused"
     return {
@@ -350,7 +391,7 @@ def next_step(item: Mapping[str, Any], conn: Mapping[str, Any], stop_list: list[
             "button": {"label": "Make clips anyway", "external": False, "action": "anyway"},
         }
     rules = obj(item.get("rules"))
-    if (rules.get("allowedSources") or {}).get("campaignProvidedOnly") and item.get("sourceVideos"):
+    if (rules.get("allowedSources") or {}).get("campaignProvidedOnly") and rules.get("sourceVideos"):
         return {"kind": "pick_video", "chip": chip_text, "text": "Pick a video below."}
     if membership == "in":
         text = (
@@ -368,7 +409,8 @@ def next_step(item: Mapping[str, Any], conn: Mapping[str, Any], stop_list: list[
         "text": text,
         "button": {"label": MAKE_CLIPS, "href": f"/?campaign={item.get('campaignId')}", "external": False},
     }
-    if item.get("autoSince"):
+    auto = parse(item.get("autoSince"))
+    if auto is not None and now - auto < config.AUTO_NOTE_FOR:
         step["sub"] = "Clip Factory can send these clips by itself now."
     cleared = parse(item.get("heldClearedAt"))
     if cleared is not None and now - cleared < config.HELD_FOR:
@@ -424,7 +466,7 @@ def _membership_step(item: Mapping[str, Any], conn: Mapping[str, Any], chip_text
     from ..clock import parse
 
     membership = str(item.get("membership"))
-    text = membership_text(item, conn)
+    text = membership_text(item, conn, now)
     submit_ask = {"label": SUBMIT_CLIP, "said": "joined_by_hand"}
     not_eligible = {
         "label": "It says Not eligible",
@@ -432,6 +474,14 @@ def _membership_step(item: Mapping[str, Any], conn: Mapping[str, Any], chip_text
         "text": "If Content Rewards shows **Not eligible**, tap It says Not eligible.",
     }
     if membership == "unknown":
+        if looking(conn):
+            return {  # connected, but CR didn't answer: Check now (in the card's head) looks again
+                "kind": "stop",
+                "chip": chip_text,
+                "text": text,
+                "asks": [{**submit_ask, "text": "Open the campaign. Does it say **Submit clip**? Then you're in."}],
+                "glass": [_open(url)],
+            }
         if connection.refused(conn):
             return {
                 "kind": "check_yourself",

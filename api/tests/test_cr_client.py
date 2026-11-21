@@ -476,3 +476,51 @@ def test_insufficient_scope_without_names(setup: Any) -> None:
     with pytest.raises(CrError):
         deps.mcp(USER).call("create_my_submission", {"campaign": CMP, "url": "u", "idempotency_key": "k"})
     assert connection.load(deps.store, USER)["status"] == "read_only"
+
+
+# --- the review's fixes ---------------------------------------------------------------------------------------------
+
+
+def test_a_cached_client_reads_each_invocations_time_left(setup: Any) -> None:
+    """The McpClient is cached per container; the time left must be the current invocation's, not the first one's
+    (a client made under an expired deadline once failed every later refresh with platform_down)."""
+    deps, fake, _client, clock = setup
+    seed_connection(deps, USER, clock.now, expires_in=timedelta(seconds=30))  # due
+    fake.answer("get_me", {"id": "cre_0123456789abcdefghjkmnpqrs"})
+    deps.remaining = lambda: 0.0  # the invocation that made the client has ended
+    client = deps.mcp(USER)
+    with pytest.raises(CrError) as caught:
+        client.call("get_me", {})
+    assert caught.value.code == "platform_down"
+    assert fake.token_forms() == []
+    deps.until(900.0)  # the next invocation
+    assert deps.mcp(USER) is client
+    assert client.call("get_me", {})["id"].startswith("cre_")
+    assert len(fake.token_forms()) == 1
+
+
+def test_429_is_not_waited_out_past_the_20_seconds(setup: Any) -> None:
+    deps, fake, _client, clock = setup
+    seed_connection(deps, USER, clock.now, expires_in=timedelta(seconds=30))
+    sleeper = Sleeper()
+    deps.sleep = sleeper
+    deps.remaining = lambda: 22.0
+    fake.tokens = [response(429, {"error": "slow_down"}, {"Retry-After": "4"}), fake.token_ok()]
+    with pytest.raises(TokenError) as caught:
+        deps.tokens().access(USER)
+    assert caught.value.kind == "down"
+    assert (sleeper.slept, len(fake.token_forms())) == ([], 1)
+
+
+def test_a_deadline_bounds_every_request(setup: Any) -> None:
+    deps, fake, _client, clock = setup
+    seed_connection(deps, USER, clock.now)
+    fake.answer("get_me", {"id": "cre_0123456789abcdefghjkmnpqrs"})
+    client = deps.mcp(USER)
+    with client.within(3.0):
+        client.call("get_me", {})
+    assert max(t for _r, t in fake.requests) <= 3.0
+    assert client.deadline is None
+    with client.within(0.5), pytest.raises(CrError) as caught:
+        client.call("get_me", {})
+    assert (caught.value.code, caught.value.sent) == ("timeout", False)

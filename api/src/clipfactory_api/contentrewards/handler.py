@@ -8,7 +8,6 @@ shows (``rulesState: failed``, ``logo.state: failed`` with the sentence); nothin
 
 from __future__ import annotations
 
-import contextlib
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -55,9 +54,14 @@ def handle(event: Any, deps: CampaignsDeps) -> dict[str, Any]:
 
 
 def read(deps: CampaignsDeps, user_id: str, item: Item) -> str:
-    """The rules read: the item's own text only (brief, public, pasted rules) and up to 3 public Google Docs."""
+    """The rules read: the item's own text only (brief, public, pasted rules) and up to 3 public Google Docs.
+
+    Its answer (or its failure) is written only while the item's ``briefHash`` is still the one it read: a newer
+    read started meanwhile (new pasted rules, a changed brief) wins, and this one ends ``superseded``."""
     pk, sk = item["pk"], item["sk"]
     now = deps.clock()
+    mine = item.get("briefHash")
+    same = {"briefHash": [mine]} if isinstance(mine, str) and mine else None
     try:
         texts = [rules.brief_text(item), str(item.get("pastedRules") or "")]
         docs, doc_doubts = rules.read_docs(texts, deps.get)
@@ -69,8 +73,10 @@ def read(deps: CampaignsDeps, user_id: str, item: Item) -> str:
         checked["uncertain"] = (doc_doubts + checked["uncertain"])[: rules.MAX_LIST]
     except Exception as e:
         log("warning", "campaigns.read_failed", error=type(e).__name__)
-        with contextlib.suppress(db.ConditionFailed):
-            deps.store.update(pk, sk, {"rulesState": "failed"}, remove=["readPending"])
+        try:
+            deps.store.update(pk, sk, {"rulesState": "failed"}, remove=["readPending"], expect_in=same)
+        except db.ConditionFailed:
+            return "superseded"
         return "failed"
     places = [str(p) for p in item.get("platformsPaid") or []]
     logo_state = dict(item.get("logo") or {"state": "none"})
@@ -89,9 +95,11 @@ def read(deps: CampaignsDeps, user_id: str, item: Item) -> str:
                 "logo": logo_state,
             },
             remove=["readPending"],
+            expect_in=same,
         )
     except db.ConditionFailed:
-        return "gone"
+        log("info", "campaigns.read_superseded")
+        return "superseded"
     log("info", "campaigns.read", rules=len(checked["requiredHashtags"]) + len(checked["requiredTags"]))
     return "ready"
 

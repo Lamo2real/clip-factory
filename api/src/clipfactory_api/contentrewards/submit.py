@@ -25,6 +25,7 @@ from .submissions import key, reason_text
 Item = dict[str, Any]
 FINAL = ("sent", "approved", "rejected", "sent_by_hand", "missed", "not_sent")
 IN_STEP_TRIES = 2
+SEND_MARGIN = 2.0  # seconds kept after a send for writing its answer
 _SHORT = re.compile(r"minimum of (\d+) seconds", re.IGNORECASE)
 
 
@@ -180,6 +181,8 @@ def _send(deps: CrDeps, user_id: str, post_id: str, campaign_id: str, timeout: f
         sub = _refreeze(deps, user_id, sub, matched)
     client = deps.mcp(user_id)
     for attempt in range(IN_STEP_TRIES + 1):
+        # Never past the Lambda's own end (the api's 29 s): a cut-short call is retried later with the same key.
+        timeout = min(timeout, max(1.0, deps.remaining() - SEND_MARGIN))
         try:
             result = client.call(
                 "create_my_submission",

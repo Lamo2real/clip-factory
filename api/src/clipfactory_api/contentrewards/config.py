@@ -49,6 +49,9 @@ PILOT_MAX = 5
 
 # MCP timeouts (seconds).
 READ_TIMEOUT = 10.0
+API_SECONDS = 28.5  # a cf-prod-api request (its Lambda and API Gateway stop at 29 s): the refresh guard, the send
+JOB_CHECK_SECONDS = 8.0  # a job start's CR check: the public JSON and list_my_campaigns together (§38.10)
+JOB_LIST_MIN_SECONDS = 2.0  # list_my_campaigns is asked only with at least this much of those 8 s left
 SUBMIT_TIMEOUT_FLOW = 30.0
 SUBMIT_TIMEOUT_API = 25.0
 CALLS_PER_SECOND = 2
@@ -73,6 +76,7 @@ FAST_FOR = timedelta(days=7)
 SLOW_EVERY = timedelta(hours=6)
 STOP_AFTER = timedelta(days=30)
 HELD_FOR = timedelta(hours=24)
+AUTO_NOTE_FOR = timedelta(hours=24)  # "Clip Factory can send these clips by itself now." shows for a day
 READ_STALE = timedelta(minutes=3)
 CHECK_NOW_EVERY = timedelta(seconds=30)
 SUB_CHECK_EVERY = timedelta(minutes=1)
