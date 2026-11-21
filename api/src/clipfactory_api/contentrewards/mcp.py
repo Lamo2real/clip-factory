@@ -273,7 +273,7 @@ class McpClient:
                 self._dead()
                 raise CrError("invalid_token", status=401)
         if response.status >= 300:
-            raise self._http_error(response)
+            raise self._http_error(response, tool)
         if access.conn.get("blocked"):
             self._unblock()
         if notify:
@@ -314,7 +314,7 @@ class McpClient:
         except NetworkError as e:
             raise CrError("network", sent=e.sent) from e
 
-    def _http_error(self, response: HttpResponse) -> CrError:
+    def _http_error(self, response: HttpResponse, tool: str | None = None) -> CrError:
         obj = _error_object(response.body)
         wait = None
         raw = response.headers.get("retry-after")
@@ -329,6 +329,8 @@ class McpClient:
             if code == "insufficient_scope":
                 found = _SCOPE.search(response.headers.get("www-authenticate", ""))
                 scopes = tuple(found.group(1).split()) if found else ()
+                if not scopes and tool == "create_my_submission":
+                    scopes = (config.WRITE_SCOPE,)
                 self._missing(scopes)
                 return _from_object(obj, status=403, tool_result=False, scopes=scopes)
             if code == "permission_denied":
@@ -362,9 +364,9 @@ class McpClient:
         conn = connection.load(self.tokens.store, self.user_id)
         missing = sorted({*(conn.get("missing") or []), *scopes})
         fields: Item = {"missing": missing}
-        if config.WRITE_SCOPE in scopes or not scopes:
+        if config.WRITE_SCOPE in scopes:
             fields.update({"status": "read_only", "canSubmit": False})
-        if any(s in config.READ_SCOPES for s in scopes):
+        if not scopes or any(s in config.READ_SCOPES for s in scopes):
             fields["reason"] = "missing_permissions"
         if connection.signed_in(conn):
             connection.update(self.tokens.store, self.user_id, now, fields)

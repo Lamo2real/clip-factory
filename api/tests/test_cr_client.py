@@ -462,3 +462,17 @@ def test_organization_falls_back_to_the_brand_name() -> None:
     assert ids.match_campaign([row], UUID, public) == (row, "name")  # the org TypeID never matched: the brand
     other = {**row, "brand_account": {"name": "Someone Else"}}
     assert ids.match_campaign([other], UUID, public) == (None, "none")
+
+
+def test_insufficient_scope_without_names(setup: Any) -> None:
+    deps, fake, _client, clock = setup
+    seed_connection(deps, USER, clock.now)
+    fake.mcp_http = [response(403, {"code": "insufficient_scope"})]
+    with pytest.raises(CrError):
+        deps.mcp(USER).call("get_my_balance", {})
+    conn = connection.load(deps.store, USER)
+    assert (conn["status"], conn["reason"]) == ("connected", "missing_permissions")  # a read tool: not read only
+    fake.mcp_http = [response(403, {"code": "insufficient_scope"})]
+    with pytest.raises(CrError):
+        deps.mcp(USER).call("create_my_submission", {"campaign": CMP, "url": "u", "idempotency_key": "k"})
+    assert connection.load(deps.store, USER)["status"] == "read_only"
