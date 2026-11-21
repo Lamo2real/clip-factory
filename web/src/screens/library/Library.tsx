@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { api } from "../../api/index.ts";
+import { CrPostLines } from "../../components/CrPostLine.tsx";
+import { useSubmissions } from "../../lib/contentRewards.ts";
 import { Glide } from "../../components/Glide.tsx";
 import { friendlyMessage } from "../../api/errors.ts";
-import type { Clip, Learning, Platform, Post, TikTokPostOptions } from "../../api/types.ts";
+import type { Clip, Learning, Platform, Post, TikTokPostOptions, CrSubmission } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -77,6 +79,8 @@ export function Library({ view = "all", week = null }: { view?: "all" | "week"; 
 
 function AllClips() {
   const { data, error, reload, setData } = useLoad(loadLibrary, "", "library");
+  // Every campaign post's line on Content Rewards (§38.6), under its clip's own posts.
+  const cr = useSubmissions({});
   // Keep again worked: swap in the fresh clip and its new posts.
   const kept = (clip: Clip, posts: Post[]) =>
     setData((d) =>
@@ -201,7 +205,14 @@ function AllClips() {
             <ul className="library-grid">
               {clips.map((c) => (
                 <li key={c.clipId}>
-                  <LibraryCard clip={c} posts={data.posts.filter((p) => p.clipId === c.clipId)} ready={ready} onKept={kept} />
+                  <LibraryCard
+                    clip={c}
+                    posts={data.posts.filter((p) => p.clipId === c.clipId)}
+                    ready={ready}
+                    onKept={kept}
+                    crSubs={cr.subs.filter((x) => x.clipId === c.clipId)}
+                    onCrChange={cr.put}
+                  />
                 </li>
               ))}
             </ul>
@@ -257,9 +268,14 @@ function LibraryCard({
   posts,
   ready = [],
   onKept,
+  crSubs = [],
+  onCrChange = () => undefined,
 }: {
   clip: Clip;
   posts: Post[];
+  /** This clip's posts on Content Rewards (§38.6). */
+  crSubs?: CrSubmission[];
+  onCrChange?: (next: CrSubmission | null) => void;
   /** Places that are set up now: a post still waiting for one of them gets its own row with Post now (§33.6). */
   ready?: readonly Platform[];
   onKept: (clip: Clip, posts: Post[]) => void;
@@ -359,6 +375,7 @@ function LibraryCard({
         <p className="muted small">No posts yet.</p>
       )}
       {needsUploadAgain(clip, posts) || stuck || clip.status === "failed" ? <UploadAgain clip={clip} posts={posts} onKept={onKept} /> : null}
+      {crSubs.length ? <CrPostLines subs={crSubs} onChange={onCrChange} compact /> : null}
       <SimilarClips clipId={clip.clipId} />
     </article>
   );

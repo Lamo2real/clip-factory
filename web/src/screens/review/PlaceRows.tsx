@@ -9,8 +9,8 @@ import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { Button, Segmented, Toggle } from "../../components/ui.tsx";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
-import { X_REPLIES_LABEL, YOUTUBE_CATEGORIES, YT_WHO, type CardOptions } from "../../lib/preset.ts";
-import { PRIVACY_LABEL, tooLongForTikTok, type TikTokChoices } from "../../lib/tiktokChoices.ts";
+import { CAMPAIGN_LOCKED, META_PAID_LINE, X_REPLIES_LABEL, YOUTUBE_CATEGORIES, YT_WHO, type CardOptions } from "../../lib/preset.ts";
+import { campaignTikTokProblem, PRIVACY_LABEL, tooLongForTikTok, type TikTokChoices } from "../../lib/tiktokChoices.ts";
 import { TikTokCommercial } from "./TikTokCommercial.tsx";
 import { TikTokPrivacy } from "./TikTokPrivacy.tsx";
 
@@ -47,8 +47,22 @@ export function placesTooLong(c: Captions, chosen?: readonly Platform[]): Platfo
   return PLATFORM_ORDER.filter((p) => over.has(p) && (!chosen || chosen.includes(p)));
 }
 
+/** A campaign clip's rows (§38.5): what is locked, and the caption items the publisher puts back. */
+export interface CampaignRows {
+  /** "#Ad" (or the brief's own) and every required tag. */
+  required: string[];
+}
+
+/** The caption is missing #Ad or one of the campaign's tags (the publisher puts them back, §38.14). */
+export function missingRequired(text: string, required: readonly string[]): boolean {
+  const low = text.toLowerCase();
+  return required.some((r) => !low.includes(r.toLowerCase()));
+}
+
 /** One short line under a closed row: what will be used, so nothing is hidden behind the tap (null: nothing to say). */
-export function nowLine(p: Platform, o: CardOptions, tiktok: TikTokChoices, nickname?: string): string | null {
+export function nowLine(p: Platform, o: CardOptions, tiktok: TikTokChoices, nickname?: string, campaign?: CampaignRows): string | null {
+  if (campaign && p === "youtube") return "Who can see it: Everyone · Made for kids: No · Paid promotion";
+  if (campaign && p === "x") return `Who can reply: ${X_REPLIES_LABEL[o.x.replies]} · Paid partnership: on`;
   switch (p) {
     case "youtube": {
       const cat = YOUTUBE_CATEGORIES.find((c) => c.id === o.youtube.category)?.label ?? "Gaming";
@@ -105,6 +119,7 @@ export function PlaceRows({
   options,
   onOptions,
   tiktok,
+  campaign,
 }: {
   places: readonly Platform[];
   captions: Captions;
@@ -116,6 +131,8 @@ export function PlaceRows({
   options: CardOptions;
   onOptions: <K extends keyof CardOptions>(platform: K, patch: Partial<CardOptions[K]>) => void;
   tiktok: TikTokRow;
+  /** A campaign clip: YouTube's choices are locked, and the lines say what the campaign needs. */
+  campaign?: CampaignRows;
 }) {
   const id = useId();
   const [open, setOpen] = useState<ReadonlySet<Platform>>(() => new Set());
@@ -161,6 +178,9 @@ export function PlaceRows({
             {tooLong ? " · too long" : ""}
           </span>
         </div>
+        {campaign && missingRequired(captions[key], campaign.required) && key !== "youtubeTitle" ? (
+          <p className="cr-caption-note small">I put #Ad and the campaign&apos;s tags back when it uploads.</p>
+        ) : null}
         {single ? (
           <input
             id={fid}
@@ -190,7 +210,7 @@ export function PlaceRows({
     <div className="place-rows" data-help="captions" data-help-dodge="">
       {shown.map((p) => {
         const isOpen = open.has(p);
-        const now = settings ? nowLine(p, options, tiktok.choices, isOpen ? undefined : tiktok.creator?.nickname) : null;
+        const now = settings ? nowLine(p, options, tiktok.choices, isOpen ? undefined : tiktok.creator?.nickname, campaign) : null;
         return (
           <details
             key={p}
@@ -238,15 +258,33 @@ export function PlaceRows({
                 <>
                   {field("youtubeTitle", "Title", 1, true)}
                   {field("youtubeDescription", "Description", 4)}
-                  <div className="field">
-                    <span className="field__label">Who can see it</span>
-                    <Segmented<YoutubePrivacy>
-                      label="Who can see it on YouTube"
-                      value={options.youtube.privacy}
-                      options={(["public", "unlisted", "private"] as const).map((v) => ({ value: v, label: YT_WHO[v] }))}
-                      onChange={(v) => onOptions("youtube", { privacy: v })}
-                    />
-                  </div>
+                  {campaign ? (
+                    <div className="cr-locked">
+                      <p className="place-row__fixed">
+                        <Icon name="lock" size={16} />
+                        <span>Who can see it: Everyone</span>
+                      </p>
+                      <p className="place-row__fixed">
+                        <Icon name="lock" size={16} />
+                        <span>Made for kids: No</span>
+                      </p>
+                      <p className="place-row__fixed">
+                        <Icon name="lock" size={16} />
+                        <span>Paid promotion: on</span>
+                      </p>
+                      <p className="small">{CAMPAIGN_LOCKED}</p>
+                    </div>
+                  ) : (
+                    <div className="field">
+                      <span className="field__label">Who can see it</span>
+                      <Segmented<YoutubePrivacy>
+                        label="Who can see it on YouTube"
+                        value={options.youtube.privacy}
+                        options={(["public", "unlisted", "private"] as const).map((v) => ({ value: v, label: YT_WHO[v] }))}
+                        onChange={(v) => onOptions("youtube", { privacy: v })}
+                      />
+                    </div>
+                  )}
                   <div className="field">
                     <span className="field__label" id={`${id}-yt-cat`}>
                       Category
@@ -260,23 +298,26 @@ export function PlaceRows({
                     />
                   </div>
                   <div className="place-row__switches">
-                    <Toggle
-                      label="Made for kids"
-                      description={options.youtube.madeForKids ? "Yes: YouTube turns off comments and some ads." : "No. Turn on only if this clip is made for kids."}
-                      checked={options.youtube.madeForKids}
-                      onChange={(v) => onOptions("youtube", { madeForKids: v })}
-                    />
+                    {campaign ? null : (
+                      <Toggle
+                        label="Made for kids"
+                        description={options.youtube.madeForKids ? "Yes: YouTube turns off comments and some ads." : "No. Turn on only if this clip is made for kids."}
+                        checked={options.youtube.madeForKids}
+                        onChange={(v) => onOptions("youtube", { madeForKids: v })}
+                      />
+                    )}
                     <Toggle label="Tell my subscribers" checked={options.youtube.notifySubscribers} onChange={(v) => onOptions("youtube", { notifySubscribers: v })} />
                   </div>
                 </>
               ) : p === "tiktok" ? (
-                <TikTokFields row={tiktok} field={field("tiktok", "TikTok caption", 5)} />
+                <TikTokFields row={tiktok} field={field("tiktok", "TikTok caption", 5)} campaign={!!campaign} />
               ) : p === "instagram" ? (
                 <>
                   {field("instagram", "Instagram caption", 5)}
                   <div className="place-row__switches">
                     <Toggle label="Also show it in my feed" description="Goes up as a Reel." checked={options.instagram.shareToFeed} onChange={(v) => onOptions("instagram", { shareToFeed: v })} />
                   </div>
+                  {campaign ? <p className="small">{META_PAID_LINE("Instagram")}</p> : null}
                 </>
               ) : p === "facebook" ? (
                 <>
@@ -285,6 +326,7 @@ export function PlaceRows({
                     <Icon name="check" size={16} />
                     <span>Goes up as a Reel on your Page. Everyone can see it.</span>
                   </p>
+                  {campaign ? <p className="small">{META_PAID_LINE("Facebook")}</p> : null}
                 </>
               ) : (
                 <>
@@ -301,6 +343,12 @@ export function PlaceRows({
                       onChange={(v) => onOptions("x", { replies: v as XReplies })}
                     />
                   </div>
+                  {campaign ? (
+                    <p className="place-row__fixed">
+                      <Icon name="lock" size={16} />
+                      <span>Paid partnership: on</span>
+                    </p>
+                  ) : null}
                 </>
               )}
             </div>
@@ -312,7 +360,7 @@ export function PlaceRows({
 }
 
 /** TikTok's own options (TikTok's Content Sharing Guidelines): all of them, always visible once the row is open. */
-function TikTokFields({ row, field }: { row: TikTokRow; field: ReactNode }) {
+function TikTokFields({ row, field, campaign = false }: { row: TikTokRow; field: ReactNode; campaign?: boolean }) {
   const { creator, error, choices, onChoices } = row;
   if (error)
     return (
@@ -350,6 +398,12 @@ function TikTokFields({ row, field }: { row: TikTokRow; field: ReactNode }) {
       </div>
       {field}
       <TikTokPrivacy creator={creator} value={privacy} branded={branded && commercial} onChange={(v) => onChoices({ privacy: v })} />
+      {campaign && campaignTikTokProblem(choices) ? (
+        <p className="callout callout--bad" role="alert">
+          <Icon name="alert" size={18} />
+          <span>{campaignTikTokProblem(choices)}</span>
+        </p>
+      ) : null}
       <div className="tt-sheet__switches">
         <Toggle label="Comments" checked={comments && !creator.commentDisabled} disabled={creator.commentDisabled} onChange={(v) => onChoices({ comments: v })} description={creator.commentDisabled ? "Turned off in your TikTok settings." : undefined} />
         <Toggle label="Duet" checked={duet && !creator.duetDisabled} disabled={creator.duetDisabled} onChange={(v) => onChoices({ duet: v })} description={creator.duetDisabled ? "Turned off in your TikTok settings." : undefined} />

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SyntheticEvent } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
-import type { Captions, Clip, Platform, TikTokCreator, TikTokPostOptions, YoutubePrivacy } from "../../api/types.ts";
+import type { Campaign, Captions, Clip, Platform, TikTokCreator, TikTokPostOptions, YoutubePrivacy } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -21,7 +21,10 @@ import { useDeletedJobs } from "../../lib/jobDeletes.ts";
 import { captionsTooLong, PlaceRows, type PlaceRowsHandle } from "./PlaceRows.tsx";
 import { prefersReducedMotion } from "../../lib/prefs.ts";
 import { brandedBlocked, choicesReady, myTikTokChoices, NO_TIKTOK_CHOICES, PICK_WHOSE, tiktokOptions, tooLongForTikTok, type TikTokChoices } from "../../lib/tiktokChoices.ts";
-import { cardOptionsFrom, optionsFor, presetOf, type CardOptions } from "../../lib/preset.ts";
+import { campaignCardOptions, cardOptionsFrom, optionsFor, presetOf, type CardOptions } from "../../lib/preset.ts";
+import { afterUploadLine, crAvailability, patchCr, placesLines, reloadCr, unlinkedPlaces, useCr } from "../../lib/contentRewards.ts";
+import { campaignTikTokChoices, campaignTikTokProblem } from "../../lib/tiktokChoices.ts";
+import { CampaignStrip } from "./CampaignStrip.tsx";
 import { TikTokLegal } from "./TikTokCommercial.tsx";
 import { TikTokSheet } from "./TikTokSheet.tsx";
 import { useUnsaved } from "../../features/help/unsaved.ts";
@@ -298,10 +301,38 @@ function ReviewCard({
   const [captions, setCaptions] = useState<Captions>(clip.captions);
   // The Post to TikTok sheet (§17.8) is open: only when nothing is set up yet but TikTok is connected (§36.4).
   const [sheet, setSheet] = useState(false);
+  // A campaign clip (§38.5): its campaign's card. Until it is read, Upload waits (it must never go to a place the
+  // campaign does not pay for). An API without Content Rewards: the clip is a normal clip.
+  const cr = useCr();
+  const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [campaignOff, setCampaignOff] = useState(false);
+  const campaignId = clip.campaignId ?? null;
+  useEffect(() => {
+    if (!campaignId) return;
+    let alive = true;
+    const read = () =>
+      api()
+        .crCampaign(campaignId)
+        .then((c) => alive && (setCampaign(c), setCampaignOff(false)))
+        .catch((e) => alive && setCampaignOff(crAvailability(e) !== "error"));
+    void read();
+    return () => {
+      alive = false;
+    };
+  }, [campaignId, cr.data?.connection.crLinked, cr.data?.campaigns]);
+  const isCampaign = !!campaign;
+  const campaignWait = !!campaignId && !campaign && !campaignOff;
+  const placesReady: Platform[] | null = campaignWait ? null : ready && campaign ? ready.filter((p) => campaign.uploadPlaces.includes(p)) : ready;
   // Where it goes (§33): the owner's taps on this card, else this device's last choice / Where clips go, minus
-  // places that are not set up.
+  // places that are not set up. A campaign clip starts with every place the campaign pays for.
   const [picked, setPicked] = useState<Platform[] | null>(null);
-  const chosen: Platform[] = ready ? (picked ? picked.filter((p) => ready.includes(p)) : defaultUploadTo(ready, readUploadTo(), me?.settings.platforms)) : [];
+  const chosen: Platform[] = placesReady
+    ? picked
+      ? picked.filter((p) => placesReady.includes(p))
+      : isCampaign
+        ? placesReady
+        : defaultUploadTo(placesReady, readUploadTo(), me?.settings.platforms)
+    : [];
   function toggle(p: Platform) {
     setPicked(chosen.includes(p) ? chosen.filter((x) => x !== p) : [...chosen, p]);
   }
@@ -339,7 +370,7 @@ function ReviewCard({
   const presetRef = useRef(preset);
   presetRef.current = preset;
   const [own, setOwn] = useState<CardOptions | null>(null);
-  const opts: CardOptions = own ?? cardOptionsFrom(preset, youtubePrivacy);
+  const opts: CardOptions = own ?? (isCampaign ? campaignCardOptions(preset) : cardOptionsFrom(preset, youtubePrivacy));
   // The owner changed something in a row after My settings went on: the button offers to put his settings back.
   const [changed, setChanged] = useState(false);
   function setOpt<K extends keyof CardOptions>(platform: K, patch: Partial<CardOptions[K]>) {
@@ -387,8 +418,11 @@ function ReviewCard({
     retryApplies.current = false;
     askTikTok();
   };
+  const campaignRef = useRef(isCampaign);
+  campaignRef.current = isCampaign;
   function applyTikTok(c: TikTokCreator) {
-    const mine = myTikTokChoices(presetRef.current.tiktok, c, choicesRef.current);
+    // A campaign clip: Everyone, with Branded content ticked (this tap is the owner's own action, §17.8).
+    const mine = campaignRef.current ? campaignTikTokChoices(presetRef.current.tiktok, c) : myTikTokChoices(presetRef.current.tiktok, c, choicesRef.current);
     setChoices(mine);
     setApplied(true);
     // Nothing TikTok offers fits (or the clip is too long for TikTok): the row opens to say why.
@@ -405,7 +439,8 @@ function ReviewCard({
     askTikTok();
   }
   const ttTooLong = !!creator && tooLongForTikTok(clip.durationSec, creator.maxDurationSec);
-  const ttReady = !!creator && choicesReady(choices) && !ttTooLong;
+  const ttCampaignProblem = isCampaign ? campaignTikTokProblem(choices) : null;
+  const ttReady = !!creator && choicesReady(choices) && !ttTooLong && !ttCampaignProblem;
   // The settings are on: places other than TikTok use them from the start; TikTok needs the owner's tap.
   const settingsOn = !changed && (!tiktokOn || applied);
   const ttAsking = ttWanted && !creator && !ttError;
@@ -491,14 +526,15 @@ function ReviewCard({
     void refresh().catch(() => undefined);
   }
 
-  // Nothing is set up yet: Upload saves the clip the old way, and it goes up once a place is set up (§33.1).
-  const noneReady = !!ready && ready.length === 0;
+  // Nothing is set up yet: Upload saves the clip the old way, and it goes up once a place is set up (§33.1). Never for
+  // a campaign clip: it needs its places (§38.14).
+  const noneReady = !isCampaign && !!placesReady && placesReady.length === 0;
 
   async function confirm() {
     // Also on Try again: a place picked, or none turned off, is checked every time.
     if (!noneReady && !chosen.length) {
       keepAct.fail({ sound: false });
-      toast.error("Pick at least one place to upload to.");
+      toast.error(isCampaign ? "Pick where it goes, then tap Upload." : "Pick at least one place to upload to.");
       return;
     }
     if (captionsTooLong(captions, noneReady ? undefined : chosen)) {
@@ -619,13 +655,16 @@ function ReviewCard({
             ? "This clip is too long for TikTok. Untick TikTok to upload it to the rest."
             : !choices.privacy
               ? "Pick who can see it on TikTok first."
-              : ttNoWhose
+              : ttCampaignProblem
+                ? ttCampaignProblem
+                : ttNoWhose
                 ? `${PICK_WHOSE} Pick Your brand or Branded content on TikTok first.`
                 : (brandedBlocked(choices.privacy) ?? "Pick Your brand or Branded content on TikTok first.");
-  const placesShown = ready && !noneReady ? chosen : PLATFORM_ORDER;
+  const placesShown = placesReady && !noneReady ? chosen : PLATFORM_ORDER;
 
   return (
     <article className={`review-card glass${leaving ? " is-leaving" : returning ? " is-returning" : ""}`} aria-labelledby={`hook-${clip.clipId}`}>
+      {campaign ? <CampaignStrip campaign={campaign} /> : null}
       <div className="review-card__head">
         <div className="review-card__tags">
           <Pill tone="vermilion">{MOMENT_LABEL[clip.momentType]}</Pill>
@@ -719,8 +758,32 @@ function ReviewCard({
           ) : null}
         </details>
 
-        {ready ? (
-          <UploadToChips ready={ready} chosen={chosen} onToggle={toggle} />
+        {placesReady ? (
+          <UploadToChips
+            ready={placesReady}
+            chosen={chosen}
+            onToggle={toggle}
+            campaign={
+              campaign
+                ? {
+                    lines: placesLines(campaign),
+                    unlinked: unlinkedPlaces(campaign, cr.data?.connection),
+                    onRelinked: async (p) => {
+                      try {
+                        const connection = await api().crPatchConnection({ relinked: p });
+                        patchCr((d) => ({ ...d, connection }));
+                        void reloadCr();
+                        setCampaign(await api().crCampaign(campaign.campaignId));
+                        return true;
+                      } catch (e) {
+                        toast.error(friendlyMessage(e));
+                        return false;
+                      }
+                    },
+                  }
+                : undefined
+            }
+          />
         ) : setupFailed ? (
           <div className="upload-to upload-to--none">
             <p className="callout callout--bad" role="alert">
@@ -735,7 +798,7 @@ function ReviewCard({
           <Skeleton className="line-skel" />
         )}
 
-        {ready && !noneReady && chosen.length ? (
+        {placesReady && !noneReady && chosen.length ? (
           <div className="my-settings" data-help="use-my-settings" ref={mySettingsRef}>
             <Button
               variant="glass"
@@ -768,9 +831,10 @@ function ReviewCard({
           captions={captions}
           onChange={edit}
           handle={rows}
-          settings={!!ready && !noneReady}
+          settings={!!placesReady && !noneReady}
           options={opts}
           onOptions={setOpt}
+          campaign={campaign ? { required: [campaign.rules?.disclosure.caption ?? "#Ad", ...(campaign.rules?.requiredHashtags ?? []), ...(campaign.rules?.requiredTags ?? [])] } : undefined}
           tiktok={{
             creator,
             error: ttError,
@@ -801,12 +865,17 @@ function ReviewCard({
             </p>
           </div>
         ) : null}
-        {ready && !keepFailed && !noneReady ? (
+        {campaign && !keepFailed ? (
+          <p className="cr-after small" data-help="cr-send-now">
+            {afterUploadLine(cr.data?.connection, campaign.membership)}
+          </p>
+        ) : null}
+        {placesReady && !keepFailed && !noneReady ? (
           <p className={`upload-going${chosen.length && !uploadWhy ? "" : " is-none"}`} id={`going-${clip.clipId}`} aria-live="polite">
             {uploadWhy ?? goingToLine(chosen)}
           </p>
         ) : null}
-        {ready && !noneReady && tiktokOn ? (
+        {placesReady && !noneReady && tiktokOn ? (
           <TikTokLegal className="tt-legal" branded={choices.commercial && choices.branded} />
         ) : null}
         <div className="review-card__actions" ref={confirmRef} data-help-dodge="">
@@ -822,10 +891,10 @@ function ReviewCard({
             data-help={keepFailed ? "try-again upload" : "upload"}
             data-help-clear=""
             loading={busy === "confirm"}
-            disabled={leaving || !ready || (!noneReady && !chosen.length)}
+            disabled={leaving || !placesReady || (!noneReady && !chosen.length)}
             // Held, not dead: a tap takes him to the fix (Use my settings) instead of doing nothing.
-            aria-disabled={leaving || !ready || (!noneReady && !chosen.length) || !!uploadWhy ? true : undefined}
-            aria-describedby={ready && !keepFailed && !noneReady ? `going-${clip.clipId}` : undefined}
+            aria-disabled={leaving || !placesReady || (!noneReady && !chosen.length) || !!uploadWhy ? true : undefined}
+            aria-describedby={placesReady && !keepFailed && !noneReady ? `going-${clip.clipId}` : undefined}
             title={ttNoWhose && !ttTooLong ? PICK_WHOSE : undefined}
             onClick={confirm}
           >

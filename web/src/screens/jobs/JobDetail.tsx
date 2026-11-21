@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/index.ts";
+import type { Campaign } from "../../api/types.ts";
+import { CrPostLines } from "../../components/CrPostLine.tsx";
+import { campaignPath, crAvailability, useSubmissions } from "../../lib/contentRewards.ts";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { Clip, ClipStatus, Job } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
@@ -308,6 +311,8 @@ export function JobDetail({ jobId }: { jobId: string }) {
         </section>
       </div>
 
+      {job.campaignId ? <JobCampaignStrip campaignId={job.campaignId} note={job.campaignNote} clipIds={data.clips.map((c) => c.clipId)} /> : null}
+
       <section className="clips-section" aria-labelledby="clips-title">
         <h2 className="display-3" id="clips-title">
           Clips <em>from this job</em>
@@ -411,5 +416,42 @@ function BackLink() {
       <Icon name="chevronLeft" size={18} />
       <span>All jobs</span>
     </A>
+  );
+}
+
+/**
+ * "For FaZe Clips on Content Rewards · Following 9 rules" (§38.5), the agent's campaign note, and one line per campaign
+ * post of this job's clips (§38.6). Hidden when the API has no Content Rewards.
+ */
+function JobCampaignStrip({ campaignId, note, clipIds }: { campaignId: string; note?: string; clipIds: string[] }) {
+  const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [off, setOff] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    api()
+      .crCampaign(campaignId)
+      .then((c) => alive && setCampaign(c))
+      .catch((e) => alive && setOff(crAvailability(e) !== "error"));
+    return () => {
+      alive = false;
+    };
+  }, [campaignId]);
+  const subs = useSubmissions({ campaignId }, !off);
+  const mine = subs.subs.filter((s) => clipIds.includes(s.clipId));
+  if (off) return null;
+  return (
+    <section className="panel glass cr-job" aria-labelledby="cr-job-title">
+      <h2 className="panel__title" id="cr-job-title">
+        <Icon name="coin" size={20} /> {campaign ? <>For <A href={campaignPath(campaignId)} className="text-link user-text">{campaign.name}</A> on Content Rewards</> : "For a Content Rewards campaign"}
+      </h2>
+      {campaign ? <p className="muted small">Following {plural(campaign.plainRules.length, "rule")}</p> : null}
+      {note ? (
+        <p className="callout callout--info">
+          <Icon name="info" size={18} />
+          <span className="user-text">{note}</span>
+        </p>
+      ) : null}
+      {mine.length ? <CrPostLines subs={mine} onChange={subs.put} compact /> : null}
+    </section>
   );
 }
