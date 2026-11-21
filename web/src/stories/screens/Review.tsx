@@ -16,7 +16,7 @@ import type { PublishingJob, SocialAccount, StoriesConfig, Story, StoryPatch, St
 import { storiesHref } from "../routes.ts";
 import { CaptionEditor } from "../studio/CaptionEditor.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
-import { useWidth, useWorkspace } from "../studio/hooks.ts";
+import { useSameScript, useWidth, useWorkspace } from "../studio/hooks.ts";
 import { Busy, celebrate, Chip, Notice, StSheet, Tag, TextField } from "../studio/kit.tsx";
 import { Player } from "../studio/Player.tsx";
 import { PostsPanel } from "../studio/PostsPanel.tsx";
@@ -142,7 +142,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
 
   const story = loaded.data?.story ?? null;
   const job = loaded.data?.job ?? null;
-  const script = loaded.data?.script ?? null;
+  const script = useSameScript(loaded.data?.script ?? null);
   const live = (!!job && (job.status === "queued" || job.status === "running")) || story?.status === "producing";
   const inFlight = (pubs.data ?? []).some((j) => j.publishingStatus === "queued" || j.publishingStatus === "publishing");
 

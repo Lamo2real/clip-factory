@@ -16,7 +16,7 @@ import { CATALOG } from "../engine/catalog.ts";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { storiesHref } from "../routes.ts";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
-import { useWorkspace } from "../studio/hooks.ts";
+import { useSameScript, useWorkspace } from "../studio/hooks.ts";
 import { Busy, celebrate, Notice, Pick, Slider, Switch, Tag, TextField } from "../studio/kit.tsx";
 import { StepTrack } from "../studio/StepTrack.tsx";
 import { ago, CATEGORY_LABEL, isConflict, NO_GUIDANCE, say, seconds, STATUS_LABEL, STATUS_TONE } from "../studio/words.ts";
@@ -209,7 +209,7 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
   }, [idea, characters]);
 
   const kind: IdeaCategory | "" = source === "idea" ? (idea?.category ?? "") : category;
-  const seconds_ = length ?? Math.min(90, Math.max(15, cfg.defaultDurationSec ?? 45));
+  const lengthSec = length ?? Math.min(90, Math.max(15, cfg.defaultDurationSec ?? 45));
   const captionsOn = captions ?? cfg.captionsOn ?? true;
   const music: MusicMood = mood ?? (cfg.musicOn === false ? "none" : kind ? MOOD_FOR[kind] : "playful");
 
@@ -238,7 +238,7 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
     if (why) return setProblem(why);
     setBusy(true);
     setProblem(null);
-    const body: StoryInput = { characterIds: cast, durationSec: seconds_, captionsOn, musicMood: music };
+    const body: StoryInput = { characterIds: cast, durationSec: lengthSec, captionsOn, musicMood: music };
     if (source === "idea" && idea) body.ideaId = idea.ideaId;
     else body.brief = { title: title.trim(), logline: logline.trim(), category: category as IdeaCategory };
     try {
@@ -356,7 +356,7 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
             <h2 className="st-panel__title" id="st-nv-3">
               <span className="st-num">3</span> How long
             </h2>
-            <Slider label="Length" min={15} max={90} step={5} value={seconds_} onChange={setLength} words={seconds(seconds_)} marks={{ from: 30, to: 60, label: "30 to 60 seconds works best." }} />
+            <Slider label="Length" min={15} max={90} step={5} value={lengthSec} onChange={setLength} words={seconds(lengthSec)} marks={{ from: 30, to: 60, label: "30 to 60 seconds works best." }} />
           </section>
 
           <section className="st-panel" aria-labelledby="st-nv-4">
@@ -421,7 +421,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
   const wasLive = useRef(false);
   const story = loaded.data?.story ?? null;
   const job = loaded.data?.job ?? null;
-  const script: StoryScript | null = loaded.data?.script ?? null;
+  const script: StoryScript | null = useSameScript(loaded.data?.script ?? null);
   const live = isLive(job) || story?.status === "producing";
 
   usePoll(() => loaded.reload(), live, 2000);

@@ -41,3 +41,14 @@ export function useWorkspace(ws: string): Workspace | null {
   }, [ws]);
   return w;
 }
+
+/**
+ * The same script object for as long as its contents do not change, so a poll that brings the same storyboard again
+ * does not restart the live previews drawn from it.
+ */
+export function useSameScript<T>(script: T | null): T | null {
+  const last = useRef<{ json: string; value: T | null }>({ json: "null", value: null });
+  const json = script === null ? "null" : JSON.stringify(script);
+  if (json !== last.current.json) last.current = { json, value: script };
+  return last.current.value;
+}

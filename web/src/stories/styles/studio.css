@@ -169,6 +169,10 @@
   background: var(--st-sky, #62c6ff);
 }
 
+.st-btn[aria-pressed="true"]:hover {
+  background: #8dd6ff;
+}
+
 .st-iconbtn {
   display: inline-grid;
   place-items: center;
@@ -1892,6 +1896,11 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   gap: 10px 16px;
+}
+
+.st-sfx__scene > .st-btn,
+.st-captions > .st-btn {
+  justify-self: end;
 }
 
 .st-sfx__title {
