@@ -361,10 +361,12 @@ def test_instagram_resumable_upload_then_publish() -> None:
     assert upload.headers["Authorization"] == "OAuth ACCESS-TOKEN"
     assert (upload.headers["offset"], upload.headers["file_size"]) == ("0", str(3 * MB))
     assert len(upload.body) == 3 * MB
-    assert saved == [{"container": "17889455560051444"}, {"container": "17889455560051444", "uploaded": True}]
+    made = {"container": "17889455560051444", "containerAt": "2026-11-15T12:00:00.000Z"}
+    assert saved == [made, {**made, "uploaded": True}]
     handle = saved[-1]
     assert publisher.check(job, handle).state == "ready_to_finish"
     done = publisher.finish(job, handle)
+    assert saved[2] == {**handle, "publishing": True}  # marked before the publish call, so a lost answer is caught
     assert form(http.calls[4])["creation_id"] == ["17889455560051444"]
     assert done.published is not None
     assert done.published.url == "https://www.instagram.com/reel/C1a2b3c4d5/"
@@ -401,7 +403,7 @@ def test_instagram_upload_5xx_falls_back_to_video_url() -> None:
     assert retry["video_url"][0].startswith("https://cf-prod-media-123.s3.")
     assert "upload_type" not in retry
     assert retry["media_type"] == ["REELS"]
-    assert saved[-1] == {"container": "17900000000000002", "uploaded": True}
+    assert saved[-1] == {"container": "17900000000000002", "containerAt": "2026-11-15T12:00:00.000Z", "uploaded": True}
 
 
 def test_instagram_daily_limit() -> None:
@@ -429,19 +431,96 @@ def test_instagram_expired_container_is_not_blamed_on_the_file() -> None:
     assert e.value.problem.kind == "other"
 
 
+IG_HANDLE = {"container": "c1", "containerAt": "2026-11-15T12:00:00.000Z", "uploaded": True}
+
+
 def test_instagram_published_container_is_never_published_twice() -> None:
     http = FakeHttp((200, "publish/instagram_status_published"), (200, "publish/instagram_media_latest"))
     job, saved, _ = make_job("instagram", http, data={"igUserId": "1784"})
-    done = InstagramPublisher().check(job, {"container": "c1", "uploaded": True})
+    done = InstagramPublisher().check(job, dict(IG_HANDLE))
     assert done.state == "done"
     assert all("media_publish" not in c.url for c in http.calls)
-    assert http.calls[1].url.startswith("https://graph.facebook.com/v27.0/1784/media?fields=id%2Cpermalink&limit=1")
+    assert http.calls[1].url.startswith(
+        "https://graph.facebook.com/v27.0/1784/media?fields=id%2Cpermalink%2Ctimestamp%2Ccaption&limit=5"
+    )
+    # Not the newest post (posted by hand), not the older Reel with the same caption: the one made after the container.
     assert done.published is not None
     assert (done.published.stats_id, done.published.url) == (
         "17920238422030506",
         "https://www.instagram.com/reel/C1a2b3c4d5/",
     )
     assert saved[-1]["mediaId"] == "17920238422030506"
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        [],
+        [{"id": "9", "caption": "Something else", "timestamp": "2026-11-15T12:10:00+0000"}],
+        [{"id": "9", "caption": "No way #gaming", "timestamp": "2026-11-10T09:00:00+0000"}],  # older than the container
+        [  # two could be it: never guess
+            {"id": "8", "caption": "No way #gaming", "timestamp": "2026-11-15T12:10:00+0000"},
+            {"id": "9", "caption": "No way #gaming", "timestamp": "2026-11-15T12:20:00+0000"},
+        ],
+    ],
+)
+def test_instagram_lookup_never_guesses(rows: list[dict[str, Any]]) -> None:
+    http = FakeHttp((200, "publish/instagram_status_published"), (200, {"data": rows}))
+    job, saved, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    with pytest.raises(errors.PlatformProblem, match="Look on Instagram before you press Try again") as e:
+        InstagramPublisher().check(job, dict(IG_HANDLE))
+    assert isinstance(e.value, RetryablePublishError) is False
+    assert saved == []  # no media id is saved
+
+
+@pytest.mark.parametrize(
+    "lost",
+    [NetworkError("timed out"), (500, {"error": {"code": 2, "message": "Service temporarily unavailable"}})],
+)
+def test_instagram_lost_publish_answer_is_never_published_twice(lost: Any) -> None:
+    http = FakeHttp(
+        lost,
+        (200, "publish/instagram_status_published"),
+        (200, "publish/instagram_media_latest"),
+    )
+    job, saved, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    done = InstagramPublisher().finish(job, dict(IG_HANDLE))
+    assert done.state == "done"
+    assert [c.url.split("?")[0].rsplit("/", 1)[-1] for c in http.calls] == ["media_publish", "c1", "media"]
+    assert done.published is not None
+    assert done.published.stats_id == "17920238422030506"
+    assert saved[0] == {**IG_HANDLE, "publishing": True}
+    assert saved[-1]["mediaId"] == "17920238422030506"
+
+
+def test_instagram_retried_publish_looks_before_publishing_again() -> None:
+    http = FakeHttp((200, "publish/instagram_status_published"), (200, "publish/instagram_media_latest"))
+    job, _, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    done = InstagramPublisher().finish(job, {**IG_HANDLE, "publishing": True})
+    assert done.state == "done"
+    assert all("media_publish" not in c.url for c in http.calls)
+
+
+def test_instagram_retried_publish_sends_again_when_not_posted() -> None:
+    http = FakeHttp(
+        (200, "publish/instagram_status_finished"),
+        (200, "publish/instagram_publish"),
+        (200, "publish/instagram_permalink"),
+    )
+    job, _, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    done = InstagramPublisher().finish(job, {**IG_HANDLE, "publishing": True})
+    assert "fields=status_code&" in http.calls[0].url
+    assert http.calls[1].url.endswith("/1784/media_publish")
+    assert done.published is not None
+    assert done.published.stats_id == "17920238422030506"
+
+
+def test_instagram_failed_publish_that_did_not_post_keeps_its_error() -> None:
+    http = FakeHttp(NetworkError("timed out"), NetworkError("timed out"))
+    job, _, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    with pytest.raises(RetryablePublishError, match="Instagram did not answer"):
+        InstagramPublisher().finish(job, dict(IG_HANDLE))
+    assert len(http.calls) == 2
 
 
 def test_instagram_upload_failure_with_debug_info() -> None:
@@ -451,7 +530,7 @@ def test_instagram_upload_failure_with_debug_info() -> None:
     job, saved, _ = make_job("instagram", http, data={"igUserId": "1784"})
     with pytest.raises(PublishError, match="Posting to Instagram did not work"):
         InstagramPublisher().start(job)
-    assert saved == [{"container": "17889455560051444"}]  # the container is kept, so a replay reuses it
+    assert saved == [{"container": "17889455560051444", "containerAt": "2026-11-15T12:00:00.000Z"}]  # kept for a replay
 
 
 @pytest.mark.parametrize(
@@ -466,7 +545,7 @@ def test_instagram_upload_failure_with_debug_info() -> None:
     ],
 )
 def test_instagram_publish_errors(fixture: str, kind: str, code: str, retryable: bool) -> None:
-    http = FakeHttp((400, f"publish/{fixture}"))
+    http = FakeHttp((400, f"publish/{fixture}"), (200, "publish/instagram_status_finished"))
     job, _, _ = make_job("instagram", http, data={"igUserId": "1784"})
     with pytest.raises(PublishError) as e:
         InstagramPublisher().finish(job, {"container": "c1", "uploaded": True})
@@ -536,8 +615,9 @@ def test_facebook_upload_done_when_meta_says_completed() -> None:
     assert FacebookPublisher().check(job, {"videoId": "v", "uploaded": True}).state == "ready_to_finish"
 
 
-def test_facebook_processing_error_logs_the_reason(capsys: pytest.CaptureFixture[str]) -> None:
-    http = FakeHttp((200, "publish/facebook_status_processing_error"))
+@pytest.mark.parametrize("fixture", ["facebook_status_processing_error_documented", "facebook_status_processing_error"])
+def test_facebook_processing_error_logs_the_reason(fixture: str, capsys: pytest.CaptureFixture[str]) -> None:
+    http = FakeHttp((200, f"publish/{fixture}"))
     job, _, _ = make_job("facebook", http, data={"pageId": "p1"})
     with pytest.raises(PublishError, match="Facebook did not like this video file"):
         FacebookPublisher().check(job, {"videoId": "v", "uploaded": True})
