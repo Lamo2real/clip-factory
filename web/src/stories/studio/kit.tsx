@@ -379,6 +379,9 @@ export function StSheet({
   }, []);
 
   function keys(e: KeyboardEvent<HTMLDivElement>) {
+    // A sheet opened from this one is drawn elsewhere on the page but its keys still reach this one through React:
+    // they are that sheet's own (its Tab stays in it).
+    if (!box.current?.contains(e.target as Node)) return;
     if (e.key === "Escape") {
       e.stopPropagation();
       closeRef.current();

@@ -6,12 +6,13 @@
 // The models come from Lamo Stories' own settings (GET …/ai). When that cannot be read, the names come from Lamo
 // Stories' own model list (stories/config/models.json); nothing here ever reads Clip Factory's models.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ApiError } from "../../api/errors.ts";
 import { A } from "../../components/ui.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { useLoad, usePoll } from "../../lib/hooks.ts";
 import modelsFile from "../../../../stories/config/models.json";
 import { storiesApi } from "../api/client.ts";
-import { EFFORT_LABEL, type AiSetting, type AiTask, type Effective, type Effort, type ModelInfo, type ModelOverride, type ProductionJob, type Story, type TaskInfo, type TaskKind } from "../api/types.ts";
+import { EFFORT_LABEL, STEP_ORDER, type AiSetting, type AiTask, type Effective, type Effort, type ModelInfo, type ModelOverride, type ProductionJob, type Story, type TaskInfo, type TaskKind } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
 import { Busy, Notice, Pick, StSheet, Tag } from "./kit.tsx";
 import { say } from "./words.ts";
@@ -154,14 +155,39 @@ export function usualFor(info: AiInfo, kind: TaskKind): Effective {
   return listedTasks().find((x) => x.kind === kind)!.effective;
 }
 
+/** What runs when nothing is picked; `modelKnown`/`effortKnown` false when it is only a guess (settings not read). */
+export type Usual = Effective & { modelKnown?: boolean; effortKnown?: boolean };
+
+/** A model and effort a call will use, and whether each part is known or only guessed (GET …/ai not read). */
+export interface Planned {
+  model: string;
+  effort: Effort | null;
+  effortApplied: boolean;
+  changed: boolean;
+  /** false: the model is the owner's usual one, which could not be read; the name in `model` is only a guess */
+  modelKnown: boolean;
+  effortKnown: boolean;
+}
+
 /** A model and effort put together over the usual: the chosen parts win, the rest stays as usual (merged apart). */
-export function merged(info: AiInfo, usual: Effective, pick: ModelOverride | AiSetting | null | undefined): { model: string; effort: Effort | null; effortApplied: boolean; changed: boolean } {
+export function merged(info: AiInfo, usual: Usual, pick: ModelOverride | AiSetting | null | undefined): Planned {
   const model = pick?.model || usual.model;
   const m = modelOf(info, model);
   const offers = m ? m.efforts : [];
   const applied = m ? offers.length > 0 : usual.effortApplied;
   const effort = applied ? (pick?.effort ?? usual.effort ?? m?.defaultEffort ?? null) : null;
-  return { model, effort, effortApplied: applied, changed: !!(pick?.model || pick?.effort) };
+  const modelKnown = info.live || !!pick?.model || !!usual.modelKnown;
+  const effortKnown = info.live || !!pick?.effort || !!usual.effortKnown || (modelKnown && !applied);
+  return { model, effort, effortApplied: applied, changed: !!(pick?.model || pick?.effort), modelKnown, effortKnown };
+}
+
+/** The line for a call not answered yet: the names when they are known, "your usual …" when they could not be read. */
+export function plannedLine(info: AiInfo, p: Pick<Planned, "model" | "effort" | "effortApplied"> & Partial<Pick<Planned, "modelKnown" | "effortKnown">>): string {
+  const modelKnown = p.modelKnown ?? true;
+  const effortKnown = p.effortKnown ?? true;
+  if (modelKnown && effortKnown) return modelLine(info, p.model, p.effort, p.effortApplied);
+  if (!modelKnown) return effortKnown && p.effort ? `your usual model · ${EFFORT_LABEL[p.effort]} effort` : "your usual model and effort";
+  return `${modelName(info, p.model)} · your usual effort`;
 }
 
 /** "Claude Opus 5.5 · High effort" (or "… · its own effort level" when the model has no effort setting). */
@@ -182,6 +208,9 @@ export function cleanPick(p: ModelOverride | null | undefined): ModelOverride | 
 
 const USUAL = "usual";
 
+/** Every effort level any listed model offers (offered when the usual model is not known). */
+const ALL_EFFORTS: Effort[] = (["low", "medium", "high", "xhigh", "max"] as Effort[]).filter((e) => LISTED_MODELS.some((m) => m.efforts.includes(e)));
+
 /**
  * The small menu next to an AI button: which model and effort to use for this one tap (never saved), or, with
  * `keep`, for one video (its own setting, kept with it). The button itself always says what will run.
@@ -199,7 +228,7 @@ export function ModelMenu({
 }: {
   info: AiInfo;
   /** what runs when nothing is picked here */
-  usual: Effective;
+  usual: Usual;
   value: ModelOverride | AiSetting | null;
   onChange: (v: ModelOverride | null) => void;
   title?: string;
@@ -220,9 +249,12 @@ export function ModelMenu({
     setOpen(true);
   }
 
-  const chosen = model === USUAL ? modelOf(info, usual.model) : modelOf(info, model);
-  const efforts = chosen ? chosen.efforts : [];
-  const usualEffort = usual.effort ?? chosen?.defaultEffort ?? null;
+  // Before Lamo Stories' settings are read, the usual model and effort are not known: nothing here names a guess.
+  const usualModelKnown = info.live || !!usual.modelKnown;
+  const usualEffortKnown = info.live || !!usual.effortKnown;
+  const chosen = model === USUAL ? (usualModelKnown ? modelOf(info, usual.model) : null) : modelOf(info, model);
+  const efforts = chosen ? chosen.efforts : model === USUAL && !usualModelKnown ? ALL_EFFORTS : [];
+  const usualEffort = usualEffortKnown ? (usual.effort ?? chosen?.defaultEffort ?? null) : null;
   const usualMissing = effort === USUAL && !!usualEffort && !!chosen && efforts.length > 0 && !efforts.includes(usualEffort);
   const pickedMissing = effort !== USUAL && !efforts.includes(effort as Effort);
   const status = chosen && chosen.status !== "ok" && chosen.status !== "not_checked" ? chosen.statusLine : null;
@@ -235,14 +267,16 @@ export function ModelMenu({
     setOpen(false);
   }
 
-  const words = `${shortName(modelName(info, now.model))}${now.effortApplied && now.effort ? ` · ${EFFORT_LABEL[now.effort]}` : ""}`;
+  const words = now.modelKnown
+    ? `${shortName(modelName(info, now.model))}${now.effortKnown && now.effortApplied && now.effort ? ` · ${EFFORT_LABEL[now.effort]}` : ""}`
+    : `Usual${now.effortKnown && now.effort ? ` · ${EFFORT_LABEL[now.effort]}` : ""}`;
   return (
     <>
       <button
         type="button"
         className={`st-btn st-s-ai-btn${now.changed ? " is-set" : ""}${compact ? " is-compact" : ""}${className ? ` ${className}` : ""}`}
         aria-haspopup="dialog"
-        aria-label={`${title}: ${spoken(info, now.model, now.effort, now.effortApplied)}${now.changed ? (note.startsWith("Kept") ? ", kept with this video" : ", just this one") : ""}`}
+        aria-label={`${title}: ${spoken(info, now)}${now.changed ? (note.startsWith("Kept") ? ", kept with this video" : ", just this one") : ""}`}
         onClick={show}
       >
         <Icon name="sliders" size={18} aria-hidden="true" />
@@ -278,11 +312,13 @@ export function ModelMenu({
             value={model}
             onChange={(v) => {
               setModel(v);
-              const m = v === USUAL ? modelOf(info, usual.model) : modelOf(info, v);
+              const m = v === USUAL ? (usualModelKnown ? modelOf(info, usual.model) : null) : modelOf(info, v);
               if (effort !== USUAL && m && !m.efforts.includes(effort as Effort)) setEffort(USUAL);
             }}
             options={[
-              { value: USUAL, label: `Usual: ${modelName(info, usual.model)}`, line: usualWords },
+              usualModelKnown
+                ? { value: USUAL, label: `Usual: ${modelName(info, usual.model)}`, line: usual.from === "project" && usual.modelKnown ? "Kept with this video" : usualWords }
+                : { value: USUAL, label: "Your usual model", line: "Your Lamo Stories settings could not be read just now, so its name is not shown." },
               ...info.models.map((m) => ({ value: m.key, label: m.label, line: modelStatusWords(m, info.live) })),
             ]}
             className="st-s-ai-models"
@@ -295,7 +331,7 @@ export function ModelMenu({
               label="Effort"
               value={effort}
               onChange={setEffort}
-              options={[{ value: USUAL, label: usualEffort ? `Usual (${EFFORT_LABEL[usualEffort]})` : "Usual" }, ...efforts.map((e) => ({ value: e, label: EFFORT_LABEL[e] }))]}
+              options={[{ value: USUAL, label: usualEffort ? `Usual (${EFFORT_LABEL[usualEffort]})` : usualEffortKnown ? "Usual" : "Your usual effort" }, ...efforts.map((e) => ({ value: e, label: EFFORT_LABEL[e] }))]}
               className="st-s-ai-efforts"
             />
           )}
@@ -308,10 +344,12 @@ export function ModelMenu({
 }
 
 /** What the menu's button says to a screen reader: "Claude Opus 5.5, High effort". */
-function spoken(info: AiInfo, model: string, effort: Effort | null, applied: boolean): string {
-  const name = modelName(info, model);
-  if (!applied) return `${name}, its own effort level`;
-  return effort ? `${name}, ${EFFORT_LABEL[effort]} effort` : name;
+function spoken(info: AiInfo, p: Planned): string {
+  if (!p.modelKnown) return p.effortKnown && p.effort ? `your usual model, ${EFFORT_LABEL[p.effort]} effort` : "your usual model and effort";
+  const name = modelName(info, p.model);
+  if (!p.effortApplied) return `${name}, its own effort level`;
+  if (!p.effortKnown) return `${name}, your usual effort`;
+  return p.effort ? `${name}, ${EFFORT_LABEL[p.effort]} effort` : name;
 }
 
 function modelStatusWords(m: ModelInfo, live: boolean): string {
@@ -324,11 +362,23 @@ function modelStatusWords(m: ModelInfo, live: boolean): string {
 
 export type TaskPhase = "idle" | "working" | "done" | "failed";
 
+/** How many reads of a task in a row may fail (a flaky connection) before the line says it stopped. */
+const MAX_MISSES = 4;
+
+/** A read that will keep failing the same way (the task is gone, not this workspace's, the request is wrong). */
+function lasting(e: unknown): boolean {
+  return e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429;
+}
+
 /**
  * Runs one AI task: starts it, then reads it every second while it is queued or running, and calls `onDone` with
- * the finished task. `retry` starts the same request again.
+ * the finished task. A read that keeps failing ends it as failed, with its sentence and Try again.
+ *
+ * `again` is how Try again asks: it builds the request anew from what the screen holds now (the model and effort
+ * picked since, the words typed), so a model swapped in after a refusal is the one sent. Without it, Try again
+ * repeats the last request as it was.
  */
-export function useAiTask(ws: string, onDone: (task: AiTask) => void) {
+export function useAiTask(ws: string, onDone: (task: AiTask) => void, again?: () => void) {
   const [task, setTask] = useState<AiTask | null>(null);
   const [phase, setPhase] = useState<TaskPhase>("idle");
   const [problem, setProblem] = useState<string | null>(null);
@@ -337,6 +387,9 @@ export function useAiTask(ws: string, onDone: (task: AiTask) => void) {
   const last = useRef<(() => Promise<AiTask>) | null>(null);
   const doneRef = useRef(onDone);
   doneRef.current = onDone;
+  const againRef = useRef(again);
+  againRef.current = again;
+  const misses = useRef(0);
   const live = useRef(true);
   useEffect(() => {
     live.current = true;
@@ -360,6 +413,7 @@ export function useAiTask(ws: string, onDone: (task: AiTask) => void) {
   const start = useCallback(
     async (begin: () => Promise<AiTask>) => {
       last.current = begin;
+      misses.current = 0;
       setProblem(null);
       setTask(null);
       setPhase("working");
@@ -379,14 +433,29 @@ export function useAiTask(ws: string, onDone: (task: AiTask) => void) {
     async () => {
       setTick((n) => n + 1);
       if (!task) return;
-      settle(await storiesApi().getTask(ws, task.taskId));
+      let next: AiTask;
+      try {
+        next = await storiesApi().getTask(ws, task.taskId);
+      } catch (e) {
+        if (!live.current) return;
+        misses.current += 1;
+        if (lasting(e) || misses.current >= MAX_MISSES) {
+          setPhase("failed");
+          setProblem(say(e, "We lost touch with the helper. Tap Try again."));
+          return;
+        }
+        throw e; // a passing hiccup: the poll waits a little longer, then reads again
+      }
+      misses.current = 0;
+      settle(next);
     },
     phase === "working" && !!task,
     1000,
   );
 
   const retry = useCallback(() => {
-    if (last.current) void start(last.current);
+    if (againRef.current) againRef.current();
+    else if (last.current) void start(last.current);
   }, [start]);
 
   const reset = useCallback(() => {
@@ -410,15 +479,12 @@ export function TaskLine({
   kind: TaskKind;
   run: ReturnType<typeof useAiTask>;
   /** what the request asked for (the usual merged with the menu), shown until the task itself says */
-  expected: { model: string; effort: Effort | null; effortApplied: boolean };
+  expected: Pick<Planned, "model" | "effort" | "effortApplied"> & Partial<Pick<Planned, "modelKnown" | "effortKnown">>;
 }) {
   if (run.phase === "working") {
     const t = run.task;
-    const model = t?.model ?? expected.model;
-    const effort = t ? t.effort : expected.effort;
-    const applied = t?.effortApplied ?? expected.effortApplied;
     const what = TASK_WORD[kind] ?? "Working";
-    const line = modelLine(info, model, effort, applied);
+    const line = t?.model ? modelLine(info, t.model, t.effort, t.effortApplied) : plannedLine(info, expected);
     return (
       <Busy>
         <span>
@@ -429,7 +495,6 @@ export function TaskLine({
     );
   }
   if (run.phase === "failed" && run.problem) {
-    const settings = /Settings\s*›\s*AI/i.test(run.problem);
     return (
       <Notice
         tone="bad"
@@ -438,11 +503,7 @@ export function TaskLine({
             <button type="button" className="st-btn st-btn--main" onClick={run.retry}>
               Try again
             </button>
-            {settings ? (
-              <A href={storiesHref({ name: "settings", section: "ai" })} className="st-btn">
-                Open Settings › AI
-              </A>
-            ) : null}
+            <SettingsFix sentence={run.problem} />
           </span>
         }
       >
@@ -453,9 +514,62 @@ export function TaskLine({
   return null;
 }
 
-/** Which model and effort made each step of a video, from the job's own record (CONTRACTS §45.25 "Recorded"). */
-export function ModelsUsed({ info, job, title = "Made with" }: { info: AiInfo; job: ProductionJob | null; title?: string }) {
-  const used = job?.meta.models ?? [];
+/** The Lamo Stories setting a stop sentence sends the owner to (§45.25: "… in Lamo Stories › Settings › AI"). */
+export function settingsFor(sentence: string | null | undefined): "ai" | "agents" | null {
+  if (!sentence) return null;
+  if (/Settings\s*›\s*Agents/i.test(sentence)) return "agents";
+  if (/Settings\s*›\s*AI\b/i.test(sentence)) return "ai";
+  return null;
+}
+
+/** The button that opens the setting a stop sentence names (nothing when it names none). */
+export function SettingsFix({ sentence }: { sentence: string | null | undefined }) {
+  const section = settingsFor(sentence);
+  if (!section) return null;
+  return (
+    <A href={storiesHref({ name: "settings", section })} className="st-btn">
+      {section === "agents" ? "Open Settings › Agents" : "Open Settings › AI"}
+    </A>
+  );
+}
+
+type ModelUse = ProductionJob["meta"]["models"][number];
+
+/**
+ * Which model and effort made each step of the video as it is now: for each step, the newest run that finished it
+ * (a later run of only some steps keeps the earlier runs' writer and checks), in the order of the steps.
+ */
+export function madeWith(list: (ProductionJob | null | undefined)[]): ModelUse[] {
+  const ids = new Set<string>();
+  const jobs: ProductionJob[] = [];
+  for (const j of list) {
+    if (!j || ids.has(j.jobId)) continue;
+    ids.add(j.jobId);
+    jobs.push(j);
+  }
+  jobs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const out = new Map<string, ModelUse>();
+  for (const j of jobs)
+    for (const u of j.meta.models) {
+      if (out.has(u.step)) continue;
+      const step = j.steps.find((s) => s.key === u.step);
+      if (step && step.status !== "done") continue; // it did not finish in that run, so an older run's is in the video
+      out.set(u.step, u);
+    }
+  const rank = (step: string) => {
+    const i = (STEP_ORDER as readonly string[]).indexOf(step);
+    return i < 0 ? STEP_ORDER.length : i;
+  };
+  return [...out.values()].sort((a, b) => rank(a.step) - rank(b.step));
+}
+
+/**
+ * Which model and effort made each step of a video, from the jobs' own records (CONTRACTS §45.25 "Recorded"): while
+ * a run works, that run's; else, with `jobs`, every step of the video as it is now (see madeWith).
+ */
+export function ModelsUsed({ info, job, jobs, title = "Made with" }: { info: AiInfo; job: ProductionJob | null; jobs?: ProductionJob[] | null; title?: string }) {
+  const working = !!job && (job.status === "queued" || job.status === "running");
+  const used = working || !jobs ? (job?.meta.models ?? []) : madeWith([job, ...jobs]);
   if (!used.length) return null;
   return (
     <div className="st-s-used">
@@ -475,19 +589,20 @@ export function ModelsUsed({ info, job, title = "Made with" }: { info: AiInfo; j
 }
 
 /** What the next run of this video uses when nothing else is picked: its own setting over the writer's usual. */
-export function storyUsual(info: AiInfo, story: Pick<Story, "ai">) {
+export function storyUsual(info: AiInfo, story: Pick<Story, "ai">): Usual {
   const base = usualFor(info, "storyboard");
   if (!story.ai.model && !story.ai.effort) return base;
   const model = story.ai.model ?? base.model;
-  const m = info.models.find((x) => x.key === model);
+  const m = modelOf(info, model);
   const applied = m ? m.efforts.length > 0 : base.effortApplied;
-  return { model, effort: applied ? (story.ai.effort ?? base.effort) : null, effortApplied: applied, from: "project" as const };
+  return { model, effort: applied ? (story.ai.effort ?? base.effort) : null, effortApplied: applied, from: "project", modelKnown: !!story.ai.model, effortKnown: !!story.ai.effort };
 }
 
 /** The video's own model and effort, kept with it (§45.25 level 2): shown, and changed while it waits for review. */
 export function StoryAi({ info, story, editable, onChange }: { info: AiInfo; story: Story; editable: boolean; onChange: (v: ModelOverride | null) => void }) {
   const own = story.ai.model || story.ai.effort;
-  const words = own ? `${modelName(info, story.ai.model ?? usualFor(info, "storyboard").model)}${story.ai.effort ? ` · ${effortName(story.ai.effort)} effort` : ""} (kept with this video)` : "Your usual settings";
+  const name = story.ai.model ? modelName(info, story.ai.model) : info.live ? modelName(info, usualFor(info, "storyboard").model) : "Your usual model";
+  const words = own ? `${name}${story.ai.effort ? ` · ${effortName(story.ai.effort)} effort` : ""} (kept with this video)` : "Your usual settings";
   if (!editable) return <span>{words}</span>;
   return (
     <span className="st-s-aiwho">

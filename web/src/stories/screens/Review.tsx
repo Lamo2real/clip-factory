@@ -15,7 +15,7 @@ import { sounds } from "../../lib/sounds.ts";
 import { storiesApi } from "../api/client.ts";
 import type { ModelOverride, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
-import { cleanPick, ModelMenu, ModelsUsed, StoryAi, storyUsual, useAiInfo } from "../studio/ai.tsx";
+import { cleanPick, madeWith, ModelMenu, ModelsUsed, SettingsFix, StoryAi, storyUsual, useAiInfo } from "../studio/ai.tsx";
 import { CaptionEditor } from "../studio/CaptionEditor.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
 import { useSameScript, useWidth, useWorkspace } from "../studio/hooks.ts";
@@ -33,6 +33,25 @@ export function ReviewScreen({ ws, page }: StoriesScreenProps) {
   return <ReviewQueue ws={ws} />;
 }
 
+/** True when the facts check holds for the storyboard as it is now ("skipped" only outside driving safety). */
+function checkHolds(story: Story): boolean {
+  const s = story.safety;
+  if (!s) return true;
+  const passed = s.status === "ok" || (s.status === "skipped" && story.category !== "driving_safety");
+  return passed && s.checkedScriptVersion === story.scriptVersion;
+}
+
+/**
+ * The video waits for review with every change in it, but the facts were checked on an older storyboard (or the
+ * check never finished): nothing is marked to make again, so only Check again (from the check on) fixes it.
+ */
+export function checkOutdated(story: Story): boolean {
+  if (story.status !== "review" || story.stale.length || story.safety?.status === "problems") return false;
+  return !checkHolds(story);
+}
+
+export const OUTDATED_CHECK = "The facts were checked on an older version of the words. Tap Check again.";
+
 /**
  * Why Approve cannot be tapped yet, or null when it can (the approve rule, §45.9): the video waits for review, every
  * change is in it, and the facts were checked on this very storyboard.
@@ -42,8 +61,18 @@ export function approveBlock(story: Story): string | null {
   if (story.status === "needs_check") return "Check the facts first.";
   if (story.status !== "review") return null;
   if (story.stale.length) return "Your changes aren't in the video yet. Tap Remake first.";
-  if (story.safety && ((story.safety.status !== "ok" && story.safety.status !== "skipped") || story.safety.checkedScriptVersion !== story.scriptVersion)) return "Your changes aren't in the video yet. Tap Remake first.";
+  if (checkOutdated(story)) return OUTDATED_CHECK;
   return null;
+}
+
+/**
+ * True when a publishing 409 is about the account (it now sends to another one, or Lamo Stories cannot tell it from
+ * Lamo Clips' own): the server's sentence names the account, so the owner is asked before it is sent there. Every
+ * other 409 (already retried, not stuck, the story changed) is only shown.
+ */
+export function accountQuestion(sentence: string, account: SocialAccount): boolean {
+  const names = [account.accountName, account.handle, account.externalAccountId].filter((n): n is string => !!n && n.length > 1);
+  return names.some((n) => sentence.includes(n)) || /different account|cannot tell if/i.test(sentence);
 }
 
 // ---------- The queue ----------
@@ -147,6 +176,9 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
 
   const story = loaded.data?.story ?? null;
   const job = loaded.data?.job ?? null;
+  // Every run of this video, read again whenever the latest one changes: "How it was made" names the model of each
+  // step as it is in the video now, even after a later run of only some steps.
+  const runs = useLoad(() => storiesApi().storyJobs(ws, storyId), `${ws}:${storyId}:runs:${job?.jobId ?? ""}:${job?.status ?? ""}`);
   const script = useSameScript(loaded.data?.script ?? null);
   const live = (!!job && (job.status === "queued" || job.status === "running")) || story?.status === "producing";
   const inFlight = (pubs.data ?? []).some((j) => j.publishingStatus === "queued" || j.publishingStatus === "publishing");
@@ -164,6 +196,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     wasLive.current = false;
     if (story.status === "review") toast.success("The new version is ready to watch.");
     else if (story.status === "needs_check") toast.info("Made. Some facts still need checking.");
+    else if (story.status === "failed") toast.error(job?.error ?? "Making the video stopped. Tap Try again.");
     // Only when the run state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live, story?.status]);
@@ -255,7 +288,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
         try {
           const { accounts } = await storiesApi().social(ws);
           const account = accounts.find((a) => a.platform === j.platform);
-          if (account && account.connectionStatus === "connected" && account.externalAccountId) {
+          if (account && account.connectionStatus === "connected" && account.externalAccountId && accountQuestion(say(e), account)) {
             setConfirm({ job: j, account, message: say(e) });
             return;
           }
@@ -305,6 +338,9 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const problems = story.safety?.status === "problems" ? story.safety.problems : [];
   const citations = story.safety?.citations ?? [];
   const checkAgain = story.status === "needs_check";
+  const outdated = !live && checkOutdated(story);
+  const stopped = story.status === "failed" ? (job?.status === "failed" && job.error ? job.error : "Making this video stopped.") : null;
+  const used = live ? (job?.meta.models ?? []) : madeWith([job, ...(runs.data ?? [])]);
   const remakeMenu = <ModelMenu info={info} usual={storyUsual(info, story)} value={pick} onChange={setPick} note="Just for the next remake. This video's own setting and yours stay the same." />;
   // Phones get a smaller player, so the decision is close below it.
   const width = colWidth < 500 ? Math.max(180, Math.min(250, colWidth - 40)) : Math.max(200, Math.min(340, colWidth));
@@ -358,7 +394,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
 
           {!live && story.stale.length && story.status !== "draft" ? (
             <Notice
-              tone="info"
+              tone={stopped ? "bad" : "info"}
               action={
                 <span className="st-s-ai-fix">
                   {!deciding ? remakeMenu : null}
@@ -368,21 +404,22 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                     aria-disabled={busy !== null || undefined}
                     onClick={() => void act("remake", async () => startRun(await produceNow()))}
                   >
-                    {busy === "remake" ? "Starting…" : checkAgain ? "Check again" : story.status === "failed" ? "Try again" : "Remake"}
+                    {busy === "remake" ? "Starting…" : checkAgain ? "Check again" : stopped ? "Try again" : "Remake"}
                   </button>
+                  {stopped ? <SettingsFix sentence={stopped} /> : null}
                 </span>
               }
             >
-              {story.status === "failed" ? "Making this video stopped." : checkAgain ? "Your fixes are saved. Tap Check again to check the facts and update the video." : "Your changes aren't in the video yet. Tap Remake to put them in."}
+              {stopped ?? (checkAgain ? "Your fixes are saved. Tap Check again to check the facts and update the video." : "Your changes aren't in the video yet. Tap Remake to put them in.")}
             </Notice>
           ) : null}
-          {!live && checkAgain && !story.stale.length ? (
+          {outdated ? (
             <Notice
               tone="info"
               action={
                 <button
                   type="button"
-                  className="st-btn"
+                  className="st-btn st-btn--main"
                   aria-disabled={busy !== null || undefined}
                   onClick={() => void act("check", async () => startRun(await produceNow({ from: "safety" })))}
                 >
@@ -390,7 +427,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 </button>
               }
             >
-              Changed the words? Tap Check again.
+              {OUTDATED_CHECK} It checks the words, then makes the video again from there.
             </Notice>
           ) : null}
 
@@ -536,8 +573,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 <StoryAi info={info} story={story} editable={editable && busy === null} onChange={(v) => void keepAi(v)} />
               </dd>
             </dl>
-            <ModelsUsed info={info} job={job} title={live ? "Models working on it" : "Made with"} />
-            {!job?.meta.models.length ? <p className="st-s-field__hint">No model notes for this version.</p> : null}
+            <ModelsUsed info={info} job={job} jobs={runs.data} title={live ? "Models working on it" : "Made with"} />
+            {!used.length ? <p className="st-s-field__hint">No model notes for this version.</p> : null}
           </details>
         </div>
       </div>
@@ -669,8 +706,9 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
         >
           <p>{confirm.message}</p>
           <p>
-            Lamo Stories&apos; {PLATFORM_LABEL[confirm.job.platform]} is now <strong>{confirm.account.accountName ?? "another account"}</strong>
-            {confirm.account.handle ? ` (${confirm.account.handle})` : ""}, id {confirm.account.externalAccountId}. It was {confirm.job.accountName ?? "a different account"} when you tapped Post it.
+            Lamo Stories&apos; {PLATFORM_LABEL[confirm.job.platform]} sends to <strong>{confirm.account.accountName ?? "this account"}</strong>
+            {confirm.account.handle ? ` (${confirm.account.handle})` : ""}, id {confirm.account.externalAccountId}.
+            {confirm.job.accountName && confirm.job.accountName !== confirm.account.accountName ? ` It was ${confirm.job.accountName} when you tapped Post it.` : ""}
           </p>
         </StSheet>
       ) : null}

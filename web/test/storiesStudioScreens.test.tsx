@@ -336,6 +336,71 @@ describe("Ideas", () => {
     expect(control("Open Settings › AI").getAttribute("href")).toBe("/stories/settings/ai");
   });
 
+  it("Try again after a refused model sends the model picked since, not the old one", async () => {
+    store.knobs.deniedModels = ["fable-5-2"];
+    const gen = vi.spyOn(api, "generateIdeas");
+    await show(<IdeasScreen {...page({ name: "ideas" })} />);
+    await click(control("Ask for ideas"), 50);
+    await click(control(/^Model and effort for this one/), 50);
+    await pick("Model", "Claude Fable 5.2");
+    await click(control("Done", document.querySelector('[role="dialog"]')!), 50);
+    await click(control("Get ideas"), 250);
+    await untilTask();
+    expect(text()).toContain("Claude Fable 5.2 isn't available right now");
+    // The sentence says to pick another model: the owner does, in the same menu, then taps Try again.
+    await click(control(/^Model and effort for this one/), 50);
+    await pick("Model", "Claude Opus 5.5");
+    await click(control("Done", document.querySelector('[role="dialog"]')!), 50);
+    await click(control("Try again", document.querySelector(".st-s-panel")!), 250);
+    expect(gen).toHaveBeenLastCalledWith("stories", { count: 4, override: { model: "opus-5-5" } });
+    await untilTask(1.25);
+    expect(document.querySelector(".st-s-busy")?.textContent).toContain("with Claude Opus 5.5");
+    await untilTask();
+    expect(document.querySelectorAll(".st-s-draft")).toHaveLength(4);
+  });
+
+  it("a task that can't be read any more stops with its sentence and Try again, and the buttons work again", async () => {
+    const read = vi.spyOn(api, "getTask").mockRejectedValue(new ApiError(404, "not_found", "We could not find that task. Tap Try again."));
+    await show(<IdeasScreen {...page({ name: "ideas" })} />);
+    const gps = () => Array.from(document.querySelectorAll(".st-s-idea")).find((c) => c.textContent?.includes("sleepy GPS"))!;
+    await click(control("Make it a full idea", gps()), 250);
+    await untilTask(2);
+    expect(read).toHaveBeenCalled();
+    expect(gps().querySelector(".st-s-busy")).toBeNull();
+    expect(gps().textContent).toContain("We could not find that task. Tap Try again.");
+    expect(control("Try again", gps())).toBeDefined();
+    expect(control("Make it a full idea", gps()).getAttribute("aria-disabled")).toBeNull();
+    // A connection that keeps dropping ends the same way after a few tries.
+    read.mockReset();
+    read.mockRejectedValue(new ApiError(0, "network", "Clip Factory cannot be reached. Check your connection and try again."));
+    await click(control("Try again", gps()), 250);
+    await untilTask(30);
+    expect(read.mock.calls.length).toBeGreaterThanOrEqual(4);
+    expect(gps().textContent).toContain("Clip Factory cannot be reached.");
+    expect(control("Try again", gps())).toBeDefined();
+  });
+
+  it("when Lamo Stories' settings can't be read, the menu never names a guess as the owner's usual model", async () => {
+    vi.spyOn(api, "getAi").mockRejectedValue(new ApiError(500, "internal", "Something went wrong on our side. Try again in a moment."));
+    forgetLoaded();
+    await show(<IdeasScreen {...page({ name: "ideas" })} />);
+    await click(control("Ask for ideas"), 50);
+    const menu = control(/^Model and effort for this one/);
+    expect(menu.getAttribute("aria-label")).toBe("Model and effort for this one: your usual model and effort");
+    expect(menu.textContent).toContain("Usual");
+    expect(menu.textContent).not.toContain("Opus");
+    await click(menu, 50);
+    const dialog = () => document.querySelector('[role="dialog"]')!;
+    expect(dialog().textContent).toContain("Your usual model");
+    expect(dialog().textContent).not.toContain("Usual: Claude");
+    expect(dialog().textContent).not.toContain("From your Lamo Stories settings");
+    await click(control("Use the usual", dialog()), 50);
+    // Until the task answers (here it never does), the line says only what is known.
+    vi.spyOn(api, "generateIdeas").mockImplementation(() => new Promise(() => undefined));
+    await click(control("Get ideas"), 250);
+    expect(document.querySelector(".st-s-busy")?.textContent).toContain("Thinking of ideas with your usual model and effort…");
+  });
+
   it("Make it a full idea shows the concept; More like this adds drafts that point at it; each has its own menu", async () => {
     const vary = vi.spyOn(api, "ideaVariations");
     const expand = vi.spyOn(api, "expandIdea");
@@ -668,7 +733,9 @@ describe("Review", () => {
     const approve = vi.spyOn(api, "approve");
     const story = structuredClone(store.stories.find((s) => s.storyId === S.review)!);
     expect(approveBlock({ ...story, stale: ["sound"] })).toBe("Your changes aren't in the video yet. Tap Remake first.");
-    expect(approveBlock({ ...story, safety: { ...story.safety!, checkedScriptVersion: story.scriptVersion - 1 } })).toBe("Your changes aren't in the video yet. Tap Remake first.");
+    expect(approveBlock({ ...story, safety: { ...story.safety!, checkedScriptVersion: story.scriptVersion - 1 } })).toBe("The facts were checked on an older version of the words. Tap Check again.");
+    expect(approveBlock({ ...story, safety: { ...story.safety!, status: "skipped" } })).toBe("The facts were checked on an older version of the words. Tap Check again.");
+    expect(approveBlock({ ...story, category: "comedy", safety: { ...story.safety!, status: "skipped" } })).toBeNull();
     expect(approveBlock(story)).toBeNull();
     await show(<ReviewScreen {...page({ name: "review_story", storyId: S.review })} />);
     await click(control("Approve"));
@@ -720,6 +787,91 @@ describe("Review", () => {
     await wait(12_000);
     const job = store.jobs.filter((j) => j.contentId === S.review).at(-2)!;
     expect(job.meta.models.find((m) => m.step === "storyboard")).toMatchObject({ model: "fable-5-2" });
+  });
+
+  it("How it was made keeps each step's model after a later run of only some steps", async () => {
+    const story = store.stories.find((s) => s.storyId === S.review)!;
+    const seeded = store.jobs.find((j) => j.contentId === S.review)!;
+    // A later Remake of only the sound and the last steps: its record has only the last look.
+    const later = structuredClone(seeded);
+    Object.assign(later, { jobId: "01JSTJBLATER0000000000000", createdAt: "2026-11-21T11:00:00.000Z", updatedAt: "2026-11-21T11:01:00.000Z" });
+    later.configuration = { run: ["sound", "assemble", "preview"], from: null, sceneIds: null, note: null };
+    later.meta = { ...later.meta, writerModel: null, models: [{ step: "preview", agentId: "quality_assurance", model: "fable-5-2", effort: "low", effortApplied: true }] };
+    store.jobs.push(later);
+    story.currentJobId = later.jobId;
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.review })} />);
+    document.querySelector<HTMLDetailsElement>(".st-s-made")!.open = true;
+    const rows = () => Array.from(document.querySelectorAll(".st-s-made .st-s-used__row")).map((r) => `${r.querySelector(".st-s-used__step")?.textContent}: ${r.querySelector(".st-s-used__model")?.textContent}`);
+    expect(rows()).toEqual(["Write the story: Claude Opus 5.5 · High effort", "Check the facts: Claude Opus 5.5 · High effort", "Last look: Claude Fable 5.2 · Low effort"]);
+    expect(text()).not.toContain("No model notes for this version.");
+  });
+
+  it("a remake stopped by a refused model says why on Review, with Open Settings › AI, and Try again takes a new pick", async () => {
+    store.knobs.deniedModels = ["fable-5-2"];
+    const produce = vi.spyOn(api, "produce");
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.review })} />);
+    await click(control("Remake the whole video"), 50);
+    await click(control(/^Model and effort for this one/, document.querySelector('[role="dialog"]')!), 50);
+    const menus = () => document.querySelectorAll('[role="dialog"]');
+    await pick("Model", "Claude Fable 5.2");
+    await click(control("Done", menus()[menus().length - 1]!), 50);
+    await click(control("Remake it"));
+    await wait(12_000);
+    const notice = () => Array.from(document.querySelectorAll(".st-s-notice")).find((n) => n.textContent?.includes("isn't available right now"))!;
+    expect(notice().textContent).toContain("Claude Fable 5.2 isn't available right now: Bedrock says this account can't use it yet. Pick another model in Lamo Stories › Settings › AI, or try again.");
+    expect(control("Open Settings › AI", notice()).getAttribute("href")).toBe("/stories/settings/ai");
+    expect(Array.from(document.querySelectorAll(".toast--bad .toast__text, .toast--error .toast__text, .toast__text")).some((t) => t.textContent?.includes("isn't available right now"))).toBe(true);
+    await click(control(/^Model and effort for this one/, notice()), 50);
+    await pick("Model", "Claude Opus 5.5");
+    await click(control("Done", document.querySelector('[role="dialog"]')!), 50);
+    await click(control("Try again", notice()));
+    expect(produce).toHaveBeenLastCalledWith("stories", S.review, { override: { model: "opus-5-5" } });
+  });
+
+  it("the production page of a video stopped by a refused model offers Open Settings › AI beside Try again", async () => {
+    store.knobs.deniedModels = ["fable-5-2"];
+    const started = api.produce("stories", S.review, { from: "storyboard", override: { model: "fable-5-2" } });
+    await wait(1500);
+    await started;
+    await wait(12_000);
+    await show(<ProductionScreen {...page({ name: "production_story", storyId: S.review })} />);
+    expect(text()).toContain("Claude Fable 5.2 isn't available right now");
+    expect(control("Open Settings › AI", document.querySelector(".st-s-actionbar")!).getAttribute("href")).toBe("/stories/settings/ai");
+  });
+
+  it("Check again shows only when it is needed: never for a needs_check video with nothing changed, and for an old check", async () => {
+    const produce = vi.spyOn(api, "produce");
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.needsCheck })} />);
+    expect(text()).toContain("Fix the facts first.");
+    expect(Array.from(document.querySelectorAll("button")).some((b) => b.textContent === "Check again")).toBe(false);
+    expect(text()).not.toContain("Changed the words?");
+    await act(async () => root.unmount());
+    host.remove();
+    // A video whose facts were checked on an older storyboard and has nothing to make again: Check again from the check.
+    const story = store.stories.find((s) => s.storyId === S.review)!;
+    story.safety = { ...story.safety!, checkedScriptVersion: story.scriptVersion - 1 };
+    forgetLoaded();
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.review })} />);
+    expect(document.getElementById("st-approve-why")?.textContent).toBe("The facts were checked on an older version of the words. Tap Check again.");
+    await click(control("Check again"));
+    expect(produce).toHaveBeenLastCalledWith("stories", S.review, { from: "safety" });
+  });
+
+  it("Tab inside the model menu opened from Remake the whole video stays in that menu", async () => {
+    vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([{}] as unknown as DOMRectList);
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.review })} />);
+    await click(control("Remake the whole video"), 50);
+    await click(control(/^Model and effort for this one/, document.querySelector('[role="dialog"]')!), 50);
+    const dialogs = document.querySelectorAll('[role="dialog"]');
+    expect(dialogs).toHaveLength(2);
+    const inner = dialogs[1]!;
+    const usual = control("Use the usual", inner);
+    usual.focus();
+    act(() => {
+      usual.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+    });
+    expect(document.activeElement).toBe(usual);
+    expect(inner.contains(document.activeElement)).toBe(true);
   });
 
   it("Reject keeps the reason", async () => {
@@ -861,6 +1013,16 @@ describe("Post it", () => {
     expect(document.querySelector(".st-s-post")?.textContent).toContain("Waiting");
   });
 
+  it("a 409 that is not about the account is only shown; no 'Post to …?' question", async () => {
+    const retry = vi.spyOn(api, "retryPublishing");
+    pubs.push({ publishingJobId: "pj-busy", workspaceId: "stories", contentId: S.approved, socialAccountId: "stories.youtube", platform: "youtube", publishingStatus: "failed", accountName: "Lamo Stories Channel", error: "YouTube said no. Tap Try again.", createdAt: "2026-11-21T11:00:00.000Z", updatedAt: "2026-11-21T11:00:00.000Z" });
+    retry.mockRejectedValueOnce(new ApiError(409, "conflict", "This post is not stuck. There is nothing to try again."));
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />);
+    await click(control("Try again", document.querySelector(".st-s-postspanel")!));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(text()).toContain("This post is not stuck. There is nothing to try again.");
+  });
+
   it("a post that goes up while watching is celebrated", async () => {
     pubs.push({ publishingJobId: "pj1", workspaceId: "stories", contentId: S.approved, socialAccountId: "stories.youtube", platform: "youtube", publishingStatus: "publishing", accountName: "Lamo Stories Channel", createdAt: "2026-11-21T11:00:00.000Z", updatedAt: "2026-11-21T11:00:00.000Z" });
     await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />);
@@ -902,6 +1064,29 @@ describe("Post it", () => {
     expect(check.mock.calls.map((c) => c[1])).toEqual(["youtube", "tiktok"]);
     expect(publish).toHaveBeenCalledTimes(1);
     expect(check.mock.invocationCallOrder[1]!).toBeLessThan(publish.mock.invocationCallOrder[0]!);
+  });
+
+  it("Check now finding another TikTok account asks TikTok's choices again for it", async () => {
+    const info = vi.spyOn(api, "tiktokCreatorInfo");
+    const publish = vi.spyOn(api, "publish");
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />);
+    await click(control("Post it"));
+    const dialog = () => document.querySelector('[role="dialog"]')!;
+    await click(control(/Lamo Stories TikTok/, dialog()));
+    await click(control("Use my settings", dialog()), 50);
+    expect(dialog().textContent).toContain(`Posting as ${CREATOR.nickname} (@${CREATOR.username})`);
+    expect(info).toHaveBeenCalledTimes(1);
+    // Meanwhile Lamo Stories' TikTok was connected to another account, with other choices.
+    Object.assign(store.social.find((a) => a.platform === "tiktok")!, { externalAccountId: "ext-tt-new", accountName: "New TikTok", handle: "@newtt" });
+    info.mockResolvedValue({ ...CREATOR, nickname: "New TikTok", username: "newtt", privacyOptions: ["SELF_ONLY"] });
+    await click(control("Check now", dialog().querySelector(".st-s-dest")!));
+    expect(info).toHaveBeenCalledTimes(2);
+    expect(dialog().textContent).toContain("Posting as New TikTok (@newtt)");
+    expect(dialog().textContent).not.toContain(`Posting as ${CREATOR.nickname}`);
+    // The old account's "Everyone" is not offered to this one: Use my settings keeps only what it allows.
+    expect(dialog().querySelector(".dropdown__value")?.textContent).not.toBe("Everyone");
+    await click(control("Upload", dialog()));
+    expect(publish.mock.calls.flatMap((c) => c[2]).every((t) => t.platform !== "tiktok" || (t.options as { privacyLevel?: string }).privacyLevel !== "PUBLIC_TO_EVERYONE")).toBe(true);
   });
 
   it("Upload stops when a check finds another account or a lost connection, and says which", async () => {

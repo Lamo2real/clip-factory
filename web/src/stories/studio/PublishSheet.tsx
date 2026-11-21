@@ -188,6 +188,13 @@ export function PublishSheet({
       const after = await storiesApi().checkSocial(ws, p);
       setAccounts((list) => (list ? list.map((a) => (a.platform === p ? after : a)) : list));
       const why = checkProblem(before, after);
+      // Another TikTok account now: TikTok's choices belong to the account posted to, so they are asked again and
+      // the picks made for the old one are cleared ("Waiting for TikTok's choices." until they arrive).
+      if (p === "tiktok" && before.externalAccountId && after.externalAccountId !== before.externalAccountId) {
+        setCreator(null);
+        setTt(NO_TIKTOK_CHOICES);
+        setAsked((n) => n + 1);
+      }
       setChecked((m) => ({ ...m, [p]: Date.now() }));
       setCheckNote((m) => ({ ...m, [p]: why ?? "Checked just now: this is the account the video goes to." }));
       if (why && after.connectionStatus !== "connected") setChosen((c) => c.filter((x) => x !== p));

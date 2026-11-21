@@ -878,7 +878,9 @@ function checkReferences(store: MockStore, ids: string[] | undefined): string[] 
 function approveProblem(story: Story): string | null {
   if (story.safety?.status === "problems") return `Fix the facts first: ${story.safety.problems.join(" ")}`;
   if (story.status !== "review" || story.stale.length) return "Your changes aren't in the video yet. Tap Remake first.";
-  if (story.safety && ((story.safety.status !== "ok" && story.safety.status !== "skipped") || story.safety.checkedScriptVersion !== story.scriptVersion)) return "Your changes aren't in the video yet. Tap Remake first.";
+  const s = story.safety;
+  const passed = !s || ((s.status === "ok" || (s.status === "skipped" && story.category !== "driving_safety")) && s.checkedScriptVersion === story.scriptVersion);
+  if (!passed) return "The facts were checked on an older version of the words. Tap Check again.";
   return null;
 }
 
@@ -1227,6 +1229,11 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         if (JSON.stringify(script) !== JSON.stringify(before)) {
           const r = validateScript(script);
           if (!r.ok) fail(400, "bad_request", "That change would break the video. Try a smaller change.");
+          // A change the fact check does not read (effects, music, a scene's length: every word stays the same)
+          // carries the check onto the new storyboard, as the API's carried_check does; a change of words makes it due.
+          const s0 = story.safety;
+          if (s0 && !stale.has("safety") && ["ok", "problems", "skipped"].includes(s0.status) && s0.checkedScriptVersion === story.scriptVersion)
+            story.safety = { ...s0, checkedScriptVersion: story.scriptVersion + 1 };
           story.scriptVersion += 1;
           store.scripts[storyId] = script;
           story.scenes = script.scenes.map((sc) => ({ sceneId: sc.sceneId, title: sc.title, durationSec: sc.durationSec }));

@@ -89,7 +89,7 @@ export function DesignPanel({
     onDraft(name ? { ...draft, name } : draft);
     setMade(true);
     celebrate(box.current, 90);
-  });
+  }, () => design());
   const busy = run.phase === "working" || sending !== null;
 
   useEffect(() => {

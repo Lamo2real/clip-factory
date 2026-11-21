@@ -32,7 +32,7 @@ import {
 import { CATALOG } from "../engine/catalog.ts";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { storiesHref } from "../routes.ts";
-import { cleanPick, effortName, ModelMenu, modelName, ModelsUsed, shortName, StoryAi, storyUsual, useAiInfo, usualFor, type AiInfo } from "../studio/ai.tsx";
+import { cleanPick, effortName, madeWith, ModelMenu, modelName, ModelsUsed, SettingsFix, shortName, StoryAi, storyUsual, useAiInfo, usualFor, type AiInfo } from "../studio/ai.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
 import { useSameScript, useWorkspace } from "../studio/hooks.ts";
 import { Busy, celebrate, Notice, Pick, Slider, Switch, Tag, TextField } from "../studio/kit.tsx";
@@ -562,7 +562,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
       burst(undefined, 120);
       toast.success("Your video is ready to watch!");
     } else if (story.status === "needs_check") toast.info("Your video is made. Some facts need checking in Review.");
-    else if (story.status === "failed") toast.error("Making the video stopped. Tap Try again.");
+    else if (story.status === "failed") toast.error(job?.status === "failed" && job.error ? job.error : "Making the video stopped. Tap Try again.");
     // Only when the run state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live, story?.status]);
@@ -634,7 +634,9 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
 
   const canTryAgain = !live && ["draft", "failed", "review", "needs_check"].includes(story.status) && story.stale.length > 0;
   const watch = ["review", "needs_check", "approved", "published"].includes(story.status);
-  const writer = job?.meta.writerModel ? modelName(info, job.meta.writerModel) : null;
+  // The writer of the storyboard in the video now: the latest run's, else the newest run that wrote it.
+  const wrote = job?.meta.writerModel ?? (live ? null : (madeWith([job, ...(jobs.data ?? [])]).find((u) => u.step === "storyboard")?.model ?? null));
+  const writer = wrote ? modelName(info, wrote) : null;
   const editable = !live && ["review", "needs_check", "failed"].includes(story.status);
   const usual = storyUsual(info, story);
 
@@ -674,6 +676,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
               <button type="button" className="st-btn st-btn--main" aria-disabled={busy !== "none" || undefined} onClick={() => busy === "none" && void again()}>
                 {busy === "again" ? "Starting…" : story.status === "draft" && story.stale.length === STEP_ORDER.length ? "Make the video" : firstStale ? `Try again from “${STEP_LABEL[firstStale]}”` : "Try again"}
               </button>
+              {job?.status === "failed" ? <SettingsFix sentence={job.error} /> : null}
             </>
           ) : null}
         </div>
@@ -742,7 +745,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
           <dt>Saved in</dt>
           <dd className="st-s-facts__mono">{story.storageLocation}</dd>
         </dl>
-        <ModelsUsed info={info} job={job} title={live ? "Models working on it" : "Made with"} />
+        <ModelsUsed info={info} job={job} jobs={jobs.data} title={live ? "Models working on it" : "Made with"} />
         {jobs.data?.length ? (
           <>
             <h3 className="st-s-details__title">Every run</h3>

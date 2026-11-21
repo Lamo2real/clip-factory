@@ -300,7 +300,7 @@ function AskForIdeas({ ws, info, onDrafts, onCancel }: { ws: string; info: AiInf
     const drafts = draftsOf(task);
     if (!drafts.length) setProblem("No ideas came back. Try another topic.");
     else onDrafts(drafts, asked.current ? `Ideas about “${asked.current}”` : "Fresh ideas");
-  });
+  }, () => ask());
   const usual = usualFor(info, "brainstorm");
   const busy = run.phase === "working";
 
@@ -374,12 +374,12 @@ function IdeaCard({
       onChange(next);
       setShowConcept(true);
     } else setProblem("The full idea did not come back. Tap Try again.");
-  });
+  }, () => expand());
   const varying = useAiTask(ws, (task) => {
     const drafts = draftsOf(task);
     if (drafts.length) onDrafts(drafts);
     else setProblem("No ideas came back. Tap More like this again.");
-  });
+  }, () => more());
   const busy = expanding.phase === "working" || varying.phase === "working";
   const expandUsual = usualFor(info, "expand_idea");
   const moreUsual = usualFor(info, "variations");

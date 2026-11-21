@@ -405,6 +405,33 @@ describe("review", () => {
     expect(mood.story.stale).toEqual(["safety", "sound", "assemble", "preview"]);
   });
 
+  it("an effects edit carries the fact check onto the new storyboard, so Remake, then Approve, works", async () => {
+    const { story, script } = await call(api.getStory("stories", S.review));
+    const scene = script!.scenes[0]!;
+    const sfx = [...scene.sfx, { id: `${scene.sceneId}.own2`, at: 1, sfx: "boing" as const, volume: 0.7 }];
+    const r = await call(api.patchStory("stories", S.review, { version: story.version, scenes: [{ sceneId: scene.sceneId, sfx }] }));
+    expect(r.story.scriptVersion).toBe(story.scriptVersion + 1);
+    expect(r.story.safety).toMatchObject({ status: "ok", checkedScriptVersion: r.story.scriptVersion });
+    const remake = await call(api.produce("stories", S.review));
+    expect(remake.job.configuration.run).toEqual(["sound", "assemble", "preview"]);
+    await finish();
+    const after = await call(api.getStory("stories", S.review));
+    expect(after.story).toMatchObject({ status: "review", stale: [] });
+    expect((await call(api.approve("stories", S.review, after.story.version))).status).toBe("approved");
+  });
+
+  it("music and a scene's length carry the check too; words make it due again", async () => {
+    const { story, script } = await call(api.getStory("stories", S.review));
+    const scene = script!.scenes[0]!;
+    const longer = await call(api.patchStory("stories", S.review, { version: story.version, scenes: [{ sceneId: scene.sceneId, durationSec: Math.min(15, scene.durationSec + 1) }] }));
+    expect(longer.story.safety).toMatchObject({ status: "ok", checkedScriptVersion: longer.story.scriptVersion });
+    const music = await call(api.patchStory("stories", S.review, { version: longer.story.version, musicMood: story.musicMood === "calm" ? "playful" : "calm" }));
+    expect(music.story.safety).toMatchObject({ status: "ok", checkedScriptVersion: music.story.scriptVersion });
+    const words = await call(api.patchStory("stories", S.review, { version: music.story.version, scenes: [{ sceneId: scene.sceneId, caption: "Slow down" }] }));
+    expect(words.story.safety).toMatchObject({ status: "pending", checkedScriptVersion: music.story.scriptVersion });
+    expect(words.story.stale).toContain("safety");
+  });
+
   it("Remake this scene is a new take of only that scene; Remake the whole video writes a new storyboard", async () => {
     const before = await call(api.getStory("stories", S.review));
     const target = before.script!.scenes[1]!.sceneId;
