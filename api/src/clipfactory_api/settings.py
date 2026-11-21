@@ -8,7 +8,8 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-from . import db, post_preset, validate
+from . import autopost, db, post_preset, validate
+from .clock import iso, utcnow
 from .errors import bad_request
 
 PLATFORMS: tuple[str, ...] = ("youtube", "instagram", "facebook", "tiktok", "x")
@@ -63,6 +64,9 @@ DEFAULTS: dict[str, Any] = {
     # §36 My settings: the owner's own post choices per platform (Everyone, comments, duets and stitches on, Reels in
     # the feed, everyone can reply; never made for kids). Additive: an owner who never saved one reads these defaults.
     "postPreset": post_preset.defaults(),
+    # §46.3 Auto-posting: off for every owner until he turns it on (then the oldest clips in Review go up by
+    # themselves every everyHours, perRun at a time). ``onAt`` (read-only) is written by the server when it goes on.
+    "autoPost": autopost.defaults(),
 }
 NOTIFY_KEYS = ("ready", "stopped", "resumed", "steps", "contentRewards", "getPaid")
 # The Clip Factory colours before the bottle-green look (ADR-43). An owner who never changed them has exactly this
@@ -120,6 +124,8 @@ def _check_field(field: str, value: Any) -> Any:
             return validate.boolean(value, field)
         case "postPreset":
             return post_preset.check(value)
+        case "autoPost":
+            return autopost.stored(value)
         case "clickSound" | "errorSound":
             return _sound_number(value, SOUND_LABELS[field])
         case "youtubePrivacy":
@@ -234,14 +240,18 @@ def _paid(value: Any, platform: str) -> bool:
     return value
 
 
-def merge_update(current: Mapping[str, Any], patch: Mapping[str, Any]) -> dict[str, Any]:
-    """Validates a ``Partial<Settings>`` and returns the full new settings (without ``hasYoutubeCookies``)."""
+def merge_update(current: Mapping[str, Any], patch: Mapping[str, Any], *, now: str | None = None) -> dict[str, Any]:
+    """Validates a ``Partial<Settings>`` and returns the full new settings (without ``hasYoutubeCookies``).
+    ``autoPost`` is merged over the stored value; ``now`` is its ``onAt`` when it goes from off to on (§46.3)."""
     patch = validate.obj(patch, "Settings")
     validate.only_keys(patch, EDITABLE | READ_ONLY)
     out = {k: current[k] for k in EDITABLE if k in current}
     for field, value in patch.items():
         if field in READ_ONLY:
             continue  # clients may echo the whole object back; read-only fields are ignored, not rejected
+        if field == "autoPost":
+            out[field] = autopost.merge(current.get("autoPost"), value, now or iso(utcnow()))
+            continue
         out[field] = _check_field(field, value)
     if out["clipMax"] < out["clipMin"]:
         raise bad_request("The most clips must be at least the fewest clips.")
@@ -250,6 +260,12 @@ def merge_update(current: Mapping[str, Any], patch: Mapping[str, Any]) -> dict[s
 
 def load(store: db.Store, user_id: str) -> dict[str, Any]:
     return with_defaults(store.get(db.user_pk(user_id), db.SETTINGS_SK))
+
+
+def register_autopost(store: db.Store, user_id: str, patch: Mapping[str, Any], now: str) -> None:
+    """§46.3: a ``PUT`` that carries ``autoPost`` also puts the owner on the hourly tick's list (``AUTOPOSTOWNERS``)."""
+    if isinstance(patch, Mapping) and "autoPost" in patch:
+        autopost.register_owner(store, user_id, now)
 
 
 def save(store: db.Store, user_id: str, values: Mapping[str, Any], now: str) -> None:

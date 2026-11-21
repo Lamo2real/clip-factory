@@ -82,8 +82,11 @@ def get_settings(app: App, req: Request) -> Response:
 
 def put_settings(app: App, req: Request) -> Response:
     current = settings.load(app.store, req.user_id)
-    updated = settings.merge_update(current, req.json())
-    settings.save(app.store, req.user_id, updated, iso(app.clock()))
+    patch = req.json()
+    now = iso(app.clock())
+    updated = settings.merge_update(current, patch, now=now)
+    settings.register_autopost(app.store, req.user_id, patch, now)  # §46.3: before the save the tick reads
+    settings.save(app.store, req.user_id, updated, now)
     return ok({"settings": {**updated, "hasYoutubeCookies": _has_cookies(app, req.user_id)}})
 
 
