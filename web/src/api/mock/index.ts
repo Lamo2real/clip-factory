@@ -3,6 +3,7 @@ import { ApiError, networkError } from "../errors.ts";
 import type { Api, Campaign, Captions, Clip, ClipPostOptions, Job, JobDeleteClips, JobDeleted, Platform, Post, Settings, SimilarClip, TikTokPostOptions } from "../types.ts";
 import { clipOptionsProblem, presetOf, presetProblem } from "../../lib/preset.ts";
 import { TIKTOK_PICK_AGAIN } from "../../lib/upload.ts";
+import { videoFileName } from "../../lib/tiktokYourself.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
 import { MOMENTS, PLATFORMS, STEP_KEYS, coverArt, seed, stepsAt, thumbArt, ulid, type Store } from "./fixtures.ts";
 import { installMockLiveControls, mockLive } from "./live.ts";
@@ -171,6 +172,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   const claimedAt = new Map<string, number>();
   // The TikTok sheet's choices stored on each TikTok post (the API's postOptions.tiktok, never returned).
   const postOptions = new Map<string, TikTokPostOptions>();
+  // Posted on TikTok by the owner (§42): what the TikTok post was before (null: made by I posted it), for Undo.
+  const byYou = new Map<string, Post | null>();
   // Each place's own choices sent with Upload (§36.3), by post (the API's postOptions, never returned).
   const clipOptions = new Map<string, object>();
 
@@ -1006,6 +1009,73 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         throw networkError();
       }
       return startPosting();
+    },
+    // Post it on TikTok yourself (§42): the same rules as the API's tiktok_self.py.
+    async clipFile(clipId) {
+      await delay();
+      const c = clip(clipId);
+      if (c.status === "declined") throw notFound("clip's video");
+      // Mock clips carry no real video: a tiny stand-in file keeps Save the video and the share menu working.
+      return { url: c.videoUrl ?? "data:video/mp4;base64,AAAAGGZ0eXBpc29tAAACAGlzb21tcDQx", filename: videoFileName(c.hook) };
+    },
+    async markTikTokPosted(clipId, link, _since) {
+      await delay();
+      const c = clip(clipId);
+      if (!["confirmed", "publishing", "posted", "failed"].includes(c.status)) throw conflict("Upload this clip first. Then you can post it on TikTok yourself.");
+      const mine = store.posts.filter((p) => p.clipId === clipId);
+      if (!mine.length) throw conflict("This clip is still starting to upload. Try again in a minute.");
+      let video: { id: string; handle: string } | null = null;
+      if (link?.trim()) {
+        const full = /tiktok\.com\/@([A-Za-z0-9_.]{1,64})\/(?:video|photo)\/(\d{8,25})/i.exec(link);
+        if (full) video = { id: full[2]!, handle: full[1]! };
+        else if (/(vm|vt)\.tiktok\.com\/\w+|tiktok\.com\/t\/\w+/i.test(link)) video = { id: "7710644811602169121", handle: "lamo.clips" };
+        else if (/tiktok\.com/i.test(link)) throw bad("That link does not open a TikTok video. In TikTok, open your post, tap Share, then Copy link.");
+        else throw bad("That is not a TikTok link. In TikTok, tap Share, then Copy link, and paste it here.");
+      }
+      let p = mine.find((x) => x.platform === "tiktok");
+      // No link: the API looks for the post on his TikTok. Here the first look finds nothing yet, a later one finds it.
+      let note: string | undefined;
+      if (!video) {
+        if (p?.by === "you") video = { id: "7710644811602169121", handle: "lamo.clips" };
+        else note = "Saved. Clip Factory could not find it on your TikTok yet. Tap Add link in a minute.";
+      }
+      if (p?.status === "queued") throw conflict("This clip is still uploading to TikTok. Wait until it is done, then try again.");
+      if (p && p.by !== "you" && p.status === "posted" && p.privacy === "public") throw conflict("This clip is already on TikTok for everyone.");
+      if (!p) {
+        p = { postId: ulid(), clipId, platform: "tiktok", status: "posted" };
+        store.posts.push(p);
+        byYou.set(p.postId, null);
+      } else if (p.by !== "you") byYou.set(p.postId, clone(p));
+      if (p.by !== "you") {
+        p.postedAt = new Date().toISOString();
+        p.perfCheckAt = new Date(Date.now() + 48 * 3600_000).toISOString();
+        delete p.error;
+        delete p.url;
+        delete p.metrics;
+      }
+      Object.assign(p, { status: "posted", by: "you", privacy: "public" });
+      if (video) p.url = `https://www.tiktok.com/@${video.handle}/video/${video.id}`;
+      if (c.status === "failed" || (c.status === "confirmed" && !mine.some((x) => x.status === "queued"))) c.status = "posted";
+      publishClip(c);
+      publishPost(p);
+      return { clip: clone(c), posts: clone(store.posts.filter((x) => x.clipId === clipId)), ...(note ? { note } : {}) };
+    },
+    async undoTikTokPosted(clipId) {
+      await delay();
+      const c = clip(clipId);
+      const p = store.posts.find((x) => x.clipId === clipId && x.platform === "tiktok");
+      if (!p || p.by !== "you") throw conflict("This clip was not marked as posted by you, so there is nothing to undo.");
+      const before = byYou.get(p.postId);
+      byYou.delete(p.postId);
+      if (before) {
+        for (const key of Object.keys(p) as (keyof Post)[]) delete p[key];
+        Object.assign(p, before);
+      } else store.posts.splice(store.posts.indexOf(p), 1);
+      const left = store.posts.filter((x) => x.clipId === clipId);
+      if (c.status === "posted" && !left.some((x) => x.status === "posted")) c.status = left.some((x) => x.status === "failed") ? "failed" : "confirmed";
+      publishClip(c);
+      if (before) publishPost(p);
+      return { clip: clone(c), posts: clone(left) };
     },
     async declineClip(clipId) {
       await delay();

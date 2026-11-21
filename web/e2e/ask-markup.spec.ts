@@ -105,7 +105,9 @@ test.describe("the markup editor on a desktop", () => {
     await page.getByRole("button", { name: "Clear" }).click();
     await page.getByRole("button", { name: "Undo", exact: true }).click(); // Clear can be undone
     await page.getByRole("button", { name: "Save" }).click();
-    await expect(editor(page)).toHaveCount(0);
+    // Save encodes the picture as a JPEG (several tries when it is big): on a busy 4-CPU CI runner that has taken
+    // longer than the default 5 s, so it gets the same allowance as the answer below.
+    await expect(editor(page)).toHaveCount(0, { timeout: 20_000 });
     await expect(panel(page).locator(".ask-marked:not(.is-hint)")).toBeVisible();
     expect(await panel(page).locator(".help-pic__img").getAttribute("src")).not.toBe(before);
     await expect(panel(page).getByRole("button", { name: "Mark picture 1 (marked)" })).toBeFocused();

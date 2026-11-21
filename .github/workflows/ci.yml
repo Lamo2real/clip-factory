@@ -1,10 +1,13 @@
-# Checks every push and pull request. Offline only: never calls AWS or Bedrock, needs no secrets.
+# Checks every push to main and every pull request. Offline only: never calls AWS or Bedrock, needs no secrets.
+# Branch pushes don't run it on their own: their pull request run does the same checks (and is what branch
+# protection reads), so running both doubled the load and left runners queued for 20+ minutes.
 # The jobs run in parallel (the browser tests as 6 shards); a newer push to the same branch cancels the older
 # run. The desktop job (Tauri, desktop/) runs only when desktop/ changed, since it needs the Linux web view
 # libraries and a Rust build.
 name: ci
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:

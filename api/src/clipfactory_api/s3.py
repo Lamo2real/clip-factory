@@ -130,6 +130,20 @@ class Media:
         )
         return url
 
+    def presign_download(self, key: str, filename: str, seconds: int = PRESIGN_SECONDS) -> str:
+        """A GET URL that makes the browser save the file as ``filename`` (Save the video, §42)."""
+        url: str = self._s3.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": self.bucket,
+                "Key": key,
+                "ResponseContentDisposition": f'attachment; filename="{safe_filename(filename, "clip.mp4")}"',
+                "ResponseContentType": "video/mp4",
+            },
+            ExpiresIn=seconds,
+        )
+        return url
+
     # --- multipart: the Mac's video (docs/CONTRACTS.md §35.3) -------------------------------------------------------
 
     def create_multipart(self, key: str, content_type: str) -> str:
