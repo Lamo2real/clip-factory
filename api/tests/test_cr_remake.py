@@ -193,6 +193,53 @@ def test_refused_when_the_copy_could_not_earn(call: Call, cr: Any, s3_client: Fa
     assert "remakes" not in stored_clip(cr, clip)
 
 
+def _campaign_clip(cr: Any, s3: FakeS3, **clip_fields: Any) -> dict[str, Any]:
+    """A campaign clip of FaZe Clips that already fits: its job's rules copy, "Paid partnership" on the video."""
+    item = cr.store.get(PK, db.campaign_sk(UUID))
+    job = seed_job(
+        cr.store,
+        status="ready",
+        source={"type": "link", "platform": "youtube", "url": LINK, "channel": "FaZe Clan"},
+        campaignId=UUID,
+        campaign={"campaignId": UUID, "name": "FaZe Clips", "brand": "FaZe", "rules": item["rules"]},
+        sourceLanguage="en-US",
+        createdAt=iso(cr.clock.now - timedelta(hours=1)),
+    )
+    checklist = {"items": [{"key": "disclosure", "label": "x", "pass": True}], "fixes": []}
+    clip = seed_clip(cr.store, job_id=job["jobId"], campaignId=UUID, checklist=checklist, **clip_fields)
+    s3.objects[f"jobs/{job['jobId']}/source/video.mp4"] = b"mp4"
+    return clip
+
+
+def test_refused_when_nothing_needs_a_copy(call: Call, cr: Any, s3_client: FakeS3, table: FakeTable) -> None:
+    """A campaign clip that already fits, or is already up for the campaign: a copy would be a second post of one
+    moment for one campaign (a reused edit)."""
+    clip = _campaign_clip(cr, s3_client)
+    status, body = call("POST", URL, {"clipId": clip["clipId"]})
+    assert (status, body["error"]["message"]) == (409, "This clip can already earn on FaZe Clips.")
+    for post_status, words in (("queued", "already going up"), ("posted", "already up")):
+        cr.store.put(
+            {
+                "pk": PK,
+                "sk": db.post_sk("P1"),
+                "gsi1pk": f"CLIP#{clip['clipId']}",
+                "gsi1sk": "POST#youtube",
+                "type": "post",
+                "userId": USER,
+                "postId": "P1",
+                "clipId": clip["clipId"],
+                "platform": "youtube",
+                "status": post_status,
+                "campaignId": UUID,
+            }
+        )
+        cr.store.update(PK, db.clip_sk(clip["clipId"]), {"checklist": {"items": [], "fixes": []}})  # needs a copy
+        status, body = call("POST", URL, {"clipId": clip["clipId"]})
+        assert (status, body["error"]["message"]) == (409, f"This clip is {words} for FaZe Clips.")
+    assert copy_jobs(table, clip) == []
+    assert "remakes" not in stored_clip(cr, clip)
+
+
 def test_an_unaccepted_soft_stop_needs_campaign_anyway(
     call: Call, cr: Any, s3_client: FakeS3, table: FakeTable
 ) -> None:

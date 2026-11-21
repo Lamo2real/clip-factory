@@ -747,7 +747,7 @@ def remake_clip(app: App, req: Request) -> Response:
     original = loader.job(clip.get("jobId"))
     found = loader.fit_one(clip, campaign_id)
     kept = original is not None and fit.source_kept(original, now)
-    refusal = fit.remake_refusal(found, kept=kept)
+    refusal = fit.remake_refusal(found, kept=kept) or fit.nothing_to_copy(found, loader.posts(clip_id))
     if refusal is not None or original is None:
         raise conflict(refusal or fit.GONE)
     stops = {s["code"]: s for s in loader.stops(item)}
