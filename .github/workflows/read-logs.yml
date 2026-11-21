@@ -1,8 +1,10 @@
 # Read-only: prints the agent's and the job flow's CloudWatch lines that explain a stopped job (errors, exceptions,
-# heartbeats, timeouts, container starts and ends), the clip flow's posting errors and the connect (OAuth) and hooks
-# errors, with tokens, cookies and URL queries blanked. It also prints the posts made in the window (platform, status,
-# the error the owner saw) and each platform connection's state (status, reason, scopes, gates; never a token, a name
-# or an id). It changes nothing in AWS: only logs:Describe*/StartQuery/GetQueryResults/FilterLogEvents and
+# heartbeats, timeouts, container starts and ends), the clip flow's posting errors, the connect (OAuth) and hooks
+# errors and the Content Rewards lines (cr.* and campaigns.* events, also from cf-prod-campaigns and cf-prod-stats),
+# with tokens, cookies and URL queries blanked. It also prints the posts made in the window (platform, status, the
+# error the owner saw), each platform connection's state (status, reason, scopes, gates) and the Content Rewards
+# connection's state (status, last result, steps done, whether the pilot email was sent), never a token, an email, a
+# name or an id. It changes nothing in AWS: only logs:Describe*/StartQuery/GetQueryResults/FilterLogEvents and
 # dynamodb:Scan.
 # Run it from the Actions tab (main only: the deploy role trusts refs/heads/main and nothing else).
 name: read-logs
@@ -73,6 +75,7 @@ jobs:
             | if ($j | type) == "object"
               then ($j | {level, event, job, jobId, step, index, what, kind, error, errorType, timedOut, outcome, status,
                           code, platform, result, reason, starts, sent, type, stopped, started, superseded, seconds, free, height, estBytes,
+                          owners, days, rules, jsonrpc,
                           detail: ((.detail // null) | if . then .[0:300] else null end)} | with_entries(select(.value != null)) | tojson)
               else ($m | gsub("\n"; " ") | .[0:400]) end'
 
@@ -111,14 +114,16 @@ jobs:
             echo "::endgroup::"
           done
 
-          for fn in cf-prod-job-flow cf-prod-api cf-prod-clip-flow cf-prod-hooks; do
-            echo "::group::/aws/lambda/$fn: job, posting and connect events, errors, timeouts"
+          # Content Rewards (CONTRACTS §38/§39): cr.* events come from cf-prod-api, cf-prod-clip-flow and cf-prod-stats,
+          # campaigns.* from cf-prod-campaigns. The regex matches the JSON "event" value, also when Lambda wraps the line.
+          for fn in cf-prod-job-flow cf-prod-api cf-prod-clip-flow cf-prod-hooks cf-prod-campaigns cf-prod-stats; do
+            echo "::group::/aws/lambda/$fn: job, posting, connect and Content Rewards events, errors, timeouts"
             if [ -z "$(aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/$fn" \
                   --query "logGroups[?logGroupName=='/aws/lambda/$fn'].logGroupName" --output text)" ]; then
               echo "no log group /aws/lambda/$fn"; echo "::endgroup::"; continue
             fi
             query "/aws/lambda/$fn" "fields @timestamp, @logStream, @message
-              | filter @message like /(?i)error|exception|traceback|timeout|timed out|job_flow\\.|clip_flow\\.|publish\\.|oauth\\.|hooks\\.|secrets\\.|callback|heartbeat|retry/
+              | filter @message like /(?i)error|exception|traceback|timeout|timed out|job_flow\\.|clip_flow\\.|publish\\.|oauth\\.|hooks\\.|secrets\\.|callback|heartbeat|retry|event\\W{1,8}(cr|campaigns)\\./
               $job_filter
               | sort @timestamp asc | limit 2000"
             echo "::endgroup::"
@@ -156,4 +161,19 @@ jobs:
                   scopes: [.scopes.L[]?.S], accountIdSet: ((.accountId.S // "") != ""),
                   gates: (.gates.M // {} | with_entries(.value = (.value.M.state.S // null))),
                   connectedAt: .connectedAt.S, updatedAt: .updatedAt.S, reconnectBy: .reconnectBy.S}' | redact
+          echo "::endgroup::"
+          # The Content Rewards connection (CRCONN): what the setup page shows and why Connect may not have finished.
+          # pilotSentAt only says whether it is set; reconnectBy is CRCONN's signInBy; fields lists the attribute names
+          # only (never their values), so a new field shows up without printing it.
+          echo "::group::Content Rewards connection (status, last result, steps done; no tokens, emails, names or ids)"
+          aws dynamodb scan --table-name cf-prod-data \
+            --filter-expression "sk = :c" \
+            --expression-attribute-values '{":c":{"S":"CRCONN"}}' --output json \
+            | jq -c '.Items[] | {status: .status.S, reason: .reason.S, lastResult: .lastResult.S,
+                  pilotSentAtSet: ((.pilotSentAt.S // "") != ""),
+                  stepsDone: ([(.stepsDone.SS // [])[], ((.stepsDone.L // [])[] | .S // empty)] | sort),
+                  canSubmit: .canSubmit.BOOL, blocked: .blocked.BOOL, missing: [.missing.L[]?.S],
+                  check: (if .check.M then {at: .check.M.at.S, ok: .check.M.ok.BOOL, code: .check.M.code.S} else null end),
+                  connectedAt: .connectedAt.S, reconnectBy: .signInBy.S, updatedAt: .updatedAt.S,
+                  fields: (keys - ["pk", "sk"])}' | redact
           echo "::endgroup::"
