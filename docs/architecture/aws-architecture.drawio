@@ -4,13 +4,13 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="hdr" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b&gt;Clip Factory Cloud on AWS. Repo &lt;code&gt;Lamo2real/clip-factory-legal&lt;/code&gt;, branch &lt;code&gt;main&lt;/code&gt;, one AWS account, one environment (&lt;code&gt;prod&lt;/code&gt;, prefix &lt;code&gt;cf-prod&lt;/code&gt;), region &lt;code&gt;eu-north-1&lt;/code&gt;. Backend: Python 3.13. Infrastructure: Terraform in &lt;code&gt;infra/&lt;/code&gt;.&lt;/b&gt;&lt;br&gt;Serverless only: 1 CloudFront distribution &amp;#183; 2 S3 buckets (web, media) &amp;#183; 1 S3 Vectors bucket + index &amp;#183; 1 DynamoDB table + Streams &amp;#183; 3 API Gateway APIs (HTTP, WebSocket, REST) &amp;#183; 14 Lambdas (2 durable functions) · 1 EventBridge rule (stats every 15 min) &amp;#183; 1 AgentCore runtime &amp;#183; Bedrock (Claude Fable 5.1, Amazon Nova 2 Lite EU profile for watching the video, Claude Haiku 5.5 EU profile for help, Titan Embeddings V2) &amp;#183; Transcribe &amp;#183; Cognito &amp;#183; SSM Parameter Store &amp;#183; Secrets Manager (platform keys and tokens) &amp;#183; Content Rewards outside AWS (13, switched off until every part has merged) &amp;#183; CloudWatch + SNS &amp;#183; no servers, no containers to run, no VPC &amp;#183; every push to &lt;code&gt;main&lt;/code&gt; deploys through GitHub OIDC" vertex="1">
+        <mxCell id="hdr" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b&gt;Clip Factory Cloud on AWS. Repo &lt;code&gt;Lamo2real/clip-factory-legal&lt;/code&gt;, branch &lt;code&gt;main&lt;/code&gt;, one AWS account, one environment (&lt;code&gt;prod&lt;/code&gt;, prefix &lt;code&gt;cf-prod&lt;/code&gt;), region &lt;code&gt;eu-north-1&lt;/code&gt;. Backend: Python 3.13. Infrastructure: Terraform in &lt;code&gt;infra/&lt;/code&gt;.&lt;/b&gt;&lt;br&gt;Serverless only: 1 CloudFront distribution &amp;#183; 2 S3 buckets (web, media) &amp;#183; 1 S3 Vectors bucket + index &amp;#183; 1 DynamoDB table + Streams &amp;#183; 3 API Gateway APIs (HTTP, WebSocket, REST) &amp;#183; 15 Lambdas (2 durable functions) · EventBridge rules (stats every 15 min, auto-posting every hour on the hour) &amp;#183; 1 AgentCore runtime &amp;#183; Bedrock (Claude Fable 5.1, Amazon Nova 2 Lite EU profile for watching the video, Claude Haiku 5.5 EU profile for help, Titan Embeddings V2) &amp;#183; Transcribe &amp;#183; Cognito &amp;#183; SSM Parameter Store &amp;#183; Secrets Manager (platform keys and tokens) &amp;#183; Content Rewards outside AWS (13, switched off until every part has merged) &amp;#183; CloudWatch + SNS &amp;#183; no servers, no containers to run, no VPC &amp;#183; every push to &lt;code&gt;main&lt;/code&gt; deploys through GitHub OIDC" vertex="1">
           <mxGeometry x="0" y="-76" width="2760" height="60" as="geometry" />
         </mxCell>
         <mxCell id="frame" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;arcSize=2;fontSize=11;verticalAlign=middle;align=center;" value="" vertex="1">
           <mxGeometry x="0" y="0" width="2760" height="1920" as="geometry" />
         </mxCell>
-        <mxCell id="frame_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;fontSize=16;fontStyle=1;fontColor=#0050EF;" value="Clip Factory Cloud - paste a link, the agent cuts 5-10 vertical clips, live updates over WebSocket, nothing is posted without the owner's Keep, a guided setup connects YouTube, TikTok, Instagram, Facebook and X, numbers refresh every 15-30 min, the owner stars the best of each week, Ask Clip Factory answers how-to questions and shows the button" vertex="1">
+        <mxCell id="frame_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;fontSize=16;fontStyle=1;fontColor=#0050EF;" value="Clip Factory Cloud - paste a link, the agent cuts 5-10 vertical clips, live updates over WebSocket, nothing is posted without the owner's Keep (or auto-posting, once he turns it on), a guided setup connects YouTube, TikTok, Instagram, Facebook and X, numbers refresh every 15-30 min, the owner stars the best of each week, Ask Clip Factory answers how-to questions and shows the button" vertex="1">
           <mxGeometry x="20" y="6" width="2700" height="34" as="geometry" />
         </mxCell>
         <mxCell id="devices" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;arcSize=2;fontSize=11;verticalAlign=middle;align=center;dashed=1;" value="" vertex="1">
@@ -407,7 +407,7 @@
         <mxCell id="roles" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;fillColor=#DD344C;" value=" " vertex="1">
           <mxGeometry x="1160" y="2082" width="56" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="roles_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Runtime IAM roles&lt;/b&gt;&lt;br&gt;one per Lambda + the agent runtime; least privilege; api, hooks, clip-flow, stats and money reach &lt;code&gt;cf-prod/platforms/*&lt;/code&gt;; &lt;code&gt;cf-prod-campaigns&lt;/code&gt; has no secret access" vertex="1">
+        <mxCell id="roles_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Runtime IAM roles&lt;/b&gt;&lt;br&gt;one per Lambda + the agent runtime; least privilege; api, hooks, clip-flow, stats, money and autopost (the campaign fit check) reach &lt;code&gt;cf-prod/platforms/*&lt;/code&gt;; &lt;code&gt;cf-prod-campaigns&lt;/code&gt; has no secret access" vertex="1">
           <mxGeometry x="1080" y="2142" width="240" height="100" as="geometry" />
         </mxCell>
         <mxCell id="apigwrole" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;fillColor=#DD344C;" value=" " vertex="1">
@@ -724,6 +724,45 @@
               <mxPoint x="2470" y="1538" />
             </Array>
           </mxGeometry>
+        </mxCell>
+        <mxCell id="apr" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.eventbridge;fillColor=#E7157B;" value=" " vertex="1">
+          <mxGeometry x="100" y="1640" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="apr_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-autopost-hourly rule (EventBridge)&lt;/b&gt;&lt;br&gt;&lt;code&gt;cron(0 * * * ? *)&lt;/code&gt;: every hour at :00 UTC; the rule never changes when the owner saves; retries 2, event age 3,300 s (before the next tick)" vertex="1">
+          <mxGeometry x="20" y="1700" width="240" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="ap" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
+          <mxGeometry x="442" y="1640" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="ap_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-autopost (Lambda)&lt;/b&gt;&lt;br&gt;&lt;b&gt;14&lt;/b&gt; auto-posting: one Query of AUTOPOSTOWNERS; per owner the due check (are his X hours up?), the pick (the oldest clips in Review), the claim (AUTORUN# + AUTOPOST in one transaction), then Upload's own code for each clip; never TikTok; no S3; 256 MB, 300 s, retries 2" vertex="1">
+          <mxGeometry x="320" y="1700" width="300" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="e14a" edge="1" parent="1" source="apr" target="ap" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;14&lt;/b&gt; tick every hour at :00">
+          <mxGeometry x="0" y="0" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14b" edge="1" parent="1" source="ap" target="ddb" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.6;entryDx=0;entryDy=0;" value="&lt;b&gt;14&lt;/b&gt; due check; claim: AUTORUN# + AUTOPOST (1 transaction);&lt;br&gt;each clip: Upload's transaction (clip + posts, only if still in Review)">
+          <mxGeometry x="-0.55" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="470" y="1600" />
+              <mxPoint x="1465" y="1600" />
+              <mxPoint x="1465" y="734" />
+            </Array>
+            <mxPoint x="0" y="-14" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e14c" edge="1" parent="1" source="ap" target="clf" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.7;entryDx=0;entryDy=0;" value="&lt;b&gt;14&lt;/b&gt; Upload's code: start clip flow, async, alias &lt;i&gt;live&lt;/i&gt;, name clip-{clipId}-{run} (never twice)">
+          <mxGeometry x="-0.2" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="640" y="1668" />
+              <mxPoint x="640" y="1880" />
+              <mxPoint x="1530" y="1880" />
+              <mxPoint x="1530" y="1149" />
+            </Array>
+            <mxPoint x="0" y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="hw14" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;14. Auto-posting.&lt;/b&gt; Off until the owner turns it on in Settings › Posting › Auto-posting. An EventBridge rule ticks every hour on the hour; &lt;code&gt;cf-prod-autopost&lt;/code&gt; runs only when his X hours are up, takes the oldest clips in Review (1 to 5 each time), claims the run in one transaction (a retry resumes it, never a second pick) and sends each clip through Upload's own code, so the clip flow posts it to every ready place except TikTok. The test buttons, Practice run now and Private test run, work inline in &lt;code&gt;cf-prod-api&lt;/code&gt; with nothing public." vertex="1">
+          <mxGeometry x="2820" y="1470" width="520" height="120" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
