@@ -863,3 +863,40 @@ def test_a_guide_page_with_a_query_keeps_it_and_stays_official(store: db.Store) 
     assert url == "https://www.facebook.com/pages/?category=your_pages"
     assert hops is not None
     assert hops("https://evil.example/") is False
+
+
+def test_read_setup_guide_takes_the_content_rewards_guide(toolbox: Toolbox) -> None:
+    """§38.17: "contentrewards" is accepted next to the five platforms, whichever builder's part merged first."""
+    import dataclasses
+
+    from clipfactory_api.ask import prompt
+
+    assert "contentrewards" in prompt.GUIDE_NAMES
+    absent = dataclasses.replace(
+        toolbox.knowledge, setup_steps={k: v for k, v in toolbox.knowledge.setup_steps.items() if k != "contentrewards"}
+    )
+    toolbox.knowledge = absent
+    out = toolbox.run("read_setup_guide", {"platform": "contentrewards"})
+    assert (out.is_error, out.content) == (True, "That guide is not in this version yet.")
+    steps = [
+        {
+            "id": "ready-account",
+            "n": 1,
+            "title": "Make a Content Rewards account",
+            "partTitle": "Set up",
+            "say": ["Tap **Send code**."],
+            "checkedOn": "2026-11-21",
+            "open": {"label": "Open Content Rewards", "url": "https://contentrewards.com/login?intent=signup"},
+        }
+    ]
+    toolbox.knowledge = dataclasses.replace(absent, setup_steps={**absent.setup_steps, "contentrewards": steps})
+    out = toolbox.run("read_setup_guide", {"platform": "contentrewards"})
+    assert out.is_error is False
+    assert "1. [ready-account] Make a Content Rewards account" in str(out.content)
+    assert "Button to this step: setup-step:contentrewards:ready-account" in str(out.content)
+    assert tools.setup_step_action(toolbox.knowledge, "setup-step:contentrewards:ready-account") == {
+        "id": "setup-step:contentrewards:ready-account",
+        "label": "Open Content Rewards step 1",
+        "to": "/settings/posting/setup/contentrewards#step-ready-account",
+        "highlight": ["step-ready-account"],
+    }
