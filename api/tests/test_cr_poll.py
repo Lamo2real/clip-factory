@@ -318,11 +318,17 @@ def test_can_move_and_money_moved(world: Any) -> None:
     fake.answer("list_my_payouts", page([]))
     fake.answer("get_my_balance", {"available": usd(50), "withdrawal_pending": usd(300), "as_of": iso(NOW)})
     money.read(deps, USER, NOW)
+    assert money.public(deps, USER, NOW)["movedAt"] is None  # still on its way: nothing moved yet
     fake.answer("get_my_balance", {"available": usd(1825), "withdrawal_pending": usd(0), "as_of": iso(NOW)})
     money.read(deps, USER, NOW + timedelta(hours=1))
     item = money.load(deps.store, USER)
     assert item["movedAt"] == iso(NOW + timedelta(hours=1))
     assert [c["text"] for c in item["celebrations"]] == ["You can move $18.25 to Whop now."]
+    # Every device sees "Money moved to Whop" from the answer, not only the one that saw it happen.
+    assert money.public(deps, USER, NOW + timedelta(hours=2))["movedAt"] == iso(NOW + timedelta(hours=1))
+    fake.answer("get_my_balance", {"available": usd(1825), "withdrawal_pending": usd(0), "as_of": iso(NOW)})
+    money.read(deps, USER, NOW + timedelta(hours=3))
+    assert money.public(deps, USER, NOW)["movedAt"] == iso(NOW + timedelta(hours=1))  # kept until the next move
 
 
 def test_money_states(world: Any) -> None:

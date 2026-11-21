@@ -64,6 +64,9 @@ def public(deps: CrDeps, user_id: str, now: datetime) -> Item:
         "waitingForBrand": int(item.get("waitingForBrand") or 0),
         "campaigns": [],
         "celebrations": [dict(c) for c in item.get("celebrations") or [] if isinstance(c, Mapping)],
+        # When Clip Factory last saw money leave CR's balance toward Whop (on its way, then gone): every device
+        # knows "Money moved to Whop" from this, not only the one that saw it happen.
+        "movedAt": item["movedAt"] if isinstance(item.get("movedAt"), str) and item["movedAt"] else None,
     }
     if item.get("asOf"):
         out["asOf"] = item["asOf"]
