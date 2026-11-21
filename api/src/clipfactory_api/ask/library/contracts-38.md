@@ -1497,3 +1497,27 @@ upload or its processing end (the 25-minute stop leaves 5 minutes); whether YouT
 paid-partnership field for Reels from this app; where brands take proof of views (the brief's words win; CR's
 **Support** chat is the fallback, its attachments not seen); which Settings tab holds "Connect your Whop account" (the
 hint says **Profile**); CR's **Finance** steps and Whop's screens (from Whop's and CR's docs only).
+
+### 38.22 Known limits (by design)
+
+What Clip Factory leaves out for a campaign on purpose. Each one is said on screen, never hidden:
+
+* **Its own overlay picture or a sound.** A campaign that wants its own picture on top of the video
+  (`rules.overlayRequired`) or one of its own sounds (`rules.soundRequired` or CR's sound toggle) is refused with a
+  stop: `overlay_needed` "This campaign wants its own picture on top of the video. Clip Factory can't add it yet. Pick
+  another campaign." or `sound_needed` "This campaign needs one of its own sounds. Clip Factory can't add it yet. Pick
+  another campaign." (§38.4; the fit of §39.3 counts both as `no`). The campaign's logo is not this: Clip Factory adds
+  that (§38.13).
+* **A required cover image** (`rules.coverImageRequired`) is not made or checked. It is a check-yourself line: the fit
+  says "I couldn't check: the brand's cover picture." (`brief_only`, `check`), which never blocks Upload.
+* **The rules review** (the agent's `campaign_rules` judgment, §38.13) sees only the campaign's banned content,
+  language and other rules (`REVIEW_RULES`: `bannedContent`, `language`, `otherRules`). The length, the disclosure,
+  the logo, the tags and the places are Clip Factory's own work or its own measured checks, so the review can never
+  drop a clip for them.
+* **When the review gives no answer**, the clip gets a warning, not a stop: its `campaign_rules` row says "Claude
+  couldn't check the campaign's rules. Check it yourself." (not critical, so the clip is kept), the fit makes it a
+  `check`, and Confirm lets it go up.
+* **No brand lookup.** Clip Factory knows a brand only from the campaign itself: its name and picture from CR, the
+  brief, and the channels and videos the brief lists. It never looks the brand up anywhere else, so a video from a
+  channel the brief doesn't name is a check-yourself line ("This video may not be from FaZe's channels. FaZe Clips
+  only pays for those. Look yourself."), never a stop.
