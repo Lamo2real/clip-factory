@@ -886,7 +886,7 @@ part's tests pass on their own, whichever part merged first.
   denied card, read only → "Content Rewards said no?" with "Open email" as the only vermilion; Disconnect and Undo; the
   sign-in-again week; Home paste of each link shape; the Campaigns page's vermilion moving to "Add campaign"; each
   membership row's single vermilion button; soft stops → one "Make clips anyway"; Check now; "You're in!" once; the
-  logo drop; Make clips with the campaign picked; the Review strip, Upload to limited, the TikTok line, "I linked it",
+  logo drop; Make clips with the campaign picked; the Review strip, Upload to limited, the TikTok line, "I added it",
   Use my settings with the locked YouTube options, the two-tap upload; the post line through every state, Ask again,
   send by hand with "Copy and open", the Mac banner, proof due; Money's Finance question, tiles and celebration;
   reduced motion (no confetti); on every page no sideways scroll at 320–1920, no edges, targets ≥ 44 px (48 on
@@ -897,6 +897,93 @@ part's tests pass on their own, whichever part merged first.
   and these pages change (run both without `--check` first).
 - **Live checks, not done here** ([§38.21](CONTRACTS.md#3821-not-verified-live-each-is-checked-at-the-owners-first-connect-or-first-campaign-post)):
   see step 15 of [Manual checks after the first deploy](#manual-checks-after-the-first-deploy).
+
+### Content Rewards: the two ways, all your money and the fit (CONTRACTS §39)
+From [CONTRACTS.md §39.5](CONTRACTS.md#395-tests-offline-fakes-only-no-aws-no-cr-no-network). Offline, fakes only, as
+for §38. Each part passes on its own whichever merges first: the web hides the fit block, the "could earn" line and
+All your money while their routes answer 404, and the golden case files are read only when present.
+
+- **Click counts** (Playwright, mock mode, `web/e2e/two-ways.spec.ts`, 375×812 and 1440×900): every click and key
+  press that acts goes through one counting helper, `tap()` in `web/e2e/flows.ts`, and a test fails as soon as the
+  count is over.
+  - **The normal way is frozen.** With the Content Rewards API absent (404), switched off (503) and on with two joined
+    campaigns: Home at `/` has exactly the labelled controls of `NORMAL_HOME_CONTROLS` (the Source bar's two options,
+    the link box, Paste, Clear when it holds text, How many clips' two options, Number of clips only for an exact
+    count, Notes, Make clips) and, inside the form, no `cr-` anchor or class and no word "campaign" outside Notes'
+    placeholder; Paste → "Make clips" → "Go to Review" → "Use my settings" → "Upload to N" uploads in exactly **5**
+    taps. The Review card of a normal clip has exactly `NORMAL_REVIEW_CONTROLS`; with a fitting campaign exactly two
+    more optional controls ("Make a FaZe Clips copy", "Not now"), and the same 5 taps still upload.
+  - **The campaign way**: 6 taps from the row chip, the main button reading "Make campaign clips"; a clip with a missing
+    tag still uploads in 6; 7 only after TikTok's Branded content was turned off ("Turn on Branded content").
+  - **The copy**: on `/review?job=X`, "Make a FaZe Clips copy", then the mock's live `clip` event brings the copy right
+    after its original; "Use my settings", "Upload to 2": 3 taps.
+  - **Connect**: from a pasted link with steps 1 and 2 already true, 7 taps with the "Yes" shortcut and 8 without it
+    (`asMacWindow({ crConnect: true })`; the pretend allow page counts 1); from zero, the 9 Clip Factory taps up to
+    "Back to FaZe Clips" plus the pretend allow = 10, then "Open campaign" and the mock's check says "You're in!".
+  - `web/test/twoWays.test.ts`: `NORMAL_WAY_TAPS = 5`, `CAMPAIGN_WAY_TAPS = 6`, `COPY_TAPS = 3`,
+    `CONNECT_TAPS_DONE = 7`, `CONNECT_CF_TAPS_FROM_ZERO = 10`, and the names list (no screen string in the help
+    corpus says "Content Rewards way", "normal mode", "compatible", "clip type", "upload type", "campaign type" or "I
+    linked it").
+- **Web units** (Vitest): `lib/crFit.ts` against `api/tests/fixtures/cr_fit_live_cases.json` when present; every
+  verdict's headline, lines and single vermilion (`wait`: none of its own, Upload off with the words; `fits` with a
+  missing tag: "Can earn" and an optional "Fix it for me"); Upload on and off by `canUpload`; "Fix it for me" (the
+  captions POST, the Undo toast) and "Turn on Branded content" (its own toast); "Read the rules" once per page; "I read
+  them. They're OK" (folds, reopens on a changed line, throwing storage, never changes Upload); the "could earn" line
+  only for `suggestion`, with the soft text and `campaignAnyway`, and "Not now" with throwing storage; the `new_clips`
+  hrefs (`&link=` only for `length`, `banned`, `posted`, `one_campaign`); `backLink.ts` (the six shapes pass; `//evil`,
+  `https:`, other paths and extra keys are ignored); `AllMoney` for every state of every place, one total per
+  currency, no amount on a `not_available` row, "Nothing to add up yet." with no total, the Total bigger than
+  Monthly's number, Monthly's "Apps only." line, the Notes card unchanged, no "See it all" on a `sign_in` row;
+  `noGuesses.test.ts` over the new files (amounts only formatted).
+- **Playwright** (mock mode, `e2e/cr-fit.spec.ts`, `e2e/all-money.spec.ts` and the updated `content-rewards.spec.ts`,
+  `money-dashboard.spec.ts`, `review-card.spec.ts`): the campaign way (the strip, the rule lines, "Which campaign" only
+  with two campaigns, "Make normal clips instead" → `/`); the row chip; the setup page (the shortcut, "I have an
+  account" and "I added them" right under their Open, "Add your accounts there", `?back=` → "Back to FaZe Clips", the
+  way back glass while "Content Rewards said no?" waits); the Campaigns page not signed in ("Set up Content Rewards"
+  vermilion, the join steps glass); the phone campaign card's "Set up Content Rewards"; the fit block for each verdict;
+  the copy arriving by a live event; the clip page fold; All your money and its place on the page. On every new
+  screen: no sideways scroll at 320–1920, no edges, targets ≥ 44 px (48 on phones), the arrow cursor only, axe
+  contrast light and dark, reduced motion, phone controls at the bottom right, Ask never over the main button.
+  `screenshots.spec.ts` adds `review-fit` and `money-all` at 375 and 1440. Run each on a port of its own, such as
+  `CF_E2E_PORT=4720 npx playwright test e2e/two-ways.spec.ts`.
+- **API** (pytest, `api/tests/test_cr_fit.py`, `test_cr_remake.py`, `test_money_everywhere.py`; the cases are written by
+  `api/tests/cr_fit_cases.py` to `api/tests/fixtures/{cr_fit_cases.json, cr_fit_live_cases.json,
+  money_everywhere_cases.json, channel_match_cases.json}`): each rule × state, the verdict (including `wait`),
+  `canUpload`, `canRemake` and `softCodes`; `held`, `paused`, `waiting` and `rules_reading` are wait items with
+  `canRemake` false; `overlay_needed` is a hard stop (`test_cr_gates.py`); a channel mismatch is `check` and never
+  blocks, while a link outside `sourceVideos` with `campaignProvidedOnly` and a ruled-out site are `no`; `channelKeys`
+  used when present; `language` free text ("English or Spanish", "EN only", none named); `logo` `ok` from the
+  checklist even after the campaign's logo was deleted; `no_place` without `platformsPaid` → `todo`; `otherRules` as
+  `check` for a normal clip only; `uncertain` read from `rules.uncertain` first; the normal-clip campaign list (in or
+  manual, newest first, 10) and the suggestion (needs `source` `ok`); `GET fit` makes no Content Rewards, public or
+  network call; the captions route uses `campaign_caption`; Confirm and `_try_again`: each blocking state → 409 with
+  its words, the merged captions and chosen places used, `tags`/`ad` fixes allowed, a clip without a campaign never
+  calls the fit and gets byte-identical posts; `release_waiting` leaves a campaign post waiting and still releases a
+  normal one (`test_release.py`); the copy: 503 while off, the refusals (an unaccepted soft stop, the gone video
+  file), the reservation before the job (two calls at once make one job; a failed job frees it), the job body (source,
+  a new `macFetch` map from the body, `sourceKey` by HEAD, notes, one clip, the snapshot and logo copy,
+  `sourceLanguage` copied, `remake` never in `public_job`), the second call 200; `gates.next_step`'s Connect href with
+  `?back=`; `nextStepKind`, `sourceRuleText`, `languageRuleText`; All your money (each state per place, the where
+  lines word for word, the period equal to the Monthly card's, totals per currency, `usd` → `USD`, cents → micros,
+  never a $0 for not available) and the `paidByDay` cases (the first read alone, a watermark read during a day scan
+  with no double count, a watermark read before the scan in the same tick, an empty `paidMark`, the stale-scan
+  restart, the scan across two ticks, YouTube plus Content Rewards giving one USD total).
+- **Infrastructure** (`terraform test`): `cr_remake_enabled` default `false` → `CR_REMAKE = "off"`, `true` → `"on"`,
+  nothing replaced.
+- **Agent** (pytest, `agent/tests/test_remake.py` and `test_agent.py`): a `remake` job calls no analyze, watch or
+  select, cuts its one moment from `sourceKey` without fetching (and fetches the link when it is absent), reuses the
+  kept words without the full-audio download (and transcribes when they are gone), renders with the campaign marks,
+  writes captions, the checklist and `remakeOf {clipId, jobId}`; a job without `remake` keeps today's prompts and
+  files byte for byte; `sourceLanguage` from Transcribe's `LanguageCode` and from `meta.json` when transcribe is
+  skipped; `source.channelKeys` equal to `sources.channel_keys(info)` (and the shared channel cases when the file is
+  there).
+- **Help and docs**: the guides `cr-two-ways`, `cr-fit`, `cr-fix-it`, `cr-make-it-for`, `money-everywhere` and
+  `money-not-available` each have one question in `helpEvals.json` that both retrievers rank first
+  (`web/test/helpRetrieve.test.ts`, `api/tests/test_help_evals.py`), and `cr-setup` and `cr-make-clips` use the §39.1
+  words. `node scripts/help-corpus.mjs --check` (every highlight is a real `data-help` anchor) and
+  `node scripts/ask-knowledge.mjs --check` pass after running both without `--check`.
+- **Live checks, not done here** ([§39.6](CONTRACTS.md#396-not-verified-live)): see step 16 of
+  [Manual checks after the first deploy](#manual-checks-after-the-first-deploy).
 
 ### Agent (pytest)
 - Prior learnings (`tests/test_learnings.py`): the exact heading `Prior learnings`, only active unexpired lessons for
@@ -1119,3 +1206,19 @@ part's tests pass on their own, whichever part merged first.
      public JSON; that Instagram and Facebook Reels show no paid-partnership option; where the first brief that
      wants proof takes it (CR's **Support** chat is the fallback); and which Settings tab shows "Connect your Whop
      account" (the hint says **Profile**).
+16. **Content Rewards: the two ways, all your money and the fit** ([CONTRACTS §39.6](CONTRACTS.md#396-not-verified-live)):
+   not checked live when built. Do them after the §38 checks, and the copy ones after the `cr_remake_enabled` PR.
+   - In the deploy log, the plan changes only the api's environment (`CR_REMAKE`) in place and replaces nothing.
+   - Make normal clips from a link at `/` and count the taps to an upload: 5, with no campaign word on the form.
+   - On the setup page, note whether **Continue with Google** is still on Content Rewards' sign-up page, how many
+     taps Google's screens take and how many questions Content Rewards asks after sign-up; whether signing in at
+     Content Rewards' sign-in page with a new email makes an account (then step 1 could fold into step 3).
+   - A campaign clip on Review: the fit headline matches what Content Rewards later says about the clip (a brand that
+     turns down a "Can earn" clip, or a channel the check called "I couldn't check", is worth a note). Check that
+     the rules reader set `overlayRequired` only for a brief that asks for its own picture on top.
+   - Tap "Make a FaZe Clips copy" on a normal clip that fits: the copy shows right below in about 3 minutes, with the
+     logo, "Paid partnership" for 3 seconds and #Ad. Note whether the brand or YouTube treats the copy and an earlier
+     normal post of the same moment as reused content.
+   - All your money: the YouTube row equals the Monthly card when YouTube is the only money place; the Content Rewards
+     row equals Content Rewards' **Earnings** for the same days (note whether every paid payout has `paid_at` in UTC).
+     Whether X's media revenue answers for the owner (then X could move from "not available" to a number later).

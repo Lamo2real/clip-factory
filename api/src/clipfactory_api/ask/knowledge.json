@@ -1,5 +1,5 @@
 {
- "version": "bbc41e037695",
+ "version": "173665008963",
  "parts": [
   {
    "id": "app-map",
@@ -837,13 +837,13 @@
    "id": "testing-what-the-tests-must-cover",
    "title": "TESTING: What the tests must cover",
    "line": "Web (Playwright, mock mode)",
-   "chars": 71869
+   "chars": 80886
   },
   {
    "id": "testing-manual-checks-after-the-first-deploy",
    "title": "TESTING: Manual checks after the first deploy",
    "line": "1. Sign in with the temporary password and set a new one.",
-   "chars": 9156
+   "chars": 10926
   },
   {
    "id": "ux-principles",
