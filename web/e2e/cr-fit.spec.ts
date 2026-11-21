@@ -288,6 +288,45 @@ test.describe("the fit block on Review", () => {
     await expect(strip).toHaveText(`Campaign clips · FaZe Clips · Following ${rules} rules`);
     await expect(strip.getByRole("link", { name: "FaZe Clips" })).toHaveAttribute("href", `/campaigns/${FAZE}`);
     await expect(page.locator(".cr-job")).not.toContainText("on Content Rewards");
+    // Narrow phones: the strip wraps, but each dot stays with the words after it (never alone at a line's end), the
+    // coin sits on the first line, and a long campaign name wraps inside its link, never past the strip's edge.
+    const stripLines = () =>
+      strip.evaluate((h) => {
+        const box = h.querySelector(".cr-job__strip")!;
+        const rows = new Map<number, string>();
+        const walk = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+        const r = document.createRange();
+        for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+          for (let i = 0; i < n.textContent!.length; i++) {
+            r.setStart(n, i);
+            r.setEnd(n, i + 1);
+            const at = r.getClientRects()[0];
+            if (at) rows.set(Math.round(at.top / 8), (rows.get(Math.round(at.top / 8)) ?? "") + n.textContent![i]);
+          }
+        }
+        r.selectNodeContents(box.firstChild!);
+        const words = r.getBoundingClientRect();
+        const coin = h.querySelector(".icon")!.getBoundingClientRect();
+        return {
+          lines: [...rows.entries()].sort((a, b) => a[0] - b[0]).map(([, t]) => t.trim()),
+          coinOff: Math.abs(coin.top + coin.height / 2 - (words.top + words.height / 2)),
+          over: box.scrollWidth - box.clientWidth,
+        };
+      });
+    for (const width of [320, 375, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      const got = await stripLines();
+      expect(got.lines.length, `${width}: wraps`).toBeGreaterThan(1);
+      for (const l of got.lines) expect(l, `${width}: a dot alone at a line's end`).not.toMatch(/·$/);
+      expect(got.coinOff, `${width}: the coin on the first line`).toBeLessThanOrEqual(3);
+      expect(got.over, `${width}: past the edge`).toBeLessThanOrEqual(0);
+    }
+    await strip.getByRole("link").evaluate((a) => (a.textContent = "The Very Long Campaign Name For Summer Sneaker Drop Clips"));
+    const long = await stripLines();
+    expect(long.over, "a long name past the edge").toBeLessThanOrEqual(0);
+    for (const l of long.lines) expect(l).not.toMatch(/·$/);
+    await strip.getByRole("link").evaluate((a) => (a.textContent = "FaZe Clips"));
+    await page.setViewportSize(DESKTOP.viewport);
     // Upload the first campaign clip, then Library shows it with the small Campaign chip; normal clips carry none.
     await knob(page, "jobs", "finish");
     await page.getByRole("link", { name: "Check these clips" }).click();

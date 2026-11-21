@@ -116,7 +116,9 @@ describe("the words", () => {
     expect(line("approved", { earned: { paidCents: 310, pendingCents: 0 } })).toBe("Approved ✓ · 12.3K views on YouTube. Earned on Content Rewards: $3.10 so far.");
     // A full stop ends the views part before the money (§38.6), and only then.
     expect(line("approved", { platform: "facebook", views: 31_000, earned: { paidCents: 2100, pendingCents: 0 } })).toBe("Approved ✓ · 31K views on Facebook. Earned on Content Rewards: $21.00 so far.");
-    expect(line("approved", { views: null, earned: { paidCents: 310, pendingCents: 0 } })).toBe("Approved ✓ Earned on Content Rewards: $3.10 so far.");
+    expect(line("approved", { views: null, earned: { paidCents: 310, pendingCents: 0 } })).toBe("Approved ✓ · Earned on Content Rewards: $3.10 so far.");
+    expect(line("approved", { views: null, earned: { paidCents: 0, pendingCents: 310 } })).toBe("Approved ✓ · $3.10 more is still earning.");
+    expect(line("approved", { views: null })).toBe("Approved ✓");
     expect(line("approved", { earned: { paidCents: 0, pendingCents: 0 } })).toBe("Approved ✓ · 12.3K views on YouTube");
     expect(line("rejected", { reason: { code: "refused", text: "", brandSaid: "Logo missing in the first seconds." } })).toBe("Not approved: “Logo missing in the first seconds.”");
     expect(line("rejected")).toBe("Not approved: The brand gave no reason.");

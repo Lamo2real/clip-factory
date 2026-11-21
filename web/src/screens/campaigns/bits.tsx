@@ -146,6 +146,24 @@ export function Fold({ fold, open, onToggle }: { fold: Pick<CrFold, "id" | "ques
 }
 
 /**
+ * Setup's steps 1 and 2 on phones: does the pinned pair need its room at the top of its box? Only if, at the top of
+ * the page (where the pinned spot is highest on the page), the pair would come within one gap of the box's top. Then
+ * it rests in the room, under the lines; otherwise it never gets there and the room would only be an empty gap. All
+ * values in page pixels: `restTop` the box's top, `pinAt` the pinned pair's bottom on screen.
+ */
+export function needsPinRoom(restTop: number, gap: number, pinAt: number, pairHeight: number): boolean {
+  return restTop + gap > pinAt - pairHeight;
+}
+
+function needsRoom(rest: HTMLElement, pin: HTMLElement, pairHeight: number): boolean {
+  const bottom = parseFloat(getComputedStyle(pin).bottom);
+  const bar = document.querySelector<HTMLElement>(".tabbar")?.getBoundingClientRect();
+  const pinAt = Number.isFinite(bottom) ? window.innerHeight - bottom : (bar && bar.height > 0 ? bar.top : window.innerHeight) - 12;
+  const gap = parseFloat(getComputedStyle(rest).rowGap) || 0;
+  return needsPinRoom(rest.getBoundingClientRect().top + window.scrollY, gap, pinAt, pairHeight);
+}
+
+/**
  * One numbered Content Rewards step (the §17.1 card): number in a circle, icon, title, a few short lines, then
  * only what the step needs, and "I did this" (green). A step Clip Factory can see ticks itself.
  */
@@ -197,14 +215,24 @@ export function CrStepCard({
   // the step: on the first screen every line is above it; scrolling on, it stays pinned at the bottom right.
   const room = pin && early;
   const [pinEl, setPinEl] = useState<HTMLDivElement | null>(null);
+  // The room is there only where the pair would ever rest at the top of its box: when the lines end low on the first
+  // screen (a phone). A tall screen (a touch tablet) whose lines end well above the pinned pair gets no room, so no
+  // empty gap shows under the lines.
+  const [roomOn, setRoomOn] = useState(true);
   useLayoutEffect(() => {
     const rest = pinEl?.parentElement;
     if (!room || !pinEl || !rest) return;
-    const put = () => rest.style.setProperty("--pin-room", `${Math.ceil(pinEl.getBoundingClientRect().height)}px`);
+    const put = () => {
+      const h = Math.ceil(pinEl.getBoundingClientRect().height);
+      rest.style.setProperty("--pin-room", `${h}px`);
+      setRoomOn(needsRoom(rest, pinEl, h));
+    };
     put();
     if (typeof ResizeObserver === "undefined") return;
+    // The pair's own size, and the page's (a part above the step that loads later moves the lines down).
     const watch = new ResizeObserver(put);
     watch.observe(pinEl);
+    watch.observe(document.documentElement);
     return () => watch.disconnect();
   }, [room, pinEl]);
   // Pinned beside the vermilion, the answer is a next step too: Ask never rests on it (it fades out instead).
@@ -291,7 +319,7 @@ export function CrStepCard({
           {pin ? (
             // The pinned pair's sticky box is this part, so it never rides up over the lead line (or, with a room, the
             // step's lines) above.
-            <div className={`gstep__rest${room ? " has-room" : ""}`}>
+            <div className={`gstep__rest${room && roomOn ? " has-room" : ""}`}>
               {rest}
               <div className={`gstep__actions cr-pin${early ? " cr-pin--stack" : ""}`} ref={setPinEl}>
                 {openEl}

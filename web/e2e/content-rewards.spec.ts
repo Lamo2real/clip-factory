@@ -752,6 +752,10 @@ test.describe("phone: the main button stays pinned", () => {
       await page.waitForTimeout(50);
       expect(await underPin(), `after ${(i + 1) * 120} px`).toEqual([]);
     }
+    // The lines end low on a phone's first screen, so the pair has its room; at the step's end it rests after every
+    // "If you see …" line.
+    await expect(page.locator("#step-ready-account .gstep__rest")).toHaveClass(/has-room/);
+    expect(await pinAtStepEnd(page)).toEqual({ hintsAbove: true, pinOnScreen: true });
   });
 
   test("a toast never covers the pinned main button (You're in! over Make clips for this campaign)", async ({ page }) => {
@@ -797,6 +801,49 @@ test.describe("phone: the main button stays pinned", () => {
     await expect(tomatoes(page)).toBeInViewport();
     await expect(page.locator("#step-join-copy")).toBeVisible();
     expect(await screenProblems(page, true)).toEqual([]);
+  });
+});
+
+/** Scrolls the setup step's end up the screen: the pinned pair rests in its own place, after the step's hints. */
+async function pinAtStepEnd(page: Page) {
+  return page.evaluate(async () => {
+    const step = document.querySelector("#step-ready-account")!;
+    const rest = step.querySelector(".gstep__rest")!;
+    scrollBy(0, rest.getBoundingClientRect().bottom - innerHeight * 0.4);
+    await new Promise((r) => setTimeout(r, 200));
+    const pin = step.querySelector(".cr-pin")!.getBoundingClientRect();
+    const hints = [...step.querySelectorAll(".gstep__hint")].map((h) => h.getBoundingClientRect());
+    return { hintsAbove: hints.length > 0 && hints.every((h) => h.bottom <= pin.top + 0.5), pinOnScreen: pin.top >= 0 && pin.bottom <= innerHeight };
+  });
+}
+
+test.describe("a touch tablet: the setup step's pinned pair", () => {
+  test.use({ viewport: { width: 820, height: 1180 }, hasTouch: true });
+  test("the lines end high on a tall screen: no room for the pair, so no empty gap under the lines", async ({ page }) => {
+    await start(page, { fresh: true });
+    await page.goto(SETUP);
+    await settle(page);
+    const step = page.locator("#step-ready-account");
+    await expect(step.locator(".cr-pin")).toBeVisible();
+    await expect(step.locator(".cr-pin .btn--primary")).toHaveText(/Open Content Rewards/);
+    await page.waitForTimeout(600);
+    const geo = await step.evaluate((el) => {
+      const rest = el.querySelector(".gstep__rest")!;
+      const say = el.querySelector(".gstep__say")!.getBoundingClientRect();
+      const first = [...rest.children].find((c) => !c.classList.contains("cr-pin"))!.getBoundingClientRect();
+      const pin = el.querySelector(".cr-pin")!.getBoundingClientRect();
+      const gap = parseFloat(getComputedStyle(el.querySelector(".gstep__body")!).rowGap) || 0;
+      const lines = [...el.querySelectorAll(".gstep__lead, .gstep__say li")].map((l) => l.getBoundingClientRect());
+      return {
+        room: rest.classList.contains("has-room"),
+        space: first.top - say.bottom - gap,
+        linesUnder: lines.filter((r) => r.top < pin.bottom && r.bottom > pin.top).length,
+      };
+    });
+    expect(geo.room, "a room on a tall screen").toBe(false);
+    expect(geo.space, "empty space between the lines and the next part").toBeLessThanOrEqual(1);
+    expect(geo.linesUnder, "a step line under the pinned pair").toBe(0);
+    expect(await pinAtStepEnd(page)).toEqual({ hintsAbove: true, pinOnScreen: true });
   });
 });
 

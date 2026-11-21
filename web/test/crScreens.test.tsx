@@ -172,6 +172,10 @@ describe("Money › Content Rewards", () => {
     expect(justMovedNow({ ...fresh, seenMovedAt: new Date(now - 9 * 86_400_000).toISOString() }, { onItsWayCents: 0, movedAt: hour }, now)).toBe(true);
     // Too old to say it just moved, or money on its way again: no.
     expect(justMovedNow(fresh, { onItsWayCents: 0, movedAt: new Date(now - MOVED_FRESH_MS - 1).toISOString() }, now)).toBe(false);
+    // "Just finished" is one day: a move 23 hours ago still leads, one 2 days ago doesn't (he may have banked it since).
+    expect(MOVED_FRESH_MS).toBe(86_400_000);
+    expect(justMovedNow(fresh, { onItsWayCents: 0, movedAt: new Date(now - 23 * 3_600_000).toISOString() }, now)).toBe(true);
+    expect(justMovedNow(fresh, { onItsWayCents: 0, movedAt: new Date(now - 2 * 86_400_000).toISOString() }, now)).toBe(false);
     expect(justMovedNow(fresh, { onItsWayCents: 500, movedAt: hour }, now)).toBe(false);
     // An API from before movedAt (absent) or before any move (null): this device's own memo, as before.
     expect(justMovedNow(fresh, { onItsWayCents: 0 }, now)).toBe(false);

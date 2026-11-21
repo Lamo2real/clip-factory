@@ -453,11 +453,13 @@ function JobCampaignStrip({ campaignId, note, clipIds }: { campaignId: string; n
           Campaign clips
           {campaign ? (
             <>
-              {" · "}
-              <A href={campaignPath(campaignId)} className="text-link user-text">
-                {campaign.name}
-              </A>
-              {/* The name is a link (a whole box), so a narrow phone breaks right after it: the count wraps whole. */}{" "}
+              {/* Each dot stays with the words after it, so a narrow phone never leaves one alone at a line's end. */}{" "}
+              <span className="cr-job__name">
+                {"· "}
+                <A href={campaignPath(campaignId)} className="text-link user-text">
+                  {campaign.name}
+                </A>
+              </span>{" "}
               <span className="nowrap">{`· Following ${plural(campaign.plainRules.length, "rule")}`}</span>
             </>
           ) : null}

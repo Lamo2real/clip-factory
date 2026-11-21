@@ -49,12 +49,15 @@ export function readMoved(raw: string | null): MovedMemo {
   }
 }
 
-/** How long after a move to Whop a device that didn't see it still leads with the bank step. */
-export const MOVED_FRESH_MS = 7 * 86_400_000;
+/**
+ * How long after a move to Whop a device that didn't see it still leads with the bank step: one day, so it means "just
+ * finished" (§38.7). Later he may well have moved it to his bank already, which Clip Factory can't know.
+ */
+export const MOVED_FRESH_MS = 86_400_000;
 
 /**
  * Did a move to Whop just finish, for this device? The API's `movedAt` when it sends one (any device: a move newer
- * than the last one this device led with, from the last 7 days, with nothing on its way now); else, as before, only
+ * than the last one this device led with, from the last day, with nothing on its way now); else, as before, only
  * what this device saw itself (On its way went back to 0 after being above 0).
  */
 export function justMovedNow(before: MovedMemo, money: Pick<CrMoney, "onItsWayCents" | "movedAt">, now = Date.now()): boolean {
