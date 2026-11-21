@@ -60,6 +60,12 @@ variable "content_rewards_enabled" {
   description = "Content Rewards campaigns (docs/CONTRACTS.md §38.16). On: every builder's part of §38.19 has merged. Set false to turn it off again; then every /v1/contentrewards route answers 503 and the clip flow sends nothing."
 }
 
+variable "cr_remake_enabled" {
+  type        = bool
+  default     = false
+  description = "The campaign copy of a clip (docs/CONTRACTS.md §39.3, CR_REMAKE). Off until G, H and I of §39.4 have merged; then one last one-line PR sets the default to true. While off, the copy route answers 503 \"Coming soon.\" and no fit offers a copy."
+}
+
 variable "help_enabled" {
   type        = bool
   default     = true

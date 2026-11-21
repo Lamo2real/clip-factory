@@ -97,6 +97,8 @@ run "environment_names_the_flow_aliases" {
       ASK_ENABLED = "false"
       # §38.16 module default: Content Rewards off.
       CONTENT_REWARDS = "off"
+      # §39.3 module default: the campaign copy off.
+      CR_REMAKE = "off"
     })
     error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9, §17.9, §19.9 and §38.16 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID, HELP_*; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
   }
@@ -577,5 +579,36 @@ run "content_rewards_on" {
   assert {
     condition     = !contains(one([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s.Condition.StringLike["s3:prefix"] if try(s.Sid, "") == "MediaList"]), "campaigns/*")
     error_message = "The api never lists campaigns/: removing a campaign deletes its files by name."
+  }
+}
+
+# docs/CONTRACTS.md §39.3: the campaign copy of a clip waits behind CR_REMAKE, off by default; the switch is an
+# in-place environment change (no new grant, nothing replaced).
+run "cr_remake_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = one(aws_lambda_function.fn["api"].environment).variables["CR_REMAKE"] == "off"
+    error_message = "cr_remake_enabled defaults to false: CR_REMAKE is off."
+  }
+}
+
+run "cr_remake_on" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = true
+    cr_remake_enabled       = true
+    campaigns_function_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"
+  }
+
+  assert {
+    condition     = one(aws_lambda_function.fn["api"].environment).variables["CR_REMAKE"] == "on"
+    error_message = "With cr_remake_enabled, CR_REMAKE is on."
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s if try(s.Sid, "") == "Campaigns"]) == 1
+    error_message = "The copy needs no new permission: the api's grants are the ones Content Rewards already has."
   }
 }
