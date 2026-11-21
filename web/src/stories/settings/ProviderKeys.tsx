@@ -1,7 +1,8 @@
 // Provider keys (docs/CONTRACTS.md §45.29 AI and Video, §45.31): a provider that needs an API key gets a key form.
-// The key goes to Secrets Manager through PUT …/providers/{id}/key and never comes back: the page only ever shows
-// "saved · ends 4f2a". Today's providers (the built-in makers, Claude and Nova on Amazon Bedrock) need none, so the
-// card says so; the form is built and waits for the first provider that does.
+// The key goes to Secrets Manager through PUT …/providers/{id}/key and never comes back: what the page shows of it is
+// the provider's own line from the API ("Key saved · ends 4f2a."). Which providers need no key is in the contract's
+// provider tables (§45.11.6, §45.31): the built-in makers, Claude, Nova Canvas and Nova Reel use Lamo Stories' own AWS
+// access. Any other provider the API lists takes a key; none does today, so the card says so and the form waits.
 import { useState } from "react";
 import { friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
@@ -9,45 +10,34 @@ import { storiesApi } from "../api/client.ts";
 import type { ProviderStatus } from "../api/types.ts";
 import { Btn, cheer, Chip, Note, PROVIDER_STATE, SIcon, whenText } from "./bits.tsx";
 
-/**
- * What the key routes add to a provider: whether it takes a key and the saved key's last four characters (never the
- * key). Not in §45.6's ProviderStatus yet (reported to the lead); read when the API sends it.
- */
-export interface ProviderKeyInfo {
-  saved: boolean;
-  hint: string | null;
-  savedAt: string | null;
-}
-export type ProviderWithKey = ProviderStatus & { key?: ProviderKeyInfo | null };
+/** The providers that use Lamo Stories' own AWS access, so a key is never asked for (§45.11.6, §45.31). */
+export const NO_KEY: ReadonlySet<string> = new Set(["bedrock-claude", "builtin-rig", "nova-canvas", "builtin-2d", "nova-reel", "builtin-synth"]);
 
-export function takesKey(p: ProviderStatus): p is ProviderWithKey & { key: ProviderKeyInfo } {
-  const k = (p as ProviderWithKey).key;
-  return !!k && typeof k === "object";
+export function takesKey(p: ProviderStatus): boolean {
+  return !NO_KEY.has(p.id);
 }
 
-/** A key route's answer for a provider in the list: its new state, line and key, under the name the list shows. */
-export function keepName(old: ProviderWithKey, next: ProviderWithKey): ProviderWithKey {
-  return { ...old, state: next.state, line: next.line, key: next.key ?? old.key ?? null, ...(next.checkedAt ? { checkedAt: next.checkedAt } : {}) };
+/** A key route's answer for a provider in the list: its new state and line, under the name the list shows. */
+export function keepName(old: ProviderStatus, next: ProviderStatus): ProviderStatus {
+  const { checkedAt: _c, lastError: _e, ...rest } = old;
+  return { ...rest, state: next.state, line: next.line, ...(next.checkedAt ? { checkedAt: next.checkedAt } : {}), ...(next.lastError ? { lastError: next.lastError } : {}) };
 }
 
-/** "saved · ends 4f2a": the only thing ever shown of a key. */
-export function keyLine(k: ProviderKeyInfo): string {
-  return k.saved ? `saved · ends ${k.hint ?? "····"}` : "not saved yet";
-}
-
-function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderWithKey & { key: ProviderKeyInfo }; onSaved: (p: ProviderWithKey) => void }) {
+function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStatus; onSaved: (p: ProviderStatus) => void }) {
   const toast = useToast();
   const [text, setText] = useState("");
-  const [open, setOpen] = useState(!provider.key.saved);
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const s = PROVIDER_STATE[provider.state];
   const save = async (el: HTMLElement | null) => {
+    if (busy) return;
     if (!text.trim()) {
       toast.error("Paste the key first.");
       return;
     }
     setBusy(true);
     try {
-      const next = (await storiesApi().setProviderKey(ws, provider.id, text.trim())) as ProviderWithKey;
+      const next = await storiesApi().setProviderKey(ws, provider.id, text.trim());
       setText("");
       setOpen(false);
       onSaved(next);
@@ -60,12 +50,12 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderWith
     }
   };
   const remove = async () => {
+    if (busy) return;
     setBusy(true);
     try {
       await storiesApi().deleteProviderKey(ws, provider.id);
-      onSaved({ ...provider, key: { saved: false, hint: null, savedAt: null } });
-      setOpen(true);
-      toast.info(`${provider.label}'s key is removed.`);
+      onSaved({ ...provider, state: "needs_setup", line: `Paste your ${provider.label} key to use it.` });
+      toast.info(`${provider.label} has no saved key now.`);
     } catch (e) {
       toast.error(friendlyMessage(e));
     } finally {
@@ -79,9 +69,10 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderWith
           <SIcon name="key" size={20} />
           {provider.label}
         </span>
-        <Chip tone={provider.key.saved ? "mint" : "sun"}>{keyLine(provider.key)}</Chip>
+        <Chip tone={s.tone}>{s.label}</Chip>
       </div>
-      {provider.key.saved && provider.key.savedAt ? <p className="st-stg-small">Saved {whenText(provider.key.savedAt)}.</p> : null}
+      <p className="st-stg-small">{provider.line}</p>
+      {provider.checkedAt ? <p className="st-stg-small">Last checked {whenText(provider.checkedAt)}.</p> : null}
       {open ? (
         <form
           className="st-stg-keyrow__form"
@@ -108,18 +99,18 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderWith
             <Btn main type="submit" off={busy ? "Saving…" : undefined}>
               Save the key
             </Btn>
-            {provider.key.saved ? (
-              <Btn quiet onClick={() => setOpen(false)}>
-                Cancel
-              </Btn>
-            ) : null}
+            <Btn quiet onClick={() => setOpen(false)}>
+              Cancel
+            </Btn>
           </div>
         </form>
       ) : (
         <div className="st-stg-actions">
-          <Btn onClick={() => setOpen(true)}>Replace the key</Btn>
-          <Btn quiet danger off={busy ? "Working…" : undefined} onClick={() => void remove()}>
-            Remove
+          <Btn main onClick={() => setOpen(true)} label={`Paste a key for ${provider.label}`}>
+            Paste a key
+          </Btn>
+          <Btn quiet danger off={busy ? "Working…" : undefined} onClick={() => void remove()} label={`Remove the saved key of ${provider.label}`}>
+            Remove the saved key
           </Btn>
         </div>
       )}
@@ -128,8 +119,8 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderWith
 }
 
 /** The providers of some kinds that take a key, each with its form; or a plain line when none does. */
-export function ProviderKeys({ ws, providers, kinds, onChange }: { ws: string; providers: ProviderStatus[]; kinds?: ProviderStatus["kind"][]; onChange: (p: ProviderWithKey) => void }) {
-  const list = providers.filter((p) => (!kinds || kinds.includes(p.kind)) && takesKey(p)) as (ProviderWithKey & { key: ProviderKeyInfo })[];
+export function ProviderKeys({ ws, providers, kinds, onChange }: { ws: string; providers: ProviderStatus[]; kinds?: ProviderStatus["kind"][]; onChange: (p: ProviderStatus) => void }) {
+  const list = providers.filter((p) => (!kinds || kinds.includes(p.kind)) && takesKey(p));
   if (!list.length)
     return (
       <Note tone="sky" icon="key">
@@ -156,7 +147,7 @@ export function ProviderRow({ p, what }: { p: ProviderStatus; what?: string }) {
       </div>
       {what ? <span className="st-stg-small">{what}</span> : null}
       <span className="st-stg-provider__line">{p.line}</span>
-      {p.lastError ? <span className="st-stg-provider__error">Last problem: {p.lastError}</span> : null}
+      {p.lastError && p.lastError !== p.line ? <span className="st-stg-provider__error">Last problem: {p.lastError}</span> : null}
       {p.checkedAt ? <span className="st-stg-small">Last checked {whenText(p.checkedAt)}.</span> : null}
     </li>
   );

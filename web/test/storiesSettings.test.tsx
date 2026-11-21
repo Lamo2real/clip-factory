@@ -25,13 +25,48 @@ const { forgetLoaded } = await import("../src/lib/hooks.ts");
 const { ToastProvider } = await import("../src/components/Toasts.tsx");
 const { SettingsScreen } = await import("../src/stories/screens/Settings.tsx");
 const { DEFAULTS } = await import("../src/stories/settings/data.ts");
+const { ApiError } = await import("../src/api/errors.ts");
 
 let root: Root;
 let host: HTMLElement;
 let store: MockStore;
 let workspace: Workspace;
-let providers: (ProviderStatus & { key?: { saved: boolean; hint: string | null; savedAt: string | null } })[];
+let providers: ProviderStatus[];
 let calls: { name: string; args: unknown[] }[];
+/** Holds the next answers of a route until the test lets them go (a slow connection). */
+const gates = new Map<string, Promise<void>>();
+/** Routes that fail for a test (a network outage, an expired task). */
+const failures = new Map<string, Error>();
+function hold(name: string): () => void {
+  let open = () => undefined as void;
+  const gate = new Promise<void>((r) => (open = r));
+  gates.set(name, gate);
+  return () => {
+    if (gates.get(name) === gate) gates.delete(name);
+    open();
+  };
+}
+
+/** The makers as the API sends them (§45.11.6): Nova Canvas off until picked, Nova Reel needs its US bucket. */
+function makers(): ProviderStatus[] {
+  const c = workspace.configuration as StoriesConfig;
+  return [
+    { kind: "writer", id: "bedrock-claude", label: "Claude in Amazon Bedrock", state: "on", line: "Writes the stories." },
+    { kind: "animation", id: "builtin-2d", label: "Built-in animation", state: "on", line: "Animates every scene." },
+    {
+      kind: "animation",
+      id: "nova-reel",
+      label: "Amazon Nova Reel",
+      state: c.providers.video === "nova-reel" ? "needs_setup" : "off",
+      line: "Needs a storage place in the USA (N. Virginia), switched on by the owner.",
+    },
+    { kind: "images", id: "builtin-rig", label: "Built-in characters", state: "on", line: "Draws every character." },
+    c.providers.images === "nova-canvas"
+      ? { kind: "images", id: "nova-canvas", label: "Amazon Nova Canvas", state: "needs_setup", line: "Make one portrait to check it works." }
+      : { kind: "images", id: "nova-canvas", label: "Amazon Nova Canvas", state: "off", line: "Off." },
+    { kind: "audio", id: "builtin-synth", label: "Built-in sounds", state: "on", line: "Makes every sound." },
+  ];
+}
 
 function fakeApi(): StoriesApi {
   store = createStore();
@@ -39,14 +74,7 @@ function fakeApi(): StoriesApi {
   for (const part of [aiPart, skillsPart, memoryPart]) part.seed(store);
   store.knobs.checkModelsMs = 20;
   workspace = store.workspaces[0]!;
-  providers = [
-    { kind: "writer", id: "bedrock-claude", label: "Claude in Amazon Bedrock", state: "on", line: "Writes the stories." },
-    { kind: "animation", id: "builtin-2d", label: "Built-in animation", state: "on", line: "Animates every scene." },
-    { kind: "animation", id: "nova-reel", label: "Amazon Nova Reel", state: "unavailable", line: "It needs a storage place in the USA first." },
-    { kind: "images", id: "builtin-rig", label: "Built-in characters", state: "on", line: "Draws every character." },
-    { kind: "images", id: "nova-canvas", label: "Amazon Nova Canvas", state: "off", line: "Off." },
-    { kind: "audio", id: "builtin-synth", label: "Built-in sounds", state: "on", line: "Makes every sound." },
-  ];
+  providers = [];
   const parts = { ...aiPart.api(store), ...skillsPart.api(store), ...memoryPart.api(store) };
   const own: Partial<StoriesApi> = {
     getWorkspace: async () => structuredClone(workspace),
@@ -55,7 +83,7 @@ function fakeApi(): StoriesApi {
       workspace = { ...workspace, configuration: { ...(workspace.configuration as StoriesConfig), ...patch.configuration }, version: workspace.version + 1 };
       return structuredClone(workspace);
     },
-    providers: async () => structuredClone(providers),
+    providers: async () => structuredClone([...makers(), ...providers]),
     getTask: async (_ws, id) => structuredClone(store.tasks.find((t) => t.taskId === id)!),
   };
   const all = { ...parts, ...own } as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>;
@@ -63,8 +91,12 @@ function fakeApi(): StoriesApi {
     get(target, key: string) {
       const fn = target[key];
       if (!fn) return () => Promise.reject(new Error(`not in this test: ${key}`));
-      return (...args: unknown[]) => {
+      return async (...args: unknown[]) => {
         calls.push({ name: key, args });
+        const gate = gates.get(key);
+        if (gate) await gate;
+        const fail = failures.get(key);
+        if (fail) throw fail;
         return fn(...args);
       };
     },
@@ -73,6 +105,8 @@ function fakeApi(): StoriesApi {
 
 beforeEach(() => {
   calls = [];
+  gates.clear();
+  failures.clear();
   forgetLoaded();
   setStoriesApi(fakeApi());
   host = document.createElement("div");
@@ -146,7 +180,7 @@ describe("the page", () => {
     it(`${section}: every pick-one bar is on <Glide>, and nothing is disabled (the deny sound needs the click)`, async () => {
       await open(section);
       for (const bar of $$("[role=radiogroup]")) expect(bar.querySelector(":scope > .glide"), bar.getAttribute("aria-label") ?? "").not.toBeNull();
-      expect($$("button[disabled], select[disabled]")).toEqual([]);
+      expect($$("[disabled]")).toEqual([]);
       expect(host.textContent).not.toMatch(/undefined|NaN|\[object/);
     });
 });
@@ -205,6 +239,39 @@ describe("AI", () => {
     expect(byText("[role=radio]", /Fable 5\.1/).textContent).toContain("No access");
   });
 
+  it("Check models stops with a sentence when its task is gone, instead of checking for ever", async () => {
+    await open("ai");
+    failures.set("getTask", new ApiError(404, "not_found", "We could not find that task."));
+    await click(byText("button", "Check models"));
+    expect(byText("button", "Checking…").getAttribute("aria-disabled")).toBe("true");
+    await act(async () => await new Promise((r) => setTimeout(r, 1200)));
+    await settle(6);
+    expect(document.body.textContent).toContain("The check stopped before it finished. Try again.");
+    expect(byText("button", "Check models").getAttribute("aria-disabled")).toBeNull();
+    expect($('[role="progressbar"]')).toBeNull();
+  });
+
+  it("Check models gives up after a few failed asks in a row and says the server's sentence", async () => {
+    await open("ai");
+    failures.set("getTask", new ApiError(503, "platform_down", "Lamo Stories' helper is not answering. Try again in a minute."));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const button = byText("button", "Check models");
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    for (let i = 0; i < 2; i++) await act(async () => await vi.advanceTimersByTimeAsync(1050));
+    expect(called("getTask")).toHaveLength(2);
+    expect(byText("button", "Checking…")).toBeTruthy();
+    await act(async () => await vi.advanceTimersByTimeAsync(1050));
+    await act(async () => await vi.advanceTimersByTimeAsync(10));
+    vi.useRealTimers();
+    await settle(4);
+    expect(called("getTask")).toHaveLength(3);
+    expect(document.body.textContent).toContain("Lamo Stories' helper is not answering. Try again in a minute.");
+    expect(byText("button", "Check models")).toBeTruthy();
+  });
+
   it("sets each agent's and each task's model and effort, with Workspace default, the suggestion and what it uses now", async () => {
     await open("ai");
     const rows = $$(".st-stg-assign__row");
@@ -255,20 +322,29 @@ describe("AI", () => {
   });
 
   it("lists the providers with their state, and shows a provider key only as saved · ends 4f2a", async () => {
-    providers.push({ kind: "animation", id: "acme-motion", label: "Acme Motion", state: "needs_setup", line: "Needs its key.", key: { saved: false, hint: null, savedAt: null } });
+    // A provider that takes a key (none does today): the API lists it, and its key routes take it.
+    providers.push({ kind: "animation", id: "acme-motion", label: "Acme Motion", state: "needs_setup", line: "Paste your Acme Motion key to use it." });
+    store.knobs.keyedProviders = [{ kind: "animation", id: "acme-motion", label: "Acme Motion" }];
     await open("ai");
     const card_ = card("Providers");
-    expect(card_.textContent).toContain("Amazon Nova Reel");
-    expect(card_.textContent).toContain("Not available yet");
+    expect(byText(".st-stg-provider", /Amazon Nova Reel/, card_).textContent).toContain("Off");
+    expect($$(".st-stg-keyrow", card_).map((r) => r.querySelector(".st-stg-keyrow__name")?.textContent)).toEqual(["Acme Motion"]);
     const row = byText(".st-stg-keyrow", /Acme Motion/, card_);
+    expect(row.textContent).toContain("Paste your Acme Motion key to use it.");
+    expect(row.textContent).toContain("Not ready yet");
+    await click(byText("button", "Paste a key", row));
     setValue(row.querySelector("input")!, "sk-acme-0123456789abcdef4f2a");
     expect(row.querySelector("input")!.type).toBe("password");
     await act(async () => row.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
     await settle(8);
     expect(called("setProviderKey").at(-1)?.args).toEqual(["stories", "acme-motion", "sk-acme-0123456789abcdef4f2a"]);
     const after = byText(".st-stg-keyrow", /Acme Motion/, card("Providers"));
-    expect(after.textContent).toContain("saved · ends 4f2a");
+    expect(after.textContent).toContain("Key saved · ends 4f2a.");
     expect(host.innerHTML).not.toContain("0123456789abcdef");
+    expect(after.querySelector("input")).toBeNull();
+    await click(byText("button", "Remove the saved key", after));
+    expect(called("deleteProviderKey").at(-1)?.args).toEqual(["stories", "acme-motion"]);
+    expect(byText(".st-stg-keyrow", /Acme Motion/, card("Providers")).textContent).toContain("Paste your Acme Motion key to use it.");
   });
 
   it("says plainly when no provider needs a key", async () => {
@@ -395,6 +471,13 @@ describe("Skills", () => {
     await pickFile(new File(["---\nname: x\n---\nDo it."], "funny-falls.md"));
     await settle(2);
     expect($('[role="progressbar"][aria-label="Upload progress"]')).not.toBeNull();
+    // While it uploads, the picker is aria-disabled (the deny sound), never `disabled`, and opens nothing.
+    expect(input.hasAttribute("disabled")).toBe(false);
+    expect(input.closest("label")?.getAttribute("aria-disabled")).toBe("true");
+    const tap = new MouseEvent("click", { bubbles: true, cancelable: true });
+    act(() => void input.dispatchEvent(tap));
+    expect(tap.defaultPrevented).toBe(true);
+    expect($$("[disabled]")).toEqual([]);
     await act(async () => await new Promise((r) => setTimeout(r, 1300)));
     await settle(8);
     expect(called("createSkill").at(-1)?.args[1]).toMatchObject({ key: expect.stringMatching(/skills\/.+\/SKILL\.md$/) });
@@ -431,18 +514,52 @@ describe("Memory", () => {
 });
 
 describe("Video", () => {
-  it("picks the makers apart from the AI models, each with its state; one not available yet cannot be picked", async () => {
+  it("picks the makers apart from the AI models, each with its real state and what it still needs", async () => {
     await open("video");
     expect($$("[role=radio]", group("Video maker")).map((r) => r.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["Built-in animator", "Amazon Nova Reel 1.1"]);
     const reel = byText("[role=radio]", /Nova Reel/);
-    expect(reel.getAttribute("aria-disabled")).toBe("true");
-    expect(reel.textContent).toContain("It needs a storage place in the USA first.");
+    // Nova Reel is built (§45.11.6): it can be picked, and it says it is not ready until its US bucket is on.
+    expect(reel.getAttribute("aria-disabled")).toBeNull();
+    expect(reel.textContent).toContain("Needs a storage place in the USA (N. Virginia), switched on by the owner.");
     await click(reel);
-    expect(called("patchWorkspace")).toHaveLength(0);
+    await settle();
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { providers: { images: "builtin-rig", video: "nova-reel", audio: "builtin-synth" } }, version: 3 });
+    expect(byText("[role=radio]", /Nova Reel/).textContent).toContain("Not ready yet");
+    expect(card("Video maker").querySelector("[role=status]")?.textContent).toBe("Amazon Nova Reel is not ready yet. Needs a storage place in the USA (N. Virginia), switched on by the owner.");
+    await click(byText("[role=radio]", /Built-in animator/));
+    await settle();
+    expect(card("Video maker").querySelector("[role=status]")).toBeNull();
     await click(byText("[role=radio]", /Nova Canvas/));
     await settle();
-    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { providers: { images: "nova-canvas", video: "builtin-2d", audio: "builtin-synth" } }, version: 3 });
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { providers: { images: "nova-canvas", video: "builtin-2d", audio: "builtin-synth" } }, version: 5 });
     expect(host.textContent).toContain("Amazon Nova Canvas (amazon.nova-canvas-v1:0)");
+    expect(card("Picture maker").querySelector("[role=status]")?.textContent).toContain("Make one portrait to check it works.");
+  });
+
+  it("takes the owner's price for the AI makers, kept in the AI settings as a price for a million units", async () => {
+    await open("video");
+    const makerPrices = () => $<HTMLElement>('[aria-label="Each maker\'s price"]')!;
+    const reel = byText(".st-stg-price", /Amazon Nova Reel/, makerPrices());
+    expect(reel.textContent).toContain("No price set.");
+    expect(byText(".st-stg-price", /Amazon Nova Canvas/, makerPrices()).textContent).toContain("No price set.");
+    await click(byText("button", "Type a price", reel));
+    setValue(reel.querySelector("input")!, "0.5");
+    await act(async () => reel.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    await settle(4);
+    expect(called("putAi")).toHaveLength(0);
+    expect(document.body.textContent).toContain("from 0 to 0.10");
+    setValue(reel.querySelector("input")!, "0.08");
+    await act(async () => reel.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    await settle(8);
+    expect(called("putAi").at(-1)?.args[1]).toMatchObject({ prices: { "nova-reel": { inputPer1M: 80_000, outputPer1M: 0, currency: "USD", source: "owner" } }, version: 0 });
+    expect(store.ai?.prices["nova-reel"]?.inputPer1M).toBe(80_000);
+    const after = byText(".st-stg-price", /Amazon Nova Reel/, makerPrices());
+    expect(after.textContent).toContain("Your price");
+    expect(after.textContent).toMatch(/\$0\.08 for a second of video/);
+    await click(byText("button", "Remove my price", after));
+    await settle(6);
+    expect(store.ai?.prices).toEqual({});
+    expect(byText(".st-stg-price", /Amazon Nova Reel/, makerPrices()).textContent).toContain("No price set.");
   });
 
   it("shows 1080 × 1920, 9:16 with the other shapes not yet offered, 30 fps, and saves quality and length", async () => {
@@ -490,5 +607,89 @@ describe("Storage and production", () => {
     expect(host.textContent).toContain("The last 4 versions");
     await click(byText("[role=radio]", /^Only me/));
     expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { youtubePrivacy: "private" } });
+  });
+});
+
+describe("quick changes are never lost", () => {
+  it("AI: a change made while the last save is reloading is sent too, and the screen keeps it", async () => {
+    await open("ai");
+    const release = hold("getAi");
+    await click(byText("[role=radio]", "Low"));
+    expect(called("putAi").map((c) => (c.args[1] as { defaultEffort: string }).defaultEffort)).toEqual(["low"]);
+    await click(byText("[role=radio]", /^Medium/, group("Default effort")));
+    expect(byText("[role=radio]", /^Medium/, group("Default effort")).getAttribute("aria-checked")).toBe("true");
+    await act(async () => release());
+    await settle(10);
+    expect(called("putAi").map((c) => (c.args[1] as { defaultEffort: string }).defaultEffort)).toEqual(["low", "medium"]);
+    expect(store.ai?.defaultEffort).toBe("medium");
+    expect(byText("[role=radio]", /^Medium/, group("Default effort")).getAttribute("aria-checked")).toBe("true");
+    expect($(".st-stg-active")?.textContent).toContain("Effort: Medium");
+    expect(document.body.textContent).not.toContain("changed while you were looking");
+  });
+
+  it("Storage: a tap made while the next save is on its way starts from what is on screen", async () => {
+    await open("storage");
+    await click(byText("[role=radio]", /Keep only the last few/));
+    expect(host.textContent).toContain("The last 3 versions");
+    const first = hold("patchWorkspace");
+    await click($('[aria-label="Keep one more"]')!);
+    await click($('[aria-label="Keep one more"]')!);
+    expect(host.textContent).toContain("The last 5 versions");
+    // The first answer (4) comes back while the next save (5) is still on its way: the screen stays at 5.
+    const second = hold("patchWorkspace");
+    await act(async () => first());
+    await settle(6);
+    expect(host.textContent).toContain("The last 5 versions");
+    await click($('[aria-label="Keep one more"]')!);
+    expect(host.textContent).toContain("The last 6 versions");
+    await act(async () => second());
+    await settle(10);
+    expect(host.textContent).toContain("The last 6 versions");
+    expect((workspace.configuration as StoriesConfig).production.keepVersions).toBe(6);
+    expect(called("patchWorkspace").map((c) => (c.args[1] as { configuration: StoriesConfig }).configuration.production.keepVersions)).toEqual([3, 4, 5, 6]);
+  });
+
+  it("Agents: three quick moves of a skill are all kept, each on the version the last answer gave", async () => {
+    await open("agents");
+    const titles = () => $$(".st-stg-skilllist__title").map((t) => t.textContent);
+    const down = () => $('[aria-label="Move Telling a story without words down"]')!;
+    const first = hold("patchAgent");
+    await click(down());
+    await click(down());
+    expect(titles()).toEqual(["Hooks for short vertical videos", "Teaching driving safety honestly", "Telling a story without words", "Slapstick timing"]);
+    // The first answer comes back while the second move is on its way: the screen keeps both moves.
+    const second = hold("patchAgent");
+    await act(async () => first());
+    await settle(6);
+    expect(titles()).toEqual(["Hooks for short vertical videos", "Teaching driving safety honestly", "Telling a story without words", "Slapstick timing"]);
+    await click(down());
+    expect(titles()).toEqual(["Hooks for short vertical videos", "Teaching driving safety honestly", "Slapstick timing", "Telling a story without words"]);
+    await act(async () => second());
+    await settle(12);
+    expect(called("patchAgent").map((c) => c.args[2])).toEqual([
+      { skillIds: ["vertical-short-hooks", "nonverbal-storytelling", "driving-safety-teaching", "01JSLAPSTICKTIMING000000AA"], version: 1 },
+      { skillIds: ["vertical-short-hooks", "driving-safety-teaching", "nonverbal-storytelling", "01JSLAPSTICKTIMING000000AA"], version: 2 },
+      { skillIds: ["vertical-short-hooks", "driving-safety-teaching", "01JSLAPSTICKTIMING000000AA", "nonverbal-storytelling"], version: 3 },
+    ]);
+    expect(titles()).toEqual(["Hooks for short vertical videos", "Teaching driving safety honestly", "Slapstick timing", "Telling a story without words"]);
+    expect(store.agents.find((x) => x.agentId === "creative_director")?.skillIds.at(-1)).toBe("nonverbal-storytelling");
+    expect(document.body.textContent).not.toContain("changed while you were looking");
+  });
+
+  it("Skills: a double tap on a skill's switch sends each change on the newest version", async () => {
+    await open("skills");
+    const sw = () => $<HTMLButtonElement>('[aria-label="Use Telling a story without words"]')!;
+    const release = hold("putSkill");
+    await click(sw());
+    await click(sw());
+    expect(sw().getAttribute("aria-checked")).toBe("true");
+    await act(async () => release());
+    await settle(10);
+    expect(called("putSkill").map((c) => c.args[2])).toEqual([
+      { version: 1, enabled: false },
+      { version: 2, enabled: true },
+    ]);
+    expect(sw().getAttribute("aria-checked")).toBe("true");
+    expect(document.body.textContent).not.toContain("changed while you were looking");
   });
 });

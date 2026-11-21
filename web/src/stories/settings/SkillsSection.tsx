@@ -65,6 +65,7 @@ function useSkillUpload(ws: string, done: (s: Skill) => void) {
   return { progress, upload };
 }
 
+/** The file picker. While an upload runs it stays clickable (the deny sound) but opens nothing: never `disabled`. */
 function FilePick({ label, onFile, off }: { label: string; onFile: (f: File, el: HTMLElement) => void; off?: string }) {
   const ref = useRef<HTMLLabelElement>(null);
   return (
@@ -75,11 +76,14 @@ function FilePick({ label, onFile, off }: { label: string; onFile: (f: File, el:
         className="sr-only"
         type="file"
         accept=".md,.zip,text/markdown,application/zip"
-        disabled={!!off}
+        aria-disabled={off ? true : undefined}
+        onClick={(e) => {
+          if (off) e.preventDefault();
+        }}
         onChange={(e) => {
           const f = e.target.files?.[0];
           e.target.value = "";
-          if (f && ref.current) onFile(f, ref.current);
+          if (f && ref.current && !off) onFile(f, ref.current);
         }}
       />
     </label>
@@ -337,11 +341,28 @@ export function SkillsSection({ ws }: { ws: string }) {
       toast.success(on ? `${a.name} uses ${skill.title} now.` : `${a.name} no longer uses ${skill.title}.`);
     }
   };
+  // One switch save at a time per skill, each on the version the last answer gave; taps made meanwhile end in one
+  // more save of the last position (so a quick double tap never sends a stale version).
+  const toggles = useRef(new Map<string, { want: boolean; version: number }>());
   const toggle = async (skill: Skill, enabled: boolean) => {
     put({ ...skill, enabled });
+    const busy = toggles.current.get(skill.skillId);
+    if (busy) {
+      busy.want = enabled;
+      return;
+    }
+    const t = { want: enabled, version: skill.version };
+    toggles.current.set(skill.skillId, t);
     try {
-      put(await storiesApi().putSkill(ws, skill.skillId, { version: skill.version, enabled }));
+      let last: Skill | null = null;
+      while (!last || last.enabled !== t.want) {
+        last = await storiesApi().putSkill(ws, skill.skillId, { version: t.version, enabled: t.want });
+        t.version = last.version;
+      }
+      toggles.current.delete(skill.skillId);
+      put(last);
     } catch (e) {
+      toggles.current.delete(skill.skillId);
       toast.error(friendlyMessage(e));
       await skills.reload();
     }

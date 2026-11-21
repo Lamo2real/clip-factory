@@ -8,7 +8,8 @@ import { findOverflow, WIDTHS } from "./helpers.ts";
 // 44 px and 48 px on phones, a hover state on every control, pick-one bars on <Glide>, the deny sound for what cannot
 // be used), and the owner's controls really work: the default model and effort, Check models, each agent's and task's
 // model, prices, agents on and off, instructions with Reset, skills written, uploaded and restored, memory, the
-// makers, the video's shape, quality and length, and storage. Lamo Stories is switched on with cf.storiesPreview = 1.
+// makers, the video's shape, quality, length and the makers' prices, and storage. Lamo Stories is switched on with
+// cf.storiesPreview = 1. It needs the shell and the workspace mock (builder F) and getTask (builder G) merged first.
 
 const SECTIONS = ["ai", "agents", "skills", "memory", "video", "storage"] as const;
 
@@ -47,10 +48,14 @@ test.describe("every section keeps the owner's rules", () => {
       }
     });
 
+  // Phones, the tablet switch, small laptops, desktops and wide screens: every layout the settings change at.
   for (const [width, height] of [
     [320, 700],
     [390, 844],
+    [768, 1024],
+    [1024, 768],
     [1440, 900],
+    [1920, 1080],
   ] as const)
     test(`${width} px: the arrow cursor, AA contrast, no visible edges, big targets, Glide under every pick`, async ({ page }) => {
       await on(page);
@@ -81,7 +86,7 @@ test.describe("every section keeps the owner's rules", () => {
         expect(small, `${section}: targets`).toEqual([]);
         const glideless = await page.evaluate(() => Array.from(document.querySelectorAll(".st-stg [role=radiogroup]")).filter((g) => !g.querySelector(":scope > .glide")).map((g) => g.getAttribute("aria-label")));
         expect(glideless, `${section}: Glide`).toEqual([]);
-        expect(await page.locator(".st-stg button[disabled], .st-stg select[disabled]").count(), `${section}: disabled`).toBe(0);
+        expect(await page.locator(".st-stg [disabled]").count(), `${section}: disabled`).toBe(0);
       }
     });
 
@@ -269,7 +274,15 @@ test.describe("Video and storage", () => {
     await openSection(page, "video");
     const maker = page.getByRole("radiogroup", { name: "Video maker" });
     await expect(maker.getByRole("radio", { name: /Built-in animator/ })).toHaveAttribute("aria-checked", "true");
-    await expect(maker.getByRole("radio", { name: /Amazon Nova Reel/ })).toHaveAttribute("aria-disabled", "true");
+    // Nova Reel is built but not ready until its US bucket is switched on (§45.11.6): it can be picked, and says so.
+    const reel = maker.getByRole("radio", { name: /Amazon Nova Reel/ });
+    await expect(reel).not.toHaveAttribute("aria-disabled", "true");
+    await reel.click();
+    await expect(reel).toHaveAttribute("aria-checked", "true");
+    await expect(card(page, "Video maker").getByRole("status")).toContainText("is not ready yet.");
+    await expect(reel).toContainText("Not ready yet");
+    await maker.getByRole("radio", { name: /Built-in animator/ }).click();
+    await expect(card(page, "Video maker").getByRole("status")).toHaveCount(0);
     await expect(page.getByText("1080 × 1920, the built-in animator's only size")).toBeVisible();
     await expect(page.getByText("30 fps, the built-in animator's only rate")).toBeVisible();
     await expect(page.getByRole("radiogroup", { name: "Shape of the video" }).getByRole("radio", { name: /16:9 wide/ })).toContainText("Not with the built-in animator yet");
@@ -282,6 +295,15 @@ test.describe("Video and storage", () => {
     await page.locator(".st-stg-tab", { hasText: "Video" }).click();
     await ready(page);
     await expect(page.locator(".st-stg-length__value strong")).toHaveText("50");
+
+    // The AI makers' prices: none is known, so the owner types one.
+    const price = page.locator(".st-stg-price").filter({ hasText: "Amazon Nova Reel" });
+    await expect(price).toContainText("No price set.");
+    await price.getByRole("button", { name: /Type a price for Amazon Nova Reel/ }).click();
+    await price.getByLabel("Price for one second").fill("0.08");
+    await price.getByRole("button", { name: "Save the price" }).click();
+    await expect(price).toContainText("Your price");
+    await expect(price).toContainText("0.08 for a second of video");
   });
 
   test("storage by kind and the production settings", async ({ page }) => {

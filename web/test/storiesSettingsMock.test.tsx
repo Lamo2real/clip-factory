@@ -144,13 +144,33 @@ describe("agents", () => {
 });
 
 describe("provider keys and storage", () => {
-  it("never gives a key back, only its last four characters", async () => {
-    const out = await api.setProviderKey("stories", "acme-voice", "sk-live-1234567890abcdef4f2a");
-    expect(JSON.stringify(out)).not.toContain("1234567890");
-    expect((out as unknown as { key: { hint: string } }).key.hint).toBe("4f2a");
+  it("answers the key routes as the API does: none takes a key today, a key never comes back, only its last four", async () => {
+    // Today's providers all use Lamo Stories' own AWS access (400); an id that takes no key is not found (404).
     await expect(api.setProviderKey("stories", "builtin-2d", "x")).rejects.toMatchObject({ status: 400 });
+    await expect(api.setProviderKey("stories", "nova-reel", "sk-live-1234567890abcdef4f2a")).rejects.toMatchObject({ status: 400 });
+    await expect(api.setProviderKey("stories", "acme-voice", "sk-live-1234567890abcdef4f2a")).rejects.toMatchObject({ status: 404 });
+    await expect(api.deleteProviderKey("stories", "acme-voice")).rejects.toMatchObject({ status: 404 });
+    await expect(api.deleteProviderKey("stories", "builtin-synth")).rejects.toMatchObject({ status: 400 });
+    // A provider that takes a key (listed for a test), answered with the ProviderStatus the providers list shows.
+    store.knobs.keyedProviders = [{ kind: "audio", id: "acme-voice", label: "Acme Voice" }];
+    const out = await api.setProviderKey("stories", "acme-voice", "sk-live-1234567890abcdef4f2a");
+    expect(out).toEqual({ kind: "audio", id: "acme-voice", label: "Acme Voice", state: "needs_setup", line: "Key saved · ends 4f2a. It is checked on its first real call." });
+    expect(JSON.stringify(out)).not.toContain("1234567890");
+    expect((await api.setProviderKey("stories", "acme-voice", "short-key")).line).toBe("Key saved. It is checked on its first real call.");
     await expect(api.setProviderKey("stories", "acme-voice", "  ")).rejects.toMatchObject({ field: "key" });
     await api.deleteProviderKey("stories", "acme-voice");
+    await expect(api.deleteProviderKey("stories", "acme-voice")).resolves.toBeUndefined();
+  });
+
+  it("keeps prices by model key or provider id in the configuration, and refuses any other id", async () => {
+    const now = (await api.getAi("stories")).ai;
+    const reel = { inputPer1M: 80_000, outputPer1M: 0, cacheReadPer1M: null, cacheWritePer1M: null, longContext: null, currency: "USD", source: "owner" as const, note: "Your price for a second of video." };
+    const saved = await api.putAi("stories", { ...now, prices: { "nova-reel": reel } });
+    expect(saved.prices["nova-reel"]).toMatchObject({ inputPer1M: 80_000, outputPer1M: 0, source: "owner", note: "Your price for a second of video." });
+    await expect(api.putAi("stories", { ...saved, prices: { "acme-motion": reel } })).rejects.toMatchObject({ status: 400, field: "prices" });
+    await expect(api.putAi("stories", { ...saved, prices: { "nova-reel": { ...reel, inputPer1M: 200_000 } } })).rejects.toMatchObject({ status: 400 });
+    const cleared = await api.putAi("stories", { ...saved, prices: {} });
+    expect(cleared.prices).toEqual({});
   });
 
   it("adds storage up by kind from the workspace's files", async () => {

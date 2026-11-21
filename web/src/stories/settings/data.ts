@@ -2,7 +2,7 @@
 // by itself, on top of the version it was given, one save at a time (changes made meanwhile go in the next save), so
 // a change made elsewhere is never overwritten: a stale version answers 409, the page says so and loads again. The
 // effective model and effort of each task come back from the API (the web only shows them, §45.25).
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad, type Loaded } from "../../lib/hooks.ts";
@@ -30,6 +30,22 @@ export function configOf(w: Workspace | null): StoriesConfig {
   };
 }
 
+/** What the owner changed that the API has not confirmed yet, shown over what the API last said. */
+interface AiOver {
+  ai: Omit<StoriesAiConfig, "version"> | null;
+  agents: Partial<Record<AgentId, AgentPatch>>;
+}
+
+/** The API's answer with the owner's unconfirmed changes on top (so a quick second change starts from the first). */
+export function withOver(d: AiData | null, over: AiOver): AiData | null {
+  if (!d || (!over.ai && !Object.keys(over.agents).length)) return d;
+  return {
+    ...d,
+    ai: over.ai ? { ...over.ai, version: d.ai.version } : d.ai,
+    agents: d.agents.map((a) => (over.agents[a.agentId] ? { ...a, ...over.agents[a.agentId] } : a)),
+  };
+}
+
 /** The AI settings: the configuration, the models with their last result, the agents and the tasks table. */
 export function useAi(ws: string): Loaded<AiData> & {
   saveAi: (next: Omit<StoriesAiConfig, "version">) => Promise<boolean>;
@@ -38,91 +54,145 @@ export function useAi(ws: string): Loaded<AiData> & {
 } {
   const loaded = useLoad(() => storiesApi().getAi(ws), ws, "st-settings-ai");
   const toast = useToast();
-  const { setData, reload } = loaded;
+  const { setData, reload: loadAgain } = loaded;
   const aiVersion = useRef<number | null>(null);
   if (loaded.data && (aiVersion.current === null || loaded.data.ai.version > aiVersion.current)) aiVersion.current = loaded.data.ai.version;
+  const agentVersions = useRef(new Map<AgentId, number>());
+  for (const a of loaded.data?.agents ?? []) if ((agentVersions.current.get(a.agentId) ?? -1) < a.version) agentVersions.current.set(a.agentId, a.version);
   const wanted = useRef<Omit<StoriesAiConfig, "version"> | null>(null);
   const running = useRef<Promise<boolean> | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [over, setOver] = useState<AiOver>({ ai: null, agents: {} });
+  const [runs, setRuns] = useState(0);
+  const work = useCallback((by: number) => setRuns((n) => n + by), []);
+
+  // Asks the API again and shows its answer; an answer older than a newer ask is dropped.
+  const asked = useRef(0);
+  const refresh = useCallback(async () => {
+    const mine = ++asked.current;
+    let fresh: AiData;
+    try {
+      fresh = await storiesApi().getAi(ws);
+    } catch {
+      if (mine === asked.current) await loadAgain(); // shows the sentence the usual way
+      return;
+    }
+    if (mine !== asked.current) return;
+    if (aiVersion.current === null || fresh.ai.version > aiVersion.current) aiVersion.current = fresh.ai.version;
+    for (const a of fresh.agents) if ((agentVersions.current.get(a.agentId) ?? -1) < a.version) agentVersions.current.set(a.agentId, a.version);
+    setData(() => fresh);
+  }, [ws, setData, loadAgain]);
 
   const failed = useCallback(
     async (e: unknown) => {
       toast.error(friendlyMessage(e));
       // Whatever was shown before the refusal goes back to what is stored.
       aiVersion.current = null;
-      await reload();
+      await refresh();
     },
-    [toast, reload],
+    [toast, refresh],
   );
 
   const saveAi = useCallback(
     (next: Omit<StoriesAiConfig, "version">): Promise<boolean> => {
       wanted.current = next;
       // Shown at once; the save follows.
-      setData((d) => (d ? { ...d, ai: { ...next, version: d.ai.version } } : d));
+      setOver((o) => ({ ...o, ai: next }));
       if (running.current) return running.current;
       const run = (async () => {
-        setBusy(true);
+        work(1);
         let ok = true;
         try {
-          while (wanted.current && aiVersion.current !== null) {
-            const body = wanted.current;
-            wanted.current = null;
-            try {
-              const saved = await storiesApi().putAi(ws, { ...body, version: aiVersion.current });
-              aiVersion.current = saved.version;
-            } catch (e) {
+          for (;;) {
+            while (wanted.current && aiVersion.current !== null) {
+              const body = wanted.current;
               wanted.current = null;
-              ok = false;
-              await failed(e);
-              return false;
+              try {
+                const saved = await storiesApi().putAi(ws, { ...body, version: aiVersion.current });
+                aiVersion.current = saved.version;
+              } catch (e) {
+                ok = false;
+                if (wanted.current === null) setOver((o) => ({ ...o, ai: null }));
+                await failed(e);
+              }
             }
+            // The effective model and effort of every task come from the API.
+            await refresh();
+            // A change made while that answer was on its way is newer than it: send it too.
+            if (wanted.current && aiVersion.current !== null) continue;
+            wanted.current = null;
+            setOver((o) => ({ ...o, ai: null }));
+            return ok;
           }
-          // The effective model and effort of every task come from the API.
-          await reload();
-          return ok;
         } finally {
           running.current = null;
-          setBusy(false);
+          work(-1);
         }
       })();
       running.current = run;
       return run;
     },
-    [ws, setData, reload, failed],
+    [ws, refresh, failed, work],
   );
 
-  // Each agent saves one change at a time, on top of the version its last save returned.
+  // Each agent saves one change at a time, on top of the version its last save returned; until the last one is
+  // answered, every change waiting is shown over the answers.
   const agentRuns = useRef(new Map<AgentId, Promise<unknown>>());
-  const agentVersions = useRef(new Map<AgentId, number>());
-  for (const a of loaded.data?.agents ?? []) if ((agentVersions.current.get(a.agentId) ?? -1) < a.version) agentVersions.current.set(a.agentId, a.version);
+  const agentWaiting = useRef(new Map<AgentId, number>());
   const saveAgent = useCallback(
     (agentId: AgentId, patch: AgentPatch | { reset: true }): Promise<Agent | null> => {
       const before = agentRuns.current.get(agentId) ?? Promise.resolve();
-      if (!("reset" in patch)) setData((d) => (d ? { ...d, agents: d.agents.map((a) => (a.agentId === agentId ? { ...a, ...patch } : a)) } : d));
+      agentWaiting.current.set(agentId, (agentWaiting.current.get(agentId) ?? 0) + 1);
+      setOver((o) => {
+        const mine = { ...(o.agents[agentId] ?? {}) };
+        if ("reset" in patch) delete mine.instructions;
+        else Object.assign(mine, patch);
+        return { ...o, agents: { ...o.agents, [agentId]: mine } };
+      });
       const run = before.then(async () => {
-        setBusy(true);
+        work(1);
+        let refreshed = false;
         try {
           const saved = await storiesApi().patchAgent(ws, agentId, "reset" in patch ? patch : { ...patch, version: agentVersions.current.get(agentId) ?? 0 });
           agentVersions.current.set(agentId, saved.version);
           setData((d) => (d ? { ...d, agents: d.agents.map((a) => (a.agentId === agentId ? saved : a)) } : d));
-          await reload();
           return saved;
         } catch (e) {
+          toast.error(friendlyMessage(e));
+          // What was shown goes back to what is stored; a change still waiting goes on top of the stored version.
           agentVersions.current.delete(agentId);
-          await failed(e);
+          setOver((o) => {
+            const { [agentId]: _gone, ...rest } = o.agents;
+            return { ...o, agents: rest };
+          });
+          await refresh();
+          refreshed = true;
           return null;
         } finally {
-          setBusy(false);
+          const left = (agentWaiting.current.get(agentId) ?? 1) - 1;
+          agentWaiting.current.set(agentId, left);
+          if (!left) {
+            // The tasks table follows the agent's model and effort (the API works them out).
+            if (!refreshed) await refresh();
+            if (!agentWaiting.current.get(agentId))
+              setOver((o) => {
+                const { [agentId]: _done, ...rest } = o.agents;
+                return { ...o, agents: rest };
+              });
+          }
+          work(-1);
         }
       });
-      agentRuns.current.set(agentId, run.catch(() => undefined));
+      agentRuns.current.set(
+        agentId,
+        run.catch(() => undefined),
+      );
       return run;
     },
-    [ws, setData, reload, failed],
+    [ws, setData, refresh, toast, work],
   );
 
-  return { ...loaded, saveAi, saveAgent, busy };
+  const data = useMemo(() => withOver(loaded.data, over), [loaded.data, over]);
+  return { ...loaded, data, reload: refresh, saveAi, saveAgent, busy: runs > 0 };
 }
 
 /** The workspace's own settings (StoriesConfig), saved a change at a time with its version. */
@@ -143,6 +213,18 @@ export function useWorkspaceConfig(ws: string): {
   const [saved, setSaved] = useState(0);
   const [busy, setBusy] = useState(false);
 
+  const latest = useRef(workspace.data);
+  latest.current = workspace.data;
+  // An answer is shown with the changes still waiting on top, so the next tap starts from what is on screen.
+  const show = useCallback(
+    (w: Workspace) => {
+      const shown: Workspace = pending.current ? { ...w, configuration: { ...configOf(w), ...pending.current } } : w;
+      latest.current = shown;
+      setData(() => shown);
+    },
+    [setData],
+  );
+
   const flush = useCallback(async () => {
     if (running.current) return;
     running.current = true;
@@ -154,24 +236,29 @@ export function useWorkspaceConfig(ws: string): {
         try {
           const next = await storiesApi().patchWorkspace(ws, { configuration: patch, version: version.current });
           version.current = next.version;
-          setData(() => next);
+          show(next);
           setSaved((n) => n + 1);
         } catch (e) {
+          // The refused change and the ones made on top of it go; the page shows what is stored. A change made
+          // while that loads is sent next, on the stored version.
           pending.current = null;
           toast.error(friendlyMessage(e));
           if (e instanceof ApiError && e.code === "conflict") version.current = null;
-          await reload();
-          break;
+          try {
+            const fresh = await storiesApi().getWorkspace(ws);
+            version.current = fresh.version;
+            show(fresh);
+          } catch {
+            await reload();
+          }
         }
       }
     } finally {
       running.current = false;
       setBusy(false);
     }
-  }, [ws, setData, reload, toast]);
+  }, [ws, show, reload, toast]);
 
-  const latest = useRef(workspace.data);
-  latest.current = workspace.data;
   const save = useCallback(
     (patch: Partial<StoriesConfig>) => {
       const w = latest.current;

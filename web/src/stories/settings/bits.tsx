@@ -472,7 +472,7 @@ export const MODEL_STATUS: Record<ModelInfo["status"], { label: string; tone: To
 export const PROVIDER_STATE: Record<ProviderStatus["state"], { label: string; tone: Tone }> = {
   on: { label: "Working", tone: "mint" },
   off: { label: "Off", tone: "sky" },
-  needs_setup: { label: "Needs a check", tone: "sun" },
+  needs_setup: { label: "Not ready yet", tone: "sun" },
   unavailable: { label: "Not available yet", tone: "coral" },
 };
 

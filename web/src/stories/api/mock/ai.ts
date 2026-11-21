@@ -2,7 +2,8 @@
 // The AI configuration (AICONFIG), the model list from Lamo Stories' own stories/config/models.json (never Clip
 // Factory's config/models.json), each model's last call result (MODELSTATUS#, one model denied), Check models as a
 // task that walks queued → running → done, the owner's prices, 30 days of usage per model and day, the five agents
-// from stories/config/agents.json, provider keys (only "saved · ends 4f2a" ever comes back) and the storage summary.
+// from stories/config/agents.json, provider keys (as the API: none takes one today; the key never comes back, only
+// "Key saved · ends 4f2a." in the provider's line) and the storage summary.
 // The resolver follows §45.25 and passes stories/config/resolve-cases.json (web/test/storiesSettingsMock.test.ts).
 import agentsFile from "../../../../../stories/config/agents.json";
 import modelsFile from "../../../../../stories/config/models.json";
@@ -303,15 +304,56 @@ function modelEntry(key: string | null | undefined, field: string): ModelEntry {
 
 const TASK_KINDS = TASKS.map((t) => t.kind) as string[];
 
-/** Providers the mock knows, for the key routes (none of today's needs a key; the form waits for one, §45.31). */
-const KNOWN_PROVIDERS: Record<string, { kind: ProviderStatus["kind"]; label: string; builtin: boolean }> = {
-  "bedrock-claude": { kind: "writer", label: "Claude in Amazon Bedrock", builtin: true },
-  "builtin-rig": { kind: "images", label: "Built-in characters", builtin: true },
-  "nova-canvas": { kind: "images", label: "Amazon Nova Canvas", builtin: true },
-  "builtin-2d": { kind: "animation", label: "Built-in animation", builtin: true },
-  "nova-reel": { kind: "animation", label: "Amazon Nova Reel", builtin: true },
-  "builtin-synth": { kind: "audio", label: "Built-in sounds and music", builtin: true },
+/** The providers that use Lamo Stories' own AWS access, so a key is never asked for (as the API's NO_KEY). */
+const NO_KEY: Record<string, string> = {
+  "bedrock-claude": "Claude on Amazon Bedrock",
+  "nova-canvas": "Amazon Nova Canvas",
+  "nova-reel": "Amazon Nova Reel",
+  "builtin-rig": "The built-in characters",
+  "builtin-2d": "The built-in animation",
+  "builtin-synth": "The built-in sounds and music",
 };
+
+interface KeyedProvider {
+  kind: ProviderStatus["kind"];
+  id: string;
+  label: string;
+}
+
+/**
+ * The providers that take an API key. None does today (the API's KEYED is empty, so its key routes answer 404); a
+ * test or a dev session can list one in `store.knobs.keyedProviders`, which must also be in the providers list.
+ */
+function keyed(store: MockStore): Record<string, KeyedProvider> {
+  const list = Array.isArray(store.knobs.keyedProviders) ? (store.knobs.keyedProviders as KeyedProvider[]) : [];
+  return Object.fromEntries(list.map((p) => [p.id, p]));
+}
+
+/** The provider ids whose use can carry the owner's price beside the models (as the API's PRICE_PROVIDERS). */
+export const PRICE_PROVIDERS = ["nova-canvas", "nova-reel"];
+
+const OWNER_NOTE = "The price you typed.";
+/** The highest price for a million (tokens, pictures or seconds) the API takes. */
+const MAX_PRICE = 100_000;
+
+/** The owner's price as the API keeps it: the two prices and the currency checked, marked as his. */
+function cleanPrice(value: unknown, field: string): Price {
+  if (!value || typeof value !== "object") throw bad("Type a price from 0 to 100,000.", field);
+  const v = value as Partial<Price>;
+  for (const [f, n] of [["inputPer1M", v.inputPer1M], ["outputPer1M", v.outputPer1M]] as const)
+    if (typeof n !== "number" || !Number.isFinite(n) || n < 0 || n > MAX_PRICE) throw bad("Type a price from 0 to 100,000.", f);
+  if (typeof v.currency !== "string" || !/^[A-Z]{3}$/.test(v.currency)) throw bad("Pick a currency.", "currency");
+  return {
+    inputPer1M: v.inputPer1M!,
+    outputPer1M: v.outputPer1M!,
+    cacheReadPer1M: typeof v.cacheReadPer1M === "number" ? v.cacheReadPer1M : null,
+    cacheWritePer1M: typeof v.cacheWritePer1M === "number" ? v.cacheWritePer1M : null,
+    longContext: v.longContext ?? null,
+    currency: v.currency,
+    source: "owner",
+    note: typeof v.note === "string" && v.note.trim() ? v.note.slice(0, 200) : OWNER_NOTE,
+  };
+}
 
 const STORAGE_KIND: Record<string, keyof StorageSummary["bytes"]> = {
   final_video: "videos",
@@ -329,6 +371,20 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
     const a = store.agents.find((x) => x.agentId === agentId);
     if (!a) throw new ApiError(404, "not_found", "We could not find that agent.");
     return a;
+  };
+  // The key routes answer as the API does: 400 for a provider that needs no key, 404 for one that takes none.
+  const keyedProvider = (providerId: string): KeyedProvider => {
+    if (!/^[a-z0-9-]{2,40}$/.test(providerId)) throw new ApiError(404, "not_found", "We could not find that provider.");
+    if (NO_KEY[providerId]) throw bad(`${NO_KEY[providerId]} uses Lamo Stories' own AWS access, so it needs no key.`);
+    const p = keyed(store)[providerId];
+    if (!p) throw new ApiError(404, "not_found", `Lamo Stories has no provider called '${providerId}' that uses a key yet.`);
+    return p;
+  };
+  // A keyed provider's ProviderStatus: only "saved · ends 4f2a" of the key, and on only after a real call.
+  const keyStatus = (p: KeyedProvider): ProviderStatus => {
+    const saved = state(store).keys[p.id];
+    if (!saved) return { kind: p.kind, id: p.id, label: p.label, state: "needs_setup", line: `Paste your ${p.label} key to use it.` };
+    return { kind: p.kind, id: p.id, label: p.label, state: "needs_setup", line: `${saved.hint ? `Key saved · ends ${saved.hint}.` : "Key saved."} It is checked on its first real call.` };
   };
 
   return {
@@ -355,7 +411,17 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         checkEffort(model, set.effort, "tasks");
         tasks[kind as TaskKind] = { ...(set.model ? { model: set.model } : {}), ...(set.effort ? { effort: set.effort } : {}) };
       }
-      store.ai = { defaultModel: next.defaultModel, defaultEffort: next.defaultEffort, tasks, prices: clone(now.prices), version: now.version + 1 };
+      // The owner's prices, by model key or provider id; left as they are when the body has none.
+      let prices = clone(now.prices);
+      if (next.prices !== undefined) {
+        if (!next.prices || typeof next.prices !== "object") throw bad("Type a price from 0 to 100,000.", "prices");
+        prices = {};
+        for (const [key, value] of Object.entries(next.prices)) {
+          if (!MOCK_MODELS.some((m) => m.key === key) && !PRICE_PROVIDERS.includes(key)) throw bad(`There is no model or provider called '${key}' to set a price for.`, "prices");
+          prices[key] = cleanPrice(value, `prices.${key}`);
+        }
+      }
+      store.ai = { defaultModel: next.defaultModel, defaultEffort: next.defaultEffort, tasks, prices, version: now.version + 1 };
       return clone(store.ai);
     },
 
@@ -392,18 +458,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const prices = { ...ai.prices };
       if (price) {
         for (const [f, v] of [["inputPer1M", price.inputPer1M], ["outputPer1M", price.outputPer1M]] as const)
-          if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 10_000) throw bad("Type a price from 0 to 10,000.", f);
-        if (!/^[A-Z]{3}$/.test(price.currency)) throw bad("Pick a currency.", "currency");
-        prices[m.key] = {
-          inputPer1M: price.inputPer1M,
-          outputPer1M: price.outputPer1M,
-          cacheReadPer1M: null,
-          cacheWritePer1M: null,
-          longContext: null,
-          currency: price.currency,
-          source: "owner",
-          note: "The price you typed.",
-        };
+          if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > MAX_PRICE) throw bad("Type a price from 0 to 100,000.", f);
+        prices[m.key] = cleanPrice({ inputPer1M: price.inputPer1M, outputPer1M: price.outputPer1M, currency: price.currency }, "price");
       } else delete prices[m.key];
       store.ai = { ...ai, prices, version: ai.version + 1 };
       return modelInfo(store, m);
@@ -473,29 +529,19 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
     async setProviderKey(ws, providerId, key) {
       await delay();
       guardStories(store, ws);
-      const p = KNOWN_PROVIDERS[providerId];
-      if (p?.builtin) throw bad(`${p.label} needs no key. It runs in Lamo Stories' own AWS account.`, "key");
-      if (!/^[a-z0-9-]{2,40}$/.test(providerId)) throw new ApiError(404, "not_found", "We could not find that provider.");
+      const p = keyedProvider(providerId);
       const k = key.trim();
-      if (!k) throw bad("Paste the key first.", "key");
-      if (new Blob([k]).size > 4096) throw bad("That key is too long. Paste only the key.", "key");
-      const saved = { savedAt: iso(Date.now()), hint: k.slice(-4) };
-      state(store).keys[providerId] = saved;
-      const out: ProviderStatus & { key: { saved: boolean; hint: string; savedAt: string } } = {
-        kind: "animation",
-        id: providerId,
-        label: providerId,
-        state: "needs_setup",
-        line: "Key saved. It is checked the first time the provider is used.",
-        key: { saved: true, hint: saved.hint, savedAt: saved.savedAt },
-      };
-      return out;
+      if (!k) throw bad("Paste the key.", "key");
+      if (new Blob([k]).size > 4096) throw bad("That key is too long (at most 4 KB).", "key");
+      state(store).keys[p.id] = { savedAt: iso(Date.now()), hint: k.length >= 12 ? k.slice(-4) : "" };
+      return keyStatus(p);
     },
 
     async deleteProviderKey(ws, providerId) {
       await delay();
       guardStories(store, ws);
-      delete state(store).keys[providerId];
+      const p = keyedProvider(providerId);
+      delete state(store).keys[p.id];
     },
 
     async storage(ws) {

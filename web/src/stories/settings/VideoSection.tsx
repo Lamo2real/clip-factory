@@ -2,16 +2,17 @@
 // models that write the stories (an LLM never "makes the video"): the video maker and its model, the picture maker
 // and the sound maker, each with its real state; the size 1080 × 1920 (the built-in animator's only size), 9:16 (1:1
 // and 16:9 listed, not with the built-in animator yet), the usual length (15 to 90 s, 30 to 60 s best), the quality,
-// the frame rate (30 fps, the built-in animator's only rate), the captions and music defaults, provider keys and the
-// render time used.
+// the frame rate (30 fps, the built-in animator's only rate), the captions and music defaults, the render time used,
+// prices for the AI makers and provider keys.
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useLoad } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
 import type { ProviderStatus, StoriesConfig } from "../api/types.ts";
 import modelsFile from "../../../../stories/config/models.json";
 import { Chip, Failed, Loading, Note, PROVIDER_STATE, SavedMark, SetCard, SetPick, SetSwitch, useSaved } from "./bits.tsx";
-import { useWorkspaceConfig } from "./data.ts";
-import { keepName, ProviderKeys, type ProviderWithKey } from "./ProviderKeys.tsx";
+import { useAi, useWorkspaceConfig } from "./data.ts";
+import { keepName, ProviderKeys } from "./ProviderKeys.tsx";
+import { MakerPrices } from "./ProviderPrices.tsx";
 
 type VideoMaker = StoriesConfig["providers"]["video"];
 type PictureMaker = StoriesConfig["providers"]["images"];
@@ -50,11 +51,20 @@ function makerOption<T extends string>(providers: ProviderStatus[] | null, id: T
 function ModelLine({ providers, id }: { providers: ProviderStatus[] | null; id: string }) {
   const p = stateOf(providers, id);
   return (
-    <p className="st-stg-active">
-      <span className="st-stg-active__word">Model</span>
-      <strong>{MAKERS[id]?.model ?? p?.label ?? id}</strong>
-      {p ? <Chip tone={PROVIDER_STATE[p.state].tone}>{PROVIDER_STATE[p.state].label}</Chip> : null}
-    </p>
+    <>
+      <p className="st-stg-active">
+        <span className="st-stg-active__word">Model</span>
+        <strong>{MAKERS[id]?.model ?? p?.label ?? id}</strong>
+        {p ? <Chip tone={PROVIDER_STATE[p.state].tone}>{PROVIDER_STATE[p.state].label}</Chip> : null}
+      </p>
+      {/* The picked maker is not working yet: what it needs, in the API's own words (§45.11.6: on only after a real call). */}
+      {p && (p.state === "needs_setup" || p.state === "unavailable") ? (
+        <Note tone="sun" role="status">
+          {p.label} is not ready yet. {p.line}
+          {p.lastError && p.lastError !== p.line ? ` Last problem: ${p.lastError}` : ""}
+        </Note>
+      ) : null}
+    </>
   );
 }
 
@@ -116,6 +126,7 @@ export function VideoSection({ ws }: { ws: string }) {
   const { workspace, config: c, save, saved: savedCount, busy } = useWorkspaceConfig(ws);
   const providers = useLoad(() => storiesApi().providers(ws), ws, "st-settings-providers");
   const usage = useLoad(() => storiesApi().usage(ws, 30), ws, "st-settings-usage");
+  const ai = useAi(ws);
   const { saved, flash } = useSaved();
   const reloadProviders = providers.reload;
   // A saved change shows "Saved" and asks the makers again (a newly picked one may need a check).
@@ -185,12 +196,15 @@ export function VideoSection({ ws }: { ws: string }) {
         <SetSwitch label="Music" description="A tune under the sound effects." checked={c.musicOn} onChange={(v) => save({ musicOn: v })} />
       </SetCard>
 
-      <SetCard title="Keys and use" icon="key" lede="Keys for makers that need one, and how much rendering was done.">
-        {p ? <ProviderKeys ws={ws} providers={p} kinds={["images", "animation", "audio"]} onChange={(x: ProviderWithKey) => providers.setData((l) => (l ? l.map((y) => (y.id === x.id ? keepName(y, x) : y)) : l))} /> : null}
+      <SetCard title="Use, prices and keys" icon="coin" lede="How much rendering was done, what the AI makers cost, and keys for makers that need one.">
         <p className="st-stg-active">
           <span className="st-stg-active__word">Rendering, last 30 days</span>
           <strong>{usage.data ? `${Math.round(usage.data.renderMinutes)} ${Math.round(usage.data.renderMinutes) === 1 ? "minute" : "minutes"}` : usage.error ? "Not known right now" : "…"}</strong>
         </p>
+        <h4 className="st-stg-subhead">Prices</h4>
+        <MakerPrices ai={ai} />
+        <h4 className="st-stg-subhead">Keys</h4>
+        {p ? <ProviderKeys ws={ws} providers={p} kinds={["images", "animation", "audio"]} onChange={(x) => providers.setData((l) => (l ? l.map((y) => (y.id === x.id ? keepName(y, x) : y)) : l))} /> : null}
       </SetCard>
     </div>
   );

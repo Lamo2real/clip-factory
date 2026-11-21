@@ -5,8 +5,8 @@
 // default" otherwise, the suggested effort as a hint, what it uses now as the API worked it out), usage and cost for
 // 30 days, prices for models with no known price, and the providers with their state and keys. Nothing is ever
 // swapped for something else: an effort a model does not offer is refused with the sentence, never changed silently.
-import { useCallback, useState } from "react";
-import { friendlyMessage } from "../../api/errors.ts";
+import { useCallback, useRef, useState } from "react";
+import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad, usePoll } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
@@ -14,7 +14,7 @@ import type { Agent, AgentId, AiTask, Effort, ModelInfo, Price, ProviderStatus, 
 import { EFFORT_LABEL } from "../api/types.ts";
 import { Btn, cheer, Chip, effortWord, Failed, Loading, MODEL_STATUS, money, Note, Progress, refusedLine, SavedMark, SetCard, SetPick, SetSelect, SIcon, statusSuffix, useSaved, whenText } from "./bits.tsx";
 import { useAi, type AiData } from "./data.ts";
-import { keepName, ProviderKeys, ProviderRow, type ProviderWithKey } from "./ProviderKeys.tsx";
+import { keepName, ProviderKeys, ProviderRow } from "./ProviderKeys.tsx";
 import { UsageCard } from "./UsageCard.tsx";
 
 const KIND_WORD: Record<ProviderStatus["kind"], string> = {
@@ -54,14 +54,43 @@ const FROM_WORD: Record<TaskInfo["effective"]["from"], string> = {
 
 // ---------- Check models ----------
 
+/** How long Check models is followed before the page stops waiting, and how many failed asks in a row it takes. */
+export const CHECK_GIVE_UP_MS = 120_000;
+export const CHECK_MISSES = 3;
+const CHECK_STOPPED = "The check stopped before it finished. Try again.";
+
 function CheckModels({ ws, count, onDone }: { ws: string; count: number; onDone: () => Promise<void> }) {
   const toast = useToast();
   const [task, setTask] = useState<AiTask | null>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const started = useRef(0);
+  const misses = useRef(0);
   const running = !!task && (task.status === "queued" || task.status === "running");
+  const stop = useCallback(
+    async (message: string) => {
+      setTask(null);
+      await onDone();
+      toast.error(message);
+    },
+    [onDone, toast],
+  );
   const tick = useCallback(async () => {
     if (!task) return;
-    const next = await storiesApi().getTask(ws, task.taskId);
+    let next: AiTask;
+    try {
+      next = await storiesApi().getTask(ws, task.taskId);
+      misses.current = 0;
+    } catch (e) {
+      // A task that is gone cannot finish; anything else is tried a few more times.
+      misses.current += 1;
+      const gone = e instanceof ApiError && e.code === "not_found";
+      if (gone || misses.current >= CHECK_MISSES || Date.now() - started.current > CHECK_GIVE_UP_MS) await stop(e instanceof ApiError && !gone ? friendlyMessage(e) : CHECK_STOPPED);
+      return;
+    }
+    if ((next.status === "queued" || next.status === "running") && Date.now() - started.current > CHECK_GIVE_UP_MS) {
+      await stop("The check is taking too long. Try again in a minute.");
+      return;
+    }
     setTask(next);
     if (next.status === "done") {
       await onDone();
@@ -72,9 +101,9 @@ function CheckModels({ ws, count, onDone }: { ws: string; count: number; onDone:
       toast.success(results.length ? `Checked ${results.length} models: ${works} work${no ? `, ${no} said no` : ""}.` : "All checked.");
     } else if (next.status === "failed") {
       await onDone();
-      toast.error(next.error ?? "The check stopped before it finished. Try again.");
+      toast.error(next.error ?? CHECK_STOPPED);
     }
-  }, [task, ws, onDone, toast, anchor]);
+  }, [task, ws, onDone, toast, anchor, stop]);
   usePoll(tick, running, 1000);
   return (
     <div className="st-stg-check">
@@ -84,6 +113,8 @@ function CheckModels({ ws, count, onDone }: { ws: string; count: number; onDone:
         onClick={(e) => {
           const el = e.currentTarget;
           setAnchor(el);
+          started.current = Date.now();
+          misses.current = 0;
           void storiesApi()
             .checkModels(ws)
             .then(setTask)
@@ -511,13 +542,14 @@ function Prices({ ws, models, onSaved }: { ws: string; models: ModelInfo[]; onSa
           <PriceRow key={m.key} ws={ws} m={m} onSaved={onSaved} />
         ))}
       </ul>
+      <p className="st-stg-small">The picture and video makers' prices are in Settings › Video.</p>
     </SetCard>
   );
 }
 
 // ---------- Providers ----------
 
-function Providers({ ws, providers, error, onChange }: { ws: string; providers: ProviderStatus[] | null; error: string | null; onChange: (p: ProviderWithKey) => void }) {
+function Providers({ ws, providers, error, onChange }: { ws: string; providers: ProviderStatus[] | null; error: string | null; onChange: (p: ProviderStatus) => void }) {
   return (
     <SetCard title="Providers" icon="plug" lede="Who does each kind of work. The AI models think and write; pictures, video and sound have makers of their own (Settings › Video).">
       {error && !providers ? <p className="st-stg-small">{error}</p> : null}
