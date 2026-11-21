@@ -31,7 +31,9 @@
 #
 #   resolve     - which deploy run (trusted only as above), its commit and number, and its hand-off. Fails (red)
 #               when the hand-off is broken or missing from a deploy that should have one, so installed apps never
-#               stop updating without a sign.
+#               stop updating without a sign, and when it is not the run's only one or was not made while the run's
+#               one successful infra job ran (anything earlier in the deploy could have uploaded it). Every other job
+#               needs resolve and runs only when it enabled the build (scripts/test-deploy-workflow.sh checks).
 #   desktop-plan, desktop, desktop-upload, desktop-manifest - the Mac and Windows apps are rebuilt only when what they
 #               are built from changed or the file is missing, both together. The build job has no OIDC token (it
 #               runs npm and cargo) and is the only job given the updater signing key; desktop-upload copies the
@@ -106,10 +108,12 @@ jobs:
           if [ "$EVENT" = "workflow_dispatch" ]; then
             [ "$REF" = "refs/heads/main" ] || { echo "::error::Run this from main: only main is deployed, and the deploy role trusts main only."; exit 1; }
             # branch=main also lists a fork's pull request from a branch it calls main: only this repository's
-            # pushes and runs by hand.
-            run="$(gh api "repos/${REPO}/actions/workflows/deploy.yml/runs?branch=main&status=success&per_page=50" \
-              | jq -r --arg repo "$REPO" '[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch")
-                  and .head_repository.full_name == $repo)][0] // empty | "\(.id) \(.run_number) \(.head_sha)"')"
+            # pushes and runs by hand, asked for by event on GitHub's side (so a stream of such runs can never push
+            # them off the page), and the newest of the two by run number.
+            runs="repos/${REPO}/actions/workflows/deploy.yml/runs?branch=main&status=success&per_page=20"
+            run="$({ gh api "${runs}&event=push" && gh api "${runs}&event=workflow_dispatch"; } \
+              | jq -rs --arg repo "$REPO" '[.[].workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch")
+                  and .head_repository.full_name == $repo)] | max_by(.run_number) // empty | "\(.id) \(.run_number) \(.head_sha)"')"
             [ -n "$run" ] || { echo "::error::No successful deploy of main yet: run deploy first."; exit 1; }
             read -r RUN_ID RUN_NUMBER SHA <<<"$run"
           fi
@@ -130,9 +134,24 @@ jobs:
             *) echo "::error::Commit ${SHA} of deploy run ${RUN_NUMBER} is not on main (${on_main})."; exit 1 ;;
           esac
           # found: hand-offs still there; uploaded: every one, expired too (30 days).
-          read -r found uploaded <<<"$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts?name=desktop-handoff" \
-            --jq '"\([.artifacts[] | select(.expired | not)] | length) \(.artifacts | length)"')"
+          handoffs="$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts?name=desktop-handoff&per_page=100" \
+            --jq '[.artifacts[] | {expired, created_at}]')"
+          read -r found uploaded <<<"$(jq -r '"\([.[] | select(.expired | not)] | length) \(length)"' <<<"$handoffs")"
           [[ "$found" =~ ^[0-9]+$ ]] && [[ "$uploaded" =~ ^[0-9]+$ ]] || { echo "::error::Could not list the artifacts of deploy run ${RUN_NUMBER}."; exit 1; }
+          if [ "$found" -gt 0 ]; then
+            # Only the one hand-off, made while the run's one successful infra job ran: code that ran earlier in the
+            # same deploy (a bad npm dependency in its build job, say) could otherwise upload a forged one first.
+            infra="$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/jobs?filter=latest&per_page=100" \
+              --jq '[.jobs[] | select(.name == "infra" and .conclusion == "success") | {started_at, completed_at}]')"
+            why="$(jq -rn --argjson h "$handoffs" --argjson i "$infra" '[$h[] | select(.expired | not)] as $h
+              | if ($h | length) != 1 then "\($h | length) desktop-handoff artifacts, not one"
+                elif ($i | length) != 1 then "\($i | length) successful infra jobs, not one"
+                elif ($h[0].created_at | fromdateiso8601) < ($i[0].started_at | fromdateiso8601)
+                  or ($h[0].created_at | fromdateiso8601) > ($i[0].completed_at | fromdateiso8601)
+                then "a desktop-handoff made at \($h[0].created_at), outside its infra job (\($i[0].started_at) to \($i[0].completed_at))"
+                else "ok" end')" || why="times that could not be read"
+            [ "$why" = "ok" ] || { echo "::error title=Hand-off not trusted::Deploy run ${RUN_NUMBER} has ${why}: nothing is built or signed. Run deploy again (Actions, deploy, Run workflow, from main)."; exit 1; }
+          fi
           {
             echo "run_id=${RUN_ID}"
             echo "run_number=${RUN_NUMBER}"
