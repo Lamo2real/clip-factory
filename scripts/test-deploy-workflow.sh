@@ -14,6 +14,9 @@
 #   - the desktop jobs are in desktop.yml, not deploy.yml (so they never hold the deploy-prod lock); desktop.yml
 #     runs only after a successful deploy, builds that deploy's commit, keeps the deploy's run number as the
 #     version (its own would go down) and never cancels a started run.
+#   - desktop.yml trusts only a push or run by hand of deploy in this repository, never a fork's pull request
+#     (which can also complete as "deploy" on a branch it calls main), in its concurrency group, resolve's `if`, the
+#     run-by-hand lookup and a second look at the run through the API.
 # Run: bash scripts/test-deploy-workflow.sh   (ci.yml runs it on every push)
 set -euo pipefail
 
@@ -228,6 +231,23 @@ if [ -z "$deploy_desktop_jobs" ] \
   ok "the desktop jobs run in desktop.yml after a successful deploy, on the deployed commit, from infra's hand-off"
 else
   not_ok "desktop.yml must hold every desktop job (deploy.yml: ${deploy_desktop_jobs:-none}), run on deploy's success, check out workflow_run.head_sha in every job (${deployed_refs}/${checkouts}) and read infra's desktop-handoff"
+fi
+
+# 13b. Only this repository's push or run-by-hand deploys get desktop.yml's secrets and the deploy role: a fork's pull
+#      request can run a deploy.yml of its own, named deploy, from a branch it calls main.
+group_line="$(awk '/^concurrency:$/ { on = 1; next } on && /^[^ ]/ { exit } on && /^  group:/' "$desktop_wf")"
+trusted_repo='github.event.workflow_run.head_repository.full_name == github.repository'
+trusted_event="github.event.workflow_run.event == 'push'"
+# shellcheck disable=SC2016  # literal shell and jq text the workflow must contain
+if grep -qF "$trusted_repo" <<<"$resolve" && grep -qF "$trusted_event" <<<"$resolve" \
+  && grep -qF "$trusted_repo" <<<"$group_line" && grep -qF "$trusted_event" <<<"$group_line" \
+  && grep -qF "github.ref == 'refs/heads/main'" <<<"$group_line" \
+  && grep -qF '.head_repository.full_name == $repo' <<<"$resolve" \
+  && grep -qF 'want="${REPO} main .github/workflows/deploy.yml success ${SHA} ${RUN_NUMBER}"' <<<"$resolve" \
+  && grep -qF 'compare/${SHA}...main' <<<"$resolve"; then
+  ok "desktop.yml builds and signs only for this repository's push or run-by-hand deploys of main"
+else
+  not_ok "desktop.yml must check workflow_run.event and head_repository in its concurrency group and resolve, filter the run-by-hand lookup the same way, and re-check the run and its commit through the API"
 fi
 
 # 14. The version stays 1.<deploy run number>.0 (desktop.yml's own number started again at 1, and the updater never

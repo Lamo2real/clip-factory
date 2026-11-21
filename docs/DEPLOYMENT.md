@@ -398,9 +398,11 @@ The Mac `.dmg` and Windows `.exe` offered by **Get the app** are built by the `d
 
 **When it runs.** After every successful deploy of `main` (desktop.yml starts when deploy.yml finishes, builds that
 deploy's commit and reads the app address, bucket and CloudFront id that the deploy's `infra` job handed off in the
-artifact `desktop-handoff`). One desktop run at a time (`desktop-prod`); a started run is never cancelled, and a newer
-deploy only replaces a run that is still waiting. It builds only if one of these is true; otherwise the job is
-skipped in seconds:
+artifact `desktop-handoff`). Only a push to `main` or a run by hand of deploy in this repository counts, never a
+fork's pull request, which could otherwise reach the signing keys. A deploy that ran `infra` but has no hand-off fails
+the desktop run (red), so installed apps never stop updating without a sign. One desktop run at a time
+(`desktop-prod`); a started run is never cancelled, and a newer deploy only replaces a run that is still waiting. It
+builds only if one of these is true; otherwise the job is skipped in seconds:
 - something under `desktop/` changed,
 - the app icon changed,
 - a download is missing from `downloads/` in the web bucket (for example the first deploy),
@@ -411,9 +413,9 @@ Then both apps are built, as version `1.<run number>.0`, where the number is tha
 desktop.yml's own, which started again at 1: the updater refuses a lower version). The last version built inside
 deploy.yml was `1.78.0`; deploy runs were past 100 when the desktop jobs moved out, so versions keep going up. Each
 installer records `updater=true|false` (whether the key was used) next to its `source-hash`. When an installer was
-built with the key but its signed bundle is missing, the build and `desktop-plan` show an error annotation instead of rebuilding on every deploy (which would give every
-installed app a new version with nothing changed); the next change under `desktop/` tries again. A missing key is
-an error annotation on every deploy too; neither fails the run.
+built with the key but its signed bundle is missing, the build and `desktop-plan` show an error annotation instead of
+rebuilding on every deploy (which would give every installed app a new version with nothing changed); the next change
+under `desktop/` tries again. A missing key is an error annotation on every deploy too; neither fails the run.
 
 The app address is read from the Terraform output `app_url` and built into the app. The build job has no OIDC token
 (npm, cargo and the Tauri CLI run there, and none of them may be able to assume the deploy role); it hands the
@@ -434,8 +436,9 @@ newest successful deploy, under that deploy's version, so apps already on that v
 apps a new version as well, run the deploy by hand instead (Actions → deploy → Run workflow): desktop.yml follows it
 with the new run number. Until it finishes, Get the app offers the browser install, never a broken link.
 
-**If the desktop job fails**, the web app is already live; the previous downloads and manifest stay. Fix and push again,
-or re-run the desktop run.
+**If the desktop job fails**, the web app is already live; the previous downloads and manifest stay. Fix and push again.
+Re-run a desktop run only while it is the newest one (Actions → desktop): an older one would put its older version
+back. Otherwise run desktop by hand from `main`, which builds for the newest successful deploy.
 
 ### Unsigned builds and the first open
 

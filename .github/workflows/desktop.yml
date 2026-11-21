@@ -9,7 +9,14 @@
 #   run's commit (never github.sha, which for workflow_run is whatever main is now), with the values its infra job
 #   handed off in the artifact desktop-handoff: app_url, web_bucket, distribution_id and media_bucket, nothing more
 #   (the artifacts of this public repository can be downloaded). A deploy that skipped itself (preflight) or ran
-#   before this workflow existed has no hand-off: nothing is built, with a notice.
+#   before this workflow existed has no hand-off: nothing is built, with a notice. A deploy that ran infra with the
+#   hand-off step and still has none (the step never fails the deploy) is an error, so apps never stop updating
+#   without a sign.
+# Only a push to main or a run by hand of this repository's deploy.yml is trusted. workflow_run matches workflows by
+#   name and branches by head_branch, so a fork's pull request from a branch it calls main, with a deploy.yml of its
+#   own that runs on pull_request, also completes as "deploy" on "main"; this workflow runs with the signing keys and
+#   the deploy role, so such a run must never get past resolve (the concurrency group and resolve's `if` check the
+#   event and the repository, and resolve asks GitHub again for the run and checks its commit is on main).
 # Version: every desktop build is 1.<deploy run number>.0, where the number is github.run_number of that deploy.yml
 #   run, never this workflow's own (it started again at 1, and the updater refuses a lower version). It goes up on
 #   every deploy; a re-run of either workflow, or a run by hand for the same deploy, keeps it, so a re-built leg
@@ -19,10 +26,12 @@
 #   update bundle and its installer leaves it half published until the next build, and under a stream of merges a
 #   cancelling group could keep stopping builds before any finished, so installed apps would stop updating. A newer
 #   deploy only replaces a run that is still waiting (its commit has everything the older one had). A run for a
-#   deploy that did not succeed does nothing and gets a group of its own, so it never pushes out a waiting build.
+#   deploy that did not succeed or is not trusted (above), or a run by hand from another branch, does nothing and
+#   gets a group of its own, so it never pushes out a waiting build.
 #
-#   resolve     - which deploy run, its commit and number, and its hand-off. Fails (red) when the hand-off is broken,
-#               so installed apps never stop updating without a sign.
+#   resolve     - which deploy run (trusted only as above), its commit and number, and its hand-off. Fails (red)
+#               when the hand-off is broken or missing from a deploy that should have one, so installed apps never
+#               stop updating without a sign.
 #   desktop-plan, desktop, desktop-upload, desktop-manifest - the Mac and Windows apps are rebuilt only when what they
 #               are built from changed or the file is missing, both together. The build job has no OIDC token (it
 #               runs npm and cargo) and is the only job given the updater signing key; desktop-upload copies the
@@ -54,7 +63,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') && 'desktop-prod' || format('desktop-nothing-{0}', github.run_id) }}
+  group: ${{ ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository && (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch'))) && 'desktop-prod' || format('desktop-nothing-{0}', github.run_id) }}
   cancel-in-progress: false
 
 env:
@@ -62,7 +71,12 @@ env:
 
 jobs:
   resolve:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # Never a fork's pull request (see the top): only a successful push or run by hand of deploy in this repository.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event.workflow_run.conclusion == 'success'
+          && github.event.workflow_run.head_repository.full_name == github.repository
+          && (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch'))
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -91,15 +105,34 @@ jobs:
         run: |
           if [ "$EVENT" = "workflow_dispatch" ]; then
             [ "$REF" = "refs/heads/main" ] || { echo "::error::Run this from main: only main is deployed, and the deploy role trusts main only."; exit 1; }
-            run="$(gh api "repos/${REPO}/actions/workflows/deploy.yml/runs?branch=main&status=success&per_page=1" \
-              --jq '.workflow_runs[0] // empty | "\(.id) \(.run_number) \(.head_sha)"')"
+            # branch=main also lists a fork's pull request from a branch it calls main: only this repository's
+            # pushes and runs by hand.
+            run="$(gh api "repos/${REPO}/actions/workflows/deploy.yml/runs?branch=main&status=success&per_page=50" \
+              | jq -r --arg repo "$REPO" '[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch")
+                  and .head_repository.full_name == $repo)][0] // empty | "\(.id) \(.run_number) \(.head_sha)"')"
             [ -n "$run" ] || { echo "::error::No successful deploy of main yet: run deploy first."; exit 1; }
             read -r RUN_ID RUN_NUMBER SHA <<<"$run"
           fi
           [[ "$RUN_ID" =~ ^[0-9]+$ ]] && [[ "$RUN_NUMBER" =~ ^[0-9]+$ ]] && [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] \
             || { echo "::error::Unexpected deploy run '${RUN_ID}' (number '${RUN_NUMBER}', commit '${SHA}')."; exit 1; }
-          found="$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts?name=desktop-handoff" \
-            --jq '[.artifacts[] | select(.expired | not)] | length')"
+          # Asked again of GitHub, both ways in: a successful push or run by hand of this repository's deploy.yml on
+          # main, with this commit and number, and the commit is on main. Anything else is never built or signed.
+          meta="$(gh api "repos/${REPO}/actions/runs/${RUN_ID}" | jq -r '[.event, .head_repository.full_name, .head_branch,
+            .path, .conclusion, .head_sha, .run_number] | map(. // "-" | tostring) | join(" ")')"
+          want="${REPO} main .github/workflows/deploy.yml success ${SHA} ${RUN_NUMBER}"
+          case "$meta" in
+            "push ${want}" | "workflow_dispatch ${want}") ;;
+            *) echo "::error::Deploy run ${RUN_ID} is not a successful push or run by hand of ${REPO} deploy.yml on main at ${SHA} (${meta})."; exit 1 ;;
+          esac
+          on_main="$(gh api "repos/${REPO}/compare/${SHA}...main?per_page=1" --jq .status)"
+          case "$on_main" in
+            identical | ahead) ;;
+            *) echo "::error::Commit ${SHA} of deploy run ${RUN_NUMBER} is not on main (${on_main})."; exit 1 ;;
+          esac
+          # found: hand-offs still there; uploaded: every one, expired too (30 days).
+          read -r found uploaded <<<"$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts?name=desktop-handoff" \
+            --jq '"\([.artifacts[] | select(.expired | not)] | length) \(.artifacts | length)"')"
+          [[ "$found" =~ ^[0-9]+$ ]] && [[ "$uploaded" =~ ^[0-9]+$ ]] || { echo "::error::Could not list the artifacts of deploy run ${RUN_NUMBER}."; exit 1; }
           {
             echo "run_id=${RUN_ID}"
             echo "run_number=${RUN_NUMBER}"
@@ -107,7 +140,18 @@ jobs:
             if [ "$found" -gt 0 ]; then echo "found=true"; else echo "found=false"; fi
           } >> "$GITHUB_OUTPUT"
           if [ "$found" -eq 0 ]; then
-            message="Deploy run ${RUN_NUMBER} has no desktop-handoff: it skipped itself (preflight), ran before desktop.yml existed, could not upload it (see that run's infra job), or is older than the hand-off's 30 days. Nothing to build; the next deploy builds whatever is out of date."
+            # infra succeeded with a deploy.yml that has the hand-off step, and no hand-off was ever uploaded: that
+            # step failed (it never fails the deploy). Red, never a quiet notice, or installed apps stop updating
+            # without a sign. Older deploys (no step) and skipped ones (no infra) still get the notice.
+            infra_ok="$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/jobs?filter=all&per_page=100" \
+              --jq '[.jobs[] | select(.name == "infra" and .conclusion == "success")] | length')"
+            if [ "$uploaded" -eq 0 ] && [ "$infra_ok" -gt 0 ] \
+              && gh api -H "Accept: application/vnd.github.raw" "repos/${REPO}/contents/.github/workflows/deploy.yml?ref=${SHA}" \
+                | grep -q 'name: desktop-handoff'; then
+              echo "::error title=Hand-off missing::Deploy run ${RUN_NUMBER} ran infra with the hand-off step but uploaded no desktop-handoff (see the hand-off steps of its infra job): installed apps are not updated. Run deploy again (Actions, deploy, Run workflow, from main)."
+              exit 1
+            fi
+            message="Deploy run ${RUN_NUMBER} has no desktop-handoff: it skipped itself (preflight), ran before desktop.yml existed, or is older than the hand-off's 30 days. Nothing to build; the next deploy builds whatever is out of date."
             if [ "$EVENT" = "workflow_dispatch" ]; then
               echo "::error title=No hand-off::${message} Run deploy (Actions, deploy, Run workflow), which builds the desktop apps after it."
               exit 1
