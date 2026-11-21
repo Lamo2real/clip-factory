@@ -26,20 +26,27 @@
   kept for bank-booked credits only; ADR-47's ban on "paid", "received" and "actual" next to an amount stays. (ii):
   no typed-in money anywhere; Instagram, TikTok, X and Facebook say "Not available" with where to look; Facebook's
   estimate stays "coming soon". (z): one pure status function on the server over stored items, eight statuses
-  (on hold, not allowed yet, can get paid ✓, not set up, can get paid (you said it's done), checking, not connected,
-  not started), never "Live" without a signal or a tick, a hold first, YouTube's own "not in the Partner Program"
-  above his ticks. A Get paid branch in Settings › Posting with one card and one step page per place, in the setup
+  (on hold, not allowed yet, can get paid ✓, not set up, checking, can get paid (you said it's done), Clip Factory
+  can't check, not started), never "Live" without a signal or a tick, a hold first, YouTube's own "not in the Partner
+  Program" above his ticks. "Not set up" is red only when a signal says a payout part is missing ("Not set up
+  (YouTube says)"); a missing tick gives the calmer "Not set up yet", because a creator who is already paid but hasn't
+  ticked must not be told money can't reach him. A payout reading counts only when it is fresh (connected, first read
+  done, checked within 48 hours), so a stopped or failing reading never keeps saying "YouTube says". The place page's
+  only vermilion is the one next step, and a step that costs money (X Premium) is never it. A Get paid branch in Settings › Posting with one card and one step page per place, in the setup
   cards' look, and a status-only card on Money; Content Rewards reuses §38.7's steps and ticks; Get paid never joins
   the setup ring or the to-do list; ticks live on a new `GETPAID` item. Two new, separate, optional read-only
   connections: "Allow payment reading" for AdSense (its own token, because the AdSense Google account can be another
   one; never merged into the YouTube connection) and "Connect Whop" through the owner's own Whop app (a public PKCE
   client; rotating refresh tokens under a lease as Content Rewards' are; behind `whop_connect_enabled`, default off).
   Both are read by `cf-prod-money`'s daily run and Check now; tokens in Secrets Manager under `cf-prod/platforms/*`,
-  made at runtime; no IAM, table or Lambda change. The bank part is defined but not built: a source-agnostic deposit
+  made at runtime; no IAM, table or Lambda change. "Stop payment reading" deletes Clip Factory's AdSense token and
+  never calls Google's revoke, because Google's revoke ends every scope the user gave the app and would also end the
+  YouTube connection when it is the same Google account. The bank part is defined but not built: a source-agnostic deposit
   shape, matching by payout records, learned payer names and his taps (never a typed number), least data, and the
   consent states, waiting for the owner to choose Enable Banking or a bank file (or nothing). Facts fixed in
   `config/monetization.json`: X's programme is Original Content Rewards in Creator Studio, Creator Rewards is not open
-  in Sweden, YouTube's 2027 rules cite answer 12843009.
+  in Sweden, YouTube's 2027 rules cite answer 12843009; and X's `subscription_type` "None" now means "X didn't share
+  this", not "no Premium" (X's field doesn't know its newer plans).
 - **Consequences.** YouTube can show "Can get paid ✓ (YouTube says)" only after Google's first payment, and a hold the
   day AdSense reports it; before that, and on every other platform, the status rests on his "I did this" and says so.
   "Sent to your bank" can differ from what his bank books (fees, conversion, returns, days in transit), and Whop's
