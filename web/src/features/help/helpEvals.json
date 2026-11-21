@@ -163,6 +163,12 @@
     { "q": "My campaign clip was not approved", "expect": "cr-not-approved" },
     { "q": "How do I get my Content Rewards money?", "expect": "cr-get-paid" },
     { "q": "What is Whop?", "expect": "cr-whop" },
-    { "q": "How do I sign in to Content Rewards again?", "expect": "cr-sign-in-again" }
+    { "q": "How do I sign in to Content Rewards again?", "expect": "cr-sign-in-again" },
+    { "q": "Should I make normal clips or campaign clips?", "expect": "cr-two-ways" },
+    { "q": "Can this clip earn on my campaign?", "expect": "cr-fit" },
+    { "q": "What does Fix it for me do?", "expect": "cr-fix-it" },
+    { "q": "How do I make a campaign copy of a clip?", "expect": "cr-make-it-for" },
+    { "q": "How much did I earn everywhere?", "expect": "money-everywhere" },
+    { "q": "Why does it say Not available from TikTok?", "expect": "money-not-available" }
   ]
 }
