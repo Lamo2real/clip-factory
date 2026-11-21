@@ -41,6 +41,8 @@ HANDLERS = (
     "clipfactory_api/http.py",  # cf-prod-api
     "clipfactory_api/flows/job_flow.py",  # cf-prod-job-flow (durable)
     "clipfactory_api/flows/clip_flow.py",  # cf-prod-clip-flow (durable)
+    "clipfactory_api/flows/story_flow.py",  # cf-prod-story-flow (durable, §45.14)
+    "clipfactory_api/workspaces/http.py",  # cf-prod-stories-api (Lamo Stories' own Lambda, §45.5)
     "clipfactory_api/realtime/authorizer.py",  # cf-prod-ws-authorizer
     "clipfactory_api/realtime/ws.py",  # cf-prod-ws
     "clipfactory_api/realtime/broadcast.py",  # cf-prod-broadcast

@@ -72,6 +72,12 @@ variable "cr_finder_enabled" {
   description = "The campaign finder (docs/CONTRACTS.md §41, CR_FINDER on cf-prod-api, cf-prod-stats and cf-prod-campaigns). Off until P, Q, R, S and T of §41.6 have merged; then one switch PR sets it true. Set false to turn it off again (the same day if Content Rewards or Whop asks Clip Factory to stop reading): every finder route answers 503 \"Coming soon.\", the tick starts no look and the stored items stay."
 }
 
+variable "whop_connect_enabled" {
+  type        = bool
+  default     = false
+  description = "\"Connect Whop\" on the Content Rewards Get paid page (docs/CONTRACTS.md §40.6, WHOP_CONNECT on cf-prod-api). Off until K, L and M of §40.8 have merged; then one switch PR sets it true. While off the card says \"Coming soon: your Whop payouts here.\" and the Whop routes answer 503."
+}
+
 variable "help_enabled" {
   type        = bool
   default     = true

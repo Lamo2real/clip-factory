@@ -3,8 +3,8 @@
 #
 # docs/CONTRACTS.md §14.2 and §14.12: the WebSocket authorizer sets no HTTP-only settings, the token in the query
 # string never reaches a log, the stream mapping has exactly one filter with the item prefixes (§16.9 adds WEEK#,
-# §17.9 adds ACCOUNT# and SETUP#, §24 FOLLOW#, §31 JOBLIVE#, §38.11 the Content Rewards items, §41.5 CRFIND), and
-# each function may do only what its code does.
+# §17.9 adds ACCOUNT# and SETUP#, §24 FOLLOW#, §31 JOBLIVE#, §38.11 the Content Rewards items, §41.5 CRFIND, §40.7
+# Get paid's four), and each function may do only what its code does.
 
 mock_provider "aws" {
   override_during = plan
@@ -120,7 +120,7 @@ run "the_token_is_never_logged" {
   }
 }
 
-run "stream_mapping_has_one_filter_with_seven_prefixes" {
+run "stream_mapping_has_one_filter_with_the_item_prefixes" {
   command = plan
 
   assert {
@@ -130,9 +130,9 @@ run "stream_mapping_has_one_filter_with_seven_prefixes" {
 
   assert {
     condition = jsondecode(one(one(aws_lambda_event_source_mapping.broadcast.filter_criteria).filter).pattern) == {
-      dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }, { prefix = "ACCOUNT#" }, { prefix = "SETUP#" }, { prefix = "FOLLOW#" }, { prefix = "JOBLIVE#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRCONN" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRFIND" }] } } }
+      dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }, { prefix = "ACCOUNT#" }, { prefix = "SETUP#" }, { prefix = "FOLLOW#" }, { prefix = "JOBLIVE#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRCONN" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRFIND" }, { prefix = "GETPAID" }, { prefix = "PAYCONN#" }, { prefix = "PAYSTATE#" }, { prefix = "PAYOUT#" }] } } }
     }
-    error_message = "The filter must pass only JOB#, CLIP#, POST#, LEARNING#, WEEK#, ACCOUNT#, SETUP#, FOLLOW#, JOBLIVE# and the Content Rewards CAMPAIGN#, CRCONN, CRSUB#, CRMONEY and CRFIND items (never STAT#, RATE#, OAUTH#/STATE, FOLLOWKEYS#, CRSTATE#, CROWNERS or the CRPUBLIC cache)."
+    error_message = "The filter must pass only JOB#, CLIP#, POST#, LEARNING#, WEEK#, ACCOUNT#, SETUP#, FOLLOW#, JOBLIVE#, the Content Rewards CAMPAIGN#, CRCONN, CRSUB#, CRMONEY and CRFIND items and Get paid's GETPAID, PAYCONN#, PAYSTATE#, PAYOUT# (§40.7; never STAT#, RATE#, OAUTH#/STATE, FOLLOWKEYS#, CRSTATE#, CROWNERS or the CRPUBLIC cache)."
   }
 
   # §41.5: the owner's CRFIND item travels (the finder page refetches on it); the shared CRPUBLIC cache (CAMP#{uuid},
@@ -155,6 +155,11 @@ run "stream_mapping_has_one_filter_with_seven_prefixes" {
       aws_lambda_event_source_mapping.broadcast.bisect_batch_on_function_error &&
     toset(aws_lambda_event_source_mapping.broadcast.function_response_types) == toset(["ReportBatchItemFailures"]))
     error_message = "The stream mapping settings must match docs/CONTRACTS.md §14.2."
+  }
+
+  assert {
+    condition     = aws_lambda_event_source_mapping.broadcast.event_source_arn == var.stream_arn && aws_lambda_event_source_mapping.broadcast.starting_position == "LATEST"
+    error_message = "A new prefix only changes the filter in place: the mapping keeps its stream and starting position (the arguments that would replace it)."
   }
 }
 
