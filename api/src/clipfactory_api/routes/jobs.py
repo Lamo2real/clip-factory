@@ -9,7 +9,7 @@ from .. import clips, db, job_delete, jobs, macfetch, s3, settings, validate
 from ..agent_client import AgentError, new_session_id
 from ..app import App
 from ..clock import iso
-from ..errors import bad_request, conflict, not_found
+from ..errors import ApiError, bad_request, conflict, not_found
 from ..http import Request, Response, ok
 from ..ids import is_ulid, ulid
 from ..log import log
@@ -59,7 +59,7 @@ def _job_or_404(app: App, req: Request) -> dict[str, Any]:
 
 def create(app: App, req: Request) -> Response:
     body = req.json()
-    validate.only_keys(body, {"source", "clipTarget", "notes", "macFetch", "replaces"})
+    validate.only_keys(body, {"source", "clipTarget", "notes", "macFetch", "replaces", "campaignId", "campaignAnyway"})
     # Started from the desktop app (§35.1): a YouTube link is fetched by the owner's Mac from the start.
     mac_up = validate.boolean(body["macFetch"], "macFetch") if "macFetch" in body else False
     user_settings = settings.load(app.store, req.user_id)
@@ -69,6 +69,7 @@ def create(app: App, req: Request) -> Response:
     notes = validate.string(body, "notes", required=False, max_len=MAX_NOTES)
     now = iso(app.clock())
     job_id = ulid()
+    campaign = _campaign(app, req.user_id, body, source, job_id) if "campaignId" in body else None
     item: dict[str, Any] = {
         "pk": db.user_pk(req.user_id),
         "sk": db.job_sk(job_id),
@@ -89,6 +90,12 @@ def create(app: App, req: Request) -> Response:
     }
     if notes:
         item["notes"] = notes
+    if campaign is not None:
+        snapshot, note = campaign
+        item["campaignId"] = snapshot["campaignId"]
+        item["campaign"] = snapshot  # internal JobCampaign: never returned (jobs.INTERNAL_FIELDS)
+        if note:
+            item["campaignNote"] = note
     if source["type"] == "link" and source["platform"] == "youtube":
         # Blocked by YouTube, the job waits for the owner's Mac instead of failing (§35); the agent checks for this map.
         item["macFetch"] = macfetch.new_map(up=mac_up)
@@ -98,6 +105,20 @@ def create(app: App, req: Request) -> Response:
         _replace_mac_wait(app, req.user_id, replaces, job_id)
     job = jobs.start(app.store, app.flows, item, now)
     return ok({"job": jobs.public_job(job)}, 201)
+
+
+def _campaign(
+    app: App, user_id: str, body: dict[str, Any], source: dict[str, Any], job_id: str
+) -> tuple[dict[str, Any], str | None] | None:
+    """§38.5: the campaign is checked again and its rules copied onto the job (503 while CR is switched off)."""
+    if body.get("campaignId") is None:
+        return None
+    deps = getattr(app, "contentrewards", None)
+    if deps is None:
+        raise ApiError(503, "unavailable", "Content Rewards is not switched on for this app yet.")
+    from ..contentrewards import jobs as cr_jobs
+
+    return cr_jobs.prepare(deps, user_id, body["campaignId"], body.get("campaignAnyway"), source, job_id, app.clock())
 
 
 def _replaces(body: dict[str, Any], source: dict[str, Any]) -> str | None:

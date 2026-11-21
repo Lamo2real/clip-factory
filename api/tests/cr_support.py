@@ -39,6 +39,10 @@ APP_NAME = f"{PREFIX}contentrewards/app"
 CAMPAIGNS_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-campaigns"
 
 
+def JSON_URL_FOR(uuid: str) -> str:
+    return f"https://contentrewards.com/api/campaign/campaigns/{uuid}"
+
+
 def fixture(name: str) -> Any:
     return json.loads((FIXTURES / f"{name}.json").read_text())
 
