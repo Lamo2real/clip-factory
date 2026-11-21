@@ -10,7 +10,7 @@ import type { Api, CrConnection, CrMoney, CrOverview, CrSubmission } from "../sr
 let current: Partial<Api> = {};
 vi.mock("../src/api/index.ts", async (orig) => ({ ...(await orig<object>()), api: () => current as Api }));
 
-const { CrMoneyPart, moneySteps, moneyMainStep } = await import("../src/screens/money/CrMoneyPart.tsx");
+const { CrMoneyPart, amountChip, moneySteps, moneyMainStep } = await import("../src/screens/money/CrMoneyPart.tsx");
 const { CrPostLines } = await import("../src/components/CrPostLine.tsx");
 const { ToastProvider } = await import("../src/components/Toasts.tsx");
 const { resetCr } = await import("../src/lib/contentRewards.ts");
@@ -87,13 +87,21 @@ describe("Money › Content Rewards", () => {
     expect(host.querySelectorAll(".btn--primary")).toHaveLength(0);
   });
 
-  it("then one vermilion step: Move money to Whop while $1 or more is ready", async () => {
-    current = { crOverview: async () => overview(conn({ finance: false }), money()) };
+  it("then one vermilion step: Move money to Whop while $1 or more is ready (Whop linked)", async () => {
+    current = { crOverview: async () => overview(conn({ finance: false, stepsDone: ["move-whop"] }), money()) };
     await draw(<CrMoneyPart />);
     const main = host.querySelectorAll(".btn--primary");
     expect(main).toHaveLength(1);
     expect(main[0]!.textContent).toContain("Open Earnings");
     expect(host.textContent).toContain("18.25");
+  });
+
+  it("a first-timer with money ready links Whop first (never Move money before step 1)", async () => {
+    current = { crOverview: async () => overview(conn({ finance: false }), money()) };
+    await draw(<CrMoneyPart />);
+    const main = host.querySelectorAll(".btn--primary");
+    expect(main).toHaveLength(1);
+    expect(main[0]!.textContent).toContain("Open Content Rewards settings");
   });
 
   it("each Finance answer shows only its own steps", () => {
@@ -102,6 +110,63 @@ describe("Money › Content Rewards", () => {
     expect(moneySteps(true).map((s) => s.id)).toEqual(["fin-setup", "move-withdraw", "fin-bank"]);
     expect(moneyMainStep(moneySteps(false), money({ readyToMoveCents: 50 }), [], false)).toBe("move-whop");
     expect(moneyMainStep(moneySteps(false), money({ readyToMoveCents: 50 }), ["move-whop", "bank-setup"], true)).toBe("bank-cashout");
+  });
+
+  it("the main step follows the order a first-timer needs (§38.7)", () => {
+    const no = moneySteps(false);
+    const yes = moneySteps(true);
+    // Money ready: the once-step first, then Move.
+    expect(moneyMainStep(no, money(), [], false)).toBe("move-whop");
+    expect(moneyMainStep(no, money(), ["move-whop"], false)).toBe("move-withdraw");
+    expect(moneyMainStep(yes, money(), [], false)).toBe("fin-setup");
+    expect(moneyMainStep(yes, money(), ["fin-setup"], false)).toBe("move-withdraw");
+    // On its way to Whop: no vermilion (a calm line says so), never back to Link your Whop account.
+    expect(moneyMainStep(no, money({ readyToMoveCents: 0, onItsWayCents: 1825 }), [], false)).toBeNull();
+    // Just arrived on Whop: Add your bank first, then Get it to your bank.
+    expect(moneyMainStep(no, money({ readyToMoveCents: 0 }), ["move-whop"], true)).toBe("bank-setup");
+    expect(moneyMainStep(no, money({ readyToMoveCents: 0 }), ["move-whop", "bank-setup"], true)).toBe("bank-cashout");
+    expect(moneyMainStep(yes, money({ readyToMoveCents: 0 }), ["fin-setup"], true)).toBe("fin-bank");
+  });
+
+  it("with Finance, Move money's hint points at Set up payouts (the step above on that path)", () => {
+    const move = moneySteps(true).find((s) => s.id === "move-withdraw")!;
+    expect(move.ifYouSee!.find((h) => /Connect payout account/.test(h.see))!.do).toBe("Do the step above: Set up payouts.");
+    const moveNo = moneySteps(false).find((s) => s.id === "move-withdraw")!;
+    expect(moveNo.ifYouSee!.find((h) => /Connect payout account/.test(h.see))!.do).toBe("Do the step above: link Whop.");
+  });
+
+  it("the Amount chip is never 0.00: Move copies what is ready, the bank step what was just moved", () => {
+    expect(amountChip("move-withdraw", money(), null)).toBe("18.25");
+    expect(amountChip("move-withdraw", money({ readyToMoveCents: 0 }), null)).toBeNull();
+    expect(amountChip("move-withdraw", money({ readyToMoveCents: 50, onItsWayCents: 1825 }), null)).toBeNull();
+    expect(amountChip("bank-cashout", money({ readyToMoveCents: 0 }), 1825)).toBe("18.25");
+    expect(amountChip("bank-cashout", money({ readyToMoveCents: 0 }), null)).toBeNull();
+  });
+
+  it("money on its way: a calm line, no vermilion, and Link your Whop account counts as done", async () => {
+    current = { crOverview: async () => overview(conn({ finance: false }), money({ readyToMoveCents: 0, onItsWayCents: 1825 })), crPatchConnection: async () => conn({ finance: false, stepsDone: ["move-whop"] }) };
+    await draw(<CrMoneyPart />);
+    expect(host.textContent).toContain("Your $18.25 is on its way to Whop. It usually takes minutes.");
+    expect(host.querySelectorAll(".btn--primary")).toHaveLength(0);
+    expect(host.querySelector('[data-step="move-whop"]')!.getAttribute("data-done")).toBe("true");
+  });
+
+  it("then on Whop: the bank step's chip copies the amount that moved", async () => {
+    localStorage.setItem("cf-cr-on-its-way", JSON.stringify({ onItsWay: 1825, lastMoveCents: 1825, moved: true }));
+    current = { crOverview: async () => overview(conn({ finance: false, stepsDone: ["move-whop", "bank-setup"] }), money({ readyToMoveCents: 0, onItsWayCents: 0 })) };
+    await draw(<CrMoneyPart />);
+    const main = host.querySelectorAll(".btn--primary");
+    expect(main).toHaveLength(1);
+    const bank = host.querySelector('[data-step="bank-cashout"]')!.textContent!;
+    expect(bank).toContain("18.25");
+    expect(bank).not.toContain("0.00");
+  });
+
+  it("per-campaign totals wait for the whole list: Checking… until paid-so-far is known", async () => {
+    current = { crOverview: async () => overview(conn(), money({ state: "checking", paidSoFarCents: null })) };
+    await draw(<CrMoneyPart />);
+    expect(host.querySelector('[data-campaign-totals="checking"]')).not.toBeNull();
+    expect(host.textContent).not.toContain("$54.10 paid");
   });
 });
 
@@ -133,7 +198,8 @@ describe("the post line", () => {
     expect(host.querySelector(".btn--leaf")!.textContent).toContain("I sent it");
   });
 
-  it("not approved: Ask again, the hint, and Copy the words again", async () => {
+  it("not approved: Ask again and the hint; Copy the words again and I asked only after Ask again", async () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
     await draw(
       <CrPostLines
         subs={[sub({ state: "rejected", reason: { code: "refused", text: "", brandSaid: "Logo missing in the first seconds." }, appeal: { href: "https://contentrewards.com/c/submissions", words: "This clip follows the brief." } })]}
@@ -143,8 +209,55 @@ describe("the post line", () => {
     expect(host.textContent).toContain("Not approved: “Logo missing in the first seconds.”");
     expect(host.textContent).toContain("Next time: keep the logo on screen the whole clip.");
     expect(host.textContent).toContain("Ask again");
+    expect(host.textContent).not.toContain("Copy the words again");
+    expect(host.textContent).not.toContain("I asked");
+    const ask = [...host.querySelectorAll("button")].find((b) => b.textContent?.includes("Ask again"))!;
+    await act(async () => ask.click());
+    expect(open).toHaveBeenCalledWith("https://contentrewards.com/c/submissions", "_blank", "noopener,noreferrer");
     expect(host.textContent).toContain("Copy the words again");
     expect(host.textContent).toContain("I asked");
+    open.mockRestore();
+  });
+
+  it("the brand kept its answer: no more appeal buttons", async () => {
+    await draw(
+      <CrPostLines
+        subs={[sub({ state: "rejected", reason: { code: "refused", text: "" }, appeal: { href: "https://contentrewards.com/c/submissions", words: "w", askedAt: new Date(Date.now() - 12 * 86_400_000).toISOString() } })]}
+        onChange={() => undefined}
+      />,
+    );
+    expect(host.textContent).toContain("The brand kept its answer. This one can't be asked again.");
+    expect(host.textContent).not.toContain("Copy the words again");
+    expect(host.textContent).not.toContain("Ask again");
+  });
+
+  it("a not-sent line shows the button names in bold, never raw ** marks", async () => {
+    await draw(<CrPostLines subs={[sub({ state: "not_sent", reason: { code: "not_on_application", text: "" } }), sub({ postId: "p2", state: "not_sent", reason: { code: "not_linked", text: "" } })]} onChange={() => undefined} />);
+    expect(host.textContent).not.toContain("**");
+    expect([...host.querySelectorAll("strong")].map((b) => b.textContent)).toEqual(expect.arrayContaining(["Add accounts", "Accounts"]));
+  });
+
+  it("the brand's own quoted words never turn bold", async () => {
+    await draw(<CrPostLines subs={[sub({ state: "rejected", reason: { code: "refused", text: "", brandSaid: "Use **our** logo" } })]} onChange={() => undefined} />);
+    expect(host.querySelector(".cr-line strong")).toBeNull();
+  });
+
+  it("an X post whose Paid partnership switch didn't take names X, not YouTube", async () => {
+    await draw(<CrPostLines subs={[sub({ platform: "x", paidLabel: "not_set" })]} onChange={() => undefined} />);
+    expect(host.textContent).toContain("X didn't take the Paid partnership switch.");
+    expect(host.textContent).not.toContain("YouTube didn't");
+  });
+
+  it("send by hand: the minutes count down from sendBy, the hint names the post's place, and a time-up send says Too late", async () => {
+    const sendBy = new Date(Date.now() + 7.5 * 60_000).toISOString();
+    await draw(<CrPostLines subs={[sub({ platform: "instagram", state: "send_by_hand", minutesLeft: 12, sendBy, openCampaignHref: "https://contentrewards.com/c/campaigns/x" })]} onChange={() => undefined} />);
+    expect(host.textContent).toContain("(8 min left)");
+    expect(host.textContent).toContain("You don't have a linked Instagram account");
+    expect(host.textContent).not.toContain("linked YouTube account");
+    expect(host.textContent).toContain("Open Content Rewards settings");
+    await act(async () => root.render(<ToastProvider><CrPostLines subs={[sub({ state: "send_by_hand", minutesLeft: 12, sendBy: new Date(Date.now() - 60_000).toISOString() })]} onChange={() => undefined} /></ToastProvider>));
+    expect(host.textContent).toContain("Too late to send this one.");
+    expect(host.textContent).not.toContain("min left");
   });
 
   it("not linked: Open Content Rewards settings and I linked it", async () => {

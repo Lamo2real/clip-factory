@@ -27,12 +27,12 @@ type Cr = Record<string, (...a: unknown[]) => unknown>;
 type MockWin = Window & { __cfMock?: { cr?: Cr; setup?: Cr } };
 
 /** Start states read once by the mock (src/api/mock/contentrewards.ts). */
-async function start(page: Page, flags: { fresh?: boolean; review?: boolean; off?: "404" | "503" } = {}) {
+async function start(page: Page, flags: { fresh?: boolean; review?: boolean | "tiktok"; off?: "404" | "503" } = {}) {
   await page.addInitScript((f) => {
     if (sessionStorage.getItem("cf-e2e-cr-init")) return;
     sessionStorage.setItem("cf-e2e-cr-init", "1");
     if (f.fresh) sessionStorage.setItem("cf-mock-cr-start", "fresh");
-    if (f.review) sessionStorage.setItem("cf-mock-cr-review", "1");
+    if (f.review) sessionStorage.setItem("cf-mock-cr-review", f.review === "tiktok" ? "tiktok" : "1");
     if (f.off) sessionStorage.setItem("cf-mock-cr-off", f.off);
   }, flags);
 }
@@ -64,7 +64,13 @@ async function screenProblems(page: Page, phone: boolean): Promise<string[]> {
       const cur = getComputedStyle(e).cursor;
       if (cur !== "auto" && cur !== "default") found.push(`"${name}" has cursor ${cur}`);
     }
-    const red = [...document.querySelectorAll<HTMLElement>("main .btn--primary")].filter((e) => e.getBoundingClientRect().height > 0);
+    // Every red-filled control on the whole page (the floating setup list and the paste box too), not only main's.
+    const redFill = (e: HTMLElement) => {
+      const cs = getComputedStyle(e);
+      const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(`${cs.backgroundImage} ${cs.backgroundColor}`);
+      return !!m && Number(m[1]) > 150 && Number(m[2]) < 90 && Number(m[3]) < 80;
+    };
+    const red = [...document.querySelectorAll<HTMLElement>(".btn, .linkbox__paste")].filter((e) => e.getBoundingClientRect().height > 0 && !e.closest(".update-bar") && redFill(e));
     if (red.length > 1) found.push(`${red.length} vermilion buttons: ${red.map((e) => e.textContent?.trim()).join(" | ")}`);
     return found;
   }, phone ? 48 : 44);
@@ -116,6 +122,9 @@ for (const [name, use] of [
       await socials.getByRole("button", { name: "I did this" }).click();
       await expect(page.locator(".setup-head")).toContainText("2/3");
       const connect = page.locator("#step-connect");
+      // Step 3's Mac-app lines and hints never show where Connect can't run.
+      await expect(connect).not.toContainText("Your web browser opens");
+      await expect(connect).not.toContainText("If you see");
       if (phone) {
         await expect(connect).toContainText("Do this step on your Mac. Open Clip Factory there, then Settings, Set up posting, Content Rewards.");
         await expect(connect.getByRole("button", { name: "Connect Content Rewards", exact: true })).toHaveCount(0);
@@ -197,6 +206,8 @@ test.describe("desktop journeys", () => {
     await page.locator("#step-connect").getByRole("button", { name: "Connect Content Rewards", exact: true }).click();
     await (await popup).getByRole("button", { name: "Cancel" }).click();
     await expect(page.locator(".result-card")).toContainText("You didn't allow it. Tap Connect Content Rewards to try again.");
+    // The answer is where he is: inside step 3, right above its button, on screen.
+    await expect(page.locator("#step-connect .result-card")).toBeInViewport();
 
     await mock(page);
     await cr(page, "setResult", "read_only");
@@ -214,6 +225,29 @@ test.describe("desktop journeys", () => {
     await pilot.getByRole("button", { name: "I sent it" }).click();
     await expect(pilot).toContainText("Content Rewards will email you back.");
     await expect(page.locator("[data-cr='card']")).toHaveCount(0);
+  });
+
+  test("Connect before ticking step 2: the answer is on screen, and step 2's Open is the one vermilion (no Add a campaign yet)", async ({ page }) => {
+    await start(page, { fresh: true });
+    await asMacWindow(page, { crConnect: true });
+    await page.goto(SETUP);
+    await settle(page);
+    await page.locator("#step-connect .gstep__head").click();
+    const popup = page.waitForEvent("popup");
+    await page.locator("#step-connect").getByRole("button", { name: "Connect Content Rewards", exact: true }).click();
+    await (await popup).getByRole("button", { name: "Allow" }).click();
+    await expect(page.locator("#step-connect .result-card")).toContainText("Content Rewards is connected!");
+    await expect(page.locator("#step-connect .result-card")).toBeInViewport();
+    // Content Rewards doesn't know his YouTube yet (as after a real first Connect: step 2 is not done).
+    await mock(page);
+    await cr(page, "unlink", "youtube");
+    // Step 3's three lines show once, in the Mac app only.
+    expect(((await page.locator("#step-connect").textContent()) ?? "").split("Your web browser opens").length - 1).toBe(1);
+    await expect(tomatoes(page)).toHaveCount(1);
+    await expect(tomatoes(page)).toHaveText(/Open Content Rewards settings/);
+    await expect(page.getByRole("link", { name: "Add a campaign" })).toHaveCount(0);
+    await expect(page.locator("[data-help='cr-ready']")).toContainText("You're connected");
+    expect(await screenProblems(page, false)).toEqual([]);
   });
 
   test("Disconnect, then Undo keeps it; the sign-in-again week has one vermilion", async ({ page }) => {
@@ -272,8 +306,11 @@ test.describe("desktop journeys", () => {
     await expect(page.locator(".cr-chip")).toHaveText("Check it yourself");
     await expect(next).toContainText("Content Rewards hasn't let Clip Factory look yet.");
     await expect(tomatoes(page)).toHaveText(/Open campaign/);
+    await expect(next.locator(".cr-next__lines li")).toHaveCount(2);
     await next.getByLabel("The campaign's rules").fill("Use #FaZe in every caption.");
     await expect(tomatoes(page)).toHaveText(/I'm in\. Read these rules/);
+    // Open campaign (the first line's button) still has a glass button, above the box.
+    await expect(next.locator(".cr-next__glass").getByRole("link", { name: /Open campaign/ })).toBeVisible();
     await tomatoes(page).click();
     await expect(page.locator(".cr-chip")).toHaveText("You're in");
   });
@@ -344,6 +381,22 @@ test.describe("desktop journeys", () => {
     await expect(bar).toContainText("Pick a video there. Copy its link. Come back and tap Paste.");
   });
 
+  test("Make clips while the brand's new rules are being read: Reading the rules…, then it starts by itself once", async ({ page }) => {
+    await start(page);
+    await page.goto("/");
+    await mock(page);
+    await finishSetup(page, "youtube", "instagram");
+    await page.goto(`/?campaign=${IDS.faze}`);
+    await settle(page);
+    await page.getByLabel("YouTube, Twitch or Kick link").fill("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    await expect(page.locator(".newjob")).toContainText(/YouTube/);
+    // The rules changed on Content Rewards a moment ago: Home doesn't know yet.
+    await cr(page, "rulesChanged", IDS.faze);
+    await page.getByRole("button", { name: "Make clips", exact: true }).click();
+    await expect(page.locator(".newjob")).toContainText("Reading the rules… I start your clips when they are ready.");
+    await expect(page).toHaveURL(/\/jobs\/[A-Za-z0-9_-]+$/, { timeout: 10_000 });
+  });
+
   test("Review: the strip, only the paid places, I linked it brings YouTube back, the locked YouTube choices", async ({ page }) => {
     await start(page, { review: true });
     await page.goto("/");
@@ -396,8 +449,14 @@ test.describe("desktop journeys", () => {
     const two = [...byClip.values()].find((list) => list.length >= 2)!;
     await cr(page, "sendFails", two[0]);
     await cr(page, "sendFails", two[1]);
-    const line = clips.locator("[data-state='send_by_hand']");
+    // The waiting send comes first on the card, and its Copy and open is the screen's one vermilion (§38.6).
+    const first = page.locator(".cr-send-first");
+    await expect(first).toContainText(/Send your clip now \(1[12] min left\)\. Then make more clips\./);
+    const line = first.locator("[data-state='send_by_hand']");
     await expect(line).toHaveCount(1);
+    await expect(clips.locator("[data-state='send_by_hand']")).toHaveCount(0);
+    await expect(tomatoes(page)).toHaveCount(1);
+    await expect(tomatoes(page)).toHaveText(/Copy and open/);
     await expect(line).toContainText(/Send these 2 to Content Rewards now \(1[12] min left\)/);
     await expect(line.getByRole("button", { name: "Copy and open" })).toBeVisible();
     await expect(line.getByRole("button", { name: "Copy link" })).toBeVisible();
@@ -414,6 +473,14 @@ test.describe("desktop journeys", () => {
     await expect(clips).not.toContainText("To do: send the brand a screen recording of this clip's views.");
   });
 
+  test("Library shows each campaign clip's Content Rewards line (read per campaign, as the API answers)", async ({ page }) => {
+    await start(page);
+    await page.goto("/library");
+    await settle(page);
+    await expect(page.locator(".library-grid [data-help='cr-post-line']").first()).toBeVisible();
+    await expect(page.locator(".library-grid [data-help='cr-post-line'][data-state='approved']").first()).toContainText("Approved ✓");
+  });
+
   test("the Mac banner: a waiting send shows on other pages in green, never on the line's own page", async ({ page }) => {
     await start(page);
     await asMacWindow(page);
@@ -425,7 +492,8 @@ test.describe("desktop journeys", () => {
     await page.goto("/jobs");
     await settle(page);
     const banner = page.locator(".cr-sendnow");
-    await expect(banner).toContainText(/Send this to Content Rewards now \(\d+ min left\)/);
+    // It names the clip, so he knows which one to send.
+    await expect(banner).toContainText(/Send “.+” to Content Rewards now \(\d+ min left\)/);
     await expect(banner.getByRole("button", { name: "Copy and open" })).toHaveClass(/btn--leaf/);
     await page.goto(`/campaigns/${IDS.money}`);
     await settle(page);
@@ -446,6 +514,10 @@ test.describe("desktop journeys", () => {
     await expect(part).toContainText("3 clips are waiting for the brand.");
     await expect(part.locator(".btn--primary")).toHaveCount(0);
     await part.locator(".segmented__opt", { hasText: /^No$/ }).click();
+    // Step 1 first: a first-timer links Whop before he can move money there.
+    await expect(part.locator(".btn--primary")).toHaveCount(1);
+    await expect(part.locator(".btn--primary")).toContainText("Open Content Rewards settings");
+    await part.locator("#step-move-whop").getByRole("button", { name: "I did this" }).click();
     await expect(part.locator(".btn--primary")).toHaveCount(1);
     await expect(part.locator(".btn--primary")).toContainText("Open Earnings");
     await expect(part.locator("#step-move-withdraw")).toContainText("18.25");
@@ -453,6 +525,9 @@ test.describe("desktop journeys", () => {
     await part.locator(".segmented__opt", { hasText: /^Yes$/ }).click();
     await expect(part.locator("#step-fin-setup")).toBeVisible();
     await expect(part.locator("#step-move-whop")).toHaveCount(0);
+    // With Finance, Set up payouts comes first, and Move money's hint points at it.
+    await expect(part.locator(".btn--primary")).toHaveCount(1);
+    await expect(part.locator("#step-fin-setup .btn--primary")).toHaveCount(1);
     await mock(page);
     await cr(page, "pay", 421);
     await expect(page.getByText("Money from Content Rewards! $4.21 is in your balance.")).toBeVisible();
@@ -479,6 +554,103 @@ test.describe("desktop journeys", () => {
     await page.goto("/campaigns");
     await settle(page);
     await expect(page.getByText("Content Rewards is coming soon to Clip Factory.")).toBeVisible();
+  });
+});
+
+test.describe("phone: the main button stays pinned", () => {
+  test.use(PHONE);
+  test("the next step's button stays bottom right while scrolling the campaign card down to the logo", async ({ page }) => {
+    await start(page);
+    await page.goto("/");
+    await mock(page);
+    await finishSetup(page, "youtube", "instagram", "facebook");
+    await page.goto(`/campaigns/${IDS.logo}`);
+    await settle(page);
+    const main = tomatoes(page);
+    await expect(main).toHaveCount(1);
+    await expect(main).toHaveText(/Add the logo/);
+    const vw = page.viewportSize()!.width;
+    const vh = page.viewportSize()!.height;
+    for (const part of [".cr-pay", ".cr-rules", ".cr-logo"]) {
+      await page.locator(part).scrollIntoViewIfNeeded();
+      await settle(page);
+      const box = (await main.boundingBox())!;
+      expect(box.x + box.width, part).toBeGreaterThan(vw / 2);
+      expect(box.y, part).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height, part).toBeLessThanOrEqual(vh);
+    }
+  });
+
+  test("the setup page: the current step's Open is pinned bottom right", async ({ page }) => {
+    await start(page, { fresh: true });
+    await page.goto(SETUP);
+    await settle(page);
+    const main = tomatoes(page);
+    await expect(main).toHaveCount(1);
+    const box = (await main.boundingBox())!;
+    expect(box.x + box.width).toBeGreaterThan(page.viewportSize()!.width / 2);
+    expect(box.y + box.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+  });
+
+  test("Campaigns with none yet: the join steps come first, Paste is glass, one vermilion on the first screen", async ({ page }) => {
+    await start(page, { fresh: true });
+    await page.goto("/campaigns");
+    await settle(page);
+    await expect(page.locator(".cr-paste .linkbox__paste")).not.toHaveCSS("background-image", /206, 48, 36/);
+    await expect(tomatoes(page)).toHaveText(/Open Content Rewards/);
+    await expect(tomatoes(page)).toBeInViewport();
+    await expect(page.locator("#step-join-copy")).toBeVisible();
+    expect(await screenProblems(page, true)).toEqual([]);
+  });
+});
+
+test.describe("campaign clips after Upload", () => {
+  test.use(DESKTOP);
+
+  test("Review: a campaign that pays for TikTok leaves TikTok out until its audit, and says so", async ({ page }) => {
+    await start(page, { review: "tiktok" });
+    await page.goto("/");
+    await mock(page);
+    await finishSetup(page, "youtube", "instagram", "tiktok");
+    await page.goto("/review");
+    await settle(page);
+    const card = page.locator(".review-card").filter({ has: page.locator("[data-help='cr-review-strip']") });
+    await expect(card.locator(".upload-to")).toContainText("TikTok is left out for now. Until TikTok checks Clip Factory, TikTok posts are private, and private posts can't earn.");
+    await expect(card.locator(".upload-chip", { hasText: "TikTok" })).toHaveCount(0);
+    await expect(card.locator(".upload-chip")).toHaveCount(2);
+  });
+
+  test("the clip's line walks Sending → Sent → Approved after Upload", async ({ page }) => {
+    test.setTimeout(60_000);
+    await start(page, { review: true });
+    await page.goto("/");
+    await mock(page);
+    await finishSetup(page, "youtube", "instagram");
+    await page.goto("/review");
+    await settle(page);
+    const card = page.locator(".review-card").filter({ has: page.locator("[data-help='cr-review-strip']") });
+    const clipId = ((await card.getAttribute("aria-labelledby")) ?? "").replace(/^hook-/, "");
+    expect(clipId).not.toBe("");
+    const mine = card.getByRole("button", { name: "Use my settings" });
+    if (await mine.count()) await mine.click();
+    await card.getByRole("button", { name: /^Upload to \d/ }).click();
+    await expect(page.getByText(/Uploading to \d places?!/)).toBeVisible();
+    // The posts go live.
+    await page.evaluate((id) => (window as unknown as { __cfMock: { posting: { settleWithOneFailed(c: string, p: string): void } } }).__cfMock.posting.settleWithOneFailed(id, "tiktok"), clipId);
+    // In-app (the mock's uploaded posts live in this page only, so no reload).
+    await page.evaluate((id) => {
+      history.pushState({}, "", `/clips/${id}`);
+      dispatchEvent(new PopStateEvent("popstate"));
+    }, clipId);
+    await settle(page);
+    const lines = page.locator(".cr-clip [data-help='cr-post-line']");
+    await expect(lines.first()).toContainText("Sending to Content Rewards…");
+    await page.waitForTimeout(1700);
+    await page.locator(".cr-clip").getByRole("button", { name: "Check now" }).click();
+    await expect(lines.first()).toContainText("Sent ✓ · Waiting for the brand to check it");
+    await page.waitForTimeout(4600);
+    await page.locator(".cr-clip").getByRole("button", { name: "Check now" }).click();
+    await expect(lines.first()).toContainText("Approved ✓");
   });
 });
 
@@ -516,12 +688,15 @@ for (const scheme of ["light", "dark"] as const)
           for (const p of await screenProblems(page, phone)) failures.push(`${path}: ${p}`);
           const axe = await new AxeBuilder({ page }).include("main").withRules(["color-contrast"]).analyze();
           for (const v of axe.violations) for (const n of v.nodes) failures.push(`${path}: contrast ${n.target.join(" ")}`);
-          if (phone && path.startsWith("/campaigns/")) {
+          if (phone) {
             const main = tomatoes(page);
             if (await main.count()) {
               const box = (await main.first().boundingBox())!;
               const vw = page.viewportSize()!.width;
+              const vh = page.viewportSize()!.height;
               if (box.x + box.width < vw / 2) failures.push(`${path}: the main button is not on the right`);
+              // Pinned: on the first screen, inside the viewport and above the tab bar.
+              if (box.y < 0 || box.y + box.height > vh) failures.push(`${path}: the main button is off screen (${Math.round(box.y)})`);
             }
           }
         }
