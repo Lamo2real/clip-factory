@@ -1,0 +1,694 @@
+{
+ "now": "2026-11-21T12:00:00.000Z",
+ "places": [
+  "youtube",
+  "instagram",
+  "facebook",
+  "x"
+ ],
+ "cases": [
+  {
+   "name": "default",
+   "want": {},
+   "places": [
+    "youtube",
+    "instagram",
+    "facebook",
+    "x"
+   ],
+   "tiktokOk": false,
+   "own": [],
+   "hidden": [],
+   "now": "2026-11-21T12:00:00.000Z",
+   "expect": {
+    "order": [
+     "c0c37381-e244-4643-98bd-edbff4bc1465",
+     "a1cefc3b-4533-438f-8e70-a7299550f1cf",
+     "3d9ef19f-1256-47ca-b630-e33e2c923969",
+     "c49840ae-ca22-4745-8a42-b675847e0355",
+     "e4a9465f-d415-4e30-bf53-e46014958bc6",
+     "d5d8b659-68ac-41d5-9e53-ab89545f437d"
+    ],
+    "skipped": [
+     [
+      "cant_make",
+      4,
+      "4 need something Clip Factory can't make."
+     ],
+     [
+      "apply",
+      2,
+      "2 want you to apply first."
+     ],
+     [
+      "budget_gone",
+      1,
+      "1 campaign has almost no money left."
+     ],
+     [
+      "other_pay",
+      1,
+      "1 campaign pays per post or shares a prize."
+     ],
+     [
+      "budget_low",
+      1,
+      "1 campaign has less than a quarter of the money left."
+     ]
+    ],
+    "looked": 15,
+    "refused": {
+     "2eaa14fb-6927-4136-897e-b096e0d907d6": "cant_make",
+     "c9617009-53cb-4885-8ffc-b655f7c128b3": "cant_make",
+     "79d6abae-b305-42e9-9ebe-82e47583adb5": "cant_make",
+     "4c7d1ede-2fca-406a-971d-f651880168aa": "cant_make",
+     "0d341d7d-e390-4807-9149-9b5294dff3e6": "apply",
+     "e815a623-badd-4516-906c-b6cfce227ff9": "apply",
+     "1d2bcb00-c904-415f-aa82-f95b96baad86": "other_pay",
+     "6e8cb2c6-7724-44a4-83da-66697acb20af": "budget_low",
+     "1db63081-715e-4e04-9b11-fbc1d4e8e700": "budget_gone"
+    },
+    "lines": {
+     "c0c37381-e244-4643-98bd-edbff4bc1465": {
+      "why": "Pays $6.00 per 1,000 views on YouTube and Instagram. 41% of the money left. Open to join.",
+      "notes": [
+       "It has 4 rules you see once you join.",
+       "Also pays on TikTok, once TikTok checks Clip Factory."
+      ],
+      "headsUp": [],
+      "cantTell": [],
+      "pay": [
+       "$6.00 per 1,000 views · up to $100 a clip",
+       "$6.00 per 1,000 views · up to $100 a clip"
+      ]
+     },
+     "a1cefc3b-4533-438f-8e70-a7299550f1cf": {
+      "why": "Pays $1.50 per 1,000 views on Instagram. 46% of the money left. Open to join.",
+      "notes": [
+       "Also pays on TikTok, once TikTok checks Clip Factory."
+      ],
+      "headsUp": [],
+      "cantTell": [],
+      "pay": [
+       "$1.50 per 1,000 views · up to $1,200 a clip"
+      ]
+     },
+     "3d9ef19f-1256-47ca-b630-e33e2c923969": {
+      "why": "Pays $1.50 per 1,000 views on YouTube and Instagram. 96% of the money left. Open to join.",
+      "notes": [
+       "Also pays on TikTok, once TikTok checks Clip Factory."
+      ],
+      "headsUp": [],
+      "cantTell": [],
+      "pay": [
+       "$1.50 per 1,000 views · up to $250 a clip",
+       "$1.50 per 1,000 views · up to $250 a clip"
+      ]
+     },
+     "c49840ae-ca22-4745-8a42-b675847e0355": {
+      "why": "Pays $1.00 per 1,000 views on YouTube and Instagram. 44% of the money left. Open to join.",
+      "notes": [
+       "Also pays on TikTok, once TikTok checks Clip Factory."
+      ],
+      "headsUp": [],
+      "cantTell": []
+     },
+     "e4a9465f-d415-4e30-bf53-e46014958bc6": {
+      "why": "Pays $1.00 per 1,000 views on YouTube, Instagram and X. 98% of the money left. Open to join.",
+      "notes": [
+       "It has 1 rule you see once you join.",
+       "Also pays on TikTok, once TikTok checks Clip Factory."
+      ],
+      "headsUp": [
+       "This brand only counts viewers from some countries. Check where yours are first."
+      ],
+      "cantTell": []
+     },
+     "d5d8b659-68ac-41d5-9e53-ab89545f437d": {
+      "why": "Pays $1.00 per 1,000 views on Instagram. 99% of the money left. Open to join.",
+      "notes": [
+       "It has 2 rules you see once you join.",
+       "Also pays on TikTok, once TikTok checks Clip Factory."
+      ],
+      "headsUp": [
+       "It may need its own sound. Clip Factory can't add one."
+      ],
+      "cantTell": []
+     }
+    }
+   }
+  },
+  {
+   "name": "also apply",
+   "want": {
+    "access": "any"
+   },
+   "places": [
+    "youtube",
+    "instagram",
+    "facebook",
+    "x"
+   ],
+   "tiktokOk": false,
+   "own": [],
+   "hidden": [],
+   "now": "2026-11-21T12:00:00.000Z",
+   "expect": {
+    "order": [
+     "c0c37381-e244-4643-98bd-edbff4bc1465",
+     "a1cefc3b-4533-438f-8e70-a7299550f1cf",
+     "3d9ef19f-1256-47ca-b630-e33e2c923969",
+     "c49840ae-ca22-4745-8a42-b675847e0355",
+     "e815a623-badd-4516-906c-b6cfce227ff9",
+     "0d341d7d-e390-4807-9149-9b5294dff3e6",
+     "e4a9465f-d415-4e30-bf53-e46014958bc6",
+     "d5d8b659-68ac-41d5-9e53-ab89545f437d"
+    ],
+    "skipped": [
+     [
+      "cant_make",
+      4
+     ],
+     [
+      "budget_gone",
+      1
+     ],
+     [
+      "other_pay",
+      1
+     ],
+     [
+      "budget_low",
+      1
+     ]
+    ],
+    "looked": 15,
+    "lines": {
+     "e815a623-badd-4516-906c-b6cfce227ff9": {
+      "why": "Pays $1.00 per 1,000 views on Instagram. 29% of the money left. You apply first.",
+      "notes": [
+       "Also pays on TikTok, once TikTok checks Clip Factory."
+      ],
+      "headsUp": [],
+      "cantTell": [],
+      "pay": [
+       "$0.20 per 1,000 views · up to $30 a clip",
+       "$1.00 per 1,000 views · up to $100 a clip"
+      ]
+     },
+     "0d341d7d-e390-4807-9149-9b5294dff3e6": {
+      "why": "Pays $1.75 per 1,000 views on YouTube. 95% of the money left. You apply first.",
+      "notes": [
+       "Also pays on TikTok, once TikTok checks Clip Factory."
+      ],
+      "headsUp": [
+       "This brand only counts viewers from some countries. Check where yours are first."
+      ],
+      "cantTell": []
+     }
+    }
+   }
+  },
+  {
+   "name": "gaming",
+   "want": {
+    "access": "any",
+    "categories": [
+     "gaming"
+    ]
+   },
+   "places": [
+    "youtube",
+    "instagram",
+    "facebook",
+    "x"
+   ],
+   "tiktokOk": false,
+   "own": [],
+   "hidden": [],
+   "now": "2026-11-21T12:00:00.000Z",
+   "expect": {
+    "order": [
+     "0d341d7d-e390-4807-9149-9b5294dff3e6"
+    ],
+    "skipped": [
+     [
+      "topic",
+      7
+     ],
+     [
+      "cant_make",
+      4
+     ],
+     [
+      "budget_gone",
+      1
+     ],
+     [
+      "other_pay",
+      1
+     ],
+     [
+      "budget_low",
+      1
+     ]
+    ],
+    "looked": 15,
+    "refused": {
+     "79d6abae-b305-42e9-9ebe-82e47583adb5": "cant_make"
+    },
+    "lines": {
+     "0d341d7d-e390-4807-9149-9b5294dff3e6": {
+      "why": "Pays $1.75 per 1,000 views on YouTube. Gaming. 95% of the money left. You apply first.",
+      "notes": [
+       "Also pays on TikTok, once TikTok checks Clip Factory."
+      ],
+      "headsUp": [
+       "This brand only counts viewers from some countries. Check where yours are first."
+      ],
+      "cantTell": []
+     }
+    }
+   }
+  },
+  {
+   "name": "other pay, any money",
+   "want": {
+    "otherPay": true,
+    "minLeftPct": 0
+   },
+   "places": [
+    "youtube",
+    "instagram",
+    "facebook",
+    "x"
+   ],
+   "tiktokOk": false,
+   "own": [],
+   "hidden": [],
+   "now": "2026-11-21T12:00:00.000Z",
+   "expect": {
+    "order": [
+     "c0c37381-e244-4643-98bd-edbff4bc1465",
+     "a1cefc3b-4533-438f-8e70-a7299550f1cf",
+     "3d9ef19f-1256-47ca-b630-e33e2c923969",
+     "c49840ae-ca22-4745-8a42-b675847e0355",
+     "1d2bcb00-c904-415f-aa82-f95b96baad86",
+     "6e8cb2c6-7724-44a4-83da-66697acb20af",
+     "e4a9465f-d415-4e30-bf53-e46014958bc6",
+     "d5d8b659-68ac-41d5-9e53-ab89545f437d"
+    ],
+    "skipped": [
+     [
+      "cant_make",
+      4
+     ],
+     [
+      "apply",
+      2
+     ],
+     [
+      "budget_gone",
+      1
+     ]
+    ],
+    "looked": 15,
+    "lines": {
+     "1d2bcb00-c904-415f-aa82-f95b96baad86": {
+      "why": "Shares the prize money on YouTube, Instagram and X. 100% of the money left. Open to join.",
+      "notes": [
+       "Also pays on TikTok, once TikTok checks Clip Factory."
+      ],
+      "headsUp": [],
+      "cantTell": [],
+      "pay": [
+       "Shares the prize money",
+       "Shares the prize money",
+       "Shares the prize money"
+      ]
+     },
+     "6e8cb2c6-7724-44a4-83da-66697acb20af": {
+      "why": "Pays up to $3.00 per 1,000 views on YouTube, Instagram and X. 21% of the money left. Open to join.",
+      "notes": [
+       "It has 1 rule you see once you join.",
+       "Also pays on TikTok, once TikTok checks Clip Factory."
+      ],
+      "headsUp": [
+       "This brand only counts viewers from some countries. Check where yours are first."
+      ],
+      "cantTell": []
+     }
+    }
+   }
+  },
+  {
+   "name": "$2 and up",
+   "want": {
+    "minPer1kCents": 200,
+    "access": "any",
+    "minLeftPct": 0
+   },
+   "places": [
+    "youtube",
+    "instagram",
+    "facebook",
+    "x"
+   ],
+   "tiktokOk": false,
+   "own": [],
+   "hidden": [],
+   "now": "2026-11-21T12:00:00.000Z",
+   "expect": {
+    "order": [
+     "c0c37381-e244-4643-98bd-edbff4bc1465",
+     "6e8cb2c6-7724-44a4-83da-66697acb20af"
+    ],
+    "skipped": [
+     [
+      "low_pay",
+      7,
+      "7 pay less than $2.00 per 1,000 views."
+     ],
+     [
+      "cant_make",
+      4
+     ],
+     [
+      "budget_gone",
+      1
+     ],
+     [
+      "other_pay",
+      1
+     ]
+    ],
+    "looked": 15,
+    "lines": {
+     "6e8cb2c6-7724-44a4-83da-66697acb20af": {
+      "why": "Pays $3.00 per 1,000 views on Instagram and X. 21% of the money left. Open to join.",
+      "notes": [
+       "It has 1 rule you see once you join.",
+       "Also pays on TikTok, once TikTok checks Clip Factory."
+      ],
+      "headsUp": [
+       "This brand only counts viewers from some countries. Check where yours are first."
+      ],
+      "cantTell": [],
+      "pay": [
+       "$1.50 per 1,000 views · up to $500 a clip",
+       "$3.00 per 1,000 views · up to $500 a clip",
+       "$3.00 per 1,000 views · up to $500 a clip"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "YouTube only",
+   "want": {
+    "places": [
+     "youtube"
+    ]
+   },
+   "places": [
+    "youtube",
+    "instagram",
+    "facebook",
+    "x"
+   ],
+   "tiktokOk": false,
+   "own": [],
+   "hidden": [],
+   "now": "2026-11-21T12:00:00.000Z",
+   "expect": {
+    "order": [
+     "c0c37381-e244-4643-98bd-edbff4bc1465",
+     "3d9ef19f-1256-47ca-b630-e33e2c923969",
+     "c49840ae-ca22-4745-8a42-b675847e0355",
+     "e4a9465f-d415-4e30-bf53-e46014958bc6"
+    ],
+    "skipped": [
+     [
+      "cant_make",
+      4
+     ],
+     [
+      "not_your_places",
+      2,
+      "2 don't pay for the places you post."
+     ],
+     [
+      "apply",
+      2
+     ],
+     [
+      "budget_gone",
+      1
+     ],
+     [
+      "other_pay",
+      1
+     ],
+     [
+      "budget_low",
+      1
+     ]
+    ],
+    "looked": 15,
+    "refused": {
+     "a1cefc3b-4533-438f-8e70-a7299550f1cf": "not_your_places",
+     "d5d8b659-68ac-41d5-9e53-ab89545f437d": "not_your_places"
+    },
+    "lines": {
+     "c0c37381-e244-4643-98bd-edbff4bc1465": {
+      "why": "Pays $6.00 per 1,000 views on YouTube. 41% of the money left. Open to join.",
+      "notes": [
+       "It has 4 rules you see once you join.",
+       "Also pays on Instagram.",
+       "Also pays on TikTok, once TikTok checks Clip Factory."
+      ],
+      "headsUp": [],
+      "cantTell": []
+     },
+     "e4a9465f-d415-4e30-bf53-e46014958bc6": {
+      "why": "Pays $1.00 per 1,000 views on YouTube. 98% of the money left. Open to join.",
+      "notes": [
+       "It has 1 rule you see once you join.",
+       "Also pays on Instagram and X.",
+       "Also pays on TikTok, once TikTok checks Clip Factory."
+      ],
+      "headsUp": [
+       "This brand only counts viewers from some countries. Check where yours are first."
+      ],
+      "cantTell": []
+     }
+    }
+   }
+  },
+  {
+   "name": "TikTok after its audit",
+   "want": {},
+   "places": [
+    "youtube",
+    "tiktok",
+    "instagram",
+    "facebook",
+    "x"
+   ],
+   "tiktokOk": true,
+   "own": [],
+   "hidden": [],
+   "now": "2026-11-21T12:00:00.000Z",
+   "expect": {
+    "order": [
+     "c0c37381-e244-4643-98bd-edbff4bc1465",
+     "a1cefc3b-4533-438f-8e70-a7299550f1cf",
+     "3d9ef19f-1256-47ca-b630-e33e2c923969",
+     "c49840ae-ca22-4745-8a42-b675847e0355",
+     "e4a9465f-d415-4e30-bf53-e46014958bc6",
+     "d5d8b659-68ac-41d5-9e53-ab89545f437d"
+    ],
+    "skipped": [
+     [
+      "cant_make",
+      4
+     ],
+     [
+      "apply",
+      2
+     ],
+     [
+      "budget_gone",
+      1
+     ],
+     [
+      "other_pay",
+      1
+     ],
+     [
+      "budget_low",
+      1
+     ]
+    ],
+    "looked": 15,
+    "noNote": "Also pays on TikTok, once TikTok checks Clip Factory.",
+    "lines": {
+     "a1cefc3b-4533-438f-8e70-a7299550f1cf": {
+      "why": "Pays up to $2.00 per 1,000 views on TikTok and Instagram. 46% of the money left. Open to join.",
+      "notes": [
+       "Pays less in some countries."
+      ],
+      "headsUp": [],
+      "cantTell": [],
+      "pay": [
+       "Up to $2.00 per 1,000 views · up to $1,200 a clip",
+       "$1.50 per 1,000 views · up to $1,200 a clip"
+      ]
+     },
+     "c0c37381-e244-4643-98bd-edbff4bc1465": {
+      "why": "Pays $6.00 per 1,000 views on YouTube, TikTok and Instagram. 41% of the money left. Open to join.",
+      "notes": [
+       "It has 4 rules you see once you join."
+      ],
+      "headsUp": [],
+      "cantTell": []
+     }
+    }
+   }
+  },
+  {
+   "name": "English",
+   "want": {
+    "languages": [
+     "en"
+    ],
+    "access": "any",
+    "minLeftPct": 0
+   },
+   "places": [
+    "youtube",
+    "instagram",
+    "facebook",
+    "x"
+   ],
+   "tiktokOk": false,
+   "own": [],
+   "hidden": [],
+   "now": "2026-11-21T12:00:00.000Z",
+   "expect": {
+    "order": [
+     "c0c37381-e244-4643-98bd-edbff4bc1465",
+     "a1cefc3b-4533-438f-8e70-a7299550f1cf",
+     "3d9ef19f-1256-47ca-b630-e33e2c923969",
+     "6e8cb2c6-7724-44a4-83da-66697acb20af",
+     "0d341d7d-e390-4807-9149-9b5294dff3e6",
+     "e4a9465f-d415-4e30-bf53-e46014958bc6",
+     "c49840ae-ca22-4745-8a42-b675847e0355",
+     "d5d8b659-68ac-41d5-9e53-ab89545f437d",
+     "e815a623-badd-4516-906c-b6cfce227ff9"
+    ],
+    "skipped": [
+     [
+      "cant_make",
+      4
+     ],
+     [
+      "budget_gone",
+      1
+     ],
+     [
+      "other_pay",
+      1
+     ]
+    ],
+    "looked": 15,
+    "lines": {
+     "6e8cb2c6-7724-44a4-83da-66697acb20af": {
+      "why": "Pays up to $3.00 per 1,000 views on YouTube, Instagram and X. 21% of the money left. Open to join.",
+      "notes": [
+       "It has 1 rule you see once you join.",
+       "Also pays on TikTok, once TikTok checks Clip Factory."
+      ],
+      "headsUp": [
+       "This brand only counts viewers from some countries. Check where yours are first."
+      ],
+      "cantTell": []
+     },
+     "e815a623-badd-4516-906c-b6cfce227ff9": {
+      "why": "Pays $1.00 per 1,000 views on Instagram. 29% of the money left. You apply first.",
+      "notes": [
+       "Also pays on TikTok, once TikTok checks Clip Factory."
+      ],
+      "headsUp": [],
+      "cantTell": [
+       "I can't tell the language."
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "hidden and own",
+   "want": {},
+   "places": [
+    "youtube",
+    "instagram",
+    "facebook",
+    "x"
+   ],
+   "tiktokOk": false,
+   "own": [
+    "a1cefc3b-4533-438f-8e70-a7299550f1cf"
+   ],
+   "hidden": [
+    "c0c37381-e244-4643-98bd-edbff4bc1465"
+   ],
+   "now": "2026-11-21T12:00:00.000Z",
+   "expect": {
+    "order": [
+     "3d9ef19f-1256-47ca-b630-e33e2c923969",
+     "c49840ae-ca22-4745-8a42-b675847e0355",
+     "e4a9465f-d415-4e30-bf53-e46014958bc6",
+     "d5d8b659-68ac-41d5-9e53-ab89545f437d"
+    ],
+    "skipped": [
+     [
+      "cant_make",
+      4
+     ],
+     [
+      "apply",
+      2
+     ],
+     [
+      "own",
+      1,
+      "1 campaign is in your campaigns already."
+     ],
+     [
+      "hidden",
+      1,
+      "1 campaign you said Not for me."
+     ],
+     [
+      "budget_gone",
+      1
+     ],
+     [
+      "other_pay",
+      1
+     ],
+     [
+      "budget_low",
+      1
+     ]
+    ],
+    "looked": 15,
+    "refused": {
+     "c0c37381-e244-4643-98bd-edbff4bc1465": "hidden",
+     "a1cefc3b-4533-438f-8e70-a7299550f1cf": "own"
+    }
+   }
+  }
+ ]
+}
