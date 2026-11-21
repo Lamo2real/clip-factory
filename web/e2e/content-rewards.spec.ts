@@ -24,7 +24,7 @@ const PHONE = { viewport: { width: 375, height: 812 }, hasTouch: true, isMobile:
 const DESKTOP = { viewport: { width: 1440, height: 900 } } as const;
 
 type Cr = Record<string, (...a: unknown[]) => unknown>;
-type MockWin = Window & { __cfMock?: { cr?: Cr; setup?: Cr } };
+type MockWin = Window & { __cfMock?: { cr?: Cr; setup?: Cr; finder?: Cr } };
 
 /** Start states read once by the mock (src/api/mock/contentrewards.ts). */
 async function start(page: Page, flags: { fresh?: boolean; review?: boolean | "tiktok"; off?: "404" | "503" } = {}) {
@@ -189,13 +189,29 @@ for (const [name, use] of [
       await expect(page.getByRole("heading", { name: "Then join a campaign" })).toBeVisible();
       await expect(page.locator("#step-join-find a.cr-open")).toHaveClass(/btn--glass/);
       expect(await screenProblems(page, phone)).toEqual([]);
-      // Connected: as before, Open Content Rewards is the vermilion while the box is empty.
+      // Connected, with the campaign finder on (§41.6 change 1): its "Find campaigns" is the vermilion while the box
+      // is empty, and the step's Open Content Rewards is glass.
       await mock(page);
       await cr(page, "connect");
-      await expect(tomatoes(page)).toHaveText(/Open Content Rewards/);
+      await expect(tomatoes(page)).toHaveCount(1);
+      await expect(tomatoes(page)).toHaveText(/Find campaigns/);
+      await expect(tomatoes(page)).toHaveAttribute("href", "/campaigns/find");
+      await expect(page.locator("#step-join-find a.cr-open")).toHaveClass(/btn--glass/);
       await expect(page.getByRole("heading", { name: "Join a campaign" })).toBeVisible();
+      expect(await screenProblems(page, phone)).toEqual([]);
       await page.getByLabel("Paste a Content Rewards campaign link").fill(CR_URL(IDS.faze));
       await expect(tomatoes(page)).toHaveCount(1);
+      await expect(tomatoes(page)).toHaveText(/Add campaign/);
+      expect(await screenProblems(page, phone)).toEqual([]);
+      // The finder switched off: as before, Open Content Rewards is the vermilion while the box is empty.
+      await page.evaluate(() => (window as MockWin).__cfMock!.finder!.setState!("unavailable"));
+      await page.reload();
+      await settle(page);
+      await expect(page.locator("[data-help='cr-finder-entry']")).toHaveCount(0);
+      await expect(tomatoes(page)).toHaveCount(1);
+      await expect(tomatoes(page)).toHaveText(/Open Content Rewards/);
+      await expect(page.locator("#step-join-find a.cr-open")).toHaveClass(/btn--primary/);
+      await page.getByLabel("Paste a Content Rewards campaign link").fill(CR_URL(IDS.faze));
       await expect(tomatoes(page)).toHaveText(/Add campaign/);
       expect(await screenProblems(page, phone)).toEqual([]);
     });

@@ -34,6 +34,8 @@ export type Route =
   | { name: "cr_setup" }
   /** Your Content Rewards campaigns (§38.4), and one campaign's card. */
   | { name: "campaigns" }
+  /** The campaign finder (§41.1): matched before `campaign`, whose pattern would otherwise take "find". */
+  | { name: "campaigns_find" }
   | { name: "campaign"; campaignId: string }
   /** Mock mode only: the pretend Content Rewards sign-in page (§38.18). */
   | { name: "mock_cr_consent" }
@@ -64,6 +66,7 @@ export function match(pathname: string, search = ""): Route {
   }
   if (path === "/money") return { name: "money" };
   if (path === "/campaigns") return { name: "campaigns" };
+  if (path === "/campaigns/find") return { name: "campaigns_find" };
   const campaign = /^\/campaigns\/([0-9A-Za-z-]{1,64})$/.exec(path);
   if (campaign) return { name: "campaign", campaignId: campaign[1]!.toLowerCase() };
   const clip = /^\/clips\/([A-Za-z0-9_-]{1,64})$/.exec(path);
@@ -258,6 +261,7 @@ export function section(route: Route): "home" | "jobs" | "review" | "library" | 
     case "cr_setup":
       return "settings";
     case "campaigns":
+    case "campaigns_find":
     case "campaign":
       return "home";
     case "job":

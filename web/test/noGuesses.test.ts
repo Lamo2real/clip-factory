@@ -112,6 +112,23 @@ describe("no money guesses (§25, ADR-47)", () => {
     expect(code(join(SRC, EVERYWHERE_MOCK))).toMatch(/amountMicros \+= a\.amountMicros/);
   });
 
+  // §41: the campaign finder shows only Content Rewards' own published numbers (pay per 1,000 views, the most a clip
+  // can earn, the money left), tagged as theirs, and never works one out. The mock's copy of the server's matching
+  // (api/mock/finder.ts) copies CR's numbers as they are and only compares and formats them.
+  const FINDER = ["lib/finder.ts", "screens/campaigns/FindPage.tsx", "screens/campaigns/FinderWant.tsx", "screens/campaigns/FinderMatchCard.tsx", "screens/campaigns/FinderEntry.tsx", "api/mock/finder.ts"];
+  it("the campaign finder only formats Content Rewards' numbers: nothing added, multiplied or divided", () => {
+    for (const f of FINDER) {
+      const text = code(join(SRC, f));
+      expect(text, f).not.toMatch(/Cents\b\s*[-+*/]|[-+*/]\s*[\w.]*Cents\b/);
+      expect(text, f).not.toMatch(/amountMicros/);
+      expect(text, f).not.toMatch(/\bviews\s*[*/]|[*/]\s*\(?\s*\w*\.?views\b/i);
+      expect(text, f).not.toMatch(/\.reduce\([^)]*\+/);
+    }
+    const card = read(join(SRC, "screens/campaigns/FinderMatchCard.tsx"));
+    expect(card).toContain("match.budget.tag");
+    expect(read(join(SRC, "api/mock/finder.ts"))).toContain('tag: "Content Rewards\' numbers"');
+  });
+
   it("the help assistant never offers to change a rate or calls money a best guess", () => {
     const kb = read(join(SRC, "features/help/helpKb.json")).toLowerCase();
     for (const phrase of ["for 1,000 views", "best guess", "use the usual", "your amount"]) expect(kb).not.toContain(phrase);

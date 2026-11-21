@@ -1,4 +1,5 @@
 import "../styles/contentrewards.css";
+import "../styles/finder.css";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { initApi } from "../api/index.ts";
 import { auth, onSignedOut } from "../lib/auth.ts";
@@ -8,6 +9,7 @@ import { navigate, useHash, useRoute, type Route } from "../lib/router.ts";
 import { findBranch, findTree, legacySettingsRedirect } from "../lib/settingsTree.ts";
 import { forgetLoaded } from "../lib/hooks.ts";
 import { resetCr } from "../lib/contentRewards.ts";
+import { resetFinder } from "../lib/finder.ts";
 import { sounds } from "../lib/sounds.ts";
 import { Backdrop, GlassFilter } from "../components/Backdrop.tsx";
 import { Sidebar, TabBar } from "../components/Nav.tsx";
@@ -32,6 +34,7 @@ import { MockConsent } from "../screens/settings/setup/MockConsent.tsx";
 import { MockCrConsent } from "../screens/campaigns/MockCrConsent.tsx";
 import { CampaignsPage } from "../screens/campaigns/CampaignsPage.tsx";
 import { CampaignPage } from "../screens/campaigns/CampaignPage.tsx";
+import { FindPage } from "../screens/campaigns/FindPage.tsx";
 import { CrSendNow } from "../components/CrSendNow.tsx";
 import { GUIDES } from "../setup/index.ts";
 import { AskClipFactory } from "../features/help/HelpLauncher.tsx";
@@ -62,6 +65,7 @@ const TITLES: Record<Route["name"], string> = {
   mock_cr_consent: "Pretend Content Rewards",
   cr_setup: "Content Rewards setup · Settings",
   campaigns: "Your campaigns",
+  campaigns_find: "Find campaigns",
   campaign: "Campaign",
   motion_gallery: "Motion gallery",
   not_found: "Not found",
@@ -105,6 +109,7 @@ export function App() {
       onSignedOut(() => {
         forgetLoaded();
         resetCr();
+        resetFinder();
         setBoot({ state: "signed_out", note: "Your sign-in on this device has ended. Please sign in again." });
       }),
     [],
@@ -119,6 +124,7 @@ export function App() {
     await auth().signOut();
     forgetLoaded();
     resetCr();
+    resetFinder();
     setBoot({ state: "signed_out", note: null });
   }, []);
 
@@ -239,6 +245,8 @@ function Screen({ route }: { route: Route }) {
       return <Settings tree="posting" branch="setup" contentRewards />;
     case "campaigns":
       return <CampaignsPage />;
+    case "campaigns_find":
+      return <FindPage />;
     case "campaign":
       return <CampaignPage key={route.campaignId} campaignId={route.campaignId} />;
     case "skill":

@@ -1423,6 +1423,17 @@ export interface CrOverview {
   money: CrMoney;
   /** send_by_hand with time left. */
   waitingSends: CrSubmission[];
+  /**
+   * The campaign finder (§41.5): present whenever it is switched on (with no CRFIND yet: `on: true`, `started: false`
+   * and zeros), absent while it is off and on an API from before §41. Home's chips and the entry card read it.
+   */
+  finder?: CrFinderSummary;
+}
+export interface CrFinderSummary {
+  on: boolean;
+  started: boolean;
+  newCount: number;
+  matches: number;
 }
 export type CrConnectionPatch =
   /** "cant_connect": he says Content Rewards refused at sign-in (it never sends the browser back). The API sets
@@ -1434,6 +1445,97 @@ export type CrConnectionPatch =
 export type CrFinishBody = { state: string; code: string; iss?: string } | { state: string; error: string; errorDescription?: string };
 export type CrAddResult = { campaign: Campaign; group?: undefined } | { group: { name: string; choices: GroupChoice[] }; campaign?: undefined };
 export type CrSubmissionSaid = "sent_by_hand" | "appealed" | "proof_sent" | null;
+
+// ---------- Content Rewards: the campaign finder (docs/CONTRACTS.md §41.5; shared contract) ----------
+
+export type FinderLanguage = "en" | "es" | "pt" | "fr" | "de" | "it";
+export interface FinderWant {
+  on: boolean;
+  minPer1kCents: 50 | 100 | 200 | 300;
+  /** null: every place he set up (a place set up later joins by itself). */
+  places: Platform[] | null;
+  /** A percent of the budget that must be left. */
+  minLeftPct: 0 | 25 | 50 | 75;
+  access: "open" | "any";
+  categories: string[];
+  languages: FinderLanguage[];
+  otherPay: boolean;
+  tellMe: boolean;
+}
+export interface FinderPay {
+  platform: Platform;
+  /** The server's words for this place ("$1.50 per 1,000 views · up to $250 a clip"). */
+  line: string;
+  per1kCents: number | null;
+  topPer1kCents: number | null;
+  perPostCents: number | null;
+  maxPayoutCents: number | null;
+  geo: boolean;
+}
+export type FinderKind = "cpm" | "per_post" | "pool" | "retainer" | "other";
+export interface FinderMatch {
+  /** Content Rewards' uuid. */
+  campaignId: string;
+  /** https://contentrewards.com/c/campaigns/{uuid} */
+  url: string;
+  name: string;
+  brand: string;
+  access: "open" | "application";
+  kind: FinderKind;
+  /** His places that pay, STATS_ORDER. */
+  pay: FinderPay[];
+  maxPerClipCents: number | null;
+  budget: {
+    totalCents: number | null;
+    leftCents: number | null;
+    usedPct: number | null;
+    line: string | null;
+    asOf: string;
+    tag: "Content Rewards' numbers";
+  };
+  categories: { id: string; name: string }[];
+  /** "Why it matched": one line made by the server. */
+  why: string;
+  /** At most 3 each, the server's words (§41.3). */
+  notes: string[];
+  headsUp: string[];
+  cantTell: string[];
+  hiddenRules: number | null;
+  launchedAt: string | null;
+  rank: number;
+  isNew: boolean;
+  /** When he tapped Open on Content Rewards (ISO). */
+  opened?: string;
+}
+export type FinderState = "new" | "looking" | "ok" | "down" | "blocked" | "not_allowed" | "unreadable" | "off";
+export interface Finder {
+  state: FinderState;
+  want: FinderWant;
+  resolvedPlaces: Platform[];
+  tiktokWaits: boolean;
+  matches: FinderMatch[];
+  newCount: number;
+  hiddenCount: number;
+  skipped: { code: string; count: number; text: string }[];
+  /** `pending` > 0 while the first fill goes on. */
+  looked: { campaigns: number; pending: number };
+  /** For the topic chips, at most 12. */
+  categories: { id: string; name: string; count: number }[];
+  lastLookAt?: string;
+  asOf?: string;
+  /** Look again now: not before this. */
+  nextAllowedAt?: string;
+  /** Content Rewards connected or read only, not blocked. */
+  signedIn: boolean;
+  askedAt?: string;
+}
+/** PATCH /v1/contentrewards/finder: one or more of these. */
+export interface FinderPatch {
+  want?: Partial<FinderWant>;
+  seenAll?: true;
+  unhideAll?: true;
+}
+export type FinderSaid = "opened" | "not_for_me" | null;
 
 // ---------- Content Rewards: does this clip fit the campaign? (docs/CONTRACTS.md §39.3; shared contract) ----------
 
@@ -1735,6 +1837,21 @@ export interface Api {
   crFitCaptions(body: { clipId: string; campaignId: string; captions: Captions }): Promise<Captions>;
   /** POST /v1/contentrewards/campaigns/{campaignId}/remake: a campaign copy of the clip (202 new, 200 already made). */
   crRemake(campaignId: string, body: CrRemakeBody): Promise<Job>;
+  // §41 the campaign finder (an API before it answers 404; Content Rewards or the finder switched off, 503).
+  /** GET /v1/contentrewards/finder. */
+  crFinder(): Promise<Finder>;
+  /** PATCH /v1/contentrewards/finder `{ want?, seenAll?, unhideAll? }`. */
+  crPatchFinder(body: FinderPatch): Promise<Finder>;
+  /** POST /v1/contentrewards/finder/check: Look again now (at most once per 30 minutes and 4 times a day). */
+  crFinderCheck(): Promise<{ started: boolean; nextAllowedAt: string }>;
+  /** PATCH /v1/contentrewards/finder/matches/{campaignId} `{ said }`. */
+  crFinderSaid(campaignId: string, said: FinderSaid): Promise<Finder>;
+  /** POST /v1/contentrewards/finder/matches/{campaignId}/add: I joined: add it. */
+  crFinderAdd(campaignId: string): Promise<Campaign>;
+  /** POST /v1/contentrewards/finder/joined: the opened campaigns Content Rewards now lists, added. */
+  crFinderJoined(): Promise<CampaignSummary[]>;
+  /** POST /v1/contentrewards/finder/ask: Ask Content Rewards for official search and join. */
+  crFinderAsk(): Promise<{ askedAt: string }>;
   /** GET /v1/money/everywhere: All your money (§39.2). */
   getMoneyEverywhere(): Promise<MoneyEverywhere>;
 }
