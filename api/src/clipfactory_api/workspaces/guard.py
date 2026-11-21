@@ -45,16 +45,10 @@ def find_workspace(store: db.Store, user_id: str, workspace_id: str) -> dict[str
 
 
 def default_stories_config() -> dict[str, Any]:
-    """StoriesConfig defaults (CONTRACTS §45.6). ``storyModel`` empty means the agent's default model."""
-    return {
-        "defaultDurationSec": 45,
-        "captionsOn": True,
-        "musicOn": True,
-        "storyModel": "",
-        "providers": {"images": "builtin-rig", "animation": "builtin-2d", "audio": "builtin-synth"},
-        "youtubeCategory": "27",
-        "youtubePrivacy": "public",
-    }
+    """StoriesConfig defaults (CONTRACTS §45.6), from the one file ``stories/config/workspace-defaults.json``."""
+    from .config import workspace_defaults
+
+    return workspace_defaults()
 
 
 def ensure_first_stories(store: db.Store, user_id: str, now: datetime) -> dict[str, Any]:

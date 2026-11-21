@@ -317,7 +317,21 @@ export interface CatalogEntry<T extends string> {
   label: string;
 }
 
+/** The look and voice choices of a character (CONTRACTS §45.33): the character agent's vocabulary. */
+export interface LookCatalog {
+  body: CatalogEntry<CharacterLook["body"]>[];
+  hair: CatalogEntry<CharacterLook["hair"]["style"]>[];
+  eyes: CatalogEntry<CharacterLook["eyes"]["shape"]>[];
+  brows: CatalogEntry<CharacterLook["brows"]>[];
+  nose: CatalogEntry<CharacterLook["nose"]>[];
+  mouth: CatalogEntry<CharacterLook["mouth"]>[];
+  pattern: CatalogEntry<CharacterLook["outfit"]["pattern"]>[];
+  accessory: CatalogEntry<CharacterLook["accessory"]>[];
+  voiceStyle: CatalogEntry<CharacterVoice["style"]>[];
+}
+
 export interface Catalog {
+  looks: LookCatalog;
   actions: CatalogEntry<ActionId>[];
   propActions: CatalogEntry<PropAction>[];
   sets: CatalogEntry<SetId>[];

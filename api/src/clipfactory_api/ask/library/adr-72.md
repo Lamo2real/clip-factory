@@ -9,18 +9,19 @@
   serves, tokens under a second Secrets Manager prefix; (3) nest Lamo Stories tokens under `cf-prod/platforms/` (no IAM
   change, but every Lamo Clips function could read them).
 - **Decision.** (CONTRACTS §45.13) Option 2 for the callback and the tokens; which developer app each platform uses is
-  the owner's explicit choice, his own or Clip Factory's (ADR-79). A Lamo Stories connect uses its own state format (`w1.` with the
-  workspace id inside the signature) and the callback routes on that prefix before verifying anything: `v1.` states
-  run today's code unchanged, `w1.` states always land on Lamo Stories' Connections page and write only
-  `cf-prod/workspaces/{workspaceId}/{platform}/token` and a `SOCIAL#{platform}` item. One account per platform per
+  the owner's explicit choice, his own or Clip Factory's (ADR-79). A Lamo Stories connect uses its own state format
+  (`w1.` with the workspace id inside the signature) and its own state items (`OAUTH#ws.{nonce}`). Clip Factory's
+  callback only forwards a `w1.` state to Lamo Stories' own callback route on `cf-prod-stories-api` (Clip Factory's
+  registered apps are not edited, so their redirect URI stays the hooks one); `v1.` states run today's code
+  unchanged. Only Lamo Stories' Lambda writes `cf-prod/workspaces/{workspaceId}/{platform}/token` and `SOCIAL#`. One account per platform per
   workspace. YouTube connects the one channel picked in Google's picker (`prompt=select_account consent`): a token
   posts to exactly one channel, so there is no channel list to choose from; Meta lists Pages. An identity equal to
   Lamo Clips' own is held as `same_as_clips` until the owner says "Use it for both". Disconnect never calls a
   platform's revoke endpoint (Google's and TikTok's revoke end the app's whole grant for that account, which can be
   Lamo Clips' too, as §40 found for AdSense).
-- **Consequences.** No platform setup again. App keys are shared, so quotas, credits and the owner's monthly X limit
-  are shared (and counted together), and TikTok's Sandbox, private-account and review limits apply to both; a later
-  key change in Lamo Clips asks Lamo Stories to connect again. Meta's page picker is per Facebook login: unticking
-  Lamo Clips' Page while connecting Lamo Stories would cut Lamo Clips off, so the page says so and checks afterwards.
-  A Disconnect leaves the grant at the platform; the page says where to remove it by hand. The OAuth callback and
-  `hooks.py` gain one prefix branch, proven not to change the old path.
+- **Consequences.** With Clip Factory's app (YouTube, TikTok, X), quotas, credits and the owner's monthly X limit are
+  shared (and counted together), and TikTok's Sandbox, private-account and review limits apply to both; a later key
+  change asks Lamo Stories to connect again. Meta always needs Lamo Stories' own app, so Clip Factory's Meta grant is
+  never touched.
+  A Disconnect leaves the grant at the platform; the page says where to remove it by hand. `hooks.py` gains one
+  forward, proven not to change the old path, and no IAM.

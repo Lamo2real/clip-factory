@@ -4,6 +4,60 @@
 import type { Catalog } from "./types.ts";
 
 export const CATALOG: Catalog = {
+  looks: {
+    body: [
+      { id: "bean", label: "Bean" },
+      { id: "round", label: "Round" },
+      { id: "tall", label: "Tall" },
+      { id: "square", label: "Square" },
+    ],
+    hair: [
+      { id: "none", label: "No hair" },
+      { id: "short", label: "Short" },
+      { id: "spiky", label: "Spiky" },
+      { id: "curly", label: "Curly" },
+      { id: "long", label: "Long" },
+      { id: "bun", label: "Bun" },
+      { id: "cap", label: "Cap" },
+    ],
+    eyes: [
+      { id: "round", label: "Round" },
+      { id: "oval", label: "Oval" },
+      { id: "sleepy", label: "Sleepy" },
+    ],
+    brows: [
+      { id: "thin", label: "Thin" },
+      { id: "thick", label: "Thick" },
+    ],
+    nose: [
+      { id: "dot", label: "Dot" },
+      { id: "button", label: "Button" },
+      { id: "long", label: "Long" },
+      { id: "none", label: "None" },
+    ],
+    mouth: [
+      { id: "small", label: "Small" },
+      { id: "wide", label: "Wide" },
+    ],
+    pattern: [
+      { id: "plain", label: "Plain" },
+      { id: "stripes", label: "Stripes" },
+      { id: "dots", label: "Dots" },
+    ],
+    accessory: [
+      { id: "none", label: "None" },
+      { id: "glasses", label: "Glasses" },
+      { id: "scarf", label: "Scarf" },
+      { id: "bowtie", label: "Bow tie" },
+      { id: "helmet", label: "Helmet" },
+      { id: "headphones", label: "Headphones" },
+    ],
+    voiceStyle: [
+      { id: "babble", label: "Babble" },
+      { id: "hum", label: "Hum" },
+      { id: "none", label: "No voice" },
+    ],
+  },
   actions: [
     { id: "idle", label: "Idle" },
     { id: "walk", label: "Walk" },
@@ -181,6 +235,8 @@ export const CATALOG: Catalog = {
   ],
 };
 
-export function catalogIds<K extends keyof Catalog>(key: K): string[] {
+type ListKey = Exclude<keyof Catalog, "looks">;
+
+export function catalogIds<K extends ListKey>(key: K): string[] {
   return CATALOG[key].map((e) => e.id);
 }

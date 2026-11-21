@@ -45,7 +45,44 @@ SOCIAL_SK: Final = "SOCIAL#"
 PUBJOB_SK: Final = "PUBJOB#"
 ACT_SK: Final = "ACT#"  # ACT#{at}#{id}: recent activity, ttl 90 days (§45.16.3)
 PROVIDER_SK: Final = "PROVIDER#"  # PROVIDER#{kind}#{providerId}: written only by the agent after a real call (§45.11.6)
-ITEM_PREFIXES: Final = (IDEA_SK, CHAR_SK, STORY_SK, PJOB_SK, ASSET_SK, SOCIAL_SK, PUBJOB_SK, ACT_SK, PROVIDER_SK)
+# The second request (§45.3, §45.24-§45.31).
+AGENT_SK: Final = "AGENT#"
+SKILL_SK: Final = (
+    "SKILL#"  # a Lamo Stories skill, in the workspace partition (Clip Factory's skills are USER#{u}/SKILL#)
+)
+TASK_SK: Final = "TASK#"
+CONV_SK: Final = "CONV#"
+MSG_SK: Final = "MSG#"  # MSG#{convId}#{msgId}
+MEM_SK: Final = "MEM#"
+REFVID_SK: Final = "REFVID#"
+MODELSTATUS_SK: Final = "MODELSTATUS#"
+USAGE_SK: Final = "USAGE#"  # USAGE#{day}#{id}
+PROVCRED_SK: Final = "PROVCRED#"
+ONBOARD_SK: Final = "ONBOARD"  # an exact sort key
+AICONFIG_SK: Final = "AICONFIG"  # an exact sort key
+ITEM_PREFIXES: Final = (
+    IDEA_SK,
+    CHAR_SK,
+    STORY_SK,
+    PJOB_SK,
+    ASSET_SK,
+    SOCIAL_SK,
+    PUBJOB_SK,
+    ACT_SK,
+    PROVIDER_SK,
+    AGENT_SK,
+    SKILL_SK,
+    TASK_SK,
+    CONV_SK,
+    MSG_SK,
+    MEM_SK,
+    REFVID_SK,
+    MODELSTATUS_SK,
+    USAGE_SK,
+    PROVCRED_SK,
+    ONBOARD_SK,
+    AICONFIG_SK,
+)
 
 # Item `type` values (never "job", "clip", "post", "account", "setup": Lamo Clips readers filter on those).
 TYPE_WORKSPACE: Final = "workspace"
@@ -58,6 +95,18 @@ TYPE_SOCIAL: Final = "ws_social"
 TYPE_PUBJOB: Final = "ws_pubjob"
 TYPE_ACTIVITY: Final = "ws_activity"
 TYPE_PROVIDER: Final = "ws_provider"
+TYPE_AGENT: Final = "ws_agent"
+TYPE_SKILL: Final = "ws_skill"
+TYPE_TASK: Final = "ws_task"
+TYPE_CONV: Final = "ws_conv"
+TYPE_MSG: Final = "ws_msg"
+TYPE_MEM: Final = "ws_mem"
+TYPE_REFVID: Final = "ws_refvid"
+TYPE_MODELSTATUS: Final = "ws_modelstatus"
+TYPE_USAGE: Final = "ws_usage"
+TYPE_PROVCRED: Final = "ws_provcred"
+TYPE_ONBOARD: Final = "ws_onboard"
+TYPE_AICONFIG: Final = "ws_aiconfig"
 
 
 def registry_pk(user_id: str) -> str:
@@ -88,7 +137,42 @@ def social_account_id(workspace_id: str, platform: str) -> str:
 
 
 WS_SECRET_PREFIX: Final = "cf-prod/workspaces/"  # noqa: S105 (a name prefix, not a secret); never under platforms/
-SECRET_KINDS: Final = ("token", "pending")
+SECRET_KINDS: Final = ("app", "token", "pending")  # app: Lamo Stories' own developer app keys (§45.30)
+PROVIDER_ID: Final = re.compile(r"^[a-z0-9][a-z0-9-]{1,39}$")
+# Lamo Stories' OAuth state items use their own key prefix, so its roles never reach Clip Factory's OAUTH#{nonce}.
+WS_OAUTH_PK_PREFIX: Final = "OAUTH#ws."
+# Platforms whose shared-app choice is allowed (§45.30): Meta always uses Lamo Stories' own app.
+SHARED_APP_PLATFORMS: Final = ("youtube", "tiktok", "x")
+
+
+def oauth_pk(nonce: str) -> str:
+    return f"{WS_OAUTH_PK_PREFIX}{nonce}"
+
+
+def rate_pk(workspace_id: str, platform: str) -> str:
+    """Lamo Stories' own rate counters, used only with its own developer app (§45.30)."""
+    if workspace_id == CLIPS or not WORKSPACE_ID.match(workspace_id):
+        raise ValueError("not a Lamo Stories workspace id")
+    if platform not in PLATFORMS:
+        raise ValueError(f"unknown platform: {platform}")
+    return f"RATE#WS#{workspace_id}#{platform}"
+
+
+def provider_secret_name(prefix: str, workspace_id: str, provider_id: str) -> str:
+    """``cf-prod/workspaces/{ws}/providers/{providerId}`` (§45.31): an external provider's API key."""
+    base = _workspace_base(prefix, workspace_id)
+    if not PROVIDER_ID.match(provider_id):
+        raise ValueError("not a provider id")
+    return f"{base}{workspace_id}/providers/{provider_id}"
+
+
+def _workspace_base(prefix: str, workspace_id: str) -> str:
+    if workspace_id == CLIPS or not WORKSPACE_ID.match(workspace_id):
+        raise ValueError("not a Lamo Stories workspace id")
+    base = prefix if prefix.endswith("/") else prefix + "/"
+    if "/platforms/" in base:
+        raise ValueError("workspace secrets never live under cf-prod/platforms/")
+    return base
 
 
 # The identity field inside each platform's token secret (written by oauth.providers.exchange / chosen, kept by
@@ -106,15 +190,12 @@ WS_STATE_PREFIX: Final = "w1."
 
 
 def secret_name(prefix: str, workspace_id: str, platform: str, kind: str) -> str:
-    """``cf-prod/workspaces/{workspaceId}/{platform}/{token|pending}`` (CONTRACTS §45.13.1), built only from ids that
-    were already validated against the workspace partition. Refuses Lamo Clips and anything under ``platforms/``."""
+    """``cf-prod/workspaces/{workspaceId}/{platform}/{app|token|pending}`` (CONTRACTS §45.13.1, §45.30), built only from
+    ids that were already validated against the workspace partition. Refuses Lamo Clips and anything under
+    ``platforms/``."""
     if kind not in SECRET_KINDS:
         raise ValueError(f"unknown secret kind: {kind}")
     if platform not in PLATFORMS:
         raise ValueError(f"unknown platform: {platform}")
-    if workspace_id == CLIPS or not WORKSPACE_ID.match(workspace_id):
-        raise ValueError("not a Lamo Stories workspace id")
-    base = prefix if prefix.endswith("/") else prefix + "/"
-    if "/platforms/" in base:
-        raise ValueError("workspace secrets never live under cf-prod/platforms/")
+    base = _workspace_base(prefix, workspace_id)
     return f"{base}{workspace_id}/{platform}/{kind}"

@@ -1,5 +1,5 @@
 {
-  "$comment": "Lamo Stories' own model list (docs/CONTRACTS.md §45.25, ADR-77). Separate from config/models.json, which is Clip Factory's and is never read by Lamo Stories. Terraform builds the Lamo Stories agent's bedrock:InvokeModel grants from this file. 'profile' is the inference profile the agent calls; 'regions' are that profile's destination Regions (for IAM; '*' for a global profile). 'efforts' are the output_config.effort levels the model accepts (empty: no effort setting, the model runs at its own level). 'pricing' is null when no price is known for this account: Bedrock prices are partner prices and differ from Anthropic's own list, so the owner may type them in Lamo Stories › Settings › AI. The owner's 'Sable 5.2 / Sable 5.1' are the Claude Fable 5.2 / 5.1 models below.",
+  "$comment": "Lamo Stories' own model list (docs/CONTRACTS.md §45.25, ADR-77). Separate from config/models.json, which is Clip Factory's and is never read by Lamo Stories. Terraform builds the Lamo Stories agent's bedrock:InvokeModel grants from this file. 'profile' is the inference profile the agent calls; 'regions' are that profile's destination Regions (for IAM; '*' for a global profile). 'efforts' are the output_config.effort levels the model accepts (empty: no effort setting, the model runs at its own level). 'pricing' is Anthropic's own list price for reference (source anthropic_list, checked 2026-11-21); Amazon Bedrock bills its own price, which can differ, so the owner may type Bedrock's in Lamo Stories › Settings › AI (source owner). null where no price is known. The owner's 'Sable 5.2 / Sable 5.1' are the Claude Fable 5.2 / 5.1 models below.",
   "defaultModel": "opus-5-5",
   "defaultEffort": "high",
   "models": [
@@ -21,7 +21,16 @@
       ],
       "defaultEffort": "high",
       "vision": true,
-      "pricing": null,
+      "pricing": {
+        "inputPer1M": 8.0,
+        "outputPer1M": 40.0,
+        "cacheReadPer1M": 0.2,
+        "cacheWritePer1M": null,
+        "longContext": null,
+        "currency": "USD",
+        "source": "anthropic_list",
+        "note": "Anthropic's own list price. Amazon Bedrock bills its own price, which can differ; type Bedrock's price in Lamo Stories › Settings › AI to replace it."
+      },
       "line": "The most capable. Best for storyboards and hard reasoning."
     },
     {
@@ -42,7 +51,16 @@
       ],
       "defaultEffort": "high",
       "vision": true,
-      "pricing": null,
+      "pricing": {
+        "inputPer1M": 10.0,
+        "outputPer1M": 50.0,
+        "cacheReadPer1M": null,
+        "cacheWritePer1M": null,
+        "longContext": null,
+        "currency": "USD",
+        "source": "anthropic_list",
+        "note": "Anthropic's own list price. Amazon Bedrock bills its own price, which can differ; type Bedrock's price in Lamo Stories › Settings › AI to replace it."
+      },
       "line": "Very capable. The model Clip Factory uses by default (a separate setting)."
     },
     {
@@ -63,7 +81,16 @@
       ],
       "defaultEffort": "medium",
       "vision": true,
-      "pricing": null,
+      "pricing": {
+        "inputPer1M": 4.0,
+        "outputPer1M": 20.0,
+        "cacheReadPer1M": 0.2,
+        "cacheWritePer1M": null,
+        "longContext": null,
+        "currency": "USD",
+        "source": "anthropic_list",
+        "note": "Anthropic's own list price. Amazon Bedrock bills its own price, which can differ; type Bedrock's price in Lamo Stories › Settings › AI to replace it."
+      },
       "line": "Smart and quicker. A good default for creative work."
     },
     {
@@ -84,7 +111,16 @@
       ],
       "defaultEffort": "high",
       "vision": true,
-      "pricing": null,
+      "pricing": {
+        "inputPer1M": 2.0,
+        "outputPer1M": 10.0,
+        "cacheReadPer1M": 0.1,
+        "cacheWritePer1M": null,
+        "longContext": null,
+        "currency": "USD",
+        "source": "anthropic_list",
+        "note": "Anthropic's own list price. Amazon Bedrock bills its own price, which can differ; type Bedrock's price in Lamo Stories › Settings › AI to replace it."
+      },
       "line": "Good and fast. Costs less."
     },
     {
@@ -110,18 +146,33 @@
       ],
       "defaultEffort": "medium",
       "vision": true,
-      "pricing": null,
+      "pricing": {
+        "inputPer1M": 0.1,
+        "outputPer1M": 0.5,
+        "cacheReadPer1M": null,
+        "cacheWritePer1M": null,
+        "longContext": {
+          "aboveInputTokens": 100000,
+          "inputPer1M": 0.5,
+          "outputPer1M": 2.5
+        },
+        "currency": "USD",
+        "source": "anthropic_list",
+        "note": "Anthropic's own list price. Amazon Bedrock bills its own price, which can differ; type Bedrock's price in Lamo Stories › Settings › AI to replace it."
+      },
       "line": "Cheapest and fastest. For quick edits."
     }
   ],
   "imageModel": {
     "label": "Amazon Nova Canvas",
     "modelId": "amazon.nova-canvas-v1:0",
-    "region": "eu-west-1"
+    "region": "eu-west-1",
+    "pricing": null
   },
   "videoModel": {
     "label": "Amazon Nova Reel 1.1",
     "modelId": "amazon.nova-reel-v1:1",
-    "region": "us-east-1"
+    "region": "us-east-1",
+    "pricing": null
   }
 }

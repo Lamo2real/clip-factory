@@ -11596,14 +11596,15 @@ Lamo Clips' partition `USER#{userId}` gets **no new items**. Two new kinds of pa
 | Provider state | same | `PROVIDER#{kind}#{providerId}` | `type="ws_provider"`, `state`, `checkedAt`, `lastError` (written only by the agent after a real call, §45.11.6) |
 | Agent | same | `AGENT#{agentId}` | `type="ws_agent"`, Agent fields (§45.26), `version` |
 | Skill | same | `SKILL#{skillId}` | `type="ws_skill"`, Skill fields (§45.26), internal `key`, `revisions` |
-| AI task | same | `TASK#{taskId}` | `type="ws_task"`, AiTask fields (§45.6: ideas, expand, variations, character design), `ttl` 30 days |
-| Conversation | same | `CONV#{convId}` | `type="ws_conv"`, Conversation fields (§45.27) |
-| Message | same | `MSG#{convId}#{msgId}` | `type="ws_msg"`, Message fields (§45.27) |
+| AI task | same | `TASK#{taskId}` | `type="ws_task"`, AiTask fields (§45.6: ideas, expand, variations, character design, captions, check models), internal `sessionId`, `heartbeatAt`, `override`, `ttl` 30 days |
+| Conversation | same | `CONV#{convId}` | `type="ws_conv"`, Conversation fields (§45.27), internal `summary`, `summaryUpToMsgId` |
+| Message | same | `MSG#{convId}#{msgId}` | `type="ws_msg"`, Message fields (§45.27); assistant messages also internal `sessionId`, `heartbeatAt`, `requested` |
 | Memory | same | `MEM#{memId}` | `type="ws_mem"`, MemoryItem fields (§45.27) |
 | Reference video | same | `REFVID#{refId}` | `type="ws_refvid"`, ReferenceVideo fields (§45.28), internal `key`, `analysisKey` |
 | Model status | same | `MODELSTATUS#{modelKey}` | `type="ws_modelstatus"`, `status`, `line`, `checkedAt` (§45.25; written only by the agent) |
-| Usage | same | `USAGE#{day}#{id}` | `type="ws_usage"`, §45.25's usage fields, `ttl` 400 days |
+| Usage | same | `USAGE#{day}#{id}` | `type="ws_usage"`, `kind: "model" \| "provider"`, §45.25's usage fields (providers: `providerId`, `modelId`, `images` / `videoSec` / `renderSec`), `ttl` 400 days |
 | Onboarding | same | `ONBOARD` | `type="ws_onboard"`, `stepsDone`, `skipped`, `finishedAt` (§45.29) |
+| AI configuration | same | `AICONFIG` | `type="ws_aiconfig"`, `defaultModel`, `defaultEffort`, `tasks`, `prices`, `version`, `updatedAt` (§45.25; made on the first PUT with a conditional put; updates conditional on `version`) |
 | Provider key | same | `PROVCRED#{providerId}` | `type="ws_provcred"`, `savedAt`, `hint` (the key itself only in Secrets Manager, §45.31) |
 | Own rate counters | `RATE#WS#{workspaceId}#{platform}` | `BUDGET` | only with Lamo Stories' own developer app (§45.30) |
 | OAuth state | `OAUTH#{nonce}` | `STATE` | the existing item (§17.4) plus `workspaceId` and `socialAccountId`, written only for a `w1.` state (§45.13.2) |
@@ -11682,7 +11683,8 @@ Lamo Stories first." Bodies are validated with `validate.py`; unknown keys are `
 | POST `/v1/workspaces/{ws}/characters/{characterId}/references` **S** | `{ "filename", "contentType": "image/png" \| "image/jpeg" \| "image/webp", "size" ≤ 10 MB }` | `{ "assetId", "uploadUrl", "headers" }` |
 | POST `/v1/workspaces/{ws}/characters/{characterId}/references/{assetId}/complete` **S** | – | `{ "character" }` (HEAD checks size and type; at most 8 references) |
 | DELETE `/v1/workspaces/{ws}/characters/{characterId}/references/{assetId}` **S** | – | `{ "character" }` |
-| POST `/v1/workspaces/{ws}/characters/design` **S** | `{ "description"?: string (≤ 600), "referenceAssetId"?: string, "override"?: ModelOverride }` | `202 { "task" }`: the character agent's suggested `CharacterInput` in `result.character` (a draft; nothing saved) |
+| POST `/v1/workspaces/{ws}/characters/design/uploads` **S** | `{ "filename", "contentType": "image/png" \| "image/jpeg" \| "image/webp", "size" ≤ 10 MB }` | `{ "assetId", "uploadUrl", "headers" }` (`ws/{u}/{ws}/design/{assetId}.{ext}`, an `ASSET#` of kind `design_ref`) |
+| POST `/v1/workspaces/{ws}/characters/design` **S** | `{ "description"?: string (≤ 600), "referenceAssetId"?: string (a `design_ref` or `character_ref` asset of this workspace, else 404), "override"?: ModelOverride }` | `202 { "task" }`: the character agent's suggested `CharacterInput` in `result.character` (a draft; nothing saved) |
 | POST `/v1/workspaces/{ws}/characters/{characterId}/portrait` **S** | – | `202 { "job" }` (a portrait job, §45.11.6); `409` "AI pictures are off. Turn them on in Lamo Stories › Settings." while `providers.images` is `builtin-rig` |
 | GET `/v1/workspaces/{ws}/stories` **S** | query `status?` (a StoryStatus or `all`), `limit` ≤ 50, `cursor` | `{ "stories": Story[], "nextCursor" }` newest first |
 | POST `/v1/workspaces/{ws}/stories` **S** | `StoryInput` (may carry `override`: ModelOverride for this video's jobs, and `referenceIds`) | `201 { "story", "job" }` (starts production) |
@@ -11690,11 +11692,11 @@ Lamo Stories first." Bodies are validated with `validate.py`; unknown keys are `
 | GET `/v1/workspaces/{ws}/stories/{storyId}/jobs` **S** | – | `{ "jobs": ProductionJob[] }` newest first (production metadata, §45.12) |
 | PATCH `/v1/workspaces/{ws}/stories/{storyId}` **S** | `StoryPatch` (§45.6; only in `review`, `needs_check` or `failed`, never while a job runs) | `{ "story", "script" }`; a script edit writes `v{n+1}` and adds the steps it makes out of date to `stale` (§45.9) |
 | DELETE `/v1/workspaces/{ws}/stories/{storyId}` **S** | – | `204` (stops a running job first; its assets and S3 files under the story's prefix are deleted; publishing jobs and posts already on platforms stay) |
-| POST `/v1/workspaces/{ws}/stories/{storyId}/produce` **S** | `{ "from"?: StepKey, "sceneIds"?: string[] (with `from` ∈ `scenes`, `animation`) }` | `202 { "story", "job" }`; no `from`: runs exactly the `stale` steps ("Try again", "Check again", "Remake"); `409` while a job runs |
+| POST `/v1/workspaces/{ws}/stories/{storyId}/produce` **S** | `{ "from"?: StepKey, "sceneIds"?: string[] (with `from` ∈ `scenes`, `animation`), "override"?: ModelOverride (this job only) }` | `202 { "story", "job" }`; no `from`: runs exactly the `stale` steps ("Try again", "Check again", "Remake"); `409` while a job runs |
 | POST `/v1/workspaces/{ws}/stories/{storyId}/cancel` **S** | – | `{ "story", "job" }` |
 | POST `/v1/workspaces/{ws}/stories/{storyId}/approve` **S** | `{ "version" }` | `{ "story" }`; `409` unless §45.9's approve rule holds |
 | POST `/v1/workspaces/{ws}/stories/{storyId}/reject` **S** | `{ "reason"?: string (≤ 500) }` | `{ "story" }` |
-| POST `/v1/workspaces/{ws}/stories/{storyId}/changes` **S** | `{ "note"?: string (0–500), "sceneIds"?: string[] }` (at least one of the two) | `202 { "story", "job" }`: the writer rewrites the named scenes (a new take when there is no note: "Remake this scene") or the whole story with the note, then everything that changed is remade |
+| POST `/v1/workspaces/{ws}/stories/{storyId}/changes` **S** | `{ "note"?: string (0–500), "sceneIds"?: string[], "override"?: ModelOverride }` (a note or scene ids at least) | `202 { "story", "job" }`: the writer rewrites the named scenes (a new take when there is no note: "Remake this scene") or the whole story with the note, then everything that changed is remade |
 | GET `/v1/workspaces/{ws}/stories/{storyId}/download` **S** | – | `{ "url", "filename" }` (only `approved` or `published`) |
 | GET `/v1/workspaces/{ws}/library` **S** | query `kind?` (an AssetKind or `all`), `storyId?`, `characterId?`, `limit` ≤ 100, `cursor` | `{ "items": LibraryItem[], "nextCursor" }` |
 | GET `/v1/workspaces/{ws}/providers` **S** | – | `{ "providers": ProviderStatus[] }` (§45.11.6) |
@@ -11742,13 +11744,14 @@ Lamo Stories first." Bodies are validated with `validate.py`; unknown keys are `
 | POST `/v1/workspaces/{ws}/publishing/{publishingJobId}/retry` **S** | `{ "options"?: PublishOptions, "confirmAccount"?: string /* the new externalAccountId the owner saw */ }` | `202 { "publishingJob" }` (only `failed` or `needs_attention`; `409` naming the new account when the destination changed and `confirmAccount` does not match it) |
 
 `/v1/accounts*`, `/v1/setup*`, `/v1/clips*`, `/v1/jobs*` and every other existing route are unchanged, served by
-`cf-prod-api` as before, and never see Lamo Stories data. Lamo Stories' route modules: `routes/workspaces/core.py`
-(workspaces, dashboard, ideas, characters, stories, library, providers, guidance, tasks), `routes/workspaces/ai.py`
-(AI configuration, agents, skills, chat, memory, references, onboarding, usage, provider keys, storage) and
-`routes/workspaces/social.py` (social, developer apps, creator info, publish, publishing), assembled in
-`routes/workspaces/__init__.py`; `workspaces/http.py` is the Lambda handler that dispatches only these (the same
-`http.dispatch` and JWT claims code, imported read-only); `routes/__init__.py` (Clip Factory's table) does not
-include them.
+`cf-prod-api` as before, and never see Lamo Stories data. Lamo Stories' route modules live **outside** Clip Factory's `routes` package:
+`workspaces/routes/core.py` (workspaces, dashboard, ideas, characters, stories, library, providers, guidance, tasks),
+`workspaces/routes/ai.py` (AI configuration, agents, skills, chat, memory, references, onboarding, usage, provider
+keys, storage) and `workspaces/routes/social.py` (social, developer apps, creator info, the Lamo Stories OAuth
+callback, publish, publishing), assembled in `workspaces/routes/__init__.py`; `workspaces/http.py` is the Lambda
+handler that dispatches only these (the shared `http.dispatch` and JWT claims code, imported read-only); a test
+imports it in a fresh interpreter and checks `clipfactory_api.routes` is not loaded; `routes/__init__.py` (Clip
+Factory's table) does not include them.
 
 Dependencies reach the routes through `workspaces/deps.py` (`deps.of(app)`: built once per `App` from the
 environment on first use: `STORIES_AGENT_RUNTIME_ARN` (Lamo Stories' own runtime), `STORY_FLOW_ARN`,
@@ -11769,8 +11772,8 @@ interface Workspace { workspaceId: string; workspaceName: string; workspaceType:
 interface StoriesConfig { defaultDurationSec: number /* 15..90, default 45; 30..60 suggested */;
   captionsOn: boolean /* default true */; musicOn: boolean /* default true */;
   providers: { images: "builtin-rig" | "nova-canvas"; video: "builtin-2d" | "nova-reel"; audio: "builtin-synth" };
-  video: { resolution: "1080x1920"; aspect: "9:16"; quality: "standard" | "high" | "best" /* default high */;
-    fps: 24 | 30 /* default 30 */ };
+  video: { resolution: "1080x1920"; aspect: "9:16"; quality: "standard" | "high" | "best" /* default high: ffmpeg
+    CRF 23 / 20 / 17 */; fps: 30 /* the built-in animator's only rate */ };
   production: { burnCaptions: boolean /* default true */; scenesAtOnce: 1 | 2 | 3 /* default 2 */;
     keepVersions: "all" | number /* 1..10, default "all" */ };
   youtubeCategory: "1" | "2" | "23" | "24" | "27" /* Film & Animation, Autos & Vehicles, Comedy, Entertainment,
@@ -11783,27 +11786,30 @@ type TaskKind = "chat" | "brainstorm" | "expand_idea" | "variations" | "storyboa
   | "character_design" | "reference_analysis" | "fact_check" | "final_review" | "captions";
 interface StoriesAiConfig { defaultModel: string /* a key of stories/config/models.json, default "opus-5-5" */;
   defaultEffort: Effort /* default "high" */; tasks: Partial<Record<TaskKind, { model?: string; effort?: Effort }>>;
-  prices: Record<string, { inputPer1M: number; outputPer1M: number; currency: string }> /* the owner's */;
-  version: number }
+  prices: Record<string, Price> /* the owner's, by model key or provider id */; version: number }
+interface Price { inputPer1M: number; outputPer1M: number; cacheReadPer1M: number | null;
+  cacheWritePer1M: number | null; longContext: { aboveInputTokens: number; inputPer1M: number; outputPer1M: number }
+  | null; currency: string; source: "anthropic_list" | "aws_price_list" | "owner"; note: string }
 interface ModelOverride { model?: string; effort?: Effort }   // just for this request; never saved
 interface ModelInfo { key: string; label: string; provider: string; modelId: string; efforts: Effort[];
   defaultEffort: Effort | null; vision: boolean; status: "ok" | "not_checked" | "denied" | "not_found" | "error";
-  statusLine: string; checkedAt: string | null; price: { inputPer1M: number; outputPer1M: number; currency: string;
-  source: "list" | "owner" } | null }
-interface TaskInfo { kind: TaskKind; label: string; agentId: string; suggestedEffort: Effort;
-  effective: { model: string; effort: Effort | null; from: "task" | "agent" | "default" } }
+  statusLine: string; checkedAt: string | null; price: Price | null }
+interface Effective { model: string; effort: Effort | null; effortApplied: boolean;
+  from: "request" | "conversation" | "project" | "task" | "agent" | "default" }
+interface TaskInfo { kind: TaskKind; label: string; agentId: string; suggestedEffort: Effort; effective: Effective }
 interface Agent { agentId: "creative_director" | "video_analysis" | "storyboard" | "character" | "quality_assurance";
   name: string; tasks: TaskKind[]; instructions: string; defaultInstructions: string; active: boolean;
   model: string | null; effort: Effort | null; skillIds: string[]; version: number; updatedAt: string }
 interface Skill { skillId: string; title: string; description: string; builtin: boolean; source: "builtin" | "written"
   | "upload"; format: "md" | "zip"; enabled: boolean; agentIds: string[]; revisions: { revisionId: string;
   savedAt: string; size: number }[]; version: number; createdAt: string; updatedAt: string }
-interface AiTask { taskId: string; kind: TaskKind; status: "queued" | "running" | "done" | "failed";
+interface AiTask { taskId: string; kind: TaskKind | "check_models"; status: "queued" | "running" | "done" | "failed";
   model: string | null; effort: Effort | null; effortApplied: boolean | null; result: Record<string, unknown> | null;
   error?: string; createdAt: string; updatedAt: string }
 type ProjectRef = { kind: "idea" | "story" | "character" | "reference"; id: string };
 interface Conversation { convId: string; title: string; model: string | null; effort: Effort | null;
-  projectRef: ProjectRef | null; lastMessageAt: string | null; createdAt: string; updatedAt: string }
+  effective: Effective /* what the next message will use, computed by the API */; projectRef: ProjectRef | null;
+  lastMessageAt: string | null; createdAt: string; updatedAt: string }
 interface Message { msgId: string; convId: string; role: "user" | "assistant"; text: string;
   attachments: { assetId: string; url: string; contentType: string }[];
   status: "pending" | "streaming" | "done" | "failed" | "stopped"; model: string | null; effort: Effort | null;
@@ -11813,6 +11819,7 @@ interface Message { msgId: string; convId: string; role: "user" | "assistant"; t
 interface MemoryItem { memId: string; text: string; source: "chat" | "owner"; createdAt: string; updatedAt: string }
 interface ReferenceVideo { refId: string; title: string; status: "uploading" | "ready" | "analyzing" | "analyzed"
   | "failed"; durationSec: number | null; bytes: number; url?: string; currentJobId: string | null;
+  ai: { model: string | null; effort: Effort | null } /* this reference's own setting, §45.25 level 2 */;
   analyzedWith: { model: string; effort: Effort | null } | null; createdAt: string; updatedAt: string }
 interface ReferenceAnalysis { summary: string; hook: { atSec: number; what: string }; pacing: { cutsPer10s: number;
   notes: string }; shots: { start: number; end: number; what: string; acting: string; sound: string }[];
@@ -11857,7 +11864,8 @@ type StepKey = "storyboard" | "safety" | "scenes" | "animation" | "sound" | "cap
 interface StoryInput { ideaId?: string; brief?: { title: string; logline: string; category: IdeaCategory } /* "type a
   concept": a short form; the writer expands it */; title?: string; characterIds: string[] /* 1..3 */;
   durationSec?: number /* 15..90 */; captionsOn?: boolean; musicMood?: MusicMood;
-  referenceIds?: string[] /* ≤ 3, §45.28 */; override?: ModelOverride /* this video's storyboard and checks */ }
+  referenceIds?: string[] /* ≤ 3, §45.28 */; ai?: { model: string | null; effort: Effort | null } /* this video's own
+  setting, kept (§45.25 level 2) */ }
 interface Captions { youtubeTitle: string; youtubeDescription: string; instagram: string; facebook: string;
   tiktok: string; x: string }   // the same shape as Lamo Clips' (§5), so the platform publishers take it as is
 interface Story { storyId: string; workspaceId: string; contentType: "animation"; title: string;
@@ -11868,10 +11876,11 @@ interface Story { storyId: string; workspaceId: string; contentType: "animation"
   storageLocation: string /* "s3://<bucket>/ws/<userId>/<workspaceId>/stories/<storyId>/" */;
   stale: StepKey[] /* steps an edit or a failure made out of date; a produce without `from` runs exactly these */;
   safetyTopicId: string | null; safety: StorySafety | null; reviewNote: string | null; currentJobId: string | null;
+  ai: { model: string | null; effort: Effort | null }; referenceIds: string[];
   posted: { platform: Platform; url: string }[]; version: number; createdAt: string; updatedAt: string;
   approvedAt?: string; publishedAt?: string }
 interface StorySafety { topicId: string | null /* null: no driving advice, only the "nothing dangerous" check */;
-  status: "pending" | "ok" | "problems"; problems: string[]; checkedScriptVersion: number | null;
+  status: "pending" | "ok" | "problems" | "skipped" /* skipped: the quality agent is off; never for driving safety */; problems: string[]; checkedScriptVersion: number | null;
   citations: { publisher: string; title: string; url: string; section?: string }[] }
 interface StoryStep { key: StepKey | "portrait"; label: string; status: "pending" | "running" | "done" | "failed"
   | "skipped"; message?: string; startedAt?: string; finishedAt?: string; i?: number; n?: number }
@@ -11888,10 +11897,11 @@ interface ProductionJob { jobId: string; workspaceId: string; contentType: "anim
 interface SceneEdit { sceneId: string; caption?: string | null; durationSec?: number /* 2..15 */;
   sfx?: SfxCue[] /* replaces that scene's whole effects list: add, move, remove */ }
 interface StoryPatch { version: number; title?: string; postCaptions?: Partial<Captions>; captions?: CaptionCue[];
-  musicMood?: MusicMood; captionsOn?: boolean; scenes?: SceneEdit[] }
+  musicMood?: MusicMood; captionsOn?: boolean; scenes?: SceneEdit[];
+  ai?: { model: string | null; effort: Effort | null }; referenceIds?: string[] }
 
 type AssetKind = "final_video" | "cover" | "storyboard" | "scene_clip" | "scene_still" | "character_ref"
-  | "portrait" | "audio" | "captions";
+  | "portrait" | "audio" | "captions" | "design_ref" /* a picture for "Design with AI"; the Library hides it */;
 interface LibraryItem { assetId: string; kind: AssetKind; storyId: string | null; characterId: string | null;
   title: string /* the story's or character's current title, filled by the route */; url: string /* presigned 1 h */;
   contentType: string; bytes: number; version: number | null; createdAt: string;
@@ -12045,13 +12055,20 @@ or `running` older than 6, is failed in one transaction (PJOB: `status = failed`
 "Making the video stopped. Tap Try again."`, a new `sessionId`, conditional on the `status`, `sessionId` and
 `heartbeatAt` read; STORY: `status = failed`, its steps into `stale`, conditional on `currentJobId`), then the old
 session is stopped (best effort). A refused condition means re-read and return what is stored. A failed start is
-`failed` with "Making the video did not start. Tap Try again." (conditional on `status = queued`).
+`failed` with "Making the video did not start. Tap Try again." (conditional on `status = queued`). **Tasks and chat
+turns are fenced the same way**: `TASK#` and assistant `MSG#` carry `sessionId` and `heartbeatAt` (set by the API at
+creation); the agent heartbeats every ≤ 30 s (the chat's text writes carry it) and every agent write is conditional
+on `sessionId` and `status IN (queued, running)` (tasks) or `(pending, streaming)` (messages); `settle` also fails a
+task `queued` > 3 min or `running` > 6 min ("The helper stopped. Tap Try again.") and a message `pending` > 3 min or
+`streaming` > 3 min without a heartbeat ("The answer stopped. Tap Try again."); Stop sets `stopped` and the next
+agent write is refused. A second message while the conversation's last answer is `pending` or `streaming` is `409`
+"Wait for the answer, or tap Stop.". The deploy drain also waits for running tasks and streaming messages.
 
 ### 45.10 The animation engine (one folder, two places)
 
 `web/src/stories/engine/`: TypeScript with only relative `./*.ts` imports inside the folder (no npm, DOM, network,
 `Date`, `performance`, `Math.random`; `Deno` only in `cli.ts`; a vitest scan holds this), so the **browser** draws it
-for live previews and the **agent** runs the very same files with Deno (already in the agent image) for the final
+for live previews and **Lamo Stories' agent** runs the very same files with Deno (from its PyPI wheel, in its own image) for the final
 frames. One source of truth for how a character moves; the preview and the video use the same draw lists.
 
 ```ts
@@ -12165,25 +12182,32 @@ captions switch, for safety stories the guidance topic's **shown** steps and don
 current script, the owner's note and the scene ids (only those scenes change; with no note, "write a new take of only
 these scenes: keep the cast, the story beat, the scene's place and length; make the action and staging different").
 The answer becomes a `StoryScript` (code adds `engine`, `fps`, `seed`, per-scene seeds and `cast` with looks), goes
-through `cli.ts normalize`, `validate` and `fit`; a failing answer is asked once more with the errors. It also writes
-the six post captions (`Captions`): YouTube title ≤ 100 chars, the others within §17.6's limits, the safety sources
-named in the descriptions.
+through `cli.ts normalize`, `validate` and `fit`; a failing answer is asked once more with the errors. Then, still in
+the `storyboard` step, a second call `task="captions"` (the storyboard agent) writes the six post captions
+(`Captions`) from the final script: YouTube title ≤ 100 chars, the others within §17.6's limits, the safety sources
+named in the descriptions. Review's **Write them again** is a `captions` AiTask whose draft is saved through
+StoryPatch.
 
 #### 45.11.3 Drawing, animating and sound (the built-in providers)
 
 * `scenes`: each scene's middle frame (`cli.ts scenes`) rasterized to `still-v{n}.jpg`.
 * `animation`: per scene, `cli.ts frames` streamed line by line → `stories/raster.py` (numpy; anti-aliased coverage
   per primitive, the semantics of `engine/README.md`) → raw RGB piped into ffmpeg (`libx264`, `yuv420p`, 30 fps,
-  CRF 20) → `scenes/{sceneId}/v{n}.mp4`. Scenes render 2 at a time.
+  CRF from `video.quality`: standard 23, high 20, best 17) → `scenes/{sceneId}/v{n}.mp4`. Scenes render
+  `production.scenesAtOnce` at a time.
 * `sound` (`stories/audio.py`): every effect and noise of `audioTrack` synthesized with numpy (no audio files, no
   network): effects from noise, sweeps and envelopes; noises as short formant "voices" in the character's pitch;
   music as a seeded loop per mood (chords, bass, light drums). Mixed at 48 kHz stereo, the music ducked under effects,
   then `loudnorm` two-pass to -14 LUFS, ≤ -1 dBTP (as clips) → `audio/v{n}.m4a`.
 * `captions`: `textTrack` → an ASS file (Inter, the platforms' safe area, bubble symbols at their positions, the
-  safety end card); `skipped` when `captionsOn` is false and there is no bubble or end card.
+  safety end card); `skipped` when `captionsOn` is false and there is no bubble or end card; burned in only when
+  `production.burnCaptions` is on (otherwise kept as a sidecar asset).
 * `assemble`: the scene files joined, the audio muxed, the ASS burned in (libass, as clips) → `final/v{n}.mp4`
   (`+faststart`) and `cover-v{n}.jpg`; `actualDurationSec` from ffprobe (≤ 89.5). Every file is an `ASSET#` (§45.12).
-* `preview`: the story goes to `review` (or `needs_check`), the job `ready` (or `needs_check`).
+* `preview`: the `quality_assurance` agent's **final review** (`task="final_review"`: the script and 8 frames sampled
+  from the final video, prepared by the picture helper of §45.33) adds any problems to `story.safety.problems`; then
+  the story goes to `review` (or `needs_check`), the job `ready` (or `needs_check`). Old versions beyond
+  `production.keepVersions` are deleted after a new version is made.
 
 Writing takes about 30–90 s, drawing and animating a few minutes for 45 s of video, sound and assembly under a
 minute (measured on the fixture and reported by builder E). There is no cost ceiling (as for clips, ADR-40), but a
@@ -12230,7 +12254,7 @@ while the us-east-1 bucket is off) to the runtime. Clip Factory's `config/models
 
 #### 45.11.6 Providers (who makes what)
 
-A registry, `agent/src/clipfactory_agent/stories/providers.py`, with four kinds and one Protocol each; the pipeline
+A registry, `stories/agent/src/lamostories_agent/providers.py`, with four kinds and one Protocol each; the pipeline
 calls only `REGISTRY[kind][config.providers[kind]]` (the writer: `storyModel`), so a new provider is one class and
 one registry line:
 
@@ -12272,11 +12296,12 @@ Library: that Library reads `CLIP#` items of `USER#{userId}` only.
 #### 45.13.1 What is shared and what is not
 
 * **The developer app, per platform, by the owner's choice** (§45.30): Lamo Stories' **own** app (keys in
-  `cf-prod/workspaces/{ws}/{platform}/app`), or, on purpose, Clip Factory's (`cf-prod/platforms/{platform}/app`, read
-  only: Lamo Stories never writes, rotates or deletes them). Either way the redirect URI is the one already registered
-  (`{oauthCallbackBase}/{platform}/callback`), so nothing of Clip Factory's setup changes. The client id used at connect is stored on the account (`appClientId`); when Lamo Clips' keys change
-  later (for example TikTok's Production keys replacing the Sandbox ones), the Lamo Stories account shows
-  `needs_reconnect` ("The {Platform} app keys changed in Lamo Clips. Connect again.") instead of failing on upload.
+  `cf-prod/workspaces/{ws}/{platform}/app`; always for Facebook and Instagram), or, on purpose and only for YouTube,
+  TikTok and X, Clip Factory's (`cf-prod/platforms/{platform}/app`, read only: Lamo Stories never writes, rotates or
+  deletes them). Nothing of Clip Factory's registered apps or setup changes. The client id used at connect is stored on the account (`appClientId`); when the chosen app's keys change
+  later (for example TikTok's Production keys replacing the Sandbox ones in Clip Factory, or new own keys), the Lamo
+  Stories account shows `needs_reconnect` ("The {Platform} app keys changed. Connect again.") instead of failing on
+  upload.
 * **Separate:** every user token. Lamo Stories tokens live only at `cf-prod/workspaces/{workspaceId}/{platform}/token`
   (and `…/pending` for Meta's list of Pages, 30 minutes), JSON in Secrets Manager (encrypted with the account's
   Secrets Manager key), created by `workspaces/secrets.py` with tags `app=cf-prod`, `workspace={workspaceId}`,
@@ -12293,47 +12318,49 @@ Library: that Library reads `CLIP#` items of `USER#{userId}` only.
 `POST …/social/{platform}/connect` makes a **workspace state**, `w1.{workspaceId}.{nonce}.{exp}.{sig}` with `sig =
 b64url(HMAC_SHA256(stateKey, "w1|" + platform + "|" + workspaceId + "|" + nonce + "|" + exp))` (the same key and
 10 minutes as §17.4; well under the 200-character state limit; PKCE derives from the nonce as today), and the state
-item `OAUTH#{nonce}`/`STATE` with `workspaceId` and `socialAccountId` added. Today's `v1.` format and `state.verify`
-are unchanged and reject `w1.` states. It returns the platform's authorize URL, built in `workspaces/social.py` from
-the same app keys and redirect URI as Lamo Clips (a test compares it with `providers` except for the parameters
-below; `providers.py` is not changed), plus:
+item `OAUTH#ws.{nonce}`/`STATE` (its own key prefix, so Lamo Stories' roles never reach Clip Factory's `OAUTH#{nonce}`
+items) with `userId`, `workspaceId`, `socialAccountId`, `appChoice` and `redirectUri`. Today's `v1.` format and
+`state.verify` are unchanged and reject `w1.` states. It returns the platform's authorize URL, built in
+`workspaces/social.py` from the keys `app_keys` picks and the redirect URI of that choice (a test compares it with
+`providers` except for the parameters below; `providers.py` is not changed), plus:
 * youtube: `prompt=select_account consent` (Google always shows its account and channel picker, Brand Accounts
   included);
 * tiktok: `disable_auto_auth=1` (as today: TikTok always shows its consent page, for the account signed in on
   tiktok.com); the page says first "Sign in to your Lamo Stories account on tiktok.com in this browser. TikTok
   connects the account that is signed in.";
-* instagram, facebook: the same Login configuration; the page says before the tap "Facebook will ask which Pages
-  Clip Factory may use. Keep your Lamo Clips Page ticked and also tick the Lamo Stories Page." (§45.13.5);
+* instagram, facebook: Lamo Stories' own Meta app and its Login configuration; the page says before the tap "Facebook
+  will ask which Pages this app may use. Tick only your Lamo Stories Page.";
 * x: as today; the page says "First sign in to your Lamo Stories account on x.com in this browser. X connects the
   account that is signed in."
 
-#### 45.13.3 The callback (the same `GET /oauth/{platform}/callback`)
+#### 45.13.3 The callback: Clip Factory's callback only forwards; Lamo Stories' own Lambda does the rest
 
-The landing page is decided from the state's prefix before anything is verified: in `hooks.py`'s `_oauth_callback`
-(before its `try`, so its `except` also lands right) and `oauth/callback.py`:
-* A `v1.` state goes through today's code unchanged; if its consumed item carries `workspaceId` it is refused
-  (nothing written, landing `/stories/connections?platform={p}&result=error`).
-* A `w1.` state always lands on `{APP_URL}/stories/connections?platform={p}&result={code}`, whatever happens (a bad
-  signature, expired, already used, an exception, a missing or different `workspaceId` on the item), with `&ws={id}`
-  added only after its signature checks out. Codes come from a fixed `WS_RESULTS` list (§17.5's codes plus
-  `same_as_clips` and `clips_meta_check`); nothing else from the request is reflected.
+* **Lamo Stories' own callback route** on `cf-prod-stories-api`: public `GET /v1/stories-oauth/{platform}/callback`
+  (authorization NONE, its own low route throttle), `storiesCallbackBase` = `{apiUrl}/v1/stories-oauth`. Own developer
+  apps register this URI. It checks the `w1.` HMAC (constant time) and expiry before anything else, consumes the state
+  item `OAUTH#ws.{nonce}` once, and exchanges the code with the `redirectUri` stored on the state (the authorize
+  request's own).
+* **Clip Factory's callback** (`cf-prod-hooks`, `GET /oauth/{platform}/callback`, the URI registered with Clip
+  Factory's apps) gains only a prefix check, before its `try`: a state starting `w1.` is answered `302` to the fixed
+  `{STORIES_OAUTH_CALLBACK}/{platform}/callback` with the query passed byte for byte (`Cache-Control: no-store`,
+  `Referrer-Policy: no-referrer`; the target comes from configuration, never from the request); every other state runs
+  today's code unchanged, including refusing a consumed `v1.` item that carries `workspaceId`. Hooks gains no workspace
+  code, no Lamo Stories secret access and no new IAM.
+* Every outcome lands on `{APP_URL}/stories/connections?platform={p}&result={code}` (`&ws={id}` only after the
+  signature checks out), codes from a fixed `WS_RESULTS` list (§17.5's codes plus `same_as_clips`); nothing else from
+  the request is reflected; an unreadable or expired state lands there too ("That took too long. Tap Connect again.").
 The workspace path (`workspaces/social_callback.py`, wrapped whole in try/except → `error`):
-1. exchanges the code with `providers.exchange` (the same code as Lamo Clips, read-only use);
+1. exchanges the code with `providers.exchange` (the same code as Clip Factory, read-only use) and the keys `app_keys`
+   picks;
 2. finds the identity: **YouTube** is one channel per token (`channels?part=id,snippet&mine=true`: none →
    `no_channel`; one → that channel; more than one → `error`, nothing written: there is no way to post to another);
    **Meta** lists Pages (with their Instagram accounts) → `choose_account` when there are several, each choice marked
-   `usedByClips` when it is Lamo Clips' destination; **TikTok** and **X** the one signed-in user;
+   `usedByClips` when it is Clip Factory's destination; **TikTok** and **X** the one signed-in user;
 3. writes the token to the workspace secret, then `SOCIAL#{platform}`: `connected` with `externalAccountId`,
-   `accountName`, `handle`, `avatarUrl`, `appClientId`, clearing `sharedWithClips`; or `choose_account`; or
-   `same_as_clips` when the identity is Lamo Clips' own (compared with `ACCOUNT#{platform}.accountId`, read-only);
-4. after a Meta connect, a read-only check that Lamo Clips' Meta connection still answers: Lamo Clips' `ACCOUNT#` and
-   token are read (no refresh, no write), `GET /{igUserId|pageId}?fields=id` with `appsecret_proof` must answer 200
-   with the same id; anything else sets the result `clips_meta_check` and the account's `warning` "Lamo Clips may have
-   lost {Instagram|Facebook}. Connect it again in Lamo Clips, keeping its Page ticked." (it never changes Lamo Clips'
-   items).
-It never writes `ACCOUNT#`, `SETUP#` or any `cf-prod/platforms/*` secret, and never releases Lamo Clips posts. An
-expired state whose item cannot be read at all still lands on `/stories/connections` (the `w1.` prefix says so), and
-the Connections page shows "That took too long. Tap Connect again.".
+   `accountName`, `handle`, `avatarUrl`, `appClientId`, `lastCheckedAt`, clearing `sharedWithClips`; or
+   `choose_account`; or `same_as_clips` when the identity is Clip Factory's own (compared with
+   `ACCOUNT#{platform}.accountId`, read-only).
+It never writes `ACCOUNT#`, `SETUP#` or any `cf-prod/platforms/*` secret, and never releases Clip Factory posts.
 
 #### 45.13.4 Same place as Lamo Clips: only on purpose
 
@@ -12350,10 +12377,9 @@ current identity (§45.14).
   channel: the one picked in Google's picker. Lamo Stories shows its name and id after connecting; **Pick another
   channel** connects again ("Google will ask which channel. Pick your Lamo Stories channel."). Both channels share the
   same Google project's daily units (about 6 uploads a day in all, counted together, §45.14).
-* **Instagram:** a separate professional (Business or Creator) account, linked to a Facebook Page. Meta asks which
-  Pages and accounts the app may use **for your whole Facebook login**: unticking Lamo Clips' Page there would cut
-  Lamo Clips off, so Lamo Stories checks Lamo Clips afterwards (§45.13.3) and warns.
-* **Facebook:** a separate Page managed by the same Facebook login; the same note on ticking both Pages.
+* **Instagram:** a separate professional (Business or Creator) account, linked to a Facebook Page, through Lamo
+  Stories' own Meta app (§45.30), so Clip Factory's Meta grant is never touched. Tick only the Lamo Stories Page.
+* **Facebook:** a separate Page managed by the same Facebook login, through the same own Meta app.
 * **TikTok:** while the TikTok app is in Sandbox (review pending since 2026-11-21) only accounts added as Sandbox
   target users can connect, and until TikTok approves the app the account must be **private** and posts stay "Only
   me" (as for Lamo Clips, §17). So the Lamo Stories account has to be a Sandbox target user and private. When the
@@ -12456,25 +12482,29 @@ own code, never `routes/setup.py`'s.
   14-day expiry) and its grants.
 * **`infra/modules/stories_api`** (new): Lambda `cf-prod-stories-api` (the same zip, handler
   `clipfactory_api.workspaces.http.handler`, Python 3.13 arm64, 1024 MB, 29 s), its log group, alarms, and its role:
-  DynamoDB with `LeadingKeys` `USER#*#WS#*`, `USER#*#WSREG`, `OAUTH#*` (writes and reads) plus GetItem on `USER#*`
-  (Clip Factory's `ACCOUNT#` for "same as Clip Factory"; read only); S3 on `ws/*`; Secrets Create, Put, Get, Describe,
-  Delete, Tag on `cf-prod/workspaces/*`, Get on the five `cf-prod/platforms/{p}/app*` and the OAuth state key;
+  DynamoDB with `LeadingKeys` `USER#*#WS#*`, `USER#*#WSREG`, `OAUTH#ws.*` (writes and reads); and one read-only
+  statement for Clip Factory's `ACCOUNT#` items: GetItem on `USER#*` with `ForAllValues:StringEquals
+  dynamodb:Attributes = [pk, sk, platform, status, accountId]` and `dynamodb:ReturnValues = NONE` (only what "same as
+  Clip Factory" compares); S3 on `ws/*`; Secrets Create, Put, Get, Describe, Delete, Tag on `cf-prod/workspaces/*`, Get
+  on `cf-prod/platforms/{youtube,tiktok,x}/app*` (the shared-app choice; never Meta's) and the OAuth state key;
   `bedrock-agentcore:InvokeAgentRuntime` and `StopRuntimeSession` on `cf_prod_story_agent` only;
   `lambda:InvokeFunction` on the story-flow alias. Env `TABLE_NAME`, `MEDIA_BUCKET`, `STORIES_AGENT_RUNTIME_ARN`,
   `STORY_FLOW_ARN`, `WS_SECRET_PREFIX`, `SECRET_PREFIX`, `OAUTH_STATE_SECRET`, `HOOKS_URL`, `APP_URL`, `VERSION`. In
   `infra/modules/api`: routes `ANY /v1/workspaces` and `ANY /v1/workspaces/{proxy+}` with the same JWT authorizer,
-  and public `OPTIONS /v1/workspaces` and `OPTIONS /v1/workspaces/{proxy+}` (the more specific paths would otherwise
+  public `GET /v1/stories-oauth/{platform}/callback` (§45.13.3, route throttle 5 per second, burst 10), and public
+  `OPTIONS /v1/workspaces` and `OPTIONS /v1/workspaces/{proxy+}` (the more specific paths would otherwise
   catch the browser's token-less preflight, the §5 CORS lesson), all integrated with `cf-prod-stories-api`; every
   other path still reaches `cf-prod-api`; the permission for API Gateway to invoke it; the deploy's smoke job also
   checks a preflight on `/v1/workspaces`. `cf-prod-api`'s function, role and environment
   are not touched.
-* `infra/modules/flows`: `story-flow` exactly as built (durable, alias `live`, 1024 MB, 900 s, execution timeout 9
-  days, its own role: DynamoDB writes limited to `USER#*#WS#*` and `RATE#*`, reads on `USER#*` and `RATE#*`, S3 Get
-  on `ws/*`, Secrets Get on `cf-prod/workspaces/*` and the five app keys, Put on `cf-prod/workspaces/*/token*`, no
-  Bedrock).
-* `infra/modules/hooks`: Secrets on `cf-prod/workspaces/*/token*` Create, Put, Get, Describe, Tag, and on
-  `cf-prod/workspaces/*/pending*` the same plus Delete, Get on `cf-prod/workspaces/*/app*` (a Lamo Stories own-app
-  callback); env `WS_SECRET_PREFIX`. Its DynamoDB `USER#*` grants already cover the workspace keys (asserted).
+* `infra/modules/flows`: `story-flow` (durable, alias `live`, 1024 MB, 900 s, execution timeout 9 days, its own role:
+  DynamoDB writes limited to `USER#*#WS#*` and `RATE#*`, reads on `USER#*#WS#*`, `USER#*#WSREG` and `RATE#*`, plus the
+  same attribute-limited GetItem on `USER#*` as the API (ACCOUNT#'s `pk, sk, platform, status, accountId`); S3 Get on
+  `ws/*`; Secrets Get on `cf-prod/workspaces/*` and `cf-prod/platforms/{youtube,tiktok,x}/app*`, Put on
+  `cf-prod/workspaces/*/token*`; no Bedrock). `RATE#{platform}` (Clip Factory's shared counters) is written only for
+  the shared-app choice, on purpose (§45.14).
+* `infra/modules/hooks`: one env var, `STORIES_OAUTH_CALLBACK` (Lamo Stories' callback base), and nothing else: no new
+  IAM, no workspace secrets (the `w1.` forward of §45.13.3). The first round's hooks IAM additions are removed.
 * Not changed: `infra/modules/agent` (Clip Factory's runtime, role, image), `infra/modules/api`'s Lambda and role.
 * `scripts/wait-for-jobs.sh`: also counts `PJOB#` items when `module.stories_agent.` changes. `deploy.yml`: a second
   image tag `stories-agent-` + 16 characters of `hashFiles('stories/**', 'web/src/stories/engine/**')`, passed as
@@ -12482,8 +12512,16 @@ own code, never `routes/setup.py`'s.
 * The Terraform tests that list exact sets gain the new members and new asserts, written as glob matches against
   sample ARNs: no Lamo Stories role matches `…:secret:cf-prod/platforms/youtube/token-AbC123` or `…/pending-AbC123`;
   no Clip Factory role matches `…:secret:cf-prod/workspaces/stories/youtube/token-AbC123`; the Lamo Stories roles
-  write DynamoDB only under their leading keys and touch S3 only under `ws/`. Every Lamo Stories deploy's plan is read
-  for changes to `module.agent.` and to `cf-prod-api`'s function and role: there must be none.
+  write DynamoDB only under their leading keys and touch S3 only under `ws/`.
+* **A scripted plan check** after `check-plan-deletes.sh` (`scripts/check-plan-clips-unchanged.sh`, jq over
+  `plan.json`): nothing under `module.agent.` changes unless Clip Factory's agent tag changed; `cf-prod-api`'s role
+  and policy are no-op; the function may change only in `source_code_hash`, `last_modified`, `version`,
+  `qualified_arn`, `qualified_invoke_arn` and `environment.variables.VERSION` (the shared zip and the release sha, as
+  on every deploy today), never its handler, runtime, memory, timeout, role or other environment keys; every existing
+  route and integration of the HTTP API is no-op. Its test feeds it sample plans.
+* The deploy's smoke job also sends a preflight to `/v1/workspaces/stories/dashboard` and checks the CORS answer.
+* The runtime's log group follows the clip runtime's pattern (`terraform_data` that creates it if missing, then sets
+  30 days), tagged `stories_agent`.
 
 ### 45.16 Web
 
@@ -12501,7 +12539,11 @@ second request names it), shown only when `storiesEnabled()`; one click switches
   Stories the same switcher sits in its own navigation.
 * Lamo Stories lives under `/stories/…`; everything else is Lamo Clips, rendered by today's `Shell` unchanged.
   Switching to Lamo Stories goes to the last Lamo Stories page (else `/stories`); switching back goes to the last
-  Lamo Clips page (else `/`), so Lamo Clips comes back exactly as it was left.
+  Clip Factory page (else `/`) at its scroll position (kept in sessionStorage), with Ask's open conversation, its
+  answer still streaming in, and the panel open or closed as it was: Ask's conversation state moves into an
+  `AskMemoryProvider` mounted once above the Clip Factory / Lamo Stories branch (its look and behaviour unchanged;
+  sign-out still forgets it and revokes its object URLs). Not kept across a switch: unsaved form drafts and open
+  sheets on the Clip Factory page (they are not kept across any page change today either).
 * The choice persists on the device (`localStorage` `cf.workspace`: `{ workspaceId, lastStoriesWorkspaceId,
   lastClipsPath, lastStoriesPath, lastConversationId, lastProject }`; Lamo Stories' own device preferences in
   `cf.stories.prefs`, never in Clip Factory's `cf.prefs`) and the URL carries it: a reload of a `/stories` page stays in Lamo Stories;
@@ -12605,14 +12647,15 @@ every screen runs under `npm run dev:mock` and in Playwright.
 |---|---|---|---|
 | `api/.../routes/__init__.py`, `api/tests/test_http.py` | **none** (Lamo Stories' routes live in their own Lambda; the Phase 1 scaffold's edits are reverted) | – | both byte-identical to main |
 | `api/.../routes/help.py` | `"stories"` in `PAGES` (the web router has a `stories` route name; Ask is never shown there) | Phase 1 | `test_help_pages.py` |
-| `api/.../oauth/callback.py` | the prefix routing of §45.13.3 (`v1.` unchanged, `w1.` to the workspace path), `WS_RESULTS`, `landing()` | B | `test_oauth_callback.py` unchanged; every old case replayed writes the same items, secrets and redirect |
-| `api/.../hooks.py` | `_oauth_callback` picks the landing from the state's prefix before its `try`; optional workspace secrets dep | B | `test_hooks.py` unchanged |
+| `api/.../oauth/callback.py` | refuses a consumed `v1.` item that carries `workspaceId` (writes nothing) | B | `test_oauth_callback.py` unchanged; every old case replayed writes the same items, secrets and redirect |
+| `api/.../hooks.py` | `_oauth_callback`: a `w1.` state is forwarded (`302` to `STORIES_OAUTH_CALLBACK`, query byte for byte) before its `try`; nothing else | B | `test_hooks.py` unchanged |
+| `web/src/features/help/*` (Ask) | its conversation state moves into an `AskMemoryProvider` mounted above the Clip Factory / Lamo Stories branch; look and behaviour unchanged | F | the Ask and help e2e and unit tests unchanged; a new e2e: ask, switch to Lamo Stories while it streams, switch back, the answer is there |
 | `api/scripts/build_lambda.py` | the story-flow and stories-API handlers in `HANDLERS`; `stories/config/` and `stories/skills/` into the zip | Phase 1, A | its build test |
-| `infra/modules/api` | the four `/v1/workspaces` routes and their permission only | C | `api.tftest.hcl`; the plan shows no change to `cf-prod-api` |
+| `infra/modules/api` | the `/v1/workspaces` routes, the public Lamo Stories callback route, their integration and permission only | C | `api.tftest.hcl`; the deploy's scripted plan check (§45.15) |
 | `infra/modules/hooks`, `infra/modules/flows`, `infra/envs/prod` | §45.15 | C | `terraform test`; the deploy's Plan and Delete gate lines |
-| `.github/workflows/deploy.yml`, `ci.yml`, `scripts/wait-for-jobs.sh` | the Lamo Stories agent image tag and push; a `stories-agent` CI job (lint, types, tests, image build); the `PJOB#` drain | C (deploy, drain), E (ci job) | `scripts/test-deploy-workflow.sh`, the drain's test; Clip Factory's agent tag and its CI job unchanged |
+| `.github/workflows/deploy.yml`, `ci.yml`, `scripts/wait-for-jobs.sh` | the Lamo Stories agent image tag and push, the scripted plan check, a deeper preflight in the smoke job; a `stories-agent` CI job (lint, types, tests, image build) and a web bundle check; the drain for `PJOB#`, running `TASK#` and streaming `MSG#` | C (deploy, drain), E (stories-agent job), F (bundle check) | `scripts/test-deploy-workflow.sh`, the drain's test; Clip Factory's agent tag and its CI job unchanged |
 | `web/src/lib/router.ts` | one route name `stories` (page from `web/src/stories/routes.ts`) for `/stories…`, only when `storiesEnabled()` | Phase 1, then F | every old path parses to the same route |
-| `web/src/app/App.tsx` | the lazy `StoriesApp` for the `stories` route; its TITLES entry | Phase 1, then F | every old route renders the same `Shell`; Clip Factory's bundle has no Lamo Stories code |
+| `web/src/app/App.tsx` | the lazy `StoriesApp` for the `stories` route; its TITLES entry; the `AskMemoryProvider` mount | Phase 1, then F | every old route renders the same `Shell`; the main chunk gains only `flag.ts`, `routes.ts` and the lazy stub, no `.stories-app` or `--st-` rule in the main CSS, no StoriesApp or engine code in the main JS (a CI grep over `web/dist`) |
 | `web/src/components/Nav.tsx` | the switcher in the sidebar foot and the phone top bar (hidden while off) | F | the nav specs unchanged; the before/after pixel check (§45.19) |
 | `web/src/styles/glide.css` | the switcher's container in the Glide list | F | – |
 | `web/areas.json` | Lamo Stories folders → "Behind the scenes" (Phase 1), "Lamo Stories" by the switch PR | Phase 1 | `update.test.ts` |
@@ -12657,11 +12700,12 @@ nothing is renamed, the table, user pool, buckets, vectors and secrets are untou
   `/stories/connections` when expired, replayed, failing or missing their workspace, a `v1.` state with a workspace
   item writes nothing, and every old case is byte-identical; a YouTube token with two channels writes nothing; the X
   post cap is shared; `leaked()` over every new route; ideas and the writer carry the skills block.
-* **agent**: the story pipeline with a fake Bedrock on `web/src/stories/engine/fixtures/sample-script.json` and the
+* **stories agent** (`stories/agent/tests`): the story pipeline with a fake Bedrock on `web/src/stories/engine/fixtures/sample-script.json` and the
   real engine CLI (Deno) and ffmpeg, asserting only contract invariants (validate ok, frame lines = `frameCount`,
   every primitive matches §45.10, the MP4's length and frame count); the rasterizer against committed draw-list
-  fixtures (`agent/tests/fixtures/stories/prims-*.jsonl`) and golden PNGs within a small tolerance; the audio synth's
-  lengths, levels and determinism; `server.py`'s old tests unchanged plus the new actions; the safety step's outcomes
+  fixtures (`stories/agent/tests/fixtures/prims-*.jsonl`) and golden PNGs within a small tolerance; the audio synth's
+  lengths, levels and determinism; the `stories/agent` server's action table and its tests (Clip Factory's `agent/`
+  tests run unchanged and byte-identical to main); the safety step's outcomes
   (ok, rewritten ok, `needs_check`, an owner's text never rewritten) and the no-topic block; fake providers registered
   for animation and audio are the only ones called; the fence (a superseded session writes nothing).
 * **web**: vitest for the engine (determinism, validation, every catalog id draws, `normalizeScript`, `fitDuration`
@@ -12732,16 +12776,16 @@ continuing from its own branch where it has one (the first round's work stays):
 
 | Builder | Branch | Owns |
 |---|---|---|
-| A api core | `feat/stories-api-core` | the core routes and their modules (workspaces, dashboard, ideas (now tasks), characters (+ design task), stories, library, providers, guidance, tasks), `workspaces/agent.py` (Lamo Stories' runtime only), `workspaces/jobs.py`, `tests/ws_routes_core.py`, `tests/ws_support.py`, its tests, the guidance and skills copy in `build_lambda.py` |
+| A api core | `feat/stories-api-core` | **removes** the first round's model path (`learn.converse_text`, the skills block, `help.model`/`app.help` use, `FakeModel`/`HelpDeps` in `tests/ws_support.py`, the skills-block idea tests); moves its routes to `workspaces/routes/core.py`; then the core routes and their modules (workspaces, dashboard, ideas (now tasks), characters (+ design task), stories, library, providers, guidance, tasks), `workspaces/agent.py` (Lamo Stories' runtime only), `workspaces/jobs.py`, `tests/ws_routes_core.py`, `tests/ws_support.py`, its tests, the guidance and skills copy in `build_lambda.py` |
 | A2 api AI | `feat/stories-api-ai` | `routes/workspaces/ai.py` and its modules (AI configuration, models and prices, agents, skills, chat, memory, references, onboarding, usage, provider keys, storage), `tests/ws_routes_ai.py`, its tests |
-| B social and publishing | `feat/stories-social` | as before, plus the developer-app choice and own keys (§45.30), own rate counters and X limit, `lastCheckedAt`, Reconnect, AI-label wrappers (§45.14) |
+| B social and publishing | `feat/stories-social` | moves its routes to `workspaces/routes/social.py`; **removes** its first-round workspace path from `oauth/callback.py` and `hooks.py` (only the forward and the `v1.` refusal stay) and the hooks IAM it needed; adds the Lamo Stories callback route; as before otherwise, plus `workspaces/apps.py`, the developer-app choice and own keys (§45.30), own rate counters and X limit, `lastCheckedAt`, Reconnect, AI-label wrappers (§45.14) |
 | C infra | `infra/stories` | §45.15: the new `stories_agent` and `stories_api` modules, the API routes, the story flow, hooks, `deploy.yml`'s Lamo Stories tag, the drain, their tests; **removes** the first round's changes to `infra/modules/agent`, `infra/modules/api`'s role and environment, and `config/models.json` |
 | D engine | `feat/stories-engine` | `web/src/stories/engine/` (not `types.ts`), `web/src/stories/preview/`, its tests |
-| E agent core | `feat/stories-agent` | `stories/agent/` (the runtime: server, runner, fencing, `models.py` (model and effort resolution, the Bedrock client, refusals, usage), agents and skills plumbing, the production pipeline moved here from the first round's `agent/src/clipfactory_agent/stories/`, rasterizer, audio, assembly, providers incl. Nova Canvas and Nova Reel), its `Dockerfile`, the `stories-agent` CI job, `stories/agent/tests`; **removes** the first round's changes to `agent/**` |
-| E2 agent creative | `feat/stories-agent-creative` | `stories/agent/src/lamostories_agent/{chat,memory,reference,tasks}/` (the chat turn and its tools, memory, reference analysis, idea, expand, variations, character design and check-models tasks), their tests |
-| F web shell | `feat/stories-web-shell` | as before, plus the onboarding (`/stories/setup`), the Social accounts page details, the mock's `onboarding.ts` |
+| E agent core | `feat/stories-agent` | **resets** `agent/**`, `.github/workflows/deploy.yml`'s agent tag line, the agent job's ffmpeg step in `ci.yml` and its check in `scripts/test-deploy-workflow.sh` to main (`git checkout origin/main -- agent …`) before adding the `stories-agent` job; then `stories/agent/` (the runtime: server, runner, fencing, `models.py` (model and effort resolution, the Bedrock client, refusals, usage), agents and skills plumbing, the production pipeline moved here from the first round's `agent/src/clipfactory_agent/stories/`, rasterizer, audio, assembly, providers incl. Nova Canvas and Nova Reel), its `Dockerfile`, the `stories-agent` CI job, `stories/agent/tests`; **removes** the first round's changes to `agent/**` |
+| E2 agent creative | `feat/stories-agent-creative` | `stories/agent/src/lamostories_agent/{chat,memory,reference,tasks}/` (each with a `register(actions, runner)` the scaffold's `build_app` already calls: the chat turn and its tools, memory, reference analysis, idea, expand, variations, captions-again, character design and check-models tasks), their tests |
+| F web shell | `feat/stories-web-shell` | **removes** its first-round `screens/Settings.tsx` body (the placeholder stays for F2), `storyModel` and every import of Clip Factory's `web/src/lib/models.ts`; the `AskMemoryProvider` (§45.16.1) and its tests; the CI bundle check; as before otherwise, plus the onboarding (`/stories/setup`), the Social accounts page details, the mock's `onboarding.ts` |
 | F2 web settings | `feat/stories-web-settings` | `web/src/stories/settings/` (AI, Agents, Skills, Memory, Video, Storage and production), the Settings screen, the mock's `ai.ts`, `skills.ts`, `memory.ts`, its tests |
-| G web studio | `feat/stories-web-studio` | as before, plus ideas and character design as tasks (the mock's `getTask`, `designCharacter`), references in Production (picked from H's list), per-video model and effort override |
+| G web studio | `feat/stories-web-studio` | **removes** `CLIP_MODELS`, `storyModel` and `DEFAULT_CLIP_MODEL` uses; as before otherwise, plus ideas and character design as tasks (the mock's `getTask`, `designCharacter`), references in Production (picked from H's list), per-video model and effort override |
 | H web chat | `feat/stories-web-chat` | `web/src/stories/chat/` and `screens/Chat.tsx`, `screens/References.tsx` (upload, analyze, the analysis), the mock's `chat.ts` and `references.ts`, its tests |
 
 `web/src/stories/api/types.ts`, `web/src/stories/engine/types.ts`, `api/.../workspaces/types.py` and the
@@ -12771,7 +12815,7 @@ E before E2's final rebase; F before G, F2 and H; A before A2. Then one check of
 |---|---|---|---|
 | 1 | Clip Factory opens and works as before | every old test; the pixel check | sign in on the live app and open `/`, `/jobs`, `/review`, `/library`, `/money`, `/settings` |
 | 2 | Existing jobs and uploaded videos stay reachable | the isolation tests | `GET /v1/jobs`, `/v1/clips`, `/v1/posts` saved before the first Lamo Stories deploy and after (ids and statuses only) are equal; one old job opens and one clip plays |
-| 3 | Clipping is unaffected | the agent's old tests; the image build | one real clip job on the new agent image |
+| 3 | Clipping is unaffected | Clip Factory's agent tests unchanged; Clip Factory's `agent-` image tag computed on every Lamo Stories branch equals main's | the deploy summary shows the same `agent-…` tag; one real clip job afterwards |
 | 4 | Publishing destinations unchanged | the callback and Disconnect tests | `GET /v1/accounts` (platform, account id, name, status) before and after, and after each Meta connect |
 | 5 | Workspace switching works | the switcher e2e | switch both ways, reload, open the Mac app |
 | 6 | Its own interface | the shell e2e | the screens |
@@ -12817,18 +12861,19 @@ integrations, accounts, credentials, data and settings, byte for byte. Lamo Stor
 **What is shared, and why** (the owner allows shared infrastructure "where appropriate" with "strict authorization and
 data boundaries"): the app shell and the one sign-in (Cognito); the AWS account, the HTTP API (a separate route and
 Lambda), the DynamoDB table (separate partitions and leading-key IAM), the media bucket (a separate prefix) and Secrets
-Manager (a separate name prefix); the REST callback Lambda `cf-prod-hooks`, because each platform allows only its
-registered redirect URI (the `w1.` state keeps the paths apart, §45.13.3); the platform publisher library code (read-
-only, called with Lamo Stories' own credentials); and, only when the owner picks it per platform, Clip Factory's
-developer app (§45.30). Nothing of Lamo Stories runs inside a Clip Factory Lambda or runtime, and no Lamo Stories
+Manager (a separate name prefix); Clip Factory's OAuth callback only to **forward** a `w1.` state to Lamo Stories'
+own callback (Clip Factory's registered apps are not edited, so their redirect URI stays the hooks one; §45.13.3);
+the platform publisher library code (read-only, called with Lamo Stories' own credentials); and, only when the owner
+picks it for YouTube, TikTok or X, Clip Factory's developer app (§45.30). Nothing of Lamo Stories runs inside a Clip Factory Lambda or runtime, and no Lamo Stories
 setting is read by Clip Factory code.
 
 **The boundaries, in IAM** (§45.15): `cf-prod-stories-api` and the `cf_prod_story_agent` role can write DynamoDB
-only under `USER#*#WS#*` and `USER#*#WSREG` (and the API also `OAUTH#*`, for connect states), read Clip Factory's
-`ACCOUNT#` items and the five app-key secrets only (for "same as Clip Factory" and the shared-app choice; the agent
-needs neither), touch S3 only under `ws/`, and read or write only `cf-prod/workspaces/*` secrets; neither can read a
-Clip Factory token. Clip Factory's roles gain nothing (the one
-exception: `cf-prod-hooks`, which must write a Lamo Stories token when a Lamo Stories connect returns).
+only under `USER#*#WS#*` and `USER#*#WSREG` (and the API also `OAUTH#ws.*`, its own connect states); the API and the
+story flow may read only five attributes of Clip Factory's `ACCOUNT#` items (an attribute-limited GetItem: IAM limits
+partitions, not sort keys, so the code and this attribute list are what keep them to `ACCOUNT#`); they read Clip
+Factory's app keys only for YouTube, TikTok and X (the shared-app choice); the agent reads none of these; S3 only
+under `ws/`; secrets only `cf-prod/workspaces/*`; none can read a Clip Factory token. Clip Factory's roles gain
+nothing.
 
 ### 45.25 AI models and reasoning effort (owner-controlled)
 
@@ -12842,26 +12887,40 @@ exception: `cf-prod-hooks`, which must write a Lamo Stories token when a Lamo St
   `null` when not known). A new model or provider is one entry (plus its IAM grant from the same file) and, for a new
   provider, one client class in the agent (§45.25 "Calls"). Terraform builds the agent's `bedrock:InvokeModel` grants
   from this file.
-* **Availability.** `ModelInfo.status`: `ok` (a real call answered; `checkedAt`), `not_checked`, `denied` (Bedrock
-  said the account has no access, with its sentence), `not_found` (the model or profile does not exist in the Region),
-  `error`. **Check models** (Settings › AI) runs one tiny real call per model through the agent and stores
-  `MODELSTATUS#{key}`. Nothing is shown as available because it is listed.
+* **Availability.** `ModelInfo.status` records what happened, it never blocks a call: every call's outcome updates
+  `MODELSTATUS#{key}` (`ok` on any answer, `denied` / `not_found` on the matching Bedrock refusal, `error` otherwise,
+  with the plain line and `checkedAt`); `not_checked` until the first call. **Check models** (Settings › AI) makes one
+  tiny real call per model through the agent. The status is shown next to every model in the pickers and above the
+  chat box, so the owner sees it before sending. Nothing is shown as available because it is listed.
 * **Effort.** `Effort = "low" | "medium" | "high" | "xhigh" | "max"`; each model shows only the levels in its
-  `efforts`. The agent sends it as `output_config.effort` on the Messages API body (Bedrock InvokeModel, or the
-  Mantle client where the model is offered there); thinking stays adaptive (these models reject a thinking budget).
-  A model whose entry has no `efforts` runs without it, and the UI and the job say "This model has no effort setting;
-  it runs at its own level." (`effortApplied: false`). Never "applied" when it was not sent.
-* **Configuration levels** (all stored in the workspace configuration, §45.6 `StoriesAiConfig`; precedence from
-  strongest): (1) a per-request override (chat message, Production › New, "Make it a full idea"); (2) the task's
-  override (`tasks[kind]`); (3) the agent's own `model` / `effort`; (4) the workspace default (`defaultModel`,
-  `defaultEffort`). An effort the chosen model does not accept is refused when saved ("Claude Haiku 5.5 does not offer
-  max. Pick another level.").
+  `efforts`. **The transport is Bedrock Converse** (`bedrock-runtime` `converse`, and `converse_stream` for the chat),
+  on each model's `profile`: the effort is sent as `additionalModelRequestFields = {"output_config": {"effort":
+  e}}` and left out when the model's `efforts` is empty (then `effortApplied: false`: "This model has no effort
+  setting; it runs at its own level."); thinking stays adaptive (these models reject a thinking budget; it is never
+  sent); a schema answer uses Converse's `outputConfig.textFormat` (JSON schema) or a tool with automatic tool choice
+  (forced tool choice is refused by these models); usage comes from Converse's `usage` (input, output,
+  `cacheReadInputTokens`, `cacheWriteInputTokens`). Converse is authorized by `bedrock:InvokeModel`, ConverseStream by
+  `bedrock:InvokeModelWithResponseStream`. A test records the request and checks the effort field is there exactly
+  when the model offers it. An effort the model does not offer is **refused, never swapped**: when saved ("Claude
+  Haiku 5.5 does not offer Maximum. Pick another level.") and, should one reach a call (for example after the model
+  was changed), the call stops with the same sentence.
+* **Configuration levels** (precedence from strongest; model and effort are merged **separately**, so a level that
+  sets only the effort takes the model from the levels below): (1) a per-request override (a chat message, "Make it a
+  full idea", Analyze, a remake; carried on the stored item: `PJOB#.configuration.override`, `TASK#.override`, the
+  pending assistant `MSG#.requested`; never saved as a setting); (2) the **conversation's** setting (chat turns) or
+  the **project's** (`Story.ai`, `ReferenceVideo.ai`: kept with the video or reference, for its jobs); (3) the task's
+  (`tasks[kind]`); (4) the agent's own `model` / `effort`; (5) the workspace default (`defaultModel`,
+  `defaultEffort`). The AI configuration is the item `AICONFIG` (§45.3); without it the defaults come from
+  `stories/config/models.json`. **One resolver**: the agent's `lamostories_agent.models.resolve` and the API's
+  `workspaces/ai_resolve.py` implement the same rules and run the same shared cases (`stories/config/resolve-cases.json`);
+  the API returns the effective values (`effective: {model, effort, effortApplied, from}`) on the chat conversation,
+  the tasks table and the story, and the web only shows them.
 * **Tasks** (`TaskKind`): `chat`, `brainstorm`, `expand_idea`, `variations`, `storyboard`, `scene_rewrite`,
   `character_design`, `reference_analysis`, `fact_check`, `final_review`, `captions`. Each belongs to one agent
   (§45.26). Suggested efforts are shown, never forced: brainstorm medium, reference analysis high, storyboard high,
   scene rewrite high, captions low, fact check and final review high.
-* **No silent substitution.** The effective model is the one the levels above name. If it is not `ok` or its call is
-  refused for access, Region, model id or quota, the task or job stops with "Claude Fable 5.2 isn't available right
+* **No silent substitution.** The effective model is the one the levels above name. If its call is refused for
+  access, Region, model id or quota, the task or job stops with "Claude Fable 5.2 isn't available right
   now: {reason}. Pick another model in Lamo Stories › Settings › AI, or try again." and an action that opens that
   setting; it never runs on another model. (Ask's refusal fallback model is Clip Factory's and is not used here.)
 * **Recorded on every job and message.** Each `PJOB#` (`meta.models`: per step, the model key, effort, `effortApplied`)
@@ -12954,8 +13013,8 @@ the page says "Upload the video file."
   * **Social accounts**: §45.16.7's Connections page.
   * **Video**: the video provider and its model; resolution `1080×1920` (the built-in animator's only size); aspect
     ratio `9:16` (1:1 and 16:9 are listed as "not with the built-in animator yet"); default length (15–90 s, 30–60
-    suggested); quality (`standard` CRF 23, `high` CRF 20, `best` CRF 17); frame rate (24 or 30); provider keys; usage
-    (render minutes per day, provider cost where known).
+    suggested); quality (`standard` CRF 23, `high` CRF 20, `best` CRF 17); frame rate "30 fps (the built-in
+    animator's only rate)"; provider keys; usage (render minutes per day, provider cost where known).
   * **Storage and production**: storage used (videos, scenes, audio, references, skills; from the `ASSET#` and
     `REFVID#` sizes), output format (MP4, H.264 and AAC, `+faststart`), captions burned in or not, scenes rendered at
     a time (1–3), keep old versions (all, or the last 1–10 per story: older files are deleted when a new version is
@@ -12968,17 +13027,28 @@ For each platform the Social Accounts page asks once, **before the first Connect
 Lamo Stories uses, and shows the choice on the card:
 
 * **Use a separate app for Lamo Stories (fully separate)**: the owner makes a second developer app on the platform
-  (the same steps as Clip Factory's guide, linked, with the differences listed: its own name, the same redirect URI
-  `{oauthCallbackBase}/{platform}/callback`), pastes its keys in Lamo Stories (`PUT …/social/{platform}/app`, stored
+  (the same steps as Clip Factory's guide, linked, with the differences listed: its own name and Lamo Stories' own
+  redirect URI `{storiesCallbackBase}/{platform}/callback`, shown with a Copy button), pastes its keys in Lamo Stories (`PUT …/social/{platform}/app`, stored
   in `cf-prod/workspaces/{ws}/{platform}/app`, the same formats and **Check it** as §17.4). Quotas, credits and app
   reviews are then separate too (TikTok's and Meta's reviews take days to weeks for a new app; X needs its own
   credits).
-* **Use Clip Factory's app (quicker)**: no new app; Lamo Stories still gets its **own authorization and tokens**
-  (never Clip Factory's), and shares that app's quotas, credits and review state. For Facebook and Instagram the page
-  warns that Meta's page picker is per login (§45.13.5) and recommends a separate app.
+* **Use Clip Factory's app (quicker)**, offered for **YouTube, TikTok and X only**: no new app; Lamo Stories still
+  gets its **own authorization and tokens** (never Clip Factory's), for a different platform identity, so Clip
+  Factory's grant is not touched; it shares that app's quotas, credits and review state. **Facebook and Instagram
+  always use Lamo Stories' own Meta app**: Meta's page picker belongs to one login and one app, so authorizing Clip
+  Factory's Meta app again would change Clip Factory's existing grant (the second request forbids that). `PUT
+  …/social/{instagram|facebook}/app {choice:"clips"}` is `400`; one own Meta app's keys serve both Instagram and
+  Facebook (entered once). A new Meta app in Development mode lets its admin (the owner) connect his own Pages and
+  Instagram account; going Live needs Meta's App Review.
 * Never a silent default and never a fallback: with neither chosen, Connect asks; a chosen app whose keys are missing
-  stops with "Paste your Lamo Stories {Platform} app keys first." The state, the token exchange, refresh and revoke
-  of a workspace connection always use the chosen app's keys (`appClientId` on `SOCIAL#` names it).
+  stops with "Paste your Lamo Stories {Platform} app keys first." **One helper picks the keys**:
+  `workspaces/apps.py: app_keys(store, secrets, user_id, ws, platform)` reads `SOCIAL#{platform}.app.choice`: `own` →
+  `cf-prod/workspaces/{ws}/{platform}/app`; `clips` → `cf-prod/platforms/{platform}/app` (read only; not for Meta);
+  none or a missing secret → "not set up", never a fallback. Connect, the callback's exchange, the token refresh,
+  Check, creator info and `validate_destination` use only this helper (`appClientId` on `SOCIAL#` records the client
+  id used at connect). The redirect URI follows the choice: Clip Factory's app keeps its registered
+  `{oauthCallbackBase}/{platform}/callback`; Lamo Stories' own app registers Lamo Stories' own callback
+  `{storiesCallbackBase}/{platform}/callback` (§45.13.3). The `limits` sentences are built per choice.
 * The shared limits of §45.14 (the X monthly limit, YouTube units) apply only with Clip Factory's app; with its own
   app Lamo Stories keeps its own counters (`RATE#WS#{ws}#{platform}`) and its own X limit setting.
 
@@ -13025,3 +13095,45 @@ pixels. Each job records which providers made it (`PJOB#.meta.providers`).
 | 19 | Publishing isolated | destination tests, IAM | – |
 | 20 | No Lamo Stories setting changes Clip Factory | the IAM tests; a test that runs every Lamo Stories route and job and compares every Clip Factory item and secret before and after | – |
 | 21 | Regression | every required check | – |
+
+### 45.33 Details settled by the second review (they win over anything above)
+
+* **Pictures to a model** (`lamostories_agent/images.py: to_model_image(path)`): every picture (chat attachments,
+  design references, reference-video frames, final-review frames, portraits) is scaled so its long edge is at most
+  1568 px, re-encoded to JPEG about q85 (which also drops EXIF and GPS), stepped down until ≤ 3.5 MB; a picture ffmpeg
+  cannot open fails the turn with "I can't open that picture. Try a screenshot or a photo.".
+* **Reference analysis steps** (§45.28): (a) one ffmpeg pass at about 360 px wide with scene detection
+  (`select='gt(scene,0.3)'`) gives the cut times; code computes `shots[]` and `cutsPer10s`, the model never guesses
+  them; (b) frames ≤ 512 px: each shot's start and middle plus a steady `min(2, 600/durationSec)` per second, at most
+  600; (c) batches of at most 20 pictures per call (lowered when Bedrock refuses for size), each with its times; (d) a
+  final call merges the batches' notes into one `ReferenceAnalysis`; (e) sound notes come from the measured loudness
+  and silences only (the model cannot hear; the analysis says so).
+* **ModelClient contract** (`lamostories_agent/models.py`): `complete(ctx: CallContext, *, task, messages,
+  override=None, schema=None, tools=None, max_tokens=16000, on_text=None) -> Reply`; `CallContext` holds `user_id`,
+  `workspace_id`, `agent_id`, the item it works for (`job_id`, `task_id` or `conv_id` + `msg_id`) and the fencing
+  `session_id`. `complete` itself resolves the model and effort, builds the system blocks (instructions, skills,
+  memory), sends the request, writes `MODELSTATUS#` and `USAGE#`; callers never pass a model or a system prompt.
+  `Reply` also carries the raw assistant `content` blocks (for tool loops). It is called from a worker thread, never
+  on the event loop.
+* **Runner contract** (`lamostories_agent/server.py`): `Runner.spawn(id, session_id, coro)`, `cancel(id)`, `busy()`,
+  `shutdown()`; builder E implements it; each of `chat/`, `tasks/`, `reference/` has `register(actions, runner)`,
+  called by `build_app` from a fixed list, so builder E2 never edits E's files.
+* **Prices**: `stories/config/models.json` carries Anthropic's own list prices for reference (`source:
+  "anthropic_list"`, `note: "Anthropic's own price. Amazon Bedrock bills its own price, which can differ."`), with
+  cache read prices and Haiku 5.5's long-context price; the owner can replace any with Bedrock's (`source: "owner"`).
+  Provider usage (Nova Canvas images, Nova Reel seconds, built-in render seconds) is recorded the same way, priced
+  only when a price is known.
+* **The quality agent switched off**: the toggle explains "Driving-safety videos are always checked." For other
+  stories its checks record `safety.status = "skipped"` ("Quality check is off"), which Approve accepts; a
+  driving-safety story still runs the fact check whatever the toggle says.
+* **Onboarding done-states** come from real state where they can: a saved AI configuration (steps 1–3), a provider
+  picked (4), each platform's `SOCIAL#` connected (6–10); only 5 and 11 are ticked by hand.
+* **The character agent's vocabulary**: the engine's `CATALOG` gains the look and voice choices (`looks`: body, hair
+  styles, eyes, brows, nose, mouth, patterns, accessories, voice styles), so `cli.ts catalog` gives the character
+  agent its schema and `validateScript`/a character check validate its answer.
+* **Workspace defaults** live in one file, `stories/config/workspace-defaults.json` (StoriesConfig's defaults), read by
+  the API's guard and checked by a web test against `StoriesConfig`.
+* **The separation test's allowed exceptions** (§45.19): reads of five `ACCOUNT#` attributes, the YouTube, TikTok and X
+  app-key secrets and the OAuth state key; `RATE#{platform}` writes only for the shared-app choice. Nothing else of
+  Clip Factory is read or written. §45.32 #20 counts the shared-app choice's shared budget as the owner's own choice.
+* **Social accounts page**: each card shows the platform's logo mark (the same marks Clip Factory's setup uses).

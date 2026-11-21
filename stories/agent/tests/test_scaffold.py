@@ -3,6 +3,7 @@ Factory's agent (docs/CONTRACTS.md §45.11.1, §45.25, ADR-76)."""
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -35,16 +36,22 @@ def test_models_file_lists_the_owners_models_with_their_efforts() -> None:
         assert m["defaultEffort"] in (*m["efforts"], None)
 
 
-def test_precedence_request_then_task_then_agent_then_default() -> None:
-    ai = {"defaultModel": "opus-5-5", "defaultEffort": "high", "tasks": {"storyboard": {"model": "fable-5-2"}}}
-    agent = {"model": "sonnet-5-5", "effort": "low"}
-    assert models.resolve(task="storyboard", agent=agent, ai=ai).model == "fable-5-2"
-    assert models.resolve(task="chat", agent=agent, ai=ai) == models.Choice("sonnet-5-5", "low", "agent")
-    got = models.resolve(task="chat", agent=agent, ai=ai, override={"model": "fable-5-1", "effort": "max"})
-    assert got == models.Choice("fable-5-1", "max", "request")
-    assert models.resolve(task="chat", agent={}, ai={}).model == "opus-5-5"
+def test_the_shared_resolver_cases() -> None:
+    cases = json.loads((config.config_dir() / "resolve-cases.json").read_text())["cases"]
+    assert len(cases) >= 9
+    for case in cases:
+        kwargs = {k: case.get(k) for k in ("agent", "ai", "conversation", "project")}
+        expect = case["expect"]
+        if "error" in expect:
+            exc = models.ModelUnavailable if expect["error"] == "model" else models.EffortUnavailable
+            with pytest.raises(exc):
+                models.resolve(task=case["task"], override=case.get("request"), **kwargs)
+            continue
+        got = models.resolve(task=case["task"], override=case.get("request"), **kwargs)
+        assert (got.model, got.effort, got.source) == (expect["model"], expect["effort"], expect["from"]), case["name"]
 
 
-def test_an_unknown_model_is_never_substituted() -> None:
-    with pytest.raises(models.ModelUnavailable, match="not in Lamo Stories' list"):
-        models.resolve(task="chat", agent={"model": "gpt-9"}, ai={})
+def test_build_app_registers_every_package() -> None:
+    from lamostories_agent.server import build_app
+
+    assert build_app() is not None

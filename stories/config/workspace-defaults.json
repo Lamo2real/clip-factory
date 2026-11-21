@@ -1,0 +1,25 @@
+{
+  "$comment": "Lamo Stories' workspace defaults (docs/CONTRACTS.md \u00a745.6 StoriesConfig). The one source: the API's guard reads it when it creates a workspace, and a web test checks it against the StoriesConfig type.",
+  "defaultDurationSec": 45,
+  "captionsOn": true,
+  "musicOn": true,
+  "providers": {
+    "images": "builtin-rig",
+    "video": "builtin-2d",
+    "audio": "builtin-synth"
+  },
+  "video": {
+    "resolution": "1080x1920",
+    "aspect": "9:16",
+    "quality": "high",
+    "fps": 30
+  },
+  "production": {
+    "burnCaptions": true,
+    "scenesAtOnce": 2,
+    "keepVersions": "all"
+  },
+  "youtubeCategory": "27",
+  "youtubePrivacy": "public",
+  "xMonthlyLimitUsd": null
+}

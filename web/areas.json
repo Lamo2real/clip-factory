@@ -92,7 +92,6 @@
   "desktop": "Desktop app",
   "web/src/stories": "Behind the scenes",
   "api/src/clipfactory_api/workspaces": "Behind the scenes",
-  "api/src/clipfactory_api/routes/workspaces": "Behind the scenes",
   "api/src/clipfactory_api/flows/story_flow.py": "Behind the scenes",
   "stories": "Behind the scenes"
 }

@@ -31,6 +31,9 @@ def test_no_workspace_prefix_is_forwarded_by_a_stream() -> None:
     prefixes = stream_prefixes()
     for sk in (*ws.ITEM_PREFIXES, ws.WS_SK):
         assert not any(sk.startswith(p) for p in prefixes), sk
+    # Every *_SK constant of the module is in ITEM_PREFIXES (or is the registry's WS#), so none is forgotten.
+    declared = {v for k, v in vars(ws).items() if k.endswith("_SK") and isinstance(v, str)}
+    assert declared == {*ws.ITEM_PREFIXES, ws.WS_SK}
 
 
 def test_workspace_partitions_are_never_lamo_clips_partition() -> None:
@@ -45,15 +48,26 @@ def test_workspace_partitions_are_never_lamo_clips_partition() -> None:
 
 def test_types_never_reuse_lamo_clips_item_types() -> None:
     clips_types = {"job", "jobLive", "clip", "post", "account", "setup", "oauth", "stat", "week", "learning", "skill"}
-    ours = {ws.TYPE_WORKSPACE, ws.TYPE_IDEA, ws.TYPE_CHARACTER, ws.TYPE_STORY, ws.TYPE_PJOB, ws.TYPE_ASSET}
-    ours |= {ws.TYPE_SOCIAL, ws.TYPE_PUBJOB}
+    ours = {v for k, v in vars(ws).items() if k.startswith("TYPE_") and isinstance(v, str)}
+    assert len(ours) >= 20
     assert not ours & clips_types
+    assert all(t == "workspace" or t.startswith("ws_") for t in ours)
 
 
 def test_secret_names_stay_in_the_workspace_prefix() -> None:
     name = ws.secret_name(ws.WS_SECRET_PREFIX, "stories", "youtube", "token")
     assert name == "cf-prod/workspaces/stories/youtube/token"
-    for bad in (("clips", "youtube", "token"), ("stories", "myspace", "token"), ("stories", "youtube", "app")):
+    assert (
+        ws.secret_name(ws.WS_SECRET_PREFIX, "stories", "facebook", "app") == "cf-prod/workspaces/stories/facebook/app"
+    )
+    assert (
+        ws.provider_secret_name(ws.WS_SECRET_PREFIX, "stories", "nova-reel")
+        == "cf-prod/workspaces/stories/providers/nova-reel"
+    )
+    for bad_provider in ("../platforms", "a/b", "", "X"):
+        with pytest.raises(ValueError, match="not a provider id"):
+            ws.provider_secret_name(ws.WS_SECRET_PREFIX, "stories", bad_provider)
+    for bad in (("clips", "youtube", "token"), ("stories", "myspace", "token"), ("stories", "youtube", "secret")):
         with pytest.raises(ValueError, match=r"unknown|not a Lamo Stories"):
             ws.secret_name(ws.WS_SECRET_PREFIX, *bad)
     with pytest.raises(ValueError, match="never live under"):
@@ -70,3 +84,8 @@ def test_registry_has_the_built_in_workspace_and_stories() -> None:
     assert ws.WORKSPACE_ID.match("01JZ0000000000000000000000")
     assert not ws.WORKSPACE_ID.match("USER#x")
     assert ws.social_account_id("stories", "youtube") == "stories.youtube"
+    assert ws.rate_pk("stories", "x") == "RATE#WS#stories#x"
+    assert ws.oauth_pk("abc") == "OAUTH#ws.abc"
+    assert not ws.oauth_pk("abc").startswith("OAUTH#abc")
+    assert "facebook" not in ws.SHARED_APP_PLATFORMS
+    assert "instagram" not in ws.SHARED_APP_PLATFORMS

@@ -1,5 +1,5 @@
 {
- "version": "1156f7262fe8",
+ "version": "f7824d878953",
  "parts": [
   {
    "id": "app-map",
@@ -279,7 +279,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Lamo Stories: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Lamo Stories",
-   "chars": 144163
+   "chars": 158769
   },
   {
    "id": "adr-01",
@@ -687,7 +687,7 @@
    "id": "adr-72",
    "title": "DECISIONS: ADR-72 Separate social connections: own tokens, one callback, the owner's choice of developer app",
    "line": "Context. The owner wants different accounts for Lamo Stories on every platform and no accidental posting to",
-   "chars": 2710
+   "chars": 2726
   },
   {
    "id": "adr-73",
@@ -711,7 +711,7 @@
    "id": "adr-76",
    "title": "DECISIONS: ADR-76 Lamo Stories is its own application: its own API Lambda, AgentCore runtime and IAM roles",
    "line": "Context. The owner's second request (2026-11-21): \"Lamo Stories must be treated as an independent application",
-   "chars": 2133
+   "chars": 2113
   },
   {
    "id": "adr-77",
@@ -729,7 +729,7 @@
    "id": "adr-79",
    "title": "DECISIONS: ADR-79 Developer apps: the owner picks Lamo Stories' own or Clip Factory's, per platform, never silently",
    "line": "Context. The second request: Lamo Stories' \"own OAuth credentials\", \"Do not reuse Clip Factory OAuth tokens. Do",
-   "chars": 1181
+   "chars": 1388
   },
   {
    "id": "adr-80",

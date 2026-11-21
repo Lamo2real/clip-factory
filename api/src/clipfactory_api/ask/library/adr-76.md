@@ -13,8 +13,8 @@
   (4) a second AWS account or a second app (duplicated sign-in and infrastructure, which the first request ruled out).
 - **Decision.** (CONTRACTS §45.24, §45.15) Option 3. Shared on purpose: the shell and Cognito sign-in, the HTTP API
   (separate routes), the table, bucket and Secrets Manager (separate namespaces, enforced by IAM leading keys and
-  prefixes), the OAuth callback Lambda (each platform allows only its registered redirect URI; the `w1.` state keeps
-  the paths apart), and the platform publisher library code.
+  prefixes), Clip Factory's OAuth callback only as a forward of `w1.` states (its registered apps are not edited),
+  and the platform publisher library code.
 - **Consequences.** Clip Factory's API Lambda, its route table, its agent runtime, image and roles do not change at
   all, and a Lamo Stories change never redeploys or drains them. Lamo Stories has its own image to build and its own
   CI job. Code shared as a library (the publishers, `db`, `http.dispatch`) is used read-only; a change there is a

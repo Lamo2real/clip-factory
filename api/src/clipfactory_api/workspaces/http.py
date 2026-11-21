@@ -25,6 +25,6 @@ def _get_app() -> App:
 
 
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
-    from ..routes.workspaces import ROUTES
+    from .routes import ROUTES
 
     return dispatch(event, _get_app, ROUTES)

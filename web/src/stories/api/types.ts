@@ -15,6 +15,8 @@ export type { CaptionCue, CharacterLook, CharacterVoice, Expression, MovementSty
 
 export type Platform = "youtube" | "instagram" | "facebook" | "tiktok" | "x";
 export const STORIES_PLATFORMS: Platform[] = ["youtube", "tiktok", "instagram", "facebook", "x"];
+/** Platforms where Lamo Stories may use Clip Factory's developer app on purpose; Meta always has its own (§45.30). */
+export const SHARED_APP_PLATFORMS: Platform[] = ["youtube", "tiktok", "x"];
 
 /** The workspace type registry (CONTRACTS §45.2), mirrored from api/.../workspaces/types.py. */
 export type WorkspaceType = "clips" | "stories";
@@ -27,7 +29,8 @@ export interface StoriesConfig {
   captionsOn: boolean;
   musicOn: boolean;
   providers: { images: "builtin-rig" | "nova-canvas"; video: "builtin-2d" | "nova-reel"; audio: "builtin-synth" };
-  video: { resolution: "1080x1920"; aspect: "9:16"; quality: "standard" | "high" | "best"; fps: 24 | 30 };
+  /** CRF: standard 23, high 20, best 17; 30 fps is the built-in animator's only rate */
+  video: { resolution: "1080x1920"; aspect: "9:16"; quality: "standard" | "high" | "best"; fps: 30 };
   production: { burnCaptions: boolean; scenesAtOnce: 1 | 2 | 3; keepVersions: "all" | number };
   /** Film & Animation, Autos & Vehicles, Comedy, Entertainment, Education (default "27") */
   youtubeCategory: "1" | "2" | "23" | "24" | "27";
@@ -53,12 +56,38 @@ export type TaskKind =
   | "final_review"
   | "captions";
 
+export interface Price {
+  inputPer1M: number;
+  outputPer1M: number;
+  cacheReadPer1M: number | null;
+  cacheWritePer1M: number | null;
+  longContext: { aboveInputTokens: number; inputPer1M: number; outputPer1M: number } | null;
+  currency: string;
+  source: "anthropic_list" | "aws_price_list" | "owner";
+  note: string;
+}
+
 export interface StoriesAiConfig {
   defaultModel: string;
   defaultEffort: Effort;
   tasks: Partial<Record<TaskKind, { model?: string; effort?: Effort }>>;
-  prices: Record<string, { inputPer1M: number; outputPer1M: number; currency: string }>;
+  /** the owner's prices, by model key or provider id */
+  prices: Record<string, Price>;
   version: number;
+}
+
+/** What a call will use, computed by the API with the same rules as the agent (CONTRACTS §45.25). */
+export interface Effective {
+  model: string;
+  effort: Effort | null;
+  effortApplied: boolean;
+  from: "request" | "conversation" | "project" | "task" | "agent" | "default";
+}
+
+/** A video's or a reference's own setting (§45.25 level 2), kept with it. */
+export interface AiSetting {
+  model: string | null;
+  effort: Effort | null;
 }
 
 /** Just for this request; never saved. */
@@ -78,7 +107,7 @@ export interface ModelInfo {
   status: "ok" | "not_checked" | "denied" | "not_found" | "error";
   statusLine: string;
   checkedAt: string | null;
-  price: { inputPer1M: number; outputPer1M: number; currency: string; source: "list" | "owner" } | null;
+  price: Price | null;
 }
 
 export type AgentId = "creative_director" | "video_analysis" | "storyboard" | "character" | "quality_assurance";
@@ -88,7 +117,7 @@ export interface TaskInfo {
   label: string;
   agentId: AgentId;
   suggestedEffort: Effort;
-  effective: { model: string; effort: Effort | null; from: "task" | "agent" | "default" };
+  effective: Effective;
 }
 
 export interface Agent {
@@ -122,7 +151,7 @@ export interface Skill {
 
 export interface AiTask {
   taskId: string;
-  kind: TaskKind;
+  kind: TaskKind | "check_models";
   status: "queued" | "running" | "done" | "failed";
   model: string | null;
   effort: Effort | null;
@@ -140,6 +169,8 @@ export interface Conversation {
   title: string;
   model: string | null;
   effort: Effort | null;
+  /** what the next message will use (computed by the API) */
+  effective: Effective;
   projectRef: ProjectRef | null;
   lastMessageAt: string | null;
   createdAt: string;
@@ -184,6 +215,7 @@ export interface ReferenceVideo {
   bytes: number;
   url?: string;
   currentJobId: string | null;
+  ai: AiSetting;
   analyzedWith: { model: string; effort: Effort | null } | null;
   createdAt: string;
   updatedAt: string;
@@ -318,8 +350,8 @@ export interface StoryInput {
   musicMood?: MusicMood;
   /** ≤ 3 reference videos whose analyses the storyboard agent reads */
   referenceIds?: string[];
-  /** this video's storyboard and checks only */
-  override?: ModelOverride;
+  /** this video's own model and effort, kept with it */
+  ai?: AiSetting;
 }
 
 export interface Captions {
@@ -334,7 +366,8 @@ export interface Captions {
 export interface StorySafety {
   /** null: no driving advice, only the "nothing dangerous" check */
   topicId: string | null;
-  status: "pending" | "ok" | "problems";
+  /** skipped: the quality agent is off (never for driving safety) */
+  status: "pending" | "ok" | "problems" | "skipped";
   problems: string[];
   checkedScriptVersion: number | null;
   citations: { publisher: string; title: string; url: string; section?: string }[];
@@ -376,6 +409,8 @@ export interface Story {
   stale: StepKey[];
   safetyTopicId: string | null;
   safety: StorySafety | null;
+  ai: AiSetting;
+  referenceIds: string[];
   reviewNote: string | null;
   currentJobId: string | null;
   posted: { platform: Platform; url: string }[];
@@ -442,6 +477,8 @@ export interface StoryPatch {
   musicMood?: MusicMood;
   captionsOn?: boolean;
   scenes?: SceneEdit[];
+  ai?: AiSetting;
+  referenceIds?: string[];
 }
 
 export type AssetKind =
@@ -453,7 +490,9 @@ export type AssetKind =
   | "character_ref"
   | "portrait"
   | "audio"
-  | "captions";
+  | "captions"
+  /** a picture for "Design with AI"; the Library hides it */
+  | "design_ref";
 
 export interface LibraryItem {
   assetId: string;
@@ -627,6 +666,8 @@ export interface StoriesApi {
   referenceComplete(ws: string, characterId: string, assetId: string): Promise<Character>;
   deleteReference(ws: string, characterId: string, assetId: string): Promise<Character>;
   makePortrait(ws: string, characterId: string): Promise<ProductionJob>;
+  /** a picture for "Design with AI" (an ASSET# of kind design_ref) */
+  designUpload(ws: string, file: { filename: string; contentType: string; size: number }): Promise<Upload>;
   /** the character agent's suggested CharacterInput in result.character (a draft) */
   designCharacter(ws: string, body: { description?: string; referenceAssetId?: string; override?: ModelOverride }): Promise<AiTask>;
 
@@ -636,13 +677,13 @@ export interface StoriesApi {
   storyJobs(ws: string, storyId: string): Promise<ProductionJob[]>;
   patchStory(ws: string, storyId: string, patch: StoryPatch): Promise<{ story: Story; script: StoryScript | null }>;
   deleteStory(ws: string, storyId: string): Promise<void>;
-  /** no `from`: runs exactly the story's stale steps ("Try again", "Check again", "Remake") */
-  produce(ws: string, storyId: string, body?: { from?: StepKey; sceneIds?: string[] }): Promise<{ story: Story; job: ProductionJob }>;
+  /** no `from`: runs exactly the story's stale steps ("Try again", "Check again", "Remake"); override: this job only */
+  produce(ws: string, storyId: string, body?: { from?: StepKey; sceneIds?: string[]; override?: ModelOverride }): Promise<{ story: Story; job: ProductionJob }>;
   cancelStory(ws: string, storyId: string): Promise<{ story: Story; job: ProductionJob | null }>;
   approve(ws: string, storyId: string, version: number): Promise<Story>;
   reject(ws: string, storyId: string, reason?: string): Promise<Story>;
   /** a note, scene ids or both; scene ids without a note is "Remake this scene" (a new take). override: this job only */
-  requestChanges(ws: string, storyId: string, body: { note?: string; sceneIds?: string[] }): Promise<{ story: Story; job: ProductionJob }>;
+  requestChanges(ws: string, storyId: string, body: { note?: string; sceneIds?: string[]; override?: ModelOverride }): Promise<{ story: Story; job: ProductionJob }>;
   download(ws: string, storyId: string): Promise<{ url: string; filename: string }>;
 
   library(ws: string, q?: { kind?: AssetKind | "all"; storyId?: string; characterId?: string; limit?: number; cursor?: string }): Promise<{ items: LibraryItem[]; nextCursor: string | null }>;
@@ -657,7 +698,9 @@ export interface StoriesApi {
   tiktokCreatorInfo(ws: string): Promise<TikTokCreator>;
   disconnectSocial(ws: string, platform: Platform): Promise<void>;
 
-  setSocialApp(ws: string, platform: Platform, body: { choice: "clips" } | { choice: "own"; clientId: string; clientSecret: string; configId?: string }): Promise<SocialAccount>;
+  /** Facebook and Instagram always use Lamo Stories' own Meta app (CONTRACTS §45.30): "clips" is only for the others */
+  setSocialApp(ws: string, platform: "instagram" | "facebook", body: { choice: "own"; clientId: string; clientSecret: string; configId: string }): Promise<SocialAccount>;
+  setSocialApp(ws: string, platform: "youtube" | "tiktok" | "x", body: { choice: "clips" } | { choice: "own"; clientId: string; clientSecret: string }): Promise<SocialAccount>;
   checkSocialApp(ws: string, platform: Platform): Promise<KeyCheck>;
   deleteSocialApp(ws: string, platform: Platform): Promise<void>;
 

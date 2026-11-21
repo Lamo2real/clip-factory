@@ -1,17 +1,18 @@
 """The Lamo Stories runtime's HTTP server: ``GET /ping`` and ``POST /invocations`` (docs/CONTRACTS.md §45.11.1).
 
-SCAFFOLD (Phase 1): a working server with an empty action table. Builder E registers ``process_story``,
-``process_portrait``, ``process_reference``, ``cancel`` and the runner; builder E2 registers ``run_task``,
-``chat_turn`` and ``check_models``. Each action handler takes the payload and returns the immediate answer; the work
-runs in the background and ``busy()`` says whether anything still runs.
+SCAFFOLD (Phase 1): a working server with an empty action table. Builder E implements the ``Runner`` and registers
+``process_story``, ``process_portrait``, ``process_reference`` and ``cancel``; builder E2 fills ``register`` in its own
+packages (``chat``, ``tasks``, ``reference``), which ``build_app`` already calls, for ``run_task``, ``chat_turn`` and
+``check_models``. Each action handler takes the payload and returns the immediate answer; the work runs in the
+background and ``busy()`` says whether anything still runs.
 """
 
 from __future__ import annotations
 
 import json
 import os
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Callable, Coroutine
+from typing import Any, Protocol
 
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -20,6 +21,18 @@ from starlette.routing import Route
 
 MAX_BODY = 64 * 1024
 Action = Callable[[dict[str, Any]], dict[str, Any]]
+
+
+class Runner(Protocol):
+    """Runs background work, one coroutine per id (§45.33). Builder E implements it."""
+
+    def spawn(self, id: str, session_id: str, coro: Coroutine[Any, Any, None]) -> bool: ...
+
+    def cancel(self, id: str) -> bool: ...
+
+    def busy(self) -> bool: ...
+
+    async def shutdown(self) -> None: ...
 
 
 class Actions:
@@ -66,9 +79,19 @@ def create_app(actions: Actions) -> Starlette:
     )
 
 
+def register_all(actions: Actions, runner: Runner | None) -> None:
+    """Every package's actions, from a fixed list (builder E adds its own here; E2's packages are already listed)."""
+    from . import chat, reference, tasks
+
+    for package in (chat, tasks, reference):
+        package.register(actions, runner)
+
+
 def build_app() -> Starlette:
-    """The app uvicorn serves (``--factory``). Builders register their actions here."""
-    return create_app(Actions())
+    """The app uvicorn serves (``--factory``)."""
+    actions = Actions()
+    register_all(actions, None)
+    return create_app(actions)
 
 
 def main() -> None:
