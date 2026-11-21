@@ -2228,7 +2228,6 @@
 }
 .dropdown__opt.is-disabled {
   opacity: 0.5;
-  cursor: default;
 }
 .dropdown__text {
   display: grid;
