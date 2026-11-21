@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from clipfactory_agent.moments import Moment, choose, dedupe, length_target, spare_count, validate
 from clipfactory_agent.transcript import lines, windows
 
@@ -58,6 +60,25 @@ def test_length_target_from_notes() -> None:
     assert length_target("clips under 30 s") == (18, 30)
     assert length_target("max 60 seconds") == (20, 60)
     assert length_target("1-2 s") == (20, 45)
+
+
+@pytest.mark.parametrize(
+    ("notes", "want"),
+    [
+        ("at least 7 seconds", (7, 45)),
+        ("minimum 30 s", (30, 45)),
+        ("over 20 sec", (20, 45)),
+        ("longer than 15 seconds", (15, 45)),
+        ("30+ seconds", (30, 45)),
+        ("clips of at least 40 seconds", (40, 55)),  # N + 15 once that is past 45
+        ("at least 170 seconds", (20, 45)),  # no room for 15 s more under the 180 s cap: ignored
+        ("at least 20 seconds and under 60 seconds", (20, 60)),  # a minimum and a maximum together
+        ("no longer than 30 seconds", (18, 30)),  # a maximum, never read as "longer than 30"
+        ("a 30 min stream", (20, 45)),
+    ],
+)
+def test_length_target_learns_minimums_from_notes(notes: str, want: tuple[float, float]) -> None:
+    assert length_target(notes) == want
 
 
 def test_dedupe_keeps_higher_score() -> None:

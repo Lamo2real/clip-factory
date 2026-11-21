@@ -6,9 +6,12 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .schema import check
+
+if TYPE_CHECKING:
+    from .campaign import Campaign
 
 MOMENT_TYPES = ["rage", "chaos", "interaction", "no_way", "first_reaction", "hot_take"]
 DEFAULT_LENGTH = (20.0, 45.0)  # the default length target
@@ -117,21 +120,62 @@ def word_count(text: str) -> int:
     return len(text.split())
 
 
-def length_target(notes: str | None) -> tuple[float, float]:
+_UNIT = r"\s*(?:s|sec|secs|seconds?)\b"
+# "at least 7 seconds", "minimum 30 s", "over 20 sec", "longer than 15 seconds" and "30+ seconds"; "no longer than"
+# and "not over" are maximums, not minimums.
+_AT_LEAST = re.compile(
+    r"(?:\bat least|\bminimum|\bmin\.?|(?<!not )\bover|(?<!no )(?<!not )\blonger than)\s*(\d{1,3})" + _UNIT
+)
+_PLUS = re.compile(r"(\d{1,3})\s*\+" + _UNIT)
+MAX_LENGTH = 180.0
+
+
+def _under(hi: float) -> tuple[float, float]:
+    """Today's rule for a maximum alone: aim a little under it, never above the default's minimum."""
+    return min(DEFAULT_LENGTH[0], round(hi * 0.6)), hi
+
+
+def _at_least(lo: float) -> tuple[float, float]:
+    """A minimum alone: from it to at least 15 s more (and 45 s), capped at MAX_LENGTH."""
+    return lo, max(lo, min(MAX_LENGTH, max(lo + 15, 45.0)))
+
+
+def _notes_minimum(text: str) -> float | None:
+    m = _AT_LEAST.search(text) or _PLUS.search(text)
+    if not m:
+        return None
+    lo = float(m.group(1))
+    return lo if 1 <= lo <= MAX_LENGTH - 15 else None
+
+
+def length_target(notes: str | None, campaign: Campaign | None = None) -> tuple[float, float]:
     """The clip length to aim for: the default 20–45 s, unless the owner's notes name one ("15-30 seconds",
-    "under 60 s")."""
+    "under 60 s", "at least 30 seconds"). A campaign's own length (``lengthMinSec``/``lengthMaxSec``, §38.13) wins
+    over both."""
+    if campaign is not None:
+        lo_c, hi_c = campaign.length
+        if lo_c is not None and hi_c is not None:
+            return lo_c, hi_c
+        if lo_c is not None:
+            return _at_least(lo_c)
+        if hi_c is not None:
+            return _under(hi_c)
     text = (notes or "").lower()
-    unit = r"\s*(?:s|sec|secs|seconds?)\b"
-    m = re.search(r"(\d{1,3})\s*(?:-|–|to)\s*(\d{1,3})" + unit, text)
+    m = re.search(r"(\d{1,3})\s*(?:-|–|to)\s*(\d{1,3})" + _UNIT, text)
     if m:
         lo, hi = sorted((float(m.group(1)), float(m.group(2))))
         if lo >= 5 and hi <= 180 and hi - lo >= 5:
             return lo, hi
-    m = re.search(r"(?:under|max(?:imum)?|at most|no longer than|up to)\s*(\d{1,3})" + unit, text)
+    least = _notes_minimum(text)
+    m = re.search(r"(?:under|max(?:imum)?|at most|no longer than|up to)\s*(\d{1,3})" + _UNIT, text)
     if m:
         hi = float(m.group(1))
         if 8 <= hi <= 180:
-            return min(DEFAULT_LENGTH[0], round(hi * 0.6)), hi
+            if least is not None and least + 5 <= hi:
+                return least, hi
+            return _under(hi)
+    if least is not None:
+        return _at_least(least)
     return DEFAULT_LENGTH
 
 
