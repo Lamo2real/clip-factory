@@ -15,7 +15,7 @@ with `validate` without a backend and `terraform test` against a mock AWS provid
 | Agent runtime | `agent/` | pytest, ruff, mypy (uv) | yes | yes |
 | Infrastructure | `infra/` | `terraform fmt -check`, `terraform validate`, `terraform test` (mock provider), tflint | yes | plan and apply |
 | Help corpus drift | `web/` | `node scripts/help-corpus.mjs --check` (corpus, routes table in [HELP_ASSISTANT.md](HELP_ASSISTANT.md), `/v1/help` rows of CONTRACTS §19); the CI `web-checks` job runs it right after `npm ci`, before type check, lint and tests | yes | – (the build regenerates the corpus) |
-| Documentation | `docs/`, `README.md` | relative-link and anchor check, draw.io XML parse and PNG export (below); `docs/SETUP_POSTING.md` is also checked by the web test `setup-docs.test.ts` | by hand (the setup page: yes, through the web tests) | – |
+| Documentation | `docs/`, `README.md` | relative-link and anchor check, draw.io XML parse and PNG export (below); `docs/SETUP_POSTING.md` is also checked by the web test `setup-docs.test.ts` (the five platforms, and the Content Rewards steps once `## Content Rewards` is there) | by hand (the setup page: yes, through the web tests) | – |
 | Workflows and scripts | `.github/`, `scripts/` | actionlint, shellcheck where available | yes | – |
 
 The exact commands are in each folder's `package.json` or `pyproject.toml` and in `ci.yml`, which are the source of
@@ -817,6 +817,87 @@ From [CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owne
   `screenshots.spec.ts` writes `setup-todo`, `-open`, `-skip`, `-skipped` and `-all-set` at 375, 1024 and 1440 px,
   light and dark, and `setup-todo-scrolled` (the pill on its glass bar) at 375 and 1024 px.
 
+### Content Rewards campaigns (CONTRACTS §38)
+From [CONTRACTS.md §38.20](CONTRACTS.md#3820-tests-offline-fakes-only-no-aws-no-cr-no-network). Everything offline:
+no AWS, no Content Rewards, no network. The api uses a recorded `HttpClient` with fixtures shaped like CR's
+`mcp-tools.json` (`api/tests/fixtures/contentrewards/**`), a fake Secrets Manager with `VersionId`s, the in-memory
+table and `FakeDurableContext`; the web runs in mock mode (`web/src/api/mock/contentrewards.ts`, state in
+`sessionStorage` `cf-mock-cr`, the pretend consent page `/mock-cr-consent`, knobs on `window.__cfMock.cr`); the Mac
+bridge is faked only by Playwright (`asMacWindow(page, { crConnect: true })` in `web/e2e/desktopWindow.ts`). Each
+part's tests pass on their own, whichever part merged first.
+
+- **API** (pytest, `api/tests/test_cr_*.py`): every link shape of §38.4 (uuid case, group, invite, checkout,
+  Discover); the TypeID vectors and the match rules (typeid; name + organization + access + rates; two same-name
+  siblings → `ambiguous` and no automatic send; none); the registration body (five redirects, `client_name`, no
+  secret) and its 429; the exact authorize URL; state tampered, wrong "platform", expired or reused → `expired`, a
+  wrong `iss` → `error`, the verifier never stored; finish for every `CrConnectResult` (read only, a missing scope,
+  no `scope` in the answer, `tools/list` without `create_my_submission`, `access_denied`, the pilot words, CR 5xx,
+  another `cre_` account, the lease busy); **nothing secret in any response, log line or item** (the fakes are
+  scanned); tokens (two refreshers → one refresh, the lease only with ≥ 20 s left, a lost answer → one retry with the
+  same refresh token, 429, the read by `VersionId`, the put-only write, a Disconnect during a refresh, `invalid_grant`,
+  the daily keep-alive, the 90-day warning and end), with `test_tokens.py` and the old `oauth/secrets.py` callers
+  unchanged; MCP headers (no `Origin`), timeouts, an event-stream body, `isError`, paging and its caps, every row of
+  the §38.9 error table; the public JSON (404 → ended, Open Graph fallback, cache, per-minute limit, never read by the
+  tick, redirects only to contentrewards.com); every `validate` rule (an injected caption text, ASS braces, 40 tags,
+  toggles that only add stops, Claude's `kind` ignored, a non-allowed host as text), `plain_rules` and
+  `things_you_do`; every stop and the single vermilion next step for each membership row; the `uploadPlaces` cases;
+  every §38.8 route, 503 when switched off, the rate limits, logo checks and the link allow-list (Drive file and
+  folder, Dropbox `dl=1`, a sign-in redirect, another host, a private address); jobs (`campaignId` snapshot, the logo
+  copy, stops, `campaignAnyway`, `retryAfter`, `campaign` never public); `cf-prod-campaigns` makes no CR or Secrets
+  call; the clip flow's step names for one, two and three campaign posts and a clip without one (exactly today's
+  steps), replay sends once, the frozen URL, `deadline` → `send_by_hand`, past `sendBy` → `missed`, a CR step that
+  raises still settles the clip; the poller (step order, membership cadence, `left`, adoption by link, money with
+  its watermark and "Checking…", proofs, pilot reminders, 25 calls, one owner failing); broadcast and notify for the
+  four new sort keys; Ask's `read_setup_guide` with `contentrewards` present and absent.
+- **Infrastructure** (`terraform test`, mock providers, `infra/modules/contentrewards/tests/*.tftest.hcl` and
+  `envs/prod/tests`): `cf-prod-campaigns` env and IAM exactly as §38.16, **no `secretsmanager` action** and media only
+  `campaigns/*`; the api and stats invoke grants; no new agent grant; the realtime and notify filters (notify still
+  `MODIFY` only); `content_rewards_enabled` default `false` → `CONTENT_REWARDS = "off"` everywhere, `true` → `"on"`; no
+  `aws_secretsmanager_secret` for Content Rewards; the plan of an existing state replaces nothing (the delete gate
+  test).
+- **Posting** (pytest, `api/tests/test_campaign_posting.py`): every 400 and 409 of Confirm and Try again for a
+  campaign clip; publisher request shapes (YouTube `paidProductPlacementDetails` and the retry without it, X
+  `paid_partnership` and its retry, TikTok branded and public, Meta nothing extra); `campaign_caption` per platform;
+  made for kids always false; no publisher or adapter defines a delete, unpublish or privacy change; job delete keeps
+  campaign posts and `CRSUB#` items.
+- **Agent** (pytest, `agent/tests/test_campaign.py` and the render, captions, moments and agent tests):
+  `length_target` and the new minimum phrases; prompts byte for byte the same without a campaign; `CAMPAIGN_NOTE` and
+  `brief_json` with one, `<` escaped; the second look drops banned content; the logo input index, the 480 band,
+  `HOOK_TOP` 288, the `Disclosure` event with braces escaped; a missing required logo fails at `resolve`; captions with
+  the disclosure and every required item (X 280 kept); the checklist keys; `campaignNote`; clips carry `campaignId`.
+- **Desktop** (`cargo test`): the authorize URL check (each bad case → `bad_url`), the door binds `127.0.0.1` only and
+  takes the next free port, `no_port`, `unsupported` off macOS, a wrong `Host`, another path, a wrong state then the
+  right one, `iss` passed through, a repeated `code` → 400, one answer only, 5-minute expiry, the page's headers,
+  `result` returns `status` and the code once, and the capability grants exactly the four commands to the app's
+  origin in `main`.
+- **Web units** (Vitest, `web/test/cr*.test.ts(x)`): `CR_GUIDE` (unique ids `^[a-z0-9-]{1,40}$`, exactly 3 numbered
+  setup steps, folds unnumbered, https opens, the encoded `mailto`, no banned word in a visible label, `checkedOn`
+  "2026-11-21", the part order, `finance` on every money step); `campaignLink` against the API's cases; the words for
+  every membership, stop, submission state, reason and result code; one vermilion per `NextStep`; grouped send-by-hand
+  lines; the 404 and 503 rule (only `code === "unavailable"`); `noGuesses.test.ts` over the new files (no rate ×
+  views, amounts only formatted, "Checking…" until the paid total is known); `ask-knowledge.mjs` emits
+  `setup_steps.contentrewards`.
+- **This page and the app agree** (Vitest `setup-docs.test.ts`): once [SETUP_POSTING.md](SETUP_POSTING.md#content-rewards)
+  has a `## Content Rewards` heading, every `CR_GUIDE` step title appears under it.
+- **Playwright** (mock mode, `e2e/content-rewards.spec.ts`, 375×812 and 1440×900, light and dark): Set up posting
+  still shows five platform cards and the floating list "0/5", with the Content Rewards card apart; the setup page
+  (steps 1 and 2 tick with "I did this", the ring counts 3, the folds; on a phone "Do this step on your Mac"; in a
+  desktop browser "Get the app"); with the fake bridge Connect → pretend consent → Allow → confetti, Cancel → the
+  denied card, read only → "Content Rewards said no?" with "Open email" as the only vermilion; Disconnect and Undo; the
+  sign-in-again week; Home paste of each link shape; the Campaigns page's vermilion moving to "Add campaign"; each
+  membership row's single vermilion button; soft stops → one "Make clips anyway"; Check now; "You're in!" once; the
+  logo drop; Make clips with the campaign picked; the Review strip, Upload to limited, the TikTok line, "I linked it",
+  Use my settings with the locked YouTube options, the two-tap upload; the post line through every state, Ask again,
+  send by hand with "Copy and open", the Mac banner, proof due; Money's Finance question, tiles and celebration;
+  reduced motion (no confetti); on every page no sideways scroll at 320–1920, no edges, targets ≥ 44 px (48 on
+  phones), the arrow cursor only, axe contrast, Ask never over the main button, phone controls at the bottom right.
+  `screenshots.spec.ts` adds `cr-setup`, `campaigns`, `campaign`, `review-campaign` and `money-cr` at 375 and 1440.
+  Run it on a port of its own: `CF_E2E_PORT=4716 npx playwright test e2e/content-rewards.spec.ts`.
+- **Docs**: `node scripts/help-corpus.mjs --check` and `node scripts/ask-knowledge.mjs --check` pass after the guides
+  and these pages change (run both without `--check` first).
+- **Live checks, not done here** ([§38.21](CONTRACTS.md#3821-not-verified-live-each-is-checked-at-the-owners-first-connect-or-first-campaign-post)):
+  see step 15 of [Manual checks after the first deploy](#manual-checks-after-the-first-deploy).
+
 ### Agent (pytest)
 - Prior learnings (`tests/test_learnings.py`): the exact heading `Prior learnings`, only active unexpired lessons for
   this job's creator keys and then "all creators" (trial, off, deleted, expired and other creators' lessons left out),
@@ -1014,3 +1095,22 @@ From [CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owne
      share this".
    - Open the official pages linked in `config/monetization.json` for TikTok, Instagram and X and confirm each number
      (`verifiedHow: official-snippet` today).
+15. **Content Rewards** ([CONTRACTS §38.21](CONTRACTS.md#3821-not-verified-live-each-is-checked-at-the-owners-first-connect-or-first-campaign-post)):
+   these were not checked against the live Content Rewards when the feature was built. Do them after the switch PR
+   ([DEPLOYMENT.md](DEPLOYMENT.md#content-rewards-contracts-38)), with the steps in
+   [SETUP_POSTING.md](SETUP_POSTING.md#content-rewards).
+   - In the deploy log of the first §38 deploy, the plan adds `cf-prod-campaigns` and replaces nothing; the delete
+     gate passes. Until the switch PR, Set up posting shows the Content Rewards card as "Coming soon".
+   - In the Mac app, **Connect Content Rewards**. Note CR's approve screen and its words, whether CR took the
+     registration from AWS and the five loopback redirects (a "Sign-in failed" page says no), and whether the answer
+     carries `iss`. Secrets Manager (eu-north-1) now has `cf-prod/platforms/contentrewards/app` and `…/token`; the
+     `CRCONN` item has no token. The card says "Ready: sends your clips for you" (the pilot granted
+     `my_submissions:write`) or "Ready: you send clips yourself" (then send the email on "Content Rewards said no?").
+   - Paste a campaign you joined: the card says "You're in" within a minute; check whether its rules came from CR's
+     listed description or need the paste box, and that the TypeID match was logged as `cr.typeid_verified`.
+   - Post the first campaign clip to YouTube: the post line goes "Sending…" → "Sent ✓" within a few minutes (or the
+     "Send this to Content Rewards now" reminder arrives); YouTube Studio shows "Includes paid promotion" (no
+     "YouTube didn't take the Paid promotion switch" line); an X post shows "Paid partnership". Note whether CR's
+     30-minute clock started at the upload or after YouTube's processing.
+   - When money arrives: the three tiles match CR's **Earnings**; follow the **Finance** or Whop steps once and note
+     where Whop's screens differ.
