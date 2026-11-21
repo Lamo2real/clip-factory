@@ -440,6 +440,16 @@ mod tests {
                 "window.__CF_GLASS__ = \"{name}\";\nwindow.__CF_DESKTOP_VERSION__ = \"1.42.0\";\nwindow.__CF_TITLEBAR__ = 28;\n"
             )));
             assert!(script.contains("window.__CF_DESKTOP__ = true"));
+            // The Content Rewards sign-in bridge (§38.15), version 1, with its four commands only.
+            assert!(script.contains("window.__CF_CR_CONNECT__ = Object.freeze({\n    version: 1,"));
+            for command in [
+                "cr_connect_listen",
+                "cr_connect_open",
+                "cr_connect_result",
+                "cr_connect_cancel",
+            ] {
+                assert!(script.contains(&format!("\"{command}\"")), "{command}");
+            }
         }
     }
 
