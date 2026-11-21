@@ -20,6 +20,7 @@ from typing import Any
 from urllib.parse import quote, urlencode
 
 from ..clock import iso
+from ..log import log
 from . import errors
 from .base import (
     GRAPH_HOST,
@@ -513,22 +514,7 @@ class InstagramPublisher(_Graph):
             total = (row.get("config") or {}).get("quota_total") if isinstance(row.get("config"), dict) else None
             if isinstance(used, int) and isinstance(total, int) and used >= total:
                 raise PublishError("Instagram's daily limit is reached. Press Try again tomorrow.")
-            params = {
-                "media_type": "REELS",
-                "caption": instagram_caption(str(_captions(job).get("instagram") or "")),
-                # Reels shared to the main feed reach more people; off only when the owner says so (§36).
-                "share_to_feed": "false"
-                if _choice_of(job.options, _preset(job, "instagram"), "shareToFeed") is False
-                else "true",
-            }
-            if source == "video_url":
-                params["video_url"] = job.video.presigned_url(3600)
-            else:
-                params["upload_type"] = "resumable"
-            data = _ok(self.platform, self._post(job, f"{ig}/media", params, "container"), "container")
-            container = str(data.get("id") or "")
-            if not container:
-                raise errors.down(self.platform)
+            container = self._container(job, ig, source)
             handle = {"container": container}
             job.save(handle)
             if source == "video_url":
@@ -545,10 +531,37 @@ class InstagramPublisher(_Graph):
         }
         url = f"{RUPLOAD}/ig-api-upload/{job.graph_api_version}/{quote(container, safe='')}"
         resp = _send(job, self.platform, HttpRequest("POST", url, headers, job.video.read(0, size)))
+        if resp.status >= 500:
+            # rupload.facebook.com sometimes answers 5xx for a good file (seen in prod, 21 Nov 2026). Instagram can
+            # fetch the same file itself: start a new container from the media bucket's link instead.
+            log("warning", "publish.instagram_upload_fallback", status=resp.status)
+            handle = {"container": self._container(job, ig, "video_url"), "uploaded": True}
+            job.save(handle)
+            return Progress("processing", handle, self._every(job))
         _ok(self.platform, resp, "upload")
         handle = {**handle, "uploaded": True}
         job.save(handle)
         return Progress("processing", handle, self._every(job))
+
+    def _container(self, job: PublishJob, ig: str, source: str) -> str:
+        """Creates the Reels container: resumable (the file is sent next) or video_url (Instagram fetches it)."""
+        params = {
+            "media_type": "REELS",
+            "caption": instagram_caption(str(_captions(job).get("instagram") or "")),
+            # Reels shared to the main feed reach more people; off only when the owner says so (§36).
+            "share_to_feed": "false"
+            if _choice_of(job.options, _preset(job, "instagram"), "shareToFeed") is False
+            else "true",
+        }
+        if source == "video_url":
+            params["video_url"] = job.video.presigned_url(3600)
+        else:
+            params["upload_type"] = "resumable"
+        data = _ok(self.platform, self._post(job, f"{ig}/media", params, "container"), "container")
+        container = str(data.get("id") or "")
+        if not container:
+            raise errors.down(self.platform)
+        return container
 
     def _every(self, job: PublishJob) -> int:
         return int(_publish_settings(job, "checkSeconds", 60))

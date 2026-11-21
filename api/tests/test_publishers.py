@@ -360,6 +360,26 @@ def test_instagram_video_url_fallback() -> None:
     assert saved[-1]["uploaded"] is True
 
 
+def test_instagram_upload_5xx_falls_back_to_video_url() -> None:
+    # Seen in prod on 21 Nov 2026: rupload answered 500 three times for a good file. Instagram fetches it instead.
+    http = FakeHttp(
+        (200, "publish/instagram_limit"),
+        (200, "publish/instagram_container"),
+        (500, {"debug_info": {"type": "ProcessingFailedError", "message": "Request processing failed"}}),
+        (200, {"id": "17900000000000002"}),
+    )
+    job, saved, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    progress = InstagramPublisher().start(job)
+    assert progress.state == "processing"
+    assert form(http.calls[1])["upload_type"] == ["resumable"]
+    retry = form(http.calls[3])
+    assert http.calls[3].url == "https://graph.facebook.com/v27.0/1784/media"
+    assert retry["video_url"][0].startswith("https://cf-prod-media-123.s3.")
+    assert "upload_type" not in retry
+    assert retry["media_type"] == ["REELS"]
+    assert saved[-1] == {"container": "17900000000000002", "uploaded": True}
+
+
 def test_instagram_daily_limit() -> None:
     http = FakeHttp((200, {"data": [{"config": {"quota_total": 50}, "quota_usage": 50}]}))
     job, _, _ = make_job("instagram", http, data={"igUserId": "1784"})
