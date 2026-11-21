@@ -4,6 +4,7 @@ import itertools
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -389,6 +390,7 @@ from clipfactory_agent.render import (  # noqa: E402
     Marks,
     RenderResult,
     disclosure_event,
+    image_size,
     logo_filters,
     logo_input,
     logo_trim_args,
@@ -533,11 +535,65 @@ def test_the_logo_trim_command_and_filters() -> None:
     assert args[args.index("-i") - 4 : args.index("-i")] == ["-loop", "1", "-t", "0.2"]
     stderr = "crop=-598:-298:600:300\n[Parsed_cropdetect_1] x1:100 crop=300:120:100:50\n... crop=302:122:98:48"
     assert parse_crop(stderr) == (302, 122, 98, 48)  # the last one: it only grows with reset=0
-    assert parse_crop("crop=-598:-298:600:300") is None and parse_crop("") is None
-    assert logo_filters((300, 120, 100, 50), 600, 300) == "crop=300:120:100:50,format=rgba"
-    assert logo_filters(None, 4000, 1000) == "scale=2000:-2,format=rgba"
-    assert logo_filters(None, 1000, 3000) == "scale=-2:2000,format=rgba"
-    assert logo_filters(None, 400, 100) == "format=rgba"
+    assert parse_crop("") is None  # no transparency to trim
+    with pytest.raises(ValueError, match="see-through"):
+        parse_crop("crop=-598:-298:600:300")  # nothing in the logo is visible
+    # the logo is fitted into the mark row once, here, so the looped picture in the render needs no work per frame
+    fit = "scale=380:80:force_original_aspect_ratio=decrease"
+    assert logo_filters((300, 120, 100, 50), 600, 300) == f"crop=300:120:100:50,{fit},format=rgba"
+    assert logo_filters(None, 4000, 1000) == f"scale=2000:-2,{fit},format=rgba"
+    assert logo_filters(None, 1000, 3000) == f"scale=-2:2000,{fit},format=rgba"
+    assert logo_filters(None, 400, 100) == f"{fit},format=rgba"
+
+
+def _png_header(width: int, height: int) -> bytes:
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\x0dIHDR"
+        + width.to_bytes(4, "big")
+        + height.to_bytes(4, "big")
+        + b"\x08\x06"
+    )
+
+
+def test_image_size_reads_the_header_only() -> None:
+    assert image_size(_png_header(600, 300)) == ("png", 600, 300)
+    jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00" + b"\x00" * 9 + b"\xff\xc0\x00\x11\x08" + (123).to_bytes(2, "big")
+    jpeg += (321).to_bytes(2, "big") + b"\x03"
+    assert image_size(jpeg) == ("jpeg", 321, 123)  # past the APP0 segment to the frame header
+    vp8x = b"RIFF\x00\x00\x00\x00WEBPVP8X\x0a\x00\x00\x00\x10\x00\x00\x00" + (320).to_bytes(3, "little")
+    vp8x += (122).to_bytes(3, "little")
+    assert image_size(vp8x) == ("webp", 321, 123)
+    lossless = b"RIFF\x00\x00\x00\x00WEBPVP8L\x00\x00\x00\x00\x2f" + (320 | 122 << 14).to_bytes(4, "little")
+    assert image_size(lossless + b"\x00" * 5) == ("webp", 321, 123)
+    for other in (b"#EXTM3U\n#EXT-X-VERSION:3\nhttp://x/y.ts", b"GIF89a", b"", b"RIFF\x00\x00\x00\x00AVI LIST"):
+        assert image_size(other) is None
+
+
+async def test_prepare_logo_refuses_what_is_not_a_small_picture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Checked from the bytes before ffmpeg sees them: a playlist (ffmpeg would open its links) and a picture too big
+    to decode safely are refused, and nothing is run."""
+    from clipfactory_agent import render as render_mod
+
+    ran: list[Any] = []
+
+    async def never(*a: Any, **kw: Any) -> Any:
+        ran.append(a)
+        raise AssertionError("ffmpeg must not see it")
+
+    monkeypatch.setattr(render_mod.proc, "probe", never)
+    monkeypatch.setattr(render_mod.proc, "run", never)
+    playlist = tmp_path / "campaign-logo.png"
+    playlist.write_bytes(b"#EXTM3U\n#EXT-X-VERSION:3\nhttp://example.invalid/a.ts\n")
+    with pytest.raises(ValueError, match="not a PNG"):
+        await prepare_logo(playlist, tmp_path / "logo.png")
+    huge = tmp_path / "campaign-logo-2.png"
+    huge.write_bytes(_png_header(30000, 30000) + b"\x00" * 100)
+    with pytest.raises(ValueError, match="too big"):
+        await prepare_logo(huge, tmp_path / "logo.png")
+    assert ran == []
 
 
 @pytest.mark.skipif(not _ffmpeg_has("alphaextract", "cropdetect"), reason="ffmpeg is not installed")
@@ -566,7 +622,7 @@ async def test_prepare_logo_trims_transparent_edges(tmp_path: Path) -> None:
         text=True,
         check=True,
     ).stdout.strip()
-    assert size == "300,120"
+    assert size == "200,80"  # trimmed to 300 × 120, then fitted into the 380 × 80 mark row
     jpeg = tmp_path / "campaign-logo.jpg"
     subprocess.run(
         ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=red:s=64x32", "-frames:v", "1", str(jpeg)],
@@ -578,6 +634,14 @@ async def test_prepare_logo_trims_transparent_edges(tmp_path: Path) -> None:
     bad.write_bytes(b"not a picture")
     with pytest.raises((ValueError, OSError, Exception)):
         await prepare_logo(bad, tmp_path / "logo3.png")
+    clear = tmp_path / "campaign-logo-clear.png"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=black@0.0:s=200x100,format=rgba", "-frames:v",
+         "1", str(clear)],
+        check=True,
+    )  # fmt: skip
+    with pytest.raises(ValueError, match="see-through"):
+        await prepare_logo(clear, tmp_path / "logo4.png")  # nothing visible: a required logo is then "missing"
 
 
 @pytest.mark.skipif(not _ffmpeg_has("ass", "boxblur", "alphaextract"), reason="ffmpeg with libass is not installed")

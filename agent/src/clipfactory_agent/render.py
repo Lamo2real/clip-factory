@@ -48,9 +48,13 @@ PUNCH_ANCHOR = (0.5, 0.4)
 _SAFE_PATH = re.compile(r"^[A-Za-z0-9/_.-]+$")
 _SILENCE = re.compile(r"silence_(start|end): (-?[\d.]+)")
 _TRAILING = re.compile(r"[.,!?;:\"“”]+$")
-_CROP = re.compile(r"crop=(\d+):(\d+):(\d+):(\d+)")
+_CROP = re.compile(r"crop=(-?\d+):(-?\d+):(-?\d+):(-?\d+)")
 LOGO_MAX = 2000  # a larger logo is scaled down before it is used
 JPEG_MAGIC = b"\xff\xd8\xff"
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+LOGO_BYTES_MAX = 20 * 1024 * 1024  # the API takes up to 10 MB (§38.8); anything bigger is not read at all
+LOGO_PIXELS_MAX = 40_000_000  # a picture that would take more memory than this once decoded is refused unread
+_SOF = {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}
 YELLOW = "&H0000D4FF&"  # #FFD400 in ASS's &HBBGGRR& order
 
 Segment = tuple[float, float]
@@ -458,16 +462,21 @@ def logo_trim_args(src: Path) -> list[str]:
 
 
 def parse_crop(stderr: str) -> tuple[int, int, int, int] | None:
-    """cropdetect's last ``crop=w:h:x:y`` (it grows over the frames with ``reset=0``); None when nothing is visible."""
+    """cropdetect's last ``crop=w:h:x:y`` (it grows over the frames with ``reset=0``); None when there is none (no
+    transparency to trim). Raises when nothing in the logo is visible (cropdetect's box is empty)."""
     found = _CROP.findall(stderr)
     if not found:
         return None
     w, h, x, y = (int(v) for v in found[-1])
-    return (w, h, x, y) if w > 0 and h > 0 else None
+    if w <= 0 or h <= 0:
+        raise ValueError("the logo is see-through")
+    return w, h, x, y
 
 
 def logo_filters(crop: tuple[int, int, int, int] | None, width: int, height: int) -> str:
-    """The trim (when there is one), a scale down to LOGO_MAX on the long side, and RGBA for the PNG."""
+    """The trim (when there is one), a scale down to LOGO_MAX on the long side, the fit into the mark row's
+    LOGO_W × MARK_H (done once here, so the render's own fit of the looped picture costs nothing per frame), and RGBA
+    for the PNG."""
     parts: list[str] = []
     if crop:
         w, h, x, y = crop
@@ -475,16 +484,64 @@ def logo_filters(crop: tuple[int, int, int, int] | None, width: int, height: int
         width, height = w, h
     if max(width, height) > LOGO_MAX:
         parts.append(f"scale={LOGO_MAX}:-2" if width >= height else f"scale=-2:{LOGO_MAX}")
+    parts.append(f"scale={LOGO_W}:{MARK_H}:force_original_aspect_ratio=decrease")
     parts.append("format=rgba")
     return ",".join(parts)
 
 
+def _big(b: bytes) -> int:
+    return int.from_bytes(b, "big")
+
+
+def image_size(data: bytes) -> tuple[str, int, int] | None:
+    """``(kind, width, height)`` read from a PNG, JPEG or WebP file's own header, without decoding it; None for
+    anything else (or a header that can't be read)."""
+    if data[:8] == PNG_MAGIC and data[12:16] == b"IHDR" and len(data) >= 24:
+        return "png", _big(data[16:20]), _big(data[20:24])
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP" and len(data) >= 30:
+        chunk = data[12:16]
+        if chunk == b"VP8X":
+            return "webp", 1 + int.from_bytes(data[24:27], "little"), 1 + int.from_bytes(data[27:30], "little")
+        if chunk == b"VP8L" and data[20] == 0x2F:
+            bits = int.from_bytes(data[21:25], "little")
+            return "webp", (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
+        if chunk == b"VP8 " and data[23:26] == b"\x9d\x01\x2a":
+            return (
+                "webp",
+                int.from_bytes(data[26:28], "little") & 0x3FFF,
+                int.from_bytes(data[28:30], "little") & 0x3FFF,
+            )
+        return None
+    if data[:3] == JPEG_MAGIC:
+        i = 2
+        while i + 4 <= len(data) and data[i] == 0xFF:
+            marker = data[i + 1]
+            if marker == 0xFF:  # fill byte
+                i += 1
+                continue
+            if marker == 0x01 or 0xD0 <= marker <= 0xD8:  # markers without a length
+                i += 2
+                continue
+            if marker in _SOF and i + 9 <= len(data):
+                return "jpeg", _big(data[i + 7 : i + 9]), _big(data[i + 5 : i + 7])
+            i += 2 + _big(data[i + 2 : i + 4])
+    return None
+
+
 async def prepare_logo(src: Path, dest: Path) -> Path:
     """The job's copy of the logo (PNG, JPEG or WebP) as ``dest`` (a PNG): transparent edges trimmed, at most
-    LOGO_MAX pixels on its long side. A JPEG has no transparency and is used as it is. Raises when it is not a
-    picture ffmpeg can read."""
-    with src.open("rb") as f:
-        jpeg = f.read(3) == JPEG_MAGIC
+    LOGO_W × MARK_H. A JPEG has no transparency and is used as it is. Raises when it is not a PNG, JPEG or WebP
+    picture ffmpeg can read, when it is too big to decode safely (its size is read from its header first, so a huge
+    picture is never decoded) and when nothing in it is visible."""
+    if src.stat().st_size > LOGO_BYTES_MAX:
+        raise ValueError("the logo file is too big")
+    found = image_size(src.read_bytes())
+    if found is None:
+        raise ValueError("the logo is not a PNG, JPEG or WebP picture")
+    kind, width, height = found
+    if width <= 0 or height <= 0 or width * height > LOGO_PIXELS_MAX:
+        raise ValueError("the logo picture is too big")
+    jpeg = kind == "jpeg"
     info = await proc.probe(str(src))
     if not info.has_video or info.width <= 0 or info.height <= 0:
         raise ValueError("the logo is not a picture")
