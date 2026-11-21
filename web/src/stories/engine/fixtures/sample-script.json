@@ -1,0 +1,138 @@
+{
+  "engine": 1,
+  "fps": 30,
+  "width": 1080,
+  "height": 1920,
+  "durationSec": 6,
+  "title": "Ice test",
+  "seed": 7,
+  "cast": {
+    "c1": {
+      "characterId": "ch1",
+      "name": "Lamo",
+      "look": {
+        "body": "bean",
+        "skin": "#f2c9a0",
+        "height": 1,
+        "width": 1,
+        "hair": {
+          "style": "short",
+          "color": "#3b2a1a"
+        },
+        "eyes": {
+          "shape": "round",
+          "color": "#1c1842"
+        },
+        "brows": "thick",
+        "nose": "button",
+        "mouth": "wide",
+        "outfit": {
+          "top": "#ff6f61",
+          "bottom": "#1c1842",
+          "accent": "#ffc94a",
+          "pattern": "plain"
+        },
+        "accessory": "none",
+        "outline": "#1c1842"
+      },
+      "movementStyle": "bouncy",
+      "voice": {
+        "style": "babble",
+        "pitch": 1.2,
+        "noises": [
+          "gasp",
+          "phew"
+        ],
+        "sfx": [
+          "boing"
+        ]
+      }
+    }
+  },
+  "scenes": [
+    {
+      "sceneId": "s1",
+      "title": "Icy road",
+      "durationSec": 3,
+      "set": "icy_road",
+      "view": "side",
+      "camera": "wide",
+      "actors": [
+        {
+          "castId": "c1",
+          "x": 0.5,
+          "y": 0.7,
+          "facing": "right"
+        }
+      ],
+      "props": [
+        {
+          "propId": "car1",
+          "kind": "car",
+          "x": 0.4,
+          "y": 0.7,
+          "scale": 1,
+          "rot": 0
+        }
+      ],
+      "beats": [
+        {
+          "at": 0.2,
+          "dur": 1,
+          "who": "c1",
+          "do": "gasp",
+          "face": "shocked",
+          "noise": "gasp",
+          "sfx": "skid"
+        }
+      ],
+      "caption": "Ease off the accelerator",
+      "note": null,
+      "sfx": []
+    },
+    {
+      "sceneId": "s2",
+      "title": "Phew",
+      "durationSec": 3,
+      "set": "road_day",
+      "view": "side",
+      "camera": "medium",
+      "actors": [
+        {
+          "castId": "c1",
+          "x": 0.5,
+          "y": 0.7,
+          "facing": "left"
+        }
+      ],
+      "props": [],
+      "beats": [
+        {
+          "at": 0.5,
+          "dur": 1,
+          "who": "c1",
+          "do": "celebrate",
+          "face": "relieved",
+          "noise": "phew"
+        }
+      ],
+      "caption": null,
+      "note": null,
+      "sfx": []
+    }
+  ],
+  "music": {
+    "mood": "playful",
+    "volume": 0.4
+  },
+  "captionsOn": true,
+  "captions": [
+    {
+      "id": "cap1",
+      "at": 0.5,
+      "dur": 2,
+      "text": "Ease off the accelerator"
+    }
+  ],
+  "safety": null
+}
