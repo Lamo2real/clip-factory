@@ -645,6 +645,77 @@ def test_the_first_reads_stale_scan_restart_resets_the_days(world: Any) -> None:
     assert fake.calls("list_my_payouts")[0][0] == {"status": ["paid"], "limit": 25}  # from the top again
 
 
+def test_a_newer_row_with_the_marks_own_time_is_counted_once(world: Any) -> None:
+    """CR pays in rounds: a row newer than the mark (listed before it) can share its ``created_at``. The watermark
+    read keeps it by day; the scan must not add it again."""
+    deps, fake, _clock = world
+    older_owner(deps)
+    balance(fake)
+    same_round = {**paid_on("pay_new", 500, "2026-11-14"), "created_at": "2026-11-03T09:00:00Z"}
+    mark = paid_on("pay_3", 300, "2026-11-03")
+    fake.answer(
+        "list_my_payouts",
+        payouts(
+            [
+                page([same_round, mark], more=True, cursor="w1"),  # the watermark read
+                page([same_round, mark], more=True, cursor="s1"),  # the scan
+                page([paid_on("pay_2", 200, "2026-11-02"), paid_on("pay_1", 100, "2026-10-20")]),
+            ]
+        ),
+    )
+    poll.money_step(deps, USER, NOW)
+    item = money.load(deps.store, USER)
+    assert item["paidByDay"] == {"2026-11-14": 500, "2026-11-03": 300, "2026-11-02": 200, "2026-10-20": 100}
+    assert (item["paidTotalCents"], item["paidByDayDone"]) == (1100, True)
+
+
+def test_a_first_read_under_way_before_paid_by_day_gets_the_day_scan(world: Any) -> None:
+    """Its earlier pages were added to the total but never by day: the days it keeps are dropped and the day scan
+    reads every row up to the mark, so the 30 days are never short."""
+    deps, fake, _clock = world
+    deps.store.put(
+        {
+            "pk": db.user_pk(USER),
+            "sk": db.CRMONEY_SK,
+            "type": "crmoney",
+            "userId": USER,
+            "scan": {
+                "status": "running",
+                "cursor": "c1",
+                "at": iso(NOW - timedelta(hours=1)),
+                "mark": {"id": "pay_3", "createdAt": "2026-11-12T09:00:00Z"},
+            },
+            "paidTotalCents": 300,
+            "paidByCampaign": {CMP: 300},
+            "payoutsSeen": ["pay_3"],
+        }
+    )
+    balance(fake)
+    fake.answer(
+        "list_my_payouts",
+        payouts(
+            [
+                page([paid_on("pay_2", 200, "2026-11-12"), paid_on("pay_1", 100, "2026-11-01")]),  # the first read
+                page(  # the day scan, from the top
+                    [
+                        paid_on("pay_3", 300, "2026-11-12"),
+                        paid_on("pay_2", 200, "2026-11-12"),
+                        paid_on("pay_1", 100, "2026-11-01"),
+                    ]
+                ),
+            ]
+        ),
+    )
+    money.read(deps, USER, NOW)
+    item = money.load(deps.store, USER)
+    assert item["paidByDay"] == {"2026-11-12": 500, "2026-11-01": 100}  # pay_3 too, once
+    assert (item["paidTotalCents"], item["firstReadDone"], item["paidByDayDone"]) == (600, True, True)
+    assert "dayScan" not in item
+    assert "scan" not in item
+    paid_calls = [a for a, _h, _t in fake.calls("list_my_payouts") if a.get("status") == ["paid"]]
+    assert paid_calls == [{"status": ["paid"], "limit": 25, "cursor": "c1"}, {"status": ["paid"], "limit": 25}]
+
+
 def test_paid_day_is_the_utc_date() -> None:
     assert money.paid_day({"paid_at": "2026-11-12T23:30:00-05:00"}) == "2026-11-13"
     assert money.paid_day({"created_at": "2026-11-12T10:00:00Z"}) == "2026-11-12"

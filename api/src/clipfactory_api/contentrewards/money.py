@@ -274,6 +274,10 @@ def _paid(  # noqa: PLR0915, PLR0917 (the first read and the watermark read of Â
             scan = {"status": "running", "cursor": None, "at": iso(now)}
             item["paidTotalCents"], item["paidByCampaign"], item["payoutsSeen"] = 0, {}, []
             item["paidByDay"] = {}
+        elif scan.get("cursor") and "paidByDay" not in item:
+            # a first read already under way before paidByDay: its earlier pages were never kept by day, so the
+            # days it keeps are dropped at the end and the day scan reads them all
+            scan["noDays"] = True
         cursor = scan.get("cursor")
         for _ in range(config.PAID_PAGES_PER_TICK):
             if client.calls - start_calls >= calls_left:
@@ -291,9 +295,13 @@ def _paid(  # noqa: PLR0915, PLR0917 (the first read and the watermark read of Â
             cursor = page.get("next_cursor") if isinstance(page.get("next_cursor"), str) else None
             if not page.get("has_more") or not cursor:
                 item["firstReadDone"] = True
-                item["paidByDayDone"] = True
                 item["paidMark"] = scan.get("mark") or {}
                 item.pop("scan", None)
+                if scan.get("noDays"):
+                    item.pop("paidByDay", None)
+                    _start_day_scan(item, now)  # the day scan reads every row up to the mark, from this tick on
+                else:
+                    item["paidByDayDone"] = True
                 return
         scan["cursor"] = cursor
         item["scan"] = scan
@@ -362,11 +370,12 @@ def _start_day_scan(item: Item, now: datetime) -> None:
 
 def _older_than_mark(row: Mapping[str, Any], mark: Mapping[str, Any], passed: bool) -> bool:
     """The list is newest first: a row is at or older than the mark once the mark's own row (or, if that row is gone
-    from the list, a row made no later than it) was reached."""
+    from the list, a row made before it) was reached. A row listed before the mark with the mark's own
+    ``created_at`` (paid in the same round) is newer: the watermark read already kept it by day."""
     if passed or row.get("id") == mark.get("id"):
         return True
     made, marked = parse(row.get("created_at")), parse(mark.get("createdAt"))
-    return made is not None and marked is not None and made <= marked
+    return made is not None and marked is not None and made < marked
 
 
 def _day_scan(client: Any, item: Item, now: datetime, start_calls: int, calls_left: int) -> None:
