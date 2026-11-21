@@ -1,5 +1,5 @@
 {
- "version": "184b4feae54c",
+ "version": "e1637bd0a092",
  "parts": [
   {
    "id": "app-map",
@@ -250,6 +250,12 @@
    "title": "CONTRACTS: 37. Chat hype: the crowd as a signal (owner request, 2026-11-20)",
    "line": "37.1 The owner's words",
    "chars": 9831
+  },
+  {
+   "id": "contracts-38",
+   "title": "CONTRACTS: 38. Content Rewards campaigns (owner request, 2026-11-21)",
+   "line": "The owner's words: \"browse Content Rewards, join a campaign there, then paste the campaign URL into Clip Factory. Clip",
+   "chars": 115630
   },
   {
    "id": "adr-01",
@@ -616,6 +622,12 @@
    "title": "DECISIONS: ADR-61 Chat hype from replay where it is public, from the picture where it is not; never a reason to fail",
    "line": "Context. The owner asked that a streamer's chat scrolling very fast, or flooding with one word, count as a sign",
    "chars": 1842
+  },
+  {
+   "id": "adr-62",
+   "title": "DECISIONS: ADR-62 Content Rewards: the official sign-in through the desktop app's loopback door, sending from the cloud, a reminder when it can't",
+   "line": "Context. The owner joins paid clipping campaigns on Content Rewards (CR) and wants Clip Factory to follow each",
+   "chars": 5273
   },
   {
    "id": "architecture-overview",
