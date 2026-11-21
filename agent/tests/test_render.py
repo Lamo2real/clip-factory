@@ -375,3 +375,267 @@ async def test_a_moment_without_words_keeps_its_quiet_stretches(
     else:
         assert asked == [] and len(shown[0]) == 1  # one whole segment: nothing cut
         assert shown[0][0][1] - shown[0][0][0] > 24
+
+
+# --- Content Rewards campaign clips (docs/CONTRACTS.md §38.13): the mark row, the logo and the disclosure -----------
+
+from clipfactory_agent.render import (  # noqa: E402
+    CAMPAIGN_BAND,
+    CAMPAIGN_HOOK_TOP,
+    DISCLOSURE_SECONDS,
+    HOOK_TOP,
+    MARK_H,
+    MARK_TOP,
+    Marks,
+    RenderResult,
+    disclosure_event,
+    logo_filters,
+    logo_input,
+    logo_trim_args,
+    parse_crop,
+    prepare_logo,
+)
+
+
+def test_the_mark_row_sits_in_the_band_above_every_face() -> None:
+    assert (CAMPAIGN_BAND, MARK_TOP, MARK_H, CAMPAIGN_HOOK_TOP) == (480, 192, 80, 288)
+    assert SAFE[1] == MARK_TOP and MARK_TOP + MARK_H < CAMPAIGN_HOOK_TOP < CAMPAIGN_BAND
+    assert DISCLOSURE_SECONDS == 3.0
+
+
+def test_layout_parts_with_the_campaign_band() -> None:
+    fc = Facecam(0.7, 0.05, 0.25, 0.3)
+    parts = layout_parts(fc, 1920, 1080, band=CAMPAIGN_BAND)
+    assert f"[bg][cam]overlay=0:{CAMPAIGN_BAND}[l1]" in parts
+    assert f"[l1][game]overlay=0:{CAMPAIGN_BAND + CAM_H}[lay]" in parts  # the gameplay starts 80 px lower
+    assert f"scale={W}:{H - CAMPAIGN_BAND - CAM_H}:" in parts[3]  # and gets 80 px less
+    fill = layout_parts(None, 1920, 1080, band=CAMPAIGN_BAND)
+    assert fill[-1] == f"[bg][fg]overlay=(W-w)/2:{CAMPAIGN_BAND}[lay]"
+    # without a campaign: the old band, exactly as before
+    assert layout_parts(fc, 1920, 1080) == layout_parts(fc, 1920, 1080, band=BAND)
+    assert f"[bg][cam]overlay=0:{BAND}[l1]" in layout_parts(fc, 1920, 1080)
+
+
+def test_the_disclosure_event_and_the_lower_hook() -> None:
+    ass = build_ass(
+        "he thought he got away with it", [], 20.0, hook_top=CAMPAIGN_HOOK_TOP, disclosure="Paid partnership"
+    )
+    styles = {ln.split(",")[0][7:]: ln.split(",") for ln in ass.splitlines() if ln.startswith("Style:")}
+    assert int(styles["Hook"][21]) == 288
+    d = styles["Disclosure"]
+    assert d[1:3] == ["Inter", "46"] and d[7] == "-1" and d[18] == "4"  # bold, middle left
+    event = next(ln for ln in ass.splitlines() if ",Disclosure," in ln)
+    assert event.startswith("Dialogue: 2,0:00:00.00,0:00:03.00,Disclosure,")
+    assert event.endswith("{\\an4\\pos(60,232)\\fad(0,300)}Paid partnership")
+    # brand words can't add override blocks or line breaks
+    hostile = disclosure_event("Paid {\\pos(0,0)} part\\Nnership\n!")
+    assert hostile.count("{") == 1 and hostile.endswith("}Paid (/pos(0,0)) part/Nnership !")
+    # long words are set smaller, so they never run under the logo
+    assert "\\fs" not in disclosure_event("Paid partnership") and "\\fs24" not in disclosure_event("x" * 30)
+    assert "\\fs28" in disclosure_event("A" * 30)
+
+
+def test_no_campaign_no_mark_row() -> None:
+    caps = phrases([TimedWord(0.5, 0.8, "no")])
+    plain = build_ass("he thought he got away with it", caps, 5.0)
+    assert "Disclosure" not in plain and f",{HOOK_TOP},1\n" in plain
+    assert plain == build_ass("he thought he got away with it", caps, 5.0, hook_top=HOOK_TOP, disclosure=None)
+    graph = filter_graph([(0, 3)], ["[vin]null[lay]"], Path("/tmp/a.ass"), has_audio=True)
+    assert "logo" not in graph and graph.endswith("[subs]format=yuv420p[vout]")
+
+
+@pytest.mark.parametrize(
+    ("tease", "has_audio", "index"),
+    [(False, True, 1), (True, True, 2), (False, False, 2), (True, False, 3)],
+)
+def test_the_logo_is_the_last_input(tease: bool, has_audio: bool, index: int) -> None:
+    assert logo_input(tease, has_audio) == index
+    segs = [(20.0, 21.5), (2.0, 10.0)] if tease else [(2.0, 10.0)]
+    graph = filter_graph(segs, ["[vin]null[lay]"], Path("/tmp/a.ass"), has_audio, tease=tease, logo=index)
+    chains = graph.split(";")
+    subs = chains.index("[lay]ass=filename=/tmp/a.ass[subs]")
+    assert chains[subs + 1] == f"[{index}:v]scale=380:80:force_original_aspect_ratio=decrease,format=rgba[logo]"
+    assert chains[subs + 2] == "[subs][logo]overlay=x=918-w:y=192+(80-h)/2[marked]"  # after the subtitles
+    assert chains[-1] == "[marked]format=yuv420p[vout]"
+    assert "-map " + (f"{index - 1}:a" if not has_audio else "[aout]") in " ".join(
+        encode_args(10, has_audio, silent_input=2 if tease else 1)
+    )
+
+
+async def test_render_clip_puts_the_logo_last_and_marks_the_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every input order (with a tease and without sound): the logo comes after the section, the tease and the
+    silence, and the graph names that index."""
+    from clipfactory_agent import proc
+    from clipfactory_agent import render as render_mod
+
+    runs: list[list[str]] = []
+
+    async def probe(src: str) -> proc.MediaInfo:
+        return proc.MediaInfo(40.0, 1280, 720, False, True, 30.0)  # no sound
+
+    async def run(args: list[str], **kw: object) -> proc.Result:
+        runs.append(list(args))
+        out = Path(args[-1])
+        if out.suffix in (".mp4", ".jpg"):
+            out.write_bytes(b"x")
+        return proc.Result(b"", "")
+
+    async def fetch(start: float, end: float, dest: Path) -> Path:
+        dest.write_bytes(b"section")
+        return dest
+
+    monkeypatch.setattr(proc, "probe", probe)
+    monkeypatch.setattr(proc, "run", run)
+    logo = tmp_path / "logo.png"
+    logo.write_bytes(b"png")
+    m = make_moment(start=5, end=30, payoff_at=29, peak_at=20, tease=(25.0, 26.5))
+    r = await render_mod.render_clip(
+        m,
+        words=[[6.0, 6.4, "no"]],
+        workdir=tmp_path / "clip",
+        fetch_section=fetch,
+        detect_layout=None,
+        known_layout=FrameLayout(None, "gameplay"),
+        marks=Marks(logo=logo, disclosure="Paid partnership"),
+    )
+    assert isinstance(r, RenderResult) and r.logo and r.disclosure
+    cut = next(a for a in runs if "-filter_complex" in a)
+    inputs = [cut[i + 1] for i, a in enumerate(cut) if a == "-i"]
+    assert inputs[-1] == str(logo) and len(inputs) == 4  # section, tease, silence, logo
+    at = cut.index(str(logo))
+    assert cut[at - 5 : at] == ["-loop", "1", "-t", f"{r.duration:.3f}", "-i"]
+    graph = cut[cut.index("-filter_complex") + 1]
+    assert "[3:v]scale=380:80" in graph and f"overlay=(W-w)/2:{CAMPAIGN_BAND}[lay]" in graph
+    ass = (tmp_path / "clip" / "captions.ass").read_text()
+    assert ",Disclosure," in ass and ",288,1\n" in ass
+    # without marks: no logo input, the old band, no disclosure
+    runs.clear()
+    plain = await render_mod.render_clip(
+        m,
+        words=[[6.0, 6.4, "no"]],
+        workdir=tmp_path / "plain",
+        fetch_section=fetch,
+        detect_layout=None,
+        known_layout=FrameLayout(None, "gameplay"),
+    )
+    assert not plain.logo and not plain.disclosure
+    cut = next(a for a in runs if "-filter_complex" in a)
+    assert str(logo) not in cut and "-loop" not in cut and f"overlay=(W-w)/2:{BAND}" in " ".join(cut)
+    assert ",Disclosure," not in (tmp_path / "plain" / "captions.ass").read_text()
+
+
+def test_the_logo_trim_command_and_filters() -> None:
+    args = logo_trim_args(Path("/tmp/w/campaign-logo.png"))
+    vf = args[args.index("-vf") + 1]
+    assert vf == "alphaextract,cropdetect=limit=0.02:round=2:reset=0"
+    assert args[args.index("-i") - 4 : args.index("-i")] == ["-loop", "1", "-t", "0.2"]
+    stderr = "crop=-598:-298:600:300\n[Parsed_cropdetect_1] x1:100 crop=300:120:100:50\n... crop=302:122:98:48"
+    assert parse_crop(stderr) == (302, 122, 98, 48)  # the last one: it only grows with reset=0
+    assert parse_crop("crop=-598:-298:600:300") is None and parse_crop("") is None
+    assert logo_filters((300, 120, 100, 50), 600, 300) == "crop=300:120:100:50,format=rgba"
+    assert logo_filters(None, 4000, 1000) == "scale=2000:-2,format=rgba"
+    assert logo_filters(None, 1000, 3000) == "scale=-2:2000,format=rgba"
+    assert logo_filters(None, 400, 100) == "format=rgba"
+
+
+@pytest.mark.skipif(not _ffmpeg_has("alphaextract", "cropdetect"), reason="ffmpeg is not installed")
+async def test_prepare_logo_trims_transparent_edges(tmp_path: Path) -> None:
+    src = tmp_path / "campaign-logo.png"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=yellow:s=300x120,format=rgba,pad=600:300:100:50:color=black@0",
+            "-frames:v",
+            "1",
+            str(src),
+        ],
+        check=True,
+    )
+    out = await prepare_logo(src, tmp_path / "logo.png")
+    size = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "csv=p=0", str(out)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert size == "300,120"
+    jpeg = tmp_path / "campaign-logo.jpg"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=red:s=64x32", "-frames:v", "1", str(jpeg)],
+        check=True,
+    )
+    out = await prepare_logo(jpeg, tmp_path / "logo2.png")
+    assert out.read_bytes()[:4] == b"\x89PNG"
+    bad = tmp_path / "campaign-logo.webp"
+    bad.write_bytes(b"not a picture")
+    with pytest.raises((ValueError, OSError, Exception)):
+        await prepare_logo(bad, tmp_path / "logo3.png")
+
+
+@pytest.mark.skipif(not _ffmpeg_has("ass", "boxblur", "alphaextract"), reason="ffmpeg with libass is not installed")
+async def test_a_rendered_campaign_clip_shows_the_logo_and_the_start_words(tmp_path: Path) -> None:
+    """A real cut: the logo sits in the mark row on the right for the whole clip, the start words on the left only for
+    the first 3 seconds, and nothing of either reaches below the row."""
+    src = tmp_path / "src.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=black:s=1280x720:r=30:d=12",
+            "-f", "lavfi", "-i", "sine=f=440:d=12", "-c:v", "libx264", "-c:a", "aac", "-shortest", str(src),
+        ],
+        check=True,
+    )  # fmt: skip
+    logo = tmp_path / "campaign-logo.png"
+    subprocess.run(
+        [
+            "ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
+            "color=c=white:s=400x100,format=rgba,pad=500:200:50:50:color=black@0", "-frames:v", "1", str(logo),
+        ],
+        check=True,
+    )  # fmt: skip
+    prepared = await prepare_logo(logo, tmp_path / "logo.png")
+
+    async def fetch(start: float, end: float, dest: Path) -> Path:
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-ss", str(start), "-to", str(end), "-i", str(src), str(dest)], check=True
+        )
+        return dest
+
+    m = make_moment(start=1, end=9, payoff_at=8, peak_at=5, hook="nobody expected this to happen here")
+    r = await render_clip(
+        m,
+        words=[],
+        workdir=tmp_path / "clip",
+        fetch_section=fetch,
+        detect_layout=None,
+        known_layout=FrameLayout(None, "gameplay"),
+        marks=Marks(logo=prepared, disclosure="Paid partnership"),
+    )
+    assert r.logo and r.disclosure
+
+    def frame(at: float) -> bytes:
+        return subprocess.run(
+            ["ffmpeg", "-v", "error", "-ss", str(at), "-i", str(r.video), "-frames:v", "1", "-vf", "format=gray",
+             "-f", "rawvideo", "-"],
+            capture_output=True,
+            check=True,
+        ).stdout  # fmt: skip
+
+    def row(gray: bytes, x0: int, x1: int) -> tuple[int, int, int, int] | None:
+        """The lit box inside the mark row between x0 and x1."""
+        crop = b"".join(gray[y * W + x0 : y * W + x1] for y in range(MARK_TOP, MARK_TOP + MARK_H))
+        return lit_box(crop, x1 - x0, MARK_H, level=150)
+
+    early, late = frame(1.0), frame(5.0)
+    logo_box = row(early, 540, 920)
+    assert logo_box is not None and logo_box[2] + 540 >= SAFE[2] - 4  # right-aligned on the safe edge
+    assert row(late, 540, 920) is not None  # the whole clip
+    assert row(early, SAFE[0], 520) is not None  # the start words, left
+    assert row(late, SAFE[0], 520) is None  # gone after 3 seconds
