@@ -92,6 +92,11 @@ run "its_own_repository_image_and_runtime" {
   }
 
   assert {
+    condition     = output.image_tag == "stories-agent-0123456789abcdef" && output.ecr_repository_url == "123456789012.dkr.ecr.eu-north-1.amazonaws.com/cf-test-stories-agent"
+    error_message = "image_tag is the tag the runtime runs (deploy.yml keeps it when a new image does not build), and the repository URL has no tag."
+  }
+
+  assert {
     condition = aws_bedrockagentcore_agent_runtime.agent.environment_variables == tomap({
       CF_STORIES_TABLE  = "cf-test-data"
       CF_MEDIA_BUCKET   = "cf-test-media"

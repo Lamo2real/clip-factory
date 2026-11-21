@@ -319,6 +319,16 @@ run "lamo_stories_is_wired" {
     }
   }
 
+  # Known at plan here so the runtime's image (and so stories_agent_image_tag) is known too.
+  override_resource {
+    target          = module.stories_agent.aws_ecr_repository.agent
+    override_during = plan
+    values = {
+      repository_url = "123456789012.dkr.ecr.eu-north-1.amazonaws.com/cf-prod-stories-agent"
+      arn            = "arn:aws:ecr:eu-north-1:123456789012:repository/cf-prod-stories-agent"
+    }
+  }
+
   override_resource {
     target          = module.api.aws_apigatewayv2_api.http
     override_during = plan
@@ -333,6 +343,12 @@ run "lamo_stories_is_wired" {
       output.stories_agent_runtime_arn == "arn:aws:bedrock-agentcore:eu-north-1:123456789012:runtime/cf_prod_story_agent-AbCdEf1234" &&
     module.stories_agent.log_group_name == "/aws/bedrock-agentcore/runtimes/cf_prod_story_agent-AbCdEf1234-DEFAULT")
     error_message = "Lamo Stories has its own runtime, cf_prod_story_agent, beside Clip Factory's cf_prod_clip_agent."
+  }
+
+  assert {
+    condition = (output.stories_agent_image_tag == "stories-agent-test" && output.stories_agent_image_tag != var.agent_image_tag &&
+    output.stories_ecr_repository_url == "123456789012.dkr.ecr.eu-north-1.amazonaws.com/cf-prod-stories-agent")
+    error_message = "deploy.yml reads stories_agent_image_tag (the tag Lamo Stories' runtime runs) before the plan; it is never Clip Factory's tag."
   }
 
   assert {
