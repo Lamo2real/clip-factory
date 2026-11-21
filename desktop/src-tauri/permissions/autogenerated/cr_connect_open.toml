@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cr-connect-open"
+description = "Enables the cr_connect_open command without any pre-configured scope."
+commands.allow = ["cr_connect_open"]
+
+[[permission]]
+identifier = "deny-cr-connect-open"
+description = "Denies the cr_connect_open command without any pre-configured scope."
+commands.deny = ["cr_connect_open"]
