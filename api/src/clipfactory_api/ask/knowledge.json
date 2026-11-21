@@ -1,5 +1,5 @@
 {
- "version": "07fafab368be",
+ "version": "62f00cf360d2",
  "parts": [
   {
    "id": "app-map",
@@ -255,7 +255,7 @@
    "id": "contracts-38",
    "title": "CONTRACTS: 38. Content Rewards campaigns (owner request, 2026-11-21)",
    "line": "The owner's words: \"browse Content Rewards, join a campaign there, then paste the campaign URL into Clip Factory. Clip",
-   "chars": 168574
+   "chars": 169368
   },
   {
    "id": "contracts-39",
@@ -268,6 +268,12 @@
    "title": "CONTRACTS: 40. Get paid: set up payouts, see if you can get paid, and what reached your bank (owner request, 2026-11-21)",
    "line": "The owner's words: \"Does the application of Clip Factory show me exactly how much I get after or how much I earn in",
    "chars": 118752
+  },
+  {
+   "id": "contracts-41",
+   "title": "CONTRACTS: 41. Campaign finder: campaigns that match what you want (owner request, 2026-11-21)",
+   "line": "The owner's words: \"Also, will I be able to find campaigns and join them based on some requirements that I set if the",
+   "chars": 94827
   },
   {
    "id": "adr-01",
@@ -651,6 +657,12 @@
    "id": "adr-64",
    "title": "DECISIONS: ADR-64 Get paid: payout records count as \"sent to your bank\", statuses say how they are known, the bank waits for the owner",
    "line": "Context. The owner asked (2026-11-21) whether Clip Factory shows exactly what he earns on YouTube, TikTok,",
+   "chars": 6402
+  },
+  {
+   "id": "adr-65",
+   "title": "DECISIONS: ADR-65 Campaign finder: Content Rewards' public pages read politely, joining stays the owner's own tap",
+   "line": "Context. The owner asked (2026-11-21) whether he can find campaigns and join them by requirements he sets, once",
    "chars": 6402
   },
   {
