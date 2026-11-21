@@ -71,6 +71,27 @@ describe("no money guesses (§25, ADR-47)", () => {
     expect(using.map(rel)).toEqual([]);
   });
 
+  // §38.7: Content Rewards' money is its own reported numbers, only formatted. Never a rate × views, never added up on
+  // the web (the mock's copy of the server's numbers is the one exception).
+  const CR_MOCK = "api/mock/contentrewards.ts";
+  it("Content Rewards amounts are never worked out (no cents times, divided or added)", () => {
+    const hits = files(SRC)
+      .filter((f) => rel(f) !== CR_MOCK)
+      .flatMap((f) => (code(f).match(/\w*Cents\b\s*[-*/+]\s*[\w(]|[\w)]\s*[*/+]\s*\w*Cents\b/g) ?? []).map((m) => `${rel(f)}: ${m}`));
+    expect(hits).toEqual([]);
+  });
+
+  it("a campaign's rate is never turned into money (no per 1,000 rate times views)", () => {
+    const using = files(SRC).filter((f) => rel(f) !== CR_MOCK && code(f).split("\n").some((line) => /per1kCents/.test(line) && /views/.test(line) && /[*/]/.test(line)));
+    expect(using.map(rel)).toEqual([]);
+  });
+
+  it("Content Rewards' paid-so-far line says Checking… until the list was read to its end", () => {
+    const part = read(join(SRC, "screens/money/CrMoneyPart.tsx"));
+    expect(part).toMatch(/paidSoFarCents == null \? "Checking…"/);
+    expect(part).toContain("Content Rewards&apos; numbers");
+  });
+
   it("the help assistant never offers to change a rate or calls money a best guess", () => {
     const kb = read(join(SRC, "features/help/helpKb.json")).toLowerCase();
     for (const phrase of ["for 1,000 views", "best guess", "use the usual", "your amount"]) expect(kb).not.toContain(phrase);

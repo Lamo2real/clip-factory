@@ -231,3 +231,20 @@ for (const size of [
     expect(hit).toBe("upload");
   });
 }
+
+test("a campaign clip (§38.5): the strip, only the paid places, YouTube locked public and never for kids, paid partnership on", async ({ page }) => {
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem("cf-mock-cr-review")) sessionStorage.setItem("cf-mock-cr-review", "1");
+  });
+  await fourReady(page);
+  const card = page.locator(".review-card").filter({ has: page.locator("[data-help='cr-review-strip']") });
+  await expect(card.locator(".cr-strip")).toContainText("For FaZe Clips · Content Rewards");
+  // FaZe Clips pays for YouTube and Instagram: TikTok and Facebook are set up but get no chip.
+  await expect(card.locator(".upload-chip")).toHaveCount(2);
+  await expect(card.locator(".upload-chip[aria-pressed='true']")).toHaveCount(2);
+  await expect(card.locator("[data-place='youtube'] .place-row__now")).toHaveText("Who can see it: Everyone · Made for kids: No · Paid promotion");
+  await card.locator("[data-place='instagram'] summary").click();
+  await expect(card.locator("[data-place='instagram']")).toContainText("Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.");
+  await card.getByRole("button", { name: "Upload to 2" }).click();
+  await expect(page.getByText("Uploading to 2 places!")).toBeVisible();
+});
