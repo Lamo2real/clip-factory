@@ -1,5 +1,5 @@
 {
- "version": "c7d6f90226e6",
+ "version": "73d5c135788b",
  "parts": [
   {
    "id": "app-map",
@@ -795,13 +795,13 @@
    "id": "deployment-what-a-deploy-does",
    "title": "DEPLOYMENT: What a deploy does",
    "line": "Triggered by a push to main ([deploy.yml](../.github/workflows/deploy.yml)) or by hand (Actions → deploy → Run workflow).",
-   "chars": 4334
+   "chars": 4516
   },
   {
    "id": "deployment-desktop-downloads",
    "title": "DEPLOYMENT: Desktop downloads",
    "line": "The Mac .dmg and Windows .exe offered by Get the app are built by the desktop job in",
-   "chars": 4801
+   "chars": 6245
   },
   {
    "id": "deployment-clip-numbers-and-their-limits",
