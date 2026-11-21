@@ -180,7 +180,8 @@ pub(crate) mod tests {
     use super::*;
 
     pub const CHALLENGE: &str = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
-    pub const STATE: &str = "v1.cr.0123456789abcdef.1795264496.c2lnbmF0dXJl";
+    pub const STATE: &str =
+        "v1.q9Xr2LmT0aBcDeFgHiJkLw.1795264796.Zq3vN8yR1kT6wP0sU4xA7cE2bG5dH9jL-mO_nQtVuWs";
 
     /// The address the API builds (§38.9), with any of its parameters swapped or added.
     pub fn url_with(port: u16, change: &[(&str, Option<&str>)]) -> String {
