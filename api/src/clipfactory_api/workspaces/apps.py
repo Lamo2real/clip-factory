@@ -190,6 +190,7 @@ def oauth_env_for(env: OAuthEnv, choice: str, base: str | None = None) -> OAuthE
         graph_version=env.graph_version,
         scopes=env.scopes,
         money_scopes=env.money_scopes,
+        payment_scopes=env.payment_scopes,
         stories_callback=found,
     )
 
