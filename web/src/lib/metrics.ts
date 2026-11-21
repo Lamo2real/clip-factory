@@ -301,6 +301,19 @@ export function postStatusLabel(post: { status: string; privacy?: string }): str
   return STATUS_LABEL[perfStatus(post)];
 }
 
+/**
+ * What a Library post row adds after its status word about numbers: when they come, or, for a private post, that
+ * none come. TikTok gives no numbers for private ("Only me") posts, so the api never reads them (platforms/tiktok.py).
+ */
+export function postNumbersNote(
+  post: { status: string; privacy?: string; metrics?: unknown; perfCheckAt?: string },
+  when: (iso: string) => string,
+): string {
+  if (post.status !== "posted" || post.metrics) return "";
+  if (post.privacy === "private") return " · private posts get no numbers";
+  return post.perfCheckAt ? ` · numbers ${when(post.perfCheckAt)}` : "";
+}
+
 /** Highest views above 0; a tie goes to the platform earlier in STATS_ORDER. */
 export function pickBest(posts: Pick<PlatformPerformance, "platform" | "metrics">[]): Platform | null {
   let best: Platform | null = null;

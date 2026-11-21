@@ -221,7 +221,7 @@ describe("the five setup guides (§17.2)", () => {
     expect(say("key-scopes")).toMatch(/Add scopes/);
     for (const scope of ["user.info.basic", "video.publish", "video.list", "user.info.stats"]) expect(say("key-scopes")).toContain(scope);
     // The real demo shows the whole path TikTok's reviewers ask for.
-    expect(say("public-demo")).toMatch(/Connect TikTok.*Authorize.*Upload.*arriving/);
+    expect(say("public-demo")).toMatch(/Connect TikTok.*Continue.*Upload.*arriving/);
     expect(say("sandbox-make")).toMatch(/Sandbox first.*private/);
   });
 
@@ -241,9 +241,20 @@ describe("the five setup guides (§17.2)", () => {
   it("gives TikTok its own app Description, with the same facts as the audit answers", () => {
     const details = steps("tiktok").find((s) => s.id === "key-details")!;
     expect(details.copy!.find((c) => c.label === "Description")!.value).toBe(TIKTOK_APP_DESCRIPTION);
-    for (const words of ["my own clipping tool", "other creators'", "paid clipping campaigns", "I approve", "I press Upload"]) {
+    for (const words of ["my own clipping tool", "other creators'", "paid campaigns", "I approve"]) {
       expect(TIKTOK_APP_DESCRIPTION.toLowerCase()).toContain(words.toLowerCase());
     }
+  });
+
+  it("keeps TikTok's app Description short enough for TikTok's box (120 characters at most)", () => {
+    expect(TIKTOK_APP_DESCRIPTION.length).toBeLessThanOrEqual(120);
+  });
+
+  it("names TikTok's consent button as TikTok shows it: Continue", () => {
+    expect(steps("tiktok").find((s) => s.id === "connect")!.say).toContain("Press **Continue**.");
+    expect(TIKTOK_DEMO_SHOTS).toContain("press Continue");
+    for (const s of steps("tiktok")) expect(s.say.join(" "), s.id).not.toMatch(/Authorize/);
+    expect(TIKTOK_DEMO_SHOTS).not.toMatch(/Authorize/);
   });
 
   it("gives every TikTok audit form answer in one step, true for one creator, after App review is Live", () => {
@@ -298,7 +309,7 @@ describe("the five setup guides (§17.2)", () => {
     const order = [
       "About page",
       "Connect TikTok",
-      "Authorize",
+      "Continue",
       "Review",
       "Asking TikTok…",
       "Posting as",

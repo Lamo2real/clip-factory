@@ -46,7 +46,7 @@ them. `{app}` is your Clip Factory address and `{hooks}` is its sign-in return a
 | Permissions (scopes) | the list for that platform (YouTube: 3 lines) |
 | Your email | the email you sign in to Clip Factory with |
 | X use case | "Post my own short video clips to my own X account and read their view and like counts in my personal Clip Factory app." |
-| TikTok description | "My own clipping tool. It turns long videos and streams I pick (my own and other creators', including paid clipping campaigns) into short clips, and posts the ones I approve to my own accounts when I press Upload." (TikTok only, so it says the same as the form in step 24) |
+| TikTok description | "My own clipping tool: cuts videos I pick (mine, other creators', paid campaigns) into clips; posts the ones I approve." (TikTok only, so it says the same as the form in step 24) |
 | TikTok review text | See [step 13 of TikTok](#13-fill-in-app-review-then-save). |
 
 The About, Privacy and Terms pages live on your Clip Factory address on purpose: TikTok checks that the website is
