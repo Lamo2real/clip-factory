@@ -28,7 +28,9 @@ from the owner's "learn from its own results" request
 whose plan the owner approved on 2026-11-18; the statistics and the lesson life were decided by the build. ADR-42
 comes from the owner's request to pick the AI model for clip jobs in Settings
 ([CONTRACTS.md §23](CONTRACTS.md#23-ai-model-choice-for-clip-jobs-owner-request-2026-11-18)); the list of five was the
-owner's, the fallback and the IAM shape were decided by the build.
+owner's, the fallback and the IAM shape were decided by the build. ADR-70 to ADR-75 come from the owner's Lamo Stories request
+([CONTRACTS.md §45](CONTRACTS.md#45-lamo-stories-a-second-separate-workspace-owner-request-2026-11-21)), whose spec the
+owner wrote; the mechanisms were decided by the build.
 
 ---
 
@@ -1665,3 +1667,118 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
   (YouTube) and paid money (CR) over the same days, tagged as such, never across currencies; what left CR for Whop
   stays "not available". A brief that asks for its own overlay becomes a hard stop (`overlay_needed`). Additive only:
   new attributes on `JOB#`, `CLIP#` and `CRMONEY`, one api env var; no table, index, bucket, secret or Lambda changes.
+
+## ADR-70 Workspaces: Lamo Clips is the built-in workspace, new workspaces live in partitions of their own
+
+- **Context.** The owner asked (2026-11-21) for a second studio, Lamo Stories, inside the same app and sign-in, with
+  its own screens, content, jobs, settings and social accounts, and made protecting the existing app the highest
+  priority: no renamed tables, attributes or resources, no change to how Lamo Clips looks or works. Every Lamo Clips
+  item sits under `USER#{userId}`; the live-update and notification streams forward items by sort-key prefix; the
+  stats poller follows `gsi2`; `posts.account_items` reads every `ACCOUNT#` under the user.
+- **Options.** (1) Add a `workspaceId` attribute to every existing item and back-fill Lamo Clips' data (a migration of
+  owner data, and every existing query would need a filter); (2) store Lamo Stories items under `USER#{userId}` with new
+  sort-key prefixes (no migration, but every existing whole-partition read and the `ACCOUNT#` readers would see them,
+  and an unlucky prefix would reach the streams); (3) Lamo Clips is the built-in workspace `clips`, never written, its
+  data where it is; each other workspace gets a registry item in `USER#{userId}#WSREG` and its own partition
+  `USER#{userId}#WS#{workspaceId}`, with sort-key prefixes no stream forwards; (4) a second table (new infrastructure
+  the owner asked not to add without need).
+- **Decision.** (CONTRACTS §45.3) Option 3. Ownership is in the key (built from the JWT's `sub`), checked again on
+  every item's `userId` and `workspaceId`. The workspace registry holds `workspaceType` (`clips` built in, `stories`),
+  so a later brand is a new workspace or one new type. In the web, `/stories/…` is Lamo Stories and every other path is
+  today's shell; the choice persists on the device and in the URL. A web switch, `STORIES_ON`, keeps it hidden until
+  all of it has merged.
+- **Consequences.** No Lamo Clips item, query, stream, index or screen changes; nothing is migrated. Lamo Stories
+  screens poll instead of using the WebSocket (no stream filter change). A user's data now spans more than one
+  partition, so a future "delete everything" must walk the registry too (none exists today).
+
+## ADR-71 One animation engine in TypeScript, drawn by the browser and by the agent
+
+- **Context.** Lamo Stories needs 30–60 s vertical cartoons without voice-over, with recurring characters that must
+  look and move the same in every video, previews in the app, and a pipeline that works today. No image or video
+  generation model is set up in the account; Amazon Nova Canvas and Nova Reel are not offered in eu-north-1 (Ireland,
+  N. Virginia and Tokyo only), Reel writes to a bucket in its own Region, and generated frames or clips do not keep a
+  character the same from one shot to the next. ffmpeg, numpy and Deno are already in the agent image; Lambdas have
+  no ffmpeg.
+- **Options.** (1) AI video for every shot (not in-Region, inconsistent characters, realistic clips need AI labels);
+  (2) AI images per scene plus pan and zoom (inconsistent, slideshow-like); (3) a 2D rig engine in Python only, with
+  previews rendered by the agent (a cold start for every preview, and the browser could not animate the Characters
+  page); (4) the engine in the browser only, exporting the video there (the app would have to stay open, and Safari and
+  Chrome encode differently); (5) one dependency-free TypeScript engine that turns a story script into draw lists:
+  the browser draws them on a canvas for instant previews, the agent runs the same file with Deno and rasterizes the
+  lists with numpy into frames for ffmpeg.
+- **Decision.** (CONTRACTS §45.10, §45.11.3) Option 5. Characters are rigs (a few looks choices), copied into each
+  story's script, so consistency is by construction; the writer (Claude) only picks from the engine's catalog and names
+  characters by cast id; effects, character noises and music are synthesized with numpy, so there are no audio files
+  and no licences. AI images (Nova Canvas) can be added later behind the rigs (ADR-75).
+- **Consequences.** Previews and videos match frame for frame (shared code, golden tests). The look is clean
+  flat-shaded 2D, not painted or realistic; new actions, props or sets are code in one file. The engine folder is
+  copied into the agent image, so the image tag hash includes it. Rendering 45 s takes a few minutes on the agent.
+
+## ADR-72 Separate social connections over the same developer apps
+
+- **Context.** The owner wants different accounts for Lamo Stories on every platform and no accidental posting to
+  Lamo Clips' destinations. He set up one developer app per platform (13 manual steps for YouTube) and asked never to
+  have to redo it. Each app has one registered redirect URI, `…/oauth/{platform}/callback`. Lamo Clips' tokens are
+  `cf-prod/platforms/{platform}/token`, one per platform, read by the clip flow, stats and money functions.
+- **Options.** (1) A second developer app per platform for Lamo Stories (hours of manual setup and platform reviews
+  again); (2) the same apps and the same callback, with the stored OAuth state telling the callback which workspace it
+  serves, tokens under a second Secrets Manager prefix; (3) nest Lamo Stories tokens under `cf-prod/platforms/` (no IAM
+  change, but every Lamo Clips function could read them).
+- **Decision.** (CONTRACTS §45.13) Option 2. The state item gains `workspaceId`; only then does the callback take the
+  workspace path, which writes `cf-prod/workspaces/{workspaceId}/{platform}/token` and a `SOCIAL#{platform}` item and
+  nothing of Lamo Clips. One account per platform per workspace. YouTube connects with `prompt=select_account
+  consent` and lists every channel the token can post to; Meta lists Pages. An identity equal to Lamo Clips' own is
+  held as `same_as_clips` until the owner says "Use it for both".
+- **Consequences.** No platform setup again. App keys are shared, so quotas and credits are shared (YouTube's daily
+  units, X's credits) and TikTok's Sandbox and review limits apply to both. Meta's page picker is per Facebook login:
+  unticking Lamo Clips' Page while connecting Lamo Stories would cut Lamo Clips off, so the page says so and checks
+  afterwards. The OAuth callback gains one branch, proven not to change the old path.
+
+## ADR-73 Publishing isolation: checked before every call, no default account, IAM as the last wall
+
+- **Context.** "A video created in Lamo Stories must only be published to Lamo Stories-connected accounts", every
+  publishing job must reference workspace, content, social account, platform and status, the relationships must be
+  validated before every operation, and a missing or ambiguous destination must stop and ask. The platform publishers
+  (§17.6) take their credentials and video in a `PublishJob` and touch no store.
+- **Options.** (1) Teach the clip flow about workspaces (changes Lamo Clips' most delicate code); (2) a new durable
+  function for Lamo Stories that reuses the publishers unchanged, with one validation function run by the API at the
+  tap and by the flow before each platform call, and its own IAM role.
+- **Decision.** (CONTRACTS §45.14, §45.15) Option 2: `cf-prod-story-flow`. A publishing job records the account's
+  identity at the tap; the flow re-checks the workspace, the story, the account (same partition, same platform,
+  connected, same identity, not Lamo Clips' own unless shared on purpose) and builds the secret name from the checked
+  ids only. Its role can read `cf-prod/workspaces/*` and the `…/app` secrets and nothing else; the Lamo Clips roles
+  cannot read `cf-prod/workspaces/*`.
+- **Consequences.** A code mistake in either flow cannot reach the other workspace's tokens (Terraform tests hold the
+  policies). A reconnect to a different account stops queued jobs instead of sending them somewhere new. Lamo Stories
+  numbers are read by the flow at 1 h, 24 h and 72 h, not by the 15-minute stats poller.
+
+## ADR-74 Safety videos only from checked guidance; Lamo Stories' AI calls keep the skills block
+
+- **Context.** The owner: "Safety-related educational content must be based on verified guidance. Do not generate
+  potentially dangerous driving instructions without appropriate validation." Research on 2026-11-21 fetched road
+  authorities' pages (UK Highway Code, National Highways, RoSPA, NY, California and Ontario driver handbooks, Transport
+  Canada, Transport for NSW, Trafikverket) and found real disagreements (stay in the car or get out after a breakdown,
+  neutral in a skid, braking with or without ABS). Separately, the owner's standing rule (§18, ADR-32) is that every AI
+  call gets all his skills, "no matter what", and the repository's scan tests enforce it; the new request wants the
+  workspaces' configurations independent.
+- **Options.** Safety: (1) trust the model; (2) a model check only; (3) a checked guidance list bundled with the app,
+  the writer allowed only its uncontradicted steps, then a separate checker call, and stories with problems held for
+  the owner. Skills: (a) give Lamo Stories no skills (breaks the standing rule and its tests); (b) send the skills block
+  first on every Lamo Stories call too, with the Lamo Stories brief after it, and report the conflict.
+- **Decision.** (CONTRACTS §45.11.5, §45.7) Option 3, and a safety topic with no guidance cannot be produced. Option
+  (b), reported to the owner, who can ask for Stories-only skills later.
+- **Consequences.** Only 12 driving situations can be taught at first; adding one means adding checked sources. Some
+  advice differs by country, so contradicted steps are left out and the video points to local rules. Lamo Clips'
+  clip-making skills reach the story writer; they mostly help hooks and captions.
+
+## ADR-75 Providers behind a registry: built-in today, AI images off until a real call works
+
+- **Context.** The owner wants room for more image, video, animation and audio providers "without rebuilding", and no
+  integration shown as working when it is not. Only Claude (writing) is set up today; Nova Canvas needs a call to
+  eu-west-1; Nova Reel needs a bucket in us-east-1 and AI-realism labels the shared publishers do not set.
+- **Options.** (1) Hard-wire the built-in engine; (2) a registry per kind (writer, images, animation, audio) with
+  one interface each, the built-in providers on, Nova Canvas built and off, Nova Reel interface only.
+- **Decision.** (CONTRACTS §45.11.6) Option 2. A provider is `on` only after a real call answered; the Providers list
+  says in one sentence what each missing one needs.
+- **Consequences.** The first videos are fully built-in. Switching on Nova Canvas adds AI portraits and painted
+  backgrounds; Nova Reel stays out until the owner wants a US bucket and the posting labels are added.

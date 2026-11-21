@@ -19,6 +19,7 @@ from . import (
     skills,
     system,
     weeks,
+    workspaces,
 )
 
 ROUTES: list[Route] = [
@@ -142,4 +143,6 @@ ROUTES: list[Route] = [
     route("GET", "/v1/contentrewards/money", contentrewards.get_money),
     route("POST", "/v1/contentrewards/money/refresh", contentrewards.refresh_money),
     route("POST", "/v1/contentrewards/seen", contentrewards.seen),
+    # §45: Lamo Stories and other workspaces, all under /v1/workspaces (appended last; nothing above changes).
+    *workspaces.ROUTES,
 ]

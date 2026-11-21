@@ -1,5 +1,5 @@
 {
- "version": "0f039d996d03",
+ "version": "bc21c16a4b86",
  "parts": [
   {
    "id": "app-map",
@@ -262,6 +262,12 @@
    "title": "CONTRACTS: 39. Content Rewards: the two ways, all your money, and does this clip fit (owner request, 2026-11-21)",
    "line": "The owner's words, the day §38 was approved: \"please double check that the steps to conect to contentrewards is",
    "chars": 79191
+  },
+  {
+   "id": "contracts-45",
+   "title": "CONTRACTS: 45. Lamo Stories: a second, separate workspace (owner request, 2026-11-21)",
+   "line": "The owner asked for Lamo Stories, a second content studio inside Clip Factory that makes short animated story",
+   "chars": 67614
   },
   {
    "id": "adr-01",
@@ -642,6 +648,42 @@
    "chars": 5981
   },
   {
+   "id": "adr-70",
+   "title": "DECISIONS: ADR-70 Workspaces: Lamo Clips is the built-in workspace, new workspaces live in partitions of their own",
+   "line": "Context. The owner asked (2026-11-21) for a second studio, Lamo Stories, inside the same app and sign-in, with",
+   "chars": 2222
+  },
+  {
+   "id": "adr-71",
+   "title": "DECISIONS: ADR-71 One animation engine in TypeScript, drawn by the browser and by the agent",
+   "line": "Context. Lamo Stories needs 30–60 s vertical cartoons without voice-over, with recurring characters that must",
+   "chars": 2201
+  },
+  {
+   "id": "adr-72",
+   "title": "DECISIONS: ADR-72 Separate social connections over the same developer apps",
+   "line": "Context. The owner wants different accounts for Lamo Stories on every platform and no accidental posting to",
+   "chars": 1900
+  },
+  {
+   "id": "adr-73",
+   "title": "DECISIONS: ADR-73 Publishing isolation: checked before every call, no default account, IAM as the last wall",
+   "line": "Context. \"A video created in Lamo Stories must only be published to Lamo Stories-connected accounts\", every",
+   "chars": 1656
+  },
+  {
+   "id": "adr-74",
+   "title": "DECISIONS: ADR-74 Safety videos only from checked guidance; Lamo Stories' AI calls keep the skills block",
+   "line": "Context. The owner: \"Safety-related educational content must be based on verified guidance. Do not generate",
+   "chars": 1804
+  },
+  {
+   "id": "adr-75",
+   "title": "DECISIONS: ADR-75 Providers behind a registry: built-in today, AI images off until a real call works",
+   "line": "Context. The owner wants room for more image, video, animation and audio providers \"without rebuilding\", and no",
+   "chars": 1034
+  },
+  {
    "id": "architecture-overview",
    "title": "ARCHITECTURE: Overview",
    "line": "The numbers match the numbered flows in the diagram.",
@@ -657,7 +699,7 @@
    "id": "architecture-data-flows",
    "title": "ARCHITECTURE: Data flows",
    "line": "1. Sign in and token lifetimes",
-   "chars": 70898
+   "chars": 72668
   },
   {
    "id": "architecture-failure-handling",
@@ -838,6 +880,12 @@
    "title": "TESTING: What the tests must cover",
    "line": "Web (Playwright, mock mode)",
    "chars": 81949
+  },
+  {
+   "id": "testing-lamo-stories-contracts-45",
+   "title": "TESTING: Lamo Stories (CONTRACTS §45)",
+   "line": "The list is CONTRACTS §45.19. Three checks matter most, because the owner put protecting Lamo Clips first:",
+   "chars": 1242
   },
   {
    "id": "testing-manual-checks-after-the-first-deploy",

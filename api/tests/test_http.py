@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 import json
 
+import ws_routes_core
+import ws_routes_social
 from clipfactory_api.app import App
 from clipfactory_api.http import MAX_BODY_BYTES, dispatch
 from clipfactory_api.routes import ROUTES
@@ -250,4 +252,9 @@ def test_every_contract_route_is_registered() -> None:
     }
     for method, path in expected:
         assert any(r.method == method and r.pattern.match(path) for r in ROUTES), (method, path)
-    assert len(ROUTES) == len(expected)
+    # §45: the /v1/workspaces routes are listed in their own files, so Lamo Clips' list above stays as it was.
+    workspace_routes = ws_routes_core.EXPECTED | ws_routes_social.EXPECTED
+    for method, path in workspace_routes:
+        assert path.startswith("/v1/workspaces"), path
+        assert any(r.method == method and r.pattern.match(path) for r in ROUTES), (method, path)
+    assert len(ROUTES) == len(expected) + len(workspace_routes)

@@ -1139,3 +1139,24 @@ the watermark) fills it and never touches the paid total.
 | api env | `CR_REMAKE` from `cr_remake_enabled` (shipped `false`; default `true` since PR #93), an in-place change |
 
 No sort key, index, table, bucket, secret or Lambda is added, and nothing that holds the owner's data is replaced.
+
+### 21. Lamo Stories: a second workspace (CONTRACTS §45, ADR-70 to ADR-75)
+
+The owner's second studio: short animated story videos with recurring characters, no voice-over, posted to its own
+social accounts ([CONTRACTS.md §45](CONTRACTS.md#45-lamo-stories-a-second-separate-workspace-owner-request-2026-11-21)).
+Lamo Clips (everything above) is the built-in workspace and does not change.
+
+* **Data.** One registry partition `USER#{userId}#WSREG` and one partition per workspace `USER#{userId}#WS#{id}` in
+  the same table, with sort-key prefixes (`IDEA#`, `CHAR#`, `STORY#`, `PJOB#`, `ASSET#`, `SOCIAL#`, `PUBJOB#`) that no
+  stream forwards; files under `ws/{userId}/{id}/` in the media bucket. Lamo Stories screens poll.
+* **Writing.** Ideas (Claude Haiku 5.5 in `cf-prod-api`); the storyboard and the fact check (the clip models in the
+  agent), every call with the skills block first; safety topics only from `config/stories-guidance.json`.
+* **Making the video.** The API invokes the agent with `process_story`. The agent runs the TypeScript engine
+  (`web/src/stories/engine`, copied into the image) with Deno for draw lists, rasterizes them with numpy, synthesizes
+  effects, noises and music, and joins it all with ffmpeg into a 1080×1920 MP4. The browser runs the same engine for
+  live previews.
+* **Connections.** The same developer apps and callback URL as Lamo Clips; the stored OAuth state carries the
+  workspace, and the callback writes `cf-prod/workspaces/{id}/{platform}/token` and a `SOCIAL#` item only.
+* **Posting.** `cf-prod-story-flow` (durable, new) checks the destination before every platform call and reuses the
+  platform publishers unchanged; its IAM role cannot read Lamo Clips' tokens, and Lamo Clips' roles cannot read
+  Lamo Stories'.
