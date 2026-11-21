@@ -43,6 +43,9 @@ export interface Source {
   fetchedBy?: "mac";
   /** Where a Mac-fetched video came from ("youtube"); `url` keeps the link. */
   linkPlatform?: SourcePlatform;
+  /** The channel's own names and ids, for the campaign fit's channel check (§39.3, written by the agent). No screen
+   * shows it. */
+  channelKeys?: string[];
 }
 
 /** Mac fetches it (CONTRACTS §35): where a YouTube job stands with the owner's Mac. */
@@ -106,6 +109,10 @@ export interface Job {
   campaignId?: string;
   /** One sentence from the agent about the campaign ("This video may not be from FaZe's channels."). */
   campaignNote?: string;
+  /** A campaign copy of a clip (§39.3): the clip, and its job, it was made from. */
+  remakeOf?: { clipId: string; jobId: string };
+  /** The language the video speaks, BCP 47 from Transcribe ("en-US", §39.3). */
+  sourceLanguage?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -158,6 +165,10 @@ export interface Clip {
   uploadTo?: Platform[];
   /** The Content Rewards campaign this clip is for (copied by the agent, §38.8). */
   campaignId?: string;
+  /** Campaign copies made of this clip (§39.3): campaignId → the copy's job. */
+  remakes?: Record<string, { jobId: string; at: string }>;
+  /** A campaign copy (§39.3): the clip, and its job, it was made from. */
+  remakeOf?: { clipId: string; jobId: string };
   /** Uploaded, but its posting has not started yet: the start after an Upload, Try again, Post now or connect did not go
    * through (§14.5). Confirm starts it. Absent otherwise. */
   startPending?: boolean;
@@ -1145,6 +1156,7 @@ export type StopCode =
   | "cap_reached"
   | "drafts_first"
   | "sound_needed"
+  | "overlay_needed"
   | "face_needed"
   | "spoken_needed"
   | "audience";
@@ -1300,11 +1312,24 @@ export interface Campaign {
   checkedAt: string;
   nextCheckAt?: string;
   addedAt: string;
+  /**
+   * The campaign's source rule as one line under Home's link box (§39.1): "FaZe Clips pays only for clips of FaZe's
+   * YouTube and Twitch." null when it has none; absent on an API from before §39 (then no line shows).
+   */
+  sourceRuleText?: string | null;
+  /** "FaZe Clips wants clips in English." null when it has none; absent before §39. */
+  languageRuleText?: string | null;
 }
 export type CampaignSummary = Pick<
   Campaign,
   "campaignId" | "name" | "brand" | "brandPictureUrl" | "state" | "membership" | "uploadPlaces" | "waitingClips" | "clipCounts" | "celebrate" | "checkedAt"
-> & { chip: string; nextStepText: string; hardStops: number };
+> & {
+  chip: string;
+  nextStepText: string;
+  hardStops: number;
+  /** The `kind` of the campaign's next step (§39.1); absent on an API from before §39. */
+  nextStepKind?: NextStepKind;
+};
 export interface GroupChoice {
   campaignId: string;
   url: string;
@@ -1402,6 +1427,116 @@ export type CrConnectionPatch =
 export type CrFinishBody = { state: string; code: string; iss?: string } | { state: string; error: string; errorDescription?: string };
 export type CrAddResult = { campaign: Campaign; group?: undefined } | { group: { name: string; choices: GroupChoice[] }; campaign?: undefined };
 export type CrSubmissionSaid = "sent_by_hand" | "appealed" | "proof_sent" | null;
+
+// ---------- Content Rewards: does this clip fit the campaign? (docs/CONTRACTS.md §39.3; shared contract) ----------
+
+export type FitVerdict = "fits" | "fixable" | "wait" | "doesnt_fit" | "cant_tell";
+export type FitState = "ok" | "fix" | "remake" | "todo" | "no" | "check" | "note";
+export type FitRule =
+  | "campaign"
+  | "soft"
+  | "deadline"
+  | "length"
+  | "places"
+  | "place_link"
+  | "tags"
+  | "ad"
+  | "paid_switch"
+  | "logo"
+  | "on_screen"
+  | "source"
+  | "language"
+  | "banned"
+  | "spoken"
+  | "uncertain"
+  | "brief_only"
+  | "posted"
+  | "one_campaign"
+  | "send";
+export interface FitFix {
+  kind: "captions" | "tiktok_branded" | "remake" | "new_clips" | "open";
+  label: string;
+  href?: string;
+  external?: boolean;
+}
+export interface FitItem {
+  rule: FitRule;
+  state: FitState;
+  text: string;
+  fix: FitFix | null;
+  platform?: Platform;
+}
+export interface CampaignFit {
+  campaignId: string;
+  campaignName: string;
+  verdict: FitVerdict;
+  headline: string;
+  canUpload: boolean;
+  canRemake: boolean;
+  /** Problems first, then ok. */
+  items: FitItem[];
+  /** Unaccepted soft stops, sent with the copy. */
+  softCodes: string[];
+  /** For the card's live check. */
+  required: { disclosure: string; tokens: string[]; phrase: string | null };
+  uploadPlaces: Platform[];
+  checkedAt: string;
+}
+export interface ClipFit {
+  clipId: string;
+  /** campaign: exactly one fit. */
+  mode: "campaign" | "normal";
+  fits: CampaignFit[];
+  suggestion: { campaignId: string; name: string } | null;
+  remakes: Record<string, { jobId: string; at: string }>;
+}
+export interface CrRemakeBody {
+  clipId: string;
+  macFetch?: boolean;
+  campaignAnyway?: string[];
+}
+
+// ---------- All your money in one place (docs/CONTRACTS.md §39.2; shared contract) ----------
+
+export type MoneyPlaceId = Platform | "contentrewards";
+export interface MoneyPlace {
+  place: MoneyPlaceId;
+  name: string;
+  state: "number" | "not_available" | "coming_soon" | "not_set_up" | "needs_ok" | "waiting" | "error" | "sign_in";
+  /** "YouTube says", "Not available from TikTok", … */
+  headline: string;
+  /** [] in every state but `number`. */
+  amounts: { currency: string; amountMicros: number }[];
+  tag?: string;
+  why?: string;
+  note?: string;
+  where?: { text: string; button?: { label: string; url: string } };
+  button?: { label: string; href: string; external: boolean };
+  checkedAt?: string;
+  cr?: {
+    stillEarningCents: number | null;
+    onItsWayCents: number | null;
+    readyToMoveCents: number | null;
+    paidSoFarCents: number | null;
+    lastPaidAt?: string;
+    asOf?: string;
+    movedOut: "not_available";
+  };
+}
+export interface MoneyEverywhere {
+  from: string;
+  to: string;
+  /** "30 days up to Sat 16 Nov" */
+  periodText: string;
+  lagNote?: string;
+  /** STATS_ORDER, then contentrewards when switched on. */
+  places: MoneyPlace[];
+  /** Biggest first. */
+  totals: { currency: string; amountMicros: number; places: MoneyPlaceId[]; tag: string }[];
+  notCounted: { place: MoneyPlaceId; state: MoneyPlace["state"] }[];
+  notCountedText?: string;
+  asOf: string;
+}
 
 /** Everything the screens need from the backend. The HTTP client and the mock both implement it. */
 export interface Api {
@@ -1584,4 +1719,15 @@ export interface Api {
   crRefreshMoney(): Promise<{ started: boolean; nextAllowedAt: string }>;
   /** POST /v1/contentrewards/seen `{ key }`: a celebration or "You're in!" was shown. */
   crSeen(key: string): Promise<void>;
+  // §39 (an API before it answers 404; Content Rewards switched off, 503 `unavailable`).
+  /** GET /v1/contentrewards/fit?clipId= */
+  crFit(clipId: string): Promise<ClipFit>;
+  /** GET /v1/contentrewards/fit?clipIds= (at most 20). */
+  crFits(clipIds: string[]): Promise<ClipFit[]>;
+  /** POST /v1/contentrewards/fit/captions: the card's captions with #Ad first and every required item back. */
+  crFitCaptions(body: { clipId: string; campaignId: string; captions: Captions }): Promise<Captions>;
+  /** POST /v1/contentrewards/campaigns/{campaignId}/remake: a campaign copy of the clip (202 new, 200 already made). */
+  crRemake(campaignId: string, body: CrRemakeBody): Promise<Job>;
+  /** GET /v1/money/everywhere: All your money (§39.2). */
+  getMoneyEverywhere(): Promise<MoneyEverywhere>;
 }

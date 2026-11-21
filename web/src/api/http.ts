@@ -5,6 +5,8 @@ import type {
   Api,
   Campaign,
   CampaignSummary,
+  Captions,
+  ClipFit,
   CrConnection,
   CrSubmission,
   Clip,
@@ -216,5 +218,11 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     crSeen: async (key) => {
       await call("POST", "/contentrewards/seen", { key });
     },
+    // §39: does this clip fit, Fix it for me, the campaign copy, and All your money.
+    crFit: (clipId) => call<ClipFit>("GET", `/contentrewards/fit${q({ clipId })}`),
+    crFits: async (clipIds) => (await call<{ clips: ClipFit[] }>("GET", `/contentrewards/fit${q({ clipIds: clipIds.join(",") })}`)).clips,
+    crFitCaptions: async (body) => (await call<{ captions: Captions }>("POST", "/contentrewards/fit/captions", body)).captions,
+    crRemake: async (campaignId, body) => (await call<{ job: Job }>("POST", `/contentrewards/campaigns/${id(campaignId)}/remake`, body)).job,
+    getMoneyEverywhere: () => call("GET", "/money/everywhere"),
   };
 }
