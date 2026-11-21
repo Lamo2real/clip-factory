@@ -164,9 +164,12 @@ export function resultStep(platform: Platform, code: ConnectResult): string | nu
 }
 
 /** The one plain line for a gate's state (§17.2). */
-export function gateLine(gate: Gate, ctx: { reviewState?: string; youtubePrivacy?: YoutubePrivacy } = {}): string {
+export function gateLine(
+  gate: Gate,
+  ctx: { reviewState?: string; youtubePrivacy?: YoutubePrivacy; platform?: Platform } = {},
+): string {
   const key: GateKey = gate.key;
-  const { reviewState, youtubePrivacy = "public" } = ctx;
+  const { reviewState, youtubePrivacy = "public", platform } = ctx;
   switch (key) {
     case "published_app":
       return gate.state === "ok"
@@ -182,10 +185,12 @@ export function gateLine(gate: Gate, ctx: { reviewState?: string; youtubePrivacy
       if (gate.state === "ok") return "TikTok said yes. Your posts can be public.";
       if (gate.state === "unknown") return "Connect TikTok first. Then this shows what TikTok allows.";
       return "Works now, but your TikTok posts stay private until TikTok says yes.";
-    case "app_live":
+    case "app_live": {
+      const reels = platform === "instagram" ? "Instagram Reels" : "Facebook Reels";
       return gate.state === "ok"
-        ? "Works now. Everyone can see your Facebook Reels."
-        : "Works now, but only you can see your Facebook Reels until the app is Live.";
+        ? `Works now. Everyone can see your ${reels}.`
+        : `Works now, but only you can see your ${reels} until the app is Live.`;
+    }
     case "credits":
       return gate.state === "action"
         ? "Your X credits ran out. Buy more in **Billing** › **Credits**."

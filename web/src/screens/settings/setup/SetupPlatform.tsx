@@ -302,7 +302,7 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
           <p className={`gate-line is-${g.state}`} key="gate" role="status">
             <Icon name={g.state === "ok" ? "checkCircle" : g.state === "action" ? "alert" : "info"} size={18} />
             <span>
-              <Rich text={gateLine(g, { reviewState: reviewValue, youtubePrivacy })} />
+              <Rich text={gateLine(g, { reviewState: reviewValue, youtubePrivacy, platform })} />
             </span>
           </p>,
         );

@@ -1,0 +1,1 @@
+{"error": {"message": "The Instagram account is restricted.", "type": "OAuthException", "code": 25, "error_subcode": 2207050, "is_transient": false, "error_user_title": "Instagram account is restricted", "error_user_msg": "The app user's Instagram Professional account is inactive, checkpointed, or restricted.", "fbtrace_id": "B7xK2mPq9LrT4vWz1Yc8dE3"}}

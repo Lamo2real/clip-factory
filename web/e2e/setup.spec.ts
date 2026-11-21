@@ -236,7 +236,7 @@ for (const size of SIZES) {
             await expect(step(page, s.id)).toContainText("TikTok is checking your app. This can take days.");
           }
           if (s.id === "public-audit") await expect(step(page, s.id)).toContainText("Works now, but your TikTok posts stay private until TikTok says yes.");
-          if (s.id === "public-live") await expect(step(page, s.id)).toContainText("only you can see your Facebook Reels");
+          if (s.id === "public-live") await expect(step(page, s.id)).toContainText(`only you can see your ${guide.name} Reels`);
           if (s.id === "public-credits") await expect(step(page, s.id)).toContainText("Works now. Posts are public straight away.");
 
           await step(page, s.id).getByRole("button", { name: "I did this" }).click();

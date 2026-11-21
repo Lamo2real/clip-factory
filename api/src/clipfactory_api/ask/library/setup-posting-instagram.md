@@ -18,7 +18,8 @@ the two from getting in each other's way.
 | 9 | Double-check the return address (only if you need it) | Make your Instagram key |
 | 10 | Paste the 3 values | Make your Instagram key |
 | 11 | Connect Instagram | Connect |
-| 12 | Post one test clip | Go public |
+| 12 | Make the app Live | Go public |
+| 13 | Post one test clip | Go public |
 
 ### Part 1: Get ready
 
@@ -31,6 +32,7 @@ the two from getting in each other's way.
 - In the Instagram app, press **Edit profile**, then **Page** (under Public business information).
 - Pick your Facebook Page, or press **Create a Facebook Page**.
 - No Page yet? Make one first in the [Facebook setup, step 1](#1-have-a-facebook-page).
+- Facebook shows a banner asking you to confirm who runs the Page? Do it now. Instagram will not post until you do.
 - If you see no **Page** line in Edit profile: on Facebook, open your Page, then **Settings**, then **Linked
   accounts**, then **Instagram**. Press **Connect account**.
 - If you see **Manage connection** on Facebook (on your Page, after **Edit profile**): your Instagram is already
@@ -67,9 +69,12 @@ the two from getting in each other's way.
 
 #### 7. Fill in Basic settings
 - Press **App settings**, then **Basic**.
-- **Privacy Policy URL**: copy it. **Terms of Service URL**: copy it.
+- **App domains**: copy the App domain. **Privacy Policy URL**: copy it. **Terms of Service URL**: copy it.
 - Under **User data deletion**, **Data deletion instructions URL**: copy it.
-- Pick a **Category**. Press **Save changes**.
+- Pick a **Category**. **App icon**: press **Download the icon** in Clip Factory and upload it.
+- Contact email: your email (already filled in).
+- In the EU: **Data Protection Officer** is your name and email.
+- Press **Save changes**. Meta needs all of this to make the app Live (step 12).
 
 #### 8. Make the Instagram login setup
 - Press **Use cases**, then **Customize** next to Instagram. Open the tab **API setup with Facebook login**.
@@ -78,6 +83,8 @@ the two from getting in each other's way.
 - Press **Edit permissions**. Tick instagram_basic, instagram_content_publish, **instagram_manage_insights** (it is not
   ticked by itself), pages_show_list and pages_read_engagement.
 - If you see instagram_manage_messages: leave it ticked.
+- Your Page is in a business portfolio? Also tick ads_management and ads_read. Meta needs them to post for a
+  portfolio Page.
 - Press **Use this configuration**.
 - **Redirect URL**: copy the Redirect URI (the return address). Press **Save**.
 
@@ -104,11 +111,19 @@ the two from getting in each other's way.
 
 ### Part 4: Go public
 
-#### 12. Post one test clip
+#### 12. Make the app Live
+- Until the app is Live, only you can see your Reels.
+- In the left menu, press **Publish**. Check the list. Press **Go live** at the bottom right.
+- No **Publish** in the menu? Turn the **App Mode** switch to **Live**.
+- Press **I did this** when the top bar says **Live**.
+- If you see **App Review** or **Advanced access**: you do not need it for your own account. Skip it. Press **Go
+  live**. Meta still says no? It lists what is missing. Go back to step 7.
+- Status before this step: "Works now, but only you can see your Instagram Reels until the app is Live."
+
+#### 13. Post one test clip
 - Upload one clip. Instagram may take a few minutes to show it.
 - Numbers can take 2 days.
-- Status: "Works now."
-- If you see your Reels missing for other people: tell Clip Factory support; Meta may want the app Live.
+- If you see your Reels missing for other people: do step 12 first.
 - If Facebook asks you to confirm who runs the Page (Page Publishing Authorization): do it. Instagram will not post
   until you do.
 
