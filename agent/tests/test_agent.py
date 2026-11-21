@@ -800,16 +800,26 @@ async def test_a_job_without_remake_sends_and_writes_what_it_did_before(
 
 CHANNEL_CASES = Path(__file__).resolve().parents[2] / "api" / "tests" / "fixtures" / "channel_match_cases.json"
 INFO_FIELDS = ("channel", "uploader", "creator", "uploader_id", "channel_id")  # what sources.channel_keys reads
+VERDICT_KEYS = ("matches", "match")  # the API's file says "matches"; both names are read, so neither is missed
+
+
+def verdict(case: dict[str, Any]) -> tuple[bool, Any]:
+    """Whether the case gives the API's answer, and that answer (true, false, or null: nothing can be said)."""
+    for key in VERDICT_KEYS:
+        if key in case:
+            return True, case[key]
+    return False, None
 
 
 def case_info(case: dict[str, Any]) -> dict[str, Any] | None:
     """The video's yt-dlp fields for one case: its own ``info``; else made from the stored facts the API reads
-    (``channelKeys``, else ``channel`` and ``channelId``), which the agent's rule then reads the same way."""
+    (``channelKeys`` whenever the case has it, even empty, as the API's rule reads it; else ``channel`` and
+    ``channelId``), which the agent's rule then reads the same way. None: a case the agent can't put as yt-dlp's."""
     if isinstance(case.get("info"), dict):
         return dict(case["info"])
-    keys = case.get("channelKeys", case.get("keys"))
-    if isinstance(keys, list) and keys and all(isinstance(k, str) for k in keys):
-        if len(keys) > len(INFO_FIELDS):
+    keys = case["channelKeys"] if "channelKeys" in case else case.get("keys")
+    if isinstance(keys, list):
+        if len(keys) > len(INFO_FIELDS) or not all(isinstance(k, str) for k in keys):
             return None
         return dict(zip(INFO_FIELDS, keys, strict=False))
     facts = {"channel": case.get("channel"), "channel_id": case.get("channelId")}
@@ -818,8 +828,8 @@ def case_info(case: dict[str, Any]) -> dict[str, Any] | None:
 
 def channel_cases() -> list[tuple[dict[str, Any], dict[str, Any]]]:
     """``channel_match_cases.json`` (written by the API's ``cr_fit_cases.py``): a list of cases, or ``{"cases": [...]}``,
-    each with the campaign's ``channels``, the video's facts and the API's answer ``match`` (true, false, or null when
-    nothing can be said)."""
+    each with the campaign's ``channels``, the video's facts and the API's answer ``matches`` (true, false, or null
+    when nothing can be said)."""
     doc = json.loads(CHANNEL_CASES.read_text(encoding="utf-8"))
     cases = doc.get("cases") if isinstance(doc, dict) else doc
     out = []
@@ -831,16 +841,50 @@ def channel_cases() -> list[tuple[dict[str, Any], dict[str, Any]]]:
     return out
 
 
+def assert_channel_case(case: dict[str, Any], info: dict[str, Any]) -> None:
+    """One case: the keys the agent writes on the job (when the case gives yt-dlp's fields and the keys), and the
+    agent's rule giving the API's answer; null (the API can't tell) is where the agent lets the job go on."""
+    name = case.get("name")
+    if isinstance(case.get("info"), dict) and isinstance(case.get("channelKeys"), list):
+        assert sources.channel_keys(info) == case["channelKeys"], name
+    has, expected = verdict(case)
+    if not has:
+        return
+    got = sources.from_allowed_channel(info, case["channels"])
+    assert expected is None or isinstance(expected, bool), (name, expected)
+    assert got is (True if expected is None else expected), (name, expected, got)
+
+
 @pytest.mark.skipif(not CHANNEL_CASES.is_file(), reason="written by the API's cr_fit_cases.py (§39.4, builder G)")
 def test_the_apis_channel_cases_hold_for_the_agents_rule() -> None:
     cases = channel_cases()
-    if not cases:
-        pytest.skip("channel_match_cases.json has no case the agent can read")
+    assert cases, "channel_match_cases.json has no case the agent can read"
+    assert any(verdict(case)[0] for case, _ in cases), f"no case gives its answer as one of {VERDICT_KEYS}"
     for case, info in cases:
-        name = case.get("name")
-        if isinstance(case.get("info"), dict) and isinstance(case.get("channelKeys"), list):
-            assert sources.channel_keys(info) == case["channelKeys"], name  # what the agent writes on the job
-        if isinstance(case.get("match"), bool):  # null: the API can't tell, where the agent lets the job go on
-            assert sources.from_allowed_channel(info, case["channels"]) is case["match"], name
-        elif case.get("match") is None and "match" in case:
-            assert sources.from_allowed_channel(info, case["channels"]) is True, name
+        assert_channel_case(case, info)
+
+
+SAMPLE_CASES = [  # the shapes the API's file may take; each passes, and a wrong answer is caught
+    {"channels": [{"name": "FaZe Clan", "url": None}], "info": {"channel": "FaZe Clan"}, "matches": True},
+    {"channels": [{"name": "FaZe Clan", "url": None}], "info": {"channel": "Valorant Daily"}, "matches": False},
+    {"channels": [{"name": "FaZe Clan", "url": None}], "info": {"channel": "FaZe Clan"}, "match": True},
+    {"channels": [{"name": "FaZe Clan", "url": None}], "channelKeys": ["valorantdaily"], "matches": False},
+    {"channels": [{"name": "FaZe Clan", "url": None}], "channelKeys": [], "channel": "FaZe Clan", "matches": None},
+    {"channels": [{"name": "FaZe Clan", "url": None}], "channel": "FaZe Clan", "channelId": "UC1", "matches": True},
+    {"channels": [], "info": {"channel": "FaZe Clan"}, "channelKeys": ["fazeclan"], "matches": None},
+]
+
+
+@pytest.mark.parametrize("case", SAMPLE_CASES)
+def test_every_shape_of_a_channel_case_is_checked(case: dict[str, Any]) -> None:
+    info = case_info(case)
+    assert info is not None
+    assert_channel_case(case, info)
+    has, expected = verdict(case)
+    assert has
+    if isinstance(expected, bool):  # the opposite answer fails: the verdict really is compared
+        with pytest.raises(AssertionError):
+            assert_channel_case({**case, VERDICT_KEYS[0]: not expected, VERDICT_KEYS[1]: not expected}, info)
+    # keys given, even none, are the only facts read: "channel" beside an empty list is not looked at
+    if case.get("channelKeys") == [] and "info" not in case:
+        assert info == {}
