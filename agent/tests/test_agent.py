@@ -645,7 +645,7 @@ def test_without_a_campaign_every_prompt_and_file_is_byte_identical_to_before() 
 # --- §39.3: a job without ``remake`` sends and writes exactly what it did before the campaign copy ----------------
 
 from clipfactory_agent import pipeline as pipeline_mod  # noqa: E402
-from clipfactory_agent import proc  # noqa: E402
+from clipfactory_agent import proc, sources  # noqa: E402
 from clipfactory_agent.render import RenderResult  # noqa: E402
 
 # sha256 (first 16 hex) of what origin/main at 806deb9 (before §39 was built) sent and wrote for the runs below: every
@@ -786,3 +786,11 @@ async def test_a_job_without_remake_sends_and_writes_what_it_did_before(
     status, _, _ = await w.run()
     assert status == "ready" and "remake" not in w.store.job
     assert run_digests(w, cuts) == BEFORE_COPIES[kind]
+    # the only new job fields: the video channel's keys (a link) and the language Transcribe heard; no copy fields
+    source = next(x for x in w.store.writes if "source" in x)["source"]
+    if kind == "upload":
+        assert "channelKeys" not in source
+    else:
+        assert source["channelKeys"] == sources.channel_keys(w.info)
+    assert [x for x in w.store.writes if "sourceLanguage" in x] == [{"sourceLanguage": "en-US"}]
+    assert all("remakeOf" not in c and "remakes" not in c for c in w.store.clips)

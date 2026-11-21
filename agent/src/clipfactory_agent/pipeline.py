@@ -55,7 +55,7 @@ from .jobs import StepDone, StepFn, Tracker, creep
 from .moments import Moment, length_target
 from .render import Marks, RenderResult, prepare_logo, render_clip
 from .skills import SkillsBlock, SkillSet, prepare_skills, skills_block
-from .store import Fence, Store, clip_prefix, cookies_key, source_prefix
+from .store import CHANNEL_KEYS, SOURCE_LANGUAGE, Fence, Store, clip_prefix, cookies_key, source_prefix
 from .transcribe import PART_SECONDS, Transcriber, job_name, language_of, parse_items, parse_speakers
 from .util import (
     JobCanceled,
@@ -580,6 +580,9 @@ class Pipeline:
         if info.get("is_live") or info.get("live_status") in ("is_live", "is_upcoming"):
             raise UserFacingError("This stream is still live or has not started. Try again once it has ended.")
         st.source.update(sources.source_fields(info, platform))
+        # Every name and handle of the video's channel (§39.3): the API's fit check matches the campaign's channels
+        # against them, by the same rule as the check below.
+        st.source[CHANNEL_KEYS] = sources.channel_keys(info)
         if st.campaign is not None and not sources.from_allowed_channel(info, st.campaign.channels):
             # The job goes on: the owner reads the note on the job and decides before uploading (§38.13).
             st.campaign_note = st.campaign.channel_note()
@@ -947,6 +950,7 @@ class Pipeline:
         if await self.store.exists(st.key("words.json")):
             st.words = await self.store.get_json(st.key("words.json"))
             st.meta["fewWords"] = len(st.words) < FEW_WORDS
+            await self._save_language(st)  # from meta.json's ``language`` (resolve read it)
             return StepDone("Used the words from last time.")
         audio = await self._local_audio(st)
         parts: list[tuple[str, float, float]] = []  # (s3 key, offset, seconds)
@@ -1026,7 +1030,19 @@ class Pipeline:
         self._deep(st, "speakers", "ok" if turns else "skipped", None if turns else "no speaker labels")
         await self.store.put_json(st.key("words.json"), st.words)
         await self.store.put_json(st.key("meta.json"), st.meta)
+        await self._save_language(st)
         return StepDone(f"Wrote down {count(len(st.words), 'word')}.")
+
+    async def _save_language(self, st: JobState) -> None:
+        """The job's public ``sourceLanguage`` (§39.3): the language Transcribe heard (its ``LanguageCode``, BCP 47),
+        written once, when the job doesn't say it already."""
+        lang = st.meta.get("language")
+        if not isinstance(lang, str) or not lang or st.job.get(SOURCE_LANGUAGE) == lang:
+            return
+        await self.store.update_job(
+            st.user_id, st.job_id, {SOURCE_LANGUAGE: lang}, unless_canceled=True, session_id=st.session_id
+        )
+        st.job[SOURCE_LANGUAGE] = lang
 
     # --- analyze ---------------------------------------------------------------------------------------------
 

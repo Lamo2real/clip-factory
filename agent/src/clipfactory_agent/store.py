@@ -53,6 +53,12 @@ def cookies_key(user_id: str) -> str:
     return f"private/{user_id}/youtube-cookies.txt"
 
 
+# Fields §39.3 adds to every job (additive only): the language Transcribe heard (BCP 47, public) and every name and
+# handle of the video's channel inside ``source`` (``source.channelKeys``, public). The API's fit check reads them.
+SOURCE_LANGUAGE = "sourceLanguage"
+CHANNEL_KEYS = "channelKeys"
+
+
 def job_key(user_id: str, job_id: str) -> dict[str, str]:
     return {"pk": user_pk(user_id), "sk": f"JOB#{job_id}"}
 
