@@ -700,8 +700,8 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
 - AC9: All your money (BR-27) is added up on the server; the web only formats. Content Rewards' paid money is kept by
   day; for an owner whose money was read before, a one-time scan fills it without ever changing the paid total.
 - AC10: Additive only: new attributes on the job, clip and money items and one api setting (`CR_REMAKE`, from
-  `cr_remake_enabled`, off by default); no new table, index, bucket, secret or Lambda, and nothing that holds the
-  owner's data is replaced.
+  `cr_remake_enabled`; it shipped off and is on since PR #93); no new table, index, bucket, secret or Lambda, and
+  nothing that holds the owner's data is replaced.
 
 ## Design and experience requirements
 

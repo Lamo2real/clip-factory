@@ -508,7 +508,9 @@ platform estimates; it has its own part.
   paid line says "Checking…".
 * "Ready to move" of $1.00 or more makes "Move your money to Whop" the part's vermilion step. When a move to Whop has
   just finished (`withdrawal_pending` went back to 0 after being above 0, `auto: money_moved`), the bank step is the
-  vermilion once: "Your money is on Whop. Move it to your bank." with "Open Whop".
+  vermilion once: "Your money is on Whop. Move it to your bank." with "Open Whop". The web knows it from the money
+  answer's `movedAt` when it is there (§38.8), so every device knows; without it (an older api), only the device that
+  saw it happen knows, from today's memo there.
 * Celebrations (once each, §38.11): the first money ever (only when paid-so-far was $0 before) "Your first money from
   Content Rewards!"; later payouts "Money from Content Rewards! $4.21 is in your balance."; `available` reaching $1.00
   "You can move $18.25 to Whop now." Confetti on the Money page, a notification on the phone. The first complete read
@@ -691,6 +693,8 @@ interface CrMoney {
   lastPaidCents?: number; waitingForBrand: number /* campaign clips CR still has pending at $0 */;
   campaigns: { campaignId?: string; name: string; paidCents: number; pendingCents: number }[];
   celebrations: { key: string; kind: "first_money" | "money_arrived" | "can_move"; text: string }[];
+  movedAt?: string | null /* ISO time Clip Factory last saw money leave CR's balance toward Whop (withdrawal_pending
+                             went from above 0 back to 0); null before any move; absent from an older api */;
 }
 interface JobCampaign {                            // internal Job attribute: the rules this job follows
   campaignId: string; crId?: string; name: string; brand: string; platformsPaid: Platform[];
@@ -959,7 +963,7 @@ This is checked at the first Connect (and logged once as `cr.typeid_verified` or
 | Connect state | `USER#{userId}` | `CRSTATE#{nonce}` | `type="crstate"`, `port`, `redirectUri`, `clientId`, `exp`, `ttl` |
 | Campaign | `USER#{userId}` | `CAMPAIGN#{uuid}` | `type="campaign"`, the stored fields of `Campaign` (not `stops`, `nextStep`, `uploadPlaces`, `thingsYouDo`, `clipCounts`, URLs) + internal `crId`, `idMatch`, `public` (stripped copy ≤ 16 KB), `publicAt`, `brief` (≤ 20 KB), `briefHash`, `pastedRules`, `rulesVersion`, `readStartedAt`, `logoKey`, `brandKey`, `held` `{at, pending}`, `firstCheckFailedAt`, `nextCheckAt`, `lastListedAt` |
 | Submission | `USER#{userId}` | `CRSUB#{postId}` | `type="crsub"`, `postId`, `clipId`, `campaignId`, `crId`, `url`, `gen` (0), `key` (`postId`, or `{postId}:{gen}` when `gen > 0`), `platform`, `state`, `attempts`, `lastTryAt`, `postedAt`, `deadline` (postedAt + 25 min), `sendBy` (postedAt + 30 min), `submissionId`, `crStatus`, `flagged`, `removed`, `postGone`, `reason`, `views`, `viewsAt`, `earned`, `appealedAt`, `proof` `{text, where, dueAt, notifiedAt, doneAt}`, `sentAt`, `reviewedAt`, `nextCheckAt`, `updatedAt`. Created only by `submit.send`, always first as `state: "sending"` with `attribute_not_exists(pk)`, then updated; `campaignId` never changes (one campaign per post, forever); `crId` and `url` are frozen at that first write |
-| CR money | `USER#{userId}` | `CRMONEY` | `type="crmoney"`, the `CrMoney` numbers, `paidTotalCents`, `paidByCampaign` (map `cmp_…` → cents), `paidMark` `{createdAt, id}` (the newest paid payout counted), `firstReadDone`, `scan` `{status, cursor, at}` (a read to the end still going), `pendingAsOf`, `payoutsSeen` (newest 50 paid payout ids), `celebrations`, `nextCheckAt`, `lastManualAt` |
+| CR money | `USER#{userId}` | `CRMONEY` | `type="crmoney"`, the `CrMoney` numbers, `paidTotalCents`, `paidByCampaign` (map `cmp_…` → cents), `paidMark` `{createdAt, id}` (the newest paid payout counted), `firstReadDone`, `scan` `{status, cursor, at}` (a read to the end still going), `pendingAsOf`, `payoutsSeen` (newest 50 paid payout ids), `celebrations`, `movedAt` (ISO time money last left CR's balance toward Whop; the money answer's `movedAt`), `nextCheckAt`, `lastManualAt` |
 | CR owners | `CROWNERS` | `USER#{userId}` | `type="crowner"`, `since` (the poller's list; written on Connect and on the first campaign add) |
 | Job | `USER#{userId}` | `JOB#{jobId}` | + `campaignId` (public), `campaignNote` (public, agent), `campaign` (internal `JobCampaign`) |
 | Clip | `USER#{userId}` | `CLIP#{clipId}` | + `campaignId` (public, agent) |
@@ -1421,11 +1425,12 @@ approved` on the fake clock. Mock values match the API's sentences.
   membership transitions and cadence (15 min, 6 h, 30 days, `manual` → `in`), `left`, a stuck `sending` with an old
   `lastTryAt`, adoption of a hand-sent post by link, status/views/flags/`removed`/post gone, appeal back to pending,
   money (first read across ticks with "Checking…" and no celebration, the watermark adds only new paid rows, pending to
-  the end, per-submission `earned`, `reversed` ignored, first money only from $0), proof due → one notification,
-  pilot reminders every 3 days at most 5, 25 calls and the time budget, one owner failing; the `contentrewards` stats
-  action; broadcast `CAMPAIGN#`/`CRCONN`/`CRSUB#`/`CRMONEY` → `contentrewards` partial; notify: each §38.11 event once,
-  the minutes left and TTL, the `contentRewards` choice off, dedupe; Ask: `read_setup_guide` with `contentrewards`
-  (present and absent).
+  the end, per-submission `earned`, `reversed` ignored, first money only from $0, `movedAt` null until a move to Whop
+  and then its time, kept until the next one, on the money route and the overview alike), proof due → one
+  notification, pilot reminders every 3 days at most 5, 25 calls and the time budget, one owner failing; the
+  `contentrewards` stats action; broadcast `CAMPAIGN#`/`CRCONN`/`CRSUB#`/`CRMONEY` → `contentrewards` partial; notify:
+  each §38.11 event once, the minutes left and TTL, the `contentRewards` choice off, dedupe; Ask: `read_setup_guide`
+  with `contentrewards` (present and absent).
 * **infra (A)** `terraform test`, mock providers: `cf-prod-campaigns` env and IAM exactly as §38.16 (**no
   `secretsmanager` action**, media only `campaigns/*`), api and stats invoke grants, no new agent grant, the realtime
   and notify filters' prefixes (notify still `MODIFY` only), `content_rewards_enabled` `false` →
@@ -1500,7 +1505,8 @@ hint says **Profile**); CR's **Finance** steps and Whop's screens (from Whop's a
 
 ### 38.22 Known limits (by design)
 
-What Clip Factory leaves out for a campaign on purpose. Each one is said on screen, never hidden:
+What Clip Factory leaves out for a campaign on purpose. None of them is hidden: each shows as a stop, a check-yourself
+line or a warning where it matters:
 
 * **Its own overlay picture or a sound.** A campaign that wants its own picture on top of the video
   (`rules.overlayRequired`) or one of its own sounds (`rules.soundRequired` or CR's sound toggle) is refused with a
