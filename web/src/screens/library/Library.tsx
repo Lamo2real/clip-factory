@@ -302,6 +302,8 @@ function LibraryCard({
   const rest = ordered.filter(ownRow);
   const noTikTok = yourself && !posts.some((p) => p.platform === "tiktok");
   const marked = (out: { clip: Clip; posts: Post[] }) => onKept(out.clip, out.posts);
+  const failedPosts = posts.filter((p) => p.status === "failed");
+  const onlyPublicTikTok = failedPosts.length > 0 && failedPosts.every(failedForPublicAccount);
   const row = (p: Post) => (
     <li key={p.postId} className={`post is-${p.status}`}>
       <span className="post__mark" title={PLATFORM_LABEL[p.platform]}>
@@ -421,7 +423,8 @@ function LibraryCard({
       ) : needsUploadAgain(clip, posts) ? null : (
         <p className="muted small">No posts yet.</p>
       )}
-      {needsUploadAgain(clip, posts) || stuck || clip.status === "failed" ? <UploadAgain clip={clip} posts={posts} onKept={onKept} /> : null}
+      {/* A clip that failed only because TikTok refused the public account: Post it yourself in its row, not Try again. */}
+      {needsUploadAgain(clip, posts) || stuck || (clip.status === "failed" && !onlyPublicTikTok) ? <UploadAgain clip={clip} posts={posts} onKept={onKept} /> : null}
       {crSubs.length ? <CrPostLines subs={crSubs} onChange={onCrChange} compact /> : null}
       <SimilarClips clipId={clip.clipId} />
     </article>

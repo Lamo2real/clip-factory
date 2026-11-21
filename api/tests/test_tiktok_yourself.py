@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from clipfactory_api import db, tiktok_find, tiktok_link
+from clipfactory_api import day7, db, posts, tiktok_find, tiktok_link, tiktok_self
 from clipfactory_api.app import App
 from clipfactory_api.ids import ulid
 from clipfactory_api.platforms.base import HttpRequest, HttpResponse, NetworkError
@@ -116,7 +116,7 @@ def test_the_real_opener_only_opens_tiktok() -> None:
 # --- I posted it ----------------------------------------------------------------------------------------------
 
 
-def _connect_tiktok(store: db.Store, handle: str = "lamo.clips") -> None:
+def _connect_tiktok(store: db.Store, handle: str = "@lamo.clips") -> None:
     store.put(
         {
             "pk": db.user_pk(USER),
@@ -222,7 +222,7 @@ def test_a_short_link_is_opened_once(app: App, call: Call, store: db.Store) -> N
 
 
 def test_a_link_from_another_account_is_kept_without_numbers(call: Call, store: db.Store, table: FakeTable) -> None:
-    _connect_tiktok(store, handle="someone.else")
+    _connect_tiktok(store, handle="@someone.else")
     clip = _uploaded(store)
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"link": FULL})
     assert status == 200
@@ -231,6 +231,18 @@ def test_a_link_from_another_account_is_kept_without_numbers(call: Call, store: 
     assert raw is not None
     assert raw["url"].endswith(VIDEO_ID)
     assert "statsId" not in raw
+
+
+def test_a_display_name_handle_is_not_compared(call: Call, store: db.Store, table: FakeTable) -> None:
+    # Without a TikTok username the connection stores the display name, which no link carries.
+    _connect_tiktok(store, handle="Lamo Clips")
+    clip = _uploaded(store)
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"link": FULL})
+    assert status == 200
+    assert "note" not in body
+    raw = table.raw(db.user_pk(USER), db.post_sk(_tiktok(body)["postId"]))
+    assert raw is not None
+    assert raw["statsId"] == VIDEO_ID
 
 
 def test_a_bad_link_is_a_plain_400(call: Call, store: db.Store) -> None:
@@ -503,3 +515,113 @@ def test_pick_prefers_the_caption_and_skips_old_posts() -> None:
     b = _video("1000000000000000003", "2026-11-15T11:52:00Z", "Wait for it!! #fyp")
     assert tiktok_find.pick([a, b], since=since, caption="wait for it") == b
     assert tiktok_find.pick([a, b], since=since, caption="") is None
+
+
+# --- review fixes: old clips without postIds, day-7 fields, two taps at once ---------------------------------------
+
+
+def _bare_post(store: db.Store, clip: dict[str, Any], platform: str, **fields: Any) -> dict[str, Any]:
+    """A post written the way clips confirmed before ``postIds`` existed were: the clip does not list it."""
+    post_id = ulid()
+    item = {
+        "pk": db.user_pk(USER),
+        "sk": db.post_sk(post_id),
+        "gsi1pk": f"CLIP#{clip['clipId']}",
+        "gsi1sk": f"POST#{platform}",
+        "type": "post",
+        "userId": USER,
+        "postId": post_id,
+        "clipId": clip["clipId"],
+        "platform": platform,
+        **fields,
+    }
+    store.put(item)
+    return item
+
+
+def test_an_old_clip_without_post_ids_keeps_all_its_posts(call: Call, store: db.Store, table: FakeTable) -> None:
+    clip = seed_clip(store, status="failed", postsCreated=True, decidedAt="2026-11-15T10:00:00.000Z")
+    youtube = _bare_post(store, clip, "youtube", status="failed", error="YouTube said no.")
+    instagram = _bare_post(store, clip, "instagram", status="posted", privacy="public")
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    assert status == 200
+    assert sorted(p["platform"] for p in body["posts"]) == ["instagram", "tiktok", "youtube"]
+    stored = table.raw(clip["pk"], clip["sk"])
+    assert stored is not None
+    assert set(stored["postIds"]) == {youtube["postId"], instagram["postId"], _tiktok(body)["postId"]}
+    seen = posts.posts_for_clip(store, USER, clip["clipId"], consistent=True)
+    assert sorted(p["platform"] for p in seen) == ["instagram", "tiktok", "youtube"]
+    status, body = call("DELETE", f"/v1/clips/{clip['clipId']}/tiktok/posted")
+    assert status == 200
+    assert sorted(p["platform"] for p in body["posts"]) == ["instagram", "youtube"]
+    stored = table.raw(clip["pk"], clip["sk"])
+    assert stored is not None
+    assert set(stored["postIds"]) == {youtube["postId"], instagram["postId"]}
+    assert "tiktokByYou" not in stored
+
+
+def test_what_was_learned_from_the_private_video_starts_fresh_and_comes_back_on_undo(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    clip = _uploaded(store)
+    private = _post(
+        store,
+        clip,
+        "tiktok",
+        status="posted",
+        privacy="private",
+        postedAt="2026-11-01T10:00:00.000Z",
+        day7State="missing",
+        day7CheckedAt="2026-11-10T10:00:00.000Z",
+        lastSnapshotAt="2026-11-02T10:00:00.000Z",
+    )
+    status, _ = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    assert status == 200
+    raw = table.raw(db.user_pk(USER), db.post_sk(private["postId"]))
+    assert raw is not None
+    for key in ("day7State", "day7CheckedAt", "lastSnapshotAt"):
+        assert key not in raw
+    # Its own day-7 window starts now: once it closes, the public post is due for its day-7 views.
+    assert day7.due(raw, datetime(2026, 11, 30, tzinfo=UTC))
+    status, _ = call("DELETE", f"/v1/clips/{clip['clipId']}/tiktok/posted")
+    assert status == 200
+    raw = table.raw(db.user_pk(USER), db.post_sk(private["postId"]))
+    assert raw is not None
+    assert raw["day7State"] == "missing"
+    assert raw["lastSnapshotAt"] == "2026-11-02T10:00:00.000Z"
+
+
+def test_two_taps_at_once_make_one_tiktok_post(app: App, store: db.Store, monkeypatch: pytest.MonkeyPatch) -> None:
+    clip = _uploaded(store)
+    stale = store.get(clip["pk"], clip["sk"])
+    assert stale is not None
+    tiktok_self.mark_posted(store, stale, None, app.clock(), min_interval=15)
+    # The second tap read the clip and its posts before the first one wrote: its create is refused, never a second
+    # TikTok post for the clip.
+    monkeypatch.setattr(tiktok_self, "posts_for_clip", lambda *_a, **_k: [])
+    with pytest.raises(db.ConditionFailed):
+        tiktok_self.mark_posted(store, stale, None, app.clock(), min_interval=15)
+    monkeypatch.undo()
+    assert [p["platform"] for p in posts.posts_for_clip(store, USER, clip["clipId"], consistent=True)] == ["tiktok"]
+
+
+def test_the_route_turns_a_lost_race_into_the_same_answer(
+    app: App, call: Call, store: db.Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clip = _uploaded(store)
+    real = tiktok_self.mark_posted
+    calls: list[int] = []
+
+    def racing(*args: Any, **kwargs: Any) -> None:
+        calls.append(1)
+        if len(calls) == 1:
+            stale = store.get(clip["pk"], clip["sk"])
+            real(store, stale, None, app.clock(), min_interval=15)  # the other tap wins first
+            raise db.ConditionFailed("lost the race")
+        real(*args, **kwargs)
+
+    monkeypatch.setattr(tiktok_self, "mark_posted", racing)
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    assert len(calls) == 2
+    assert status == 200
+    assert [p["platform"] for p in body["posts"]] == ["tiktok"]

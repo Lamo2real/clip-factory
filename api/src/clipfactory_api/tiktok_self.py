@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import Any
 
-from . import db
+from . import day7, db
 from .clock import iso, parse
 from .ids import ulid
 from .posts import PERF_CHECK_DELAY, posts_for_clip
@@ -44,8 +44,26 @@ REPLACED = (
     "gsi2sk",
     "metrics",
     "statsError",
+    "nextRefreshAt",
+    # What was learned from the earlier video: day-7 views (§16.12) and the snapshot/insights bookkeeping. A post by
+    # him is another video, so it starts fresh and Undo puts these back.
+    *day7.FIELDS,
+    "lastSnapshotAt",
+    "lastSnapshotViews",
+    "insightsDueAt",
 )
 STATS_FIELDS = ("statsId", "statsDueAt", "gsi2pk", "gsi2sk")
+LEARNED = (
+    "metrics",
+    "statsError",
+    "nextRefreshAt",
+    *day7.FIELDS,
+    "lastSnapshotAt",
+    "lastSnapshotViews",
+    "insightsDueAt",
+)
+# On the clip while a TikTok post made by I posted it exists: two taps at once can never make two TikTok posts.
+MADE_MARK = "tiktokByYou"
 
 
 class Refused(Exception):
@@ -119,12 +137,16 @@ def mark_posted(
             item["url"] = video.url
             if count_views:
                 item.update(_stats_fields(post_id, video, now, min_interval))
-        ids = [str(i) for i in clip.get("postIds") or []]
         update = db.update_request(
             db.user_pk(user_id),
             db.clip_sk(clip_id),
-            {"postIds": [*ids, post_id], **_clip_status(status, rows, now_posted=True)},
+            {
+                "postIds": [*_post_ids(clip, rows), post_id],
+                MADE_MARK: post_id,
+                **_clip_status(status, rows, now_posted=True),
+            },
             expect_in={"status": [status]},
+            expect_absent=[MADE_MARK],
         )
         store.transact(puts=[item], updates=[update])
         return
@@ -138,12 +160,15 @@ def mark_posted(
         posted_at = now
         fields["postedAt"] = iso(posted_at)
         fields["perfCheckAt"] = iso(posted_at + PERF_CHECK_DELAY)
-        remove += [k for k in ("error", "platformPostId", "metrics", "statsError", "url") if k in row]
+        remove += [k for k in ("error", "platformPostId", "url", *LEARNED) if k in row]
         remove += [k for k in STATS_FIELDS if k in row]
     if video is not None:
         fields["url"] = video.url
         remove = [k for k in remove if k != "url"]
         same = row.get("by") == "you" and row.get("statsId") == video.video_id
+        if row.get("by") == "you" and not same:
+            # Another video than the one he linked before: its numbers and what was learned from it go.
+            remove += [k for k in LEARNED if k in row and k not in remove]
         if count_views and not same:
             fields.update(_stats_fields(post_id, video, now, min_interval))
             remove = [k for k in remove if k not in STATS_FIELDS]
@@ -177,11 +202,17 @@ def undo(store: db.Store, clip: Mapping[str, Any]) -> None:
     others = [r for r in rows if r is not row]
     status = str(clip.get("status"))
     if row.get("madeByYou"):
-        ids = [str(i) for i in clip.get("postIds") or [] if str(i) != str(row["postId"])]
+        ids = [i for i in _post_ids(clip, rows) if i != str(row["postId"])]
         clip_fields: Item = {"postIds": ids, **_clip_status(status, others, now_posted=False)}
         store.transact(
             updates=[
-                db.update_request(db.user_pk(user_id), db.clip_sk(clip_id), clip_fields, expect_in={"status": [status]})
+                db.update_request(
+                    db.user_pk(user_id),
+                    db.clip_sk(clip_id),
+                    clip_fields,
+                    remove=[MADE_MARK],
+                    expect_in={"status": [status]},
+                )
             ]
         )
         store.delete_if(str(row["pk"]), str(row["sk"]), {"by": ["you"]})
@@ -199,6 +230,15 @@ def undo(store: db.Store, clip: Mapping[str, Any]) -> None:
             db.update_request(db.user_pk(user_id), db.clip_sk(clip_id), clip_fields, expect_in={"status": [status]})
         )
     store.transact(updates=updates)
+
+
+def _post_ids(clip: Mapping[str, Any], rows: list[Item]) -> list[str]:
+    """The clip's ``postIds``. Clips uploaded before that list existed have none; their posts were all read by the
+    full fallback query (``posts_for_clip``), so the list starts from those, or later reads would see only the new one."""
+    kept = clip.get("postIds")
+    if isinstance(kept, list):
+        return [str(i) for i in kept]
+    return [str(r["postId"]) for r in rows if r.get("postId")]
 
 
 def _clip_status(status: Any, others: list[Item], *, now_posted: bool) -> Item:

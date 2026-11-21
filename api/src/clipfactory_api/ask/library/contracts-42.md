@@ -28,7 +28,10 @@ posting API. Decision record: ADR-66.
     paste the caption; check it says Everyone (TikTok starts a new post with the last post's privacy, Only you after
     Clip Factory's uploads) and turn on Comments, Duet and Stitch; a campaign clip also turns on Disclose post content
     › Branded content; Post; come back and tap I posted it. Closing the share menu is not an error; a share that fails
-    offers **Save the video**.
+    for any other reason (or a video that did not load) shows **Save the video** (the file link below) with "The share
+    menu did not open. Tap Save the video below. It goes to Files: open it there, tap Share, then Save Video. Then open
+    TikTok and tap +." The link and the video load apart: Save the video never waits for the whole video, which only
+    the share menu and AirDrop need.
   * **A computer** (and a phone that cannot share files): **Save the video** (vermilion; the file link below, so the
     browser saves it to Downloads; the Mac app opens it in the system browser, which does the same) and **Open TikTok**
     (`https://www.tiktok.com/tiktokstudio/upload` in a new tab, the system browser in the Mac app). Both copy the
@@ -46,8 +49,8 @@ posting API. Decision record: ADR-66.
   until it has one.
 * **Right after Upload on Review** (`offerAfterUpload`): when nothing of Clip Factory's is on its way to TikTok (no
   TikTok post, or one waiting for setup) and TikTok's `posting_audit` gate is not `ok`, the clip's line in "Uploaded
-  just now" gets **Post it yourself** too, and when TikTok is set up (he posts there) but was left unticked, the sheet
-  opens by itself (Not now closes it). Nothing
+  just now" gets **Post it yourself** too (its Undo brings the button back), and when TikTok is set up (he posts
+  there) but was left unticked, the sheet opens by itself (Not now closes it), except on a campaign clip. Nothing
   else on Review changes: Upload to, Use my settings, each place's row with TikTok's dropdown and switches, and Upload
   to several places all stay. TikTok ticked there is still Clip Factory's own upload, "Only me" until TikTok approves.
 
@@ -58,7 +61,7 @@ the app. Tap Post it yourself to post it for everyone." (`TIKTOK_PRIVATE_ONLY`, 
 sentence, also for posts that failed earlier with the old one ("Make your TikTok account private (Setup step 3), then
 press Try again."), with **Post it yourself** and no Try again (it would fail the same way); the clip page says the
 same. On Review, while TikTok is ticked and TikTok has not approved the app (`app_review` and `posting_audit` both
-`ok`), one line above Upload says: "Until TikTok approves the app, Clip Factory can only upload to a private TikTok
+`ok`), one line just above TikTok's Music Usage line (which stays right above Upload, §17.8) says: "Until TikTok approves the app, Clip Factory can only upload to a private TikTok
 account. Yours is public? Untick TikTok, tap Upload, then post it yourself." TikTok stays ticked as it was (every set-up
 place starts ticked, §36.1); once he unticks it and uploads, Upload to remembers that (§33.2) and the sheet opens by
 itself after Upload (below).
@@ -75,7 +78,13 @@ itself after Upload (below).
   "public"`, public `by: "you"`, `postedAt` now (kept when marked again), `perfCheckAt` +48 h. A post Clip Factory made
   (waiting, failed or private) keeps its earlier fields in the internal `beforeYou` and loses `error`,
   `platformPostId` and its stats fields; a clip with no TikTok post gets a new one (internal `madeByYou`, same keys as
-  `create_for_clip`, appended to `postIds`, `campaignId` copied), in one transaction with the clip. The clip becomes
+  `create_for_clip`, appended to `postIds`, `campaignId` copied), in one transaction with the clip, which gets the
+  internal `tiktokByYou` (the new post's id) on the condition that it has none: two taps at once never make two TikTok
+  posts, and the route answers the second one as the first (it reads again and writes once more). A clip uploaded
+  before `postIds` existed has no list: it starts from all the posts the full read found, so later reads still see
+  every post. What was learned from Clip Factory's own video (`metrics`, `statsError`, `nextRefreshAt`, the day-7
+  fields of §16.12, `lastSnapshotAt`, `lastSnapshotViews`, `insightsDueAt`) goes into `beforeYou` and off the post,
+  so his post gets its own day-7 window; a later link to another video drops them again. The clip becomes
   `posted` when it was `failed`, or `confirmed` with nothing `queued` (the clip flow's settle rule, §14.5); a
   `publishing` clip is left to its flow.
 * Refused (409, plain sentences): not uploaded ("Upload this clip first. Then you can post it on TikTok yourself."),
@@ -89,7 +98,8 @@ itself after Upload (below).
   follow redirects, at most three times, each `Location` https on `tiktok.com`, `www.`, `m.`, `vm.` or `vt.` only
   (`App.tiktok_open`, 5 s). Stored as `url` `https://www.tiktok.com/@name/video/<id>`; `statsId` = the id, joining the
   poller's `gsi2` like any public post (§16.3; TikTok's `video/query` reads only the connected account's videos).
-  When the connected TikTok account's `handle` is another name, or TikTok is not connected, the link is kept without
+  When the connected TikTok account's `handle` is another `@username` (a handle without "@" is the display name and is
+  not compared), or TikTok is not connected, the link is kept without
   `statsId` and the answer's `note` says "Saved. Views only show for posts on the TikTok account you connected."
   Errors (400): "That is not a TikTok link. In TikTok, tap Share, then Copy link, and paste it here.", "That link does
   not open a TikTok video. In TikTok, open your post, tap Share, then Copy link.", "TikTok did not open that link. Try
@@ -105,7 +115,7 @@ itself after Upload (below).
   the only candidate does; otherwise nothing. Found: `url` and `statsId` as for a link. Not found, or TikTok did not
   answer: the post is still marked and `note` is "Saved. Clip Factory could not find it on your TikTok yet. Tap Add
   link in a minute."
-* **Undo** (DELETE): a post made here is deleted and leaves `postIds`; Clip Factory's own post gets `beforeYou` back
+* **Undo** (DELETE): a post made here is deleted, leaves `postIds` and clears `tiktokByYou`; Clip Factory's own post gets `beforeYou` back
   (status, url, privacy, error, ids and stats fields as they were). The clip's status follows the same settle rule.
   Nothing to undo: 409 "This clip was not marked as posted by you, so there is nothing to undo."
 * `Post.by?: "you"` and `PlatformPerformance.by?: "you"` (§16.2) are the only shape changes. No Terraform, table,

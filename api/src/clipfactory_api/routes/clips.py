@@ -500,7 +500,9 @@ def tiktok_posted(app: App, req: Request) -> Response:
             video = tiktok_link.resolve(link, app.tiktok_open)
         except tiktok_link.LinkError as e:
             raise bad_request(str(e)) from e
-        handle = str((account or {}).get("handle") or "").lstrip("@").lower()
+        # The connected handle is "@username" when TikTok gave one, else the display name (which a link never has).
+        stored = str((account or {}).get("handle") or "")
+        handle = stored[1:].lower() if stored.startswith("@") else ""
         if account is None or (handle and video.handle and video.handle.lower() != handle):
             count_views = False
             note = OTHER_ACCOUNT
@@ -517,7 +519,13 @@ def tiktok_posted(app: App, req: Request) -> Response:
             note = NOT_FOUND_YET
     minutes = stats_config.load().platform("tiktok").min_interval
     try:
-        tiktok_self.mark_posted(app.store, item, video, app.clock(), min_interval=minutes, count_views=count_views)
+        try:
+            tiktok_self.mark_posted(app.store, item, video, app.clock(), min_interval=minutes, count_views=count_views)
+        except db.ConditionFailed:
+            # A second tap at the same moment (or the clip just changed): read it again and write once more, which
+            # only adds the link when the first one already marked it.
+            fresh = _clip_or_404(app, req)
+            tiktok_self.mark_posted(app.store, fresh, video, app.clock(), min_interval=minutes, count_views=count_views)
     except tiktok_self.Refused as e:
         raise conflict(e.message) from e
     except db.ConditionFailed as e:

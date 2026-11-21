@@ -18,34 +18,47 @@ import { useAction } from "../../lib/motion.ts";
 import { canShareVideo, handOffFor, isPaid, looksLikeTikTokLink, steps, TIKTOK_UPLOAD_URL } from "../../lib/tiktokYourself.ts";
 import { copyText, readClipboard, Rich } from "../settings/setup/bits.tsx";
 
-type FileState = { state: "getting" } | { state: "ready"; file: ClipFile; video: File | null } | { state: "failed"; message: string };
+interface ClipFiles {
+  /** The 1-hour download link (Save the video), or null while it loads. */
+  link: ClipFile | null;
+  /** The video itself, fetched ahead so the share menu opens on the tap (WebKit gives a tap 5 s), or null. */
+  video: File | null;
+  /** The link did not load: nothing can be saved or shared. */
+  error: string | null;
+  /** Only the video did not load: Save the video (the link) still works. */
+  videoError: string | null;
+}
 
-/** Fetches the clip's file link and, where it will be shared, the video itself, so the tap can share it at once. */
-function useClipFile(clipId: string, wantVideo: boolean, attempt: number, wanted = true): FileState {
-  const [state, setState] = useState<FileState>({ state: "getting" });
+/**
+ * Fetches the clip's file link and, where the share menu is used, the video itself. They load apart: Save the video
+ * needs only the link, so it never waits for a whole download that only the share menu (or AirDrop) needs.
+ */
+function useClipFile(clipId: string, wantVideo: boolean, attempt: number, wanted = true): ClipFiles {
+  const [state, setState] = useState<ClipFiles>({ link: null, video: null, error: null, videoError: null });
   useEffect(() => {
     if (!wanted) return;
     let alive = true;
-    setState({ state: "getting" });
-    (async () => {
-      const file = await api().clipFile(clipId);
-      let video: File | null = null;
-      if (wantVideo) {
-        // no-store: a copy cached by the page's own <video> may lack the bucket's CORS answer.
-        const res = await fetch(file.url, { cache: "no-store" });
-        if (!res.ok) throw new Error(`video ${res.status}`);
-        video = new File([await res.blob()], file.filename, {
-          type: "video/mp4",
-        });
-      }
-      if (alive) setState({ state: "ready", file, video });
-    })().catch((e: unknown) => {
-      if (alive)
-        setState({
-          state: "failed",
-          message: e instanceof Error && e.message.startsWith("video") ? "The video did not load." : friendlyMessage(e),
-        });
-    });
+    setState({ link: null, video: null, error: null, videoError: null });
+    api()
+      .clipFile(clipId)
+      .then(async (link) => {
+        if (!alive) return;
+        setState((s) => ({ ...s, link }));
+        if (!wantVideo) return;
+        try {
+          // no-store: a copy cached by the page's own <video> may lack the bucket's CORS answer.
+          const res = await fetch(link.url, { cache: "no-store" });
+          if (!res.ok) throw new Error(`video ${res.status}`);
+          // The name must end in .mp4: iOS reads the file's type from it (§42.1).
+          const video = new File([await res.blob()], link.filename, { type: "video/mp4" });
+          if (alive) setState((s) => ({ ...s, video }));
+        } catch {
+          if (alive) setState((s) => ({ ...s, videoError: "The video did not load." }));
+        }
+      })
+      .catch((e: unknown) => {
+        if (alive) setState((s) => ({ ...s, error: friendlyMessage(e) }));
+      });
     return () => {
       alive = false;
     };
@@ -84,6 +97,8 @@ export function PostYourself({
   const [attempt, setAttempt] = useState(0);
   const file = useClipFile(clip.clipId, (mode === "share" || airdrop) && !linkOnly, attempt, !linkOnly);
   const [sent, setSent] = useState(false);
+  // The share menu did not open (anything but closing it): Save the video shows as the way out (§42.1).
+  const [shareFailed, setShareFailed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
@@ -124,29 +139,36 @@ export function PostYourself({
    * versions never give one after Save Video.
    */
   function shareIt() {
-    if (file.state !== "ready" || !file.video) return;
+    if (!file.video) return;
     copyCaption();
     setSent(true);
+    setShareFailed(false);
+    setProblem("");
     navigator.share({ files: [file.video] }).catch((e: unknown) => {
       // Closing the share menu is not an error. Anything else: saving the file still works.
       if (e instanceof DOMException && e.name === "AbortError") return;
+      setShareFailed(true);
       send.fail({ sound: false });
-      setProblem(mode === "share" ? "The share menu did not open. Tap Save the video below, then open TikTok and tap +." : "AirDrop did not open. Click Save the video instead.");
+      setProblem(
+        mode === "share"
+          ? "The share menu did not open. Tap Save the video below. It goes to Files: open it there, tap Share, then Save Video. Then open TikTok and tap +."
+          : "AirDrop did not open. Click Save the video instead.",
+      );
     });
   }
 
   function saveIt() {
-    if (file.state !== "ready") return;
+    if (!file.link) return;
     copyCaption();
     // The Mac app opens other sites in the system browser, which saves the file (the link says "attachment").
     if ((window as { __CF_DESKTOP__?: unknown }).__CF_DESKTOP__ === true) {
-      window.open(file.file.url, "_blank", "noopener,noreferrer");
+      window.open(file.link.url, "_blank", "noopener,noreferrer");
       setSent(true);
       return;
     }
     const a = document.createElement("a");
-    a.href = file.file.url;
-    a.download = file.file.filename;
+    a.href = file.link.url;
+    a.download = file.link.filename;
     a.rel = "noopener";
     document.body.appendChild(a);
     a.click();
@@ -185,8 +207,9 @@ export function PostYourself({
       onMarked(out);
       const linked = !!out.posts.find((p) => p.platform === "tiktok")?.url;
       if (linkOnly) {
-        if (linked) toast.success(typed ? "Link saved! Clip Factory will count its views." : "Found it on your TikTok! Clip Factory will count its views.");
-        else toast.info(out.note ?? "Clip Factory could not find it yet. Paste its link instead.");
+        // The note wins: a link from another account is kept, but its views are not read.
+        if (out.note || !linked) toast.info(out.note ?? "Clip Factory could not find it yet. Paste its link instead.");
+        else toast.success(typed ? "Link saved! Clip Factory will count its views." : "Found it on your TikTok! Clip Factory will count its views.");
         if (!linked) return;
       } else {
         const box = dialog.current?.getBoundingClientRect();
@@ -269,11 +292,13 @@ export function PostYourself({
               </p>
             </div>
 
-            {file.state === "failed" ? (
+            {file.error || (mode === "share" && file.videoError) ? (
               <div className="tt-sheet__stuck">
                 <p className="callout callout--bad" role="alert">
                   <Icon name="alert" size={18} />
-                  <span>{file.message} Tap Try again.</span>
+                  <span>
+                    {file.error ?? file.videoError} Tap Try again.{file.error ? "" : " Or tap Save the video below."}
+                  </span>
                 </p>
                 <div className="tt-sheet__stuck-actions">
                   <Button icon="retry" act="retry" onClick={() => setAttempt((n) => n + 1)}>
@@ -292,14 +317,14 @@ export function PostYourself({
                     icon="download"
                     act={send}
                     block
-                    loading={file.state === "getting"}
-                    disabled={file.state !== "ready"}
+                    loading={!file.video && !file.error && !file.videoError}
+                    disabled={!file.video}
                     onClick={shareIt}
                   >
-                    {file.state === "getting" ? "Getting the video ready…" : "Save to my phone"}
+                    {!file.video && !file.error && !file.videoError ? "Getting the video ready…" : "Save to my phone"}
                   </Button>
-                  {problem && !sent ? (
-                    <Button variant="glass" icon="download" act={save} block disabled={file.state !== "ready"} onClick={saveIt}>
+                  {shareFailed || file.videoError ? (
+                    <Button variant="glass" icon="download" act={save} block disabled={!file.link} onClick={saveIt}>
                       Save the video
                     </Button>
                   ) : null}
@@ -312,8 +337,8 @@ export function PostYourself({
                     icon="download"
                     act={save}
                     block
-                    loading={file.state === "getting"}
-                    disabled={file.state !== "ready"}
+                    loading={!file.link && !file.error}
+                    disabled={!file.link}
                     onClick={saveIt}
                   >
                     Save the video
@@ -322,7 +347,7 @@ export function PostYourself({
                     Open TikTok
                   </Button>
                   {airdrop ? (
-                    <Button variant="ghost" icon="phone" act={send} block disabled={file.state !== "ready"} onClick={shareIt}>
+                    <Button variant="ghost" icon="phone" act={send} block disabled={!file.video} onClick={shareIt}>
                       Send to my iPhone (AirDrop)
                     </Button>
                   ) : null}

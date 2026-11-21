@@ -12,5 +12,6 @@ TikTok's API row stay as they are, so the API path is ready if TikTok ever appro
 
 **Consequences.** No TikTok rule is touched: TikTok's posting API is not used for these posts, and the owner posts with
 TikTok's own app. Everyone needs a public account, on which Clip Factory's own TikTok upload is refused until the audit,
-so that row fails with its existing sentence and offers Post it yourself. Numbers need the link (or come later from
-`video/query` on the connected account only).
+so that row fails with a sentence that points to Post it yourself (no "make it private", no Try again) and offers the
+button there. Numbers come from the post found on the connected account (`video/list`) or a pasted link, then
+`video/query` as for any public post.

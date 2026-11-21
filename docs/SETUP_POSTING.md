@@ -236,8 +236,8 @@ to TikTok, but only you can see those posts, and TikTok gives no numbers for the
 page, tap **Post it yourself**. Clip Factory copies the caption and saves the video to your phone (or your computer).
 You post it in TikTok and pick **Everyone**, then tap **I posted it**, and Clip Factory finds the post and counts its
 views. **Everyone** needs a public TikTok account. While your account is public, TikTok will not let Clip Factory upload
-there for you (its rule for apps it has not approved). That upload then says to make the account private, and **Post
-it yourself** stays next to it.
+there for you (its rule for apps it has not approved). That upload then says to tap **Post it yourself**, and the
+button is right there. Keep your account public.
 
 | # | Step | Part |
 |---|---|---|
@@ -499,7 +499,7 @@ The answers, word for word. They are all true today: do not change them to sound
 | "The key does not work. Copy the Client key and secret again (step 15)." | Do step 15 again (in the Sandbox: step 19). |
 | "The return address does not match. Copy it again in step 10." | Do step 10 again with the **Copy** button. |
 | "A permission box was not ticked. Connect again and tick every box." | Do step 12, then connect again and leave every switch on. |
-| "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone." | Tap **Post it yourself** on the clip and post it in TikTok (your account is public). Or make your account private, then press **Try again**. |
+| "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone." | Tap **Post it yourself** on the clip and post it in TikTok, picking **Everyone**. Keep your account public. |
 | "TikTok did not answer. Try again in a few minutes." | Wait, then press **Connect TikTok**. |
 | "Finish the TikTok review steps to post outside the Sandbox." | Do steps 21 to 23. |
 

@@ -152,12 +152,15 @@ export function Review({ jobId }: { jobId: string | null }) {
     setJustKept((k) => [clip, ...k.filter((c) => c.clipId !== clip.clipId)].slice(0, 5));
     const after = offerAfterUpload(posts, setup.data?.platforms);
     if (after.offer) setTikTokYourself((s) => new Set(s).add(clip.clipId));
-    if (after.open) setHandOff(clip);
+    // Not for a campaign clip: Content Rewards takes its TikTok post through the campaign's own places (§38).
+    if (after.open && !clip.campaignId) setHandOff(clip);
   };
-  const markedYourself = (clipId: string) =>
+  // I posted it hides the offer; its Undo brings it back.
+  const markedYourself = (clipId: string, out?: { posts: Post[] }) =>
     setTikTokYourself((s) => {
       const next = new Set(s);
-      next.delete(clipId);
+      if (out && !out.posts.some((p) => p.platform === "tiktok" && p.by === "you")) next.add(clipId);
+      else next.delete(clipId);
       return next;
     });
   // Where focus goes when a card leaves while it holds focus: the next card's title (or the one before, or the empty
@@ -257,7 +260,7 @@ export function Review({ jobId }: { jobId: string | null }) {
                 <LinkButton href={`/clips/${c.clipId}`} size="sm" icon="chart" iconAfter="chevronRight">
                   See how it does
                 </LinkButton>
-                {tiktokYourself.has(c.clipId) ? <PostYourselfButton clip={c} onMarked={() => markedYourself(c.clipId)} /> : null}
+                {tiktokYourself.has(c.clipId) ? <PostYourselfButton clip={c} onMarked={(out) => markedYourself(c.clipId, out)} /> : null}
               </li>
             ))}
           </ul>
@@ -309,8 +312,9 @@ export function Review({ jobId }: { jobId: string | null }) {
       ) : null}
       {handOff ? (
         <PostYourself
+          key={handOff.clipId}
           clip={handOff}
-          onMarked={() => markedYourself(handOff.clipId)}
+          onMarked={(out) => markedYourself(handOff.clipId, out)}
           onClose={() => setHandOff(null)}
         />
       ) : null}
@@ -1089,10 +1093,11 @@ function ReviewCard({
             {uploadWhy ?? goingToLine(chosen)}
           </p>
         ) : null}
+        {/* Above TikTok's Music Usage line, which stays right above Upload (§17.8). */}
+        {placesReady && !noneReady && tiktokOn && !tiktokApproved && !keepFailed ? <p className="tt-yourself-hint">{TIKTOK_PUBLIC_HINT}</p> : null}
         {placesReady && !noneReady && tiktokOn ? (
           <TikTokLegal className="tt-legal" branded={choices.commercial && choices.branded} />
         ) : null}
-        {placesReady && !noneReady && tiktokOn && !tiktokApproved && !keepFailed ? <p className="tt-yourself-hint">{TIKTOK_PUBLIC_HINT}</p> : null}
         <div className="review-card__actions" ref={confirmRef} data-help-dodge="">
           <Button variant="ghost" icon="trash" act="throw" data-help="throw-away" disabled={busy !== null || leaving} onClick={throwAway}>
             Throw away

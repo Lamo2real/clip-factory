@@ -1,5 +1,5 @@
 // Post it on TikTok yourself (docs/CONTRACTS.md §42): the Library's button, the sheet, I posted it, Add link and Undo.
-import { expect, test } from "@playwright/test";
+import { devices, expect, test } from "@playwright/test";
 import { settle } from "./helpers.ts";
 import type { Page } from "@playwright/test";
 
@@ -87,4 +87,42 @@ test("review: right after Upload without TikTok, Uploaded just now offers Post i
   await sheet.getByRole("button", { name: "I posted it" }).click();
   await expect(sheet).toHaveCount(0);
   await expect(item.getByRole("button", { name: "Post it on TikTok yourself" })).toHaveCount(0);
+});
+
+// A phone (§42.1): the share menu holds the file; when it fails, Save the video is the way out.
+// The iPhone's size, touch and user agent, in this project's own browser (a describe group cannot pick another one).
+const { defaultBrowserType: _browser, ...IPHONE } = devices["iPhone 15"]!;
+
+test.describe("on a phone", () => {
+  test.use(IPHONE);
+
+  async function phoneSheet(page: Page, share: "reject" | "abort") {
+    await page.addInitScript((how) => {
+      Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
+      Object.defineProperty(navigator, "share", {
+        configurable: true,
+        value: () => Promise.reject(new DOMException("no", how === "abort" ? "AbortError" : "NotAllowedError")),
+      });
+    }, share);
+    await page.goto("/library");
+    await settle(page);
+    const { row } = await privateCard(page);
+    await row.getByRole("button", { name: "Post it on TikTok yourself" }).click();
+    const sheet = page.getByRole("dialog", { name: "Post it on TikTok yourself" });
+    await sheet.getByRole("button", { name: "Save to my phone" }).click();
+    return sheet;
+  }
+
+  test("a share menu that does not open offers Save the video", async ({ page }) => {
+    const sheet = await phoneSheet(page, "reject");
+    await expect(sheet.getByRole("alert")).toContainText("The share menu did not open. Tap Save the video below.");
+    await expect(sheet.getByRole("button", { name: "Save the video" })).toBeVisible();
+  });
+
+  test("closing the share menu is not an error", async ({ page }) => {
+    const sheet = await phoneSheet(page, "abort");
+    await expect(sheet.getByRole("button", { name: "I posted it" })).toBeVisible();
+    await expect(sheet.getByRole("alert")).toHaveCount(0);
+    await expect(sheet.getByRole("button", { name: "Save the video" })).toHaveCount(0);
+  });
 });
