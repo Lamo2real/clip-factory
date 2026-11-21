@@ -65,6 +65,16 @@ DEFAULT_MONEY_SCOPES: dict[str, tuple[str, ...]] = {
     "x": (),
 }
 MONEY_GRANT = "money"
+# §40.6: asked for only by "Allow payment reading" (grant=payments), on its own (never with the Connect or money scopes:
+# the AdSense Google account can be another one). The platforms.json paymentScopes lists win when present.
+DEFAULT_PAYMENT_SCOPES: dict[str, tuple[str, ...]] = {
+    "youtube": ("https://www.googleapis.com/auth/adsense.readonly",),
+    "tiktok": (),
+    "instagram": (),
+    "facebook": (),
+    "x": (),
+}
+PAYMENTS_GRANT = "payments"
 
 
 def label(platform: str) -> str:
@@ -88,6 +98,7 @@ class OAuthEnv:
     graph_version: str = "v27.0"
     scopes: dict[str, tuple[str, ...]] = field(default_factory=lambda: dict(DEFAULT_SCOPES))
     money_scopes: dict[str, tuple[str, ...]] = field(default_factory=lambda: dict(DEFAULT_MONEY_SCOPES))
+    payment_scopes: dict[str, tuple[str, ...]] = field(default_factory=lambda: dict(DEFAULT_PAYMENT_SCOPES))
 
     def redirect_uri(self, platform: str) -> str:
         """Exact, no trailing slash; the same string goes to the authorize URL and the code exchange."""
@@ -118,6 +129,17 @@ def money_scopes_from_config() -> dict[str, tuple[str, ...]]:
     except Exception:
         return dict(DEFAULT_MONEY_SCOPES)
     return {p: cfg.platform(p).money_scopes for p in SETUP_ORDER}
+
+
+def payment_scopes_from_config() -> dict[str, tuple[str, ...]]:
+    """The platforms.json ``paymentScopes`` lists (§40.6), falling back to ``DEFAULT_PAYMENT_SCOPES``."""
+    from ..stats import config
+
+    try:
+        cfg = config.load()
+    except Exception:
+        return dict(DEFAULT_PAYMENT_SCOPES)
+    return {p: cfg.platform(p).payment_scopes or DEFAULT_PAYMENT_SCOPES[p] for p in SETUP_ORDER}
 
 
 def money_capable(env: OAuthEnv, platform: str) -> bool:

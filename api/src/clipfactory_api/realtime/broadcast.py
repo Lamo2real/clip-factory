@@ -3,9 +3,11 @@
 The event source mapping only delivers ``JOB#``, ``CLIP#``, ``POST#``, ``LEARNING#``, ``WEEK#``, ``ACCOUNT#``,
 ``SETUP#``, ``FOLLOW#`` (§24), ``JOBLIVE#`` (§31, the live status line, ``{type: "jobLive"}``) and the Content Rewards
 items ``CAMPAIGN#``, ``CRCONN``, ``CRSUB#``, ``CRMONEY`` (§38.11) and ``CRFIND`` (§41.5, ``id: "finder"``), each
-``{type: "contentrewards", partial: true}`` (``ACCOUNT#`` and ``SETUP#`` become ``{type: "setup", op: "upsert", id:
-platform, partial: true}``, §17.4). Per batch the last record per item wins (job heartbeats coalesce); each becomes
-one ``LiveEvent``, built by the same public-shape functions the HTTP API uses, so internal fields never leave. An event over 24 KB is sent as ``partial: true`` (the
+``{type: "contentrewards", partial: true}``, and the Get paid items ``GETPAID``, ``PAYCONN#``, ``PAYSTATE#``,
+``PAYOUT#`` (§40.7, ``{type: "getpaid", id: "getpaid", partial: true}``) items (``ACCOUNT#`` and ``SETUP#`` become
+``{type: "setup", op: "upsert", id: platform, partial: true}``, §17.4). Per batch the last record per item wins (job
+heartbeats coalesce); each becomes one ``LiveEvent``, built by the same public-shape functions the HTTP API uses, so
+internal fields never leave. An event over 24 KB is sent as ``partial: true`` (the
 web refetches). Closed connections (410 Gone) are deleted; other send errors are logged and skipped. Only a
 failed connections query reports records as batch item failures, so Lambda retries just those.
 """
@@ -40,6 +42,12 @@ TYPES = {
     "CRSUB#": "contentrewards",
     "CRMONEY": "contentrewards",
     "CRFIND": "contentrewards",  # §41.5: the finder (its matches ride along only through GET …/finder)
+    # §40.7: Get paid. Partial only: the web refetches GET /v1/getpaid, so no tick, connection, payout or trace code
+    # ever rides along.
+    "GETPAID": "getpaid",
+    "PAYCONN#": "getpaid",
+    "PAYSTATE#": "getpaid",
+    "PAYOUT#": "getpaid",
 }
 CR_IDS = {"CAMPAIGN#": "campaign:", "CRSUB#": "submission:"}
 # Setup changes carry no item: the web refetches GET /v1/setup (§17.4), so keys, hints and tokens never ride along.
@@ -126,6 +134,8 @@ def message_for(record: Mapping[str, Any], deserialize: Callable[[Mapping[str, A
     data = record.get("dynamodb") or {}
     if kind == "contentrewards":
         return _content_rewards(key[1], record)
+    if kind == "getpaid":
+        return {"type": "getpaid", "op": "upsert", "id": "getpaid", "partial": True}
     if kind in PARTIAL_ONLY:
         return {"type": kind, "op": "upsert", "id": item_id.split("#", 1)[0], "partial": True}
     if record.get("eventName") == "REMOVE":

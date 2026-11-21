@@ -4,7 +4,10 @@
 // inputs as its golden cases (api/tests/fixtures/money_everywhere_cases.json, checked in web/test/allMoney.test.tsx
 // when the file is there), so the mock and the server say the same. Like moneySummary.ts, this mock file is allowed to
 // add up reported money (web/test/noGuesses.test.ts): the real app only formats what the server sent.
-import type { MoneyEverywhere, MoneyPlace, MoneyWhere, Platform } from "../types.ts";
+//
+// Get paid (§40.4): `sentLine` and `sentTotals` are line-for-line copies of api/src/clipfactory_api/getpaid/sent.py
+// `sent_line` and `sent_totals` (with `parseAmount`, its `parse_amount`), checked through the same golden cases.
+import type { MoneyEverywhere, MoneyPlace, MoneyPlaceId, MoneySentBlock, MoneyWhere, Platform, SentLine } from "../types.ts";
 import { addDays, ORDER, summarize, todayUtc, type MoneyRow, type MoneyStatus } from "./moneySummary.ts";
 
 const CR = "contentrewards";
@@ -37,7 +40,7 @@ export const PAID_WHERE: Record<Platform, MoneyWhere> = {
   facebook: { label: "Meta Business Suite › Payouts", url: "https://business.facebook.com/latest/monetization" },
   instagram: { label: "Professional dashboard › Payouts" },
   tiktok: { label: "Profile › Balance" },
-  x: { label: "X › Monetization (paid through Stripe)", url: "https://x.com/settings/monetization" },
+  x: { label: "X › Creator Studio (paid through Stripe)", url: "https://x.com/i/jf/creators/studio" },
 };
 
 /** The golden cases' inputs (everywhere.py's arguments, with plain JSON for the items). */
@@ -61,6 +64,33 @@ export interface EverywhereInput {
     paidByDay?: Record<string, number>;
     error?: string;
   } | null;
+  /** §40.4: the stored PAYOUT# rows per place (YouTube: Google's own text; Content Rewards: Whop's amounts). */
+  payouts?: Partial<Record<MoneyPlaceId, PayoutItem[]>> | null;
+  /** §40.4: PAYCONN#adsense and PAYCONN#whop. */
+  payconns?: Partial<Record<"adsense" | "whop", PayConnItem>> | null;
+  /** §40.4: PAYSTATE#youtube and PAYSTATE#contentrewards. */
+  paystates?: Partial<Record<MoneyPlaceId, { firstReadDone?: boolean; lastCheckedAt?: string; lastError?: string | null }>> | null;
+  /** WHOP_CONNECT. */
+  whopOn?: boolean;
+}
+
+/** A stored PAYOUT# row (§40.7), as the golden cases give it. */
+export interface PayoutItem {
+  sk?: string;
+  date?: string;
+  amountText?: string;
+  state?: string;
+  status?: string;
+  goneAt?: string;
+  amountMicros?: number;
+  currency?: string;
+  estimatedArrival?: string;
+}
+/** A stored PAYCONN# item (§40.7). */
+export interface PayConnItem {
+  status?: string;
+  connectedAt?: string;
+  stoppedAt?: string;
 }
 
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -227,6 +257,277 @@ function notCountedText(places: MoneyPlace[]): string | undefined {
   return `Not in the total: ${[...groups.entries()].map(([state, names]) => `${join(names)} (${STATE_WORDS[state] ?? state})`).join(" · ")}.`;
 }
 
+// ---------- Get paid: money sent toward his bank (getpaid/sent.py, line for line) ----------
+
+const SENT_MICROS = 1_000_000;
+const MAX_AMOUNT_CHARS = 64;
+const CHECKING_HOURS = 26;
+const CODE = /(?<![A-Za-z])([A-Z]{3})(?![A-Za-z])/g;
+const SYMBOLS: Record<string, string> = { "€": "EUR", "£": "GBP", "₹": "INR" };
+const NUMBER = /[0-9](?:[0-9 \u00a0\u202f'\u2019.,]*[0-9])?/g;
+const GROUPING = " \u00a0\u202f'\u2019";
+const MINUS = "-\u2212";
+const GOOGLE_ARRIVE = "Your bank gets it up to 7 workdays after Google sends it.";
+const WHOP_ARRIVE_SOON = "Whop says it should arrive within 5 workdays.";
+const WHOP_NOTE = "Whop counts all your Whop money, not only Content Rewards.";
+const YT_PAGE = "/settings/posting/getpaid/youtube";
+const YT_READING = "/settings/posting/getpaid/youtube#yt-reading";
+const WHOP_CARD = "/settings/posting/getpaid/contentrewards#whop";
+const STRIPE = "https://connect.stripe.com/express_login";
+const WHOP_STATES: Record<string, string> = {
+  completed: "sent",
+  requested: "on_its_way",
+  in_review: "on_its_way",
+  processing: "on_its_way",
+  failed: "didnt_go_through",
+  canceled: "didnt_go_through",
+  denied: "didnt_go_through",
+  reversed: "came_back",
+};
+const NOT_AVAILABLE: Record<string, { headline: string; where: NonNullable<SentLine["where"]> }> = {
+  tiktok: { headline: "Not available from TikTok", where: { text: "Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal." } },
+  instagram: { headline: "Not available from Instagram", where: { text: "Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month." } },
+  facebook: { headline: "Not available from Meta", where: { text: "Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month." } },
+  x: { headline: "Not available from X", where: { text: "Look in Stripe: Payouts.", button: { label: "Open Stripe", url: STRIPE } } },
+};
+const TOTAL_NAMES: Record<string, string> = { youtube: "YouTube", [CR]: "Whop (all your Whop money, Content Rewards too)" };
+const BY: Record<string, string> = { youtube: "Google", [CR]: "Whop" };
+const PLACE_NAMES: Record<string, string> = { ...LABEL, [CR]: CR_NAME };
+const SENT_STATE_WORDS: Record<string, string> = {
+  not_available: "not available",
+  needs_reading: "Clip Factory can't see it",
+  checking: "checking",
+  error: "couldn't check",
+  none_yet: "nothing sent yet",
+};
+const BANK_TEXT = "Clip Factory can't see your bank. Look in your bank's app to see what arrived.";
+
+function sentCurrency(text: string): string | null {
+  const codes = new Set([...text.matchAll(CODE)].map((m) => m[1]!));
+  const symbols = new Set([...text].filter((c) => c in SYMBOLS).map((c) => SYMBOLS[c]!));
+  if (codes.size === 1) {
+    const code = [...codes][0]!;
+    return !symbols.size || (symbols.size === 1 && symbols.has(code)) ? code : null;
+  }
+  if (!codes.size && symbols.size === 1) return [...symbols][0]!;
+  return null;
+}
+
+function splitNumber(raw: string): [string, string] | null {
+  const s = [...raw].filter((c) => !GROUPING.includes(c)).join("");
+  const dot = s.lastIndexOf(".");
+  const comma = s.lastIndexOf(",");
+  if (dot >= 0 && comma >= 0) {
+    const [mark, grouping] = dot > comma ? [".", ","] : [",", "."];
+    const at = s.lastIndexOf(mark);
+    const whole = s.slice(0, at);
+    if (whole.includes(mark)) return null;
+    return [whole.split(grouping).join(""), s.slice(at + 1)];
+  }
+  for (const mark of [".", ","]) {
+    if (s.includes(mark)) {
+      const at = s.lastIndexOf(mark);
+      const tail = s.slice(at + 1);
+      if (tail.length === 1 || tail.length === 2) {
+        if (s.split(mark).length - 1 > 1) return null;
+        return [s.slice(0, at), tail];
+      }
+      return [s.split(mark).join(""), ""];
+    }
+  }
+  return [s, ""];
+}
+
+/** getpaid/sent.py `parse_amount`: [micros, currency], each null when it can't be read for sure. */
+export function parseAmount(text: unknown): [number | null, string | null] {
+  if (typeof text !== "string") return [null, null];
+  const value = text.trim();
+  if (!value || value.length > MAX_AMOUNT_CHARS) return [null, null];
+  const currency = sentCurrency(value);
+  const found = [...value.matchAll(NUMBER)];
+  if (found.length !== 1) return [null, currency];
+  const parts = splitNumber(found[0]![0]);
+  if (!parts) return [null, currency];
+  const [whole, fraction] = parts;
+  if (!/^[0-9]+$/.test(whole) || (fraction && !/^[0-9]+$/.test(fraction)) || fraction.length > 6) return [null, currency];
+  let micros = Number(whole) * SENT_MICROS + Number(fraction.padEnd(6, "0"));
+  if ([...value.slice(0, found[0]!.index)].some((c) => MINUS.includes(c))) micros = -micros;
+  return [micros, currency];
+}
+
+const SENT_MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function sentDate(value: unknown): Date | null {
+  if (typeof value !== "string" || !value) return null;
+  const day = value.includes("T") ? new Date(value) : /^\d{4}-\d{2}-\d{2}/.test(value) ? new Date(`${value.slice(0, 10)}T00:00:00Z`) : null;
+  return day && Number.isFinite(day.getTime()) ? day : null;
+}
+/** "23 Oct" */
+const shortDay = (value: unknown) => {
+  const d = sentDate(value);
+  return d ? `${d.getUTCDate()} ${SENT_MONTH[d.getUTCMonth()]}` : "";
+};
+/** "Thu 27 Nov" */
+const weekDay = (value: unknown) => {
+  const d = sentDate(value);
+  return d ? `${WEEKDAY[d.getUTCDay()]} ${d.getUTCDate()} ${SENT_MONTH[d.getUTCMonth()]}` : "";
+};
+const sentJoin = (names: string[]) => (!names.length ? "" : join(names));
+
+const youtubeState = (row: PayoutItem) => (row.goneAt || row.state === "gone" ? "gone" : "sent");
+function whopState(row: PayoutItem): string {
+  if (typeof row.status === "string" && row.status in WHOP_STATES) return WHOP_STATES[row.status]!;
+  return typeof row.state === "string" && Object.values(WHOP_STATES).includes(row.state) ? row.state : "on_its_way";
+}
+const textOrder = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const newestFirst = (rows: PayoutItem[]) => [...rows].sort((a, b) => textOrder(b.date ?? "", a.date ?? "") || textOrder(b.sk ?? "", a.sk ?? ""));
+function rowMoney(row: PayoutItem, p: string): [number | null, string | null] {
+  if (p === "youtube") return parseAmount(row.amountText);
+  const micros = typeof row.amountMicros === "number" && Number.isInteger(row.amountMicros) ? row.amountMicros : null;
+  return [micros, typeof row.currency === "string" && row.currency ? row.currency.toUpperCase() : null];
+}
+function sums(pairs: [number, string][]): SentLine["amounts"] {
+  const by = new Map<string, number>();
+  for (const [micros, currency] of pairs) by.set(currency, (by.get(currency) ?? 0) + micros);
+  return [...by.keys()].sort().map((currency) => ({ currency, amountMicros: by.get(currency)! }));
+}
+
+function sentLineOf(state: SentLine["state"], headline: string, extra: Partial<SentLine> = {}): SentLine {
+  const out: SentLine = { state, headline, amounts: [] };
+  for (const [k, v] of Object.entries(extra)) if (v !== undefined && v !== null) (out as unknown as Record<string, unknown>)[k] = v;
+  return out;
+}
+
+function firstReadLate(conn: PayConnItem, state: { lastError?: string | null }, now: number | null): boolean {
+  if (state.lastError) return true;
+  const started = conn.connectedAt ? Date.parse(conn.connectedAt) : NaN;
+  return !Number.isFinite(started) || now === null || now - started >= CHECKING_HOURS * 3600_000;
+}
+
+function unreadText(by: string, count: number, more: boolean, what = "payment"): string {
+  const things = count === 1 ? what : `${what}s`;
+  const extra = more ? " more" : "";
+  if (count === 1) return `${by} sent 1${extra} ${things}. Clip Factory couldn't tell its money type, so it isn't added up.`;
+  return `${by} sent ${count}${extra} ${things}. Clip Factory couldn't tell their money type, so they aren't added up.`;
+}
+const rowNotAdded = (count: number, what = "payment") =>
+  count === 1 ? `1 ${what} isn't added up: Clip Factory couldn't tell its money type.` : `${count} ${what}s aren't added up: Clip Factory couldn't tell their money type.`;
+
+function numberLine(p: string, sent: PayoutItem[]): SentLine {
+  const read: [number, string][] = [];
+  let unread = 0;
+  for (const r of sent) {
+    const [micros, currency] = rowMoney(r, p);
+    if (micros === null || currency === null) unread += 1;
+    else read.push([micros, currency]);
+  }
+  const by = BY[p]!;
+  const newest = newestFirst(sent)[0]!;
+  const [micros, currency] = rowMoney(newest, p);
+  const last: NonNullable<SentLine["last"]> = { date: String(newest.date ?? ""), amountMicros: currency ? micros : null, currency: micros !== null ? currency : null };
+  if (p === "youtube" && last.amountMicros === null && typeof newest.amountText === "string") last.text = newest.amountText;
+  const out = sentLineOf("number", `Sent to your bank by ${by}`, { tag: `${p === "youtube" ? "YouTube" : "Whop"} says` });
+  out.amounts = sums(read);
+  const what = p === "youtube" ? "payment" : "payout";
+  if (unread && read.length) out.notAdded = rowNotAdded(unread, what);
+  else if (unread) {
+    out.notAdded = unreadText(by, unread, false, what);
+    if (p === "youtube") out.button = { label: "See them", href: YT_PAGE, external: false };
+  }
+  if (p === "youtube") out.arrive = GOOGLE_ARRIVE;
+  else {
+    const arrival = weekDay(newest.estimatedArrival);
+    out.arrive = arrival ? `Whop says it should arrive by ${arrival}.` : WHOP_ARRIVE_SOON;
+    out.note = WHOP_NOTE;
+  }
+  out.last = last;
+  return out;
+}
+
+function youtubeSent(rows: PayoutItem[], conn: PayConnItem, state: { firstReadDone?: boolean; lastError?: string | null }, now: number | null): SentLine {
+  const status = conn.status;
+  const sent = rows.filter((r) => youtubeState(r) === "sent");
+  if (sent.length) {
+    const out = numberLine("youtube", sent);
+    if (status === "needs_reconnect") out.note = "Clip Factory can't see YouTube payments anymore. Tap Allow payment reading again.";
+    else if (status !== "connected" && shortDay(conn.stoppedAt)) out.note = `Clip Factory stopped reading on ${shortDay(conn.stoppedAt)}.`;
+    return out;
+  }
+  if (status === "connected") {
+    if (state.firstReadDone) return sentLineOf("none_yet", "Nothing sent to your bank yet", { tag: "YouTube says" });
+    if (!firstReadLate(conn, state, now)) return sentLineOf("checking", "Checking YouTube payments…", { why: "This can take until tomorrow." });
+    return sentLineOf("error", "Clip Factory couldn't check YouTube payments yet", { why: "It tries again tomorrow." });
+  }
+  const button = { label: "Allow payment reading", href: YT_READING, external: false };
+  if (status === "needs_reconnect") return sentLineOf("needs_reading", "Clip Factory can't see YouTube payments anymore", { why: "Tap Allow payment reading again.", button });
+  return sentLineOf("needs_reading", "Clip Factory can't see YouTube payments yet", { button });
+}
+
+function whopSent(rows: PayoutItem[], conn: PayConnItem, state: { firstReadDone?: boolean; lastError?: string | null }, now: number | null, whopOn: boolean): SentLine {
+  const status = whopOn ? conn.status : undefined;
+  const sent = rows.filter((r) => whopState(r) === "sent");
+  if (sent.length) return numberLine(CR, sent);
+  const button = whopOn ? { label: "Connect Whop", href: WHOP_CARD, external: false } : undefined;
+  if (status === "connected") {
+    if (state.firstReadDone) return sentLineOf("none_yet", "Nothing sent to your bank yet", { tag: "Whop says", note: WHOP_NOTE });
+    if (!firstReadLate(conn, state, now)) return sentLineOf("checking", "Checking your Whop payouts…", { why: "This can take until tomorrow.", note: WHOP_NOTE });
+    return sentLineOf("error", "Clip Factory couldn't check your Whop payouts yet", { why: "It tries again tomorrow.", note: WHOP_NOTE });
+  }
+  if (status === "needs_reconnect") return sentLineOf("needs_reading", "Clip Factory can't see your Whop payouts anymore", { why: "Sign in to Whop again to see your payouts.", button });
+  return sentLineOf("not_available", "Sent to your bank: not available from Content Rewards", { where: { text: "Look on Whop: **Balances**." }, button });
+}
+
+/** getpaid/sent.py `sent_line`: one place's "Sent to your bank" line. */
+export function sentLine(
+  p: MoneyPlaceId,
+  rows: PayoutItem[] | null | undefined,
+  conn: PayConnItem | null | undefined,
+  state: { firstReadDone?: boolean; lastError?: string | null } | null | undefined,
+  whopOn = false,
+  now: number | null = null,
+): SentLine {
+  if (p === "youtube") return youtubeSent([...(rows ?? [])], conn ?? {}, state ?? {}, now);
+  if (p === CR) return whopSent([...(rows ?? [])], conn ?? {}, state ?? {}, now, whopOn);
+  const found = NOT_AVAILABLE[p]!;
+  return sentLineOf("not_available", found.headline, { where: { ...found.where } });
+}
+
+const UNREAD_COUNT = /(\d+)(?: more)? (?:payment|payout)s?\b/;
+const unreadCount = (line: SentLine) => Number(UNREAD_COUNT.exec(line.notAdded ?? "")?.[1] ?? 0);
+
+/** getpaid/sent.py `sent_totals`: the "Sent to your bank, so far" block, one line per money type, in the places' order. */
+export function sentTotals(lines: [MoneyPlaceId, SentLine][]): MoneySentBlock {
+  const by = new Map<string, MoneySentBlock["totals"][number]>();
+  const first = new Map<string, number>();
+  const who: string[] = [];
+  const notAdded: string[] = [];
+  const groups = new Map<string, string[]>();
+  lines.forEach(([p, line], index) => {
+    if (line.state !== "number") {
+      groups.set(line.state, [...(groups.get(line.state) ?? []), PLACE_NAMES[p] ?? p]);
+      return;
+    }
+    if (BY[p] && !who.includes(BY[p]!)) who.push(BY[p]!);
+    for (const a of line.amounts) {
+      const total = by.get(a.currency) ?? { currency: a.currency, amountMicros: 0, places: [], names: "" };
+      by.set(a.currency, total);
+      if (!first.has(a.currency)) first.set(a.currency, index);
+      total.amountMicros += a.amountMicros;
+      if (!total.places.includes(p)) total.places.push(p);
+    }
+    const count = unreadCount(line);
+    if (count) notAdded.push(unreadText(BY[p] ?? PLACE_NAMES[p] ?? p, count, line.amounts.length > 0, p === "youtube" ? "payment" : "payout"));
+  });
+  const totals = [...by.values()].sort((a, b) => first.get(a.currency)! - first.get(b.currency)! || (a.currency < b.currency ? -1 : a.currency > b.currency ? 1 : 0));
+  for (const t of totals) t.names = sentJoin(t.places.map((p) => TOTAL_NAMES[p] ?? PLACE_NAMES[p] ?? p));
+  const out: MoneySentBlock = { totals, tag: who.length === 1 ? `${who[0]} says it sent it.` : "Google and Whop say they sent it.", bankText: BANK_TEXT };
+  if (notAdded.length) out.notAdded = notAdded.join(" ");
+  if (groups.size) out.notCountedText = `Not in this: ${[...groups.entries()].map(([state, names]) => `${sentJoin(names)} (${SENT_STATE_WORDS[state] ?? state})`).join(" · ")}.`;
+  if (!lines.some(([, line]) => line.state === "number")) out.empty = "Nothing sent to your bank yet.";
+  return out;
+}
+
+const SOURCE_OF: Partial<Record<MoneyPlaceId, "adsense" | "whop">> = { youtube: "adsense", [CR]: "whop" };
+
 /** MoneyEverywhere, exactly as the server works it out (stored items only). */
 export function everywhere(input: EverywhereInput): MoneyEverywhere {
   const now = Date.parse(input.today);
@@ -255,6 +556,12 @@ export function everywhere(input: EverywhereInput): MoneyEverywhere {
   const behind = monthly.excluded.filter((e) => e.reason === "behind").map((e) => e.platform as string);
   const places: MoneyPlace[] = ORDER.map((p) => platformPlace(p, verified, input.accounts[p], input.states[p] ?? {}, stored.get(p) ?? [], behind, start, end));
   if (input.crOn) places.push(crPlace(input.crconn, input.crmoney ?? {}, start, end, now));
+  const lines: [MoneyPlaceId, SentLine][] = places.map((row) => {
+    const source = SOURCE_OF[row.place];
+    const line = sentLine(row.place, input.payouts?.[row.place] ?? [], (source && input.payconns?.[source]) || {}, input.paystates?.[row.place] ?? {}, !!input.whopOn, now);
+    row.sent = line;
+    return [row.place, line];
+  });
   const out: MoneyEverywhere = {
     from: start,
     to: end,
@@ -270,6 +577,7 @@ export function everywhere(input: EverywhereInput): MoneyEverywhere {
   out.notCounted = places.filter((p) => p.state !== "number").map((p) => ({ place: p.place, state: p.state }));
   const text = notCountedText(places);
   if (text) out.notCountedText = text;
+  out.sent = sentTotals(lines);
   return out;
 }
 

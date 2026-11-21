@@ -51,12 +51,20 @@ DEFAULTS: dict[str, Any] = {
     # show, so only the owner can ask for one each step. "Picked up again" is off too: the job flow resumes a stalled job by
     # itself (up to 6 times a run) and the owner has nothing to do.
     # §38.11: "Content Rewards news" (you're in, send-now reminders, approvals, proof and money) is on by default.
-    "notify": {"ready": True, "stopped": True, "resumed": False, "steps": False, "contentRewards": True},
+    # §40.7: "Money on hold or sent to your bank" (getPaid) is on by default too.
+    "notify": {
+        "ready": True,
+        "stopped": True,
+        "resumed": False,
+        "steps": False,
+        "contentRewards": True,
+        "getPaid": True,
+    },
     # §36 My settings: the owner's own post choices per platform (Everyone, comments, duets and stitches on, Reels in
     # the feed, everyone can reply; never made for kids). Additive: an owner who never saved one reads these defaults.
     "postPreset": post_preset.defaults(),
 }
-NOTIFY_KEYS = ("ready", "stopped", "resumed", "steps", "contentRewards")
+NOTIFY_KEYS = ("ready", "stopped", "resumed", "steps", "contentRewards", "getPaid")
 # The Clip Factory colours before the bottle-green look (ADR-43). An owner who never changed them has exactly this
 # trio stored; it reads back as today's default so the backdrop follows the new look. Read time only: no migration
 # job; the mapped value is written only when the owner next saves settings, as every default is. Any other choice (a
@@ -182,7 +190,8 @@ def _notify(value: Any) -> dict[str, bool]:
     """``{ready, stopped, steps}`` booleans; a missing one keeps its default."""
     if not isinstance(value, dict) or any(k not in NOTIFY_KEYS for k in value):
         raise bad_request(
-            "Notifications must say on or off for: clips ready, stopped, picked up, every step, Content Rewards news."
+            "Notifications must say on or off for: clips ready, stopped, picked up, every step, Content Rewards news, "
+            "money on hold or sent."
         )
     return {k: validate.boolean(value.get(k, DEFAULTS["notify"][k]), k) for k in NOTIFY_KEYS}
 

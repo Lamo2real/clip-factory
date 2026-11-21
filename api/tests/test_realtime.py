@@ -522,6 +522,41 @@ def test_broadcast_content_rewards_is_partial(
     assert [m for _, m in management.sent] == [message] * 2  # never the item: briefs and token versions stay home
 
 
+@pytest.mark.parametrize(
+    ("sk", "event"),
+    [
+        ("GETPAID", "MODIFY"),
+        ("GETPAID", "INSERT"),
+        ("PAYCONN#adsense", "MODIFY"),
+        ("PAYCONN#whop", "REMOVE"),
+        ("PAYSTATE#youtube", "MODIFY"),
+        ("PAYSTATE#contentrewards", "INSERT"),
+        ("PAYOUT#youtube#2026-10-23#3456", "INSERT"),
+        ("PAYOUT#contentrewards#2026-11-10#po_1", "MODIFY"),
+    ],
+)
+def test_broadcast_get_paid_is_partial(
+    bc_deps: broadcast.BroadcastDeps, management: FakeManagement, sk: str, event: str
+) -> None:
+    """§40.7: the four Get paid prefixes → one partial ``getpaid`` event; no tick, token version, trace code or
+    publisher id ever rides along (the web refetches GET /v1/getpaid)."""
+    item = {
+        "pk": f"USER#{USER}",
+        "sk": sk,
+        "type": "payout",
+        "userId": USER,
+        "traceCode": "UETR-secret",
+        "tokenVersionId": "v9",
+        "accounts": [{"name": "accounts/pub-1234567890123456"}],
+        "stepsDone": ["yt-tax"],
+    }
+    broadcast.process({"Records": [_record(item, event=event)]}, bc_deps)
+    message = {"type": "getpaid", "op": "upsert", "id": "getpaid", "partial": True}
+    assert [m for _, m in management.sent] == [message] * 2
+    assert "UETR" not in json.dumps(management.sent)
+    assert "pub-" not in json.dumps(management.sent)
+
+
 def test_broadcast_never_sends_crstate_or_crowners(
     bc_deps: broadcast.BroadcastDeps, management: FakeManagement
 ) -> None:

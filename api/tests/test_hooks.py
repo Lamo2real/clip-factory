@@ -243,3 +243,18 @@ def test_internal_errors_use_the_error_shape(
     out = hooks.handle(_event("POST", "/hooks/{platform}", "youtube", body="{}"), deps)
     assert out["statusCode"] == 500
     assert _body(out)["error"]["code"] == "internal"
+
+
+def test_whop_is_served_on_the_oauth_callback_only(deps: hooks.HooksDeps, table: FakeTable) -> None:
+    """§40.6: Connect Whop comes back on ``/oauth/whop/callback``; ``/hooks/whop`` does not exist."""
+    for method in ("GET", "POST"):
+        out = hooks.handle(_event(method, "/hooks/{platform}", "whop", body="{}"), deps)
+        assert out["statusCode"] == 404
+        assert _body(out)["error"]["code"] == "not_found"
+    assert table.items == {}
+    out = hooks.handle(_event("GET", "/oauth/{platform}/callback", "whop", query={"code": "C", "state": "S"}), deps)
+    assert out["statusCode"] == 302  # without secrets: a fixed Get paid page and a listed code
+    assert out["headers"]["location"] == f"{APP_URL}/settings/posting/getpaid/contentrewards?result=whop_error#whop"
+    assert out["headers"]["referrer-policy"] == "no-referrer"
+    assert "whop" in hooks.HOOK_PLATFORMS
+    assert "whop" not in hooks.PLATFORMS
