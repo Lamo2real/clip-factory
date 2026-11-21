@@ -1,0 +1,897 @@
+{
+ "now": "2026-11-21T12:00:00.000Z",
+ "cases": {
+  "d04-cod-dmz": {
+   "uuid": "a1cefc3b-4533-438f-8e70-a7299550f1cf",
+   "kind": "cpm",
+   "access": "open",
+   "onDiscover": true,
+   "toggles": {
+    "preApproval": false,
+    "sound": false,
+    "logoRequired": false,
+    "faceOnCamera": false
+   },
+   "contentTypes": [
+    "clipping"
+   ],
+   "overlay": null,
+   "sound": null,
+   "audience": false,
+   "namedLanguages": [],
+   "pageLanguage": "en",
+   "groupIds": [],
+   "platformsPaid": [
+    "tiktok",
+    "instagram"
+   ],
+   "pay": [
+    [
+     "tiktok",
+     0,
+     null,
+     120000,
+     200,
+     [
+      0
+     ]
+    ],
+    [
+     "instagram",
+     150,
+     null,
+     120000,
+     null,
+     []
+    ]
+   ],
+   "budget": {
+    "totalCents": 3000000,
+    "spentCents": 1613583,
+    "leftCents": 1386417
+   },
+   "categories": [
+    "entertainment"
+   ],
+   "hiddenRules": 0,
+   "launchedAt": "2026-11-09T17:59:40.000Z"
+  },
+  "d05-kai-pool": {
+   "uuid": "1d2bcb00-c904-415f-aa82-f95b96baad86",
+   "kind": "pool",
+   "access": "open",
+   "onDiscover": true,
+   "toggles": {
+    "preApproval": false,
+    "sound": false,
+    "logoRequired": false,
+    "faceOnCamera": false
+   },
+   "contentTypes": [
+    "clipping"
+   ],
+   "overlay": null,
+   "sound": null,
+   "audience": false,
+   "namedLanguages": [],
+   "pageLanguage": "en",
+   "groupIds": [],
+   "platformsPaid": [
+    "youtube",
+    "tiktok",
+    "instagram",
+    "x"
+   ],
+   "pay": [
+    [
+     "youtube",
+     null,
+     null,
+     null,
+     null,
+     []
+    ],
+    [
+     "tiktok",
+     null,
+     null,
+     null,
+     null,
+     []
+    ],
+    [
+     "instagram",
+     null,
+     null,
+     null,
+     null,
+     []
+    ],
+    [
+     "x",
+     null,
+     null,
+     null,
+     null,
+     []
+    ]
+   ],
+   "budget": {
+    "totalCents": 1000000,
+    "spentCents": 0,
+    "leftCents": 1000000
+   },
+   "categories": [
+    "streamer",
+    "personal-brand"
+   ],
+   "hiddenRules": 0
+  },
+  "d06-kreekcraft": {
+   "uuid": "2eaa14fb-6927-4136-897e-b096e0d907d6",
+   "kind": "cpm",
+   "access": "open",
+   "onDiscover": true,
+   "toggles": {
+    "preApproval": false,
+    "sound": false,
+    "logoRequired": false,
+    "faceOnCamera": false
+   },
+   "contentTypes": [
+    "clipping"
+   ],
+   "overlay": "needed",
+   "sound": null,
+   "audience": false,
+   "namedLanguages": [],
+   "pageLanguage": null,
+   "groupIds": [],
+   "platformsPaid": [
+    "youtube",
+    "tiktok",
+    "instagram"
+   ],
+   "pay": [
+    [
+     "youtube",
+     50,
+     null,
+     50000,
+     null,
+     []
+    ],
+    [
+     "tiktok",
+     50,
+     null,
+     50000,
+     null,
+     []
+    ],
+    [
+     "instagram",
+     50,
+     null,
+     50000,
+     null,
+     []
+    ]
+   ],
+   "budget": {
+    "totalCents": 682460,
+    "spentCents": 263048,
+    "leftCents": 419412
+   },
+   "categories": [
+    "twitch",
+    "personal-brand",
+    "streamer"
+   ],
+   "hiddenRules": 0
+  },
+  "d07-8lanco-sound": {
+   "uuid": "d5d8b659-68ac-41d5-9e53-ab89545f437d",
+   "kind": "cpm",
+   "access": "open",
+   "onDiscover": true,
+   "toggles": {
+    "preApproval": false,
+    "sound": false,
+    "logoRequired": false,
+    "faceOnCamera": false
+   },
+   "contentTypes": [
+    "clipping",
+    "sound"
+   ],
+   "overlay": null,
+   "sound": "maybe",
+   "audience": false,
+   "namedLanguages": [],
+   "pageLanguage": null,
+   "groupIds": [
+    "e7b7aa0d-8d5c-460b-bb1e-803ad0492bc5"
+   ],
+   "platformsPaid": [
+    "tiktok",
+    "instagram"
+   ],
+   "pay": [
+    [
+     "tiktok",
+     100,
+     null,
+     20000,
+     null,
+     []
+    ],
+    [
+     "instagram",
+     100,
+     null,
+     20000,
+     null,
+     []
+    ]
+   ],
+   "budget": {
+    "totalCents": 300000,
+    "spentCents": 971,
+    "leftCents": 299029
+   },
+   "categories": [
+    "music"
+   ],
+   "hiddenRules": 2
+  },
+  "d08-ugc-splitscreen": {
+   "uuid": "6e8cb2c6-7724-44a4-83da-66697acb20af",
+   "kind": "cpm",
+   "access": "open",
+   "onDiscover": true,
+   "toggles": {
+    "preApproval": false,
+    "sound": false,
+    "logoRequired": false,
+    "faceOnCamera": false
+   },
+   "contentTypes": [],
+   "overlay": null,
+   "sound": null,
+   "audience": true,
+   "namedLanguages": [
+    "en"
+   ],
+   "pageLanguage": null,
+   "groupIds": [],
+   "platformsPaid": [
+    "youtube",
+    "tiktok",
+    "instagram",
+    "x"
+   ],
+   "pay": [
+    [
+     "youtube",
+     150,
+     null,
+     50000,
+     null,
+     []
+    ],
+    [
+     "tiktok",
+     300,
+     null,
+     50000,
+     null,
+     []
+    ],
+    [
+     "instagram",
+     300,
+     null,
+     50000,
+     null,
+     []
+    ],
+    [
+     "x",
+     300,
+     null,
+     50000,
+     null,
+     []
+    ]
+   ],
+   "budget": {
+    "totalCents": 1800000,
+    "spentCents": 1415711,
+    "leftCents": 384289
+   },
+   "categories": [],
+   "hiddenRules": 1
+  },
+  "d09-santacruz-brand": {
+   "uuid": "c49840ae-ca22-4745-8a42-b675847e0355",
+   "kind": "cpm",
+   "access": "open",
+   "onDiscover": true,
+   "toggles": {
+    "preApproval": false,
+    "sound": false,
+    "logoRequired": false,
+    "faceOnCamera": false
+   },
+   "contentTypes": [
+    "clipping"
+   ],
+   "overlay": null,
+   "sound": null,
+   "audience": false,
+   "namedLanguages": [],
+   "pageLanguage": null,
+   "groupIds": [],
+   "platformsPaid": [
+    "youtube",
+    "tiktok",
+    "instagram"
+   ],
+   "pay": [
+    [
+     "youtube",
+     100,
+     null,
+     20000,
+     null,
+     []
+    ],
+    [
+     "tiktok",
+     100,
+     null,
+     20000,
+     null,
+     []
+    ],
+    [
+     "instagram",
+     100,
+     null,
+     20000,
+     null,
+     []
+    ]
+   ],
+   "budget": {
+    "totalCents": 1186463,
+    "spentCents": 660584,
+    "leftCents": 525879
+   },
+   "categories": [
+    "health-wellness"
+   ],
+   "hiddenRules": 0
+  },
+  "d10-tradelens-slides": {
+   "uuid": "c9617009-53cb-4885-8ffc-b655f7c128b3",
+   "kind": "cpm",
+   "access": "open",
+   "onDiscover": true,
+   "toggles": {
+    "preApproval": false,
+    "sound": false,
+    "logoRequired": false,
+    "faceOnCamera": false
+   },
+   "contentTypes": [
+    "slideshows"
+   ],
+   "overlay": null,
+   "sound": null,
+   "audience": false,
+   "namedLanguages": [],
+   "pageLanguage": null,
+   "groupIds": [],
+   "platformsPaid": [
+    "tiktok"
+   ],
+   "pay": [
+    [
+     "tiktok",
+     125,
+     null,
+     40000,
+     null,
+     []
+    ]
+   ],
+   "budget": {
+    "totalCents": 600000,
+    "spentCents": 290585,
+    "leftCents": 309415
+   },
+   "categories": [
+    "trading",
+    "finance"
+   ],
+   "hiddenRules": 1
+  },
+  "d11-ungodly-apply": {
+   "uuid": "0d341d7d-e390-4807-9149-9b5294dff3e6",
+   "kind": "cpm",
+   "access": "application",
+   "onDiscover": true,
+   "toggles": {
+    "preApproval": false,
+    "sound": false,
+    "logoRequired": false,
+    "faceOnCamera": false
+   },
+   "contentTypes": [
+    "clipping"
+   ],
+   "overlay": null,
+   "sound": null,
+   "audience": true,
+   "namedLanguages": [],
+   "pageLanguage": "en",
+   "groupIds": [],
+   "platformsPaid": [
+    "youtube",
+    "tiktok"
+   ],
+   "pay": [
+    [
+     "youtube",
+     175,
+     null,
+     17500,
+     null,
+     []
+    ],
+    [
+     "tiktok",
+     175,
+     null,
+     17500,
+     null,
+     []
+    ]
+   ],
+   "budget": {
+    "totalCents": 200000,
+    "spentCents": 8527,
+    "leftCents": 191473
+   },
+   "categories": [
+    "gaming"
+   ],
+   "hiddenRules": null
+  },
+  "d13-weeknd-music": {
+   "uuid": "4c7d1ede-2fca-406a-971d-f651880168aa",
+   "kind": "cpm",
+   "access": "open",
+   "onDiscover": true,
+   "toggles": {
+    "preApproval": false,
+    "sound": false,
+    "logoRequired": false,
+    "faceOnCamera": false
+   },
+   "contentTypes": [
+    "clipping",
+    "ugc-with-face",
+    "ugc-faceless",
+    "sound",
+    "reposting"
+   ],
+   "overlay": null,
+   "sound": "needed",
+   "audience": false,
+   "namedLanguages": [],
+   "pageLanguage": "en",
+   "groupIds": [],
+   "platformsPaid": [
+    "tiktok",
+    "instagram"
+   ],
+   "pay": [
+    [
+     "tiktok",
+     150,
+     null,
+     15000,
+     null,
+     []
+    ],
+    [
+     "instagram",
+     150,
+     null,
+     15000,
+     null,
+     []
+    ]
+   ],
+   "budget": {
+    "totalCents": 150000,
+    "spentCents": 25217,
+    "leftCents": 124783
+   },
+   "categories": [
+    "music"
+   ],
+   "hiddenRules": 0
+  },
+  "d14-hablando-es-apply": {
+   "uuid": "e815a623-badd-4516-906c-b6cfce227ff9",
+   "kind": "cpm",
+   "access": "application",
+   "onDiscover": true,
+   "toggles": {
+    "preApproval": false,
+    "sound": false,
+    "logoRequired": false,
+    "faceOnCamera": false
+   },
+   "contentTypes": [
+    "clipping"
+   ],
+   "overlay": null,
+   "sound": null,
+   "audience": false,
+   "namedLanguages": [],
+   "pageLanguage": null,
+   "groupIds": [],
+   "platformsPaid": [
+    "youtube",
+    "tiktok",
+    "instagram"
+   ],
+   "pay": [
+    [
+     "youtube",
+     20,
+     null,
+     3000,
+     null,
+     []
+    ],
+    [
+     "tiktok",
+     30,
+     null,
+     5000,
+     null,
+     []
+    ],
+    [
+     "instagram",
+     100,
+     null,
+     10000,
+     null,
+     []
+    ]
+   ],
+   "budget": {
+    "totalCents": 1000000,
+    "spentCents": 704648,
+    "leftCents": 295352
+   },
+   "categories": [
+    "personal-brand"
+   ],
+   "hiddenRules": null
+  },
+  "d15-mack-twitch-apply": {
+   "uuid": "79d6abae-b305-42e9-9ebe-82e47583adb5",
+   "kind": "cpm",
+   "access": "application",
+   "onDiscover": true,
+   "toggles": {
+    "preApproval": true,
+    "sound": false,
+    "logoRequired": false,
+    "faceOnCamera": false
+   },
+   "contentTypes": [
+    "clipping"
+   ],
+   "overlay": null,
+   "sound": null,
+   "audience": false,
+   "namedLanguages": [],
+   "pageLanguage": null,
+   "groupIds": [],
+   "platformsPaid": [
+    "tiktok"
+   ],
+   "pay": [
+    [
+     "tiktok",
+     100,
+     null,
+     50000,
+     null,
+     []
+    ]
+   ],
+   "budget": {
+    "totalCents": 200000,
+    "spentCents": 0,
+    "leftCents": 200000
+   },
+   "categories": [
+    "pc-gaming",
+    "gaming"
+   ],
+   "hiddenRules": null
+  },
+  "d16-fundingpips": {
+   "uuid": "c0c37381-e244-4643-98bd-edbff4bc1465",
+   "kind": "cpm",
+   "access": "open",
+   "onDiscover": true,
+   "toggles": {
+    "preApproval": false,
+    "sound": false,
+    "logoRequired": false,
+    "faceOnCamera": false
+   },
+   "contentTypes": [
+    "clipping"
+   ],
+   "overlay": null,
+   "sound": null,
+   "audience": false,
+   "namedLanguages": [],
+   "pageLanguage": "en",
+   "groupIds": [],
+   "platformsPaid": [
+    "youtube",
+    "tiktok",
+    "instagram"
+   ],
+   "pay": [
+    [
+     "youtube",
+     600,
+     null,
+     10000,
+     null,
+     []
+    ],
+    [
+     "tiktok",
+     600,
+     null,
+     10000,
+     null,
+     []
+    ],
+    [
+     "instagram",
+     600,
+     null,
+     10000,
+     null,
+     []
+    ]
+   ],
+   "budget": {
+    "totalCents": 400000,
+    "spentCents": 233121,
+    "leftCents": 166879
+   },
+   "categories": [
+    "technology"
+   ],
+   "hiddenRules": 4,
+   "launchedAt": "2026-05-26T11:21:33.000Z"
+  },
+  "d17-forgegui-group": {
+   "uuid": "1db63081-715e-4e04-9b11-fbc1d4e8e700",
+   "kind": "cpm",
+   "access": "open",
+   "onDiscover": true,
+   "toggles": {
+    "preApproval": false,
+    "sound": false,
+    "logoRequired": false,
+    "faceOnCamera": false
+   },
+   "contentTypes": [
+    "clipping",
+    "ugc-faceless"
+   ],
+   "overlay": null,
+   "sound": null,
+   "audience": false,
+   "namedLanguages": [],
+   "pageLanguage": null,
+   "groupIds": [
+    "52a937dd-2e14-4e4b-8eaf-971ac5921208",
+    "237c2143-cbcc-4296-81f1-7da057a53264"
+   ],
+   "platformsPaid": [
+    "youtube",
+    "tiktok",
+    "instagram"
+   ],
+   "pay": [
+    [
+     "youtube",
+     50,
+     null,
+     50000,
+     null,
+     []
+    ],
+    [
+     "tiktok",
+     100,
+     null,
+     100000,
+     null,
+     []
+    ],
+    [
+     "instagram",
+     100,
+     null,
+     100000,
+     null,
+     []
+    ]
+   ],
+   "budget": {
+    "totalCents": 22465300,
+    "spentCents": 21961265,
+    "leftCents": 504035
+   },
+   "categories": [
+    "technology"
+   ],
+   "hiddenRules": 1,
+   "groupName": "ForgeGUI [UNLIMITED]"
+  },
+  "d18-pickleball": {
+   "uuid": "3d9ef19f-1256-47ca-b630-e33e2c923969",
+   "kind": "cpm",
+   "access": "open",
+   "onDiscover": true,
+   "toggles": {
+    "preApproval": false,
+    "sound": false,
+    "logoRequired": false,
+    "faceOnCamera": false
+   },
+   "contentTypes": [
+    "clipping"
+   ],
+   "overlay": null,
+   "sound": null,
+   "audience": false,
+   "namedLanguages": [],
+   "pageLanguage": "en",
+   "groupIds": [],
+   "platformsPaid": [
+    "youtube",
+    "tiktok",
+    "instagram"
+   ],
+   "pay": [
+    [
+     "youtube",
+     150,
+     null,
+     25000,
+     null,
+     []
+    ],
+    [
+     "tiktok",
+     150,
+     null,
+     25000,
+     null,
+     []
+    ],
+    [
+     "instagram",
+     150,
+     null,
+     25000,
+     null,
+     []
+    ]
+   ],
+   "budget": {
+    "totalCents": 250000,
+    "spentCents": 8990,
+    "leftCents": 241010
+   },
+   "categories": [
+    "sports-highlights",
+    "sports"
+   ],
+   "hiddenRules": 0,
+   "listedAt": "2026-11-14T17:23:44.000Z"
+  },
+  "d19-energy-product": {
+   "uuid": "e4a9465f-d415-4e30-bf53-e46014958bc6",
+   "kind": "cpm",
+   "access": "open",
+   "onDiscover": true,
+   "toggles": {
+    "preApproval": false,
+    "sound": false,
+    "logoRequired": false,
+    "faceOnCamera": false
+   },
+   "contentTypes": [
+    "clipping"
+   ],
+   "overlay": null,
+   "sound": null,
+   "audience": true,
+   "namedLanguages": [],
+   "pageLanguage": "en",
+   "groupIds": [],
+   "platformsPaid": [
+    "youtube",
+    "tiktok",
+    "instagram",
+    "x"
+   ],
+   "pay": [
+    [
+     "youtube",
+     100,
+     null,
+     20000,
+     null,
+     []
+    ],
+    [
+     "tiktok",
+     100,
+     null,
+     20000,
+     null,
+     []
+    ],
+    [
+     "instagram",
+     100,
+     null,
+     20000,
+     null,
+     []
+    ],
+    [
+     "x",
+     100,
+     null,
+     20000,
+     null,
+     []
+    ]
+   ],
+   "budget": {
+    "totalCents": 1000000,
+    "spentCents": 11248,
+    "leftCents": 988752
+   },
+   "categories": [
+    "product",
+    "consumer-brand"
+   ],
+   "hiddenRules": 1
+  }
+ }
+}

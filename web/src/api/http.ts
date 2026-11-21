@@ -10,6 +10,7 @@ import type {
   CrConnection,
   CrSubmission,
   Clip,
+  ClipFile,
   ClipPerformance,
   Job,
   JobDeleted,
@@ -27,6 +28,7 @@ import type {
   Skill,
   SkillDetail,
   TikTokCreator,
+  TikTokMarked,
   WeekView,
 } from "./types.ts";
 
@@ -115,6 +117,10 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
         ...(options && Object.keys(options).length ? { options } : {}),
       }),
     declineClip: async (clipId) => (await call<{ clip: Clip }>("POST", `/clips/${id(clipId)}/decline`)).clip,
+    clipFile: (clipId) => call<ClipFile>("GET", `/clips/${id(clipId)}/file`),
+    markTikTokPosted: (clipId, link, since) =>
+      call<TikTokMarked>("POST", `/clips/${id(clipId)}/tiktok/posted`, { ...(link ? { link } : {}), ...(since ? { since } : {}) }),
+    undoTikTokPosted: (clipId) => call<TikTokMarked>("DELETE", `/clips/${id(clipId)}/tiktok/posted`),
     listSkills: async () => (await call<{ skills: Skill[] }>("GET", "/skills")).skills,
     getSkill: (skillId) => call<SkillDetail>("GET", `/skills/${id(skillId)}`),
     writeSkill: async (form) => (await call<{ skill: Skill }>("POST", "/skills", form)).skill,

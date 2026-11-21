@@ -773,7 +773,7 @@ def test_caption_rules() -> None:
             403,
             {"error": {"code": "unaudited_client_can_only_post_to_private_accounts"}},
             False,
-            "Make your TikTok account private (Setup step 3), then press Try again.",
+            "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone.",
         ),
         (
             "tiktok",
