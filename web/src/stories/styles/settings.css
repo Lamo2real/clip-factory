@@ -770,6 +770,21 @@
     grid-column: 1 / -1;
   }
 }
+.st-stg-assign__pick {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.st-stg-assign__lab {
+  color: var(--st-ink-soft);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+@media (min-width: 1100px) {
+  .st-stg-assign__lab {
+    display: none;
+  }
+}
 .st-stg-assign__name,
 .st-stg-assign__now {
   display: grid;

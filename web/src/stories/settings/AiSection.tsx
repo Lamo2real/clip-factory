@@ -243,19 +243,29 @@ function AssignRow({
         <span className="st-stg-assign__title">{name}</span>
         <span className="st-stg-small">{sub}</span>
       </div>
-      <SetSelect label={`Model for ${name}`} hideLabel value={shownModel} options={modelOptions(models, inheritModel)} onChange={(v) => onModel(v || null)} />
-      {effortModel && !effortModel.efforts.length ? (
-        <span className="st-stg-assign__none">No effort setting</span>
-      ) : (
-        <SetSelect
-          label={`Effort for ${name}`}
-          hideLabel
-          value={needsEffort ? "pick" : (effort ?? "")}
-          invalid={needsEffort || !!effortBroken}
-          options={needsEffort ? [{ value: "pick", label: "Pick a level" }, ...effortOptions(effortModel, inheritEffort).slice(1)] : effortOptions(effortModel, inheritEffort)}
-          onChange={(v) => v !== "pick" && onEffort((v || null) as Effort | null)}
-        />
-      )}
+      <div className="st-stg-assign__pick">
+        <span className="st-stg-assign__lab" aria-hidden="true">
+          Model
+        </span>
+        <SetSelect label={`Model for ${name}`} hideLabel value={shownModel} options={modelOptions(models, inheritModel)} onChange={(v) => onModel(v || null)} />
+      </div>
+      <div className="st-stg-assign__pick">
+        <span className="st-stg-assign__lab" aria-hidden="true">
+          Effort
+        </span>
+        {effortModel && !effortModel.efforts.length ? (
+          <span className="st-stg-assign__none">No effort setting</span>
+        ) : (
+          <SetSelect
+            label={`Effort for ${name}`}
+            hideLabel
+            value={needsEffort ? "pick" : (effort ?? "")}
+            invalid={needsEffort || !!effortBroken}
+            options={needsEffort ? [{ value: "pick", label: "Pick a level" }, ...effortOptions(effortModel, inheritEffort).slice(1)] : effortOptions(effortModel, inheritEffort)}
+            onChange={(v) => v !== "pick" && onEffort((v || null) as Effort | null)}
+          />
+        )}
+      </div>
       <div className="st-stg-assign__now">
         <span className="st-stg-small">Uses now</span>
         <span className="st-stg-assign__uses">

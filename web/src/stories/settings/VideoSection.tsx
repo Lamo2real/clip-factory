@@ -62,13 +62,27 @@ function ModelLine({ providers, id }: { providers: ProviderStatus[] | null; id: 
 export function LengthPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const [shown, setShown] = useState(value);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const waiting = useRef<number | null>(null);
+  const send = useRef(onChange);
+  send.current = onChange;
   useEffect(() => setShown(value), [value]);
-  useEffect(() => () => clearTimeout(timer.current), []);
+  // Leaving the page within the moment still saves the last length picked.
+  useEffect(
+    () => () => {
+      clearTimeout(timer.current);
+      if (waiting.current !== null) send.current(waiting.current);
+    },
+    [],
+  );
   const pick = (v: number) => {
     const n = Math.max(15, Math.min(90, Math.round(v / 5) * 5));
     setShown(n);
+    waiting.current = n;
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => onChange(n), 450);
+    timer.current = setTimeout(() => {
+      waiting.current = null;
+      send.current(n);
+    }, 450);
   };
   const pct = ((shown - 15) / 75) * 100;
   return (
