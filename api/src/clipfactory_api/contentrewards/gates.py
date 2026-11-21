@@ -8,7 +8,7 @@ served. B (Confirm) and D (the card) carry the same ``uploadPlaces`` rule and te
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from ..clock import parse
@@ -50,6 +50,13 @@ OPEN_CAMPAIGN = "Open campaign"
 FIND_ANOTHER = "Find another campaign"
 MAKE_CLIPS = "Make clips for this campaign"
 SUBMIT_CLIP = "It says Submit clip"
+# §41.6 changes 10 and 11: campaigns the finder added ("I applied: add it" / "I joined: add it").
+FINDER_WAIT = (
+    "Waiting for the brand. Content Rewards shows **Pending review** while the brand decides. When it says **Submit "
+    "clip**, tap It says Submit clip."
+)
+FINDER_CHECKING = "Checking that you joined… This can take a few minutes."
+FINDER_CHECKING_FOR = timedelta(minutes=15)
 
 
 def money(cents: int) -> str:
@@ -329,9 +336,28 @@ def membership_text(item: Mapping[str, Any], conn: Mapping[str, Any], now: datet
     }.get(str(membership), "")
 
 
+def finder_applied(item: Mapping[str, Any]) -> bool:
+    """§41.6 change 10: an application the finder added while Clip Factory can't look (``unknown``, ``said:
+    applied``)."""
+    return item.get("addedBy") == "finder" and item.get("membership") == "unknown" and item.get("said") == "applied"
+
+
+def finder_checking(item: Mapping[str, Any], now: datetime) -> bool:
+    """§41.6 change 11: an open campaign the finder added, not listed yet, in the first 15 minutes after the add."""
+    added = parse(item.get("addedAt"))
+    return (
+        item.get("addedBy") == "finder"
+        and item.get("membership") == "not_joined"
+        and added is not None
+        and now - added < FINDER_CHECKING_FOR
+    )
+
+
 def chip(item: Mapping[str, Any], conn: Mapping[str, Any]) -> str:
     membership = item.get("membership")
     if membership == "unknown":
+        if finder_applied(item):
+            return "Waiting for the brand"
         if connection.refused(conn):
             return "Check it yourself"
         return "Not checked yet" if looking(conn) else "Connect first"
@@ -495,6 +521,14 @@ def _membership_step(item: Mapping[str, Any], conn: Mapping[str, Any], chip_text
         "said": "not_eligible",
         "text": "If Content Rewards shows **Not eligible**, tap It says Not eligible.",
     }
+    if membership == "unknown" and finder_applied(item):
+        return {  # change 10: no vermilion; he taps It says Submit clip once Content Rewards shows it
+            "kind": "wait",
+            "chip": chip_text,
+            "text": FINDER_WAIT,
+            "asks": [submit_ask, not_eligible],
+            "glass": [_open(url)],
+        }
     if membership == "unknown":
         if looking(conn):
             return {  # connected, but CR didn't answer: Check now (in the card's head) looks again
@@ -530,6 +564,8 @@ def _membership_step(item: Mapping[str, Any], conn: Mapping[str, Any], chip_text
         say_by = parse(item.get("canSayInBy"))
         if say_by is not None and now >= say_by:
             asks.append({"label": "I joined, but it still says not joined", "said": "joined_by_hand"})
+        if finder_checking(item, now):  # change 11: Content Rewards may list it in a few minutes; no vermilion
+            return {"kind": "join", "chip": chip_text, "text": FINDER_CHECKING, "asks": asks, "glass": [_open(url)]}
         return {"kind": "join", "chip": chip_text, "text": text, "button": _open(url), "asks": asks}
     if membership == "apply_first":
         return {

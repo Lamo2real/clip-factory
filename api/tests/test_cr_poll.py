@@ -9,7 +9,7 @@ import pytest
 
 from clipfactory_api import db
 from clipfactory_api.clock import iso
-from clipfactory_api.contentrewards import money, poll
+from clipfactory_api.contentrewards import config, money, poll
 from clipfactory_api.stats import handler as stats_handler
 from conftest import NOW, USER, Clock
 from cr_support import (
@@ -726,3 +726,100 @@ def test_paid_day_is_the_utc_date() -> None:
     assert money.paid_day({"paid_at": "2026-11-12T23:30:00-05:00"}) == "2026-11-13"
     assert money.paid_day({"created_at": "2026-11-12T10:00:00Z"}) == "2026-11-12"
     assert money.paid_day({}) is None
+
+
+# --- §41.5: the campaign finder's adopt hook in step 3 ------------------------------------------------------------------
+
+
+def _finder_candidate(deps: Any, *, opened_ago: timedelta = timedelta(minutes=5)) -> None:
+    """He opened UUID from the finder (``CRFIND.opened``) and the look kept its public copy (``CRPUBLIC/PUB#``)."""
+    from clipfactory_api.contentrewards import public
+    from cr_support import public_campaign
+
+    deps.store.put(
+        {
+            "pk": db.user_pk(USER),
+            "sk": "CRFIND",
+            "type": "crfind",
+            "userId": USER,
+            "want": {"on": True},
+            "opened": {UUID: iso(NOW - opened_ago)},
+        }
+    )
+    deps.store.put(
+        {
+            "pk": "CRPUBLIC",
+            "sk": f"PUB#{UUID}",
+            "type": "crpubliccopy",
+            "uuid": UUID,
+            "public": public.strip(public_campaign(UUID, application=False)),
+            "readAt": iso(NOW - timedelta(hours=2)),
+        }
+    )
+
+
+def test_the_finder_hook_adopts_a_joined_campaign_with_one_list_call(
+    world: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    deps, fake, _clock = world
+    monkeypatch.setenv("CR_FINDER", "on")
+    _finder_candidate(deps)
+    fake.answer("list_my_campaigns", page([listed_campaign(access="open")]))  # CMP is UUID's TypeID
+    assert poll.membership(deps, USER, NOW) == {"due": 0, "changed": 0, "adopted": 1}  # no campaign was due
+    assert len(fake.calls("list_my_campaigns")) == 1  # one more call, inside the 25
+    item = deps.store.get(db.user_pk(USER), db.campaign_sk(UUID)) or {}
+    assert (item["membership"], item["celebrate"], item["addedBy"]) == ("in", "in", "finder")
+    finder = deps.store.get(db.user_pk(USER), "CRFIND") or {}
+    assert finder["added"] == {UUID: iso(NOW)}
+    assert poll.membership(deps, USER, NOW) == {"due": 0}  # added: no candidate any more, no call
+    assert len(fake.calls("list_my_campaigns")) == 1
+
+
+def test_the_finder_hook_needs_a_candidate_the_sign_in_and_the_switch(
+    world: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from clipfactory_api.contentrewards import connection
+
+    deps, fake, _clock = world
+    monkeypatch.setenv("CR_FINDER", "on")
+    assert poll.membership(deps, USER, NOW) == {"due": 0}  # no candidate: no call
+    _finder_candidate(deps, opened_ago=timedelta(hours=49))
+    assert poll.membership(deps, USER, NOW) == {"due": 0}  # opened more than 48 hours ago
+    _finder_candidate(deps)
+    monkeypatch.setenv("CR_FINDER", "off")
+    assert poll.membership(deps, USER, NOW) == {"due": 0}
+    monkeypatch.setenv("CR_FINDER", "on")
+    connection.update(deps.store, USER, NOW, {"status": "not_connected"})
+    assert poll.membership(deps, USER, NOW) == {"due": 0}
+    assert fake.calls() == []
+    assert deps.store.get(db.user_pk(USER), db.campaign_sk(UUID)) is None
+
+
+def test_the_finder_hook_is_inside_the_owners_tick_budget(world: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    deps, fake, _clock = world
+    monkeypatch.setenv("CR_FINDER", "on")
+    _finder_candidate(deps)
+    fake.answer("list_my_campaigns", page([listed_campaign(access="open")]))
+    report = poll.run_owner(deps, USER, NOW, deadline=0.0, clock=lambda: 1.0)  # no time (or calls) left
+    assert report["membership"] == "skipped"
+    assert deps.store.get(db.user_pk(USER), db.campaign_sk(UUID)) is None
+    no_money(fake)
+    report = poll.run_owner(deps, USER, NOW)
+    assert report["membership"]["adopted"] == 1
+    assert deps.mcp(USER).calls <= config.CALLS_PER_OWNER_TICK
+
+
+def test_the_finder_hook_never_adds_an_ambiguous_campaign(world: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    from clipfactory_api.contentrewards import connection, ids
+
+    deps, fake, _clock = world
+    monkeypatch.setenv("CR_FINDER", "on")
+    connection.update(deps.store, USER, NOW, {"typeidVerified": False})
+    _finder_candidate(deps)
+    twins = [
+        listed_campaign(ids.typeid("cmp", f"00000000-0000-4000-8000-00000000000{n}"), access="open", platforms=None)
+        for n in (1, 2)
+    ]
+    fake.answer("list_my_campaigns", page(twins))
+    assert poll.membership(deps, USER, NOW) == {"due": 0, "changed": 0, "adopted": 0}
+    assert deps.store.get(db.user_pk(USER), db.campaign_sk(UUID)) is None

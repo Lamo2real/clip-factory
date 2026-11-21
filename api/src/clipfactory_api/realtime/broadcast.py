@@ -2,10 +2,10 @@
 
 The event source mapping only delivers ``JOB#``, ``CLIP#``, ``POST#``, ``LEARNING#``, ``WEEK#``, ``ACCOUNT#``,
 ``SETUP#``, ``FOLLOW#`` (§24), ``JOBLIVE#`` (§31, the live status line, ``{type: "jobLive"}``) and the Content Rewards
-items ``CAMPAIGN#``, ``CRCONN``, ``CRSUB#``, ``CRMONEY`` (§38.11, ``{type: "contentrewards", partial: true}``) items (``ACCOUNT#``
-and ``SETUP#`` become ``{type: "setup", op: "upsert", id: platform, partial: true}``, §17.4). Per batch the last
-record per item wins (job heartbeats coalesce); each becomes one ``LiveEvent``, built by the same public-shape
-functions the HTTP API uses, so internal fields never leave. An event over 24 KB is sent as ``partial: true`` (the
+items ``CAMPAIGN#``, ``CRCONN``, ``CRSUB#``, ``CRMONEY`` (§38.11) and ``CRFIND`` (§41.5, ``id: "finder"``), each
+``{type: "contentrewards", partial: true}`` (``ACCOUNT#`` and ``SETUP#`` become ``{type: "setup", op: "upsert", id:
+platform, partial: true}``, §17.4). Per batch the last record per item wins (job heartbeats coalesce); each becomes
+one ``LiveEvent``, built by the same public-shape functions the HTTP API uses, so internal fields never leave. An event over 24 KB is sent as ``partial: true`` (the
 web refetches). Closed connections (410 Gone) are deleted; other send errors are logged and skipped. Only a
 failed connections query reports records as batch item failures, so Lambda retries just those.
 """
@@ -39,6 +39,7 @@ TYPES = {
     "CRCONN": "contentrewards",
     "CRSUB#": "contentrewards",
     "CRMONEY": "contentrewards",
+    "CRFIND": "contentrewards",  # §41.5: the finder (its matches ride along only through GET …/finder)
 }
 CR_IDS = {"CAMPAIGN#": "campaign:", "CRSUB#": "submission:"}
 # Setup changes carry no item: the web refetches GET /v1/setup (§17.4), so keys, hints and tokens never ride along.
@@ -146,12 +147,14 @@ def message_for(record: Mapping[str, Any], deserialize: Callable[[Mapping[str, A
 
 
 def _content_rewards(sk: str, record: Mapping[str, Any]) -> dict[str, Any]:
-    """``{type: "contentrewards", op, id: "campaign:{uuid}" | "connection" | "submission:{postId}" | "money",
-    partial: true}``; a removed campaign is ``op: "delete"``."""
+    """``{type: "contentrewards", op, id: "campaign:{uuid}" | "connection" | "submission:{postId}" | "money" |
+    "finder", partial: true}``; a removed campaign is ``op: "delete"``."""
     if sk == "CRCONN":
         item_id = "connection"
     elif sk == "CRMONEY":
         item_id = "money"
+    elif sk == "CRFIND":
+        item_id = "finder"
     else:
         prefix = next(p for p in CR_IDS if sk.startswith(p))
         item_id = CR_IDS[prefix] + sk[len(prefix) :]

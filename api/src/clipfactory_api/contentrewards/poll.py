@@ -2,7 +2,8 @@
 
 ``run_tick`` runs after the platform poll on the existing 15-minute rule; ``run_owner`` serves the
 ``{"action": "contentrewards", "userId", "what"}`` event too. For each ``CROWNERS`` owner, in this order: (1) time
-only, (2) the sign-in's keep-alive and the 90 days, (3) membership, (4) money, (5) submissions. At most 25 CR calls
+only, (2) the sign-in's keep-alive and the 90 days, (3) membership (and, since §41, adopting a campaign he opened
+from the finder and joined), (4) money, (5) submissions. At most 25 CR calls
 per owner per tick; ``rate_limited`` ends that owner's tick; nothing here raises, and one owner's failure never stops
 another.
 """
@@ -230,8 +231,10 @@ def membership(deps: CrDeps, user_id: str, now: datetime, *, force: bool = False
         for c in items
         if force or (parse(c.get("nextCheckAt")) is not None and parse(c.get("nextCheckAt")) <= now)  # type: ignore[operator]
     ]
-    if not due:
+    found = _adopt_candidates(deps, user_id, now)
+    if not due and not found:
         return {"due": 0}
+    # §41.5: a campaign he opened from the finder is looked for in the same list (one call, inside the 25).
     listed, complete = campaigns.list_campaigns(deps, user_id, fresh=True)
     changed = 0
     for item in due:
@@ -243,7 +246,36 @@ def membership(deps: CrDeps, user_id: str, now: datetime, *, force: bool = False
         campaigns.save(deps, user_id, item)
         if before != (item.get("membership"), item.get("state"), item.get("briefHash")):
             changed += 1
-    return {"due": len(due), "changed": changed}
+    out = {"due": len(due), "changed": changed}
+    if found:
+        out["adopted"] = _adopt(deps, user_id, listed, now, found)
+    return out
+
+
+def _adopt_candidates(deps: CrDeps, user_id: str, now: datetime) -> list[tuple[str, Item]]:
+    """§41.5 (§38.12 step 3): the finder's adopt candidates while the finder is switched on; a finder failure never
+    stops the membership checks."""
+    from . import finderapi
+
+    if not finderapi.enabled():
+        return []
+    try:
+        return finderapi.candidates(deps, user_id, now)
+    except Exception as e:
+        log("error", "cr.finder_candidates_failed", error=type(e).__name__)
+        return []
+
+
+def _adopt(deps: CrDeps, user_id: str, listed: list[Item], now: datetime, found: list[tuple[str, Item]]) -> int:
+    from . import finderapi
+
+    try:
+        return len(finderapi.adopt(deps, user_id, listed, now, found=found))
+    except CrError:
+        raise
+    except Exception as e:
+        log("error", "cr.finder_adopt_failed", error=type(e).__name__)
+        return 0
 
 
 def _clear_holds(deps: CrDeps, user_id: str, items: list[Item], now: datetime) -> None:

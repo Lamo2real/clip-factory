@@ -501,6 +501,9 @@ def test_broadcast_setup_changes_are_partial(
             {"type": "contentrewards", "op": "upsert", "id": "submission:01J0000000000000000000000P", "partial": True},
         ),
         ("CRMONEY", "MODIFY", {"type": "contentrewards", "op": "upsert", "id": "money", "partial": True}),
+        # §41.5: the finder; the web refetches GET /v1/contentrewards/finder (no new LiveItemType)
+        ("CRFIND", "MODIFY", {"type": "contentrewards", "op": "upsert", "id": "finder", "partial": True}),
+        ("CRFIND", "INSERT", {"type": "contentrewards", "op": "upsert", "id": "finder", "partial": True}),
     ],
 )
 def test_broadcast_content_rewards_is_partial(
@@ -525,6 +528,10 @@ def test_broadcast_never_sends_crstate_or_crowners(
     records = [
         _record({"pk": f"USER#{USER}", "sk": "CRSTATE#nonce", "type": "crstate"}),
         _record({"pk": "CROWNERS", "sk": f"USER#{USER}", "type": "crowner"}),
+        # §41.5: the finder's shared cache never travels (no owner's key, no owner's data)
+        _record({"pk": "CRPUBLIC", "sk": "CAMP#200ea21b-be80-4db8-b552-8e32b148604e", "type": "crpublic"}),
+        _record({"pk": "CRPUBLIC", "sk": "PUB#200ea21b-be80-4db8-b552-8e32b148604e", "type": "crpubliccopy"}),
+        _record({"pk": "CRPUBLIC", "sk": "STATE", "type": "crpublicstate"}),
     ]
     broadcast.process({"Records": records}, bc_deps)
     assert management.sent == []

@@ -405,6 +405,34 @@ def test_overview_get_list_and_delete(call: Call, cr: Any, s3_client: FakeS3) ->
     assert f"campaigns/{USER}/{UUID}/brand.png" not in s3_client.objects
 
 
+def test_overview_finder_key(call: Call, cr: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """§41.5: ``finder`` whenever ``CR_FINDER=on`` (from ``CRFIND`` only), absent while off."""
+    assert "finder" not in call("GET", BASE)[1]
+    monkeypatch.setenv("CR_FINDER", "on")
+    assert call("GET", BASE)[1]["finder"] == {"on": True, "started": False, "newCount": 0, "matches": 0}
+    now = cr.clock.now
+    seed_campaign(cr.store, USER, now)  # his already: the finder never counts it
+    other = "3d9ef19f-6a2b-4c8e-9d1f-2b3c4d5e6f70"
+    cr.store.put(
+        {
+            "pk": db.user_pk(USER),
+            "sk": "CRFIND",
+            "type": "crfind",
+            "userId": USER,
+            "want": {"on": True, "minPer1kCents": 100},
+            "matches": [{"campaignId": u, "name": "M"} for u in (UUID, UUID2, other)],
+            "shown": {UUID2: iso(now - timedelta(hours=1)), other: iso(now - timedelta(days=3))},
+            "seenAt": iso(now - timedelta(days=1)),
+        }
+    )
+    assert call("GET", BASE)[1]["finder"] == {"on": True, "started": True, "newCount": 1, "matches": 2}
+    cr.store.update(db.user_pk(USER), "CRFIND", {"want": {"on": False}})
+    assert call("GET", BASE)[1]["finder"] == {"on": False, "started": True, "newCount": 0, "matches": 0}
+    assert fake_of(cr).requests == []  # still never Content Rewards
+    monkeypatch.setenv("CR_FINDER", "off")
+    assert "finder" not in call("GET", BASE)[1]
+
+
 def test_check_now_rate_limit_and_pasted_rules(call: Call, cr: Any) -> None:
     seed_campaign(
         cr.store,
