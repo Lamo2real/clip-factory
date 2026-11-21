@@ -11,8 +11,11 @@ from __future__ import annotations
 
 import copy
 import json
+import time
 from collections.abc import Callable, Iterable
 from typing import Any
+
+import pytest
 
 from clipfactory_api import db
 from clipfactory_api.app import App
@@ -75,6 +78,50 @@ def character_body(name: str = "Lamo", **extra: Any) -> dict[str, Any]:
         "voice": copy.deepcopy(VOICE),
         **extra,
     }
+
+
+class Monotonic:
+    """``time.monotonic`` moved on by ``spent`` seconds: how much of its 29 s a request has used (its ``started`` keeps
+    the real arrival time). Restored by ``monkeypatch`` after the test."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        real = time.monotonic
+        self.spent = 0.0
+        monkeypatch.setattr(time, "monotonic", lambda: real() + self.spent)
+
+
+class SlowAgentCore(FakeAgentCore):
+    """AgentCore hanging: a stop (``slow_stop``) or a ``cancel`` (``slow_cancel``) takes 20 s, then the read times out.
+    ``order`` is every call in turn: the action of each invoke, ``"stop"`` for each StopRuntimeSession."""
+
+    def __init__(self, clock: Monotonic, *, slow_stop: bool = True, slow_cancel: bool = False) -> None:
+        super().__init__()
+        self.clock = clock
+        self.slow_stop = slow_stop
+        self.slow_cancel = slow_cancel
+        self.order: list[str] = []
+        self.stop_calls: list[str] = []
+
+    def _hang(self) -> None:
+        from botocore.exceptions import ReadTimeoutError
+
+        self.clock.spent += 20.0
+        raise ReadTimeoutError(endpoint_url="https://bedrock-agentcore.eu-north-1.amazonaws.com")
+
+    def stop_runtime_session(self, **kw: Any) -> dict[str, Any]:
+        self.order.append("stop")
+        self.stop_calls.append(kw["runtimeSessionId"])
+        if self.slow_stop:
+            self._hang()
+        return super().stop_runtime_session(**kw)
+
+    def invoke_agent_runtime(self, **kw: Any) -> dict[str, Any]:
+        action = json.loads(kw["payload"]).get("action")
+        self.order.append(str(action))
+        if self.slow_cancel and action == "cancel":
+            self.calls.append({**kw, "payload": json.loads(kw["payload"])})
+            self._hang()
+        return super().invoke_agent_runtime(**kw)
 
 
 def install(app: App, agentcore: FakeAgentCore | None, s3_client: FakeS3) -> deps.WsDeps:

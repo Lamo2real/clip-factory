@@ -4,13 +4,16 @@ registry (``stories/agent/src/lamostories_agent/providers.py``), so ``GET …/pr
 States, as §45.11.6's table gives them:
 
 * the built-in animator, sounds and characters (``builtin-2d``, ``builtin-synth``, ``builtin-rig``) are code in Lamo
-  Stories' own image with nothing to set up: ``on`` while picked, with ``checkedAt`` the last time a story job's step
-  made by it finished with real work; a later failure the agent recorded (``PROVIDER#``) shows instead;
+  Stories' own image with nothing to set up: ``on`` (picked or not), with ``checkedAt`` the last time a story job's
+  step made by it finished with real work; a later failure the agent recorded (``PROVIDER#``) shows instead;
 * the writer (``bedrock-claude``) is ``on`` only after a model answered: a ``MODELSTATUS#`` item with ``ok`` (Check
   models, or any real call) or a finished storyboard step; until then it says to tap Check models;
-* Amazon Nova Canvas and Nova Reel are ``off`` until the owner picks them, then ``needs_setup`` until the agent's
-  real call answers (``PROVIDER#{kind}#{id}`` with ``state = on`` and ``checkedAt``). Nothing is shown as working
-  because it was configured.
+* Amazon Nova Canvas is ``off`` until the owner picks it, then ``needs_setup`` until the agent's real call answers
+  (``PROVIDER#{kind}#{id}`` with ``state = on`` and ``checkedAt``);
+* Amazon Nova Reel is built but ``needs_setup`` (its United States bucket is switched off), picked or not, until a
+  ``PROVIDER#`` record says ``on``: picking it never makes it look ready.
+
+Nothing is shown as working because it was configured.
 
 ``StoriesConfig.providers`` names the kinds ``images``, ``video`` and ``audio``; ``ProviderStatus.kind`` calls the
 video kind ``animation`` (the registry's name).
@@ -36,6 +39,7 @@ class Provider:
     builtin: bool
     line_on: str
     line_unchecked: str
+    off_until_picked: bool = False  # only Nova Canvas: off until the owner picks it (§45.11.6)
 
 
 REGISTRY: Final[tuple[Provider, ...]] = (
@@ -63,6 +67,7 @@ REGISTRY: Final[tuple[Provider, ...]] = (
         "Makes AI portraits of your characters. They show in the app and the Library only, never in a posted video.",
         "Make one portrait to check it. If Bedrock says it is not enabled, turn on Amazon Nova Canvas in the Bedrock "
         "console in Europe (Ireland).",
+        off_until_picked=True,
     ),
     Provider(
         "animation",
@@ -103,11 +108,7 @@ def provider_sk(kind: str, provider_id: str) -> str:
 
 def _selected(p: Provider, config: Mapping[str, Any]) -> bool:
     chosen = config.get("providers") if isinstance(config.get("providers"), Mapping) else {}
-    if p.kind == "writer":
-        return True
-    if p.kind == "images" and p.id == "builtin-rig":
-        return True  # the rig always draws the characters in videos; the images choice is about portraits
-    return (chosen or {}).get(CONFIG_KEY[p.kind]) == p.id
+    return p.kind in CONFIG_KEY and (chosen or {}).get(CONFIG_KEY[p.kind]) == p.id
 
 
 def _used(p: Provider, job: Mapping[str, Any]) -> bool:
@@ -162,7 +163,7 @@ def status(
     model_statuses: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     out: dict[str, Any] = {"kind": p.kind, "id": p.id, "label": p.label}
-    if not _selected(p, config):
+    if p.off_until_picked and not _selected(p, config):
         return {**out, "state": "off", "line": OFF_LINE}
     state = (record or {}).get("state")
     checked = (record or {}).get("checkedAt")

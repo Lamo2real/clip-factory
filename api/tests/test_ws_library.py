@@ -137,11 +137,15 @@ def test_built_ins_are_on_ai_providers_only_after_a_real_call(call: Call, store:
     for key in (("images", "builtin-rig"), ("animation", "builtin-2d"), ("audio", "builtin-synth")):
         assert states[key]["state"] == "on"
         assert "checkedAt" not in states[key]
-    # The writer is on only once a model answered; the AI providers are off until picked.
+    # The writer is on only once a model answered; Nova Canvas is off until picked; Nova Reel is built but needs its
+    # United States bucket, picked or not (never "pick it to use it": picking it would not make it work).
     assert states[("writer", "bedrock-claude")]["state"] == "needs_setup"
     assert "Check models" in states[("writer", "bedrock-claude")]["line"]
     assert states[("images", "nova-canvas")]["state"] == "off"
-    assert states[("animation", "nova-reel")]["state"] == "off"
+    unpicked_reel = states[("animation", "nova-reel")]
+    assert unpicked_reel["state"] == "needs_setup"
+    assert "United States" in unpicked_reel["line"]
+    assert unpicked_reel["line"] != providers.OFF_LINE
     seed_item(store, "PROVIDER#writer#bedrock-claude", "ws_provider", state="on")  # no checkedAt: not proven
     seed_item(store, "MODELSTATUS#fable-5-2", "ws_modelstatus", status="denied", checkedAt="2026-11-15T11:10:00.000Z")
     assert _providers(call)[("writer", "bedrock-claude")]["state"] == "needs_setup"
@@ -154,7 +158,7 @@ def test_built_ins_are_on_ai_providers_only_after_a_real_call(call: Call, store:
     reel = states[("animation", "nova-reel")]
     assert reel["state"] == "needs_setup"
     assert "United States" in reel["line"]
-    assert states[("animation", "builtin-2d")]["state"] == "off"  # not picked any more
+    assert states[("animation", "builtin-2d")]["state"] == "on"  # not picked any more, still built in and working
     seed_item(
         store,
         "PROVIDER#images#nova-canvas",
@@ -257,6 +261,42 @@ def test_the_mirror_names_the_agents_providers() -> None:
     }
     missing = [p.id for p in providers.REGISTRY if p.id not in names]
     assert missing == [], f"the agent registry does not name {missing}"
+
+
+def _agent_states() -> dict[str, str]:
+    """Each agent provider class's ``id`` and its ``state`` before any call (``kind, id, label = …``, ``state = …``)."""
+    out: dict[str, str] = {}
+    for node in ast.walk(ast.parse(AGENT_REGISTRY.read_text())):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        provider_id = state = None
+        for stmt in node.body:
+            if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
+                continue
+            target, value = stmt.targets[0], stmt.value
+            if isinstance(target, ast.Tuple) and isinstance(value, ast.Tuple):
+                names = [t.id for t in target.elts if isinstance(t, ast.Name)]
+                if "id" in names and isinstance(value.elts[names.index("id")], ast.Constant):
+                    provider_id = value.elts[names.index("id")].value  # type: ignore[attr-defined]
+            elif isinstance(target, ast.Name) and target.id == "state" and isinstance(value, ast.Constant):
+                state = value.value
+        if isinstance(provider_id, str) and isinstance(state, str):
+            out[provider_id] = state
+    return out
+
+
+def test_the_ai_providers_start_in_the_agents_state() -> None:
+    """Before any call, with the workspace defaults, Nova Canvas and Nova Reel show the state the agent's registry
+    starts them in (off, needs_setup). The built-ins and the writer follow §45.11.6's table and real proof here."""
+    defaults = {"providers": config.workspace_defaults()["providers"]}
+    shown = {p.id: providers.status(p, defaults, None)["state"] for p in providers.REGISTRY}
+    assert shown["nova-canvas"] == "off"
+    assert shown["nova-reel"] == "needs_setup"
+    if not AGENT_REGISTRY.is_file():
+        pytest.skip("the agent's registry (builder E, CONTRACTS §45.11.6) is not in this checkout yet")
+    agent = _agent_states()
+    ai = [p.id for p in providers.REGISTRY if not p.builtin and p.kind != "writer"]
+    assert {i: shown[i] for i in ai} == {i: agent.get(i) for i in ai}
 
 
 def test_guidance_lists_every_topic_with_its_sources(call: Call) -> None:

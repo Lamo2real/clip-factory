@@ -11,8 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import json
-import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -41,6 +40,7 @@ from ...workspaces import (
     stories,
     tasks,
 )
+from ...workspaces import agent as story_agent
 from ...workspaces import types as ws
 from ...workspaces.expr import Update
 
@@ -58,18 +58,23 @@ SETTINGS_CHANGED = "These settings changed on another screen. Reload and try aga
 CHARACTER_CHANGED = "This character changed on another screen. Reload it and try again."
 IMAGES_OFF = "AI pictures are off. Turn them on in Lamo Stories › Settings."
 SCRIPT_UNREADABLE = "We could not open the storyboard just now. Try again in a minute."
-# A failed start is followed by a stop only while one more AgentCore call (3 s connect + 20 s read at most) still ends
-# inside API Gateway's 29 s.
-STOP_AFTER_START_WITHIN_SECONDS = 6.0
 CANCEL_ATTEMPTS = 3
+# A delete still deletes items and files after its stops: that much more of the 29 s is kept for it.
+DELETE_RESERVE_SECONDS = 4.0
 
 
 @dataclass
 class Ctx:
+    """One request. Its best-effort AgentCore calls (``stop``, ``_tell_agent``) run once each and only while
+    ``story_agent.time_for_call`` says the call still ends inside the 29 s with ``reserve`` seconds to spare; inside
+    ``stops_last`` they wait until the route's own start (which may need the whole 29 s) is done."""
+
     app: App
     req: Request
     workspace: Item
     now: datetime
+    reserve: float = story_agent.AFTER_CALL_SECONDS
+    deferred: list[str] | None = None  # set by ``stops_last``: the sessions to stop at its end
 
     @property
     def user_id(self) -> str:
@@ -106,9 +111,36 @@ class Ctx:
             return None
         return dict(item)
 
+    def time_for_call(self) -> bool:
+        return story_agent.time_for_call(self.req.started, after=self.reserve)
+
     def stop(self) -> Callable[[str], None] | None:
+        """Ends a fenced run's session (best effort, ``jobs.stop_quietly``): once, while the request has time."""
         agent = self.deps.agent
-        return agent.stop_session if agent is not None and getattr(agent, "ready", False) else None
+        if agent is None or not getattr(agent, "ready", False):
+            return None
+
+        def stop_in_time(session_id: str) -> None:
+            if self.deferred is not None:
+                self.deferred.append(session_id)
+            elif self.time_for_call():
+                agent.stop_session(session_id, attempts=1)
+            else:
+                log("info", "stories.stop_skipped", reason="no_time")  # the new sessionId already fences it
+
+        return stop_in_time
+
+    @contextlib.contextmanager
+    def stops_last(self) -> Iterator[None]:
+        """For a route that starts work: the fence's stops wait until the start is done (or the route refused)."""
+        self.deferred = []
+        try:
+            yield
+        finally:
+            sessions, self.deferred = self.deferred, None
+            stop = self.stop()
+            for session_id in sessions:
+                jobs.stop_quietly(stop, session_id)
 
 
 def _ctx(app: App, req: Request, *, stories_only: bool = True) -> Ctx:
@@ -392,9 +424,37 @@ def delete_idea(app: App, req: Request) -> Response:
     return no_content()
 
 
-def _task_reply(ctx: Ctx, kind: str, task_input: Mapping[str, Any], override: Mapping[str, Any] | None) -> Response:
-    """Writes the task and asks Lamo Stories' runtime to do it: ``202 { task }`` (a refused start is a failed task)."""
+def _refuse_unusable(
+    ctx: Ctx,
+    *,
+    project: Any,
+    request: Mapping[str, Any] | None = None,
+    field: str,
+    kinds: tuple[str, ...] = overrides.STORY_TASKS,
+) -> None:
+    overrides.refuse_unusable(
+        ctx.store,
+        ctx.user_id,
+        ctx.ws_id,
+        project=project if isinstance(project, Mapping) else None,
+        request=request,
+        field=field,
+        kinds=kinds,
+    )
+
+
+def _task_reply(
+    ctx: Ctx,
+    kind: str,
+    task_input: Mapping[str, Any],
+    override: Mapping[str, Any] | None,
+    *,
+    project: Any = None,
+) -> Response:
+    """Writes the task and asks Lamo Stories' runtime to do it: ``202 { task }`` (a refused start is a failed task).
+    ``project``: the video's own setting, for a story's task (§45.25 level 2)."""
     tasks.refuse_if_off(ctx.store, ctx.user_id, ctx.ws_id, kind)
+    _refuse_unusable(ctx, project=project, request=override, field="override", kinds=(kind,))
     task = tasks.new_task(ctx.user_id, ctx.ws_id, kind=kind, task_input=task_input, override=override, now=ctx.now)
     started = tasks.start(ctx.store, ctx.deps.agent, task, ctx.now, started=ctx.req.started, stop=ctx.stop())
     return ok({"task": tasks.public_task(started)}, 202)
@@ -608,6 +668,7 @@ def _active_jobs(ctx: Ctx) -> list[Item]:
 
 def delete_character(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
+    ctx.reserve = DELETE_RESERVE_SECONDS  # the fence's stops leave time for the deletes after them
     item = _character(ctx)
     character_id = item["characterId"]
     running = _active_jobs(ctx)
@@ -753,47 +814,49 @@ def reference_delete(app: App, req: Request) -> Response:
 
 def make_portrait(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
-    item = _character(ctx)
-    if ctx.config["providers"].get("images") != "nova-canvas":
-        raise conflict(IMAGES_OFF)
-    if item.get("portraitJobId"):
-        previous = ctx.owned(ctx.store.get(ctx.pk, jobs.job_sk(str(item["portraitJobId"]))), ws.TYPE_PJOB)
-        if jobs.active(jobs.settle(ctx.store, previous, ctx.now, stop=ctx.stop())):
-            raise conflict(f"A picture of {item.get('name')} is being made. Wait until it is done.")
-    job_id = ulid()
-    job = jobs.new_job(
-        ctx.user_id,
-        ctx.ws_id,
-        job_id=job_id,
-        content_type="character",
-        content_id=item["characterId"],
-        job_type="portrait",
-        run=["portrait"],
-        steps=[{"key": "portrait", "label": shapes.STEP_LABEL["portrait"], "status": "pending"}],
-        now=ctx.now,
-        meta={"providers": {"images": "nova-canvas"}},
-    )
-    mark = Update(ctx.pk, item["sk"], sets={"portraitJobId": job_id}).equals("userId", ctx.user_id)
-    ctx.store.transact(puts=[job], updates=[mark.request()])
-    agent = ctx.deps.agent
-    if agent is None or not getattr(agent, "ready", False):
-        return ok(
-            {"job": shapes.public_job(jobs.fail_start(ctx.store, job, None, ctx.now, jobs.PORTRAIT_NOT_SET_UP))}, 202
-        )
-    try:
-        agent.start_portrait(
-            user_id=ctx.user_id,
-            workspace_id=ctx.ws_id,
-            character_id=item["characterId"],
+    with ctx.stops_last():  # the fence's stops wait: the start may need the whole 29 s
+        item = _character(ctx)
+        if ctx.config["providers"].get("images") != "nova-canvas":
+            raise conflict(IMAGES_OFF)
+        if item.get("portraitJobId"):
+            previous = ctx.owned(ctx.store.get(ctx.pk, jobs.job_sk(str(item["portraitJobId"]))), ws.TYPE_PJOB)
+            if jobs.active(jobs.settle(ctx.store, previous, ctx.now, stop=ctx.stop())):
+                raise conflict(f"A picture of {item.get('name')} is being made. Wait until it is done.")
+        job_id = ulid()
+        job = jobs.new_job(
+            ctx.user_id,
+            ctx.ws_id,
             job_id=job_id,
-            session_id=job["sessionId"],
+            content_type="character",
+            content_id=item["characterId"],
+            job_type="portrait",
+            run=["portrait"],
+            steps=[{"key": "portrait", "label": shapes.STEP_LABEL["portrait"], "status": "pending"}],
+            now=ctx.now,
+            meta={"providers": {"images": "nova-canvas"}},
         )
-    except Exception as e:
-        log("warning", "stories.portrait_start_failed", jobId=job_id, error=type(e).__name__)
-        session_id = str(job["sessionId"])
-        job = jobs.fail_start(ctx.store, job, None, ctx.now, jobs.PORTRAIT_NOT_STARTED)
-        _stop_after_failed_start(ctx, session_id)
-    return ok({"job": shapes.public_job(job)}, 202)
+        mark = Update(ctx.pk, item["sk"], sets={"portraitJobId": job_id}).equals("userId", ctx.user_id)
+        ctx.store.transact(puts=[job], updates=[mark.request()])
+        agent = ctx.deps.agent
+        if agent is None or not getattr(agent, "ready", False):
+            return ok(
+                {"job": shapes.public_job(jobs.fail_start(ctx.store, job, None, ctx.now, jobs.PORTRAIT_NOT_SET_UP))},
+                202,
+            )
+        try:
+            agent.start_portrait(
+                user_id=ctx.user_id,
+                workspace_id=ctx.ws_id,
+                character_id=item["characterId"],
+                job_id=job_id,
+                session_id=job["sessionId"],
+            )
+        except Exception as e:
+            log("warning", "stories.portrait_start_failed", jobId=job_id, error=type(e).__name__)
+            session_id = str(job["sessionId"])
+            job = jobs.fail_start(ctx.store, job, None, ctx.now, jobs.PORTRAIT_NOT_STARTED)
+            _stop_after_failed_start(ctx, session_id)
+        return ok({"job": shapes.public_job(job)}, 202)
 
 
 # --- "Design with AI" ----------------------------------------------------------------------------------------
@@ -971,6 +1034,9 @@ def _story_job(
     story_version: int,
     override: Mapping[str, Any] | None = None,
 ) -> Item:
+    """A story job. Its override is refused (400) when, on top of the video's own setting, the model that would run
+    does not offer its effort (§45.25)."""
+    _refuse_unusable(ctx, project=story.get("ai"), request=override, field="override")
     return jobs.new_job(
         ctx.user_id,
         ctx.ws_id,
@@ -993,10 +1059,9 @@ def _story_job(
 
 def _stop_after_failed_start(ctx: Ctx, session_id: str) -> None:
     """A start that failed may still have opened a runtime session (a refusal, or a timeout after the runtime took
-    the job): end it, best effort, when the request still has time for it. Either way the job's new ``sessionId``
-    fences the run out, so its first write is refused and it stops by itself."""
-    if time.monotonic() - ctx.req.started <= STOP_AFTER_START_WITHIN_SECONDS:
-        jobs.stop_quietly(ctx.stop(), session_id)
+    the job): end it, best effort, when the request still has time for it (``Ctx.stop``). Either way the job's new
+    ``sessionId`` fences the run out, so its first write is refused and it stops by itself."""
+    jobs.stop_quietly(ctx.stop(), session_id)
 
 
 def _start(ctx: Ctx, story: Item, job: Item) -> tuple[Item, Item]:
@@ -1091,6 +1156,7 @@ def create_story(app: App, req: Request) -> Response:
     fields = stories.story_input(req.json())
     cast = _check_characters(ctx, fields["characterIds"])
     _check_references(ctx, fields["referenceIds"])
+    _refuse_unusable(ctx, project=fields["ai"], field="ai")
     config = ctx.config
     g = guidance.load()
     idea: Item | None = None
@@ -1208,6 +1274,8 @@ def patch_story(app: App, req: Request) -> Response:
     patch = stories.patch_input(req.json())
     if "referenceIds" in patch:
         _check_references(ctx, patch["referenceIds"])
+    if "ai" in patch and patch["ai"] != shapes.ai_setting(story.get("ai")):  # only a changed setting is checked
+        _refuse_unusable(ctx, project=patch["ai"], field="ai")
     story, job = _settled(ctx, story)
     if jobs.active(job) or story.get("currentJobId") or story.get("status") == "producing":
         raise conflict(stories.BUSY)
@@ -1322,9 +1390,29 @@ def _undo_patch(ctx: Ctx, before: Mapping[str, Any], after: Mapping[str, Any], f
         undo.bump().equals("version", after.get("version")).run(ctx.store)
 
 
-def _stop_job(ctx: Ctx, story: Item, job: Item | None) -> tuple[Item, Item | None]:
-    """Cancels a running job (its writes fenced out by a new sessionId), then tells the agent (best effort). A cancel
-    refused because the run wrote meanwhile is tried again on what is stored now."""
+def _tell_agent(ctx: Ctx, job: Mapping[str, Any], *, wind_down: bool) -> None:
+    """After the cancel: the run's ``cancel`` (``wind_down``), then its session stopped outright; once each, best
+    effort, and only while the request has time (a slow ``cancel`` leaves the stop to the fence)."""
+    agent = ctx.deps.agent
+    if agent is None or not getattr(agent, "ready", False):
+        return
+    session_id, job_id = str(job["sessionId"]), str(job["jobId"])
+    calls: list[tuple[str, Callable[[], None]]] = [("stop", lambda: agent.stop_session(session_id, attempts=1))]
+    if wind_down:
+        calls.insert(0, ("cancel", lambda: agent.cancel(job_id, session_id, attempts=1)))
+    for name, call in calls:
+        if not ctx.time_for_call():
+            log("info", "stories.cancel_call_skipped", jobId=job_id, call=name)
+            return
+        try:
+            call()
+        except Exception as e:
+            log("warning", "stories.cancel_call_failed", jobId=job_id, call=name, error=type(e).__name__)
+
+
+def _stop_job(ctx: Ctx, story: Item, job: Item | None, *, wind_down: bool = True) -> tuple[Item, Item | None]:
+    """Cancels a running job (its writes fenced out by a new sessionId), then tells the agent (best effort,
+    ``_tell_agent``). A cancel refused because the run wrote meanwhile is tried again on what is stored now."""
     if job is None or not jobs.active(job):
         return story, job
     canceled = None
@@ -1338,25 +1426,17 @@ def _stop_job(ctx: Ctx, story: Item, job: Item | None) -> tuple[Item, Item | Non
             break
         job = found
     if canceled is not None:
-        agent = ctx.deps.agent
-        if agent is not None and getattr(agent, "ready", False):
-            session_id, job_id = str(canceled["sessionId"]), str(canceled["jobId"])
-            calls: list[Callable[[], None]] = [
-                lambda: agent.cancel(job_id, session_id),
-                lambda: agent.stop_session(session_id),
-            ]
-            for call in calls:
-                try:
-                    call()
-                except Exception as e:
-                    log("warning", "stories.cancel_call_failed", jobId=job.get("jobId"), error=type(e).__name__)
+        _tell_agent(ctx, canceled, wind_down=wind_down)
     return _reread_story(ctx, story), ctx.owned(ctx.store.get(ctx.pk, str(job["sk"])), ws.TYPE_PJOB)
 
 
 def delete_story(app: App, req: Request) -> Response:
+    """The running job is canceled and its session stopped outright, not sent a ``cancel`` whose wind-down would
+    write again; the stop comes before the files go, while the request keeps time for the deletes after it."""
     ctx = _ctx(app, req)
+    ctx.reserve = DELETE_RESERVE_SECONDS
     story, job = _settled(ctx, _story(ctx))
-    story, _ = _stop_job(ctx, story, job)
+    story, _ = _stop_job(ctx, story, job, wind_down=False)
     story_id = story["storyId"]
     story_jobs_items = [
         j
@@ -1390,67 +1470,70 @@ def _ready_to_remake(ctx: Ctx, story: Item) -> tuple[Item, Item | None]:
 
 def produce(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
-    story = _story(ctx)
-    from_step, scene_ids, override = stories.produce_input(req.json(), story)
-    story, last = _ready_to_remake(ctx, story)
-    again = stories.changes_again(story, last) if from_step is None else None
-    if again is not None:  # "Try again" after an "Ask for changes" or "Remake this scene" that did not finish
-        note, chosen = again
+    with ctx.stops_last():  # the fence's stops wait: the start may need the whole 29 s
+        story = _story(ctx)
+        from_step, scene_ids, override = stories.produce_input(req.json(), story)
+        story, last = _ready_to_remake(ctx, story)
+        again = stories.changes_again(story, last) if from_step is None else None
+        if again is not None:  # "Try again" after an "Ask for changes" or "Remake this scene" that did not finish
+            note, chosen = again
+            job = _story_job(
+                ctx,
+                story,
+                job_type="changes",
+                run=shapes.ordered_steps(story.get("stale") or []),
+                from_step="storyboard",
+                scene_ids=chosen,
+                note=note,
+                story_version=int(story.get("version") or 0) + 1,
+                override=override,
+            )
+            story, job = _launch(ctx, story, job, note=note)
+            return ok({"story": _public_story(ctx, story), "job": shapes.public_job(job)}, 202)
+        run, scenes = stories.produce_run(story, from_step, scene_ids)
+        job = _story_job(
+            ctx,
+            story,
+            job_type="produce",
+            run=run,
+            from_step=from_step if stories.has_script(story) else None,
+            scene_ids=scenes,
+            note=None,
+            story_version=int(story.get("version") or 0) + 1,
+            override=override,
+        )
+        story, job = _launch(ctx, story, job)
+        return ok({"story": _public_story(ctx, story), "job": shapes.public_job(job)}, 202)
+
+
+def request_changes(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    with ctx.stops_last():  # the fence's stops wait: the start may need the whole 29 s
+        story = _story(ctx)
+        note, scene_ids, override = stories.changes_input(req.json(), story)
+        story, _ = _ready_to_remake(ctx, story)
+        if not stories.has_script(story):
+            raise conflict(stories.NO_SCRIPT)
         job = _story_job(
             ctx,
             story,
             job_type="changes",
-            run=shapes.ordered_steps(story.get("stale") or []),
+            run=list(shapes.STEP_ORDER),
             from_step="storyboard",
-            scene_ids=chosen,
+            scene_ids=scene_ids,
             note=note,
             story_version=int(story.get("version") or 0) + 1,
             override=override,
         )
         story, job = _launch(ctx, story, job, note=note)
+        activity.record(ctx.store, ctx.user_id, ctx.ws_id, "changes", story, now=ctx.now)
         return ok({"story": _public_story(ctx, story), "job": shapes.public_job(job)}, 202)
-    run, scenes = stories.produce_run(story, from_step, scene_ids)
-    job = _story_job(
-        ctx,
-        story,
-        job_type="produce",
-        run=run,
-        from_step=from_step if stories.has_script(story) else None,
-        scene_ids=scenes,
-        note=None,
-        story_version=int(story.get("version") or 0) + 1,
-        override=override,
-    )
-    story, job = _launch(ctx, story, job)
-    return ok({"story": _public_story(ctx, story), "job": shapes.public_job(job)}, 202)
-
-
-def request_changes(app: App, req: Request) -> Response:
-    ctx = _ctx(app, req)
-    story = _story(ctx)
-    note, scene_ids, override = stories.changes_input(req.json(), story)
-    story, _ = _ready_to_remake(ctx, story)
-    if not stories.has_script(story):
-        raise conflict(stories.NO_SCRIPT)
-    job = _story_job(
-        ctx,
-        story,
-        job_type="changes",
-        run=list(shapes.STEP_ORDER),
-        from_step="storyboard",
-        scene_ids=scene_ids,
-        note=note,
-        story_version=int(story.get("version") or 0) + 1,
-        override=override,
-    )
-    story, job = _launch(ctx, story, job, note=note)
-    activity.record(ctx.store, ctx.user_id, ctx.ws_id, "changes", story, now=ctx.now)
-    return ok({"story": _public_story(ctx, story), "job": shapes.public_job(job)}, 202)
 
 
 def story_captions(app: App, req: Request) -> Response:
     """Review's **Write them again** (§45.11.2): the storyboard agent drafts the six post captions from the current
-    script, ``202 { task }``; the draft is in ``result.captions`` and is saved only through PATCH (``postCaptions``)."""
+    script, ``202 { task }``; the draft is in ``result.postCaptions`` (the agent's key, the same name as the story's
+    field) and is saved only through PATCH (``StoryPatch.postCaptions``)."""
     ctx = _ctx(app, req)
     story = _story(ctx)
     body = req.json()
@@ -1459,7 +1542,7 @@ def story_captions(app: App, req: Request) -> Response:
     if not stories.has_script(story):
         raise conflict(stories.NO_SCRIPT)
     task_input = {"storyId": story["storyId"], "scriptVersion": int(story.get("scriptVersion") or 0)}
-    return _task_reply(ctx, "captions", task_input, override)
+    return _task_reply(ctx, "captions", task_input, override, project=story.get("ai"))
 
 
 def cancel_story(app: App, req: Request) -> Response:

@@ -4,7 +4,12 @@ Only ``cf_prod_story_agent`` is ever called: its ARN comes from ``STORIES_AGENT_
 ``AGENT_RUNTIME_ARN``), and this module does not import Clip Factory's ``agent_client`` (which stays byte-identical),
 so a change on either side never reaches the other. Every run gets its own runtime session
 ``"cfstory-" + id + "-" + 8 random chars`` (at least 33 characters); a call is tried twice on a retryable error, with
-a 20 s read timeout. The runtime answers ``{"accepted": true, "id"}`` at once and does the work in the background.
+a 20 s read timeout, and never a second time after a slow first try (it would outlive the request). The runtime
+answers ``{"accepted": true, "id"}`` at once and does the work in the background.
+
+Best-effort calls (a stop after the fence, a cancel's ``cancel`` and stop) are made once, and only while
+``time_for_call`` says one more call still ends inside the request's 29 s: the item's new ``sessionId`` already fences
+the old run out, so a skipped or failed one changes nothing the owner sees.
 
 Actions (§45.11.1): ``process_story``, ``process_portrait``, ``process_reference``, ``run_task``, ``check_models``,
 ``chat_turn``, ``cancel { id }``.
@@ -28,6 +33,9 @@ ATTEMPTS: Final = 2
 CONNECT_TIMEOUT: Final = 3
 READ_TIMEOUT: Final = 20
 RETRY_WITHIN_SECONDS: Final = 6.0  # the API request has 29 s; one 20 s read plus a second try would not fit
+CALL_SECONDS: Final = CONNECT_TIMEOUT + READ_TIMEOUT  # one call at worst (botocore makes no retries of its own)
+REQUEST_SECONDS: Final = 29.0  # API Gateway's integration timeout, and cf-prod-stories-api's own
+AFTER_CALL_SECONDS: Final = 2.0  # what a request still does after its last best-effort call (re-reads, the answer)
 RETRYABLE_CODES: Final = frozenset(
     {
         "ThrottlingException",
@@ -52,6 +60,13 @@ class StoriesAgentError(Exception):
         self.retryable = retryable
 
 
+def _error_code(e: BaseException) -> str | None:
+    """A ClientError's code; None for others (botocore's connection errors carry ``response = None``)."""
+    response = getattr(e, "response", None)
+    code = response.get("Error", {}).get("Code") if isinstance(response, dict) else None
+    return str(code) if code else None
+
+
 def is_retryable(e: BaseException) -> bool:
     response = getattr(e, "response", None)
     if isinstance(response, dict):
@@ -59,6 +74,14 @@ def is_retryable(e: BaseException) -> bool:
         status = response.get("ResponseMetadata", {}).get("HTTPStatusCode") or 0
         return code in RETRYABLE_CODES or int(status) >= 500 or int(status) == 429
     return bool({c.__name__ for c in type(e).__mro__} & _RETRYABLE_TYPES)
+
+
+def time_for_call(started: float | None, *, after: float = AFTER_CALL_SECONDS) -> bool:
+    """Whether one more call (``CALL_SECONDS`` at worst, one attempt) still ends inside the request's 29 s with
+    ``after`` seconds to spare. ``started`` is the request's ``time.monotonic()`` on arrival; None: no request."""
+    if started is None:
+        return True
+    return time.monotonic() - started + CALL_SECONDS + after <= REQUEST_SECONDS
 
 
 def new_session_id(item_id: str) -> str:
@@ -158,27 +181,30 @@ class StoryAgent:
             },
         )
 
-    def cancel(self, item_id: str, session_id: str) -> None:
+    def cancel(self, item_id: str, session_id: str, *, attempts: int = ATTEMPTS) -> None:
         """Asks the session doing the work to stop it (best effort: the item's new ``sessionId`` already fences it)."""
-        self._invoke(session_id, {"action": "cancel", "id": item_id})
+        self._invoke(session_id, {"action": "cancel", "id": item_id}, attempts=attempts)
 
-    def stop_session(self, session_id: str) -> None:
-        """Ends a runtime session outright; a session that is already gone is not an error."""
+    def stop_session(self, session_id: str, *, attempts: int = ATTEMPTS) -> None:
+        """Ends a runtime session outright; a session that is already gone is not an error. Like every call, a second
+        try only after a quick refusal (``attempts=1``: never)."""
         if not self.runtime_arn:
             raise StoriesAgentError(f"{ENV_ARN} is not set")
-        last: Exception | None = None
-        for _ in range(ATTEMPTS):
+        attempt = 1
+        while True:
+            started = time.monotonic()
             try:
                 self._boto().stop_runtime_session(agentRuntimeArn=self.runtime_arn, runtimeSessionId=session_id)
                 return
             except Exception as e:
-                code = getattr(e, "response", {}).get("Error", {}).get("Code")
-                if code == "ResourceNotFoundException":
+                if _error_code(e) == "ResourceNotFoundException":
                     return
-                last = e
-                if not is_retryable(e):
-                    break
-        raise StoriesAgentError(f"stop failed: {type(last).__name__}", retryable=bool(last and is_retryable(last)))
+                retryable = is_retryable(e)
+                slow = time.monotonic() - started > RETRY_WITHIN_SECONDS
+                log("warning", "stories.agent_call_failed", action="stop", attempt=attempt, slow=slow)
+                if not retryable or slow or attempt >= attempts:
+                    raise StoriesAgentError(f"stop failed: {type(e).__name__}", retryable=retryable) from e
+            attempt += 1
 
     # --- the calls --------------------------------------------------------------------------------------------
 
@@ -187,7 +213,7 @@ class StoryAgent:
         if reply.get("accepted") is not True:
             raise StoriesAgentError("Lamo Stories' agent did not accept the work")
 
-    def _invoke(self, session_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _invoke(self, session_id: str, payload: dict[str, Any], *, attempts: int = ATTEMPTS) -> dict[str, Any]:
         if not self.runtime_arn:
             raise StoriesAgentError(f"{ENV_ARN} is not set")
         attempt = 1
@@ -199,7 +225,7 @@ class StoryAgent:
                 slow = time.monotonic() - started > RETRY_WITHIN_SECONDS
                 log("warning", "stories.agent_call_failed", action=payload.get("action"), attempt=attempt, slow=slow)
                 # A second try only after a quick refusal: after a slow one it would outlive the 29 s request.
-                if not e.retryable or slow or attempt >= ATTEMPTS:
+                if not e.retryable or slow or attempt >= attempts:
                     raise
             attempt += 1
 

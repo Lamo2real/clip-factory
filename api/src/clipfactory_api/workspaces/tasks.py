@@ -17,13 +17,13 @@ What the agent reads from ``input`` (an internal attribute, by kind):
 * ``character_design``: ``{description?, referenceAssetId?, referenceKey?, referenceContentType?}`` (the picture, a
   ``design_ref`` or ``character_ref`` asset of this workspace, already checked) → ``result.character``
   (CharacterInput, a draft);
-* ``captions``: ``{storyId, scriptVersion}`` → ``result.captions`` (Captions, a draft saved through StoryPatch);
+* ``captions``: ``{storyId, scriptVersion}`` → ``result.postCaptions`` (Captions, a draft the web saves through
+  ``StoryPatch.postCaptions``) and ``result.storyId``;
 * ``check_models`` (builder A2's route): ``{models?}``.
 """
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from typing import Any, Final
@@ -35,7 +35,7 @@ from ..ids import ulid
 from ..log import log
 from . import config, jobs
 from . import types as ws
-from .agent import new_session_id
+from .agent import new_session_id, time_for_call
 
 KEEP: Final = timedelta(days=30)
 KINDS: Final = (
@@ -53,8 +53,6 @@ KINDS: Final = (
     "check_models",
 )
 STATUSES: Final = ("queued", "running", "done", "failed")
-# A failed start is followed by a stop only while one more AgentCore call still ends inside API Gateway's 29 s.
-STOP_AFTER_START_WITHIN_SECONDS: Final = 6.0
 
 Item = dict[str, Any]
 
@@ -168,7 +166,7 @@ def start(
         log("warning", "stories.task_start_failed", taskId=task.get("taskId"), error=type(e).__name__)
         session_id = str(task["sessionId"])
         failed = jobs.fail_task_start(store, task, now, jobs.TASK_NOT_STARTED)
-        if started is None or time.monotonic() - started <= STOP_AFTER_START_WITHIN_SECONDS:
+        if time_for_call(started):  # one more call still ends inside the request's 29 s
             jobs.stop_quietly(stop, session_id)
         return failed
     return dict(task)

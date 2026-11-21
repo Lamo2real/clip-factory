@@ -11,12 +11,12 @@ import pytest
 
 from clipfactory_api import db
 from clipfactory_api.app import App
-from clipfactory_api.workspaces import guidance, jobs
-from clipfactory_api.workspaces.routes import core
+from clipfactory_api.workspaces import config, guidance, jobs, overrides
 from conftest import USER, Call
 from fakes import FakeAgentCore, FakeS3, FakeTable
 from ws_support import (
     BASE,
+    Monotonic,
     agent_end,
     agent_step,
     caller,
@@ -216,7 +216,7 @@ def test_a_not_accepted_start_is_not_retried(call: Call, agentcore: FakeAgentCor
 def test_a_slow_failed_start_leaves_the_stop_to_the_fence(
     call: Call, agentcore: FakeAgentCore, hero: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(core, "STOP_AFTER_START_WITHIN_SECONDS", -1.0)  # as if the start took most of the 29 s
+    Monotonic(monkeypatch).spent = 25.0  # as if the start took most of the 29 s
     agentcore.reply = {"accepted": False}
     body = call(
         "POST",
@@ -1011,6 +1011,23 @@ def test_write_them_again_is_a_captions_task_of_the_storyboard_agent(
     assert _story(store, story["storyId"])["version"] == story["version"]
     draft = seed_story(store, s3_client, made=False, status="failed")
     assert call("POST", f"{BASE}/stories/{draft['storyId']}/captions", {})[0] == 409
+    # The agent's finished draft is shown under ``postCaptions`` (StoryPatch's name for it), as the agent wrote it.
+    written = {
+        "youtubeTitle": "Ice: what to do",
+        "youtubeDescription": "Slow down on ice. #shorts",
+        "instagram": "Ice tips",
+        "facebook": "Ice tips",
+        "tiktok": "Ice tips",
+        "x": "Ice tips",
+    }
+    store.update(
+        pk(),
+        f"TASK#{task['taskId']}",
+        {"status": "done", "result": {"postCaptions": written, "storyId": story["storyId"]}},
+    )
+    shown = call("GET", f"{BASE}/tasks/{task['taskId']}")[1]["task"]
+    assert shown["status"] == "done"
+    assert shown["result"] == {"postCaptions": written, "storyId": story["storyId"]}
 
 
 def test_approve_accepts_a_skipped_quality_check_except_for_driving_safety(
@@ -1092,3 +1109,161 @@ def test_a_switched_off_storyboard_agent_refuses_runs_that_write_the_story(
     # A remake that writes nothing new (only the sounds here) still runs.
     assert call("POST", f"{BASE}/stories/{story['storyId']}/produce", {})[0] == 202
     assert [c["payload"]["action"] for c in agentcore.calls] == ["process_story"]
+
+
+# --- the model that will really run (§45.25 "refused, never swapped: when saved") ----------------------------------
+
+HAIKU_NO_MAX = "Claude Haiku 5.5 does not offer Maximum. Pick another level."
+
+
+class _FakeResolve:
+    """A stand-in for the API's one resolver (builder A2's ``ai_resolve.story_effective``): model and effort merged
+    separately, request over project over the workspace default; Haiku 5.5 has no Maximum here."""
+
+    @staticmethod
+    def story_effective(
+        story: dict[str, Any], *, ai: dict[str, Any], agents: dict[str, Any], task: str, override: Any
+    ) -> tuple[dict[str, Any], str | None]:
+        levels = [override or {}, story.get("ai") or {}]
+        model = next((lv["model"] for lv in levels if lv.get("model")), ai["defaultModel"])
+        effort = next((lv["effort"] for lv in levels if lv.get("effort")), ai["defaultEffort"])
+        effective = {"model": model, "effort": effort, "effortApplied": True, "from": "project"}
+        return effective, (HAIKU_NO_MAX if model == "haiku-5-5" and effort == "max" else None)
+
+
+def _resolver(monkeypatch: pytest.MonkeyPatch, default_model: str, default_effort: str = "high") -> list[str]:
+    """Installs the stand-in; returns the tasks it was asked about."""
+    asked: list[str] = []
+
+    class Res(_FakeResolve):
+        @staticmethod
+        def story_effective(story: dict[str, Any], **kw: Any) -> tuple[dict[str, Any], str | None]:
+            asked.append(kw["task"])
+            return _FakeResolve.story_effective(story, **kw)
+
+    class AiConfig:
+        @staticmethod
+        def current(store: Any, user_id: str, workspace_id: str) -> dict[str, Any]:
+            assert (user_id, workspace_id) == (USER, "stories")
+            return {"defaultModel": default_model, "defaultEffort": default_effort, "tasks": {}}
+
+    class Agents:
+        @staticmethod
+        def read_all(store: Any, user_id: str, workspace_id: str) -> dict[str, Any]:
+            return {}
+
+    monkeypatch.setattr(overrides, "resolver", lambda: (Res, AiConfig, Agents))
+    return asked
+
+
+def test_an_effort_alone_is_checked_against_the_model_that_will_run(
+    call: Call, store: db.Store, s3_client: FakeS3, hero: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked = _resolver(monkeypatch, "haiku-5-5")
+    brief = {"title": "x", "logline": "y", "category": "comedy"}
+    status, body = call(
+        "POST", f"{BASE}/stories", {"brief": brief, "characterIds": [hero["characterId"]], "ai": {"effort": "max"}}
+    )
+    assert status == 400
+    assert body["error"]["message"] == HAIKU_NO_MAX
+    assert body["error"].get("field") == "ai"
+    assert asked == ["storyboard", "storyboard"]  # with the setting (refused), then without it (usable)
+    assert store.query_all(pk(), "STORY#") == []  # nothing was saved
+    status, body = call(
+        "POST",
+        f"{BASE}/stories",
+        {"brief": brief, "characterIds": [hero["characterId"]], "override": {"effort": "max"}},
+    )
+    assert (status, body["error"]["message"], body["error"].get("field")) == (400, HAIKU_NO_MAX, "override")
+    asked.clear()
+    ok_story = call(
+        "POST",
+        f"{BASE}/stories",
+        {"brief": brief, "characterIds": [hero["characterId"]], "ai": {"model": "opus-5-5", "effort": "max"}},
+    )
+    assert ok_story[0] == 201
+    assert asked == list(overrides.STORY_TASKS)  # every task a story's jobs run
+    # Produce, changes, Write them again and the idea helpers check their override the same way.
+    story = seed_story(store, s3_client)
+    sid = story["storyId"]
+    for path, extra in [
+        (f"/stories/{sid}/produce", {"from": "storyboard"}),
+        (f"/stories/{sid}/changes", {"note": "Funnier"}),
+        (f"/stories/{sid}/captions", {}),
+        ("/ideas/generate", {"count": 3}),
+    ]:
+        status, body = call("POST", BASE + path, {**extra, "override": {"effort": "max"}})
+        assert (status, body["error"]["message"]) == (400, HAIKU_NO_MAX), path
+    # The video's own Opus setting is the level the override's effort lands on: usable.
+    patched = call("PATCH", f"{BASE}/stories/{sid}", {"version": story["version"], "ai": {"model": "opus-5-5"}})
+    assert patched[0] == 200
+    assert (
+        call("POST", f"{BASE}/stories/{sid}/produce", {"from": "storyboard", "override": {"effort": "max"}})[0] == 202
+    )
+
+
+def test_a_patch_is_refused_only_for_a_setting_it_changes_to_unusable(
+    call: Call, store: db.Store, s3_client: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _resolver(monkeypatch, "haiku-5-5")
+    story = seed_story(store, s3_client)
+    status, body = call(
+        "PATCH", f"{BASE}/stories/{story['storyId']}", {"version": story["version"], "ai": {"effort": "max"}}
+    )
+    assert (status, body["error"]["message"], body["error"].get("field")) == (400, HAIKU_NO_MAX, "ai")
+    assert _story(store, story["storyId"])["version"] == story["version"]
+    # A problem the levels below already have is the call's to report, never this save's.
+    _resolver(monkeypatch, "haiku-5-5", default_effort="max")
+    status, _ = call(
+        "PATCH", f"{BASE}/stories/{story['storyId']}", {"version": story["version"], "ai": {"effort": "max"}}
+    )
+    assert status == 200
+    # Sending the stored setting back with another edit is not checked again.
+    stored = _story(store, story["storyId"])
+    _resolver(monkeypatch, "haiku-5-5")
+    status, _ = call(
+        "PATCH",
+        f"{BASE}/stories/{story['storyId']}",
+        {"version": stored["version"], "title": "New title", "ai": {"model": None, "effort": "max"}},
+    )
+    assert status == 200
+
+
+def test_without_the_resolver_in_the_build_nothing_more_is_checked(
+    call: Call, store: db.Store, s3_client: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(overrides, "resolver", lambda: None)
+    story = seed_story(store, s3_client)
+    body = {"from": "storyboard", "override": {"effort": "max"}}
+    assert call("POST", f"{BASE}/stories/{story['storyId']}/produce", body)[0] == 202
+
+
+def test_the_real_resolver_refuses_an_effort_the_default_model_lacks(
+    call: Call, hero: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Runs once builder A2's ``ai_resolve`` is in the build (§45.25's one resolver), on a model list where the
+    default model, Opus 5.5, offers no Maximum."""
+    if overrides.resolver() is None:
+        pytest.skip("the API's resolver (workspaces/ai_resolve.py, builder A2) is not in this build yet")
+    real = config.load
+
+    def load(name: str) -> dict[str, Any]:
+        data = real(name)
+        if name != "models.json":
+            return data
+        limited = [
+            {**m, "efforts": ["low", "medium", "high"]} if m.get("key") == "opus-5-5" else m for m in data["models"]
+        ]
+        return {**data, "models": limited, "defaultModel": "opus-5-5", "defaultEffort": "high"}
+
+    monkeypatch.setattr(config, "load", load)
+    brief = {"title": "x", "logline": "y", "category": "comedy"}
+    status, body = call(
+        "POST", f"{BASE}/stories", {"brief": brief, "characterIds": [hero["characterId"]], "ai": {"effort": "max"}}
+    )
+    assert status == 400
+    assert "does not offer Maximum" in body["error"]["message"]
+    status, _ = call(
+        "POST", f"{BASE}/stories", {"brief": brief, "characterIds": [hero["characterId"]], "ai": {"effort": "high"}}
+    )
+    assert status == 201

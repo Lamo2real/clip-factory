@@ -16,7 +16,18 @@ from clipfactory_api.workspaces import jobs, shapes
 from clipfactory_api.workspaces.agent import StoriesAgentError as AgentError
 from conftest import NOW, Call, Clock
 from fakes import FakeAgentCore, FakeS3, FakeTable, client_error
-from ws_support import ARN, BASE, caller, install, pk, seed_character, seed_job, seed_story
+from ws_support import (
+    ARN,
+    BASE,
+    Monotonic,
+    SlowAgentCore,
+    caller,
+    install,
+    pk,
+    seed_character,
+    seed_job,
+    seed_story,
+)
 
 
 @pytest.fixture
@@ -383,3 +394,141 @@ def test_a_stale_chat_answer_is_failed_and_its_session_stopped(store: db.Store, 
     # The agent wrote meanwhile: the fence is refused and what is stored is returned.
     store.update(fresh["pk"], fresh["sk"], {"heartbeatAt": "2026-11-15T11:59:59.000Z"})
     assert jobs.settle_message(store, fresh, NOW + timedelta(minutes=10))["status"] == "pending"
+
+
+# --- best-effort calls stay inside the request's 29 s (§45.5, §45.9.1) ------------------------------------------
+
+
+class QuickFlakyStop(FakeAgentCore):
+    """StopRuntimeSession throttled (quickly) ``failures`` times, then fine."""
+
+    def __init__(self, failures: int) -> None:
+        super().__init__()
+        self.failures = failures
+        self.stop_calls = 0
+
+    def stop_runtime_session(self, **kw: Any) -> dict[str, Any]:
+        self.stop_calls += 1
+        if self.failures:
+            self.failures -= 1
+            raise client_error("ThrottlingException", 429)
+        return super().stop_runtime_session(**kw)
+
+
+def test_a_slow_stop_is_never_tried_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    slow = SlowAgentCore(Monotonic(monkeypatch))
+    with pytest.raises(AgentError) as e:
+        story_agent.StoryAgent(slow, ARN).stop_session("cfstory-x")
+    assert e.value.retryable
+    assert len(slow.stop_calls) == 1  # 20 s spent: a second 23 s try would outlive the request
+    quick = QuickFlakyStop(1)
+    story_agent.StoryAgent(quick, ARN).stop_session("cfstory-y")
+    assert quick.stop_calls == 2  # a quick throttle is tried once more
+    once = QuickFlakyStop(1)
+    with pytest.raises(AgentError):
+        story_agent.StoryAgent(once, ARN).stop_session("cfstory-z", attempts=1)
+    assert once.stop_calls == 1
+
+
+def test_time_for_call_keeps_one_call_inside_the_29_seconds(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = Monotonic(monkeypatch)
+    import time
+
+    started = time.monotonic()
+    assert story_agent.time_for_call(started)
+    assert story_agent.time_for_call(None)
+    clock.spent = story_agent.REQUEST_SECONDS - story_agent.CALL_SECONDS - story_agent.AFTER_CALL_SECONDS + 0.5
+    assert not story_agent.time_for_call(started)
+    assert story_agent.time_for_call(started, after=0.0)
+
+
+def test_a_hanging_stop_never_outlives_a_read_that_settles_many_jobs(
+    app: App, call: Call, store: db.Store, s3_client: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    slow = SlowAgentCore(Monotonic(monkeypatch))
+    install(app, slow, s3_client)
+    stale = [_running(store, s3_client, minutes=9)[1] for _ in range(3)]
+    status, _ = call("GET", f"{BASE}/dashboard")
+    assert status == 200
+    # Every stale job is fenced; only the first stop is tried (once): after its 20 s none fits any more.
+    assert all(store.get(j["pk"], j["sk"])["status"] == "failed" for j in stale)  # type: ignore[index]
+    assert len(slow.stop_calls) == 1
+    assert slow.stop_calls[0] in {j["sessionId"] for j in stale}
+
+
+def test_a_late_read_leaves_the_stop_to_the_fence(
+    app: App, call: Call, store: db.Store, s3_client: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = Monotonic(monkeypatch)
+    slow = SlowAgentCore(clock, slow_stop=False)
+    install(app, slow, s3_client)
+    story, job = _running(store, s3_client, minutes=9)
+    clock.spent = 10.0  # 10 s + one 23 s call would pass the 29 s
+    body = call("GET", f"{BASE}/stories/{story['storyId']}")[1]
+    assert body["job"]["status"] == "failed"
+    assert slow.stop_calls == []
+    assert store.get(job["pk"], job["sk"])["sessionId"] != job["sessionId"]  # type: ignore[index]
+
+
+def test_a_cancel_whose_cancel_call_hangs_skips_the_stop_and_still_answers(
+    app: App, call: Call, store: db.Store, s3_client: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = Monotonic(monkeypatch)
+    slow = SlowAgentCore(clock, slow_stop=False, slow_cancel=True)
+    install(app, slow, s3_client)
+    story, _ = _running(store, s3_client, minutes=1)
+    status, body = call("POST", f"{BASE}/stories/{story['storyId']}/cancel")
+    assert status == 200
+    assert body["job"]["status"] == "canceled"
+    assert slow.order == ["cancel"]  # tried once; its 20 s leave no room for the stop: the new sessionId fences it
+    clock.spent = 0.0  # a new request
+    quick = SlowAgentCore(clock, slow_stop=False)
+    install(app, quick, s3_client)
+    other, other_job = _running(store, s3_client, minutes=1)
+    assert call("POST", f"{BASE}/stories/{other['storyId']}/cancel")[0] == 200
+    assert quick.order == ["cancel", "stop"]
+    assert quick.stop_calls == [other_job["sessionId"]]
+
+
+def test_delete_stops_the_session_outright_before_the_files_go(
+    app: App, call: Call, store: db.Store, s3_client: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = Monotonic(monkeypatch)
+    quick = SlowAgentCore(clock, slow_stop=False)
+    install(app, quick, s3_client)
+    story, job = _running(store, s3_client, minutes=1)
+    deleted_before_stop: list[bool] = []
+    real_stop = quick.stop_runtime_session
+
+    def stop(**kw: Any) -> dict[str, Any]:
+        deleted_before_stop.append(store.get(story["pk"], story["sk"]) is None)
+        return real_stop(**kw)
+
+    monkeypatch.setattr(quick, "stop_runtime_session", stop)
+    assert call("DELETE", f"{BASE}/stories/{story['storyId']}")[0] == 204
+    assert quick.order == ["stop"]  # no cancel whose wind-down would write again
+    assert quick.stop_calls == [job["sessionId"]]
+    assert deleted_before_stop == [False]
+    assert store.get(story["pk"], story["sk"]) is None
+    # A late delete leaves the stop to the fence and still deletes everything inside the 29 s.
+    late = SlowAgentCore(clock, slow_stop=False)
+    install(app, late, s3_client)
+    other, other_job = _running(store, s3_client, minutes=1)
+    clock.spent = 3.0  # 3 s + one 23 s call + the deletes' 4 s would pass the 29 s
+    assert call("DELETE", f"{BASE}/stories/{other['storyId']}")[0] == 204
+    assert late.order == []
+    assert store.get(other["pk"], other["sk"]) is None
+    assert store.get(other_job["pk"], other_job["sk"]) is None
+
+
+def test_a_start_after_the_fence_goes_first_and_the_stop_waits_for_it(
+    app: App, call: Call, store: db.Store, s3_client: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    slow = SlowAgentCore(Monotonic(monkeypatch))
+    install(app, slow, s3_client)
+    story, job = _running(store, s3_client, minutes=9, made=True)
+    status, body = call("POST", f"{BASE}/stories/{story['storyId']}/produce", {"from": "storyboard"})
+    assert status == 202
+    assert body["job"]["status"] == "queued"  # the start had the whole request
+    assert slow.order == ["process_story", "stop"]
+    assert slow.stop_calls == [job["sessionId"]]
