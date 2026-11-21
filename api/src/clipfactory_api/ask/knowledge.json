@@ -1,5 +1,5 @@
 {
- "version": "1fe0fe36c747",
+ "version": "d3e894d0b833",
  "parts": [
   {
    "id": "app-map",
@@ -255,13 +255,13 @@
    "id": "contracts-38",
    "title": "CONTRACTS: 38. Content Rewards campaigns (owner request, 2026-11-21)",
    "line": "The owner's words: \"browse Content Rewards, join a campaign there, then paste the campaign URL into Clip Factory. Clip",
-   "chars": 174914
+   "chars": 176084
   },
   {
    "id": "contracts-39",
    "title": "CONTRACTS: 39. Content Rewards: the two ways, all your money, and does this clip fit (owner request, 2026-11-21)",
    "line": "The owner's words, the day §38 was approved: \"please double check that the steps to conect to contentrewards is",
-   "chars": 81696
+   "chars": 81818
   },
   {
    "id": "contracts-40",

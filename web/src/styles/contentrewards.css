@@ -152,13 +152,21 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
-.cr-login .text-link {
-  min-height: 44px;
-  background: none;
-  font: inherit;
-  font-weight: 700;
-  padding: 0;
-  margin-inline-start: 8px;
+/* "Send it from {email}." with its glass Change at the right end of the row (on a narrow screen it wraps under the
+   line, still at the right). */
+.cr-login__from {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.cr-login__from p {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.cr-login__change {
+  --btn-h: 48px;
+  margin-inline-start: auto;
 }
 .cr-place__words {
   margin: 0;
