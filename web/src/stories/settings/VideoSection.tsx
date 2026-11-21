@@ -1,0 +1,183 @@
+// Lamo Stories › Settings › Video (docs/CONTRACTS.md §45.29 Video, §45.31): the makers, picked apart from the AI
+// models that write the stories (an LLM never "makes the video"): the video maker and its model, the picture maker
+// and the sound maker, each with its real state; the size 1080 × 1920 (the built-in animator's only size), 9:16 (1:1
+// and 16:9 listed, not with the built-in animator yet), the usual length (15 to 90 s, 30 to 60 s best), the quality,
+// the frame rate (30 fps, the built-in animator's only rate), the captions and music defaults, provider keys and the
+// render time used.
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useLoad } from "../../lib/hooks.ts";
+import { storiesApi } from "../api/client.ts";
+import type { ProviderStatus, StoriesConfig } from "../api/types.ts";
+import modelsFile from "../../../../stories/config/models.json";
+import { Chip, Failed, Loading, Note, PROVIDER_STATE, SavedMark, SetCard, SetPick, SetSwitch, useSaved } from "./bits.tsx";
+import { useWorkspaceConfig } from "./data.ts";
+import { keepName, ProviderKeys, type ProviderWithKey } from "./ProviderKeys.tsx";
+
+type VideoMaker = StoriesConfig["providers"]["video"];
+type PictureMaker = StoriesConfig["providers"]["images"];
+
+/** Each maker's name and model, from Lamo Stories' own stories/config/models.json where it has one. */
+export const MAKERS: Record<string, { label: string; model: string; line: string }> = {
+  "builtin-2d": { label: "Built-in animator", model: "Lamo Stories' own 2D animator", line: "Draws and moves every character the same way in every video." },
+  "nova-reel": { label: modelsFile.videoModel.label, model: `${modelsFile.videoModel.label} (${modelsFile.videoModel.modelId})`, line: "AI footage for backgrounds and cut-aways, 6 seconds a shot. Posts that use it carry the platforms' AI label." },
+  "builtin-rig": { label: "Built-in drawings", model: "Lamo Stories' own character drawings", line: "Every character looks the same in every video." },
+  "nova-canvas": { label: `Also AI portraits (${modelsFile.imageModel.label})`, model: `${modelsFile.imageModel.label} (${modelsFile.imageModel.modelId})`, line: "Makes a portrait of each character for the app. Videos still use the drawings." },
+  "builtin-synth": { label: "Built-in sounds and music", model: "Lamo Stories' own sound maker", line: "Every sound effect, noise and tune, made fresh for each video." },
+};
+
+const QUALITY: { value: StoriesConfig["video"]["quality"]; label: string; line: string }[] = [
+  { value: "standard", label: "Good", line: "Smaller files (CRF 23)" },
+  { value: "high", label: "Better", line: "The usual (CRF 20)" },
+  { value: "best", label: "Best", line: "Bigger files (CRF 17)" },
+];
+
+function stateOf(providers: ProviderStatus[] | null, id: string): ProviderStatus | undefined {
+  return providers?.find((p) => p.id === id);
+}
+
+function makerOption<T extends string>(providers: ProviderStatus[] | null, id: T) {
+  const p = stateOf(providers, id);
+  const s = p ? PROVIDER_STATE[p.state] : null;
+  return {
+    value: id,
+    label: MAKERS[id]?.label ?? p?.label ?? id,
+    line: p?.line ?? MAKERS[id]?.line,
+    chip: s ? <Chip tone={s.tone}>{s.label}</Chip> : undefined,
+    off: p?.state === "unavailable" ? p.line || "Not available yet." : undefined,
+  };
+}
+
+function ModelLine({ providers, id }: { providers: ProviderStatus[] | null; id: string }) {
+  const p = stateOf(providers, id);
+  return (
+    <p className="st-stg-active">
+      <span className="st-stg-active__word">Model</span>
+      <strong>{MAKERS[id]?.model ?? p?.label ?? id}</strong>
+      {p ? <Chip tone={PROVIDER_STATE[p.state].tone}>{PROVIDER_STATE[p.state].label}</Chip> : null}
+    </p>
+  );
+}
+
+/** The usual length: 15 to 90 seconds in steps of 5, with 30 to 60 marked as the best. Saved a moment after the last change. */
+export function LengthPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [shown, setShown] = useState(value);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => setShown(value), [value]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const pick = (v: number) => {
+    const n = Math.max(15, Math.min(90, Math.round(v / 5) * 5));
+    setShown(n);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => onChange(n), 450);
+  };
+  const pct = ((shown - 15) / 75) * 100;
+  return (
+    <div className="st-stg-length">
+      <p className="st-stg-length__value" aria-live="polite">
+        <strong>{shown}</strong> seconds
+        {shown >= 30 && shown <= 60 ? <Chip tone="mint">Best length</Chip> : <Chip tone="sun">Longer or shorter than most</Chip>}
+      </p>
+      <div className="st-stg-length__row">
+        <button type="button" className="st-stg-round" aria-label="5 seconds shorter" aria-disabled={shown <= 15 || undefined} onClick={() => shown > 15 && pick(shown - 5)}>
+          <span aria-hidden="true">−</span>
+        </button>
+        <div className="st-stg-range" style={{ "--st-stg-range": `${pct}%` } as CSSProperties}>
+          <span className="st-stg-range__best" aria-hidden="true" />
+          <input type="range" min={15} max={90} step={5} value={shown} aria-label="Usual video length in seconds" aria-valuetext={`${shown} seconds`} onChange={(e) => pick(Number(e.target.value))} />
+        </div>
+        <button type="button" className="st-stg-round" aria-label="5 seconds longer" aria-disabled={shown >= 90 || undefined} onClick={() => shown < 90 && pick(shown + 5)}>
+          <span aria-hidden="true">+</span>
+        </button>
+      </div>
+      <p className="st-stg-length__scale" aria-hidden="true">
+        <span>15 s</span>
+        <span>30 to 60 s is best</span>
+        <span>90 s</span>
+      </p>
+    </div>
+  );
+}
+
+export function VideoSection({ ws }: { ws: string }) {
+  const { workspace, config: c, save, saved: savedCount, busy } = useWorkspaceConfig(ws);
+  const providers = useLoad(() => storiesApi().providers(ws), ws, "st-settings-providers");
+  const usage = useLoad(() => storiesApi().usage(ws, 30), ws, "st-settings-usage");
+  const { saved, flash } = useSaved();
+  const reloadProviders = providers.reload;
+  // A saved change shows "Saved" and asks the makers again (a newly picked one may need a check).
+  useEffect(() => {
+    if (!savedCount) return;
+    flash();
+    void reloadProviders();
+  }, [savedCount, flash, reloadProviders]);
+
+  if (!workspace.data) return workspace.error ? <Failed message={workspace.error} onRetry={() => void workspace.reload()} /> : <Loading label="Opening the video settings…" />;
+  const p = providers.data;
+
+  return (
+    <div className="st-stg-cards">
+      <div className="st-stg-bar">
+        <p className="st-stg-small">These make the pictures, video and sound. The AI models that write the stories are in Settings › AI.</p>
+        <SavedMark saved={saved} busy={busy} />
+      </div>
+      <SetCard title="Video maker" icon="film" lede="What turns each story into moving pictures.">
+        <SetPick<VideoMaker> label="Video maker" stack value={c.providers.video} options={[makerOption(p, "builtin-2d"), makerOption(p, "nova-reel")]} onChange={(v) => save({ providers: { ...c.providers, video: v } })} />
+        <ModelLine providers={p} id={c.providers.video} />
+      </SetCard>
+      <SetCard title="Picture maker" icon="brush" lede="How the characters are drawn.">
+        <SetPick<PictureMaker> label="Picture maker" stack value={c.providers.images} options={[makerOption(p, "builtin-rig"), makerOption(p, "nova-canvas")]} onChange={(v) => save({ providers: { ...c.providers, images: v } })} />
+        <ModelLine providers={p} id={c.providers.images} />
+      </SetCard>
+      <SetCard title="Sound maker" icon="sound" lede="Sound effects, character noises and music. No voice-over.">
+        <SetPick label="Sound maker" stack value={c.providers.audio} options={[makerOption(p, "builtin-synth")]} onChange={() => undefined} />
+        <ModelLine providers={p} id={c.providers.audio} />
+      </SetCard>
+      {providers.error && !p ? <Note tone="sun">{providers.error}</Note> : null}
+
+      <SetCard title="Picture size" icon="ruler" lede="Tall videos for phones.">
+        <dl className="st-stg-facts">
+          <div>
+            <dt>Size</dt>
+            <dd>1080 × 1920, the built-in animator's only size</dd>
+          </div>
+          <div>
+            <dt>Frame rate</dt>
+            <dd>30 fps, the built-in animator's only rate</dd>
+          </div>
+        </dl>
+        <p className="st-stg-label">Shape</p>
+        <SetPick<string>
+          label="Shape of the video"
+          value={c.video.aspect}
+          onChange={() => undefined}
+          options={[
+            { value: "9:16", label: "9:16 tall", line: "For Shorts, Reels and TikTok" },
+            { value: "1:1", label: "1:1 square", off: "Not with the built-in animator yet" },
+            { value: "16:9", label: "16:9 wide", off: "Not with the built-in animator yet" },
+          ]}
+        />
+      </SetCard>
+
+      <SetCard title="Usual length" icon="clock" lede="New videos start at this length. You can change it for each video.">
+        <LengthPicker value={c.defaultDurationSec} onChange={(v) => save({ defaultDurationSec: v })} />
+      </SetCard>
+
+      <SetCard title="Quality" icon="film" lede="Better quality makes bigger files that take a little longer to upload.">
+        <SetPick label="Video quality" value={c.video.quality} options={QUALITY} onChange={(v) => save({ video: { ...c.video, quality: v } })} />
+      </SetCard>
+
+      <SetCard title="Words and music" icon="sound" lede="What new videos start with. You can still change it for one video.">
+        <SetSwitch label="Captions" description="Short words on screen, like a comic." checked={c.captionsOn} onChange={(v) => save({ captionsOn: v })} />
+        <SetSwitch label="Music" description="A tune under the sound effects." checked={c.musicOn} onChange={(v) => save({ musicOn: v })} />
+      </SetCard>
+
+      <SetCard title="Keys and use" icon="key" lede="Keys for makers that need one, and how much rendering was done.">
+        {p ? <ProviderKeys ws={ws} providers={p} kinds={["images", "animation", "audio"]} onChange={(x: ProviderWithKey) => providers.setData((l) => (l ? l.map((y) => (y.id === x.id ? keepName(y, x) : y)) : l))} /> : null}
+        <p className="st-stg-active">
+          <span className="st-stg-active__word">Rendering, last 30 days</span>
+          <strong>{usage.data ? `${Math.round(usage.data.renderMinutes)} ${Math.round(usage.data.renderMinutes) === 1 ? "minute" : "minutes"}` : usage.error ? "Not known right now" : "…"}</strong>
+        </p>
+      </SetCard>
+    </div>
+  );
+}
