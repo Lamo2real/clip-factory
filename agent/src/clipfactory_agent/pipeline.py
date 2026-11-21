@@ -495,6 +495,9 @@ class Pipeline:
         self.pick_model(st)
         st.source = dict(job.get("source") or {})
         st.campaign = Campaign.from_job(job)
+        if st.campaign is not None and not st.campaign.rules:
+            # The API always copies the rules (§38.8): the clips still get #Ad and "Paid partnership".
+            log("error", "campaign.no_rules", job=st.job_id)
         st.workdir.mkdir(parents=True, exist_ok=True)
         await self._clear_previous_clips(st)
         if st.campaign is not None:
@@ -508,11 +511,12 @@ class Pipeline:
         await self.store.put_json(st.key("meta.json"), st.meta)
         model, drop = self._model_fields(st)
         fields = {"source": st.source, **creator_fields(st.source), **model}
-        if st.campaign is not None:
-            if st.campaign_note:
-                fields["campaignNote"] = st.campaign_note
-            else:
-                drop = (*drop, "campaignNote")
+        if st.campaign is not None and st.campaign_note:
+            # The note the API may have left ("Couldn't check the campaign just now.") stays; the channel note joins it.
+            prior = st.job.get("campaignNote")
+            prior = prior.strip() if isinstance(prior, str) else ""
+            if st.campaign_note not in prior:
+                fields["campaignNote"] = f"{prior} {st.campaign_note}".strip()
         await self.store.update_job(
             st.user_id,
             st.job_id,
@@ -2036,7 +2040,8 @@ class Pipeline:
                 "move_start_by": 0,
                 "move_end_by": 0,
                 "verdict": "keep",
-                **({"follows_rules": True, "follows_rules_note": note} if st.campaign is not None else {}),
+                # Nobody looked at the campaign's rules: a warning on Review, never a silent pass.
+                **({"follows_rules": None, "follows_rules_note": ""} if st.campaign is not None else {}),
             }
 
     async def _check_one(self, st: JobState, c: Candidate, index: int, gate: RenderGate | None = None) -> Outcome:
@@ -2063,7 +2068,7 @@ class Pipeline:
                 review,
                 length=st.length,
                 first_loud=lambda t: loudness.first_loud_second(st.loud, t),
-                strict=st.campaign is not None,
+                strict=st.campaign is not None and st.campaign.sets_length,
                 duration=c.render.duration,
             )
             if fixes:
@@ -2433,7 +2438,7 @@ class Pipeline:
             "campaign_tags",
             f"{disclosure} and the campaign's tags in every caption",
             ok,
-            note if ok else "A caption is missing the disclosure or a campaign tag. I add them back when it uploads.",
+            note if ok else f"A caption is missing {disclosure} or a campaign tag. I put them back when it uploads.",
         )
 
     # --- finalize --------------------------------------------------------------------------------------------

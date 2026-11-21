@@ -21,6 +21,7 @@ DEFAULT_ON_SCREEN = "Paid partnership"
 _ON_SCREEN = re.compile(r"^[A-Za-z0-9 '’&.!-]{2,30}$")
 _HASHTAG = re.compile(r"^#\w{1,60}$")
 _HANDLE = re.compile(r"^@[\w.]{1,60}$")
+_WHOLE_HANDLE = re.compile(r"^@\w+(?:\.\w+)*$")  # what a caption's tag reader (captions._TAG) sees as one tag
 MAX_HASHTAGS, MAX_TAGS = 8, 5
 CAPTION_TEXT_MAX = 150
 MAX_TEXT = 300
@@ -32,6 +33,10 @@ CHANNEL_NOTE = "This video may not be from {who}'s channels. Check before you up
 SPOKEN_LABEL = "Say “paid partnership” out loud in the first 10 seconds"
 SPOKEN_FAILED = "The brand wants “paid partnership” said out loud. Clip Factory can't. This clip may be turned down."
 SPOKEN_SECONDS = 10.0
+# The rules the clip review judges (checklist.review_prompt). Everything else is added by Clip Factory (#Ad, "Paid
+# partnership", the logo, the tags) or checked by its own measured items (the length, the spoken words), and a card
+# warning (faceOnCamera, soundRequired) never drops a clip.
+REVIEW_RULES = ("bannedContent", "language", "otherRules")
 
 
 def block_json(value: Any) -> str:
@@ -89,14 +94,19 @@ class Campaign:
 
     @classmethod
     def from_job(cls, job: Mapping[str, Any]) -> Campaign | None:
-        """The job's campaign, or None for a job without one (or with a campaign that has no rules)."""
-        raw = job.get("campaign")
-        if not isinstance(raw, Mapping):
-            return None
+        """The job's campaign, or None for a job without one. A job that has a campaign id but lost its copy of the
+        rules (or whose rules are not a map) gets a campaign with no rules: its clips still show "Paid partnership"
+        and start their captions with #Ad, so a clip is never sent as a campaign clip without them."""
+        found = job.get("campaign")
+        raw: Mapping[str, Any] = found if isinstance(found, Mapping) else {}
         campaign_id = raw.get("campaignId")
-        rules = raw.get("rules")
-        if not isinstance(campaign_id, str) or not campaign_id or not isinstance(rules, Mapping):
+        if not isinstance(campaign_id, str) or not campaign_id:
+            campaign_id = job.get("campaignId")
+        if not isinstance(campaign_id, str) or not campaign_id:
             return None
+        rules = raw.get("rules")
+        if not isinstance(rules, Mapping):
+            rules = {}
         logo_key = raw.get("logoKey")
         version = raw.get("rulesVersion")
         return cls(
@@ -122,11 +132,20 @@ class Campaign:
 
     @property
     def length(self) -> tuple[float | None, float | None]:
-        """``(lengthMinSec, lengthMaxSec)``, each None when the brief does not say (or both, when min > max)."""
+        """``(lengthMinSec, lengthMaxSec)``, each None when the brief does not say (or both, when min > max). An
+        exact length ("exactly 30 seconds", min = max) gets a second each way, so a cut clip can meet it."""
         lo, hi = _seconds(self._rule("lengthMinSec")), _seconds(self._rule("lengthMaxSec"))
-        if lo is not None and hi is not None and lo > hi:
-            return None, None
+        if lo is not None and hi is not None:
+            if lo > hi:
+                return None, None
+            if hi - lo < 2:
+                return max(LENGTH_RANGE[0], lo - 1), min(LENGTH_RANGE[1], hi + 1)
         return lo, hi
+
+    @property
+    def sets_length(self) -> bool:
+        """The brief names a minimum or a maximum: only then is the length check the campaign's (strict, critical)."""
+        return self.length != (None, None)
 
     # --- the disclosure ----------------------------------------------------------------------------------------
 
@@ -174,8 +193,11 @@ class Campaign:
 
     @property
     def tags(self) -> list[str]:
+        """``requiredTags``, each "@…". A dot at the end is punctuation, not part of the handle ("@faze." is
+        "@faze"), so the tag a caption carries is the one its check looks for."""
         v = self._rule("requiredTags")
-        return [t for t in (v if isinstance(v, list) else []) if isinstance(t, str) and _HANDLE.match(t)][:MAX_TAGS]
+        out = [t.rstrip(".") for t in (v if isinstance(v, list) else []) if isinstance(t, str) and _HANDLE.match(t)]
+        return [t for t in out if _WHOLE_HANDLE.match(t)][:MAX_TAGS]
 
     @property
     def caption_text(self) -> str | None:
@@ -208,6 +230,13 @@ class Campaign:
 
     def rules_block(self) -> str:
         return f"<campaign_rules>\n{block_json(self.brief())}\n</campaign_rules>"
+
+    def review_block(self) -> str:
+        """The ``<campaign_rules>`` block the clip review gets: only the rules a reviewer can judge from the plan and
+        the words (REVIEW_RULES). The length, the disclosure, the logo, the tags and the rest are Clip Factory's own
+        work or its own measured checks, so the review can never drop a clip for them."""
+        judge = {k: self.rules[k] for k in REVIEW_RULES if k in self.rules}
+        return f"<campaign_rules>\n{block_json({'name': self.name, 'brand': self.brand, 'rules': judge})}\n</campaign_rules>"
 
     def channel_note(self) -> str:
         return CHANNEL_NOTE.format(who=self.brand or self.name)

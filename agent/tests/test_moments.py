@@ -75,6 +75,18 @@ def test_length_target_from_notes() -> None:
         ("at least 20 seconds and under 60 seconds", (20, 60)),  # a minimum and a maximum together
         ("no longer than 30 seconds", (18, 30)),  # a maximum, never read as "longer than 30"
         ("a 30 min stream", (20, 45)),
+        # a maximum with "no", "not", "never" or "n't" before it is a maximum, never a minimum
+        ("never over 60 seconds", (20, 60)),
+        ("no clips over 50 seconds", (20, 50)),
+        ("don't go over 45 sec", (20, 45)),
+        ("don’t go over 45 sec", (20, 45)),
+        ("never longer than 40 seconds", (20, 40)),
+        ("shouldn't be longer than 50 seconds", (20, 50)),
+        ("must not go over 59 sec", (20, 59)),
+        ("not over 30 seconds", (18, 30)),
+        ("at least 20 seconds but never over 60 seconds", (20, 60)),
+        ("no music and over 20 seconds", (20, 45)),  # the "no" is about the music
+        ("10 min 30 sec", (20, 45)),  # minutes, not a minimum
     ],
 )
 def test_length_target_learns_minimums_from_notes(notes: str, want: tuple[float, float]) -> None:

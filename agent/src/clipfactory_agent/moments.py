@@ -121,12 +121,18 @@ def word_count(text: str) -> int:
 
 
 _UNIT = r"\s*(?:s|sec|secs|seconds?)\b"
-# "at least 7 seconds", "minimum 30 s", "over 20 sec", "longer than 15 seconds" and "30+ seconds"; "no longer than"
-# and "not over" are maximums, not minimums.
+# "at least 7 seconds", "minimum 30 s", "over 20 sec", "longer than 15 seconds" and "30+ seconds". A "min" right after
+# a number ("10 min 30 sec") is minutes, not a minimum.
 _AT_LEAST = re.compile(
-    r"(?:\bat least|\bminimum|\bmin\.?|(?<!not )\bover|(?<!no )(?<!not )\blonger than)\s*(\d{1,3})" + _UNIT
+    r"(?:\bat least|\bminimum|(?<!\d\s)\bmin\.?|\b(?P<over>over|longer than))\s*(?P<n>\d{1,3})" + _UNIT
 )
-_PLUS = re.compile(r"(\d{1,3})\s*\+" + _UNIT)
+_PLUS = re.compile(r"(?P<n>\d{1,3})\s*\+" + _UNIT)
+# The words just before a hit that turn it around: "never over 60 seconds", "no clips over 50 seconds", "don't go
+# over 45 sec", "shouldn't be longer than 50 seconds" (up to three words between, but never across "and"/"but").
+_NEGATED = re.compile(
+    r"(?:\b(?:no|not|never|nothing|none|without)\b|n[’']t)(?:\s+(?!(?:and|but|or|then)\b)\w+){0,3}\s*$"
+)
+_AT_MOST = re.compile(r"(?:under|max(?:imum)?|at most|no longer than|up to)\s*(\d{1,3})" + _UNIT)
 MAX_LENGTH = 180.0
 
 
@@ -140,12 +146,23 @@ def _at_least(lo: float) -> tuple[float, float]:
     return lo, max(lo, min(MAX_LENGTH, max(lo + 15, 45.0)))
 
 
-def _notes_minimum(text: str) -> float | None:
-    m = _AT_LEAST.search(text) or _PLUS.search(text)
-    if not m:
-        return None
-    lo = float(m.group(1))
-    return lo if 1 <= lo <= MAX_LENGTH - 15 else None
+def _notes_bounds(text: str) -> tuple[float | None, float | None]:
+    """The first minimum and the first maximum the notes name. "over"/"longer than" after a "no", "not", "never" or
+    "n't" is a maximum ("never over 60 seconds"); any other turned-around minimum is left out."""
+    least: float | None = None
+    most: tuple[int, float] | None = None
+    hits = sorted([*_AT_LEAST.finditer(text), *_PLUS.finditer(text)], key=lambda h: h.start())
+    for h in hits:
+        n = float(h.group("n"))
+        if _NEGATED.search(text[: h.start()]):
+            if h.re is _AT_LEAST and h.group("over") and most is None:
+                most = (h.start(), n)
+        elif least is None and 1 <= n <= MAX_LENGTH - 15:
+            least = n
+    m = _AT_MOST.search(text)
+    if m and (most is None or m.start() < most[0]):
+        most = (m.start(), float(m.group(1)))
+    return least, most[1] if most else None
 
 
 def length_target(notes: str | None, campaign: Campaign | None = None) -> tuple[float, float]:
@@ -166,14 +183,11 @@ def length_target(notes: str | None, campaign: Campaign | None = None) -> tuple[
         lo, hi = sorted((float(m.group(1)), float(m.group(2))))
         if lo >= 5 and hi <= 180 and hi - lo >= 5:
             return lo, hi
-    least = _notes_minimum(text)
-    m = re.search(r"(?:under|max(?:imum)?|at most|no longer than|up to)\s*(\d{1,3})" + _UNIT, text)
-    if m:
-        hi = float(m.group(1))
-        if 8 <= hi <= 180:
-            if least is not None and least + 5 <= hi:
-                return least, hi
-            return _under(hi)
+    least, most = _notes_bounds(text)
+    if most is not None and 8 <= most <= 180:
+        if least is not None and least + 5 <= most:
+            return least, most
+        return _under(most)
     if least is not None:
         return _at_least(least)
     return DEFAULT_LENGTH
