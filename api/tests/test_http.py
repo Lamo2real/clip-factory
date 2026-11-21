@@ -266,6 +266,9 @@ def test_every_contract_route_is_registered() -> None:
         ("POST", "/v1/contentrewards/finder/matches/200ea21b-be80-4db8-b552-8e32b148604e/add"),
         ("POST", "/v1/contentrewards/finder/joined"),
         ("POST", "/v1/contentrewards/finder/ask"),
+        # §46: auto-posting
+        ("GET", "/v1/autopost"),
+        ("POST", "/v1/autopost/run"),
     }
     for method, path in expected:
         assert any(r.method == method and r.pattern.match(path) for r in ROUTES), (method, path)

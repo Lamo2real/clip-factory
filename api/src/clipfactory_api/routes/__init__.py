@@ -5,6 +5,7 @@ from __future__ import annotations
 from ..http import Route, route
 from . import (
     ask,
+    autopost,
     clips,
     contentrewards,
     finder,
@@ -111,6 +112,9 @@ ROUTES: list[Route] = [
     route("GET", "/v1/getpaid/{place}", getpaid.get_place),
     route("GET", "/v1/weeks/{week}", weeks.get_week),
     route("PUT", "/v1/weeks/{week}/best", weeks.put_best),
+    # §46: Auto-posting. Its status, and a Practice or Private test run now (inline, at most one a minute).
+    route("GET", "/v1/autopost", autopost.status),
+    route("POST", "/v1/autopost/run", autopost.run_now),
     # Ask Clip Factory (§19.6): the help package loads only inside these handlers.
     route("GET", "/v1/help", help.status),
     route("POST", "/v1/help/answers", help.answer),

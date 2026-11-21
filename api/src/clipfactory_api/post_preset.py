@@ -98,11 +98,14 @@ def check(raw: Any) -> dict[str, dict[str, Any]]:
     return out
 
 
-def upload_options(settings: Mapping[str, Any], places: Iterable[str]) -> dict[str, dict[str, Any]]:
+def upload_options(
+    settings: Mapping[str, Any], places: Iterable[str], *, campaign: bool = False
+) -> dict[str, dict[str, Any]]:
     """What Use my settings sends with Upload for ``places`` (§36.3), built on the server for auto-posting (§46.6): the
     twin of the web's ``cardOptionsFrom`` + ``optionsFor`` (``web/src/lib/preset.ts``). YouTube's who-can-see-it is
-    the saved ``youtubePrivacy`` and made for kids is always No; Instagram and X are My settings; Facebook has nothing
-    to pick; TikTok's choices are never made here (the owner picks them for each post, §17.8)."""
+    the saved ``youtubePrivacy`` (Everyone for a campaign clip, as ``campaignCardOptions``) and made for kids is always
+    No; Instagram and X are My settings; Facebook has nothing to pick; TikTok's choices are never made here (the owner
+    picks them for each post, §17.8)."""
     try:
         preset = check(settings.get("postPreset") or {})
     except Exception:  # a bad stored preset reads the defaults, as settings.with_defaults does
@@ -113,7 +116,7 @@ def upload_options(settings: Mapping[str, Any], places: Iterable[str]) -> dict[s
     if "youtube" in going:
         youtube = preset["youtube"]
         out["youtube"] = {
-            "privacy": privacy if privacy in YOUTUBE_PRIVACY else "public",
+            "privacy": privacy if privacy in YOUTUBE_PRIVACY and not campaign else "public",
             "category": youtube["category"],
             "madeForKids": False,
             "notifySubscribers": youtube["notifySubscribers"],
