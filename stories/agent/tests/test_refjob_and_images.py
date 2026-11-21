@@ -77,9 +77,7 @@ def test_a_reference_is_analyzed_through_its_own_job_and_written_back_fenced(tmp
     assert pjob["status"] == "ready" and [s["status"] for s in pjob["steps"]] == ["done", "done", "done"]
     assert pjob["meta"]["models"] == [{"step": "look", "agentId": "video_analysis", "task": "reference_analysis",
                                        "model": "opus-5-5", "effort": "high", "effortApplied": True}]  # fmt: skip
-    assert (
-        ref["status"] == "analyzed" and ref["analysisKey"] == FOLDER + "analysis.json" and ref["currentJobId"] is None
-    )
+    assert ref["status"] == "analyzed" and ref["analysisKey"] == FOLDER + "analysis.json" and "currentJobId" not in ref
     assert ref["analyzedWith"] == {"model": "opus-5-5", "effort": "high"}
     assert ref["durationSec"] == pytest.approx(3.0, abs=0.2)
     assert json.loads(store.objects[FOLDER + "analysis.json"][0]) == ANALYSIS
@@ -104,6 +102,7 @@ def test_without_the_analysis_code_the_job_fails_plainly(tmp_path: Path) -> None
         refjob.find_analyze = saved
     pjob, ref = table.item("PJOB#J1"), table.item("REFVID#R1")
     assert pjob is not None and pjob["error"] == NOT_BUILT and ref is not None and ref["status"] == "failed"
+    assert "currentJobId" not in ref  # cleared the same way as on a story: REMOVE
 
 
 @needs_ffmpeg

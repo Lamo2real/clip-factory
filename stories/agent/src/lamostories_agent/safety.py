@@ -140,7 +140,19 @@ def code_problems(script: dict[str, Any], topic: Topic | None) -> list[dict[str,
     return out
 
 
-def request(script: dict[str, Any], post: dict[str, Any] | None, topic: Topic | None) -> dict[str, Any]:
+UNCHECKED_NOTE = (
+    "The writer said this video teaches driving safety, but no checked advice covers it. Report every item that gives "
+    "driving advice or shows how to handle a driving situation: none of it is checked. Also check that nothing "
+    "dangerous is shown as fun."
+)
+
+
+def request(
+    script: dict[str, Any], post: dict[str, Any] | None, topic: Topic | None, *, unchecked_advice: bool = False
+) -> dict[str, Any]:
+    """The checker's input. ``unchecked_advice``: a story the writer flagged ``teachesSafety`` with no checked topic;
+    any driving advice in it is a problem (§45.11.5: it is held until the owner picks a topic or takes the advice
+    out)."""
     body: dict[str, Any] = {
         "video": {"title": script.get("title"), "lengthSec": script.get("durationSec")},
         "items": [{k: v for k, v in it.items() if k != "where" and v is not None} for it in items(script, post)],
@@ -156,7 +168,11 @@ def request(script: dict[str, Any], post: dict[str, Any] | None, topic: Topic | 
         }
     else:
         body["guidance"] = None
-        body["note"] = "This video teaches no driving advice: check only that nothing dangerous is shown as fun."
+        body["note"] = (
+            UNCHECKED_NOTE
+            if unchecked_advice
+            else "This video teaches no driving advice: check only that nothing dangerous is shown as fun."
+        )
     return body
 
 

@@ -312,12 +312,14 @@ class StoryData:
         puts: Sequence[dict[str, Any]] = (),
         job_fields: dict[str, Any] | None = None,
         other_set: tuple[str, dict[str, Any], dict[str, Any]] | None = None,
+        other_remove: Sequence[str] = (),
         delete_assets: Sequence[str] = (),
     ) -> None:
         """One transaction: the job's check (or its update), the story's update (``version`` + 1, ``updatedAt``),
         new ``ASSET#`` items, older assets marked ``meta.current = 0`` (``retire``: asset ids) and other new items
         (``puts``: an activity, a provider state), one update of another item of the workspace (``other_set``:
-        ``(sk, fields, conditions)``, e.g. a reference video's analysis, each condition an equality), and deleted
+        ``(sk, fields, conditions)``, e.g. a reference video's analysis, each condition an equality; ``other_remove``:
+        its attributes to REMOVE, e.g. ``currentJobId``, cleared the same way as on a story), and deleted
         ``ASSET#`` items (``delete_assets``, old versions). Nothing is written unless the run still owns the job."""
         from botocore.exceptions import ClientError
 
@@ -348,7 +350,7 @@ class StoryData:
             ops.append({"Put": {"TableName": name, "Item": to_ddb(item)}})
         if other_set is not None:
             sk, fields, conds = other_set
-            oe = Expr().set({**fields, "updatedAt": now}).exists()
+            oe = Expr().set({**fields, "updatedAt": now}).remove(other_remove).exists()
             for k, v in conds.items():
                 oe.equals(k, v)
             ops.append({"Update": {"TableName": name, "Key": {"pk": fence.pk, "sk": sk}, **oe.params()}})

@@ -127,19 +127,23 @@ def test_an_effort_the_model_does_not_offer_is_refused_never_swapped(monkeypatch
 
 
 @pytest.mark.parametrize(
-    ("error", "status", "reason"),
+    ("error", "status", "reason", "line"),
     [
         (client_error("AccessDeniedException", "You don't have access to the model with the specified model ID."),
-         "denied", "Bedrock says this AWS account may not use it"),
+         "denied", "Bedrock says this AWS account may not use it", "Bedrock says this AWS account may not use it."),
         (client_error("ResourceNotFoundException", "Model not found"), "not_found",
-         "Bedrock cannot find it from this Region"),
+         "Bedrock cannot find it from this Region", "Bedrock cannot find it from this Region."),
         (client_error("ValidationException", "The provided model identifier is invalid."), "not_found",
-         "Bedrock does not accept this model id here"),
-        (client_error("ThrottlingException", "Too many requests"), "error", "its Bedrock limit is used up for now"),
+         "Bedrock does not accept this model id here", "Bedrock does not accept this model id here."),
+        (client_error("ValidationException", "Invocation of model ID anthropic.claude-fable-5-2 with on-demand "
+                      "throughput isn't supported. Retry your request with the ID or ARN of an inference profile."),
+         "not_found", "Bedrock does not accept this model id here", "Bedrock does not accept this model id here."),
+        (client_error("ThrottlingException", "Too many requests"), "error", "its Bedrock limit is used up for now",
+         "Its Bedrock limit is used up for now."),
     ],
 )  # fmt: skip
 def test_a_refused_model_stops_with_the_owner_s_sentence_and_no_other_model_is_called(
-    error: Exception, status: str, reason: str
+    error: Exception, status: str, reason: str, line: str
 ) -> None:
     m, runtime, table, _ = client([error], item(keys.AICONFIG_SK, defaultModel="fable-5-2"))
     with pytest.raises(ModelUnavailable) as e:
@@ -151,7 +155,30 @@ def test_a_refused_model_stops_with_the_owner_s_sentence_and_no_other_model_is_c
     assert runtime.requests and {r["modelId"] for r in runtime.requests} == {"global.anthropic.claude-fable-5-2"}
     st = table.item(keys.modelstatus_sk("fable-5-2"))
     assert st is not None and st["status"] == status and st["checkedAt"] and st["type"] == "ws_modelstatus"
+    assert st["line"] == line  # one sentence beside the model in the pickers (§45.25)
     assert table.prefix("USAGE#") == []  # no answer, nothing used
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "The model returned the following errors: messages: roles must alternate between user and assistant",
+        "The model returned the following errors: output_config.effort: Input should be 'low', 'medium' or 'high'",
+        "Malformed input request: #/messages/0/content: expected type: JSONArray, found: String",
+    ],
+)
+def test_a_request_shape_error_is_a_plain_failure_never_an_unavailable_model(message: str) -> None:
+    """Bedrock wraps the model's own request errors as a ValidationException that mentions "model": only the model
+    id's own refusals mean the model is unavailable (§45.25); anything else is the call failing."""
+    from botocore.exceptions import ClientError
+
+    m, runtime, table, _ = client([client_error("ValidationException", message)])
+    with pytest.raises(ClientError):
+        m.complete(CTX, task="chat", messages=HELLO)
+    assert len(runtime.requests) == 1
+    st = table.item(keys.modelstatus_sk("opus-5-5"))
+    assert st is not None and st["status"] == "error" and st["line"] == "The last call failed."
+    assert models.unavailable(client_error("ValidationException", message)) is None
 
 
 def test_a_refusal_is_a_plain_sentence_and_never_retried_elsewhere() -> None:
@@ -218,6 +245,28 @@ def test_a_schema_answer_wrong_twice_fails_after_exactly_two_calls() -> None:
     with pytest.raises(AnswerInvalid):
         m.complete(CTX, task="brainstorm", messages=HELLO, schema=SCHEMA)
     assert len(runtime.requests) == 2
+
+
+def test_a_schema_with_tools_hands_the_caller_s_tool_calls_back_and_answers_every_tool_use() -> None:
+    """With a schema and the caller's tools together: an answer that calls only a caller tool comes back as it is
+    (the caller's tool loop runs it); a wrong answer that called tools gets a toolResult for every toolUse."""
+    tool = {"name": "list_ideas", "description": "List the saved ideas.", "input_schema": {"type": "object"}}
+    m, runtime, _, _ = client([converse_reply("Let me look.", tool=("list_ideas", {}))])
+    reply = m.complete(CTX, task="brainstorm", messages=HELLO, schema=SCHEMA, tools=[tool])
+    assert len(runtime.requests) == 1 and reply.data is None
+    assert reply.tool_calls == [{"id": "tu1", "name": "list_ideas", "input": {}}] and reply.stop_reason == "tool_use"
+
+    both = converse_reply("Here.")
+    both["output"]["message"]["content"] += [
+        {"toolUse": {"toolUseId": "tA", "name": ANSWER_TOOL, "input": {"title": "far too long a title"}}},
+        {"toolUse": {"toolUseId": "tB", "name": "list_ideas", "input": {}}},
+    ]
+    both["stopReason"] = "tool_use"
+    m2, runtime2, _, _ = client([both, converse_reply(tool=(ANSWER_TOOL, {"title": "Ice"}))])
+    assert m2.complete(CTX, task="brainstorm", messages=HELLO, schema=SCHEMA, tools=[tool]).data == {"title": "Ice"}
+    results = [b["toolResult"] for b in runtime2.requests[1]["messages"][-1]["content"] if "toolResult" in b]
+    assert [r["toolUseId"] for r in results] == ["tA", "tB"] and all(r["status"] == "error" for r in results)
+    assert "longer than 10" in results[0]["content"][0]["text"] and "Not run" in results[1]["content"][0]["text"]
 
 
 def test_tools_are_passed_with_automatic_choice_and_the_calls_come_back_with_the_raw_content() -> None:

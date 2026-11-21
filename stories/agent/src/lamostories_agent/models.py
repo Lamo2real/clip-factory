@@ -155,7 +155,18 @@ STATUS_LINES = {
     "not_found": "Bedrock cannot find it from here.",
     "error": "The last call failed.",
 }
-_MODEL_WORDS = ("model", "profile", "identifier", "retention")
+# What Bedrock says when it refuses the model id itself (a ValidationException); anything else about the request is a
+# plain failure, never "the model is unavailable".
+_MODEL_ID_PHRASES = (
+    "model identifier",
+    "provided model",
+    "model id",
+    "on-demand throughput",
+    "inference profile",
+    "end of its life",
+)
+_MODEL_SAID = "model returned the following errors"  # Bedrock's wrapper of the model's own request errors
+NOT_RUN = f"Not run. {ANSWER_NUDGE}"
 CALL_ATTEMPTS = 3
 READ_TIMEOUT = 15 * 60  # a long structured answer with adaptive thinking can take minutes
 
@@ -196,15 +207,23 @@ def unavailable(e: BaseException) -> tuple[str, str] | None:
         return "denied", "Bedrock says this AWS account may not use it"
     if code == "ResourceNotFoundException":
         return "not_found", "Bedrock cannot find it from this Region"
-    if code == "ValidationException" and any(w in msg for w in _MODEL_WORDS):
-        if any(w in msg for w in ("tool", "cache", "image", "token", "schema")):
-            return None
-        if "retention" in msg:
+    if code == "ValidationException" and _MODEL_SAID not in msg:
+        if "retention" in msg and "model" in msg:
             return "denied", "Bedrock needs this AWS account's data-retention opt-in for it first"
-        return "not_found", "Bedrock does not accept this model id here"
+        if any(p in msg for p in _MODEL_ID_PHRASES):
+            return "not_found", "Bedrock does not accept this model id here"
     if code in ("ThrottlingException", "ServiceQuotaExceededException", "TooManyRequestsException"):
         return "error", "its Bedrock limit is used up for now"
     return None
+
+
+def status_line(found: tuple[str, str] | None) -> str:
+    """The one sentence MODELSTATUS# shows beside the model after a failed call: the reason, or "The last call
+    failed." when Bedrock said nothing about the model itself."""
+    if not found:
+        return STATUS_LINES["error"]
+    reason = found[1]
+    return reason[:1].upper() + reason[1:] + "."
 
 
 def price_of(model_key: str, ai: dict[str, Any]) -> dict[str, Any] | None:
@@ -339,7 +358,9 @@ class BedrockModels:
     ) -> Reply:
         """One model call for ``ctx``'s agent (see ``ModelClient``). ``on_text`` gets the answer's text so far while
         it streams (ConverseStream); without it the call is a plain Converse. ``allow_inactive`` lets the quality
-        agent's fact check of a driving-safety story run while the agent is off (§45.26)."""
+        agent's fact check of a driving-safety story run while the agent is off (§45.26). With a ``schema`` and
+        ``tools`` together, an answer that calls only the caller's tools comes back as it is (``data`` None, the
+        calls in ``tool_calls``): the caller runs them and calls again with their results."""
         ws = self.workspace(ctx)
         profile = ws.agent(ctx.agent_id)
         if task not in profile.tasks:
@@ -380,14 +401,15 @@ class BedrockModels:
             if answer.stop_reason == "refusal":
                 raise ModelRefused(REFUSED.format(label=info.get("label") or choice.model))
             data: dict[str, Any] | None = None
-            if schema is not None:
-                use = next((c for c in calls if c["name"] == ANSWER_TOOL), None)
+            use = next((c for c in calls if c["name"] == ANSWER_TOOL), None)
+            wants_tools = use is None and any(c["name"] != ANSWER_TOOL for c in calls)
+            if schema is not None and not wants_tools:  # a caller's tool first: its tool loop runs it, then asks again
                 value = use["input"] if use else _json_text(text)
                 problems = check(schema, value) if isinstance(value, dict) else [f"You did not call {ANSWER_TOOL}."]
                 if problems:
                     if attempt == 2 or answer.stop_reason == "max_tokens":
                         raise AnswerInvalid(problems)
-                    msgs = _ask_again(msgs, answer.content, use, problems)
+                    msgs = _ask_again(msgs, answer.content, problems)
                     continue
                 assert isinstance(value, dict)
                 data = value
@@ -466,7 +488,7 @@ class BedrockModels:
                     continue
                 found = unavailable(e)
                 status = found[0] if found else "error"
-                line = f"{STATUS_LINES[status]} {found[1].capitalize()}." if found else STATUS_LINES["error"]
+                line = status_line(found)
                 self._model_status(ctx, choice.model, status, line)
                 log("warn", "stories.model_failed", model=choice.model, task=task, code=_code(e), detail=msg[:300])
                 if found:
@@ -596,15 +618,28 @@ def _nudge(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _ask_again(
-    messages: list[dict[str, Any]], content: list[dict[str, Any]], use: dict[str, Any] | None, problems: list[str]
+    messages: list[dict[str, Any]], content: list[dict[str, Any]], problems: list[str]
 ) -> list[dict[str, Any]]:
-    """The model's own answer back, with exactly what is wrong (asked once more, §45.7)."""
+    """The model's own answer back, with exactly what is wrong (asked once more, §45.7). Every ``toolUse`` in the
+    answer gets its ``toolResult`` (Converse refuses a turn that leaves one out): ``submit_answer``'s says what is
+    wrong, any other tool's says it was not run."""
     feedback = "Problems: " + "; ".join(problems[:20]) + " " + ANSWER_NUDGE
     out = [*messages, {"role": "assistant", "content": content or [{"text": "(no answer)"}]}]
-    if use is not None and use.get("id"):
-        result = {"toolResult": {"toolUseId": use["id"], "content": [{"text": feedback}], "status": "error"}}
-        return [*out, {"role": "user", "content": [result]}]
-    return [*out, {"role": "user", "content": [{"text": feedback}]}]
+    results: list[dict[str, Any]] = []
+    answered = False
+    for block in content:
+        use = block.get("toolUse") if isinstance(block, dict) else None
+        if not isinstance(use, dict) or not use.get("toolUseId"):
+            continue
+        mine = use.get("name") == ANSWER_TOOL
+        answered = answered or mine
+        results.append(
+            {"toolResult": {"toolUseId": use["toolUseId"], "content": [{"text": feedback if mine else NOT_RUN}],
+                            "status": "error"}}
+        )  # fmt: skip
+    if not answered:
+        results.append({"text": feedback})
+    return [*out, {"role": "user", "content": results}]
 
 
 def _json(use: dict[str, Any]) -> Any:

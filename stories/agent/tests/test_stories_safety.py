@@ -49,6 +49,8 @@ def test_ok_when_the_checker_finds_nothing(tmp_path: Path) -> None:
         "problems": [],
         "checkedScriptVersion": 1,
         "citations": [],
+        "checkStatus": "ok",  # internal: the fact check's own status, without the last look
+        "lastLook": [],  # internal: the final review's problems (the API's StorySafety shape leaves both out)
     }
     check = fake.calls[2]
     assert check["task"] == "fact_check" and check["ctx"].agent_id == "quality_assurance"
@@ -271,3 +273,113 @@ def test_the_final_review_adds_its_problems_and_holds_the_story(tmp_path: Path) 
     assert story["safety"]["problems"] == ["Last look: The last caption is cut off."]
     assert job["steps"][-1]["message"] == "1 thing to check"
     assert fake.calls[-1]["task"] == "final_review" and fake.calls[-1]["ctx"].agent_id == "quality_assurance"
+
+
+def quality_off(answer: Any) -> Any:
+    """The quality agent switched off: its calls stop, except the ones that must run anyway (``allow_inactive``)."""
+    from lamostories_agent.models import AgentOff
+
+    def got(kw: dict[str, Any]) -> Any:
+        if not kw.get("allow_inactive"):
+            raise AgentOff("Quality check is switched off.")
+        if isinstance(answer, list):  # used in turn, the last one kept
+            return answer.pop(0) if len(answer) > 1 else answer[0]
+        return answer
+
+    return got
+
+
+def produce(table: Any, job_id: str, session: str, run: list[str], **story: Any) -> None:
+    table.seed({**table.items[(PK, f"STORY#{STORY}")], "status": "producing", "currentJobId": job_id, **story})
+    table.seed(job_item(job_id, session, run=run))
+
+
+@needs_deno
+def test_a_story_the_writer_flags_is_always_checked_and_held_until_the_advice_is_checked_or_gone(
+    tmp_path: Path,
+) -> None:
+    """A comedy story the writer flags teachesSafety with no topic it could pick, the quality agent off: the fact
+    check still runs (never "skipped"), every piece of driving advice is a problem, and the story is held. A later
+    job (no storyboard) still knows the flag from the writer's sidecar; once the advice is gone the hold ends."""
+    from lamostories_agent.safety import UNCHECKED_NOTE
+
+    answer = writer_answer()
+    answer.update({"teachesSafety": True, "safetyTopicId": None})
+    advice = problem("caption:cap1", "This gives driving advice that is not on the checked list.")
+    replies = answers(storyboard=answer, fact_check=quality_off([advice, advice, OK]))
+    svc, store, table, fake = world(tmp_path, replies, job=job_item("J1", "S1", run=CHECK_RUN))
+    assert run_job(svc) == "needs_check"
+    checks = [c for c in fake.calls if c["task"] == "fact_check"]
+    assert checks and all(c.get("allow_inactive") is True for c in checks)
+    body = json.loads(checks[0]["messages"][0]["content"][1]["text"].split("\n", 1)[1])
+    assert body["guidance"] is None and body["note"] == UNCHECKED_NOTE
+    story = table.item(f"STORY#{STORY}")
+    assert story is not None and story["safety"]["status"] == "problems" and HELD_TOPIC in story["safety"]["problems"]
+    sidecar = json.loads(store.objects[story["scriptKey"].removesuffix(".json") + ".writer.json"][0])
+    assert sidecar["teachesSafety"] is True
+
+    # the owner edits something; the next "Check again" runs only the fact check: still checked, still held
+    fake.answers["fact_check"] = quality_off(advice)
+    produce(table, "J2", "S2", ["safety"], stale=["safety"])
+    assert run_job(svc, "J2", "S2") == "needs_check"
+    assert fake.calls[-1]["allow_inactive"] is True
+    held = table.item(f"STORY#{STORY}")
+    assert held is not None and held["safety"]["status"] == "problems" and HELD_TOPIC in held["safety"]["problems"]
+
+    # the advice taken out: the checker finds none, and the story may be approved
+    fake.answers["fact_check"] = quality_off(OK)
+    produce(table, "J3", "S3", ["safety"], stale=["safety"])
+    assert run_job(svc, "J3", "S3") == "ready"
+    done = table.item(f"STORY#{STORY}")
+    assert done is not None and done["status"] == "review" and done["safety"]["status"] == "ok"
+
+
+@needs_deno
+def test_the_code_s_own_findings_count_when_the_quality_agent_is_off(tmp_path: Path) -> None:
+    """A comedy story with the quality agent off is skipped, unless the code itself found a problem (a caption that
+    names advice that is not on the checked list): then the problem is shown, never "skipped"."""
+    script = sample()
+    script["captions"][0]["guidanceRef"] = "made-up-step"
+    svc, store, table, _fake = world(
+        tmp_path, answers(fact_check=quality_off(OK)), job=job_item("J1", "S1", run=["safety"])
+    )
+    store.objects[PREFIX + "script/v1.json"] = (json.dumps(script).encode(), "application/json")
+    table.seed(story_item(scriptVersion=1, scriptKey=PREFIX + "script/v1.json", postCaptions=POST))
+    assert run_job(svc) == "needs_check"
+    story = table.item(f"STORY#{STORY}")
+    assert story is not None and story["safety"]["status"] == "problems"
+    assert story["safety"]["problems"] == [
+        "Caption “Ease off the accelerator”: This caption uses advice that is not on the checked list."
+    ]
+
+
+@needs_deno
+@needs_libass
+def test_the_last_look_s_problems_stand_until_a_new_look_and_are_never_added_twice(tmp_path: Path) -> None:
+    cut = {"ok": False, "problems": [{"ref": "", "problem": "The last caption is cut off."}]}
+    svc, _store, table, fake = world(tmp_path, answers(final_review=cut))
+    assert run_job(svc) == "needs_check"
+    first = table.item(f"STORY#{STORY}")
+    assert first is not None and first["safety"]["problems"] == ["Last look: The last caption is cut off."]
+
+    # a post caption edit runs the fact check alone: the video was not looked at again, so the last look stands
+    produce(table, "J2", "S2", ["safety"], stale=["safety"])
+    assert run_job(svc, "J2", "S2") == "needs_check"
+    second = table.item(f"STORY#{STORY}")
+    assert second is not None and second["safety"]["status"] == "problems"
+    assert second["safety"]["problems"] == ["Last look: The last caption is cut off."]
+
+    # the same finding again on a new look: shown once
+    produce(table, "J3", "S3", ["preview"])
+    assert run_job(svc, "J3", "S3") == "needs_check"
+    third = table.item(f"STORY#{STORY}")
+    assert third is not None and third["safety"]["problems"] == ["Last look: The last caption is cut off."]
+
+    # an effects edit (sound, assemble, preview; the check carried over by the API): a clean look clears it
+    fake.answers["final_review"] = OK
+    produce(table, "J4", "S4", ["sound", "assemble", "preview"])
+    assert run_job(svc, "J4", "S4") == "ready"
+    fourth = table.item(f"STORY#{STORY}")
+    assert fourth is not None and fourth["status"] == "review"
+    assert fourth["safety"]["status"] == "ok" and fourth["safety"]["problems"] == []
+    assert fourth["safety"]["checkedScriptVersion"] == fourth["scriptVersion"]

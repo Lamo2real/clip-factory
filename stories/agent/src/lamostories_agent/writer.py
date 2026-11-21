@@ -195,7 +195,11 @@ def storyboard_schema(
             "type": "object",
             "additionalProperties": False,
             "required": ["scenes"],
-            "properties": {"scenes": scenes, "captions": {**captions, "type": ["array", "null"]}},
+            "properties": {
+                "scenes": scenes,
+                "captions": {**captions, "type": ["array", "null"]},
+                "teachesSafety": {"type": ["boolean", "null"]},  # these scenes now teach driving safety
+            },
         }
     return {
         "type": "object",

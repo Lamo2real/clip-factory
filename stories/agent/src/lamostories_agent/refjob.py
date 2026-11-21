@@ -8,7 +8,7 @@ awaits ``reference.analyze(run)`` with a ``ReferenceRun``: the file, its length,
 progress (``run.report``) and the model call (``run.ask``: the ``video_analysis`` agent's ``reference_analysis`` task on
 the owner's model and effort, recorded in ``meta.models``). ``analyze`` returns the ``ReferenceAnalysis``; this module
 writes ``analysis.json`` and, in one fenced transaction, the reference (``status = analyzed``, ``analysisKey``,
-``analyzedWith``, ``durationSec``, ``currentJobId = null``) and the job (``ready``)."""
+``analyzedWith``, ``durationSec``, ``currentJobId`` removed, as on a story) and the job (``ready``)."""
 
 from __future__ import annotations
 
@@ -177,10 +177,10 @@ class ReferenceJob(Job):
         await self._last_write(
             other_set=(
                 keys.refvid_sk(self.content_id),
-                {"status": "analyzed", "analysisKey": key, "analyzedWith": with_, "durationSec": seconds,
-                 "currentJobId": None},
+                {"status": "analyzed", "analysisKey": key, "analyzedWith": with_, "durationSec": seconds},
                 {"currentJobId": self.fence.job_id},
             ),
+            other_remove=["currentJobId"],
             job_fields={"status": "ready", "steps": self.steps, "progress": 1.0, "meta": self.meta, "heartbeatAt": at},
         )  # fmt: skip
         log("info", "stories.reference_done", job=self.fence.job_id)
@@ -197,10 +197,10 @@ class ReferenceJob(Job):
         ref = await self.data.reference(self.fence.user_id, self.fence.workspace_id, self.content_id)
         other = None
         if ref is not None and ref.get("currentJobId") == self.fence.job_id:
-            other = (keys.refvid_sk(self.content_id), {"status": "failed", "currentJobId": None},
-                     {"currentJobId": self.fence.job_id})  # fmt: skip
+            other = (keys.refvid_sk(self.content_id), {"status": "failed"}, {"currentJobId": self.fence.job_id})
         await self._last_write(
             other_set=other,
+            other_remove=["currentJobId"] if other else (),
             job_fields={"status": "failed", "error": sentence, "steps": self.steps, "progress": self._progress(),
                         "meta": self.meta, "heartbeatAt": at},
         )  # fmt: skip

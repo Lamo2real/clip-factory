@@ -10,8 +10,10 @@ for the task, §45.25), so a new provider is one class and one registry line. Ea
 * ``AudioProvider.mix(script, out) -> Path``: an m4a at 48 kHz, -14 LUFS;
 
 and every provider has ``check() -> ProviderStatus``, its state before any call (the API's ``workspaces/providers.py``
-mirrors these). A provider is shown ``on`` only after a real call answered: the job writes ``PROVIDER#{kind}#{id}``
-then (pipeline.py, portrait.py), never because it was configured.
+mirrors these). The built-in animator, sounds and characters are code in this image with nothing to set up: ``on``,
+as §45.11.6's and §45.31's tables give them. The writer and the AI providers are shown ``on`` only after a real call
+answered: the job writes ``PROVIDER#{kind}#{id}`` after every real call (pipeline.py, portrait.py), which also gives
+the built-ins their ``checkedAt`` or a later failure, never because something was configured.
 
 * ``nova-canvas`` (Amazon Nova Canvas, Bedrock in eu-west-1) draws character portraits for the app and the Library
   only, never anything inside a posted video.
@@ -266,8 +268,8 @@ class RigImages(_Base):
     """The character drawn by the engine itself: a still of it standing in the studio set."""
 
     kind, id, label = "images", "builtin-rig", "Built-in characters"
-    state = "needs_setup"
-    line = "Draws your characters the same way in every video. Shown as on after the first scenes are drawn."
+    state = "on"
+    line = "Built in: draws your characters the same way in every video. Nothing to set up."
 
     async def image(self, prompt: str, width: int, height: int, seed: int, refs: list[Path]) -> bytes:
         script = portrait_script(self.ctx.character or {}, seed, await self.ctx.engine.version())
@@ -373,8 +375,8 @@ class Builtin2D(_Base):
     """The engine's draw lists rasterized with numpy and encoded with libx264, in a process of its own per scene."""
 
     kind, id, label = "animation", "builtin-2d", "Built-in animator"
-    state = "needs_setup"
-    line = "Animates every scene on the server. Shown as on after the first video is animated."
+    state = "on"
+    line = "Built in: animates every scene at 1080 by 1920, 30 frames a second. Nothing to set up."
     preset: ClassVar[str] = "fast"
 
     async def render_scene(
@@ -534,8 +536,8 @@ async def fit_shot(src: Path, out: Path, seconds: float, crf: int) -> None:
 
 class BuiltinSynth(_Base):
     kind, id, label = "audio", "builtin-synth", "Built-in sounds"
-    state = "needs_setup"
-    line = "Makes every sound effect, noise and tune on the server. Shown as on after the first video's sound."
+    state = "on"
+    line = "Built in: makes every sound effect, noise and tune on the server. Nothing to set up."
 
     async def mix(self, script: dict[str, Any], out: Path) -> Path:
         work = self.ctx.workdir / "sound"

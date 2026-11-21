@@ -99,7 +99,7 @@ def test_the_registry_has_every_kind_and_reads_the_workspace_s_provider_names() 
     assert chosen(defaults) == chosen(None)
 
 
-def test_every_provider_says_its_state_in_one_plain_sentence_and_none_is_on_before_a_real_call() -> None:
+def test_every_provider_says_its_state_in_one_plain_sentence_and_only_the_built_ins_start_on() -> None:
     got = {(s.kind, s.id): s for s in statuses()}
     assert set(got) == {
         ("writer", "bedrock-claude"),
@@ -109,7 +109,13 @@ def test_every_provider_says_its_state_in_one_plain_sentence_and_none_is_on_befo
         ("animation", "nova-reel"),
         ("audio", "builtin-synth"),
     }
-    assert all(s.state != "on" for s in got.values())  # "on" only after a real call (PROVIDER#)
+    # the built-ins are on (§45.11.6, §45.31: nothing to set up); the writer and the AI ones only after a real call
+    assert {k: s.state for k, s in got.items() if s.state == "on"} == {
+        ("images", "builtin-rig"): "on",
+        ("animation", "builtin-2d"): "on",
+        ("audio", "builtin-synth"): "on",
+    }
+    assert got[("writer", "bedrock-claude")].state == "needs_setup"
     assert got[("images", "nova-canvas")].state == "off"
     reel = got[("animation", "nova-reel")]
     assert reel.state == "needs_setup" and reel.line == REEL_NO_BUCKET
