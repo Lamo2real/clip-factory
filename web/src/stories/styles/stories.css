@@ -937,6 +937,19 @@
     font-size: 0.82rem;
   }
 }
+/* Three stats share a 320-359 px row (88 px tiles): a long first word ("Animations") stays inside its tile even with
+   a wider system font than SF (Linux, Windows). The column gap only sits between tiles side by side. */
+@media (max-width: 359px) {
+  .st-tiles {
+    column-gap: 8px;
+  }
+  .st-stat {
+    padding-inline: 7px;
+  }
+  .st-stat__label {
+    font-size: 0.78rem;
+  }
+}
 @media (min-width: 1000px) {
   .st-tile--half {
     grid-column: span 6;
