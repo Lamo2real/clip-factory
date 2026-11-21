@@ -4,6 +4,8 @@ import { useSyncExternalStore } from "react";
 import type { Platform } from "../api/types.ts";
 import { isMock } from "./config.ts";
 import { findBranch, findTree } from "./settingsTree.ts";
+import { storiesEnabled } from "../stories/flag.ts";
+import { isStoriesPath, matchStories, type StoriesPage } from "../stories/routes.ts";
 
 const SETUP_PLATFORMS: readonly Platform[] = ["youtube", "tiktok", "instagram", "facebook", "x"];
 
@@ -42,6 +44,8 @@ export type Route =
   | { name: "get_app" }
   /** Mock (e2e) mode only: one button per action motion kind (docs/CONTRACTS.md §20.10). Never in a real build. */
   | { name: "motion_gallery" }
+  /** Lamo Stories (docs/CONTRACTS.md §45.16): every /stories path, only while Lamo Stories is switched on. */
+  | { name: "stories"; page: StoriesPage }
   | { name: "not_found" };
 
 /** The motion gallery's address (mock mode only). */
@@ -95,6 +99,7 @@ export function match(pathname: string, search = ""): Route {
   if (path === "/get-app") return { name: "get_app" };
   if (isMock && path === MOTION_GALLERY_PATH) return { name: "motion_gallery" };
   if (isMock && path === MOCK_CR_CONSENT_PATH) return { name: "mock_cr_consent" };
+  if (isStoriesPath(path) && storiesEnabled()) return { name: "stories", page: matchStories(path, search) };
   return { name: "not_found" };
 }
 
@@ -257,6 +262,7 @@ export function section(route: Route): "home" | "jobs" | "review" | "library" | 
     case "mock_oauth":
     case "mock_cr_consent":
     case "motion_gallery":
+    case "stories":
       return null;
     case "cr_setup":
       return "settings";

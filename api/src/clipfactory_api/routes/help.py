@@ -46,6 +46,7 @@ OSES = frozenset({"mac", "windows", "linux", "chromeos", "ios", "android", "unkn
 # mock_cr_consent) never reach a real API, the client sends them as "not_found", and they are accepted here only so a
 # page name can never be the reason Ask fails. The Content Rewards pages (cr_setup, campaigns, campaigns_find, campaign)
 # are §38/§41.
+# "stories" is every Lamo Stories page (§45.16): Ask is not shown there, so it is accepted only for the same reason.
 PAGES = frozenset(
     {
         "home",
@@ -66,6 +67,7 @@ PAGES = frozenset(
         "campaigns_find",
         "campaign",
         "mock_cr_consent",
+        "stories",
     }
 )
 

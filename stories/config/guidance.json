@@ -1,0 +1,1722 @@
+{
+  "$comment": "Checked guidance list for Lamo Stories driving-safety videos (docs/CONTRACTS.md §45.11.5): every step comes from the cited road-authority and road-safety pages fetched and quote-checked on 2026-11-21, and only steps with shown true go on screen, because a step is shown only when a cited road authority states it and no other cited source contradicts it.",
+  "checkedAt": "2026-11-21",
+  "rule": "A step is shown in a video only when a cited road authority states it and no other cited source contradicts it. Contradicted or unsupported steps are never put on screen; the video then says: Check your local road rules.",
+  "notes": [
+    "Every quote was copied from the live page (or official PDF) fetched on 2026-11-21 and machine-checked against the fetched text. In quotes, ' | ' separates consecutive bullet-list items on the source page.",
+    "doSources / dontSources list, for each step at the same position, the citation 'ref' values that state it. A step with only one ref is single-source.",
+    "Lines starting 'DISAGREEMENT:' mark points where the cited authorities give different advice. The writer must not present either side as universal.",
+    "Not fetchable on 2026-11-21 (bot-blocked, HTTP 403): nhtsa.gov, fmcsa.dot.gov, nsc.org, vicroads.vic.gov.au. Nothing from these sites is cited. California DMV text quoted here credits NHTSA for its blowout steps, but the NHTSA page itself was not fetched.",
+    "UK Highway Code breakdown rules were renumbered in the 22 Oct 2025 update (page now 'Breakdowns and incidents (275 to 287)'). The URL still says 274-to-287."
+  ],
+  "sources": {
+    "HC-119": {
+      "publisher": "UK Department for Transport (GOV.UK) - The Highway Code",
+      "title": "The Highway Code - General rules, techniques and advice for all drivers and riders (103 to 158)",
+      "url": "https://www.gov.uk/guidance/the-highway-code/general-rules-techniques-and-advice-for-all-drivers-and-riders-103-to-158",
+      "section": "Rule 119 (Skids); see also Rule 122 (Coasting)",
+      "quote": "If skidding occurs, remove the cause by releasing the brake pedal fully or easing off the accelerator. Turn the steering wheel in the direction of the skid."
+    },
+    "NYDMV-skid": {
+      "publisher": "New York State Department of Motor Vehicles",
+      "title": "New York State Driver's Manual (MV-21), PDF dated April 2026",
+      "url": "https://dmv.ny.gov/brochure/mv21.pdf",
+      "section": "Chapter 10 - Special Driving Conditions, 'How to Drive in Winter' (rear-wheel and front-wheel skids), p. 64",
+      "quote": "Take your foot off the gas and shift to neutral or push in the clutch, but do not try to immediately steer."
+    },
+    "ONMTO-skid": {
+      "publisher": "Ontario Ministry of Transportation (Government of Ontario)",
+      "title": "Driving at night and in bad weather | The Official Ministry of Transportation (MTO) Driver's Handbook",
+      "url": "https://www.ontario.ca/document/official-mto-drivers-handbook/driving-night-and-bad-weather",
+      "section": "Skids",
+      "quote": "Ease off on the accelerator or brake and on a very slippery surface slip the transmission into neutral if you can. Continue to steer in the direction you wish to go. Be careful not to oversteer."
+    },
+    "HC-228": {
+      "publisher": "UK Department for Transport (GOV.UK) - The Highway Code",
+      "title": "The Highway Code - Driving in adverse weather conditions (226 to 237)",
+      "url": "https://www.gov.uk/guidance/the-highway-code/driving-in-adverse-weather-conditions-226-to-237",
+      "section": "Rules 228-231 (Icy and snowy weather)",
+      "quote": "drive at a slow speed in as high a gear as possible; accelerate and brake very gently"
+    },
+    "NH-snow": {
+      "publisher": "National Highways (UK government company operating England's motorways)",
+      "title": "Travelling in snow and ice - National Highways",
+      "url": "https://nationalhighways.co.uk/safety/driving-advice/travelling-in-severe-weather/travelling-in-snow-and-ice/",
+      "section": "Advice during severe winter weather",
+      "quote": "Use a high gear - this will help avoid wheel spin. | Accelerate gently, using low revs. You may need to take off in second gear to avoid skidding."
+    },
+    "RoSPA-snow": {
+      "publisher": "Royal Society for the Prevention of Accidents (RoSPA)",
+      "title": "RoSPA- Winter driving tips | Stay safe on snowy and icy roads",
+      "url": "https://www.rospa.com/road-safety/road-safety-information/driver-safety/winter-driving",
+      "section": "Snow and ice - Allow extra stopping distance",
+      "quote": "On icy roads, braking distances can be up to ten times greater than normal. Maintain a much larger gap between your vehicle and the one ahead."
+    },
+    "CADMV-blowout": {
+      "publisher": "California Department of Motor Vehicles",
+      "title": "Section 8: Safe Driving (Continued) - California DMV (California Driver's Handbook)",
+      "url": "https://www.dmv.ca.gov/portal/handbook/california-driver-handbook/safe-driving-cont2/",
+      "section": "Know How to Handle Emergencies - Tire Blowout (steps credited to NHTSA)",
+      "quote": "If you have a tire blowout, do not panic or overreact. Suddenly braking or abruptly removing your foot from the accelerator can result in a loss of control over the vehicle."
+    },
+    "NYDMV-blowout": {
+      "publisher": "New York State Department of Motor Vehicles",
+      "title": "New York State Driver's Manual (MV-21), PDF dated April 2026",
+      "url": "https://dmv.ny.gov/brochure/mv21.pdf",
+      "section": "Chapter 10 - Special Driving Conditions, 'Driving Emergencies: Tire Blowout', p. 65",
+      "quote": "If a tire blows out, hold the steering wheel tightly and slowly take your foot off the gas pedal. If your vehicle skids, handle it as you would on ice or snow. Do not brake until your vehicle is controlled."
+    },
+    "ONMTO-blowout": {
+      "publisher": "Ontario Ministry of Transportation (Government of Ontario)",
+      "title": "Dealing with emergencies | The Official Ministry of Transportation (MTO) Driver's Handbook",
+      "url": "https://www.ontario.ca/document/official-mto-drivers-handbook/dealing-emergencies",
+      "section": "If a tire blows out",
+      "quote": "Take your foot off the gas pedal to slow down and steer the vehicle firmly in the direction you want to go. Bring the vehicle to a stop off the road."
+    },
+    "HC-227": {
+      "publisher": "UK Department for Transport (GOV.UK) - The Highway Code",
+      "title": "The Highway Code - Driving in adverse weather conditions (226 to 237)",
+      "url": "https://www.gov.uk/guidance/the-highway-code/driving-in-adverse-weather-conditions-226-to-237",
+      "section": "Rule 227 (Wet weather)",
+      "quote": "if the steering becomes unresponsive, it probably means that water is preventing the tyres from gripping the road. Ease off the accelerator and slow down gradually"
+    },
+    "NH-rain": {
+      "publisher": "National Highways (UK government company operating England's motorways)",
+      "title": "Travelling when it's raining - National Highways",
+      "url": "https://nationalhighways.co.uk/safety/driving-advice/travelling-in-severe-weather/travelling-when-its-raining/",
+      "section": "Aquaplaning - If your vehicle starts aquaplaning",
+      "quote": "If your vehicle starts aquaplaning, the key thing is don't panic: | Don't hit the brakes hard | Gently ease off the accelerator | Hold the steering wheel straight | Switch off cruise control mode if you have it on"
+    },
+    "RoSPA-rain": {
+      "publisher": "Royal Society for the Prevention of Accidents (RoSPA)",
+      "title": "RoSPA- Winter driving tips | Stay safe on snowy and icy roads",
+      "url": "https://www.rospa.com/road-safety/road-safety-information/driver-safety/winter-driving",
+      "section": "Driving in rain and floods - What is aquaplaning?",
+      "quote": "If aquaplaning occurs: | Ease off the accelerator | Do not brake sharply | Allow speed to reduce naturally until grip returns"
+    },
+    "ONMTO-brakes": {
+      "publisher": "Ontario Ministry of Transportation (Government of Ontario)",
+      "title": "Dealing with emergencies | The Official Ministry of Transportation (MTO) Driver's Handbook",
+      "url": "https://www.ontario.ca/document/official-mto-drivers-handbook/dealing-emergencies",
+      "section": "If your brakes fail",
+      "quote": "Try pumping the brake pedal to temporarily restore hydraulic brake pressure. If this does not work, apply the parking brake gently but firmly while holding the release button."
+    },
+    "NYDMV-brakes": {
+      "publisher": "New York State Department of Motor Vehicles",
+      "title": "New York State Driver's Manual (MV-21), PDF dated April 2026",
+      "url": "https://dmv.ny.gov/brochure/mv21.pdf",
+      "section": "Chapter 10 - Special Driving Conditions, 'Driving Emergencies: Brake Failure', p. 65",
+      "quote": "If your brake pedal suddenly goes to the floor, try pumping it to increase pressure. If that does not help, use your emergency if you can apply it gradually- but use it gently."
+    },
+    "HC-160": {
+      "publisher": "UK Department for Transport (GOV.UK) - The Highway Code",
+      "title": "The Highway Code - Using the road (159 to 203)",
+      "url": "https://www.gov.uk/guidance/the-highway-code/using-the-road-159-to-203",
+      "section": "Rule 160",
+      "quote": "select a lower gear before you reach a long downhill slope. This will help to control your speed"
+    },
+    "ONMTO-gas": {
+      "publisher": "Ontario Ministry of Transportation (Government of Ontario)",
+      "title": "Dealing with emergencies | The Official Ministry of Transportation (MTO) Driver's Handbook",
+      "url": "https://www.ontario.ca/document/official-mto-drivers-handbook/dealing-emergencies",
+      "section": "If your gas pedal sticks",
+      "quote": "If this does not work, turn on your hazard lights, shift to neutral and stop as soon as you safely can, preferably off the road. Turn off the ignition and do not drive away."
+    },
+    "NYDMV-gas": {
+      "publisher": "New York State Department of Motor Vehicles",
+      "title": "New York State Driver's Manual (MV-21), PDF dated April 2026",
+      "url": "https://dmv.ny.gov/brochure/mv21.pdf",
+      "section": "Chapter 10 - Special Driving Conditions, 'Driving Emergencies: Stuck Gas Pedal', p. 65",
+      "quote": "Hook your shoe under the pedal and see if you can free it. If not, shift into neutral and use the brake to slow your vehicle and get off the road."
+    },
+    "ONMTO-offroad": {
+      "publisher": "Ontario Ministry of Transportation (Government of Ontario)",
+      "title": "Dealing with emergencies | The Official Ministry of Transportation (MTO) Driver's Handbook",
+      "url": "https://www.ontario.ca/document/official-mto-drivers-handbook/dealing-emergencies",
+      "section": "If your wheels go off the pavement",
+      "quote": "Don't panic. Grip the steering wheel firmly. Take your foot off the gas pedal to slow down. Avoid heavy braking. When the vehicle is under control, steer toward the pavement."
+    },
+    "CADMV-offroad": {
+      "publisher": "California Department of Motor Vehicles",
+      "title": "Section 8: Safe Driving (Continued) - California DMV (California Driver's Handbook)",
+      "url": "https://www.dmv.ca.gov/portal/handbook/california-driver-handbook/safe-driving-cont2/",
+      "section": "Know How to Handle Emergencies - Driving Off the Pavement",
+      "quote": "If your wheels drift off the pavement: | Grip the steering wheel firmly. | Remove your foot from the accelerator. | Brake gently. | Check for traffic behind you. | Carefully steer back onto the pavement."
+    },
+    "NYDMV-offroad": {
+      "publisher": "New York State Department of Motor Vehicles",
+      "title": "New York State Driver's Manual (MV-21), PDF dated April 2026",
+      "url": "https://dmv.ny.gov/brochure/mv21.pdf",
+      "section": "Chapter 10 - Special Driving Conditions, 'Driving Emergencies: Running Off the Pavement', p. 65",
+      "quote": "If your wheels move off the pavement, do not suddenly steer or swerve back onto the pavement. Ease your foot off the gas pedal and brake gently."
+    },
+    "HC-226": {
+      "publisher": "UK Department for Transport (GOV.UK) - The Highway Code",
+      "title": "The Highway Code - Driving in adverse weather conditions (226 to 237)",
+      "url": "https://www.gov.uk/guidance/the-highway-code/driving-in-adverse-weather-conditions-226-to-237",
+      "section": "Rules 226, 234, 235, 236 (Fog)",
+      "quote": "be able to pull up well within the distance you can see clearly. This is particularly important on motorways and dual carriageways, as vehicles are travelling faster"
+    },
+    "NH-fog": {
+      "publisher": "National Highways (UK government company operating England's motorways)",
+      "title": "Travelling in fog - National Highways",
+      "url": "https://nationalhighways.co.uk/safety/driving-advice/travelling-in-severe-weather/travelling-in-fog/",
+      "section": "Advice for driving in fog",
+      "quote": "Use dipped headlights, wipers and demisters. Avoid using full beam, as the fog reflects the light back, reducing visibility even further."
+    },
+    "ONMTO-fog": {
+      "publisher": "Ontario Ministry of Transportation (Government of Ontario)",
+      "title": "Driving at night and in bad weather | The Official Ministry of Transportation (MTO) Driver's Handbook",
+      "url": "https://www.ontario.ca/document/official-mto-drivers-handbook/driving-night-and-bad-weather",
+      "section": "Fog - Tips for driving safely in fog",
+      "quote": "If the fog is too dense to continue, pull completely off the road and try to position your vehicle in a safe parking area. Turn on your emergency flashers, in addition to keeping on your low-beam headlights."
+    },
+    "ONMTO-animals": {
+      "publisher": "Ontario Ministry of Transportation (Government of Ontario)",
+      "title": "Dealing with particular situations | The Official Ministry of Transportation (MTO) Driver's Handbook",
+      "url": "https://www.ontario.ca/document/official-mto-drivers-handbook/dealing-particular-situations",
+      "section": "Animals on the road",
+      "quote": "If you see an animal: | Slow down and sound your horn. | Be alert for other animals that may be with the one you've seen. | Don't try to drive around the animal. Animal movements are unpredictable."
+    },
+    "NSW-animals": {
+      "publisher": "Transport for NSW (NSW Government)",
+      "title": "Road hazards | NSW Government",
+      "url": "https://www.nsw.gov.au/driving-boating-and-transport/driving-nsw/roads-safety-and-rules/warnings-and-hazards/road-hazards",
+      "section": "If you encounter an animal on the road",
+      "quote": "If you see an animal on or near the road, slow down and apply your brakes in a controlled way. Never swerve to avoid an animal."
+    },
+    "NVR": {
+      "publisher": "Nationella Viltolycksrådet (Swedish National Wildlife Accident Council; led by the Swedish Police Authority, Trafikverket is a member)",
+      "title": "Procedures in the event of a wildlife accident - Nationella Viltolycksrådet",
+      "url": "https://www.viltolycka.se/information/procedures-in-the-event-of-a-wildlife-accident/",
+      "section": "Procedures (Section 40 of the Hunting Ordinance)",
+      "quote": "Place a warning triangle to prevent further accidents. | Always mark the accident site so that hunters with tracking dogs can find the location. | Call 112 and report the accident."
+    },
+    "HC-214": {
+      "publisher": "UK Department for Transport (GOV.UK) - The Highway Code",
+      "title": "The Highway Code - Road users requiring extra care (204 to 225)",
+      "url": "https://www.gov.uk/guidance/the-highway-code/road-users-requiring-extra-care-204-to-225",
+      "section": "Rule 214 (Animals)",
+      "quote": "When passing animals, drive slowly. Give them plenty of room and be ready to stop. Do not scare animals by sounding your horn, revving your engine or accelerating rapidly once you have passed them."
+    },
+    "HC-275": {
+      "publisher": "UK Department for Transport (GOV.UK) - The Highway Code",
+      "title": "The Highway Code - Breakdowns and incidents (275 to 287)",
+      "url": "https://www.gov.uk/guidance/the-highway-code/breakdowns-and-incidents-274-to-287",
+      "section": "Rules 275-277 (place of relative safety; breakdowns; additional rules for motorways: Go left / Get safe / Get help)",
+      "quote": "Get safe | exit your vehicle by the side furthest from traffic, if it is safe and possible to do so, and ensure passengers do the same"
+    },
+    "TRV": {
+      "publisher": "Trafikverket (Swedish Transport Administration)",
+      "title": "Om du får stopp på bilen – varna, lämna och larma - www.trafikverket.se",
+      "url": "https://www.trafikverket.se/resa-och-trafik/trafiksakerhet/sakerhet-pa-vag/om-du-far-stopp-pa-bilen--varna-lamna-och-larma/",
+      "section": "Lämna (Leave)",
+      "quote": "Det är inte säkert att vara kvar i bilen eller att vara på vägen. Gå bort från vägen, utanför räcket om det finns ett.",
+      "quoteTranslation": "It is not safe to stay in the car or to be on the road. Walk away from the road, beyond the barrier if there is one."
+    },
+    "NSW-breakdown": {
+      "publisher": "Transport for NSW (NSW Government)",
+      "title": "How to handle vehicle breakdowns on NSW roads | NSW Government",
+      "url": "https://www.nsw.gov.au/driving-boating-and-transport/driving-nsw/roads-safety-and-rules/warnings-and-hazards/breakdowns",
+      "section": "If you break down",
+      "quote": "turn on your hazard lights (and parking lights, if there's poor visibility) | stay in your vehicle with your seatbelt on and call roadside assistance"
+    },
+    "ONMTO-freeway": {
+      "publisher": "Ontario Ministry of Transportation (Government of Ontario)",
+      "title": "Dealing with emergencies | The Official Ministry of Transportation (MTO) Driver's Handbook",
+      "url": "https://www.ontario.ca/document/official-mto-drivers-handbook/dealing-emergencies",
+      "section": "If you have trouble on a freeway",
+      "quote": "Be careful getting out of your vehicle. If possible, leave through the door away from traffic. Do not raise the hood. While you wait for help, stay in your vehicle with the doors locked."
+    },
+    "HC-118": {
+      "publisher": "UK Department for Transport (GOV.UK) - The Highway Code",
+      "title": "The Highway Code - General rules, techniques and advice for all drivers and riders (103 to 158)",
+      "url": "https://www.gov.uk/guidance/the-highway-code/general-rules-techniques-and-advice-for-all-drivers-and-riders-103-to-158",
+      "section": "Rule 118 (In an emergency) and Rule 120 (ABS)",
+      "quote": "in the case of an emergency, apply the footbrake firmly; do not release the pressure until the vehicle has slowed to the desired speed. The ABS should ensure that steering control will be retained"
+    },
+    "ONMTO-abs": {
+      "publisher": "Ontario Ministry of Transportation (Government of Ontario)",
+      "title": "Driving at night and in bad weather | The Official Ministry of Transportation (MTO) Driver's Handbook",
+      "url": "https://www.ontario.ca/document/official-mto-drivers-handbook/driving-night-and-bad-weather",
+      "section": "Anti-lock braking systems (ABS); Threshold braking",
+      "quote": "Vehicles equipped with ABS should provide controlled braking on slippery surfaces automatically. Press the brake pedal hard and allow the system to control wheel lock-up."
+    },
+    "TC": {
+      "publisher": "Transport Canada (Government of Canada)",
+      "title": "Driving safely in winter",
+      "url": "https://tc.canada.ca/en/road-transportation/stay-safe-when-driving/winter-driving/driving-safely-winter",
+      "section": "Safe braking",
+      "quote": "make sure that you don't release the brake pedal when the vehicle is out of control. Focus on steering with the brake pedal applied hard"
+    },
+    "NYDMV-abs": {
+      "publisher": "New York State Department of Motor Vehicles",
+      "title": "New York State Driver's Manual (MV-21), PDF dated April 2026",
+      "url": "https://dmv.ny.gov/brochure/mv21.pdf",
+      "section": "Chapter 10 - Special Driving Conditions, 'How to Drive in Winter', p. 64",
+      "quote": "If your vehicle has anti-lock brakes (ABS), keep your foot with even pressure on the brake pedal. If your vehicle does not have ABS, pump the pedal carefully."
+    },
+    "HC-232": {
+      "publisher": "UK Department for Transport (GOV.UK) - The Highway Code",
+      "title": "The Highway Code - Driving in adverse weather conditions (226 to 237)",
+      "url": "https://www.gov.uk/guidance/the-highway-code/driving-in-adverse-weather-conditions-226-to-237",
+      "section": "Rules 232-233 (Windy weather)",
+      "quote": "strong gusts can also blow a car, cyclist, motorcyclist or horse rider off course. This can happen on open stretches of road exposed to strong crosswinds, or when passing bridges or gaps in hedges."
+    },
+    "NH-wind": {
+      "publisher": "National Highways (UK government company operating England's motorways)",
+      "title": "Travelling in strong winds - National Highways",
+      "url": "https://nationalhighways.co.uk/safety/driving-advice/travelling-in-severe-weather/travelling-in-strong-winds/",
+      "section": "Advice for driving in strong winds",
+      "quote": "Gusts of wind can cause your vehicle to shake. Always keep good control of your vehicle by using both hands on the steering wheel."
+    },
+    "RoSPA-wind": {
+      "publisher": "Royal Society for the Prevention of Accidents (RoSPA)",
+      "title": "RoSPA- Winter driving tips | Stay safe on snowy and icy roads",
+      "url": "https://www.rospa.com/road-safety/road-safety-information/driver-safety/winter-driving",
+      "section": "Driving in strong winds - Tips for windy conditions",
+      "quote": "Tips for windy conditions | Reduce speed | Keep a firm grip on the steering wheel | Give cyclists and motorcyclists extra room | Take extra care when overtaking large vehicles"
+    }
+  },
+  "topics": [
+    {
+      "id": "skid-recovery",
+      "title": "Recovering from a skid on ice or snow (rear-wheel and front-wheel skids)",
+      "keywords": [
+        "skid",
+        "skidding",
+        "slide",
+        "sliding",
+        "black ice",
+        "spin out",
+        "fishtail",
+        "losing control",
+        "rear skid",
+        "front skid",
+        "car sliding on ice"
+      ],
+      "steps": [
+        {
+          "id": "skid-recovery.1",
+          "text": "Stay calm. You can still control the car during a skid.",
+          "sources": [
+            "ONMTO-skid"
+          ],
+          "shown": true
+        },
+        {
+          "id": "skid-recovery.2",
+          "text": "Remove the cause: ease off the accelerator.",
+          "sources": [
+            "HC-119",
+            "ONMTO-skid"
+          ],
+          "shown": true
+        },
+        {
+          "id": "skid-recovery.3",
+          "text": "Remove the cause: release the brake.",
+          "sources": [
+            "HC-119",
+            "ONMTO-skid"
+          ],
+          "shown": false,
+          "why": "Braking during a skid is disputed: Highway Code rule 119 says release the brake pedal fully, while NY DMV says keep even pressure on it with ABS or pump it without ABS."
+        },
+        {
+          "id": "skid-recovery.4",
+          "text": "Rear-wheel skid: steer in the direction of the skid (rear slides right, steer right).",
+          "sources": [
+            "HC-119",
+            "NYDMV-skid"
+          ],
+          "shown": true
+        },
+        {
+          "id": "skid-recovery.5",
+          "text": "If the rear swings back the other way, steer toward that side too. You may need several small corrections.",
+          "sources": [
+            "NYDMV-skid"
+          ],
+          "shown": true
+        },
+        {
+          "id": "skid-recovery.6",
+          "text": "Keep steering in the direction you want to go.",
+          "sources": [
+            "ONMTO-skid"
+          ],
+          "shown": true
+        },
+        {
+          "id": "skid-recovery.7",
+          "text": "Front-wheel skid: take your foot off the gas, shift to neutral or push the clutch in, and do not steer straight away.",
+          "sources": [
+            "NYDMV-skid"
+          ],
+          "shown": false,
+          "why": "Shifting to neutral is disputed: NY DMV says shift to neutral in a front-wheel skid, while Highway Code rule 122 warns that coasting in neutral reduces control."
+        },
+        {
+          "id": "skid-recovery.8",
+          "text": "Front-wheel skid: as grip returns, steer where you want to go, then put it back in drive or release the clutch and accelerate carefully.",
+          "sources": [
+            "NYDMV-skid"
+          ],
+          "shown": false,
+          "why": "It is the second half of the disputed neutral-gear step: NY DMV says use neutral or the clutch, while Highway Code rule 122 warns that coasting in neutral reduces control."
+        },
+        {
+          "id": "skid-recovery.9",
+          "text": "Once you are back in control, brake only very gently and smoothly.",
+          "sources": [
+            "ONMTO-skid"
+          ],
+          "shown": true
+        }
+      ],
+      "donts": [
+        {
+          "id": "skid-recovery.x1",
+          "text": "Don't brake, accelerate or steer harshly. These cause most skids.",
+          "sources": [
+            "HC-119"
+          ],
+          "shown": true
+        },
+        {
+          "id": "skid-recovery.x2",
+          "text": "Don't oversteer.",
+          "sources": [
+            "ONMTO-skid"
+          ],
+          "shown": true
+        },
+        {
+          "id": "skid-recovery.x3",
+          "text": "Don't brake hard in a car without ABS. It makes the skid worse.",
+          "sources": [
+            "NYDMV-skid"
+          ],
+          "shown": true
+        }
+      ],
+      "caveats": [
+        "DISAGREEMENT (braking during a skid): Highway Code rule 119 says release the brake pedal fully. NY DMV says keep even pressure on the brake pedal with ABS, or pump it carefully without ABS. Library default: show easing off the accelerator and steering, and don't show any braking method during the skid.",
+        "DISAGREEMENT (neutral gear): Ontario MTO (on very slippery surfaces) and NY DMV (front-wheel skids) say shift to neutral. Highway Code rule 122, on the same UK page as rule 119, warns that coasting in neutral reduces control. Don't show shifting to neutral as a universal step.",
+        "Front-wheel skid (understeer) steps come from one source only (NY DMV). No fetched source uses the words 'understeer' or 'oversteer' for skid types.",
+        "NY DMV: front-wheel-drive cars may skid with no warning. Front-wheel and four-wheel drive do not give flawless traction.",
+        "Skids are mostly caused by driving too fast for the conditions, or by harsh braking, steering or accelerating (Highway Code 119, Ontario MTO). Prevention (slow down, gentle inputs) is the safest message for a kids' audience."
+      ],
+      "countryNotes": "Steering into the skid does not depend on which side of the road you drive on. Braking and neutral-gear advice differs between the UK, Ontario and New York sources (see caveats).",
+      "citations": [
+        "HC-119",
+        "NYDMV-skid",
+        "ONMTO-skid"
+      ]
+    },
+    {
+      "id": "ice-snow-driving",
+      "title": "Driving on ice and snow",
+      "keywords": [
+        "ice",
+        "snow",
+        "icy road",
+        "snowy road",
+        "winter driving",
+        "black ice",
+        "slippery road",
+        "snowdrift",
+        "stuck in snow",
+        "frost",
+        "gritted road"
+      ],
+      "steps": [
+        {
+          "id": "ice-snow-driving.1",
+          "text": "Check the forecast. Only drive in ice or snow if your journey is essential.",
+          "sources": [
+            "HC-228"
+          ],
+          "shown": true
+        },
+        {
+          "id": "ice-snow-driving.2",
+          "text": "Before you set off, clear all snow and ice from the windows, lights, mirrors and number plates.",
+          "sources": [
+            "HC-228"
+          ],
+          "shown": true
+        },
+        {
+          "id": "ice-snow-driving.3",
+          "text": "Drive slowly, in as high a gear as possible.",
+          "sources": [
+            "HC-228",
+            "NH-snow"
+          ],
+          "shown": true
+        },
+        {
+          "id": "ice-snow-driving.4",
+          "text": "Accelerate and brake very gently. Steer smoothly.",
+          "sources": [
+            "HC-228",
+            "RoSPA-snow"
+          ],
+          "shown": true
+        },
+        {
+          "id": "ice-snow-driving.5",
+          "text": "Pull away gently with low revs. You may need to start in second gear to avoid wheelspin.",
+          "sources": [
+            "NH-snow"
+          ],
+          "shown": true
+        },
+        {
+          "id": "ice-snow-driving.6",
+          "text": "Leave up to ten times the normal gap to the vehicle in front.",
+          "sources": [
+            "HC-228",
+            "NH-snow",
+            "RoSPA-snow"
+          ],
+          "shown": true
+        },
+        {
+          "id": "ice-snow-driving.7",
+          "text": "Slow down on the straight before bends and junctions, then steer smoothly round.",
+          "sources": [
+            "HC-228",
+            "RoSPA-snow"
+          ],
+          "shown": true
+        },
+        {
+          "id": "ice-snow-driving.8",
+          "text": "Check your grip by braking gently somewhere safe.",
+          "sources": [
+            "HC-228"
+          ],
+          "shown": true
+        },
+        {
+          "id": "ice-snow-driving.9",
+          "text": "If you get stuck, rock gently back and forth in the highest practical gear.",
+          "sources": [
+            "RoSPA-snow"
+          ],
+          "shown": false,
+          "why": "Only RoSPA states it, and RoSPA is a safety body, not a road authority."
+        },
+        {
+          "id": "ice-snow-driving.10",
+          "text": "If you are trapped in a snowdrift, stay with your vehicle and call for help.",
+          "sources": [
+            "RoSPA-snow"
+          ],
+          "shown": false,
+          "why": "Only RoSPA states it, and RoSPA is a safety body, not a road authority."
+        }
+      ],
+      "donts": [
+        {
+          "id": "ice-snow-driving.x1",
+          "text": "Avoid sudden actions. They can cause loss of control.",
+          "sources": [
+            "HC-228"
+          ],
+          "shown": true
+        },
+        {
+          "id": "ice-snow-driving.x2",
+          "text": "Don't brake suddenly. The wheels can lock and you can skid further.",
+          "sources": [
+            "NH-snow"
+          ],
+          "shown": true
+        },
+        {
+          "id": "ice-snow-driving.x3",
+          "text": "Don't spin the wheels when stuck. It makes it worse.",
+          "sources": [
+            "RoSPA-snow"
+          ],
+          "shown": false,
+          "why": "Only RoSPA states it, and RoSPA is a safety body, not a road authority."
+        },
+        {
+          "id": "ice-snow-driving.x4",
+          "text": "Don't overtake snowploughs unless the lane you will use has been cleared.",
+          "sources": [
+            "HC-228"
+          ],
+          "shown": true
+        },
+        {
+          "id": "ice-snow-driving.x5",
+          "text": "Don't assume treated (gritted) roads are safe.",
+          "sources": [
+            "HC-228"
+          ],
+          "shown": true
+        }
+      ],
+      "caveats": [
+        "Warning signs of ice: the steering feels unresponsive, and tyres make almost no noise on ice (Highway Code 231).",
+        "Hidden ice is common under bridges, in shady areas and on untreated roads (RoSPA).",
+        "'Ten times' is the upper figure the sources give ('can be'). It is not a fixed rule.",
+        "The high-gear and second-gear advice is for manual gearboxes. No cited source covers automatics or EVs."
+      ],
+      "countryNotes": "All three citations are UK sources. The fetched US and Canadian sources agree on the principles but express them differently and are not cited here. Winter-tyre laws differ by country and were not verified. Don't state tyre laws in videos.",
+      "citations": [
+        "HC-228",
+        "NH-snow",
+        "RoSPA-snow"
+      ]
+    },
+    {
+      "id": "tyre-blowout",
+      "title": "Tyre blowout at speed",
+      "keywords": [
+        "blowout",
+        "tyre blowout",
+        "tire blowout",
+        "burst tyre",
+        "burst tire",
+        "flat tyre",
+        "flat tire",
+        "popped tire",
+        "tyre burst"
+      ],
+      "steps": [
+        {
+          "id": "tyre-blowout.1",
+          "text": "Don't panic.",
+          "sources": [
+            "CADMV-blowout",
+            "ONMTO-blowout"
+          ],
+          "shown": true
+        },
+        {
+          "id": "tyre-blowout.2",
+          "text": "Hold the steering wheel firmly with both hands.",
+          "sources": [
+            "CADMV-blowout",
+            "NYDMV-blowout"
+          ],
+          "shown": true
+        },
+        {
+          "id": "tyre-blowout.3",
+          "text": "Steer firmly in the direction you want to go. Correct the steering as needed to keep the car stable.",
+          "sources": [
+            "CADMV-blowout",
+            "ONMTO-blowout"
+          ],
+          "shown": true
+        },
+        {
+          "id": "tyre-blowout.4",
+          "text": "Ease off the accelerator slowly and gradually.",
+          "sources": [
+            "CADMV-blowout",
+            "NYDMV-blowout"
+          ],
+          "shown": true
+        },
+        {
+          "id": "tyre-blowout.5",
+          "text": "Once the car is stable and under control, keep slowing down.",
+          "sources": [
+            "CADMV-blowout"
+          ],
+          "shown": true
+        },
+        {
+          "id": "tyre-blowout.6",
+          "text": "Pull off the road and stop where it is safe.",
+          "sources": [
+            "CADMV-blowout",
+            "NYDMV-blowout",
+            "ONMTO-blowout"
+          ],
+          "shown": true
+        }
+      ],
+      "donts": [
+        {
+          "id": "tyre-blowout.x1",
+          "text": "Don't brake suddenly.",
+          "sources": [
+            "CADMV-blowout"
+          ],
+          "shown": true
+        },
+        {
+          "id": "tyre-blowout.x2",
+          "text": "Don't lift your foot off the accelerator abruptly.",
+          "sources": [
+            "CADMV-blowout"
+          ],
+          "shown": true
+        },
+        {
+          "id": "tyre-blowout.x3",
+          "text": "Don't brake until the vehicle is under control.",
+          "sources": [
+            "NYDMV-blowout"
+          ],
+          "shown": true
+        }
+      ],
+      "caveats": [
+        "DISAGREEMENT (speed, minor): California DMV, citing NHTSA, says keep your speed if possible and safe, then release the accelerator gradually. Ontario MTO says take your foot off the gas to slow down. All three agree on easing off gently and not braking hard. Library default: 'ease off the accelerator gently, don't brake'.",
+        "Expect strong steering vibration. Ontario MTO says don't be alarmed by it.",
+        "A thumping sound can warn of a coming blowout. If you hear it, get safely off the road and check your tyres (NY DMV).",
+        "If the car skids after a blowout, handle it as you would on ice or snow (NY DMV). See skid-recovery."
+      ],
+      "countryNotes": "The steps don't depend on the country. 'Pull off the road' means the nearside verge or shoulder: the left in the UK and Australia, the right in the US, Canada and Sweden. On UK motorways, combine this with motorway-breakdown.",
+      "citations": [
+        "CADMV-blowout",
+        "NYDMV-blowout",
+        "ONMTO-blowout"
+      ]
+    },
+    {
+      "id": "aquaplaning",
+      "title": "Aquaplaning (hydroplaning)",
+      "keywords": [
+        "aquaplaning",
+        "hydroplaning",
+        "rain",
+        "wet road",
+        "heavy rain",
+        "puddle",
+        "standing water",
+        "floodwater",
+        "flood",
+        "car floating on water"
+      ],
+      "steps": [
+        {
+          "id": "aquaplaning.1",
+          "text": "Know the signs: the steering feels light or unresponsive, the engine gets louder and revs rise, or the back of the car drifts side to side.",
+          "sources": [
+            "HC-227",
+            "NH-rain"
+          ],
+          "shown": true
+        },
+        {
+          "id": "aquaplaning.2",
+          "text": "Don't panic.",
+          "sources": [
+            "NH-rain"
+          ],
+          "shown": true
+        },
+        {
+          "id": "aquaplaning.3",
+          "text": "Gently ease off the accelerator.",
+          "sources": [
+            "HC-227",
+            "NH-rain",
+            "RoSPA-rain"
+          ],
+          "shown": true
+        },
+        {
+          "id": "aquaplaning.4",
+          "text": "Hold the steering wheel straight.",
+          "sources": [
+            "NH-rain"
+          ],
+          "shown": true
+        },
+        {
+          "id": "aquaplaning.5",
+          "text": "Switch off cruise control if it is on.",
+          "sources": [
+            "NH-rain"
+          ],
+          "shown": true
+        },
+        {
+          "id": "aquaplaning.6",
+          "text": "Let your speed fall gradually until the tyres grip again.",
+          "sources": [
+            "HC-227",
+            "RoSPA-rain"
+          ],
+          "shown": true
+        },
+        {
+          "id": "aquaplaning.7",
+          "text": "Once you have control again, brake gently to slow down.",
+          "sources": [
+            "NH-rain"
+          ],
+          "shown": true
+        },
+        {
+          "id": "aquaplaning.8",
+          "text": "Prevention: slow down in the wet, keep well back, and keep tyres at the right pressure and tread depth.",
+          "sources": [
+            "HC-227",
+            "RoSPA-rain"
+          ],
+          "shown": true
+        }
+      ],
+      "donts": [
+        {
+          "id": "aquaplaning.x1",
+          "text": "Don't brake hard or sharply.",
+          "sources": [
+            "NH-rain",
+            "RoSPA-rain"
+          ],
+          "shown": true
+        },
+        {
+          "id": "aquaplaning.x2",
+          "text": "Don't drive through floodwater. It may be deeper than it looks.",
+          "sources": [
+            "NH-rain",
+            "RoSPA-rain"
+          ],
+          "shown": true
+        }
+      ],
+      "caveats": [
+        "National Highways says to brake once control returns. RoSPA says let speed fall naturally until grip returns. These fit together: no braking while aquaplaning, gentle braking only after grip is back.",
+        "In wet weather, stopping distances are at least double those on dry roads (Highway Code 227). National Highways advises a gap of at least four seconds."
+      ],
+      "countryNotes": "No country-specific differences in the cited guidance. US and Canadian sources call it 'hydroplaning'.",
+      "citations": [
+        "HC-227",
+        "NH-rain",
+        "RoSPA-rain"
+      ]
+    },
+    {
+      "id": "brake-failure",
+      "title": "Brake failure (pedal goes to the floor) and avoiding brake fade",
+      "keywords": [
+        "brake failure",
+        "brakes failed",
+        "no brakes",
+        "brakes not working",
+        "brake pedal to the floor",
+        "brake fade",
+        "handbrake",
+        "parking brake",
+        "long downhill"
+      ],
+      "steps": [
+        {
+          "id": "brake-failure.1",
+          "text": "Pump the brake pedal to try to bring back brake pressure.",
+          "sources": [
+            "ONMTO-brakes",
+            "NYDMV-brakes"
+          ],
+          "shown": true
+        },
+        {
+          "id": "brake-failure.2",
+          "text": "If that doesn't work, apply the parking (emergency) brake gradually and gently but firmly.",
+          "sources": [
+            "ONMTO-brakes",
+            "NYDMV-brakes"
+          ],
+          "shown": true
+        },
+        {
+          "id": "brake-failure.3",
+          "text": "Shift to a lower gear to help slow the car.",
+          "sources": [
+            "NYDMV-brakes"
+          ],
+          "shown": true
+        },
+        {
+          "id": "brake-failure.4",
+          "text": "Once stopped, don't drive away. Call for help.",
+          "sources": [
+            "ONMTO-brakes"
+          ],
+          "shown": true
+        },
+        {
+          "id": "brake-failure.5",
+          "text": "To avoid brake fade: choose a lower gear before a long downhill slope to help control your speed.",
+          "sources": [
+            "HC-160"
+          ],
+          "shown": false,
+          "why": "Brake fade is only verified as prevention (Highway Code rule 160), and no cited source says what to do once fade has started, which is what this topic shows."
+        }
+      ],
+      "donts": [
+        {
+          "id": "brake-failure.x1",
+          "text": "Don't apply the parking brake harshly.",
+          "sources": [
+            "ONMTO-brakes",
+            "NYDMV-brakes"
+          ],
+          "shown": true
+        },
+        {
+          "id": "brake-failure.x2",
+          "text": "Don't drive the car again after the brakes have failed.",
+          "sources": [
+            "ONMTO-brakes"
+          ],
+          "shown": true
+        }
+      ],
+      "caveats": [
+        "Brake fade (brakes overheating on long descents) is only covered by prevention: use a lower gear before the downhill. No fetched source gave steps for what to do once fade has started (for example, stopping to let brakes cool), so don't show such steps.",
+        "Ontario MTO's parking-brake advice ('while holding the release button') describes a lever-type handbrake. No cited source covers electronic parking brakes, so don't show a generic electronic parking brake procedure.",
+        "Ontario MTO: total brake failure is very rare on modern vehicles. New drivers should practise a parking-brake stop only with a qualified instructor under controlled conditions.",
+        "The NY DMV quote misses the word 'brake' after 'emergency'. That's a typo in the source; it means the emergency (parking) brake."
+      ],
+      "countryNotes": "Terms differ: 'parking brake' or 'emergency brake' (North America), 'handbrake' (UK). Otherwise no country differences.",
+      "citations": [
+        "ONMTO-brakes",
+        "NYDMV-brakes",
+        "HC-160"
+      ]
+    },
+    {
+      "id": "stuck-accelerator",
+      "title": "Stuck accelerator (gas pedal sticks)",
+      "keywords": [
+        "stuck accelerator",
+        "stuck gas pedal",
+        "gas pedal stuck",
+        "accelerator stuck",
+        "pedal stuck",
+        "sticky pedal",
+        "car won't slow down",
+        "runaway car"
+      ],
+      "steps": [
+        {
+          "id": "stuck-accelerator.1",
+          "text": "Try to free the pedal by hooking your foot or shoe under it.",
+          "sources": [
+            "ONMTO-gas",
+            "NYDMV-gas"
+          ],
+          "shown": true
+        },
+        {
+          "id": "stuck-accelerator.2",
+          "text": "If it stays stuck, turn on your hazard lights.",
+          "sources": [
+            "ONMTO-gas"
+          ],
+          "shown": true
+        },
+        {
+          "id": "stuck-accelerator.3",
+          "text": "Shift to neutral.",
+          "sources": [
+            "ONMTO-gas",
+            "NYDMV-gas"
+          ],
+          "shown": true
+        },
+        {
+          "id": "stuck-accelerator.4",
+          "text": "Brake to slow the car and get off the road.",
+          "sources": [
+            "NYDMV-gas"
+          ],
+          "shown": true
+        },
+        {
+          "id": "stuck-accelerator.5",
+          "text": "Stop as soon as you safely can, preferably off the road.",
+          "sources": [
+            "ONMTO-gas"
+          ],
+          "shown": true
+        },
+        {
+          "id": "stuck-accelerator.6",
+          "text": "Once stopped, turn off the ignition, don't drive away, and call for help.",
+          "sources": [
+            "ONMTO-gas"
+          ],
+          "shown": true
+        }
+      ],
+      "donts": [
+        {
+          "id": "stuck-accelerator.x1",
+          "text": "Don't reach down with your hands while the car is moving.",
+          "sources": [
+            "ONMTO-gas"
+          ],
+          "shown": true
+        },
+        {
+          "id": "stuck-accelerator.x2",
+          "text": "Don't turn off the ignition while moving. You could lose steering control or lock the steering wheel.",
+          "sources": [
+            "NYDMV-gas"
+          ],
+          "shown": true
+        }
+      ],
+      "caveats": [
+        "APPARENT DISAGREEMENT (ignition): Ontario MTO says turn off the ignition. NY DMV says don't, because steering control can be lost or the wheel can lock. Read together: switch off only once the car has stopped. Never show switching off while moving.",
+        "No cited source covers push-button start or electric vehicles. Don't show a specific ignition action for those."
+      ],
+      "countryNotes": "No country-specific differences in the cited guidance. 'Neutral' means N on an automatic. Ontario and NY don't separate manual and automatic for this situation.",
+      "citations": [
+        "ONMTO-gas",
+        "NYDMV-gas"
+      ]
+    },
+    {
+      "id": "off-road-recovery",
+      "title": "Wheels drop off the road edge (off-road recovery)",
+      "keywords": [
+        "wheels off the road",
+        "road edge",
+        "off the pavement",
+        "running off the road",
+        "drift off the road",
+        "shoulder",
+        "verge",
+        "gravel edge",
+        "over-correcting"
+      ],
+      "steps": [
+        {
+          "id": "off-road-recovery.1",
+          "text": "Don't panic. Grip the steering wheel firmly.",
+          "sources": [
+            "ONMTO-offroad",
+            "CADMV-offroad"
+          ],
+          "shown": true
+        },
+        {
+          "id": "off-road-recovery.2",
+          "text": "Take your foot off the accelerator.",
+          "sources": [
+            "ONMTO-offroad",
+            "CADMV-offroad",
+            "NYDMV-offroad"
+          ],
+          "shown": true
+        },
+        {
+          "id": "off-road-recovery.3",
+          "text": "Brake gently.",
+          "sources": [
+            "CADMV-offroad",
+            "NYDMV-offroad"
+          ],
+          "shown": true
+        },
+        {
+          "id": "off-road-recovery.4",
+          "text": "Once you have slowed and are in control, check for traffic behind you.",
+          "sources": [
+            "CADMV-offroad",
+            "NYDMV-offroad"
+          ],
+          "shown": true
+        },
+        {
+          "id": "off-road-recovery.5",
+          "text": "Steer carefully and gently back onto the road.",
+          "sources": [
+            "ONMTO-offroad",
+            "CADMV-offroad",
+            "NYDMV-offroad"
+          ],
+          "shown": true
+        },
+        {
+          "id": "off-road-recovery.6",
+          "text": "Be ready to correct your steering when all wheels are back on the road.",
+          "sources": [
+            "ONMTO-offroad"
+          ],
+          "shown": true
+        }
+      ],
+      "donts": [
+        {
+          "id": "off-road-recovery.x1",
+          "text": "Don't steer or swerve back onto the road suddenly.",
+          "sources": [
+            "NYDMV-offroad"
+          ],
+          "shown": true
+        },
+        {
+          "id": "off-road-recovery.x2",
+          "text": "Don't yank the steering wheel. Too much force can send you into oncoming traffic.",
+          "sources": [
+            "CADMV-offroad"
+          ],
+          "shown": true
+        },
+        {
+          "id": "off-road-recovery.x3",
+          "text": "Don't brake heavily.",
+          "sources": [
+            "ONMTO-offroad"
+          ],
+          "shown": true
+        }
+      ],
+      "caveats": [
+        "All three are North American (right-hand traffic) sources. Ontario MTO adds that you may need to speed up again once the wheels are fully back on the road."
+      ],
+      "countryNotes": "Which edge you drop off depends on traffic side. In right-hand traffic it's usually the right edge, and over-correcting carries you left into oncoming traffic. In left-hand traffic (UK, Australia) it's the mirror image. No UK or Australian source covering this was found, so mirror the animation for left-hand traffic but keep the same steps.",
+      "citations": [
+        "ONMTO-offroad",
+        "CADMV-offroad",
+        "NYDMV-offroad"
+      ]
+    },
+    {
+      "id": "fog-driving",
+      "title": "Driving in fog",
+      "keywords": [
+        "fog",
+        "foggy",
+        "mist",
+        "misty",
+        "low visibility",
+        "poor visibility",
+        "fog lights",
+        "can't see the road"
+      ],
+      "steps": [
+        {
+          "id": "fog-driving.1",
+          "text": "Check the forecast. If there is a fog warning, delay your trip if you can.",
+          "sources": [
+            "ONMTO-fog",
+            "NH-fog"
+          ],
+          "shown": true
+        },
+        {
+          "id": "fog-driving.2",
+          "text": "Before you enter fog, check your mirrors, then slow down.",
+          "sources": [
+            "HC-226"
+          ],
+          "shown": true
+        },
+        {
+          "id": "fog-driving.3",
+          "text": "Use dipped (low-beam) headlights, wipers and demisters.",
+          "sources": [
+            "NH-fog",
+            "ONMTO-fog"
+          ],
+          "shown": true
+        },
+        {
+          "id": "fog-driving.4",
+          "text": "Use fog lights only when visibility is seriously reduced (under 100 m). Switch them off when it improves.",
+          "sources": [
+            "HC-226",
+            "NH-fog"
+          ],
+          "shown": true
+        },
+        {
+          "id": "fog-driving.5",
+          "text": "Leave a bigger gap, and drive slowly enough to stop within the distance you can see clearly.",
+          "sources": [
+            "HC-226",
+            "NH-fog",
+            "ONMTO-fog"
+          ],
+          "shown": true
+        },
+        {
+          "id": "fog-driving.6",
+          "text": "Check your mirrors before you slow down, and brake so your brake lights warn drivers behind.",
+          "sources": [
+            "HC-226",
+            "NH-fog"
+          ],
+          "shown": true
+        },
+        {
+          "id": "fog-driving.7",
+          "text": "At junctions, stop in the right place and listen for traffic.",
+          "sources": [
+            "HC-226",
+            "NH-fog"
+          ],
+          "shown": true
+        },
+        {
+          "id": "fog-driving.8",
+          "text": "If the fog is too thick, pull right off the road into a safe parking area. Keep low beams on and turn on your hazard flashers.",
+          "sources": [
+            "ONMTO-fog"
+          ],
+          "shown": true
+        }
+      ],
+      "donts": [
+        {
+          "id": "fog-driving.x1",
+          "text": "Don't use full beam (high beams). Fog reflects the light back.",
+          "sources": [
+            "NH-fog",
+            "ONMTO-fog"
+          ],
+          "shown": true
+        },
+        {
+          "id": "fog-driving.x2",
+          "text": "Don't follow the rear lights in front too closely. They give a false sense of security.",
+          "sources": [
+            "HC-226"
+          ],
+          "shown": true
+        },
+        {
+          "id": "fog-driving.x3",
+          "text": "Don't speed up to get away from a vehicle close behind you.",
+          "sources": [
+            "HC-226",
+            "ONMTO-fog"
+          ],
+          "shown": true
+        },
+        {
+          "id": "fog-driving.x4",
+          "text": "Don't speed up suddenly, even if the fog seems to clear.",
+          "sources": [
+            "HC-226",
+            "ONMTO-fog"
+          ],
+          "shown": true
+        },
+        {
+          "id": "fog-driving.x5",
+          "text": "Don't stop on the road itself.",
+          "sources": [
+            "ONMTO-fog"
+          ],
+          "shown": true
+        }
+      ],
+      "caveats": [
+        "Fog-light rules are legal requirements in the UK: you MUST NOT use them unless visibility is seriously reduced, and MUST switch them off when it improves (Highway Code 226, 236). Ontario MTO just says use them, if fitted, together with low beams.",
+        "Ontario MTO's tip to 'use the right edge of the road as a guide' only applies in right-hand traffic.",
+        "Ontario MTO mentions hazard flashers only once the car is parked off the road. The cited UK pages don't mention hazard lights in fog. Don't show hazard lights while driving in fog."
+      ],
+      "countryNotes": "In the UK, fog-light use is regulated (MUST/MUST NOT, under 100 m visibility). Ontario has no stated visibility threshold. Pulling off the road means the left verge in the UK and Australia, the right shoulder in North America and Sweden.",
+      "citations": [
+        "HC-226",
+        "NH-fog",
+        "ONMTO-fog"
+      ]
+    },
+    {
+      "id": "animal-on-road",
+      "title": "Animal on the road (deer, moose, kangaroo, livestock)",
+      "keywords": [
+        "animal",
+        "deer",
+        "moose",
+        "elk",
+        "kangaroo",
+        "wild boar",
+        "cow",
+        "sheep",
+        "horse",
+        "wildlife",
+        "animal crossing",
+        "hit an animal"
+      ],
+      "steps": [
+        {
+          "id": "animal-on-road.1",
+          "text": "Slow down at animal warning signs, especially from dusk to dawn.",
+          "sources": [
+            "ONMTO-animals",
+            "NSW-animals"
+          ],
+          "shown": true
+        },
+        {
+          "id": "animal-on-road.2",
+          "text": "Scan both sides of the road. Watch for shining eyes, and be ready to stop.",
+          "sources": [
+            "ONMTO-animals"
+          ],
+          "shown": true
+        },
+        {
+          "id": "animal-on-road.3",
+          "text": "Use high beams when it is possible and safe.",
+          "sources": [
+            "ONMTO-animals"
+          ],
+          "shown": true
+        },
+        {
+          "id": "animal-on-road.4",
+          "text": "If you see an animal on or near the road, slow down and brake in a controlled way.",
+          "sources": [
+            "NSW-animals",
+            "ONMTO-animals"
+          ],
+          "shown": true
+        },
+        {
+          "id": "animal-on-road.5",
+          "text": "Expect more animals. They often travel in groups.",
+          "sources": [
+            "ONMTO-animals"
+          ],
+          "shown": true
+        },
+        {
+          "id": "animal-on-road.6",
+          "text": "Stay in your vehicle.",
+          "sources": [
+            "ONMTO-animals"
+          ],
+          "shown": false,
+          "why": "Ontario MTO says stay in your vehicle, but the Swedish procedure (Nationella Viltolycksrådet) has the driver put out a warning triangle and mark the spot after hitting an animal."
+        },
+        {
+          "id": "animal-on-road.7",
+          "text": "After hitting a large animal in Sweden: put out a warning triangle, mark the spot, and call 112.",
+          "sources": [
+            "NVR"
+          ],
+          "shown": true
+        }
+      ],
+      "donts": [
+        {
+          "id": "animal-on-road.x1",
+          "text": "Never swerve or try to drive around the animal. You could lose control or hit oncoming traffic.",
+          "sources": [
+            "NSW-animals",
+            "ONMTO-animals"
+          ],
+          "shown": true
+        },
+        {
+          "id": "animal-on-road.x2",
+          "text": "Don't park on the shoulder to watch an animal.",
+          "sources": [
+            "ONMTO-animals"
+          ],
+          "shown": true
+        },
+        {
+          "id": "animal-on-road.x3",
+          "text": "Don't try to move, track or put down an injured animal yourself.",
+          "sources": [
+            "ONMTO-animals",
+            "NVR"
+          ],
+          "shown": true
+        },
+        {
+          "id": "animal-on-road.x4",
+          "text": "Don't scare animals you are passing by revving or speeding off (UK rule for passing animals).",
+          "sources": [
+            "HC-214"
+          ],
+          "shown": true
+        }
+      ],
+      "caveats": [
+        "DISAGREEMENT (horn): Ontario MTO says 'Slow down and sound your horn' when you see an animal. Highway Code rule 214 says don't scare animals by sounding your horn (written mainly for farm animals and horses being passed). Library default: don't show the horn.",
+        "For a kids' audience, leave out the euthanasia and carcass-removal parts of the Swedish procedure."
+      ],
+      "countryNotes": "The animals differ: moose and deer (Sweden, Canada), deer (US), kangaroos, wombats and livestock (Australia), farm animals and horses (UK). Reporting duties differ too. In Sweden, the driver must call 112 after hitting listed species such as moose, deer or wild boar, and mark the site; failing to report is punishable. In Ontario, report a deer or moose hit to local police or the Ministry of Natural Resources. In NSW, contact WIRES for injured native animals. Never swerving is the same everywhere.",
+      "citations": [
+        "ONMTO-animals",
+        "NSW-animals",
+        "NVR",
+        "HC-214"
+      ]
+    },
+    {
+      "id": "motorway-breakdown",
+      "title": "Car breakdown on a motorway or highway",
+      "keywords": [
+        "breakdown",
+        "broken down",
+        "car broke down",
+        "motorway",
+        "highway",
+        "freeway",
+        "hard shoulder",
+        "hazard lights",
+        "warning triangle",
+        "stranded",
+        "roadside"
+      ],
+      "steps": [
+        {
+          "id": "motorway-breakdown.1",
+          "text": "At the first sign of trouble, leave at the next exit or service area if you can.",
+          "sources": [
+            "HC-275",
+            "ONMTO-freeway"
+          ],
+          "shown": true
+        },
+        {
+          "id": "motorway-breakdown.2",
+          "text": "If you can't, move to the nearside lane and pull onto the hard shoulder, an emergency area or the nearest shoulder. Stop as far from traffic as you can.",
+          "sources": [
+            "HC-275",
+            "ONMTO-freeway",
+            "NSW-breakdown"
+          ],
+          "shown": true
+        },
+        {
+          "id": "motorway-breakdown.3",
+          "text": "Turn on your hazard warning lights. Add sidelights or parking lights if it is dark or visibility is poor.",
+          "sources": [
+            "HC-275",
+            "ONMTO-freeway",
+            "NSW-breakdown",
+            "TRV"
+          ],
+          "shown": true
+        },
+        {
+          "id": "motorway-breakdown.4",
+          "text": "If you get out, use the door on the side away from traffic. Passengers do the same.",
+          "sources": [
+            "HC-275",
+            "ONMTO-freeway",
+            "NSW-breakdown"
+          ],
+          "shown": true
+        },
+        {
+          "id": "motorway-breakdown.5",
+          "text": "Get well away from the car and the traffic, behind a safety barrier if there is one.",
+          "sources": [
+            "HC-275",
+            "NSW-breakdown",
+            "TRV"
+          ],
+          "shown": false,
+          "why": "Leaving or staying in the car is disputed: the Highway Code and Trafikverket say get out and away behind the barrier, while NSW (unless you have to get out) and Ontario MTO say stay in your vehicle."
+        },
+        {
+          "id": "motorway-breakdown.6",
+          "text": "Call for help.",
+          "sources": [
+            "HC-275",
+            "ONMTO-freeway",
+            "NSW-breakdown",
+            "TRV"
+          ],
+          "shown": true
+        },
+        {
+          "id": "motorway-breakdown.7",
+          "text": "If you can't safely get out, stay in the car with your seat belt on and hazard lights on, and call the emergency number.",
+          "sources": [
+            "HC-275"
+          ],
+          "shown": false,
+          "why": "Staying in the car is disputed: NSW and Ontario MTO say stay in, the Highway Code says get out unless you can't do so safely, and Trafikverket says it is not safe to stay in the car."
+        }
+      ],
+      "donts": [
+        {
+          "id": "motorway-breakdown.x1",
+          "text": "Don't stop in a live driving lane unless you have no choice.",
+          "sources": [
+            "ONMTO-freeway"
+          ],
+          "shown": true
+        },
+        {
+          "id": "motorway-breakdown.x2",
+          "text": "Don't stand between your car and oncoming traffic.",
+          "sources": [
+            "HC-275"
+          ],
+          "shown": true
+        },
+        {
+          "id": "motorway-breakdown.x3",
+          "text": "Don't go back to the car (UK advice).",
+          "sources": [
+            "HC-275"
+          ],
+          "shown": false,
+          "why": "Waiting away from the car is disputed: the Highway Code says get out and don't go back, while NSW and Ontario MTO say stay in your vehicle."
+        },
+        {
+          "id": "motorway-breakdown.x4",
+          "text": "Don't try repairs at the roadside.",
+          "sources": [
+            "HC-275",
+            "ONMTO-freeway"
+          ],
+          "shown": true
+        },
+        {
+          "id": "motorway-breakdown.x5",
+          "text": "Don't put a warning triangle on a UK motorway.",
+          "sources": [
+            "HC-275"
+          ],
+          "shown": false,
+          "why": "Warning triangles are disputed: the Highway Code says never on motorways, while Trafikverket says put one at least 100 m behind, always where the speed limit is above 50 km/h."
+        }
+      ],
+      "caveats": [
+        "DISAGREEMENT (stay in or get out): The UK Highway Code (rule 277) says get out on the side away from traffic and wait behind the barrier. Sweden's Trafikverket says it is not safe to stay in the car or on the road. NSW says stay in your vehicle with your seatbelt on (and get behind a barrier if you have to get out). Ontario MTO says stay in your vehicle with the doors locked while you wait. Never present one answer as universal. Make the video country-specific or keep to the steps everyone shares: get off the road, hazard lights on, exit away from traffic if you get out, call for help.",
+        "DISAGREEMENT (warning triangle): UK: never on motorways; on other roads at least 45 m behind the car (Highway Code 276). Sweden: put one at least 100 m behind, and always where the speed limit is above 50 km/h (Trafikverket).",
+        "Emergency numbers differ: 999 (UK), 112 (Sweden and EU), 911 (Canada and US). The writer must not show a number that doesn't match the video's target country.",
+        "UK roads with no hard shoulder: pull into an emergency area. If you can't reach the left lane or a place of relative safety, or can't get out safely, stay in the car with seat belt and hazard lights on and call 999 (Highway Code 277)."
+      ],
+      "countryNotes": "This topic differs most by country. 'Go left' is UK and Australia (left-hand traffic); in North America and Sweden you pull over to the right shoulder. Whether to stay in the car, triangle rules and emergency numbers all differ (see caveats). Each video needs one country set and must follow that country's source.",
+      "citations": [
+        "HC-275",
+        "TRV",
+        "NSW-breakdown",
+        "ONMTO-freeway"
+      ]
+    },
+    {
+      "id": "abs-emergency-stop",
+      "title": "Emergency stop with ABS (anti-lock brakes)",
+      "keywords": [
+        "emergency stop",
+        "emergency braking",
+        "abs",
+        "anti-lock brakes",
+        "brake hard",
+        "slam the brakes",
+        "sudden stop",
+        "stop quickly",
+        "pedal vibrating"
+      ],
+      "steps": [
+        {
+          "id": "abs-emergency-stop.1",
+          "text": "Brake straight away.",
+          "sources": [
+            "HC-118"
+          ],
+          "shown": true
+        },
+        {
+          "id": "abs-emergency-stop.2",
+          "text": "With ABS, press the brake pedal firmly and hard, and keep pressing until you have slowed to the speed you need.",
+          "sources": [
+            "HC-118",
+            "ONMTO-abs",
+            "TC"
+          ],
+          "shown": true
+        },
+        {
+          "id": "abs-emergency-stop.3",
+          "text": "Keep steering while you brake. ABS helps you keep steering control.",
+          "sources": [
+            "HC-118",
+            "TC"
+          ],
+          "shown": true
+        },
+        {
+          "id": "abs-emergency-stop.4",
+          "text": "Expect the pedal to pulse or vibrate. Keep your foot down.",
+          "sources": [
+            "ONMTO-abs"
+          ],
+          "shown": true
+        },
+        {
+          "id": "abs-emergency-stop.5",
+          "text": "Learn your car's braking system from the owner's handbook.",
+          "sources": [
+            "HC-118",
+            "TC"
+          ],
+          "shown": true
+        }
+      ],
+      "donts": [
+        {
+          "id": "abs-emergency-stop.x1",
+          "text": "Don't release the brake pedal with ABS until you have slowed down.",
+          "sources": [
+            "HC-118",
+            "ONMTO-abs",
+            "TC"
+          ],
+          "shown": true
+        },
+        {
+          "id": "abs-emergency-stop.x2",
+          "text": "Don't assume ABS will stop you in a shorter distance.",
+          "sources": [
+            "HC-118",
+            "ONMTO-abs"
+          ],
+          "shown": true
+        },
+        {
+          "id": "abs-emergency-stop.x3",
+          "text": "Without ABS, don't brake so hard that the wheels lock. Locked wheels can lead to loss of control.",
+          "sources": [
+            "HC-118"
+          ],
+          "shown": true
+        }
+      ],
+      "caveats": [
+        "DISAGREEMENT (cars without ABS): Ontario MTO teaches threshold braking and says 'Don't pump the brakes'. NY DMV says pump the pedal carefully if the car has no ABS. Modern cars nearly all have ABS. Library default: ABS cars only, with no non-ABS technique shown.",
+        "Ontario MTO suggests practising emergency braking only under controlled conditions with a qualified instructor. Videos must not encourage practising on public roads."
+      ],
+      "countryNotes": "No country-specific differences. All sources agree: firm, continuous pedal pressure with ABS.",
+      "citations": [
+        "HC-118",
+        "ONMTO-abs",
+        "TC",
+        "NYDMV-abs"
+      ]
+    },
+    {
+      "id": "crosswinds",
+      "title": "Driving in strong crosswinds",
+      "keywords": [
+        "wind",
+        "crosswind",
+        "strong wind",
+        "windy",
+        "gust",
+        "gusty",
+        "storm",
+        "high wind",
+        "blown sideways",
+        "windy bridge"
+      ],
+      "steps": [
+        {
+          "id": "crosswinds.1",
+          "text": "Check the forecast. If strong winds are expected, think about delaying your journey.",
+          "sources": [
+            "NH-wind"
+          ],
+          "shown": true
+        },
+        {
+          "id": "crosswinds.2",
+          "text": "Slow down.",
+          "sources": [
+            "NH-wind",
+            "RoSPA-wind"
+          ],
+          "shown": true
+        },
+        {
+          "id": "crosswinds.3",
+          "text": "Keep both hands on the wheel and a firm grip.",
+          "sources": [
+            "NH-wind",
+            "RoSPA-wind"
+          ],
+          "shown": true
+        },
+        {
+          "id": "crosswinds.4",
+          "text": "Expect sudden gusts on open roads, on bridges, and at gaps in hedges, trees or buildings.",
+          "sources": [
+            "HC-232",
+            "NH-wind"
+          ],
+          "shown": true
+        },
+        {
+          "id": "crosswinds.5",
+          "text": "Leave room on both sides in case the car is blown sideways.",
+          "sources": [
+            "NH-wind"
+          ],
+          "shown": true
+        },
+        {
+          "id": "crosswinds.6",
+          "text": "Take extra care passing or overtaking lorries and other high-sided vehicles.",
+          "sources": [
+            "HC-232",
+            "NH-wind",
+            "RoSPA-wind"
+          ],
+          "shown": true
+        },
+        {
+          "id": "crosswinds.7",
+          "text": "Give cyclists and motorcyclists extra room.",
+          "sources": [
+            "HC-232",
+            "RoSPA-wind"
+          ],
+          "shown": true
+        },
+        {
+          "id": "crosswinds.8",
+          "text": "Watch for fallen branches and debris. Keep to main roads where you can.",
+          "sources": [
+            "NH-wind"
+          ],
+          "shown": true
+        }
+      ],
+      "donts": [
+        {
+          "id": "crosswinds.x1",
+          "text": "Avoid exposed sections of road if you can.",
+          "sources": [
+            "NH-wind"
+          ],
+          "shown": true
+        }
+      ],
+      "caveats": [
+        "High-sided vehicles, vans, caravans, trailers, motorcycles and cyclists are most affected (Highway Code 232, National Highways, RoSPA). Cars can still be pushed off course."
+      ],
+      "countryNotes": "No country-specific differences in the cited guidance. All three citations are UK sources.",
+      "citations": [
+        "HC-232",
+        "NH-wind",
+        "RoSPA-wind"
+      ]
+    }
+  ]
+}

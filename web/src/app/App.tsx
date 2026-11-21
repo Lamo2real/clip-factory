@@ -48,6 +48,10 @@ import { forgetDevice } from "../lib/push.ts";
  */
 const MotionGallery = import.meta.env.VITE_MOCK === "1" ? lazy(() => import("../dev/MotionGallery.tsx").then((m) => ({ default: m.MotionGallery }))) : null;
 
+/** Lamo Stories (docs/CONTRACTS.md §45.16.2) loads only when it is opened, so Lamo Clips' own bundle and styles stay as
+ * they were. */
+const StoriesApp = lazy(() => import("../stories/StoriesApp.tsx").then((m) => ({ default: m.StoriesApp })));
+
 type Boot = { state: "loading" } | { state: "signed_out"; note: string | null } | { state: "ready" } | { state: "broken" };
 
 const TITLES: Record<Route["name"], string> = {
@@ -68,6 +72,7 @@ const TITLES: Record<Route["name"], string> = {
   campaigns_find: "Find campaigns",
   campaign: "Campaign",
   motion_gallery: "Motion gallery",
+  stories: "Lamo Stories",
   not_found: "Not found",
 };
 
@@ -186,6 +191,13 @@ function Shell() {
   // Mock mode's pretend consent pages stand alone, like the platform's real page would.
   if (route.name === "mock_oauth") return <MockConsent platform={route.platform} />;
   if (route.name === "mock_cr_consent") return <MockCrConsent />;
+  // Lamo Stories has its own shell (docs/CONTRACTS.md §45.16.2); every other route keeps this one, unchanged.
+  if (route.name === "stories")
+    return (
+      <Suspense fallback={<div className="boot" role="status" aria-label="Loading Lamo Stories" />}>
+        <StoriesApp page={route.page} />
+      </Suspense>
+    );
 
   return (
     <div className="app">
