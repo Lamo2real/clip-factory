@@ -353,6 +353,7 @@ function ReviewCard({
   // An API from before §39 (404) or Content Rewards switched off (503): nothing shows, the card is as before.
   const fitLoad = useClipFit(clip.clipId, cr.state !== "missing" && cr.state !== "soon");
   const clipFit = fitLoad.data;
+  const ownFit = clipFit?.mode === "campaign" ? (clipFit.fits[0] ?? null) : null;
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [campaignOff, setCampaignOff] = useState(false);
   // The campaign could not be read (a network error or a 5xx): say so, with Check again, never a skeleton for good.
@@ -387,7 +388,9 @@ function ReviewCard({
   }, [campaignId, linkedKey, summaryKey, campaignTry]);
   const isCampaign = !!campaign;
   const campaignWait = !!campaignId && !campaign && !campaignOff;
-  const placesReady: Platform[] | null = campaignWait ? null : ready && campaign ? ready.filter((p) => campaign.uploadPlaces.includes(p)) : ready;
+  // A campaign clip offers only the places its campaign pays for: the fit's (read again on setup news), else the card's.
+  const campaignPlaces = ownFit?.uploadPlaces ?? campaign?.uploadPlaces ?? null;
+  const placesReady: Platform[] | null = campaignWait ? null : ready && campaignPlaces && (campaign || ownFit) ? ready.filter((p) => campaignPlaces.includes(p)) : ready;
   // Where it goes (§33): the owner's taps on this card, else this device's last choice / Where clips go, minus
   // places that are not set up. A campaign clip starts with every place the campaign pays for.
   const [picked, setPicked] = useState<Platform[] | null>(null);
@@ -770,7 +773,6 @@ function ReviewCard({
   // Commercial content is on but says nothing about whose: TikTok's own words go on Upload's hover text and the line.
   const ttNoWhose = tiktokOn && !!creator && choices.commercial && !choices.yourBrand && !choices.branded;
   // §39.3: the fit again for what this card holds now (captions, places, TikTok's Branded content).
-  const ownFit = clipFit?.mode === "campaign" ? (clipFit.fits[0] ?? null) : null;
   const live = ownFit
     ? liveFit(ownFit, {
         captions,

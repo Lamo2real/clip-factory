@@ -3,7 +3,7 @@
 // that could earn shows the same quiet "could earn" line. After it posts, the §38.6 post lines take over. A normal
 // clip also has, closed by default and only when the owner is in a campaign, "Can it earn on your campaigns?" with one
 // line per campaign. With no campaign, Content Rewards switched off (503) or an API before §39 (404): nothing shows.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, friendlyMessage } from "../../api/index.ts";
 import type { CampaignFit as Fit, Clip, ClipFit as ClipFitData } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
@@ -127,4 +127,25 @@ export function ClipFit({ clip, data, primary }: { clip: Clip; data: ClipFitData
       ) : null}
     </>
   );
+}
+
+/**
+ * A clip that waits in Review has no numbers yet (its page says so): the fit still shows above that, from the clip
+ * itself, so the clip page tells him whether it can earn before he uploads it.
+ */
+export function WaitingClipFit({ clipId }: { clipId: string }) {
+  const [clip, setClip] = useState<Clip | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api()
+      .getClip(clipId)
+      .then((c) => alive && setClip(c))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [clipId]);
+  const page = useClipPageFit(clip?.status === "review" ? clip : null);
+  if (!clip || clip.status !== "review") return null;
+  return <ClipFit clip={clip} data={page.data} primary={false} />;
 }
