@@ -13,13 +13,14 @@ import { bytes } from "../../lib/format.ts";
 import { campaignLink, checkLink, extractLink, KIND_LABEL, PLATFORM_NAMES } from "../../lib/links.ts";
 import type { Campaign, GroupChoice } from "../../api/types.ts";
 import { ApiError } from "../../api/errors.ts";
-import { COMING_SOON, NOT_YET, campaignPath, clippable, homeStop, listedCampaign, useCr } from "../../lib/contentRewards.ts";
+import { CAMPAIGNS_PATH, COMING_SOON, NOT_YET, campaignPath, homeStop, listedCampaign, makeClipsPath, readyForClips, useCr } from "../../lib/contentRewards.ts";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
 import { addCampaign, GroupPicker } from "../campaigns/CampaignPaste.tsx";
 import { OpenButton } from "../campaigns/bits.tsx";
 import { Rich } from "../settings/setup/bits.tsx";
 import { useAction } from "../../lib/motion.ts";
-import { navigate } from "../../lib/router.ts";
+import { navigate, useRoute } from "../../lib/router.ts";
+import { plural } from "../../lib/format.ts";
 import { useUnsaved } from "../../features/help/unsaved.ts";
 import { canMacFetch, macBridge } from "../../lib/macFetch.ts";
 
@@ -61,7 +62,19 @@ export async function stopMacCopy(from: string, newJobId: string): Promise<boole
   }
 }
 
+/**
+ * Home's form, in one of the two ways (§39.1). At `/` it is the normal way, exactly as it was before campaigns: no
+ * campaign field, bar, chip or line, whatever campaigns exist. The campaign way always starts from a campaign: Home at
+ * `/?campaign={uuid}` shows the strip "Campaign clips · FaZe Clips", its rule lines, its videos and the main button
+ * "Make campaign clips". Each way gets its own fresh form (so "Make normal clips instead" leaves nothing behind).
+ */
 export function NewJobForm() {
+  useRoute();
+  const way = typeof location !== "undefined" && campaignStart(location.search).campaignId ? "campaign" : "normal";
+  return <JobForm key={way} />;
+}
+
+function JobForm() {
   const id = useId();
   const { me, refresh } = useSession();
   const toast = useToast();
@@ -166,11 +179,22 @@ export function NewJobForm() {
   const check = useMemo(() => checkLink(link), [link]);
   const crLink = useMemo(() => campaignLink(link), [link]);
   const isCampaignLink = mode === "link" && crLink.kind !== "none";
-  // The campaigns a job can be for right now (in or manual, nothing stopping it), and the one Home was opened for.
-  const clipFor = clippable(cr).filter((c) => c.hardStops === 0 || c.campaignId === pickedCampaign);
+  const crOn = cr.state !== "missing" && cr.state !== "soon";
+  // The campaign way (§39.1): only when Home was opened for a campaign, and Content Rewards is there at all.
+  const campaignWay = !!fromCampaign.campaignId && crOn;
+  // The campaigns ready for clips (the "Which campaign" bar, only with two or more; no None: leaving is "Make normal
+  // clips instead"), and the one Home was opened for.
+  const clipFor = campaignWay && cr.state === "ok" ? cr.data.campaigns.filter((c) => readyForClips(c) || c.campaignId === pickedCampaign) : [];
   // Only a campaign the API listed goes with a new job (§38.19).
-  const listed = listedCampaign(cr, pickedCampaign);
+  const listed = campaignWay ? listedCampaign(cr, pickedCampaign) : null;
   const forCampaign = listed && (listed.membership === "in" || listed.membership === "manual") ? listed.campaignId : null;
+  // Opened for a campaign that can't take clips (not joined, or not added): say why, with the way to its card.
+  const notReady =
+    campaignWay && cr.state === "ok" && !forCampaign
+      ? listed
+        ? { text: listed.nextStepText, href: campaignPath(listed.campaignId) }
+        : { text: "Add the campaign again on the Campaigns page.", href: CAMPAIGNS_PATH }
+      : null;
 
   // The picked campaign's card (its stops, its videos and channels).
   useEffect(() => {
@@ -214,15 +238,18 @@ export function NewJobForm() {
   );
   // The live news may be late or lost: while he waits for the rules, look now and then too.
   useLivePoll(readCampaign, waitingRules && !!forCampaign, 5000);
-  const hardStop = campaign?.stops.find((s) => s.hard) ?? null;
+  const hardStop = forCampaign ? (campaign?.stops.find((s) => s.hard) ?? null) : null;
   // Home's words for the stop (the card's say "below", which is the campaign page) and the button's short text.
-  const homeWords = hardStop ? homeStop(hardStop) : null;
+  const homeWords = hardStop ? homeStop(hardStop) : notReady ? { short: "Can't make clips yet", text: notReady.text, openCard: true } : null;
   const stopWords = homeWords?.text ?? null;
   const min = me?.settings.clipMin ?? 5;
   const max = me?.settings.clipMax ?? 10;
   const target: ClipTarget = count === "range" ? { min, max } : { min: exact, max: exact };
-  const crOn = cr.state !== "missing" && cr.state !== "soon";
-  const ready = isCampaignLink ? crLink.kind === "campaign" && crOn : (mode === "link" ? check.state === "ok" : !!file && !fileError) && !stopWords;
+  // The campaign way waits for its campaign (never a job without it while the overview loads).
+  const waitingCampaign = campaignWay && cr.state === "loading";
+  const ready = isCampaignLink
+    ? crLink.kind === "campaign" && crOn
+    : (mode === "link" ? check.state === "ok" : !!file && !fileError) && !stopWords && !waitingCampaign;
   const showLinkError = !isCampaignLink && check.state === "error" && (touched || link.length > 8);
 
   function takeLink(text: string) {
@@ -484,8 +511,9 @@ export function NewJobForm() {
       onDrop={drop}
     >
       <h2 className="sr-only" id={`${id}-h`}>
-        Make new clips
+        {campaignWay ? "Make campaign clips" : "Make new clips"}
       </h2>
+      {campaignWay ? <CampaignWayStrip name={listed?.name ?? campaign?.name ?? null} rules={forCampaign && campaign ? campaign.plainRules.length : null} /> : null}
       <Segmented<Mode>
         label="Source"
         value={mode}
@@ -651,28 +679,36 @@ export function NewJobForm() {
         </div>
       )}
 
+      {campaignWay && campaign && forCampaign && !isCampaignLink ? (
+        <div className="cr-way__below">
+          <CampaignRuleLines campaign={campaign} />
+          <CampaignVideos campaign={campaign} onPick={(url) => (setMode("link"), takeLink(url), setTouched(true))} />
+        </div>
+      ) : null}
+
       {group ? <GroupPicker name={group.name} choices={group.choices} onPicked={() => setGroup(null)} /> : null}
 
-      {clipFor.length && !isCampaignLink ? (
-        <fieldset className="field field--inline cr-for" data-help="cr-make-clips">
-          <legend className="field__label">For a campaign</legend>
+      {campaignWay && clipFor.length >= 2 && !isCampaignLink ? (
+        <fieldset className="field field--inline cr-for">
+          <legend className="field__label">Which campaign</legend>
           <div className={`cr-for__bar${moreCampaigns ? " is-more" : ""}`} ref={forBar}>
             <Segmented<string>
-              label="For a campaign"
-              value={forCampaign ?? ""}
+              label="Which campaign"
+              value={forCampaign ?? pickedCampaign ?? ""}
               onChange={(v) => {
-                setPickedCampaign(v || null);
+                setPickedCampaign(v);
                 setCrError(null);
                 resend.current = null;
                 setWaitingRules(false);
                 setResendNow(false);
+                // The address follows the pick (no new history entry), so a reload stays on this campaign.
+                history.replaceState(history.state, "", makeClipsPath(v));
               }}
-              options={[{ value: "", label: "None" }, ...clipFor.map((c) => ({ value: c.campaignId, label: c.name.length > 28 ? `${c.name.slice(0, 27)}…` : c.name }))]}
+              options={clipFor.map((c) => ({ value: c.campaignId, label: c.name.length > 28 ? `${c.name.slice(0, 27)}…` : c.name }))}
             />
             {/* More campaigns hide to the right: a soft fade and a chevron say so. */}
             {moreCampaigns ? <Icon name="chevronRight" size={20} className="icon cr-for__more" /> : null}
           </div>
-          {campaign ? <CampaignVideos campaign={campaign} onPick={(url) => (setMode("link"), takeLink(url), setTouched(true))} /> : null}
         </fieldset>
       ) : null}
 
@@ -724,7 +760,7 @@ export function NewJobForm() {
             }
           }}
         >
-          {isCampaignLink && crOn ? "Add campaign" : homeWords && !crError ? homeWords.short : "Make clips"}
+          {isCampaignLink && crOn ? "Add campaign" : homeWords && !crError ? homeWords.short : campaignWay ? "Make campaign clips" : "Make clips"}
         </Button>
         {crError || (stopWords && !isCampaignLink) ? (
           <p className="field__status is-bad" role="alert">
@@ -734,9 +770,9 @@ export function NewJobForm() {
             </span>
           </p>
         ) : null}
-        {homeWords?.openCard && forCampaign && !crError && !isCampaignLink ? (
-          <LinkButton href={campaignPath(forCampaign)} variant="glass" icon="layers">
-            Open the campaign
+        {homeWords?.openCard && (forCampaign || notReady) && !crError && !isCampaignLink ? (
+          <LinkButton href={forCampaign ? campaignPath(forCampaign) : notReady!.href} variant="glass" icon="layers">
+            {forCampaign || notReady?.href !== CAMPAIGNS_PATH ? "Open the campaign" : "Your campaigns"}
           </LinkButton>
         ) : null}
         <p className="newjob__hint">Nothing gets posted until you tap Upload.</p>
@@ -765,6 +801,48 @@ export function NewJobForm() {
         </div>
       ) : null}
     </form>
+  );
+}
+
+/** The campaign way's strip (§39.1): "Campaign clips · FaZe Clips", how many rules it follows, and the quiet way back
+ * to the normal way at its right end. */
+function CampaignWayStrip({ name, rules }: { name: string | null; rules: number | null }) {
+  return (
+    <div className="cr-way" data-help="cr-make-clips">
+      <div className="cr-way__head">
+        <p className="cr-way__title">
+          <Icon name="coin" size={20} />
+          <span>
+            Campaign clips{name ? (
+              <>
+                {" · "}
+                <strong className="user-text">{name}</strong>
+              </>
+            ) : null}
+          </span>
+        </p>
+        <LinkButton href="/" variant="ghost" size="sm" className="cr-way__normal">
+          Make normal clips instead
+        </LinkButton>
+      </div>
+      {rules !== null ? <p className="cr-way__rules">{rules > 0 ? `Clip Factory follows its ${plural(rules, "rule")} on every clip.` : "Clip Factory follows its rules on every clip."}</p> : null}
+    </div>
+  );
+}
+
+/** The campaign's own rule lines under the link box, made by the server (absent on an API from before §39). */
+function CampaignRuleLines({ campaign }: { campaign: Campaign }) {
+  const lines = [campaign.sourceRuleText, campaign.languageRuleText].filter((l): l is string => typeof l === "string" && l.length > 0);
+  if (!lines.length) return null;
+  return (
+    <ul className="cr-way__lines" aria-label="This campaign's rules for the video">
+      {lines.map((l) => (
+        <li key={l}>
+          <Icon name="info" size={18} />
+          <span className="user-text">{l}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
