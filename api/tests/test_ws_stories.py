@@ -619,3 +619,21 @@ def test_a_refused_agent_stop_is_not_an_error(
     status, body = call("POST", f"{BASE}/stories/{story['storyId']}/cancel")
     assert status == 200
     assert body["job"]["status"] == "canceled"
+
+
+def test_a_failed_script_write_leaves_the_story_as_it_was(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    story = seed_story(store, s3_client)
+
+    def refuse(**_: Any) -> dict[str, Any]:
+        raise OSError("S3 is down")
+
+    s3_client.put_object = refuse  # type: ignore[method-assign]
+    status, body = _patch(call, story, captionsOn=False)
+    assert status == 503
+    assert body["error"]["message"] == "We could not save the change just now. Try again."
+    stored = _story(store, story["storyId"])
+    assert stored["scriptVersion"] == 1
+    assert stored["scriptKey"] == story["scriptKey"]
+    assert stored["stale"] == []
+    assert stored["captionsOn"] is True
+    assert "ownerEdits" not in stored

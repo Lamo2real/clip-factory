@@ -1034,10 +1034,10 @@ def patch_story(app: App, req: Request) -> Response:
     if not sets and new_script is None:
         return ok({"story": _public_story(ctx, story), "script": script or _read_script(ctx, story)})
     update = Update(ctx.pk, story["sk"], sets={**sets, "updatedAt": ctx.at()})
+    key = ""
     if new_script is not None:
         number = int(story.get("scriptVersion") or 0) + 1
         key = f"{shapes.story_prefix(ctx.user_id, ctx.ws_id, story['storyId'])}script/v{number}.json"
-        app.media.put(key, json.dumps(new_script, ensure_ascii=False).encode(), "application/json")
         update.sets.update({"scriptVersion": number, "scriptKey": key})
     if stale_add:
         update.sets["stale"] = shapes.ordered_steps([*(story.get("stale") or []), *stale_add])
@@ -1054,10 +1054,31 @@ def patch_story(app: App, req: Request) -> Response:
     update.bump().equals("version", patch["version"]).one_of("status", stories.EDIT_STATUSES)
     update.absent_or_null("currentJobId")
     try:
-        item = update.run(ctx.store)
+        item = update.run(ctx.store)  # first win the version, so two edits at once never share v{n+1}
     except db.ConditionFailed as e:
         raise conflict(stories.CHANGED) from e
+    if new_script is not None:
+        try:
+            app.media.put(key, json.dumps(new_script, ensure_ascii=False).encode(), "application/json")
+        except Exception as e:
+            _undo_patch(ctx, story, item, list(update.sets))
+            log("warning", "stories.script_write_failed", storyId=story["storyId"], error=type(e).__name__)
+            raise ApiError(503, "platform_down", "We could not save the change just now. Try again.") from e
     return ok({"story": _public_story(ctx, item), "script": new_script or script or _read_script(ctx, item)})
+
+
+def _undo_patch(ctx: Ctx, before: Mapping[str, Any], after: Mapping[str, Any], fields: list[str]) -> None:
+    """The new script could not be written: every field the edit set goes back to what it was (best effort)."""
+    undo = Update(ctx.pk, str(before["sk"]), sets={"updatedAt": ctx.at()})
+    for name in fields:
+        if name == "updatedAt":
+            continue
+        if before.get(name) is None:
+            undo.removes.append(name)
+        else:
+            undo.sets[name] = before[name]
+    with contextlib.suppress(db.ConditionFailed):
+        undo.bump().equals("version", after.get("version")).run(ctx.store)
 
 
 def _stop_job(ctx: Ctx, story: Item, job: Item | None) -> tuple[Item, Item | None]:
