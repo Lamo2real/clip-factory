@@ -576,6 +576,21 @@ export interface Post {
   campaignId?: string;
   /** YouTube or X did not take the paid-partnership switch (§38.14). */
   paidLabel?: "not_set";
+  /** "you": the owner posted it on TikTok himself (Post on TikTok yourself, §42). */
+  by?: "you";
+}
+
+/** GET /v1/clips/{clipId}/file: a 1-hour link that saves the clip's video (§42). */
+export interface ClipFile {
+  url: string;
+  filename: string;
+}
+
+/** POST and DELETE /v1/clips/{clipId}/tiktok/posted (§42). `note`: the link was kept, but views are not read. */
+export interface TikTokMarked {
+  clip: Clip;
+  posts: Post[];
+  note?: string;
 }
 
 export interface Learning {
@@ -668,6 +683,8 @@ export interface PlatformPerformance {
   error?: string;
   /** §25.3: what this platform reported this clip made (YouTube's estimate today). Absent when nothing was reported. */
   revenue?: ReportedMoney;
+  /** "you": posted on TikTok by the owner himself (§42). */
+  by?: "you";
 }
 
 export interface SeriesPoint {
@@ -1607,6 +1624,12 @@ export interface Api {
     options?: ClipPostOptions,
   ): Promise<{ clip: Clip; posts: Post[] }>;
   declineClip(clipId: string): Promise<Clip>;
+  /** GET /v1/clips/{clipId}/file: a link that saves the clip's video (Save the video, §42). */
+  clipFile(clipId: string): Promise<ClipFile>;
+  /** POST /v1/clips/{clipId}/tiktok/posted: the owner posted it on TikTok himself; `link` gives its views (§42). */
+  markTikTokPosted(clipId: string, link?: string, since?: string): Promise<TikTokMarked>;
+  /** DELETE /v1/clips/{clipId}/tiktok/posted: Undo of "I posted it" (§42). */
+  undoTikTokPosted(clipId: string): Promise<TikTokMarked>;
   /** GET /v1/skills: built-ins first, then the owner's, by name (§18.3). */
   listSkills(): Promise<Skill[]>;
   /** GET /v1/skills/{skillId}. */
