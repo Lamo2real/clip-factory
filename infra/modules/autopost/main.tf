@@ -5,9 +5,10 @@
 #                     transaction per clip and the idempotent start of cf-prod-clip-flow on its live alias, so a clip
 #                     is confirmed and started only once, even when a tick is retried or two runs overlap.
 #
-# Additive only: a new function, role, log group, async-invoke config, rule, target and permission. No table, index,
-# secret or bucket is created, changed or deleted here, and cf-prod-api is not touched (its run-now test actions run
-# inline with Upload's existing grants). The role has no DeleteItem, no Scan and no S3.
+# Additive only: a new function, role, log group, async-invoke config, rule, target, permission and the rule's
+# failed-invocations alarm. No table, index, secret or bucket is created, changed or deleted here, and cf-prod-api is
+# not touched (its run-now test actions run inline with Upload's existing grants). The role has no DeleteItem, no
+# Scan, no S3 and no Secrets Manager access.
 terraform {
   required_version = ">= 1.11.0"
   required_providers {
@@ -59,11 +60,9 @@ resource "aws_iam_role_policy" "autopost" {
       # Starts clip-{clipId}-{flowRun} on the clip flow's live alias (any qualifier of clip-flow, never another
       # function), as the API's StartFlows and the hooks' StartClipFlow.
       { Sid = "StartClipFlow", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = ["${var.clip_flow_arn_prefix}:*"] },
-      # For the campaign fit check only (§46.5 rule 4), the clip flow's Content Rewards grants: read the app keys and
-      # tokens; write a refreshed (rotated) token back, only to {platform}/token. Never create or delete a secret,
-      # never write the app keys or pending choices.
-      { Sid = "PlatformSecretsRead", Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = [var.platform_secrets_arn] },
-      { Sid = "PlatformTokens", Effect = "Allow", Action = ["secretsmanager:PutSecretValue"], Resource = [var.platform_token_secrets_arn] },
+      # No Secrets Manager statement: the campaign fit check (§46.5 rule 4, contentrewards.fit.for_clip) reads only the
+      # table (CRCONN, setups, campaigns, jobs, posts, submissions) and never a key or token. SECRET_PREFIX is set only
+      # so the Content Rewards deps (and with them the fit check) exist; their Secrets Manager client is never called.
     ]
   })
 }
@@ -137,4 +136,27 @@ resource "aws_lambda_permission" "autopost" {
   function_name = aws_lambda_function.autopost.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.autopost.arn
+}
+
+# The hourly rule could not start cf-prod-autopost (permission or target lost, function deleted or throttled past the
+# event's 55 minutes), so nothing is auto-posted. FailedInvocations counts at most one event an hour, so the window is
+# hourly: two failed ticks in a row (§46.13: one lost tick is caught up by the next). monitoring's schedule alarm
+# (15-minute periods, two in a row) can never fire for a rule that runs once an hour, so this rule is not handed to
+# it; the alarm keeps its name and goes to the same topic as every other alarm.
+resource "aws_cloudwatch_metric_alarm" "hourly_failed" {
+  alarm_name          = "${aws_cloudwatch_event_rule.autopost.name}-failed-invocations"
+  alarm_description   = "The schedule ${aws_cloudwatch_event_rule.autopost.name} could not start its function, so the autopost job is not running. Check the rule's target and the function's resource policy."
+  namespace           = "AWS/Events"
+  metric_name         = "FailedInvocations"
+  dimensions          = { RuleName = aws_cloudwatch_event_rule.autopost.name }
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [var.alarm_topic_arn]
+  ok_actions          = [var.alarm_topic_arn]
+  tags                = local.tags
 }

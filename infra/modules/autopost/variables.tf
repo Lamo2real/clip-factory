@@ -40,28 +40,19 @@ variable "clip_flow_arn_prefix" {
 
 variable "secret_prefix" {
   type        = string
-  description = "Name prefix of the owner's platform key and token secrets (SECRET_PREFIX, <name>/platforms/)."
+  description = "SECRET_PREFIX (<name>/platforms/): only so the Content Rewards deps, and with them the campaign fit check, are built. The fit check reads only the table, so the role reads no secret."
   validation {
     condition     = endswith(var.secret_prefix, "/platforms/")
     error_message = "secret_prefix must end with /platforms/."
   }
 }
 
-variable "platform_secrets_arn" {
+variable "alarm_topic_arn" {
   type        = string
-  description = "ARN pattern arn:aws:secretsmanager:REGION:ACCT:secret:<name>/platforms/*: the campaign fit check reads keys and tokens, as the clip flow."
+  description = "The alarms topic (monitoring's alarm_topic_arn, cf-prod-alarms): the hourly rule's failed-invocations alarm goes there."
   validation {
-    condition     = can(regex("^arn:aws[a-z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9_-]+/platforms/\\*$", var.platform_secrets_arn))
-    error_message = "platform_secrets_arn must be a secretsmanager ARN ending in /platforms/*."
-  }
-}
-
-variable "platform_token_secrets_arn" {
-  type        = string
-  description = "ARN pattern arn:aws:secretsmanager:REGION:ACCT:secret:<name>/platforms/*/token-*: the only secrets this function may write (a refreshed token)."
-  validation {
-    condition     = can(regex("^arn:aws[a-z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9_-]+/platforms/\\*/token-\\*$", var.platform_token_secrets_arn))
-    error_message = "platform_token_secrets_arn must be a secretsmanager ARN ending in /platforms/*/token-*."
+    condition     = can(regex("^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]+$", var.alarm_topic_arn))
+    error_message = "alarm_topic_arn must be one SNS topic ARN."
   }
 }
 

@@ -3,9 +3,10 @@
 #
 # docs/CONTRACTS.md §46.11 and ADR-81: cf-prod-autopost fires every hour on the hour (EventBridge rule
 # cf-prod-autopost-hourly), a retried delivery resumes its own run (2 retries, never older than 55 minutes), and the
-# role is exactly what the run calls: the table without DeleteItem or Scan, starting the clip flow and nothing else,
-# and the clip flow's platform secret grants for the campaign fit check. No S3, no iam:*, no scheduler:*. Everything
-# here is new: no owner-data resource is in this module.
+# role is exactly what the run calls: the table without DeleteItem or Scan, starting the clip flow and nothing else.
+# The campaign fit check reads only the table, so no Secrets Manager; no S3, no iam:*, no scheduler:*. The rule's
+# failed invocations are watched hourly (two failed ticks in a row). Everything here is new: no owner-data resource is
+# in this module.
 
 mock_provider "aws" {
   override_during = plan
@@ -19,22 +20,24 @@ mock_provider "aws" {
   mock_resource "aws_lambda_function" {
     defaults = { arn = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-autopost" }
   }
+  mock_resource "aws_cloudwatch_metric_alarm" {
+    defaults = { arn = "arn:aws:cloudwatch:eu-north-1:123456789012:alarm:cf-test-autopost-hourly-failed-invocations" }
+  }
 }
 
 variables {
   name = "cf-test"
   # Any existing file: the module only hashes it.
-  lambda_zip_path            = "main.tf"
-  table_name                 = "cf-test-data"
-  table_arn                  = "arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"
-  media_bucket               = "cf-test-media-123456789012"
-  clip_flow_alias_arn        = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:live"
-  clip_flow_arn_prefix       = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow"
-  secret_prefix              = "cf-test/platforms/"
-  platform_secrets_arn       = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*"
-  platform_token_secrets_arn = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/token-*"
-  content_rewards_enabled    = true
-  permissions_boundary_arn   = "arn:aws:iam::123456789012:policy/cf-test-role-boundary"
+  lambda_zip_path          = "main.tf"
+  table_name               = "cf-test-data"
+  table_arn                = "arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"
+  media_bucket             = "cf-test-media-123456789012"
+  clip_flow_alias_arn      = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:live"
+  clip_flow_arn_prefix     = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow"
+  secret_prefix            = "cf-test/platforms/"
+  alarm_topic_arn          = "arn:aws:sns:eu-north-1:123456789012:cf-test-alarms"
+  content_rewards_enabled  = true
+  permissions_boundary_arn = "arn:aws:iam::123456789012:policy/cf-test-role-boundary"
 }
 
 run "the_function" {
@@ -78,8 +81,9 @@ run "the_function" {
   }
 
   assert {
-    condition     = output.function_names == { autopost = "cf-test-autopost" } && output.schedule_rule_names == { autopost = "cf-test-autopost-hourly" }
-    error_message = "The function and its rule are handed to monitoring."
+    condition = (output.function_names == { autopost = "cf-test-autopost" } && output.schedule_rule_names == { autopost = "cf-test-autopost-hourly" } &&
+    output.schedule_alarm_names == { autopost = "cf-test-autopost-hourly-failed-invocations" })
+    error_message = "The function (for monitoring's errors alarm), its rule and the rule's own alarm are handed out."
   }
 }
 
@@ -147,10 +151,10 @@ run "least_privilege_and_nothing_can_be_deleted" {
   assert {
     condition = (
       toset([for s in jsondecode(aws_iam_role_policy.autopost.policy).Statement : s.Sid]) ==
-      toset(["Logs", "Tracing", "Data", "StartClipFlow", "PlatformSecretsRead", "PlatformTokens"]) &&
+      toset(["Logs", "Tracing", "Data", "StartClipFlow"]) &&
       alltrue([for s in jsondecode(aws_iam_role_policy.autopost.policy).Statement : s.Effect == "Allow"])
     )
-    error_message = "The role has exactly the logs, tracing, table, clip flow start and platform secret statements: nothing else."
+    error_message = "The role has exactly the logs, tracing, table and clip flow start statements: nothing else."
   }
 
   assert {
@@ -186,21 +190,12 @@ run "least_privilege_and_nothing_can_be_deleted" {
   }
 
   assert {
-    condition = (
-      one([for s in jsondecode(aws_iam_role_policy.autopost.policy).Statement : s.Action if s.Sid == "PlatformSecretsRead"]) == ["secretsmanager:GetSecretValue"] &&
-      one([for s in jsondecode(aws_iam_role_policy.autopost.policy).Statement : s.Resource if s.Sid == "PlatformSecretsRead"]) ==
-      ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*"]
-    )
-    error_message = "GetSecretValue on the platform keys and tokens only, as the clip flow."
-  }
-
-  assert {
-    condition = (
-      one([for s in jsondecode(aws_iam_role_policy.autopost.policy).Statement : s.Action if s.Sid == "PlatformTokens"]) == ["secretsmanager:PutSecretValue"] &&
-      one([for s in jsondecode(aws_iam_role_policy.autopost.policy).Statement : s.Resource if s.Sid == "PlatformTokens"]) ==
-      ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/token-*"]
-    )
-    error_message = "PutSecretValue only on the token secrets (a refreshed token), as the clip flow."
+    condition = alltrue([
+      for s in jsondecode(aws_iam_role_policy.autopost.policy).Statement :
+      alltrue([for a in flatten([s.Action]) : !startswith(a, "secretsmanager:") && !startswith(a, "kms:")]) &&
+      alltrue([for r in flatten([s.Resource]) : !strcontains(r, ":secretsmanager:")])
+    ])
+    error_message = "No Secrets Manager access at all: the campaign fit check reads only the table, never a key or token."
   }
 
   assert {
@@ -245,24 +240,14 @@ run "clip_flow_must_be_the_live_alias" {
   expect_failures = [var.clip_flow_alias_arn]
 }
 
-run "token_secret_pattern_is_validated" {
+run "alarm_topic_must_be_one_sns_topic" {
   command = plan
 
   variables {
-    platform_token_secrets_arn = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:*"
+    alarm_topic_arn = "arn:aws:sns:eu-north-1:123456789012:*"
   }
 
-  expect_failures = [var.platform_token_secrets_arn]
-}
-
-run "secret_pattern_is_validated" {
-  command = plan
-
-  variables {
-    platform_secrets_arn = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:*"
-  }
-
-  expect_failures = [var.platform_secrets_arn]
+  expect_failures = [var.alarm_topic_arn]
 }
 
 # docs/CONTRACTS.md §45.13.1, §45.15 and ADR-73: Lamo Clips' auto-posting role cannot reach a Lamo Stories workspace
@@ -278,5 +263,44 @@ run "no_lamo_stories_secrets" {
       ] if anytrue([for a in flatten([s.Action]) : startswith(a, "secretsmanager:") || a == "*"])
     ]))
     error_message = "…:secret:<name>/workspaces/stories/youtube/token-AbC123 must match no auto-posting Secrets Manager resource."
+  }
+}
+
+# docs/CONTRACTS.md §46.11, §46.13: the hourly rule is watched for failed invocations. EventBridge counts a failed
+# event once, after its retries (never later than 55 minutes), so an hourly rule makes at most one count an hour: each
+# period must be an hour long for two failed ticks in a row to make two breaching periods in a row. (A 15-minute
+# window, as monitoring's schedule alarm, never sees two in a row and could never fire.)
+run "hourly_rule_failures_alarm" {
+  command = plan
+
+  assert {
+    condition = (aws_cloudwatch_metric_alarm.hourly_failed.alarm_name == "cf-test-autopost-hourly-failed-invocations" &&
+      aws_cloudwatch_metric_alarm.hourly_failed.namespace == "AWS/Events" &&
+      aws_cloudwatch_metric_alarm.hourly_failed.metric_name == "FailedInvocations" &&
+      aws_cloudwatch_metric_alarm.hourly_failed.dimensions == tomap({ RuleName = "cf-test-autopost-hourly" }) &&
+      aws_cloudwatch_metric_alarm.hourly_failed.statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.hourly_failed.threshold == 0 &&
+      aws_cloudwatch_metric_alarm.hourly_failed.comparison_operator == "GreaterThanThreshold" &&
+    aws_cloudwatch_metric_alarm.hourly_failed.treat_missing_data == "notBreaching")
+    error_message = "cf-test-autopost-hourly-failed-invocations: FailedInvocations > 0 on RuleName cf-test-autopost-hourly."
+  }
+
+  assert {
+    condition = (aws_cloudwatch_metric_alarm.hourly_failed.period == 3600 &&
+      aws_cloudwatch_metric_alarm.hourly_failed.evaluation_periods == 2 &&
+    aws_cloudwatch_metric_alarm.hourly_failed.datapoints_to_alarm == 2)
+    error_message = "Two failed hourly ticks in a row alarm: 2 of 2 one-hour periods (one lost tick is caught up by the next)."
+  }
+
+  assert {
+    condition = (aws_cloudwatch_metric_alarm.hourly_failed.period >= 3600 &&
+    aws_cloudwatch_metric_alarm.hourly_failed.datapoints_to_alarm <= aws_cloudwatch_metric_alarm.hourly_failed.evaluation_periods)
+    error_message = "Each period must hold an hourly tick, or the alarm could never see enough breaching periods to fire."
+  }
+
+  assert {
+    condition = (aws_cloudwatch_metric_alarm.hourly_failed.alarm_actions == toset(["arn:aws:sns:eu-north-1:123456789012:cf-test-alarms"]) &&
+    aws_cloudwatch_metric_alarm.hourly_failed.ok_actions == toset(["arn:aws:sns:eu-north-1:123456789012:cf-test-alarms"]))
+    error_message = "The alarm and its all-clear go to the alarms topic, as every other alarm."
   }
 }

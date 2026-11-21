@@ -80,8 +80,8 @@ run "clip_performance_is_wired" {
   }
 
   assert {
-    condition     = toset(keys(module.monitoring.schedule_alarm_names)) == toset(["stats", "follow-tick", "money", "autopost"])
-    error_message = "The stats, follow-tick, money and autopost rules are watched for failed invocations."
+    condition     = toset(keys(module.monitoring.schedule_alarm_names)) == toset(["stats", "follow-tick", "money"])
+    error_message = "The stats, follow-tick and money rules are watched for failed invocations."
   }
 }
 
@@ -597,9 +597,10 @@ run "whop_connect_switch_on_plans" {
 }
 
 # docs/CONTRACTS.md §46.11 and ADR-81: auto-posting. cf-prod-autopost and its hourly rule are planned and watched (its
-# errors and the rule's failed invocations, two new alarms), it starts the clip flow on its live alias with the clip
-# flow's own secret grants, gets the Content Rewards switch and the boundary, and the switch off still plans it. The
-# module's own test (modules/autopost) proves the role, the cron and the retries.
+# errors in monitoring, the rule's failed invocations by the module's own hourly alarm on the same topic: two new
+# alarms), it starts the clip flow on its live alias, gets SECRET_PREFIX but no secret grant (the campaign fit check
+# reads only the table), the Content Rewards switch and the boundary, and the switch off still plans it. The module's
+# own test (modules/autopost) proves the role, the cron, the retries and the alarm's hourly window.
 run "autopost_is_wired" {
   command = plan
 
@@ -612,8 +613,9 @@ run "autopost_is_wired" {
 
   assert {
     condition = (module.monitoring.alarm_names["autopost"] == "cf-prod-autopost-errors" &&
-    module.monitoring.schedule_alarm_names["autopost"] == "cf-prod-autopost-hourly-failed-invocations")
-    error_message = "cf-prod-autopost is watched for errors and its hourly rule for failed invocations."
+      module.autopost.schedule_alarm_names == { autopost = "cf-prod-autopost-hourly-failed-invocations" } &&
+    !contains(keys(module.monitoring.schedule_alarm_names), "autopost"))
+    error_message = "cf-prod-autopost is watched for errors and its hourly rule for failed invocations, by one alarm of that name (the module's hourly one, not monitoring's 15-minute one)."
   }
 
   assert {
@@ -621,15 +623,19 @@ run "autopost_is_wired" {
       for line in [
         "\n  clip_flow_alias_arn  = module.flows.clip_flow_alias_arn\n",
         "\n  clip_flow_arn_prefix = module.flows.function_arns[\"clip-flow\"]\n",
-        "\n  secret_prefix              = module.hooks.secret_prefix\n",
-        "\n  platform_secrets_arn       = module.hooks.platform_secrets_arn\n",
-        "\n  platform_token_secrets_arn = module.hooks.platform_token_secrets_arn\n",
+        "\n  secret_prefix = module.hooks.secret_prefix\n",
         "\n  content_rewards_enabled = var.content_rewards_enabled\n",
+        "\n  alarm_topic_arn = module.monitoring.alarm_topic_arn\n",
         "\n  permissions_boundary_arn = var.role_permissions_boundary_arn\n",
         "\n  table_arn       = module.data.table_arn\n",
       ] : strcontains("\n${regex("(?s)\nmodule \"autopost\" \\{\n(.*?)\n\\}\n", file("main.tf"))[0]}\n", line)
     ])
-    error_message = "module.autopost gets the clip flow's live alias and unqualified ARN, the clip flow's secret patterns, the Content Rewards switch, the table and the boundary."
+    error_message = "module.autopost gets the clip flow's live alias and unqualified ARN, SECRET_PREFIX, the Content Rewards switch, the alarms topic, the table and the boundary."
+  }
+
+  assert {
+    condition     = module.autopost.function_name == "cf-prod-autopost" && !strcontains(regex("(?s)\nmodule \"autopost\" \\{\n(.*?)\n\\}\n", file("main.tf"))[0], "secrets_arn")
+    error_message = "module.autopost gets no secret ARN: the campaign fit check reads only the table, so the role reads and writes no secret."
   }
 }
 
