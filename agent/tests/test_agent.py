@@ -640,3 +640,149 @@ def test_without_a_campaign_every_prompt_and_file_is_byte_identical_to_before() 
     assert digest(json.dumps(brief_json(b), sort_keys=True)) == BEFORE["brief"]
     assert "campaign" not in brief_json(b) and "Campaign:" not in system_prompt(b)
     assert checklist.review_schema(None) is checklist.REVIEW_SCHEMA
+
+
+# --- §39.3: a job without ``remake`` sends and writes exactly what it did before the campaign copy ----------------
+
+from clipfactory_agent import pipeline as pipeline_mod  # noqa: E402
+from clipfactory_agent import proc  # noqa: E402
+from clipfactory_agent.render import RenderResult  # noqa: E402
+
+# sha256 (first 16 hex) of what origin/main at 806deb9 (before §39 was built) sent and wrote for the runs below: every
+# model request, every file, the finder's brief, every clip, every section the Cut step read and the pipeline's own
+# job writes. Only two job fields are new since, on every job: ``source.channelKeys`` and ``sourceLanguage``.
+BEFORE_COPIES = {
+    "link": {
+        "requests": "66a839bd7d370f8a",
+        "files": "82d3faa27d45fe43",
+        "brief": "cc9e3d975250db60",
+        "clips": "e60154a4f029e310",
+        "cuts": "bac985facdf5a632",
+        "writes": "04949f4b7f964eb7",
+    },
+    "upload": {
+        "requests": "66a839bd7d370f8a",
+        "files": "0872a31b19b0464a",
+        "brief": "d5bb1a0c6b6095c3",
+        "clips": "6c6257697968d5b5",
+        "cuts": "e086ea24508c5744",
+        "writes": "9bc3d175be732c53",
+    },
+    "campaign": {
+        "requests": "b22e45e284152ca2",
+        "files": "1c98321fd1db6b58",
+        "brief": "2e61c767507848aa",
+        "clips": "6ec5edfc51f70291",
+        "cuts": "bac985facdf5a632",
+        "writes": "5f6649f69e7d32e0",
+    },
+}
+
+
+def _plain(value: Any) -> Any:
+    if isinstance(value, bytes):
+        return {"bytes": hashlib.sha256(value).hexdigest()}
+    return str(value)
+
+
+def _dump(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, default=_plain)
+
+
+def frozen_run(world: Any, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Makes a World run repeatable (ids, times) and has its Cut step read the video the way the real one does."""
+    ids = iter(f"01ID{n:022d}" for n in range(1000))
+    monkeypatch.setattr(pipeline_mod, "ulid", lambda: next(ids))
+    monkeypatch.setattr(pipeline_mod, "now_iso", lambda: "2026-11-21T10:00:00.000Z")
+    cuts: list[dict[str, Any]] = []
+    inner = pipeline_mod.render_clip
+
+    async def render_clip(m: Any, *, workdir: Path, fetch_section: Any, **kw: Any) -> RenderResult:
+        await fetch_section(m.start - 2, m.end + 1.5, workdir / "section.mp4")
+        return await inner(m, workdir=workdir, fetch_section=fetch_section, **kw)
+
+    async def download_section(url: str, start: float, end: float, dest: Path, *a: Any, **kw: Any) -> Path:
+        cuts.append({"how": "section", "url": url, "start": start, "end": end, "dest": dest.name})
+        return dest
+
+    async def ffmpeg_cut(src: str, start: float, end: float, dest: Path) -> Path:
+        cuts.append({"how": "file", "src": src, "start": start, "end": end, "dest": dest.name})
+        return dest
+
+    async def run(args: list[str], **kw: Any) -> proc.Result:
+        Path(args[-1]).parent.mkdir(parents=True, exist_ok=True)
+        Path(args[-1]).write_bytes(b"audio")  # an upload's sound, taken out with ffmpeg
+        return proc.Result(b"", "")
+
+    monkeypatch.setattr(pipeline_mod, "render_clip", render_clip)
+    monkeypatch.setattr(pipeline_mod.sources, "download_section", download_section)
+    monkeypatch.setattr(pipeline_mod.Pipeline, "_ffmpeg_cut", staticmethod(ffmpeg_cut))
+    monkeypatch.setattr(proc, "run", run)
+    return cuts
+
+
+def run_digests(world: Any, cuts: list[dict[str, Any]]) -> dict[str, str]:
+    requests = sorted(digest(_dump(r)) for r in [*world.fable.requests, *world.nova.requests])
+    files = sorted(f"{k} {hashlib.sha256(v).hexdigest()}" for k, v in world.store.files.items())
+    writes = []
+    for write in world.store.writes:
+        if "heartbeatAt" in write:
+            continue  # the Tracker's steps and progress (timed)
+        w = {k: v for k, v in write.items() if k != "sourceLanguage"}
+        if "source" in w:
+            w["source"] = {k: v for k, v in w["source"].items() if k != "channelKeys"}
+        if w:
+            writes.append(w)
+    b = world.briefs[0]
+    return {
+        "requests": digest("\n".join(requests)),
+        "files": digest("\n".join(files)),
+        "brief": digest(system_prompt(b) + _dump(brief_json(b))),
+        "clips": digest(_dump(world.store.clips)),
+        "cuts": digest(_dump(sorted(cuts, key=_dump))),
+        "writes": digest(_dump(writes)),
+    }
+
+
+def copy_world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str) -> Any:
+    from .test_campaign import UUID, job_campaign
+    from .test_pipeline import World
+
+    w = World(tmp_path, monkeypatch)
+    if kind == "upload":
+        w.store.job["source"] = {"type": "upload", "key": "uploads/u/video.mp4", "filename": "v.mp4"}
+        w.store.files["uploads/u/video.mp4"] = b"mp4"
+    if kind == "campaign":
+        w.store.job["campaignId"] = UUID
+        w.store.job["campaign"] = job_campaign(logo={"required": False, "rules": None})
+        del w.store.job["campaign"]["logoKey"]
+        w.info = {**w.info, "channel": "FaZe Clan", "uploader_id": "@FaZeClan"}
+        w.fable.handlers["submit_review"] = lambda kw: {
+            **dict.fromkeys(("zero_context", "pays_off", "hook_ok", "follows_rules"), True),
+            **dict.fromkeys(("zero_context_note", "pays_off_note", "hook_note", "follows_rules_note"), ""),
+            **{"new_hook": None, "move_start_by": 0, "move_end_by": 0, "verdict": "keep"},
+        }
+
+        async def render_clip(m: Any, *, workdir: Path, marks: Any = None, **kw: Any) -> RenderResult:
+            workdir.mkdir(parents=True, exist_ok=True)
+            (workdir / "clip.mp4").write_bytes(b"clip")
+            (workdir / "cover.jpg").write_bytes(b"cover")
+            caps = [{"t0": 0.0, "t1": 1.0, "text": "w1 w2"}]
+            return RenderResult(
+                workdir / "clip.mp4", workdir / "cover.jpg", 30.0, [(m.start, m.end)], caps, "blur_fill", False,
+                logo=False, disclosure=bool(marks and marks.disclosure),
+            )  # fmt: skip
+
+        monkeypatch.setattr(pipeline_mod, "render_clip", render_clip)
+    return w
+
+
+@pytest.mark.parametrize("kind", ["link", "upload", "campaign"])
+async def test_a_job_without_remake_sends_and_writes_what_it_did_before(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    w = copy_world(tmp_path, monkeypatch, kind)
+    cuts = frozen_run(w, monkeypatch)
+    status, _, _ = await w.run()
+    assert status == "ready" and "remake" not in w.store.job
+    assert run_digests(w, cuts) == BEFORE_COPIES[kind]
