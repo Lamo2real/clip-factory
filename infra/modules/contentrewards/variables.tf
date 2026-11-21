@@ -43,6 +43,12 @@ variable "content_rewards_enabled" {
   description = "§38.16: CONTENT_REWARDS on/off. Off until every builder's part of §38.19 has merged."
 }
 
+variable "cr_finder_enabled" {
+  type        = bool
+  default     = false
+  description = "§41.6: CR_FINDER on/off, the campaign finder's \"find\" action. Off until every builder's part of §41.6 has merged."
+}
+
 variable "log_retention_days" {
   type    = number
   default = 30

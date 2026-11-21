@@ -1,9 +1,12 @@
-"""Lambda ``cf-prod-campaigns`` (docs/CONTRACTS.md §38.9, §38.10, §38.16).
+"""Lambda ``cf-prod-campaigns`` (docs/CONTRACTS.md §38.9, §38.10, §38.16, §41.5).
 
-Async only, ``{"action": "read" | "logo" | "brand_picture", "userId", "campaignId", …}``. It reads untrusted brand
-text and fetches outside files, so it makes **no CR call and has no secret access at all**: the brief is already on
-the item (the api and ``cf-prod-stats`` store it before they start a read). Every failure ends in a state the card
-shows (``rulesState: failed``, ``logo.state: failed`` with the sentence); nothing raises to Lambda.
+Async only, ``{"action": "read" | "logo" | "brand_picture", "userId", "campaignId", …}`` and the finder's
+``{"action": "find", "userId"?, "why"}``. It reads untrusted brand text and fetches outside files, so it makes **no
+call to Content Rewards' API and has no secret access at all**: the brief is already on the item (the api and
+``cf-prod-stats`` store it before they start a read). Since §41 it reads the public pages robots.txt allows
+(``/robots.txt``, ``/sitemap.xml``, ``/c/campaigns/{uuid}``) for the campaign finder, anonymously, only while
+``CR_FINDER=on``. Every failure ends in a state the card shows (``rulesState: failed``, ``logo.state: failed`` with
+the sentence); nothing raises to Lambda.
 """
 
 from __future__ import annotations
@@ -17,6 +20,8 @@ from .. import db, s3
 from ..clock import Clock, iso, utcnow
 from ..log import log
 from . import config, fetch, links, logo, rules
+from .finder import config as finder_config
+from .finder import run as finder_run
 from .util import obj
 
 Item = dict[str, Any]
@@ -36,6 +41,8 @@ def handle(event: Any, deps: CampaignsDeps) -> dict[str, Any]:
     if not isinstance(event, Mapping):
         log("warning", "campaigns.bad_event")
         return {"action": "bad_event"}
+    if event.get("action") == "find":
+        return find(event, deps)
     action, user_id, uuid = event.get("action"), event.get("userId"), event.get("campaignId")
     if not (isinstance(user_id, str) and user_id and isinstance(uuid, str) and links.UUID.match(uuid)):
         log("warning", "campaigns.bad_event")
@@ -51,6 +58,21 @@ def handle(event: Any, deps: CampaignsDeps) -> dict[str, Any]:
         return {"action": "brand_picture", "outcome": brand_picture(deps, user_id, item)}
     log("warning", "campaigns.bad_event")
     return {"action": "bad_event"}
+
+
+def find(event: Mapping[str, Any], deps: CampaignsDeps) -> dict[str, Any]:
+    """The campaign finder's look (§41.5): ``off`` unless ``CR_FINDER=on``. ``schedule`` comes from the
+    ``cf-prod-stats`` tick (every owner); ``start``, ``check_now`` and ``want`` from the api (one owner)."""
+    if not finder_config.enabled():
+        return {"action": "find", "outcome": "off"}
+    why, user_id = event.get("why"), event.get("userId")
+    if why not in finder_config.WHYS or (user_id is not None and not (isinstance(user_id, str) and user_id)):
+        log("warning", "campaigns.bad_event")
+        return {"action": "bad_event"}
+    if why != "schedule" and not user_id:
+        log("warning", "campaigns.bad_event")
+        return {"action": "bad_event"}
+    return finder_run.run(deps, user_id, str(why), deps.clock())
 
 
 def read(deps: CampaignsDeps, user_id: str, item: Item) -> str:

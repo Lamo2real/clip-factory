@@ -5,6 +5,8 @@
 # secretsmanager action at all, reaches only the media bucket's campaigns/ prefix, never deletes a table item, is
 # async only and never retried. CONTENT_REWARDS is off unless the switch is on. Everything here is new: no owner-data
 # resource is in this module (no table, bucket or secret).
+# §41.6: the campaign finder's "find" action waits behind CR_FINDER (cr_finder_enabled, default off); turning it on
+# changes one env var in place and adds no grant (it reads only public pages, so still no secretsmanager action).
 
 mock_provider "aws" {
   override_during = plan
@@ -52,8 +54,9 @@ run "the_function_and_its_environment" {
       MODEL_ID        = "global.anthropic.claude-fable-5-1"
       APP_URL         = "https://app.example.test"
       CONTENT_REWARDS = "off"
+      CR_FINDER       = "off"
     })
-    error_message = "Exactly TABLE_NAME, MEDIA_BUCKET, MODEL_ID, APP_URL and CONTENT_REWARDS (off by default); no SECRET_PREFIX."
+    error_message = "Exactly TABLE_NAME, MEDIA_BUCKET, MODEL_ID, APP_URL, CONTENT_REWARDS and CR_FINDER (both off by default); no SECRET_PREFIX."
   }
 
   assert {
@@ -83,6 +86,75 @@ run "switched_on" {
   assert {
     condition     = one(aws_lambda_function.campaigns.environment).variables["CONTENT_REWARDS"] == "on"
     error_message = "content_rewards_enabled = true turns CONTENT_REWARDS on."
+  }
+
+  assert {
+    condition     = one(aws_lambda_function.campaigns.environment).variables["CR_FINDER"] == "off"
+    error_message = "Content Rewards on leaves the finder off: CR_FINDER has its own switch (§41.6)."
+  }
+}
+
+# docs/CONTRACTS.md §41.2 and §41.6: the finder's look runs here. Its switch only sets CR_FINDER; the function, its
+# timeout, its async-only no-retry config and its grants stay exactly as they are (no secret, no DeleteItem, no Scan,
+# nothing new).
+run "finder_switched_on" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = true
+    cr_finder_enabled       = true
+  }
+
+  assert {
+    condition = one(aws_lambda_function.campaigns.environment).variables == tomap({
+      TABLE_NAME      = "cf-test-data"
+      MEDIA_BUCKET    = "cf-test-media"
+      MODEL_ID        = "global.anthropic.claude-fable-5-1"
+      APP_URL         = "https://app.example.test"
+      CONTENT_REWARDS = "on"
+      CR_FINDER       = "on"
+    })
+    error_message = "cr_finder_enabled = true turns CR_FINDER on and adds no other env var."
+  }
+
+  assert {
+    condition = (aws_lambda_function.campaigns.function_name == "cf-test-campaigns" &&
+      aws_lambda_function.campaigns.timeout == 120 && aws_lambda_function.campaigns.memory_size == 512 &&
+    aws_lambda_function_event_invoke_config.campaigns.maximum_retry_attempts == 0)
+    error_message = "The same function: 120 s (a look's reads stop at 100 s), 512 MB, async only and never retried."
+  }
+
+  assert {
+    condition     = length(regexall("secretsmanager", aws_iam_role_policy.campaigns.policy)) == 0
+    error_message = "With the finder on, cf-prod-campaigns still has no secretsmanager action at all (§41.2)."
+  }
+
+  assert {
+    condition = (
+      toset([for s in jsondecode(aws_iam_role_policy.campaigns.policy).Statement : s.Sid]) ==
+      toset(["Logs", "Tracing", "Data", "CampaignFiles", "RulesModel"]) &&
+      toset(one([for s in jsondecode(aws_iam_role_policy.campaigns.policy).Statement : s.Action if s.Sid == "Data"])) ==
+      toset(["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"])
+    )
+    error_message = "The finder adds no grant: the CRPUBLIC cache uses the same GetItem, PutItem, UpdateItem and Query (old items leave by TTL)."
+  }
+
+  assert {
+    condition     = length(regexall("lambda:", aws_iam_role_policy.campaigns.policy)) == 0
+    error_message = "A look starts nothing else: the stats tick and the api start it."
+  }
+}
+
+# The finder switch reaches only the CR_FINDER env var: one use of var.cr_finder_enabled in this module, inside the
+# function's environment, so turning it on or off can never replace anything (the deploy's delete gate stays quiet).
+run "finder_switch_only_sets_its_env_var" {
+  command = plan
+
+  assert {
+    condition = (one(aws_lambda_function.campaigns.environment).variables["CR_FINDER"] == "off" &&
+      length(regexall("var\\.cr_finder_enabled", file("main.tf"))) == 1 &&
+    length(regexall("(?m)^\\s+CR_FINDER\\s+=\\s+var\\.cr_finder_enabled \\? \"on\" : \"off\"$", file("main.tf"))) == 1)
+    error_message = "var.cr_finder_enabled is used once, as CR_FINDER = var.cr_finder_enabled ? \"on\" : \"off\"."
   }
 }
 

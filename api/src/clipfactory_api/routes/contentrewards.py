@@ -51,14 +51,30 @@ def overview(app: App, req: Request) -> Response:
             if sub.get("state") == "send_by_hand" and submissions.minutes_left(sub, now) > 0:
                 campaign = next((c for c in items if c.get("campaignId") == sub.get("campaignId")), None)
                 waiting.append(submissions.public(sub, now=now, campaign=campaign))
-    return ok(
-        {
-            "connection": connection.public(view.conn, now),
-            "campaigns": [view.summary(c) for c in items],
-            "money": money.public(deps, req.user_id, now),
-            "waitingSends": waiting,
-        }
-    )
+    out = {
+        "connection": connection.public(view.conn, now),
+        "campaigns": [view.summary(c) for c in items],
+        "money": money.public(deps, req.user_id, now),
+        "waitingSends": waiting,
+    }
+    finder = _finder_overview(deps, req.user_id, [str(c.get("campaignId")) for c in items])
+    if finder is not None:
+        out["finder"] = finder
+    return ok(out)
+
+
+def _finder_overview(deps: Any, user_id: str, own: list[str]) -> dict[str, Any] | None:
+    """§41.5: ``finder`` whenever ``CR_FINDER=on`` (from ``CRFIND`` only, so Home makes no extra call); absent while
+    off. A failure leaves it out: the finder never breaks the overview."""
+    from ..contentrewards import finderapi
+
+    if not finderapi.enabled():
+        return None
+    try:
+        return finderapi.overview(deps.store, user_id, own)
+    except Exception as e:
+        log("warning", "cr.finder_overview_failed", error=type(e).__name__)
+        return None
 
 
 def connect(app: App, req: Request) -> Response:
