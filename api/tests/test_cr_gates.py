@@ -469,3 +469,59 @@ def test_next_step_kind_and_the_rule_lines() -> None:
     assert campaigns.language_rule_text(two) == "FaZe Clips wants clips in English or Spanish."
     other = campaign(rules={**rules.empty(), "language": "Tagalog"})
     assert campaigns.language_rule_text(other) == "FaZe Clips wants clips in Tagalog."
+
+
+# --- §41.6 changes 10 and 11: campaigns the finder added ------------------------------------------------------------
+
+
+def test_change_10_an_application_the_finder_added_while_clip_factory_cant_look() -> None:
+    item = campaign(membership="unknown", access="application", said="applied", addedBy="finder")
+    found = step(item, NOT_CONNECTED)
+    assert found == {
+        "kind": "wait",
+        "chip": "Waiting for the brand",
+        "text": (
+            "Waiting for the brand. Content Rewards shows **Pending review** while the brand decides. When it says "
+            "**Submit clip**, tap It says Submit clip."
+        ),
+        "asks": [
+            {"label": "It says Submit clip", "said": "joined_by_hand"},
+            {
+                "label": "It says Not eligible",
+                "said": "not_eligible",
+                "text": "If Content Rewards shows **Not eligible**, tap It says Not eligible.",
+            },
+        ],
+        "glass": [{"label": "Open campaign", "href": item["url"], "external": True}],
+    }
+    assert "button" not in found  # no vermilion
+    assert gates.chip(item, REFUSED) == "Waiting for the brand"
+    assert step(item, REFUSED)["kind"] == "wait"
+
+
+def test_change_11_checking_that_you_joined_for_15_minutes() -> None:
+    added = iso(NOW - timedelta(minutes=5))
+    item = campaign(membership="not_joined", addedBy="finder", addedAt=added, canSayInBy=added)
+    found = step(item)
+    assert found == {
+        "kind": "join",
+        "chip": "Not joined yet",
+        "text": "Checking that you joined… This can take a few minutes.",
+        "asks": [{"label": "I joined, but it still says not joined", "said": "joined_by_hand"}],
+        "glass": [{"label": "Open campaign", "href": item["url"], "external": True}],
+    }
+    later = step({**item, "addedAt": iso(NOW - timedelta(minutes=15))})
+    assert later["text"] == "Not joined yet: tap **Join Campaign** on Content Rewards. I'll see it by myself."
+    assert later["button"] == {"label": "Open campaign", "href": item["url"], "external": True}
+
+
+def test_campaigns_added_by_section_38s_own_add_are_unchanged() -> None:
+    applied = campaign(membership="unknown", access="application", said="applied")
+    assert step(applied, NOT_CONNECTED)["kind"] == "connect"
+    assert gates.chip(applied, NOT_CONNECTED) == "Connect first"
+    fresh = campaign(membership="not_joined", addedAt=iso(NOW - timedelta(minutes=1)))
+    found = step(fresh)
+    assert (found["kind"], found["button"]["label"], found["asks"]) == ("join", "Open campaign", [])
+    assert found["text"].startswith("Not joined yet:")
+    joined_by_hand = campaign(membership="manual", addedBy="finder", said="joined_by_hand")
+    assert step(joined_by_hand, NOT_CONNECTED)["kind"] != "wait"
