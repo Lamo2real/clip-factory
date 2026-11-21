@@ -794,3 +794,53 @@ async def test_a_job_without_remake_sends_and_writes_what_it_did_before(
         assert source["channelKeys"] == sources.channel_keys(w.info)
     assert [x for x in w.store.writes if "sourceLanguage" in x] == [{"sourceLanguage": "en-US"}]
     assert all("remakeOf" not in c and "remakes" not in c for c in w.store.clips)
+
+
+# --- the API's channel cases (§39.5): its fit check ports the agent's channel rule, so both read one file ---------
+
+CHANNEL_CASES = Path(__file__).resolve().parents[2] / "api" / "tests" / "fixtures" / "channel_match_cases.json"
+INFO_FIELDS = ("channel", "uploader", "creator", "uploader_id", "channel_id")  # what sources.channel_keys reads
+
+
+def case_info(case: dict[str, Any]) -> dict[str, Any] | None:
+    """The video's yt-dlp fields for one case: its own ``info``; else made from the stored facts the API reads
+    (``channelKeys``, else ``channel`` and ``channelId``), which the agent's rule then reads the same way."""
+    if isinstance(case.get("info"), dict):
+        return dict(case["info"])
+    keys = case.get("channelKeys", case.get("keys"))
+    if isinstance(keys, list) and keys and all(isinstance(k, str) for k in keys):
+        if len(keys) > len(INFO_FIELDS):
+            return None
+        return dict(zip(INFO_FIELDS, keys, strict=False))
+    facts = {"channel": case.get("channel"), "channel_id": case.get("channelId")}
+    return {k: v for k, v in facts.items() if isinstance(v, str) and v}
+
+
+def channel_cases() -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """``channel_match_cases.json`` (written by the API's ``cr_fit_cases.py``): a list of cases, or ``{"cases": [...]}``,
+    each with the campaign's ``channels``, the video's facts and the API's answer ``match`` (true, false, or null when
+    nothing can be said)."""
+    doc = json.loads(CHANNEL_CASES.read_text(encoding="utf-8"))
+    cases = doc.get("cases") if isinstance(doc, dict) else doc
+    out = []
+    for case in cases or []:
+        if isinstance(case, dict) and isinstance(case.get("channels"), list):
+            info = case_info(case)
+            if info is not None:
+                out.append((case, info))
+    return out
+
+
+@pytest.mark.skipif(not CHANNEL_CASES.is_file(), reason="written by the API's cr_fit_cases.py (§39.4, builder G)")
+def test_the_apis_channel_cases_hold_for_the_agents_rule() -> None:
+    cases = channel_cases()
+    if not cases:
+        pytest.skip("channel_match_cases.json has no case the agent can read")
+    for case, info in cases:
+        name = case.get("name")
+        if isinstance(case.get("info"), dict) and isinstance(case.get("channelKeys"), list):
+            assert sources.channel_keys(info) == case["channelKeys"], name  # what the agent writes on the job
+        if isinstance(case.get("match"), bool):  # null: the API can't tell, where the agent lets the job go on
+            assert sources.from_allowed_channel(info, case["channels"]) is case["match"], name
+        elif case.get("match") is None and "match" in case:
+            assert sources.from_allowed_channel(info, case["channels"]) is True, name
