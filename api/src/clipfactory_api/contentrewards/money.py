@@ -4,12 +4,18 @@ Only CR's reported balance and payouts show (Â§25 extended), all in USD cents as
 total shows only once CR's list was read to its end; until then ``paidSoFarCents`` is null ("Checkingâ€¦"). The first
 complete read fills what was already paid quietly (no celebration for old money); later new paid rows (found by the
 ``paidMark`` watermark) celebrate once each. ``reversed`` rows are never counted.
+
+Paid by day (Â§39.2, for "All your money"): each paid row's amount is also kept by its ``paid_at`` UTC day
+(``paidByDay``) while the first read runs, and by the watermark read once ``paidByDayDone`` (or while a day scan
+runs). An owner whose first read finished before this gets one day scan (``dayScan``): it is made before the
+watermark read of its tick, so every row that read adds is newer than its ``mark``, and the scan adds only the rows
+at or older than the mark. It never touches ``paidTotalCents``, ``paidByCampaign`` or ``payoutsSeen``.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .. import db
@@ -111,7 +117,9 @@ def read(deps: CrDeps, user_id: str, now: datetime, *, calls_left: int = 25) -> 
     start_calls = client.calls
     try:
         _balance(client, item, now)
+        _start_day_scan(item, now)
         _paid(deps, client, user_id, item, now, start_calls, calls_left)
+        _day_scan(client, item, now, start_calls, calls_left)
         if client.calls - start_calls < calls_left:
             _pending(deps, client, user_id, item, now)
         item.pop("error", None)
@@ -125,7 +133,8 @@ def read(deps: CrDeps, user_id: str, now: datetime, *, calls_left: int = 25) -> 
             for s in deps.store.query_all(db.user_pk(user_id), db.CRSUB_PREFIX)
             if s.get("type") == "crsub" and s.get("crStatus") == "pending" and not s.get("removed")
         )
-        item["nextCheckAt"] = iso(now + _cadence(deps, user_id, now))
+        # A day scan goes on at the next tick (at most 8 pages a tick), then the usual cadence.
+        item["nextCheckAt"] = iso(now + (config.TICK if item.get("dayScan") else _cadence(deps, user_id, now)))
         item["updatedAt"] = iso(now)
         item = _write(deps, user_id, item)
     return item
@@ -194,12 +203,31 @@ def _paid_row(row: Mapping[str, Any]) -> tuple[str, int, str, str | None, str] |
     )
 
 
+def paid_day(row: Mapping[str, Any]) -> str | None:
+    """A paid row's day: its ``paid_at`` (``created_at`` when absent) as a UTC date."""
+    moment = parse(row.get("paid_at") or row.get("created_at"))
+    return moment.astimezone(UTC).date().isoformat() if moment is not None else None
+
+
+def _add_day(days: dict[str, Any], row: Mapping[str, Any], amount: int) -> None:
+    day = paid_day(row)
+    if day is not None:
+        days[day] = int(days.get(day) or 0) + amount
+
+
+def _by_day(item: Mapping[str, Any]) -> bool:
+    """Paid rows are kept by day: the first read, and later reads once the days are complete or being filled."""
+    return not item.get("firstReadDone") or bool(item.get("paidByDayDone")) or isinstance(item.get("dayScan"), Mapping)
+
+
 def _add_paid(
     deps: CrDeps, user_id: str, item: Item, rows: list[Mapping[str, Any]], subs: dict[str, Item]
 ) -> list[tuple[str, int, str]]:
     added = []
     seen = list(item.get("payoutsSeen") or [])
     by_campaign = dict(item.get("paidByCampaign") or {})
+    by_day = _by_day(item)
+    days = dict(item.get("paidByDay") or {})
     for row in rows:
         parsed = _paid_row(row)
         if parsed is None or parsed[0] in seen:
@@ -207,6 +235,8 @@ def _add_paid(
         pay_id, amount, cr_campaign, submission, paid_at = parsed
         item["paidTotalCents"] = int(item.get("paidTotalCents") or 0) + amount
         by_campaign[cr_campaign] = int(by_campaign.get(cr_campaign) or 0) + amount
+        if by_day:
+            _add_day(days, row, amount)
         seen.insert(0, pay_id)
         if submission and submission in subs:
             sub = subs[submission]
@@ -220,6 +250,8 @@ def _add_paid(
         added.append((pay_id, amount, paid_at))
     item["paidByCampaign"] = by_campaign
     item["payoutsSeen"] = seen[:SEEN_KEEP]
+    if by_day:
+        item["paidByDay"] = days
     return added
 
 
@@ -241,6 +273,7 @@ def _paid(  # noqa: PLR0915, PLR0917 (the first read and the watermark read of Â
         if started is None or now - started > config.SCAN_KEEP:
             scan = {"status": "running", "cursor": None, "at": iso(now)}
             item["paidTotalCents"], item["paidByCampaign"], item["payoutsSeen"] = 0, {}, []
+            item["paidByDay"] = {}
         cursor = scan.get("cursor")
         for _ in range(config.PAID_PAGES_PER_TICK):
             if client.calls - start_calls >= calls_left:
@@ -258,6 +291,7 @@ def _paid(  # noqa: PLR0915, PLR0917 (the first read and the watermark read of Â
             cursor = page.get("next_cursor") if isinstance(page.get("next_cursor"), str) else None
             if not page.get("has_more") or not cursor:
                 item["firstReadDone"] = True
+                item["paidByDayDone"] = True
                 item["paidMark"] = scan.get("mark") or {}
                 item.pop("scan", None)
                 return
@@ -303,6 +337,76 @@ def _paid(  # noqa: PLR0915, PLR0917 (the first read and the watermark read of Â
                 "money_arrived",
                 f"Money from Content Rewards! {dollars(amount)} is in your balance.",
             )
+
+
+def _start_day_scan(item: Item, now: datetime) -> None:
+    """An owner whose first read finished before ``paidByDay``: nothing was paid (an empty ``paidMark``), so the
+    days are complete at once; else the day scan starts now, before this tick's watermark read. A scan stuck for 7
+    days starts over with the same mark (the watermark read already kept every newer row by day)."""
+    if not item.get("firstReadDone") or item.get("paidByDayDone"):
+        return
+    mark = obj(item.get("paidMark"))
+    scan = item.get("dayScan")
+    if isinstance(scan, Mapping):
+        started = parse(scan.get("at"))
+        if started is not None and now - started <= config.SCAN_KEEP:
+            return
+        mark = obj(scan.get("mark")) or mark
+    if not mark.get("id"):
+        item["paidByDay"] = dict(item.get("paidByDay") or {})
+        item["paidByDayDone"] = True
+        item.pop("dayScan", None)
+        return
+    item["dayScan"] = {"status": "running", "cursor": None, "mark": mark, "passed": False, "days": {}, "at": iso(now)}
+
+
+def _older_than_mark(row: Mapping[str, Any], mark: Mapping[str, Any], passed: bool) -> bool:
+    """The list is newest first: a row is at or older than the mark once the mark's own row (or, if that row is gone
+    from the list, a row made no later than it) was reached."""
+    if passed or row.get("id") == mark.get("id"):
+        return True
+    made, marked = parse(row.get("created_at")), parse(mark.get("createdAt"))
+    return made is not None and marked is not None and made <= marked
+
+
+def _day_scan(client: Any, item: Item, now: datetime, start_calls: int, calls_left: int) -> None:
+    """At most 8 pages of ``list_my_payouts {status: [paid]}`` a tick; at the end one write adds the days into
+    ``paidByDay`` and sets ``paidByDayDone``."""
+    scan = item.get("dayScan")
+    if not isinstance(scan, Mapping) or item.get("paidByDayDone"):
+        return
+    scan = dict(scan)
+    mark = obj(scan.get("mark"))
+    days = dict(scan.get("days") or {})
+    passed = bool(scan.get("passed"))
+    cursor = scan.get("cursor") if isinstance(scan.get("cursor"), str) else None
+    for _ in range(config.PAID_PAGES_PER_TICK):
+        if client.calls - start_calls >= calls_left:
+            break
+        args: Item = {"status": ["paid"], "limit": config.PAGE_LIMIT}
+        if cursor:
+            args["cursor"] = cursor
+        page = client.call("list_my_payouts", args)
+        for row in page.get("data") or []:
+            if not isinstance(row, Mapping):
+                continue
+            passed = _older_than_mark(row, mark, passed)
+            parsed = _paid_row(row)
+            if passed and parsed is not None:
+                _add_day(days, row, parsed[1])
+        cursor = page.get("next_cursor") if isinstance(page.get("next_cursor"), str) else None
+        if not page.get("has_more") or not cursor:
+            total = dict(item.get("paidByDay") or {})
+            for day, cents in days.items():
+                total[day] = int(total.get(day) or 0) + int(cents)
+            item["paidByDay"] = total
+            item["paidByDayDone"] = True
+            item.pop("dayScan", None)
+            log("info", "cr.day_scan_done", days=len(total))
+            return
+        scan.update(cursor=cursor, days=dict(days), passed=passed)
+    scan.update(cursor=cursor, days=days, passed=passed)
+    item["dayScan"] = scan
 
 
 def _pending(deps: CrDeps, client: Any, user_id: str, item: Item, now: datetime) -> None:
