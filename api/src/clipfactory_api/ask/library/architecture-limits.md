@@ -71,10 +71,10 @@
   Discover or to join, so the finder reads the public campaign pages its robots.txt allows, a few times a day, and
   depends on their format (a change shows "I can't read Content Rewards' campaign pages right now") and on Content
   Rewards keeping them open to crawlers (a robots.txt change or a block stops it by itself; "Look on Content Rewards
-  yourself" always works). Open campaigns hide their rules until he joins, so the finder matches on pay, places,
-  money left, category, open or apply and what the public page shows; the full rules are read right after the join.
-  The first full look takes 3 to 5 days, and money left can be up to 12 hours old ("as of" shown). Joining stays his
-  own tap on Content Rewards. What is still unverified is in
+  yourself" always works). Open campaigns hide their rules until he joins, so the finder matches on pay, places, money
+  left, category, open or apply and what the public page shows; the full rules are read right after the join. The first
+  full look takes 3 to 5 days, and money left on a match is usually under a day old (re-read once it is 12 hours old, at
+  the next look; "as of" shown). Joining stays his own tap on Content Rewards. What is still unverified is in
   [CONTRACTS.md §41.6](CONTRACTS.md#416-who-builds-what-the-switch-tests-not-verified-live).
 - **30 minutes to send.** CR takes a post only in its first 30 minutes live; Clip Factory stops trying at 25 and the
   reminder covers the rest. TikTok campaign clips wait for TikTok's audit (private posts can't earn); Instagram and

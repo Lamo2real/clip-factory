@@ -58,7 +58,7 @@ $0.02), and two more secrets ($0.80 a month).
 Campaigns on Content Rewards that match what the owner wants
 ([CONTRACTS.md §41](CONTRACTS.md#41-campaign-finder-campaigns-that-match-what-you-want-owner-request-2026-11-21),
 [ADR-65](DECISIONS.md#adr-65-campaign-finder-content-rewards-public-pages-read-politely-joining-stays-the-owners-own-tap),
-[ARCHITECTURE.md flow 21](ARCHITECTURE.md#21-campaign-finder-contracts-41-adr-65)). Nothing to set up in AWS, GitHub
+[ARCHITECTURE.md flow 22](ARCHITECTURE.md#22-campaign-finder-contracts-41-adr-65)). Nothing to set up in AWS, GitHub
 or on Content Rewards by hand.
 
 **Switched off until every part has merged.** `infra/envs/prod` has `variable "cr_finder_enabled"` (bool, **default
@@ -97,8 +97,8 @@ role's current permissions; no change to `infra/bootstrap`.
 
 **Owner data.** Nothing that holds the owner's data is replaced or destroyed. The new items are a new sort key
 (`USER#{id}` / `CRFIND`), a new partition key value in the same table (`CRPUBLIC` with `CAMP#{uuid}`, `PUB#{uuid}` and
-`STATE`, public campaign data only, expiring through the table's existing `ttl` attribute) and one internal attribute
-on campaigns (`addedBy: "finder"`).
+`STATE`, public campaign data only, `CAMP#` and `PUB#` expiring through the table's existing `ttl` attribute) and one
+internal attribute on campaigns (`addedBy: "finder"`).
 
 **Cost.** Cents a month: at most 6 short runs of `cf-prod-campaigns` a day, about 155 public pages a day, a few
 hundred small table writes, no model call and no secret.

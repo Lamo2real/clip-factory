@@ -1428,9 +1428,10 @@ no `noindex` is a **challenge** (handled like a 403); a page with stream data bu
 (a format change, never a wrong match). `normalize.card` turns the pair into a `FinderCard`: pay and places through
 §38's `campaigns.pay_from_public` (geo rates kept), the money left through `budget_from_public`, CR's own toggles
 (drafts first, its own sound, logo, face on camera), open or apply, the kind of pay, up to 6 categories, the content
-types, the number of rules an open campaign hides until you join, `onDiscover`, and four signals read from the name
-and description (and an application campaign's brief), which are **not stored**: an overlay or sound it needs
-(`needed` or `maybe`), a viewer-country rule, the languages named in the name and a guess of the page's language.
+types, the number of rules an open campaign hides until you join, `onDiscover`, and four signals (an overlay or sound
+it needs, `needed` or `maybe`; a viewer-country rule; the languages named in the name; a guess of the page's
+language) read from the name and description (and an application campaign's brief); the card keeps only the signals,
+never that text (the `PUB#` copy below keeps §38.10's stripped public JSON for the add).
 
 **The plan** (`source.plan`, pure). A sitemap `lastmod` is the date a campaign was first listed and never moves, so
 freshness comes from reading pages again. In order, up to 40 a look: current matches of any owner read more than 12
@@ -1439,19 +1440,20 @@ campaigns read more than 2 days ago, the rest more than 14 days ago, and a gone 
 That is about 155 pages a day within 160 for 4 looks; the first fill of all 766 campaign pages takes 3 to 5 days,
 newest first, and the page says how many it has looked at so far.
 
-**Matching** (`finder/match.py`, `words.py`, pure, golden cases in `api/tests/fixtures/finder/`). For each cached
-card on Discover, in order, the first refusal is its reason: already his, Not for me, not on Discover, something Clip
-Factory can't make (drafts first, its own sound, its own overlay, only slideshows or face videos), almost no money
-left (95 % used), no paid place among his ready places (TikTok only after its audit), another kind of pay (unless he
-asked for it), apply first (unless he asked for it), under his pay per 1,000 views, under his money left, another
-topic (only when he picked one), another language (only when he picked one). A card can be refused only by a fact on
-the public page; what the page can't tell is a line "I can't tell…", never a pass. Heads-ups (its own sound maybe, its
-own picture on top maybe, face on camera, viewers from some countries only) and notes (cheaper in some countries,
-rules hidden until you join, also pays on TikTok once TikTok checks Clip Factory) ride with the match. Ranking: clean
-matches first, per-view pay before other kinds, the highest rate, the most money left, the newest launch. At most 20
-matches. The defaults are chosen for him: at least $1.00 per 1,000 views, the places he set up, at least a quarter of
-the money left, open to join. Every rate and amount is CR's own number, formatted only and tagged "Content Rewards'
-numbers"; nothing estimates what a clip would earn. The web never decides a match: it shows the server's words.
+**Matching** (`finder/match.py`, `words.py`, pure, golden cases in `api/tests/fixtures/finder/`). For each cached card
+on Discover, in order, the first refusal is its reason: already his, Not for me, not on Discover, something Clip Factory
+can't make (drafts first, its own sound, its own overlay, only slideshows or face videos), almost no money left (95 %
+used), no paid place among his ready places (TikTok only after its audit), another kind of pay (unless he asked for it),
+apply first (unless he asked for it), under his pay per 1,000 views, under his money left, another topic (only when he
+picked one), another language (only when he picked one). A card can be refused only by a fact on the public page; what
+the page can't tell never refuses it: the match is kept with a line "I can't tell…" and ranks after the clean ones.
+Heads-ups (its own sound maybe, its own picture on top maybe, face on camera, viewers from some countries only) and
+notes (cheaper in some countries, rules hidden until you join, also pays on TikTok once TikTok checks Clip Factory) ride
+with the match. Ranking: clean matches first, per-view pay before other kinds, the highest rate, the most money left,
+the newest launch. At most 20 matches. The defaults are chosen for him: at least $1.00 per 1,000 views, the places he
+set up, at least a quarter of the money left, open to join. Every rate and amount is CR's own number, formatted only and
+tagged "Content Rewards' numbers"; nothing estimates what a clip would earn. The web never decides a match: it shows the
+server's words.
 
 **From a match to making clips.**
 
@@ -1714,10 +1716,10 @@ only switch is `CF_DEEP=off` (Terraform `deep_analysis_enabled = false`), which 
   Discover or to join, so the finder reads the public campaign pages its robots.txt allows, a few times a day, and
   depends on their format (a change shows "I can't read Content Rewards' campaign pages right now") and on Content
   Rewards keeping them open to crawlers (a robots.txt change or a block stops it by itself; "Look on Content Rewards
-  yourself" always works). Open campaigns hide their rules until he joins, so the finder matches on pay, places,
-  money left, category, open or apply and what the public page shows; the full rules are read right after the join.
-  The first full look takes 3 to 5 days, and money left can be up to 12 hours old ("as of" shown). Joining stays his
-  own tap on Content Rewards. What is still unverified is in
+  yourself" always works). Open campaigns hide their rules until he joins, so the finder matches on pay, places, money
+  left, category, open or apply and what the public page shows; the full rules are read right after the join. The first
+  full look takes 3 to 5 days, and money left on a match is usually under a day old (re-read once it is 12 hours old, at
+  the next look; "as of" shown). Joining stays his own tap on Content Rewards. What is still unverified is in
   [CONTRACTS.md §41.6](CONTRACTS.md#416-who-builds-what-the-switch-tests-not-verified-live).
 - **30 minutes to send.** CR takes a post only in its first 30 minutes live; Clip Factory stops trying at 25 and the
   reminder covers the rest. TikTok campaign clips wait for TikTok's audit (private posts can't earn); Instagram and

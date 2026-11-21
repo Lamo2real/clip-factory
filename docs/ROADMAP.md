@@ -96,7 +96,7 @@ the owner's words: "will I be able to find campaigns and join them based on some
   times a day, skips campaigns it can't make clips for, ranks the matches and tells him "3 new campaigns match what
   you want." (at most once a day). Only Content Rewards' own numbers, never a guess of earnings.
 - **Join with his own tap**: every match has "Open on Content Rewards"; he taps **Join Campaign** there, then "I
-  joined: add it" (no copy or paste). Once Content Rewards' sign-in yes arrives, the campaign is added by itself
+  joined: add it" (no link to copy or paste). Once Content Rewards' sign-in yes arrives, the campaign is added by itself
   when he comes back, and "You're in!" follows.
 - **Polite and anonymous**: only what robots.txt allows (`/sitemap.xml`, `/c/campaigns/{uuid}`), never an `/api/…`
   path, at most 40 pages a look, 1 s apart, from AWS only, with no cookie and nothing about the owner; a backoff, a
