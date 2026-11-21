@@ -99,10 +99,19 @@ def start(deps: CrDeps, user_id: str, port: Any, now: datetime) -> Item:
     }
 
 
-def _result(deps: CrDeps, user_id: str, now: datetime, result: str) -> Item:
+def _result(deps: CrDeps, user_id: str, now: datetime, result: str, *, signed_in: bool = False) -> Item:
+    """Stores the Connect result as ``lastResult``. CR's "can't connect apps" comes after he signed in, and so does
+    any answer after CR gave a code (``signed_in``): either way he has an account, so step 1 ticks (§39.1)."""
     connection.ensure(deps.store, user_id, now)
-    item = connection.update(deps.store, user_id, now, {"lastResult": result})
+    steps = connection.STEPS_SIGNED_IN if signed_in or result == "not_allowed" else ()
+    item = connection.tick(deps.store, user_id, now, steps, {"lastResult": result})
+    log("info", "cr.connect_result", result=result)
     return {"result": result, "connection": connection.public(item, now)}
+
+
+def _with_steps(conn: Mapping[str, Any], add: tuple[str, ...]) -> set[str]:
+    """``stepsDone`` with the steps Clip Factory now knows are done (setup steps 1 and 2 of ``CR_GUIDE``)."""
+    return {str(s) for s in conn.get("stepsDone") or []} | set(add)
 
 
 def _lease(deps: CrDeps, user_id: str) -> bool:
@@ -142,6 +151,7 @@ def finish(  # noqa: PLR0915 (the steps of §38.9 Connect finish, in order)
     code = body.get("code")
     if not isinstance(code, str) or not code:
         return _result(deps, user_id, now, "error")
+    # CR gave a code for this sign-in's state: he signed in there, so from here every result ticks step 1.
     verifier, _challenge = oauth_state.pkce(key, nonce)
     cid = str(found.get("clientId") or "")
     try:
@@ -149,14 +159,14 @@ def finish(  # noqa: PLR0915 (the steps of §38.9 Connect finish, in order)
     except oauth.OAuthFail as e:
         if e.kind == "invalid_client":
             deps.secrets.delete(app_name(deps.secrets))  # register again next time
-            return _result(deps, user_id, now, "error")
+            return _result(deps, user_id, now, "error", signed_in=True)
         if e.kind in {"down", "rate"}:
-            return _result(deps, user_id, now, "cr_down")
+            return _result(deps, user_id, now, "cr_down", signed_in=True)
         if e.kind == "dead":
-            return _result(deps, user_id, now, "expired")
+            return _result(deps, user_id, now, "expired", signed_in=True)
         if _PILOT.search(e.code):
             return _result(deps, user_id, now, "not_allowed")
-        return _result(deps, user_id, now, "error")
+        return _result(deps, user_id, now, "error", signed_in=True)
     fresh = oauth.secret_from(answer, now, requested=config.SCOPES)
     granted = set(fresh["scope"].split())
     client = McpClient(
@@ -175,7 +185,7 @@ def finish(  # noqa: PLR0915 (the steps of §38.9 Connect finish, in order)
         oauth.revoke(deps.net, cid, fresh["refreshToken"])  # this sign-in is never kept: end it at CR too
         if e.code == "permission_denied":
             return _result(deps, user_id, now, "not_allowed")
-        return _result(deps, user_id, now, "cr_down" if e.retryable else "error")
+        return _result(deps, user_id, now, "cr_down" if e.retryable else "error", signed_in=True)
     creator = str(me.get("id") or "")
     fresh["creatorId"] = creator
     missing = [s for s in config.SCOPES if s not in granted]
@@ -184,7 +194,7 @@ def finish(  # noqa: PLR0915 (the steps of §38.9 Connect finish, in order)
     result = "connected" if can_submit else "read_only"
     if not _lease(deps, user_id):
         oauth.revoke(deps.net, cid, fresh["refreshToken"])
-        return _result(deps, user_id, now, "busy")
+        return _result(deps, user_id, now, "busy", signed_in=True)
     pk, sk = connection.key(user_id)
     try:
         old_conn = connection.load(deps.store, user_id)
@@ -194,10 +204,10 @@ def finish(  # noqa: PLR0915 (the steps of §38.9 Connect finish, in order)
         version = _write_token(deps, fresh)
         if version is None:
             oauth.revoke(deps.net, cid, fresh["refreshToken"])
-            return _result(deps, user_id, now, "cr_down")
+            return _result(deps, user_id, now, "cr_down", signed_in=True)
         if old_secret and old_secret.get("refreshToken") and old_secret.get("refreshToken") != fresh["refreshToken"]:
             oauth.revoke(deps.net, cid, str(old_secret["refreshToken"]))
-        steps = {str(s) for s in old_conn.get("stepsDone") or []} | {"ready-account"}
+        steps = _with_steps(old_conn, connection.STEPS_CONNECTED)
         fields: Item = {
             "status": status,
             "creatorId": creator,
@@ -238,6 +248,7 @@ def finish(  # noqa: PLR0915 (the steps of §38.9 Connect finish, in order)
         except Exception as e:  # the campaigns are re-checked on the next tick anyway
             log("warning", "cr.check_invoke_failed", error=type(e).__name__)
     log("info", "cr.connected", result=result)
+    log("info", "cr.connect_result", result=result)  # every result, so the logs show each Connect the same way
     return {"result": result, "connection": connection.public(updated, now)}
 
 
@@ -335,8 +346,35 @@ def disconnect(deps: CrDeps, user_id: str, now: datetime) -> None:
     log("info", "cr.disconnected")
 
 
+def _said(said: Any, now: datetime) -> tuple[Item, list[str]]:
+    """``{said}``: "I sent it" (``pilot_sent``) or its undo (null). ``cant_connect`` is ``_said_cant_connect``."""
+    if said == "pilot_sent":
+        log("info", "cr.pilot_sent")
+        return {"pilotSentAt": iso(now), "pilotReminders": 0, "pilotRemindAt": iso(now + config.PILOT_EVERY)}, []
+    if said is None:
+        return {}, ["pilotSentAt", "pilotReminders", "pilotRemindAt"]
+    raise bad_request('said must be "pilot_sent", "cant_connect" or null.', "said")
+
+
+def _said_cant_connect(deps: CrDeps, user_id: str, conn: Mapping[str, Any], now: datetime) -> Mapping[str, Any]:
+    """His answer "It said my account can't connect apps". CR's page sends nobody back (seen live 21 Nov 2026), so he
+    tells us. It is kept like a not_allowed Connect (the "Content Rewards said no?" card opens on every device) and
+    ticks step 1. A Connect that finished first wins: signed in, or one finishing meanwhile, leaves everything as is."""
+    signed = connection.effective(conn, now)[0] in connection.SIGNED_IN
+    log("info", "cr.said_cant_connect", signedIn=signed)
+    if signed:
+        return conn
+    fields = {"lastResult": "not_allowed", "saidCantConnectAt": iso(now)}
+    try:
+        return connection.tick(deps.store, user_id, now, connection.STEPS_SIGNED_IN, fields, unchanged_since=conn)
+    except db.ConditionFailed:
+        log("info", "cr.said_cant_connect_late")
+        return connection.load(deps.store, user_id)
+
+
 def patch(deps: CrDeps, user_id: str, body: Mapping[str, Any], now: datetime) -> Item:
-    """One of ``{said}``, ``{step, done}``, ``{relinked}``, ``{finance}`` (§38.8)."""
+    """One of ``{said}`` (``pilot_sent``, ``cant_connect`` or null), ``{step, done}``, ``{relinked}``, ``{finance}``
+    (§38.8)."""
     from ..settings import PLATFORMS
 
     keys = set(body)
@@ -344,15 +382,10 @@ def patch(deps: CrDeps, user_id: str, body: Mapping[str, Any], now: datetime) ->
     conn = connection.load(deps.store, user_id)
     fields: Item = {}
     remove: list[str] = []
+    if keys == {"said"} and body["said"] == "cant_connect":
+        return connection.public(_said_cant_connect(deps, user_id, conn, now), now)
     if keys == {"said"}:
-        if body["said"] == "pilot_sent":
-            fields["pilotSentAt"] = iso(now)
-            fields["pilotReminders"] = 0
-            fields["pilotRemindAt"] = iso(now + config.PILOT_EVERY)
-        elif body["said"] is None:
-            remove += ["pilotSentAt", "pilotReminders", "pilotRemindAt"]
-        else:
-            raise bad_request('said must be "pilot_sent" or null.', "said")
+        fields, remove = _said(body["said"], now)
     elif keys == {"step", "done"}:
         step, done = body["step"], body["done"]
         if not isinstance(step, str) or not connection.STEP_ID.match(step) or not isinstance(done, bool):
