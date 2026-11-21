@@ -29,6 +29,7 @@ INTERNAL = (
     "pilotRemindAt",
     "warnedAt",
     "lastCheckAt",
+    "saidCantConnectAt",
 )
 
 PILOT_TO = "support@contentrewards.com"

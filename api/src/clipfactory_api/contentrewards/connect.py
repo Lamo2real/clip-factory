@@ -29,6 +29,10 @@ Item = dict[str, Any]
 LEASE_WAIT_TRIES = 5
 DELETE_RETRY_SECONDS = 10
 _PILOT = re.compile(r"connect apps|pilot|not allowed|not eligible", re.IGNORECASE)
+# CR_GUIDE's setup steps 1 and 2 (web/src/setup/contentrewards.ts). A finished Connect proves both (§39.1); a "can't
+# connect apps" from CR (its redirect, or his answer "It said my account can't connect apps") proves step 1.
+STEPS_CONNECTED = ("ready-account", "ready-socials")
+STEPS_SIGNED_IN = ("ready-account",)
 
 
 @dataclass
@@ -101,8 +105,17 @@ def start(deps: CrDeps, user_id: str, port: Any, now: datetime) -> Item:
 
 def _result(deps: CrDeps, user_id: str, now: datetime, result: str) -> Item:
     connection.ensure(deps.store, user_id, now)
-    item = connection.update(deps.store, user_id, now, {"lastResult": result})
+    fields: Item = {"lastResult": result}
+    if result == "not_allowed":  # CR refused this account after he signed in: he has an account (step 1)
+        fields["stepsDone"] = _with_steps(connection.load(deps.store, user_id), STEPS_SIGNED_IN)
+    item = connection.update(deps.store, user_id, now, fields)
+    log("info", "cr.connect_result", result=result)
     return {"result": result, "connection": connection.public(item, now)}
+
+
+def _with_steps(conn: Mapping[str, Any], add: tuple[str, ...]) -> set[str]:
+    """``stepsDone`` with the steps Clip Factory now knows are done (setup steps 1 and 2 of ``CR_GUIDE``)."""
+    return {str(s) for s in conn.get("stepsDone") or []} | set(add)
 
 
 def _lease(deps: CrDeps, user_id: str) -> bool:
@@ -197,7 +210,7 @@ def finish(  # noqa: PLR0915 (the steps of §38.9 Connect finish, in order)
             return _result(deps, user_id, now, "cr_down")
         if old_secret and old_secret.get("refreshToken") and old_secret.get("refreshToken") != fresh["refreshToken"]:
             oauth.revoke(deps.net, cid, str(old_secret["refreshToken"]))
-        steps = {str(s) for s in old_conn.get("stepsDone") or []} | {"ready-account"}
+        steps = _with_steps(old_conn, STEPS_CONNECTED)
         fields: Item = {
             "status": status,
             "creatorId": creator,
@@ -335,8 +348,29 @@ def disconnect(deps: CrDeps, user_id: str, now: datetime) -> None:
     log("info", "cr.disconnected")
 
 
+def _said(conn: Mapping[str, Any], said: Any, now: datetime) -> tuple[Item, list[str]]:
+    """``{said}``: "I sent it" (``pilot_sent``), its undo (null), or "It said my account can't connect apps"
+    (``cant_connect``)."""
+    if said == "pilot_sent":
+        log("info", "cr.pilot_sent")
+        return {"pilotSentAt": iso(now), "pilotReminders": 0, "pilotRemindAt": iso(now + config.PILOT_EVERY)}, []
+    if said == "cant_connect":
+        # CR's "This account can't connect apps" page sends nobody back (seen live 21 Nov 2026), so he tells us. It is
+        # kept like a not_allowed Connect, so the "Content Rewards said no?" card opens on every device.
+        log("info", "cr.said_cant_connect", signedIn=connection.signed_in(conn))
+        return {
+            "lastResult": "not_allowed",
+            "saidCantConnectAt": iso(now),
+            "stepsDone": _with_steps(conn, STEPS_SIGNED_IN),
+        }, []
+    if said is None:
+        return {}, ["pilotSentAt", "pilotReminders", "pilotRemindAt"]
+    raise bad_request('said must be "pilot_sent", "cant_connect" or null.', "said")
+
+
 def patch(deps: CrDeps, user_id: str, body: Mapping[str, Any], now: datetime) -> Item:
-    """One of ``{said}``, ``{step, done}``, ``{relinked}``, ``{finance}`` (§38.8)."""
+    """One of ``{said}`` (``pilot_sent``, ``cant_connect`` or null), ``{step, done}``, ``{relinked}``, ``{finance}``
+    (§38.8)."""
     from ..settings import PLATFORMS
 
     keys = set(body)
@@ -345,14 +379,7 @@ def patch(deps: CrDeps, user_id: str, body: Mapping[str, Any], now: datetime) ->
     fields: Item = {}
     remove: list[str] = []
     if keys == {"said"}:
-        if body["said"] == "pilot_sent":
-            fields["pilotSentAt"] = iso(now)
-            fields["pilotReminders"] = 0
-            fields["pilotRemindAt"] = iso(now + config.PILOT_EVERY)
-        elif body["said"] is None:
-            remove += ["pilotSentAt", "pilotReminders", "pilotRemindAt"]
-        else:
-            raise bad_request('said must be "pilot_sent" or null.', "said")
+        fields, remove = _said(conn, body["said"], now)
     elif keys == {"step", "done"}:
         step, done = body["step"], body["done"]
         if not isinstance(step, str) or not connection.STEP_ID.match(step) or not isinstance(done, bool):

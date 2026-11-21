@@ -134,7 +134,7 @@ def test_connect_finish_success(call: Call, cr: Any, secrets_client: FakeSecrets
     assert body["result"] == "connected"
     conn = body["connection"]
     assert (conn["status"], conn["canSubmit"]) == ("connected", True)
-    assert "ready-account" in conn["stepsDone"]
+    assert {"ready-account", "ready-socials"} <= set(conn["stepsDone"])  # a finished Connect proves steps 1 and 2
     form = fake_of(cr).token_forms()[0]
     assert form["grant_type"] == ["authorization_code"]
     assert form["redirect_uri"] == ["http://127.0.0.1:47812/"]
@@ -197,11 +197,27 @@ def test_connect_finish_scopes(
         ({"error": "server_error"}, "error"),
     ],
 )
-def test_connect_finish_errors(call: Call, cr: Any, extra: dict[str, Any], result: str) -> None:
+def test_connect_finish_errors(call: Call, cr: Any, extra: dict[str, Any], result: str, capsys: Any) -> None:
     q = _start(call)
     status, body = call("POST", f"{BASE}/connect/finish", {"state": q["state"], **extra})
     assert (status, body["result"]) == (200, result)
     assert body["connection"]["lastResult"] == result
+    # "Can't connect apps" comes after he signed in, so he has an account: step 1 ticks (only step 1).
+    assert body["connection"]["stepsDone"] == (["ready-account"] if result == "not_allowed" else [])
+    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith("{")]
+    assert {"event": "cr.connect_result", "result": result} in [
+        {k: v for k, v in line.items() if k in {"event", "result"}} for line in lines
+    ]
+
+
+def test_connect_finish_keeps_an_account_content_rewards_does_not_know(call: Call, cr: Any) -> None:
+    """Connect ticks step 2, but a crLinked false (Content Rewards said it doesn't know YouTube) stays: only his own
+    "I added them" or "I added it" clears that (§38.3)."""
+    seed_connection(cr, USER, cr.clock.now, status="not_connected", crLinked={"youtube": False})
+    _status, body = _finish(call, _start(call))
+    assert body["result"] == "connected"
+    assert body["connection"]["crLinked"] == {"youtube": False}
+    assert body["connection"]["stepsDone"] == ["ready-account", "ready-socials"]
 
 
 def test_connect_finish_state_and_iss(call: Call, cr: Any, clock: Clock) -> None:
@@ -274,6 +290,51 @@ def test_patch_connection(call: Call, cr: Any) -> None:
     assert call("PATCH", f"{BASE}/connection", {"finance": True})[1]["connection"]["finance"] is True
     assert "finance" not in call("PATCH", f"{BASE}/connection", {"finance": None})[1]["connection"]
     assert call("PATCH", f"{BASE}/connection", {"finance": True, "said": None})[0] == 400
+
+
+def test_said_cant_connect(call: Call, cr: Any, capsys: Any) -> None:
+    """CR's "This account can't connect apps" page sends nobody back, so he answers "It said my account can't connect
+    apps": the API records it like a not_allowed Connect (the pilot card opens on every device) and ticks step 1."""
+    cr.store.put(
+        {"pk": db.user_pk(USER), "sk": db.CRCONN_SK, "type": "crconn", "status": "not_connected", "stepsDone": {"x-1"}}
+    )
+    status, body = call("PATCH", f"{BASE}/connection", {"said": "cant_connect"})
+    assert status == 200
+    conn = body["connection"]
+    assert (conn["status"], conn["lastResult"], conn["stepsDone"]) == (
+        "not_connected",
+        "not_allowed",
+        ["ready-account", "x-1"],
+    )
+    assert "pilotSentAt" not in conn
+    assert "saidCantConnectAt" not in conn  # internal: when he said it
+    item = connection.load(cr.store, USER)
+    assert item["saidCantConnectAt"] == iso(cr.clock.now)
+    assert connection.refused(item)  # campaigns say "Check it yourself", as after a not_allowed Connect
+    assert call("GET", BASE)[1]["connection"]["lastResult"] == "not_allowed"  # every device opens the pilot card
+    out = capsys.readouterr().out
+    assert '"event": "cr.said_cant_connect"' in out
+    assert USER not in out
+    # Saying it again changes nothing more; "I sent it" and its undo leave the answer alone.
+    assert call("PATCH", f"{BASE}/connection", {"said": "cant_connect"})[1]["connection"]["stepsDone"] == [
+        "ready-account",
+        "x-1",
+    ]
+    assert call("PATCH", f"{BASE}/connection", {"said": "pilot_sent"})[1]["connection"]["lastResult"] == "not_allowed"
+    conn = call("PATCH", f"{BASE}/connection", {"said": None})[1]["connection"]
+    assert ("pilotSentAt" not in conn, conn["lastResult"]) == (True, "not_allowed")
+    status, body = call("PATCH", f"{BASE}/connection", {"said": "cant"})
+    assert (status, body["error"]["message"]) == (400, 'said must be "pilot_sent", "cant_connect" or null.')
+    # A later Connect that works replaces the answer and ticks steps 1 and 2.
+    _status, body = _finish(call, _start(call))
+    assert (body["result"], body["connection"]["lastResult"]) == ("connected", "connected")
+    assert body["connection"]["stepsDone"] == ["ready-account", "ready-socials", "x-1"]
+
+
+def test_said_cant_connect_on_a_new_owner(call: Call, cr: Any) -> None:
+    """No CRCONN yet (he never opened Connect on this account): the answer still lands."""
+    conn = call("PATCH", f"{BASE}/connection", {"said": "cant_connect"})[1]["connection"]
+    assert (conn["lastResult"], conn["stepsDone"], conn["canSubmit"]) == ("not_allowed", ["ready-account"], False)
 
 
 def test_disconnect(call: Call, cr: Any, secrets_client: FakeSecretsManager) -> None:
