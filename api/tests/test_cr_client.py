@@ -451,3 +451,14 @@ def test_two_calls_a_second(setup: Any) -> None:
         client.call("get_me", {})
     assert sleeper.slept
     assert sleeper.slept[0] > 0
+
+
+def test_organization_falls_back_to_the_brand_name() -> None:
+    public = public_campaign()
+    row = {
+        **listed_campaign("cmp_7zzzzzzzzzzzzzzzzzzzzzzzzz", org="org_7zzzzzzzzzzzzzzzzzzzzzzzzz"),
+        "brand_account": {"name": "ClippedIn"},
+    }
+    assert ids.match_campaign([row], UUID, public) == (row, "name")  # the org TypeID never matched: the brand
+    other = {**row, "brand_account": {"name": "Someone Else"}}
+    assert ids.match_campaign([other], UUID, public) == (None, "none")

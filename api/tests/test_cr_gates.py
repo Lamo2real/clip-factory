@@ -299,3 +299,9 @@ def test_settle_membership_transitions() -> None:
     assert waiting["nextCheckAt"] == iso(NOW + timedelta(days=8, hours=6))
     campaigns.settle_membership(waiting, CONNECTED, [], True, NOW + timedelta(days=31))
     assert "nextCheckAt" not in waiting  # stops after 30 days: "Still waiting? Tap Check now."
+
+
+def test_you_can_post_again_after_a_hold() -> None:
+    found = step(campaign(heldClearedAt=iso(NOW - timedelta(hours=1))))
+    assert (found["kind"], found["sub"]) == ("make_clips", "You can post again.")
+    assert "sub" not in step(campaign(heldClearedAt=iso(NOW - timedelta(days=2))))

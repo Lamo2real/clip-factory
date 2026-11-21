@@ -350,6 +350,21 @@ def settle_membership(  # noqa: PLR0915 (the membership table of §38.4, one pla
     return item
 
 
+def verify_typeid(deps: CrDeps, user_id: str, conn: Mapping[str, Any], item: Mapping[str, Any], now: datetime) -> None:
+    """The first match after Connect tells whether CR's ids are the TypeID of the page's UUID: logged once and kept
+    as ``CRCONN.typeidVerified`` (after a mismatch only the name rules are used)."""
+    if "typeidVerified" in conn or item.get("idMatch") not in ("typeid", "name"):
+        return
+    verified = item.get("idMatch") == "typeid"
+    log("info", "cr.typeid_verified" if verified else "cr.typeid_mismatch")
+    try:
+        connection.update(deps.store, user_id, now, {"typeidVerified": verified})
+    except db.ConditionFailed:
+        return
+    if isinstance(conn, dict):
+        conn["typeidVerified"] = verified
+
+
 def needs_read(item: Mapping[str, Any]) -> bool:
     """A rules read is due: the brief (or the pasted rules) changed since the last read."""
     if item.get("rulesState") == "reading":
@@ -420,6 +435,8 @@ def check_membership(
             log("info", "cr.list_failed", code=e.code)
             listed = None
     settle_membership(item, conn, listed, complete, now)
+    if listed is not None:
+        verify_typeid(deps, user_id, conn, item, now)
     if needs_read(item):
         start_read(deps, user_id, item, now)
     return item

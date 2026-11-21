@@ -229,6 +229,7 @@ def membership(deps: CrDeps, user_id: str, now: datetime, *, force: bool = False
     for item in due:
         before = (item.get("membership"), item.get("state"), item.get("briefHash"))
         campaigns.settle_membership(item, conn, listed, complete, now)
+        campaigns.verify_typeid(deps, user_id, conn, item, now)
         if campaigns.needs_read(item):
             campaigns.start_read(deps, user_id, item, now)
         campaigns.save(deps, user_id, item)

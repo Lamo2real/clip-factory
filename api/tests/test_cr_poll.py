@@ -375,3 +375,11 @@ def _stats_deps() -> Any:
     return StatsDeps(
         store=db.Store(FakeTable()), adapters=lambda p: adapters[p], clock=Clock(NOW), time_budget_seconds=240.0
     )
+
+
+def test_typeid_is_verified_once(world: Any) -> None:
+    deps, fake, _clock = world
+    seed_campaign(deps.store, USER, NOW, membership="not_joined", nextCheckAt=iso(NOW - timedelta(minutes=1)))
+    fake.answer("list_my_campaigns", page([listed_campaign(access="open")]))
+    poll.membership(deps, USER, NOW)
+    assert (deps.store.get(db.user_pk(USER), db.CRCONN_SK) or {})["typeidVerified"] is True

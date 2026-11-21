@@ -11,6 +11,7 @@ from collections.abc import Iterable, Mapping
 from datetime import date, datetime
 from typing import Any
 
+from ..clock import parse
 from ..stats import STATS_ORDER
 from . import config, connection
 from .util import obj
@@ -369,6 +370,9 @@ def next_step(item: Mapping[str, Any], conn: Mapping[str, Any], stop_list: list[
     }
     if item.get("autoSince"):
         step["sub"] = "Clip Factory can send these clips by itself now."
+    cleared = parse(item.get("heldClearedAt"))
+    if cleared is not None and now - cleared < config.HELD_FOR:
+        step["sub"] = "You can post again."
     return step
 
 

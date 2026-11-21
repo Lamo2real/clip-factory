@@ -54,8 +54,9 @@ def match_campaign(
 ) -> tuple[Mapping[str, Any] | None, str]:
     """``(listed campaign or None, how)``: how is ``typeid``, ``name``, ``ambiguous`` or ``none``.
 
-    ``use_typeid`` is False after a verified mismatch (only rules 2–4 then). ``org_matches`` is False when the
-    organization TypeID never matched anything for this owner: the brand name is compared instead."""
+    ``use_typeid`` is False after a verified mismatch (only rules 2–4 then). The organization is compared by its
+    TypeID when any listed campaign carries it, else (it never matched anything) by the brand name; ``org_matches``
+    False forces the brand name."""
     rows = [c for c in listed if isinstance(c, Mapping)]
     if use_typeid:
         wanted = typeid("cmp", uuid)
@@ -71,8 +72,10 @@ def match_campaign(
         (public.get("organization") or {}).get("name") if isinstance(public.get("organization"), Mapping) else ""
     )
 
+    by_org = bool(org_matches and org and any(r.get("organization") == org for r in rows))
+
     def same_org(row: Mapping[str, Any]) -> bool:
-        if org_matches and org:
+        if by_org:
             return row.get("organization") == org
         brand_row = row.get("brand_account") or {}
         listed_brand = _fold(brand_row.get("name") if isinstance(brand_row, Mapping) else row.get("brand"))
