@@ -179,15 +179,16 @@ Fold-outs inside step 2 (closed unless the question applies):
   otherwise "Update the Clip Factory app first." "Quit it (press Command and Q), then open it again." "When it asks,
   tap Restart now." (no button).
 
-**"Content Rewards said no?"** (an unnumbered card under step 3, `id: connect-pilot`, `data-help="cr-pilot-email"`;
-open when `lastResult` is `not_allowed` or the connection is `read_only`, otherwise folded under that question; it
-ticks itself on `can_submit`). Lines: "Content Rewards turns this on by email." "Send it from the email you use to
-sign in to Content Rewards. Check the From line." Vermilion `mailto` "Open email" (→ `mailto:[hidden]?
-subject=…&body=…`, URL-encoded). Copy chip (glass) "Email to Content Rewards" with the line "An email asking Content
-Rewards to let Clip Factory send your clips." (the body is under **Show more**). Green `ask` "I sent it" (`said:
-pilot_sent`). Then: "Content Rewards will email you back. When they say yes, come back and tap Connect Content
-Rewards." "Until then, you send each clip yourself. I'll remind you after each post." "Sign in to Content Rewards on
-your phone now. Then sending by hand is quick." with the glass Open "Open Content Rewards" (→
+**"Content Rewards said no?"** (an unnumbered card under step 3, `id: connect-pilot`, `data-help="cr-pilot-email"`; open
+when `lastResult` is `not_allowed` or the connection is `read_only`, otherwise folded under that question; it ticks
+itself on `can_submit`). Lines: "Content Rewards turns this on by email." "Send it from the email you use to sign in to
+Content Rewards. Check the From line." (the page shows only the first: the box below asks the second) Vermilion `mailto`
+"Open email" (→ `mailto:[hidden]?subject=…&body=…`, URL-encoded; which link it opens and what it does
+with no email yet: **Which email**, below; glass once the email is sent). Copy chip (glass) "Email to Content Rewards"
+with the line "An email asking Content Rewards to let Clip Factory send your clips." (the body is under **Show more**).
+Green `ask` "I sent it" (`said: pilot_sent`). Then: "Content Rewards will email you back. When they say yes, come back
+and tap Connect Content Rewards." "Until then, you send each clip yourself. I'll remind you after each post." "Sign in
+to Content Rewards on your phone now. Then sending by hand is quick." with the glass Open "Open Content Rewards" (→
 `https://contentrewards.com/login`). While this card is open, step 3's button reads "Connect Content Rewards" in glass,
 so "Open email" is the screen's one vermilion button; after "I sent it" the vermilion goes back to the first numbered
 step not done: "Connect Content Rewards" (to check if they said yes) once steps 1 and 2 are done (§39.1, **The one
@@ -195,18 +196,24 @@ vermilion**).
 
 **Which email** (live check, 21 Nov 2026: `mailto` opens Mail's default account, which may not be his Content Rewards
 login). The card asks once "Which email do you sign in to Content Rewards with?" (one email box, kept on this device
-only in `localStorage`, never sent to the API), then shows **"Send it from {email}"** in bold with a glass "Change"
-next to it (it shows the box again). The bold line takes the place of "Send it from the email you use to sign in to
-Content Rewards. Check the From line.", so the two never show together. The address is trimmed, and its domain is
-matched in any case. For an `@gmail.com` or `@googlemail.com` address "Open email" opens Gmail's own compose page for
-that exact account instead of the `mailto`:
+only in `localStorage`, never sent to the API), then shows **"Send it from {email}."** in bold with a glass "Change"
+button (at least 48 px tall, at the right end of that line) next to it (it shows the box again). The box and the bold
+line take the place of "Send it from the email you use to sign in to Content Rewards. Check the From line.", so the two
+never show together. The address is trimmed, and its domain is matched in any case. For an `@gmail.com` or
+`@googlemail.com` address "Open email" opens Gmail's own compose page for that exact account instead of the `mailto`:
 `[hidden]]&su={subject}&body={body}` (every
 value with `encodeURIComponent`, so a space is `%20`, like `connection.pilotEmail.mailto`). The link check that guards
 "Open email" lets an `https` link through only for exactly `[hidden]` with
 `to=[hidden]`. Any other address keeps the `mailto` with the bold line **"Check the From line says
-{email}"**. Until he types an email, "Open email" is the `mailto` with the card's own "Check the From line." line.
-The Copy chip stays as the fallback. Once `pilotSentAt` is set the card never pushes him to send it again: no email
-question, "Open email" is glass, and the lines after "I sent it" show.
+{email}"**. Until he types an email, "Open email" opens nothing (a button with no link, as a `mailto` would send from
+Mail's own default account): it puts the focus in the box and says under it, in bold, "Type the email you use for
+Content Rewards first." (`role="alert"`); it is still the vermilion while the email waits. The Copy chip stays as the
+fallback. Once `pilotSentAt` is set the card never pushes him to send it again: no email question (no box, no "Send it
+from" line, no "Change"), no vermilion and no line asking him to send it again; the lines after "I sent it" show. "Open
+email" stays where it was, glass, built the same way from the email kept on this device (Gmail's compose page for an
+`@gmail.com` or `@googlemail.com` address; any other the `mailto` with the bold **"Check the From line says {email}"**),
+so he can send it again if Content Rewards never answers. With no email kept on this device (he sent it from another
+one), tapping it shows the box and "Type the email you use for Content Rewards first." the same way.
 
 The email (literal in `contentrewards.ts` as `CR_PILOT_EMAIL`, also served as `connection.pilotEmail`): To
 `[hidden]`; Subject "Please let my account connect apps (MCP sign-in pilot)"; Body "Hi! Please let

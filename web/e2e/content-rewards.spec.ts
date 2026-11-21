@@ -308,6 +308,11 @@ test.describe("desktop journeys", () => {
     await expect(pilot.getByRole("button", { name: "Copy Email to Content Rewards" })).toBeVisible();
     await pilot.getByRole("button", { name: "I sent it" }).click();
     await expect(pilot).toContainText("Content Rewards will email you back.");
+    // Open email stays, glass, so he can send it again if Content Rewards never answers; nothing pushes him to.
+    await expect(pilot.locator("[data-cr='open-email']")).toBeVisible();
+    await expect(pilot.locator("[data-cr='open-email']")).toHaveClass(/btn--glass/);
+    await expect(pilot.getByLabel("Which email do you sign in to Content Rewards with?")).toHaveCount(0);
+    await expect(tomatoes(page).filter({ hasText: "Open email" })).toHaveCount(0);
     await expect(page.locator("[data-cr='card']")).toHaveCount(0);
   });
 
@@ -355,6 +360,10 @@ test.describe("desktop journeys", () => {
     await expect(pilot).toContainText("Content Rewards hasn't let your account connect apps yet.");
     await expect(pilot.getByLabel("Which email do you sign in to Content Rewards with?")).toHaveCount(0);
     await expect(pilot).toContainText("Send it from kid.test@gmail.com.");
+    // Change is a glass button, at least 48 px tall.
+    const change = pilot.getByRole("button", { name: "Change", exact: true });
+    await expect(change).toHaveClass(/btn--glass/);
+    expect((await change.boundingBox())!.height).toBeGreaterThanOrEqual(48);
     // The email card is the step on the first screen (step 2 waits folded until the email went).
     await expect(page.locator("#step-ready-socials")).not.toHaveClass(/is-open/);
     await expect(pilot.locator("[data-cr='open-email']")).toBeInViewport();
@@ -386,6 +395,10 @@ test.describe("desktop journeys", () => {
     let popup = page.waitForEvent("popup");
     await page.locator("#step-connect").getByRole("button", { name: "Connect Content Rewards", exact: true }).click();
     await (await popup).close();
+    // While it waits for the browser (before the question shows) nothing is the vermilion.
+    await expect(page.getByText("Waiting for you in the browser…")).toBeVisible();
+    await expect(ask).toHaveCount(0);
+    await expect(tomatoes(page)).toHaveCount(0);
     // He comes back from Content Rewards' page while it still waits: the question comes on screen by itself.
     await page.waitForTimeout(3_200);
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));

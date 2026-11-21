@@ -89,10 +89,11 @@ top to bottom (H; `CrSetup.tsx`, D's `CrStepCard` in `screens/campaigns/bits.tsx
 numbered step not done → step 1 "Open Content Rewards", step 2 "Open Content Rewards settings" (each with its green
 answer right under it), step 3 "Connect Content Rewards" (elsewhere, step 3's own words for where the page runs); every
 step done → the back button with a `?back=`, else "Add a campaign" while he has no campaign. While the page waits for
-the browser, or asks "What did Content Rewards say?" (§38.3), nothing is vermilion. Steps tick themselves whenever Clip
-Factory knows (above), so after a finished Connect, once Content Rewards said the account can't connect apps, or once
-the pilot email is sent, he never sees step 1's button as the next step. With the owner's own data at the live check
-(pilot email sent, no steps ticked) the vermilion is step 2's "Open Content Rewards settings".
+the browser (the Mac app's waiting card, from the tap on "Connect Content Rewards" or "Connect again", before the
+question shows too), or asks "What did Content Rewards say?" (§38.3), nothing is vermilion. Steps tick themselves
+whenever Clip Factory knows (above), so after a finished Connect, once Content Rewards said the account can't connect
+apps, or once the pilot email is sent, he never sees step 1's button as the next step. With the owner's own data at the
+live check (pilot email sent, no steps ticked) the vermilion is step 2's "Open Content Rewards settings".
 
 **`?back=`** (H, `web/src/lib/backLink.ts`, one pure function used by every setup page): only these exact same-origin
 shapes count, anything else (another origin, `//`, a scheme, other paths, extra query keys) is ignored: `/campaigns/{uuid}`
