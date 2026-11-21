@@ -64,7 +64,7 @@ Text is not part of the prims. Captions and bubble symbols are drawn on top of t
   about `size × 0.09`) or put a rounded panel behind the block (`#1c1842` at 72 %). The browser draws the panel.
   `bubble` text sits inside a balloon the frames already drew, so it has no outline and no panel.
 * Where things go: captions at y 1400 (above the platforms' bottom bar, x 520 keeps clear of the right-hand
-  buttons). Scene teaching text at y 330 (under the top tabs) in sunshine yellow. The safety end card at y 500 for the
+  buttons). Scene teaching text at y 330 (under the top tabs) in sunshine yellow. The safety end card at y 420 for the
   last 2.5 s. A bubble's symbol sits at its balloon's centre.
 
 ## Sound (`audioTrack`)

@@ -13,7 +13,7 @@ export const CAPTION = { x: 520, y: 1400, maxW: 840, sizes: [64, 58, 52, 46, 40]
 /** Scene teaching text: under the platforms' top tabs. */
 export const HEADER = { x: 520, y: 330, maxW: 840, sizes: [60, 54, 48, 42], color: "#ffc94a" };
 /** The safety end card: high up, over the background, so it never covers a face. */
-export const ENDCARD = { x: 540, y: 500, maxW: 860, sizes: [56, 50, 44, 40], color: "#fff6e5", seconds: 2.5, maxLines: 4 };
+export const ENDCARD = { x: 540, y: 420, maxW: 860, sizes: [52, 48, 44, 40], color: "#fff6e5", seconds: 2.5, maxLines: 4 };
 
 /** Inter ExtraBold widths in em, roughly: enough to wrap lines before they overflow. */
 function charEm(ch: string): number {

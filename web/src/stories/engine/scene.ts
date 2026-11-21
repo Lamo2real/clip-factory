@@ -249,11 +249,17 @@ function focusOf(actors: ActorRT[], props: PropState[], view: "side" | "top"): F
 
 // ---- drawing ---------------------------------------------------------------------------------------------
 
-function drawActor(pen: Pen, a: ActorRT, view: "side" | "top", t: number): void {
+function drawActor(pen: Pen, a: ActorRT, view: "side" | "top", t: number, dark: boolean): void {
   const st = a.st;
   const px = actorScale(st.y, view);
   const x = st.x * W;
   const y = st.y * H;
+  if (dark) {
+    // a soft light behind the head keeps dark hair readable at night and on the stage
+    const hy = y + (a.geo.headY + st.pose.dy) * px;
+    pen.circle(x, hy, (a.geo.headRX + 22) * px, "#fff6e5", 0.07);
+    pen.circle(x, hy, (a.geo.headRX + 10) * px, "#fff6e5", 0.07);
+  }
   const lift = Math.max(0, -st.pose.dy);
   const lying = st.pose.rot < -45;
   const shadowK = 1 - Math.min(0.5, lift / 40);
@@ -347,12 +353,13 @@ export function drawSceneFrame(s: StoryScript, index: number, t: number): Prim[]
   const ground = layerMatrix(rt.cam, 1);
   pen.setMatrix(ground);
   const night = setInfo(scene.set).night;
+  const dark = night || scene.set === "studio";
   for (const p of rt.props) if (DECALS.has(p.prop.kind)) drawProp(pen, p, rt.view, t, rt.seed, {}, night);
   type Item = { y: number; i: number; draw: () => void };
   const items: Item[] = [];
   rt.actors.forEach((a, i) => {
     if (a.actor.inCar && rt.occupants.has(a.actor.inCar)) return;
-    items.push({ y: a.st.y, i, draw: () => drawActor(pen, a, rt.view, t) });
+    items.push({ y: a.st.y, i, draw: () => drawActor(pen, a, rt.view, t, dark) });
   });
   rt.props.forEach((p, i) => {
     const kind = p.prop.kind;

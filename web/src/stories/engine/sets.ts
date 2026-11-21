@@ -371,8 +371,8 @@ function studioSide(env: SetEnv): void {
   const { pen, t, seed } = env;
   pen.setMatrix([1, 0, 0, 1, 0, 0]);
   pen.grad(0, 0, 0, H, [
-    [0, "#14112f"],
-    [0.6, "#2a2466"],
+    [0, "#231e58"],
+    [0.55, "#3a3288"],
     [1, "#1c1842"],
   ]);
   env.layer(0.3);
@@ -382,10 +382,10 @@ function studioSide(env: SetEnv): void {
   }
   env.layer(0.6);
   const sway = Math.sin(t * 0.6) * 40;
-  pen.poly([200, -40, 300, -40, 520 + sway, 1500, 80 + sway, 1500], "#fff6e5", 0.07);
-  pen.poly([780, -40, 880, -40, 1000 - sway, 1500, 560 - sway, 1500], "#fff6e5", 0.07);
+  pen.poly([200, -40, 300, -40, 520 + sway, 1500, 80 + sway, 1500], "#fff6e5", 0.09);
+  pen.poly([780, -40, 880, -40, 1000 - sway, 1500, 560 - sway, 1500], "#fff6e5", 0.09);
   env.layer(1);
-  pen.rect(env.view.x0 - 200, SIDE.verge + 40, env.view.x1 - env.view.x0 + 400, 1200, 0, "#241f58");
+  pen.rect(env.view.x0 - 200, SIDE.verge + 40, env.view.x1 - env.view.x0 + 400, 1200, 0, "#2a2466");
   pen.ellipse(540, SIDE.lane + 20, 520, 120, 0, "#ffc94a", 0.13);
   pen.ellipse(540, SIDE.lane + 20, 330, 70, 0, "#fff6e5", 0.1);
 }
