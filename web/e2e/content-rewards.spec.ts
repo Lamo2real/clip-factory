@@ -105,21 +105,43 @@ for (const [name, use] of [
       await expect(page.locator(".setup-todo")).toContainText(/0\/5|0 of 5/);
     });
 
-    test("the setup page: steps 1 and 2 tick with I did this, the ring counts 3, the folds open", async ({ page }) => {
+    test("the setup page in time order: the shortcut, each answer right under its Open, the ring counts 3, the folds open", async ({ page }) => {
       await start(page, { fresh: true });
       await page.goto(SETUP);
       await settle(page);
       await expect(page.locator(".setup-head")).toContainText("0/3");
       await expect(tomatoes(page)).toHaveCount(1);
       await expect(tomatoes(page)).toHaveText(/Open Content Rewards/);
-      await page.locator("#step-ready-account").getByRole("button", { name: "I did this" }).click();
+      // §39.1: the shortcut comes first while steps 1 and 2 are both not done (no No button: step 1 is right below).
+      const shortcut = page.locator("[data-cr='shortcut']");
+      await expect(shortcut).toContainText(/^Already use Content Rewards, with .+\?/);
+      await expect(shortcut.getByRole("button")).toHaveText(["Yes"]);
+      const one = page.locator("#step-ready-account");
+      await expect(one.locator(".gstep__lead")).toHaveText("Have one already? Tap I have an account.");
+      // The green answer sits right under Open, before the other lines and the If you see hints.
+      const order = await one.evaluate((el) => {
+        const open = el.querySelector("a.cr-open")!;
+        const answer = [...el.querySelectorAll("button")].find((b) => b.textContent?.includes("I have an account"))!;
+        const lines = el.querySelector(".gstep__say")!;
+        return [open.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING, answer.compareDocumentPosition(lines) & Node.DOCUMENT_POSITION_FOLLOWING];
+      });
+      // On a phone both sit pinned at the bottom right of the card (§38.1), the answer still right under Open.
+      expect(phone ? order[0] : order.every(Boolean)).toBeTruthy();
+      await expect(one).toContainText("Tap Continue with Google. Pick your Google account.");
+      await expect(one).toContainText("Then come back to Clip Factory. Tap I have an account.");
+      await one.getByRole("button", { name: "I have an account" }).click();
       await expect(page.locator("#step-ready-account")).toHaveAttribute("data-done", "true");
       await expect(page.locator(".setup-head")).toContainText("1/3");
       const socials = page.locator("#step-ready-socials");
       await expect(socials.locator(".gstep__body")).toBeVisible();
       await socials.getByText("Content Rewards says Not a professional account?").click();
       await expect(socials.locator("#fold-instagram")).toContainText("Tap Account type and tools.");
-      await socials.getByRole("button", { name: "I did this" }).click();
+      await expect(socials.locator(".gstep__title")).toHaveText("Step 2: Add your accounts there");
+      await expect(socials.locator(".gstep__lead")).toHaveText(/^Already added .+ there\? Tap I added them\.$/);
+      await expect(socials).toContainText("Add Instagram, X and Facebook the same way, if you post there.");
+      await expect(socials).toContainText("Then come back to Clip Factory. Tap I added them.");
+      await expect(page.locator("[data-cr='shortcut']")).toHaveCount(0);
+      await socials.getByRole("button", { name: "I added them" }).click();
       await expect(page.locator(".setup-head")).toContainText("2/3");
       const connect = page.locator("#step-connect");
       // Step 3's Mac-app lines and hints never show where Connect can't run.
@@ -156,13 +178,22 @@ for (const [name, use] of [
       await expect(page.locator(".cr-head")).toContainText("FaZe Clips");
     });
 
-    test("Campaigns, empty: Open Content Rewards is the vermilion until a link is pasted, then Add campaign", async ({ page }) => {
+    test("Campaigns, empty and not connected: Set up Content Rewards first, Then join a campaign, then Add campaign", async ({ page }) => {
       await start(page, { fresh: true });
       await page.goto("/campaigns");
       await settle(page);
       await expect(page.locator(".cr-join .gstep")).toHaveCount(3);
       await expect(tomatoes(page)).toHaveCount(1);
+      await expect(tomatoes(page)).toHaveText(/Set up Content Rewards/);
+      await expect(tomatoes(page)).toHaveAttribute("href", "/settings/posting/setup/contentrewards?back=/campaigns");
+      await expect(page.getByRole("heading", { name: "Then join a campaign" })).toBeVisible();
+      await expect(page.locator("#step-join-find a.cr-open")).toHaveClass(/btn--glass/);
+      expect(await screenProblems(page, phone)).toEqual([]);
+      // Connected: as before, Open Content Rewards is the vermilion while the box is empty.
+      await mock(page);
+      await cr(page, "connect");
       await expect(tomatoes(page)).toHaveText(/Open Content Rewards/);
+      await expect(page.getByRole("heading", { name: "Join a campaign" })).toBeVisible();
       await page.getByLabel("Paste a Content Rewards campaign link").fill(CR_URL(IDS.faze));
       await expect(tomatoes(page)).toHaveCount(1);
       await expect(tomatoes(page)).toHaveText(/Add campaign/);
@@ -179,8 +210,8 @@ test.describe("desktop journeys", () => {
     await asMacWindow(page, { crConnect: true });
     await page.goto(SETUP);
     await settle(page);
-    await page.locator("#step-ready-account").getByRole("button", { name: "I did this" }).click();
-    await page.locator("#step-ready-socials").getByRole("button", { name: "I did this" }).click();
+    await page.locator("#step-ready-account").getByRole("button", { name: "I have an account" }).click();
+    await page.locator("#step-ready-socials").getByRole("button", { name: "I added them" }).click();
     const connect = page.getByRole("button", { name: "Connect Content Rewards", exact: true });
     await expect(connect).toHaveClass(/btn--primary/);
     const popup = page.waitForEvent("popup");
@@ -194,6 +225,55 @@ test.describe("desktop journeys", () => {
     await expect(page.locator("[data-help='cr-ready']")).toContainText("Clip Factory sends your campaign clips for you.");
     // With no campaign yet and nothing else to do, Add a campaign is the one vermilion.
     await expect(tomatoes(page)).toHaveText(/Add a campaign/);
+  });
+
+  test("?back= (§39.1): Back to FaZe Clips after Connect, glass while Content Rewards said no? waits for I sent it", async ({ page }) => {
+    await start(page, { fresh: true });
+    await asMacWindow(page, { crConnect: true });
+    await page.goto("/campaigns");
+    await mock(page);
+    await finishSetup(page, "youtube", "instagram");
+    await settle(page);
+    await page.getByLabel("Paste a Content Rewards campaign link").fill(CR_URL(IDS.faze));
+    await page.getByRole("button", { name: "Add campaign" }).click();
+    await expect(page).toHaveURL(new RegExp(`/campaigns/${IDS.faze}$`));
+    const next = page.locator("[data-help='cr-next-step']");
+    await expect(next.getByRole("link", { name: "Connect Content Rewards" })).toHaveAttribute("href", `${SETUP}?back=/campaigns/${IDS.faze}`);
+    await next.getByRole("link", { name: "Connect Content Rewards" }).click();
+    await settle(page);
+    await page.locator("[data-cr='shortcut']").getByRole("button", { name: "Yes" }).click();
+    await cr(page, "setResult", "read_only");
+    const popup = page.waitForEvent("popup");
+    await page.locator("#step-connect").getByRole("button", { name: "Connect Content Rewards", exact: true }).click();
+    await (await popup).getByRole("button", { name: "Allow" }).click();
+    await expect(page.locator(".result-card")).toContainText("Next: back to FaZe Clips.");
+    const back = page.locator("[data-cr='back']");
+    await expect(back).toHaveText(/Back to FaZe Clips/);
+    // The pilot email waits: Open email is the one vermilion, the way back is glass.
+    await expect(tomatoes(page)).toHaveText(/Open email/);
+    await expect(back).toHaveClass(/btn--glass/);
+    await page.locator("[data-help='cr-pilot-email']").getByRole("button", { name: "I sent it" }).click();
+    await expect(back).toHaveClass(/btn--primary/);
+    await expect(tomatoes(page)).toHaveCount(1);
+    await back.click();
+    await expect(page).toHaveURL(new RegExp(`/campaigns/${IDS.faze}$`));
+  });
+
+  test("a platform's setup page reads ?back= too: once connected, Back to Money is the vermilion", async ({ page }) => {
+    await start(page);
+    await page.goto("/");
+    await mock(page);
+    await finishSetup(page, "youtube");
+    await page.goto("/settings/posting/setup/youtube?back=/money");
+    await settle(page);
+    const back = page.locator("[data-setup='back']");
+    await expect(back).toHaveText(/Back to Money/);
+    await expect(back).toHaveClass(/btn--primary/);
+    await expect(tomatoes(page)).toHaveCount(1);
+    // Anything else is ignored.
+    await page.goto("/settings/posting/setup/youtube?back=//evil.example");
+    await settle(page);
+    await expect(page.locator("[data-setup='back']")).toHaveCount(0);
   });
 
   test("Cancel on the consent page gives the denied card; read only opens Content Rewards said no?", async ({ page }) => {
@@ -375,10 +455,23 @@ test.describe("desktop journeys", () => {
     await expect(page.locator("[data-help='cr-things-you-do']")).toContainText("Keep each clip up for 30 days. Don't delete it.");
     await tomatoes(page).click();
     await expect(page).toHaveURL(new RegExp(`/\\?campaign=${IDS.faze}$`));
+    // The campaign way (§39.1): the strip, the rule line, the channel chip, and the main button's own words.
+    await expect(page.locator(".cr-way")).toContainText("Campaign clips · FaZe Clips");
+    const below = page.locator(".cr-way__below");
+    await expect(below).toContainText("FaZe Clips pays only for clips of FaZe Clan's YouTube and Twitch.");
+    await expect(below.getByRole("link", { name: /Open FaZe Clan's YouTube/ })).toHaveAttribute("href", "https://www.youtube.com/@FaZeClan/videos");
+    await expect(below).toContainText("Pick a video there. Copy its link. Come back and tap Paste.");
+    await expect(page.locator("form.newjob").getByRole("button", { name: "Make campaign clips" })).toBeVisible();
+    // Two campaigns ready for clips: the "Which campaign" bar, this one picked, and no None (leaving is "Make normal
+    // clips instead").
     const bar = page.locator(".cr-for");
     await expect(bar.locator(".segmented__opt.is-on")).toContainText("FaZe Clips");
-    await expect(bar.getByRole("link", { name: /Open FaZe Clan's YouTube/ })).toHaveAttribute("href", "https://www.youtube.com/@FaZeClan/videos");
-    await expect(bar).toContainText("Pick a video there. Copy its link. Come back and tap Paste.");
+    await expect(bar.getByRole("radio")).not.toHaveCount(0);
+    await expect(bar.getByRole("radio", { name: "None" })).toHaveCount(0);
+    await page.getByRole("link", { name: "Make normal clips instead" }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.locator(".cr-way")).toHaveCount(0);
+    await expect(page.locator("form.newjob").getByRole("button", { name: "Make clips", exact: true })).toBeVisible();
   });
 
   test("Make clips while the brand's new rules are being read: Reading the rules…, then it starts by itself once", async ({ page }) => {
@@ -393,12 +486,12 @@ test.describe("desktop journeys", () => {
     // The rules changed on Content Rewards a moment ago: Home doesn't know yet. The read takes 4 s here, so a slow
     // machine's click still lands while it runs.
     await cr(page, "rulesChanged", IDS.faze, 4000);
-    await page.getByRole("button", { name: "Make clips", exact: true }).click();
+    await page.getByRole("button", { name: "Make campaign clips", exact: true }).click();
     await expect(page.locator(".newjob")).toContainText("Reading the rules… I start your clips when they are ready.");
     await expect(page).toHaveURL(/\/jobs\/[A-Za-z0-9_-]+$/, { timeout: 10_000 });
   });
 
-  test("Review: the strip, only the paid places, I linked it brings YouTube back, the locked YouTube choices", async ({ page }) => {
+  test("Review: the fit block, only the paid places, I added it brings YouTube back, the locked YouTube choices", async ({ page }) => {
     await start(page, { review: true });
     await page.goto("/");
     await mock(page);
@@ -406,13 +499,14 @@ test.describe("desktop journeys", () => {
     await cr(page, "unlink", "youtube");
     await page.goto("/review");
     await settle(page);
-    const card = page.locator(".review-card").filter({ has: page.locator("[data-help='cr-review-strip']") });
-    await expect(card.locator(".cr-strip")).toContainText("For FaZe Clips · Content Rewards");
-    await expect(card.locator(".cr-strip")).toContainText("#Ad at the start");
+    const card = page.locator(".review-card").filter({ has: page.locator("[data-help~='cr-review-strip']") });
+    // §39.3: the fit block replaced the old strip.
+    await expect(card.locator(".cr-fit")).toContainText("Campaign clip · FaZe Clips");
+    await expect(card.locator(".cr-strip")).toHaveCount(0);
     await expect(card.locator(".upload-chip")).toHaveCount(1);
     await expect(card.locator(".upload-to")).toContainText("Only places this campaign pays for.");
-    await expect(card.locator(".upload-to")).toContainText("Link YouTube inside Content Rewards first.");
-    await card.getByRole("button", { name: "I linked it" }).click();
+    await expect(card.locator(".upload-to")).toContainText("Add YouTube in Content Rewards first.");
+    await card.locator(".upload-to").getByRole("button", { name: "I added it" }).click();
     await expect(card.locator(".upload-chip")).toHaveCount(2);
     await expect(card.locator(".upload-chip", { hasText: "YouTube" })).toHaveAttribute("aria-pressed", "true");
     await expect(card.locator("[data-place='youtube'] .place-row__now")).toHaveText("Who can see it: Everyone · Made for kids: No · Paid promotion");
@@ -598,9 +692,32 @@ test.describe("phone: the main button stays pinned", () => {
     await page.goto("/campaigns");
     await settle(page);
     await expect(page.locator(".cr-paste .linkbox__paste")).not.toHaveCSS("background-image", /206, 48, 36/);
-    await expect(tomatoes(page)).toHaveText(/Open Content Rewards/);
+    // Not connected yet: setting up comes first (§39.1).
+    await expect(tomatoes(page)).toHaveText(/Set up Content Rewards/);
     await expect(tomatoes(page)).toBeInViewport();
     await expect(page.locator("#step-join-copy")).toBeVisible();
+    expect(await screenProblems(page, true)).toEqual([]);
+  });
+});
+
+test.describe("a phone's campaign card (§39.1)", () => {
+  test.use(PHONE);
+  test("not connected: the vermilion is Set up Content Rewards, with the way back to this card", async ({ page }) => {
+    await start(page, { fresh: true });
+    await page.goto("/campaigns");
+    await mock(page);
+    await finishSetup(page, "youtube");
+    await settle(page);
+    await page.getByLabel("Paste a Content Rewards campaign link").fill(CR_URL(IDS.faze));
+    await page.getByRole("button", { name: "Add campaign" }).click();
+    await expect(page).toHaveURL(new RegExp(`/campaigns/${IDS.faze}$`));
+    await expect(tomatoes(page)).toHaveCount(1);
+    await expect(tomatoes(page)).toHaveText(/Set up Content Rewards/);
+    await expect(tomatoes(page)).toHaveAttribute("href", `${SETUP}?back=/campaigns/${IDS.faze}`);
+    await expect(page.locator("[data-help='cr-next-step']")).toContainText("Connect Content Rewards on your Mac, so I can see if you're in.");
+    await tomatoes(page).click();
+    await settle(page);
+    await expect(page.locator("#step-ready-account")).toBeVisible();
     expect(await screenProblems(page, true)).toEqual([]);
   });
 });
@@ -615,7 +732,7 @@ test.describe("campaign clips after Upload", () => {
     await finishSetup(page, "youtube", "instagram", "tiktok");
     await page.goto("/review");
     await settle(page);
-    const card = page.locator(".review-card").filter({ has: page.locator("[data-help='cr-review-strip']") });
+    const card = page.locator(".review-card").filter({ has: page.locator("[data-help~='cr-review-strip']") });
     await expect(card.locator(".upload-to")).toContainText("TikTok is left out for now. Until TikTok checks Clip Factory, TikTok posts are private, and private posts can't earn.");
     await expect(card.locator(".upload-chip", { hasText: "TikTok" })).toHaveCount(0);
     await expect(card.locator(".upload-chip")).toHaveCount(2);
@@ -629,7 +746,7 @@ test.describe("campaign clips after Upload", () => {
     await finishSetup(page, "youtube", "instagram");
     await page.goto("/review");
     await settle(page);
-    const card = page.locator(".review-card").filter({ has: page.locator("[data-help='cr-review-strip']") });
+    const card = page.locator(".review-card").filter({ has: page.locator("[data-help~='cr-review-strip']") });
     const clipId = ((await card.getAttribute("aria-labelledby")) ?? "").replace(/^hook-/, "");
     expect(clipId).not.toBe("");
     const mine = card.getByRole("button", { name: "Use my settings" });

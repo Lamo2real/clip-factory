@@ -232,13 +232,15 @@ for (const size of [
   });
 }
 
-test("a campaign clip (§38.5): the strip, only the paid places, YouTube locked public and never for kids, paid partnership on", async ({ page }) => {
+test("a campaign clip (§38.5, §39.3): the fit block, only the paid places, YouTube locked public and never for kids, paid partnership on", async ({ page }) => {
   await page.addInitScript(() => {
     if (!sessionStorage.getItem("cf-mock-cr-review")) sessionStorage.setItem("cf-mock-cr-review", "1");
   });
   await fourReady(page);
-  const card = page.locator(".review-card").filter({ has: page.locator("[data-help='cr-review-strip']") });
-  await expect(card.locator(".cr-strip")).toContainText("For FaZe Clips · Content Rewards");
+  const card = page.locator(".review-card").filter({ has: page.locator("[data-help~='cr-review-strip']") });
+  // The fit block replaced the old strip at the top of the card.
+  await expect(card.locator(".cr-fit")).toContainText("Campaign clip · FaZe Clips");
+  await expect(card.locator(".cr-fit .cr-fit__headline")).toBeVisible();
   // FaZe Clips pays for YouTube and Instagram: TikTok and Facebook are set up but get no chip.
   await expect(card.locator(".upload-chip")).toHaveCount(2);
   await expect(card.locator(".upload-chip[aria-pressed='true']")).toHaveCount(2);

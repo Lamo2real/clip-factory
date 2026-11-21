@@ -539,3 +539,49 @@ for (const size of [
     });
   });
 }
+
+// §39 (docs/CONTRACTS.md §39.5): a campaign clip's fit block on Review, and All your money on the Money page, at 375
+// and 1440 px. The campaign clip is the first card of a new FaZe Clips job (the campaign way), in the pretend app.
+for (const size of [
+  { name: "phone", width: 375, height: 812, scale: 2, touch: true },
+  { name: "desktop", width: 1440, height: 900, scale: 1, touch: false },
+]) {
+  test.describe(`content rewards fit and all money ${size.name} ${size.width}x${size.height}`, () => {
+    test.use({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale, hasTouch: size.touch, isMobile: size.touch });
+    const suffix = `-${size.width}x${size.height}`;
+    test("screenshot review-fit and money-all", async ({ page }) => {
+      type Knobs = Record<string, (...a: unknown[]) => unknown>;
+      const mock = (group: "setup" | "jobs", fn: string, ...args: unknown[]) =>
+        page.evaluate(([g, f, a]) => (window as unknown as { __cfMock: Record<string, Knobs> }).__cfMock[g as string]![f as string]!(...(a as unknown[])), [group, fn, args] as const);
+      await page.goto("/");
+      await settle(page);
+      await page.waitForFunction(() => !!(window as unknown as { __cfMock?: { jobs?: unknown } }).__cfMock?.jobs);
+      for (const p of ["youtube", "instagram"]) await mock("setup", "finish", p);
+      await page.goto("/?campaign=200ea21b-be80-4db8-b552-8e32b148604e");
+      await settle(page);
+      await page.getByLabel("YouTube, Twitch or Kick link").fill("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+      await page.locator("form.newjob").getByRole("button", { name: "Make campaign clips", exact: true }).click();
+      await page.waitForURL(/\/jobs\//);
+      await mock("jobs", "finish");
+      await page.getByRole("link", { name: "Check these clips" }).click();
+      await page.waitForURL(/\/review\?job=/);
+      await settle(page);
+      const fit = page.locator(".review-list__item").first().locator(".cr-fit");
+      await expect(fit).toBeVisible();
+      await expect(page.locator(".toast")).toHaveCount(0, { timeout: 15_000 });
+      await fit.evaluate((el) => el.scrollIntoView({ block: "start" }));
+      await page.evaluate(() => scrollBy(0, -80));
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: join(dir, `review-fit${suffix}.png`) });
+      await page.evaluate(() => {
+        history.pushState({}, "", "/money");
+        dispatchEvent(new PopStateEvent("popstate"));
+      });
+      await settle(page);
+      await expect(page.locator(".cr-all__rows")).toBeVisible();
+      await page.evaluate(() => scrollTo(0, 0));
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: join(dir, `money-all${suffix}.png`) });
+    });
+  });
+}
