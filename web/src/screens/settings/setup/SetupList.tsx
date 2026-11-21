@@ -150,7 +150,7 @@ function CrCardPart() {
               </span>
             </div>
           ) : (
-            <A href={CR_SETUP_PATH} className={`setup-card cr-card${n === 3 ? " is-cr-ready" : ""}`} data-cr="card" data-help="cr-setup-card">
+            <A href={CR_SETUP_PATH} className={`setup-card cr-setup-card${n === 3 ? " is-cr-ready" : ""}`} data-cr="card" data-help="cr-setup-card">
               <span className="setup-card__mark cr-mark" aria-hidden="true">
                 <Icon name="coin" size={28} />
               </span>

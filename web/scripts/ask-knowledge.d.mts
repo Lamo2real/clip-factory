@@ -1,8 +1,8 @@
 // Types for the parts of ask-knowledge.mjs the tests import (the script itself is plain JavaScript run by Node).
 export interface SetupStepRow {
   id: string;
-  /** The number the guide shows; null for Content Rewards' unnumbered steps (§38.17). */
-  n: number | null;
+  /** The number the guide shows (Content Rewards: within each part, §38.17). */
+  n: number;
   part: string;
   partTitle: string;
   title: string;

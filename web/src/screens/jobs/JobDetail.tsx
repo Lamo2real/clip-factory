@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/index.ts";
 import type { Campaign } from "../../api/types.ts";
 import { CrPostLines } from "../../components/CrPostLine.tsx";
-import { campaignPath, crAvailability, useSubmissions } from "../../lib/contentRewards.ts";
+import { campaignPath, useCr, useSubmissions } from "../../lib/contentRewards.ts";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { Clip, ClipStatus, Job } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
@@ -425,17 +425,21 @@ function BackLink() {
  */
 function JobCampaignStrip({ campaignId, note, clipIds }: { campaignId: string; note?: string; clipIds: string[] }) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const [off, setOff] = useState(false);
+  // "No Content Rewards" comes from the overview (an API from before §38, or switched off), never from this one
+  // campaign: a campaign he removed answers 404, and the job still keeps its copy, its note and its lines (§38.8).
+  const cr = useCr();
+  const off = cr.state === "missing" || cr.state === "soon";
   useEffect(() => {
+    if (off) return;
     let alive = true;
     api()
       .crCampaign(campaignId)
       .then((c) => alive && setCampaign(c))
-      .catch((e) => alive && setOff(crAvailability(e) !== "error"));
+      .catch(() => alive && setCampaign(null));
     return () => {
       alive = false;
     };
-  }, [campaignId]);
+  }, [campaignId, off]);
   const subs = useSubmissions({ campaignId }, !off);
   const mine = subs.subs.filter((s) => clipIds.includes(s.clipId));
   if (off) return null;

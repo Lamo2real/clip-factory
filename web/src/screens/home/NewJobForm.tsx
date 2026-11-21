@@ -7,14 +7,14 @@ import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { ActGlyph, Button, Progress, Segmented, Stepper } from "../../components/ui.tsx";
+import { ActGlyph, Button, LinkButton, Progress, Segmented, Stepper } from "../../components/ui.tsx";
 import { classifyDrop, dragKind, dragMayHoldText, isVideoFile, videoType, type Dropped, type DragKind } from "../../lib/drops.ts";
 import { bytes } from "../../lib/format.ts";
 import { campaignLink, checkLink, extractLink, KIND_LABEL, PLATFORM_NAMES } from "../../lib/links.ts";
 import type { Campaign, GroupChoice } from "../../api/types.ts";
 import { ApiError } from "../../api/errors.ts";
-import { COMING_SOON, NOT_YET, campaignPath, clippable, listedCampaign, useCr } from "../../lib/contentRewards.ts";
-import { useLiveEvents } from "../../lib/live.ts";
+import { COMING_SOON, NOT_YET, campaignPath, clippable, homeStop, listedCampaign, useCr } from "../../lib/contentRewards.ts";
+import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
 import { addCampaign, GroupPicker } from "../campaigns/CampaignPaste.tsx";
 import { OpenButton } from "../campaigns/bits.tsx";
 import { Rich } from "../settings/setup/bits.tsx";
@@ -77,6 +77,8 @@ export function NewJobForm() {
   const [crError, setCrError] = useState<string | null>(null);
   // A start refused while the rules were being read: sent again once they are ready, at most once.
   const resend = useRef<"waiting" | "sent" | null>(null);
+  const [waitingRules, setWaitingRules] = useState(false);
+  const [resendNow, setResendNow] = useState(false);
   const [touched, setTouched] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -185,25 +187,37 @@ export function NewJobForm() {
       live = false;
     };
   }, [forCampaign]);
+  /** A fresh read of the picked campaign. "Reading the rules…" ended: the same start goes again by itself, once. */
+  function took(c: Campaign) {
+    setCampaign(c);
+    if (resend.current === "waiting" && c.rulesState === "ready") {
+      resend.current = "sent";
+      setWaitingRules(false);
+      setCrError(null);
+      // Sent after the next render, when the form sees the campaign without its "Reading the rules…" stop.
+      setResendNow(true);
+    }
+  }
+  const readCampaign = () =>
+    forCampaign
+      ? api()
+          .crCampaign(forCampaign)
+          .then(took)
+          .catch(() => undefined)
+      : Promise.resolve();
   useLiveEvents(
     (e) => {
       if (e.type !== "contentrewards" || !forCampaign || e.id !== `campaign:${forCampaign}`) return;
-      void api()
-        .crCampaign(forCampaign)
-        .then((c) => {
-          setCampaign(c);
-          // "Reading the rules…" ended: send the same start again by itself, once.
-          if (resend.current === "waiting" && c.rulesState === "ready") {
-            resend.current = "sent";
-            form.current?.requestSubmit();
-          }
-        })
-        .catch(() => undefined);
+      void readCampaign();
     },
     () => undefined,
   );
+  // The live news may be late or lost: while he waits for the rules, look now and then too.
+  useLivePoll(readCampaign, waitingRules && !!forCampaign, 5000);
   const hardStop = campaign?.stops.find((s) => s.hard) ?? null;
-  const stopWords = hardStop ? (hardStop.code === "rules_reading" ? "Reading the rules…" : hardStop.text) : null;
+  // Home's words for the stop (the card's say "below", which is the campaign page) and the button's short text.
+  const homeWords = hardStop ? homeStop(hardStop) : null;
+  const stopWords = homeWords?.text ?? null;
   const min = me?.settings.clipMin ?? 5;
   const max = me?.settings.clipMax ?? 10;
   const target: ClipTarget = count === "range" ? { min, max } : { min: exact, max: exact };
@@ -217,6 +231,33 @@ export function NewJobForm() {
     setCrError(null);
     setGroup(null);
   }
+
+  // The "For a campaign" bar scrolls sideways when the campaigns don't fit.
+  const forBar = useRef<HTMLDivElement>(null);
+  const [moreCampaigns, setMoreCampaigns] = useState(false);
+  const forCount = clipFor.length;
+  useEffect(() => {
+    const bar = forBar.current?.querySelector<HTMLElement>(".segmented");
+    if (!bar) {
+      setMoreCampaigns(false);
+      return;
+    }
+    const check = () => setMoreCampaigns(bar.scrollWidth - bar.clientWidth - bar.scrollLeft > 4);
+    check();
+    bar.addEventListener("scroll", check, { passive: true });
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(check) : null;
+    ro?.observe(bar);
+    return () => {
+      bar.removeEventListener("scroll", check);
+      ro?.disconnect();
+    };
+  }, [forCount, isCampaignLink]);
+
+  useEffect(() => {
+    if (!resendNow || busy || !ready) return;
+    setResendNow(false);
+    form.current?.requestSubmit();
+  }, [resendNow, busy, ready]);
 
   async function pasteFromClipboard() {
     try {
@@ -397,20 +438,22 @@ export function NewJobForm() {
       // This computer stops getting that job's video now and removes its copy (the job's stop says so too, a moment later).
       // Only when the server really stopped that job: its replace is best effort, and a job still waiting keeps its download.
       if (source.type === "upload" && start.from) void stopMacCopy(start.from, job.jobId);
+      // A later "Reading the rules…" in this visit gets its own one resend.
+      resend.current = null;
+      setWaitingRules(false);
       toast.success("Started! Your clips show up in Review when they are ready.");
       void refresh().catch(() => undefined);
       if (mounted.current && location.pathname === "/") navigate(`/jobs/${job.jobId}`);
     } catch (err) {
       if ((err as DOMException)?.name === "AbortError")
         toast.info(mounted.current ? "Upload canceled." : "Upload stopped because you left Home. Start it again from Home.");
-      else if (forCampaign && err instanceof ApiError && err.retryAfter !== undefined && resend.current !== "sent") {
-        // The rules are being read (§38.5): "Reading the rules…", and the same start goes again once they are ready.
+      else if (forCampaign && err instanceof ApiError && err.status === 409 && err.retryAfter !== undefined && resend.current !== "sent") {
+        // The rules are being read (§38.5): "Reading the rules…", and the same start goes again once they are ready
+        // (also when they were ready before this answer came: the read below sends it at once).
         resend.current = "waiting";
+        setWaitingRules(true);
         setCrError("Reading the rules… I start your clips when they are ready.");
-        void api()
-          .crCampaign(forCampaign)
-          .then(setCampaign)
-          .catch(() => undefined);
+        void readCampaign();
       } else if (forCampaign && err instanceof ApiError && (err.status === 409 || err.status === 400)) {
         send.fail({ sound: false });
         setCrError(friendlyMessage(err));
@@ -613,16 +656,22 @@ export function NewJobForm() {
       {clipFor.length && !isCampaignLink ? (
         <fieldset className="field field--inline cr-for" data-help="cr-make-clips">
           <legend className="field__label">For a campaign</legend>
-          <Segmented<string>
-            label="For a campaign"
-            value={forCampaign ?? ""}
-            onChange={(v) => {
-              setPickedCampaign(v || null);
-              setCrError(null);
-              resend.current = null;
-            }}
-            options={[{ value: "", label: "None" }, ...clipFor.map((c) => ({ value: c.campaignId, label: c.name.length > 28 ? `${c.name.slice(0, 27)}…` : c.name }))]}
-          />
+          <div className={`cr-for__bar${moreCampaigns ? " is-more" : ""}`} ref={forBar}>
+            <Segmented<string>
+              label="For a campaign"
+              value={forCampaign ?? ""}
+              onChange={(v) => {
+                setPickedCampaign(v || null);
+                setCrError(null);
+                resend.current = null;
+                setWaitingRules(false);
+                setResendNow(false);
+              }}
+              options={[{ value: "", label: "None" }, ...clipFor.map((c) => ({ value: c.campaignId, label: c.name.length > 28 ? `${c.name.slice(0, 27)}…` : c.name }))]}
+            />
+            {/* More campaigns hide to the right: a soft fade and a chevron say so. */}
+            {moreCampaigns ? <Icon name="chevronRight" size={20} className="icon cr-for__more" /> : null}
+          </div>
           {campaign ? <CampaignVideos campaign={campaign} onPick={(url) => (setMode("link"), takeLink(url), setTouched(true))} /> : null}
         </fieldset>
       ) : null}
@@ -675,7 +724,7 @@ export function NewJobForm() {
             }
           }}
         >
-          {isCampaignLink && crOn ? "Add campaign" : stopWords && hardStop?.code === "rules_reading" ? "Reading the rules…" : "Make clips"}
+          {isCampaignLink && crOn ? "Add campaign" : homeWords && !crError ? homeWords.short : "Make clips"}
         </Button>
         {crError || (stopWords && !isCampaignLink) ? (
           <p className="field__status is-bad" role="alert">
@@ -684,6 +733,11 @@ export function NewJobForm() {
               <Rich text={crError ?? stopWords ?? ""} />
             </span>
           </p>
+        ) : null}
+        {homeWords?.openCard && forCampaign && !crError && !isCampaignLink ? (
+          <LinkButton href={campaignPath(forCampaign)} variant="glass" icon="layers">
+            Open the campaign
+          </LinkButton>
         ) : null}
         <p className="newjob__hint">Nothing gets posted until you tap Upload.</p>
       </div>

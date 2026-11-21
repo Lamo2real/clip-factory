@@ -1,6 +1,7 @@
-// Your Content Rewards campaigns (/campaigns, docs/CONTRACTS.md §38.4): the paste box at the top, then one card per
-// campaign (name, brand picture, one state chip, the next step in one line). With none yet: the three "join" steps.
-// While the box is empty the screen's vermilion is "Open Content Rewards"; once a campaign link is in it, "Add campaign".
+// Your Content Rewards campaigns (/campaigns, docs/CONTRACTS.md §38.4): the paste box, then one card per campaign
+// (name, brand picture, one state chip, the next step in one line). With none yet: the three "join" steps first, then
+// the box. While the box is empty the screen's vermilion is "Open Content Rewards"; once a campaign link is in it,
+// "Add campaign". Paste itself is glass here.
 import { useState } from "react";
 import type { GroupChoice } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
@@ -28,10 +29,17 @@ export function accountLinks(platforms: { platform: string; account: { status: s
   return out;
 }
 
-export function JoinSteps({ primaryOpen }: { primaryOpen: boolean }) {
+/** Step 3's last line when the paste box sits under the steps (Campaigns with none yet). */
+export const PASTE_BELOW = "Come back to Clip Factory. Tap Paste in the box below.";
+
+export function JoinSteps({ primaryOpen, boxBelow = false }: { primaryOpen: boolean; boxBelow?: boolean }) {
   const setup = useSetup();
-  const [open, setOpen] = useState<string | null>("join-find");
   const steps = crPart("join").steps;
+  // An Ask button for one of these steps opens it (`#step-join-copy`).
+  const [open, setOpen] = useState<string | null>(() => {
+    const id = typeof location !== "undefined" ? /^#step-([a-z0-9-]+)$/.exec(location.hash)?.[1] : undefined;
+    return id && steps.some((st) => st.id === id) ? id : "join-find";
+  });
   return (
     <ol className="guide-steps cr-join">
       {steps.map((step, i) => (
@@ -45,6 +53,7 @@ export function JoinSteps({ primaryOpen }: { primaryOpen: boolean }) {
           primary={primaryOpen && step.id === "join-find"}
           onToggle={() => setOpen((o) => (o === step.id ? null : step.id))}
           copies={step.id === "join-join" ? accountLinks(setup.data?.platforms) : undefined}
+          say={step.id === "join-copy" && boxBelow ? step.say.map((l) => (/^Come back to Clip Factory\./.test(l) ? PASTE_BELOW : l)) : undefined}
         >
           {step.id === "join-copy" ? (
             <p className="gstep__note">
@@ -84,6 +93,15 @@ export function CampaignsPage() {
   return (
     <div className="page page--narrow cr-campaigns">
       <PageHeader title="Your campaigns" lede="Join a campaign on Content Rewards. Paste its link here. I check the rules and if you're in." />
+      {/* None yet: the three join steps come first, so step 1's Open Content Rewards is on the first screen. */}
+      {data && !campaigns.length ? (
+        <section className="setup-part" aria-labelledby="cr-join-title">
+          <h2 className="setup-part__title" id="cr-join-title">
+            Join a campaign
+          </h2>
+          <JoinSteps primaryOpen={!typed && !group} boxBelow />
+        </section>
+      ) : null}
       <CampaignPasteBox
         onGroup={setGroup}
         onTyped={(has) => {
@@ -109,14 +127,6 @@ export function CampaignsPage() {
             </A>
           </span>
         </p>
-      ) : null}
-      {data && !campaigns.length ? (
-        <section className="setup-part" aria-labelledby="cr-join-title">
-          <h2 className="setup-part__title" id="cr-join-title">
-            Join a campaign
-          </h2>
-          <JoinSteps primaryOpen={!typed && !group} />
-        </section>
       ) : null}
       {campaigns.length ? (
         <ul className="cr-cards" aria-label="Your campaigns">

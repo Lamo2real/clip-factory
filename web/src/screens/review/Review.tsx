@@ -306,20 +306,36 @@ function ReviewCard({
   const cr = useCr();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [campaignOff, setCampaignOff] = useState(false);
+  // The campaign could not be read (a network error or a 5xx): say so, with Check again, never a skeleton for good.
+  const [campaignFailed, setCampaignFailed] = useState(false);
+  const [campaignTry, setCampaignTry] = useState(0);
   const campaignId = clip.campaignId ?? null;
+  // Read again only when something that changes the card changed (the places CR refused, this campaign's own
+  // summary), never on every new overview object: each live event reloads the overview (§38.10).
+  const linkedKey = JSON.stringify(cr.data?.connection.crLinked ?? {});
+  const summary = campaignId ? cr.data?.campaigns.find((c) => c.campaignId === campaignId) : undefined;
+  const summaryKey = summary ? `${summary.checkedAt}|${summary.uploadPlaces.join(",")}|${summary.membership}|${summary.state}` : "";
   useEffect(() => {
     if (!campaignId) return;
     let alive = true;
-    const read = () =>
-      api()
-        .crCampaign(campaignId)
-        .then((c) => alive && (setCampaign(c), setCampaignOff(false)))
-        .catch((e) => alive && setCampaignOff(crAvailability(e) !== "error"));
-    void read();
+    api()
+      .crCampaign(campaignId)
+      .then((c) => {
+        if (!alive) return;
+        setCampaign(c);
+        setCampaignOff(false);
+        setCampaignFailed(false);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        const off = crAvailability(e) !== "error";
+        setCampaignOff(off);
+        setCampaignFailed(!off);
+      });
     return () => {
       alive = false;
     };
-  }, [campaignId, cr.data?.connection.crLinked, cr.data?.campaigns]);
+  }, [campaignId, linkedKey, summaryKey, campaignTry]);
   const isCampaign = !!campaign;
   const campaignWait = !!campaignId && !campaign && !campaignOff;
   const placesReady: Platform[] | null = campaignWait ? null : ready && campaign ? ready.filter((p) => campaign.uploadPlaces.includes(p)) : ready;
@@ -791,6 +807,16 @@ function ReviewCard({
               <span>Could not check your places. Check again, then tap Upload.</span>
             </p>
             <Button variant="glass" icon="retry" act="retry" onClick={onCheckAgain}>
+              Check again
+            </Button>
+          </div>
+        ) : campaignWait && campaignFailed ? (
+          <div className="upload-to upload-to--none" data-cr="campaign-failed">
+            <p className="callout callout--bad" role="alert">
+              <Icon name="alert" size={18} />
+              <span>Couldn&apos;t check the campaign. Tap Check again.</span>
+            </p>
+            <Button variant="glass" icon="retry" act="retry" onClick={() => (setCampaignFailed(false), setCampaignTry((n) => n + 1))}>
               Check again
             </Button>
           </div>

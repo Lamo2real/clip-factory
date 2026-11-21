@@ -1,5 +1,5 @@
 {
- "version": "57c4633ba4c4",
+ "version": "ecc97b724d28",
  "parts": [
   {
    "id": "app-map",
@@ -14,7 +14,7 @@
   {
    "id": "setup-steps",
    "title": "Setup steps per platform (ids and titles, numbered as the guide shows them)",
-   "text": "### YouTube (Settings › Posting › Set up posting › YouTube, /settings/posting/setup/youtube)\nPart: Get ready\n1. ready-channel · Have a YouTube channel\n2. ready-computer · Use a computer\nPart: Make your YouTube key\n3. key-console · Open Google Cloud\n4. key-project · Make a project\n5. key-data-api · Turn on YouTube Data API v3\n6. key-analytics-api · Turn on YouTube Analytics API\n7. key-get-started · Start Google Auth Platform\n8. key-branding · Fill in Branding\n9. key-scopes · Add the 3 permissions\n10. key-publish · Publish the app\n11. key-client · Make the key\n12. key-paste · Paste the key here (ticks itself: keys)\nPart: Connect\n13. connect · Connect YouTube (ticks itself: connected)\nPart: Go public\n14. public-privacy · Pick who can see your clips\n15. public-keep-alive · Post at least every 6 months (optional)\n16. public-quota · Only if you post over 100 a day (optional)\n\n### TikTok (Settings › Posting › Set up posting › TikTok, /settings/posting/setup/tiktok)\nPart: Get ready\n1. ready-account · Have your TikTok account\n2. ready-computer · Use a computer\n3. ready-private · Make your TikTok private for now\nPart: Make your TikTok key\n4. key-signup · Make a TikTok developer account\n5. key-org · Make an organization\n6. key-app · Create the app\n7. key-details · Fill in App details\n8. key-web · Choose Web\n9. key-products · Add 2 products\n10. key-redirect · Paste the return address\n11. key-direct-post · Turn on Direct Post\n12. key-scopes · Add 2 permissions\n13. key-review · Fill in App review, then Save\n14. key-verify · Prove the website is yours (ticks itself: files)\n15. key-paste · Paste Client key and secret (ticks itself: keys)\nPart: Connect\n16. sandbox-make · Make a Sandbox for testing\n17. sandbox-user · Add yourself as a test user\n18. sandbox-verify · Verify the website in Sandbox too\n19. sandbox-keys · Use the Sandbox keys (optional)\n20. connect · Connect TikTok (ticks itself: connected)\nPart: Go public\n21. public-demo · Record the real demo video\n22. public-review · Ask TikTok to check the app\n23. public-live-keys · When it says Live (optional)\n24. public-audit · Ask to post publicly\n25. public-unprivate · Make your account public again\n\n### Instagram (Settings › Posting › Set up posting › Instagram, /settings/posting/setup/instagram)\nPart: Get ready\n1. ready-pro · Make Instagram a pro account\n2. ready-page · Link Instagram to a Facebook Page\n3. ready-computer · Use a computer\n4. ready-portfolio · Business portfolio, if Meta asks (optional)\nPart: Make your Instagram key\n5. key-developer · Become a Meta developer\n6. key-app · Create the app\n7. key-basic · Fill in Basic settings\n8. key-config · Make the Instagram login setup\n9. key-redirect-check · Double-check the return address (optional)\n10. key-paste · Paste the 3 values (ticks itself: keys)\nPart: Connect\n11. connect · Connect Instagram (ticks itself: connected)\nPart: Go public\n12. public-live · Make the app Live\n13. public-try · Post one test clip\n\n### Facebook (Settings › Posting › Set up posting › Facebook, /settings/posting/setup/facebook)\nPart: Get ready\n1. ready-page · Have a Facebook Page\n2. ready-computer · Use a computer\nPart: Make your Facebook key\n3. key-developer · Turn on Meta for developers\n4. key-app · Create the app\n5. key-use-case · Pick one use case\n6. key-finish-app · Finish the app\n7. key-permissions · Turn on Page permissions\n8. key-basic · Fill in Basic settings\n9. key-redirect · Paste the return address\n10. key-config · Make a login configuration\n11. key-paste · Paste the 3 values (ticks itself: keys)\nPart: Connect\n12. connect · Connect Facebook (ticks itself: connected)\nPart: Go public\n13. public-live · Make the app Live\n\n### X (Settings › Posting › Set up posting › X, /settings/posting/setup/x)\nPart: Get ready\n1. ready-account · Use the X account your clips go on\n2. ready-computer · Use a computer\n3. ready-card · Ask a grown-up for a card\nPart: Make your X key\n4. key-console · Sign in to the X Developer Console\n5. key-credits · Buy a few credits\n6. key-app · Create the app\n7. key-auth-settings · Open the sign-in settings\n8. key-permissions · Pick Read and write\n9. key-addresses · Paste the addresses\n10. key-paste · Paste Client ID and Secret (ticks itself: keys)\nPart: Connect\n11. connect · Connect X (ticks itself: connected)\nPart: Go public\n12. public-credits · Keep a few credits\n\n### Content Rewards (Settings › Posting › Set up posting › Content Rewards, /settings/posting/setup/contentrewards)\nPart: Set it up once\n1. ready-account · Make a Content Rewards account (ticks itself: connected)\n2. ready-socials · Connect your accounts there (ticks itself: linked)\n3. connect · Connect Content Rewards (ticks itself: connected)\n- connect-pilot · Content Rewards said no? (ticks itself: can_submit)\nPart: Join a campaign\n- join-find · Pick a campaign\n- join-join · Join it (ticks itself: membership)\n- join-copy · Copy its link\nPart: Move your money to Whop\n- move-whop · Link your Whop account (ticks itself: whop_linked)\n- fin-setup · Set up payouts\n- move-withdraw · Move money to Whop (ticks itself: money_moving)\nPart: Get it to your bank\n- bank-setup · Add your bank on Whop\n- bank-cashout · Get it to your bank (ticks itself: money_moved)\n- fin-bank · Get it to your bank"
+   "text": "### YouTube (Settings › Posting › Set up posting › YouTube, /settings/posting/setup/youtube)\nPart: Get ready\n1. ready-channel · Have a YouTube channel\n2. ready-computer · Use a computer\nPart: Make your YouTube key\n3. key-console · Open Google Cloud\n4. key-project · Make a project\n5. key-data-api · Turn on YouTube Data API v3\n6. key-analytics-api · Turn on YouTube Analytics API\n7. key-get-started · Start Google Auth Platform\n8. key-branding · Fill in Branding\n9. key-scopes · Add the 3 permissions\n10. key-publish · Publish the app\n11. key-client · Make the key\n12. key-paste · Paste the key here (ticks itself: keys)\nPart: Connect\n13. connect · Connect YouTube (ticks itself: connected)\nPart: Go public\n14. public-privacy · Pick who can see your clips\n15. public-keep-alive · Post at least every 6 months (optional)\n16. public-quota · Only if you post over 100 a day (optional)\n\n### TikTok (Settings › Posting › Set up posting › TikTok, /settings/posting/setup/tiktok)\nPart: Get ready\n1. ready-account · Have your TikTok account\n2. ready-computer · Use a computer\n3. ready-private · Make your TikTok private for now\nPart: Make your TikTok key\n4. key-signup · Make a TikTok developer account\n5. key-org · Make an organization\n6. key-app · Create the app\n7. key-details · Fill in App details\n8. key-web · Choose Web\n9. key-products · Add 2 products\n10. key-redirect · Paste the return address\n11. key-direct-post · Turn on Direct Post\n12. key-scopes · Add 2 permissions\n13. key-review · Fill in App review, then Save\n14. key-verify · Prove the website is yours (ticks itself: files)\n15. key-paste · Paste Client key and secret (ticks itself: keys)\nPart: Connect\n16. sandbox-make · Make a Sandbox for testing\n17. sandbox-user · Add yourself as a test user\n18. sandbox-verify · Verify the website in Sandbox too\n19. sandbox-keys · Use the Sandbox keys (optional)\n20. connect · Connect TikTok (ticks itself: connected)\nPart: Go public\n21. public-demo · Record the real demo video\n22. public-review · Ask TikTok to check the app\n23. public-live-keys · When it says Live (optional)\n24. public-audit · Ask to post publicly\n25. public-unprivate · Make your account public again\n\n### Instagram (Settings › Posting › Set up posting › Instagram, /settings/posting/setup/instagram)\nPart: Get ready\n1. ready-pro · Make Instagram a pro account\n2. ready-page · Link Instagram to a Facebook Page\n3. ready-computer · Use a computer\n4. ready-portfolio · Business portfolio, if Meta asks (optional)\nPart: Make your Instagram key\n5. key-developer · Become a Meta developer\n6. key-app · Create the app\n7. key-basic · Fill in Basic settings\n8. key-config · Make the Instagram login setup\n9. key-redirect-check · Double-check the return address (optional)\n10. key-paste · Paste the 3 values (ticks itself: keys)\nPart: Connect\n11. connect · Connect Instagram (ticks itself: connected)\nPart: Go public\n12. public-live · Make the app Live\n13. public-try · Post one test clip\n\n### Facebook (Settings › Posting › Set up posting › Facebook, /settings/posting/setup/facebook)\nPart: Get ready\n1. ready-page · Have a Facebook Page\n2. ready-computer · Use a computer\nPart: Make your Facebook key\n3. key-developer · Turn on Meta for developers\n4. key-app · Create the app\n5. key-use-case · Pick one use case\n6. key-finish-app · Finish the app\n7. key-permissions · Turn on Page permissions\n8. key-basic · Fill in Basic settings\n9. key-redirect · Paste the return address\n10. key-config · Make a login configuration\n11. key-paste · Paste the 3 values (ticks itself: keys)\nPart: Connect\n12. connect · Connect Facebook (ticks itself: connected)\nPart: Go public\n13. public-live · Make the app Live\n\n### X (Settings › Posting › Set up posting › X, /settings/posting/setup/x)\nPart: Get ready\n1. ready-account · Use the X account your clips go on\n2. ready-computer · Use a computer\n3. ready-card · Ask a grown-up for a card\nPart: Make your X key\n4. key-console · Sign in to the X Developer Console\n5. key-credits · Buy a few credits\n6. key-app · Create the app\n7. key-auth-settings · Open the sign-in settings\n8. key-permissions · Pick Read and write\n9. key-addresses · Paste the addresses\n10. key-paste · Paste Client ID and Secret (ticks itself: keys)\nPart: Connect\n11. connect · Connect X (ticks itself: connected)\nPart: Go public\n12. public-credits · Keep a few credits\n\n### Content Rewards (Settings › Posting › Set up posting › Content Rewards, /settings/posting/setup/contentrewards)\nPart: Set it up once\n1. ready-account · Make a Content Rewards account (ticks itself: connected)\n2. ready-socials · Connect your accounts there (ticks itself: linked)\n3. connect · Connect Content Rewards (ticks itself: connected)\n3. connect-pilot · Content Rewards said no? (ticks itself: can_submit)\nPart: Join a campaign\n1. join-find · Pick a campaign\n2. join-join · Join it (ticks itself: membership)\n3. join-copy · Copy its link\nPart: Move your money to Whop\n1. move-whop · Link your Whop account (ticks itself: whop_linked)\n1. fin-setup · Set up payouts\n2. move-withdraw · Move money to Whop (ticks itself: money_moving)\nPart: Get it to your bank\n3. bank-setup · Add your bank on Whop\n4. bank-cashout · Get it to your bank (ticks itself: money_moved)\n3. fin-bank · Get it to your bank"
   },
   {
    "id": "settings-places",
@@ -4093,7 +4093,7 @@
    },
    {
     "id": "connect-pilot",
-    "n": null,
+    "n": 3,
     "part": "setup",
     "partTitle": "Set it up once",
     "title": "Content Rewards said no?",
@@ -4106,7 +4106,7 @@
    },
    {
     "id": "join-find",
-    "n": null,
+    "n": 1,
     "part": "join",
     "partTitle": "Join a campaign",
     "title": "Pick a campaign",
@@ -4123,7 +4123,7 @@
    },
    {
     "id": "join-join",
-    "n": null,
+    "n": 2,
     "part": "join",
     "partTitle": "Join a campaign",
     "title": "Join it",
@@ -4172,7 +4172,7 @@
    },
    {
     "id": "join-copy",
-    "n": null,
+    "n": 3,
     "part": "join",
     "partTitle": "Join a campaign",
     "title": "Copy its link",
@@ -4185,7 +4185,7 @@
    },
    {
     "id": "move-whop",
-    "n": null,
+    "n": 1,
     "part": "move",
     "partTitle": "Move your money to Whop",
     "title": "Link your Whop account",
@@ -4218,7 +4218,7 @@
    },
    {
     "id": "fin-setup",
-    "n": null,
+    "n": 1,
     "part": "move",
     "partTitle": "Move your money to Whop",
     "title": "Set up payouts",
@@ -4250,7 +4250,7 @@
    },
    {
     "id": "move-withdraw",
-    "n": null,
+    "n": 2,
     "part": "move",
     "partTitle": "Move your money to Whop",
     "title": "Move money to Whop",
@@ -4292,7 +4292,7 @@
    },
    {
     "id": "bank-setup",
-    "n": null,
+    "n": 3,
     "part": "bank",
     "partTitle": "Get it to your bank",
     "title": "Add your bank on Whop",
@@ -4312,7 +4312,7 @@
    },
    {
     "id": "bank-cashout",
-    "n": null,
+    "n": 4,
     "part": "bank",
     "partTitle": "Get it to your bank",
     "title": "Get it to your bank",
@@ -4321,7 +4321,7 @@
      "Tap **Withdraw**.",
      "Paste the amount in **Amount**. Tap **Continue**.",
      "Tap **Payout**.",
-     "Pick the normal payout. It costs less. It takes up to 5 business days.",
+     "Pick the normal way, not instant. It costs less. It takes up to 5 weekdays.",
      "Whop may need $10 or more before it sends to your bank.",
      "Whop may show this a little differently. Look for the same words."
     ],
@@ -4335,7 +4335,7 @@
    },
    {
     "id": "fin-bank",
-    "n": null,
+    "n": 3,
     "part": "bank",
     "partTitle": "Get it to your bank",
     "title": "Get it to your bank",

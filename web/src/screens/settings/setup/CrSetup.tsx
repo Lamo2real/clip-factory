@@ -16,6 +16,7 @@ import {
   COMING_SOON,
   CR_MONEY_PATH,
   crSetupCount,
+  safeMailto,
   crStepsDone,
   dayDate,
   patchCr,
@@ -28,7 +29,8 @@ import {
 import { isTouchDevice } from "../../../lib/crConnect.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../../lib/format.ts";
 import { prefersReducedMotion } from "../../../lib/prefs.ts";
-import { CR_PILOT, CR_PILOT_AFTER, CR_SETUP_STEPS } from "../../../setup/contentrewards.ts";
+import { navigate } from "../../../lib/router.ts";
+import { CR_GUIDE, CR_PILOT, CR_PILOT_AFTER, CR_SETUP_STEPS, pilotMailto } from "../../../setup/contentrewards.ts";
 import type { CrStep } from "../../../setup/types.ts";
 import { BrandText, CrStepCard, GreenButton, Lines, Note } from "../../campaigns/bits.tsx";
 import { CopyChip } from "./bits.tsx";
@@ -53,6 +55,21 @@ export function postsToLine(platforms: { platform: Platform; account: { status: 
   return shown.length ? `Clip Factory posts to: ${shown.join(" · ")}.` : null;
 }
 
+/**
+ * Where an Ask button for a Content Rewards step opens (`/settings/posting/setup/contentrewards#step-{id}`, api
+ * ask/tools.py): the join steps live on Campaigns and the money steps on Money, so those go there instead.
+ */
+export function crStepHome(hash: string): string | null {
+  const id = /^#step-([a-z0-9-]+)$/.exec(hash)?.[1];
+  const part = id ? CR_GUIDE.parts.find((p) => p.steps.some((st) => st.id === id))?.id : undefined;
+  if (part === "join") return `${CAMPAIGNS_PATH}#step-${id}`;
+  if (part === "move" || part === "bank") return CR_MONEY_PATH;
+  return null;
+}
+
+/** "Connect" status and reason: an old result card or Check it answer goes when it changes. */
+const statusKey = (c: CrConnection | null) => (c ? `${c.status}:${c.reason ?? ""}:${c.canSubmit ? 1 : 0}` : "");
+
 export function CrSetup() {
   const cr = useCr();
   const conn = cr.state === "ok" ? cr.data.connection : cr.state === "error" ? (cr.data?.connection ?? null) : null;
@@ -63,7 +80,7 @@ export function CrSetup() {
   const [opened, setOpened] = useState<Set<string>>(new Set());
   const [closed, setClosed] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
-  const [check, setCheck] = useState<string | null>(null);
+  const [check, setCheck] = useState<{ text: string; key: string } | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [disconnected, setDisconnected] = useState(false);
   const disconnectAct = useAction("disconnect");
@@ -83,6 +100,29 @@ export function CrSetup() {
   const pilotMain = pilotApplies && !pilotSent && !pilotDone;
   const soon = signInSoon(conn);
   const reconnect = conn?.status === "needs_reconnect";
+  const bridge = run.place === "bridge";
+  const key = statusKey(conn);
+
+  // An Ask button for a join or money step lands where that step is.
+  useEffect(() => {
+    const to = crStepHome(location.hash);
+    if (to) navigate(to, { replace: true });
+  }, []);
+
+  // The last Connect's card stays until Connect's status changes (then it would say the opposite of the page).
+  const resultAt = useRef<{ result: string; key: string } | null>(null);
+  useEffect(() => {
+    if (!run.result) {
+      resultAt.current = null;
+      return;
+    }
+    if (resultAt.current?.result !== run.result) resultAt.current = { result: run.result, key };
+    else if (resultAt.current.key !== key) run.clear();
+  }, [run, key]);
+  const resultRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (run.result) resultRef.current?.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  }, [run.result]);
 
   // The first step not done is open and scrolled into view (once).
   useEffect(() => {
@@ -150,11 +190,11 @@ export function CrSetup() {
   async function checkIt() {
     try {
       const out = await api().crCheck();
-      setCheck(out.check.message || CHECK_TEXT[out.check.code]);
+      setCheck({ text: out.check.message || CHECK_TEXT[out.check.code], key: statusKey(out.connection) });
       patchCr((o) => ({ ...o, connection: out.connection }));
       return out.check.ok;
     } catch (e) {
-      setCheck(friendlyMessage(e));
+      setCheck({ text: friendlyMessage(e), key });
       return false;
     }
   }
@@ -223,15 +263,25 @@ export function CrSetup() {
       </div>
     );
 
-  // The one vermilion button: the calm sign-in card, the pilot email, the current step, or the done panel's.
-  const mainStep = pilotMain || reconnect ? null : current;
+  // The one vermilion button, in one order: signed out → the panel's Connect again (Mac app); the sign-in-again week
+  // (Mac app) → the calm card's Connect again; the pilot email; the first step not done; and only when every step is
+  // done, Add a campaign. Signed out elsewhere: none (the panel says to sign in again on the Mac).
+  const soonMain = !reconnect && soon && !!conn.signInBy && bridge;
+  const main: string | null = reconnect
+    ? bridge
+      ? "reconnect"
+      : null
+    : soonMain
+      ? "soon"
+      : pilotMain
+        ? "pilot"
+        : (current ?? (!campaigns.length ? "add" : null));
   const postsTo = setup.data ? postsToLine(setup.data.platforms) : null;
+  const shownCheck = check && check.key === key ? check.text : null;
 
   return (
     <div className="setup-page cr-setup">
       {header}
-
-      {run.result ? <CrResultCard result={run.result} onClose={run.clear} /> : null}
 
       <section className="setup-part" aria-labelledby="cr-part-setup">
         <h2 className="setup-part__title" id="cr-part-setup">
@@ -239,21 +289,25 @@ export function CrSetup() {
         </h2>
         <ol className="guide-steps">
           {CR_SETUP_STEPS.map((step, i) => {
+            const isConnect = step.id === "connect";
             const isDone = done[step.id as keyof typeof done];
-            const primary = mainStep === step.id;
-            const open = isOpen(step.id) || (step.id === "ready-socials" && !!refusedLink && !isDone);
+            const primary = main === step.id;
+            // Step 3 stays open while its last result shows (the card sits right above its button).
+            const open = isOpen(step.id) || (step.id === "ready-socials" && !!refusedLink && !isDone) || (isConnect && (!!run.result || run.waiting));
             return (
               <CrStepCard
                 key={step.id}
-                step={step}
+                // Step 3's own lines and "If you see" hints are the Mac app's: elsewhere its words say where to do it.
+                step={isConnect && !bridge ? { ...step, ifYouSee: [] } : step}
                 number={i + 1}
                 done={isDone}
                 open={open}
                 current={current === step.id}
-                primary={primary && step.id !== "connect"}
+                primary={primary && !isConnect}
                 onToggle={() => toggle(step.id)}
                 onDone={(d) => tick(step, d)}
                 busy={busy === step.id}
+                say={isConnect ? [] : undefined}
               >
                 {step.id === "ready-socials" ? (
                   <div className="gstep__extras">
@@ -265,10 +319,23 @@ export function CrSetup() {
                     {postsTo ? <p className="gstep__note">{postsTo}</p> : null}
                   </div>
                 ) : null}
-                {step.id === "connect" ? (
+                {isConnect ? (
                   <div className="gstep__extras">
-                    {run.place === "bridge" ? <Lines lines={step.say} /> : null}
-                    <CrConnectControls run={run} primary={primary || (!pilotMain && pilotSent && !on)} />
+                    {bridge ? <Lines lines={step.say} /> : null}
+                    {run.result ? (
+                      <div ref={resultRef}>
+                        <CrResultCard result={run.result} onClose={run.clear} />
+                      </div>
+                    ) : null}
+                    {reconnect && bridge ? (
+                      // Signed out: the one Connect is the panel's Connect again (never two Connect buttons).
+                      <Note icon="alert" tone="bad">
+                        Content Rewards signed you out. Tap Connect again below.
+                      </Note>
+                    ) : on && bridge ? null : (
+                      // Signed in, in the Mac app: Connect again lives in the panel below (one Connect on the page).
+                      <CrConnectControls run={run} primary={primary} />
+                    )}
                     {on ? (
                       <p className="gstep__note is-ok">
                         <Icon name="checkCircle" size={18} />
@@ -283,63 +350,70 @@ export function CrSetup() {
         </ol>
       </section>
 
-      <PilotCard
-        conn={conn}
-        applies={pilotApplies}
-        main={pilotMain}
-        onSaid={() => saidPilot(true)}
-        open={isOpen(CR_PILOT.id) || (pilotApplies && !closed.has(CR_PILOT.id))}
-        onToggle={() => toggle(CR_PILOT.id)}
-      />
+      {pilotDone ? null : (
+        <PilotCard
+          conn={conn}
+          applies={pilotApplies}
+          main={main === "pilot"}
+          onSaid={() => saidPilot(true)}
+          open={isOpen(CR_PILOT.id) || (pilotApplies && !closed.has(CR_PILOT.id))}
+          onToggle={() => toggle(CR_PILOT.id)}
+        />
+      )}
 
       {on || reconnect ? (
         <section className="done-panel glass" aria-labelledby="cr-done-title" data-help="cr-ready">
           <h2 className="done-panel__title" id="cr-done-title">
-            When it&apos;s done
+            {reconnect ? "Sign in again" : "You're connected"}
           </h2>
           <div className="done-panel__account">
             <CrMark size={26} />
             <div className="done-panel__who">
-              <span className="done-panel__name">
-                {conn.connectedAt ? `Signed in to Content Rewards since ${shortDay(conn.connectedAt)}.` : "Signed in to Content Rewards."}
+              <span className={`done-panel__name${reconnect ? " is-bad" : ""}`}>
+                {reconnect
+                  ? "Content Rewards signed you out."
+                  : conn.connectedAt
+                    ? `Signed in to Content Rewards since ${shortDay(conn.connectedAt)}.`
+                    : "Signed in to Content Rewards."}
               </span>
               <span className={`done-panel__state${reconnect ? " is-bad" : ""}`}>
                 {leaving
                   ? "Disconnecting…"
                   : reconnect
-                    ? "Content Rewards signed Clip Factory out. Tap Connect again."
+                    ? bridge
+                      ? "Tap Connect again."
+                      : "Sign in again in the Clip Factory app on your Mac."
                     : conn.status === "connected" && conn.canSubmit
                       ? "Clip Factory sends your campaign clips for you."
                       : "Clip Factory can see your campaigns and money. It can't send clips yet, so I remind you after each post."}
               </span>
             </div>
           </div>
-          {soon && conn.signInBy ? (
+          {!reconnect && soon && conn.signInBy ? (
             <div className="cr-calm glass" role="status">
               <Icon name="clock" size={20} />
               <p>{phone ? `Sign in again on your Mac by ${dayDate(conn.signInBy)}.` : `Sign in to Content Rewards again by ${dayDate(conn.signInBy)}. It takes one minute.`}</p>
-              {run.place === "bridge" ? <CrConnectControls run={run} primary label="Connect again" /> : null}
+              {bridge ? <CrConnectControls run={run} primary={main === "soon"} label="Connect again" /> : null}
             </div>
           ) : null}
-          {check ? (
+          {shownCheck ? (
             <p className="gstep__note" role="status">
               <Icon name="info" size={18} />
-              {check}
+              {shownCheck}
             </p>
           ) : null}
           <div className="done-panel__actions">
             <Button variant="glass" icon="checkCircle" act="tick" onClick={checkIt}>
               Check it
             </Button>
-            {!soon && run.place === "bridge" ? <CrConnectControls run={run} primary={reconnect} label="Connect again" /> : null}
+            {!soonMain && bridge ? <CrConnectControls run={run} primary={main === "reconnect"} label="Connect again" /> : null}
             <Button variant="ghost" icon="logout" act={disconnectAct} disabled={leaving} onClick={disconnect}>
               Disconnect
             </Button>
           </div>
-          {reconnect && run.place !== "bridge" ? <Note>Sign in to Content Rewards again in the Clip Factory app on your Mac.</Note> : null}
-          {!campaigns.length && !reconnect && !soon && !pilotMain ? (
+          {main === "add" ? (
             <div className="done-panel__actions">
-              <LinkButton href={CAMPAIGNS_PATH} variant="primary" size="lg" icon="plus">
+              <LinkButton href={CAMPAIGNS_PATH} variant="primary" size="lg" icon="plus" data-help-clear="">
                 Add a campaign
               </LinkButton>
             </div>
@@ -376,7 +450,7 @@ function PilotCard({ conn, applies, main, onSaid, open, onToggle }: { conn: CrCo
       <CrStepCard step={CR_PILOT} number={null} done={done} open={open && !done} current={applies && !done} primary={false} onToggle={onToggle}>
         <div className="gstep__extras">
           <div className="gstep__actions">
-            <a className={`btn btn--${main ? "primary" : "glass"} btn--lg`} href={email.mailto} data-help-clear={main ? "" : undefined}>
+            <a className={`btn btn--${main ? "primary" : "glass"} btn--lg`} href={safeMailto(email.mailto, pilotMailto())} data-help-clear={main ? "" : undefined}>
               <Icon name="fileText" size={20} />
               <span className="btn__label">Open email</span>
             </a>

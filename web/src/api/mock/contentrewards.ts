@@ -474,7 +474,9 @@ function plainRulesOf(r: CampaignRules | null, platformsPaid: Platform[], brand:
   if (logoNeeded || r.logo.required) out.push(`The ${brand} logo stays on screen the whole clip, away from faces and the game.`);
   if (r.allowedSources.channels.length) out.push(`Only clips from ${r.allowedSources.channels.map((c) => c.name).join(" and ")}'s videos.`);
   if (r.bannedContent.length) out.push(`No ${r.bannedContent.slice(0, 5).join(" or ")}.`);
-  out.push(`It goes up on ${placeWords(platformsPaid.filter((p) => p !== "tiktok"))} only.`);
+  // As the API (rules.py): only when a paid place can be posted to (never "It goes up on nowhere only").
+  const places = platformsPaid.filter((p) => p !== "tiktok");
+  if (places.length) out.push(`It goes up on ${placeWords(places)} only.`);
   return out.slice(0, 12);
 }
 
@@ -554,9 +556,18 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
   };
 
   // One Review clip for a campaign (tests and screenshots): the first waiting clip of the newest ready job.
-  if (readFlag("cf-mock-cr-review") === "1") {
+  const reviewFlag = readFlag("cf-mock-cr-review");
+  if (reviewFlag === "1" || reviewFlag === "tiktok") {
     const clip = store.clips.find((c) => c.status === "review");
     if (clip) clip.campaignId = CR_IDS.faze;
+  }
+  // "tiktok": FaZe Clips pays for TikTok too, so the Review card shows TikTok left out until its audit (§38.5).
+  if (reviewFlag === "tiktok") {
+    const faze = CATALOG[CR_IDS.faze]!;
+    if (!faze.platformsPaid.includes("tiktok")) {
+      faze.platformsPaid = [...faze.platformsPaid, "tiktok"];
+      faze.pay = [...faze.pay, cpm("tiktok", 100)];
+    }
   }
 
   // GameFuel Clips: the posted clips' first five posts with a link (three approved, two not approved).
@@ -822,8 +833,17 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
 
   /** A fresh mock upload walks sending → sent → approved on the clock (§38.18). */
   function walk(s: SubState, post: Post) {
+    // The walk starts when the post is live (as cf-prod-clip-flow sends it then): the first read that sees it posted
+    // says "Sending…", then 1.5 s later "Sent ✓", then 6 s after it went "Approved ✓".
+    if (post.status !== "posted" || s.state === "waiting_for_post") {
+      const first = post.status === "posted";
+      s.state = first ? "sending" : "waiting_for_post";
+      s.at = now();
+      save(state);
+      return;
+    }
     const age = now() - s.at;
-    const next: CrSubState = post.status !== "posted" ? "waiting_for_post" : age < 1500 ? "sending" : age < 6000 ? "sent" : "approved";
+    const next: CrSubState = age < 1500 ? "sending" : age < 6000 ? "sent" : "approved";
     if (next !== s.state) {
       s.state = next;
       if (next === "approved") {
@@ -1000,6 +1020,13 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
     unlink(platform: Platform) {
       state.connection = { ...state.connection, crLinked: { ...state.connection.crLinked, [platform]: false } };
       changed();
+    },
+    /** The brand changed the rules: a read starts without any news yet (it says so when it ends, like the API). */
+    rulesChanged(uuid: string) {
+      const c = state.campaigns.find((x) => x.campaignId === uuid);
+      if (!c) return;
+      startReading(c);
+      save(state);
     },
     readFails(uuid: string) {
       const c = state.campaigns.find((x) => x.campaignId === uuid);
@@ -1196,7 +1223,8 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
       }
       if (body.anyway) {
         if (body.anyway.some((x) => !SOFT_STOPS.includes(x) || x === "not_connected")) throw bad("Only soft stops can be skipped.");
-        c.anyway = [...new Set([...c.anyway, ...body.anyway])];
+        // As the API: the list replaces the one before (the web sends every soft stop he accepted).
+        c.anyway = [...new Set(body.anyway)].sort();
       }
       changed(`campaign:${campaignId}`);
       return serve(c);
@@ -1259,6 +1287,8 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
     async crSubmissions(q) {
       await wait();
       guard();
+      // As the API: only ?clipId= or ?campaignId= (§38.8).
+      if (!q.clipId && !q.campaignId) throw bad("Send clipId or campaignId.");
       return subsFor(q);
     },
     async crCheckSubmissions(clipId) {

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api } from "../../api/index.ts";
 import { CrPostLines } from "../../components/CrPostLine.tsx";
-import { useSubmissions } from "../../lib/contentRewards.ts";
+import { useCr, useSubmissions } from "../../lib/contentRewards.ts";
 import { Glide } from "../../components/Glide.tsx";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { Clip, Learning, Platform, Post, TikTokPostOptions, CrSubmission } from "../../api/types.ts";
@@ -79,8 +79,14 @@ export function Library({ view = "all", week = null }: { view?: "all" | "week"; 
 
 function AllClips() {
   const { data, error, reload, setData } = useLoad(loadLibrary, "", "library");
-  // Every campaign post's line on Content Rewards (§38.6), under its clip's own posts.
-  const cr = useSubmissions({});
+  // Every campaign post's line on Content Rewards (§38.6), under its clip's own posts: each listed campaign's posts
+  // (and those of campaigns the kept clips were made for), read with the one query the API answers, ?campaignId=.
+  const crState = useCr();
+  const campaignIds = [
+    ...(crState.state === "ok" ? crState.data.campaigns.map((c) => c.campaignId) : []),
+    ...(data?.clips ?? []).flatMap((c) => (c.campaignId ? [c.campaignId] : [])),
+  ];
+  const cr = useSubmissions({ campaignIds }, crState.state === "ok");
   // Keep again worked: swap in the fresh clip and its new posts.
   const kept = (clip: Clip, posts: Post[]) =>
     setData((d) =>

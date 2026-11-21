@@ -182,13 +182,18 @@ export async function setupSteps() {
     });
   }
   // Content Rewards (docs/CONTRACTS.md §38.17): its own guide, CR_GUIDE, under `contentrewards` next to the five.
-  // Only the three setup steps are numbered; the rest of the guide (joining, money) and the "said no?" card follow
-  // unnumbered (n: null), so Ask never calls a money step "step 5".
+  // Each part is numbered 1…N as its own screen numbers it (setup, Join a campaign on Campaigns, the money steps for
+  // each Finance answer), so Ask never calls a money step "step 5" and its button never reads "step None". The
+  // unnumbered "said no?" card belongs to step 3 (Connect), so it carries 3.
   const cr = await import(pathToFileURL(join(web, "src/setup/contentrewards.ts")).href);
   const crRows = [];
+  // The money steps are one list per answer to "Do you see Finance?" (Money › Content Rewards numbers them so).
+  const money = cr.CR_GUIDE.parts.filter((p) => p.id === "move" || p.id === "bank").flatMap((p) => p.steps);
+  const moneyN = (s) => money.filter((x) => x.finance === (s.finance === "yes" ? "yes" : "no") || x.finance === "both").indexOf(s) + 1;
   for (const part of cr.CR_GUIDE.parts) {
     part.steps.forEach((s, i) => {
-      const row = { id: s.id, n: part.id === "setup" ? i + 1 : null, part: part.id, partTitle: part.title, title: s.title };
+      const n = part.id === "move" || part.id === "bank" ? moneyN(s) : i + 1;
+      const row = { id: s.id, n, part: part.id, partTitle: part.title, title: s.title };
       row.say = s.say.map(redact);
       if (s.ifYouSee?.length) row.ifYouSee = s.ifYouSee.map((x) => ({ see: redact(x.see), do: redact(x.do) }));
       if (s.open && /^https:\/\//.test(s.open.url)) row.open = { label: s.open.label, url: setupLink(s.open.url) };
@@ -200,7 +205,8 @@ export async function setupSteps() {
     });
     if (part.id === "setup") {
       const p = cr.CR_PILOT;
-      crRows.push({ id: p.id, n: null, part: "setup", partTitle: part.title, title: p.title, say: p.say.map(redact), checkedOn: cr.CR_GUIDE.checkedOn, auto: p.auto });
+      const connectN = part.steps.findIndex((s) => s.id === "connect") + 1;
+      crRows.push({ id: p.id, n: connectN, part: "setup", partTitle: part.title, title: p.title, say: p.say.map(redact), checkedOn: cr.CR_GUIDE.checkedOn, auto: p.auto });
     }
   }
   out.contentrewards = crRows;

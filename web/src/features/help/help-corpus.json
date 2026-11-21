@@ -1,5 +1,5 @@
 {
-  "version": "d8204c78747c",
+  "version": "2d66302fe9f0",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -3458,6 +3458,7 @@
         "job page",
         "copy",
         "link",
+        "sending",
         "ask",
         "words",
         "content",
@@ -3482,8 +3483,7 @@
         "file",
         "check",
         "gone",
-        "stopping",
-        "stopped"
+        "stopping"
       ],
       "answer": "A job's page shows each step as your clips are made. Tap a job in Jobs to open it.",
       "steps": [
@@ -3560,6 +3560,7 @@
         "posted clips",
         "copy",
         "link",
+        "sending",
         "ask",
         "words",
         "content",
@@ -3584,8 +3585,7 @@
         "commercial",
         "post",
         "tiktok",
-        "close",
-        "comments"
+        "close"
       ],
       "answer": "Library has every clip you uploaded.",
       "steps": [
@@ -3612,6 +3612,7 @@
         "clip page",
         "copy",
         "link",
+        "sending",
         "ask",
         "words",
         "content",

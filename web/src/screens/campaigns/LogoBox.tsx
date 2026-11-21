@@ -9,7 +9,7 @@ import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { Button, Progress } from "../../components/ui.tsx";
 import { reloadCr } from "../../lib/contentRewards.ts";
-import { Lines } from "./bits.tsx";
+import { Lines, OpenButton } from "./bits.tsx";
 
 export const LOGO_TYPES = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" } as const;
 export const LOGO_MAX = 10 * 1024 * 1024;
@@ -28,7 +28,18 @@ export interface LogoBoxHandle {
   pick(): void;
 }
 
-export function LogoBox({ campaign, onCampaign, handle }: { campaign: Campaign; onCampaign: (c: Campaign) => void; handle?: Ref<LogoBoxHandle> }) {
+export function LogoBox({
+  campaign,
+  onCampaign,
+  handle,
+  openCampaign,
+}: {
+  campaign: Campaign;
+  onCampaign: (c: Campaign) => void;
+  handle?: Ref<LogoBoxHandle>;
+  /** The campaign's page on Content Rewards, where the logo file is (a glass Open campaign leads the box). */
+  openCampaign?: string;
+}) {
   const id = useId();
   const toast = useToast();
   const input = useRef<HTMLInputElement>(null);
@@ -142,9 +153,16 @@ export function LogoBox({ campaign, onCampaign, handle }: { campaign: Campaign; 
         </div>
       ) : (
         <>
+          {openCampaign ? (
+            <div className="cr-logo__actions">
+              <OpenButton label="Open campaign" href={openCampaign} />
+            </div>
+          ) : null}
           <Lines
             lines={[
-              "On the campaign page, open **Reference materials**. Tap the file with “logo” in its name. Download it.",
+              openCampaign
+                ? "Tap Open campaign. Open **Reference materials**. Tap the file with “logo” in its name. Download it."
+                : "On the campaign page, open **Reference materials**. Tap the file with “logo” in its name. Download it.",
               "Tap Choose a file and pick it from Downloads. A Google Drive link works too: tap Paste.",
             ]}
           />
@@ -158,9 +176,7 @@ export function LogoBox({ campaign, onCampaign, handle }: { campaign: Campaign; 
             onDrop={drop}
           >
             <Icon name="image" size={26} />
-            <span className="dropzone__text">
-              <strong>Drop the logo here, or paste a Google Drive or Dropbox link.</strong>
-            </span>
+            <span className="dropzone__text cr-semibold">Drop the logo here, or paste a Google Drive or Dropbox link.</span>
             <input
               ref={input}
               type="file"

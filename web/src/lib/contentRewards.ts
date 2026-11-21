@@ -178,6 +178,34 @@ export function useCrOnReturn(onReturn: () => void, active: boolean): void {
   }, [onReturn, active]);
 }
 
+/** Phones and touch tablets (the same media as the CSS): the screen's one vermilion is pinned at the bottom right. */
+export const PIN_MEDIA = "(max-width: 767px), (pointer: coarse)";
+export function usePinMain(): boolean {
+  const query = () => (typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia(PIN_MEDIA) : null);
+  const [on, setOn] = useState(() => !!query()?.matches);
+  useEffect(() => {
+    const mq = query();
+    if (!mq) return;
+    const fn = () => setOn(mq.matches);
+    fn();
+    mq.addEventListener?.("change", fn);
+    return () => mq.removeEventListener?.("change", fn);
+  }, []);
+  return on;
+}
+
+/** Now, every 30 s while `on` (minutes left count down on screen between two reads of the API). */
+export function useNow(on: boolean, everyMs = 30_000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!on) return;
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), everyMs);
+    return () => clearInterval(t);
+  }, [on, everyMs]);
+  return now;
+}
+
 /** A campaign the API listed for this owner (only those may go with a new job, §38.19). */
 export function listedCampaign(state: CrState, campaignId: string | null | undefined): CampaignSummary | null {
   if (!campaignId || state.state !== "ok") return null;
@@ -234,7 +262,8 @@ export function crStepsDone(c: CrConnection | null | undefined): { "ready-accoun
   const linked = !!c && Object.values(c.crLinked).some((v) => v === true);
   const refusedLink = !!c && Object.values(c.crLinked).some((v) => v === false);
   return {
-    "ready-account": on || !!c?.stepsDone.includes("ready-account"),
+    // Signed out by Content Rewards: he has an account, only step 3 opens again.
+    "ready-account": on || c?.status === "needs_reconnect" || !!c?.stepsDone.includes("ready-account"),
     "ready-socials": linked || (!!c?.stepsDone.includes("ready-socials") && !refusedLink),
     connect: on,
   };
@@ -404,6 +433,42 @@ export function stopText(code: StopCode, ctx: StopContext = {}): string {
       return "This brand wants you to say “paid partnership” out loud. Clip Factory can't, so clips may be turned down.";
     case "audience":
       return `This brand wants ${ctx.audience ?? "viewers from some countries"}. In YouTube Studio tap **Analytics**, then **Audience**, then look at **Top geographies**.`;
+  }
+}
+
+/** The disabled Make clips button's short words for each hard stop (§38.5). */
+export const STOP_SHORT: Partial<Record<StopCode, string>> = {
+  rules_reading: "Reading the rules…",
+  rules_failed: "Rules missing",
+  logo_missing: "Add the logo first",
+  paused: "Campaign paused",
+  ended: "Campaign ended",
+  deadline: "Campaign closed",
+  budget_gone: "Money is gone",
+  tiktok_only: "TikTok only",
+  no_place: "Set up a place first",
+  held: "On hold",
+  cap_reached: "You earned the most",
+  drafts_first: "Can't make these",
+  sound_needed: "Can't make these",
+};
+
+/**
+ * A hard stop as Home says it: the short words on the disabled Make clips button, the sentence under it, and
+ * whether its fix is on the campaign card (then a glass "Open the campaign" sits under it: the card's own sentences
+ * say "below", which on Home points at nothing).
+ */
+export function homeStop(stop: Pick<CampaignStop, "code" | "text">): { short: string; text: string; openCard: boolean } {
+  const short = STOP_SHORT[stop.code] ?? "Can't make clips yet";
+  switch (stop.code) {
+    case "rules_reading":
+      return { short, text: "Reading the rules… (about 30 seconds)", openCard: false };
+    case "logo_missing":
+      return { short, text: "This campaign needs its logo on every clip. Tap Open the campaign and add it there.", openCard: true };
+    case "rules_failed":
+      return { short, text: "I couldn't read the rules. Tap Open the campaign, then Check now, or paste them there.", openCard: true };
+    default:
+      return { short, text: stop.text, openCard: false };
   }
 }
 
@@ -809,14 +874,22 @@ export const SEND_STEPS = [
   "3 Tap **Clip link** and paste.",
   "4 Tick the box that starts “I've read”. Tap **Submit clip**.",
 ];
-export const SEND_HINTS: { see: string; do: string }[] = [
-  { see: "**Hold to confirm**", do: "Press and hold it." },
-  { see: "a sign-in page", do: "Content Rewards asks you to sign in? Type the email code, then tap **Submit clip**." },
-  { see: "“Posts have to be submitted within 30 minutes”", do: "Too late for this one. Next time, send it as soon as I remind you." },
-  { see: "“You don't have a linked YouTube account”", do: "Open Content Rewards settings, tap **Accounts**, and connect it. The next clip will go." },
-  { see: "“This post's account isn't on your application”", do: "On the campaign page tap **Add accounts** and add it." },
-  { see: "“already submitted”", do: "Nothing to do. It's in." },
-];
+/** The hints under "How do I send it?", naming the post's own place (CR says "You don't have a linked {platform} account"). */
+export function sendHints(platforms: readonly Platform[] = ["youtube"]): { see: string; do: string }[] {
+  const names = PLATFORM_ORDER.filter((p) => platforms.includes(p)).map((p) => PLATFORM_LABEL[p]);
+  return [
+    { see: "**Hold to confirm**", do: "Press and hold it." },
+    { see: "a sign-in page", do: "Content Rewards asks you to sign in? Type the email code, then tap **Submit clip**." },
+    { see: "“Posts have to be submitted within 30 minutes”", do: "Too late for this one. Next time, send it as soon as I remind you." },
+    ...(names.length ? names : ["YouTube"]).map((name) => ({
+      see: `“You don't have a linked ${name} account”`,
+      do: "Tap Open Content Rewards settings below. Tap **Accounts**, and connect it. The next clip will go.",
+    })),
+    { see: "“This post's account isn't on your application”", do: "Tap Open campaign below. Tap **Add accounts** and add it." },
+    { see: "“already submitted”", do: "Nothing to do. It's in." },
+  ];
+}
+export const SEND_HINTS: { see: string; do: string }[] = sendHints();
 
 /** Posts of one clip waiting for the same campaign show as one line (§38.6); its copy is the links, one per line. */
 export interface SendGroup {
@@ -833,16 +906,26 @@ export interface SendGroup {
   openHref: string;
 }
 
-export function sendGroups(subs: readonly CrSubmission[]): SendGroup[] {
+/**
+ * Minutes left to send by hand: worked out from `sendBy` against the clock (so the line counts down between two reads
+ * of the API, and is gone once the time is up), else the API's own `minutesLeft`.
+ */
+export function minutesLeftOf(s: Pick<CrSubmission, "sendBy" | "minutesLeft">, now = Date.now()): number {
+  const by = s.sendBy ? Date.parse(s.sendBy) : NaN;
+  if (Number.isFinite(by)) return Math.max(0, Math.ceil((by - now) / 60_000));
+  return s.minutesLeft ?? 0;
+}
+
+export function sendGroups(subs: readonly CrSubmission[], now = Date.now()): SendGroup[] {
   const by = new Map<string, CrSubmission[]>();
   for (const s of subs) {
-    if (s.state !== "send_by_hand" || !s.url || (s.minutesLeft ?? 0) <= 0) continue;
+    if (s.state !== "send_by_hand" || !s.url || minutesLeftOf(s, now) <= 0) continue;
     const key = `${s.clipId}:${s.campaignId}`;
     by.set(key, [...(by.get(key) ?? []), s]);
   }
   return [...by.entries()].map(([key, list]) => {
     const sorted = [...list].sort((a, b) => PLATFORM_ORDER.indexOf(a.platform) - PLATFORM_ORDER.indexOf(b.platform));
-    const minutesLeft = Math.min(...sorted.map((s) => s.minutesLeft ?? 0));
+    const minutesLeft = Math.min(...sorted.map((s) => minutesLeftOf(s, now)));
     const first = sorted[0]!;
     const line = sorted.length > 1 ? `Send these ${sorted.length} to Content Rewards now (${minutesLeft} min left)` : subLineFor({ ...first, minutesLeft });
     return {
@@ -896,47 +979,89 @@ export const PROOF_OPEN: Record<Platform, { label: string; href: string }> = {
 
 export { CR_SETTINGS };
 
+/** Only an https page is ever opened; anything else (a `javascript:` or `data:` address) falls back to `fallback`. */
+export function safeHref(href: string | null | undefined, fallback: string = CR_SUBMISSIONS): string {
+  return typeof href === "string" && /^https:\/\/[^\s]+$/.test(href) ? href : fallback;
+}
+
+/** The Content Rewards campaign page for a campaign id (built here, never taken from a reply). */
+export function crCampaignUrl(campaignId: string | null | undefined): string {
+  return campaignId && /^[0-9a-f-]{36}$/i.test(campaignId) ? `https://contentrewards.com/c/campaigns/${campaignId.toLowerCase()}` : CR_SUBMISSIONS;
+}
+
 /** Copies and opens in the same tap: the copy starts first and is never awaited before the open (§38.6). */
-export function copyAndOpen(text: string, href: string, copy: (t: string) => Promise<boolean>): Promise<boolean> {
+export function copyAndOpen(text: string, href: string, copy: (t: string) => Promise<boolean>, fallback: string = CR_SUBMISSIONS): Promise<boolean> {
   const copied = copy(text);
-  window.open(href, "_blank", "noopener,noreferrer");
+  window.open(safeHref(href, fallback), "_blank", "noopener,noreferrer");
   return copied;
+}
+
+/** The pilot email's `mailto:` only when it goes to Content Rewards' support (else the one this app writes). */
+export function safeMailto(mailto: string | null | undefined, fallback: string): string {
+  return typeof mailto === "string" && /^mailto:support@contentrewards\.com\?/.test(mailto) ? mailto : fallback;
+}
+
+/**
+ * A clip line for <Rich>: **bold** stays for the other site's button names the code wrote, but never inside the
+ * brand's own quoted words (“…”), which stay plain.
+ */
+export function richLine(line: string): string {
+  // A zero-width space between the two stars: they still show, but never turn into bold.
+  return line.replace(/“[^”]*”/g, (q) => q.replace(/\*\*/g, "*\u200b*"));
 }
 
 // ---------- One clip's or one campaign's posts on Content Rewards ----------
 
 /**
- * GET /v1/contentrewards/submissions for a clip or a campaign, read again on every live contentrewards event. An API
- * from before §38, or one switched off, gives an empty list (no line shows).
+ * GET /v1/contentrewards/submissions for a clip or a campaign (the only two query shapes, §38.8), read again (once
+ * per burst) on live contentrewards and post news. An API from before §38, or one switched off, gives an empty list
+ * (no line shows). `campaignIds`: Library's view, every listed campaign's posts, merged.
  */
-export function useSubmissions(query: { clipId?: string; campaignId?: string }, enabled = true) {
-  const key = `${query.clipId ?? ""}|${query.campaignId ?? ""}`;
+export function useSubmissions(query: { clipId?: string; campaignId?: string; campaignIds?: readonly string[] }, enabled = true) {
+  const many = query.campaignIds ? [...new Set(query.campaignIds)].sort() : null;
+  const key = `${query.clipId ?? ""}|${query.campaignId ?? ""}|${many?.join(",") ?? ""}`;
+  const on = enabled && (!!query.clipId || !!query.campaignId || !!many?.length);
   const [subs, setSubs] = useState<CrSubmission[]>([]);
   const [loaded, setLoaded] = useState(false);
   const seq = useRef(0);
   const q = useRef(query);
   q.current = query;
   const reload = useCallback(async () => {
-    if (!enabled) return;
+    if (!on) return;
     const mine = ++seq.current;
+    const now = q.current;
     try {
-      const list = await api().crSubmissions(q.current);
+      const list = now.campaignIds
+        ? (await Promise.all([...new Set(now.campaignIds)].map((campaignId) => api().crSubmissions({ campaignId }).catch(() => [] as CrSubmission[])))).flat()
+        : await api().crSubmissions(now.clipId ? { clipId: now.clipId } : { campaignId: now.campaignId });
       if (mine === seq.current) setSubs(list);
     } catch {
       if (mine === seq.current) setSubs([]);
     } finally {
       if (mine === seq.current) setLoaded(true);
     }
-  }, [enabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [on, key]);
   useEffect(() => {
+    if (!on) {
+      setSubs([]);
+      return;
+    }
     void reload();
-  }, [reload, key]);
+  }, [reload, on]);
   useEffect(() => {
-    if (!enabled) return;
-    return onLiveSignal((s) => {
-      if (s.kind === "resync" || s.event.type === "contentrewards" || s.event.type === "post") void reload();
+    if (!on) return;
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const off = onLiveSignal((s) => {
+      if (s.kind !== "resync" && s.event.type !== "contentrewards" && s.event.type !== "post") return;
+      if (t) clearTimeout(t);
+      t = setTimeout(() => void reload(), 600);
     });
-  }, [enabled, reload]);
+    return () => {
+      off();
+      if (t) clearTimeout(t);
+    };
+  }, [on, reload]);
   const put = useCallback((next: CrSubmission | null) => {
     if (!next) return void reload();
     setSubs((list) => list.map((s) => (s.postId === next.postId ? next : s)));

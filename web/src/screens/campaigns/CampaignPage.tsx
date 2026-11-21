@@ -22,7 +22,10 @@ import {
   payLine,
   placeList,
   reloadCr,
+  sendGroups,
   useCrOnReturn,
+  useNow,
+  usePinMain,
   useSubmissions,
   usdShort,
 } from "../../lib/contentRewards.ts";
@@ -47,6 +50,10 @@ export function CampaignPage({ campaignId }: { campaignId: string }) {
   const toast = useToast();
   const logo = useRef<LogoBoxHandle>(null);
   const celebrated = useRef(false);
+  const [justIn, setJustIn] = useState(false);
+  // Phones: the screen's one vermilion is pinned at the bottom right while the card is on screen (§38.1).
+  const pin = usePinMain();
+  const [pinSlot, setPinSlot] = useState<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -101,6 +108,7 @@ export function CampaignPage({ campaignId }: { campaignId: string }) {
   useEffect(() => {
     if (campaign?.celebrate !== "in" || celebrated.current) return;
     celebrated.current = true;
+    setJustIn(true);
     if (!prefersReducedMotion()) burst(undefined, 140);
     const stop = cheerOnNextTap(sounds);
     toast.success("You're in!");
@@ -111,6 +119,9 @@ export function CampaignPage({ campaignId }: { campaignId: string }) {
   }, [campaign, toast]);
 
   const subs = useSubmissions({ campaignId }, !!campaign);
+  // A clip that waits to be sent by hand now comes first: its Copy and open is the screen's vermilion (§38.6).
+  const now = useNow(subs.subs.some((s) => s.state === "send_by_hand"));
+  const sendNow = sendGroups(subs.subs, now)[0] ?? null;
   // While the rules are being read (about 30 seconds), look again now and then too, in case the live news is late.
   useLivePoll(load, campaign?.rulesState === "reading", 4000);
 
@@ -141,7 +152,7 @@ export function CampaignPage({ campaignId }: { campaignId: string }) {
             title={problem.kind === "soon" ? "Coming soon" : "This campaign isn't here"}
             heading="h2"
             action={
-              <LinkButton href={CAMPAIGNS_PATH} variant="primary" icon="layers">
+              <LinkButton href={CAMPAIGNS_PATH} variant="primary" icon="layers" data-help-clear="">
                 Your campaigns
               </LinkButton>
             }
@@ -166,7 +177,7 @@ export function CampaignPage({ campaignId }: { campaignId: string }) {
   const pickVideo = c.nextStep.kind === "pick_video";
   return (
     <div className="page page--narrow cr-campaign">
-      <article className="cr-card glass" data-help="cr-campaign-card" aria-labelledby="cr-name">
+      <article className={`cr-card glass${pin ? " has-pin" : ""}`} data-help="cr-campaign-card" aria-labelledby="cr-name">
         <header className="cr-head">
           <BrandMark name={c.brand || c.name} url={c.brandPictureUrl} size={56} />
           <div className="cr-head__text">
@@ -186,12 +197,21 @@ export function CampaignPage({ campaignId }: { campaignId: string }) {
           </div>
         </header>
 
-        <NextStepPanel campaign={c} onCampaign={setCampaign} onPickLogo={() => logo.current?.pick()} />
+        {sendNow ? (
+          <section className="cr-next cr-send-first" aria-labelledby="cr-send-title">
+            <h2 className="cr-section__title" id="cr-send-title">
+              Send your clip now ({sendNow.minutesLeft} min left). Then make more clips.
+            </h2>
+            <CrPostLines subs={subs.subs.filter((x) => sendNow.postIds.includes(x.postId))} onChange={subs.put} primary />
+          </section>
+        ) : null}
+
+        <NextStepPanel campaign={c} onCampaign={setCampaign} onPickLogo={() => logo.current?.pick()} pinSlot={pin && !sendNow ? pinSlot : null} quiet={!!sendNow} justIn={justIn} />
 
         <PaySection c={c} />
         <RulesSection c={c} onCampaign={setCampaign} />
-        <LogoBox campaign={c} onCampaign={setCampaign} handle={logo} />
-        <VideosSection c={c} pickVideo={pickVideo} />
+        <LogoBox campaign={c} onCampaign={setCampaign} handle={logo} openCampaign={c.url} />
+        <VideosSection c={c} pickVideo={pickVideo && !sendNow} />
 
         {subs.subs.length ? (
           <section className="cr-clips" data-help="cr-campaign-clips" aria-labelledby="cr-clips-title">
@@ -201,7 +221,7 @@ export function CampaignPage({ campaignId }: { campaignId: string }) {
             <p className="cr-quiet">
               {c.clipCounts.approved} approved · {c.clipCounts.waiting} waiting · {c.clipCounts.notApproved} not approved
             </p>
-            <ClipLines subs={subs.subs} onChange={subs.put} />
+            <ClipLines subs={sendNow ? subs.subs.filter((x) => !sendNow.postIds.includes(x.postId)) : subs.subs} onChange={subs.put} />
           </section>
         ) : null}
 
@@ -211,6 +231,7 @@ export function CampaignPage({ campaignId }: { campaignId: string }) {
           </Button>
           <OpenButton label="Open campaign" href={c.url} size="sm" />
         </footer>
+        {pin ? <div className="cr-pin" ref={setPinSlot} /> : null}
       </article>
       <div className="cr-below">
         <LinkButton href={CAMPAIGNS_PATH} variant="glass" icon="layers">
@@ -251,7 +272,7 @@ function PaySection({ c }: { c: Campaign }) {
           <li key={p.platform} className="cr-pay__row">
             <PlatformMark platform={p.platform} size={20} />
             <span>
-              <strong>{PLATFORM_LABEL[p.platform]}</strong> · {payLine(p, c.type)}
+              <span className="cr-pay__place">{PLATFORM_LABEL[p.platform]}</span> · {payLine(p, c.type)}
             </span>
           </li>
         ))}
@@ -391,7 +412,13 @@ function VideosSection({ c, pickVideo }: { c: Campaign; pickVideo: boolean }) {
             <li key={v.url} className="cr-video-row">
               <span className="cr-video-row__url user-text">{v.note ?? v.url}</span>
               {v.canMakeClips ? (
-                <LinkButton href={`${makeClipsPath(c.campaignId)}&link=${encodeURIComponent(v.url)}`} variant={pickVideo && i === 0 ? "primary" : "glass"} size="sm" icon="scissors">
+                <LinkButton
+                  href={`${makeClipsPath(c.campaignId)}&link=${encodeURIComponent(v.url)}`}
+                  variant={pickVideo && i === 0 ? "primary" : "glass"}
+                  size="sm"
+                  icon="scissors"
+                  data-help-clear={pickVideo && i === 0 ? "" : undefined}
+                >
                   Make clips from this
                 </LinkButton>
               ) : v.kind === "google_drive" || v.kind === "dropbox" ? (

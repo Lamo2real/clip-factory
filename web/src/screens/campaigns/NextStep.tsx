@@ -1,14 +1,15 @@
 // A campaign card's one next step (docs/CONTRACTS.md §38.4): the chip, one sentence, and the screen's only vermilion
 // button (pinned at the bottom right on phones while the card is on screen). Quiet green asks change only Clip
 // Factory, each with an 8 s Undo. The rules box sits here when the owner has to copy the rules himself.
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { Campaign, SaidAnswer, StopCode } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { Button, LinkButton } from "../../components/ui.tsx";
-import { MEMBERSHIP_TEXT, SOFT_STOPS, forDevice, reloadCr, vermilionOf } from "../../lib/contentRewards.ts";
+import { CR_SETUP_PATH, MEMBERSHIP_TEXT, SOFT_STOPS, forDevice, refused, reloadCr, signedIn, useCr, vermilionOf } from "../../lib/contentRewards.ts";
 import { isTouchDevice } from "../../lib/crConnect.ts";
 import { Rich } from "../settings/setup/bits.tsx";
 import { GreenButton, OpenButton } from "./bits.tsx";
@@ -45,17 +46,41 @@ export function RulesBox({ value, onChange, label = "The campaign's rules" }: { 
   );
 }
 
+/** "Check it yourself" and "paste the rules" as two short numbered lines (one action each, §38.1). */
+export const CHECK_YOURSELF_LEAD = "Content Rewards hasn't let Clip Factory look yet.";
+export const CHECK_YOURSELF_LINES = [
+  "Tap Open campaign. Does it say **Submit clip**? Then you're in.",
+  "Copy everything under **Brief** and **Content requirements**. Paste it in the box. Tap I'm in. Read these rules.",
+] as const;
+export const RULES_PASTE_LINES = [
+  "Tap Open campaign.",
+  "Copy everything under **Brief** and **Content requirements**. Paste it in the box. Tap Read these rules.",
+] as const;
+/** A manual campaign while Content Rewards hasn't let Clip Factory send (a connect can't help yet). */
+export const MANUAL_REFUSED = "Content Rewards hasn't said yes to Clip Factory yet, so you send each clip yourself. I'll remind you after each post.";
+
 export function NextStepPanel({
   campaign,
   onCampaign,
   onPickLogo,
+  pinSlot = null,
+  quiet = false,
+  justIn = false,
 }: {
   campaign: Campaign;
   onCampaign: (c: Campaign) => void;
   /** "Add the logo" opens the logo's file picker. */
   onPickLogo: () => void;
+  /** Phones: the end of the card, where the main button is pinned at the bottom right (§38.1). */
+  pinSlot?: HTMLElement | null;
+  /** A clip waits to be sent now: its Copy and open is the screen's vermilion, so this step's button is glass. */
+  quiet?: boolean;
+  /** "You're in!" was just celebrated on this visit: the step says so first. */
+  justIn?: boolean;
 }) {
   const toast = useToast();
+  const cr = useCr();
+  const conn = cr.state === "ok" ? cr.data.connection : null;
   const step = forDevice(campaign.nextStep, isTouchDevice());
   const [box, setBox] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -116,16 +141,18 @@ export function NextStepPanel({
   // The one vermilion control (never two): the step's button, or the rules box's once it has text.
   const main = vermilionOf(step, showBox ? box : "");
   const typed = showBox && box.trim().length > 0;
-  let mainEl = null;
+  const v = quiet ? "glass" : "primary";
+  const clear = quiet ? undefined : "";
+  let mainEl: ReactNode = null;
   if (inByHand) {
     mainEl = (
-      <Button variant="primary" size="lg" icon="check" act="tick" loading={busy === "read"} data-help-clear="" onClick={() => readRules(box, true)}>
+      <Button variant={v} size="lg" icon="check" act="tick" loading={busy === "read"} data-help-clear={clear} onClick={() => readRules(box, true)}>
         I&apos;m in. Read these rules
       </Button>
     );
   } else if (typed) {
     mainEl = (
-      <Button variant="primary" size="lg" icon="check" act="tick" loading={busy === "read"} data-help-clear="" onClick={() => readRules(box, step.kind === "check_yourself")}>
+      <Button variant={v} size="lg" icon="check" act="tick" loading={busy === "read"} data-help-clear={clear} onClick={() => readRules(box, step.kind === "check_yourself")}>
         {main}
       </Button>
     );
@@ -133,31 +160,42 @@ export function NextStepPanel({
     const b = step.button;
     if (b.action === "logo_picker")
       mainEl = (
-        <Button variant="primary" size="lg" icon="image" data-help-clear="" onClick={onPickLogo}>
+        <Button variant={v} size="lg" icon="image" data-help-clear={clear} onClick={onPickLogo}>
           {b.label}
         </Button>
       );
     else if (b.action === "said_applied")
       mainEl = (
-        <Button variant="primary" size="lg" icon="check" act="tick" loading={busy === "applied"} data-help-clear="" onClick={() => patch({ said: "applied" }, "applied", undoSaid)}>
+        <Button variant={v} size="lg" icon="check" act="tick" loading={busy === "applied"} data-help-clear={clear} onClick={() => patch({ said: "applied" }, "applied", undoSaid)}>
           {b.label}
         </Button>
       );
     else if (b.action === "anyway") {
-      const codes = campaign.stops.filter((s) => !s.hard && SOFT_STOPS.includes(s.code) && s.code !== "not_connected" && !campaign.anyway.includes(s.code)).map((s) => s.code);
+      // The API keeps exactly the list it gets (PATCH replaces `anyway`), so every soft stop he ever accepted goes
+      // with the new one: else each tap would un-accept the one before.
+      const now = campaign.stops.filter((s) => !s.hard && SOFT_STOPS.includes(s.code) && s.code !== "not_connected").map((s) => s.code);
+      const codes = [...new Set([...campaign.anyway.filter((c) => SOFT_STOPS.includes(c) && c !== "not_connected"), ...now])];
       mainEl = (
-        <Button variant="primary" size="lg" icon="scissors" loading={busy === "anyway"} data-help-clear="" onClick={() => patch({ anyway: codes }, "anyway")}>
+        <Button variant={v} size="lg" icon="scissors" loading={busy === "anyway"} data-help-clear={clear} onClick={() => patch({ anyway: codes }, "anyway")}>
           {b.label}
         </Button>
       );
-    } else if (b.href && b.external) mainEl = <OpenButton label={b.label} href={b.href} primary size="lg" />;
+    } else if (b.href && b.external) mainEl = <OpenButton label={b.label} href={b.href} primary={!quiet} size="lg" />;
     else if (b.href)
       mainEl = (
-        <LinkButton href={b.href} variant="primary" size="lg" icon={b.href.startsWith("/?campaign=") ? "scissors" : "link"} data-help-clear="" data-help={b.href.startsWith("/?campaign=") ? "cr-make-clips" : undefined}>
+        <LinkButton href={b.href} variant={v} size="lg" icon={b.href.startsWith("/?campaign=") ? "scissors" : "link"} data-help-clear={clear} data-help={b.href.startsWith("/?campaign=") ? "cr-make-clips" : undefined}>
           {b.label}
         </LinkButton>
       );
   }
+  // While he has typed the rules, Open campaign (the first thing those lines say) still has a button, above the box.
+  const openAboveBox = typed && !inByHand && (step.kind === "check_yourself" || step.kind === "rules_paste") && step.button?.href;
+  const lines = step.kind === "check_yourself" ? CHECK_YOURSELF_LINES : step.kind === "rules_paste" && campaign.rulesState !== "failed" ? RULES_PASTE_LINES : null;
+  // A manual campaign without a connection: the line names a button that is here (or says connecting can't help yet).
+  const manualNote =
+    step.kind === "make_clips" && campaign.membership === "manual" && !signedIn(conn) ? (refused(conn) ? MANUAL_REFUSED : step.sub ?? null) : null;
+  const sub = manualNote ? null : step.sub;
+  const mainWrap = mainEl ? <div className={pinSlot ? "cr-next__main is-pinned" : "cr-next__main"}>{mainEl}</div> : null;
 
   const isIn = campaign.membership === "in" || campaign.membership === "manual";
   const reading = campaign.rulesState === "reading";
@@ -169,19 +207,63 @@ export function NextStepPanel({
       <h2 className="cr-section__title" id="cr-next-title">
         Next step
       </h2>
-      <p className="cr-next__text">
-        {reading ? <span className="spinner" aria-hidden="true" /> : <Icon name={isIn ? "checkCircle" : step.kind === "wait" ? "clock" : "info"} size={20} />}
-        <span>
-          <Rich text={step.text} />
-        </span>
-      </p>
-      {step.sub ? (
-        <p className="cr-next__sub">
-          <Rich text={step.sub} />
+      {justIn && !/^You're in!/.test(step.text) ? (
+        <p className="cr-next__text cr-next__in">
+          <Icon name="checkCircle" size={20} />
+          <strong>You&apos;re in!</strong>
         </p>
       ) : null}
+      {lines && step.kind === "check_yourself" ? (
+        <p className="cr-next__text">
+          <Icon name="info" size={20} />
+          <span>{CHECK_YOURSELF_LEAD}</span>
+        </p>
+      ) : null}
+      {lines ? (
+        <ol className="cr-next__lines">
+          {lines.map((l, i) => (
+            <li key={l}>
+              <span className="cr-next__n" aria-hidden="true">
+                {i + 1}
+              </span>
+              <span>
+                <Rich text={l} />
+              </span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="cr-next__text">
+          {reading ? <span className="spinner" aria-hidden="true" /> : <Icon name={isIn ? "checkCircle" : step.kind === "wait" ? "clock" : "info"} size={20} />}
+          <span>
+            <Rich text={step.text} />
+          </span>
+        </p>
+      )}
+      {sub ? (
+        <p className="cr-next__sub">
+          <Rich text={sub} />
+        </p>
+      ) : null}
+      {manualNote ? (
+        <div className="cr-next__glass">
+          <p className="cr-next__sub">
+            <Rich text={manualNote} />
+          </p>
+          {manualNote !== MANUAL_REFUSED ? (
+            <LinkButton href={CR_SETUP_PATH} variant="glass" icon="link">
+              Connect Content Rewards
+            </LinkButton>
+          ) : null}
+        </div>
+      ) : null}
+      {openAboveBox && step.button?.href ? (
+        <div className="cr-next__glass">
+          <OpenButton label={step.button.label} href={step.button.href} />
+        </div>
+      ) : null}
       {showBox ? <RulesBox value={box} onChange={setBox} /> : null}
-      {mainEl ? <div className="cr-next__main">{mainEl}</div> : null}
+      {mainWrap && pinSlot ? createPortal(mainWrap, pinSlot) : mainWrap}
       {!connectFold && step.glass?.length ? (
         <div className="cr-next__glass">
           {step.glass.map((g) => (g.external ? <OpenButton key={g.label} label={g.label} href={g.href} /> : <LinkButton key={g.label} href={g.href} variant="glass">{g.label}</LinkButton>))}
@@ -200,9 +282,15 @@ export function NextStepPanel({
             </p>
             <div className="cr-next__asks">
               <OpenButton label="Open campaign" href={campaign.url} />
-              <GreenButton onClick={() => ask("joined_by_hand")} loading={busy === "joined_by_hand"}>
-                It says Submit clip
-              </GreenButton>
+              {inByHand ? (
+                <Button variant="ghost" size="sm" onClick={() => patch({ said: "joined_by_hand" }, "joined_by_hand", undoSaid).then((ok) => (setInByHand(false), ok))}>
+                  There are no rules to copy
+                </Button>
+              ) : (
+                <GreenButton onClick={() => ask("joined_by_hand")} loading={busy === "joined_by_hand"}>
+                  It says Submit clip
+                </GreenButton>
+              )}
             </div>
           </div>
         </details>

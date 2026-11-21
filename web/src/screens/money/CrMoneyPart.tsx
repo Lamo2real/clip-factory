@@ -21,19 +21,67 @@ import { CrStepCard } from "../campaigns/bits.tsx";
 
 const MOVED_KEY = "cf-cr-on-its-way";
 
+/** What this device saw of the moves to Whop: what was on its way, the last amount moved, and if one ever was. */
+export interface MovedMemo {
+  onItsWay: number;
+  lastMoveCents: number | null;
+  moved: boolean;
+}
+export function readMoved(raw: string | null): MovedMemo {
+  if (!raw) return { onItsWay: 0, lastMoveCents: null, moved: false };
+  // Before this record: the plain number that was on its way.
+  if (/^\d+$/.test(raw)) return { onItsWay: Number(raw), lastMoveCents: null, moved: Number(raw) > 0 };
+  try {
+    const m = JSON.parse(raw) as Partial<MovedMemo>;
+    return { onItsWay: Number(m.onItsWay) || 0, lastMoveCents: typeof m.lastMoveCents === "number" ? m.lastMoveCents : null, moved: !!m.moved };
+  } catch {
+    return { onItsWay: 0, lastMoveCents: null, moved: false };
+  }
+}
+
 /** The money steps for the owner's answer about Finance (§38.7), in order. */
 export function moneySteps(finance: boolean | undefined): CrStep[] {
   if (finance === undefined) return [];
   const want = finance ? "yes" : "no";
-  return [...crPart("move").steps, ...crPart("bank").steps].filter((s) => s.finance === want || s.finance === "both");
+  return [...crPart("move").steps, ...crPart("bank").steps]
+    .filter((s) => s.finance === want || s.finance === "both")
+    .map((s) =>
+      // With Finance, "the step above" is Set up payouts, not Link Whop.
+      finance && s.id === "move-withdraw" && s.ifYouSee
+        ? { ...s, ifYouSee: s.ifYouSee.map((h) => (/Connect payout account/.test(h.see) ? { ...h, do: "Do the step above: Set up payouts." } : h)) }
+        : s,
+    );
 }
 
-/** The step whose Open is the part's one vermilion button. */
+/**
+ * The step whose Open is the part's one vermilion button, in the order a first-timer needs them: the once-steps
+ * before the step that uses them. Money ready: link Whop (or Set up payouts) first, then Move money to Whop. Money
+ * on its way: none (a calm line says so). Just arrived on Whop: Add your bank first, then Get it to your bank.
+ * `done` holds the ticked steps (and move-whop once any move to Whop happened).
+ */
 export function moneyMainStep(steps: readonly CrStep[], money: CrMoney | null, done: readonly string[], justMoved: boolean): string | null {
   if (!steps.length) return null;
-  if ((money?.readyToMoveCents ?? 0) >= MOVE_MIN_CENTS) return "move-withdraw";
-  if (justMoved) return steps.find((s) => s.id === "bank-cashout" || s.id === "fin-bank")?.id ?? null;
+  const has = (id: string) => steps.some((s) => s.id === id);
+  const finance = has("fin-setup");
+  const setupFirst = finance ? "fin-setup" : "move-whop";
+  if ((money?.readyToMoveCents ?? 0) >= MOVE_MIN_CENTS) return has(setupFirst) && !done.includes(setupFirst) ? setupFirst : "move-withdraw";
+  if ((money?.onItsWayCents ?? 0) > 0) return null;
+  if (justMoved) {
+    if (finance) return "fin-bank";
+    return has("bank-setup") && !done.includes("bank-setup") ? "bank-setup" : "bank-cashout";
+  }
   return steps.find((s) => s.repeat === "once" && !done.includes(s.id))?.id ?? null;
+}
+
+/** The Amount copy chip: never 0.00, never the wrong number (the move step copies what is ready; the bank step what
+ * was just moved, when this device saw it). */
+export function amountChip(stepId: string, money: CrMoney | null, lastMoveCents: number | null): string | null {
+  if (stepId === "move-withdraw") {
+    const ready = money?.readyToMoveCents;
+    return ready != null && ready >= MOVE_MIN_CENTS ? amountText(ready) : null;
+  }
+  if (stepId === "bank-cashout") return lastMoveCents != null && lastMoveCents > 0 ? amountText(lastMoveCents) : null;
+  return null;
 }
 
 function Tile({ title, cents, hint, testid }: { title: string; cents: number | null; hint: string; testid: string }) {
@@ -55,24 +103,54 @@ export function CrMoneyPart() {
   const [busy, setBusy] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [justMoved, setJustMoved] = useState(false);
+  const [memo, setMemo] = useState<MovedMemo>(() => {
+    try {
+      return readMoved(localStorage.getItem(MOVED_KEY));
+    } catch {
+      return readMoved(null);
+    }
+  });
   const shown = useRef(new Set<string>());
+  const autoTicked = useRef(false);
 
   const data = cr.state === "ok" ? cr.data : null;
   const money = data?.money ?? null;
   const conn = data?.connection ?? null;
 
-  // A move to Whop just finished (on its way went back to 0 after being above 0): the bank step leads, once.
+  // A move to Whop just finished (on its way went back to 0 after being above 0): the bank steps lead. The amount
+  // that moved is kept for the bank step's copy chip, and any move proves Whop is linked.
   useEffect(() => {
     if (!money || money.onItsWayCents === null) return;
-    let was = 0;
+    let before: MovedMemo = readMoved(null);
     try {
-      was = Number(localStorage.getItem(MOVED_KEY) ?? "0") || 0;
-      localStorage.setItem(MOVED_KEY, String(money.onItsWayCents));
+      before = readMoved(localStorage.getItem(MOVED_KEY));
     } catch {
       /* no storage: no "just moved" */
     }
-    if (was > 0 && money.onItsWayCents === 0) setJustMoved(true);
+    const way = money.onItsWayCents;
+    const next: MovedMemo = {
+      onItsWay: way,
+      lastMoveCents: way > 0 ? way : before.lastMoveCents,
+      moved: before.moved || way > 0,
+    };
+    try {
+      localStorage.setItem(MOVED_KEY, JSON.stringify(next));
+    } catch {
+      /* no storage */
+    }
+    setMemo(next);
+    if (before.onItsWay > 0 && way === 0) setJustMoved(true);
   }, [money]);
+
+  // Any move to Whop proves Whop is linked: tick Link your Whop account by itself, once (§38.7, auto whop_linked).
+  useEffect(() => {
+    if (!memo.moved || autoTicked.current || !conn || conn.finance !== false || conn.stepsDone.includes("move-whop")) return;
+    autoTicked.current = true;
+    void api()
+      .crPatchConnection({ step: "move-whop", done: true })
+      .then((connection) => patchCr((d) => ({ ...d, connection })))
+      .catch(() => undefined);
+  }, [memo.moved, conn]);
 
   // Celebrations (§38.7, §38.11): confetti once each (not with reduced motion), the server told.
   useEffect(() => {
@@ -135,7 +213,8 @@ export function CrMoneyPart() {
   }
 
   const state = money?.state;
-  const done = conn?.stepsDone ?? [];
+  // Any move to Whop means Whop is linked: Link your Whop account counts as done.
+  const done = [...(conn?.stepsDone ?? []), ...(memo.moved ? ["move-whop"] : [])];
   const steps = moneySteps(conn?.finance);
   const main = moneyMainStep(steps, money, done, justMoved);
   const showTiles = !!money && (state === "ok" || state === "checking");
@@ -188,7 +267,12 @@ export function CrMoneyPart() {
           <p className="cr-money__paid" data-paid-line="">
             {paidLine}
           </p>
-          {money.campaigns.length ? (
+          {/* A total shows only once Content Rewards' list was read to its end (§38.7). */}
+          {money.campaigns.length && money.paidSoFarCents === null ? (
+            <p className="dash-grey" data-campaign-totals="checking">
+              Checking…
+            </p>
+          ) : money.campaigns.length ? (
             <ul className="cr-money__list" aria-label="Money per campaign">
               {money.campaigns.map((c) => (
                 <li key={c.campaignId ?? c.name}>
@@ -235,11 +319,18 @@ export function CrMoneyPart() {
               </p>
             )}
           </div>
+          {steps.length && (money?.onItsWayCents ?? 0) > 0 && (money?.readyToMoveCents ?? 0) < MOVE_MIN_CENTS ? (
+            <p className="gstep__note is-ok" role="status" data-cr="on-its-way">
+              <Icon name="clock" size={18} />
+              <span>Your {usd(money!.onItsWayCents)} is on its way to Whop. It usually takes minutes.</span>
+            </p>
+          ) : null}
           {steps.length ? (
             <ol className="guide-steps">
               {steps.map((step, i) => {
                 const stepDone = step.repeat === "once" && done.includes(step.id);
                 const isMain = main === step.id;
+                const amount = amountChip(step.id, money, memo.lastMoveCents);
                 return (
                   <CrStepCard
                     key={step.id}
@@ -252,7 +343,7 @@ export function CrMoneyPart() {
                     onToggle={() => setOpened((o) => (o === step.id ? "" : step.id))}
                     onDone={step.manual === false ? undefined : (d) => tick(step, d)}
                     busy={busy === step.id}
-                    copies={step.id === "move-withdraw" || step.id === "bank-cashout" ? [{ label: "Amount", value: amountText(money?.readyToMoveCents ?? money?.onItsWayCents ?? 0) }] : undefined}
+                    copies={amount ? [{ label: "Amount", value: amount }] : undefined}
                   >
                     {isMain && justMoved && (step.id === "bank-cashout" || step.id === "fin-bank") ? (
                       <p className="gstep__note is-ok">
@@ -260,7 +351,7 @@ export function CrMoneyPart() {
                         <span>Your money is on Whop. Move it to your bank.</span>
                       </p>
                     ) : null}
-                    {step.id === "move-withdraw" && (money?.onItsWayCents ?? 0) > 0 ? (
+                    {step.id === "move-withdraw" && (money?.onItsWayCents ?? 0) > 0 && (money?.readyToMoveCents ?? 0) >= MOVE_MIN_CENTS ? (
                       <p className="gstep__note is-ok">
                         <Icon name="checkCircle" size={18} />
                         <span>{usd(money!.onItsWayCents)} is on its way to Whop.</span>

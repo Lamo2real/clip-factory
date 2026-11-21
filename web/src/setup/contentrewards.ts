@@ -313,7 +313,7 @@ export const CR_GUIDE: CrGuide = {
             "Tap **Withdraw**.",
             "Paste the amount in **Amount**. Tap **Continue**.",
             "Tap **Payout**.",
-            "Pick the normal payout. It costs less. It takes up to 5 business days.",
+            "Pick the normal way, not instant. It costs less. It takes up to 5 weekdays.",
             "Whop may need $10 or more before it sends to your bank.",
             WHOP_HINT,
           ],

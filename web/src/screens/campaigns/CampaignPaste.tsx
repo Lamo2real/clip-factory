@@ -185,7 +185,9 @@ export function CampaignPasteBox({ onGroup, onTyped }: { onGroup: (g: { name: st
             <span>That&apos;s a Content Rewards campaign!</span>
           </>
         ) : (
-          <span>On Content Rewards, tap the share icon, then Copy campaign link. Then tap Paste.</span>
+          <span>
+            <Rich text="On Content Rewards, tap the share icon, then **Copy campaign link**. Then tap Paste." />
+          </span>
         )}
       </p>
       <div className="cr-paste__actions">

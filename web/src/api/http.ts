@@ -194,7 +194,7 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     crConnectFinish: (body) => call("POST", "/contentrewards/connect/finish", body),
     crCheck: () => call("POST", "/contentrewards/check"),
     crPatchConnection: async (body) => (await call<{ connection: CrConnection }>("PATCH", "/contentrewards/connection", body)).connection,
-    crDisconnect: () => call("DELETE", "/contentrewards/connection"),
+    crDisconnect: () => call("DELETE", "/contentrewards/connection", undefined, true),
     crCampaigns: async () => (await call<{ campaigns: CampaignSummary[] }>("GET", "/contentrewards/campaigns")).campaigns,
     crAddCampaign: (url) => call("POST", "/contentrewards/campaigns", { url }),
     crCampaign: async (campaignId) => (await call<{ campaign: Campaign }>("GET", `/contentrewards/campaigns/${id(campaignId)}`)).campaign,

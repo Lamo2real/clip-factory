@@ -258,9 +258,17 @@
   font-size: var(--fs-small);
   overflow-wrap: anywhere;
 }
+/* The chip is the one word that says where he stands: always in full, wrapping if it must. */
 .cr-chip {
-  flex: none;
-  max-width: 14ch;
+  flex: 0 1 auto;
+  max-width: 100%;
+  white-space: normal;
+  justify-self: start;
+}
+.cr-chip .pill__text {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 /* One campaign's card. */
@@ -361,17 +369,52 @@
 .cr-ask__text {
   font-size: var(--fs-small);
 }
-/* Phones and touch tablets: the next step's vermilion stays at the bottom right while the card is on screen. */
-@media (max-width: 767px), (pointer: coarse) {
-  .cr-next__main {
-    position: sticky;
-    bottom: calc(var(--tabbar-h, 64px) + env(safe-area-inset-bottom) + 12px);
-    z-index: 3;
-  }
+/* Phones and touch tablets (usePinMain): the screen's one vermilion is the last thing in its card and stays pinned at
+   the bottom right while the card is on screen. A flex column (never grid: a sticky grid item can't leave its row). */
+.cr-card.has-pin,
+.gstep__body.has-pin {
+  display: flex;
+  flex-direction: column;
+}
+.cr-pin {
+  position: sticky;
+  bottom: calc(var(--tabbar-h, 64px) + env(safe-area-inset-bottom) + 12px);
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-self: flex-end;
+  gap: 10px;
+  margin-inline-start: auto;
+  max-width: 100%;
+}
+.cr-pin .btn {
+  box-shadow: 0 14px 30px -14px rgb(var(--shadow-rgb) / 0.9);
+}
+/* "If you see …:" is quiet; only the other site's labels inside it are bold. */
+.gstep__hint-see {
+  color: var(--ink-2);
+}
+/* On Campaigns the paste box's Paste is glass: the screen's one vermilion is the step or Add campaign. */
+.cr-paste .linkbox__paste {
+  color: var(--ink);
+  background: var(--fill);
+  text-shadow: none;
+  box-shadow: 0 6px 16px -10px rgb(var(--shadow-rgb) / 0.68);
+}
+.cr-paste .linkbox__paste:hover {
+  background: var(--fill-hover);
+}
+.cr-paste .linkbox__paste:active {
+  background: var(--fill-hover);
 }
 .cr-rules-box {
   display: grid;
   gap: 6px;
+}
+/* On a phone the pinned main button never covers the box he types in. */
+.cr-rules-box textarea {
+  scroll-margin-bottom: 140px;
 }
 
 .cr-pay,
@@ -668,6 +711,22 @@
 .cr-for .segmented__opt {
   flex: none;
 }
+.cr-for__bar {
+  position: relative;
+  min-width: 0;
+}
+.cr-for__bar.is-more .segmented {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 56px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 56px), transparent);
+}
+.cr-for__more {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  translate: 0 -50%;
+  color: var(--ink-2);
+  pointer-events: none;
+}
 .cr-for__videos {
   display: grid;
   gap: 8px;
@@ -739,4 +798,42 @@
   .cr-fold__chev {
     transition: none;
   }
+}
+
+/* Clip Factory's own words that need a little weight, never the bold that means another site's label (§38.1). */
+.cr-semibold,
+.cr-pay__place {
+  font-weight: 650;
+}
+.cr-pin:empty {
+  display: none;
+}
+/* "You're in!" leads the next step on the visit it was celebrated. */
+.cr-next__in {
+  font-size: 1.15rem;
+}
+/* "Check it yourself" as two short numbered lines. */
+.cr-next__lines {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-weight: 650;
+}
+.cr-next__lines li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  overflow-wrap: anywhere;
+}
+.cr-next__n {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--fill);
+  font-weight: 800;
 }

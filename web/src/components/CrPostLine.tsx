@@ -11,17 +11,25 @@ import {
   CAMPAIGN_REASONS,
   CR_SETTINGS,
   RECORD_SCREEN,
-  SEND_HINTS,
   SEND_STEPS,
   appealSteps,
+  canSend,
   copyAndOpen,
+  crCampaignUrl,
+  minutesLeftOf,
   patchCr,
   reasonText,
   rejectHint,
+  richLine,
+  safeHref,
   sendGroups,
+  sendHints,
   subLineFor,
+  useCr,
+  useNow,
   type SendGroup,
 } from "../lib/contentRewards.ts";
+import { PLATFORM_LABEL } from "../lib/format.ts";
 import { CR_DISCOVER } from "../setup/contentrewards.ts";
 import { copyText, Rich } from "../screens/settings/setup/bits.tsx";
 import { Fold, GreenButton, Hints, Lines, OpenButton } from "../screens/campaigns/bits.tsx";
@@ -47,7 +55,9 @@ export function CrPostLines({
   /** The first waiting send's "Copy and open" is the screen's vermilion button (the page has none of its own then). */
   primary?: boolean;
 }) {
-  const groups = sendGroups(subs);
+  // The minutes left count down on screen (a send whose time is up leaves the group and reads "Too late").
+  const now = useNow(subs.some((s) => s.state === "send_by_hand"));
+  const groups = sendGroups(subs, now);
   const grouped = new Set(groups.flatMap((g) => g.postIds));
   const rest = subs.filter((s) => !grouped.has(s.postId));
   if (!subs.length) return null;
@@ -60,7 +70,7 @@ export function CrPostLines({
       ))}
       {rest.map((s) => (
         <li key={s.postId}>
-          <CrPostLine sub={s} onChange={onChange} compact={compact} />
+          <CrPostLine sub={s} onChange={onChange} compact={compact} now={now} />
         </li>
       ))}
     </ul>
@@ -82,7 +92,27 @@ export function SendLine({
   primary?: boolean;
 }) {
   const toast = useToast();
+  const cr = useCr();
   const [busy, setBusy] = useState(false);
+  const [sending, setSending] = useState(false);
+  // "Try sending again" (§38.8): only while Clip Factory may send clips itself and there is time left.
+  const canTry = !banner && cr.state === "ok" && canSend(cr.data.connection) && group.minutesLeft > 0;
+  async function tryAgain() {
+    setSending(true);
+    try {
+      let last: CrSubmission | null = null;
+      for (const id of group.postIds) last = await api().crSendSubmission(id);
+      onChange(last);
+      if (group.postIds.length > 1) onChange(null);
+      toast.success(last && last.state !== "send_by_hand" ? "Sent to Content Rewards." : "It didn't go yet. Copy and open, then paste it.");
+      return true;
+    } catch (e) {
+      toast.error(friendlyMessage(e));
+      return false;
+    } finally {
+      setSending(false);
+    }
+  }
   async function sentIt() {
     setBusy(true);
     try {
@@ -109,7 +139,15 @@ export function SendLine({
     <div className={`cr-line cr-line--send${banner ? " is-banner" : ""}`} data-help="cr-post-line" data-state="send_by_hand">
       <p className="cr-line__text">
         <Icon name="clock" size={18} />
-        <span>{group.line}</span>
+        <span>
+          {banner ? (
+            <>
+              Send “<span className="user-text">{group.clipTitle}</span>” to Content Rewards now ({group.minutesLeft} min left)
+            </>
+          ) : (
+            group.line
+          )}
+        </span>
       </p>
       <div className="cr-line__actions" data-help="cr-send-now">
         <Button
@@ -119,7 +157,7 @@ export function SendLine({
           act="copy"
           data-help-clear={primary ? "" : undefined}
           onClick={() =>
-            copyAndOpen(group.copy, group.openHref, copyText).then((ok) => {
+            copyAndOpen(group.copy, group.openHref, copyText, crCampaignUrl(group.campaignId)).then((ok) => {
               toast.success(ok ? "Link copied. Paste it on Content Rewards." : "Copy did not work. Tap Copy link, then paste it.");
               return ok;
             })
@@ -145,6 +183,11 @@ export function SendLine({
             <GreenButton onClick={sentIt} loading={busy}>
               I sent it
             </GreenButton>
+            {canTry ? (
+              <Button variant="glass" icon="retry" act="retry" loading={sending} onClick={tryAgain}>
+                Try sending again
+              </Button>
+            ) : null}
           </>
         ) : null}
       </div>
@@ -157,7 +200,11 @@ export function SendLine({
           </summary>
           <div className="cr-fold__body">
             <Lines lines={SEND_STEPS} />
-            <Hints list={SEND_HINTS} />
+            <Hints list={sendHints(group.platforms)} />
+            <div className="cr-line__actions">
+              <OpenButton label="Open Content Rewards settings" href={CR_SETTINGS} />
+              <OpenButton label="Open campaign" href={safeHref(group.openHref, crCampaignUrl(group.campaignId))} />
+            </div>
           </div>
         </details>
       ) : null}
@@ -166,10 +213,14 @@ export function SendLine({
 }
 
 /** One campaign post's line (every state of §38.6 but a waiting send, which SendLine draws). */
-export function CrPostLine({ sub, onChange, compact = false }: { sub: CrSubmission; onChange: (next: CrSubmission | null) => void; compact?: boolean }) {
+export function CrPostLine({ sub, onChange, compact = false, now = Date.now() }: { sub: CrSubmission; onChange: (next: CrSubmission | null) => void; compact?: boolean; now?: number }) {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
-  const line = sub.line || subLineFor(sub);
+  // "Ask again" tapped on this visit: then "Copy the words again" and "I asked" make sense.
+  const [askTapped, setAskTapped] = useState(false);
+  // A send whose 30 minutes ran out since the last read says so now, not "(12 min left)".
+  const late = sub.state === "send_by_hand" && minutesLeftOf(sub, now) <= 0;
+  const line = late ? subLineFor({ ...sub, state: "missed" }) : sub.line || subLineFor(sub);
   const hint = sub.state === "rejected" && !sub.appeal?.askedAt ? rejectHint(sub.reason?.brandSaid) : null;
 
   async function say(said: "appealed" | "proof_sent") {
@@ -212,19 +263,29 @@ export function CrPostLine({ sub, onChange, compact = false }: { sub: CrSubmissi
   }
 
   const ok = sub.state === "approved" || sub.state === "sent" || sub.state === "sent_by_hand";
-  const bad = sub.state === "rejected" || sub.state === "missed" || sub.state === "not_sent" || sub.removed || sub.postGone;
+  const bad = late || sub.state === "rejected" || sub.state === "missed" || sub.state === "not_sent" || sub.removed || sub.postGone;
   const appealOpen = sub.state === "rejected" && !!sub.appeal && !sub.appeal.askedAt;
+  // After "The brand kept its answer. This one can't be asked again." nothing more can be done.
+  const asked = sub.appeal?.askedAt ? Date.parse(sub.appeal.askedAt) : NaN;
+  const appealOver = Number.isFinite(asked) && now - asked > 10 * 86_400_000;
+  const showCopyAgain = !appealOver && (askTapped || !!sub.appeal?.askedAt);
   return (
     <div className={`cr-line${ok ? " is-ok" : bad ? " is-bad" : ""}`} data-help="cr-post-line" data-state={sub.state} data-post={sub.postId} data-clip={sub.clipId}>
       <p className="cr-line__text">
         <PlatformMark platform={sub.platform} size={18} />
         <span>
           {compact ? <span className="cr-line__campaign user-text">{sub.campaignName}: </span> : null}
-          <span className="user-text">{line}</span>
+          <span className="user-text">
+            <Rich text={richLine(line)} />
+          </span>
         </span>
       </p>
       {hint ? <p className="cr-line__hint">{hint}</p> : null}
-      {sub.paidLabel === "not_set" ? <p className="cr-line__hint">YouTube didn&apos;t take the Paid promotion switch. #Ad and the words on the video still tell viewers.</p> : null}
+      {sub.paidLabel === "not_set" ? (
+        <p className="cr-line__hint">
+          {PLATFORM_LABEL[sub.platform]} didn&apos;t take the {sub.platform === "youtube" ? "Paid promotion" : "Paid partnership"} switch. #Ad and the words on the video still tell viewers.
+        </p>
+      ) : null}
 
       {sub.state === "not_sent" && sub.reason ? (
         <div className="cr-line__actions">
@@ -236,14 +297,14 @@ export function CrPostLine({ sub, onChange, compact = false }: { sub: CrSubmissi
               </GreenButton>
             </>
           ) : sub.reason.code === "not_on_application" ? (
-            <OpenButton label="Open campaign" href={sub.openCampaignHref} />
+            <OpenButton label="Open campaign" href={safeHref(sub.openCampaignHref, crCampaignUrl(sub.campaignId))} />
           ) : CAMPAIGN_REASONS.includes(sub.reason.code) ? (
             <OpenButton label="Find another campaign" href={CR_DISCOVER} />
           ) : null}
         </div>
       ) : null}
 
-      {sub.state === "rejected" && sub.appeal ? (
+      {sub.state === "rejected" && sub.appeal && !appealOver ? (
         <div className="cr-line__appeal">
           <div className="cr-line__actions">
             {appealOpen ? (
@@ -251,31 +312,34 @@ export function CrPostLine({ sub, onChange, compact = false }: { sub: CrSubmissi
                 variant="glass"
                 icon="retry"
                 act="copy"
-                onClick={() =>
-                  copyAndOpen(sub.appeal!.words, sub.appeal!.href || APPEAL_HREF, copyText).then((done) => {
+                onClick={() => {
+                  setAskTapped(true);
+                  return copyAndOpen(sub.appeal!.words, sub.appeal!.href || APPEAL_HREF, copyText, APPEAL_HREF).then((done) => {
                     toast.success(done ? "Words copied." : "Copy did not work. Tap Copy the words again.");
                     return done;
-                  })
-                }
+                  });
+                }}
               >
                 Ask again
               </Button>
             ) : null}
-            <Button
-              variant="glass"
-              size="sm"
-              icon="copy"
-              act="copy"
-              onClick={() =>
-                copyText(sub.appeal!.words).then((done) => {
-                  toast.success(done ? "Words copied." : "Copy did not work.");
-                  return done;
-                })
-              }
-            >
-              Copy the words again
-            </Button>
-            {appealOpen ? (
+            {showCopyAgain ? (
+              <Button
+                variant="glass"
+                size="sm"
+                icon="copy"
+                act="copy"
+                onClick={() =>
+                  copyText(sub.appeal!.words).then((done) => {
+                    toast.success(done ? "Words copied." : "Copy did not work.");
+                    return done;
+                  })
+                }
+              >
+                Copy the words again
+              </Button>
+            ) : null}
+            {appealOpen && askTapped ? (
               <GreenButton size="sm" onClick={() => say("appealed")} loading={busy === "appealed"}>
                 I asked
               </GreenButton>
@@ -312,11 +376,16 @@ export function CrPostLine({ sub, onChange, compact = false }: { sub: CrSubmissi
             </GreenButton>
           </div>
           <Lines lines={sub.proof.steps} />
+          <div className="cr-line__actions">
+            <OpenButton label="Open campaign" href={safeHref(sub.openCampaignHref, crCampaignUrl(sub.campaignId))} />
+          </div>
           <Fold fold={{ id: `proof-${sub.postId}`, question: "How do I record my screen?", say: RECORD_SCREEN }} />
         </div>
       ) : null}
       {sub.state === "not_sent" && sub.reason && !line.includes(reasonText(sub.reason.code, sub.platform).slice(0, 20)) ? (
-        <p className="cr-line__hint">{reasonText(sub.reason.code, sub.platform, sub.reason.brandSaid)}</p>
+        <p className="cr-line__hint">
+          <Rich text={richLine(reasonText(sub.reason.code, sub.platform, sub.reason.brandSaid))} />
+        </p>
       ) : null}
     </div>
   );

@@ -4,6 +4,7 @@
 import { useId, useState, type ReactNode } from "react";
 import { Icon, type IconName } from "../../components/Icon.tsx";
 import { Button } from "../../components/ui.tsx";
+import { usePinMain } from "../../lib/contentRewards.ts";
 import type { CrFold, CrStep } from "../../setup/types.ts";
 import { CopyChip, Rich } from "../settings/setup/bits.tsx";
 
@@ -87,9 +88,10 @@ export function Hints({ list }: { list: { see: string; do: string }[] | undefine
         <li key={h.see} className="gstep__hint">
           <Icon name="info" size={18} />
           <span>
-            <strong className="gstep__hint-see">
+            {/* The lead-in is quiet: only the other site's own labels are bold (§38.1). */}
+            <span className="gstep__hint-see">
               If you see <Rich text={h.see} />:
-            </strong>{" "}
+            </span>{" "}
             <Rich text={h.do} />
           </span>
         </li>
@@ -100,6 +102,7 @@ export function Hints({ list }: { list: { see: string; do: string }[] | undefine
 
 /** Short lines, one action each (bold = the other site's own label). */
 export function Lines({ lines, className = "gstep__say" }: { lines: readonly string[]; className?: string }) {
+  if (!lines.length) return null;
   return (
     <ul className={className}>
       {lines.map((line) => (
@@ -179,6 +182,10 @@ export function CrStepCard({
 }) {
   const bodyId = `step-${step.id}-body`;
   const manual = step.manual !== false;
+  // Phones: the step's vermilion Open sits last in the card and stays pinned at the bottom right while the card is on
+  // screen (§38.1). Elsewhere it sits right under the step's lines.
+  const pin = usePinMain() && primary && !!step.open;
+  const openEl = step.open ? <OpenButton label={step.open.label} href={step.open.url} primary={primary} size="lg" /> : null;
   return (
     <li
       className={`gstep glass${done ? " is-done" : ""}${current ? " is-current" : ""}${open ? " is-open" : ""}${number === null ? " is-helper" : ""}`}
@@ -202,13 +209,9 @@ export function CrStepCard({
         <Icon name="chevronRight" size={20} className="icon gstep__chev act-turn" />
       </button>
       {open ? (
-        <div className="gstep__body" id={bodyId}>
+        <div className={`gstep__body${pin ? " has-pin" : ""}`} id={bodyId}>
           <Lines lines={say ?? step.say} />
-          {step.open ? (
-            <div className="gstep__actions">
-              <OpenButton label={step.open.label} href={step.open.url} primary={primary} size="lg" />
-            </div>
-          ) : null}
+          {openEl && !pin ? <div className="gstep__actions">{openEl}</div> : null}
           {copies?.length || step.copy?.length ? (
             <div className="gstep__copies">
               {(copies ?? []).map((c) => (
@@ -238,6 +241,7 @@ export function CrStepCard({
               )}
             </div>
           ) : null}
+          {pin ? <div className="gstep__actions cr-pin">{openEl}</div> : null}
         </div>
       ) : null}
     </li>
