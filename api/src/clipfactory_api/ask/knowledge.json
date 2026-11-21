@@ -1,5 +1,5 @@
 {
- "version": "c30aa36da5fb",
+ "version": "7b73690c2c16",
  "parts": [
   {
    "id": "app-map",
@@ -837,7 +837,7 @@
    "id": "testing-what-the-tests-must-cover",
    "title": "TESTING: What the tests must cover",
    "line": "Web (Playwright, mock mode)",
-   "chars": 81722
+   "chars": 81721
   },
   {
    "id": "testing-manual-checks-after-the-first-deploy",

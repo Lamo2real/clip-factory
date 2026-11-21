@@ -1,5 +1,5 @@
 {
-  "version": "a042ffb6582e",
+  "version": "639e092225ad",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -3260,9 +3260,8 @@
         "will this clip get paid",
         "clip ok for the campaign",
         "right for the campaign",
-        "compatible",
-        "compatible with my campaign",
         "content i upload",
+        "work for my campaign",
         "earn money on content rewards",
         "get paid on content rewards",
         "i couldn't check",

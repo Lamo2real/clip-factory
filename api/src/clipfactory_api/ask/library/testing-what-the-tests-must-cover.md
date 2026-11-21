@@ -606,9 +606,9 @@ All your money while their routes answer 404, and the golden case files are read
   - `web/test/twoWays.test.ts`: `NORMAL_WAY_TAPS = 5`, `CAMPAIGN_WAY_TAPS = 6`, `COPY_TAPS = 3`,
     `CONNECT_TAPS_DONE = 7`, `CONNECT_CF_TAPS_FROM_ZERO = 10`, and the names list (no screen string in the help
     corpus says "Content Rewards way", "normal mode", "compatible", "clip type", "upload type", "campaign type" or "I
-    linked it"). Screen strings are the `page` docs' words and each guide's title, where, answer, steps and button
-    labels. A guide's search `keywords` are never shown, so they may hold the owner's own words: `cr-fit` lists
-    "compatible", so his question "Is the content I upload compatible with my campaign?" finds the fit guide.
+    linked it"). The test reads the whole help corpus, search `keywords` too, so no keyword says a banned name either.
+    His question "Is the content I upload compatible with my campaign?" still finds the fit guide through its other
+    words ("content i upload", "work for my campaign").
 - **Web units** (Vitest): `lib/crFit.ts` against `api/tests/fixtures/cr_fit_live_cases.json` when present; every
   verdict's headline, lines and single vermilion (`wait`: none of its own, Upload off with the words; `fits` with a
   missing tag: "Can earn" and an optional "Fix it for me"); Upload on and off by `canUpload`; "Fix it for me" (the
@@ -666,8 +666,9 @@ All your money while their routes answer 404, and the golden case files are read
   `money-not-available` each have one question in `helpEvals.json` that both retrievers rank first
   (`web/test/helpRetrieve.test.ts`, `api/tests/test_help_evals.py`), and `cr-setup` and `cr-make-clips` use the §39.1
   words. The owner's own wording is in the eval file too ("Is the content I upload compatible with my Content Rewards
-  campaign?" finds `cr-fit`), and normal-way questions keep their guides: on Review "How do I fix the caption?" and
-  "How do I add hashtags?" find `review-captions`, and "connect my accounts" finds `accounts-connected`. A campaign
+  campaign?" and "Will my content work for my campaign?" find `cr-fit`), and normal-way questions keep their guides:
+  on Review "How do I fix the caption?" and "How do I add hashtags?" find `review-captions`, and "connect my accounts"
+  finds `accounts-connected`. A campaign
   guide that says "Make campaign clips" never rings the normal "Make clips": `cr-make-clips`'s Home button lights only
   the `cr-make-clips` anchor. `node scripts/help-corpus.mjs --check` (every highlight is a real `data-help` anchor)
   and `node scripts/ask-knowledge.mjs --check` pass after running both without `--check`.
