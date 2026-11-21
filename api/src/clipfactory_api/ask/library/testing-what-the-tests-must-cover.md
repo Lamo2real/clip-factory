@@ -564,8 +564,8 @@ part's tests pass on their own, whichever part merged first.
   has a `## Content Rewards` heading, every `CR_GUIDE` step title appears under it.
 - **Playwright** (mock mode, `e2e/content-rewards.spec.ts`, 375×812 and 1440×900, light and dark): Set up posting
   still shows five platform cards and the floating list "0/5", with the Content Rewards card apart; the setup page
-  (steps 1 and 2 tick with "I did this", the ring counts 3, the folds; on a phone "Do this step on your Mac"; in a
-  desktop browser "Get the app"); with the fake bridge Connect → pretend consent → Allow → confetti, Cancel → the
+  (steps 1 and 2 tick with "I have an account" and "I added them", the ring counts 3, the folds; on a phone "Do this
+  step on your Mac"; in a desktop browser "Get the app"); with the fake bridge Connect → pretend consent → Allow → confetti, Cancel → the
   denied card, read only → "Content Rewards said no?" with "Open email" as the only vermilion; Disconnect and Undo; the
   sign-in-again week; Home paste of each link shape; the Campaigns page's vermilion moving to "Add campaign"; each
   membership row's single vermilion button; soft stops → one "Make clips anyway"; Check now; "You're in!" once; the
@@ -606,7 +606,9 @@ All your money while their routes answer 404, and the golden case files are read
   - `web/test/twoWays.test.ts`: `NORMAL_WAY_TAPS = 5`, `CAMPAIGN_WAY_TAPS = 6`, `COPY_TAPS = 3`,
     `CONNECT_TAPS_DONE = 7`, `CONNECT_CF_TAPS_FROM_ZERO = 10`, and the names list (no screen string in the help
     corpus says "Content Rewards way", "normal mode", "compatible", "clip type", "upload type", "campaign type" or "I
-    linked it").
+    linked it"). Screen strings are the `page` docs' words and each guide's title, where, answer, steps and button
+    labels. A guide's search `keywords` are never shown, so they may hold the owner's own words: `cr-fit` lists
+    "compatible", so his question "Is the content I upload compatible with my campaign?" finds the fit guide.
 - **Web units** (Vitest): `lib/crFit.ts` against `api/tests/fixtures/cr_fit_live_cases.json` when present; every
   verdict's headline, lines and single vermilion (`wait`: none of its own, Upload off with the words; `fits` with a
   missing tag: "Can earn" and an optional "Fix it for me"); Upload on and off by `canUpload`; "Fix it for me" (the
@@ -663,8 +665,12 @@ All your money while their routes answer 404, and the golden case files are read
 - **Help and docs**: the guides `cr-two-ways`, `cr-fit`, `cr-fix-it`, `cr-make-it-for`, `money-everywhere` and
   `money-not-available` each have one question in `helpEvals.json` that both retrievers rank first
   (`web/test/helpRetrieve.test.ts`, `api/tests/test_help_evals.py`), and `cr-setup` and `cr-make-clips` use the §39.1
-  words. `node scripts/help-corpus.mjs --check` (every highlight is a real `data-help` anchor) and
-  `node scripts/ask-knowledge.mjs --check` pass after running both without `--check`.
+  words. The owner's own wording is in the eval file too ("Is the content I upload compatible with my Content Rewards
+  campaign?" finds `cr-fit`), and normal-way questions keep their guides: on Review "How do I fix the caption?" and
+  "How do I add hashtags?" find `review-captions`, and "connect my accounts" finds `accounts-connected`. A campaign
+  guide that says "Make campaign clips" never rings the normal "Make clips": `cr-make-clips`'s Home button lights only
+  the `cr-make-clips` anchor. `node scripts/help-corpus.mjs --check` (every highlight is a real `data-help` anchor)
+  and `node scripts/ask-knowledge.mjs --check` pass after running both without `--check`.
 - **Live checks, not done here** ([§39.6](CONTRACTS.md#396-not-verified-live)): see step 16 of
   [Manual checks after the first deploy](#manual-checks-after-the-first-deploy).
 

@@ -357,9 +357,9 @@ how to navigate it". ([the steps](SETUP_POSTING.md#content-rewards),
   itself whether the owner is in: every 15 minutes for 7 days, then every 6 hours to day 30, plus "Check now". "You're
   in!" comes with confetti and a notification, once.
 - AC5: A campaign that can't earn says why and what to do in one sentence (paused, ended, the money almost gone, only
-  TikTok, drafts first, its own sound, a missing logo, too many clips waiting), and Make clips is refused; a warning
-  (half the money used, a low rate, face on camera, a spoken disclosure, a viewer-country rule) is accepted with one
-  "Make clips anyway".
+  TikTok, drafts first, its own sound, the brand's own picture on top of the video, a missing logo, too many clips
+  waiting), and Make clips is refused; a warning (half the money used, a low rate, face on camera, a spoken
+  disclosure, a viewer-country rule) is accepted with one "Make clips anyway".
 - AC6: Each video is **3 steps** ("Make campaign clips" on the campaign's chip on Home, or "Make clips for this
   campaign" on its card; a "Videos from the campaign" chip or Paste; "Make campaign clips"). Every clip
   follows the rules: the campaign's length, no banned content, the logo on screen the whole clip (above the picture,
@@ -440,10 +440,11 @@ using eaither the content rewards way of videos or normal way we have done so fa
 - AC3: The Content Rewards row also shows, in money's time order and only what Content Rewards reported: "Right now":
   Still earning, Ready to move to Whop, On its way to Whop; "Earned so far, since you started"; and "Paid out to your
   bank: not available from Content Rewards. Look on Whop: **Balances**."
-- AC4: A place that isn't set up, needs his OK or must sign in again has one glass button to its own page, and that
+- AC4: A place that isn't set up, needs his OK or must sign in again has one glass button to its own page; a setup
   page brings him back to Money when it's done.
-- AC5: The Monthly, Weekly, Daily and Yearly cards keep their numbers and words, apps only; the Monthly card says
-  "Apps only. Content Rewards is in All your money." The Content Rewards part stays at the end of the page.
+- AC5: The Monthly, Weekly, Daily and Yearly cards keep their numbers and words, apps only. While the Content Rewards
+  row is on All your money, the Monthly card says "Apps only. Content Rewards is in All your money." (its empty states
+  too, when that row has a number). The Content Rewards part stays at the end of the page.
 
 ### BR-28 Does this clip fit the campaign? Know before uploading
 "btw i would like to know if the content i upload is compati ble with the content rewards campaigns so i can get paid
