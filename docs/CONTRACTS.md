@@ -10135,7 +10135,7 @@ Production `/stories/production` (`/stories/production/new`, `/stories/productio
 Settings `/stories/settings`. Lamo Clips' overlays (Ask, the setup to-do, the campaign banner) are not shown in Lamo
 Stories; the Mac download host, the update bar, toasts and sounds stay global.
 
-Look: its own tokens (`--st-*`, `web/src/styles/stories.css`, documented in UX_DESIGN_SYSTEM "Lamo Stories"): a deep
+Look: its own tokens (`--st-*`, in `web/src/stories/styles/`, outside `web/src/styles` whose tests police Lamo Clips' palette; `test/storiesStyles.test.ts` holds the owner's rules there): a deep
 night-indigo stage (`#1C1842`) with soft spotlight glows, warm cream words (`#FFF6E5`), sunshine (`#FFC94A`) for
 every main action, coral (`#FF6F61`), mint (`#47D6A0`) and sky (`#62C6FF`) for status and characters, rounded type
 (`ui-rounded`, then the system font), frosted panels, character-shaped empty states, storyboard filmstrips. The

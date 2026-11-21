@@ -1,0 +1,81 @@
+/* Lamo Stories: its own look, "an animation studio" (docs/CONTRACTS.md §45.16.2). Everything is scoped under
+   .stories-app, so nothing here reaches a Lamo Clips screen. It lives outside web/src/styles on purpose: the tests
+   there police Lamo Clips' own palette. The owner's rules still hold here and test/storiesStyles.test.ts (builder F)
+   checks them over web/src/stories/styles: no cursor CSS, no visible borders (shadows and fills instead), radii from
+   var(--r-*), type no smaller than 0.78rem, light only, AA contrast for the --st-* text colours on the stage.
+   SCAFFOLD (Phase 1): the tokens and a few base classes; builder F (web shell) owns this file and extends it, builder G
+   (studio screens) styles its screens in web/src/stories/styles/studio.css with these tokens. */
+
+.stories-app {
+  --st-stage: #1c1842; /* deep night-indigo stage */
+  --st-stage-2: #26205a;
+  --st-stage-3: #322a73;
+  --st-panel: rgba(255, 246, 229, 0.08);
+  --st-panel-strong: rgba(255, 246, 229, 0.14);
+  --st-ink: #fff6e5; /* warm cream words */
+  --st-ink-soft: rgba(255, 246, 229, 0.78);
+  --st-sun: #ffc94a; /* every main action */
+  --st-sun-deep: #f2a900;
+  --st-on-sun: #1c1842;
+  --st-coral: #ff6f61;
+  --st-mint: #47d6a0;
+  --st-sky: #62c6ff;
+  --st-shadow: 0 10px 30px rgba(8, 6, 30, 0.45);
+  --st-font: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--st-ink);
+  font-family: var(--st-font);
+}
+
+.st-page {
+  padding: 0 0 48px;
+}
+
+.st-card {
+  background: var(--st-panel);
+  border-radius: var(--r-lg);
+  box-shadow: var(--st-shadow);
+  padding: 20px;
+}
+
+.st-btn {
+  appearance: none;
+  border: 0;
+  border-radius: var(--r-pill);
+  min-height: 44px;
+  padding: 0 20px;
+  font: 700 1rem/1 var(--st-font);
+  color: var(--st-ink);
+  background: var(--st-panel-strong);
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+.st-btn:hover {
+  background: rgba(255, 246, 229, 0.22);
+  transform: translateY(-1px);
+}
+
+.st-btn--main {
+  color: var(--st-on-sun);
+  background: var(--st-sun);
+}
+
+.st-btn--main:hover {
+  background: #ffd56e;
+}
+
+.st-btn:disabled,
+.st-btn[aria-disabled="true"] {
+  opacity: 0.55;
+  transform: none;
+}
+
+.st-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: var(--r-pill);
+  font: 700 0.85rem/1 var(--st-font);
+  background: var(--st-panel-strong);
+}
