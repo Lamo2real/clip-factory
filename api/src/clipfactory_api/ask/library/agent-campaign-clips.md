@@ -21,3 +21,43 @@ campaign every prompt, tool description, brief and file is byte for byte what it
 
 The publishers check the captions once more just before upload (`campaign_caption`), so a caption the owner edited
 still has the disclosure and every required item.
+
+### Two facts every job now keeps
+
+For the fit check of the API ([CONTRACTS.md §39.3](CONTRACTS.md#393-does-this-clip-fit-the-campaign-the-fit-check),
+[ARCHITECTURE.md flow 20](ARCHITECTURE.md#20-content-rewards-the-fit-check-the-copy-and-all-your-money-contracts-39-adr-63)),
+every job, with or without a campaign, gets two public fields. Nothing in a prompt, file or clip changes because of
+them.
+
+- `sourceLanguage`: the Transcribe `LanguageCode` (BCP 47, such as `en-US`), written once at transcribe; when
+  transcribe is skipped ("Used the words from last time"), the `language` of the kept `meta.json`. The fit's
+  `language` rule reads it ("This clip is in Spanish. FaZe Clips wants English."); without it the rule says "I
+  couldn't check the language."
+- `source.channelKeys`: `sources.channel_keys(info)`, written in `_resolve_link` with the other source fields: the
+  same channel keys the agent's own allowed-channel rule (`sources.from_allowed_channel`) matches. The API's
+  `fit.channel_matches` is a port of that rule, and both run the shared cases in
+  `api/tests/fixtures/channel_match_cases.json`. A channel that doesn't match is only "This video may not be from
+  FaZe's channels … Look yourself." (it never blocks, as the job's own `campaignNote` never stops the job).
+
+### A campaign copy
+
+A normal clip that could earn on a joined campaign is never changed in place; the owner taps "Make a FaZe Clips copy"
+and the API makes a new one-clip campaign job from the same moment
+([CONTRACTS.md §39.3](CONTRACTS.md#393-does-this-clip-fit-the-campaign-the-fit-check), **The copy**). That job carries
+the usual `job.campaign` (rules snapshot and logo copy, as above), the public `remakeOf {clipId, jobId}` and the
+internal `job.remake {clipId, jobId, sourceStart, sourceEnd, layout, momentType, hook, pickedFor, sourceKey}`
+(`remake.py` reads it from the job item; the agent imports nothing of the API).
+
+| Step | A job with `remake` |
+|---|---|
+| Resolve | As for every campaign job: the channel check and the campaign logo. |
+| Source | With `sourceKey` (the original's kept video, `jobs/{jobId}/source/video.mp4` or the Mac upload), the moment is cut from that file and nothing is fetched. Without it (both are gone), a link job fetches the link again. |
+| Words | `jobs/{remake.jobId}/source/words.json` while it is kept: no full-audio download and no picture prep. Else transcribe as today. |
+| Find, watch, select | Skipped: no analyze, watch or select call. The one moment is `remake`'s (`sourceStart`, `sourceEnd`, `layout`, `momentType`, `hook`, `pickedFor`). |
+| Cut and render | That moment, rendered with the campaign band, logo and “Paid partnership” (the table above). |
+| Captions and checklist | The campaign's tags and #Ad; the full checklist, with `campaign_rules` judged. |
+| Finalize | One clip with `campaignId` and `remakeOf {clipId, jobId}` (from `remake`). |
+
+**A job without `remake` is byte for byte today's**: the same prompts, tool descriptions, briefs and files (a test).
+The copy waits behind the api switch `CR_REMAKE` (off by default) until this part has shipped; before it, no job ever
+carries `remake`.

@@ -11,7 +11,8 @@ The diagram is [architecture/aws-architecture.drawio](architecture/aws-architect
 [§17](CONTRACTS.md#17-posting-setup-a-setup-list-per-platform-real-connect-real-posting-owner-request-2026-11-16) (posting setup, Connect and real posting),
 [§18](CONTRACTS.md#18-skills-full-create-read-update-delete-every-ai-call-uses-every-skill-owner-request-2026-11-16) (skills, and every AI call using every skill)
 and [§19](CONTRACTS.md#19-ask-clip-factory-grounded-in-app-help-assistant-owner-request-2026-11-16) (Ask Clip Factory, the help assistant),
-and [§38](CONTRACTS.md#38-content-rewards-campaigns-owner-request-2026-11-21) (Content Rewards campaigns);
+and [§38](CONTRACTS.md#38-content-rewards-campaigns-owner-request-2026-11-21) (Content Rewards campaigns)
+with [§39](CONTRACTS.md#39-content-rewards-the-two-ways-all-your-money-and-does-this-clip-fit-owner-request-2026-11-21) (the two ways, all your money and the fit check);
 this document explains how the pieces work together and why.
 
 ![Clip Factory Cloud on AWS](architecture/aws-architecture.png)
@@ -100,7 +101,7 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 | Amazon API Gateway, HTTP API | `/v1` routes | The app's API. Cheapest type, with a built-in JWT authorizer. CORS for the app and `localhost:5173`; a public `OPTIONS /v1/{proxy+}` route lets CORS answer the browser's preflight before the JWT authorizer. |
 | Amazon API Gateway, WebSocket API | `cf-prod-ws`, stage `live` | Pushes job, clip, post and learning changes to open apps, so screens update without waiting for a poll. See [ADR-23](DECISIONS.md#adr-23-live-updates-over-a-websocket-api-polling-only-as-the-fallback). |
 | Amazon API Gateway, REST API | `cf-prod-hooks`, stage `v1` | The one public, unauthenticated surface: platform webhooks and the OAuth callback that finishes Connect, with per-method throttling, a usage plan, request validation and X-Ray. See [ADR-24](DECISIONS.md#adr-24-a-separate-rest-api-for-public-platform-webhooks). |
-| AWS Lambda | `cf-prod-api` | Every `/v1` route: validation, DynamoDB, presigned URLs, skills (write, upload, read, change, delete), starting the two durable flows, cancel, Keep and Throw away, similar clips, a clip's performance, Refresh numbers (claims the posts, then invokes `cf-prod-stats`), the weeks and their picks (invokes `cf-prod-learn`), the posting setup (keys to Secrets Manager, Check it, Connect start, choose, disconnect, TikTok's verification file to the web bucket), and Ask Clip Factory ([flow 17](#17-ask-clip-factory-the-help-assistant): search, compose, the optional Haiku rewrite; the help code loads only on its two routes), and Content Rewards under `/v1/contentrewards` ([flow 19](#19-content-rewards-campaigns-contracts-38-adr-62): register, Connect finish, Check it, campaigns and their Check now, the logo, Try sending again, money refresh). |
+| AWS Lambda | `cf-prod-api` | Every `/v1` route: validation, DynamoDB, presigned URLs, skills (write, upload, read, change, delete), starting the two durable flows, cancel, Keep and Throw away, similar clips, a clip's performance, Refresh numbers (claims the posts, then invokes `cf-prod-stats`), the weeks and their picks (invokes `cf-prod-learn`), the posting setup (keys to Secrets Manager, Check it, Connect start, choose, disconnect, TikTok's verification file to the web bucket), and Ask Clip Factory ([flow 17](#17-ask-clip-factory-the-help-assistant): search, compose, the optional Haiku rewrite; the help code loads only on its two routes), and Content Rewards under `/v1/contentrewards` ([flow 19](#19-content-rewards-campaigns-contracts-38-adr-62): register, Connect finish, Check it, campaigns and their Check now, the logo, Try sending again, money refresh; [flow 20](#20-content-rewards-the-fit-check-the-copy-and-all-your-money-contracts-39-adr-63): the fit check, its captions fix and the campaign copy), and All your money (`GET /v1/money/everywhere`). |
 | AWS Lambda | `cf-prod-stats` | The numbers poller ([flow 13](#13-clip-numbers-the-poller-and-refresh-numbers)): every tick it reads the posts that are due from the sparse `gsi2`, reserves each platform's budget, reads the numbers in batches and writes them to the posts and `STAT#` snapshots. The Refresh button runs the same code at once. After the platform poll, the same tick checks Content Rewards when it is switched on (membership, reviews, views, proof reminders and money, [flow 19](#19-content-rewards-campaigns-contracts-38-adr-62)); `{"action": "contentrewards"}` runs that for one owner. Reads `cf-prod/platforms/*`, writes only a refreshed token (`cf-prod/platforms/*/token-*`). See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
 | AWS Lambda | `cf-prod-learn` | The weekly best ([flow 14](#14-best-of-the-week)): marks the starred clips' vectors `best`, asks Claude Fable 5.1 (with the skills block) for one "Best of week" learning. See [ADR-31](DECISIONS.md#adr-31-the-weekly-best-is-an-explicit-owner-signal). |
 | AWS Lambda | `cf-prod-campaigns` | Content Rewards ([flow 19](#19-content-rewards-campaigns-contracts-38-adr-62), [CONTRACTS.md §38.10](CONTRACTS.md#3810-reading-a-campaign)): reads a campaign's rules from the brand's brief with Claude (one Bedrock Converse call per read, checked field by field in code), fetches the campaign logo from a Google Drive or Dropbox link and copies the brand's picture into the media bucket (`campaigns/*`). Started only by `cf-prod-api` and `cf-prod-stats` (async). It reads untrusted brand text and outside links, so it has **no Secrets Manager access at all** and never calls Content Rewards; the brief is already on the `CAMPAIGN#` item. See [ADR-62](DECISIONS.md#adr-62-content-rewards-the-official-sign-in-through-the-desktop-apps-loopback-door-sending-from-the-cloud-a-reminder-when-it-cant). |
@@ -1181,7 +1182,8 @@ each once (`NOTIFIED#cr#{key}`).
 
 **Money.** Only CR's own numbers (§25 extended): `get_my_balance` and `list_my_payouts`, in USD cents, formatted
 only. "Paid" may stand only next to CR's paid payouts. A campaign's rate × views is a guess and is never shown or
-added anywhere; CR money is never added into the Money dashboard's totals.
+added anywhere; CR money is never added into the MRR cards. Its paid payouts of the last 30 days are added in one
+place only: the total of All your money ([flow 20](#20-content-rewards-the-fit-check-the-copy-and-all-your-money-contracts-39-adr-63)).
 
 **Data** (additive only, [CONTRACTS.md §38.11](CONTRACTS.md#3811-data-additive-only-new-sort-keys-new-attributes-a-new-s3-prefix-new-runtime-secrets)):
 
@@ -1199,6 +1201,110 @@ added anywhere; CR money is never added into the Money dashboard's totals.
 
 No table, index, Cognito pool, bucket or secret is replaced; removing a campaign or disconnecting deletes nothing on
 CR or any platform.
+
+### 20. Content Rewards: the fit check, the copy and all your money (CONTRACTS §39, ADR-63)
+
+The owner's follow-up the same day: Connect in time order, a pleasant choice between campaign clips and normal clips,
+all his money in one place, and knowing before an upload whether a clip can earn on a campaign
+([CONTRACTS.md §39](CONTRACTS.md#39-content-rewards-the-two-ways-all-your-money-and-does-this-clip-fit-owner-request-2026-11-21),
+[ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-in-the-api-a-new-copy-instead-of-turning-a-normal-clip-into-a-campaign-clip-one-30-day-total-that-includes-content-rewards)).
+No new Lambda, table, index, bucket or secret: three routes under `/v1/contentrewards`, one under `/v1/money`, new
+attributes and one api setting. It is part of **13** in the diagram.
+
+**The two ways** live in the web. Home at `/` is frozen (no campaign field on the normal form, 5 taps to an upload,
+held by click-count tests); the campaign way is Home at `/?campaign={uuid}`, reached only from a campaign (the
+"Your campaigns" row chip, the card, a campaign video, the fit). The API helps with three public fields made in
+`contentrewards/campaigns.py`: `CampaignSummary.nextStepKind` (the row chip says "Make campaign clips" when it is
+`make_clips`), and `sourceRuleText` and `languageRuleText` (the rule lines under the link box). Every link to a setup
+page carries the `?back=` of the page it came from (`gates.next_step`'s Connect button and the `not_connected` stop's
+`fixHref` use `?back=/campaigns/{uuid}`); the web accepts only six exact same-origin shapes.
+
+**The fit check** (`contentrewards/fit.py`). One pure function, computed every time it is asked from stored items only
+(never Content Rewards, the public campaign JSON or the network), so it can never go stale and Confirm can trust it:
+
+```mermaid
+flowchart LR
+  items[("stored items: CLIP#, JOB#, CAMPAIGN#, CRCONN, POST#, CRSUB#<br/>+ gates.stops and gates.upload_places")] --> fit["contentrewards/fit.py<br/>fit(clip, job, campaign, ...) → CampaignFit"]
+  fit --> get["GET /v1/contentrewards/fit<br/>Review card, clip page (no-store)"]
+  fit --> caps["POST /v1/contentrewards/fit/captions<br/>campaign_caption per platform"]
+  fit --> gate["Confirm, Try again, Post now<br/>409 on a no, remake or todo item"]
+  fit --> copy["POST /v1/contentrewards/campaigns/{id}/remake<br/>409 unless canRemake"]
+  get --> web["web lib/crFit.ts<br/>re-checks tags, #Ad, the paid switch and the places while he types"]
+```
+
+A campaign clip (`clip.campaignId ?? job.campaignId`) is checked against its own campaign only; a normal clip against
+every campaign he is in (`in` or `manual`), newest first, at most 10, and `ClipFit.suggestion` is the first one a copy
+could fix with a `source` item that passed. Each rule is one item (`campaign`, `soft`, `deadline`, `length`,
+`places`, `place_link`, `tags`, `ad`, `paid_switch`, `logo`, `on_screen`, `source`, `language`, `banned`, `spoken`,
+`uncertain`, `brief_only`, `posted`, `one_campaign`, `send`) with a state (`ok`, `fix`, `remake`, `todo`, `no`,
+`check`, `note`) and the server's own words. The verdict, in this order: any `no` → `doesnt_fit`; a wait item (a held,
+paused or re-read campaign) → `wait`; a `remake`, `todo` or paid-switch `fix` → `fixable`; a `check` → `cant_tell`;
+else `fits`. Tag and #Ad fixes never change it, since the publisher puts them back at upload. Only exact facts can say
+no: a channel that doesn't match by name, an unknown language or a rule the reader couldn't pin down is "I couldn't
+check", never a pass and never a block. The source and language checks read `job.source.channelKeys` and
+`job.sourceLanguage`, which the agent writes; without them they say "I couldn't check". The web refetches the fit
+(debounced 1 s) on a `contentrewards` event, a `clip` event of the clip or its copy, a `post` event of the clip and a
+`setup` event; there is no new live type.
+
+**The gate on posting.** For a clip with a campaign (and `CONTENT_REWARDS=on`), Confirm runs the fit with the merged
+captions, the chosen places and the TikTok choices; any `no`, `remake` or `todo` item answers 409 `conflict` "This
+clip can't earn on FaZe Clips: {its words}" (a wait item: "Not yet for FaZe Clips: {its words}"), and `_try_again`
+(Try again and Post now) does the same. A clip without a campaign never calls the fit and posts byte for byte as
+before. `release.release_waiting` (§33.6) no longer restarts a waiting campaign post when its account comes back: it
+waits for Post now, which goes through the fit, so a campaign post never goes up days later after the campaign ended
+or was held.
+
+**The copy (remake).** A normal clip that could earn is never turned into a campaign clip in place (it has no logo and
+no "Paid partnership" on the video); a new one-clip campaign job is made from the same moment:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant O as Owner (Review)
+  participant A as cf-prod-api
+  participant DB as DynamoDB
+  participant S3 as S3 cf-prod-media
+  participant JF as cf-prod-job-flow
+  participant AG as Agent
+  O->>A: POST /v1/contentrewards/campaigns/{id}/remake {clipId, macFetch?, campaignAnyway?}
+  A->>DB: fit.for_clip: canRemake, and every soft stop accepted
+  A->>DB: reserve first: SET remakes.{campaignId} = {jobId, at} on the original CLIP# (conditional)
+  A->>S3: HEAD the original's kept video (jobs/{jobId}/source/video.mp4, else the Mac upload)
+  A->>DB: new JOB# like POST /v1/jobs (start_job): source, notes, one clip, campaignId, rules snapshot, logo copy, remakeOf, internal remake
+  A-)JF: async invoke, alias live
+  A-->>O: 202 {job} ("Making a FaZe Clips copy… It shows here in about 3 minutes.")
+  JF->>AG: process_job: the one moment of job.remake, no analyze, watch or select
+  AG->>DB: one CLIP# with campaignId and remakeOf {clipId, jobId}
+  DB-->>O: live clip event: the copy shows right after its original on the same Review page
+```
+
+A second call answers 200 with the job already named, so a double tap makes one copy; a failed, canceled or deleted
+job, or a declined copy, frees the reservation. A link job whose kept video is gone fetches the link again; a video file
+answers 409 "This video is gone from Clip Factory. Make new clips for this campaign." The agent's side is in
+[AGENT.md](AGENT.md#a-campaign-copy). The copy waits behind `CR_REMAKE` (Terraform `cr_remake_enabled`, default
+`false`): until then the route answers 503 "Coming soon." and `canRemake` is false, so no "could earn" line shows.
+
+**All your money** (`GET /v1/money/everywhere`, `money/everywhere.py`, pure). One period for the whole card, the 30
+days up to the Monthly card's `through` (today when no platform money is stored). It reads `MONEYSTATE#`,
+`REVENUE#{platform}#` (YouTube, and Facebook once `moneyVerified`), the Accounts, `config/monetization.json` and, while
+`CONTENT_REWARDS=on`, `CRCONN` and `CRMONEY`; it never calls a platform or Content Rewards. Platform rows sum their
+reported days in the period; Content Rewards sums `CRMONEY.paidByDay` over the same days (CR's `usd` written `USD`,
+cents to micros × 10,000: units, never a conversion). The total adds only reported rows, one per currency, biggest
+first. TikTok, Instagram and X are `not_available` with the "Look in …" line made from the config's `paidWhere`.
+`paidByDay` is filled by the money read of `cf-prod-stats` (§38.12 step 4) from the paid rows' `paid_at` day; for an
+owner whose first read finished before §39, a one-time `dayScan` (at most 8 pages a tick, only rows at or older than
+the watermark) fills it and never touches the paid total.
+
+**Data** (additive only, [CONTRACTS.md §39.3](CONTRACTS.md#393-does-this-clip-fit-the-campaign-the-fit-check)):
+
+| Item or place | New attributes |
+|---|---|
+| `JOB#{jobId}` | `remakeOf` (public), `remake` (internal), `sourceLanguage` (public, from Transcribe), `source.channelKeys` (public) |
+| `CLIP#{clipId}` | `remakes` (public, campaign → {jobId, at}), `remakeOf` (public) |
+| `CRMONEY` | `paidByDay`, `paidByDayDone`, `dayScan` (internal) |
+| api env | `CR_REMAKE` from `cr_remake_enabled` (default `false`), an in-place change |
+
+No sort key, index, table, bucket, secret or Lambda is added, and nothing that holds the owner's data is replaced.
 
 ## Failure handling
 
@@ -1271,6 +1377,12 @@ CR or any platform.
 | The public campaign JSON fails | The page's Open Graph line fills the name and pay; when both fail the add answers `platform_down`. A 404 means the campaign ended. |
 | The CR campaign can't be matched for sure (two siblings with the same name) | `idMatch: ambiguous`: never sent automatically, the owner sends by hand with the reminder. |
 | The desktop door can't open (every port of 47811–47815 busy) | The `no_port` card: "Clip Factory couldn't start the sign-in. Quit Clip Factory, open it again, then tap Connect Content Rewards." |
+| The fit, its captions route or All your money answer 404 (an api before §39) or 503 (switched off) | The web hides the fit block, the "could earn" line and All your money; the old campaign strip stays and the normal way is untouched. |
+| A campaign clip has a `no`, `remake` or `todo` fit item at Confirm, Try again or Post now | 409 `conflict` with the first such item's words (a wait item: "Not yet for FaZe Clips: …"); nothing is posted, and the card shows the same words with Upload off. |
+| A campaign post waits for a platform to come back | It is not released by itself; it waits for Post now, which checks the fit again. |
+| The copy is tapped twice, or two copies start at once | The conditional reservation on the original clip makes one job; the other call answers 200 with it. A failed, canceled or deleted copy job (or a declined copy) frees it for a new try; a job that can't be made removes its reservation at once. |
+| The original's video is gone (past 14 days) | A link job fetches the link again; a video file answers 409 "This video is gone from Clip Factory. Make new clips for this campaign." |
+| Content Rewards' paid money by day isn't read yet (an owner from before §39) | Its row of All your money says "Checking Content Rewards…" until the day scan ends; the paid total and the campaign money never change. |
 
 ## Cost notes
 

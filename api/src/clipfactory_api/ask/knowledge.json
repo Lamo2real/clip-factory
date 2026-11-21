@@ -1,5 +1,5 @@
 {
- "version": "6870c5107965",
+ "version": "bbc41e037695",
  "parts": [
   {
    "id": "app-map",
@@ -651,19 +651,19 @@
    "id": "architecture-services-and-why-each-one",
    "title": "ARCHITECTURE: Services and why each one",
    "line": "Only managed, pay-per-use services. Nothing runs while the app is idle except storage. Why each choice was made is in",
-   "chars": 15677
+   "chars": 15875
   },
   {
    "id": "architecture-data-flows",
    "title": "ARCHITECTURE: Data flows",
    "line": "1. Sign in and token lifetimes",
-   "chars": 62201
+   "chars": 70644
   },
   {
    "id": "architecture-failure-handling",
    "title": "ARCHITECTURE: Failure handling",
    "line": "What can fail | What happens |",
-   "chars": 13699
+   "chars": 15037
   },
   {
    "id": "architecture-cost-notes",
@@ -1107,7 +1107,7 @@
    "id": "agent-campaign-clips",
    "title": "AGENT: Campaign clips",
    "line": "A job made for a Content Rewards campaign carries the campaign's rules",
-   "chars": 4677
+   "chars": 7829
   },
   {
    "id": "agent-limits-and-guarantees",

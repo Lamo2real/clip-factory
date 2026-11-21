@@ -69,3 +69,9 @@
 | The public campaign JSON fails | The page's Open Graph line fills the name and pay; when both fail the add answers `platform_down`. A 404 means the campaign ended. |
 | The CR campaign can't be matched for sure (two siblings with the same name) | `idMatch: ambiguous`: never sent automatically, the owner sends by hand with the reminder. |
 | The desktop door can't open (every port of 47811–47815 busy) | The `no_port` card: "Clip Factory couldn't start the sign-in. Quit Clip Factory, open it again, then tap Connect Content Rewards." |
+| The fit, its captions route or All your money answer 404 (an api before §39) or 503 (switched off) | The web hides the fit block, the "could earn" line and All your money; the old campaign strip stays and the normal way is untouched. |
+| A campaign clip has a `no`, `remake` or `todo` fit item at Confirm, Try again or Post now | 409 `conflict` with the first such item's words (a wait item: "Not yet for FaZe Clips: …"); nothing is posted, and the card shows the same words with Upload off. |
+| A campaign post waits for a platform to come back | It is not released by itself; it waits for Post now, which checks the fit again. |
+| The copy is tapped twice, or two copies start at once | The conditional reservation on the original clip makes one job; the other call answers 200 with it. A failed, canceled or deleted copy job (or a declined copy) frees it for a new try; a job that can't be made removes its reservation at once. |
+| The original's video is gone (past 14 days) | A link job fetches the link again; a video file answers 409 "This video is gone from Clip Factory. Make new clips for this campaign." |
+| Content Rewards' paid money by day isn't read yet (an owner from before §39) | Its row of All your money says "Checking Content Rewards…" until the day scan ends; the paid total and the campaign money never change. |

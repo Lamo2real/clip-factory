@@ -1014,7 +1014,8 @@ each once (`NOTIFIED#cr#{key}`).
 
 **Money.** Only CR's own numbers (§25 extended): `get_my_balance` and `list_my_payouts`, in USD cents, formatted
 only. "Paid" may stand only next to CR's paid payouts. A campaign's rate × views is a guess and is never shown or
-added anywhere; CR money is never added into the Money dashboard's totals.
+added anywhere; CR money is never added into the MRR cards. Its paid payouts of the last 30 days are added in one
+place only: the total of All your money ([flow 20](#20-content-rewards-the-fit-check-the-copy-and-all-your-money-contracts-39-adr-63)).
 
 **Data** (additive only, [CONTRACTS.md §38.11](CONTRACTS.md#3811-data-additive-only-new-sort-keys-new-attributes-a-new-s3-prefix-new-runtime-secrets)):
 
@@ -1032,3 +1033,107 @@ added anywhere; CR money is never added into the Money dashboard's totals.
 
 No table, index, Cognito pool, bucket or secret is replaced; removing a campaign or disconnecting deletes nothing on
 CR or any platform.
+
+### 20. Content Rewards: the fit check, the copy and all your money (CONTRACTS §39, ADR-63)
+
+The owner's follow-up the same day: Connect in time order, a pleasant choice between campaign clips and normal clips,
+all his money in one place, and knowing before an upload whether a clip can earn on a campaign
+([CONTRACTS.md §39](CONTRACTS.md#39-content-rewards-the-two-ways-all-your-money-and-does-this-clip-fit-owner-request-2026-11-21),
+[ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-in-the-api-a-new-copy-instead-of-turning-a-normal-clip-into-a-campaign-clip-one-30-day-total-that-includes-content-rewards)).
+No new Lambda, table, index, bucket or secret: three routes under `/v1/contentrewards`, one under `/v1/money`, new
+attributes and one api setting. It is part of **13** in the diagram.
+
+**The two ways** live in the web. Home at `/` is frozen (no campaign field on the normal form, 5 taps to an upload,
+held by click-count tests); the campaign way is Home at `/?campaign={uuid}`, reached only from a campaign (the
+"Your campaigns" row chip, the card, a campaign video, the fit). The API helps with three public fields made in
+`contentrewards/campaigns.py`: `CampaignSummary.nextStepKind` (the row chip says "Make campaign clips" when it is
+`make_clips`), and `sourceRuleText` and `languageRuleText` (the rule lines under the link box). Every link to a setup
+page carries the `?back=` of the page it came from (`gates.next_step`'s Connect button and the `not_connected` stop's
+`fixHref` use `?back=/campaigns/{uuid}`); the web accepts only six exact same-origin shapes.
+
+**The fit check** (`contentrewards/fit.py`). One pure function, computed every time it is asked from stored items only
+(never Content Rewards, the public campaign JSON or the network), so it can never go stale and Confirm can trust it:
+
+```mermaid
+flowchart LR
+  items[("stored items: CLIP#, JOB#, CAMPAIGN#, CRCONN, POST#, CRSUB#<br/>+ gates.stops and gates.upload_places")] --> fit["contentrewards/fit.py<br/>fit(clip, job, campaign, ...) → CampaignFit"]
+  fit --> get["GET /v1/contentrewards/fit<br/>Review card, clip page (no-store)"]
+  fit --> caps["POST /v1/contentrewards/fit/captions<br/>campaign_caption per platform"]
+  fit --> gate["Confirm, Try again, Post now<br/>409 on a no, remake or todo item"]
+  fit --> copy["POST /v1/contentrewards/campaigns/{id}/remake<br/>409 unless canRemake"]
+  get --> web["web lib/crFit.ts<br/>re-checks tags, #Ad, the paid switch and the places while he types"]
+```
+
+A campaign clip (`clip.campaignId ?? job.campaignId`) is checked against its own campaign only; a normal clip against
+every campaign he is in (`in` or `manual`), newest first, at most 10, and `ClipFit.suggestion` is the first one a copy
+could fix with a `source` item that passed. Each rule is one item (`campaign`, `soft`, `deadline`, `length`,
+`places`, `place_link`, `tags`, `ad`, `paid_switch`, `logo`, `on_screen`, `source`, `language`, `banned`, `spoken`,
+`uncertain`, `brief_only`, `posted`, `one_campaign`, `send`) with a state (`ok`, `fix`, `remake`, `todo`, `no`,
+`check`, `note`) and the server's own words. The verdict, in this order: any `no` → `doesnt_fit`; a wait item (a held,
+paused or re-read campaign) → `wait`; a `remake`, `todo` or paid-switch `fix` → `fixable`; a `check` → `cant_tell`;
+else `fits`. Tag and #Ad fixes never change it, since the publisher puts them back at upload. Only exact facts can say
+no: a channel that doesn't match by name, an unknown language or a rule the reader couldn't pin down is "I couldn't
+check", never a pass and never a block. The source and language checks read `job.source.channelKeys` and
+`job.sourceLanguage`, which the agent writes; without them they say "I couldn't check". The web refetches the fit
+(debounced 1 s) on a `contentrewards` event, a `clip` event of the clip or its copy, a `post` event of the clip and a
+`setup` event; there is no new live type.
+
+**The gate on posting.** For a clip with a campaign (and `CONTENT_REWARDS=on`), Confirm runs the fit with the merged
+captions, the chosen places and the TikTok choices; any `no`, `remake` or `todo` item answers 409 `conflict` "This
+clip can't earn on FaZe Clips: {its words}" (a wait item: "Not yet for FaZe Clips: {its words}"), and `_try_again`
+(Try again and Post now) does the same. A clip without a campaign never calls the fit and posts byte for byte as
+before. `release.release_waiting` (§33.6) no longer restarts a waiting campaign post when its account comes back: it
+waits for Post now, which goes through the fit, so a campaign post never goes up days later after the campaign ended
+or was held.
+
+**The copy (remake).** A normal clip that could earn is never turned into a campaign clip in place (it has no logo and
+no "Paid partnership" on the video); a new one-clip campaign job is made from the same moment:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant O as Owner (Review)
+  participant A as cf-prod-api
+  participant DB as DynamoDB
+  participant S3 as S3 cf-prod-media
+  participant JF as cf-prod-job-flow
+  participant AG as Agent
+  O->>A: POST /v1/contentrewards/campaigns/{id}/remake {clipId, macFetch?, campaignAnyway?}
+  A->>DB: fit.for_clip: canRemake, and every soft stop accepted
+  A->>DB: reserve first: SET remakes.{campaignId} = {jobId, at} on the original CLIP# (conditional)
+  A->>S3: HEAD the original's kept video (jobs/{jobId}/source/video.mp4, else the Mac upload)
+  A->>DB: new JOB# like POST /v1/jobs (start_job): source, notes, one clip, campaignId, rules snapshot, logo copy, remakeOf, internal remake
+  A-)JF: async invoke, alias live
+  A-->>O: 202 {job} ("Making a FaZe Clips copy… It shows here in about 3 minutes.")
+  JF->>AG: process_job: the one moment of job.remake, no analyze, watch or select
+  AG->>DB: one CLIP# with campaignId and remakeOf {clipId, jobId}
+  DB-->>O: live clip event: the copy shows right after its original on the same Review page
+```
+
+A second call answers 200 with the job already named, so a double tap makes one copy; a failed, canceled or deleted
+job, or a declined copy, frees the reservation. A link job whose kept video is gone fetches the link again; a video file
+answers 409 "This video is gone from Clip Factory. Make new clips for this campaign." The agent's side is in
+[AGENT.md](AGENT.md#a-campaign-copy). The copy waits behind `CR_REMAKE` (Terraform `cr_remake_enabled`, default
+`false`): until then the route answers 503 "Coming soon." and `canRemake` is false, so no "could earn" line shows.
+
+**All your money** (`GET /v1/money/everywhere`, `money/everywhere.py`, pure). One period for the whole card, the 30
+days up to the Monthly card's `through` (today when no platform money is stored). It reads `MONEYSTATE#`,
+`REVENUE#{platform}#` (YouTube, and Facebook once `moneyVerified`), the Accounts, `config/monetization.json` and, while
+`CONTENT_REWARDS=on`, `CRCONN` and `CRMONEY`; it never calls a platform or Content Rewards. Platform rows sum their
+reported days in the period; Content Rewards sums `CRMONEY.paidByDay` over the same days (CR's `usd` written `USD`,
+cents to micros × 10,000: units, never a conversion). The total adds only reported rows, one per currency, biggest
+first. TikTok, Instagram and X are `not_available` with the "Look in …" line made from the config's `paidWhere`.
+`paidByDay` is filled by the money read of `cf-prod-stats` (§38.12 step 4) from the paid rows' `paid_at` day; for an
+owner whose first read finished before §39, a one-time `dayScan` (at most 8 pages a tick, only rows at or older than
+the watermark) fills it and never touches the paid total.
+
+**Data** (additive only, [CONTRACTS.md §39.3](CONTRACTS.md#393-does-this-clip-fit-the-campaign-the-fit-check)):
+
+| Item or place | New attributes |
+|---|---|
+| `JOB#{jobId}` | `remakeOf` (public), `remake` (internal), `sourceLanguage` (public, from Transcribe), `source.channelKeys` (public) |
+| `CLIP#{clipId}` | `remakes` (public, campaign → {jobId, at}), `remakeOf` (public) |
+| `CRMONEY` | `paidByDay`, `paidByDayDone`, `dayScan` (internal) |
+| api env | `CR_REMAKE` from `cr_remake_enabled` (default `false`), an in-place change |
+
+No sort key, index, table, bucket, secret or Lambda is added, and nothing that holds the owner's data is replaced.
