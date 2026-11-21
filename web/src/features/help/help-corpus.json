@@ -1,5 +1,5 @@
 {
-  "version": "2ee1324e6637",
+  "version": "fcb62aff818c",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -1068,7 +1068,7 @@
         "how do i get paid",
         "where is my money"
       ],
-      "answer": "Each app pays you itself, so you add your bank account or PayPal inside each app. YouTube: **AdSense for YouTube › Payments**. Facebook and Instagram: Meta's payout settings. TikTok: your TikTok **Balance**. X: **Monetization**, through Stripe. Clip Factory never needs your bank details, and never asks for them.",
+      "answer": "Each app pays you itself, so you add your bank account or PayPal inside each app. YouTube: **AdSense for YouTube › Payments**. Facebook and Instagram: Meta's payout settings. TikTok: your TikTok **Balance**. X: **Creator Studio**, through Stripe. Clip Factory never needs your bank details, and never asks for them.",
       "steps": [
         "Tap **Settings**, then **Posting**, then **Money**.",
         "Scroll to **Getting your money out**.",
@@ -1140,7 +1140,7 @@
         "facebook money coming soon",
         "look in"
       ],
-      "answer": "TikTok, Instagram and X don't tell apps what you earn. So Clip Factory never guesses and never shows $0: it says **Not available from TikTok** and where to look. TikTok: **Profile**, then **Balance**. Instagram: **Professional dashboard**, then **Payouts**. X: **Monetization**. Facebook says **Coming soon** for now.",
+      "answer": "TikTok, Instagram and X don't tell apps what you earn. So Clip Factory never guesses and never shows $0: it says **Not available from TikTok** and where to look. TikTok: **Profile**, then **Balance**. Instagram: **Professional dashboard**, then **Payouts**. X: **Creator Studio**. Facebook says **Coming soon** for now.",
       "steps": [
         "Tap **Money** in the menu.",
         "Find the place in **All your money**.",
@@ -3586,6 +3586,287 @@
           "highlight": [
             "cr-money"
           ]
+        }
+      ]
+    },
+    {
+      "id": "getpaid-setup",
+      "kind": "guide",
+      "route": "/settings/posting/money",
+      "where": "Settings › Posting › Get paid",
+      "title": "How do I set up getting paid?",
+      "keywords": [
+        "set up getting paid",
+        "getting paid",
+        "get paid",
+        "set up payouts",
+        "payout setup",
+        "payment setup",
+        "get paid for each platform",
+        "get paid steps",
+        "add my payment details",
+        "payout details",
+        "get paid everywhere",
+        "how do i get paid",
+        "can i get paid",
+        "connect my bank",
+        "connect my card"
+      ],
+      "answer": "Open **Get paid**. It has one card for each place that can pay you: YouTube, TikTok, Instagram, Facebook, X and Content Rewards. Tap a card and do its steps in order. Each place pays you on its own pages, so Clip Factory never asks for your bank, card or tax numbers. Each card says if money can reach you, and how Clip Factory knows.",
+      "steps": [
+        "Tap **Settings**, then **Posting**, then **Get paid**.",
+        "Tap a place's card.",
+        "Tap the red button. It opens the place's own page.",
+        "Do the step there. Come back and tap **I did this**. Some steps tick themselves.",
+        "Some steps wait for the place, like a letter or your first money. The step says when.",
+        "On **Money**, the **Get paid** card shows every place too."
+      ],
+      "actions": [
+        {
+          "id": "getpaid-setup:money",
+          "label": "Open Money settings",
+          "to": "/settings/posting/money"
+        }
+      ]
+    },
+    {
+      "id": "getpaid-status",
+      "kind": "guide",
+      "route": "/settings/posting/money",
+      "where": "Settings › Posting › Get paid",
+      "title": "What does Can get paid mean?",
+      "keywords": [
+        "can get paid",
+        "what does can get paid mean",
+        "get paid status",
+        "payout status",
+        "status check",
+        "can money reach me",
+        "you said its done",
+        "not set up yet",
+        "not set up",
+        "clip factory cant check",
+        "payment on hold",
+        "money on hold",
+        "on hold",
+        "not allowed yet",
+        "not started",
+        "checking",
+        "disconnected",
+        "not connected",
+        "is it live",
+        "is my payout live"
+      ],
+      "answer": "It means money can reach you from that place. **Can get paid ✓ (YouTube says)**: the place itself told Clip Factory. **Can get paid (you said it's done)**: you ticked every step, but that place doesn't tell apps. What a place says always beats your ticks. With no sign and no tick, Clip Factory never says a place is ready.",
+      "steps": [
+        "**Not set up yet**: you can earn there, but a payout step isn't done. Tap the red button.",
+        "**Not set up (YouTube says)**, in red: the place says something is missing. Tap the red button.",
+        "**Payment on hold**: the place is holding your money. Tap the red button to see why.",
+        "**Not allowed yet**: you don't reach the place's rules yet. Clip Factory tells you when you do.",
+        "**Clip Factory can't check**: it can't see that place. You can still do its steps.",
+        "**Checking…**: the first check can take until tomorrow. **Not started**: do the steps."
+      ],
+      "actions": [
+        {
+          "id": "getpaid-status:money",
+          "label": "Open Money settings",
+          "to": "/settings/posting/money"
+        }
+      ]
+    },
+    {
+      "id": "getpaid-sent",
+      "kind": "guide",
+      "route": "/money",
+      "where": "Money › All your money",
+      "title": "How much was sent to my bank?",
+      "keywords": [
+        "sent to my bank",
+        "sent to your bank",
+        "sent to your bank so far",
+        "how much was sent",
+        "money sent",
+        "reached my bank",
+        "in my bank",
+        "bank total",
+        "total sent",
+        "paid out",
+        "google sent",
+        "whop sent",
+        "what arrived",
+        "exact number",
+        "all my bank accounts"
+      ],
+      "answer": "Google and Whop tell Clip Factory what they sent. On **Money**, **All your money** shows **Sent to your bank, so far**: one total for each money type, never adding dollars and kronor together. TikTok, Instagram, Facebook and X don't tell apps, so they say **Not available**. Clip Factory can't see your bank. Look in your bank's app to see what arrived.",
+      "steps": [
+        "Tap **Money**. Find **Sent to your bank, so far** under **All your money**.",
+        "Each line says who sent it: **Sent to your bank by Google** or **by Whop**.",
+        "Google's money reaches your bank up to 7 workdays after Google sends it. Whop says when.",
+        "To see each payment, open **Get paid** and tap **YouTube** or **Content Rewards**.",
+        "Whop counts all your Whop money, not only Content Rewards.",
+        "YouTube needs **Allow payment reading** first. Whop needs **Connect Whop**."
+      ],
+      "actions": [
+        {
+          "id": "getpaid-sent:money",
+          "label": "Open Money",
+          "to": "/money"
+        }
+      ]
+    },
+    {
+      "id": "getpaid-youtube",
+      "kind": "guide",
+      "route": "/settings/posting/money",
+      "where": "Settings › Posting › Get paid › YouTube",
+      "title": "Get paid by YouTube",
+      "keywords": [
+        "get paid by youtube",
+        "get paid on youtube",
+        "youtube payout",
+        "youtube payouts",
+        "youtube payments",
+        "adsense for youtube",
+        "adsense",
+        "partner program",
+        "youtube partner program",
+        "youtube bank",
+        "us tax info",
+        "youtube tax",
+        "pin letter",
+        "youtube pin",
+        "id check",
+        "test payment",
+        "allow payment reading",
+        "payment reading",
+        "kr 700"
+      ],
+      "answer": "Join the YouTube Partner Program in YouTube Studio. That makes your **AdSense for YouTube**, Google's page that pays you. Then add your US tax info and your bank, confirm a tiny test payment, check your ID and type the PIN from a letter. In Sweden YouTube pays in kronor straight to your bank, between the 21st and 26th, once you have kr 700.",
+      "steps": [
+        "Tap **Settings**, **Posting**, **Get paid**, then **YouTube**.",
+        "Step 1: join the Partner Program. It ticks itself when YouTube says you're in.",
+        "Optional: a grown-up taps **Allow payment reading** on the Mac. Then Clip Factory sees holds and payments.",
+        "Steps 2 to 6 open **AdSense for YouTube**. Do each one when YouTube lets you.",
+        "Tap **I did this** on each. Google's first payment ticks them for you."
+      ],
+      "actions": [
+        {
+          "id": "getpaid-youtube:money",
+          "label": "Open Money settings",
+          "to": "/settings/posting/money"
+        }
+      ]
+    },
+    {
+      "id": "getpaid-tiktok-sweden",
+      "kind": "guide",
+      "route": "/settings/posting/money",
+      "where": "Settings › Posting › Get paid › TikTok",
+      "title": "Can I earn on TikTok in Sweden?",
+      "keywords": [
+        "tiktok in sweden",
+        "earn on tiktok",
+        "tiktok sweden",
+        "sweden",
+        "creator rewards",
+        "creator rewards program",
+        "tiktok creator rewards",
+        "tiktok gifts",
+        "video gifts",
+        "live gifts",
+        "payoneer",
+        "tiktok studio",
+        "can i earn on tiktok"
+      ],
+      "answer": "Not from Creator Rewards: TikTok lists only the US, UK, Germany, Japan, South Korea, France, Mexico and Brazil. **Video Gifts** and **LIVE Gifts** may work in Sweden, so look in **TikTok Studio**. Gifts need you to be 18 or older with a Personal account. TikTok pays to PayPal, your bank or Payoneer. TikTok doesn't tell apps what you earn.",
+      "steps": [
+        "Tap **Settings**, **Posting**, **Get paid**, then **TikTok**.",
+        "Do these in the TikTok app on your phone.",
+        "Step 1: tap **Profile**, the menu ☰, **TikTok Studio**, **Video Gifts**, then **Turn on Gifts**.",
+        "Step 2: tap **Profile**, ☰, **Balance**, then **LIVE rewards**. Pick PayPal, your bank or Payoneer.",
+        "Tap **I did this** after each step. TikTok doesn't tell Clip Factory."
+      ],
+      "actions": [
+        {
+          "id": "getpaid-tiktok-sweden:money",
+          "label": "Open Money settings",
+          "to": "/settings/posting/money"
+        }
+      ]
+    },
+    {
+      "id": "getpaid-x-clips",
+      "kind": "guide",
+      "route": "/settings/posting/money",
+      "where": "Settings › Posting › Get paid › X",
+      "title": "Why won't X pay for my clips?",
+      "keywords": [
+        "x pay",
+        "x pay for my clips",
+        "why wont x pay",
+        "earn on x",
+        "x payout",
+        "original content rewards",
+        "creator revenue sharing",
+        "revenue sharing",
+        "x premium",
+        "premium",
+        "verified followers",
+        "creator studio",
+        "x stripe",
+        "stripe",
+        "automated",
+        "reuploaded clips"
+      ],
+      "answer": "X's Original Content Rewards leaves out posts made or posted by automated means, and reuploaded or barely changed clips. So your Clip Factory clips probably won't earn on X. It also needs a paid plan (not Basic), 500 verified followers and 500,000 views from verified people in 90 days. Creator Revenue Sharing ended in September 2026.",
+      "steps": [
+        "Tap **Settings**, **Posting**, **Get paid**, then **X**.",
+        "Read the warning at the top of the page.",
+        "Only buy **Premium** if you also post your own videos.",
+        "Apply in **Creator Studio**, under **Original Content Rewards**.",
+        "X pays through Stripe every two weeks once you have $30."
+      ],
+      "actions": [
+        {
+          "id": "getpaid-x-clips:money",
+          "label": "Open Money settings",
+          "to": "/settings/posting/money"
+        }
+      ]
+    },
+    {
+      "id": "getpaid-whop",
+      "kind": "guide",
+      "route": "/settings/posting/money",
+      "where": "Settings › Posting › Get paid › Content Rewards",
+      "title": "See my Whop payouts",
+      "keywords": [
+        "whop payouts",
+        "see my whop payouts",
+        "connect whop",
+        "whop key",
+        "whop payout",
+        "whop sent",
+        "sent to your bank by whop",
+        "stop reading whop",
+        "whop withdrawals",
+        "content rewards payouts",
+        "see your whop payouts here"
+      ],
+      "answer": "The Content Rewards page in **Get paid** has the card **See your Whop payouts here**. Make your own Whop key once on Whop's developer page, paste it in **Whop key** and tap **Save key**, then **Connect Whop**. Clip Factory only reads what Whop sent. It never moves money. Until this is switched on, the card says **Coming soon**.",
+      "steps": [
+        "Tap **Settings**, **Posting**, **Get paid**, then **Content Rewards**.",
+        "Find **See your Whop payouts here**.",
+        "Tap **Open Whop's developer page**. Follow the card: **Create app**, then copy the **Client ID**.",
+        "Paste it in **Whop key**. Tap **Save key**.",
+        "Tap **Connect Whop** and allow it on Whop.",
+        "**Sent to your bank by Whop** counts all your Whop money, not only Content Rewards."
+      ],
+      "actions": [
+        {
+          "id": "getpaid-whop:money",
+          "label": "Open Money settings",
+          "to": "/settings/posting/money"
         }
       ]
     },

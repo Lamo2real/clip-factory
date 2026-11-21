@@ -190,3 +190,21 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
 - AC10: Additive only: new attributes on the job, clip and money items and one api setting (`CR_REMAKE`, from
   `cr_remake_enabled`; it shipped off and is on since PR #93); no new table, index, bucket, secret or Lambda, and
   nothing that holds the owner's data is replaced.
+
+### NFR-20 Get paid is read-only, additive and switched on piece by piece
+([CONTRACTS.md §40.6–§40.7](CONTRACTS.md#406-new-permissions-and-connections),
+[SECURITY.md](SECURITY.md#get-paid-contracts-40), [ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner))
+- AC1: Clip Factory never moves money. Its only permissions are read-only: AdSense's "View your AdSense data" and
+  Whop's balance, payouts, payout methods and ID-check reads.
+- AC2: "Allow payment reading" is its own connection with its own token, because the AdSense Google account can be
+  another one; it never changes the YouTube connection, and stopping it never calls Google's revoke (that would also end
+  YouTube's connection).
+- AC3: The new tokens live only in Secrets Manager under `cf-prod/platforms/*`, made at runtime (never in Terraform);
+  no answer carries a token, a raw platform answer, a trace code or a full AdSense id.
+- AC4: Every status and total is worked out on the server from stored items, by one pure function each; a reading
+  counts only when it is fresh (connected, first read done, checked in the last 48 hours). The web only formats.
+- AC5: Additive only: new sort keys (`GETPAID`, `PAYCONN#`, `PAYSTATE#`, `PAYOUT#`), new attributes, two stream filters
+  changed in place and one api setting; no new Lambda, table, index, bucket or role, IAM unchanged, nothing that holds
+  his connections or saved data replaced, and nothing deletes a payout record.
+- AC6: The Whop part ships switched off (`whop_connect_enabled = false`, the card says "Coming soon") until every part
+  has merged; one switch PR turns it on.

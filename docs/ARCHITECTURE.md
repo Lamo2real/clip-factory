@@ -105,17 +105,17 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 | AWS Lambda | `cf-prod-stats` | The numbers poller ([flow 13](#13-clip-numbers-the-poller-and-refresh-numbers)): every tick it reads the posts that are due from the sparse `gsi2`, reserves each platform's budget, reads the numbers in batches and writes them to the posts and `STAT#` snapshots. The Refresh button runs the same code at once. After the platform poll, the same tick checks Content Rewards when it is switched on (membership, reviews, views, proof reminders and money, [flow 19](#19-content-rewards-campaigns-contracts-38-adr-62)); `{"action": "contentrewards"}` runs that for one owner. Reads `cf-prod/platforms/*`, writes only a refreshed token (`cf-prod/platforms/*/token-*`). See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
 | AWS Lambda | `cf-prod-learn` | The weekly best ([flow 14](#14-best-of-the-week)): marks the starred clips' vectors `best`, asks Claude Fable 5.1 (with the skills block) for one "Best of week" learning. See [ADR-31](DECISIONS.md#adr-31-the-weekly-best-is-an-explicit-owner-signal). |
 | AWS Lambda | `cf-prod-campaigns` | Content Rewards ([flow 19](#19-content-rewards-campaigns-contracts-38-adr-62), [CONTRACTS.md §38.10](CONTRACTS.md#3810-reading-a-campaign)): reads a campaign's rules from the brand's brief with Claude (one Bedrock Converse call per read, checked field by field in code), fetches the campaign logo from a Google Drive or Dropbox link and copies the brand's picture into the media bucket (`campaigns/*`). Started only by `cf-prod-api` and `cf-prod-stats` (async). It reads untrusted brand text and outside links, so it has **no Secrets Manager access at all** and never calls Content Rewards; the brief is already on the `CAMPAIGN#` item. See [ADR-62](DECISIONS.md#adr-62-content-rewards-the-official-sign-in-through-the-desktop-apps-loopback-door-sending-from-the-cloud-a-reminder-when-it-cant). |
-| AWS Lambda | `cf-prod-money` | Real earnings ([CONTRACTS.md §25](CONTRACTS.md#25-real-earnings-paid-programme-progress-and-platform-reported-money-owner-request-2026-11-18)): once a day reads each connected platform's account numbers and the money the platform itself reports (YouTube Analytics `estimatedRevenue` with the monetary scope; Facebook only after its live check), through the shared token manager and rate budgets, and writes `ACCTSTAT#`, `REVENUE#` and `MONEYSTATE#` items. No DeleteItem. See [ADR-47](DECISIONS.md#adr-47-only-platform-reported-money-the-estimates-are-removed). |
+| AWS Lambda | `cf-prod-money` | Real earnings ([CONTRACTS.md §25](CONTRACTS.md#25-real-earnings-paid-programme-progress-and-platform-reported-money-owner-request-2026-11-18)): once a day reads each connected platform's account numbers and the money the platform itself reports (YouTube Analytics `estimatedRevenue` with the monetary scope; Facebook only after its live check), through the shared token manager and rate budgets, and writes `ACCTSTAT#`, `REVENUE#` and `MONEYSTATE#` items. After the platforms it reads the optional payout connections of Get paid (AdSense `payments`, Whop `payouts`) into `PAYSTATE#` and `PAYOUT#` items ([flow 22](#22-get-paid-payout-steps-honest-statuses-and-money-sent-to-the-bank-contracts-40-adr-64)). No DeleteItem. See [ADR-47](DECISIONS.md#adr-47-only-platform-reported-money-the-estimates-are-removed) and [ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner). |
 | Amazon EventBridge | rule `cf-prod-stats`, `rate(15 minutes)` | The only schedule in the system: one tick for the stats poller, its rate taken from the smallest interval in `config/platforms.json`. A few thousand invocations a month. See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
 | AWS Lambda, durable function | `cf-prod-job-flow` (alias `live`) | Starts the agent for a job and waits (no compute) for its callback; fails the job if heartbeats stop. Replaces the watchdog. See [ADR-22](DECISIONS.md#adr-22-lambda-durable-functions-for-the-job-and-clip-workflows). |
 | AWS Lambda, durable function | `cf-prod-clip-flow` (alias `live`) | After Keep: makes the posts, publishes each one (start, durable waits and checks, finish; tokens from Secrets Manager), sends each campaign post to Content Rewards right after it is live (`cr-send-{platform}`, retried every minute up to 25 minutes, never failing the flow), waits 48 hours (no compute), reads metrics, writes a learning, updates the clip's vector. Reads `cf-prod/platforms/*`, writes only a refreshed token (`cf-prod/platforms/*/token-*`). Replaces the publish queue, the publisher, the scheduler and perf-check. |
 | AWS Lambda | `cf-prod-ws-authorizer` | Checks the Cognito access token on `$connect` (standard library RS256 check, no extra packages). |
 | AWS Lambda | `cf-prod-ws` | `$connect` stores the connection, `$disconnect` removes it, `$default` answers `ping`. |
 | AWS Lambda | `cf-prod-broadcast` | Reads the DynamoDB stream and sends each change to the owner's open connections. |
-| AWS Lambda | `cf-prod-hooks` | Answers webhook verification challenges, stores webhook events, and finishes Connect: checks the signed state, exchanges the code, stores the token in Secrets Manager, redirects to the setup page with a result code ([flow 16](#16-set-up-posting-connect-and-real-posting)). |
+| AWS Lambda | `cf-prod-hooks` | Answers webhook verification challenges, stores webhook events, and finishes Connect: checks the signed state, exchanges the code, stores the token in Secrets Manager, redirects to the setup page with a result code ([flow 16](#16-set-up-posting-connect-and-real-posting)). Also finishes Get paid's two read-only grants, YouTube `payments` and Connect Whop ([flow 22](#22-get-paid-payout-steps-honest-statuses-and-money-sent-to-the-bank-contracts-40-adr-64)). |
 | Amazon DynamoDB | `cf-prod-data` + stream | Single table for all entities including WebSocket connections, webhook events, stats snapshots (`STAT#`, 90-day TTL), the weekly picks (`WEEK#`), the per-platform rate budgets (`RATE#`) and the Content Rewards items (`CRCONN`, `CRSTATE#`, `CAMPAIGN#`, `CRSUB#`, `CRMONEY`, `CROWNERS`); a sparse `gsi2` holds only the posts due for a stats poll. On-demand, point-in-time recovery, TTL, stream `NEW_AND_OLD_IMAGES` feeding `cf-prod-broadcast`. See [ADR-05](DECISIONS.md#adr-05-one-dynamodb-table-single-table-design). |
 | AWS Systems Manager Parameter Store | `/cf-prod/hooks/verify-token` (SecureString) | The Meta webhook verify token. Generated by Terraform as a write-only value, so it never enters the Terraform state. |
-| AWS Secrets Manager | `cf-prod/oauth/state-key` (Terraform, write-only value), `cf-prod/platforms/{platform}/{app,token,pending}` and `cf-prod/platforms/contentrewards/{app,token}` (all created at runtime) | The only place for the owner's platform app keys and account tokens, and the key that signs the Connect `state` ([flow 16](#16-set-up-posting-connect-and-real-posting), [ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager)). `cf-prod-api` writes all of them; `cf-prod-hooks` reads the app keys and writes tokens and pending choices; `cf-prod-clip-flow`, `cf-prod-stats` and `cf-prod-money` read `cf-prod/platforms/*` and write only the token secrets `cf-prod/platforms/*/token-*` (Terraform output `platform_token_secrets_arn` of the hooks module). With the push key, the badge keys, Ask's search key and the optional YouTube proxy, at most about 22 secrets in all ([ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager)). |
+| AWS Secrets Manager | `cf-prod/oauth/state-key` (Terraform, write-only value), `cf-prod/platforms/{platform}/{app,token,pending}`, `cf-prod/platforms/contentrewards/{app,token}`, `cf-prod/platforms/adsense/token` and `cf-prod/platforms/whop/{app,token}` (all created at runtime) | The only place for the owner's platform app keys and account tokens, and the key that signs the Connect `state` ([flow 16](#16-set-up-posting-connect-and-real-posting), [ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager)). `cf-prod-api` writes all of them; `cf-prod-hooks` reads the app keys and writes tokens and pending choices; `cf-prod-clip-flow`, `cf-prod-stats` and `cf-prod-money` read `cf-prod/platforms/*` and write only the token secrets `cf-prod/platforms/*/token-*` (Terraform output `platform_token_secrets_arn` of the hooks module). With the push key, the badge keys, Ask's search key and the optional YouTube proxy, at most about 22 secrets in all ([ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager)). |
 | Amazon Bedrock AgentCore Runtime | `cf_prod_clip_agent` | Runs the agent container for as long as a job needs, one isolated session per job. See [ADR-03](DECISIONS.md#adr-03-amazon-bedrock-agentcore-runtime--claude-agent-sdk-for-the-agent). |
 | Amazon Bedrock | Claude Fable 5.1 (global profile), Titan Text Embeddings V2 (in-Region) | Fable: watching the whole picture as frames and the second look at each picked moment ([ADR-40](DECISIONS.md#adr-40-watch-the-whole-video-before-picking)), moment selection, facecam detection, checklist judgement, captions, learnings. Every Fable call, through the Agent SDK or Converse, gets the owner's skills block first ([flow 15](#15-skills-every-ai-call-gets-every-skill)). Titan: 1024-number embeddings of clip text for S3 Vectors (no skills: not text generation). |
 | Amazon Bedrock | Claude Haiku 5.5 (EU profile `eu.anthropic.claude-haiku-5-5`) | Ask Clip Factory only: rewrites a found answer in friendlier words. Optional, capped at 2,000 answers per 30 days, EU Regions only. See [ADR-39](DECISIONS.md#adr-39-help-runs-in-cf-prod-api-with-claude-haiku-55-through-the-eu-profile). |
@@ -1334,6 +1334,111 @@ social accounts, run as **its own application** inside the Clip Factory shell
   picker. Disconnect never calls a platform's revoke.
 * **Posting.** `cf-prod-story-flow` checks the destination inside every platform step, including the identity inside
   the token secret, and reuses the platform publisher library unchanged.
+
+### 22. Get paid: payout steps, honest statuses and money sent to the bank (CONTRACTS §40, ADR-64)
+
+The owner asked for a step-by-step payout setup per place, "the same system" as Set up posting, a status that tells
+him money can reach him (or that it can't although he may earn), what he earned per place, and what reached his bank
+([CONTRACTS.md §40](CONTRACTS.md#40-get-paid-set-up-payouts-see-if-you-can-get-paid-and-what-reached-your-bank-owner-request-2026-11-21),
+[ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner),
+the owner's steps in [SETUP_POSTING.md](SETUP_POSTING.md#get-paid)). No new Lambda, table, index, bucket, role or
+Terraform-made secret: seven routes under `/v1/getpaid` (plus `{"grant": "payments"}` on the YouTube connect route),
+new sort keys, two stream filters changed in place and one api setting. It is part of **13** in the diagram.
+
+**What it reads.** Only two places report payout facts to an app, so only they get a connection:
+
+| Place | Signals | Sent to the bank |
+|---|---|---|
+| YouTube | `MONEYSTATE#youtube` (§25: in the Partner Program or not, and its goals); after "Allow payment reading", AdSense Management API v2 with `adsense.readonly`: the account `state` (`READY`, `NEEDS_ATTENTION`, `CLOSED`), `alerts` of type `payment-hold`, `youtube-unpaid` | every `youtube-yyyy-MM-dd` payment (Google's own text, `amountText`) |
+| Content Rewards | `CRCONN`, `CRMONEY` (§38.7); after "Connect Whop", Whop's `GET /users/me` (the ID check) and `GET /payouts/methods` (saved methods) | Whop's `GET /payouts`, `completed` = sent |
+| TikTok, Instagram, Facebook, X | the Account and the follower and Premium counts §25 already stores | not available (no API) |
+
+Everything else is the owner's ticks on `GETPAID.stepsDone` (Content Rewards' stay on `CRCONN.stepsDone`), always
+labelled "you said". Get paid is not part of Set up posting: no tick goes to `SETUP#`, and the "n of 5" ring and the
+five-row to-do list are unchanged.
+
+```mermaid
+flowchart LR
+  subgraph grants["Optional read-only grants (cf-prod-hooks)"]
+    g1["POST /v1/accounts/youtube/connect {grant: payments}<br/>→ Google, adsense.readonly only"] --> cb1["/oauth/youtube/callback<br/>getpaid.grants.save_payments_grant()"]
+    g2["PUT /v1/getpaid/whop/key, POST /v1/getpaid/whop/connect<br/>→ Whop, OAuth 2.1 + PKCE, public client"] --> cb2["/oauth/whop/callback<br/>getpaid.grants.save_whop_grant()"]
+  end
+  cb1 --> sec[("Secrets Manager<br/>cf-prod/platforms/adsense/token<br/>cf-prod/platforms/whop/{app,token}")]
+  cb2 --> sec
+  cb1 --> conn[("PAYCONN#adsense, PAYCONN#whop")]
+  cb2 --> conn
+  money["cf-prod-money (06:00 UTC daily, Check now)<br/>money run, then payouts.collect.run()"] --> sec
+  money --> state[("PAYSTATE#youtube, PAYSTATE#contentrewards<br/>PAYOUT#youtube#…, PAYOUT#contentrewards#…")]
+  state --> view["getpaid/view.py load()<br/>status.card() · sent.sent_line()"]
+  conn --> view
+  ticks[("GETPAID.stepsDone, CRCONN, CRMONEY,<br/>ACCOUNT#, MONEYSTATE#, MONEYPREFS")] --> view
+  view --> api["GET /v1/getpaid · GET /v1/getpaid/{place}<br/>GET /v1/money/everywhere (sent)"]
+  state -- "stream: PAYSTATE#, PAYOUT#, PAYCONN#, GETPAID" --> live["cf-prod-broadcast → getpaid event<br/>cf-prod-notify → hold / sent"]
+```
+
+**The status** (`getpaid/status.py`, pure: `card(place, inputs, now) -> GetPaidCard`). One status per place, the first
+that applies: on hold › not allowed yet › can get paid ✓ › not set up (from a signal) › checking › not set up yet
+(from ticks) › can get paid (you said it's done) › Clip Factory can't check › not started. A signal always beats a
+tick; "Live" is never shown. A `PAYSTATE#` is used only when **fresh**: its `PAYCONN#` is `connected`, `firstReadDone`
+is set and `lastCheckedAt` is within 48 hours; otherwise nothing (no hold, no "no hold", no account state) comes from
+it. Sent `PAYOUT#` rows still tick YouTube's five payout steps, dated, because they record real money. A connected
+reading with no first read is `checking` for 26 hours at most (or until `lastError`); then the status comes from his
+ticks and `seen` says "Clip Factory couldn't check … yet". `next` is the one next step (on the place page the only
+vermilion; never a step that costs money, `x-premium`), `HOLD_FIX` names a hold's fix, and the ring counts only the
+numbered `earn` and `payout` steps. `STEPS` holds the same ids and roles as the web's guides
+(`api/tests/fixtures/getpaid_steps.json`).
+
+**Sent to the bank** (`getpaid/sent.py`, pure). `parse_amount(text)` reads Google's formatted amount on every view:
+the currency only from a 3-letter code or €, £ or ₹ (never "kr", "$" or "¥" alone), the decimal mark from the
+number's own shape. An unread row is shown as Google wrote it and never added up. `sent_line(place, rows, conn,
+state)` builds each place's line; `sent_totals(lines)` sums per currency on the server, in the places' order, never
+across currencies and never converted. Whop's amount is its own `destination_amount` in `destination_currency` (else
+`net_amount` in `currency`), turned into micros on write (a unit change); `requested`, `in_review` and `processing`
+are "on its way", `failed`, `canceled` and `denied` "didn't go through", `reversed` "came back". These are "Sent to
+your bank by Google/Whop", never "Reached your bank", which is kept for bank-booked credits (§40.5, not built). The
+web only formats.
+
+**The reads** (`payouts/collect.py`, in `cf-prod-money`; no new schedule). After the five platforms, the daily run
+and Check now call `payouts.collect.run(deps, user_id, now)` inside its own try, so it can never stop the money run,
+and skip it with less than 20 s of the time budget left. AdSense (when connected): `accounts.list`, then per account
+(at most 2) `alerts.list?languageCode=en` and `payments.list`: at most 5 calls a run. Whop (when connected, with
+`Api-Version-Date: 2026-11-20`): `GET /users/me`, `GET /payouts/methods`, `GET /payouts` from `payoutsMark` minus 30
+days (at most 5 pages). Each source on its own: an error sets that `PAYSTATE#`'s `lastError` and keeps everything;
+429 and 5xx wait for the next run. The first read after a grant fills old payments quietly. Google's refresh token
+doesn't rotate (no lease); Whop's rotates on every use, so it refreshes under the `PAYCONN#whop` lease with a put-only
+write checked against `tokenVersionId`.
+
+**The grants.** "Allow payment reading" is its own connection, `PAYCONN#adsense`, because the AdSense Google account
+can be another one: the authorize URL of §17.4 with the AdSense permission only and no `include_granted_scopes`; the
+callback hands the code to `getpaid.grants.save_payments_grant()`, which exchanges it itself (never
+`providers.exchange()`, whose YouTube check would fail on an AdSense-only token), checks `adsense.readonly`, calls
+`GET /v2/accounts` once and only then writes the secret and `PAYCONN#adsense`. "Stop payment reading" deletes the
+secret and makes no call to Google's revoke (it would also end YouTube's connection). "Connect Whop" uses the owner's
+own Whop app (`whop-key`, a public client) behind `WHOP_CONNECT` (Terraform `whop_connect_enabled`, default off; the
+routes answer 503 "Coming soon." while off). Both callbacks redirect to the place page with a fixed `result`.
+
+**Live and notifications.** `cf-prod-broadcast`'s `TYPES` gain `GETPAID`, `PAYCONN#`, `PAYSTATE#` and `PAYOUT#`, each
+sent as `{type: "getpaid", op: "upsert", id: "getpaid", partial: true}` (no item rides along); the web's
+`lib/getPaid.ts` refetches `GET /v1/getpaid` (debounced 1 s) on `getpaid`, `setup` and `contentrewards` events and
+after a Content Rewards step tick, and on Money also `GET /v1/money/everywhere`. `cf-prod-notify` (stream filter +
+`PAYSTATE#`, MODIFY only) sends "Your YouTube money is on hold. Tap to see why.", "Whop can't send your money. Tap to
+see why." and "Money sent to your bank: …" once each, only after the first read and only while `notify.getPaid` is on.
+
+**Data** (additive only, [CONTRACTS.md §40.7](CONTRACTS.md#407-api-data-checking-live-and-notifications)):
+
+| Item | Written by |
+|---|---|
+| `GETPAID` (`stepsDone`, at most 80) | api (`PATCH /v1/getpaid/steps`) |
+| `PAYCONN#adsense`, `PAYCONN#whop` | hooks (grants), api (key, stop), money (lease, `needs_reconnect`) |
+| `PAYSTATE#youtube`, `PAYSTATE#contentrewards` | money |
+| `PAYOUT#youtube#{yyyy-mm-dd}#{last 4 of the publisher id}`, `PAYOUT#contentrewards#{yyyy-mm-dd}#{payoutId}` | money |
+| Settings `notify.getPaid` (default `true`) | api |
+| api env `WHOP_CONNECT` from `whop_connect_enabled` (default `false`), an in-place change | Terraform |
+
+Nothing deletes a `PAYOUT#` or `PAYSTATE#` item (the money role has no DeleteItem); a stopped connection keeps them.
+The prod plan stays 0 to destroy and 0 to replace; nothing that holds the owner's data or connections changes. The
+bank part ([§40.5](CONTRACTS.md#405-your-bank-waits-for-the-owners-choice)) has a defined shape but no code until the
+owner chooses a source.
 
 ## Failure handling
 
