@@ -1,0 +1,641 @@
+# Builds and publishes the Mac (.dmg) and Windows (.exe) desktop apps (desktop/, Tauri) and the desktop app's pinned
+# tools after every successful run of deploy.yml on main, and on demand. These were the last jobs of deploy.yml; they
+# are a workflow of their own so a desktop build (slow macOS and Windows runners) never holds deploy.yml's deploy-prod
+# lock: the next merge's release starts as soon as the previous one's smoke test is done. docs/DEPLOYMENT.md, Desktop
+# downloads.
+#
+# Which deploy: the deploy.yml run that triggered this one (workflow_run, only when it succeeded), or, run by hand
+#   (Actions, desktop, Run workflow, from main), the newest successful deploy of main. Everything is built from that
+#   run's commit (never github.sha, which for workflow_run is whatever main is now), with the values its infra job
+#   handed off in the artifact desktop-handoff: app_url, web_bucket, distribution_id and media_bucket, nothing more
+#   (the artifacts of this public repository can be downloaded). A deploy that skipped itself (preflight) or ran
+#   before this workflow existed has no hand-off: nothing is built, with a notice.
+# Version: every desktop build is 1.<deploy run number>.0, where the number is github.run_number of that deploy.yml
+#   run, never this workflow's own (it started again at 1, and the updater refuses a lower version). It goes up on
+#   every deploy; a re-run of either workflow, or a run by hand for the same deploy, keeps it, so a re-built leg
+#   matches the others. NSIS needs every part at or below 65535. The last build made inside deploy.yml was 1.78.0
+#   (deploy run 78), and deploy runs were past 100 when this moved, so the next build is newer.
+# One run at a time (group desktop-prod), and a run that has started is never cancelled: a cancel between a target's
+#   update bundle and its installer leaves it half published until the next build, and under a stream of merges a
+#   cancelling group could keep stopping builds before any finished, so installed apps would stop updating. A newer
+#   deploy only replaces a run that is still waiting (its commit has everything the older one had). A run for a
+#   deploy that did not succeed does nothing and gets a group of its own, so it never pushes out a waiting build.
+#
+#   resolve     - which deploy run, its commit and number, and its hand-off. Fails (red) when the hand-off is broken,
+#               so installed apps never stop updating without a sign.
+#   desktop-plan, desktop, desktop-upload, desktop-manifest - the Mac and Windows apps are rebuilt only when what they
+#               are built from changed or the file is missing, both together. The build job has no OIDC token (it
+#               runs npm and cargo) and is the only job given the updater signing key; desktop-upload copies the
+#               installer and the signed update bundle to the web bucket under downloads/, and desktop-manifest
+#               rewrites downloads/manifest.json and downloads/latest.json (what installed apps update from, §12.6).
+#               These jobs never fail the run: a broken desktop build leaves the previous installers in place.
+#   desktop-tools, desktop-tools-upload - the pinned yt-dlp, Deno and ffmpeg the desktop app runs to fetch a YouTube
+#               video itself (docs/CONTRACTS.md §35.4): desktop-tools downloads each pinned file, checks it against
+#               upstream's own sums and desktop/tools/tools.lock.json, and signs tools.json with CF_TOOLS_SIGNING_KEY
+#               (no OIDC token there); desktop-tools-upload copies the files and the signed manifest to the web bucket
+#               under downloads/tools/. Skipped when the live manifest already has this lock. Never fails the run.
+# The same variables as deploy.yml: CF_DEPLOY_ROLE_ARN (GitHub runs workflow_run on main, so the role's trust in
+#   refs/heads/main matches) and CF_REGION.
+# Secret CF_TOOLS_SIGNING_KEY: the tool manifest's ed25519 key (PEM). Not the updater key; its public half is built
+#   into the app (desktop/src-tauri/src/mac_fetch/tools.rs).
+# Optional secrets TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD: the updater signing key
+#   (desktop/README.md). Without them the installers are still built, but no update bundle, so installed apps
+#   are not updated.
+name: desktop
+run-name: ${{ github.event_name == 'workflow_run' && format('desktop apps for deploy {0}', github.event.workflow_run.run_number) || 'desktop apps for the newest deploy (by hand)' }}
+on:
+  workflow_run:
+    workflows: [deploy]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') && 'desktop-prod' || format('desktop-nothing-{0}', github.run_id) }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.CF_REGION || 'eu-north-1' }}
+
+jobs:
+  resolve:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # Reads the deploy run and downloads its hand-off; nothing else.
+      actions: read
+    outputs:
+      enabled: ${{ steps.handoff.outputs.enabled || 'false' }}
+      sha: ${{ steps.run.outputs.sha }}
+      run_number: ${{ steps.run.outputs.run_number }}
+      app_url: ${{ steps.handoff.outputs.app_url }}
+      web_bucket: ${{ steps.handoff.outputs.web_bucket }}
+      distribution_id: ${{ steps.handoff.outputs.distribution_id }}
+      media_bucket: ${{ steps.handoff.outputs.media_bucket }}
+    steps:
+      - name: which deploy run
+        id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            [ "$REF" = "refs/heads/main" ] || { echo "::error::Run this from main: only main is deployed, and the deploy role trusts main only."; exit 1; }
+            run="$(gh api "repos/${REPO}/actions/workflows/deploy.yml/runs?branch=main&status=success&per_page=1" \
+              --jq '.workflow_runs[0] // empty | "\(.id) \(.run_number) \(.head_sha)"')"
+            [ -n "$run" ] || { echo "::error::No successful deploy of main yet: run deploy first."; exit 1; }
+            read -r RUN_ID RUN_NUMBER SHA <<<"$run"
+          fi
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]] && [[ "$RUN_NUMBER" =~ ^[0-9]+$ ]] && [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] \
+            || { echo "::error::Unexpected deploy run '${RUN_ID}' (number '${RUN_NUMBER}', commit '${SHA}')."; exit 1; }
+          found="$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts?name=desktop-handoff" \
+            --jq '[.artifacts[] | select(.expired | not)] | length')"
+          {
+            echo "run_id=${RUN_ID}"
+            echo "run_number=${RUN_NUMBER}"
+            echo "sha=${SHA}"
+            if [ "$found" -gt 0 ]; then echo "found=true"; else echo "found=false"; fi
+          } >> "$GITHUB_OUTPUT"
+          if [ "$found" -eq 0 ]; then
+            message="Deploy run ${RUN_NUMBER} has no desktop-handoff: it skipped itself (preflight), ran before desktop.yml existed, could not upload it (see that run's infra job), or is older than the hand-off's 30 days. Nothing to build; the next deploy builds whatever is out of date."
+            if [ "$EVENT" = "workflow_dispatch" ]; then
+              echo "::error title=No hand-off::${message} Run deploy (Actions, deploy, Run workflow), which builds the desktop apps after it."
+              exit 1
+            fi
+            echo "::notice title=Desktop apps skipped::${message}"
+            printf '## Desktop apps\n\n%s\n' "$message" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - if: steps.run.outputs.found == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-handoff
+          path: ${{ runner.temp }}/handoff
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.run.outputs.run_id }}
+      - name: read the hand-off
+        if: steps.run.outputs.found == 'true'
+        id: handoff
+        env:
+          FILE: ${{ runner.temp }}/handoff/handoff.json
+          SHA: ${{ steps.run.outputs.sha }}
+          RUN_NUMBER: ${{ steps.run.outputs.run_number }}
+        run: |
+          jq -e 'type == "object"' "$FILE" >/dev/null || { echo "::error::The hand-off of deploy run ${RUN_NUMBER} is not a JSON object."; exit 1; }
+          get() { jq -r --arg k "$1" '.[$k] // empty | strings' "$FILE"; }
+          sha="$(get sha)"
+          run_number="$(get run_number)"
+          app_url="$(get app_url)"
+          web_bucket="$(get web_bucket)"
+          distribution_id="$(get distribution_id)"
+          media_bucket="$(get media_bucket)"
+          [ "$sha" = "$SHA" ] && [ "$run_number" = "$RUN_NUMBER" ] \
+            || { echo "::error::The hand-off names deploy run ${run_number:-?} at ${sha:-?}, not run ${RUN_NUMBER} at ${SHA}."; exit 1; }
+          [[ "$app_url" =~ ^https://[^[:space:]]+$ ]] || { echo "::error::The hand-off has no https app_url."; exit 1; }
+          [[ "$web_bucket" =~ ^[a-z0-9][a-z0-9.-]+[a-z0-9]$ ]] || { echo "::error::The hand-off has no web_bucket."; exit 1; }
+          [[ "$media_bucket" =~ ^[a-z0-9][a-z0-9.-]+[a-z0-9]$ ]] || { echo "::error::The hand-off has no media_bucket."; exit 1; }
+          [[ "$distribution_id" =~ ^[A-Z0-9]+$ ]] || { echo "::error::The hand-off has no distribution_id."; exit 1; }
+          {
+            echo "enabled=true"
+            echo "app_url=${app_url}"
+            echo "web_bucket=${web_bucket}"
+            echo "distribution_id=${distribution_id}"
+            echo "media_bucket=${media_bucket}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Desktop apps for deploy run ${RUN_NUMBER}, commit ${SHA}."
+
+  # Decides whether to rebuild the desktop apps. Each installer in the bucket carries, as S3 metadata, a hash of
+  # what it was built from: desktop/ (docs excluded), the app icon, and the app address baked into it. A
+  # mismatch means desktop/ or the icon changed (or the address did); no file or no hash means it was never
+  # built or the last build failed. With the signing key set, a target whose update pointer
+  # (downloads/updates/<target>.json) is missing is stale too. When any target is stale, every target is rebuilt,
+  # so all of them carry the same version (latest.json has one version for every platform); otherwise none is.
+  desktop-plan:
+    needs: [resolve]
+    if: needs.resolve.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      source_hash: ${{ steps.plan.outputs.source_hash }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          # The deployed commit, not github.sha (for workflow_run, the newest commit on main).
+          ref: ${{ needs.resolve.outputs.sha }}
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: which installers need a build
+        id: plan
+        env:
+          WEB_BUCKET: ${{ needs.resolve.outputs.web_bucket }}
+          APP_URL: ${{ needs.resolve.outputs.app_url }}
+          # desktop/tools/ (the pinned yt-dlp, Deno and ffmpeg, §35.4) ships through desktop-tools, never a rebuild.
+          SOURCES_HASH: ${{ hashFiles('desktop/**', '!desktop/**/*.md', '!desktop/tools/**', 'web/public/icons/icon-512.png') }}
+          # The media bucket's host is baked into the app (Mac fetches it sends the video there, §35.3).
+          MEDIA_HOST: ${{ format('{0}.s3.{1}.amazonaws.com', needs.resolve.outputs.media_bucket, env.AWS_REGION) }}
+          # Only whether the key is set; the key itself never reaches this job.
+          SIGNING: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          RUN_NUMBER: ${{ needs.resolve.outputs.run_number }}
+        run: |
+          [ -n "$SOURCES_HASH" ] || { echo "::error::desktop/ not found."; exit 1; }
+          source_hash="$(printf '%s %s %s' "$SOURCES_HASH" "${APP_URL%/}" "$MEDIA_HOST" | sha256sum | cut -c1-32)"
+          # The deploy run's number, never this workflow's (see the top): goes up on every deploy, and a re-run keeps
+          # it, so a re-built leg matches the others. NSIS needs every part at or below 65535.
+          version="1.${RUN_NUMBER}.0"
+          # update: what the build calls the updater bundle (mac) or the signed installer itself (windows), and the
+          # name it gets in the bucket under downloads/updates/<version>/.
+          targets='[
+            {"target": "mac", "os": "macos-latest", "rust_targets": "aarch64-apple-darwin,x86_64-apple-darwin",
+             "args": "--target universal-apple-darwin --bundles app,dmg",
+             "bundle": "src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg",
+             "update": "src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz",
+             "update_name": "Clip-Factory.app.tar.gz", "update_type": "application/gzip",
+             "platforms": "darwin-universal darwin-aarch64 darwin-x86_64",
+             "key": "downloads/Clip-Factory.dmg", "content_type": "application/x-apple-diskimage"},
+            {"target": "windows", "os": "windows-latest", "rust_targets": "",
+             "args": "--bundles nsis",
+             "bundle": "src-tauri/target/release/bundle/nsis/*-setup.exe",
+             "update": "src-tauri/target/release/bundle/nsis/*-setup.exe",
+             "update_name": "Clip-Factory-Setup.exe", "update_type": "application/vnd.microsoft.portable-executable",
+             "platforms": "windows-x86_64",
+             "key": "downloads/Clip-Factory-Setup.exe", "content_type": "application/vnd.microsoft.portable-executable"}
+          ]'
+          stale=false
+          summary=()
+          for i in 0 1; do
+            entry="$(jq -c ".[$i]" <<<"$targets")"
+            key="$(jq -r .key <<<"$entry")"
+            target="$(jq -r .target <<<"$entry")"
+            meta="$(aws s3api head-object --bucket "$WEB_BUCKET" --key "$key" --query Metadata --output json 2>/dev/null || echo null)"
+            live="$(jq -r '(. // {})."source-hash" // "missing"' <<<"$meta")"
+            # updater=true: this installer was built with the signing key, so its update bundle was already tried.
+            tried="$(jq -r '(. // {}).updater // "false"' <<<"$meta")"
+            if [ "$live" != "$source_hash" ]; then
+              stale=true
+              if [ "$live" = "missing" ]; then
+                summary+=("- ${key}: not in the bucket yet")
+              else
+                summary+=("- ${key}: desktop app, icon or address changed")
+              fi
+            elif [ "$SIGNING" = "true" ] \
+              && ! aws s3api head-object --bucket "$WEB_BUCKET" --key "downloads/updates/${target}.json" >/dev/null 2>&1; then
+              if [ "$tried" = "true" ]; then
+                # Built with the key and still no bundle: building again would only give every app a new version
+                # with nothing changed, so this says so loudly instead (the next change to desktop/ tries again).
+                echo "::error::${key} was built with the signing key but has no signed update bundle; installed ${target} apps are not updated."
+                summary+=("- ${key}: signing failed last build, not rebuilt")
+              else
+                stale=true
+                summary+=("- ${key}: no update bundle yet")
+              fi
+            else
+              summary+=("- ${key}: up to date")
+            fi
+          done
+          if [ "$stale" = "true" ]; then
+            matrix="$(jq -c . <<<"$targets")"
+            summary+=("" "Building every desktop app as version ${version}.")
+          else
+            matrix='[]'
+            summary+=("" "Nothing to build.")
+          fi
+          if [ "$SIGNING" != "true" ]; then
+            echo "::error::No updater signing key (TAURI_SIGNING_PRIVATE_KEY): installers only, installed apps are not updated."
+            summary+=("" "No updater signing key (TAURI_SIGNING_PRIVATE_KEY): installers only, installed apps are not updated.")
+          fi
+          {
+            echo "matrix=${matrix}"
+            echo "source_hash=${source_hash}"
+            echo "version=${version}"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## Desktop apps"
+            echo
+            printf '%s\n' "${summary[@]}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Unsigned builds for now (no Apple or Microsoft certificates; see docs/CONTRACTS.md §12.3).
+  desktop:
+    name: desktop (${{ matrix.target }})
+    needs: [resolve, desktop-plan]
+    if: >-
+      needs.resolve.outputs.enabled == 'true'
+      && needs.desktop-plan.outputs.matrix != ''
+      && needs.desktop-plan.outputs.matrix != '[]'
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.desktop-plan.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    # No id-token here: npm ci, cargo build scripts and the Tauri CLI run in this job, and none of them may be able
+    # to ask GitHub for a token that assumes the deploy role. desktop-upload does the upload.
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: desktop/src-tauri -> target
+          key: ${{ matrix.target }}
+      - run: npm ci
+      - name: icons from the web app icon
+        run: bash scripts/make-icons.sh
+      # The signing key reaches this step only (never a job that can assume the deploy role). Without it the
+      # installer is still built, just with no update bundle.
+      - name: build the installer and the signed update bundle
+        env:
+          CF_APP_URL: ${{ needs.resolve.outputs.app_url }}
+          # Where Mac fetches it sends the video's parts (§35.3); build.rs refuses a release without it.
+          CF_MEDIA_HOST: ${{ format('{0}.s3.{1}.amazonaws.com', needs.resolve.outputs.media_bucket, env.AWS_REGION) }}
+          TAURI_ARGS: ${{ matrix.args }}
+          VERSION: ${{ needs.desktop-plan.outputs.version }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          [[ "$VERSION" =~ ^1\.[0-9]+\.0$ ]] || { echo "::error::Unexpected version '${VERSION}'."; exit 1; }
+          updater=false
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            updater=true
+          else
+            unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+            echo "::warning::No updater signing key: building the installer without an update bundle."
+          fi
+          echo "CF_UPDATER=${updater}" >> "$GITHUB_ENV"
+          # A file rather than inline JSON, so no Windows command shim can mangle the quotes.
+          config="${RUNNER_TEMP}/tauri-release.json"
+          jq -n --arg v "$VERSION" --argjson u "$updater" '{version: $v, bundle: {createUpdaterArtifacts: $u}}' >"$config"
+          read -ra args <<<"$TAURI_ARGS"
+          npx --no-install tauri build --ci --config "$config" "${args[@]}"
+      - name: collect the installer and the update bundle
+        env:
+          BUNDLE_GLOB: ${{ matrix.bundle }}
+          UPDATE_GLOB: ${{ matrix.update }}
+          OUT: ${{ runner.temp }}/desktop-out
+        run: |
+          # Portable on macOS runners, whose /bin/bash 3.2 has no mapfile.
+          files=()
+          while IFS= read -r f; do files+=("$f"); done < <(compgen -G "$BUNDLE_GLOB" || true)
+          [ "${#files[@]}" -eq 1 ] || { echo "::error::Expected one installer at ${BUNDLE_GLOB}, found ${#files[@]}."; exit 1; }
+          mkdir -p "$OUT/installer" "$OUT/update"
+          # Whether the key was used; the upload records it on the installer (desktop-plan reads it back).
+          printf '%s\n' "${CF_UPDATER:-false}" >"$OUT/updater"
+          cp "${files[0]}" "$OUT/installer/"
+          echo "Built ${files[0]} ($(wc -c <"${files[0]}" | tr -d ' ') bytes)."
+          updates=()
+          while IFS= read -r f; do updates+=("$f"); done < <(compgen -G "$UPDATE_GLOB" || true)
+          if [ "${#updates[@]}" -eq 1 ] && [ -s "${updates[0]}.sig" ]; then
+            cp "${updates[0]}" "$OUT/update/bundle"
+            cp "${updates[0]}.sig" "$OUT/update/bundle.sig"
+            echo "Update bundle ${updates[0]} ($(wc -c <"${updates[0]}" | tr -d ' ') bytes), signed."
+          elif [ "${CF_UPDATER:-false}" = "true" ]; then
+            # The installer still ships; desktop-plan will not rebuild for this alone (it reads updater=true).
+            echo "::error::Built with the signing key but found no signed update bundle at ${UPDATE_GLOB}; installed apps will not get this version."
+          else
+            echo "::warning::No signed update bundle at ${UPDATE_GLOB}; installed apps will not get this version."
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-${{ matrix.target }}
+          path: ${{ runner.temp }}/desktop-out
+          retention-days: 1
+          if-no-files-found: error
+
+  # The only desktop job that can assume the deploy role. It runs no code from npm, cargo or the build: it downloads
+  # what the build job made and copies it to the web bucket. The update bundle and its pointer go first, the
+  # installer (whose source-hash marks the target as built) last.
+  desktop-upload:
+    name: desktop-upload (${{ matrix.target }})
+    needs: [resolve, desktop-plan, desktop]
+    if: >-
+      !cancelled()
+      && needs.resolve.outputs.enabled == 'true'
+      && needs.desktop-plan.outputs.matrix != ''
+      && needs.desktop-plan.outputs.matrix != '[]'
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.desktop-plan.outputs.matrix) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # A target whose build failed has no artifact: this leg fails and the previous installer stays in place.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-${{ matrix.target }}
+          path: ${{ runner.temp }}/build
+      - name: find the installer
+        id: file
+        env:
+          DIR: ${{ runner.temp }}/build/installer
+        run: |
+          mapfile -t files < <(find "$DIR" -type f)
+          [ "${#files[@]}" -eq 1 ] || { echo "::error::Expected one installer in the build's artifact, found ${#files[@]}."; exit 1; }
+          echo "path=${files[0]}" >> "$GITHUB_OUTPUT"
+          updater="$(cat "$DIR/../updater" 2>/dev/null || echo false)"
+          [ "$updater" = "true" ] || updater=false
+          echo "updater=${updater}" >> "$GITHUB_OUTPUT"
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      # downloads/updates/<version>/<name> never changes once written; downloads/updates/<target>.json says which
+      # version is the newest for this target, with its signature. desktop-manifest builds latest.json from those.
+      - name: upload the update bundle and its pointer
+        env:
+          DIR: ${{ runner.temp }}/build/update
+          WEB_BUCKET: ${{ needs.resolve.outputs.web_bucket }}
+          APP_URL: ${{ needs.resolve.outputs.app_url }}
+          VERSION: ${{ needs.desktop-plan.outputs.version }}
+          TARGET: ${{ matrix.target }}
+          UPDATE_NAME: ${{ matrix.update_name }}
+          UPDATE_TYPE: ${{ matrix.update_type }}
+          PLATFORMS: ${{ matrix.platforms }}
+        run: |
+          if [ ! -s "$DIR/bundle" ] || [ ! -s "$DIR/bundle.sig" ]; then
+            echo "::warning::No signed update bundle for ${TARGET}; installed apps keep their version."
+            exit 0
+          fi
+          [[ "$VERSION" =~ ^1\.[0-9]+\.0$ ]] || { echo "::error::Unexpected version '${VERSION}'."; exit 1; }
+          key="downloads/updates/${VERSION}/${UPDATE_NAME}"
+          aws s3 cp "$DIR/bundle" "s3://${WEB_BUCKET}/${key}" \
+            --cache-control "public, max-age=31536000, immutable" \
+            --content-type "$UPDATE_TYPE" \
+            --only-show-errors
+          pointer="$(jq -n --arg version "$VERSION" --arg url "${APP_URL%/}/${key}" \
+            --rawfile signature "$DIR/bundle.sig" --arg platforms "$PLATFORMS" \
+            '{version: $version, url: $url, signature: ($signature | rtrimstr("\n")), platforms: ($platforms | split(" "))}')"
+          printf '%s\n' "$pointer" | aws s3 cp - "s3://${WEB_BUCKET}/downloads/updates/${TARGET}.json" \
+            --cache-control "no-cache" --content-type "application/json" --only-show-errors
+          echo "Uploaded ${key} and downloads/updates/${TARGET}.json (version ${VERSION})."
+      - name: upload the installer to the web bucket
+        env:
+          FILE: ${{ steps.file.outputs.path }}
+          WEB_BUCKET: ${{ needs.resolve.outputs.web_bucket }}
+          KEY: ${{ matrix.key }}
+          CONTENT_TYPE: ${{ matrix.content_type }}
+          SOURCE_HASH: ${{ needs.desktop-plan.outputs.source_hash }}
+          UPDATER: ${{ steps.file.outputs.updater }}
+        run: |
+          aws s3 cp "$FILE" "s3://${WEB_BUCKET}/${KEY}" \
+            --cache-control "no-cache" \
+            --content-type "$CONTENT_TYPE" \
+            --content-disposition "attachment; filename=\"${KEY##*/}\"" \
+            --metadata "source-hash=${SOURCE_HASH},updater=${UPDATER:-false}" \
+            --only-show-errors
+          echo "Uploaded ${KEY}."
+
+  # The pinned tools of Mac fetches it (docs/CONTRACTS.md §35.4). This job has no OIDC token: it downloads from
+  # GitHub releases (never runs what it downloads), checks every sum, and signs the manifest; desktop-tools-upload
+  # copies the result. Nothing happens when the live manifest already carries this lock's hash.
+  desktop-tools:
+    needs: [resolve]
+    if: needs.resolve.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    continue-on-error: true
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.plan.outputs.changed }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+      - name: is the live manifest this lock
+        id: plan
+        env:
+          APP_URL: ${{ needs.resolve.outputs.app_url }}
+        run: |
+          want="$(python3 -I desktop/tools/build_tools.py lock-hash --lock desktop/tools/tools.lock.json)"
+          live="$(curl -fsS --max-time 20 "${APP_URL%/}/downloads/tools/tools.json" 2>/dev/null | jq -r '.lock // empty' || true)"
+          if [ "$live" = "$want" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Tools are up to date (lock ${want})." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: download, check and lay out the pinned tools
+        if: steps.plan.outputs.changed == 'true'
+        env:
+          APP_URL: ${{ needs.resolve.outputs.app_url }}
+        run: |
+          python3 -I desktop/tools/build_tools.py fetch --lock desktop/tools/tools.lock.json \
+            --out "$RUNNER_TEMP/tools" --base-url "${APP_URL%/}/downloads/tools"
+      # The key reaches this step only, through a file only this job can read, removed straight after.
+      - name: sign tools.json
+        if: steps.plan.outputs.changed == 'true'
+        env:
+          CF_TOOLS_SIGNING_KEY: ${{ secrets.CF_TOOLS_SIGNING_KEY }}
+        run: |
+          [ -n "$CF_TOOLS_SIGNING_KEY" ] || { echo "::error::CF_TOOLS_SIGNING_KEY is not set: the tools are not published."; exit 1; }
+          key="$RUNNER_TEMP/tools-key.pem"
+          ( umask 077; printf '%s\n' "$CF_TOOLS_SIGNING_KEY" > "$key" )
+          python3 -I desktop/tools/build_tools.py sign --manifest "$RUNNER_TEMP/tools/tools.json" --key "$key"
+          rm -f "$key"
+          pub="$(grep -oE 'PUBLIC_KEY: &str = "[^"]+"' desktop/src-tauri/src/mac_fetch/tools.rs | cut -d'"' -f2)"
+          python3 -I desktop/tools/build_tools.py verify --manifest "$RUNNER_TEMP/tools/tools.json" --pubkey "$pub"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: steps.plan.outputs.changed == 'true'
+        with:
+          name: desktop-tools
+          path: ${{ runner.temp }}/tools
+          retention-days: 1
+          if-no-files-found: error
+
+  # Copies the checked files first (each key never changes once written), then the signed manifest, then refreshes
+  # CloudFront for the manifest only. Runs no code from the artifact.
+  desktop-tools-upload:
+    needs: [resolve, desktop-tools]
+    if: >-
+      !cancelled()
+      && needs.resolve.outputs.enabled == 'true'
+      && needs.desktop-tools.outputs.changed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-tools
+          path: ${{ runner.temp }}/tools
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: upload the tools and the signed manifest
+        env:
+          DIR: ${{ runner.temp }}/tools
+          WEB_BUCKET: ${{ needs.resolve.outputs.web_bucket }}
+          DISTRIBUTION_ID: ${{ needs.resolve.outputs.distribution_id }}
+        run: |
+          [ -s "$DIR/tools.json" ] && [ -s "$DIR/tools.json.sig" ] || { echo "::error::No signed manifest in the artifact."; exit 1; }
+          aws s3 cp "$DIR/files/" "s3://${WEB_BUCKET}/downloads/tools/" --recursive \
+            --cache-control "public, max-age=31536000, immutable" --content-type "application/octet-stream" --only-show-errors
+          aws s3 cp "$DIR/tools.json" "s3://${WEB_BUCKET}/downloads/tools/tools.json" \
+            --cache-control "no-cache" --content-type "application/json" --only-show-errors
+          aws s3 cp "$DIR/tools.json.sig" "s3://${WEB_BUCKET}/downloads/tools/tools.json.sig" \
+            --cache-control "no-cache" --content-type "text/plain" --only-show-errors
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" \
+            --paths "/downloads/tools/tools.json" "/downloads/tools/tools.json.sig" --query Invalidation.Id --output text
+          echo "Published $(jq -r '[.tools | to_entries[] | "\(.key) \(.value.version)"] | join(", ")' "$DIR/tools.json")." >> "$GITHUB_STEP_SUMMARY"
+
+  # Lists only the installers that exist in the bucket, so the app never offers a dead link (§12.1), and writes
+  # downloads/latest.json, what installed apps update from (§12.6). It runs after every upload, so latest.json
+  # never names a bundle that is not there yet. Every run rewrites both from what is in the bucket.
+  desktop-manifest:
+    needs: [resolve, desktop-plan, desktop, desktop-upload]
+    if: >-
+      !cancelled()
+      && needs.resolve.result == 'success'
+      && needs.resolve.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: rewrite downloads/manifest.json and refresh CloudFront
+        env:
+          WEB_BUCKET: ${{ needs.resolve.outputs.web_bucket }}
+          DISTRIBUTION_ID: ${{ needs.resolve.outputs.distribution_id }}
+        run: |
+          # latest.json: the newest version any target has, with only the targets that have that version (a target
+          # whose build failed this time is left out, so it is never offered another target's version).
+          pointers='[]'
+          for target in mac windows; do
+            if pointer="$(aws s3 cp "s3://${WEB_BUCKET}/downloads/updates/${target}.json" - 2>/dev/null)" \
+              && jq -e '(.version | test("^1\\.[0-9]+\\.0$")) and (.url | type == "string") and (.signature | length > 0)' \
+                <<<"$pointer" >/dev/null; then
+              pointers="$(jq -c --argjson p "$pointer" '. + [$p]' <<<"$pointers")"
+            fi
+          done
+          latest="$(jq -r '[.[].version | split(".") | map(tonumber)] | max // empty | map(tostring) | join(".")' <<<"$pointers")"
+          if [ -n "$latest" ]; then
+            update="$(jq -n --argjson pointers "$pointers" --arg version "$latest" \
+              --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
+                version: $version,
+                notes: "Desktop app",
+                pub_date: $date,
+                platforms: ([$pointers[] | select(.version == $version) | . as $p
+                  | .platforms[] | {key: ., value: {url: $p.url, signature: $p.signature}}] | from_entries)
+              }')"
+            printf '%s\n' "$update" | aws s3 cp - "s3://${WEB_BUCKET}/downloads/latest.json" \
+              --cache-control "no-cache" --content-type "application/json" --only-show-errors
+          fi
+          version="${latest:-$(jq -r '.version' desktop/src-tauri/tauri.conf.json)}"
+          manifest="$(jq -n --arg version "$version" '{version: $version, files: {}}')"
+          for entry in "mac downloads/Clip-Factory.dmg" "windows downloads/Clip-Factory-Setup.exe"; do
+            read -r name key <<<"$entry"
+            size="$(aws s3api head-object --bucket "$WEB_BUCKET" --key "$key" \
+              --query ContentLength --output text 2>/dev/null || true)"
+            if [[ "$size" =~ ^[0-9]+$ ]] && [ "$size" -gt 0 ]; then
+              manifest="$(jq --arg n "$name" --arg p "/${key}" --argjson s "$size" \
+                '.files[$n] = {path: $p, size: $s}' <<<"$manifest")"
+            fi
+          done
+          printf '%s\n' "$manifest" | aws s3 cp - "s3://${WEB_BUCKET}/downloads/manifest.json" \
+            --cache-control "no-cache" --content-type "application/json" --only-show-errors
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" \
+            --paths "/downloads/*" --query Invalidation.Id --output text
+          {
+            echo "## Desktop downloads"
+            echo
+            echo '```json'
+            jq . <<<"$manifest"
+            echo '```'
+            echo
+            if [ -n "$latest" ]; then
+              echo "Installed apps update to ${latest}: $(jq -r '.platforms | keys | join(", ")' <<<"$update")."
+            else
+              echo "No signed update bundle yet: installed apps are not offered an update."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
