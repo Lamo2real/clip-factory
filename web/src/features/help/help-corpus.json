@@ -1,5 +1,5 @@
 {
-  "version": "1a5042ad67a1",
+  "version": "a042ffb6582e",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -246,7 +246,10 @@
         "stream",
         "vod",
         "new clips",
-        "start"
+        "start",
+        "make my clips",
+        "make clips for me",
+        "how do i make clips"
       ],
       "answer": "Copy the link to a stream or video, paste it on Home and tap **Make clips**. Clip Factory finds the best moments for you.",
       "steps": [
@@ -701,7 +704,10 @@
         "edit caption",
         "change the caption",
         "tiktok caption",
-        "instagram caption"
+        "instagram caption",
+        "fix my caption",
+        "add hashtags",
+        "tags"
       ],
       "answer": "Each clip has its own caption for every place it goes. Change them on the clip in **Review** before you tap **Upload**. They save by themselves.",
       "steps": [
@@ -893,7 +899,7 @@
           "label": "Open Money",
           "to": "/money",
           "highlight": [
-            "money-dash-monthly"
+            "money-dash"
           ]
         },
         {
@@ -1086,9 +1092,8 @@
       "keywords": [
         "all your money",
         "earn everywhere",
-        "all platforms",
-        "every platform",
-        "every place",
+        "earn on all platforms",
+        "money from every platform",
         "total",
         "total money",
         "all my money",
@@ -1130,7 +1135,7 @@
         "instagram money",
         "x money",
         "why no number",
-        "coming soon",
+        "facebook money coming soon",
         "look in"
       ],
       "answer": "TikTok, Instagram and X don't tell apps what you earn. So Clip Factory never guesses and never shows $0: it says **Not available from TikTok** and where to look. TikTok: **Profile**, then **Balance**. Instagram: **Professional dashboard**, then **Payouts**. X: **Monetization**. Facebook says **Coming soon** for now.",
@@ -2963,7 +2968,8 @@
         "sign in content rewards",
         "i have an account",
         "i added them",
-        "connect"
+        "connect my content rewards account",
+        "how to connect content rewards"
       ],
       "answer": "Content Rewards pays you for clips you make for brands. Connect it once, in 3 steps, in this order. 1: make a Content Rewards account, or tap **I have an account**. 2: add YouTube and your other accounts inside Content Rewards, then tap **I added them**. 3: on your Mac, tap **Connect Content Rewards** and allow it. Already set up there? Tap **Yes** at the top, then do step 3.",
       "steps": [
@@ -2993,7 +2999,6 @@
       "title": "Content Rewards says my account can't connect apps",
       "keywords": [
         "can't connect apps",
-        "cannot connect",
         "not allowed",
         "content rewards said no",
         "pilot",
@@ -3159,14 +3164,15 @@
       "title": "Make campaign clips",
       "keywords": [
         "campaign clips",
-        "for a campaign",
         "campaign rules",
         "clips for a brand",
         "brand clips",
         "paid partnership",
         "campaign video",
         "which campaign",
-        "videos from the campaign"
+        "videos from the campaign",
+        "for a campaign",
+        "clips for my campaign"
       ],
       "answer": "Campaign clips start from a campaign: tap its chip in **Your campaigns** on Home, or tap **Make clips for this campaign** on the campaign. Home then says **Campaign clips** and its name. Paste or pick the video and tap **Make campaign clips**. The rules go with it: length, tags, #Ad and the logo.",
       "steps": [
@@ -3181,8 +3187,7 @@
           "label": "Go to Home",
           "to": "/",
           "highlight": [
-            "cr-make-clips",
-            "make-clips"
+            "cr-make-clips"
           ]
         }
       ]
@@ -3199,10 +3204,8 @@
         "which way",
         "normal way",
         "campaign way",
-        "regular",
         "both ways",
-        "pick a way",
-        "normal"
+        "pick a way"
       ],
       "answer": "There are two ways. **Make clips** on Home makes normal clips, the same as always. Campaign clips start from a campaign you joined: tap **Make campaign clips** on it in Your campaigns. Then Home says **Campaign clips** and its name. A normal clip that could earn on your campaign tells you so on Review.",
       "steps": [
@@ -3256,16 +3259,26 @@
         "rules check",
         "will this clip get paid",
         "clip ok for the campaign",
-        "right for the campaign"
+        "right for the campaign",
+        "compatible",
+        "compatible with my campaign",
+        "content i upload",
+        "earn money on content rewards",
+        "get paid on content rewards",
+        "i couldn't check",
+        "campaign deadline",
+        "needs a copy",
+        "can this clip earn on my campaign",
+        "will this clip get paid on content rewards"
       ],
-      "answer": "On Review, a campaign clip shows **Campaign clip** and the campaign's name at the top. It checks the campaign's rules before you upload. **Can earn on** it: tap **Upload**. **Almost ready** or **One thing first**: tap the button under it. **Wait a little**: Upload turns on by itself. **Can't earn**: make new clips. **Check 2 things**: read them yourself.",
+      "answer": "On Review, a campaign clip checks its Content Rewards rules. It checks the length, where it pays, tags and #Ad, the logo, Paid partnership, where the video is from, its language, banned things and the deadline. If it can't earn money, **Upload** stays off. **Wait a little** means Upload turns on by itself. **I couldn't check** means look yourself. One clip earns on one campaign only.",
       "steps": [
-        "Tap **Review**.",
-        "Look at the top of the clip: **Campaign clip** and the campaign's name.",
-        "Read the big line under it.",
-        "Something to do first? Tap the button right under it.",
-        "**Check 2 things**? Read them, then tap **I read them. They're OK**.",
-        "A normal clip that could earn says **This clip could earn money on** the campaign."
+        "Tap **Review**. Read the big line under **Campaign clip** at the top.",
+        "**Can earn on** it? Tap **Upload**.",
+        "**Almost ready** or **One thing first**? Tap the button right under it.",
+        "**Needs a copy of this clip**? Tap **Make a FaZe Clips copy**.",
+        "**Can't earn**? Tap **Make new clips for this campaign**.",
+        "**Check 2 things**? Read them. You can still tap **Upload**."
       ],
       "actions": [
         {
@@ -3286,18 +3299,12 @@
       "title": "What does Fix it for me do?",
       "keywords": [
         "fix it for me",
-        "fix it",
-        "missing hashtag",
-        "missing tag",
+        "what does fix it for me do",
         "missing #ad",
         "#ad missing",
-        "put the tags back",
-        "required hashtags",
-        "caption tags",
-        "hashtags missing",
-        "turn on branded content"
+        "campaign tags missing"
       ],
-      "answer": "When a caption is missing #Ad or a tag the campaign wants, Review says so and shows **Fix it for me**. Tap it to put them back in the words right now. Tap **Undo** within 8 seconds to get the old words back. You don't have to tap it: when the clip uploads, I put #Ad and the tags back by myself. For TikTok, **Turn on Branded content** is its own button. Tap that one yourself.",
+      "answer": "On a campaign clip, when a caption is missing #Ad or a tag the campaign wants, Review says so and shows **Fix it for me**. Tap it to put them back in the words right now. Tap **Undo** within 8 seconds to get the old words back. You don't have to tap it: when the clip uploads, I put #Ad and the tags back by myself. For TikTok, **Turn on Branded content** is its own button. Tap that one yourself.",
       "steps": [
         "Tap **Review**.",
         "Find the line that says #Ad or a tag is missing.",
@@ -3332,16 +3339,19 @@
         "use this clip for my campaign",
         "earn with this clip",
         "not now",
-        "the copy"
+        "the copy",
+        "already up",
+        "already posted",
+        "posted the normal way"
       ],
-      "answer": "When a normal clip could earn on a campaign you're in, Review says **This clip could earn money on** it. Tap the button with the campaign's name, like **Make a FaZe Clips copy**. In about 3 minutes the copy shows right below, with the logo, **Paid partnership** and #Ad. Upload the copy to earn. The first clip stays as it is. **Not now** hides it.",
+      "answer": "When a normal clip could earn on a campaign you're in, Review says **This clip could earn money on** it. Tap the button with the campaign's name, like **Make a FaZe Clips copy**. In about 3 minutes the copy shows right below, with the logo, **Paid partnership** and #Ad. Upload the copy to earn. The first clip stays as it is. **Not now** hides the line.",
       "steps": [
-        "Tap **Review**.",
-        "Find **This clip could earn money on** under the clip.",
+        "In **Review**, find **This clip could earn money on** under the clip.",
         "Tap **Make a FaZe Clips copy**. It shows your campaign's name.",
         "Wait about 3 minutes. The copy shows right below.",
         "On the copy, tap **Use my settings**, then **Upload**.",
-        "You can throw the first one away."
+        "You can throw the first one away.",
+        "Already posted the normal way? Content Rewards only takes a post in its first 30 minutes, so make a copy."
       ],
       "actions": [
         {
