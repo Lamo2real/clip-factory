@@ -27,11 +27,12 @@ type Knobs = Record<string, (...a: unknown[]) => unknown>;
 type MockWin = Window & { __cfMock?: { cr?: Knobs; setup?: Knobs; jobs?: Knobs } };
 
 /** Start states read once by the mock, then the places he has set up. */
-async function start(page: Page, flags: { fresh?: boolean; off?: "404" | "503"; remake?: boolean; review?: boolean; tiktok?: boolean } = {}) {
+async function start(page: Page, flags: { fresh?: boolean; off?: "404" | "503"; remake?: boolean; review?: boolean; tiktok?: boolean; overview500?: boolean } = {}) {
   await page.addInitScript((f) => {
     if (sessionStorage.getItem("cf-e2e-two-ways")) return;
     sessionStorage.setItem("cf-e2e-two-ways", "1");
     if (f.fresh) sessionStorage.setItem("cf-mock-cr-start", "fresh");
+    if (f.overview500) sessionStorage.setItem("cf-mock-cr-overview", "500");
     if (f.off) sessionStorage.setItem("cf-mock-cr-off", f.off);
     if (f.remake) sessionStorage.setItem("cf-mock-cr-remake", "on");
     if (f.review) sessionStorage.setItem("cf-mock-cr-review", "1");
@@ -161,6 +162,54 @@ for (const [size, viewport] of [
       await taps.tap(upload);
       await expect(page.getByText(/^Uploading to/)).toBeVisible();
       expect(taps.count).toBe(CAMPAIGN_WAY_TAPS);
+    });
+
+    test("the campaign way never makes normal clips: the campaigns can't be read, so it waits with Check again", async ({ page }) => {
+      await start(page, { overview500: true });
+      await page.goto("/");
+      await ready(page, "youtube", "instagram");
+      await page.goto(`/?campaign=${FAZE}`);
+      await settle(page);
+      await page.getByLabel("YouTube, Twitch or Kick link").fill(VIDEO);
+      const form = page.locator("form.newjob");
+      const make = form.getByRole("button", { name: "Make campaign clips", exact: true });
+      await expect(make).toBeDisabled();
+      await expect(form).toContainText("Couldn't check your campaigns. Tap Check again.");
+      const again = form.getByRole("button", { name: "Check again" });
+      await expect(again).toHaveClass(/btn--glass/);
+      // Content Rewards answers again: Check again reads it, and the campaign way goes on with its campaign.
+      await page.evaluate(() => sessionStorage.removeItem("cf-mock-cr-overview"));
+      await again.click();
+      await expect(make).toBeEnabled();
+      await expect(form).not.toContainText("Couldn't check your campaigns.");
+      await make.click();
+      await expect(page).toHaveURL(/\/jobs\/[0-9A-Z]{26}$/);
+      await jobRuns(page);
+      await page.getByRole("link", { name: "Check these clips" }).click();
+      await expect(page.locator(".review-card").first().locator(".cr-fit")).toContainText("Campaign clip · FaZe Clips");
+    });
+
+    test("Which campaign comes first, above the video, with every campaign in view (no sideways scroll)", async ({ page }) => {
+      await start(page);
+      await page.goto("/");
+      await ready(page, "youtube", "instagram");
+      for (const width of size === "phone" ? [320, 375] : [768, 1024, 1440, 1920]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(`/?campaign=${FAZE}`);
+        await settle(page);
+        const bar = page.locator(".cr-for .segmented");
+        await expect(bar).toBeVisible();
+        const box = (await bar.boundingBox())!;
+        const opts = bar.locator(".segmented__opt");
+        expect(await opts.count()).toBeGreaterThanOrEqual(2);
+        for (const o of await opts.all()) {
+          const b = (await o.boundingBox())!;
+          expect(b.x, `${width}: ${await o.innerText()}`).toBeGreaterThanOrEqual(box.x - 0.5);
+          expect(b.x + b.width, `${width}: ${await o.innerText()}`).toBeLessThanOrEqual(box.x + box.width + 0.5);
+        }
+        const source = (await page.getByRole("radiogroup", { name: "Source" }).boundingBox())!;
+        expect(box.y, `${width}: Which campaign is above Paste a link`).toBeLessThan(source.y);
+      }
     });
 
     test("the campaign way with TikTok: 7 only after he turned Branded content off (Turn on Branded content)", async ({ page }) => {
@@ -293,6 +342,24 @@ test.describe("Connect Content Rewards: the taps (desktop, the Mac app)", () => 
     expect(taps.count).toBe(CONNECT_TAPS_DONE + 1);
   });
 
+  test("a short Mac window (1280×720): after Yes step 3's Connect is on screen, after Allow so is Back to FaZe Clips", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await start(page, { fresh: true });
+    await asMacWindow(page, { crConnect: true });
+    const taps = tap(CONNECT_TAPS_DONE);
+    await pasteAndAdd(page, taps);
+    await taps.tap(page.locator("[data-cr='shortcut']").getByRole("button", { name: "Yes" }));
+    await expect(page.locator("#step-connect").getByRole("button", { name: "Connect Content Rewards", exact: true })).toBeInViewport();
+    await allowAndBack(page, taps);
+    const back = page.locator("[data-cr='back']");
+    await expect(back).toHaveCount(1);
+    await expect(back).toBeInViewport();
+    // It sits in the result card, right under "Next: back to FaZe Clips."; closed, it is the panel's again.
+    await expect(page.locator(".result-card [data-cr='back']")).toHaveCount(1);
+    await page.locator(".result-card").getByRole("button", { name: "Close" }).click();
+    await expect(page.locator(".done-panel [data-cr='back']")).toHaveClass(/btn--primary/);
+  });
+
   test("from zero: 9 Clip Factory taps and the allow up to Back to FaZe Clips, then Open campaign and You're in!", async ({ page }) => {
     await start(page, { fresh: true });
     await asMacWindow(page, { crConnect: true });
@@ -322,4 +389,51 @@ test.describe("Connect Content Rewards: the taps (desktop, the Mac app)", () => 
     await expect(next).toContainText("You're in!");
     expect(taps.count).toBe(CONNECT_CF_TAPS_FROM_ZERO + 1);
   });
+});
+
+test.describe("Connect Content Rewards on a phone: each step's Open and its answer on screen, clear of the tab bar", () => {
+  for (const viewport of [
+    { width: 320, height: 568 },
+    { width: 375, height: 667 },
+    { width: 390, height: 844 },
+  ])
+    test(`${viewport.width}×${viewport.height}: at the top and half way down, nothing covers them`, async ({ browser }) => {
+      const context = await browser.newContext({ viewport, hasTouch: true, isMobile: true, baseURL: test.info().project.use.baseURL });
+      const page = await context.newPage();
+      await start(page, { fresh: true });
+      await page.goto("/");
+      await ready(page, "youtube");
+      await page.goto(`/settings/posting/setup/contentrewards?back=${encodeURIComponent(`/campaigns/${FAZE}`)}`);
+      await settle(page);
+      const step = page.locator("#step-ready-account");
+      const pair = [step.getByRole("link", { name: /Open Content Rewards/ }), step.getByRole("button", { name: "I have an account" })];
+      await expect(pair[0]!).toBeVisible();
+      await page.waitForTimeout(700);
+      const clear = async (where: string) => {
+        for (const b of pair) {
+          await expect(b, where).toBeInViewport({ ratio: 1 });
+          const hit = await b.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return !!top && el.contains(top);
+          });
+          expect(hit, `${where}: ${await b.innerText()} is covered`).toBe(true);
+        }
+        // The lead line is never under the pinned pair.
+        const lead = (await step.locator(".gstep__lead").boundingBox())!;
+        const open = (await pair[0]!.boundingBox())!;
+        expect(lead.y + lead.height <= open.y || open.y + open.height <= lead.y || lead.x + lead.width <= open.x, `${where}: the lead line is covered`).toBe(true);
+      };
+      await clear("first screen");
+      await page.evaluate(() => window.scrollBy(0, 160));
+      await page.waitForTimeout(200);
+      await clear("half way");
+      // Step 3 on a phone: done on the Mac, and the way back is right there.
+      await step.getByRole("button", { name: "I have an account" }).click();
+      await page.locator("#step-ready-socials").getByRole("button", { name: "I added them" }).click();
+      const three = page.locator("#step-connect");
+      await expect(three).toContainText("Do this step on your Mac.");
+      await expect(three.locator("[data-cr='back']")).toHaveText(/Back to/);
+      await context.close();
+    });
 });

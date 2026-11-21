@@ -11,7 +11,11 @@ import type { CampaignFit, FitItem } from "../src/api/types.ts";
 import {
   adFirst,
   canUploadOf,
+  casefold,
+  checkLineText,
   checkPages,
+  copyStateOf,
+  fitLines,
   fitMain,
   fixedWords,
   hasItem,
@@ -23,6 +27,7 @@ import {
   safeFixHref,
   saveChecked,
   saveNotNow,
+  softText,
   sortItems,
   uploadOffWords,
   verdictOf,
@@ -31,6 +36,11 @@ import { CampaignFit as Block, KEEP_IT_HERE, READ_THEM } from "../src/screens/re
 import { FitSuggestion, copyWords } from "../src/screens/review/FitSuggestion.tsx";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+// Review's list reads the API through api(): a small fake per test.
+const fake = vi.hoisted(() => ({ api: null as unknown }));
+vi.mock("../src/api/index.ts", async (orig) => ({ ...(await orig<object>()), api: () => fake.api }));
+const { reviewClips } = await import("../src/screens/review/Review.tsx");
 
 const CID = "200ea21b-be80-4db8-b552-8e32b148604e";
 const it_ = (rule: FitItem["rule"], state: FitItem["state"], text: string, fix: FitItem["fix"] = null, platform?: FitItem["platform"]): FitItem =>
@@ -99,6 +109,15 @@ describe("the live check (a port of fit.py live)", () => {
     expect(adFirst("#Sponsored wow", "#Ad")).toBe(true);
     expect(adFirst("#ad wow", "#Sponsored")).toBe(false);
     expect(adFirst(`${"x".repeat(31)} #Ad`, "#Ad")).toBe(false);
+  });
+
+  it("like Python: #Ad's place counts characters (an emoji is one), and a phrase folds like casefold (ß is ss)", () => {
+    // 15 emoji and a space: 16 characters before #Ad (31 UTF-16 units). B's rule says it is at the start.
+    expect(adFirst(`${"🔥".repeat(15)} #Ad`, "#Ad")).toBe(true);
+    expect(adFirst(`${"🔥".repeat(30)} #Ad`, "#Ad")).toBe(false);
+    expect(casefold("Straße")).toBe("strasse");
+    expect(hasItem("Das GROSSE Spiel heute", "große spiel")).toBe(true);
+    expect(hasItem("Die große Show", "GROSSE show")).toBe(true);
   });
 
   it("nothing changed: still Can earn", () => {
@@ -204,6 +223,42 @@ describe("verdicts, Upload and the block's one vermilion", () => {
     expect(f.items.map((i) => i.state)).toEqual(["fix", "note", "ok", "ok"]);
   });
 
+  it("the could-earn line's soft words are those of softCodes' first code, never of a stop already accepted", () => {
+    const face = it_("soft", "check", "This brand wants your face on camera. Clips of other videos may be turned down.", READ);
+    const half = it_("soft", "note", "Half the money is used. $3,880 is left. Post soon, before it runs out.");
+    const spoken = it_("spoken", "check", "The brand wants “paid partnership” said out loud. Clip Factory can't. This clip may be turned down.", READ);
+    // He accepted face_needed already (still listed, sorted first); budget_half is the one the tap accepts.
+    expect(softText(fit([face, half, ...OK_ITEMS], { softCodes: ["budget_half"] }))).toBe(half.text);
+    expect(softText(fit([face, half, ...OK_ITEMS], { softCodes: ["face_needed", "budget_half"] }))).toBe(face.text);
+    expect(softText(fit([spoken, half], { softCodes: ["spoken_needed"] }))).toBe(spoken.text);
+    expect(softText(fit([face, half], { softCodes: [] }))).toBeNull();
+    expect(softText(fit([face], { softCodes: ["budget_half"] }))).toBeNull();
+  });
+
+  it("each verdict shows only its own lines (§39.3 Then): the no items, the wait item, the first todo, one thing at a time", () => {
+    const ig = it_("paid_switch", "note", "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.");
+    const tag = it_("tags", "fix", "The Instagram words are missing #FaZe. I'll put it back when it uploads.", { kind: "captions", label: "Fix it for me" }, "instagram");
+    const no = it_("length", "no", "This clip is 72 seconds. FaZe Clips takes 15 to 60 seconds.", { kind: "new_clips", label: "Make new clips for this campaign", href: `/?campaign=${CID}` });
+    const settings = { kind: "open" as const, label: "Open Content Rewards settings", href: "https://contentrewards.com/c/settings", external: true };
+    const todo1 = it_("places", "todo", "Add YouTube in Content Rewards first. Then tap I added it.", settings, "youtube");
+    const note2 = it_("place_link", "note", "Content Rewards doesn't know your Instagram account. Add it there, then tap I added it.", settings, "instagram");
+    const wait = it_("campaign", "todo", "The brand paused this campaign. I'll tell you when it opens again.");
+    const check = it_("uncertain", "check", "I couldn't check: Clips must feel organic. Look yourself.", READ);
+    const last = it_("deadline", "note", "Today is the last day FaZe Clips takes clips.");
+
+    expect(fitLines(fit([no, tag, ig, SEND, ...OK_ITEMS])).lines).toEqual([no]);
+    expect(fitLines(fit([wait, tag, ig, SEND, check])).lines).toEqual([wait]);
+    expect(fitLines(fit([todo1, note2, ig, SEND])).lines).toEqual([todo1]);
+    const fits = fitLines(fit([ig, last, tag, SEND, ...OK_ITEMS]));
+    expect(fits.lines).toEqual([tag, SEND]);
+    expect(fits.folded).toEqual(expect.arrayContaining([ig, last]));
+    const cant = fitLines(fit([check, ig, SEND]));
+    expect(cant.lines).toEqual([SEND]);
+    expect(cant.folded).toEqual([ig]);
+    expect(checkLineText(check.text)).toBe("Clips must feel organic. Look yourself.");
+    expect(checkLineText("I couldn't check the language. FaZe Clips wants English.")).toBe("I couldn't check the language. FaZe Clips wants English.");
+  });
+
   it("Read the rules once per page, never one per line", () => {
     const f = fit([it_("uncertain", "check", "a", READ), it_("uncertain", "check", "b", READ), it_("banned", "check", "c", READ)]);
     expect(checkPages(f.items)).toHaveLength(1);
@@ -217,6 +272,60 @@ describe("verdicts, Upload and the block's one vermilion", () => {
     expect(safeFixHref({ kind: "open", label: "x", href: "//evil.example" })).toBeNull();
     expect(safeFixHref({ kind: "open", label: "x", href: "javascript:alert(1)" })).toBeNull();
     expect(safeFixHref({ kind: "open", label: "x", href: "https://contentrewards.com/c/settings" })).toEqual({ href: "https://contentrewards.com/c/settings", external: true });
+  });
+});
+
+describe("where the copy stands, from the copy's own job (§39.3 The copy)", () => {
+  const read = (status: "queued" | "running" | "ready" | "failed" | "canceled", clip?: "review" | "declined" | "posted" | "confirmed") => ({
+    jobId: "J2",
+    job: { status },
+    clips: clip ? [{ clipId: "C2", status: clip, remakeOf: { clipId: "C1", jobId: "J1" } }] : [],
+  });
+  it("making only while its job runs; a failed, canceled or gone job, or a thrown-away copy, brings the button back", () => {
+    expect(copyStateOf("C1", null, null)).toBe("none");
+    expect(copyStateOf("C1", "J2", null)).toBe("unknown");
+    expect(copyStateOf("C1", "J2", read("queued"))).toBe("making");
+    expect(copyStateOf("C1", "J2", read("running"))).toBe("making");
+    expect(copyStateOf("C1", "J2", read("failed"))).toBe("none");
+    expect(copyStateOf("C1", "J2", read("canceled"))).toBe("none");
+    expect(copyStateOf("C1", "J2", { jobId: "J2", job: null, clips: [] })).toBe("none");
+    expect(copyStateOf("C1", "J2", read("ready", "declined"))).toBe("none");
+    expect(copyStateOf("C1", "J2", read("ready"))).toBe("none");
+    // An older read of another job says nothing about this one.
+    expect(copyStateOf("C1", "J3", read("running"))).toBe("unknown");
+  });
+  it("ready only when the copy is in this Review list (or, on the clip page, waits in Review); uploaded: done", () => {
+    expect(copyStateOf("C1", "J2", read("ready", "review"), true)).toBe("ready");
+    expect(copyStateOf("C1", "J2", read("ready", "review"), false)).toBe("unknown");
+    expect(copyStateOf("C1", "J2", read("ready", "review"))).toBe("ready");
+    expect(copyStateOf("C1", "J2", read("ready", "posted"))).toBe("done");
+    expect(copyStateOf("C1", "J2", read("ready", "confirmed"))).toBe("done");
+  });
+});
+
+describe("the copy on Review (/review?job=)", () => {
+  const clip = (clipId: string, jobId: string, status: string, over: Record<string, unknown> = {}) => ({ clipId, jobId, status, ...over });
+  it("a copy stays listed after its original was thrown away (the job's clips' remakes, not only its Review clips')", async () => {
+    const store = [
+      clip("C1", "J1", "declined", { remakes: { [CID]: { jobId: "J2", at: "2026-11-21T10:00:00.000Z" } } }),
+      clip("C3", "J1", "review"),
+      clip("C2", "J2", "review", { remakeOf: { clipId: "C1", jobId: "J1" }, campaignId: CID }),
+    ];
+    const asked: string[] = [];
+    fake.api = {
+      listClips: async (q: { status?: string; jobId?: string } = {}) => {
+        asked.push(`${q.status}:${q.jobId}`);
+        return store.filter((c) => (q.status === "all" || c.status === (q.status ?? "review")) && (!q.jobId || c.jobId === q.jobId));
+      },
+    };
+    const list = await reviewClips("J1");
+    expect(list.map((c) => c.clipId)).toEqual(["C3", "C2"]);
+    expect(asked).toEqual(["all:J1", "review:J2"]);
+    // A job with no copies: one read, its Review clips only.
+    asked.length = 0;
+    store[0] = clip("C1", "J1", "review");
+    expect((await reviewClips("J1")).map((c) => c.clipId)).toEqual(["C1", "C3"]);
+    expect(asked).toEqual(["all:J1"]);
   });
 });
 
@@ -331,6 +440,73 @@ describe("the fit block (CampaignFit.tsx)", () => {
     expect(vermilion()).toEqual([]);
   });
 
+  it("doesn't fit shows only its no line: never the send note or the Instagram note under a can't-earn headline", async () => {
+    const f = fit([
+      it_("length", "no", "This clip is 72 seconds. FaZe Clips takes 15 to 60 seconds.", { kind: "new_clips", label: "Make new clips for this campaign", href: `/?campaign=${CID}` }),
+      it_("paid_switch", "note", "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers."),
+      SEND,
+      ...OK_ITEMS,
+    ]);
+    await draw(createElement(Block, { clipId: "c1", fit: f, primary: true }));
+    expect(host.textContent).toContain("This clip is 72 seconds.");
+    expect(host.textContent).not.toContain("After it posts");
+    expect(host.textContent).not.toContain("Instagram doesn't let apps");
+  });
+
+  it("one thing first: only the first todo, one Open Content Rewards settings, and its own green I added it", async () => {
+    const settings = { kind: "open" as const, label: "Open Content Rewards settings", href: "https://contentrewards.com/c/settings", external: true };
+    const f = fit([
+      it_("places", "todo", "Add YouTube in Content Rewards first. Then tap I added it.", settings, "youtube"),
+      it_("place_link", "note", "Content Rewards doesn't know your Instagram account. Add it there, then tap I added it.", settings, "instagram"),
+      SEND,
+    ]);
+    const onAdded = vi.fn(async () => true);
+    await draw(createElement(Block, { clipId: "c1", fit: f, primary: true, onAdded }));
+    expect(host.textContent).toContain("One thing first for FaZe Clips");
+    expect(host.textContent).not.toContain("Instagram account");
+    expect(buttons().filter((b) => b === "Open Content Rewards settings")).toHaveLength(1);
+    expect(vermilion()).toEqual(["Open Content Rewards settings (opens in a new tab)"]);
+    const added = [...host.querySelectorAll<HTMLElement>(".btn--leaf")].find((b) => b.textContent?.includes("I added it"))!;
+    await act(async () => added.click());
+    expect(onAdded).toHaveBeenCalledWith("youtube");
+  });
+
+  it("his own check is never Clip Factory's tick: after I read them, no check mark on the headline", async () => {
+    localStorage.clear();
+    const f = fit([it_("uncertain", "check", "I couldn't check: Clips must feel organic. Look yourself.", READ), SEND, ...OK_ITEMS]);
+    await draw(createElement(Block, { clipId: "c9", fit: f, primary: true }));
+    // The things to check come right under the headline, before the send note, without saying "I couldn't check:" twice.
+    const text = host.textContent ?? "";
+    expect(text.indexOf("Clips must feel organic.")).toBeLessThan(text.indexOf("After it posts"));
+    expect(host.querySelector(".cr-fit__checks")?.textContent).not.toContain("I couldn't check: ");
+    await act(async () => [...host.querySelectorAll("button")].find((b) => b.textContent?.includes(READ_THEM))!.click());
+    expect(host.querySelector(".cr-fit__headline")?.textContent).toBe("You checked these for FaZe Clips");
+    // Icon.tsx draws the same path for the same name: the headline's icon is not the fits' check mark.
+    const tick = async () => {
+      await act(async () => root.unmount());
+      root = createRoot(host);
+      await draw(createElement(Block, { clipId: "c10", fit: fit([...OK_ITEMS, SEND]), primary: true }));
+      return host.querySelector(".cr-fit__headline svg")?.innerHTML;
+    };
+    const checkedIcon = host.querySelector(".cr-fit__headline svg")?.innerHTML;
+    expect(checkedIcon).not.toBe(await tick());
+  });
+
+  it("the copy: making, ready and uploaded each have their line, and no copy button meanwhile", async () => {
+    const f = fit([it_("on_screen", "remake", "“Paid partnership” isn't on the video.", { kind: "remake", label: "Make a FaZe Clips copy" }), ...OK_ITEMS]);
+    for (const [copy, words] of [
+      ["making", "Making a FaZe Clips copy… It shows here in about 3 minutes."],
+      ["ready", "The FaZe Clips copy is ready, right below."],
+      ["done", "The FaZe Clips copy is uploaded. You can throw this one away."],
+    ] as const) {
+      await draw(createElement(Block, { clipId: "c1", fit: f, primary: true, onRemake: () => undefined, copy }));
+      expect(host.textContent).toContain(words);
+      expect(buttons()).not.toContain("Make a FaZe Clips copy");
+    }
+    await draw(createElement(Block, { clipId: "c1", fit: f, primary: true, onRemake: () => undefined, copy: "none" }));
+    expect(vermilion()).toEqual(["Make a FaZe Clips copy"]);
+  });
+
   it("can't tell: I couldn't check these, Read the rules once, and I read them folds the lines (this device only)", async () => {
     localStorage.clear();
     const f = fit([it_("uncertain", "check", "I couldn't check: Clips must feel organic. Look yourself.", READ), it_("banned", "check", "I couldn't check: no swearing. Look yourself.", READ), ...OK_ITEMS]);
@@ -390,6 +566,11 @@ describe("the could-earn line (FitSuggestion.tsx)", () => {
     root = createRoot(host);
     await draw(createElement(FitSuggestion, { clipId: "c2", fit: suggested, onCopy: () => undefined }));
     await act(async () => [...host.querySelectorAll("button")].find((b) => b.textContent === "Not now")!.click());
+    expect(host.textContent).toBe("");
+  });
+
+  it("not read yet: nothing at all (a copy already asked for never flashes its button)", async () => {
+    await draw(createElement(FitSuggestion, { clipId: "c1", fit: suggested, onCopy: () => undefined, copy: "unknown" }));
     expect(host.textContent).toBe("");
   });
 

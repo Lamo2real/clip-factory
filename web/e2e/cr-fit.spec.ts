@@ -17,11 +17,11 @@ const DESKTOP = { viewport: { width: 1440, height: 900 } } as const;
 type Knobs = Record<string, (...a: unknown[]) => unknown>;
 type MockWin = Window & { __cfMock?: { cr?: Knobs; setup?: Knobs; jobs?: Knobs } };
 
-async function start(page: Page, flags: { remake?: boolean; fresh?: boolean } = {}) {
+async function start(page: Page, flags: { remake?: boolean | "fail"; fresh?: boolean } = {}) {
   await page.addInitScript((f) => {
     if (sessionStorage.getItem("cf-e2e-cr-fit")) return;
     sessionStorage.setItem("cf-e2e-cr-fit", "1");
-    if (f.remake) sessionStorage.setItem("cf-mock-cr-remake", "on");
+    if (f.remake) sessionStorage.setItem("cf-mock-cr-remake", f.remake === "fail" ? "fail" : "on");
     if (f.fresh) sessionStorage.setItem("cf-mock-cr-start", "fresh");
   }, flags);
 }
@@ -38,14 +38,14 @@ async function go(page: Page, path: string) {
 }
 
 /** FaZe Clips' campaign clips of one new job, on /review?job= (the first card is a campaign clip). */
-async function campaignClips(page: Page) {
+async function campaignClips(page: Page, link = VIDEO) {
   await page.goto("/");
   await page.waitForFunction(() => !!(window as MockWin).__cfMock?.jobs && !!(window as MockWin).__cfMock?.setup);
   await knob(page, "setup", "finish", "youtube");
   await knob(page, "setup", "finish", "instagram");
   await page.goto(`/?campaign=${FAZE}`);
   await settle(page);
-  await page.getByLabel("YouTube, Twitch or Kick link").fill(VIDEO);
+  await page.getByLabel("YouTube, Twitch or Kick link").fill(link);
   await page.locator("form.newjob").getByRole("button", { name: "Make campaign clips", exact: true }).click();
   await expect(page).toHaveURL(/\/jobs\/[0-9A-Z]{26}$/);
   await knob(page, "jobs", "finish");
@@ -138,6 +138,62 @@ test.describe("the fit block on Review", () => {
     await expect(fit).toContainText("Add YouTube in Content Rewards first. Then tap I added it.");
     await expect(tomatoes(page)).toHaveCount(1);
     await expect(fit.locator(".btn--primary")).toHaveText(/Open Content Rewards settings/);
+    // One thing at a time: the first todo only, one Open (never twice), and its own green I added it right there.
+    await expect(fit).not.toContainText("Instagram account");
+    await expect(fit.getByRole("link", { name: /Open Content Rewards settings/ })).toHaveCount(1);
+    const added = fit.getByRole("button", { name: "I added it" });
+    await expect(added).toHaveClass(/btn--leaf/);
+    await added.click();
+    await expect(fit.locator(".cr-fit__headline")).not.toHaveText("One thing first for FaZe Clips");
+    await expect(fit).not.toContainText("Add YouTube in Content Rewards first.");
+  });
+
+  test("the block leads the card: above what the clip is and its Upload, on a phone and on a wide screen", async ({ page }) => {
+    await start(page);
+    const { card } = await campaignClips(page);
+    for (const width of [375, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(250);
+      const fit = (await card.locator(".cr-fit").boundingBox())!;
+      const head = (await card.locator(".review-card__head").boundingBox())!;
+      const upload = (await card.getByRole("button", { name: /^Upload to 2$/ }).boundingBox())!;
+      expect(fit.y, `${width}: the block starts above the clip's words`).toBeLessThan(head.y);
+      expect(fit.y + fit.height, `${width}: the block ends above Upload`).toBeLessThanOrEqual(upload.y);
+    }
+  });
+
+  test("a Kick video on FaZe Clips (YouTube and Twitch only): can't earn, with its reason and Make new clips", async ({ page }) => {
+    await start(page);
+    const { card } = await campaignClips(page, "https://kick.com/video/3b7f2c1e-faze-clutch");
+    const fit = card.locator(".cr-fit");
+    await expect(fit.locator(".cr-fit__headline")).toHaveText("This clip can't earn on FaZe Clips");
+    await expect(fit).toContainText("FaZe Clips doesn't pay for clips of Kick videos.");
+    // The doesn't-fit block says only why: no send note under a can't-earn headline.
+    await expect(fit).not.toContainText("After it posts");
+    const main = fit.getByRole("link", { name: "Make new clips for this campaign" });
+    await expect(main).toHaveClass(/btn--primary/);
+    await expect(main).toHaveAttribute("href", `/?campaign=${FAZE}`);
+  });
+
+  test("a copy whose job failed: Making… goes away and Make a FaZe Clips copy comes back", async ({ page }) => {
+    await start(page, { remake: "fail" });
+    const { card, clipId } = await campaignClips(page);
+    await knob(page, "jobs", "checklist", clipId, "disclosure", false);
+    const fit = card.locator(".cr-fit");
+    const make = fit.getByRole("button", { name: "Make a FaZe Clips copy" });
+    await expect(make).toHaveClass(/btn--primary/);
+    await make.click();
+    await expect(fit).toContainText("Making a FaZe Clips copy… It shows here in about 3 minutes.");
+    await expect(make).toHaveCount(0);
+    await expect(card.locator(".upload-going")).toContainText("Making a FaZe Clips copy…");
+    // The copy's job fails (the pretend agent): the block reads that job and offers the copy again.
+    await expect(fit).not.toContainText("Making a FaZe Clips copy…", { timeout: 15_000 });
+    await expect(fit.getByRole("button", { name: "Make a FaZe Clips copy" })).toHaveClass(/btn--primary/);
+    await expect(card.locator(".upload-going")).toContainText("Tap Make a FaZe Clips copy first.");
+    // The clip page reads the same job: the button, not Making… for good.
+    await go(page, `/clips/${clipId}`);
+    await expect(page.locator(".cr-clip-fit").getByRole("button", { name: "Make a FaZe Clips copy" })).toBeVisible();
+    await expect(page.locator(".cr-clip-fit")).not.toContainText("Making a FaZe Clips copy…");
   });
 
   test("a copy: Make a FaZe Clips copy is the vermilion; the copy arrives right below by live news", async ({ page }) => {
@@ -194,6 +250,13 @@ test.describe("the fit block on Review", () => {
     await go(page, `/clips/${clipId}`);
     await expect(page.locator(".cr-clip-fit .cr-fit__headline")).toHaveText("Can earn on FaZe Clips");
     await expect(page.locator(".cr-clip-fit__all")).toHaveCount(0);
+    // No numbers yet because it waits in Review: the page sends him to Review, where it can be uploaded.
+    const empty = page.locator(".empty");
+    if (await empty.count()) {
+      await expect(empty).toContainText("It waits in Review. Upload it there first.");
+      await expect(empty.getByRole("link", { name: "Go to Review" })).toHaveClass(/btn--primary/);
+      await expect(empty.getByRole("link", { name: "Go to Library" })).toHaveCount(0);
+    }
     // A normal clip waiting in Review: the could-earn line, and the fold, closed by default.
     await go(page, "/review");
     const normal = page.locator(".review-card").filter({ has: page.locator(".cr-suggest") }).first();
