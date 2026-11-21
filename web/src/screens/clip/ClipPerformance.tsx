@@ -22,6 +22,8 @@ import { isoWeek, weekRange } from "../../lib/week.ts";
 import { CrPostLines } from "../../components/CrPostLine.tsx";
 import { sendGroups, useSubmissions } from "../../lib/contentRewards.ts";
 import { CampaignsFold, ClipFit, useClipPageFit, useWaitingClip, WaitingClipFit } from "./ClipFit.tsx";
+import { canPostYourselfHere } from "../../lib/tiktokYourself.ts";
+import { PostYourselfButton } from "../library/PostYourself.tsx";
 
 /** Re-renders every `ms` so "3 min ago" and "Next check in 4 min" stay true. */
 export function useNow(ms = 15_000): number {
@@ -422,6 +424,10 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
             >
               {label}
             </Button>
+            {/* TikTok keeps Clip Factory's own uploads Only me for now: he can post it there himself (§40). */}
+            {canPostYourselfHere(perf.clip, perf.posts.find((p) => p.platform === "tiktok")) ? (
+              <PostYourselfButton clip={perf.clip} onMarked={() => void load()} size="md" />
+            ) : null}
             {/* Not a live region: the clock re-renders it every minute. New numbers are announced by the toast. */}
             {/* The span is what the window look tints (see-through, glass.css), so the tint hugs the words. */}
             <p className="perf__updated">

@@ -250,7 +250,7 @@ export interface CalmCopy {
 }
 
 /** The one plain line (and link) a stack shows instead of numbers. Null when it has numbers to show. */
-export function calmCopy(p: Pick<PlatformPerformance, "platform" | "status" | "metrics" | "error">): CalmCopy | null {
+export function calmCopy(p: Pick<PlatformPerformance, "platform" | "status" | "metrics" | "error"> & Partial<Pick<PlatformPerformance, "by" | "url">>): CalmCopy | null {
   const name = PLATFORM_LABEL[p.platform];
   switch (p.status) {
     case "waiting_for_connection":
@@ -272,6 +272,8 @@ export function calmCopy(p: Pick<PlatformPerformance, "platform" | "status" | "m
       return { text: `${why}. Go to Library and tap Try again.`, link: { href: "/library", label: "Go to Library" } };
     }
     case "posted":
+      // Posted on TikTok by the owner himself (§40): only its link lets Clip Factory find its numbers.
+      if (p.by === "you" && !p.url) return { text: "Posted by you. Add its TikTok link in Library to count views.", link: { href: "/library", label: "Go to Library" } };
       return p.metrics ? null : { text: "Numbers are on the way. Check back in a few minutes." };
   }
 }

@@ -1,5 +1,5 @@
 {
-  "version": "639e092225ad",
+  "version": "ab48a0f78f8c",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -34,6 +34,7 @@
     "src/screens/jobs/mergeJobs.ts",
     "src/screens/jobs/pendingStops.ts",
     "src/screens/library/Library.tsx",
+    "src/screens/library/PostYourself.tsx",
     "src/screens/library/WeekView.tsx",
     "src/screens/review/CampaignFit.tsx",
     "src/screens/review/CampaignStrip.tsx",
@@ -3836,15 +3837,15 @@
         "review",
         "show",
         "views",
+        "save",
+        "video",
+        "tiktok",
+        "paste",
+        "close",
         "make",
         "earlier",
         "week",
-        "later",
-        "best",
-        "commercial",
-        "post",
-        "tiktok",
-        "close"
+        "later"
       ],
       "answer": "Library has every clip you uploaded.",
       "steps": [
@@ -3889,6 +3890,11 @@
         "loading",
         "check",
         "views",
+        "save",
+        "video",
+        "tiktok",
+        "paste",
+        "close",
         "fix"
       ],
       "answer": "A clip's page shows how it does on each app. Tap a clip in Library to open it.",

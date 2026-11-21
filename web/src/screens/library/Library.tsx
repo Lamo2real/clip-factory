@@ -22,6 +22,8 @@ import { needsTikTokChoices, needsUploadAgain, START_GRACE_MS, STILL_WORKING, up
 import { TikTokSheet } from "../review/TikTokSheet.tsx";
 import { ClipStatusPill } from "../jobs/JobDetail.tsx";
 import { useSetup } from "../settings/setup/useSetup.ts";
+import { canPostYourself } from "../../lib/tiktokYourself.ts";
+import { PostYourselfButton } from "./PostYourself.tsx";
 
 interface LibraryData {
   clips: Clip[];
@@ -291,9 +293,69 @@ function LibraryCard({
   const ordered = byPlatformOrder(posts);
   // A waiting post whose place is set up since can go now (a clip still publishing finishes its run first).
   const canPostNow = (p: Post) => p.status === "pending_integration" && ready.includes(p.platform) && clip.status !== "publishing";
-  const waiting = ordered.filter((p) => p.status === "pending_integration" && !canPostNow(p));
+  // TikTok keeps Clip Factory's own uploads Only me until it approves the app, so the owner can post it there
+  // himself (§40): TikTok then gets its own row, even while TikTok is not set up or has no post at all.
+  const yourself = canPostYourself(clip, posts);
+  const ownRow = (p: Post) => p.status !== "pending_integration" || canPostNow(p) || (yourself && p.platform === "tiktok");
+  const waiting = ordered.filter((p) => !ownRow(p));
   const totalViews = clip.totalViews ?? posts.reduce((n, p) => n + (p.metrics?.views ?? 0), 0);
-  const rest = ordered.filter((p) => p.status !== "pending_integration" || canPostNow(p));
+  const rest = ordered.filter(ownRow);
+  const noTikTok = yourself && !posts.some((p) => p.platform === "tiktok");
+  const marked = (out: { clip: Clip; posts: Post[] }) => onKept(out.clip, out.posts);
+  const row = (p: Post) => (
+    <li key={p.postId} className={`post is-${p.status}`}>
+      <span className="post__mark" title={PLATFORM_LABEL[p.platform]}>
+        <PlatformMark platform={p.platform} size={18} />
+      </span>
+      <span className="post__text">
+        <span className="post__name">{PLATFORM_LABEL[p.platform]}</span>
+        <span className="post__status clamp-2">
+          {p.by === "you"
+            ? p.url
+              ? "Posted by you · Everyone"
+              : "Posted by you · Everyone · add the link to count views"
+            : canPostNow(p)
+              ? "Ready to post"
+              : p.status === "failed" && p.error
+                ? `${postStatusLabel(p)}. ${p.error}`
+                : postStatusLabel(p)}
+          {p.status === "posted" && !p.metrics && p.perfCheckAt && !(p.by === "you" && !p.url) && p.privacy !== "private" ? ` · numbers ${relative(p.perfCheckAt)}` : ""}
+        </span>
+      </span>
+      {/* TikTok only lets Clip Factory post Only me for now: the owner posts it there himself (§40). */}
+      {yourself && p.platform === "tiktok" ? <PostYourselfButton clip={clip} onMarked={marked} /> : null}
+      {p.by === "you" && !p.url ? <PostYourselfButton clip={clip} onMarked={marked} linkOnly postedAt={p.postedAt} /> : null}
+      {/* One place did not work on an uploaded clip: Try again for that place only (§33). */}
+      {p.status === "failed" && clip.status === "posted" ? <UploadAgain clip={clip} posts={posts} platform={p.platform} onKept={onKept} /> : null}
+      {/* Waiting for a place that is set up now: send it there (§33.6). */}
+      {canPostNow(p) ? <UploadAgain clip={clip} posts={posts} platform={p.platform} now onKept={onKept} /> : null}
+      {p.metrics ? (
+        <span className="post__metrics">
+          {/* A plain span cannot carry an aria-label: the numbers are read from this text instead. */}
+          <span className="sr-only">
+            {`${p.metrics.views ?? "no"} views, ${p.metrics.likes ?? "no"} likes, ${p.metrics.comments ?? "no"} comments`}
+          </span>
+          <span aria-hidden="true">
+            <Icon name="eye" size={15} />
+            {compact(p.metrics.views)}
+          </span>
+          <span aria-hidden="true">
+            <Icon name="heart" size={15} />
+            {compact(p.metrics.likes)}
+          </span>
+          <span aria-hidden="true">
+            <Icon name="comment" size={15} />
+            {compact(p.metrics.comments)}
+          </span>
+        </span>
+      ) : null}
+      {p.url ? (
+        <a className="icon-btn post__open" href={p.url} target="_blank" rel="noreferrer noopener" aria-label={`Open the ${PLATFORM_LABEL[p.platform]} post`}>
+          <Icon name="external" size={16} />
+        </a>
+      ) : null}
+    </li>
+  );
   // Uploaded, but its posting did not start (the start after a Try again, Post now or connect did not go through,
   // §14.5): once that lasts past the normal moment, the big Try again starts it.
   const stuck = useHeld(!!clip.startPending, START_GRACE_MS);
@@ -333,49 +395,20 @@ function LibraryCard({
               <span className="post__status">{STATUS_LABEL.waiting_for_connection}. Posts once these accounts are connected.</span>
             </li>
           ) : null}
-          {rest.map((p) => (
-            <li key={p.postId} className={`post is-${p.status}`}>
-              <span className="post__mark" title={PLATFORM_LABEL[p.platform]}>
-                <PlatformMark platform={p.platform} size={18} />
+          {rest.filter((p) => p.platform === "youtube").map(row)}
+          {noTikTok ? (
+            <li className="post is-none">
+              <span className="post__mark" title={PLATFORM_LABEL.tiktok}>
+                <PlatformMark platform="tiktok" size={18} />
               </span>
               <span className="post__text">
-                <span className="post__name">{PLATFORM_LABEL[p.platform]}</span>
-                <span className="post__status clamp-2">
-                  {canPostNow(p) ? "Ready to post" : p.status === "failed" && p.error ? `${postStatusLabel(p)}. ${p.error}` : postStatusLabel(p)}
-                  {p.status === "posted" && !p.metrics && p.perfCheckAt ? ` · numbers ${relative(p.perfCheckAt)}` : ""}
-                </span>
+                <span className="post__name">{PLATFORM_LABEL.tiktok}</span>
+                <span className="post__status clamp-2">Not on TikTok yet</span>
               </span>
-              {/* One place did not work on an uploaded clip: Try again for that place only (§33). */}
-              {p.status === "failed" && clip.status === "posted" ? <UploadAgain clip={clip} posts={posts} platform={p.platform} onKept={onKept} /> : null}
-              {/* Waiting for a place that is set up now: send it there (§33.6). */}
-              {canPostNow(p) ? <UploadAgain clip={clip} posts={posts} platform={p.platform} now onKept={onKept} /> : null}
-              {p.metrics ? (
-                <span className="post__metrics">
-                  {/* A plain span cannot carry an aria-label: the numbers are read from this text instead. */}
-                  <span className="sr-only">
-                    {`${p.metrics.views ?? "no"} views, ${p.metrics.likes ?? "no"} likes, ${p.metrics.comments ?? "no"} comments`}
-                  </span>
-                  <span aria-hidden="true">
-                    <Icon name="eye" size={15} />
-                    {compact(p.metrics.views)}
-                  </span>
-                  <span aria-hidden="true">
-                    <Icon name="heart" size={15} />
-                    {compact(p.metrics.likes)}
-                  </span>
-                  <span aria-hidden="true">
-                    <Icon name="comment" size={15} />
-                    {compact(p.metrics.comments)}
-                  </span>
-                </span>
-              ) : null}
-              {p.url ? (
-                <a className="icon-btn post__open" href={p.url} target="_blank" rel="noreferrer noopener" aria-label={`Open the ${PLATFORM_LABEL[p.platform]} post`}>
-                  <Icon name="external" size={16} />
-                </a>
-              ) : null}
+              <PostYourselfButton clip={clip} onMarked={marked} />
             </li>
-          ))}
+          ) : null}
+          {rest.filter((p) => p.platform !== "youtube").map(row)}
         </ul>
       ) : needsUploadAgain(clip, posts) ? null : (
         <p className="muted small">No posts yet.</p>

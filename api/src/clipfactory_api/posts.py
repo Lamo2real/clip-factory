@@ -25,6 +25,7 @@ POST_FIELDS = (
     "error",
     "campaignId",  # the Content Rewards campaign the post is for: set at creation, never changed (§38.11)
     "paidLabel",  # "not_set" when the platform refused the paid-partnership switch (§38.14)
+    "by",  # "you": the owner posted it on TikTok himself (§40)
 )
 COMMON_METRICS = ("views", "likes", "comments", "shares")
 REFRESH_CLAIM = timedelta(minutes=5)  # a manual refresh counts as running for this long (§16.2)
