@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timedelta
 from typing import Any
@@ -712,6 +713,7 @@ class View:
                 out[k] = full[k]
         out["chip"] = full["nextStep"]["chip"]
         out["nextStepText"] = full["nextStep"]["text"]
+        out["nextStepKind"] = full["nextStep"]["kind"]  # §39.1: "make_clips" chips open /?campaign={uuid}
         out["hardStops"] = sum(1 for s in full["stops"] if s["hard"])
         return out
 
@@ -721,13 +723,90 @@ def _places_note(view: View, item: Mapping[str, Any], places: list[str]) -> str 
     linked = connection.crlinked(view.conn)
     refused = [p for p in STATS_ORDER if p in paid and linked.get(p) is False]
     if refused:
-        return f"Link {gates.LABELS.get(refused[0], refused[0])} inside Content Rewards first."
+        return f"Add {gates.LABELS.get(refused[0], refused[0])} in Content Rewards first."
     if gates.tiktok_waits(paid, view.setups):
         return (
             "TikTok is left out for now. Until TikTok checks Clip Factory, TikTok posts are private, and private posts "
             "can't earn."
         )
     return None
+
+
+SITES = (("youtube", "YouTube"), ("twitch", "Twitch"), ("kick", "Kick"))
+
+
+def possessive(name: str) -> str:
+    """``FaZe`` → ``FaZe's``, ``Clips`` → ``Clips'``."""
+    return f"{name}'" if name.endswith("s") else f"{name}'s"
+
+
+def allowed_sites(rules_now: Mapping[str, Any]) -> list[str]:
+    """The sites the brief's ``allowedSources`` flags name, in YouTube, Twitch, Kick order ([] when none is set)."""
+    allowed = obj(rules_now.get("allowedSources"))
+    return [site for site, _label in SITES if allowed.get(site) is True]
+
+
+def source_rule_text(item: Mapping[str, Any]) -> str | None:
+    """The campaign's source rule as one line under Home's link box (§39.1), from the stored rules only."""
+    rules_now = obj(item.get("rules"))
+    allowed = obj(rules_now.get("allowedSources"))
+    name = str(item.get("name") or "This campaign")
+    owner = possessive(str(item.get("brand") or name))
+    sites = allowed_sites(rules_now)
+    labels = [label for site, label in SITES if site in sites]
+    if allowed.get("campaignProvidedOnly"):
+        return f"{name} pays only for clips of its own videos. Pick one below."
+    if [c for c in allowed.get("channels") or [] if isinstance(c, Mapping) and c.get("name")]:
+        where = gates._join(labels) if labels and len(labels) < len(SITES) else "channels"
+        return f"{name} pays only for clips of {owner} {where}."
+    if labels and len(labels) < len(SITES):
+        return f"{name} pays only for clips of {gates._join(labels)} videos."
+    return None
+
+
+# The fit check's one fixed language table (§39.3): ``rules.language`` is free text, ``job.sourceLanguage`` BCP 47.
+LANGUAGES: tuple[tuple[str, str], ...] = (
+    ("en", "English"),
+    ("es", "Spanish"),
+    ("pt", "Portuguese"),
+    ("fr", "French"),
+    ("de", "German"),
+    ("it", "Italian"),
+    ("ja", "Japanese"),
+    ("ko", "Korean"),
+    ("hi", "Hindi"),
+    ("ar", "Arabic"),
+    ("tr", "Turkish"),
+    ("ru", "Russian"),
+)
+
+
+def languages_in(text: str) -> list[tuple[str, str]]:
+    """The table's languages a free-text rule names, by name or code, as whole words, case-insensitive."""
+    return [
+        (code, name)
+        for code, name in LANGUAGES
+        if re.search(rf"(?<![^\W\d_])(?:{code}|{name})(?![^\W\d_])", text, re.IGNORECASE)
+    ]
+
+
+def language_words(text: str) -> str:
+    """``"English or Spanish"`` for the languages a rule names; the rule's own words when it names none."""
+    found = [name for _, name in languages_in(text)]
+    if found:
+        return found[0] if len(found) == 1 else ", ".join(found[:-1]) + " or " + found[-1]
+    words = " ".join(text.split())
+    return (words[:59].rstrip() + "…" if len(words) > 60 else words).rstrip(".!? ")
+
+
+def language_rule_text(item: Mapping[str, Any]) -> str | None:
+    """``rules.language`` as one line (§39.1): the languages the fit check knows, else the brief's own words."""
+    rules_now = obj(item.get("rules"))
+    raw = rules_now.get("language")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    name = str(item.get("name") or "This campaign")
+    return f"{name} wants clips in {language_words(raw)}."
 
 
 def public_campaign(view: View, item: Mapping[str, Any]) -> Item:
@@ -787,6 +866,8 @@ def public_campaign(view: View, item: Mapping[str, Any]) -> Item:
         for c in channels
         if isinstance(c, Mapping) and c.get("name")
     ]
+    out["sourceRuleText"] = source_rule_text(item)
+    out["languageRuleText"] = language_rule_text(item)
     out["uploadPlaces"] = places
     note = _places_note(view, item, places)
     if note:

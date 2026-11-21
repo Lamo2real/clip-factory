@@ -110,6 +110,7 @@ def test_a_clean_campaign_has_no_stops() -> None:
         ({"capReached": True}, "cap_reached", True),
         ({"rules": {**rules.empty(), "draftsFirst": True}}, "drafts_first", True),
         ({"rules": {**rules.empty(), "soundRequired": True}}, "sound_needed", True),
+        ({"rules": {**rules.empty(), "overlayRequired": True}}, "overlay_needed", True),
         ({"rules": {**rules.empty(), "faceOnCamera": True}}, "face_needed", False),
         (
             {
@@ -198,7 +199,8 @@ def test_membership_rows(
 
 def test_row_details() -> None:
     connect = step(campaign(membership="unknown"), NOT_CONNECTED)
-    assert connect["button"]["href"] == "/settings/posting/setup/contentrewards"
+    # §39.1: the way back to this card (the one server-made href with a ?back=)
+    assert connect["button"]["href"] == f"/settings/posting/setup/contentrewards?back=/campaigns/{UUID}"
     assert connect["asks"][0]["said"] == "joined_by_hand"
     applied = step(campaign(membership="apply_first", access="application"))
     assert applied["button"]["action"] == "said_applied"
@@ -412,3 +414,58 @@ def test_a_listed_campaign_without_platforms_keeps_the_public_pay() -> None:
     assert [p["platform"] for p in item["pay"]] == ["youtube", "instagram"]
     campaigns.apply_listed(item, {**listed[0], "platforms": []}, "typeid")
     assert item["platformsPaid"] == []  # an empty list is CR saying it pays nowhere
+
+
+# --- §39: the overlay stop and the way back ---------------------------------------------------------------------
+
+
+def test_overlay_needed_is_a_hard_stop_that_sends_him_elsewhere() -> None:
+    """§39.1 change 11: a brief asking for its own picture on top of the video is a hard stop, like a sound."""
+    item = campaign(rules={**rules.empty(), "overlayRequired": True})
+    stop = next(s for s in gates.stops(item, CONNECTED, ["youtube"], NOW) if s["code"] == "overlay_needed")
+    assert stop == {
+        "code": "overlay_needed",
+        "hard": True,
+        "text": "This campaign wants its own picture on top of the video. Clip Factory can't add it yet. Pick another "
+        "campaign.",
+    }
+    found = step(item)
+    assert (found["kind"], found["chip"], _button(found)) == (
+        "pick_another",
+        "Can't do this one",
+        "Find another campaign",
+    )
+    assert "overlay_needed" in gates.ELSEWHERE
+    assert codes(campaign()) == []  # off by default (rules.empty)
+
+
+def test_not_connected_note_links_back_to_the_card() -> None:
+    """§39.1 change 8: the not_connected stop's fixHref carries ?back=/campaigns/{uuid} too."""
+    item = campaign(membership="manual")
+    stop = next(s for s in gates.stops(item, NOT_CONNECTED, ["youtube"], NOW) if s["code"] == "not_connected")
+    assert stop["fixHref"] == f"/settings/posting/setup/contentrewards?back=/campaigns/{UUID}"
+
+
+def test_next_step_kind_and_the_rule_lines() -> None:
+    """§39.3: CampaignSummary.nextStepKind and the Campaign's sourceRuleText and languageRuleText."""
+    plain = campaign()
+    assert campaigns.source_rule_text(plain) is None
+    assert campaigns.language_rule_text(plain) is None
+    allowed = {**rules.empty()["allowedSources"], "youtube": True, "twitch": True, "channels": [{"name": "FaZe Clan"}]}
+    channels = campaign(rules={**rules.empty(), "allowedSources": allowed, "language": "EN only"})
+    assert campaigns.source_rule_text(channels) == "FaZe Clips pays only for clips of FaZe's YouTube and Twitch."
+    assert campaigns.language_rule_text(channels) == "FaZe Clips wants clips in English."
+    own = campaign(
+        rules={**rules.empty(), "allowedSources": {**rules.empty()["allowedSources"], "campaignProvidedOnly": True}}
+    )
+    assert campaigns.source_rule_text(own) == "FaZe Clips pays only for clips of its own videos. Pick one below."
+    any_channel = campaign(
+        rules={**rules.empty(), "allowedSources": {**rules.empty()["allowedSources"], "channels": [{"name": "FaZe"}]}}
+    )
+    assert campaigns.source_rule_text(any_channel) == "FaZe Clips pays only for clips of FaZe's channels."
+    sites = campaign(rules={**rules.empty(), "allowedSources": {**rules.empty()["allowedSources"], "kick": True}})
+    assert campaigns.source_rule_text(sites) == "FaZe Clips pays only for clips of Kick videos."
+    two = campaign(rules={**rules.empty(), "language": "English or Spanish"})
+    assert campaigns.language_rule_text(two) == "FaZe Clips wants clips in English or Spanish."
+    other = campaign(rules={**rules.empty(), "language": "Tagalog"})
+    assert campaigns.language_rule_text(other) == "FaZe Clips wants clips in Tagalog."
