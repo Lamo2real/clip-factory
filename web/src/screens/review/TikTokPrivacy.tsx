@@ -5,7 +5,7 @@ import { useId } from "react";
 import type { TikTokCreator } from "../../api/types.ts";
 import { Dropdown } from "../../components/Dropdown.tsx";
 import { Icon } from "../../components/Icon.tsx";
-import { onlyPrivateAllowed, PRIVACY_LABEL, privacyChoices } from "../../lib/tiktokChoices.ts";
+import { BRANDED_PRIVATE_LINE, onlyPrivateAllowed, orderedPrivacy, PRIVACY_LABEL, privacyChoices } from "../../lib/tiktokChoices.ts";
 
 export function TikTokPrivacy({
   creator,
@@ -15,24 +15,27 @@ export function TikTokPrivacy({
 }: {
   creator: TikTokCreator;
   value: string;
-  /** Branded content is on: Only me is not offered (TikTok's rule). */
+  /** Branded content is on: Only me and Followers show greyed with TikTok's line (TikTok's rule). */
   branded: boolean;
   onChange: (privacy: string) => void;
 }) {
   const id = useId();
-  const options = privacyChoices(creator.privacyOptions, branded);
+  const allowed = privacyChoices(creator.privacyOptions, branded);
   const onlyMe = onlyPrivateAllowed(creator.privacyOptions);
   return (
     <div className="field">
       <span className="field__label" id={`${id}-label`}>
         Who can see it
       </span>
-      {options.length ? (
+      {allowed.length ? (
         <Dropdown
           labelledBy={`${id}-label`}
           value={value}
           placeholder="Pick who can see it"
-          options={options.map((o) => ({ value: o, label: PRIVACY_LABEL[o] ?? o }))}
+          options={orderedPrivacy(creator.privacyOptions).map((o) => {
+            const off = !allowed.includes(o);
+            return { value: o, label: PRIVACY_LABEL[o] ?? o, disabled: off, line: off ? BRANDED_PRIVATE_LINE : undefined };
+          })}
           onChange={onChange}
           describedBy={onlyMe ? `${id}-hint` : undefined}
         />

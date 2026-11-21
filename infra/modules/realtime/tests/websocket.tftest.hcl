@@ -129,9 +129,9 @@ run "stream_mapping_has_one_filter_with_seven_prefixes" {
 
   assert {
     condition = jsondecode(one(one(aws_lambda_event_source_mapping.broadcast.filter_criteria).filter).pattern) == {
-      dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }, { prefix = "ACCOUNT#" }, { prefix = "SETUP#" }, { prefix = "FOLLOW#" }, { prefix = "JOBLIVE#" }] } } }
+      dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }, { prefix = "ACCOUNT#" }, { prefix = "SETUP#" }, { prefix = "FOLLOW#" }, { prefix = "JOBLIVE#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRCONN" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }] } } }
     }
-    error_message = "The filter must pass only JOB#, CLIP#, POST#, LEARNING#, WEEK#, ACCOUNT#, SETUP#, FOLLOW# and JOBLIVE# items (never STAT#, RATE#, OAUTH#/STATE or FOLLOWKEYS#)."
+    error_message = "The filter must pass only JOB#, CLIP#, POST#, LEARNING#, WEEK#, ACCOUNT#, SETUP#, FOLLOW#, JOBLIVE# and the Content Rewards CAMPAIGN#, CRCONN, CRSUB#, CRMONEY items (never STAT#, RATE#, OAUTH#/STATE, FOLLOWKEYS#, CRSTATE# or CROWNERS)."
   }
 
   assert {

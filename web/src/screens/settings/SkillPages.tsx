@@ -135,7 +135,7 @@ const BUILTIN_LEAF = "This skill comes with Clip Factory. It is always used. You
 function ReadPage({ tree, branch, skillId }: Place & { skillId: string }) {
   const { data, error, missing, reload } = useLoad(() => api().getSkill(skillId), skillId);
   const hidden = useHiddenSkills();
-  // §38: after Add, Undo or Not now the page reads the skill again (its words changed), keeping what is on screen.
+  // §44: after Add, Undo or Not now the page reads the skill again (its words changed), keeping what is on screen.
   const toast = useToast();
   const [asking, setAsking] = useState(false);
 

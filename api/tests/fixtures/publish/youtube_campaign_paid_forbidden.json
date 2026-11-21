@@ -1,0 +1,13 @@
+{
+  "error": {
+    "code": 403,
+    "message": "The request is not allowed to set paidProductPlacementDetails.",
+    "errors": [
+      {
+        "message": "The request is not allowed to set paidProductPlacementDetails.",
+        "domain": "youtube.video",
+        "reason": "forbidden"
+      }
+    ]
+  }
+}

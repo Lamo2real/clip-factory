@@ -8,11 +8,14 @@ import { Icon } from "../../../components/Icon.tsx";
 import { PlatformMark } from "../../../components/PlatformMark.tsx";
 import { ProgressRing } from "../../../components/ProgressRing.tsx";
 import { SkipConfirm } from "../../../components/SkipConfirm.tsx";
+import { useToast } from "../../../components/Toasts.tsx";
 import { A, Button, ErrorPanel, Skeleton } from "../../../components/ui.tsx";
 import { progressOf, stateLine } from "../../../lib/setupProgress.ts";
 import { isFinished, skippedNote, todoCount, todoRows, todoVisible } from "../../../lib/setupTodo.ts";
 import { GUIDES, SETUP_ORDER, timeLine } from "../../../setup/index.ts";
 import { Apple, Panel } from "../parts.tsx";
+import { CR_LOAD_FAILED, CR_SETUP_PATH, crCardLine, crSetupCount, crSnapshot, useCr } from "../../../lib/contentRewards.ts";
+import { crBridge } from "../../../lib/crConnect.ts";
 import { useSetup } from "./useSetup.ts";
 import { useSkips } from "./useSkips.ts";
 
@@ -104,6 +107,7 @@ export function SetupList() {
           );
         })}
       </ul>
+      <CrCardPart />
       {asking ? (
         <SkipConfirm
           platform={asking}
@@ -116,5 +120,88 @@ export function SetupList() {
         />
       ) : null}
     </>
+  );
+}
+
+/**
+ * "Get paid by brands" (§38.3): one glass card for Content Rewards, apart from the five platforms. It never joins the
+ * "2 of 5 ready" ring, the count or the floating setup list. An API from before §38 (404): nothing here at all.
+ */
+export function CrCardPart() {
+  const cr = useCr();
+  const toast = useToast();
+  const [retrying, setRetrying] = useState(false);
+  if (cr.state === "missing" || cr.state === "loading") return null;
+  // Try again shows it is trying; if it still can't load, a toast says why (the card's line alone would not change).
+  async function retry() {
+    setRetrying(true);
+    try {
+      await cr.reload();
+    } finally {
+      setRetrying(false);
+    }
+    const now = crSnapshot();
+    if (now.state === "error" && !now.data) toast.error(now.error);
+  }
+  const conn = cr.state === "ok" ? cr.data.connection : (cr.data?.connection ?? null);
+  const n = crSetupCount(conn);
+  const soon = cr.state === "soon";
+  // GET /v1/contentrewards failed with nothing kept yet: say so honestly, never "Not started".
+  const failed = cr.state === "error" && !conn;
+  return (
+    <section className="cr-part" aria-labelledby="cr-part-title">
+      <h2 className="setup-part__title cr-part__title" id="cr-part-title">
+        Get paid by brands
+      </h2>
+      <ul className="setup-cards" aria-label="Get paid by brands">
+        <li className="setup-card-wrap glass">
+          {soon ? (
+            <div className="setup-card is-soon" data-help="cr-setup-card">
+              <span className="setup-card__mark cr-mark" aria-hidden="true">
+                <Icon name="coin" size={28} />
+              </span>
+              <span className="setup-card__text">
+                <span className="setup-card__name">Content Rewards</span>
+                <span className="setup-card__state">Coming soon</span>
+              </span>
+            </div>
+          ) : failed ? (
+            <>
+              <div className="setup-card is-soon" data-cr="card" data-help="cr-setup-card">
+                <span className="setup-card__mark cr-mark" aria-hidden="true">
+                  <Icon name="coin" size={28} />
+                </span>
+                <span className="setup-card__text">
+                  <span className="setup-card__name">Content Rewards</span>
+                  <span className="setup-card__state" role="alert">
+                    {CR_LOAD_FAILED}
+                  </span>
+                </span>
+              </div>
+              <p className="setup-card__skip" data-cr="retry">
+                <Button size="md" variant="glass" icon="retry" act="retry" loading={retrying} onClick={retry}>
+                  Try again
+                </Button>
+              </p>
+            </>
+          ) : (
+            <A href={CR_SETUP_PATH} className={`setup-card cr-setup-card${n === 3 ? " is-cr-ready" : ""}`} data-cr="card" data-help="cr-setup-card">
+              <span className="setup-card__mark cr-mark" aria-hidden="true">
+                <Icon name="coin" size={28} />
+              </span>
+              <span className="setup-card__text">
+                <span className="setup-card__name">Content Rewards</span>
+                <span className="setup-card__state">{crCardLine(conn, !!crBridge())}</span>
+                <span className="setup-card__time">About 10 minutes · Free</span>
+              </span>
+              <ProgressRing value={n / 3} size={48} stroke={6} label="Content Rewards progress">
+                {n === 3 ? <Icon name="check" size={18} /> : null}
+              </ProgressRing>
+              <Icon name="chevronRight" size={20} className="icon setup-card__go" />
+            </A>
+          )}
+        </li>
+      </ul>
+    </section>
   );
 }

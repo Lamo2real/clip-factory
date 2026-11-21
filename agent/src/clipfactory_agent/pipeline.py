@@ -6,7 +6,11 @@ the picture parts, what the watchers saw) are reused, which is what makes Retry 
 The deep analysis (docs/DECISIONS.md ADR-40) is the picture half: ``download`` starts preparing the picture in the
 background, ``watch`` lets two models watch all of it, ``select`` reads the merged signals and takes a second look
 at each picked moment. Every part of it is optional at run time: whatever fails is logged and the job picks from the
-signals it has, down to exactly what it did before the picture was watched."""
+signals it has, down to exactly what it did before the picture was watched.
+
+A campaign copy of a clip (a job with ``remake``, docs/CONTRACTS.md §39.3) runs the same ten steps but finds nothing:
+it reuses its original's words while they are kept, listens, watches and picks nothing, and cuts that clip's moment
+again with the campaign's marks, from the original's kept video when there is one. Every other job runs as before."""
 
 from __future__ import annotations
 
@@ -18,7 +22,7 @@ import json
 import os
 import shutil
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -33,8 +37,8 @@ from . import signals as signals_mod
 from . import vectors as vectors_mod
 from .agent import Brief, find_moments
 from .bedrock import Bedrock, Facecam, FrameLayout, ModelError, model_unavailable
+from .campaign import LOGO_MISSING, Campaign
 from .checklist import (
-    REVIEW_SCHEMA,
     Candidate,
     Item,
     Outcome,
@@ -45,6 +49,7 @@ from .checklist import (
     measured_items,
     plan_fix,
     review_prompt,
+    review_schema,
 )
 from .config import Config
 from .creators import creator_keys, creator_name
@@ -52,9 +57,10 @@ from .guard import Deadline, fable_budget, nova_budget
 from .heartbeat import free_memory
 from .jobs import StepDone, StepFn, Tracker, creep
 from .moments import Moment, length_target
-from .render import RenderResult, render_clip
+from .remake import CANT_COPY, VIDEO_GONE, Remake, cant_earn, saved_index, saved_moment
+from .render import Marks, RenderResult, prepare_logo, render_clip
 from .skills import SkillsBlock, SkillSet, prepare_skills, skills_block
-from .store import Fence, Store, clip_prefix, cookies_key, source_prefix
+from .store import CHANNEL_KEYS, REMAKE_OF, SOURCE_LANGUAGE, Fence, Store, clip_prefix, cookies_key, source_prefix
 from .transcribe import PART_SECONDS, Transcriber, job_name, language_of, parse_items, parse_speakers
 from .util import (
     JobCanceled,
@@ -105,6 +111,11 @@ ALMOST_NO_SPEECH = (
     "Almost no speech was found in this video, so there is nothing to pick moments from. "
     "Clip Factory needs talking or commentary."
 )
+# A campaign copy of a clip (docs/CONTRACTS.md §39.3) finds no moments: these are its steps' words.
+COPY_KEPT = "Used what your clip already had."
+COPY_WORDS = "Used the words from your clip."
+COPY_SKIPPED = "Not needed for a copy."
+COPY_MOMENT = "Used the moment from your clip."
 
 
 def mount_type(path: Path, mounts: Path | None = None) -> str:
@@ -324,6 +335,18 @@ class JobState:
     model_id: str = ""
     model_wanted: str | None = None
     bedrock: Bedrock | None = None
+    # A Content Rewards campaign job (docs/CONTRACTS.md §38.13), read in resolve from ``job.campaign``: the rules
+    # travel with the job, the logo is prepared once (``logo.png`` in the work folder) and the channel check may leave
+    # a note. None for every other job, which then runs exactly as before.
+    campaign: Campaign | None = None
+    logo: Path | None = None
+    campaign_note: str | None = None
+    # A campaign copy of a clip (docs/CONTRACTS.md §39.3), read in resolve from ``job.remake``: its one moment is cut
+    # again, from the original's kept video when ``remake.source_key`` names it, and nothing finds, watches or picks
+    # moments. ``copy_layout`` is the original clip's framing when its job still keeps it. None for every other job,
+    # which then runs exactly as before.
+    remake: Remake | None = None
+    copy_layout: FrameLayout | None = None
 
     @property
     def notes(self) -> str:
@@ -331,7 +354,22 @@ class JobState:
 
     @property
     def length(self) -> tuple[float, float]:
-        return length_target(self.notes)
+        return length_target(self.notes, self.campaign)
+
+    @property
+    def campaign_id(self) -> str | None:
+        """The campaign the job's clips are for: the rules' own id, else the job's public ``campaignId``."""
+        if self.campaign is not None:
+            return self.campaign.campaign_id
+        cid = self.job.get("campaignId")
+        return cid if isinstance(cid, str) and cid else None
+
+    @property
+    def marks(self) -> Marks | None:
+        """What a campaign clip shows in its mark row: the logo (when there is one) and the on-screen disclosure."""
+        if self.campaign is None:
+            return None
+        return Marks(logo=self.logo, disclosure=self.campaign.on_screen)
 
     @property
     def clip_target(self) -> tuple[int, int]:
@@ -347,6 +385,18 @@ class JobState:
 
     def key(self, name: str) -> str:
         return source_prefix(self.job_id) + name
+
+    @property
+    def video_key(self) -> str:
+        """The whole video an upload is read from: its copy in the job's folder, or a copy's kept video (§39.3)."""
+        if self.remake is not None and self.remake.source_key:
+            return self.remake.source_key
+        return self.key("video.mp4")
+
+    @property
+    def from_file(self) -> bool:
+        """The Cut step cuts one video file (an upload, or a copy's kept video) instead of fetching from the link."""
+        return self.source.get("type") == "upload" or (self.remake is not None and bool(self.remake.source_key))
 
     @property
     def block(self) -> SkillsBlock:
@@ -472,8 +522,17 @@ class Pipeline:
         st.settings = await self.store.get_settings(st.user_id)
         self.pick_model(st)
         st.source = dict(job.get("source") or {})
+        st.campaign = Campaign.from_job(job)
+        if st.campaign is not None and not st.campaign.rules:
+            # The API always copies the rules (§38.8): the clips still get #Ad and "Paid partnership".
+            log("error", "campaign.no_rules", job=st.job_id)
+        st.remake = Remake.from_job(job, st.user_id)
+        if st.remake is not None:
+            await self._copy_source(st)
         st.workdir.mkdir(parents=True, exist_ok=True)
         await self._clear_previous_clips(st)
+        if st.campaign is not None:
+            await self._campaign_logo(st)
         if await self.store.exists(st.key("meta.json")):
             st.meta = await self.store.get_json(st.key("meta.json"))
         if st.source.get("type") == "upload":
@@ -482,10 +541,17 @@ class Pipeline:
             await self._resolve_link(st, tr)
         await self.store.put_json(st.key("meta.json"), st.meta)
         model, drop = self._model_fields(st)
+        fields = {"source": st.source, **creator_fields(st.source), **model}
+        if st.campaign is not None and st.campaign_note:
+            # The note the API may have left ("Couldn't check the campaign just now.") stays; the channel note joins it.
+            prior = st.job.get("campaignNote")
+            prior = prior.strip() if isinstance(prior, str) else ""
+            if st.campaign_note not in prior:
+                fields["campaignNote"] = f"{prior} {st.campaign_note}".strip()
         await self.store.update_job(
             st.user_id,
             st.job_id,
-            {"source": st.source, **creator_fields(st.source), **model},
+            fields,
             unless_canceled=True,
             session_id=st.session_id,
             remove=drop,
@@ -493,6 +559,50 @@ class Pipeline:
         title = st.source.get("title") or "the video"
         length = f" ({hms(st.source['durationSec'])})" if st.source.get("durationSec") else ""
         return f"Found {title}{length}."
+
+    async def _copy_source(self, st: JobState) -> None:
+        """A campaign copy (§39.3): always a campaign clip, and its original's kept video only while it is there (the
+        API found it moments before; a link is fetched again when it is gone)."""
+        assert st.remake is not None
+        if st.campaign is None:
+            log("error", "remake.no_campaign", job=st.job_id)
+            raise UserFacingError(CANT_COPY)
+        key = st.remake.source_key
+        if key and not await self.store.exists(key):
+            log("warn", "remake.source_gone", job=st.job_id)
+            st.remake = replace(st.remake, source_key=None)
+        log(
+            "info",
+            "remake.ready",
+            job=st.job_id,
+            clip=st.remake.clip_id,
+            fromJob=st.remake.job_id,
+            keptVideo=bool(st.remake.source_key),
+        )
+
+    async def _campaign_logo(self, st: JobState) -> None:
+        """The campaign's logo, from the job's own copy (``jobs/{jobId}/source/campaign-logo.{ext}``, §38.11), prepared
+        as ``logo.png`` in the work folder (PNG, transparent edges trimmed). A required logo that is missing or can't be
+        read fails the job at once; any other logo that can't be read is left out."""
+        assert st.campaign is not None
+        ext = st.campaign.logo_ext(st.job_id)
+        st.logo = None
+        if st.campaign.logo_key and ext is None:
+            log("warn", "campaign.logo_key_refused", job=st.job_id)
+        key = str(st.campaign.logo_key)
+        if ext is not None and await self.store.exists(key):
+            raw = st.workdir / f"campaign-logo.{ext}"
+            await self.store.download(key, raw)  # a storage failure is the step's to retry, not a missing logo
+            try:
+                st.logo = await prepare_logo(raw, st.workdir / "logo.png")
+            except (proc.CommandError, OSError, ValueError) as e:
+                log("warn", "campaign.logo_unreadable", job=st.job_id, error=type(e).__name__, detail=str(e)[:200])
+                st.logo = None
+        elif ext is not None:
+            log("warn", "campaign.logo_gone", job=st.job_id)
+        if st.logo is None and st.campaign.logo_required:
+            raise UserFacingError(LOGO_MISSING)
+        log("info", "campaign.ready", job=st.job_id, logo=st.logo is not None, rulesVersion=st.campaign.rules_version)
 
     async def _clear_previous_clips(self, st: JobState) -> None:
         """A retried job starts over: clips of an earlier run still waiting for review are removed.
@@ -517,10 +627,22 @@ class Pipeline:
         try:
             info = await sources.video_info(url, st.cookies, proxy=st.proxy)
         except proc.CommandError as e:
+            if st.remake is not None and st.remake.source_key:
+                # A copy cut from its original's kept video needs nothing from the link (§39.3): the job's stored
+                # facts (title, channel, its keys) stand, and the owner's Mac is not asked for the video again.
+                log("warn", "remake.link_unreadable", job=st.job_id, platform=platform)
+                return
             raise sources.explain_or_mac(e, platform, st.cookies is not None, mac_ok=st.mac_ok) from e
         if info.get("is_live") or info.get("live_status") in ("is_live", "is_upcoming"):
             raise UserFacingError("This stream is still live or has not started. Try again once it has ended.")
         st.source.update(sources.source_fields(info, platform))
+        # Every name and handle of the video's channel (§39.3): the API's fit check matches the campaign's channels
+        # against them, by the same rule as the check below.
+        st.source[CHANNEL_KEYS] = sources.channel_keys(info)
+        if st.campaign is not None and not sources.from_allowed_channel(info, st.campaign.channels):
+            # The job goes on: the owner reads the note on the job and decides before uploading (§38.13).
+            st.campaign_note = st.campaign.channel_note()
+            log("info", "campaign.channel_mismatch", job=st.job_id)
         st.meta["heatmap"] = sources.heatmap(info)
         self._chat_source(st, info, platform)
         st.meta["webpageUrl"] = info.get("webpage_url") or url
@@ -570,14 +692,18 @@ class Pipeline:
             return None
 
     async def _resolve_upload(self, st: JobState) -> None:
-        key = str(st.source.get("key") or "")
-        if not key.startswith(f"uploads/{st.user_id}/"):
-            raise UserFacingError("The uploaded file could not be found. Upload it again.")
-        video_key = st.key("video.mp4")
-        if not await self.store.exists(video_key):
-            if not await self.store.exists(key):
-                raise UserFacingError("The uploaded file has expired or was removed. Upload it again.")
-            await self.store.copy(key, video_key)
+        # A copy whose original's video is kept reads that one (checked in Remake.from_job), with no copy of its own.
+        video_key = st.video_key
+        if video_key == st.key("video.mp4"):
+            key = str(st.source.get("key") or "")
+            if not key.startswith(f"uploads/{st.user_id}/"):
+                raise UserFacingError("The uploaded file could not be found. Upload it again.")
+            if not await self.store.exists(video_key):
+                if not await self.store.exists(key):
+                    if st.remake is not None:
+                        raise UserFacingError(VIDEO_GONE)
+                    raise UserFacingError("The uploaded file has expired or was removed. Upload it again.")
+                await self.store.copy(key, video_key)
         info = await proc.probe(self.store.presign(video_key))
         if not info.has_video:
             raise UserFacingError("The uploaded file has no video in it.")
@@ -595,10 +721,26 @@ class Pipeline:
     async def download(self, st: JobState, tr: Tracker) -> StepDone:
         """The sound first, exactly as before the picture was watched, and it must succeed. Only then does the
         picture start preparing in the background (``_picture_prep``), so it overlaps the transcription."""
+        if st.remake is not None:
+            return await self._download_copy(st, tr)
         done = await self._download_audio(st, tr)
         await self._start_picture(st)
         await self._start_chat(st)
         return done
+
+    async def _download_copy(self, st: JobState, tr: Tracker) -> StepDone:
+        """A campaign copy (§39.3) needs the sound only when the original's words are gone (then it is transcribed as
+        any job is). It never watches the video, so no picture is prepared and no chat is fetched."""
+        assert st.remake is not None
+        if await self.store.exists(st.key("words.json")) or await self.store.exists(self._copy_key(st, "words.json")):
+            return StepDone(COPY_KEPT)
+        return await self._download_audio(st, tr)
+
+    @staticmethod
+    def _copy_key(st: JobState, name: str) -> str:
+        """A file the original clip's job kept (``jobs/{remake.jobId}/source/{name}``): only ever read."""
+        assert st.remake is not None
+        return source_prefix(st.remake.job_id) + name
 
     async def _download_audio(self, st: JobState, tr: Tracker) -> StepDone:
         cap = self._cap(st)
@@ -610,7 +752,7 @@ class Pipeline:
         local = st.workdir / "source" / "audio.m4a"
         local.parent.mkdir(parents=True, exist_ok=True)
         capped = bool(total and total > cap)
-        if st.source.get("type") == "upload":
+        if st.from_file:  # an upload, or a copy's kept video (§39.3): the same test as type == "upload" for any other
             if st.meta.get("hasAudio") is False:
                 raise UserFacingError("The uploaded video has no sound, so there is nothing to transcribe.")
             await proc.run(
@@ -620,7 +762,7 @@ class Pipeline:
                     "error",
                     "-y",
                     "-i",
-                    self.store.presign(st.key("video.mp4"), 6 * 3600),
+                    self.store.presign(st.video_key, 6 * 3600),
                     "-vn",
                     "-t",
                     str(int(cap)),
@@ -884,7 +1026,14 @@ class Pipeline:
         if await self.store.exists(st.key("words.json")):
             st.words = await self.store.get_json(st.key("words.json"))
             st.meta["fewWords"] = len(st.words) < FEW_WORDS
+            await self._save_language(st)  # from meta.json's ``language`` (resolve read it)
             return StepDone("Used the words from last time.")
+        if st.remake is not None:
+            if await self._words_from_clip(st):
+                await self._save_language(st)
+                return StepDone(COPY_WORDS)
+            if not await self.store.exists(st.key("audio.m4a")):
+                await self._download_audio(st, tr)  # the words went since Get the video: the sound is needed now
         audio = await self._local_audio(st)
         parts: list[tuple[str, float, float]] = []  # (s3 key, offset, seconds)
         if st.duration > PART_SECONDS:
@@ -963,11 +1112,47 @@ class Pipeline:
         self._deep(st, "speakers", "ok" if turns else "skipped", None if turns else "no speaker labels")
         await self.store.put_json(st.key("words.json"), st.words)
         await self.store.put_json(st.key("meta.json"), st.meta)
+        await self._save_language(st)
         return StepDone(f"Wrote down {count(len(st.words), 'word')}.")
+
+    async def _save_language(self, st: JobState) -> None:
+        """The job's public ``sourceLanguage`` (§39.3): the language Transcribe heard (its ``LanguageCode``, BCP 47),
+        written once, when the job doesn't say it already."""
+        lang = st.meta.get("language")
+        if not isinstance(lang, str) or not lang or st.job.get(SOURCE_LANGUAGE) == lang:
+            return
+        await self.store.update_job(
+            st.user_id, st.job_id, {SOURCE_LANGUAGE: lang}, unless_canceled=True, session_id=st.session_id
+        )
+        st.job[SOURCE_LANGUAGE] = lang
+
+    async def _words_from_clip(self, st: JobState) -> bool:
+        """A campaign copy (§39.3) reuses its original job's words while they are kept: copied into its own folder
+        (so trying again reuses them), with the language heard then. False when they are gone."""
+        key = self._copy_key(st, "words.json")
+        if not await self.store.exists(key):
+            return False
+        words = await self.store.get_json(key)
+        if not isinstance(words, list):
+            log("warn", "remake.words_unreadable", job=st.job_id)
+            return False
+        st.words = words
+        st.meta["fewWords"] = len(st.words) < FEW_WORDS
+        meta = await self._saved_json(self._copy_key(st, "meta.json"))
+        lang = meta.get("language") if isinstance(meta, dict) else None
+        lang = lang if isinstance(lang, str) and lang else st.job.get(SOURCE_LANGUAGE)
+        if isinstance(lang, str) and lang:
+            st.meta["language"] = lang
+        await self.store.put_json(st.key("words.json"), st.words)
+        await self.store.put_json(st.key("meta.json"), st.meta)
+        log("info", "remake.words_reused", job=st.job_id, words=len(st.words))
+        return True
 
     # --- analyze ---------------------------------------------------------------------------------------------
 
-    async def analyze(self, st: JobState, tr: Tracker) -> str:
+    async def analyze(self, st: JobState, tr: Tracker) -> StepDone | str:
+        if st.remake is not None:
+            return await self._analyze_copy(st, tr)
         if await self.store.exists(st.key("loudness.json")):
             st.loud = await self.store.get_json(st.key("loudness.json"))
         else:
@@ -1003,6 +1188,27 @@ class Pipeline:
         crowd = f" Chat went wild {count(wild, 'time')}." if wild else ""
         return f"Found {count(spikes, 'loud moment')}.{crowd}{note}"
 
+    async def _analyze_copy(self, st: JobState, tr: Tracker) -> StepDone:
+        """A campaign copy (§39.3) listens for nothing: only what its cut, check and captions need, the owner's skills
+        (never a model call without them), the model and the lessons, and the original's loudness while it is kept."""
+        if await self.store.exists(st.key("loudness.json")):
+            st.loud = await self.store.get_json(st.key("loudness.json"))
+        else:
+            kept = await self._saved_json(self._copy_key(st, "loudness.json"))
+            st.loud = [float(x) for x in kept] if isinstance(kept, list) else []
+            if st.loud:
+                await self.store.put_json(st.key("loudness.json"), st.loud)
+        tr.report(0.5)
+        st.skills = await prepare_skills(
+            st.workdir, self.cfg.skills_dir, await self.store.skill_rows(st.user_id), self.store.get_bytes
+        )
+        st.skills_block = skills_block(st.skills.docs, where="agent.job")
+        await self.check_model(st)
+        taught = await learnings.load(self.store, st.user_id, creator_keys(st.source), datetime.now(UTC))
+        st.week_learnings, st.prior = taught.week, taught.prior
+        log("info", "analyze.copy", job=st.job_id, skills=len(st.skills.docs), learnings=len(taught), loud=len(st.loud))
+        return StepDone(COPY_SKIPPED, skipped=True)
+
     async def _similar(self, st: JobState) -> list[vectors_mod.Hit]:
         """The owner's past clips most like this video, for "What worked before" (never fails the job)."""
         if self.vectors is None:
@@ -1030,6 +1236,8 @@ class Pipeline:
     async def watch(self, st: JobState, tr: Tracker) -> StepDone:
         """Two models watch the whole picture. Never raises but for a cancel (or a newer run taking over): whatever
         goes wrong, the job goes on with the signals it has, so the job's three step attempts never repeat work."""
+        if st.remake is not None:
+            return StepDone(COPY_SKIPPED, skipped=True)  # a campaign copy cuts a moment already picked (§39.3)
         try:
             return await self._watch(st, tr)
         except (JobCanceled, asyncio.CancelledError):
@@ -1307,11 +1515,18 @@ class Pipeline:
             signals=st.signals,
             speakers=st.speakers,
             chat=st.chat,
+            campaign=st.campaign,
         )
 
     def _moments_hash(self, st: JobState) -> str:
         """What the picks depend on besides the video: when it changes, saved picks are not reused."""
-        basis = {"notes": st.notes, "target": list(st.clip_target), "model": st.model_id or self.cfg.model_id}
+        basis: dict[str, Any] = {
+            "notes": st.notes,
+            "target": list(st.clip_target),
+            "model": st.model_id or self.cfg.model_id,
+        }
+        if st.campaign is not None:
+            basis["campaign"] = [st.campaign.campaign_id, st.campaign.rules_version]
         return hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()[:16]
 
     async def _saved_moments(self, st: JobState) -> tuple[list[Moment], list[Moment]] | None:
@@ -1343,6 +1558,8 @@ class Pipeline:
             st.moments_reused = True
             log("info", "select.reused", job=st.job_id, chosen=len(st.chosen), spares=len(st.spares))
             return f"Used the {count(len(st.chosen), 'moment')} picked last time."
+        if st.remake is not None:
+            return await self._select_copy(st)
         # The check that used to end the transcribe step: almost no words is only the end when the picture has
         # nothing strong to offer either.
         strong = st.signals is not None and any(e.intensity >= signals_mod.STRONG for e in st.signals.events)
@@ -1366,6 +1583,62 @@ class Pipeline:
         log("info", "select.picked", job=st.job_id, chosen=len(st.chosen), spares=len(st.spares))
         return f"Picked {count(len(st.chosen), 'moment')}."
 
+    async def _select_copy(self, st: JobState) -> str:
+        """A campaign copy (§39.3): its one moment is the clip's own, from ``job.remake``, with the tease, payoff and
+        peak an earlier run of the copy picked (its own ``moments.json``), else its original's job kept (``clips.json``)
+        or else what the original Clip item says. No spares: it is that moment or none."""
+        assert st.remake is not None
+        saved = await self._own_moment(st)
+        if saved is None:
+            saved = saved_moment(await self._saved_json(self._copy_key(st, "clips.json")), st.remake.clip_id)
+        clip = None if saved is not None and st.remake.same_span(saved) else await self._original_clip(st)
+        st.chosen, st.spares = [st.remake.moment(saved, clip)], []
+        await self._after_select(st)
+        log("info", "select.copy", job=st.job_id, clip=st.remake.clip_id, kept=clip is None)
+        return COPY_MOMENT
+
+    async def _own_moment(self, st: JobState) -> Moment | None:
+        """The moment an earlier run of this copy picked (its own ``moments.json``), while it is the clip's span: a
+        copy tried again after its original's files expired keeps the tease, the payoff and the peak."""
+        assert st.remake is not None
+        saved = await self._saved_json(st.key("moments.json"))
+        try:
+            if isinstance(saved, dict) and saved.get("version") == MOMENTS_VERSION and saved.get("chosen"):
+                m = Moment.from_dict(saved["chosen"][0])
+                return m if st.remake.same_span(m) else None
+        except (KeyError, TypeError, ValueError, IndexError):
+            log("warn", "remake.own_moment_unreadable", job=st.job_id)
+        return None
+
+    async def _original_clip(self, st: JobState) -> dict[str, Any] | None:
+        """The Clip item a copy copies (read only), when it is the owner's."""
+        assert st.remake is not None
+        for c in await self.store.job_clips(st.remake.job_id):
+            if c.get("clipId") == st.remake.clip_id and c.get("userId") == st.user_id:
+                return c
+        return None
+
+    async def _original_layout(self, st: JobState) -> FrameLayout | None:
+        """The framing the original clip was cut with (where the facecam is), from its job's ``checked/NN`` or
+        ``render/NN`` while they are kept and hold the same moment; else the framing an earlier run of this copy cut
+        it with (its own ``checked/00`` or ``render/00``); None: the copy looks at the picture again."""
+        assert st.remake is not None
+        index = saved_index(await self._saved_json(self._copy_key(st, "clips.json")), st.remake.clip_id)
+        keys = (
+            [] if index is None else [self._copy_key(st, f"{f}/{index:02d}/done.json") for f in ("checked", "render")]
+        )
+        keys += [self._render_key(st, 0, "done.json", f) for f in ("checked", "render")]
+        for key in keys:
+            done = await self._saved_json(key)
+            try:
+                if isinstance(done, dict) and st.remake.same_span(Moment.from_dict(done["moment"])):
+                    layout = frame_layout(done.get("frameLayout"))
+                    if layout is not None:
+                        return layout
+            except (KeyError, TypeError, ValueError):
+                continue
+        return None
+
     async def _second_look(self, st: JobState, tr: Tracker) -> None:
         """Each picked moment and spare is checked against the picture (verify.py). Any failure keeps the picks."""
         if st.frames is None:
@@ -1386,6 +1659,7 @@ class Pipeline:
                 check_cancel=tr.check_cancel,
                 on_progress=lambda f: tr.report(0.8 + 0.2 * f),
                 prior=st.prior,
+                banned=st.campaign.banned if st.campaign is not None else (),
             )
             checked = sum(1 for r in st.second_look if "keep" in r)
             total = len(st.second_look)
@@ -1479,13 +1753,16 @@ class Pipeline:
 
     async def _upload_file(self, st: JobState) -> str:
         """Where the Cut step reads an upload: the copy on disk, downloaded once per run when it fits next to
-        ``UPLOAD_DISK_SPARE``; else (or when the download fails) the file in S3."""
+        ``UPLOAD_DISK_SPARE``; else (or when the download fails) the file in S3. A copy (§39.3) cuts one moment of a
+        video that may be hours long: it always reads it from S3."""
+        if st.remake is not None:
+            return self.store.presign(st.video_key)
         async with st.upload_lock:
             if st.upload_source is not None and st.upload_source.is_file():
                 return str(st.upload_source)
             if not st.upload_checked:
                 st.upload_checked = True
-                key = st.key("video.mp4")
+                key = st.video_key
                 dest = st.workdir / "source" / "upload.mp4"
                 try:
                     size = int((await self.store.head(key)).get("ContentLength") or 0)
@@ -1509,7 +1786,7 @@ class Pipeline:
                 except Exception as e:
                     dest.unlink(missing_ok=True)
                     log("warn", "cut.upload_download_failed", job=st.job_id, error=type(e).__name__)
-        return self.store.presign(st.key("video.mp4"))
+        return self.store.presign(st.video_key)
 
     @staticmethod
     def _not_for_uploads(st: JobState, what: str) -> None:
@@ -1518,7 +1795,7 @@ class Pipeline:
             raise RuntimeError(f"{what} is for YouTube links, not uploads")
 
     async def _fetch_section(self, st: JobState, start: float, end: float, dest: Path) -> Path:
-        if st.source.get("type") == "upload":
+        if st.from_file:
             return await self._ffmpeg_cut(await self._upload_file(st), start, end, dest)
         platform = str(st.source.get("platform"))
         if platform == "youtube":
@@ -1698,6 +1975,7 @@ class Pipeline:
             detect_layout=functools.partial(self.claude(st).detect_layout, skills=st.block),
             known_layout=layout,
             live_index=index + 1,
+            marks=st.marks,
         )
         return Candidate(m, r, index=index)
 
@@ -1721,6 +1999,8 @@ class Pipeline:
                 "tease": r.tease,
                 "frameLayout": {"scene": fl.scene, "facecam": vars(fl.facecam) if fl.facecam else None} if fl else None,
                 "extra": r.extra,
+                **({"logo": True} if r.logo else {}),
+                **({"disclosure": True} if r.disclosure else {}),
             }
             await self.store.upload(r.video, self._render_key(st, c.index, "clip.mp4", folder), "video/mp4")
             await self.store.upload(r.cover, self._render_key(st, c.index, "cover.jpg", folder), "image/jpeg")
@@ -1745,12 +2025,7 @@ class Pipeline:
             video, cover = workdir / "clip.mp4", workdir / "cover.jpg"
             await self.store.download(self._render_key(st, index, "clip.mp4", folder), video)
             await self.store.download(self._render_key(st, index, "cover.jpg", folder), cover)
-            fl = done.get("frameLayout")
-            layout = (
-                FrameLayout(Facecam(**fl["facecam"]) if fl.get("facecam") else None, str(fl.get("scene") or "other"))
-                if isinstance(fl, dict)
-                else None
-            )
+            layout = frame_layout(done.get("frameLayout"))
             r = RenderResult(
                 video=video,
                 cover=cover,
@@ -1761,6 +2036,8 @@ class Pipeline:
                 tease=bool(done.get("tease")),
                 frame_layout=layout,
                 extra=dict(done.get("extra") or {}),
+                logo=bool(done.get("logo")),
+                disclosure=bool(done.get("disclosure")),
             )
         except (JobCanceled, asyncio.CancelledError):
             raise
@@ -1804,9 +2081,11 @@ class Pipeline:
             log("warn", "render.mark_failed", job=st.job_id, index=index, error=type(e).__name__)
 
     async def render(self, st: JobState, tr: Tracker) -> str:
+        if st.remake is not None:
+            st.copy_layout = await self._original_layout(st)  # a copy is framed like the clip it copies (§39.3)
         if await self._reload_checked(st, tr):
             return f"Used the {count(len(st.candidates), 'clip')} cut and checked last time."
-        if st.source.get("type") != "upload" and st.source.get("platform") == "youtube":
+        if not st.from_file and st.source.get("platform") == "youtube":
             # One extraction for every clip (§29.4): the sections read the formats from this file. Blocked here, the
             # owner's Mac gets the video instead (§35.1).
             try:
@@ -1837,7 +2116,7 @@ class Pipeline:
                     await self._mark_started(st, i, deaths + 1)
                     livestatus.emit("cut", i=i + 1, n=len(st.chosen))  # "Cutting clip 3 of 10" (§31)
                     try:
-                        results[i] = await self._cut(st, m, i)
+                        results[i] = await self._cut(st, m, i, st.copy_layout)
                         break
                     except JobCanceled:
                         raise
@@ -1907,6 +2186,11 @@ class Pipeline:
                 log("info", "render.needs_mac", job=st.job_id, why=why[:80])
                 raise NeedsMac("cut")
             raise UserFacingError(why)
+        if st.remake is not None and st.remake.layout and st.candidates[0].render.layout != st.remake.layout:
+            # Only a log (a layout name can't rebuild the framing): a copy framed unlike its original can be found.
+            log(
+                "info", "remake.layout_changed", job=st.job_id, was=st.remake.layout, now=st.candidates[0].render.layout
+            )
         failed = len(st.chosen) - len(st.candidates)
         return f"Cut {count(len(st.candidates), 'clip')}" + (f"; {failed} could not be cut." if failed else ".")
 
@@ -1928,12 +2212,13 @@ class Pipeline:
                                 c.render,
                                 st.notes,
                                 seen=signals_mod.seen_block(st.signals, c.moment.start, c.moment.end),
+                                campaign=st.campaign,
                             )
                         }
                     ],
                     tool="submit_review",
                     description="Submit the checklist review of this clip.",
-                    schema=REVIEW_SCHEMA,
+                    schema=review_schema(st.campaign),
                     max_tokens=8000,
                 ),
                 REVIEW_SECONDS,
@@ -1963,14 +2248,21 @@ class Pipeline:
                 "move_start_by": 0,
                 "move_end_by": 0,
                 "verdict": "keep",
+                # Nobody looked at the campaign's rules: a warning on Review, never a silent pass.
+                **({"follows_rules": None, "follows_rules_note": ""} if st.campaign is not None else {}),
             }
 
     async def _check_one(self, st: JobState, c: Candidate, index: int, gate: RenderGate | None = None) -> Outcome:
         async def first() -> tuple[dict[str, Any], list[Item]]:
             review = await self._review(st, c)
             items = measured_items(
-                c.moment, c.render, await measure(c.render.video), st.length, has_speech=self._has_speech(st, c.moment)
-            ) + judged_items(review)
+                c.moment,
+                c.render,
+                await measure(c.render.video),
+                st.length,
+                has_speech=self._has_speech(st, c.moment),
+                campaign=st.campaign,
+            ) + judged_items(review, st.campaign)
             return review, items
 
         review, items = await asyncio.wait_for(first(), CHECK_CLIP_SECONDS)
@@ -1979,7 +2271,13 @@ class Pipeline:
         fixes: list[str] = []
         if any(not i.passed for i in items):
             fixed, fixes = plan_fix(
-                c.moment, items, review, length=st.length, first_loud=lambda t: loudness.first_loud_second(st.loud, t)
+                c.moment,
+                items,
+                review,
+                length=st.length,
+                first_loud=lambda t: loudness.first_loud_second(st.loud, t),
+                strict=st.campaign is not None and st.campaign.sets_length,
+                duration=c.render.duration,
             )
             if fixes:
                 async with gate or contextlib.nullcontext():
@@ -1992,6 +2290,7 @@ class Pipeline:
                             await measure(cut.render.video),
                             st.length,
                             has_speech=self._has_speech(st, cut.moment),
+                            campaign=st.campaign,
                         )
 
                     c, measured = await asyncio.wait_for(recut(), CUT_SECONDS)
@@ -2001,7 +2300,8 @@ class Pipeline:
                         **review,
                         "pays_off": review.get("pays_off") or any("payoff" in f for f in fixes),
                         "hook_ok": review.get("hook_ok") or any(f.startswith("New hook") for f in fixes),
-                    }
+                    },
+                    st.campaign,
                 )
                 items = measured + judged
         bad = critical_failure(items)
@@ -2118,6 +2418,8 @@ class Pipeline:
         if not passed:
             unchecked = [o.candidate for o in failed if o.reason.startswith("The clip could not be checked")]
             if not unchecked:
+                if st.remake is not None:
+                    raise UserFacingError(self._copy_failed(st, failed))
                 reasons = "; ".join(sorted({o.reason for o in failed if o.reason}))[:200]
                 raise UserFacingError(f"No clip passed the checklist ({reasons}). Try another video or add notes.")
             # Nothing passed only because nothing could be checked (not because the clips are bad): the clips go
@@ -2136,6 +2438,15 @@ class Pipeline:
         replaced = sum(1 for c in passed if c.index >= len(st.chosen))
         msg = f"{count(len(passed), 'clip')} passed"
         return msg + (f"; {replaced} swapped for other moments." if replaced else ".")
+
+    @staticmethod
+    def _copy_failed(st: JobState, failed: list[Outcome]) -> str:
+        """A copy has one moment and no spares, so a clip that fails a check that must pass fails the copy (§39.3),
+        in plain words: the campaign's own rules first, else the first such check, by its own note."""
+        bad = [i for o in failed for i in o.candidate.items if i.critical and not i.passed]
+        first = next((i for i in bad if i.key == "campaign_rules"), bad[0] if bad else None)
+        log("warn", "remake.failed_checks", job=st.job_id, item=first.key if first else "")
+        return cant_earn(st.campaign.name if st.campaign is not None else "", first.note if first else "")
 
     async def _save_checked(self, st: JobState) -> None:
         """``checked.json`` and ``checked/NN/`` (§30.6): the checked clips, so a run picking up after the checklist
@@ -2203,9 +2514,9 @@ class Pipeline:
             if c is None:
                 tr.say(f"Cutting clip {k + 1} of {n} again; the rest come from last time…")
                 try:
-                    if st.source.get("type") != "upload" and st.source.get("platform") == "youtube":
+                    if not st.from_file and st.source.get("platform") == "youtube":
                         await self._save_info(st)
-                    c = await self._cut(st, m, i)
+                    c = await self._cut(st, m, i, st.copy_layout)
                 except JobCanceled:
                     raise
                 except Exception as e:
@@ -2246,7 +2557,10 @@ class Pipeline:
         except (proc.CommandError, OSError, ValueError) as e:
             log("warn", "checklist.measure_failed", job=st.job_id, index=c.index, error=type(e).__name__)
             return [passed]
-        return [*measured_items(c.moment, c.render, got, st.length, has_speech=self._has_speech(st, c.moment)), passed]
+        measured = measured_items(
+            c.moment, c.render, got, st.length, has_speech=self._has_speech(st, c.moment), campaign=st.campaign
+        )
+        return [*measured, passed]
 
     # --- captions --------------------------------------------------------------------------------------------
 
@@ -2295,6 +2609,7 @@ class Pipeline:
                     skills_text=st.skills.full_text,
                     system=learnings.with_prior(st.prior, "You write social captions for short clips."),
                     answer_seconds=CAPTIONS_SECONDS,
+                    campaign=st.campaign,
                 )
         rows = [
             {
@@ -2312,10 +2627,10 @@ class Pipeline:
             raise
         except Exception as e:
             log("warn", "captions.save_failed", job=st.job_id, error=type(e).__name__)
-        required = captions_mod.required_tags(st.notes, st.skills.full_text)
+        required = captions_mod.required_tags(st.notes, st.skills.full_text, st.campaign)
         for c in st.candidates:
             title = st.captions[st.clip_ids[id(c)]]["youtubeTitle"]
-            c.items = [i for i in c.items if i.key not in ("tags", "title")]
+            c.items = [i for i in c.items if i.key not in ("tags", "title", "campaign_tags")]
             c.items.append(
                 Item(
                     "tags",
@@ -2325,7 +2640,25 @@ class Pipeline:
                 )
             )
             c.items.append(Item("title", "Title under 60 characters", len(title) < 60, f"{len(title)} characters."))
+            if st.campaign is not None:
+                c.items.append(self._campaign_tags_item(st.campaign, st.captions[st.clip_ids[id(c)]]))
         return f"Wrote captions for {count(len(st.candidates), 'clip')}."
+
+    @staticmethod
+    def _campaign_tags_item(campaign: Campaign, captions: dict[str, str]) -> Item:
+        """``campaign_tags`` (§38.13): the disclosure first and every campaign item in every caption but the title."""
+        disclosure = campaign.disclosure_caption
+        items = captions_mod.campaign_items(campaign)
+        ok = captions_mod.qualifies(captions, items)
+        note = f"First in every caption: {disclosure}." + (
+            f" Also in every caption: {' '.join(items)}" if items else ""
+        )
+        return Item(
+            "campaign_tags",
+            f"{disclosure} and the campaign's tags in every caption",
+            ok,
+            note if ok else f"A caption is missing {disclosure} or a campaign tag. I put them back when it uploads.",
+        )
 
     # --- finalize --------------------------------------------------------------------------------------------
 
@@ -2380,6 +2713,13 @@ class Pipeline:
             log("info", "vectors.put", job=st.job_id, count=n)
         except Exception as e:
             log("warn", "vectors.put_failed", job=st.job_id, error=type(e).__name__, detail=str(e)[:300])
+
+
+def frame_layout(fl: Any) -> FrameLayout | None:
+    """A saved ``done.json``'s ``frameLayout`` back as a FrameLayout (None when it has none)."""
+    if not isinstance(fl, dict):
+        return None
+    return FrameLayout(Facecam(**fl["facecam"]) if fl.get("facecam") else None, str(fl.get("scene") or "other"))
 
 
 def _status(r: watch.TrackResult) -> dict[str, Any]:
@@ -2444,6 +2784,10 @@ def clip_item(
     }
     if m.picked_for:
         item["pickedFor"] = m.picked_for[: signals_mod.MAX_PICKED_FOR]
+    if st.campaign_id:
+        item["campaignId"] = st.campaign_id  # public: the review card and Confirm read the campaign from it (§38.8)
+    if st.remake is not None:
+        item[REMAKE_OF] = st.remake.remake_of  # public: the copy shows right below the clip it copies (§39.3)
     if url and platform in ("youtube", "twitch", "kick"):
         at = sources.url_at(url, platform, m.start)
         if at:

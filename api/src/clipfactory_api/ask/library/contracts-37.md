@@ -103,7 +103,7 @@ memory for one job. `chat.json` is reused by a Try again (§30) like `loudness.j
   (`test_without_signals_every_prompt_is_byte_identical_to_before`). The tool descriptions are unchanged.
 * The built-in skill `viral-clip-editing` §1 "Reading the signals" has a **Chat** block: what it means, the lag, how
   to weigh it, what to ignore. An owner's own copy of that skill made before it is offered the block, and gets it as a
-  note until then (§38).
+  note until then (§44).
 
 ### 37.7 Switches
 

@@ -81,6 +81,8 @@ structure." ([CONTRACTS.md §18](CONTRACTS.md#18-skills-full-create-read-update-
 Upload to X, Meta (Facebook and Instagram) and YouTube; TikTok is added because the existing Clip Factory and its
 legal pages already cover it.
 - AC1 (phase 1): Confirmed posts are stored with status `pending_integration` and the app says "Waiting for the account connection".
+- AC1b: A waiting post goes out once its account is connected (no tap needed), and the Library gives a place that is
+  set up since its own **Post now** ([CONTRACTS.md §17.6, §33.6](CONTRACTS.md#176-tokens-and-real-posting)).
 - AC2 (phase 2): A queued post is uploaded through the platform's official API and gets its public URL.
 - AC3: Every upload is sent from Clip Factory as a file; a retried step never posts twice; when posting fails the clip
   says why in one sentence and what to press ([CONTRACTS.md §17.6](CONTRACTS.md#176-tokens-and-real-posting)).
@@ -324,5 +326,156 @@ whole application, and for every AI call to use the skills.
   answers after the next deploy; CI fails when the committed knowledge is out of date.
 - AC11: Mac and Windows download steps appear only on desktops without the app installed, iPhone steps only on iOS,
   Android steps only on Android.
+
+### BR-25 Content Rewards campaigns: paste the link, Clip Factory follows the rules
+"Browse Content Rewards, join a campaign there, then paste the campaign URL into Clip Factory. Clip Factory should
+then onboard onto that campaign and follow its rules and guardrails (required hashtags, logos/watermarks, captions,
+tags, length, platforms, posting rules) so the videos qualify to earn money. It should connect just like we have
+created for all the social media platforms. The whole flow should take 3 steps, 5 at most." … "make sure that
+whatever steps i need to take for both the setup and creating and joining a campaign to checking if I am confirmed
+as a member of the campaign and get paid for it, is all idiot proof, even an 8 year old should be able to understand
+how to navigate it". ([the steps](SETUP_POSTING.md#content-rewards),
+[CONTRACTS.md §38](CONTRACTS.md#38-content-rewards-campaigns-owner-request-2026-11-21),
+[ADR-62](DECISIONS.md#adr-62-content-rewards-the-official-sign-in-through-the-desktop-apps-loopback-door-sending-from-the-cloud-a-reminder-when-it-cant))
+- AC1: Settings › Posting › Set up posting shows a separate **Content Rewards** card under the five platforms ("Get
+  paid by brands"), with a ring over 3 numbered steps and one state line. It never counts in "n of 5 ready" and is
+  never in the floating setup list, which keeps exactly five rows.
+- AC2: Setup is **3 steps**, in time order: make a Content Rewards account (or tap "I have an account"), add the same
+  accounts inside Content Rewards (or tap "I added them"), then "Connect Content Rewards" in the Mac app and allow it
+  (BR-26 AC4). Only if Content Rewards says the account can't connect
+  apps, one more: "Open email" sends a ready email. If Content Rewards lets Clip Factory look but not send (read
+  only), Clip Factory reads campaigns and money and reminds the owner after each post. If it refuses the sign-in,
+  there is no connection: the owner checks each campaign himself ("It says Submit clip", paste the rules) and sends
+  each clip by hand, and the Money part waits for Connect. Every 3 days (at most 5 times) Clip Factory asks him to try
+  Connect again.
+- AC3: Each campaign is **3 steps**, **5 at most**: join it on Content Rewards (**Join Campaign**, or **Apply** →
+  **Submit application**), copy its link (share icon → **Copy campaign link**), then "Paste" and "Add campaign" in
+  Clip Factory (on Home or the Campaigns page). The extras are "Add the logo" when the brief needs one, and either
+  "Yes, I applied" (optional) or, only while Content Rewards doesn't let Clip Factory look, "I'm in. Read these rules".
+- AC4: Clip Factory shows the campaign's pay as Content Rewards publishes it (per 1,000 views, per post, the money
+  left), reads its rules from the brief ("Rules I'll follow", "Things you do", "I couldn't tell"), and finds out by
+  itself whether the owner is in: every 15 minutes for 7 days, then every 6 hours to day 30, plus "Check now". "You're
+  in!" comes with confetti and a notification, once.
+- AC5: A campaign that can't earn says why and what to do in one sentence (paused, ended, the money almost gone, only
+  TikTok, drafts first, its own sound, the brand's own picture on top of the video, a missing logo, too many clips
+  waiting), and Make clips is refused; a warning (half the money used, a low rate, face on camera, a spoken
+  disclosure, a viewer-country rule) is accepted with one "Make clips anyway".
+- AC6: Each video is **3 steps** ("Make campaign clips" on the campaign's chip on Home, or "Make clips for this
+  campaign" on its card; a "Videos from the campaign" chip or Paste; "Make campaign clips"). Every clip
+  follows the rules: the campaign's length, no banned content, the logo on screen the whole clip (above the picture,
+  away from faces and the game), "Paid partnership" on screen for the first 3 seconds, "#Ad" first and every required
+  hashtag, tag and phrase in each caption (put back at upload if the owner deleted one). A video outside the brief's
+  allowed channels gets a warning on the job.
+- AC7: Each clip is **2 taps** ("Use my settings", "Upload to N"), also with a tag or #Ad missing (the upload puts them
+  back), plus "Turn on Branded content" only if he turned TikTok's switch off; a clip that can't earn can't go up this
+  way (BR-28). Upload to offers only the places the campaign pays
+  for that are set up and linked inside Content Rewards; campaign clips are public, never made for kids, and marked
+  as paid (YouTube Paid promotion, X Paid partnership, TikTok Branded content by the owner's own tap). TikTok is left
+  out until TikTok's audit, because private posts can't earn.
+- AC8: After each post, Clip Factory sends the clip to Content Rewards by itself within 30 minutes (0 steps), and its
+  line shows Sending → Sent → Waiting for the brand → Approved or Not approved (with the brand's reason), the views
+  and the money Content Rewards reports for it.
+- AC9: When it can't send, the owner gets "Send this to Content Rewards now (N min left)"; the clip opens with one
+  "Copy and open" and 4 numbered steps. A rejected clip has "Ask again" (copies true words, opens Content Rewards, 4
+  steps); a brief that wants proof of views gets one reminder with 3 steps.
+- AC10: Getting paid is **3 steps once** (answer "Do you see **Finance**?", link Whop, add the bank) and **2 each
+  payout** (**Withdraw** on Content Rewards, **Withdraw** on Whop). The Money page shows only Content Rewards' own
+  numbers (Still earning, On its way, Ready to move, paid so far), never a rate × views guess, and celebrates the first
+  money once. Its paid money of the last 30 days is also in the total of "All your money" (BR-27), never in the MRR
+  cards.
+- AC11: [SETUP_POSTING.md](SETUP_POSTING.md#content-rewards) has the same step titles as the app, with the date they
+  were checked (21 Nov 2026) and the sources; a test checks the titles.
+- AC12: Nothing about the five platforms changes when no campaign is involved, and removing a campaign or
+  disconnecting deletes nothing on Content Rewards or any platform.
+
+### BR-26 Normal clips or campaign clips: two clear ways, the normal way unchanged
+"please double check that the steps to conect to contentrewards is extremely easy and simple and set up in. a
+chronological and structured manner so the UX is better and the user has a better and pleasant experience on the app
+using eaither the content rewards way of videos or normal way we have done so far". ([CONTRACTS.md
+§39.1](CONTRACTS.md#391-connect-in-time-order-and-the-two-ways),
+[ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-in-the-api-a-new-copy-instead-of-turning-a-normal-clip-into-a-campaign-clip-one-30-day-total-that-includes-content-rewards),
+[UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md#the-two-ways))
+- AC1: **The normal way is frozen.** Home at `/` keeps exactly the form it had before Content Rewards (Paste a link or
+  Pick a video, the link box with Paste and Clear, How many clips, Notes, "Make clips", "Nothing gets posted until you
+  tap Upload."), with no campaign field, bar, chip, line or warning, whatever campaigns exist. From a link to an
+  upload is **5 taps** (Paste, "Make clips", "Go to Review", "Use my settings", "Upload to N"). The Review card of a
+  clip with no campaign keeps its controls; the only addition is the optional "could earn" line of BR-28 AC5, which
+  never blocks and never adds a needed tap. A click-count test fails if the normal way gains a tap, a field or a
+  warning.
+- AC2: **The campaign way always starts from a campaign**: the chip "Make campaign clips" in Home's "Your campaigns"
+  row (one tap to Home at `/?campaign=`), the campaign card's "Make clips for this campaign", a campaign video's "Make
+  clips from this", or the fit's "Make new clips for this campaign". Home then shows "Campaign clips · {name}", "Clip
+  Factory follows its N rules on every clip.", a quiet "Make normal clips instead", the campaign's own rule lines
+  (which videos and which language it pays for), its videos, and the main button reads **"Make campaign clips"**, so
+  he sees which way he is on as he taps. With two or more campaigns a pick-one bar "Which campaign" shows (no "None":
+  leaving is "Make normal clips instead"). From the chip to an upload is **6 taps**.
+- AC3: **One name for each thing**, on every screen, help guide and notification: "Make clips" and, only side by side
+  with the other way, "normal clips"; "Make campaign clips" and "campaign clips"; "add" for putting a social account
+  inside Content Rewards ("Add YouTube in Content Rewards first.", "I added it"); "Connect" only for Clip Factory and
+  Content Rewards, and each platform's own setup; "Content Rewards", never "CR". Never on a screen: "mode", "the
+  Content Rewards way", "compatible", "clip type", "upload type", "campaign type".
+- AC4: **Connect in time order.** One page, three numbered steps, each something only the owner can do or knows: 1
+  "Make a Content Rewards account" ("Open Content Rewards", with the green "I have an account" right under it), 2 "Add
+  your accounts there" ("Open Content Rewards settings", with the green "I added them" right under it), 3 "Connect
+  Content Rewards" on the Mac (allow it). While steps 1 and 2 are both open, a card on top asks "Already use Content
+  Rewards, with YouTube added there?" with a green "Yes" that ticks both. Coming from a campaign, Money or the
+  Campaigns page, the finished page's main button takes him back ("Back to FaZe Clips"). From a pasted campaign link
+  with his account ready: **7 taps** on 5 screens; from zero: 10 Clip Factory taps (23 in all, with Content Rewards'
+  and Google's own).
+
+### BR-27 All your money in one place
+"i also need to track how much i earn from all platforms including contentrewards". ([CONTRACTS.md
+§39.2](CONTRACTS.md#392-all-your-money-in-one-place),
+[ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-in-the-api-a-new-copy-instead-of-turning-a-normal-clip-into-a-campaign-clip-one-30-day-total-that-includes-content-rewards))
+- AC1: The Money page opens with **All your money**: one row per place (YouTube, TikTok, Instagram, Facebook, X, then
+  Content Rewards while it is switched on), one period for the whole card (the same 30 days as the Monthly card), and
+  under the rows one **Total** per currency with the places in it and whose numbers they are ("YouTube's estimate +
+  Content Rewards' numbers"). Different money, like dollars and euros, is never added together. The total is the
+  biggest number on the page; with nothing to add it says "Nothing to add up yet." and shows no total, never $0.
+- AC2: Only money a place reported: YouTube's estimate per day, Facebook's once it is checked (until then "Coming
+  soon"), and Content Rewards' paid payouts dated in those days. TikTok, Instagram and X tell apps nothing about money,
+  so their rows say "Not available from TikTok" and where to look in that app ("Look in TikTok: Profile, then
+  Balance."), never a number and never $0. Nothing is calculated, guessed, converted or typed in; all arithmetic is on
+  the server.
+- AC3: The Content Rewards row also shows, in money's time order and only what Content Rewards reported: "Right now":
+  Still earning, Ready to move to Whop, On its way to Whop; "Earned so far, since you started"; and "Paid out to your
+  bank: not available from Content Rewards. Look on Whop: **Balances**."
+- AC4: A place that isn't set up, needs his OK or must sign in again has one glass button to its own page; a setup
+  page brings him back to Money when it's done.
+- AC5: The Monthly, Weekly, Daily and Yearly cards keep their numbers and words, apps only. While the Content Rewards
+  row is on All your money, the Monthly card says "Apps only. Content Rewards is in All your money." (its empty states
+  too, when that row has a number). The Content Rewards part stays at the end of the page.
+
+### BR-28 Does this clip fit the campaign? Know before uploading
+"btw i would like to know if the content i upload is compati ble with the content rewards campaigns so i can get paid
+instead of me selecting the content rewards way of uploading but arent compatible, so please make sure thats in place
+as well". ([CONTRACTS.md §39.3](CONTRACTS.md#393-does-this-clip-fit-the-campaign-the-fit-check),
+[ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-in-the-api-a-new-copy-instead-of-turning-a-normal-clip-into-a-campaign-clip-one-30-day-total-that-includes-content-rewards))
+- AC1: Every campaign clip on Review, and on its own page while it waits, shows "Campaign clip · {name}" and one
+  headline: "Can earn on {name}", "Almost ready for {name}", "{name} needs a copy of this clip", "One thing first for
+  {name}", "Wait a little for {name}", "This clip can't earn on {name}" or "Check 2 things, then upload", then the
+  reasons in one short sentence each, problems first, and one button for the next thing.
+- AC2: The check covers, from what Clip Factory already stored (never a call to Content Rewards): the campaign's own
+  state (ended, paused, held, the money gone, not joined), its deadline, the clip's length, the places it pays for and
+  whether each is added inside Content Rewards, every required tag and #Ad, the paid switch per place, the logo,
+  "Paid partnership" on the video, the source video and its channel, the language, banned content, rules Clip Factory
+  can't check, an earlier normal post of the same clip, one campaign per clip, and how it will be sent.
+- AC3: A campaign clip that can't earn can't go up the campaign way: Upload is off with the reason, and the server
+  refuses it too (Upload, Try again, Post now). A held, paused or re-read campaign is "Wait a little" (Upload turns on
+  by itself), never "can't earn". A campaign post waiting for a platform to come back waits for Post now, which checks
+  again, instead of going up days later by itself.
+- AC4: A missing tag or #Ad never blocks: the upload puts them back. "Fix it for me" (optional) puts them back on the
+  card at once, with an 8-second Undo. TikTok's "Turn on Branded content" is the owner's own tap.
+- AC5: A normal clip that could earn on a campaign he joined (same creator or an allowed video, and a copy can be made)
+  gets one quiet line under Checks before posting: "This clip could earn money on {name}." with "Make a {name} copy"
+  and "Not now". The copy (the campaign's logo, "Paid partnership" on the video and #Ad) arrives right below it on the
+  same Review page in about 3 minutes and uploads in **3 taps**; the original stays as it is and keeps its own 2-tap
+  upload. With no campaign nothing shows. The copy has its own switch: it shipped off and is on since PR #93, once
+  the agent's part had shipped.
+- AC6: Clip Factory never calls a rule it can't check a pass: it says "I couldn't check: …" and the owner can answer
+  "I read them. They're OK" (kept on that device only, never needed to upload, never shown as a Clip Factory tick).
+- AC7: Length, source video, language, banned content, the deadline and another campaign are never "fixed" on the
+  clip: the button is "Make new clips for this campaign" (with the same link only when the video itself is fine) or
+  "Find another campaign".
 
 ---

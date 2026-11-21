@@ -140,6 +140,40 @@ def test_ensure_posts_follows_upload_to_after_a_lost_race(store: db.Store) -> No
     assert hasattr(clip_flow, "ensure_posts")
 
 
+def test_campaign_posts_get_the_campaign_id_and_options_on_every_place(store: db.Store, table: FakeTable) -> None:
+    """A campaign clip's posts (§38.14): ``campaignId`` on each, ``postOptions.campaign`` next to each place's own."""
+    _connect(store, "youtube", "x")
+    clip = seed_clip(store)
+    campaign = {"paidPartnership": True, "disclosure": "#Ad", "required": ["#FaZe"]}
+    created = posts.create_for_clip(
+        store,
+        USER,
+        clip,
+        {},
+        "2026-11-20T00:00:00.000Z",
+        clip_fields={"uploadTo": ["x", "youtube"], "status": "confirmed"},
+        post_options={"x": {"replies": "following"}},
+        campaign_id="0b5c1f3e-1a2b-4c3d-9e8f-123456789abc",
+        campaign_options=campaign,
+    )
+    assert [(p["platform"], p["campaignId"]) for p in created] == [
+        ("youtube", "0b5c1f3e-1a2b-4c3d-9e8f-123456789abc"),
+        ("x", "0b5c1f3e-1a2b-4c3d-9e8f-123456789abc"),
+    ]
+    stored = {p["platform"]: p for p in table.all() if p.get("type") == "post"}
+    assert stored["youtube"]["postOptions"] == {"campaign": campaign}
+    assert stored["x"]["postOptions"] == {"replies": "following", "campaign": campaign}
+
+
+def test_posts_without_a_campaign_carry_no_campaign_fields(call: Call, store: db.Store, table: FakeTable) -> None:
+    _connect(store, "youtube", "x")
+    clip = seed_clip(store)
+    status, body = _confirm(call, clip["clipId"], {"platforms": ["youtube", "x"]})
+    assert status == 200
+    assert all("campaignId" not in p and "paidLabel" not in p for p in body["posts"])
+    assert all("postOptions" not in p for p in table.all() if p.get("type") == "post")
+
+
 def test_existing_clips_without_upload_to_are_unchanged(call: Call, store: db.Store, table: FakeTable) -> None:
     clip = seed_clip(store, status="posted", publishState="started", postsCreated=True, flowRun=1)
     before = table.raw(clip["pk"], clip["sk"])

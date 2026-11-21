@@ -28,6 +28,8 @@ STATUS_GROUPS: dict[str, frozenset[str] | None] = {
 }
 # Internal fields never leave the API (docs/CONTRACTS.md §13, §14.5). publishState is "pending" from Confirm until
 # the durable cf-prod-clip-flow has started, then "started". publishClaimAt is gone but may linger on old items.
+# Public on purpose (§39.3): ``remakes`` (campaignId → {jobId, at}, the campaign copies made of this clip) and
+# ``remakeOf`` ({clipId, jobId}, on a copy: the clip it was made from).
 INTERNAL_FIELDS = (
     "videoKey",
     "coverKey",
@@ -43,6 +45,8 @@ INTERNAL_FIELDS = (
 )
 PUBLISH_PENDING = "pending"
 PUBLISH_STARTED = "started"
+# Uploaded clips whose flow start Confirm finishes when it is still pending (§14.5): the public ``startPending``.
+STARTABLE = ("confirmed", "publishing", "posted")
 
 
 def public_clip(
@@ -54,9 +58,12 @@ def public_clip(
 ) -> Item:
     """The Clip shape of §5. With ``media`` it carries 1-hour ``coverUrl`` (and, unless ``video=False``,
     ``videoUrl``) links; without (the live WebSocket events) it carries none, and the web keeps the links it already
-    has. With the clip's ``posts`` it carries ``totalViews`` (absent when nothing was measured)."""
+    has. With the clip's ``posts`` it carries ``totalViews`` (absent when nothing was measured). ``startPending: true``
+    when the clip was uploaded but its flow has not started (``publishState: pending``, §14.5)."""
     clip = db.strip_keys(item, INTERNAL_FIELDS)
     clip.pop("totalViews", None)
+    if item.get("publishState") == PUBLISH_PENDING and item.get("status") in STARTABLE:
+        clip["startPending"] = True  # uploaded, but its flow has not started yet: the Library offers Try again
     if media is not None and item.get("status") != "declined":
         if video and item.get("videoKey"):
             clip["videoUrl"] = media.presign_get(item["videoKey"])

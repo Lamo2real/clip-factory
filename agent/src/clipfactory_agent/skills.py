@@ -294,10 +294,10 @@ def skills_block(docs: Sequence[SkillDoc], *, where: str = "") -> SkillsBlock:
         truncated += cut
         source = "built-in" if d.builtin else "owner"
         parts.append(f'<skill name="{escape(d.name)}" source="{source}">\n{text}\n</skill>')
-        if not d.builtin:  # his copy of a built-in that gained a part since: a small separate note (§38.4)
+        if not d.builtin:  # his copy of a built-in that gained a part since: a small separate note (§44.4)
             for gap in skill_sections.missing_sections(builtins, d.text):
                 note = skill_sections.skill_note(d.name, gap)
-                left = max(0, left - len(note))  # a note counts against the same budget (§38.4)
+                left = max(0, left - len(note))  # a note counts against the same budget (§44.4)
                 parts.append(note)
                 notes += 1
     if not parts and not omitted:

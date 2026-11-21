@@ -39,10 +39,12 @@ Decision record: ADR-60 (which corrects ADR-57).
    With nothing set up (or the check failed) the rows hold the words only. There is no caption tab bar and no second
    place selector anywhere on the card.
 5. "Going to: YouTube · TikTok · Instagram · Facebook" (or why Upload is off), TikTok's Music Usage Confirmation line
-   (`.tt-legal`, + Branded Content Policy when branded) whenever TikTok is ticked, then **Throw away** and **Upload to
+   (`.tt-legal`; branded: Branded Content Policy and Music Usage Confirmation) whenever TikTok is ticked, then **Throw away** and **Upload to
    4** (bottom right, vermilion on the top card). Upload is off, with one plain line in its place, while TikTok is
    ticked and not ready: "Tap Use my settings first. TikTok needs your tap.", "Asking TikTok…", "Pick who can see it on
-   TikTok first.", "Pick Your brand or Branded content on TikTok first.", "This clip is too long for TikTok. Untick
+   TikTok first.", "You need to indicate if your content promotes yourself, a third party, or both. Pick Your brand
+   or Branded content on TikTok first." (that first sentence is also Upload's hover text), "Branded content can't be
+   Only me. Pick Everyone or Friends first.", "This clip is too long for TikTok. Untick
    TikTok to upload it to the rest.", "TikTok did not answer. Tap Ask TikTok again, or untick TikTok."
 
 A standard upload is two taps: **Use my settings**, then **Upload to 4**. The TikTok sheet no longer opens from the
@@ -107,7 +109,7 @@ options)`. Nothing about My settings is kept in localStorage.
 ### 34.5 TikTok's "Who can see it"
 
 The app's own dropdown (`components/Dropdown.tsx`: a soft-fill button that opens a solid list, keyboard arrows,
-Escape, never the OS list), labelled "Who can see it", with exactly `privacyOptions` (minus Only me when branded),
+Escape, never the OS list), labelled "Who can see it", with exactly `privacyOptions` (Only me and Followers greyed when branded, §17.8),
 Everyone first, and the placeholder "Pick who can see it" until the owner picks or taps Use my settings. When only
 `SELF_ONLY` is allowed: one choice and the line "TikTok keeps posts private until it approves your app." Used in the
 TikTok row and on the Post to TikTok sheet (which still opens for Library's Try again, and on Upload while nothing is

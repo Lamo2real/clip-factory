@@ -1,0 +1,118 @@
+{
+ "get_me": {
+  "brand_accounts": [
+   {
+    "id": "bra_01h455vb4pex5vsknk084sn02q",
+    "name": "Lumen Coffee",
+    "role": "member"
+   }
+  ],
+  "id": "cre_01h455vb4pex5vsknk084sn02q",
+  "livemode": true,
+  "object": "me",
+  "organizations": [
+   {
+    "id": "org_01h455vb4pex5vsknk084sn02q",
+    "name": "Northwind Studios",
+    "role": "admin"
+   }
+  ],
+  "truncated": false
+ },
+ "get_my_balance": {
+  "as_of": "2026-10-01T12:00:00.000Z",
+  "available": {
+   "currency": "usd",
+   "value": 18250
+  },
+  "livemode": true,
+  "object": "creator_balance",
+  "withdrawal_pending": {
+   "currency": "usd",
+   "value": 0
+  }
+ },
+ "list_my_campaigns": {
+  "access": "open",
+  "brand_account": null,
+  "created_at": "2026-10-01T12:00:00.000Z",
+  "description": "Clip the trailer and post it with #FallLaunch.",
+  "id": "cmp_01h455vb4pex5vsknk084sn02q",
+  "livemode": true,
+  "name": "Fall launch",
+  "object": "campaign",
+  "organization": "org_01h455vb4pex5vsknk084sn02q",
+  "planned_launch_at": null,
+  "platforms": [
+   {
+    "country_rates": null,
+    "max_payout": {
+     "currency": "usd",
+     "value": 50000
+    },
+    "min_payout": {
+     "currency": "usd",
+     "value": 500
+    },
+    "min_views": null,
+    "platform": "tiktok",
+    "rate": {
+     "currency": "usd",
+     "value": 150
+    }
+   }
+  ],
+  "status": "active",
+  "type": "cpm",
+  "visibility": "public"
+ },
+ "list_my_payouts": {
+  "amount": {
+   "currency": "usd",
+   "value": 4210
+  },
+  "campaign": "cmp_01h455vb4pex5vsknk084sn02q",
+  "created_at": "2026-10-01T12:00:00.000Z",
+  "id": "pay_01h455vb4pex5vsknk084sn02q",
+  "livemode": true,
+  "object": "payout",
+  "paid_at": "2026-10-08T12:00:00.000Z",
+  "status": "paid",
+  "submission": "sub_01h455vb4pex5vsknk084sn02q"
+ },
+ "list_my_submissions": {
+  "banned_by": "none",
+  "campaign": "cmp_01h455vb4pex5vsknk084sn02q",
+  "created_at": "2026-10-01T12:00:00.000Z",
+  "creator": {
+   "display_name": null,
+   "id": "cre_01h455vb4pex5vsknk084sn02q",
+   "posting_account": null,
+   "username": null
+  },
+  "deleted": false,
+  "flag": null,
+  "flagged": false,
+  "id": "sub_01h455vb4pex5vsknk084sn02q",
+  "livemode": true,
+  "moderation": null,
+  "object": "submission",
+  "payout": null,
+  "post": {
+   "caption": null,
+   "comments": 41,
+   "likes": 1200,
+   "platform": "tiktok",
+   "shares": 18,
+   "status": "active",
+   "thumbnail_url": null,
+   "url": "https://www.tiktok.com/@creator/video/7412345678901234567",
+   "views": 48210
+  },
+  "review_comment": null,
+  "reviewed_at": "2026-10-02T09:30:00.000Z",
+  "reviewed_by": "organization",
+  "status": "approved",
+  "updated_at": "2026-10-02T09:30:00.000Z"
+ }
+}

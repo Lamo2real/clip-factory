@@ -67,7 +67,7 @@ def test_setup_list_starts_empty_with_values(call: Call) -> None:
     }
     assert body["platforms"][1]["files"] == []
     assert [g["key"] for g in body["platforms"][1]["gates"]] == ["app_review", "posting_audit"]
-    assert body["platforms"][2]["gates"] == []
+    assert body["platforms"][2]["gates"] == [{"key": "app_live", "state": "limited"}]
     assert body["platforms"][3]["gates"] == [{"key": "app_live", "state": "limited"}]
     assert body["platforms"][4]["gates"] == [{"key": "credits", "state": "unknown"}]
     values = body["values"]
@@ -101,8 +101,9 @@ def test_tick_and_untick_steps(call: Call) -> None:
     assert call("PATCH", "/v1/setup/youtube", {"step": "x", "done": "yes"})[0] == 400
 
 
-def test_facebook_live_step_opens_its_gate(call: Call) -> None:
-    _, body = call("PATCH", "/v1/setup/facebook", {"step": "public-live", "done": True})
+@pytest.mark.parametrize("platform", ["instagram", "facebook"])
+def test_meta_live_step_opens_its_gate(call: Call, platform: str) -> None:
+    _, body = call("PATCH", f"/v1/setup/{platform}", {"step": "public-live", "done": True})
     assert body["setup"]["gates"] == [{"key": "app_live", "state": "ok"}]
 
 

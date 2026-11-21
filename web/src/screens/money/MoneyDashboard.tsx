@@ -6,6 +6,8 @@
 // bar; Ask's home spot moves above the dock while this page is open. Wide screens with a mouse get the controls at the
 // right of a full-width glass band under the title that stays at the top (the page scrolls under it, so it never
 // floats over a clip's money or the sort bar).
+import { CrMoneyPart } from "./CrMoneyPart.tsx";
+import { AllMoney, APPS_ONLY, crRowOf, useMoneyEverywhere } from "./AllMoney.tsx";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { api, friendlyMessage } from "../../api/index.ts";
 import type { MoneyChange, MoneyCurrencySummary, MoneyExcluded, MoneySummary, MoneyView, Platform } from "../../api/types.ts";
@@ -189,7 +191,22 @@ export function kpiSub(kind: Kpi, coveredDays: number): string {
   return KPI_TEXT[kind].sub;
 }
 
-function KpiCard({ kind, currencies, help, main = false, children }: { kind: Kpi; currencies: MoneyCurrencySummary[]; help?: string; main?: boolean; children?: ReactNode }) {
+function KpiCard({
+  kind,
+  currencies,
+  help,
+  main = false,
+  children,
+  extra,
+}: {
+  kind: Kpi;
+  currencies: MoneyCurrencySummary[];
+  help?: string;
+  main?: boolean;
+  children?: ReactNode;
+  /** One more line under the sub line (Monthly: "Apps only. Content Rewards is in All your money.", §39.2). */
+  extra?: string | null;
+}) {
   const t = KPI_TEXT[kind];
   const titleId = useId();
   const covered = Math.min(...currencies.map((c) => c.coveredDays));
@@ -202,6 +219,7 @@ function KpiCard({ kind, currencies, help, main = false, children }: { kind: Kpi
         {children}
       </div>
       <p className="dash-kpi__sub">{kpiSub(kind, covered)}</p>
+      {extra ? <p className="dash-kpi__sub dash-kpi__apps">{extra}</p> : null}
       <div className="dash-kpi__lines">
         {currencies.map((c) => (
           <KpiLine key={c.currency} kind={kind} c={c} count={main} />
@@ -284,13 +302,14 @@ function Notes({ excluded }: { excluded: MoneyExcluded[] }) {
 }
 
 /** Nothing can be counted: the nearest goal instead of zeros (the same bar as Home's money tile). */
-function NoMoneyYet() {
+function NoMoneyYet({ extra }: { extra?: string | null }) {
   const { data } = useLoad<MoneyView>(() => api().getMoney());
   const near = data ? nearestGoal(data.platforms) : null;
   return (
     <section className="dash-kpi dash-kpi--main dash-kpi--empty glass glass--green" data-kpi="empty" data-help="money-dash-monthly">
       <h2 className="dash-kpi__label">Monthly MRR</h2>
       <p className="dash-empty__title">No money yet.</p>
+      {extra ? <p className="dash-kpi__sub dash-kpi__apps">{extra}</p> : null}
       {near ? (
         <div className="money-tile__near" data-near={near.platform}>
           <p className="money-tile__near-line">
@@ -314,10 +333,11 @@ function NoMoneyYet() {
 }
 
 /** The filter is only apps that never share money: one card saying where to look instead. */
-function OnlyNotShared({ excluded }: { excluded: MoneyExcluded[] }) {
+function OnlyNotShared({ excluded, extra }: { excluded: MoneyExcluded[]; extra?: string | null }) {
   return (
     <section className="dash-kpi dash-kpi--main dash-kpi--empty glass glass--green" data-kpi="not-shared" data-help="money-dash-monthly">
       <h2 className="dash-kpi__label">Monthly MRR</h2>
+      {extra ? <p className="dash-kpi__sub dash-kpi__apps">{extra}</p> : null}
       {excluded.map((e) => (
         <p className="dash-empty__line" key={e.platform}>
           <span className="dash-note__mark" aria-hidden="true">
@@ -444,6 +464,16 @@ export function MoneyDashboard() {
   const dock = useMedia(DOCK_QUERY);
   const [choice, setChoiceState] = useState<DashChoice>(() => readChoice(location.search, readStored()));
   const { data, error, fresh, reload } = useSummary(choice.apps, choice.period);
+  // §39.2: All your money, the page's first card. While it has a Content Rewards row, the Monthly card says it is apps
+  // only (its empty states only when that row has a number).
+  const everywhereLoad = useMoneyEverywhere();
+  const crRow = crRowOf(everywhereLoad);
+  const appsOnly = crRow ? APPS_ONLY : null;
+  const appsOnlyEmpty = crRow?.state === "number" ? APPS_ONLY : null;
+  const allShown = everywhereLoad.state === "ok";
+  // Phones: while All your money is on the page (loading, its numbers or its error), the dock sits with the cards it
+  // changes and never floats over All your money (CSS: .dock-with-cards). Without it (an API from before §39), as before.
+  const dockWithCards = dock && everywhereLoad.state !== "off";
   const [currency, setCurrency] = useState<string | null>(null);
 
   const set = useCallback((patch: Partial<DashChoice>) => setChoiceState((c) => ({ ...c, ...patch })), []);
@@ -472,7 +502,13 @@ export function MoneyDashboard() {
   const thisYear = new Date().getUTCFullYear();
 
   return (
-    <div className={`page money-dash${dock ? " is-dock" : " is-toolbar"}`} data-help="money-dash" data-help-dodge-text aria-busy={!fresh || undefined}>
+    <>
+    <div
+      className={`page money-dash${dock ? " is-dock" : " is-toolbar"}${allShown ? " has-all-money" : ""}${dockWithCards ? " dock-with-cards" : ""}`}
+      data-help="money-dash"
+      data-help-dodge-text
+      aria-busy={!fresh || undefined}
+    >
       <header className="dash-head">
         <div className="dash-head__text">
           <h1 className="page-head__title">Money</h1>
@@ -493,8 +529,14 @@ export function MoneyDashboard() {
         {dock ? null : <PaidLink />}
       </header>
 
+      {/* All your money comes first (§39.2): the apps and days below change only the cards under them. */}
+      <AllMoney load={everywhereLoad} />
+
+      {/* Everything the apps and days change, with their controls first. Its own box only on phones beside All your
+          money (the dock's sticky box: it can never leave the cards); elsewhere it draws no box at all. */}
+      <div className="dash-filtered">
       {/* Right after the title in the reading and tab order on both layouts. Wide screens: a full-width glass band
-          that stays at the top (the page scrolls under it, nothing hides beside it); phones: the fixed dock. */}
+          that stays at the top (the page scrolls under it, nothing hides beside it); phones: the dock. */}
       {dock ? (
         <Controls choice={choice} set={set} dock />
       ) : (
@@ -511,12 +553,12 @@ export function MoneyDashboard() {
           <div className="dash-grid-box">
           <div className="dash-grid">
             {onlyNotShared ? (
-              <OnlyNotShared excluded={data.excluded} />
+              <OnlyNotShared excluded={data.excluded} extra={appsOnlyEmpty} />
             ) : !data.currencies.length ? (
-              <NoMoneyYet />
+              <NoMoneyYet extra={appsOnlyEmpty} />
             ) : (
               <>
-                <KpiCard kind="monthly" currencies={data.currencies} help="money-dash-monthly" main>
+                <KpiCard kind="monthly" currencies={data.currencies} help="money-dash-monthly" main extra={appsOnly}>
                   <WhatIsMrr />
                 </KpiCard>
                 <KpiCard kind="weekly" currencies={data.currencies} />
@@ -551,7 +593,14 @@ export function MoneyDashboard() {
       ) : null}
 
       <MoneyClipList choice={choice} onSort={(sort) => set({ sort })} />
+      </div>
     </div>
+    {/* Content Rewards' own numbers (§38.7): their own part at the end of the page, never added into the MRR cards
+        (All your money's total is the one place it is added, §39.2). */}
+    <div className={`page cr-money-page${dock ? " is-dock" : ""}`} data-help-dodge-text>
+      <CrMoneyPart />
+    </div>
+    </>
   );
 }
 

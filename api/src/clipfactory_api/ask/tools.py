@@ -18,7 +18,7 @@ from typing import Any
 from ..log import log
 from . import fetch as web
 from .knowledge import Knowledge, read_section
-from .prompt import READ_MY_SECTIONS, SETUP_PLATFORMS
+from .prompt import GUIDE_NAMES, READ_MY_SECTIONS
 from .search import QUERY_CHARS, SearchError, SearchProvider
 from .state import Reader
 
@@ -60,6 +60,14 @@ OFFICIAL_FETCH_CAP = 3
 OFFICIAL_TEXT_CHARS = 15_000
 OFFICIAL_PDF_BYTES = 500_000
 SETUP_STEP_ACTION = re.compile(r"setup-step:([a-z]+):([a-z0-9-]{1,40})")
+# Content Rewards' join and money parts are shown on their own pages, not the setup page: (where the button opens, the
+# spot lit when the step's card is not on screen). The join steps show only until the first campaign is added (then
+# the paste box, always there, is where a campaign is joined); the money steps once the owner answers about Finance.
+CR_STEP_PAGES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "join": ("/campaigns#step-{step}", ("cr-campaign-paste",)),
+    "move": ("/money#content-rewards", ("cr-money",)),
+    "bank": ("/money#content-rewards", ("cr-money",)),
+}
 LIMIT_REACHED = "limit reached, answer with what you have"
 LIBRARY_SOURCE = "clip-factory://library/"
 URL_IN_TEXT = re.compile(r"https?://[^\s<>\"'`)\]]+")
@@ -120,18 +128,26 @@ def hop_check(start: str) -> Callable[[str], bool]:
 def setup_step_action(knowledge: Knowledge, action_id: str) -> dict[str, Any] | None:
     """The button for ``setup-step:{platform}:{stepId}``: opens that step of the setup guide and lights it."""
     m = SETUP_STEP_ACTION.fullmatch(action_id)
-    if not m or m.group(1) not in SETUP_PLATFORMS:
+    if not m or m.group(1) not in GUIDE_NAMES:
         return None
     platform, step_id = m.group(1), m.group(2)
     step = next((st for st in knowledge.setup_steps.get(platform, []) if st.get("id") == step_id), None)
     if step is None:
         return None
-    name = {"youtube": "YouTube", "tiktok": "TikTok", "x": "X"}.get(platform, platform.capitalize())
+    name = {"youtube": "YouTube", "tiktok": "TikTok", "x": "X", "contentrewards": "Content Rewards"}.get(
+        platform, platform.capitalize()
+    )
+    to, highlight = f"/settings/posting/setup/{platform}#step-{step_id}", [f"step-{step_id}"]
+    if platform == "contentrewards" and step.get("part") in CR_STEP_PAGES:
+        # The join steps live on Campaigns and the money steps on Money (web CrSetup.tsx crStepHome): straight there.
+        page, fallback = CR_STEP_PAGES[step["part"]]
+        to = page.format(step=step_id)
+        highlight = [*highlight, *fallback]
     return {
         "id": action_id,
         "label": f"Open {name} step {step.get('n')}",
-        "to": f"/settings/posting/setup/{platform}#step-{step_id}",
-        "highlight": [f"step-{step_id}"],
+        "to": to,
+        "highlight": highlight,
     }
 
 
@@ -381,11 +397,15 @@ class Toolbox:
 
     def _guide(self, args: dict[str, Any]) -> Outcome:
         platform, step_id = args.get("platform"), args.get("stepId")
-        if set(args) - {"platform", "stepId"} or platform not in SETUP_PLATFORMS:
-            return Outcome('{"INVALID_JSON": "platform must be youtube, tiktok, instagram, facebook or x"}', True)
+        if set(args) - {"platform", "stepId"} or platform not in GUIDE_NAMES:
+            return Outcome(
+                '{"INVALID_JSON": "platform must be youtube, tiktok, instagram, facebook, x or contentrewards"}', True
+            )
         if step_id is not None and not isinstance(step_id, str):
             return Outcome('{"INVALID_JSON": "stepId must be a string"}', True)
         rows = self.knowledge.setup_steps.get(str(platform), [])
+        if not rows and platform == "contentrewards":
+            return Outcome("That guide is not in this version yet.", True)
         if not rows:
             return Outcome("that guide is not in this version of the app", True)
         if step_id:

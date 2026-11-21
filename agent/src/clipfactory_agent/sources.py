@@ -579,3 +579,57 @@ def url_at(url: str, platform: str, seconds: float) -> str | None:
     else:
         return None
     return urlunparse(u._replace(query=urlencode(query)))
+
+
+# --- a Content Rewards campaign's allowed channels (docs/CONTRACTS.md §38.13) -----------------------------------------
+
+_NOT_WORD = re.compile(r"[\W_]+")
+_CHANNEL_PATH_PREFIXES = ("c", "user", "channel")
+MIN_CHANNEL_KEY = 3
+
+
+def _channel_key(text: str) -> str:
+    """A name or handle reduced to its letters and digits, case-folded ("@FaZe_Clan" and "FaZe Clan" -> "fazeclan")."""
+    return _NOT_WORD.sub("", text.casefold())
+
+
+def _handle_from_url(url: str) -> str | None:
+    """The channel part of a YouTube, Twitch or Kick channel link (``youtube.com/@FaZeClan/videos`` -> "FaZeClan")."""
+    try:
+        u = urlparse(url)
+    except ValueError:
+        return None
+    parts = [p for p in u.path.split("/") if p]
+    if not parts:
+        return None
+    if parts[0] in _CHANNEL_PATH_PREFIXES and len(parts) > 1:
+        return parts[1]
+    return parts[0].lstrip("@")
+
+
+def channel_keys(info: dict[str, Any]) -> list[str]:
+    """Every name and handle yt-dlp gives for the video's channel, as channel keys."""
+    texts = [info.get(k) for k in ("channel", "uploader", "creator", "uploader_id", "channel_id")]
+    for k in ("channel_url", "uploader_url"):
+        url = info.get(k)
+        if isinstance(url, str):
+            texts.append(_handle_from_url(url))
+    keys = [_channel_key(str(t)) for t in texts if isinstance(t, str) and t]
+    return [k for k in dict.fromkeys(keys) if len(k) >= MIN_CHANNEL_KEY]
+
+
+def from_allowed_channel(info: dict[str, Any], channels: list[dict[str, Any]]) -> bool:
+    """Whether the video's channel is one of a campaign's ``allowedSources.channels`` (``{name, url}``): a name or
+    handle of one contains the other, case-folded. True when the campaign names no channel, or when yt-dlp gives no
+    channel to compare (then nothing can be said)."""
+    allowed: list[str] = []
+    for c in channels:
+        allowed.append(_channel_key(str(c.get("name") or "")))
+        url = c.get("url")
+        if isinstance(url, str):
+            allowed.append(_channel_key(_handle_from_url(url) or ""))
+    allowed = [a for a in allowed if len(a) >= MIN_CHANNEL_KEY]
+    video = channel_keys(info)
+    if not allowed or not video:
+        return True
+    return any(a in v or v in a for a in allowed for v in video)

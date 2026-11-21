@@ -181,14 +181,14 @@ def list_skills(app: App, req: Request) -> Response:
     for item in owner_items(rows):
         view = _public(item)
         offers = _listed_offers(app, item)
-        if offers:  # only on his copy of a built-in that gained a part since (§38.2)
+        if offers:  # only on his copy of a built-in that gained a part since (§44.2)
             view["newSections"] = offers
         owner.append(view)
     owner.sort(key=lambda s: (s["name"], s["skillId"]))
     return ok({"skills": builtins + owner})
 
 
-# --- new parts of a built-in, for his copy of it (§38) ---------------------------------------------------------
+# --- new parts of a built-in, for his copy of it (§44) ---------------------------------------------------------
 
 SECTION_ACTIONS = ("add", "undo", "not_now")
 ALREADY_HAS = "Your skill already has this part."
@@ -255,7 +255,7 @@ def _builtin_part(app: App, section: skill_sections.BuiltinSection) -> str:
 
 
 def skill_section(app: App, req: Request) -> Response:
-    """POST /v1/skills/{skillId}/sections: add a new built-in part to his copy, undo that, or say Not now (§38.3).
+    """POST /v1/skills/{skillId}/sections: add a new built-in part to his copy, undo that, or say Not now (§44.3).
     Add and undo save a new revision of his file with only the part added or taken out; Not now is remembered on
     the skill (``sectionsNotNow``) and changes nothing else."""
     item = _editable(app, req)
@@ -281,7 +281,7 @@ def skill_section(app: App, req: Request) -> Response:
     key = s3.skill_key(req.user_id, str(item["skillId"]), ulid(), fmt)
     app.media.put(key, data, CONTENT_TYPES[fmt])
     fields: dict[str, Any] = {"key": key, "format": fmt, "size": len(data)}
-    if added is not None:  # exactly what was put in and where, so Undo takes out only that (§38.3)
+    if added is not None:  # exactly what was put in and where, so Undo takes out only that (§44.3)
         fields["sectionAdded"] = added
     saved = _save(app, item, version, fields, shape="section_" + action, remove=() if added else ("sectionAdded",))
     updated = {**item, **fields, "version": version + 1}

@@ -80,6 +80,11 @@ export const SYNONYMS = {
   dark: "reduce motion",
   calm: "reduce motion",
   calmer: "reduce motion",
+  // Content Rewards (docs/CONTRACTS.md §38.17).
+  whop: "content rewards",
+  "clipping campaign": "content rewards",
+  "brand deal": "content rewards",
+  cpm: "content rewards",
 };
 
 /** Keys, ids and infra words never reach the corpus. "Cookies" stays: it is the YouTube cookies setting. */

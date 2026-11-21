@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { findOverflow, settle } from "./helpers.ts";
 
-// The owner's own copy of a built-in skill that gained a part since (docs/CONTRACTS.md §38): Settings › Skills asks
+// The owner's own copy of a built-in skill that gained a part since (docs/CONTRACTS.md §44): Settings › Skills asks
 // "New in the built-in skill: Chat went wild. Add it to your skill?" with Add (Undo), Not now (remembered) and
 // See what changes; the skill's own page keeps a small note. Mock mode: __cfMock.addSkillCopy() adds his copy.
 const LIST = "/settings/clip-making/skills";

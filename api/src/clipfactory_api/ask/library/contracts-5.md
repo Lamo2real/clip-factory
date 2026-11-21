@@ -42,7 +42,7 @@ try again in a minute, §17.4), `internal`.
 | PATCH `/v1/skills/{skillId}` | – | always `400 bad_request` "Skills are always used now, so there is no switch." (§18.1; the on/off switch is gone) |
 | DELETE `/v1/skills/{skillId}` | – | `204` (owner skills only; built-ins → `409 conflict`, §18.5) |
 | GET `/v1/skills/{skillId}/content` | – | `{ "content": "<SKILL.md text>" }` (kept for old clients; the web uses `GET /v1/skills/{skillId}`) |
-| POST `/v1/skills/{skillId}/sections` | `{ "key", "action": "add" \| "undo", "version" }` or `{ "key", "action": "not_now" }` | `{ "skill": Skill, "newSections": SectionOffer[] }` (§38.3; owner skills only, built-ins → `409`) |
+| POST `/v1/skills/{skillId}/sections` | `{ "key", "action": "add" \| "undo", "version" }` or `{ "key", "action": "not_now" }` | `{ "skill": Skill, "newSections": SectionOffer[] }` (§44.3; owner skills only, built-ins → `409`) |
 | GET `/v1/settings` | – | `{ "settings": Settings }` |
 | PUT `/v1/settings` | `Partial<Settings>` (validated) | `{ "settings": Settings }` |
 | POST `/v1/settings/cookies` | `{ "filename" }` | presigned PUT for an optional YouTube `cookies.txt` (helps when YouTube blocks cloud IPs) |
@@ -93,7 +93,9 @@ interface Clip { clipId: string; jobId: string; rank: number; status: ClipStatus
                                        built by agent code from evidence inside the clip (§8), never by a model;
                                        absent on older clips and when nothing stood out */;
                  best?: boolean /* starred "Best this week" (§16) */; bestWeek?: string /* "yyyy-Www" */;
-                 totalViews?: number /* sum of Post.metrics.views over posted posts; absent when none measured */ }
+                 totalViews?: number /* sum of Post.metrics.views over posted posts; absent when none measured */;
+                 startPending?: true /* uploaded, but its flow has not started (internal publishState "pending" on a
+                                        confirmed, publishing or posted clip, §14.5): Confirm starts it */ }
 interface Skill { skillId: string; name: string /* frontmatter slug */; title: string /* shown name, §18.2 */;
                   description: string; builtin: boolean; source: "builtin" | "written" | "upload";
                   format: "md" | "zip"; size: number; createdAt: string; updatedAt: string;

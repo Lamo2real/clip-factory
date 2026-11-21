@@ -86,6 +86,18 @@ def get_clips(app: App, req: Request) -> Response:
     return ok(out)
 
 
+def get_everywhere(app: App, req: Request) -> Response:
+    """§39.2: all your money in one place: every platform and, while it is switched on, Content Rewards, over the
+    Monthly card's 30 days. Stored items only (never a platform or Content Rewards); nothing here is worked out on
+    the web."""
+    from ..money import everywhere
+
+    now = app.clock()
+    money.register_owner(app.store, req.user_id, now)
+    cr_on = getattr(app, "contentrewards", None) is not None
+    return ok(everywhere.load(app.store, req.user_id, now, cr_on=cr_on))
+
+
 def refresh(app: App, req: Request) -> Response:
     """Check now: one conditional write claims the hour, then ``cf-prod-money`` reads every platform."""
     now = app.clock()

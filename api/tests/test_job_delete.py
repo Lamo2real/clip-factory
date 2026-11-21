@@ -218,6 +218,60 @@ def test_delete_review_clips_when_asked_but_never_posted_ones(
     assert call("GET", "/v1/clips", query={"status": "review"})[1]["clips"] == []
 
 
+def test_delete_keeps_campaign_posts_and_what_was_sent_to_content_rewards(
+    call: Call, store: db.Store, s3_client: FakeS3
+) -> None:
+    """A campaign job (§38.14): its posted clips, their posts (with ``campaignId``) and the ``CRSUB#`` items stay,
+    so a delete never takes a campaign post down or forgets what was sent. Only the job's own files go, the job's copy
+    of the campaign logo among them (the campaign keeps its own under ``campaigns/``)."""
+    campaign = "0b5c1f3e-1a2b-4c3d-9e8f-123456789abc"
+    job = seed_job(store, status="ready", campaignId=campaign, campaign={"campaignId": campaign, "name": "FaZe Clips"})
+    logo = f"jobs/{job['jobId']}/source/campaign-logo.png"
+    s3_client.objects[logo] = b"png"
+    s3_client.objects[f"campaigns/{USER}/{campaign}/logo-1.png"] = b"png"
+    clip = seed_clip(store, s3_client, job_id=job["jobId"], status="posted", campaignId=campaign)
+    pk = db.user_pk(USER)
+    for platform in ("youtube", "instagram"):
+        store.put(
+            {
+                "pk": pk,
+                "sk": db.post_sk(f"P{platform}"),
+                "type": "post",
+                "postId": f"P{platform}",
+                "clipId": clip["clipId"],
+                "platform": platform,
+                "status": "posted",
+                "campaignId": campaign,
+                "url": f"https://{platform}.com/p",
+            }
+        )
+        store.put(
+            {
+                "pk": pk,
+                "sk": f"CRSUB#P{platform}",
+                "type": "crsub",
+                "postId": f"P{platform}",
+                "clipId": clip["clipId"],
+                "campaignId": campaign,
+                "state": "sent",
+            }
+        )
+    store.put({"pk": pk, "sk": f"CAMPAIGN#{campaign}", "type": "campaign", "campaignId": campaign})
+    status, body = call("DELETE", f"/v1/jobs/{job['jobId']}", query={"clips": "delete"})
+    assert status == 200
+    assert (body["deleted"], body["clipsKept"]) == (True, 1)
+    assert store.get(clip["pk"], clip["sk"]) is not None
+    for platform in ("youtube", "instagram"):
+        post = store.get(pk, db.post_sk(f"P{platform}"))
+        assert post is not None
+        assert (post["status"], post["campaignId"]) == ("posted", campaign)
+        assert store.get(pk, f"CRSUB#P{platform}") is not None
+    assert store.get(pk, f"CAMPAIGN#{campaign}") is not None
+    assert clip["videoKey"] in s3_client.objects
+    assert logo not in s3_client.objects
+    assert f"campaigns/{USER}/{campaign}/logo-1.png" in s3_client.objects
+
+
 def test_a_review_clip_kept_meanwhile_is_kept(app: Any, store: db.Store, s3_client: FakeS3) -> None:
     job = seed_job(store, status="ready")
     clip = seed_clip(store, s3_client, job_id=job["jobId"])

@@ -1,4 +1,4 @@
-"""The owner's copy of a built-in skill that lacks a newer part (docs/CONTRACTS.md §38): every model call of a job
+"""The owner's copy of a built-in skill that lacks a newer part (docs/CONTRACTS.md §44): every model call of a job
 still gets the built-in's Chat guidance, as a small separate note right after his skill, until he adds it."""
 
 from __future__ import annotations

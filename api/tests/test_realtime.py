@@ -469,3 +469,62 @@ def test_broadcast_setup_changes_are_partial(
     broadcast.process({"Records": [_record(item, event=event)]}, bc_deps)
     platform = sk.split("#")[1]
     assert [m for _, m in management.sent] == [{"type": "setup", "op": "upsert", "id": platform, "partial": True}] * 2
+
+
+@pytest.mark.parametrize(
+    ("sk", "event", "message"),
+    [
+        (
+            "CAMPAIGN#200ea21b-be80-4db8-b552-8e32b148604e",
+            "MODIFY",
+            {
+                "type": "contentrewards",
+                "op": "upsert",
+                "id": "campaign:200ea21b-be80-4db8-b552-8e32b148604e",
+                "partial": True,
+            },
+        ),
+        (
+            "CAMPAIGN#200ea21b-be80-4db8-b552-8e32b148604e",
+            "REMOVE",
+            {
+                "type": "contentrewards",
+                "op": "delete",
+                "id": "campaign:200ea21b-be80-4db8-b552-8e32b148604e",
+                "partial": True,
+            },
+        ),
+        ("CRCONN", "MODIFY", {"type": "contentrewards", "op": "upsert", "id": "connection", "partial": True}),
+        (
+            "CRSUB#01J0000000000000000000000P",
+            "INSERT",
+            {"type": "contentrewards", "op": "upsert", "id": "submission:01J0000000000000000000000P", "partial": True},
+        ),
+        ("CRMONEY", "MODIFY", {"type": "contentrewards", "op": "upsert", "id": "money", "partial": True}),
+    ],
+)
+def test_broadcast_content_rewards_is_partial(
+    bc_deps: broadcast.BroadcastDeps, management: FakeManagement, sk: str, event: str, message: dict[str, Any]
+) -> None:
+    item = {
+        "pk": f"USER#{USER}",
+        "sk": sk,
+        "type": "x",
+        "userId": USER,
+        "brief": "brand text",
+        "tokenVersionId": "v9",
+        "public": {"name": "x"},
+    }
+    broadcast.process({"Records": [_record(item, event=event)]}, bc_deps)
+    assert [m for _, m in management.sent] == [message] * 2  # never the item: briefs and token versions stay home
+
+
+def test_broadcast_never_sends_crstate_or_crowners(
+    bc_deps: broadcast.BroadcastDeps, management: FakeManagement
+) -> None:
+    records = [
+        _record({"pk": f"USER#{USER}", "sk": "CRSTATE#nonce", "type": "crstate"}),
+        _record({"pk": "CROWNERS", "sk": f"USER#{USER}", "type": "crowner"}),
+    ]
+    broadcast.process({"Records": records}, bc_deps)
+    assert management.sent == []

@@ -78,10 +78,10 @@ def skills_block(docs: Iterable[SkillDoc], *, where: str = "") -> SkillsBlock:
         truncated += cut
         source = "built-in" if doc.builtin else "owner"
         parts.append(f'<skill name="{escape(doc.name)}" source="{source}">\n{text}\n</skill>')
-        if not doc.builtin:  # his copy of a built-in that gained a part since: a small separate note (§38.4)
+        if not doc.builtin:  # his copy of a built-in that gained a part since: a small separate note (§44.4)
             for gap in skill_sections.missing_sections(builtins, doc.text):
                 note = skill_sections.skill_note(doc.name, gap)
-                left = max(0, left - len(note))  # a note counts against the same budget (§38.4)
+                left = max(0, left - len(note))  # a note counts against the same budget (§44.4)
                 parts.append(note)
                 notes += 1
     if not parts and not omitted:
@@ -249,7 +249,7 @@ def _read_text(media: s3.Media, item: dict[str, Any], sleep: Callable[[float], N
 
 def read_skill_text(media: s3.Media, item: dict[str, Any]) -> str | None:
     """One owner skill's SKILL.md text through the same cache as the skills block (``None`` when it cannot be
-    read); used to spot a copy of a built-in that lacks a newer part (§38)."""
+    read); used to spot a copy of a built-in that lacks a newer part (§44)."""
     return _read_text(media, item, time.sleep)
 
 

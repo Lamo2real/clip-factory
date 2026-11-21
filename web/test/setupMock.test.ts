@@ -104,9 +104,10 @@ describe("the mock posting setup (§17.10)", () => {
 });
 
 describe("the Post to TikTok sheet's rules (§17.8)", () => {
-  it("never offers Only me for branded content", () => {
+  it("lets branded content be seen only by Everyone or Friends (never Only me or Followers)", () => {
     expect(privacyChoices(["PUBLIC_TO_EVERYONE", "SELF_ONLY"], false)).toEqual(["PUBLIC_TO_EVERYONE", "SELF_ONLY"]);
     expect(privacyChoices(["PUBLIC_TO_EVERYONE", "SELF_ONLY"], true)).toEqual(["PUBLIC_TO_EVERYONE"]);
+    expect(privacyChoices(["SELF_ONLY", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "PUBLIC_TO_EVERYONE"], true)).toEqual(["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS"]);
   });
 
   it("puts Everyone first and Only me last, and never offers more than TikTok does", () => {
@@ -127,5 +128,7 @@ describe("the Post to TikTok sheet's rules (§17.8)", () => {
     expect(sheetReady({ ...base, privacy: "PUBLIC_TO_EVERYONE", commercial: true })).toBe(false);
     expect(sheetReady({ ...base, privacy: "PUBLIC_TO_EVERYONE", commercial: true, yourBrand: true })).toBe(true);
     expect(sheetReady({ ...base, privacy: "SELF_ONLY", commercial: true, branded: true })).toBe(false);
+    expect(sheetReady({ ...base, privacy: "FOLLOWER_OF_CREATOR", commercial: true, branded: true })).toBe(false);
+    expect(sheetReady({ ...base, privacy: "MUTUAL_FOLLOW_FRIENDS", commercial: true, branded: true })).toBe(true);
   });
 });

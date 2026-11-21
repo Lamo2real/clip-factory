@@ -77,7 +77,7 @@ export function SkillsSection() {
   const pick = usePickAction("upload");
   const id = useId();
   const shown = data?.filter((s) => !hidden.has(s.skillId)) ?? null;
-  // §38: his own copy of a built-in that gained a part since gets a card above the list.
+  // §44: his own copy of a built-in that gained a part since gets a card above the list.
   const offers = (shown ?? []).flatMap((s) => (s.newSections ?? []).filter((o) => !o.notNow).map((o) => ({ skill: s, offer: o })));
   const changed = ({ skill, newSections }: SectionResult) =>
     setData((d) =>

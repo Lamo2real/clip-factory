@@ -5,6 +5,8 @@ import type { Platform } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { A, ActGlyph } from "../../components/ui.tsx";
+import { CR_SETTINGS } from "../../setup/contentrewards.ts";
+import { GreenButton, OpenButton } from "../campaigns/bits.tsx";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
 import { useAction } from "../../lib/motion.ts";
 
@@ -24,10 +26,34 @@ export function notReadyLine(ready: readonly Platform[]): string | null {
  * One soft-fill toggle chip per place that is set up, in STATS_ORDER. Any number can be on (so not a Glide bar); a
  * chip that is on shows a check mark and has aria-pressed. Places not set up get no chip, only the quiet line below.
  */
-export function UploadToChips({ ready, chosen, onToggle }: { ready: readonly Platform[]; chosen: readonly Platform[]; onToggle: (p: Platform) => void }) {
+export function UploadToChips({
+  ready,
+  chosen,
+  onToggle,
+  campaign,
+}: {
+  ready: readonly Platform[];
+  chosen: readonly Platform[];
+  onToggle: (p: Platform) => void;
+  /**
+   * A campaign clip (§38.5): only the places it pays for (`ready` is already limited to them), its lines, and the
+   * places Content Rewards refused as not added there, with "I added it".
+   */
+  campaign?: { lines: string[]; unlinked: Platform[]; onRelinked: (p: Platform) => unknown };
+}) {
   const id = useId();
-  const line = notReadyLine(ready);
+  const line = campaign ? null : notReadyLine(ready);
   const firstMissing = PLATFORM_ORDER.find((p) => !ready.includes(p));
+  if (!ready.length && campaign)
+    return (
+      <div className="upload-to upload-to--none" data-help="upload-to">
+        <p className="callout">
+          <Icon name="alert" size={18} />
+          <span>None of the places this campaign pays for is set up yet. Set one up, then tap Upload.</span>
+        </p>
+        <CampaignLines campaign={campaign} />
+      </div>
+    );
   if (!ready.length)
     return (
       <div className="upload-to upload-to--none">
@@ -55,6 +81,32 @@ export function UploadToChips({ ready, chosen, onToggle }: { ready: readonly Pla
           {line}
         </A>
       ) : null}
+      {campaign ? <CampaignLines campaign={campaign} /> : null}
+    </div>
+  );
+}
+
+/** "Only places this campaign pays for.", the TikTok line, and "Add YouTube in Content Rewards first." */
+function CampaignLines({ campaign }: { campaign: NonNullable<Parameters<typeof UploadToChips>[0]["campaign"]> }) {
+  return (
+    <div className="cr-places">
+      {campaign.lines.map((l) => (
+        <p key={l} className="upload-to__hint small">
+          {l}
+        </p>
+      ))}
+      {campaign.unlinked.map((p) => (
+        <div key={p} className="cr-places__unlinked">
+          <p className="small">Add {PLATFORM_LABEL[p]} in Content Rewards first.</p>
+          <div className="cr-line__actions">
+            <OpenButton label="Open Content Rewards settings" href={CR_SETTINGS} size="sm" />
+            <GreenButton size="sm" onClick={() => campaign.onRelinked(p)}>
+              I added it
+            </GreenButton>
+          </div>
+          <p className="small">Then tap I added it. The next clip will go.</p>
+        </div>
+      ))}
     </div>
   );
 }

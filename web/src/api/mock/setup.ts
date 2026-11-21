@@ -74,6 +74,8 @@ interface MockPlatform {
   files: string[];
   /** The state of the Connect that is under way. */
   pending?: string;
+  /** Connected on the pretend consent page: the next start releases the posts waiting for it (§17.6). */
+  justConnected?: boolean;
   updatedAt?: string;
 }
 
@@ -144,6 +146,7 @@ function gatesOf(p: Platform, s: MockPlatform): Gate[] {
         { key: "posting_audit", state: !connected ? "unknown" : s.audited ? "ok" : "limited" },
       ];
     }
+    case "instagram":
     case "facebook":
       return [{ key: "app_live", state: s.stepsDone.includes("public-live") ? "ok" : "limited" }];
     case "x":
@@ -179,20 +182,34 @@ export interface SetupDeps {
   /** Mirrors account states into the main mock store (the numbers pages read them). */
   onAccounts?: (accounts: Account[]) => void;
   publish?: (platform: Platform) => void;
+  /** An account just became connected: the posts waiting for it go out, like the API's release (§17.6). */
+  onConnected?: (platform: Platform) => void;
 }
 
 /** The setup half of the mock API. */
-export function setupApi({ onAccounts, publish }: SetupDeps = {}) {
+export function setupApi({ onAccounts, publish, onConnected }: SetupDeps = {}) {
   let state = load();
+  // Each account's status as last seen, so only a change to connected releases waiting posts.
+  const seen = new Map(SETUP_ORDER.map((p) => [p, state[p].account.status]));
 
   const changed = (p: Platform) => {
     state[p].updatedAt = new Date().toISOString();
     save(state);
     onAccounts?.(SETUP_ORDER.map((x) => structuredClone(state[x].account)));
+    const status = state[p].account.status;
+    if (status === "connected" && seen.get(p) !== "connected") onConnected?.(p);
+    seen.set(p, status);
     publish?.(p);
     return publicSetup(p, state[p]);
   };
   onAccounts?.(SETUP_ORDER.map((x) => structuredClone(state[x].account)));
+  // Connected on the pretend consent page (a full page load since): release now, as the real callback does.
+  for (const p of SETUP_ORDER) {
+    if (!state[p].justConnected) continue;
+    delete state[p].justConnected;
+    save(state);
+    if (state[p].account.status === "connected") onConnected?.(p);
+  }
 
   const knownPlatform = (p: string): Platform => {
     if (!(SETUP_ORDER as readonly string[]).includes(p)) throw new ApiError(404, "not_found", "That platform does not exist.");
@@ -389,6 +406,7 @@ export function mockAuthorize(platform: Platform, stateParam: string | null, all
     result = "choose";
   } else {
     s.account = connectedAccount(platform);
+    s.justConnected = true;
     result = "connected";
   }
   delete s.pending;

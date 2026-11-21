@@ -1,6 +1,10 @@
 """Cutting one clip with ffmpeg: 1080×1920 at 30 fps, facecam on top (or a blurred fill), dead pauses cut, an
 optional payoff tease first, the hook and word-by-word captions burned in with libass inside every platform's safe
-area, a smooth punch-in on the face at the peak, loudness normalised to -14 LUFS, a cover at the peak."""
+area, a smooth punch-in on the face at the peak, loudness normalised to -14 LUFS, a cover at the peak.
+
+A Content Rewards campaign clip (docs/CONTRACTS.md §38.13) also carries a mark row at the top of the safe area: the
+brand's logo on the right for the whole clip and "Paid partnership" on the left for the first 3 seconds. The band
+above the picture grows by 80 px to hold it, so neither ever covers a face, the game or a caption."""
 
 from __future__ import annotations
 
@@ -24,6 +28,16 @@ BAND = 400  # the band above the facecam (or the picture) that holds the hook
 CAM_H = 560
 FILL_H = 880  # the picture's height in blur_fill
 HOOK_TOP = SAFE[1] + 20  # the hook's first line starts here and the hook grows down
+# The mark row of a campaign clip (§38.13): y = 192…272, inside the band, above every face and picture. The band
+# grows by its 80 px (the facecam or picture starts 80 px lower) and the hook moves down under it.
+CAMPAIGN_BAND = 480
+MARK_TOP, MARK_H = SAFE[1], 80
+CAMPAIGN_HOOK_TOP = 288
+LOGO_W = 380  # the logo fits 380 × 80, right-aligned on the safe area's right edge
+DISCLOSURE_SECONDS = 3.0
+DISCLOSURE_SIZE = 46
+DISCLOSURE_FADE_MS = 300
+DISCLOSURE_FIT = 16  # characters that fit at full size beside the widest logo; longer words are set smaller
 CAP_BOTTOM = SAFE[3] - 60  # the captions' last line ends here and longer captions grow up
 TEXT_MARGIN_L, TEXT_MARGIN_R = SAFE[0], W - SAFE[2] + 10  # libass wraps text between these
 # The punch-in on the face at the peak: up to 120%, eased in over 0.4 s, held, eased out over 0.6 s. It zooms toward a
@@ -34,6 +48,13 @@ PUNCH_ANCHOR = (0.5, 0.4)
 _SAFE_PATH = re.compile(r"^[A-Za-z0-9/_.-]+$")
 _SILENCE = re.compile(r"silence_(start|end): (-?[\d.]+)")
 _TRAILING = re.compile(r"[.,!?;:\"“”]+$")
+_CROP = re.compile(r"crop=(-?\d+):(-?\d+):(-?\d+):(-?\d+)")
+LOGO_MAX = 2000  # a larger logo is scaled down before it is used
+JPEG_MAGIC = b"\xff\xd8\xff"
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+LOGO_BYTES_MAX = 20 * 1024 * 1024  # the API takes up to 10 MB (§38.8); anything bigger is not read at all
+LOGO_PIXELS_MAX = 40_000_000  # a picture that would take more memory than this once decoded is refused unread
+_SOF = {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}
 YELLOW = "&H0000D4FF&"  # #FFD400 in ASS's &HBBGGRR& order
 
 Segment = tuple[float, float]
@@ -57,6 +78,19 @@ class Phrase:
         return clean_caption(" ".join(w.text for w in self.words))
 
 
+@dataclass(frozen=True)
+class Marks:
+    """What a campaign clip shows in its mark row (§38.13): the prepared logo (``logo.png``) and the on-screen
+    disclosure words ("Paid partnership"). Each may be missing."""
+
+    logo: Path | None = None
+    disclosure: str | None = None
+
+    @property
+    def any(self) -> bool:
+        return self.logo is not None or bool(self.disclosure)
+
+
 @dataclass
 class RenderResult:
     video: Path
@@ -68,6 +102,8 @@ class RenderResult:
     tease: bool
     frame_layout: FrameLayout | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+    logo: bool = False  # the campaign's logo is on screen the whole clip
+    disclosure: bool = False  # the on-screen disclosure shows at the start
 
 
 def even(n: float) -> int:
@@ -165,11 +201,34 @@ def hook_markup(hook: str) -> str:
     return " ".join(words[:cut]) + " {\\c" + YELLOW + "}" + " ".join(words[cut:])
 
 
-def build_ass(hook: str, caps: Sequence[Phrase], total: float) -> str:
+def disclosure_event(text: str) -> str:
+    """The on-screen disclosure (§38.13): left in the mark row, from 0 to DISCLOSURE_SECONDS, fading out. The words are
+    escaped like every text from outside (no override blocks, no line breaks); words too long to sit beside the logo
+    are set smaller."""
+    words = ass_escape(text)
+    size = DISCLOSURE_SIZE if len(words) <= DISCLOSURE_FIT else max(28, DISCLOSURE_SIZE * DISCLOSURE_FIT // len(words))
+    fs = "" if size == DISCLOSURE_SIZE else f"\\fs{size}"
+    pos = f"\\an4\\pos({SAFE[0]},{MARK_TOP + MARK_H // 2})"
+    return (
+        f"Dialogue: 2,{ass_time(0)},{ass_time(DISCLOSURE_SECONDS)},Disclosure,,0,0,0,,"
+        f"{{{pos}{fs}\\fad(0,{DISCLOSURE_FADE_MS})}}{words}"
+    )
+
+
+def build_ass(
+    hook: str, caps: Sequence[Phrase], total: float, *, hook_top: int = HOOK_TOP, disclosure: str | None = None
+) -> str:
     """The subtitle file: the hook for the whole clip, then each phrase with the word being said in yellow. Both sit
-    inside SAFE: the hook hangs from HOOK_TOP (alignment 8), the captions stand on CAP_BOTTOM (alignment 2), and libass
-    wraps them between the left margin and the buttons on the right."""
+    inside SAFE: the hook hangs from ``hook_top`` (alignment 8), the captions stand on CAP_BOTTOM (alignment 2), and
+    libass wraps them between the left margin and the buttons on the right. A campaign clip passes CAMPAIGN_HOOK_TOP
+    and its ``disclosure`` words, which get their own style and event in the mark row."""
     ml, mr = TEXT_MARGIN_L, TEXT_MARGIN_R
+    disclosure_style = (
+        f"Style: Disclosure,Inter,{DISCLOSURE_SIZE},&H00FFFFFF,&H00FFFFFF,&H00000000,&H8C000000,-1,0,0,0,100,100,0,0,1,5,2,4,"
+        f"{ml},{mr},0,1\n"
+        if disclosure
+        else ""
+    )
     head = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {W}
@@ -180,13 +239,15 @@ YCbCr Matrix: TV.709
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Hook,Inter,68,&H00FFFFFF,&H00FFFFFF,&H00000000,&H8C000000,-1,0,0,0,100,100,0,0,1,7,3,8,{ml},{mr},{HOOK_TOP},1
+Style: Hook,Inter,68,&H00FFFFFF,&H00FFFFFF,&H00000000,&H8C000000,-1,0,0,0,100,100,0,0,1,7,3,8,{ml},{mr},{hook_top},1
 Style: Caption,Inter,82,&H00FFFFFF,&H00FFFFFF,&H00000000,&H99000000,-1,0,0,0,100,100,0,0,1,9,4,2,{ml},{mr},{H - CAP_BOTTOM},1
-
+{disclosure_style}
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     events = [f"Dialogue: 1,{ass_time(0)},{ass_time(total)},Hook,,0,0,0,,{hook_markup(hook)}"]
+    if disclosure:
+        events.append(disclosure_event(disclosure))
     for i, p in enumerate(caps):
         nxt = caps[i + 1].t0 if i + 1 < len(caps) else total
         end = min(total, max(p.t1, p.t0 + 0.25), nxt)
@@ -218,14 +279,21 @@ def punch_in(peak: float, w: int, h: int) -> str:
 
 
 def layout_parts(
-    fc: Facecam | None, src_w: int, src_h: int, *, peak: float | None = None, face_fill: bool = False
+    fc: Facecam | None,
+    src_w: int,
+    src_h: int,
+    *,
+    peak: float | None = None,
+    face_fill: bool = False,
+    band: int = BAND,
 ) -> list[str]:
     """Filter chains from ``[vin]`` to ``[lay]``. ``peak`` (clip seconds) adds the punch-in on the face: on the
-    facecam, or on the whole picture when ``face_fill`` (a camera shot with no facecam box)."""
+    facecam, or on the whole picture when ``face_fill`` (a camera shot with no facecam box). ``band`` is the height
+    above the facecam or picture: CAMPAIGN_BAND for a campaign clip's mark row (the gameplay below gets 80 px less)."""
     blur = f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=24:2,eq=brightness=-0.18"
     if fc:
         # Facecam under the hook band, gameplay below (the layout the skills assume), over a blurred copy.
-        game_y = BAND + CAM_H
+        game_y = band + CAM_H
         game_h = H - game_y
         cx, cy, cw, ch = even(fc.x * src_w), even(fc.y * src_h), even(fc.w * src_w), even(fc.h * src_h)
         cw, ch = min(cw, src_w - cx), min(ch, src_h - cy)
@@ -244,11 +312,11 @@ def layout_parts(
             f"[bgs]{blur}[bg]",
             f"[cams]crop={cw}:{ch}:{cx}:{cy},{cam}[cam]",
             f"[games]crop={gw}:{gh}:{gx}:0,scale={W}:{game_h}:force_original_aspect_ratio=increase,crop={W}:{game_h}[game]",
-            f"[bg][cam]overlay=0:{BAND}[l1]",
+            f"[bg][cam]overlay=0:{band}[l1]",
             f"[l1][game]overlay=0:{game_y}[lay]",
         ]
     # No facecam: the whole frame, a little zoomed, under the hook band, over a blurred copy of itself.
-    fg_h, fg_y = FILL_H, BAND
+    fg_h, fg_y = FILL_H, band
     if peak is not None and face_fill:
         fw = min(W, even(src_w * fg_h / max(1, src_h)))
         fg = f"scale=-2:{2 * fg_h},crop=min(iw\\,{2 * fw}):{2 * fg_h}," + punch_in(peak, fw, fg_h)
@@ -262,14 +330,28 @@ def layout_parts(
     ]
 
 
+def logo_input(tease: bool, has_audio: bool) -> int:
+    """The logo's input index: it is the last input, after the section, the tease's own input and the silence."""
+    return 1 + (1 if tease else 0) + (0 if has_audio else 1)
+
+
 def filter_graph(
-    segs: Sequence[Segment], parts: Sequence[str], ass_file: Path, has_audio: bool, *, tease: bool = False
+    segs: Sequence[Segment],
+    parts: Sequence[str],
+    ass_file: Path,
+    has_audio: bool,
+    *,
+    tease: bool = False,
+    logo: int | None = None,
 ) -> str:
     """One graph: trim each segment (section seconds), concat, normalise to 30 fps, lay out, burn the subtitles.
 
     With ``tease`` the first segment is the payoff tease, which plays first but sits later in the section. It comes
     from its own input (``[1:v]``/``[1:a]``, the section opened again at the tease), so ``concat`` never has to hold
-    every frame of the body in memory while it waits for the tease (that is gigabytes for a 1080p60 source, §30.4)."""
+    every frame of the body in memory while it waits for the tease (that is gigabytes for a 1080p60 source, §30.4).
+
+    ``logo`` is the input index of a campaign's logo (``logo_input``): fitted into 380 × 80 and overlaid after the
+    subtitles for the whole clip, right-aligned on the safe area's right edge and centred in the mark row."""
     if not _SAFE_PATH.match(str(ass_file)):
         raise ValueError(f"unsafe subtitle path: {ass_file}")
     chains: list[str] = []
@@ -294,7 +376,12 @@ def filter_graph(
     chains.append(f"[vcat]fps={FPS},setsar=1[vin]")
     chains += parts
     chains.append(f"[lay]ass=filename={ass_file}[subs]")
-    chains.append("[subs]format=yuv420p[vout]")
+    if logo is not None:
+        chains.append(f"[{logo}:v]scale={LOGO_W}:{MARK_H}:force_original_aspect_ratio=decrease,format=rgba[logo]")
+        chains.append(f"[subs][logo]overlay=x={SAFE[2]}-w:y={MARK_TOP}+({MARK_H}-h)/2[marked]")
+        chains.append("[marked]format=yuv420p[vout]")
+    else:
+        chains.append("[subs]format=yuv420p[vout]")
     return ";".join(chains)
 
 
@@ -348,6 +435,141 @@ def cover_time(segs: Sequence[Segment], peak: float, tease: bool, total: float) 
     """The cover's second: the peak in the finished clip, or 2 s in when the peak was cut out."""
     at = peak_time(segs, peak, tease)
     return max(0.0, min(total - 0.5, 2.0 if at is None else at))
+
+
+# --- the campaign's logo (§38.13), prepared once at resolve ---------------------------------------------------------
+
+
+def logo_trim_args(src: Path) -> list[str]:
+    """ffmpeg finds the box around everything in the logo that is not transparent (``cropdetect`` on its alpha). The
+    picture is looped for a few frames because cropdetect skips the first ones."""
+    return [
+        "ffmpeg",
+        "-hide_banner",
+        "-nostats",
+        "-loop",
+        "1",
+        "-t",
+        "0.2",
+        "-i",
+        str(src),
+        "-vf",
+        "alphaextract,cropdetect=limit=0.02:round=2:reset=0",
+        "-f",
+        "null",
+        "-",
+    ]
+
+
+def parse_crop(stderr: str) -> tuple[int, int, int, int] | None:
+    """cropdetect's last ``crop=w:h:x:y`` (it grows over the frames with ``reset=0``); None when there is none (no
+    transparency to trim). Raises when nothing in the logo is visible (cropdetect's box is empty)."""
+    found = _CROP.findall(stderr)
+    if not found:
+        return None
+    w, h, x, y = (int(v) for v in found[-1])
+    if w <= 0 or h <= 0:
+        raise ValueError("the logo is see-through")
+    return w, h, x, y
+
+
+def logo_filters(crop: tuple[int, int, int, int] | None, width: int, height: int) -> str:
+    """The trim (when there is one), a scale down to LOGO_MAX on the long side, the fit into the mark row's
+    LOGO_W × MARK_H (done once here, so the render's own fit of the looped picture costs nothing per frame), and RGBA
+    for the PNG."""
+    parts: list[str] = []
+    if crop:
+        w, h, x, y = crop
+        parts.append(f"crop={w}:{h}:{x}:{y}")
+        width, height = w, h
+    if max(width, height) > LOGO_MAX:
+        parts.append(f"scale={LOGO_MAX}:-2" if width >= height else f"scale=-2:{LOGO_MAX}")
+    parts.append(f"scale={LOGO_W}:{MARK_H}:force_original_aspect_ratio=decrease")
+    parts.append("format=rgba")
+    return ",".join(parts)
+
+
+def _big(b: bytes) -> int:
+    return int.from_bytes(b, "big")
+
+
+def image_size(data: bytes) -> tuple[str, int, int] | None:
+    """``(kind, width, height)`` read from a PNG, JPEG or WebP file's own header, without decoding it; None for
+    anything else (or a header that can't be read)."""
+    if data[:8] == PNG_MAGIC and data[12:16] == b"IHDR" and len(data) >= 24:
+        return "png", _big(data[16:20]), _big(data[20:24])
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP" and len(data) >= 30:
+        chunk = data[12:16]
+        if chunk == b"VP8X":
+            return "webp", 1 + int.from_bytes(data[24:27], "little"), 1 + int.from_bytes(data[27:30], "little")
+        if chunk == b"VP8L" and data[20] == 0x2F:
+            bits = int.from_bytes(data[21:25], "little")
+            return "webp", (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
+        if chunk == b"VP8 " and data[23:26] == b"\x9d\x01\x2a":
+            return (
+                "webp",
+                int.from_bytes(data[26:28], "little") & 0x3FFF,
+                int.from_bytes(data[28:30], "little") & 0x3FFF,
+            )
+        return None
+    if data[:3] == JPEG_MAGIC:
+        i = 2
+        while i + 4 <= len(data) and data[i] == 0xFF:
+            marker = data[i + 1]
+            if marker == 0xFF:  # fill byte
+                i += 1
+                continue
+            if marker == 0x01 or 0xD0 <= marker <= 0xD8:  # markers without a length
+                i += 2
+                continue
+            if marker in _SOF and i + 9 <= len(data):
+                return "jpeg", _big(data[i + 7 : i + 9]), _big(data[i + 5 : i + 7])
+            i += 2 + _big(data[i + 2 : i + 4])
+    return None
+
+
+async def prepare_logo(src: Path, dest: Path) -> Path:
+    """The job's copy of the logo (PNG, JPEG or WebP) as ``dest`` (a PNG): transparent edges trimmed, at most
+    LOGO_W × MARK_H. A JPEG has no transparency and is used as it is. Raises when it is not a PNG, JPEG or WebP
+    picture ffmpeg can read, when it is too big to decode safely (its size is read from its header first, so a huge
+    picture is never decoded) and when nothing in it is visible."""
+    if src.stat().st_size > LOGO_BYTES_MAX:
+        raise ValueError("the logo file is too big")
+    found = image_size(src.read_bytes())
+    if found is None:
+        raise ValueError("the logo is not a PNG, JPEG or WebP picture")
+    kind, width, height = found
+    if width <= 0 or height <= 0 or width * height > LOGO_PIXELS_MAX:
+        raise ValueError("the logo picture is too big")
+    jpeg = kind == "jpeg"
+    info = await proc.probe(str(src))
+    if not info.has_video or info.width <= 0 or info.height <= 0:
+        raise ValueError("the logo is not a picture")
+    crop = None
+    if not jpeg:
+        try:
+            crop = parse_crop((await proc.run(logo_trim_args(src), time_limit=60)).stderr)
+        except proc.CommandError:
+            crop = None  # no alpha channel: nothing to trim
+    await proc.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-y",
+            "-i",
+            str(src),
+            "-frames:v",
+            "1",
+            "-vf",
+            logo_filters(crop, info.width, info.height),
+            str(dest),
+        ],
+        time_limit=60,
+    )
+    if not dest.is_file() or dest.stat().st_size == 0:
+        raise ValueError("the logo could not be read")
+    return dest
 
 
 SectionFetcher = Callable[[float, float, Path], Awaitable[Path]]
@@ -419,8 +641,10 @@ async def render_clip(
     detect_layout: LayoutDetector | None,
     known_layout: FrameLayout | None = None,
     live_index: int | None = None,
+    marks: Marks | None = None,
 ) -> RenderResult:
-    """Cuts ``m`` into ``workdir/clip.mp4`` and ``workdir/cover.jpg``."""
+    """Cuts ``m`` into ``workdir/clip.mp4`` and ``workdir/cover.jpg``. ``marks`` (a campaign clip, §38.13) adds the
+    mark row with the logo and the on-screen disclosure."""
     workdir.mkdir(parents=True, exist_ok=True)
     tease = m.tease
     src_from = max(0.0, min(m.start, tease[0] if tease else m.start) - 2)
@@ -464,9 +688,23 @@ async def render_clip(
     caps = phrases(retime(words, source_segs))
     peak = peak_time(segs, t(m.peak_at), bool(tease))
     face_fill = layout.scene == "camera_only"
-    parts = layout_parts(fc, info.width, info.height, peak=peak if fc or face_fill else None, face_fill=face_fill)
+    marked = marks is not None and marks.any
+    logo = marks.logo if marks is not None else None
+    disclosure = (marks.disclosure or None) if marks is not None else None
+    parts = layout_parts(
+        fc,
+        info.width,
+        info.height,
+        peak=peak if fc or face_fill else None,
+        face_fill=face_fill,
+        band=CAMPAIGN_BAND if marked else BAND,
+    )
     ass_file = workdir / "captions.ass"
-    ass_file.write_text(build_ass(m.hook, caps, total), "utf-8")
+    if marked:
+        ass = build_ass(m.hook, caps, total, hook_top=CAMPAIGN_HOOK_TOP, disclosure=disclosure)
+    else:
+        ass = build_ass(m.hook, caps, total)
+    ass_file.write_text(ass, "utf-8")
 
     out = workdir / "clip.mp4"
     inputs = ["-i", str(section)]
@@ -476,6 +714,8 @@ async def render_clip(
     silent_input = 2 if tease else 1
     if not info.has_audio:
         inputs += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
+    if logo is not None:
+        inputs += ["-loop", "1", "-t", f"{total:.3f}", "-i", str(logo)]  # always the last input (logo_input)
     await proc.run(
         [
             "ffmpeg",
@@ -486,7 +726,14 @@ async def render_clip(
             "1",
             *inputs,
             "-filter_complex",
-            filter_graph(segs, parts, ass_file, info.has_audio, tease=bool(tease)),
+            filter_graph(
+                segs,
+                parts,
+                ass_file,
+                info.has_audio,
+                tease=bool(tease),
+                logo=logo_input(bool(tease), info.has_audio) if logo is not None else None,
+            ),
             *encode_args(total, info.has_audio, silent_input=silent_input),
             # Where the encode is, once a second on stdout, for the live status line ("0:41 of 0:58", §31).
             "-progress",
@@ -533,4 +780,6 @@ async def render_clip(
         tease=bool(tease),
         frame_layout=layout,
         extra={"loudness": level} if level else {},
+        logo=logo is not None,
+        disclosure=bool(disclosure),
     )

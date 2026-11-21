@@ -583,3 +583,19 @@ test.describe("Sounds", () => {
     expect(await soundLog(page)).toMatchObject([{ kind: "tap", sound: 3, muted: false }]);
   });
 });
+
+test("Find a setting: Content Rewards, its campaigns and its money (§38.17)", async ({ page }) => {
+  await page.goto("/settings");
+  await settle(page);
+  const box = page.getByLabel("Find a setting");
+  await box.fill("content rewards");
+  const hits = page.getByRole("listbox", { name: "Settings found" }).getByRole("option");
+  await expect(hits.first()).toContainText("Content Rewards");
+  await box.press("Enter");
+  await expect(page).toHaveURL(/\/settings\/posting\/setup\/contentrewards$/);
+  await expect(page.getByRole("heading", { name: "Content Rewards", level: 1 })).toBeVisible();
+  await page.goto("/settings");
+  await settle(page);
+  await page.getByLabel("Find a setting").fill("whop");
+  await expect(page.getByRole("listbox", { name: "Settings found" })).toContainText("Content Rewards");
+});

@@ -108,22 +108,54 @@ for (const v of VIEWPORTS) {
       await open(page);
       await launcherSettled(page);
       const dock = page.locator(".money-dock");
-      await expect(dock).toBeVisible();
+      await expect(dock).toBeAttached();
+      // §39.2: the dock changes only the cards under All your money, so it never floats over All your money: not on
+      // first load (its title in view), and not anywhere down to its Total.
+      const overAll = () =>
+        page.evaluate(() => {
+          const d = document.querySelector(".money-dock")!.getBoundingClientRect();
+          const a = document.querySelector(".cr-all")!.getBoundingClientRect();
+          const onScreen = d.bottom > 0 && d.top < innerHeight;
+          return onScreen && d.top < a.bottom - 0.5 && d.bottom > a.top + 0.5 && d.left < a.right && d.right > a.left;
+        });
+      expect(await overAll(), "the dock over All your money on first load").toBe(false);
+      expect(await page.locator(".cr-all__title").evaluate((el) => el.getBoundingClientRect().bottom <= innerHeight), "All your money's title in view on first load").toBe(true);
+      const topLeftAtStart = await page.evaluate(
+        () =>
+          [...document.querySelectorAll<HTMLElement>(".money-dash a, .money-dash button, .money-dash input, .money-dash [tabindex='0']")]
+            .filter((el) => el.offsetParent !== null && !el.closest(".money-dock"))
+            .map((el) => el.getBoundingClientRect())
+            .filter((r) => r.width > 0 && r.left + r.width / 2 < innerWidth / 2 && r.top + r.height / 2 < innerHeight / 3).length,
+      );
+      expect(topLeftAtStart, "nothing tappable in the top-left third").toBe(0);
+      const askHiddenAtStart = await page.evaluate(() => document.querySelector(".help-launcher")?.classList.contains("is-hidden") ?? false);
+      expect(askHiddenAtStart, "Ask stays shown once the page is still").toBe(false);
+      for (let step = 0; step < 40; step++) {
+        const done = await page.evaluate(() => {
+          scrollBy(0, Math.round(innerHeight / 3));
+          return document.querySelector(".cr-all__total")!.getBoundingClientRect().bottom < 0;
+        });
+        await page.waitForTimeout(30);
+        expect(await overAll(), `the dock over All your money after ${step + 1} scrolls`).toBe(false);
+        if (done) break;
+      }
+      // With the cards it changes on screen, it rests at the bottom right.
+      await page.evaluate(() => {
+        scrollTo(0, 0);
+        scrollBy(0, document.querySelector(".dash-body")!.getBoundingClientRect().top - 120);
+      });
+      await launcherSettled(page);
+      await expect(dock).toBeInViewport();
       const geo = await page.evaluate(() => {
         const d = document.querySelector<HTMLElement>(".money-dock")!;
         const box = d.getBoundingClientRect();
         const pad = parseFloat(getComputedStyle(d).paddingRight);
         const controls = [...d.querySelectorAll<HTMLElement>("button, .segmented__opt")].map((el) => el.getBoundingClientRect());
         const seg = d.querySelector(".dash-period .segmented")!.getBoundingClientRect();
-        const num = document.querySelector("[data-kpi=monthly] .dash-num")!.getBoundingClientRect();
         const tabEl = document.querySelector<HTMLElement>(".tabbar");
         const tab = tabEl && tabEl.offsetParent !== null ? tabEl.getBoundingClientRect() : null;
         const ask = document.querySelector<HTMLElement>(".help-launcher");
         const askBox = ask?.getBoundingClientRect() ?? null;
-        const topLeft = [...document.querySelectorAll<HTMLElement>(".money-dash a, .money-dash button, .money-dash input, .money-dash [tabindex='0']")]
-          .filter((el) => el.offsetParent !== null && !el.closest(".money-dock"))
-          .map((el) => el.getBoundingClientRect())
-          .filter((r) => r.width > 0 && r.left + r.width / 2 < innerWidth / 2 && r.top + r.height / 2 < innerHeight / 3);
         return {
           vw: innerWidth,
           vh: innerHeight,
@@ -133,22 +165,16 @@ for (const v of VIEWPORTS) {
           segRight: seg.right,
           tab: tab && { top: tab.top, bottom: tab.bottom },
           ask: askBox && { top: askBox.top, bottom: askBox.bottom, left: askBox.left, right: askBox.right },
-          askHidden: ask?.classList.contains("is-hidden") ?? false,
-          numBottom: num.bottom,
-          topLeft: topLeft.length,
         };
       });
       for (const c of geo.centres) expect(c, "control centre in the bottom 40%").toBeGreaterThanOrEqual(0.6 * geo.vh);
       expect(geo.vw - geo.box.right).toBeLessThanOrEqual(24 + 1);
       expect(Math.abs(geo.segRight - geo.contentRight)).toBeLessThanOrEqual(1);
-      expect(geo.topLeft, "nothing tappable in the top-left third").toBe(0);
       if (geo.tab) expect(geo.box.bottom).toBeLessThanOrEqual(geo.tab.top);
       if (geo.ask) {
         const overlaps = !(geo.ask.bottom <= geo.box.top || geo.ask.top >= geo.box.bottom || geo.ask.right <= geo.box.left || geo.ask.left >= geo.box.right);
         expect(overlaps, "Ask sits above the dock").toBe(false);
-        expect(geo.askHidden, "Ask stays shown once the page is still").toBe(false);
       }
-      expect(geo.numBottom, "the Monthly number is in view above the dock on first load").toBeLessThanOrEqual(geo.box.top);
       // The last clip row scrolls fully clear of the dock.
       await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
       await page.waitForTimeout(200);
@@ -334,7 +360,9 @@ test.describe("flows", () => {
     await open(page);
     await page.locator(".dash-app[data-app='youtube']").click();
     await page.getByRole("radiogroup", { name: "Period" }).getByRole("radio", { name: "7 days" }).click();
-    await page.evaluate(() => scrollTo(0, 400));
+    // Among the cards, where the dock rests at the bottom right (it never floats over All your money above them).
+    await page.evaluate(() => scrollTo(0, scrollY + document.querySelector(".dash-body")!.getBoundingClientRect().top + 280));
+    await expect(page.locator(".money-dock")).toBeInViewport();
     const y = await page.evaluate(() => scrollY);
     await page.getByRole("radiogroup", { name: "Period" }).getByRole("radio", { name: "90 days" }).click();
     await page.waitForTimeout(300);
@@ -411,7 +439,8 @@ test.describe("flows", () => {
     await expect(page.locator("[data-kpi='monthly']")).toContainText("Not enough days to compare yet");
     await expect(page.locator("[data-kpi='monthly'] .dash-chip")).toHaveCount(0);
     await open(page, "start");
-    const allow = page.getByRole("link", { name: "Allow money reading" });
+    // The Notes card's (All your money's YouTube row has its own glass one).
+    const allow = page.locator(".dash-notes").getByRole("link", { name: "Allow money reading" });
     await expect(allow).toHaveClass(/btn--action/);
     await expect(allow).toHaveAttribute("href", "/settings/posting/money#money-youtube");
   });
@@ -424,11 +453,31 @@ test.describe("flows", () => {
     expect(await page.title()).toBe("Money · Clip Factory");
   });
 
-  test("the filters come right after the title in reading and tab order", async ({ page }) => {
+  test("All your money comes right after the title, then the filters, in reading and tab order (§39.2)", async ({ page }) => {
     await open(page);
-    const order = await page.evaluate(() => [...document.querySelector(".money-dash")!.children].slice(0, 2).map((el) => el.className));
+    const order = await page.evaluate(() => [...document.querySelector(".money-dash")!.children].slice(0, 3).map((el) => el.className));
     expect(order[0]).toContain("dash-head");
-    expect(order[1]).toContain("money-dock");
+    expect(order[1]).toContain("cr-all");
+    // The filters lead the part they change (the dock's sticky box on a phone).
+    expect(order[2]).toContain("dash-filtered");
+    expect(await page.evaluate(() => document.querySelector(".dash-filtered")!.firstElementChild!.className)).toContain("money-dock");
+  });
+
+  test("phones without All your money (an API from before §39): the dock floats at the bottom right as before", async ({ page }) => {
+    await page.clock.setFixedTime(new Date(NOW));
+    await page.goto("/");
+    await page.evaluate(() => {
+      sessionStorage.setItem("cf-mock-money", JSON.stringify({ scenario: "dash_many", country: "US", seen: [] }));
+      sessionStorage.setItem("cf-mock-money-everywhere", "404");
+      localStorage.removeItem("cf-money-dash");
+    });
+    await page.goto("/money");
+    await settle(page);
+    await page.locator(".dash-kpi").first().waitFor();
+    await expect(page.locator(".cr-all")).toHaveCount(0);
+    await expect(page.locator(".money-dash")).not.toHaveClass(/dock-with-cards/);
+    await expect(page.locator(".money-dock")).toHaveCSS("position", "fixed");
+    await expect(page.locator(".money-dock")).toBeInViewport();
   });
 
   test("with motion on, the count-up never shows a negative amount", async ({ browser }) => {

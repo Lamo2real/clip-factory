@@ -1,4 +1,4 @@
-// A part a built-in skill gained after the owner made his own copy of it (docs/CONTRACTS.md §38): "New in the built-in
+// A part a built-in skill gained after the owner made his own copy of it (docs/CONTRACTS.md §44): "New in the built-in
 // skill: Chat went wild. Add it to your skill?" with Add (his words all stay; Undo for 8 s), Not now (remembered) and
 // See what changes. Shown as a card on Settings › Skills and as a small note on the skill's own page.
 import { useId, useMemo, useRef, useState } from "react";

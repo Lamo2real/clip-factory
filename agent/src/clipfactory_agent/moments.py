@@ -6,9 +6,12 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .schema import check
+
+if TYPE_CHECKING:
+    from .campaign import Campaign
 
 MOMENT_TYPES = ["rage", "chaos", "interaction", "no_way", "first_reaction", "hot_take"]
 DEFAULT_LENGTH = (20.0, 45.0)  # the default length target
@@ -117,21 +120,76 @@ def word_count(text: str) -> int:
     return len(text.split())
 
 
-def length_target(notes: str | None) -> tuple[float, float]:
+_UNIT = r"\s*(?:s|sec|secs|seconds?)\b"
+# "at least 7 seconds", "minimum 30 s", "over 20 sec", "longer than 15 seconds" and "30+ seconds". A "min" right after
+# a number ("10 min 30 sec") is minutes, not a minimum.
+_AT_LEAST = re.compile(
+    r"(?:\bat least|\bminimum|(?<!\d\s)\bmin\.?|\b(?P<over>over|longer than))\s*(?P<n>\d{1,3})" + _UNIT
+)
+_PLUS = re.compile(r"(?P<n>\d{1,3})\s*\+" + _UNIT)
+# The words just before a hit that turn it around: "never over 60 seconds", "no clips over 50 seconds", "don't go
+# over 45 sec", "shouldn't be longer than 50 seconds" (up to three words between, but never across "and"/"but").
+_NEGATED = re.compile(
+    r"(?:\b(?:no|not|never|nothing|none|without)\b|n[’']t)(?:\s+(?!(?:and|but|or|then)\b)\w+){0,3}\s*$"
+)
+_AT_MOST = re.compile(r"(?:under|max(?:imum)?|at most|no longer than|up to)\s*(\d{1,3})" + _UNIT)
+MAX_LENGTH = 180.0
+
+
+def _under(hi: float) -> tuple[float, float]:
+    """Today's rule for a maximum alone: aim a little under it, never above the default's minimum."""
+    return min(DEFAULT_LENGTH[0], round(hi * 0.6)), hi
+
+
+def _at_least(lo: float) -> tuple[float, float]:
+    """A minimum alone: from it to at least 15 s more (and 45 s), capped at MAX_LENGTH."""
+    return lo, max(lo, min(MAX_LENGTH, max(lo + 15, 45.0)))
+
+
+def _notes_bounds(text: str) -> tuple[float | None, float | None]:
+    """The first minimum and the first maximum the notes name. "over"/"longer than" after a "no", "not", "never" or
+    "n't" is a maximum ("never over 60 seconds"); any other turned-around minimum is left out."""
+    least: float | None = None
+    most: tuple[int, float] | None = None
+    hits = sorted([*_AT_LEAST.finditer(text), *_PLUS.finditer(text)], key=lambda h: h.start())
+    for h in hits:
+        n = float(h.group("n"))
+        if _NEGATED.search(text[: h.start()]):
+            if h.re is _AT_LEAST and h.group("over") and most is None:
+                most = (h.start(), n)
+        elif least is None and 1 <= n <= MAX_LENGTH - 15:
+            least = n
+    m = _AT_MOST.search(text)
+    if m and (most is None or m.start() < most[0]):
+        most = (m.start(), float(m.group(1)))
+    return least, most[1] if most else None
+
+
+def length_target(notes: str | None, campaign: Campaign | None = None) -> tuple[float, float]:
     """The clip length to aim for: the default 20–45 s, unless the owner's notes name one ("15-30 seconds",
-    "under 60 s")."""
+    "under 60 s", "at least 30 seconds"). A campaign's own length (``lengthMinSec``/``lengthMaxSec``, §38.13) wins
+    over both."""
+    if campaign is not None:
+        lo_c, hi_c = campaign.length
+        if lo_c is not None and hi_c is not None:
+            return lo_c, hi_c
+        if lo_c is not None:
+            return _at_least(lo_c)
+        if hi_c is not None:
+            return _under(hi_c)
     text = (notes or "").lower()
-    unit = r"\s*(?:s|sec|secs|seconds?)\b"
-    m = re.search(r"(\d{1,3})\s*(?:-|–|to)\s*(\d{1,3})" + unit, text)
+    m = re.search(r"(\d{1,3})\s*(?:-|–|to)\s*(\d{1,3})" + _UNIT, text)
     if m:
         lo, hi = sorted((float(m.group(1)), float(m.group(2))))
         if lo >= 5 and hi <= 180 and hi - lo >= 5:
             return lo, hi
-    m = re.search(r"(?:under|max(?:imum)?|at most|no longer than|up to)\s*(\d{1,3})" + unit, text)
-    if m:
-        hi = float(m.group(1))
-        if 8 <= hi <= 180:
-            return min(DEFAULT_LENGTH[0], round(hi * 0.6)), hi
+    least, most = _notes_bounds(text)
+    if most is not None and 8 <= most <= 180:
+        if least is not None and least + 5 <= most:
+            return least, most
+        return _under(most)
+    if least is not None:
+        return _at_least(least)
     return DEFAULT_LENGTH
 
 

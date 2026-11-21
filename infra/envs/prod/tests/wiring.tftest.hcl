@@ -44,6 +44,7 @@ run "whole_stack_plans" {
   assert {
     condition = toset(keys(module.monitoring.alarm_names)) == toset([
       "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks", "stats", "learn", "follow-tick", "money", "ask", "notify",
+      "campaigns",
     ])
     error_message = "Every function except the WebSocket authorizer is watched for errors."
   }
@@ -284,5 +285,65 @@ run "notifications_are_wired" {
   assert {
     condition     = module.notify.notify_function_name == "cf-prod-notify" && module.notify.vapid_secret_name == "cf-prod/notify/vapid"
     error_message = "cf-prod-notify and the cf-prod/notify/vapid secret exist."
+  }
+}
+
+# docs/CONTRACTS.md §38.16: Content Rewards. cf-prod-campaigns is planned and watched, the switch defaults to on (every
+# builder's part has merged), the api and the stats tick get its unqualified ARN, and the stack still plans with it off.
+run "content_rewards_is_wired_and_on" {
+  command = plan
+
+  assert {
+    condition     = var.content_rewards_enabled == true
+    error_message = "content_rewards_enabled defaults to true now that every builder's part of §38.19 has merged."
+  }
+
+  assert {
+    condition = (module.contentrewards.campaigns_function_arn == "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-campaigns" &&
+    module.contentrewards.campaigns_function_name == "cf-prod-campaigns")
+    error_message = "cf-prod-campaigns is planned with an unqualified ARN for the api and the stats tick."
+  }
+
+  assert {
+    condition     = contains(keys(module.monitoring.alarm_names), "campaigns")
+    error_message = "cf-prod-campaigns joins monitoring's errors alarm."
+  }
+}
+
+run "content_rewards_switch_off_plans" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = false
+  }
+
+  assert {
+    condition     = module.contentrewards.function_names == { campaigns = "cf-prod-campaigns" }
+    error_message = "With the switch off the stack still plans and cf-prod-campaigns is the same function."
+  }
+}
+
+# docs/CONTRACTS.md §39.3: the campaign copy (CR_REMAKE) defaults to on (G, H and I of §39.4 have merged) and only
+# changes the api's environment; the stack still plans with it off.
+run "cr_remake_is_wired_and_on" {
+  command = plan
+
+  assert {
+    condition     = var.cr_remake_enabled == true
+    error_message = "cr_remake_enabled defaults to true now that G, H and I of §39.4 have merged."
+  }
+}
+
+run "cr_remake_switch_off_plans" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = true
+    cr_remake_enabled       = false
+  }
+
+  assert {
+    condition     = module.api.function_names == { api = "cf-prod-api" }
+    error_message = "With the copy switched off the stack still plans and cf-prod-api is the same function."
   }
 }

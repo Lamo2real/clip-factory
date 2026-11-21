@@ -665,6 +665,31 @@ def test_instagram_throttle_blocks_and_is_not_retried(store: db.Store, table: Fa
     assert item["blockedUntil"] == iso(NOW + timedelta(minutes=90))
 
 
+@pytest.mark.parametrize(("platform", "stats_id"), [("instagram", "17900000000000001"), ("facebook", "1234567890123")])
+def test_a_dead_meta_token_asks_for_connect_again(
+    store: db.Store, table: FakeTable, platform: str, stats_id: str
+) -> None:
+    # Meta never says a token died; the first stats read that gets 190 flips the account to Connect again (§17.6).
+    store.put({"pk": db.user_pk(USER), "sk": f"ACCOUNT#{platform}", "platform": platform, "status": "connected"})
+    post = seed_post(store, platform, stats_id)
+    error = {
+        "error": {
+            "message": "Error validating access token",
+            "type": "OAuthException",
+            "code": 190,
+            "error_subcode": 460,
+            "fbtrace_id": "AbCdEf",
+        }
+    }
+    http = FakeHttp((400, error))
+    report = refresh_posts(make_deps(store, http), [stored(table, post)], reason="poll", now=NOW)
+    assert report.outcomes[post["postId"]] == "not_connected"
+    account = store.get(db.user_pk(USER), f"ACCOUNT#{platform}")
+    assert account is not None
+    assert (account["status"], account["reason"]) == ("needs_reconnect", "token_dead")
+    assert store.get(post["pk"], post["sk"]).get("statsError") is None  # type: ignore[union-attr]
+
+
 def test_private_and_unposted_posts_are_never_read(store: db.Store) -> None:
     private = seed_post(store, "tiktok", None, privacy="private")
     queued = seed_post(store, "x", "1", status="queued")

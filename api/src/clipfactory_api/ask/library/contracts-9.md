@@ -10,16 +10,18 @@
 | `cf-prod-ws-authorizer` | `clipfactory_api.realtime.authorizer.handler` | WebSocket `$connect` REQUEST authorizer | `USER_POOL_ID`, `USER_POOL_CLIENT_ID` |
 | `cf-prod-ws` | `clipfactory_api.realtime.ws.handler` | WebSocket routes `$connect`, `$disconnect`, `$default` | `TABLE_NAME`, `WS_ENDPOINT`, `CONN_TTL_SECONDS=7200` |
 | `cf-prod-broadcast` | `clipfactory_api.realtime.broadcast.handler` | DynamoDB Streams on `cf-prod-data` (filtered) | `TABLE_NAME`, `WS_ENDPOINT` |
-| `cf-prod-hooks` | `clipfactory_api.hooks.handler` | REST API `cf-prod-hooks` (all routes) | `TABLE_NAME`, `APP_URL`, `VERIFY_TOKEN_PARAM=/cf-prod/hooks/verify-token`, `SECRET_PREFIX`, `OAUTH_STATE_SECRET` (§17.9) |
+| `cf-prod-hooks` | `clipfactory_api.hooks.handler` | REST API `cf-prod-hooks` (all routes) | `TABLE_NAME`, `APP_URL`, `VERIFY_TOKEN_PARAM=/cf-prod/hooks/verify-token`, `SECRET_PREFIX`, `OAUTH_STATE_SECRET` (§17.9), `CLIP_FLOW_ARN` (alias `live`, releases waiting posts, §17.6) |
 
 Details of every new function, and what replaced `cf-prod-publisher`, `cf-prod-perf-check`, `cf-prod-watchdog`,
 the SQS publish queue and the EventBridge resources: §14.
 
 * Confirm → API writes one `Post` per enabled platform (`pending_integration` while no account is connected for that
   platform, `queued` when connected) and starts the durable `cf-prod-clip-flow` (§14.5), which publishes the `queued`
-  ones through the platform adapter (adapters arrive in phase 2; today every platform is `pending_integration`), waits
+  ones through the platform adapter, waits
   48 hours, reads metrics (through the shared stats refresh, §16.5) and updates the clip's vector (the one-sentence
   48-hour Learning is retired, §16.12). Between and after those steps `cf-prod-stats` keeps every posted post's numbers fresh for 30 days (§16).
+  A `pending_integration` post goes out once its place is connected: the connect releases it (§17.6 "Release"), and
+  the Library's **Post now** is the manual backup (§33.6).
 * A `running` job whose agent stops sending heartbeats for 6 minutes is resumed on a new session (as long as it keeps
   moving forward, §30.2) through the job-flow callback heartbeat timeout (§14.4), not a scan; only after that does it become `failed`
   ("Making the clips stopped. Tap Try again to pick up where it left off.").

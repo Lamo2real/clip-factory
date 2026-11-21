@@ -1,6 +1,6 @@
 // The whole HTTP API in memory, with fake latency, so the UI runs with no backend (npm run dev:mock, Playwright).
 import { ApiError, networkError } from "../errors.ts";
-import type { Api, Clip, ClipPostOptions, Job, JobDeleteClips, JobDeleted, Platform, Post, Settings, SimilarClip, TikTokPostOptions } from "../types.ts";
+import type { Api, Campaign, Captions, Clip, ClipPostOptions, Job, JobDeleteClips, JobDeleted, Platform, Post, Settings, SimilarClip, TikTokPostOptions } from "../types.ts";
 import { clipOptionsProblem, presetOf, presetProblem } from "../../lib/preset.ts";
 import { TIKTOK_PICK_AGAIN } from "../../lib/upload.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
@@ -12,8 +12,12 @@ import { statsApi, type StatsFaults } from "./stats.ts";
 import { savedSkillCopy, skillsApi, type MockSkillControls } from "./skills.ts";
 import { lessonsApi, type LessonsFault } from "./lessons.ts";
 import { followsApi } from "./follows.ts";
-import { mockMoneyGrant, moneyApi } from "./money.ts";
+import { dashData, mockMoneyGrant, moneyApi } from "./money.ts";
 import { pushApi } from "./push.ts";
+import { crMockApi } from "./contentrewards.ts";
+import { clipFit, fitOne, remakeRefusal, sourceKept, uploadRefusal, type FitInputs } from "./fit.ts";
+import { everywhere, MONETARY_SCOPE } from "./moneyEverywhere.ts";
+import { adFirst, hasItem, liveFit } from "../../lib/crFit.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
 import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../../lib/background.ts";
 import { currentClipModel, isClipModel } from "../../lib/models.ts";
@@ -60,6 +64,8 @@ export interface MockFaults extends StatsFaults {
   jobsPageSize?: number;
   /** The next N "Show older jobs" pages (listJobs with a cursor) fail like a server error. */
   olderJobsFails?: number;
+  /** Posting does not start after a Try again, Post now or connect: the clip stays `startPending` (§14.5). */
+  startFails?: boolean;
   /** The next N job deletes (deleteJob, deleteJobs) fail like a server error (§34). */
   deleteJobFails?: number;
   /** The next N Make clips (createJob) fail like a server error. */
@@ -170,13 +176,23 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
 
   /**
    * Try again on a failed clip (§14.5): failed posts go back to queued and the clip to confirmed. New TikTok sheet
-   * choices replace the failed TikTok post's postOptions, like the API's _try_again.
+   * choices replace the failed TikTok post's postOptions, like the API's _try_again. Named places still waiting go
+   * too once they are set up (Post now, §33.6); one not set up is the API's plain 400.
    */
   function tryAgain(c: Clip, tiktok?: TikTokPostOptions, platforms?: Platform[]) {
-    const failed = store.posts.filter((p) => p.clipId === c.clipId && p.status === "failed" && (!platforms || platforms.includes(p.platform)));
-    // Naming no failed place changes nothing (§33).
-    if (!failed.length) return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === c.clipId)) };
-    for (const p of failed) {
+    const named = store.posts.filter((p) => p.clipId === c.clipId && (!platforms || platforms.includes(p.platform)));
+    const failed = named.filter((p) => p.status === "failed");
+    const waiting = platforms ? named.filter((p) => p.status === "pending_integration") : [];
+    const connected = setup.connected();
+    const missing = PLATFORM_ORDER.find((p) => waiting.some((w) => w.platform === p) && !connected.includes(p));
+    if (missing) throw bad(`${PLATFORM_LABEL[missing]} is not set up yet. Turn it off, then tap Upload.`);
+    if (!tiktok && waiting.some((p) => p.platform === "tiktok" && !postOptions.get(p.postId)?.privacyLevel)) throw bad("Pick who can see it on TikTok.");
+    // Naming nothing to send changes nothing (§33), except a start that did not go through earlier: it starts now.
+    if (!failed.length && !waiting.length) {
+      if (c.startPending) started(c);
+      return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === c.clipId)) };
+    }
+    for (const p of [...failed, ...waiting]) {
       p.status = "queued";
       delete p.error;
       if (tiktok && p.platform === "tiktok") postOptions.set(p.postId, clone(tiktok));
@@ -184,8 +200,36 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     }
     // A failed clip goes back to confirmed; an uploaded one (one place did not work) stays posted (§33).
     if (c.status === "failed") c.status = "confirmed";
-    publishClip(c);
+    started(c);
     return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === c.clipId)) };
+  }
+
+  /** The clip's posting starts, like the API's flow start; with faults.startFails it does not (startPending, §14.5). */
+  function started(c: Clip) {
+    if (faults.startFails) c.startPending = true;
+    else delete c.startPending;
+    publishClip(c);
+  }
+
+  /**
+   * A place was just connected: every uploaded clip's post waiting for it goes out, like the API's release (§17.6).
+   * Clips still in review or still publishing are left alone; TikTok waits for the owner's choice (Post now).
+   */
+  function releaseWaiting(platform: Platform) {
+    for (const c of store.clips) {
+      if (c.status !== "posted" && c.status !== "confirmed" && c.status !== "failed") continue;
+      const waiting = store.posts.filter(
+        (p) => p.clipId === c.clipId && p.platform === platform && p.status === "pending_integration" && (platform !== "tiktok" || !!postOptions.get(p.postId)?.privacyLevel),
+      );
+      if (!waiting.length) continue;
+      for (const p of waiting) {
+        p.status = "queued";
+        delete p.error;
+        publishPost(p);
+      }
+      if (c.status === "failed") c.status = "confirmed";
+      started(c);
+    }
   }
 
   /** Test knob (window.__cfMock.posting): a kept clip whose TikTok post failed because its privacy choice is gone. */
@@ -247,7 +291,11 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
 
   function finish(job: Job) {
     const count = job.clipTarget.min + Math.floor(Math.random() * (job.clipTarget.max - job.clipTarget.min + 1));
-    const tags = job.notes?.match(/#\w+/g)?.join(" ") ?? "#clips";
+    // A campaign job's clips, as the agent writes them (§38.13): #Ad first and every required tag, the marks on the video.
+    const campaign = job.campaignId ? cr.served().find((x) => x.campaignId === job.campaignId) : undefined;
+    const campaignTags = campaign ? [...(campaign.rules?.requiredHashtags ?? []), ...(campaign.rules?.requiredTags ?? [])].join(" ") : "";
+    const ad = campaign ? `${campaign.rules?.disclosure.caption ?? "#Ad"} ` : "";
+    const tags = [job.notes?.match(/#\w+/g)?.join(" ") ?? (campaign ? "" : "#clips"), campaignTags].filter(Boolean).join(" ");
     for (let i = 0; i < count; i++) {
       const m = MOMENTS[(i + job.jobId.charCodeAt(25)) % MOMENTS.length]!;
       const layout = i % 3 === 0 ? "blur_fill" : "facecam_top";
@@ -266,17 +314,30 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         layout,
         coverUrl: coverArt(i + 2, m.hook, layout),
         captions: {
-          youtubeTitle: `${m.hook} ${tags}`,
-          youtubeDescription: m.summary,
-          instagram: `${m.hook}\n${tags}`,
-          facebook: m.hook,
-          tiktok: `${m.hook} ${tags}`,
-          x: `${m.hook} ${tags}`,
+          youtubeTitle: campaign ? m.hook : `${m.hook} ${tags}`,
+          youtubeDescription: campaign ? `${ad}${m.summary} ${tags}` : m.summary,
+          instagram: `${ad}${m.hook}\n${tags}`,
+          facebook: campaign ? `${ad}${m.hook} ${tags}` : m.hook,
+          tiktok: `${ad}${m.hook} ${tags}`,
+          x: `${ad}${m.hook} ${tags}`,
         },
-        checklist: { items: [{ key: "hook_3s", label: "Hook lands in the first 3 seconds", pass: true }], fixes: [] },
+        checklist: {
+          items: [
+            { key: "hook_3s", label: "Hook lands in the first 3 seconds", pass: true },
+            ...(campaign
+              ? [
+                  { key: "disclosure", label: "“Paid partnership” shows for the first 3 seconds", pass: true },
+                  ...(campaign.logo.needed ? [{ key: "logo", label: "The campaign's logo is on the whole clip", pass: true }] : []),
+                  { key: "campaign_rules", label: "Follows the campaign's rules", pass: true },
+                ]
+              : []),
+          ],
+          fixes: [],
+        },
         score: m.score,
         pickedFor: m.why,
         createdAt: new Date().toISOString(),
+        ...(job.campaignId ? { campaignId: job.campaignId } : {}),
       });
     }
     job.status = "ready";
@@ -349,6 +410,23 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   }
   /** Test knob (window.__cfMock.jobs): a finished job as it was saved before the "watch" step existed (nine steps). */
   const jobKnobs = {
+    /** One check of a clip passes or fails (tests: "Paid partnership" not on the video makes a campaign clip need a copy). */
+    checklist(clipId: string, key: string, pass: boolean): void {
+      const c = store.clips.find((x) => x.clipId === clipId);
+      if (!c) return;
+      const items = c.checklist.items.filter((i) => i.key !== key);
+      c.checklist = { ...c.checklist, items: [...items, { key, label: key, pass }] };
+      publishClip(c);
+    },
+    /** The newest queued or working job finishes now: its clips wait in Review (tests: "the job runs"). */
+    finish(jobId?: string): string | null {
+      const j = jobId ? store.jobs.find((x) => x.jobId === jobId) : [...store.jobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).find((x) => x.status === "queued" || x.status === "running");
+      if (!j || j.remakeOf) return null;
+      clock.delete(j.jobId);
+      finish(j);
+      publishJob(j);
+      return j.jobId;
+    },
     /** No jobs and no clips, as for a new owner, so the empty Home and Jobs can be checked (reload to see them). */
     clear() {
       store.jobs.length = 0;
@@ -386,6 +464,13 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       store.accounts = accounts;
     },
     publish: (platform) => mockLive.publish({ type: "setup", op: "upsert", id: platform, partial: true }),
+    onConnected: releaseWaiting,
+  });
+  // Content Rewards (§38.18): its own state; it reads the setups for each campaign's places.
+  const cr = crMockApi({
+    store,
+    setup: () => setup.overview(),
+    publish: (id) => mockLive.publish({ type: "contentrewards", op: "upsert", id, partial: true }),
   });
 
   const job = (jobId: string) => {
@@ -393,6 +478,94 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     if (!j) throw notFound("job");
     return j;
   };
+
+  // §39.3: does this clip fit, and the campaign copy. The copy waits behind a switch, like the API's (off by default).
+  const REMAKE_KEY = "cf-mock-cr-remake";
+  const remakeFlag = () => {
+    try {
+      return sessionStorage.getItem(REMAKE_KEY);
+    } catch {
+      return null;
+    }
+  };
+  const remakeOn = () => remakeFlag() === "on" || remakeFlag() === "fail";
+  const fitInputs = (c: Clip) => (campaign: Campaign): FitInputs => {
+    const original = c.remakeOf ? store.clips.find((x) => x.clipId === c.remakeOf!.clipId) : null;
+    const relatives = [original, ...store.clips.filter((x) => (original && x.remakeOf?.clipId === original.clipId) || x.remakeOf?.clipId === c.clipId)].filter(
+      (x): x is Clip => !!x && x.clipId !== c.clipId && x.status !== "declined",
+    );
+    const served = cr.served();
+    return {
+      clip: c,
+      job: store.jobs.find((j) => j.jobId === c.jobId) ?? null,
+      campaign,
+      conn: cr.connection(),
+      posts: store.posts.filter((p) => p.clipId === c.clipId),
+      others: [
+        ...relatives.filter((x) => x.campaignId).map((x) => ({ campaignId: x.campaignId!, name: served.find((s) => s.campaignId === x.campaignId)?.name ?? "" })),
+        ...Object.keys(c.remakes ?? {})
+          .filter((id) => id !== campaign.campaignId)
+          .map((id) => ({ campaignId: id, name: served.find((s) => s.campaignId === id)?.name ?? "" })),
+      ],
+      remakeOn: remakeOn(),
+      now: Date.now(),
+    };
+  };
+  const fitOf = (c: Clip) => clipFit(c, fitInputs(c), cr.served());
+  /** A campaign copy finishes like a one-clip job: the same moment, the campaign's marks, #Ad and the tags. */
+  function finishCopy(j: Job, from: Clip, campaign: Campaign) {
+    const tags = [campaign.rules?.disclosure.caption ?? "#Ad", ...(campaign.rules?.requiredHashtags ?? []), ...(campaign.rules?.requiredTags ?? [])];
+    const withTags = (t: string) => `${tags[0]} ${t.replace(/^#ad\b\s*/i, "")} ${tags.slice(1).join(" ")}`.trim();
+    const copy: Clip = {
+      ...clone(from),
+      clipId: ulid(),
+      jobId: j.jobId,
+      rank: 1,
+      status: "review",
+      createdAt: new Date().toISOString(),
+      campaignId: campaign.campaignId,
+      remakeOf: { clipId: from.clipId, jobId: from.jobId },
+      remakes: undefined,
+      uploadTo: undefined,
+      decidedAt: undefined,
+      best: undefined,
+      bestWeek: undefined,
+      totalViews: undefined,
+      captions: {
+        youtubeTitle: from.captions.youtubeTitle,
+        youtubeDescription: withTags(from.captions.youtubeDescription),
+        instagram: withTags(from.captions.instagram),
+        facebook: withTags(from.captions.facebook),
+        tiktok: withTags(from.captions.tiktok),
+        x: withTags(from.captions.x),
+      },
+      checklist: {
+        items: [
+          ...from.checklist.items.filter((x) => !["logo", "disclosure", "campaign_rules"].includes(x.key)),
+          { key: "disclosure", label: "“Paid partnership” shows for the first 3 seconds", pass: true },
+          ...(campaign.logo.needed ? [{ key: "logo", label: "The campaign's logo is on the whole clip", pass: true }] : []),
+          { key: "campaign_rules", label: "Follows the campaign's rules", pass: true },
+        ],
+        fixes: [],
+      },
+    };
+    store.clips.push(copy);
+    j.status = "ready";
+    j.clipCount = 1;
+    j.progress = 1;
+    j.steps = stepsAt(STEP_KEYS.length, "ready");
+    j.updatedAt = new Date().toISOString();
+    publishJob(j);
+    publishClip(copy);
+  }
+  /** A copy whose job failed: the original keeps its `remakes` entry (as the API does), and a new copy can be asked. */
+  function failCopy(j: Job) {
+    j.status = "failed";
+    j.error = "Clip Factory couldn't make the copy. Try again.";
+    j.steps = stepsAt(Math.max(0, STEP_KEYS.length - 2), "failed", "Cutting the clips");
+    j.updatedAt = new Date().toISOString();
+    publishJob(j);
+  }
   const clip = (clipId: string) => {
     const c = store.clips.find((x) => x.clipId === clipId);
     if (!c) throw notFound("clip");
@@ -411,7 +584,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     mockLive.publish({ type: "job", op: "delete", id: jobId });
     return { jobId, deleted: true, clipsDeleted: gone.length, clipsKept: mine.length - gone.length };
   };
-  // §38: the owner's copy of a built-in, only when a test asked for it (kept over reloads).
+  // §44: the owner's copy of a built-in, only when a test asked for it (kept over reloads).
   const copy = savedSkillCopy();
   if (copy && !store.skills.some((x) => x.skillId === copy.skillId)) store.skills.push(copy);
   const skills = skillsApi(store, delay);
@@ -425,6 +598,113 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   }
 
   const api: Api = {
+    ...cr.api,
+    async crFit(clipId) {
+      await delay(80, 160);
+      cr.guard();
+      return clone(fitOf(clip(clipId)));
+    },
+    async crFits(clipIds) {
+      await delay(80, 160);
+      cr.guard();
+      if (!clipIds.length || clipIds.length > 20) throw bad("Ask for 1 to 20 clips.");
+      return clipIds.map((id) => store.clips.find((c) => c.clipId === id)).filter((c): c is Clip => !!c).map((c) => clone(fitOf(c)));
+    },
+    async crFitCaptions({ clipId, campaignId, captions }) {
+      await delay(80, 160);
+      cr.guard();
+      const c = clip(clipId);
+      if (c.campaignId !== campaignId || c.status !== "review") throw bad("This clip isn't a campaign clip waiting in Review.");
+      const campaign = cr.served().find((x) => x.campaignId === campaignId);
+      const rules = campaign?.rules;
+      const disclosure = rules?.disclosure.caption ?? "#Ad";
+      const wanted = [...(rules?.requiredHashtags ?? []), ...(rules?.requiredTags ?? [])];
+      // B's campaign_caption, in short: the disclosure first, then every required item the caption lacks.
+      const fix = (text: string) => {
+        let out = text.trim();
+        if (!adFirst(out, disclosure)) out = `${disclosure} ${out}`.trim();
+        for (const w of wanted) if (!hasItem(out, w)) out = `${out} ${w}`;
+        return out;
+      };
+      const out: Captions = { ...c.captions, ...captions };
+      for (const k of ["youtubeDescription", "instagram", "facebook", "tiktok", "x"] as const) out[k] = fix(out[k]);
+      return out;
+    },
+    async crRemake(campaignId, body) {
+      await delay();
+      cr.guard();
+      if (!remakeOn()) throw new ApiError(503, "unavailable", "Coming soon.");
+      const c = clip(body.clipId);
+      const campaign = cr.served().find((x) => x.campaignId === campaignId);
+      if (!campaign) throw notFound("campaign");
+      // G's reserve: a copy already named answers that job, unless it failed, was canceled or deleted, or its clip
+      // was thrown away (then a new copy can be made).
+      const had = c.remakes?.[campaignId];
+      const hadJob = had ? store.jobs.find((j) => j.jobId === had.jobId && j.status !== "failed" && j.status !== "canceled") : undefined;
+      const thrown = hadJob ? store.clips.some((x) => x.jobId === hadJob.jobId && x.status === "declined") : false;
+      if (hadJob && !thrown) return clone(hadJob);
+      const from = store.jobs.find((j) => j.jobId === c.jobId) ?? null;
+      const found = fitOne(fitInputs(c)(campaign));
+      const refusal = remakeRefusal(found, sourceKept(from, Date.now()));
+      if (refusal) throw conflict(refusal);
+      const soft = campaign.stops.find((s) => !s.hard && s.code !== "not_connected" && !s.anyway && !(body.campaignAnyway ?? []).includes(s.code));
+      if (soft) throw conflict(soft.text);
+      const now = new Date().toISOString();
+      const j: Job = {
+        jobId: ulid(),
+        status: "running",
+        source: clone(from?.source ?? { type: "link", platform: "youtube" }),
+        clipTarget: { min: 1, max: 1 },
+        steps: stepsAt(Math.max(0, STEP_KEYS.length - 2), "running", "Cutting the clips"),
+        progress: 0.8,
+        clipCount: 0,
+        ...(from?.notes ? { notes: from.notes } : {}),
+        campaignId,
+        remakeOf: { clipId: c.clipId, jobId: c.jobId },
+        ...(from?.sourceLanguage ? { sourceLanguage: from.sourceLanguage } : {}),
+        model: currentClipModel(store.settings.clipModel),
+        createdAt: now,
+        updatedAt: now,
+      };
+      store.jobs.unshift(j);
+      c.remakes = { ...(c.remakes ?? {}), [campaignId]: { jobId: j.jobId, at: now } };
+      publishJob(j);
+      publishClip(c);
+      // "It shows here in about 3 minutes": a moment in the pretend app (or, with the "fail" knob, its job fails).
+      setTimeout(() => (remakeFlag() === "fail" ? failCopy(j) : finishCopy(j, c, campaign)), 2500);
+      return clone(j);
+    },
+    async getMoneyEverywhere() {
+      await delay();
+      // An API from before §39 (tests): GET /v1/money/everywhere is not there.
+      let before39 = false;
+      try {
+        before39 = sessionStorage.getItem("cf-mock-money-everywhere") === "404";
+      } catch {
+        /* no storage: the route is there */
+      }
+      if (before39) throw notFound("page");
+      const scenario = money.controls.scenario();
+      const data = dashData(scenario);
+      const items = cr.moneyItems();
+      const accounts: Parameters<typeof everywhere>[0]["accounts"] = {};
+      const states: Parameters<typeof everywhere>[0]["states"] = {};
+      for (const p of PLATFORM_ORDER) {
+        const st = data.status[p];
+        if (st?.connected) accounts[p] = { platform: p, status: "connected", scopes: p === "youtube" && st.moneyScope ? [MONETARY_SCOPE] : [] };
+        if (st) states[p] = { state: ["not_yet", "goal_reached", "in_program"].includes(scenario) ? scenario : "earning", ...(st.lastError ? { lastError: st.lastError } : {}), ...(st.checkedAt ? { lastCheckedAt: st.checkedAt } : {}) };
+      }
+      return everywhere({
+        today: new Date().toISOString(),
+        facebookVerified: data.facebookVerified,
+        accounts,
+        states,
+        rows: data.rows,
+        crOn: items.on,
+        crconn: items.crconn,
+        crmoney: items.crmoney as Parameters<typeof everywhere>[0]["crmoney"],
+      });
+    },
     async health() {
       await delay();
       return { ok: true, version: "mock" };
@@ -460,11 +740,15 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         faults.createJobFails!--;
         throw serverDown();
       }
+      // A campaign job (§38.5): the campaign is checked again; a hard stop or a soft one not accepted is refused.
+      if (body.campaignId) await cr.jobCheck(body.campaignId, body.campaignAnyway ?? []);
       const now = new Date().toISOString();
       const isLink = body.source.type === "link";
       const url = isLink ? (body.source as { url: string }).url : undefined;
       const platform = !isLink ? "upload" : /twitch\.tv/.test(url!) ? "twitch" : /kick\.com/.test(url!) ? "kick" : "youtube";
       const filename = body.source.type === "upload" ? body.source.filename : undefined;
+      // A campaign job's video, as yt-dlp would read it: from the campaign's own channel (the fit's source check).
+      const channel = body.campaignId && isLink ? cr.served().find((x) => x.campaignId === body.campaignId)?.rules?.allowedSources.channels[0]?.name : undefined;
       const j: Job = {
         jobId: ulid(),
         status: "queued",
@@ -475,6 +759,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
           key: body.source.type === "upload" ? body.source.key : undefined,
           filename,
           title: filename ?? "Reading the link…",
+          ...(channel ? { channel } : {}),
           thumbnailUrl: thumbArt(store.jobs.length, platform === "upload" ? "Upload" : platform),
         },
         clipTarget: body.clipTarget,
@@ -486,6 +771,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         progress: 0,
         clipCount: 0,
         notes: body.notes,
+        ...(body.campaignId ? { campaignId: body.campaignId } : {}),
         // Like the agent (ADR-42): the job is made with the model picked in Settings at the time.
         model: currentClipModel(store.settings.clipModel),
         createdAt: now,
@@ -493,6 +779,17 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       };
       store.jobs.unshift(j);
       publishJob(j);
+      // Like the API (§35.8): the file replaces the link job it came from, and that job's wait for the Mac ends.
+      const old = body.replaces && body.source.type === "upload" ? store.jobs.find((o) => o.jobId === body.replaces) : undefined;
+      const oldState = old?.macFetch?.state;
+      if (old && (old.status === "queued" || old.status === "running") && oldState && oldState !== "cloud" && oldState !== "failed") {
+        old.status = "canceled";
+        old.replacedBy = j.jobId;
+        old.steps = old.steps.map((s) => (s.status === "running" ? { ...s, status: "pending", message: undefined } : s));
+        clock.delete(old.jobId);
+        old.updatedAt = now;
+        publishJob(old);
+      }
       return clone(j);
     },
     async listJobs({ limit = 20, cursor } = {}) {
@@ -588,6 +885,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       if (j.status !== "failed" && j.status !== "canceled") throw conflict("Only a failed or canceled job can be retried.");
       j.status = "queued";
       j.error = undefined;
+      j.replacedBy = undefined;
       j.steps = stepsAt(0, "queued");
       j.progress = 0;
       j.model = currentClipModel(store.settings.clipModel);
@@ -658,6 +956,15 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         const missing = chosen.find((p) => !connected.includes(p));
         if (missing) throw bad(`${PLATFORM_LABEL[missing]} is not set up yet. Turn it off, then tap Upload.`);
       }
+      // A campaign clip (§38.14): only the campaign's places, public, never made for kids, TikTok Branded content.
+      if (c.status === "review") await cr.confirmCheck(c, chosen, options, tiktok);
+      // §39.3: a campaign clip goes up the campaign way only when it can earn (the merged captions, the picked places).
+      if (c.status === "review" && c.campaignId) {
+        const own = fitOf({ ...c, captions: { ...c.captions, ...(captions ?? {}) } }).fits[0];
+        const now = own ? liveFit(own, { captions: { ...c.captions, ...(captions ?? {}) }, chosen: chosen ?? null, tiktok: chosen?.includes("tiktok") ? (tiktok ?? null) : null }) : null;
+        const refusal = now ? uploadRefusal(now) : null;
+        if (refusal) throw conflict(refusal);
+      }
       // TikTok's rules: the owner picks who can see it before anything is posted there (§17.8).
       const tiktokGoing = chosen ? chosen.includes("tiktok") : store.settings.platforms.includes("tiktok") && connected.includes("tiktok");
       if (c.status === "review" && tiktokGoing && !tiktok?.privacyLevel) throw bad("Pick who can see it on TikTok.");
@@ -673,6 +980,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
           const own = options?.[p.platform as keyof ClipPostOptions];
           if (own) clipOptions.set(p.postId, clone(own));
         }
+        cr.onPosts(c, created);
         publishClip(c);
         for (const p of created) publishPost(p);
         return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === clipId)) };
@@ -684,7 +992,12 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         claimedAt.set(clipId, Date.now());
         return startPosting();
       }
-      if (c.status === "failed" || (c.status === "posted" && chosen)) return tryAgain(c, tiktok, chosen);
+      if (c.status === "failed" || ((c.status === "posted" || c.status === "confirmed") && chosen)) return tryAgain(c, tiktok, chosen);
+      // A start that did not go through earlier (§14.5): Try again starts it.
+      if (c.startPending && c.status !== "review") {
+        started(c);
+        return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === clipId)) };
+      }
       if (c.status !== "review") throw conflict(ALREADY_DECIDED);
       if (captions) c.captions = { ...c.captions, ...captions };
       if (chosen) c.uploadTo = chosen;

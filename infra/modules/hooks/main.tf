@@ -68,7 +68,8 @@ resource "aws_iam_role" "fn" {
 # OAuth callback consumes the state item (DeleteItem on OAUTH#), writes and updates the owner's ACCOUNT#/SETUP#
 # items (USER#), reads the state key and the platform's app keys, writes the token and pending secrets and deletes
 # the pending one (the aws/secretsmanager key needs no IAM statement either). This Lambda is public, so it can
-# never change or delete the owner's app keys, and touches only those three partitions of the table.
+# never change or delete the owner's app keys, and touches only those three partitions of the table. After a connect
+# it releases the owner's waiting posts (USER#) and starts the clip flow for them (§17.6).
 resource "aws_iam_role_policy" "fn" {
   name = "least-privilege"
   role = aws_iam_role.fn.id
@@ -122,6 +123,17 @@ resource "aws_iam_role_policy" "fn" {
         Action   = ["secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret", "secretsmanager:DeleteSecret", "secretsmanager:TagResource"]
         Resource = [local.platform_pending_secrets_arn]
       },
+      # §17.6: once a place is connected, the owner's clips waiting for it go out. Read the owner's posts (Query on
+      # USER#), set them and their clip to a new flow run in one transaction (UpdateItem), and start the clip flow on
+      # its live alias (any qualifier of clip-flow, never another function, as the API's StartFlows).
+      {
+        Sid       = "ReleaseWaitingPosts"
+        Effect    = "Allow"
+        Action    = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:UpdateItem", "dynamodb:TransactWriteItems"]
+        Resource  = [var.table_arn]
+        Condition = { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["USER#*"] } }
+      },
+      { Sid = "StartClipFlow", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = ["${var.clip_flow_arn_prefix}:*"] },
     ]
   })
 }
@@ -150,6 +162,7 @@ resource "aws_lambda_function" "fn" {
       VERIFY_TOKEN_PARAM = local.verify_token_name
       SECRET_PREFIX      = local.secret_prefix
       OAUTH_STATE_SECRET = local.state_key_name
+      CLIP_FLOW_ARN      = var.clip_flow_alias_arn
     }
   }
   tags       = local.tags

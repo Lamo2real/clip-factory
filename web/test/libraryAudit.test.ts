@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { titleFor } from "../src/app/App.tsx";
 import { isoWeek } from "../src/lib/week.ts";
-import { postStatusLabel, STATUS_LABEL } from "../src/lib/metrics.ts";
+import { postNumbersNote, postStatusLabel, STATUS_LABEL } from "../src/lib/metrics.ts";
 import { libraryEmptyCopy } from "../src/screens/library/Library.tsx";
 import { weekTitle } from "../src/screens/library/WeekView.tsx";
 
@@ -60,6 +60,16 @@ describe("one name per post state (F085)", () => {
     expect(postStatusLabel({ status: "posted" })).toBe("Uploaded");
     expect(postStatusLabel({ status: "posted", privacy: "private" })).toBe("Uploaded privately");
     expect(postStatusLabel({ status: "failed" })).toBe("Didn't work");
+  });
+  it("says a private post gets no numbers, instead of a time they never come", () => {
+    const when = () => "in 2 days";
+    const at = "2026-11-23T10:00:00Z";
+    expect(postNumbersNote({ status: "posted", privacy: "private", perfCheckAt: at }, when)).toBe(" · private posts get no numbers");
+    expect(postNumbersNote({ status: "posted", privacy: "private" }, when)).toBe(" · private posts get no numbers");
+    expect(postNumbersNote({ status: "posted", privacy: "public", perfCheckAt: at }, when)).toBe(" · numbers in 2 days");
+    expect(postNumbersNote({ status: "posted", perfCheckAt: at, metrics: { views: 3 } }, when)).toBe("");
+    expect(postNumbersNote({ status: "queued", perfCheckAt: at }, when)).toBe("");
+    expect(postNumbersNote({ status: "posted" }, when)).toBe("");
   });
   it("Library no longer has its own status words", () => {
     const src = read("src", "screens", "library", "Library.tsx");

@@ -9,6 +9,7 @@ import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { Button, ErrorPanel, LinkButton, Skeleton } from "../../components/ui.tsx";
 import { burst } from "../../lib/confetti.ts";
+import { CR_MONEY_PATH, useCr } from "../../lib/contentRewards.ts";
 import { PLATFORM_LABEL } from "../../lib/format.ts";
 import { formatMoney, MONEY_RESULTS, PAYOUTS, resultCopy } from "../../lib/money.ts";
 import { useAction } from "../../lib/motion.ts";
@@ -115,6 +116,7 @@ export function MoneyBranch() {
           </Panel>
         );
       })}
+      <CrMoneyApple />
       <Panel>
         <Apple id="money-payouts" wide>
           <Payouts />
@@ -205,5 +207,20 @@ function Payouts() {
         ))}
       </ul>
     </div>
+  );
+}
+
+/** Content Rewards' money (§38.7) lives on the Money page; here one link takes him there. Hidden without it. */
+function CrMoneyApple() {
+  const cr = useCr();
+  if (cr.state === "missing" || cr.state === "loading") return null;
+  return (
+    <Panel>
+      <Apple id="money-contentrewards" wide>
+        <LinkButton href={CR_MONEY_PATH} icon="coin" iconAfter="chevronRight">
+          Open Content Rewards money
+        </LinkButton>
+      </Apple>
+    </Panel>
   );
 }

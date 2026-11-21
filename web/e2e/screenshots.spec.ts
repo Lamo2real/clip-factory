@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { ACTIVE_SCENE, asDesktop, INACTIVE_FLOOR, paintGlass } from "./glass.ts";
 import { CLIPS, openClip, openTodo, settle } from "./helpers.ts";
 import { GALLERY, pauseActs, tapAct } from "./motionHelpers.ts";
@@ -334,7 +334,13 @@ for (const size of [
       await page.locator("[data-help-spotlit]").waitFor();
       await page.waitForTimeout(900);
       await page.screenshot({ path: join(dir, `help-spotlight-keep-${size.width}x${size.height}.png`) });
-      if (await panel.count()) await panel.getByRole("button", { name: "Close" }).click();
+      // The panel may still be stepping away from Keep on a busy runner: then there is nothing to close.
+      if (await panel.count())
+        await panel
+          .getByRole("button", { name: "Close" })
+          .click({ timeout: 5_000 })
+          .catch(() => undefined);
+      await expect(panel).toHaveCount(0);
       await page.evaluate(() => window.dispatchEvent(new CustomEvent("cf:help", { detail: {} })));
       // The plain answer's steps (§19), or the assistant's answer (§28).
       await panel.locator(".help-steps, .ask-answer").last().waitFor();
@@ -496,4 +502,229 @@ for (const shot of MONEY_SHOTS) {
       await ctx.close();
     });
   }
+}
+
+// Content Rewards (§38.20): its setup page, the campaigns list, a campaign card, a campaign clip on Review and the
+// Money part, at 375 and 1440 px.
+for (const size of [
+  { name: "phone", width: 375, height: 812, scale: 2, touch: true },
+  { name: "desktop", width: 1440, height: 900, scale: 1, touch: false },
+]) {
+  test.describe(`content rewards ${size.name} ${size.width}x${size.height}`, () => {
+    test.use({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale, hasTouch: size.touch, isMobile: size.touch });
+    const suffix = `-${size.width}x${size.height}`;
+    test("screenshot content rewards", async ({ page }) => {
+      await page.addInitScript(() => {
+        if (!sessionStorage.getItem("cf-mock-cr-review")) sessionStorage.setItem("cf-mock-cr-review", "1");
+      });
+      await page.goto("/");
+      await settle(page);
+      await page.evaluate(() => {
+        const s = (window as unknown as { __cfMock: { setup: { finish(p: string): void } } }).__cfMock.setup;
+        for (const p of ["youtube", "instagram", "facebook"]) s.finish(p);
+      });
+      for (const [name, path] of [
+        ["cr-setup", "/settings/posting/setup/contentrewards"],
+        ["campaigns", "/campaigns"],
+        ["campaign", "/campaigns/200ea21b-be80-4db8-b552-8e32b148604e"],
+        ["review-campaign", "/review"],
+        ["money-cr", "/money#content-rewards"],
+      ] as const) {
+        await page.goto(path);
+        await settle(page);
+        if (name === "money-cr") await page.locator("#content-rewards").scrollIntoViewIfNeeded();
+        await page.waitForTimeout(500);
+        await page.screenshot({ path: join(dir, `${name}${suffix}.png`) });
+      }
+    });
+  });
+}
+
+// §39 (docs/CONTRACTS.md §39.5): a campaign clip's fit block on Review, and All your money on the Money page, at 375
+// and 1440 px. The campaign clip is the first card of a new FaZe Clips job (the campaign way), in the pretend app.
+for (const size of [
+  { name: "phone", width: 375, height: 812, scale: 2, touch: true },
+  { name: "desktop", width: 1440, height: 900, scale: 1, touch: false },
+]) {
+  test.describe(`content rewards fit and all money ${size.name} ${size.width}x${size.height}`, () => {
+    test.use({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale, hasTouch: size.touch, isMobile: size.touch });
+    const suffix = `-${size.width}x${size.height}`;
+    test("screenshot review-fit and money-all", async ({ page }) => {
+      type Knobs = Record<string, (...a: unknown[]) => unknown>;
+      const mock = (group: "setup" | "jobs", fn: string, ...args: unknown[]) =>
+        page.evaluate(([g, f, a]) => (window as unknown as { __cfMock: Record<string, Knobs> }).__cfMock[g as string]![f as string]!(...(a as unknown[])), [group, fn, args] as const);
+      await page.goto("/");
+      await settle(page);
+      await page.waitForFunction(() => !!(window as unknown as { __cfMock?: { jobs?: unknown } }).__cfMock?.jobs);
+      for (const p of ["youtube", "instagram"]) await mock("setup", "finish", p);
+      await page.goto("/?campaign=200ea21b-be80-4db8-b552-8e32b148604e");
+      await settle(page);
+      await page.getByLabel("YouTube, Twitch or Kick link").fill("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+      await page.locator("form.newjob").getByRole("button", { name: "Make campaign clips", exact: true }).click();
+      await page.waitForURL(/\/jobs\//);
+      await mock("jobs", "finish");
+      await page.getByRole("link", { name: "Check these clips" }).click();
+      await page.waitForURL(/\/review\?job=/);
+      await settle(page);
+      const fit = page.locator(".review-list__item").first().locator(".cr-fit");
+      await expect(fit).toBeVisible();
+      await expect(page.locator(".toast")).toHaveCount(0, { timeout: 15_000 });
+      await fit.evaluate((el) => el.scrollIntoView({ block: "start" }));
+      await page.evaluate(() => scrollBy(0, -80));
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: join(dir, `review-fit${suffix}.png`) });
+      await page.evaluate(() => {
+        history.pushState({}, "", "/money");
+        dispatchEvent(new PopStateEvent("popstate"));
+      });
+      await settle(page);
+      await expect(page.locator(".cr-all__rows")).toBeVisible();
+      await page.evaluate(() => scrollTo(0, 0));
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: join(dir, `money-all${suffix}.png`) });
+    });
+  });
+}
+
+// The Content Rewards loose ends (§38, §39), at 375, 390 and 1440 px: Check 1 thing with its own group, the money dock
+// with the cards (never over All your money), the setup page's pinned pair resting under step 1's lines, Content
+// Rewards said no? with one mark, a toast above the pinned Make clips for this campaign, the job page strip and
+// Library's Campaign chip, and Your money is on Whop from the API's movedAt.
+for (const size of [
+  { name: "phone", width: 375, height: 812, scale: 2, touch: true },
+  { name: "phone", width: 390, height: 844, scale: 2, touch: true },
+  { name: "desktop", width: 1440, height: 900, scale: 1, touch: false },
+]) {
+  test.describe(`content rewards loose ends ${size.name} ${size.width}x${size.height}`, () => {
+    test.use({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale, hasTouch: size.touch, isMobile: size.touch, reducedMotion: "reduce" });
+    const suffix = `-${size.width}x${size.height}`;
+    const FAZE = "200ea21b-be80-4db8-b552-8e32b148604e";
+    const APPLY = "a1cefc3b-4533-438f-8e70-a7299550f1cf";
+    type Knobs = Record<string, (...a: unknown[]) => unknown>;
+    const knob = (page: import("@playwright/test").Page, group: "setup" | "jobs" | "cr", fn: string, ...args: unknown[]) =>
+      page.evaluate(([g, f, a]) => (window as unknown as { __cfMock: Record<string, Knobs> }).__cfMock[g as string]![f as string]!(...(a as unknown[])), [group, fn, args] as const);
+    const inApp = async (page: import("@playwright/test").Page, path: string) => {
+      await page.evaluate((p) => {
+        history.pushState({}, "", p);
+        dispatchEvent(new PopStateEvent("popstate"));
+      }, path);
+      await settle(page);
+    };
+    const shot = (page: import("@playwright/test").Page, name: string) => page.screenshot({ path: join(dir, `${name}${suffix}.png`) });
+
+    test("screenshot review check one, job strip, library chip", async ({ page }) => {
+      await page.goto("/");
+      await settle(page);
+      await page.waitForFunction(() => !!(window as unknown as { __cfMock?: { jobs?: unknown } }).__cfMock?.jobs);
+      for (const p of ["youtube", "instagram"]) await knob(page, "setup", "finish", p);
+      await page.goto(`/?campaign=${FAZE}`);
+      await settle(page);
+      await page.getByLabel("YouTube, Twitch or Kick link").fill("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+      await page.locator("form.newjob").getByRole("button", { name: "Make campaign clips", exact: true }).click();
+      await page.waitForURL(/\/jobs\//);
+      await settle(page);
+      await expect(page.locator(".cr-job [data-cr='job-strip']")).toContainText("Following");
+      await expect(page.locator(".toast")).toHaveCount(0, { timeout: 15_000 });
+      await page.locator(".cr-job").evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await page.waitForTimeout(400);
+      await shot(page, "cr-job-strip");
+      await knob(page, "jobs", "finish");
+      await page.getByRole("link", { name: "Check these clips" }).click();
+      await page.waitForURL(/\/review\?job=/);
+      await settle(page);
+      await knob(page, "cr", "setRules", FAZE, { uncertain: ["Clips must feel organic"] });
+      const card = page.locator(".review-list__item").first().locator(".review-card");
+      const fit = card.locator(".cr-fit");
+      await expect(fit.locator(".cr-fit__headline")).toHaveText("Check 1 thing, then upload");
+      await expect(page.locator(".toast")).toHaveCount(0, { timeout: 15_000 });
+      await fit.evaluate((el) => el.scrollIntoView({ block: "start" }));
+      await page.evaluate(() => scrollBy(0, -80));
+      await page.waitForTimeout(400);
+      await shot(page, "review-check-one");
+      const mine = card.getByRole("button", { name: "Use my settings" });
+      if (await mine.count()) await mine.click();
+      await card.getByRole("button", { name: /^Upload to \d/ }).click();
+      await expect(page.locator(".toast")).toHaveCount(0, { timeout: 15_000 });
+      await inApp(page, "/library");
+      await expect(page.locator("[data-cr='campaign-chip']")).toHaveCount(1);
+      await page.locator("[data-cr='campaign-chip']").evaluate((el) => el.closest(".lib-card")!.scrollIntoView({ block: "center" }));
+      await page.waitForTimeout(400);
+      await shot(page, "library-campaign-chip");
+    });
+
+    test("screenshot money dock with the cards", async ({ page }) => {
+      await page.clock.setFixedTime(new Date("2026-11-19T12:00:00Z"));
+      await page.goto("/");
+      await page.evaluate(() => sessionStorage.setItem("cf-mock-money", JSON.stringify({ scenario: "dash_many", country: "US", seen: [] })));
+      await page.goto("/money");
+      await settle(page);
+      await expect(page.locator(".cr-all__rows")).toBeVisible();
+      await page.waitForTimeout(400);
+      await shot(page, "money-dock-top");
+      await page.evaluate(() => scrollBy(0, document.querySelector(".cr-all__total")!.getBoundingClientRect().bottom - innerHeight + 40));
+      await page.waitForTimeout(400);
+      await shot(page, "money-dock-total");
+      await page.evaluate(() => scrollBy(0, document.querySelector(".dash-body")!.getBoundingClientRect().top - 120));
+      await page.waitForTimeout(400);
+      await shot(page, "money-dock-cards");
+    });
+
+    test("screenshot setup pinned pair and said no", async ({ page }) => {
+      await page.addInitScript(() => {
+        if (sessionStorage.getItem("cf-shot-cr-fresh")) return;
+        sessionStorage.setItem("cf-shot-cr-fresh", "1");
+        sessionStorage.setItem("cf-mock-cr-start", "fresh");
+      });
+      await page.goto("/settings/posting/setup/contentrewards");
+      await settle(page);
+      await page.waitForTimeout(700);
+      await shot(page, "cr-setup-fresh");
+      await page.waitForFunction(() => !!(window as unknown as { __cfMock?: { cr?: unknown } }).__cfMock?.cr);
+      await knob(page, "cr", "setReadOnly", true);
+      await page.reload();
+      await settle(page);
+      const pilot = page.locator("[data-help='cr-pilot-email']");
+      await expect(pilot).toContainText("Content Rewards said no?");
+      await pilot.evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await page.waitForTimeout(400);
+      await shot(page, "cr-setup-said-no");
+    });
+
+    test("screenshot you're in toast above the main button", async ({ page }) => {
+      await page.goto("/");
+      await settle(page);
+      await page.waitForFunction(() => !!(window as unknown as { __cfMock?: { cr?: unknown; setup?: unknown } }).__cfMock?.cr);
+      await knob(page, "setup", "finish", "youtube");
+      await page.goto(`/campaigns/${APPLY}`);
+      await settle(page);
+      await page.locator("main .btn--primary").filter({ visible: true }).click();
+      await expect(page.locator(".cr-chip")).toHaveText("Waiting for the brand");
+      await knob(page, "cr", "sayYes", APPLY);
+      await expect(page.locator(".toast", { hasText: "You're in!" })).toBeVisible();
+      await page.locator("main .btn--primary").filter({ visible: true }).click();
+      await expect(page.locator("main .btn--primary").filter({ visible: true })).toHaveText(/Make clips for this campaign/);
+      await page.waitForTimeout(300);
+      await shot(page, "campaign-in-toast");
+    });
+
+    test("screenshot your money is on whop", async ({ page }) => {
+      await page.goto("/money#content-rewards");
+      await settle(page);
+      const part = page.locator("#content-rewards");
+      await part.locator(".segmented__opt", { hasText: /^Yes$/ }).click();
+      await expect(part.locator("#step-fin-setup")).toBeVisible();
+      await page.goto("/");
+      await settle(page);
+      await page.waitForFunction(() => !!(window as unknown as { __cfMock?: { cr?: unknown } }).__cfMock?.cr);
+      await knob(page, "cr", "moveToWhop");
+      await knob(page, "cr", "moneyArrivedOnWhop");
+      await page.goto("/money#content-rewards");
+      await settle(page);
+      await expect(part).toContainText("Your money is on Whop. Move it to your bank.");
+      await part.locator("#step-fin-bank").evaluate((el) => el.scrollIntoView({ block: "start" }));
+      await page.evaluate(() => scrollBy(0, -100));
+      await page.waitForTimeout(400);
+      await shot(page, "money-cr-on-whop");
+    });
+  });
 }

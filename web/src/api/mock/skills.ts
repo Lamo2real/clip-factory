@@ -8,7 +8,7 @@ import { ulid } from "./fixtures.ts";
 
 /**
  * A stored skill: the public fields plus its SKILL.md text and, for a zip, the other files in it. `copyOf` marks the
- * owner's own copy of a built-in (§38); `notNow` and `sectionAdded` are what the API keeps on the item.
+ * owner's own copy of a built-in (§44); `notNow` and `sectionAdded` are what the API keeps on the item.
  */
 export type MockSkill = Skill & {
   content: string;
@@ -18,7 +18,7 @@ export type MockSkill = Skill & {
   sectionAdded?: { key: string; at: number; text: string };
 };
 
-// --- §38: the owner's copy of a built-in that gained a part since -------------------------------------------------
+// --- §44: the owner's copy of a built-in that gained a part since -------------------------------------------------
 
 /** The built-in part the mock knows: viral-clip-editing's Chat block (shortened; the API cuts the real one). */
 export const CHAT_SECTION = {
@@ -80,7 +80,7 @@ function saveCopy(s: MockSkill): void {
   }
 }
 
-/** Where the part goes in his text and exactly what is added (the API's `insertion`, §38.3). */
+/** Where the part goes in his text and exactly what is added (the API's `insertion`, §44.3). */
 export function insertion(text: string): { at: number; added: string } {
   const lines = text.split("\n");
   const offsets: number[] = [];
@@ -200,7 +200,7 @@ export interface MockSkillControls {
   bumpSkillVersion(skillId: string): number;
   /** The old on/off switch route: always the §18.1 400. */
   patchSkill(skillId: string, body?: unknown): Promise<never>;
-  /** Adds the owner's copy of viral-clip-editing from before its Chat part (§38); kept over reloads. */
+  /** Adds the owner's copy of viral-clip-editing from before its Chat part (§44); kept over reloads. */
   addSkillCopy(): void;
 }
 

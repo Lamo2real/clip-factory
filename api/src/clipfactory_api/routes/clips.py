@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
-from .. import clips, db, post_preset, posts, s3, settings, validate, vectors
+from .. import clips, db, post_preset, posts, release, s3, settings, validate, vectors
 from ..app import App
 from ..clock import iso
 from ..errors import bad_request, conflict, not_found
-from ..flow_client import FlowStartError
 from ..http import Request, Response, ok
 from ..ids import is_ulid
 from ..log import log
+from ..oauth import setup as platform_setup
 from ..platforms import label as platform_label
+from ..platforms.campaign_caption import campaign_options
 
 ALREADY_DECIDED = "This clip has already been uploaded or thrown away."
 ALREADY_DECLINED = "This clip was thrown away, so it cannot be uploaded."
@@ -77,6 +80,8 @@ def patch_clip(app: App, req: Request) -> Response:
 
 
 TIKTOK_PRIVACY = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY")
+# TikTok's rule: branded content (a paid partnership) is only for Everyone or Friends.
+TIKTOK_BRANDED_PRIVACY = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS")
 TIKTOK_SWITCHES = ("disableComment", "disableDuet", "disableStitch", "brandContent", "brandOrganic")
 
 
@@ -90,8 +95,8 @@ def tiktok_options(raw: Any) -> dict[str, Any]:
     out: dict[str, Any] = {"privacyLevel": privacy}
     for name in TIKTOK_SWITCHES:
         out[name] = validate.boolean(body.get(name, False), name)
-    if out["brandContent"] and privacy == "SELF_ONLY":
-        raise bad_request("Branded content cannot be posted as Only me on TikTok. Pick who can see it.")
+    if out["brandContent"] and privacy not in TIKTOK_BRANDED_PRIVACY:
+        raise bad_request("Branded content can only be seen by Everyone or Friends on TikTok. Pick who can see it.")
     return out
 
 
@@ -116,12 +121,189 @@ def _require_set_up(app: App, user_id: str, platforms: list[str]) -> None:
             raise bad_request(f"{platform_label(platform)} is not set up yet. Turn it off, then tap Upload.")
 
 
+# --- Content Rewards campaign clips (docs/CONTRACTS.md §38.14) ------------------------------------------------------
+#
+# The items are read by their literal keys (CAMPAIGN#{uuid}, CRCONN, SETUP#tiktok; §38.11). The one import of the
+# Content Rewards package is the fit check (§39.3), only while it is switched on (``_require_fit``).
+
+CAMPAIGN_PICK = "Pick where it goes, then tap Upload."
+CAMPAIGN_GONE = "Add the campaign again on the Campaigns page."
+CAMPAIGN_PUBLIC = "Campaign clips must be public. Pick Everyone."
+CAMPAIGN_KIDS = "Campaign clips are never made for kids."
+CAMPAIGN_BRANDED = "Turn on Branded content on TikTok for campaign clips."
+CAMPAIGN_HELD = (
+    "Content Rewards wants the brand to check your other clips first. I'll tell you when you can post again."
+)
+CAMPAIGN_CAN_POST = ("in", "manual")
+# Try again (Library, a clip's post line) has no switch and no Upload: its sentences name the buttons it has.
+TRY_ANOTHER = "Tap Try again on another place."
+TIKTOK_PRIVATE = "TikTok keeps Clip Factory's posts private until TikTok checks the app, and private posts can't earn."
+# The stop that keeps a campaign from taking clips (§38.4): its state first, then the owner's membership.
+CAMPAIGN_STATE_STOPS = {
+    "ended": "This campaign has ended. Pick another one.",
+    "paused": "The brand paused this campaign. I'll tell you when it opens again.",
+}
+CAMPAIGN_MEMBERSHIP_STOPS = {
+    "unknown": "Connect Content Rewards so I can see if you're in.",
+    "not_joined": "Not joined yet: tap Join Campaign on Content Rewards. I'll see it by myself.",
+    "apply_first": "Did you tap Submit application on Content Rewards? Then tap Yes, I applied.",
+    "waiting": "The brand hasn't let you in yet. I'll tell you when you're in.",
+    "left": (
+        "Content Rewards doesn't show this campaign for you any more. Open it to check: you may have left, or the "
+        "brand removed you."
+    ),
+    "not_accepted": "The brand said no to this one. That's OK! Pick another campaign.",
+}
+
+
+@dataclass(frozen=True)
+class CampaignClip:
+    """A clip made for a campaign: the live ``CAMPAIGN#`` item (None when it was removed), the places the campaign
+    pays for and the internal ``postOptions.campaign`` every one of its posts carries."""
+
+    campaign_id: str
+    item: Mapping[str, Any] | None
+    paid: tuple[str, ...]
+    options: dict[str, Any]
+
+
+def _platform_list(raw: Any) -> tuple[str, ...]:
+    found = raw if isinstance(raw, list | tuple | set) else []
+    return tuple(p for p in posts.UPLOAD_ORDER if p in found)
+
+
+def campaign_clip(
+    app: App, user_id: str, clip: Mapping[str, Any], clip_posts: list[dict[str, Any]] | None = None
+) -> CampaignClip | None:
+    """The campaign this clip follows: its job's ``campaign`` (the rules copied at ``POST /v1/jobs``), else the
+    clip's or its posts' ``campaignId`` (a clip that outlived its job) with the rules of the ``CAMPAIGN#`` item.
+    None for a clip without a campaign (everything then works exactly as before)."""
+    pk = db.user_pk(user_id)
+    job = app.store.get(pk, db.job_sk(str(clip["jobId"]))) if clip.get("jobId") else None
+    raw = (job or {}).get("campaign")
+    job_campaign: Mapping[str, Any] = raw if isinstance(raw, Mapping) and raw.get("campaignId") else {}
+    from_posts = next((str(p["campaignId"]) for p in clip_posts or [] if p.get("campaignId")), "")
+    campaign_id = str(job_campaign.get("campaignId") or clip.get("campaignId") or from_posts or "")
+    if not campaign_id:
+        return None
+    item = app.store.get(pk, f"CAMPAIGN#{campaign_id}")
+    rules = job_campaign.get("rules") if job_campaign else (item or {}).get("rules")
+    # The live list wins: the brand may have changed it since the job started; the job's copy only when it has none.
+    paid = _platform_list((item or {}).get("platformsPaid")) or _platform_list(job_campaign.get("platformsPaid"))
+    return CampaignClip(campaign_id, item, paid, campaign_options(rules if isinstance(rules, Mapping) else None))
+
+
+def _require_campaign_open(app: App, campaign: CampaignClip) -> None:
+    """409 unless the owner is in the campaign (``in`` or ``manual``) and it takes clips (not held, paused, ended)."""
+    item = campaign.item
+    if item is None:
+        raise conflict(CAMPAIGN_GONE)
+    state = item.get("state")
+    if state in CAMPAIGN_STATE_STOPS:
+        raise conflict(CAMPAIGN_STATE_STOPS[str(state)])
+    membership = item.get("membership")
+    if membership not in CAMPAIGN_CAN_POST:
+        raise conflict(CAMPAIGN_MEMBERSHIP_STOPS.get(str(membership), CAMPAIGN_MEMBERSHIP_STOPS["unknown"]))
+    if item.get("held"):  # held until the poller clears it (§38.12), the same rule as the card's stop
+        raise conflict(CAMPAIGN_HELD)
+
+
+def _place_refusal(
+    platform: str, campaign: CampaignClip, setups: list[dict[str, Any]], linked: Any, *, try_again: bool = False
+) -> str | None:
+    """Why a campaign clip can't go to ``platform`` (None when it can): the §38.8 ``uploadPlaces`` rule, the
+    campaign's paid places ∩ places ready on Set up posting ∩ not refused by Content Rewards as unlinked, TikTok only
+    once its posting audit passed. Upload's sentences say to turn the place off; Try again's (Library, a clip's post
+    line: no switch and no Upload there) name the buttons those screens have."""
+    name = platform_label(platform)
+    setup = next((s for s in setups if s.get("platform") == platform), {})
+    if platform not in campaign.paid:
+        if try_again:
+            return f"This campaign doesn't pay for {name} any more. {TRY_ANOTHER}"
+        return f"This campaign doesn't pay for {name}. Turn it off, then tap Upload."
+    if not setup.get("ready"):
+        if try_again:
+            return f"{name} is not set up yet. Set it up in Settings › Posting › Set up posting, then tap Try again."
+        return f"{name} is not set up yet. Turn it off, then tap Upload."
+    if platform == "tiktok":
+        audit = [g.get("state") for g in setup.get("gates") or [] if g.get("key") == "posting_audit"]
+        if audit != ["ok"]:
+            then = TRY_ANOTHER if try_again else "Turn TikTok off, then tap Upload."
+            return f"{TIKTOK_PRIVATE} {then}"
+    if isinstance(linked, Mapping) and linked.get(platform) is False:
+        if try_again:
+            return f"Add {name} in Content Rewards first, then tap Try again."
+        return f"Add {name} in Content Rewards first. Then tap I added it, or turn {name} off and tap Upload."
+    return None
+
+
+def _require_campaign_places(
+    app: App, user_id: str, campaign: CampaignClip, places: list[str], *, try_again: bool = False
+) -> None:
+    """400 with the reason when a place is not one of this campaign clip's places (``_place_refusal``)."""
+    setups = platform_setup.all_setups(app.store, user_id)
+    linked = (app.store.get(db.user_pk(user_id), "CRCONN") or {}).get("crLinked")
+    for platform in places:
+        refusal = _place_refusal(platform, campaign, setups, linked, try_again=try_again)
+        if refusal:
+            raise bad_request(refusal)
+
+
+def _require_campaign_tiktok(tiktok: Mapping[str, Any] | None) -> None:
+    """TikTok's own rules stay (§17.8: the owner picks who can see it, nothing is picked for him); a campaign clip
+    must be for Everyone with Branded content ticked."""
+    if tiktok is None:
+        return
+    if tiktok.get("privacyLevel") != "PUBLIC_TO_EVERYONE":
+        raise bad_request(CAMPAIGN_PUBLIC)
+    if tiktok.get("brandContent") is not True:
+        raise bad_request(CAMPAIGN_BRANDED)
+
+
+def _require_fit(
+    app: App,
+    user_id: str,
+    clip: Mapping[str, Any],
+    *,
+    captions: Mapping[str, Any] | None = None,
+    chosen: list[str] | None = None,
+    tiktok: Mapping[str, Any] | None = None,
+) -> None:
+    """§39.3: a campaign clip goes up the campaign way only when it can earn: 409 with the first ``no``, ``remake``
+    or ``todo`` item's words (a wait item: "Not yet for …"). Only while Content Rewards is switched on (its deps
+    exist); a clip without a campaign never gets here, so its Confirm is exactly as before."""
+    deps = getattr(app, "contentrewards", None)
+    if deps is None:
+        return
+    from ..contentrewards import fit
+
+    found = fit.for_clip(
+        deps, user_id, str(clip["clipId"]), app.clock(), captions=captions, chosen=chosen, tiktok=tiktok
+    )
+    refusal = fit.upload_refusal(found["fits"][0]) if found["fits"] else None
+    if refusal:
+        raise conflict(refusal)
+
+
+def _campaign_youtube(per_clip: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """YouTube's options for a campaign clip: public and never made for kids (anything else is refused)."""
+    youtube = dict(per_clip.get("youtube") or {})
+    if youtube.get("privacy", "public") != "public":
+        raise bad_request(CAMPAIGN_PUBLIC)
+    if youtube.get("madeForKids") is True:
+        raise bad_request(CAMPAIGN_KIDS)
+    return {**youtube, "privacy": "public", "madeForKids": False}
+
+
 def confirm(app: App, req: Request) -> Response:
     """Upload a clip (docs/CONTRACTS.md §14.5, §33). Safe to repeat: the posts are created once and the durable
     ``cf-prod-clip-flow`` start is idempotent on its execution name. With TikTok going (connected and chosen, or
     enabled in settings when nothing is chosen), the TikTok sheet's choices are required (§17.8). ``platforms`` picks
     exactly where the clip goes; without it (older clients) Settings › Where clips go decides, as before. On a
-    ``posted`` or ``failed`` clip, ``platforms`` names the failed posts to try again (one platform's Try again)."""
+    ``posted``, ``failed`` or ``confirmed`` clip, ``platforms`` names the failed posts to try again (one platform's
+    Try again) and the waiting posts to send now that their place is connected (Post now, §33.6). A campaign clip
+    (§38.14) must name its places, only ones the campaign pays for, while the campaign takes clips, public and never
+    made for kids; its posts carry ``campaignId`` and ``postOptions.campaign``."""
     body = req.json()
     validate.only_keys(body, {"captions", "tiktok", "platforms", "options"})
     patch = clips.caption_patch(body["captions"]) if body.get("captions") is not None else {}
@@ -133,6 +315,9 @@ def confirm(app: App, req: Request) -> Response:
     if item.get("status") == "review":
         now = iso(app.clock())
         current_settings = settings.load(app.store, req.user_id)
+        campaign = campaign_clip(app, req.user_id, item)
+        if campaign is not None and chosen is None:
+            raise bad_request(CAMPAIGN_PICK)  # Settings › Where clips go never decides for a campaign clip
         if chosen is not None:
             _require_set_up(app, req.user_id, chosen)
             tiktok_queued = "tiktok" in chosen
@@ -142,6 +327,20 @@ def confirm(app: App, req: Request) -> Response:
             )
         if tiktok_queued and options is None:
             raise bad_request("Pick who can see it on TikTok.")
+        if campaign is not None and chosen is not None:
+            _require_campaign_open(app, campaign)
+            _require_campaign_places(app, req.user_id, campaign, chosen)
+            if "youtube" in chosen:
+                per_clip = {**per_clip, "youtube": _campaign_youtube(per_clip)}
+            _require_campaign_tiktok(options if "tiktok" in chosen else None)
+            _require_fit(
+                app,
+                req.user_id,
+                item,
+                captions=clips.merged_captions(item.get("captions"), patch),
+                chosen=chosen,
+                tiktok=options if "tiktok" in chosen else None,
+            )
         fields: dict[str, Any] = {
             "status": "confirmed",
             "decidedAt": now,
@@ -165,6 +364,8 @@ def confirm(app: App, req: Request) -> Response:
                     **({"tiktok": options} if options else {}),
                 }
                 or None,
+                campaign_id=campaign.campaign_id if campaign else None,
+                campaign_options=campaign.options if campaign else None,
             )
         except db.ConditionFailed:
             # Another Confirm (or a Decline) won the race: carry on from the clip's current state.
@@ -178,10 +379,10 @@ def confirm(app: App, req: Request) -> Response:
         raise conflict(ALREADY_DECLINED)
     if status == "review":
         raise conflict("This clip changed while you pressed Upload. Please try again.")
-    if status == "failed" or (status == "posted" and chosen is not None):
+    if status == "failed" or (status in {"posted", "confirmed"} and chosen is not None):
         item = _try_again(app, item, tiktok=options, platforms=chosen)
-    elif status in {"confirmed", "publishing"} and item.get("publishState") == clips.PUBLISH_PENDING:
-        item = _start_flow(app, item)  # an earlier Confirm stopped before its flow started
+    elif status in {"confirmed", "publishing", "posted"} and item.get("publishState") == clips.PUBLISH_PENDING:
+        item = _start_flow(app, item)  # an earlier Confirm, Try again or release stopped before its flow started
     return ok({"clip": clips.public_clip(item, app.media), "posts": _posts(app, req.user_id, item["clipId"])})
 
 
@@ -190,78 +391,47 @@ def _posts(app: App, user_id: str, clip_id: str) -> list[dict[str, Any]]:
 
 
 def _start_flow(app: App, clip: dict[str, Any]) -> dict[str, Any]:
-    """Starts ``clip-{clipId}-{flowRun}``; on success the clip becomes ``publishState: started``. A failed start
-    leaves it ``pending``, so the next Confirm starts it again."""
-    run = int(clip.get("flowRun") or 1)
-    try:
-        started = app.flows.start_clip_flow(clip["clipId"], clip["userId"], run)
-    except (FlowStartError, ValueError) as e:
-        log("error", "clip.flow_start_failed", clipId=clip["clipId"], run=run, error=str(e))
-        return clip
-    fields: dict[str, Any] = {"publishState": clips.PUBLISH_STARTED, "flowRun": run}
-    if started.execution_arn:
-        fields["flowExecutionArn"] = started.execution_arn
-    expect: dict[str, Any] = {"publishState": [clips.PUBLISH_PENDING]}
-    if clip.get("flowRun"):
-        expect["flowRun"] = [run]  # a clip kept before flow runs existed has none yet
-    try:
-        updated = app.store.update(clip["pk"], clip["sk"], fields, expect_in=expect)
-    except db.ConditionFailed:
-        return app.store.get(clip["pk"], clip["sk"]) or clip
-    log("info", "clip.flow_started", clipId=clip["clipId"], flow=started.name, existed=started.execution_arn is None)
-    return updated
+    """Starts ``clip-{clipId}-{flowRun}`` (``release.start_flow``, shared with the OAuth callback)."""
+    return release.start_flow(app.store, app.flows, clip)
 
 
 def _try_again(
     app: App, clip: dict[str, Any], *, tiktok: dict[str, Any] | None = None, platforms: list[str] | None = None
 ) -> dict[str, Any]:
-    """Failed posts go back to ``queued`` and a new flow run starts. Without ``platforms`` (a ``failed`` clip, whose
-    every post failed) all failed posts are tried again; with it only the named ones, which also works on a ``posted``
-    clip where one place did not work (§33). A ``failed`` clip becomes ``confirmed``; a ``posted`` one stays
-    ``posted``. Naming no failed post changes nothing. New TikTok sheet choices (``tiktok``) replace the failed TikTok
-    post's ``postOptions``, so a privacy TikTok no longer offers can be picked again."""
-    run = int(clip.get("flowRun") or 1)
-    failed = [
-        p
-        for p in posts.posts_for_clip(app.store, clip["userId"], clip["clipId"], consistent=True)
-        if p.get("status") == "failed" and (platforms is None or p.get("platform") in platforms)
-    ]
-    status = str(clip.get("status"))
-    if not failed:
-        # Nothing failed among the named places. A start that did not go through earlier still gets finished.
-        return _start_flow(app, clip) if clip.get("publishState") == clips.PUBLISH_PENDING else clip
-    clip_update = db.update_request(
-        clip["pk"],
-        clip["sk"],
-        {
-            "status": "confirmed" if status == "failed" else status,
-            "publishState": clips.PUBLISH_PENDING,
-            "flowRun": run + 1,
-        },
-        remove=["flowExecutionArn"],
-        expect_in={"status": [status], "flowRun": [run]} if clip.get("flowRun") else {"status": [status]},
-    )
-    post_updates = [
-        # A fresh publishHandle: Try again starts a new upload instead of resuming the one that failed (§17.6).
-        db.update_request(
-            p["pk"],
-            p["sk"],
-            {"status": "queued", **({"postOptions": tiktok} if tiktok and p.get("platform") == "tiktok" else {})},
-            remove=["error", "publishHandle"],
-            expect_in={"status": ["failed"]},
+    """Failed posts go back to ``queued`` and a new flow run starts (``release.restart``). Without ``platforms`` (a
+    ``failed`` clip, whose every post failed) all failed posts are tried again; with it only the named ones, which also
+    works on a ``posted`` clip where one place did not work (§33). Named places still ``pending_integration`` are
+    released the same way once they are connected (Post now, §33.6); one not connected yet is a 400 with the plain
+    sentence Upload uses. A ``failed`` clip becomes ``confirmed``; a ``posted`` one stays ``posted``. Naming nothing
+    to send changes nothing. New TikTok sheet choices (``tiktok``) replace the TikTok post's ``postOptions``, so a
+    privacy TikTok no longer offers can be picked again. A campaign clip's posts get the checks of Confirm first
+    (§38.14), and new TikTok choices keep the post's ``postOptions.campaign``."""
+    rows = posts.posts_for_clip(app.store, clip["userId"], clip["clipId"], consistent=True)
+    named = [p for p in rows if platforms is None or p.get("platform") in platforms]
+    failed = [p for p in named if p.get("status") == "failed"]
+    waiting = [p for p in named if platforms is not None and p.get("status") == "pending_integration"]
+    if waiting:
+        _require_set_up(
+            app, clip["userId"], [p for p in posts.UPLOAD_ORDER if any(w["platform"] == p for w in waiting)]
         )
-        for p in failed
-    ]
-    try:
-        app.store.transact(updates=[clip_update, *post_updates])
-    except db.ConditionFailed:
-        current = app.store.get(clip["pk"], clip["sk"]) or clip
-        if current.get("status") in {"confirmed", "posted"} and current.get("publishState") == clips.PUBLISH_PENDING:
-            return _start_flow(app, current)  # a parallel Try again reset it; finish its start
-        return current
-    log("info", "clip.try_again", clipId=clip["clipId"], run=run + 1, posts=len(failed))
-    refreshed = app.store.get(clip["pk"], clip["sk"]) or clip
-    return _start_flow(app, refreshed)
+        if tiktok is None and any(p["platform"] == "tiktok" and not release.has_tiktok_choice(p) for p in waiting):
+            raise bad_request("Pick who can see it on TikTok.")
+    if not failed and not waiting:
+        # Nothing to send among the named places. A start that did not go through earlier still gets finished.
+        return _start_flow(app, clip) if clip.get("publishState") == clips.PUBLISH_PENDING else clip
+    campaign = campaign_clip(app, clip["userId"], clip, rows)
+    if campaign is not None:
+        going = [p for p in posts.UPLOAD_ORDER if any(r.get("platform") == p for r in [*failed, *waiting])]
+        _require_campaign_open(app, campaign)
+        _require_campaign_places(app, clip["userId"], campaign, going, try_again=True)
+        _require_fit(app, clip["userId"], clip, chosen=going, tiktok=tiktok if "tiktok" in going else None)
+        if tiktok is not None and "tiktok" in going:
+            _require_campaign_tiktok(tiktok)
+            kept = next((r.get("postOptions") for r in rows if r.get("platform") == "tiktok"), None)
+            frozen = kept.get("campaign") if isinstance(kept, Mapping) else None
+            # release.restart replaces the TikTok post's postOptions: the campaign part goes along unchanged.
+            tiktok = {**tiktok, "campaign": dict(frozen) if isinstance(frozen, Mapping) else campaign.options}
+    return release.restart(app.store, app.flows, clip, [*failed, *waiting], clip_posts=rows, tiktok=tiktok)
 
 
 def decline(app: App, req: Request) -> Response:

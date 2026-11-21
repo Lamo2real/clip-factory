@@ -4,7 +4,7 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="hdr" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b&gt;Clip Factory Cloud on AWS. Repo &lt;code&gt;Lamo2real/clip-factory-legal&lt;/code&gt;, branch &lt;code&gt;main&lt;/code&gt;, one AWS account, one environment (&lt;code&gt;prod&lt;/code&gt;, prefix &lt;code&gt;cf-prod&lt;/code&gt;), region &lt;code&gt;eu-north-1&lt;/code&gt;. Backend: Python 3.13. Infrastructure: Terraform in &lt;code&gt;infra/&lt;/code&gt;.&lt;/b&gt;&lt;br&gt;Serverless only: 1 CloudFront distribution &amp;#183; 2 S3 buckets (web, media) &amp;#183; 1 S3 Vectors bucket + index &amp;#183; 1 DynamoDB table + Streams &amp;#183; 3 API Gateway APIs (HTTP, WebSocket, REST) &amp;#183; 12 Lambdas (2 durable functions) · 1 EventBridge rule (stats every 15 min) &amp;#183; 1 AgentCore runtime &amp;#183; Bedrock (Claude Fable 5.1, Amazon Nova 2 Lite EU profile for watching the video, Claude Haiku 5.5 EU profile for help, Titan Embeddings V2) &amp;#183; Transcribe &amp;#183; Cognito &amp;#183; SSM Parameter Store &amp;#183; Secrets Manager (platform keys and tokens) &amp;#183; CloudWatch + SNS &amp;#183; no servers, no containers to run, no VPC &amp;#183; every push to &lt;code&gt;main&lt;/code&gt; deploys through GitHub OIDC" vertex="1">
+        <mxCell id="hdr" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b&gt;Clip Factory Cloud on AWS. Repo &lt;code&gt;Lamo2real/clip-factory-legal&lt;/code&gt;, branch &lt;code&gt;main&lt;/code&gt;, one AWS account, one environment (&lt;code&gt;prod&lt;/code&gt;, prefix &lt;code&gt;cf-prod&lt;/code&gt;), region &lt;code&gt;eu-north-1&lt;/code&gt;. Backend: Python 3.13. Infrastructure: Terraform in &lt;code&gt;infra/&lt;/code&gt;.&lt;/b&gt;&lt;br&gt;Serverless only: 1 CloudFront distribution &amp;#183; 2 S3 buckets (web, media) &amp;#183; 1 S3 Vectors bucket + index &amp;#183; 1 DynamoDB table + Streams &amp;#183; 3 API Gateway APIs (HTTP, WebSocket, REST) &amp;#183; 14 Lambdas (2 durable functions) · 1 EventBridge rule (stats every 15 min) &amp;#183; 1 AgentCore runtime &amp;#183; Bedrock (Claude Fable 5.1, Amazon Nova 2 Lite EU profile for watching the video, Claude Haiku 5.5 EU profile for help, Titan Embeddings V2) &amp;#183; Transcribe &amp;#183; Cognito &amp;#183; SSM Parameter Store &amp;#183; Secrets Manager (platform keys and tokens) &amp;#183; Content Rewards outside AWS (13, switched off until every part has merged) &amp;#183; CloudWatch + SNS &amp;#183; no servers, no containers to run, no VPC &amp;#183; every push to &lt;code&gt;main&lt;/code&gt; deploys through GitHub OIDC" vertex="1">
           <mxGeometry x="0" y="-76" width="2760" height="60" as="geometry" />
         </mxCell>
         <mxCell id="frame" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;arcSize=2;fontSize=11;verticalAlign=middle;align=center;" value="" vertex="1">
@@ -14,7 +14,7 @@
           <mxGeometry x="20" y="6" width="2700" height="34" as="geometry" />
         </mxCell>
         <mxCell id="devices" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;arcSize=2;fontSize=11;verticalAlign=middle;align=center;dashed=1;" value="" vertex="1">
-          <mxGeometry x="16" y="60" width="150" height="960" as="geometry" />
+          <mxGeometry x="16" y="60" width="150" height="1110" as="geometry" />
         </mxCell>
         <mxCell id="devices_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b&gt;Owner's devices&lt;/b&gt;" vertex="1">
           <mxGeometry x="20" y="64" width="142" height="20" as="geometry" />
@@ -70,7 +70,7 @@
         <mxCell id="api" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
           <mxGeometry x="1242" y="400" width="56" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="api_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-api (Lambda)&lt;/b&gt;&lt;br&gt;every &lt;code&gt;/v1&lt;/code&gt; route; presigned URLs; starts both flows; Keep / Throw away; performance + weeks; &lt;b&gt;10&lt;/b&gt; setup: keys to Secrets Manager, Check it, Connect start (signed state, PKCE), choose, disconnect; &lt;b&gt;11&lt;/b&gt; Ask Clip Factory: &lt;code&gt;GET /v1/help&lt;/code&gt;, &lt;code&gt;POST /v1/help/answers&lt;/code&gt; (BM25 + composer, Haiku optional, capped)" vertex="1">
+        <mxCell id="api_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-api (Lambda)&lt;/b&gt;&lt;br&gt;every &lt;code&gt;/v1&lt;/code&gt; route; presigned URLs; starts both flows; Keep / Throw away; performance + weeks; &lt;b&gt;10&lt;/b&gt; setup: keys to Secrets Manager, Check it, Connect start (signed state, PKCE), choose, disconnect; &lt;b&gt;11&lt;/b&gt; Ask Clip Factory: &lt;code&gt;GET /v1/help&lt;/code&gt;, &lt;code&gt;POST /v1/help/answers&lt;/code&gt; (BM25 + composer, Haiku optional, capped); &lt;b&gt;13&lt;/b&gt; &lt;code&gt;/v1/contentrewards&lt;/code&gt;: register, Connect finish, campaigns, Check now" vertex="1">
           <mxGeometry x="1160" y="460" width="220" height="185" as="geometry" />
         </mxCell>
         <mxCell id="wsauth" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
@@ -106,7 +106,7 @@
         <mxCell id="clf" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
           <mxGeometry x="1642" y="1110" width="56" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="clf_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-clip-flow (Lambda DURABLE, alias live)&lt;/b&gt;&lt;br&gt;&lt;i&gt;ensure-posts&lt;/i&gt; → &lt;i&gt;publish- / wait- / check- / finish-{platform}&lt;/i&gt; → &lt;i&gt;settle-clip&lt;/i&gt; → &lt;b&gt;wait 48 h&lt;/b&gt; (no compute) → &lt;i&gt;metrics&lt;/i&gt; → &lt;i&gt;distil&lt;/i&gt; → &lt;i&gt;upsert-vector&lt;/i&gt;" vertex="1">
+        <mxCell id="clf_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-clip-flow (Lambda DURABLE, alias live)&lt;/b&gt;&lt;br&gt;&lt;i&gt;ensure-posts&lt;/i&gt; → &lt;i&gt;publish- / wait- / check- / finish-{platform}&lt;/i&gt; → &lt;b&gt;13&lt;/b&gt; &lt;i&gt;cr-send-{platform}&lt;/i&gt; (campaign posts) → &lt;i&gt;settle-clip&lt;/i&gt; → &lt;i&gt;cr-wait/cr-retry-{n}&lt;/i&gt; (≤ 25 min) → &lt;b&gt;wait 48 h&lt;/b&gt; (no compute) → &lt;i&gt;metrics&lt;/i&gt; → &lt;i&gt;distil&lt;/i&gt; → &lt;i&gt;upsert-vector&lt;/i&gt;" vertex="1">
           <mxGeometry x="1560" y="1170" width="220" height="120" as="geometry" />
         </mxCell>
         <mxCell id="ddb" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.dynamodb;fillColor=#C925D1;" value=" " vertex="1">
@@ -142,7 +142,7 @@
         <mxCell id="br2" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock;fillColor=#01A88D;" value=" " vertex="1">
           <mxGeometry x="2442" y="1250" width="56" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="br2_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Amazon Bedrock (same models)&lt;/b&gt;&lt;br&gt;distil: Claude Fable 5.1, effort low; embed: Titan V2" vertex="1">
+        <mxCell id="br2_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Amazon Bedrock (same models)&lt;/b&gt;&lt;br&gt;distil: Claude Fable 5.1, effort low; embed: Titan V2; &lt;b&gt;13&lt;/b&gt; campaign rules (cf-prod-campaigns)" vertex="1">
           <mxGeometry x="2506" y="1264" width="215" height="60" as="geometry" />
         </mxCell>
         <mxCell id="os" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.elasticsearch_service;fillColor=#8C4FFF;" value=" " vertex="1">
@@ -303,7 +303,7 @@
             <mxPoint x="0" y="-16" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="e4a" edge="1" parent="1" source="stream" target="bc" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;4&lt;/b&gt; stream, filtered: JOB#, CLIP#, POST#, LEARNING#, WEEK#">
+        <mxCell id="e4a" edge="1" parent="1" source="stream" target="bc" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;4&lt;/b&gt; stream, filtered: JOB#, CLIP#, POST#, LEARNING#, WEEK#, …; &lt;b&gt;13&lt;/b&gt; CAMPAIGN#, CRCONN, CRSUB#, CRMONEY">
           <mxGeometry x="0.3" y="0" relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="1670" y="908" />
@@ -407,7 +407,7 @@
         <mxCell id="roles" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;fillColor=#DD344C;" value=" " vertex="1">
           <mxGeometry x="1160" y="2082" width="56" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="roles_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Runtime IAM roles&lt;/b&gt;&lt;br&gt;one per Lambda (9) + the agent runtime; least privilege; only api, hooks, clip-flow and stats reach &lt;code&gt;cf-prod/platforms/*&lt;/code&gt;" vertex="1">
+        <mxCell id="roles_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Runtime IAM roles&lt;/b&gt;&lt;br&gt;one per Lambda + the agent runtime; least privilege; api, hooks, clip-flow, stats and money reach &lt;code&gt;cf-prod/platforms/*&lt;/code&gt;; &lt;code&gt;cf-prod-campaigns&lt;/code&gt; has no secret access" vertex="1">
           <mxGeometry x="1080" y="2142" width="240" height="100" as="geometry" />
         </mxCell>
         <mxCell id="apigwrole" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;fillColor=#DD344C;" value=" " vertex="1">
@@ -487,7 +487,7 @@
         <mxCell id="stats" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
           <mxGeometry x="1242" y="1640" width="56" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="stats_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-stats (Lambda)&lt;/b&gt;&lt;br&gt;&lt;b&gt;8&lt;/b&gt; poller + manual refresh: due posts from gsi2, reserve the platform budget, fetch in batches, write metrics + STAT#; 256 MB, 300 s, retries 0" vertex="1">
+        <mxCell id="stats_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-stats (Lambda)&lt;/b&gt;&lt;br&gt;&lt;b&gt;8&lt;/b&gt; poller + manual refresh: due posts from gsi2, reserve the platform budget, fetch in batches, write metrics + STAT#; &lt;b&gt;13&lt;/b&gt; then the Content Rewards tick (membership, reviews, views, money); 256 MB, 300 s, retries 0" vertex="1">
           <mxGeometry x="1140" y="1700" width="250" height="100" as="geometry" />
         </mxCell>
         <mxCell id="learn" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
@@ -578,7 +578,7 @@
         <mxCell id="sm" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.secrets_manager;fillColor=#DD344C;" value=" " vertex="1">
           <mxGeometry x="1847" y="1360" width="56" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="sm_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Secrets Manager&lt;/b&gt;&lt;br&gt;&lt;code&gt;cf-prod/platforms/*&lt;/code&gt;: app keys + tokens (runtime); &lt;code&gt;cf-prod/oauth/state-key&lt;/code&gt; (write-only)" vertex="1">
+        <mxCell id="sm_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Secrets Manager&lt;/b&gt;&lt;br&gt;&lt;code&gt;cf-prod/platforms/*&lt;/code&gt;: app keys + tokens (runtime), &lt;b&gt;13&lt;/b&gt; incl. &lt;code&gt;contentrewards/{app,token}&lt;/code&gt;; &lt;code&gt;cf-prod/oauth/state-key&lt;/code&gt; (write-only)" vertex="1">
           <mxGeometry x="1800" y="1422" width="155" height="110" as="geometry" />
         </mxCell>
         <mxCell id="e10a" edge="1" parent="1" source="hooks" target="sm" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.8;entryDx=0;entryDy=0;" value="&lt;b&gt;10&lt;/b&gt; state key; write tokens">
@@ -657,6 +657,73 @@
         </mxCell>
         <mxCell id="e12c" edge="1" parent="1" source="ask" target="web" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;" value="search / fetch">
           <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1158" y="100" /><mxPoint x="2180" y="100" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="cr_door" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;fillColor=none;dashed=0;" value="&lt;b&gt;13 Sign-in door&lt;/b&gt; (Mac app): 127.0.0.1 only, ports 47811–47815, open 5 min, one answer; checks Host and state; hands the one-time code to the app page; never sees a token" vertex="1">
+          <mxGeometry x="22" y="1010" width="140" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="cr_id" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;fillColor=none;dashed=0;" value="&lt;b&gt;13 Content Rewards sign-in&lt;/b&gt; (system browser)&lt;br&gt;&lt;code&gt;id.contentrewards.com/oauth2/authorize&lt;/code&gt;: sign in, allow; PKCE S256, signed state; returns only to &lt;code&gt;http://127.0.0.1:{port}/&lt;/code&gt;" vertex="1">
+          <mxGeometry x="330" y="1030" width="240" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="cr_hosts" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;fillColor=none;dashed=0;" value="&lt;b&gt;13 Content Rewards (outside AWS)&lt;/b&gt;&lt;br&gt;&lt;code&gt;id.contentrewards.com&lt;/code&gt;: register, token, refresh (single use, rotating), revoke&lt;br&gt;&lt;code&gt;mcp.contentrewards.com/mcp&lt;/code&gt;: MCP, Api-Version 2026-10-01, never an Origin header&lt;br&gt;&lt;code&gt;contentrewards.com&lt;/code&gt; public campaign JSON: only when the owner acts" vertex="1">
+          <mxGeometry x="2442" y="1345" width="290" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="cr_camp" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
+          <mxGeometry x="2442" y="1560" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="cr_camp_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value='&lt;b style="font-size:11px"&gt;cf-prod-campaigns (Lambda)&lt;/b&gt;&lt;br&gt;async only, from api and stats: rules from the brief (Converse, checked by code), the logo from a Drive or Dropbox link, the brand picture; writes CAMPAIGN# and &lt;code&gt;campaigns/*&lt;/code&gt;; &lt;b&gt;no secrets, no Content Rewards call&lt;/b&gt;; 512 MB, 120 s' vertex="1">
+          <mxGeometry x="2506" y="1548" width="228" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="hw13" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;13. Content Rewards campaigns.&lt;/b&gt; Once, in the Mac app, the owner taps Connect: a one-shot door on 127.0.0.1 catches Content Rewards' sign-in code and the page posts it to &lt;code&gt;cf-prod-api&lt;/code&gt;, which keeps the token in Secrets Manager. A pasted campaign link becomes a CAMPAIGN# item; &lt;code&gt;cf-prod-campaigns&lt;/code&gt; reads its rules. The clip flow sends each campaign post within 25 minutes; the stats tick follows membership, reviews and money. When it can't send, the owner gets &quot;Send this to Content Rewards now&quot;." vertex="1">
+          <mxGeometry x="2820" y="1340" width="520" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="e13a" edge="1" parent="1" source="desktop" target="cr_id" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.3;entryDx=0;entryDy=0;" value="&lt;b&gt;13&lt;/b&gt; open in the system browser">
+          <mxGeometry x="0.2" y="0" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13b" edge="1" parent="1" source="cr_id" target="cr_door" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=0;exitX=0;exitY=0.85;exitDx=0;exitDy=0;entryX=1;entryY=0.65;entryDx=0;entryDy=0;" value="&lt;b&gt;13&lt;/b&gt; 302 ?code&amp;amp;state">
+          <mxGeometry x="0" y="0" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13c" edge="1" parent="1" source="cr_door" target="desktop" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=0;exitY=0.15;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="20" y="1032" />
+              <mxPoint x="20" y="892" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13d" edge="1" parent="1" source="api" target="cr_hosts" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=0;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0.27;entryY=1;entryDx=0;entryDy=0;" value="">
+          <mxGeometry x="0" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1520" y="414" />
+              <mxPoint x="1520" y="1538" />
+              <mxPoint x="2520" y="1538" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13e" edge="1" parent="1" source="stats" target="cr_hosts" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=0;exitX=1;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.73;entryDx=0;entryDy=0;" value="&lt;b&gt;13&lt;/b&gt; tick: membership, reviews, views, money">
+          <mxGeometry x="-0.45" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1330" y="1625" />
+              <mxPoint x="2425" y="1625" />
+              <mxPoint x="2425" y="1440" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13f" edge="1" parent="1" source="clf" target="cr_hosts" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=0;exitX=1;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.27;entryDx=0;entryDy=0;" value="&lt;b&gt;13&lt;/b&gt; cr-send-{platform}: create_my_submission, ≤ 25 min after posting">
+          <mxGeometry x="-0.35" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2425" y="1110" />
+              <mxPoint x="2425" y="1380" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13g" edge="1" parent="1" source="api" target="cr_camp" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=0;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" value="&lt;b&gt;13&lt;/b&gt; Connect, campaigns, Check now; async: rules, logo">
+          <mxGeometry x="0.75" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1520" y="414" />
+              <mxPoint x="1520" y="1538" />
+              <mxPoint x="2470" y="1538" />
+            </Array>
+          </mxGeometry>
         </mxCell>
       </root>
     </mxGraphModel>

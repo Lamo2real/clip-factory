@@ -601,7 +601,12 @@ publisher, scheduler and perf-check are removed.
   reads posts; harder to audit). *SSM Parameter Store SecureStrings* (cheaper, but no `CreateSecret`-style lifecycle,
   lower throughput limits, and 4 KB values). *State in a cookie* (the callback is on another domain than the app).
   *An unsigned random state only in DynamoDB* (works, but a signature lets the callback reject junk without a read).
-- **Consequences.** At most about 16 secrets at $0.40 a month each. Only `cf-prod-api`, `cf-prod-hooks`,
+- **Consequences.** At most about 22 secrets in all at $0.40 a month each, about $9 (about 16 when this was decided):
+  two made by Terraform (the state key and the push key `cf-prod/notify/vapid`); 19 made at runtime by the app (an
+  app and a token secret for each of the five platforms, the short-lived pending choice of Instagram and Facebook,
+  Content Rewards' app and token, the four badge keys `cf-prod/platforms/{twitch/app, kick/app, youtube/readkey,
+  twitch/eventsub}` and Ask's search key); and the optional YouTube proxy the owner may add by hand. Only
+  `cf-prod-api`, `cf-prod-hooks`,
   `cf-prod-clip-flow` and `cf-prod-stats` may touch the `cf-prod/platforms/*` prefix, and the last two may write only
   the token secrets (`cf-prod/platforms/*/token-*`) ([SECURITY.md](SECURITY.md#platform-keys-and-tokens)). A lost race on a rotating refresh token cannot strand the
   account. Rotating the state key ends Connects that are in flight, nothing else.
@@ -1130,6 +1135,10 @@ logs its token counts (`bedrock.usage`), and this table is to be corrected from 
   counts need a TikTok review of `user.info.stats`; 30-day views need 30 days of snapshots. Google shows an
   "unverified app" screen for the monetary scope. The YouTube API policy's storage limits are not yet confirmed, so
   nothing is deleted automatically except on an explicit YouTube Disconnect (§25.6, §25.8).
+- **Amended by [ADR-64](#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner)
+  (2026-11-21).** Two APIs do report money sent toward the bank: AdSense `payments` (YouTube) and Whop `payouts`
+  (Content Rewards' money after Whop). They show as "Sent to your bank by Google/Whop", never "received" or "in your
+  bank"; the other places still link to their payout pages, and typed-in money stays forbidden.
 
 ## ADR-48 Ask pictures go inline, are read once into words, and are never stored
 
@@ -1544,7 +1553,241 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
   replay. The chat box finder can miss odd overlays (then there is no chat, which is safe). Bedrock cost under $0.05
   a job; the image grows by numpy. No infrastructure or owner data change.
 
-## ADR-62 New built-in skill parts are offered to the owner's copy, never written into it
+## ADR-62 Content Rewards: the official sign-in through the desktop app's loopback door, sending from the cloud, a reminder when it can't
+
+- **Context.** The owner joins paid clipping campaigns on Content Rewards (CR) and wants Clip Factory to follow each
+  campaign's rules and send every clip so it can earn, in 3 steps per campaign (5 at most), kid-proof from setup to
+  getting paid. A post earns only if it is sent within 30 minutes of going live, from an account linked inside CR,
+  and only once, to one campaign. The local app tried this with browser automation in a signed-in Chrome: 9 Shorts
+  posted on an $8,500 campaign, 0 of 7 links sent (a declined application it could not read, a pop-up over the page,
+  TikTok drafts with no public link). Whop's terms ban scrapers and CR's older clipper terms banned automated
+  posting. Since October 2026 CR has an official MCP server with a person's OAuth sign-in (a pilot) whose
+  `create_my_submission` sends your own post "the same as the creators app", but its OAuth server only takes
+  `http://localhost` / `127.0.0.1` redirects (no https), its refresh token is single use and rotates (a reuse more
+  than a few seconds later ends the connection), it lasts 30 days unused and 90 days at most, and any request with an
+  `Origin` header gets 403.
+- **Options.** (1) Browser automation of contentrewards.com (the local app's way): breaks on the first pop-up, can't
+  tell a declined application, against Whop's terms. (2) The undocumented public JSON for everything: read only, no
+  way to submit, robots.txt disallows `/api/` for crawlers. (3) CR's REST API: brand and agency keys only, not for a
+  clipper. (4) The official MCP sign-in, with the redirect landing on a one-shot `127.0.0.1` listener in the owner's
+  desktop app, the code exchanged and every token kept by the cloud, and every MCP call made by Lambda. (5) The same
+  sign-in run entirely on the Mac (tokens and calls in the desktop app): phone uploads could not send while the Mac
+  sleeps, and the 30-minute window would depend on the Mac being on. (6) No sign-in: after each post, remind the
+  owner to paste the link himself.
+- **Decision.** (CONTRACTS §38) Option 4 with option 6 as the fallback. Clip Factory registers itself with CR (RFC
+  7591, `client_name` "Clip Factory", five fixed loopback redirects `http://127.0.0.1:47811–47815/`, no secret); the
+  Mac app's narrow `cr_connect_*` commands (app origin only; macOS only, Windows answers `unsupported`) open the door
+  for at most 5 minutes, open CR's sign-in in the system browser, take only `?code&state` (+ `iss`; the state must
+  match the URL it opened), show "Done, go back to Clip Factory" and hand the code to its own page, which posts it to
+  the API at once (the code lives 60 s). The API exchanges it with PKCE S256 (the verifier derived from the signed
+  state, never stored) and keeps the token only in Secrets Manager (`cf-prod/platforms/contentrewards/token`, created
+  at runtime under the existing prefix and grants). Exactly one process ever uses a refresh token: the §17.6 lease
+  on `CRCONN`, taken only with 20 s of Lambda left, an immediate single retry of the same token when an answer is
+  lost, the secret read by the `VersionId` recorded on `CRCONN` (never a stale copy), put-only writes (a refresh can
+  never re-create a disconnected secret), and Connect and Disconnect under the same lease. The clip flow sends each
+  campaign post right after it is live and public (`idempotency_key` = the post id, frozen with the URL and campaign
+  id on the first try), retries every minute until 25 minutes after posting, then stops; these steps never fail the
+  clip flow. `cf-prod-stats` follows membership, reviews, views, proof reminders and money on its 15-minute tick
+  (money paged to the end with a watermark, so a total is always CR's whole number). When sending is not possible (no
+  sign-in, the pilot refused the write scope, an older campaign closed to apps, an error that isn't the owner's, or
+  the 25 minutes ran out) the owner gets a notification "Send this to Content Rewards now (N min left)" that opens the
+  clip with one "Copy and open" button. No browser automation anywhere; the public campaign JSON is read only when
+  the owner acts (add, Check now, opening a stale card, a job's start), never on a schedule, rate-limited and cached.
+  Claude turns the brief into rules (the local app's RULES_SCHEMA, ported) in `cf-prod-campaigns`, a Lambda with no
+  secret access; code checks every field (verbatim from the brief for anything that reaches a caption, the screen or
+  a link; fixed disclosure words; caps on tags; CR's own toggles can only add stops). Pay, budget, status and
+  platforms come only from CR's own fields; pure-code gates (the local `ruleCheck.js`) decide the stops. Campaign
+  clips go up public, never made for kids, with paid partnership on where the platform's API has it, the disclosure
+  ("#Ad") first in the caption, the required tags, "Paid partnership" on screen for 3 seconds and the logo in the
+  band above the picture. CR is a separate connection, never a sixth `Platform`, and money from CR is shown only as CR
+  reports it (§25 extended; "paid" is allowed only next to CR's paid payouts). The whole feature ships switched off
+  (`content_rewards_enabled = false`) and is turned on by one line once every part has merged (done: the switch PR
+  #88, 21 Nov 2026, so it is on).
+- **Consequences.** The owner signs in on the Mac once and again at least every 90 days (a week's warning); after
+  that everything runs in the cloud, so a phone upload is sent too. CR's pilot may refuse the write scope at first:
+  then Clip Factory reads campaigns and money and reminds him after each post (and every 3 days to try Connect
+  again), and the setup card offers the ready email to CR support; if CR refuses apps entirely he says "It says
+  Submit clip" and pastes the rules once per campaign. The alpha API can change: the client tolerates unknown fields
+  and values, a daily keep-alive refresh shows breakage early, and unexpected errors go to CR through
+  `send_feedback`. Previews of not-yet-joined campaigns can be up to an owner action old (the card says "as of").
+  TikTok campaign clips wait for TikTok's audit (private posts can't earn). Instagram and Facebook carry the
+  disclosure in the caption and on the video only. The existing platform-secret grants are wider than CR needs
+  (`cf-prod-money` and `cf-prod-hooks` can reach the CR token; written down in SECURITY.md). Additive only: new sort
+  keys (`CRCONN`, `CRSTATE#`, `CAMPAIGN#`, `CRSUB#`, `CRMONEY`, `CROWNERS`), new attributes, a new media prefix
+  `campaigns/`, runtime secrets, one new Lambda `cf-prod-campaigns`, two widened stream filters; nothing that holds
+  the owner's data is replaced. One signed desktop release ("Restart now").
+
+## ADR-63 Content Rewards follow-ups: one fit check in the API, a new copy instead of turning a normal clip into a campaign clip, one 30-day total that includes Content Rewards
+
+- **Context.** After approving §38 the owner asked (2026-11-21) for three things: the Connect steps checked so they are
+  very simple and in time order, with a pleasant choice between campaign clips and the normal clips he makes today;
+  all his money from every place, Content Rewards included, in one place; and to know before uploading whether a clip
+  can earn on a campaign he joined, so he never sends one that can't. Content Rewards (CR) checks a post when it is
+  sent: from an account added inside CR, never sent before, live for less than 30 minutes; a post belongs to one
+  campaign forever; rejections rest on the written brief; the same final clip in two campaigns is rejected as a
+  reused edit; CR's disclosure page wants "#Ad" first and a text on the video at the start. The brief is free text
+  that Claude reads into `CampaignRules`, with an `uncertain` list. Of the five platforms only YouTube (and Facebook,
+  once checked) report money to apps; TikTok, Instagram and X report none; CR reports its balance and payouts but not
+  what left the balance for Whop.
+- **Options.** Where the fit runs: (1) in the web (fast, but Confirm could not trust it, and the rules would live in two
+  languages); (2) in the agent at render time (it knows the video, but not later changes: membership, budget, places,
+  posts); (3) one pure function in the API over stored items, computed on every read, used by the Review card, Confirm,
+  Try again and the copy route, with the web re-checking only what changes while he types or taps; (4) results stored
+  on the clip (stale the moment a campaign or a connection changes). A normal clip that could earn: (a) turn it into a
+  campaign clip in place (posts with #Ad and the paid switch), which misses "Paid partnership" on the video and the
+  logo that briefs and CR's disclosure page ask for, so it would be rejected; (b) a new campaign clip of the same moment,
+  re-rendered with the campaign's rules, the original left as it is; (c) only "Make new clips for this campaign" (new
+  moments). A video from a channel whose name doesn't match the campaign's: (x) block it (the match is by name and can
+  be wrong, and §38.13 lets the owner decide); (y) "I couldn't check", with "no" only for exact facts (a link outside
+  the campaign's own videos, a ruled-out site). Money: (i) add CR's numbers into the MRR cards (they are platform
+  estimates by day; CR's are payouts in rounds); (ii) keep CR only in its own part (§38.7: two places to look); (iii)
+  one "All your money" card with one 30-day period: each platform's reported rows in those days and CR's paid payouts
+  dated in those days, one total per currency, and plain "Not available from …" rows.
+- **Decision.** (CONTRACTS §39) Option 3: `contentrewards/fit.py`, pure, from stored items only (never CR, the public
+  JSON or the network), each rule an item with a state (`ok`, `fix`, `remake`, `todo`, `no`, `check`, `note`), a verdict
+  (`fits`, `fixable`, `wait`, `doesnt_fit`, `cant_tell`) and `canUpload`/`canRemake`; uncertain rules are "I couldn't
+  check", never a pass; a held, paused or re-read campaign is "Wait a little", not "can't earn"; Confirm and Try again
+  refuse a campaign clip with a `no`, `remake` or `todo` item, with the item's words, and a campaign post waiting for a
+  reconnect is not released by itself (it waits for Post now and the same check). Option (y) for the channel. Option
+  (b) with (c) as its fallback: `POST …/campaigns/{id}/remake` reserves the copy on the original clip first (a double
+  tap makes one), then makes a one-clip campaign job from the same source and moment (A's campaign checks, rules
+  snapshot and logo copy), cut from the original's kept video when it is there; the agent skips finding moments for
+  it, and a moment can earn on one campaign only; the copy waits behind `cr_remake_enabled` (default off) until the
+  agent's part has merged (done: its switch PR #93 turned it on). Option (iii): `GET /v1/money/everywhere`, pure on the server, CR's paid payouts kept by day
+  (`CRMONEY.paidByDay`, filled once for older owners by a day scan that never changes the paid total); the card is the
+  first on the Money page with the biggest number, and the MRR cards stay platform-only and say so. The normal way is
+  frozen: Home's form at `/` and the Review card of a clip with no campaign keep origin/main's controls and taps (5 to
+  upload), enforced by click-count tests; the campaign way always starts from a campaign and is named "Make campaign
+  clips". The Connect steps keep their order (account, accounts added inside CR, Connect), each with its answer button
+  right under its Open button, a "Yes" shortcut for someone already set up, and a way back to the page he came from.
+- **Consequences.** The owner sees on every Review card whether a campaign clip can earn and fixes what Clip Factory can
+  fix in one tap (tags and #Ad are put back by the upload anyway); a clip that can't earn can't go up the campaign way.
+  A normal clip that could earn gets one quiet offer and a new copy in about 3 minutes, right below it on Review; he is
+  told to upload the copy (both on one channel could look like reused content, §39.6). Language and source checks are
+  only as good as the stored source fields (`sourceLanguage`, `channelKeys`); unknown or unmatched is "I couldn't
+  check", so a clip from a wrong channel can still be sent and turned down. "All your money" adds an estimate
+  (YouTube) and paid money (CR) over the same days, tagged as such, never across currencies; what left CR for Whop
+  stays "not available". A brief that asks for its own overlay becomes a hard stop (`overlay_needed`). Additive only:
+  new attributes on `JOB#`, `CLIP#` and `CRMONEY`, one api env var; no table, index, bucket, secret or Lambda changes.
+
+## ADR-64 Get paid: payout records count as "sent to your bank", statuses say how they are known, the bank waits for the owner
+
+- **Context.** The owner asked (2026-11-21) whether Clip Factory shows exactly what he earns on YouTube, TikTok,
+  Instagram, Facebook, X and Content Rewards; for a step-by-step payout setup per place, "the same system" as Set up
+  posting; for a status per place that tells him money can reach him, or that it can't although he is allowed to
+  earn; and for the exact total that reached his bank accounts, per place. He lives in Sweden. Research (273 claims,
+  skeptic-checked) found: YouTube's AdSense Management API (`adsense.readonly`) reports the account state, holds and
+  every payment Google sent, but nothing about the bank, tax, ID or PIN; Whop's API, with a user sign-in, reports
+  payout methods, the ID check and payouts Whop sent; Meta, TikTok and X report no payout status or payouts at all
+  (X pays through Stripe Express, which only X can read); TikTok's Creator Rewards isn't open in Sweden; X's Original
+  Content Rewards excludes automated and reuploaded posts; Meta's earnings metrics are undocumented in unit and
+  currency. Only a booked bank credit proves arrival, and the only free self-serve bank route for a private person in
+  Sweden (Enable Banking, restricted mode) has a grey area in its terms. ADR-47 says "payouts are only on the
+  platform's payout page" and forbids "paid" wording and typed-in money.
+- **Options.** Payouts: (a) keep ADR-47 as it is, links only; (b) show the payments AdSense and Whop report, worded
+  as what they are, "Sent to your bank by Google/Whop"; (c) also work out "sent" as paid minus balance (a
+  calculation, refused). The places with no API: (i) let him type his earnings and payouts, labelled "You typed
+  this"; (ii) keep "Not available from X" with where to look, and let the bank show what really arrived. Statuses: (x)
+  ticks only; (y) signals only (four places would say nothing); (z) signals where they exist, his ticks elsewhere,
+  each labelled with who said it, signals beating ticks. Where: inside Set up posting (it would change the five-row
+  to-do list and the "n of 5" ring) or its own Get paid area plus a card on Money. Storing ticks: `SETUP#.stepsDone`
+  (it would move the to-do rows) or a new `GETPAID` item. The bank: Enable Banking, a monthly bank file, payout emails,
+  or nothing new.
+- **Decision.** (CONTRACTS §40) (b): AdSense `payments` and Whop `completed` payouts are shown as "Sent to your bank
+  by Google" / "by Whop", tagged "YouTube says" / "Whop says", with when they should arrive; "Reached your bank" is
+  kept for bank-booked credits only; ADR-47's ban on "paid", "received" and "actual" next to an amount stays. (ii):
+  no typed-in money anywhere; Instagram, TikTok, X and Facebook say "Not available" with where to look; Facebook's
+  estimate stays "coming soon". (z): one pure status function on the server over stored items, eight statuses
+  (on hold, not allowed yet, can get paid ✓, not set up, checking, can get paid (you said it's done), Clip Factory
+  can't check, not started), never "Live" without a signal or a tick, a hold first, YouTube's own "not in the Partner
+  Program" above his ticks. "Not set up" is red only when a signal says a payout part is missing ("Not set up
+  (YouTube says)"); a missing tick gives the calmer "Not set up yet", because a creator who is already paid but hasn't
+  ticked must not be told money can't reach him. A payout reading counts only when it is fresh (connected, first read
+  done, checked within 48 hours), so a stopped or failing reading never keeps saying "YouTube says". The place page's
+  only vermilion is the one next step, and a step that costs money (X Premium) is never it. A Get paid branch in Settings › Posting with one card and one step page per place, in the setup
+  cards' look, and a status-only card on Money; Content Rewards reuses §38.7's steps and ticks; Get paid never joins
+  the setup ring or the to-do list; ticks live on a new `GETPAID` item. Two new, separate, optional read-only
+  connections: "Allow payment reading" for AdSense (its own token, because the AdSense Google account can be another
+  one; never merged into the YouTube connection) and "Connect Whop" through the owner's own Whop app (a public PKCE
+  client; rotating refresh tokens under a lease as Content Rewards' are; behind `whop_connect_enabled`, default off).
+  Both are read by `cf-prod-money`'s daily run and Check now; tokens in Secrets Manager under `cf-prod/platforms/*`,
+  made at runtime; no IAM, table or Lambda change. "Stop payment reading" deletes Clip Factory's AdSense token and
+  never calls Google's revoke, because Google's revoke ends every scope the user gave the app and would also end the
+  YouTube connection when it is the same Google account. The bank part is defined but not built: a source-agnostic deposit
+  shape, matching by payout records, learned payer names and his taps (never a typed number), least data, and the
+  consent states, waiting for the owner to choose Enable Banking or a bank file (or nothing). Facts fixed in
+  `config/monetization.json`: X's programme is Original Content Rewards in Creator Studio, Creator Rewards is not open
+  in Sweden, YouTube's 2027 rules cite answer 12843009; and X's `subscription_type` "None" now means "X didn't share
+  this", not "no Premium" (X's field doesn't know its newer plans).
+- **Consequences.** YouTube can show "Can get paid ✓ (YouTube says)" only after Google's first payment, and a hold the
+  day AdSense reports it; before that, and on every other platform, the status rests on his "I did this" and says so.
+  "Sent to your bank" can differ from what his bank books (fees, conversion, returns, days in transit), and Whop's
+  total covers all his Whop money, not only Content Rewards; the words say both. X's card warns that clips Clip
+  Factory posts probably won't earn there. Whop's part depends on Whop letting a personal user make an app and read
+  payouts (not live-tested); until the switch is on, Content Rewards' "sent" stays "not available". "Reached your
+  bank" stays unknown until the owner picks a bank source. Additive only: new sort keys `GETPAID`, `PAYCONN#`,
+  `PAYSTATE#`, `PAYOUT#`, new attributes, two stream filters updated in place, one api env var; nothing that holds his
+  connections or saved data changes.
+
+## ADR-65 Campaign finder: Content Rewards' public pages read politely, joining stays the owner's own tap
+
+- **Context.** The owner asked (2026-11-21) whether he can find campaigns and join them by requirements he sets, once
+  Content Rewards (CR) lets Clip Factory sign in. CR's official MCP server (23 tools, API version `2026-10-01`) lists
+  the campaigns he joined, sends his posts and reads his money, but has **no tool to browse Discover and none to join or
+  apply**; its REST API is for brands. Joining also accepts that campaign's terms, a choice only he can make. CR's
+  robots.txt allows crawlers everywhere except `/api/…` and a few account pages, and names a `sitemap.xml` that lists
+  every public campaign page with a `lastmod` (which is only the date the campaign was first listed: it never moves on
+  edits or status changes); each campaign page is server-rendered and carries the same campaign object as the
+  undocumented `/api/campaign/campaigns/{uuid}` JSON. The full Discover list comes only from
+  `/api/campaign/campaigns/discover` in the browser. CR's Terms say nothing on reading public pages; Whop's Terms forbid
+  automated access to Whop's own service, creators agree to Whop's terms through CR's (Creator Terms 3.2), and Whop's
+  guidelines can hold back the payouts of accounts that use bots, scrapers or crawlers; ADR-62 already rules out browser
+  automation and reading `/api/…` on a schedule.
+- **Options.** (1) Drive CR's site with a robot to search and join: against Whop's no-bots terms, it breaks on the first
+  pop-up, and it would accept a brand's terms for him. (2) Wait for an official search-and-join tool: nothing for him
+  today. (3) Read the `/api/…` Discover listing on a schedule: one request gives 50 campaigns, but robots.txt asks
+  crawlers not to, and ADR-62 says no. (4) Read only what robots.txt allows (the sitemap, then each campaign page), a
+  few times a day, one page at a time, capped, cached and backed off, from a Lambda with no secret; match his
+  requirements in pure code; he joins on CR with his own tap; Clip Factory adds the campaign in one tap, or by itself
+  once its sign-in sees the join in `list_my_campaigns`. (5) Only a link to CR's filtered Discover page: no match on his
+  places, money left or what Clip Factory can make, and nothing to tell him when a new one appears.
+- **Decision.** (CONTRACTS §41) Option 4, with option 5 kept as "Look on Content Rewards yourself" and option 2 asked
+  for: a signed-in owner can send CR one fixed feature request through MCP `send_feedback` with one tap. The finder
+  reads `robots.txt` once a day and honours it on every request, `sitemap.xml` once a look and at most 40 campaign pages
+  a look (at least 1 s apart, 100 s at most), every 6 hours plus a rate-limited "Look again now", never more than 6
+  reading looks a day (counted when a look starts, so a crash can't cause extra looks), with a 429/503/403 backoff and a
+  `blocked` state; it re-reads live campaigns every 2 days and the rest every 14 (the sitemap's `lastmod` can't say what
+  changed); it never reads `/api/…`, Discover, group, invite or Whop pages, images or other creators' data. Every read
+  is anonymous and can't be linked to his CR or Whop account: only from AWS, never his Mac, the desktop app or his
+  browser, a shared cache, `User-Agent: ClipFactory/1`, no cookies, no account id; if CR or Whop asks Clip Factory to
+  stop, the switch goes off the same day. It runs as a new action of `cf-prod-campaigns` (no secret, no CR API call),
+  started by the existing `cf-prod-stats` tick: no new Lambda, schedule, secret or grant. One pure function decides each
+  match from CR's public fields only (pay per 1,000 views with geo rates, places, money left, open or apply, category,
+  language) and refuses only what the public page shows (drafts first, its own sound, including a description that says
+  a sound must be used, its own overlay, slideshows, almost no money left); a brand that counts only some countries'
+  viewers gets a heads-up; whatever the page can't tell is said as "I can't tell…", never as a pass. Its defaults are
+  chosen for him: at least $1.00 per 1,000 views, the places he set up, at least a quarter of the money left (a percent,
+  so big campaigns with thousands of dollars left stay in), open to join. Rates and money left are CR's own numbers,
+  tagged so; nothing estimates what a clip would earn. At most one notification a day, and never right after he asked.
+  Joining stays his tap on **Join Campaign**, and the page says so plainly ("You join each campaign yourself on Content
+  Rewards."); "I joined: add it" uses §38's add with the link it already has, and while Clip Factory can't read an open
+  campaign's rules the same step takes his pasted rules; once signed in, a listed campaign he opened from the finder in
+  the last 48 hours is added by itself (never one he removed) and its "You're in!" comes as for any campaign. Every
+  match keeps its "Open on Content Rewards" button; only the open one is vermilion. It ships behind `cr_finder_enabled`
+  (default off) and is turned on by one line once every part has merged.
+- **Consequences.** From the Find page to making clips: 2 taps of his own once signed in (open it, then "Make clips for
+  this campaign" after the rules are read by themselves) plus CR's **Join Campaign**; 4 today, before CR's pilot yes
+  (open it, paste the rules he copied on CR, "I joined: add it", "Make clips for this campaign") plus **Join Campaign**
+  and the copy on CR; no search and no copied link. Open campaigns still hide their rules until he joins, so a match can
+  later meet a §38.4 stop; Clip Factory reads the rules right after the join and the fit check (§39.3) guards every
+  upload. The first full look takes 3 to 5 days (all 766 campaign pages at 40 a look, newest listings first); money left
+  can be up to 12 hours old ("as of" shown). The finder depends on CR's page format and on CR keeping these pages open
+  to crawlers: a format change shows "I can't read Content Rewards' campaign pages right now", a robots.txt change or a
+  block stops it by itself, and "Look on Content Rewards yourself" always works. Additive only: the owner item `CRFIND`,
+  the shared cache under pk `CRPUBLIC` (with TTL), one env var on three Lambdas and one stream-filter prefix; nothing
+  that holds the owner's data is replaced or destroyed.
+
+## ADR-67 New built-in skill parts are offered to the owner's copy, never written into it
 
 - **Context.** §37 added a Chat block to the built-in `viral-clip-editing`. An owner who had made his own copy of that
   skill does not get it, and his rule is that his own edited text never changes without his say.
@@ -1552,7 +1795,7 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
   three-way merge of his copy with the new built-in: heavy, and still edits text he did not see. (4) Version each
   later part of a built-in, spot a copy that lacks one, offer it with a preview, add only that part on his tap, with
   an exact Undo, and meanwhile give every model call the built-in's part as a separate note.
-- **Decision.** (CONTRACTS §38) Option 4. One pure module, the same file in the API and the agent, finds copies by
+- **Decision.** (CONTRACTS §44) Option 4. One pure module, the same file in the API and the agent, finds copies by
   shared lines and places the part before "Skip these"; the item remembers what was added (for Undo) and Not now.
 - **Consequences.** Chat hype works before he taps Add. A heavily rewritten copy (under 30% of the built-in's lines)
   is not seen as a copy and gets no offer or note; the built-in itself is always in the block anyway (§18.1). Each

@@ -1,4 +1,4 @@
-"""New parts of a built-in skill, for the owner's own copy of it (docs/CONTRACTS.md §38).
+"""New parts of a built-in skill, for the owner's own copy of it (docs/CONTRACTS.md §44).
 
 The owner can upload or write his own version of a built-in skill (for example his copy of viral-clip-editing). When
 a built-in later gains a part (§37 added the Chat block), his copy does not have it. This module, pure and with no
@@ -9,7 +9,7 @@ imports from the package, finds that and adds the part without touching any of h
 * ``is_copy_of`` says whether an owner skill is a copy of a built-in (most of the built-in's lines are in it).
 * ``missing_sections`` lists the parts a copy lacks; ``insertion`` says where one goes and exactly what is added
   (his text stays byte for byte); ``remove_section`` takes exactly that addition out again (Undo).
-* ``skill_note`` is the small separate note every model call gets while his copy lacks a part (§38.4).
+* ``skill_note`` is the small separate note every model call gets while his copy lacks a part (§44.4).
 
 This file is the same, byte for byte, in ``api/src/clipfactory_api/skill_sections.py`` and
 ``agent/src/clipfactory_agent/skill_sections.py`` (a test checks it).
@@ -216,7 +216,7 @@ NOTE = (
 
 
 def skill_note(owner: str, missing: Missing) -> str:
-    """The small separate note that goes right after his skill in the skills block (§38.4). It only points at the
+    """The small separate note that goes right after his skill in the skills block (§44.4). It only points at the
     part: the built-in skill is in every model call already, so the part's text is not sent a second time."""
     s = missing.section
     words = NOTE.format(owner=owner, skill=s.skill, title=s.title, start=s.start)

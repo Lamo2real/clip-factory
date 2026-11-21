@@ -1,0 +1,131 @@
+{
+ "configuration": {
+  "application": {
+   "accountApproval": true,
+   "autoDeclineAfterDeadline": false,
+   "id": "1badb034-1204-4d7b-9338-74c1b3036b1c",
+   "reviewDeadline": "48h"
+  },
+  "budget": 850000,
+  "content": {
+   "contentCategories": [
+    {
+     "id": "gaming",
+     "name": "Gaming"
+    }
+   ],
+   "contentTypes": [
+    {
+     "id": "clipping",
+     "name": "Clipping"
+    }
+   ],
+   "guidelines": "Only clip the official FaZe Flank Invitational broadcast (twitch.tv/faze, twitch.tv/zoomaa) or the players' own POV streams\nKeep the FaZe Flank Invitational logo on screen for the whole clip, never over the action\nCaption must include @FaZeClan @ZooMaa @TheFlank #FaZeFlankInvitational, plus featured player and team handles when shown\n60%+ US audience required\nHook in the first second: open on the play, the pick or the reaction\nEvery clip must be an edit, no full VODs or unedited stream segments\nNever make FaZe, CDL teams or players look bad, no fake results, fake drama or misleading scores\nVertical 9:16, at least 7 seconds\nNo carousels, collab posts, politics or religion\nKeep every clip public for at least 3 months\nFull rules in the guidelines"
+  },
+  "creator": {
+   "creatorTypes": [
+    {
+     "id": "clipper",
+     "name": "Clipper"
+    }
+   ]
+  },
+  "display": {
+   "hiddenCreatorSubmissions": true,
+   "topPerformers": true
+  },
+  "payoutModel": [
+   {
+    "maxPayout": 35000,
+    "minPayout": 1000,
+    "platform": "tiktok",
+    "rate": 200
+   },
+   {
+    "maxPayout": 35000,
+    "minPayout": 1000,
+    "platform": "instagram",
+    "rate": 200
+   },
+   {
+    "maxPayout": 35000,
+    "minPayout": 1000,
+    "platform": "youtube",
+    "rate": 200
+   },
+   {
+    "maxPayout": 35000,
+    "minPayout": 1000,
+    "platform": "x",
+    "rate": 200
+   }
+  ],
+  "requirement": {
+   "brandLogo": false,
+   "draftCaptionRequired": false,
+   "faceOnCamera": false,
+   "linkInBio": false,
+   "oauthPlatforms": [
+    "tiktok",
+    "instagram"
+   ],
+   "oauthRequired": true,
+   "preApproval": false
+  },
+  "rules": {
+   "audio": {
+    "clearSpeech": false
+   },
+   "branding": {
+    "logoRequired": false
+   },
+   "content": {
+    "noExplicit": false
+   },
+   "faceOnCamera": false,
+   "reviewerOnly": [
+    "Only clip the official FaZe Flank Invitational broadcast (twitch.tv/faze, twitch.tv/zoomaa) or the players' own POV streams",
+    "Keep the FaZe Flank Invitational logo on screen for the whole clip, never over the action",
+    "Caption must include @FaZeClan @ZooMaa @TheFlank #FaZeFlankInvitational, plus featured player and team handles when shown",
+    "60%+ US audience required",
+    "Hook in the first second: open on the play, the pick or the reaction",
+    "Every clip must be an edit, no full VODs or unedited stream segments",
+    "Never make FaZe, CDL teams or players look bad, no fake results, fake drama or misleading scores",
+    "Vertical 9:16, at least 7 seconds",
+    "No carousels, collab posts, politics or religion",
+    "Keep every clip public for at least 3 months",
+    "Full rules in the guidelines"
+   ],
+   "sound": {
+    "keepOriginalAudio": false,
+    "mustUseProvided": false
+   },
+   "video": {
+    "wellLit": false
+   }
+  }
+ },
+ "description": "FaZe Flank Invitational (Call of Duty), live on Twitch Nov 10 to 12.\nClip the draft, clutch plays and reactions from the official broadcast only.\nFaZe Flank logo on every clip, required caption tags, 60%+ US audience.\n$2 CPM, up to $350 per clip. \nTop clippers get invited to our private team.",
+ "id": "200ea21b-be80-4db8-b552-8e32b148604e",
+ "metrics": {
+  "approvedSubmissionCount": 63,
+  "budgetProgressBps": 718,
+  "budgetSpentCents": 60992,
+  "creatorCount": 19,
+  "paidOutCents": 0,
+  "totalViews": 367644
+ },
+ "name": "$8,500 FaZe Tournament Clipping Campaign",
+ "organization": {
+  "logoUrl": "organizations/b5d86b5d-b3a3-5970-809c-81b92ccff73c/logo/b5d86b5d-b3a3-5970-809c-81b92ccff73c.d0df0baf62.png",
+  "name": "ClippedIn",
+  "profileHandle": "clippedin",
+  "verified": false
+ },
+ "organizationId": "b5d86b5d-b3a3-5970-809c-81b92ccff73c",
+ "private": false,
+ "requiresApplication": true,
+ "status": "active",
+ "statusReason": "funded",
+ "type": "cpm"
+}

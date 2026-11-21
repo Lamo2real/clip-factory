@@ -20,6 +20,9 @@ export type UploadOutcome =
   /** The clip can no longer be uploaded (thrown away, or gone). `message` is a sentence for the owner. */
   | { kind: "gone"; message: string };
 
+/** A flow start normally lands a moment after its Upload, Try again or release: one still pending after this is stuck. */
+export const START_GRACE_MS = 4000;
+
 /**
  * A clip that was uploaded but never started posting: confirmed with no posts. Tapping Upload again
  * (POST /confirm on a confirmed clip) finishes that work once the first attempt is a minute old.

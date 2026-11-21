@@ -1,4 +1,4 @@
-"""New parts of a built-in skill for the owner's own copy of it (docs/CONTRACTS.md §38): finding a copy that lacks
+"""New parts of a built-in skill for the owner's own copy of it (docs/CONTRACTS.md §44): finding a copy that lacks
 the Chat part, adding it without changing a word of his, Undo, Not now, and the note every model call gets."""
 
 from __future__ import annotations

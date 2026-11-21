@@ -1,0 +1,565 @@
+[
+ {
+  "name": "nothing changed",
+  "fit": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fits",
+    "headline": "Can earn on FaZe Clips",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "paid_switch", "state": "note", "text": "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.", "fix": null},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and Instagram. FaZe Clips pays for both.", "fix": null},
+     {"rule": "tags", "state": "ok", "text": "Every caption has #FaZe and @FaZeClan.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   },
+  "card": {"captions": {"youtubeTitle": "He did WHAT", "youtubeDescription": "#Ad The clutch of the year #FaZe @FaZeClan", "instagram": "#Ad The clutch of the year #FaZe @FaZeClan", "facebook": "#Ad The clutch of the year #FaZe @FaZeClan", "tiktok": "#Ad The clutch of the year #FaZe @FaZeClan", "x": "#Ad The clutch of the year #FaZe @FaZeClan"}, "chosen": null, "tiktok": null},
+  "expect": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fits",
+    "headline": "Can earn on FaZe Clips",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "paid_switch", "state": "note", "text": "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.", "fix": null},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and Instagram. FaZe Clips pays for both.", "fix": null},
+     {"rule": "tags", "state": "ok", "text": "Every caption has #FaZe and @FaZeClan.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   }
+ },
+ {
+  "name": "he deletes a tag on Instagram",
+  "fit": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fits",
+    "headline": "Can earn on FaZe Clips",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "paid_switch", "state": "note", "text": "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.", "fix": null},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and Instagram. FaZe Clips pays for both.", "fix": null},
+     {"rule": "tags", "state": "ok", "text": "Every caption has #FaZe and @FaZeClan.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   },
+  "card": {"captions": {"youtubeTitle": "He did WHAT", "youtubeDescription": "#Ad The clutch of the year #FaZe @FaZeClan", "instagram": "#Ad The clutch @FaZeClan", "facebook": "#Ad The clutch of the year #FaZe @FaZeClan", "tiktok": "#Ad The clutch of the year #FaZe @FaZeClan", "x": "#Ad The clutch of the year #FaZe @FaZeClan"}, "chosen": null, "tiktok": null},
+  "expect": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fits",
+    "headline": "Can earn on FaZe Clips",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "tags", "state": "fix", "text": "The Instagram words are missing #FaZe. I'll put it back when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "instagram"},
+     {"rule": "paid_switch", "state": "note", "text": "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.", "fix": null},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and Instagram. FaZe Clips pays for both.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   }
+ },
+ {
+  "name": "he moves #Ad to the end on Instagram and deletes everything on YouTube",
+  "fit": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fits",
+    "headline": "Can earn on FaZe Clips",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "paid_switch", "state": "note", "text": "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.", "fix": null},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and Instagram. FaZe Clips pays for both.", "fix": null},
+     {"rule": "tags", "state": "ok", "text": "Every caption has #FaZe and @FaZeClan.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   },
+  "card": {"captions": {"youtubeTitle": "He did WHAT", "youtubeDescription": "", "instagram": "The clutch of the year, unreal #FaZe @FaZeClan #Ad", "facebook": "#Ad The clutch of the year #FaZe @FaZeClan", "tiktok": "#Ad The clutch of the year #FaZe @FaZeClan", "x": "#Ad The clutch of the year #FaZe @FaZeClan"}, "chosen": null, "tiktok": null},
+  "expect": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fits",
+    "headline": "Can earn on FaZe Clips",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "tags", "state": "fix", "text": "The YouTube words are missing #FaZe and @FaZeClan. I'll put them back when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "youtube"},
+     {"rule": "ad", "state": "fix", "text": "#Ad isn't at the start of the YouTube words. I'll put it there when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "youtube"},
+     {"rule": "ad", "state": "fix", "text": "#Ad isn't at the start of the Instagram words. I'll put it there when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "instagram"},
+     {"rule": "paid_switch", "state": "note", "text": "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.", "fix": null},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and Instagram. FaZe Clips pays for both.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   }
+ },
+ {
+  "name": "he turns Instagram off",
+  "fit": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fits",
+    "headline": "Can earn on FaZe Clips",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "paid_switch", "state": "note", "text": "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.", "fix": null},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and Instagram. FaZe Clips pays for both.", "fix": null},
+     {"rule": "tags", "state": "ok", "text": "Every caption has #FaZe and @FaZeClan.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   },
+  "card": {"captions": {"youtubeTitle": "He did WHAT", "youtubeDescription": "#Ad The clutch of the year #FaZe @FaZeClan", "instagram": "#Ad The clutch of the year #FaZe @FaZeClan", "facebook": "#Ad The clutch of the year #FaZe @FaZeClan", "tiktok": "#Ad The clutch of the year #FaZe @FaZeClan", "x": "#Ad The clutch of the year #FaZe @FaZeClan"}, "chosen": ["youtube"], "tiktok": null},
+  "expect": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fits",
+    "headline": "Can earn on FaZe Clips",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "places", "state": "note", "text": "Instagram pays too. Turn it on to earn there as well.", "fix": null, "platform": "instagram"},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube. FaZe Clips pays for it.", "fix": null},
+     {"rule": "tags", "state": "ok", "text": "Every caption has #FaZe and @FaZeClan.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   }
+ },
+ {
+  "name": "he turns Instagram back on",
+  "fit": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fits",
+    "headline": "Can earn on FaZe Clips",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "places", "state": "note", "text": "Instagram pays too. Turn it on to earn there as well.", "fix": null, "platform": "instagram"},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube. FaZe Clips pays for it.", "fix": null},
+     {"rule": "tags", "state": "ok", "text": "Every caption has #FaZe and @FaZeClan.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   },
+  "card": {"captions": {"youtubeTitle": "He did WHAT", "youtubeDescription": "#Ad The clutch of the year #FaZe @FaZeClan", "instagram": "#Ad The clutch of the year #FaZe @FaZeClan", "facebook": "#Ad The clutch of the year #FaZe @FaZeClan", "tiktok": "#Ad The clutch of the year #FaZe @FaZeClan", "x": "#Ad The clutch of the year #FaZe @FaZeClan"}, "chosen": ["youtube", "instagram"], "tiktok": null},
+  "expect": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fits",
+    "headline": "Can earn on FaZe Clips",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "paid_switch", "state": "note", "text": "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.", "fix": null},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and Instagram. FaZe Clips pays for both.", "fix": null},
+     {"rule": "tags", "state": "ok", "text": "Every caption has #FaZe and @FaZeClan.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   }
+ },
+ {
+  "name": "he turns TikTok's Branded content off",
+  "fit": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fits",
+    "headline": "Can earn on FaZe Clips",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and TikTok. FaZe Clips pays for both.", "fix": null},
+     {"rule": "tags", "state": "ok", "text": "Every caption has #FaZe and @FaZeClan.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Branded content is on for TikTok.", "fix": null, "platform": "tiktok"},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "tiktok"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   },
+  "card": {"captions": {"youtubeTitle": "He did WHAT", "youtubeDescription": "#Ad The clutch of the year #FaZe @FaZeClan", "instagram": "#Ad The clutch of the year #FaZe @FaZeClan", "facebook": "#Ad The clutch of the year #FaZe @FaZeClan", "tiktok": "#Ad The clutch of the year #FaZe @FaZeClan", "x": "#Ad The clutch of the year #FaZe @FaZeClan"}, "chosen": ["youtube", "tiktok"], "tiktok": {"privacyLevel": "PUBLIC_TO_EVERYONE", "disableComment": false, "disableDuet": false, "disableStitch": false, "brandContent": false, "brandOrganic": false}},
+  "expect": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fixable",
+    "headline": "Almost ready for FaZe Clips",
+    "canUpload": false,
+    "canRemake": true,
+    "items": [
+     {"rule": "paid_switch", "state": "fix", "text": "Branded content is off on TikTok.", "fix": {"kind": "tiktok_branded", "label": "Turn on Branded content"}, "platform": "tiktok"},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and TikTok. FaZe Clips pays for both.", "fix": null},
+     {"rule": "tags", "state": "ok", "text": "Every caption has #FaZe and @FaZeClan.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "tiktok"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   }
+ },
+ {
+  "name": "he turns TikTok's Branded content on",
+  "fit": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fits",
+    "headline": "Can earn on FaZe Clips",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and TikTok. FaZe Clips pays for both.", "fix": null},
+     {"rule": "tags", "state": "ok", "text": "Every caption has #FaZe and @FaZeClan.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Branded content is on for TikTok.", "fix": null, "platform": "tiktok"},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "tiktok"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   },
+  "card": {"captions": {"youtubeTitle": "He did WHAT", "youtubeDescription": "#Ad The clutch of the year #FaZe @FaZeClan", "instagram": "#Ad The clutch of the year #FaZe @FaZeClan", "facebook": "#Ad The clutch of the year #FaZe @FaZeClan", "tiktok": "#Ad The clutch of the year #FaZe @FaZeClan", "x": "#Ad The clutch of the year #FaZe @FaZeClan"}, "chosen": ["youtube", "tiktok"], "tiktok": {"privacyLevel": "PUBLIC_TO_EVERYONE", "disableComment": false, "disableDuet": false, "disableStitch": false, "brandContent": true, "brandOrganic": false}},
+  "expect": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fits",
+    "headline": "Can earn on FaZe Clips",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and TikTok. FaZe Clips pays for both.", "fix": null},
+     {"rule": "tags", "state": "ok", "text": "Every caption has #FaZe and @FaZeClan.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Branded content is on for TikTok.", "fix": null, "platform": "tiktok"},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "tiktok"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   }
+ },
+ {
+  "name": "the brand's own disclosure and a phrase: the phrase deleted",
+  "fit": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fits",
+    "headline": "Can earn on FaZe Clips",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "tags", "state": "fix", "text": "The YouTube words are missing “Use code FAZE”. I'll put it back when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "youtube"},
+     {"rule": "tags", "state": "fix", "text": "The Instagram words are missing “Use code FAZE”. I'll put it back when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "instagram"},
+     {"rule": "ad", "state": "fix", "text": "#Sponsored isn't at the start of the YouTube words. I'll put it there when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "youtube"},
+     {"rule": "ad", "state": "fix", "text": "#Sponsored isn't at the start of the Instagram words. I'll put it there when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "instagram"},
+     {"rule": "paid_switch", "state": "note", "text": "Instagram doesn't let apps turn on Paid partnership. #Sponsored and the words on the video tell viewers.", "fix": null},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and Instagram. FaZe Clips pays for both.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Sponsored” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Sponsored", "tokens": ["#FaZe", "@FaZeClan"], "phrase": "Use code FAZE"},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   },
+  "card": {"captions": {"youtubeTitle": "He did WHAT", "youtubeDescription": "#Ad The clutch of the year #FaZe @FaZeClan", "instagram": "#Ad the clutch", "facebook": "#Ad The clutch of the year #FaZe @FaZeClan", "tiktok": "#Sponsored the clutch #FaZe @FaZeClan", "x": "#Ad The clutch of the year #FaZe @FaZeClan"}, "chosen": null, "tiktok": null},
+  "expect": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fits",
+    "headline": "Can earn on FaZe Clips",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "tags", "state": "fix", "text": "The YouTube words are missing “Use code FAZE”. I'll put it back when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "youtube"},
+     {"rule": "tags", "state": "fix", "text": "The Instagram words are missing #FaZe, @FaZeClan and “Use code FAZE”. I'll put them back when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "instagram"},
+     {"rule": "ad", "state": "fix", "text": "#Sponsored isn't at the start of the YouTube words. I'll put it there when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "youtube"},
+     {"rule": "ad", "state": "fix", "text": "#Sponsored isn't at the start of the Instagram words. I'll put it there when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "instagram"},
+     {"rule": "paid_switch", "state": "note", "text": "Instagram doesn't let apps turn on Paid partnership. #Sponsored and the words on the video tell viewers.", "fix": null},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and Instagram. FaZe Clips pays for both.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Sponsored” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Sponsored", "tokens": ["#FaZe", "@FaZeClan"], "phrase": "Use code FAZE"},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   }
+ },
+ {
+  "name": "checks stay checks while he types",
+  "fit": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "cant_tell",
+    "headline": "Check 2 things, then upload",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "soft", "state": "check", "text": "This brand wants your face on camera. Clips of other videos may be turned down.", "fix": {"kind": "open", "label": "Read the rules", "href": "/campaigns/200ea21b-be80-4db8-b552-8e32b148604e#rules"}},
+     {"rule": "uncertain", "state": "check", "text": "I couldn't check: Clips must feel organic. Look yourself.", "fix": {"kind": "open", "label": "Read the rules", "href": "/campaigns/200ea21b-be80-4db8-b552-8e32b148604e#rules"}},
+     {"rule": "paid_switch", "state": "note", "text": "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.", "fix": null},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and Instagram. FaZe Clips pays for both.", "fix": null},
+     {"rule": "tags", "state": "ok", "text": "Every caption has #FaZe and @FaZeClan.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": ["face_needed"],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   },
+  "card": {"captions": {"youtubeTitle": "He did WHAT", "youtubeDescription": "#Ad The clutch of the year #FaZe @FaZeClan", "instagram": "the clutch", "facebook": "#Ad The clutch of the year #FaZe @FaZeClan", "tiktok": "#Ad The clutch of the year #FaZe @FaZeClan", "x": "#Ad The clutch of the year #FaZe @FaZeClan"}, "chosen": null, "tiktok": null},
+  "expect": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "cant_tell",
+    "headline": "Check 2 things, then upload",
+    "canUpload": true,
+    "canRemake": true,
+    "items": [
+     {"rule": "tags", "state": "fix", "text": "The Instagram words are missing #FaZe and @FaZeClan. I'll put them back when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "instagram"},
+     {"rule": "ad", "state": "fix", "text": "#Ad isn't at the start of the Instagram words. I'll put it there when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "instagram"},
+     {"rule": "soft", "state": "check", "text": "This brand wants your face on camera. Clips of other videos may be turned down.", "fix": {"kind": "open", "label": "Read the rules", "href": "/campaigns/200ea21b-be80-4db8-b552-8e32b148604e#rules"}},
+     {"rule": "uncertain", "state": "check", "text": "I couldn't check: Clips must feel organic. Look yourself.", "fix": {"kind": "open", "label": "Read the rules", "href": "/campaigns/200ea21b-be80-4db8-b552-8e32b148604e#rules"}},
+     {"rule": "paid_switch", "state": "note", "text": "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.", "fix": null},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and Instagram. FaZe Clips pays for both.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": ["face_needed"],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   }
+ },
+ {
+  "name": "a wait stays a wait",
+  "fit": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "wait",
+    "headline": "Wait a little for FaZe Clips",
+    "canUpload": false,
+    "canRemake": false,
+    "items": [
+     {"rule": "campaign", "state": "todo", "text": "Content Rewards wants the brand to check your other clips first. I'll tell you when you can post again.", "fix": null},
+     {"rule": "paid_switch", "state": "note", "text": "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.", "fix": null},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and Instagram. FaZe Clips pays for both.", "fix": null},
+     {"rule": "tags", "state": "ok", "text": "Every caption has #FaZe and @FaZeClan.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   },
+  "card": {"captions": {"youtubeTitle": "He did WHAT", "youtubeDescription": "#Ad The clutch of the year #FaZe @FaZeClan", "instagram": "#Ad The clutch of the year #FaZe @FaZeClan", "facebook": "#Ad The clutch of the year #FaZe @FaZeClan", "tiktok": "#Ad The clutch of the year #FaZe @FaZeClan", "x": "#Ad The clutch of the year #FaZe @FaZeClan"}, "chosen": ["instagram"], "tiktok": null},
+  "expect": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "wait",
+    "headline": "Wait a little for FaZe Clips",
+    "canUpload": false,
+    "canRemake": false,
+    "items": [
+     {"rule": "campaign", "state": "todo", "text": "Content Rewards wants the brand to check your other clips first. I'll tell you when you can post again.", "fix": null},
+     {"rule": "places", "state": "note", "text": "YouTube pays too. Turn it on to earn there as well.", "fix": null, "platform": "youtube"},
+     {"rule": "paid_switch", "state": "note", "text": "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.", "fix": null},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to Instagram. FaZe Clips pays for it.", "fix": null},
+     {"rule": "tags", "state": "ok", "text": "Every caption has #FaZe and @FaZeClan.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   }
+ },
+ {
+  "name": "a copy is still needed",
+  "fit": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fixable",
+    "headline": "FaZe Clips needs a copy of this clip",
+    "canUpload": false,
+    "canRemake": true,
+    "items": [
+     {"rule": "on_screen", "state": "remake", "text": "“Paid partnership” isn't on the video.", "fix": {"kind": "remake", "label": "Make a FaZe Clips copy"}},
+     {"rule": "paid_switch", "state": "note", "text": "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.", "fix": null},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and Instagram. FaZe Clips pays for both.", "fix": null},
+     {"rule": "tags", "state": "ok", "text": "Every caption has #FaZe and @FaZeClan.", "fix": null},
+     {"rule": "ad", "state": "ok", "text": "#Ad is at the start of every caption.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   },
+  "card": {"captions": {"youtubeTitle": "He did WHAT", "youtubeDescription": "The clutch of the year", "instagram": "The clutch of the year #gaming", "facebook": "The clutch of the year", "tiktok": "The clutch of the year", "x": "The clutch of the year"}, "chosen": null, "tiktok": null},
+  "expect": {
+    "campaignId": "200ea21b-be80-4db8-b552-8e32b148604e",
+    "campaignName": "FaZe Clips",
+    "verdict": "fixable",
+    "headline": "FaZe Clips needs a copy of this clip",
+    "canUpload": false,
+    "canRemake": true,
+    "items": [
+     {"rule": "on_screen", "state": "remake", "text": "“Paid partnership” isn't on the video.", "fix": {"kind": "remake", "label": "Make a FaZe Clips copy"}},
+     {"rule": "tags", "state": "fix", "text": "The YouTube words are missing #FaZe and @FaZeClan. I'll put them back when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "youtube"},
+     {"rule": "tags", "state": "fix", "text": "The Instagram words are missing #FaZe and @FaZeClan. I'll put them back when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "instagram"},
+     {"rule": "ad", "state": "fix", "text": "#Ad isn't at the start of the YouTube words. I'll put it there when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "youtube"},
+     {"rule": "ad", "state": "fix", "text": "#Ad isn't at the start of the Instagram words. I'll put it there when it uploads.", "fix": {"kind": "captions", "label": "Fix it for me"}, "platform": "instagram"},
+     {"rule": "paid_switch", "state": "note", "text": "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.", "fix": null},
+     {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
+     {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
+     {"rule": "places", "state": "ok", "text": "Goes to YouTube and Instagram. FaZe Clips pays for both.", "fix": null},
+     {"rule": "paid_switch", "state": "ok", "text": "Paid promotion goes on for YouTube.", "fix": null},
+     {"rule": "source", "state": "ok", "text": "Any video is fine for FaZe Clips.", "fix": null}
+    ],
+    "softCodes": [],
+    "required": {"disclosure": "#Ad", "tokens": ["#FaZe", "@FaZeClan"], "phrase": null},
+    "uploadPlaces": ["youtube", "instagram"],
+    "checkedAt": "2026-11-15T12:00:00.000Z"
+   }
+ }
+]
