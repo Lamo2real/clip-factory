@@ -500,7 +500,8 @@ as well". ([CONTRACTS.md §39.3](CONTRACTS.md#393-does-this-clip-fit-the-campaig
   gets one quiet line under Checks before posting: "This clip could earn money on {name}." with "Make a {name} copy"
   and "Not now". The copy (the campaign's logo, "Paid partnership" on the video and #Ad) arrives right below it on the
   same Review page in about 3 minutes and uploads in **3 taps**; the original stays as it is and keeps its own 2-tap
-  upload. With no campaign nothing shows. The copy waits behind a switch, off, until the agent's part has shipped.
+  upload. With no campaign nothing shows. The copy has its own switch: it shipped off and is on since PR #93, once
+  the agent's part had shipped.
 - AC6: Clip Factory never calls a rule it can't check a pass: it says "I couldn't check: …" and the owner can answer
   "I read them. They're OK" (kept on that device only, never needed to upload, never shown as a Clip Factory tick).
 - AC7: Length, source video, language, banned content, the deadline and another campaign are never "fixed" on the
@@ -689,7 +690,8 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
   Content Rewards.
 - AC5: Only additive data (new sort keys, attributes, a media prefix, runtime secrets, one small Lambda); no table,
   pool, bucket or secret holding the owner's data is replaced, and the deploy's delete gate passes.
-- AC6: Switched off in prod (`content_rewards_enabled = false`) until every part has merged; one line switches it on.
+- AC6: Shipped switched off in prod (`content_rewards_enabled = false`) until every part had merged; the one-line
+  switch PR #88 turned it on, so it is on now. Setting it back to `false` turns it off again.
 - AC7: Money shows only what Content Rewards reports; a rate × views guess is never shown (a test checks).
 - AC8: The fit check (BR-28) is one pure function on the server, worked out from stored items each time it is asked
   (never Content Rewards, the public campaign data or the network), and the same answer drives the Review card, the

@@ -1592,7 +1592,8 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
   ("#Ad") first in the caption, the required tags, "Paid partnership" on screen for 3 seconds and the logo in the
   band above the picture. CR is a separate connection, never a sixth `Platform`, and money from CR is shown only as CR
   reports it (§25 extended; "paid" is allowed only next to CR's paid payouts). The whole feature ships switched off
-  (`content_rewards_enabled = false`) and is turned on by one line once every part has merged.
+  (`content_rewards_enabled = false`) and is turned on by one line once every part has merged (done: the switch PR
+  #88, 21 Nov 2026, so it is on).
 - **Consequences.** The owner signs in on the Mac once and again at least every 90 days (a week's warning); after
   that everything runs in the cloud, so a phone upload is sent too. CR's pilot may refuse the write scope at first:
   then Clip Factory reads campaigns and money and reminds him after each post (and every 3 days to try Connect
@@ -1643,7 +1644,7 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
   tap makes one), then makes a one-clip campaign job from the same source and moment (A's campaign checks, rules
   snapshot and logo copy), cut from the original's kept video when it is there; the agent skips finding moments for
   it, and a moment can earn on one campaign only; the copy waits behind `cr_remake_enabled` (default off) until the
-  agent's part has merged. Option (iii): `GET /v1/money/everywhere`, pure on the server, CR's paid payouts kept by day
+  agent's part has merged (done: its switch PR #93 turned it on). Option (iii): `GET /v1/money/everywhere`, pure on the server, CR's paid payouts kept by day
   (`CRMONEY.paidByDay`, filled once for older owners by a day scan that never changes the paid total); the card is the
   first on the Money page with the biggest number, and the MRR cards stay platform-only and say so. The normal way is
   frozen: Home's form at `/` and the Review card of a clip with no campaign keep origin/main's controls and taps (5 to

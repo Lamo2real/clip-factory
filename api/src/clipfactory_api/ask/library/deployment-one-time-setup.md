@@ -297,7 +297,8 @@ the public `oauthCallbackBase`.
 
 **Content Rewards** (paid campaigns) is set up the same way, inside the app: Settings › Posting › Set up posting ›
 Content Rewards, with the last step in the Mac app ([SETUP_POSTING.md](SETUP_POSTING.md#content-rewards)). It is
-switched off until all its parts have merged ([Content Rewards](#content-rewards-contracts-38)).
+switched on: it shipped off and the switch PR #88 turned it on once all its parts had merged
+([Content Rewards](#content-rewards-contracts-38)).
 
 What this deploy changes for posting: `cf-prod-hooks` runs up to **28 s** (the code exchange calls the platform),
 `cf-prod-clip-flow` has **1024 MB** (chunked uploads), and Secrets Manager holds at most about **18 secrets** (the

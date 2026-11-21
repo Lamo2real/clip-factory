@@ -912,8 +912,8 @@ Rewards for you. Whop is the website where Content Rewards sends your money. Fro
 Content Rewards is **not** one of the five places above. In Settings › Posting › Set up posting it has its own
 card under the five, in a part called "Get paid by brands". It never counts in "2 of 5 ready" and is never in the
 floating Set up posting list. Your campaigns live on the "Campaigns" page (`/campaigns`, also a row on Home), and
-the campaign money on the "Money" page (`/money#content-rewards`). Until the feature is switched on for your app,
-the card says "Coming soon".
+the campaign money on the "Money" page (`/money#content-rewards`). It is switched on. If it is ever switched off
+for your app, the card says "Coming soon".
 
 How many steps each thing takes. Waiting is never a step: Clip Factory watches and tells you.
 

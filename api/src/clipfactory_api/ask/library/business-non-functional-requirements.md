@@ -178,7 +178,8 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
   Content Rewards.
 - AC5: Only additive data (new sort keys, attributes, a media prefix, runtime secrets, one small Lambda); no table,
   pool, bucket or secret holding the owner's data is replaced, and the deploy's delete gate passes.
-- AC6: Switched off in prod (`content_rewards_enabled = false`) until every part has merged; one line switches it on.
+- AC6: Shipped switched off in prod (`content_rewards_enabled = false`) until every part had merged; the one-line
+  switch PR #88 turned it on, so it is on now. Setting it back to `false` turns it off again.
 - AC7: Money shows only what Content Rewards reports; a rate × views guess is never shown (a test checks).
 - AC8: The fit check (BR-28) is one pure function on the server, worked out from stored items each time it is asked
   (never Content Rewards, the public campaign data or the network), and the same answer drives the Review card, the

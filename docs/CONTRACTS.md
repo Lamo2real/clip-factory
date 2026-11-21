@@ -7295,9 +7295,10 @@ What this section adds, and what it leaves alone: CR is **not** a sixth `Platfor
 (`CRCONN`), its own card on Set up posting, its own routes under `/v1/contentrewards`, its own items. The five
 platforms, the setup to-do list (§17.13: still exactly five rows), `GET /v1/setup`, the publish chain (§17.6), the
 money rule (§25) and every existing item keep working byte for byte when no campaign is involved. Where this section
-and an earlier one disagree about a **campaign** clip, this one wins. The whole feature stays switched off in prod
-(`content_rewards_enabled = false`, §38.16) until every builder's part of §38.19 has merged; one last one-line PR turns
-it on.
+and an earlier one disagree about a **campaign** clip, this one wins. The whole feature stayed switched off in prod
+(`content_rewards_enabled = false`, §38.16) until every builder's part of §38.19 had merged; then the one-line switch
+PR #88 (21 Nov 2026) turned it on, so it is **on** in prod. The campaign copy of §39.3 has its own switch, on since PR
+#93.
 
 Facts it rests on (checked 21 Nov 2026; sources in `docs/SETUP_POSTING.md` § Content Rewards): CR (contentrewards.com,
 its own app since August 2026; Whop still pays out) has an official **MCP server** `https://mcp.contentrewards.com/mcp`
@@ -8535,10 +8536,11 @@ for macOS only (`#[cfg(target_os = "macos")]`); on Windows the bridge exists but
 * `realtime`: the ESM filter's prefixes gain `CAMPAIGN#`, `CRCONN`, `CRSUB#`, `CRMONEY`. `notify`: its filter's `sk`
   prefixes gain the same four (still `eventName: ["MODIFY"]`, one pattern with five prefixes). Both are in-place
   updates of the mappings.
-* `envs/prod`: `variable "content_rewards_enabled"` (bool, **default `false`**), the wiring; no new output. The
-  switch: after builders A–F have all merged, one last one-line PR (owner of the line: builder A) sets the default to
-  `true`. Before it, every new route answers 503 `unavailable` and the clip flow sends nothing, so no campaign clip can
-  go out without B's paid-partnership and caption code and C's logo and on-screen disclosure.
+* `envs/prod`: `variable "content_rewards_enabled"` (bool; shipped **default `false`**, `true` since PR #88), the
+  wiring; no new output. The switch: after builders A–F had all merged, one last one-line PR (#88, owner of the line:
+  builder A) set the default to `true`. Before it, every new route answered 503 `unavailable` and the clip flow sent
+  nothing, so no campaign clip could go out without B's paid-partnership and caption code and C's logo and on-screen
+  disclosure. Setting it back to `false` turns all of that off again.
 * Owner data: no table, index, Cognito pool, bucket or secret is replaced or destroyed; the CR secrets are made at
   runtime and never in Terraform. The plan adds one function, role, policy and log group and changes env vars, IAM
   and two filters in place. The deploy's delete gate still prints "Delete gate: the plan deletes or replaces nothing
@@ -8667,9 +8669,10 @@ approved` on the fake clock. Mock values match the API's sentences.
   (present and absent).
 * **infra (A)** `terraform test`, mock providers: `cf-prod-campaigns` env and IAM exactly as §38.16 (**no
   `secretsmanager` action**, media only `campaigns/*`), api and stats invoke grants, no new agent grant, the realtime
-  and notify filters' prefixes (notify still `MODIFY` only), `content_rewards_enabled` default `false` →
-  `CONTENT_REWARDS = "off"` everywhere and `true` → `"on"`, no `aws_secretsmanager_secret` for CR, and `envs/prod`
-  wiring; the plan of an existing state replaces nothing (the delete gate test).
+  and notify filters' prefixes (notify still `MODIFY` only), `content_rewards_enabled` `false` →
+  `CONTENT_REWARDS = "off"` everywhere and `true` → `"on"` (modules default `false`; `envs/prod` defaults `true` since
+  PR #88 and still plans with `false`), no `aws_secretsmanager_secret` for CR, and `envs/prod` wiring; the plan of an
+  existing state replaces nothing (the delete gate test).
 * **api posting (B)**: Confirm for campaign clips (every 400/409 of §38.14: no `platforms`, a place off the live
   `CAMPAIGN#` list, TikTok Friends refused, the places rule cases, options forced; the same in `_try_again`; posts carry
   `campaignId` and `postOptions.campaign`); publisher request shapes from fixtures: YouTube `paidProductPlacementDetails`
@@ -9306,7 +9309,7 @@ attributes):
 | `JOB#{jobId}` | `remakeOf` (public, G), `remake` (internal, G), `sourceLanguage` (public, I; G copies it onto a copy), `source.channelKeys` (public, I) |
 | `CLIP#{clipId}` | `remakes` (public map `campaignId → {jobId, at}`, G), `remakeOf` (public `{clipId, jobId}`, I) |
 | `CRMONEY` | `paidByDay` (map day → cents), `paidByDayDone`, `dayScan` (internal) (G) |
-| api env | `CR_REMAKE` from Terraform `cr_remake_enabled` (bool, **default `false`**), an in-place env change; the plan replaces and deletes nothing that holds the owner's data |
+| api env | `CR_REMAKE` from Terraform `cr_remake_enabled` (bool; shipped **default `false`**, `true` in `envs/prod` since PR #93), an in-place env change; the plan replaces and deletes nothing that holds the owner's data |
 
 ### 39.4 Who builds what (after A `feature/cr-api` and D `feature/cr-web` have merged)
 
@@ -9397,8 +9400,8 @@ attributes):
   `gates.next_step`'s `connect` href with `?back=`; `nextStepKind`, `sourceRuleText`, `languageRuleText`;
   `money_everywhere_cases.json` (each state per place, the where lines word for word, the period equal to the Monthly
   card's, totals per currency, `usd` → `USD`, CR cents → micros, never a $0 for not available) and the `paidByDay`
-  cases of §39.2; `terraform test`: `cr_remake_enabled` default `false` → `CR_REMAKE = "off"`, `true` → `"on"`, nothing
-  replaced.
+  cases of §39.2; `terraform test`: `cr_remake_enabled` `false` → `CR_REMAKE = "off"`, `true` → `"on"` (the api module
+  defaults `false`; `envs/prod` defaults `true` since PR #93 and still plans with `false`), nothing replaced.
 * **agent (I)**: a `remake` job calls no analyze, watch or select, cuts its one moment from `sourceKey` without
   fetching (and fetches the link when it is absent), reuses the kept words without the full-audio download (and
   transcribes when they are gone), renders with the campaign marks, writes captions, the checklist and `remakeOf
