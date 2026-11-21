@@ -148,6 +148,21 @@
     { "q": "What does Upload do?", "expect": "review-keep", "history": [{ "role": "user", "text": "How do I add a skill?" }, { "role": "assistant", "text": "(the answer)" }] },
     { "q": "How do I upload with my settings in one tap?", "expect": "review-use-my-settings" },
     { "q": "How do I mark a TikTok as a paid partnership?", "expect": "review-place-rows" },
-    { "q": "Where do I change my settings for uploads?", "expect": "my-settings" }
+    { "q": "Where do I change my settings for uploads?", "expect": "my-settings" },
+    { "q": "How do I connect Content Rewards?", "expect": "cr-setup" },
+    { "q": "Content Rewards says my account can't connect apps", "expect": "cr-cant-connect" },
+    { "q": "How do I add a Content Rewards campaign link?", "expect": "cr-add-campaign" },
+    { "q": "Am I a member of the campaign?", "expect": "cr-am-i-in" },
+    { "q": "I applied to a campaign, what now?", "expect": "cr-applied" },
+    { "q": "Where do I add the campaign logo?", "expect": "cr-logo" },
+    { "q": "How do I make clips for a campaign?", "expect": "cr-make-clips" },
+    { "q": "Why is TikTok left out for campaigns?", "expect": "cr-tiktok" },
+    { "q": "Did my clip go to Content Rewards?", "expect": "cr-clip-sent" },
+    { "q": "How do I send a clip to Content Rewards myself?", "expect": "cr-send-by-hand" },
+    { "q": "The brand wants proof of views", "expect": "cr-proof" },
+    { "q": "My campaign clip was not approved", "expect": "cr-not-approved" },
+    { "q": "How do I get my Content Rewards money?", "expect": "cr-get-paid" },
+    { "q": "What is Whop?", "expect": "cr-whop" },
+    { "q": "How do I sign in to Content Rewards again?", "expect": "cr-sign-in-again" }
   ]
 }
