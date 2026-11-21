@@ -56,15 +56,26 @@ the usual shape for each platform's engine, with `ClipFactoryDesktop/<version>` 
   (never `0.0.0.0` or `::`). It reads one request head per connection (at most 8 KB, 5 s), takes only `GET /` with
   `Host` exactly `127.0.0.1:{port}`, and only a `code` (or an `error`) whose `state` equals, compared in constant
   time, the one in the address `open` opened. A repeated `code`, `state`, `error`, `iss` or `error_description` is a
-  400; any other path (such as `/favicon.ico`) a 404; a wrong state or host a 400, and the door stays open for the
-  right answer. An `iss` is passed through; other parameters are ignored.
+  400; any other path (such as `/favicon.ico`) a 404; a wrong host a 400, and the door stays open for the right
+  answer. A well-formed answer with another sign-in's `state` (an old Content Rewards tab, after the owner tapped
+  Connect again) is a 400 page that says "This sign-in is old. Go back to Clip Factory and tap Connect Content Rewards
+  again." An `iss` is passed through; other parameters are ignored. An `error_description` keeps printable characters
+  only: line breaks and other control or space characters become one space, invisible ones are dropped, and it is cut
+  to 300.
+* **Its connections are short.** At most 8 are read at once, each on its own thread; after its reply a connection is
+  read for at most 1 second more (so the browser gets the page, not a reset) and then closed.
 * **The page it shows** has `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `Content-Security-Policy:
   default-src 'none'; style-src 'unsafe-inline'` and `Connection: close`, and repeats nothing from the request.
-* **It closes** after one good answer, a cancel, a new `listen`, or 5 minutes (then `result` says `expired`).
+* **It closes** after one good answer, a cancel, a new `listen`, or 5 minutes, even if nobody asks it anything (then
+  `result` says `expired`). After a good answer the window comes to the front; if macOS keeps the browser in front, the
+  Dock icon bounces once.
 * **Ports.** 47811–47815 are the five ways back Clip Factory registers with Content Rewards; none free is the error
-  `no_port`. Command errors reach the page as `{code: "no_port" | "bad_url" | "unsupported" | "busy"}`.
-* **Tests** (`cargo test cr_connect`) use free ports the system picks and a clock moved by hand, so they never take
-  the app's ports and never wait 5 minutes.
+  `no_port`. Command errors reach the page as `{code: "no_port" | "bad_url" | "unsupported" | "busy"}`, and only those:
+  when Tauri itself refuses a call (its own errors are plain words), `init.js` hands the page `{code: "unsupported"}`.
+* **Tests** (`cargo test cr_connect`) open each door on port 0, so the system gives every door its own free port and
+  tests running at once never race for one; the few that need the number first take it from 20000-31999, which no
+  system hands out for port 0. A clock moved by hand means they never wait 5 minutes. They check the address the
+  system says the door is bound to (`127.0.0.1`, not `0.0.0.0`), and on Linux that `127.0.0.2` does not answer.
 
 ## Files
 
