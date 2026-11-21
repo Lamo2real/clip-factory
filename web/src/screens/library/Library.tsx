@@ -8,7 +8,7 @@ import type { Clip, Learning, Platform, Post, TikTokPostOptions, CrSubmission } 
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Segmented, Skeleton } from "../../components/ui.tsx";
+import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Pill, Segmented, Skeleton } from "../../components/ui.tsx";
 import { compact, postNumbersNote, postStatusLabel, STATUS_LABEL } from "../../lib/metrics.ts";
 import { WeekView } from "./WeekView.tsx";
 import { byPlatformOrder, count, MOMENT_LABEL, PLATFORM_LABEL, plural, relative } from "../../lib/format.ts";
@@ -314,6 +314,12 @@ function LibraryCard({
             {clip.decidedAt ? ` · uploaded ${relative(clip.decidedAt)}` : ""}
           </span>
           <ClipStatusPill status={clip.status} />
+          {/* A clip made the campaign way wears a small "Campaign" chip (§39.1); a normal clip carries no label. */}
+          {clip.campaignId ? (
+            <span className="lib-card__campaign" data-cr="campaign-chip">
+              <Pill icon="coin">Campaign</Pill>
+            </span>
+          ) : null}
         </div>
       </div>
       <LinkButton href={`/clips/${clip.clipId}`} size="sm" icon="chart" iconAfter="chevronRight" className="lib-card__see">

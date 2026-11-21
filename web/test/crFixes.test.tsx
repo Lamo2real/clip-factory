@@ -229,6 +229,45 @@ describe("the setup page (§38.3)", () => {
     expect(vermilion()).toEqual([]);
   });
 
+  it("Content Rewards said no? wears one info mark, in the number's place (never two)", async () => {
+    current = { crOverview: async () => overview(conn({ status: "read_only", canSubmit: false, stepsDone: ["ready-account", "ready-socials"] })), getSetup: async () => setupNone };
+    await draw(<CrSetup />);
+    const head = host.querySelector('[data-step="connect-pilot"] .gstep__head')!;
+    expect(head.textContent).toContain("Content Rewards said no?");
+    expect(head.querySelectorAll(".gstep__icon")).toHaveLength(0);
+    expect(head.querySelectorAll(".gstep__num svg")).toHaveLength(1);
+    // The mark and the open/close chevron: nothing else draws in the row.
+    expect(head.querySelectorAll("svg")).toHaveLength(2);
+    // Numbered steps keep their number and their own picture.
+    const step1 = host.querySelector('[data-step="ready-account"] .gstep__head')!;
+    expect(step1.querySelectorAll(".gstep__icon")).toHaveLength(1);
+  });
+
+  it("phones: steps 1's lines sit above the pinned pair's box, which starts with the pair's room", async () => {
+    const before = window.matchMedia;
+    window.matchMedia = ((q: string) => ({ matches: true, media: q, addEventListener() {}, removeEventListener() {} })) as unknown as typeof matchMedia;
+    try {
+      current = { crOverview: async () => overview(conn({ status: "not_connected", canSubmit: false })), getSetup: async () => setupNone };
+      await draw(<CrSetup />);
+      const body = host.querySelector('[data-step="ready-account"] .gstep__body')!;
+      const rest = body.querySelector(".gstep__rest")!;
+      const say = body.querySelector(".gstep__say")!;
+      const pin = rest.querySelector(".cr-pin")!;
+      expect(rest.classList.contains("has-room")).toBe(true);
+      // Every line of the step comes before the sticky box (so the pair can never ride up over one), the pair last.
+      expect(rest.contains(say)).toBe(false);
+      expect(say.compareDocumentPosition(rest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(rest.lastElementChild).toBe(pin);
+      expect([...pin.querySelectorAll("a, button")].map((b) => b.textContent?.replace("(opens in a new tab)", "").trim())).toEqual(["Open Content Rewards", "I have an account"]);
+      // The room is the pair's own height (0 in jsdom, which lays nothing out).
+      expect((rest as HTMLElement).style.getPropertyValue("--pin-room")).toBe("0px");
+      // Only the open, pinned step with its own answer gets the room.
+      expect(host.querySelectorAll(".gstep__rest.has-room")).toHaveLength(1);
+    } finally {
+      window.matchMedia = before;
+    }
+  });
+
   it("an Ask button for a join or money step lands where that step is", () => {
     expect(crStepHome("#step-join-copy")).toBe("/campaigns#step-join-copy");
     expect(crStepHome("#step-move-withdraw")).toBe("/money#content-rewards");

@@ -88,8 +88,14 @@
   gap: 10px;
   padding: 0 14px 14px;
 }
+/* An unnumbered card ("Content Rewards said no?"): its one mark sits in the number's place, light on a soft fill
+   (also while it is the open card: never the current step's dark-on-bone, which drew it dark on dark). */
 .gstep.is-helper .gstep__num {
   background: var(--fill);
+}
+.gstep.is-helper:not(.is-done) .gstep__num {
+  color: var(--ink);
+  text-shadow: none;
 }
 
 .cr-waiting {
@@ -682,6 +688,17 @@
   align-items: center;
   flex-wrap: wrap;
 }
+/* "Campaign clips · FaZe Clips · Following 9 rules": one line that wraps like words. */
+.cr-job__strip {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* Library: the small "Campaign" chip of a campaign clip, under its status. */
+.lib-card__campaign {
+  display: inline-flex;
+  max-width: 100%;
+}
 .cr-clip {
   display: grid;
   gap: 10px;
@@ -1009,9 +1026,16 @@
 .cr-fit__copy.is-ok {
   color: var(--green-ink);
 }
+/* "I couldn't check these:" and only its own lines, on a soft fill (no edge); the other lines keep clear room below. */
 .cr-fit__checks {
   display: grid;
   gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+}
+.cr-fit__checks + .cr-fit__more {
+  margin-top: 6px;
 }
 .cr-fit__actions {
   display: flex;
@@ -1288,6 +1312,14 @@
   flex-direction: column;
   gap: 14px;
   min-width: 0;
+}
+/* Setup's steps 1 and 2 on phones: the step's lines come before the pair's sticky box, and its first thing is a room
+   exactly the pair's height (set by CrStepCard). The pair rests there, right under the lines, so it never covers one;
+   scrolling on, it stays pinned at the bottom right as before. */
+.gstep__rest.has-room::before {
+  content: "";
+  flex: none;
+  height: var(--pin-room, 0px);
 }
 
 /* Home's campaigns row: "campaigns." stays one word in the narrow intro column, and the chip's scissors sit on the

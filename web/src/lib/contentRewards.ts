@@ -878,7 +878,8 @@ export function subLineFor(s: Pick<CrSubmission, "state" | "flagged" | "views" |
       const paid = s.earned && s.earned.paidCents > 0 ? ` Earned on Content Rewards: ${usd(s.earned.paidCents)} so far.` : "";
       const pending = s.earned && s.earned.pendingCents > 0 ? ` ${usd(s.earned.pendingCents)} more is still earning.` : "";
       const earned = paid + pending;
-      return `Approved ✓${views ? ` · ${views}` : ""}${earned}`;
+      // A full stop ends the views part before the money sentence (§38.6): "… views on Facebook. Earned on …".
+      return `Approved ✓${views ? ` · ${views}${earned ? "." : ""}` : ""}${earned}`;
     }
     case "rejected": {
       if (s.appeal?.askedAt) {

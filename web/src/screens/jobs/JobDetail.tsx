@@ -420,8 +420,10 @@ function BackLink() {
 }
 
 /**
- * "For FaZe Clips on Content Rewards · Following 9 rules" (§38.5), the agent's campaign note, and one line per campaign
- * post of this job's clips (§38.6). Hidden when the API has no Content Rewards.
+ * "Campaign clips · FaZe Clips · Following 9 rules" (§39.1's names for §38.5's strip: the job's campaign and the count
+ * of its rules), the agent's campaign note, and one line per campaign post of this job's clips (§38.6). Hidden when
+ * the API has no Content Rewards. The job's own copy of the rules stays on the server, so the name and the count come
+ * from the job's campaign; once that campaign is removed the strip says only "Campaign clips".
  */
 function JobCampaignStrip({ campaignId, note, clipIds }: { campaignId: string; note?: string; clipIds: string[] }) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -445,10 +447,22 @@ function JobCampaignStrip({ campaignId, note, clipIds }: { campaignId: string; n
   if (off) return null;
   return (
     <section className="panel glass cr-job" aria-labelledby="cr-job-title">
-      <h2 className="panel__title" id="cr-job-title">
-        <Icon name="coin" size={20} /> {campaign ? <>For <A href={campaignPath(campaignId)} className="text-link user-text">{campaign.name}</A> on Content Rewards</> : "For a Content Rewards campaign"}
+      <h2 className="panel__title" id="cr-job-title" data-cr="job-strip">
+        <Icon name="coin" size={20} />
+        <span className="cr-job__strip">
+          Campaign clips
+          {campaign ? (
+            <>
+              {" · "}
+              <A href={campaignPath(campaignId)} className="text-link user-text">
+                {campaign.name}
+              </A>
+              {/* The name is a link (a whole box), so a narrow phone breaks right after it: the count wraps whole. */}{" "}
+              <span className="nowrap">{`· Following ${plural(campaign.plainRules.length, "rule")}`}</span>
+            </>
+          ) : null}
+        </span>
       </h2>
-      {campaign ? <p className="muted small">Following {plural(campaign.plainRules.length, "rule")}</p> : null}
       {note ? (
         <p className="callout callout--info">
           <Icon name="info" size={18} />

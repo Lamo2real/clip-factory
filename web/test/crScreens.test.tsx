@@ -10,7 +10,7 @@ import type { Api, CrConnection, CrMoney, CrOverview, CrSubmission } from "../sr
 let current: Partial<Api> = {};
 vi.mock("../src/api/index.ts", async (orig) => ({ ...(await orig<object>()), api: () => current as Api }));
 
-const { CrMoneyPart, amountChip, moneySteps, moneyMainStep } = await import("../src/screens/money/CrMoneyPart.tsx");
+const { CrMoneyPart, amountChip, justMovedNow, moneySteps, moneyMainStep, readMoved, MOVED_FRESH_MS } = await import("../src/screens/money/CrMoneyPart.tsx");
 const { CrPostLines } = await import("../src/components/CrPostLine.tsx");
 const { ToastProvider } = await import("../src/components/Toasts.tsx");
 const { resetCr } = await import("../src/lib/contentRewards.ts");
@@ -160,6 +160,52 @@ describe("Money › Content Rewards", () => {
     const bank = host.querySelector('[data-step="bank-cashout"]')!.textContent!;
     expect(bank).toContain("18.25");
     expect(bank).not.toContain("0.00");
+  });
+
+  it("a finished move to Whop: the API's movedAt when it sends one, else only what this device saw", () => {
+    const now = Date.parse("2026-11-21T12:00:00Z");
+    const fresh = readMoved(null);
+    const hour = new Date(now - 3_600_000).toISOString();
+    // Another device (nothing seen here): the API's movedAt leads the bank step, once per move.
+    expect(justMovedNow(fresh, { onItsWayCents: 0, movedAt: hour }, now)).toBe(true);
+    expect(justMovedNow({ ...fresh, seenMovedAt: hour }, { onItsWayCents: 0, movedAt: hour }, now)).toBe(false);
+    expect(justMovedNow({ ...fresh, seenMovedAt: new Date(now - 9 * 86_400_000).toISOString() }, { onItsWayCents: 0, movedAt: hour }, now)).toBe(true);
+    // Too old to say it just moved, or money on its way again: no.
+    expect(justMovedNow(fresh, { onItsWayCents: 0, movedAt: new Date(now - MOVED_FRESH_MS - 1).toISOString() }, now)).toBe(false);
+    expect(justMovedNow(fresh, { onItsWayCents: 500, movedAt: hour }, now)).toBe(false);
+    // An API from before movedAt (absent) or before any move (null): this device's own memo, as before.
+    expect(justMovedNow(fresh, { onItsWayCents: 0 }, now)).toBe(false);
+    expect(justMovedNow({ ...fresh, onItsWay: 1825 }, { onItsWayCents: 0 }, now)).toBe(true);
+    expect(justMovedNow({ ...fresh, onItsWay: 1825 }, { onItsWayCents: 0, movedAt: null }, now)).toBe(true);
+    expect(justMovedNow({ ...fresh, onItsWay: 1825 }, { onItsWayCents: null, movedAt: hour }, now)).toBe(false);
+    // The memo reads its older shapes.
+    expect(readMoved("1825")).toEqual({ onItsWay: 1825, lastMoveCents: null, moved: true, seenMovedAt: null });
+    expect(readMoved(JSON.stringify({ onItsWay: 0, lastMoveCents: 1825, moved: true }))).toEqual({ onItsWay: 0, lastMoveCents: 1825, moved: true, seenMovedAt: null });
+  });
+
+  it("on a device that never saw the move: the API's movedAt says Your money is on Whop, with the bank step the vermilion", async () => {
+    const movedAt = new Date(Date.now() - 3_600_000).toISOString();
+    current = { crOverview: async () => overview(conn({ finance: false, stepsDone: ["move-whop", "bank-setup"] }), money({ readyToMoveCents: 0, onItsWayCents: 0, movedAt })) };
+    await draw(<CrMoneyPart />);
+    expect(host.textContent).toContain("Your money is on Whop. Move it to your bank.");
+    const main = host.querySelectorAll(".btn--primary");
+    expect(main).toHaveLength(1);
+    expect(host.querySelector('[data-step="bank-cashout"] .btn--primary')).not.toBeNull();
+    // The amount moved was seen on the other device only: no Amount chip is made up here.
+    expect(host.querySelector('[data-step="bank-cashout"]')!.textContent).not.toContain("0.00");
+    // Once per move on this device: the next visit doesn't lead with it again.
+    expect(JSON.parse(localStorage.getItem("cf-cr-on-its-way")!).seenMovedAt).toBe(movedAt);
+    act(() => root.unmount());
+    resetCr();
+    root = createRoot(host);
+    await draw(<CrMoneyPart />);
+    expect(host.textContent).not.toContain("Your money is on Whop. Move it to your bank.");
+  });
+
+  it("an API without movedAt and a device that saw nothing: no Your money is on Whop (as before)", async () => {
+    current = { crOverview: async () => overview(conn({ finance: false, stepsDone: ["move-whop", "bank-setup"] }), money({ readyToMoveCents: 0, onItsWayCents: 0 })) };
+    await draw(<CrMoneyPart />);
+    expect(host.textContent).not.toContain("Your money is on Whop.");
   });
 
   it("per-campaign totals wait for the whole list: Checking… until paid-so-far is known", async () => {
