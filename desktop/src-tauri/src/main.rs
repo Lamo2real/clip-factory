@@ -4,6 +4,7 @@
 //! Clip Factory desktop: one native window that shows the deployed web app (docs/CONTRACTS.md §12.3).
 //! It bundles no web UI: the pages update from the website itself, and the wrapper updates itself (update.rs).
 
+mod cr_connect;
 mod mac_fetch;
 mod update;
 
@@ -213,11 +214,18 @@ fn main() {
         .manage(update::LaterInstall::default())
         // Mac fetches it (§35): the page's four commands, granted below to the app's own address only.
         .manage(mac_fetch::Fetches::default())
+        // Connect Content Rewards (§38.15): the one-time sign-in door and its four commands, granted below to the
+        // app's own address only. Off macOS they answer `unsupported`.
+        .manage(cr_connect::CrConnect::default())
         .invoke_handler(tauri::generate_handler![
             mac_fetch::mac_fetch_start,
             mac_fetch::mac_fetch_status,
             mac_fetch::mac_fetch_upload,
-            mac_fetch::mac_fetch_cancel
+            mac_fetch::mac_fetch_cancel,
+            cr_connect::cr_connect_listen,
+            cr_connect::cr_connect_open,
+            cr_connect::cr_connect_result,
+            cr_connect::cr_connect_cancel
         ])
         .setup(|app| {
             let app_url = Url::parse(APP_URL)?;
@@ -227,6 +235,7 @@ fn main() {
             let version = app.package_info().version.to_string();
             app.add_capability(drag_capability(&app_url))?;
             app.add_capability(mac_fetch::capability(&app_url, WINDOW_LABEL))?;
+            app.add_capability(cr_connect::capability(&app_url, WINDOW_LABEL))?;
             // Videos left on this computer by a job that never finished are cleared at start-up.
             mac_fetch::sweep(app.handle());
 
@@ -431,6 +440,22 @@ mod tests {
                 "window.__CF_GLASS__ = \"{name}\";\nwindow.__CF_DESKTOP_VERSION__ = \"1.42.0\";\nwindow.__CF_TITLEBAR__ = 28;\n"
             )));
             assert!(script.contains("window.__CF_DESKTOP__ = true"));
+            // The Content Rewards sign-in bridge (§38.15), version 1, with its four commands only.
+            assert!(script.contains("window.__CF_CR_CONNECT__ = Object.freeze({\n    version: 1,"));
+            for command in [
+                "cr_connect_listen",
+                "cr_connect_open",
+                "cr_connect_result",
+                "cr_connect_cancel",
+            ] {
+                assert!(script.contains(&format!("\"{command}\"")), "{command}");
+            }
+            // Its errors reach the page as one of the four codes only, Tauri's own refusals too.
+            assert!(script
+                .contains("var CR_CODES = [\"no_port\", \"bad_url\", \"unsupported\", \"busy\"];"));
+            assert!(script.contains(
+                "return Promise.reject(known ? { code: e.code } : { code: \"unsupported\" });"
+            ));
         }
     }
 

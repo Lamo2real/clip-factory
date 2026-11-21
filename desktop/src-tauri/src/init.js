@@ -11,7 +11,12 @@
 // 5. Mac fetches it (docs/CONTRACTS.md §35): window.__CF_MAC_FETCH__ lets the page ask this app to get a YouTube
 //    video on this computer's own connection and send it to the job. Four commands only (start, status, upload,
 //    cancel), which main.rs grants to the app's own address in this window and nowhere else.
-// 6. Links to other sites (and window.open) become a plain navigation, which the wrapper catches and opens
+// 6. Connect Content Rewards (docs/CONTRACTS.md §38.15): window.__CF_CR_CONNECT__ (version 1) lets the page open a
+//    one-time sign-in door on this computer (127.0.0.1, ports 47811-47815, 5 minutes), open Content Rewards' own
+//    sign-in page in the system browser, and read the answer once. Four commands only (listen, open, result,
+//    cancel), granted like Mac fetches it. Errors are {code: "no_port" | "bad_url" | "unsupported" | "busy"}; off
+//    macOS listen answers unsupported.
+// 7. Links to other sites (and window.open) become a plain navigation, which the wrapper catches and opens
 //    in the system browser. The page itself never leaves the app. Same-site links open in this window.
 (function () {
   "use strict";
@@ -38,6 +43,39 @@
     },
     cancel: function (jobId) {
       return call("mac_fetch_cancel", { jobId: String(jobId) });
+    },
+  });
+
+  // Errors always reach the page as one of the four {code}s: before Tauri's bridge is there, and when Tauri itself
+  // refuses a call (its own errors are plain words), the page reads "unsupported".
+  var CR_CODES = ["no_port", "bad_url", "unsupported", "busy"];
+  var crCall = function (cmd, args) {
+    var internals = window.__TAURI_INTERNALS__;
+    if (!internals || typeof internals.invoke !== "function") return Promise.reject({ code: "unsupported" });
+    var asked;
+    try {
+      asked = Promise.resolve(internals.invoke(cmd, args));
+    } catch (_) {
+      asked = Promise.reject(null);
+    }
+    return asked.then(undefined, function (e) {
+      var known = e !== null && typeof e === "object" && CR_CODES.indexOf(e.code) !== -1;
+      return Promise.reject(known ? { code: e.code } : { code: "unsupported" });
+    });
+  };
+  window.__CF_CR_CONNECT__ = Object.freeze({
+    version: 1,
+    listen: function () {
+      return crCall("cr_connect_listen", {});
+    },
+    open: function (url) {
+      return crCall("cr_connect_open", { url: String(url) });
+    },
+    result: function () {
+      return crCall("cr_connect_result", {});
+    },
+    cancel: function () {
+      return crCall("cr_connect_cancel", {});
     },
   });
 
