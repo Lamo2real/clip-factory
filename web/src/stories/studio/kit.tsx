@@ -417,6 +417,21 @@ export function StSheet({
   );
 }
 
+/** "Show more" under a list the API pages (§45.34 "All projects"), with its own plain sentence when it fails. */
+export function ShowMore({ list, what }: { list: { hasMore: boolean; busy: boolean; problem: string | null; more: () => Promise<void> }; what: string }) {
+  if (!list.hasMore && !list.problem) return null;
+  return (
+    <div className="st-s-more-row">
+      {list.problem ? <Notice tone="bad">{list.problem}</Notice> : null}
+      {list.hasMore ? (
+        <button type="button" className="st-btn" aria-disabled={list.busy || undefined} onClick={() => !list.busy && void list.more()}>
+          {list.busy ? `Getting more ${what}…` : "Show more"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 /** A celebration: confetti from the button and the success cheer (it answers the owner's own tap). */
 export function celebrate(from?: Element | null, amount = 110): void {
   burst(centerOf(from ?? null), amount);

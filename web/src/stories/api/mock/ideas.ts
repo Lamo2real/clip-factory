@@ -269,6 +269,24 @@ function checkInput(i: Partial<IdeaInput>, whole: boolean): void {
   }
   if ((whole || i.category !== undefined) && !CATEGORIES.includes(i.category as IdeaCategory)) fail(400, "bad_request", "Pick a kind of video.");
   if (i.characterIds && i.characterIds.length > 3) fail(400, "bad_request", "Pick up to 3 characters.");
+  if (i.concept !== undefined) checkConcept(i.concept);
+}
+
+/** A VideoConcept, checked like the API's ideas.concept (§45.6): the owner can edit every part (§45.34). */
+function checkConcept(c: VideoConcept): void {
+  if (!c || typeof c !== "object") fail(400, "bad_request", "concept must be a full idea.");
+  for (const k of Object.keys(c)) if (!["premise", "beats", "lesson", "ending", "tone", "durationSec", "onScreenText"].includes(k)) fail(400, "bad_request", "Something in that request was not right.");
+  if (!["funny", "calm", "tense_then_relief", "wholesome"].includes(c.tone)) fail(400, "bad_request", "concept.tone must be funny, calm, tense_then_relief or wholesome.");
+  if (typeof c.premise !== "string" || !c.premise.trim() || c.premise.length > 600) fail(400, "bad_request", "concept.premise needs 1 to 600 characters.");
+  const beats = Array.isArray(c.beats) ? c.beats.filter((b) => typeof b === "string" && b.trim()) : [];
+  if (beats.length < 3 || beats.length > 8) fail(400, "bad_request", "concept.beats needs 3 to 8 lines.");
+  if (beats.some((b) => b.length > 160)) fail(400, "bad_request", "Each line of concept.beats can be at most 160 characters.");
+  if (c.lesson !== null && c.lesson !== undefined && (typeof c.lesson !== "string" || c.lesson.length > 280)) fail(400, "bad_request", "concept.lesson can be at most 280 characters.");
+  if (typeof c.ending !== "string" || !c.ending.trim() || c.ending.length > 280) fail(400, "bad_request", "concept.ending needs 1 to 280 characters.");
+  if (!Number.isInteger(c.durationSec) || c.durationSec < 15 || c.durationSec > 90) fail(400, "bad_request", "concept.durationSec must be 15 to 90.");
+  const words = Array.isArray(c.onScreenText) ? c.onScreenText.filter((t) => typeof t === "string" && t.trim()) : [];
+  if (words.length > 6) fail(400, "bad_request", "concept.onScreenText needs 0 to 6 lines.");
+  if (words.some((t) => t.length > 60)) fail(400, "bad_request", "Each line of concept.onScreenText can be at most 60 characters.");
 }
 
 /** The API's topic match (§45.7): only driving-safety ideas get a topic; with none they need checked advice. */

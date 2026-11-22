@@ -2,8 +2,10 @@
 // videos whose facts need checking; never Lamo Clips' Review), and each video's review page: the player (the MP4, else
 // the live preview), Approve (only when the approve rule holds; the fact problems and the sources shown), Reject, Ask
 // for changes, Remake this scene, Remake the whole video, Remake and Check again (each with the "Model and effort for
-// this one" menu: this job only, never saved), the captions and sound effects editors, which model and effort made each
-// step, Download, Post it (the publish sheet, with the exact account each platform sends to) and the Posts panel.
+// this one" menu: this job only, never saved), "Next run: {model} · {effort}", the captions editor (with "Write them
+// again") and the sound effects editor, which model and effort made each step, Download (the MP4 and each extra copy
+// the video has), Post it (the publish sheet, with the exact account each platform sends to) and the Posts panel,
+// whose Try again asks "Post to {name}?" when the API names a changed account (§45.34). Each queue group has Show more.
 import "../styles/studio.css";
 import { useEffect, useRef, useState } from "react";
 import { A } from "../../components/ui.tsx";
@@ -13,19 +15,19 @@ import { useLoad, usePoll } from "../../lib/hooks.ts";
 import { cheerOnNextTap } from "../../lib/sound.ts";
 import { sounds } from "../../lib/sounds.ts";
 import { storiesApi } from "../api/client.ts";
-import type { ModelOverride, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus } from "../api/types.ts";
+import type { DownloadFormat, ErrorAccount, ModelOverride, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
-import { cleanPick, madeWith, ModelMenu, ModelsUsed, SettingsFix, StoryAi, storyUsual, useAiInfo } from "../studio/ai.tsx";
+import { cleanPick, madeWith, ModelMenu, ModelsUsed, NextRun, SettingsFix, StoryAi, storyUsual, useAiInfo } from "../studio/ai.tsx";
 import { CaptionEditor } from "../studio/CaptionEditor.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
-import { useSameScript, useWidth, useWorkspace } from "../studio/hooks.ts";
-import { Busy, celebrate, Chip, Notice, StSheet, Tag, TextField } from "../studio/kit.tsx";
+import { usePaged, useSameScript, useWidth, useWorkspace } from "../studio/hooks.ts";
+import { Busy, celebrate, Chip, Notice, ShowMore, StSheet, Tag, TextField } from "../studio/kit.tsx";
 import { Player } from "../studio/Player.tsx";
 import { PostsPanel } from "../studio/PostsPanel.tsx";
-import { PublishSheet } from "../studio/PublishSheet.tsx";
+import { AccountCard, PublishSheet } from "../studio/PublishSheet.tsx";
 import { SfxEditor } from "../studio/SfxEditor.tsx";
 import { StepTrack } from "../studio/StepTrack.tsx";
-import { CATEGORY_LABEL, isConflict, PLATFORM_LABEL, say, seconds, STATUS_LABEL, STATUS_TONE } from "../studio/words.ts";
+import { accountOf, CATEGORY_LABEL, isConflict, PLATFORM_LABEL, say, seconds, STATUS_LABEL, STATUS_TONE } from "../studio/words.ts";
 import type { StoriesScreenProps } from "./types.ts";
 
 export function ReviewScreen({ ws, page }: StoriesScreenProps) {
@@ -83,17 +85,20 @@ const QUEUE: { title: string; statuses: StoryStatus[]; empty: string }[] = [
   { title: "Posted", statuses: ["published"], empty: "" },
 ];
 
+/** One page of a queue group: each of its statuses has its own cursor, kept together as one ("Show more", §45.34). */
+async function groupPage(ws: string, statuses: StoryStatus[], cursor?: string): Promise<{ items: Story[]; nextCursor: string | null }> {
+  const cursors: Partial<Record<StoryStatus, string | null>> = cursor ? (JSON.parse(cursor) as Partial<Record<StoryStatus, string | null>>) : {};
+  const asked = cursor ? statuses.filter((st) => cursors[st]) : statuses;
+  const pages = await Promise.all(asked.map((status) => storiesApi().listStories(ws, cursors[status] ? { status, limit: 50, cursor: cursors[status]! } : { status, limit: 50 })));
+  const next: Partial<Record<StoryStatus, string | null>> = {};
+  asked.forEach((status, i) => {
+    next[status] = pages[i]!.nextCursor;
+  });
+  const items = pages.flatMap((p) => p.stories).sort((a, b) => statuses.indexOf(a.status) - statuses.indexOf(b.status));
+  return { items, nextCursor: Object.values(next).some(Boolean) ? JSON.stringify(next) : null };
+}
+
 function ReviewQueue({ ws }: { ws: string }) {
-  const lists = useLoad(
-    async () => {
-      const statuses: StoryStatus[] = ["needs_check", "review", "approved", "published"];
-      const pages = await Promise.all(statuses.map((status) => storiesApi().listStories(ws, { status, limit: 50 })));
-      return pages.flatMap((p) => p.stories);
-    },
-    ws,
-    "st-s-review",
-  );
-  const all = lists.data ?? [];
   return (
     <section className="st-page st-studio">
       <header className="st-s-head">
@@ -102,52 +107,81 @@ function ReviewQueue({ ws }: { ws: string }) {
           <p className="st-s-head__lede">Watch each new video. Approve it, ask for changes, or make a scene again.</p>
         </div>
       </header>
-      {lists.error && !lists.data ? (
-        <Notice tone="bad" action={<button type="button" className="st-btn" onClick={() => void lists.reload()}>Try again</button>}>
-          {lists.error}
+      {QUEUE.map((group) => (
+        <QueueGroup key={group.title} ws={ws} group={group} />
+      ))}
+    </section>
+  );
+}
+
+function QueueGroup({ ws, group }: { ws: string; group: (typeof QUEUE)[number] }) {
+  const list = usePaged((cursor) => groupPage(ws, group.statuses, cursor), `${ws}|${group.statuses.join(",")}`, "st-s-review-group", (s) => s.storyId);
+  if (list.error && !list.data)
+    return (
+      <section aria-label={group.title}>
+        <h2 className="st-s-section">{group.title}</h2>
+        <Notice tone="bad" action={<button type="button" className="st-btn" onClick={() => void list.reload()}>Try again</button>}>
+          {list.error}
         </Notice>
-      ) : !lists.data ? (
+      </section>
+    );
+  if (!list.data)
+    return group.empty ? (
+      <section aria-label={group.title}>
+        <h2 className="st-s-section">{group.title}</h2>
         <Busy>Getting the videos to review…</Busy>
+      </section>
+    ) : null;
+  const items = list.data.filter((s) => group.statuses.includes(s.status));
+  if (!items.length && !group.empty) return null;
+  return (
+    <section aria-label={group.title}>
+      <h2 className="st-s-section">{group.title}</h2>
+      {items.length ? (
+        <ul className="st-s-queue">
+          {items.map((s) => (
+            <li key={s.storyId}>
+              <A href={storiesHref({ name: "review_story", storyId: s.storyId })} className="st-s-qcard">
+                {s.coverUrl ? <img className="st-s-qcard__cover" src={s.coverUrl} alt="" width={90} height={160} /> : <span className="st-s-qcard__cover is-blank" aria-hidden="true" />}
+                <span className="st-s-qcard__text">
+                  <Tag tone={STATUS_TONE[s.status]}>{STATUS_LABEL[s.status]}</Tag>
+                  <span className="st-s-qcard__title">{s.title}</span>
+                  <span className="st-s-qcard__meta">
+                    {CATEGORY_LABEL[s.category]} · {seconds(s.actualDurationSec ?? s.durationSec)}
+                  </span>
+                  {s.status === "needs_check" && s.safety?.problems.length ? <span className="st-s-qcard__why">{s.safety.problems.length === 1 ? "1 fact to fix" : `${s.safety.problems.length} facts to fix`}</span> : null}
+                  {s.posted.length ? <span className="st-s-qcard__meta">On {s.posted.map((p) => PLATFORM_LABEL[p.platform]).join(", ")}</span> : null}
+                </span>
+              </A>
+            </li>
+          ))}
+        </ul>
       ) : (
-        QUEUE.map((group) => {
-          const items = all.filter((s) => group.statuses.includes(s.status)).sort((a, b) => group.statuses.indexOf(a.status) - group.statuses.indexOf(b.status));
-          if (!items.length && !group.empty) return null;
-          return (
-            <section key={group.title} aria-label={group.title}>
-              <h2 className="st-s-section">{group.title}</h2>
-              {items.length ? (
-                <ul className="st-s-queue">
-                  {items.map((s) => (
-                    <li key={s.storyId}>
-                      <A href={storiesHref({ name: "review_story", storyId: s.storyId })} className="st-s-qcard">
-                        {s.coverUrl ? <img className="st-s-qcard__cover" src={s.coverUrl} alt="" width={90} height={160} /> : <span className="st-s-qcard__cover is-blank" aria-hidden="true" />}
-                        <span className="st-s-qcard__text">
-                          <Tag tone={STATUS_TONE[s.status]}>{STATUS_LABEL[s.status]}</Tag>
-                          <span className="st-s-qcard__title">{s.title}</span>
-                          <span className="st-s-qcard__meta">
-                            {CATEGORY_LABEL[s.category]} · {seconds(s.actualDurationSec ?? s.durationSec)}
-                          </span>
-                          {s.status === "needs_check" && s.safety?.problems.length ? <span className="st-s-qcard__why">{s.safety.problems.length === 1 ? "1 fact to fix" : `${s.safety.problems.length} facts to fix`}</span> : null}
-                          {s.posted.length ? <span className="st-s-qcard__meta">On {s.posted.map((p) => PLATFORM_LABEL[p.platform]).join(", ")}</span> : null}
-                        </span>
-                      </A>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="st-s-field__hint">{group.empty}</p>
-              )}
-            </section>
-          );
-        })
+        <p className="st-s-field__hint">{group.empty}</p>
       )}
+      <ShowMore list={list} what="videos" />
     </section>
   );
 }
 
 // ---------- One video ----------
 
-type Confirm = { job: PublishingJob; account: SocialAccount; message: string };
+type Confirm = { job: PublishingJob; account: ErrorAccount; message: string };
+
+const FORMAT_NAME: Record<DownloadFormat, string> = { mp4: "MP4", webm: "WebM", mov: "MOV" };
+
+/**
+ * The extra copies this video has now (CONTRACTS §45.34: ASSET# items of kind `video` with meta.format, made beside the
+ * MP4; a `final_video` with meta.format counts too). The Library is asked for the story's newest files, where the
+ * copies of the last assembly are.
+ */
+async function copiesOf(ws: string, storyId: string): Promise<DownloadFormat[]> {
+  const { items } = await storiesApi().library(ws, { storyId, limit: 100 });
+  const found = new Set<DownloadFormat>();
+  for (const i of items)
+    if ((i.kind === "video" || i.kind === "final_video") && i.meta.current !== 0 && (i.meta.format === "webm" || i.meta.format === "mov")) found.add(i.meta.format);
+  return (["webm", "mov"] as DownloadFormat[]).filter((f) => found.has(f));
+}
 
 function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const toast = useToast();
@@ -175,6 +209,9 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const wasLive = useRef(false);
 
   const story = loaded.data?.story ?? null;
+  const approvedNow = story?.status === "approved" || story?.status === "published";
+  // The copies the video has besides its MP4 (read once it can be downloaded, again after a new version).
+  const copies = useLoad(async () => (approvedNow ? await copiesOf(ws, storyId) : []), `${ws}:${storyId}:copies:${approvedNow ? (story?.scriptVersion ?? 0) : "no"}`);
   const job = loaded.data?.job ?? null;
   // Every run of this video, read again whenever the latest one changes: "How it was made" names the model of each
   // step as it is in the video now, even after a later run of only some steps.
@@ -284,12 +321,19 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
       pubs.setData((list) => (list ? list.map((x) => (x.publishingJobId === next.publishingJobId ? next : x)) : [next]));
       setConfirm(null);
     } catch (e) {
+      // The API names the account it would send to now (error.account, §45.34): ask before sending there.
+      const named = accountOf(e);
+      if (named && named.externalAccountId !== confirmAccount) {
+        setConfirm({ job: j, account: named, message: say(e) });
+        return;
+      }
       if (isConflict(e) && !confirmAccount) {
+        // An answer without the account: the account is read here, and asked about only when the sentence names it.
         try {
           const { accounts } = await storiesApi().social(ws);
           const account = accounts.find((a) => a.platform === j.platform);
           if (account && account.connectionStatus === "connected" && account.externalAccountId && accountQuestion(say(e), account)) {
-            setConfirm({ job: j, account, message: say(e) });
+            setConfirm({ job: j, account: { externalAccountId: account.externalAccountId, accountName: account.accountName, handle: account.handle }, message: say(e) });
             return;
           }
         } catch {
@@ -302,9 +346,9 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     }
   }
 
-  async function download() {
-    await act("download", async () => {
-      const { url, filename } = await storiesApi().download(ws, storyId);
+  async function download(format?: DownloadFormat) {
+    await act(format ? `download:${format}` : "download", async () => {
+      const { url, filename } = format ? await storiesApi().download(ws, storyId, { format }) : await storiesApi().download(ws, storyId);
       const a = document.createElement("a");
       a.href = url;
       a.download = filename;
@@ -312,7 +356,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
       document.body.appendChild(a);
       a.click();
       a.remove();
-      toast.success("Downloading your video.");
+      toast.success(format ? `Downloading the ${FORMAT_NAME[format]} copy.` : "Downloading your video.");
     });
   }
 
@@ -363,9 +407,16 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
         <div className="st-s-review__player" ref={col}>
           <Player story={story} script={script} width={width} />
           {done ? (
-            <button type="button" className="st-btn" aria-disabled={busy !== null || undefined} onClick={() => void download()}>
-              {busy === "download" ? "Getting the file…" : "Download"}
-            </button>
+            <div className="st-s-downloads" role="group" aria-label="Download">
+              <button type="button" className="st-btn" aria-disabled={busy !== null || undefined} onClick={() => void download()}>
+                {busy === "download" ? "Getting the file…" : copies.data?.length ? "Download MP4" : "Download"}
+              </button>
+              {(copies.data ?? []).map((f) => (
+                <button key={f} type="button" className="st-btn" aria-disabled={busy !== null || undefined} onClick={() => void download(f)}>
+                  {busy === `download:${f}` ? "Getting the file…" : `Download ${FORMAT_NAME[f]}`}
+                </button>
+              ))}
+            </div>
           ) : null}
         </div>
 
@@ -465,6 +516,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 <span className="st-s-field__hint">Remakes use</span>
                 {remakeMenu}
               </div>
+              {!pick ? <NextRun info={info} story={story} /> : null}
               <div className="st-s-decide__more">
                 <button type="button" className="st-btn" aria-expanded={form === "changes"} onClick={() => setForm((f) => (f === "changes" ? "none" : "changes"))}>
                   Ask for changes
@@ -571,6 +623,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
               <dt>Model and effort for this video</dt>
               <dd>
                 <StoryAi info={info} story={story} editable={editable && busy === null} onChange={(v) => void keepAi(v)} />
+                <NextRun info={info} story={story} />
               </dd>
             </dl>
             <ModelsUsed info={info} job={job} jobs={runs.data} title={live ? "Models working on it" : "Made with"} />
@@ -622,7 +675,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
             <h2 className="st-s-panel__title" id="st-captions-title">
               Captions
             </h2>
-            <CaptionEditor key={`c:${story.scriptVersion}:${story.version}`} story={story} script={script} saving={saving} onSave={(e) => void save(e)} />
+            <CaptionEditor key={`c:${story.scriptVersion}:${story.version}`} ws={ws} info={info} story={story} script={script} saving={saving} onSave={(e) => void save(e)} />
           </section>
           <section className="st-s-panel" aria-labelledby="st-sfx-title">
             <h2 className="st-s-panel__title" id="st-sfx-title">
@@ -686,7 +739,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
 
       {confirm ? (
         <StSheet
-          title={`Post to ${confirm.account.accountName ?? "the new account"}?`}
+          title={`Post to ${confirm.account.accountName || confirm.account.handle || "this account"}?`}
           onClose={() => setConfirm(null)}
           actions={
             <>
@@ -697,19 +750,16 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 type="button"
                 className="st-btn st-btn--main"
                 aria-disabled={retrying !== null || undefined}
-                onClick={() => retrying === null && void retry(confirm.job, confirm.account.externalAccountId ?? undefined)}
+                onClick={() => retrying === null && void retry(confirm.job, confirm.account.externalAccountId)}
               >
-                {retrying ? "Trying…" : `Yes, post to ${confirm.account.accountName ?? "it"}`}
+                {retrying ? "Trying…" : `Yes, post to ${confirm.account.accountName || confirm.account.handle || "it"}`}
               </button>
             </>
           }
         >
           <p>{confirm.message}</p>
-          <p>
-            Lamo Stories&apos; {PLATFORM_LABEL[confirm.job.platform]} sends to <strong>{confirm.account.accountName ?? "this account"}</strong>
-            {confirm.account.handle ? ` (${confirm.account.handle})` : ""}, id {confirm.account.externalAccountId}.
-            {confirm.job.accountName && confirm.job.accountName !== confirm.account.accountName ? ` It was ${confirm.job.accountName} when you tapped Post it.` : ""}
-          </p>
+          <AccountCard platform={confirm.job.platform} account={confirm.account} />
+          {confirm.job.accountName && confirm.job.accountName !== confirm.account.accountName ? <p className="st-s-field__hint">It was {confirm.job.accountName} when you tapped Post it.</p> : null}
         </StSheet>
       ) : null}
     </section>

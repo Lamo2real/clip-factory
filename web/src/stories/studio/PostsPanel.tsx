@@ -1,10 +1,10 @@
-// The Posts panel of an approved or posted video (docs/CONTRACTS.md §45.14, §45.16.6): each publishing job with its
-// place, the Lamo Stories account it went to, its status, the link, the numbers (read 1 hour, 1 day, 3 days and 7
-// days after posting) and, when it stopped, its plain sentence and Try again.
+// The Posts panel of an approved or posted video (docs/CONTRACTS.md §45.14, §45.16.6, §45.34): each publishing job with
+// its place, the exact Lamo Stories account it went to (name, handle and id), its status, the link, the numbers (read
+// 1 hour, 1 day, 3 days and 7 days after posting) and, when it stopped, its plain sentence and Try again.
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import type { PublishingJob } from "../api/types.ts";
 import { Tag } from "./kit.tsx";
-import { ago, PLATFORM_LABEL, PUBLISH_LABEL, PUBLISH_TONE, shortNumber } from "./words.ts";
+import { accountWords, ago, PLATFORM_LABEL, PUBLISH_LABEL, PUBLISH_TONE, shortNumber } from "./words.ts";
 
 export function PostRow({ job, onRetry, busy = false }: { job: PublishingJob; onRetry: (j: PublishingJob) => void; busy?: boolean }) {
   const stuck = job.publishingStatus === "failed" || job.publishingStatus === "needs_attention";
@@ -19,7 +19,10 @@ export function PostRow({ job, onRetry, busy = false }: { job: PublishingJob; on
           <strong>{PLATFORM_LABEL[job.platform]}</strong>
           <Tag tone={PUBLISH_TONE[job.publishingStatus]}>{PUBLISH_LABEL[job.publishingStatus]}</Tag>
         </span>
-        <span className="st-s-post__account">{job.accountName ?? "Lamo Stories account"}</span>
+        <span className="st-s-post__account">
+          {job.externalAccountId ? accountWords({ accountName: job.accountName, handle: job.handle ?? null, externalAccountId: job.externalAccountId }) : (job.accountName ?? job.handle ?? "Lamo Stories account")}
+        </span>
+        {job.externalAccountId ? <span className="st-s-post__id">Account id {job.externalAccountId}</span> : null}
         {job.publishingStatus === "posted" ? (
           <span className="st-s-post__when">Posted {ago(job.postedAt ?? job.updatedAt)}</span>
         ) : job.publishingStatus === "queued" || job.publishingStatus === "publishing" ? (

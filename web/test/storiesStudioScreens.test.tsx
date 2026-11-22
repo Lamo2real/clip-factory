@@ -559,9 +559,14 @@ describe("Characters", () => {
     const pipRef = store.characters.find((c) => c.characterId === C.pip)!.references[0]!.assetId;
     await click(control("Use picture 1"), 50);
     await click(control("Design it"), 250);
-    expect(design).toHaveBeenCalledWith("stories", { referenceAssetId: pipRef });
+    // A redesign of this very character (§45.34): the agent starts from it.
+    expect(design).toHaveBeenCalledWith("stories", { referenceAssetId: pipRef, characterId: C.pip });
     await untilTask();
-    expect(text()).toContain("This is the AI's new look for Pip. Nothing changes until you tap Save changes.");
+    // Which parts change is shown before Use this; nothing is in the editor yet.
+    expect(text()).toContain("What changes:");
+    expect(put).not.toHaveBeenCalled();
+    await click(control("Use this"));
+    expect(text()).toContain("The new version of Pip is in the editor. Nothing changes until you tap Save changes.");
     expect(put).not.toHaveBeenCalled();
     await click(control("Save changes"));
     expect(put.mock.calls[0]![2]).toMatchObject({ name: "Pip" });
@@ -934,7 +939,7 @@ describe("Review", () => {
 // ---------- Post it ----------
 
 describe("Post it", () => {
-  it("lists only this workspace's connected accounts by name, with nothing chosen; others only offer Connect in Connections", async () => {
+  it("lists only this workspace's connected accounts by name, with nothing chosen; others only offer Connect in Social accounts", async () => {
     await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />);
     await click(control("Post it"));
     const dialog = document.querySelector('[role="dialog"]')!;
@@ -1103,7 +1108,7 @@ describe("Post it", () => {
     await click(control("Upload to 2 places", dialog()));
     expect(publish).not.toHaveBeenCalled();
     expect(dialog().textContent).toContain("Lamo Stories' YouTube is now Someone Else (@someone). Look at it below, then tap Upload again.");
-    expect(dialog().textContent).toContain("Lamo Stories' TikTok needs connecting again. Fix it in Connections, or leave TikTok out.");
+    expect(dialog().textContent).toContain("Lamo Stories' TikTok needs connecting again. Fix it in Social accounts, or leave TikTok out.");
     expect(dialog().querySelector(".st-s-dest")?.textContent).toContain("Goes to Someone Else (@someone)");
     // TikTok left the list of chosen places; the owner has seen the new YouTube account, so the next tap sends.
     await click(control("Upload", dialog()));

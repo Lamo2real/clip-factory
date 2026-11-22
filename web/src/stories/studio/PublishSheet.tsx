@@ -3,11 +3,14 @@
 // is no default account). "Use my settings" applies the owner's preset in one tap (everyone can see it, comments, duets
 // and stitches on, never made for kids); More details opens every option. TikTok follows its rules: who can see it is
 // picked from a dropdown with no default (TikTok's own choices for this account), and Comments, Duet and Stitch are
-// shown and start off. An account that is not connected (or needs connecting again) only offers Connect in
-// Connections. Each chosen place shows the exact account the video goes to (name, handle and id) with Check now
+// shown and start off. An account that is not connected (or needs connecting again) only offers Connect in Social
+// accounts. Each chosen place shows the exact account the video goes to (name, handle and id) with Check now
 // (a live check with the platform, §45.16.7); Upload checks every chosen account that was not checked in the sheet and
-// stops, saying what changed, when one is no longer connected or is now a different account. After Upload, the sheet
-// shows each publishing job's status, its sentence and Try again.
+// stops, saying what changed, when one is no longer connected or is now a different account. When the API answers 409
+// naming an account (it changed, or Lamo Stories cannot tell this TikTok from Lamo Clips' own; `error.account`,
+// §45.34), the sheet asks "Post to {name}?" with the account shown and, on Yes, sends the same request again with
+// `confirmAccount` for that place. After Upload, the sheet shows each publishing job's status, its sentence and Try
+// again.
 import { useEffect, useId, useMemo, useState } from "react";
 import { Dropdown } from "../../components/Dropdown.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
@@ -30,11 +33,11 @@ import {
   type TikTokChoices,
 } from "../../lib/tiktokChoices.ts";
 import { storiesApi } from "../api/client.ts";
-import { STORIES_PLATFORMS, type Platform, type PublishOptions, type PublishingJob, type PublishTarget, type SocialAccount, type StoriesConfig, type Story, type TikTokCreator } from "../api/types.ts";
+import { STORIES_PLATFORMS, type ErrorAccount, type Platform, type PublishOptions, type PublishingJob, type PublishTarget, type SocialAccount, type StoriesConfig, type Story, type TikTokCreator } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
 import { Busy, Notice, Pick, StSheet, Switch } from "./kit.tsx";
 import { PostRow } from "./PostsPanel.tsx";
-import { ago, PLATFORM_LABEL, say } from "./words.ts";
+import { accountOf, accountWords, ago, PLATFORM_LABEL, say } from "./words.ts";
 
 type YouTubeOptions = { privacy: "public" | "unlisted" | "private"; category: string; notifySubscribers: boolean };
 
@@ -63,7 +66,7 @@ export function accountState(a: SocialAccount): string {
     case "choose_account":
       return "Pick which account to use first.";
     case "same_as_clips":
-      return "This is Lamo Clips' account. Decide in Connections.";
+      return "This is Lamo Clips' account. Decide in Social accounts.";
     default:
       return "Not connected yet.";
   }
@@ -81,11 +84,35 @@ export function checkProblem(before: SocialAccount, after: SocialAccount): strin
           : after.connectionStatus === "same_as_clips"
             ? "is Lamo Clips' own account right now"
             : "is not connected any more";
-    return `Lamo Stories' ${place} ${state}. Fix it in Connections, or leave ${place} out.`;
+    return `Lamo Stories' ${place} ${state}. Fix it in Social accounts, or leave ${place} out.`;
   }
   if (before.externalAccountId && after.externalAccountId !== before.externalAccountId)
     return `Lamo Stories' ${place} is now ${after.accountName ?? "a different account"}${after.handle ? ` (${after.handle})` : ""}. Look at it below, then tap Upload again.`;
   return null;
+}
+
+/**
+ * Which chosen place a publishing 409 that names an account is about (§45.34): the place whose account is that one,
+ * else the place the sentence names, else the only place chosen; null when it cannot be told.
+ */
+export function placeOf(message: string, account: ErrorAccount, chosen: Platform[], accounts: Map<Platform, SocialAccount>): Platform | null {
+  const same = chosen.find((p) => accounts.get(p)?.externalAccountId === account.externalAccountId);
+  if (same) return same;
+  const named = chosen.filter((p) => new RegExp(`(^|[^A-Za-z])${PLATFORM_LABEL[p]}([^A-Za-z]|$)`).test(message));
+  if (named.length === 1) return named[0]!;
+  return chosen.length === 1 ? chosen[0]! : null;
+}
+
+/** The account a post would go to, shown before the owner says yes (name, handle and id, §45.34). */
+export function AccountCard({ platform, account }: { platform: Platform; account: ErrorAccount }) {
+  return (
+    <div className="st-s-dest st-s-dest--ask" aria-label={`The ${PLATFORM_LABEL[platform]} account`}>
+      <p className="st-s-dest__who">
+        Lamo Stories&apos; {PLATFORM_LABEL[platform]} sends to <strong>{accountWords(account)}</strong>
+      </p>
+      <p className="st-s-dest__id">Account id {account.externalAccountId}</p>
+    </div>
+  );
 }
 
 /** The Lamo Clips-shaped creator the shared TikTok rules read (the same fields, §17.4). */
@@ -136,6 +163,9 @@ export function PublishSheet({
   const [checked, setChecked] = useState<Partial<Record<Platform, number>>>({});
   const [checking, setChecking] = useState<Platform[]>([]);
   const [checkNote, setCheckNote] = useState<Partial<Record<Platform, string>>>({});
+  /** The accounts the owner said yes to after a 409 named them (sent as confirmAccount), and the one being asked. */
+  const [confirms, setConfirms] = useState<Partial<Record<Platform, string>>>({});
+  const [ask, setAsk] = useState<{ platform: Platform; account: ErrorAccount; message: string } | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -230,7 +260,7 @@ export function PublishSheet({
             ? `${PICK_WHOSE} Pick Your brand or Branded content.`
             : null;
 
-  async function post() {
+  async function post(yes: Partial<Record<Platform, string>> = confirms) {
     if (why || sending) return;
     setSending(true);
     setProblem(null);
@@ -245,16 +275,30 @@ export function PublishSheet({
       const targets: PublishTarget[] = chosen.map((p) => {
         const account = byPlatform.get(p)!;
         const options = optionsFor(p, yt, shareToFeed, tt, creator);
-        return options ? { platform: p, socialAccountId: account.socialAccountId, options } : { platform: p, socialAccountId: account.socialAccountId };
+        const t: PublishTarget = options ? { platform: p, socialAccountId: account.socialAccountId, options } : { platform: p, socialAccountId: account.socialAccountId };
+        if (yes[p]) t.confirmAccount = yes[p];
+        return t;
       });
       const made = await storiesApi().publish(ws, story.storyId, targets);
       setSentIds(made.map((j) => j.publishingJobId));
       onSent(made);
     } catch (e) {
-      setProblem(say(e));
+      // The API names the account a place would send to (§45.34): the owner says yes first; nothing was posted.
+      const named = accountOf(e);
+      const place = named ? placeOf(say(e), named, chosen, byPlatform) : null;
+      if (named && place && yes[place] !== named.externalAccountId) setAsk({ platform: place, account: named, message: say(e) });
+      else setProblem(say(e));
     } finally {
       setSending(false);
     }
+  }
+
+  function sayYes() {
+    if (!ask) return;
+    const next = { ...confirms, [ask.platform]: ask.account.externalAccountId };
+    setConfirms(next);
+    setAsk(null);
+    void post(next);
   }
 
   if (sentIds) {
@@ -349,8 +393,8 @@ export function PublishSheet({
               })}
             </ul>
           ) : (
-            <Notice tone="info" action={<A href={storiesHref({ name: "connections", platform: null, result: null, ws: null })} className="st-btn">Open Connections</A>}>
-              No Lamo Stories account is connected yet. Connect one in Connections first.
+            <Notice tone="info" action={<A href={storiesHref({ name: "connections", platform: null, result: null, ws: null })} className="st-btn">Open Social accounts</A>}>
+              No Lamo Stories account is connected yet. Connect one in Social accounts first.
             </Notice>
           )}
           {others.length ? (
@@ -365,7 +409,7 @@ export function PublishSheet({
                     <span className="st-s-place__name">{accountState(a)}</span>
                   </span>
                   <A href={storiesHref({ name: "connections", platform: null, result: null, ws: null })} className="st-btn st-s-small">
-                    Connect in Connections
+                    Connect in Social accounts
                   </A>
                 </li>
               ))}
@@ -486,6 +530,25 @@ export function PublishSheet({
 
           {why && chosen.length ? <p className="st-s-field__hint st-s-why">{why}</p> : null}
           {problem ? <Notice tone="bad">{problem}</Notice> : null}
+          {ask ? (
+            <StSheet
+              title={`Post to ${ask.account.accountName || ask.account.handle || "this account"}?`}
+              onClose={() => setAsk(null)}
+              actions={
+                <>
+                  <button type="button" className="st-btn" onClick={() => setAsk(null)}>
+                    Not now
+                  </button>
+                  <button type="button" className="st-btn st-btn--main" aria-disabled={sending || undefined} onClick={() => !sending && sayYes()}>
+                    {sending ? "Sending…" : `Yes, post to ${ask.account.accountName || ask.account.handle || "it"}`}
+                  </button>
+                </>
+              }
+            >
+              <p>{ask.message}</p>
+              <AccountCard platform={ask.platform} account={ask.account} />
+            </StSheet>
+          ) : null}
         </>
       )}
     </StSheet>

@@ -382,6 +382,7 @@ describe("references", () => {
     await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.analyzed })} />);
     await until(() => !!$(".st-ref-analysis"));
     store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Lamo Stories › Settings › AI, or try again.";
+    store.knobs.refNoJob = true; // an answer without the job (the API before §45.34)
     await click(byText("button", "Analyze again"));
     await until(() => !!$(".st-ref-busybar"));
     await until(() => !!$(".st-ref-failed"), 8000);
@@ -396,6 +397,7 @@ describe("references", () => {
 
   it("a first analysis that fails says so; with the job in the answer, its own sentence and Settings › AI", async () => {
     store.knobs.refFail = "This video can't be opened. Upload it again as MP4 or MOV.";
+    store.knobs.refNoJob = true; // first an answer without the job (the API before §45.34)
     await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.ready })} />);
     await until(() => !!byText("button", "Analyze it"));
     await click(byText("button", "Analyze it"));

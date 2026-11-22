@@ -1,10 +1,14 @@
-// The captions editor of Review (docs/CONTRACTS.md §45.16.6, §45.9; spec §5.E "edit captions"): the words on the
-// video (each caption's text, when it starts and how long it shows, plus each scene's own words, and captions on or
-// off) and the six post captions, each with its platform's limit. Save sends only what changed; the API then marks
+// The captions editor of Review (docs/CONTRACTS.md §45.16.6, §45.9, §45.34; spec §5.E "edit captions"): the words on
+// the video (each caption's text, when it starts and how long it shows, plus each scene's own words, and captions on
+// or off) and the six post captions, each with its platform's limit. Save sends only what changed; the API then marks
 // the steps it makes out of date (captions, put together, ready to watch and the fact check), so Remake shows.
+// "Write them again" asks the storyboard agent for new post captions (a captions task, with its own model menu): the
+// draft shows next to the saved words, and only "Use these" saves it (PATCH postCaptions).
 import { useMemo, useState } from "react";
-import type { CaptionCue, Captions, Story, StoryPatch, StoryScript } from "../api/types.ts";
-import { Notice, Pick, Slider, Switch, TextField } from "./kit.tsx";
+import { storiesApi } from "../api/client.ts";
+import type { AiTask, CaptionCue, Captions, CaptionsResult, ModelOverride, Story, StoryPatch, StoryScript } from "../api/types.ts";
+import { cleanPick, LISTED_INFO, merged, ModelMenu, storyUsual, TaskLine, useAiTask, type AiInfo } from "./ai.tsx";
+import { celebrate, Notice, Pick, Slider, Switch, TextField } from "./kit.tsx";
 import { clock } from "./words.ts";
 
 /** The platforms' own caption limits (the same as Lamo Clips', CONTRACTS §17.6). */
@@ -31,6 +35,17 @@ function sceneAt(script: StoryScript, t: number): number {
   return script.scenes.length;
 }
 
+/** The draft a finished "Write them again" task carries (result.postCaptions), filled out to all six; null when none. */
+export function captionsDraft(task: AiTask): CaptionsResult | null {
+  const r = task.result as Partial<CaptionsResult> | null;
+  const p = r?.postCaptions as Partial<Captions> | undefined;
+  if (!p || typeof p !== "object") return null;
+  const keys = Object.keys(POST_LIMITS) as (keyof Captions)[];
+  if (!keys.some((k) => typeof p[k] === "string")) return null;
+  const postCaptions = Object.fromEntries(keys.map((k) => [k, typeof p[k] === "string" ? p[k]!.slice(0, POST_LIMITS[k]) : ""])) as unknown as Captions;
+  return { storyId: typeof r?.storyId === "string" ? r.storyId : "", scriptVersion: typeof r?.scriptVersion === "number" ? r.scriptVersion : 0, postCaptions };
+}
+
 /** Why these captions cannot be saved, or null. */
 export function captionsProblem(cues: CaptionCue[], total: number): string | null {
   for (const [i, c] of cues.entries()) {
@@ -41,7 +56,21 @@ export function captionsProblem(cues: CaptionCue[], total: number): string | nul
   return null;
 }
 
-export function CaptionEditor({ story, script, saving, onSave }: { story: Story; script: StoryScript; saving: boolean; onSave: (e: Edit) => void }) {
+export function CaptionEditor({
+  ws,
+  info = LISTED_INFO,
+  story,
+  script,
+  saving,
+  onSave,
+}: {
+  ws: string;
+  info?: AiInfo;
+  story: Story;
+  script: StoryScript;
+  saving: boolean;
+  onSave: (e: Edit) => void;
+}) {
   const total = useMemo(() => script.scenes.reduce((s, sc) => s + sc.durationSec, 0), [script]);
   const [tab, setTab] = useState<"video" | "posts">("video");
   const [cues, setCues] = useState<CaptionCue[]>(() => [...script.captions].sort((a, b) => a.at - b.at));
@@ -49,6 +78,40 @@ export function CaptionEditor({ story, script, saving, onSave }: { story: Story;
   const [sceneWords, setSceneWords] = useState<Record<string, string>>(() => Object.fromEntries(script.scenes.map((sc) => [sc.sceneId, sc.caption ?? ""])));
   const [posts, setPosts] = useState<Captions>(story.postCaptions);
   const [problem, setProblem] = useState<string | null>(null);
+  /** "Write them again": the model and effort for that one run, and the draft it brought back. */
+  const [pick, setPick] = useState<ModelOverride | null>(null);
+  const [draft, setDraft] = useState<CaptionsResult | null>(null);
+  const writeUsual = storyUsual(info, story, "captions");
+  const writing = useAiTask(
+    ws,
+    (task) => {
+      const d = captionsDraft(task);
+      if (!d) return setProblem("No new words came back. Tap Write them again.");
+      setDraft(d);
+    },
+    () => writeAgain(),
+  );
+
+  function writeAgain() {
+    if (writing.phase === "working") return;
+    setProblem(null);
+    setDraft(null);
+    const override = cleanPick(pick);
+    void writing.start(() => storiesApi().writeCaptions(ws, story.storyId, override ? { override } : undefined));
+  }
+
+  /** "Use these": only the places whose words changed are saved (PATCH postCaptions). */
+  function takeDraft(from: HTMLElement | null) {
+    if (!draft) return;
+    const changes = (Object.keys(POST_LIMITS) as (keyof Captions)[]).filter((k) => draft.postCaptions[k] !== story.postCaptions[k]);
+    if (!changes.length) {
+      setDraft(null);
+      return;
+    }
+    setPosts(draft.postCaptions);
+    celebrate(from, 60);
+    onSave({ postCaptions: Object.fromEntries(changes.map((k) => [k, draft.postCaptions[k]])) });
+  }
 
   const cuesChanged = JSON.stringify(cues) !== JSON.stringify([...script.captions].sort((a, b) => a.at - b.at));
   const sceneChanges = script.scenes.filter((sc) => (sceneWords[sc.sceneId] ?? "").trim() !== (sc.caption ?? "")).map((sc) => sc.sceneId);
@@ -155,6 +218,54 @@ export function CaptionEditor({ story, script, saving, onSave }: { story: Story;
       ) : (
         <div className="st-s-captions">
           <p className="st-s-field__hint">What each place shows with the video. Each one has its own limit.</p>
+          <div className="st-s-aipair st-s-rewrite">
+            <button type="button" className="st-btn" aria-disabled={writing.phase === "working" || saving || undefined} onClick={() => !saving && writeAgain()}>
+              {writing.phase === "working" ? "Writing…" : "Write them again"}
+            </button>
+            <ModelMenu info={info} usual={writeUsual} value={pick} onChange={setPick} compact />
+          </div>
+          <TaskLine info={info} kind="captions" run={writing} expected={merged(info, writeUsual, pick)} />
+          {draft ? (
+            <section className="st-s-draftcaps" aria-labelledby="st-draftcaps-title">
+              <h3 className="st-s-draftcaps__title" id="st-draftcaps-title">
+                New words to look at
+              </h3>
+              <p className="st-s-field__hint">
+                {draft.scriptVersion && draft.scriptVersion !== story.scriptVersion ? "Written from an older storyboard. " : ""}Nothing changes until you tap Use these.
+              </p>
+              <ul className="st-s-draftcaps__list">
+                {POST_FIELDS.map((f) => {
+                  const same = draft.postCaptions[f.key] === story.postCaptions[f.key];
+                  return (
+                    <li key={f.key} className={`st-s-draftcaps__row${same ? " is-same" : ""}`}>
+                      <span className="st-s-draftcaps__place">
+                        {f.label}
+                        {same ? " (the same)" : ""}
+                      </span>
+                      <span className="st-s-draftcaps__pair">
+                        <span className="st-s-draftcaps__was">
+                          <span className="st-s-draftcaps__tag">Saved</span>
+                          <span className="st-s-draftcaps__words">{story.postCaptions[f.key] || "No words yet"}</span>
+                        </span>
+                        <span className="st-s-draftcaps__new">
+                          <span className="st-s-draftcaps__tag">New</span>
+                          <span className="st-s-draftcaps__words">{draft.postCaptions[f.key] || "No words"}</span>
+                        </span>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="st-s-actionbar">
+                <button type="button" className="st-btn" onClick={() => setDraft(null)}>
+                  Keep the saved words
+                </button>
+                <button type="button" className="st-btn st-btn--main" aria-disabled={saving || undefined} onClick={(e) => !saving && takeDraft(e.currentTarget)}>
+                  {saving ? "Saving…" : "Use these"}
+                </button>
+              </div>
+            </section>
+          ) : null}
           {POST_FIELDS.map((f) => (
             <TextField key={f.key} label={f.label} value={posts[f.key]} max={POST_LIMITS[f.key]} multiline={f.rows > 1} rows={f.rows} onChange={(v) => setPosts((p) => ({ ...p, [f.key]: v }))} hint={`Up to ${POST_LIMITS[f.key].toLocaleString("en-GB")} letters.`} />
           ))}

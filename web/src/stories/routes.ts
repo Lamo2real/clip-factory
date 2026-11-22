@@ -7,7 +7,11 @@ export type StoriesPage =
   | { name: "character_new" }
   | { name: "character"; characterId: string }
   | { name: "production" }
-  | { name: "production_new"; ideaId: string | null }
+  /**
+   * Make a new video, filled in from the address (CONTRACTS §45.34): `?idea=`, `?ref=` (repeatable, up to 3 reference
+   * videos), `?cast=` (repeatable, up to 3 characters) and `?sec=` (15 to 90). The router always fills every key.
+   */
+  | { name: "production_new"; ideaId: string | null; refIds?: string[]; castIds?: string[]; durationSec?: number | null }
   | { name: "production_story"; storyId: string }
   | { name: "review" }
   | { name: "review_story"; storyId: string }
@@ -28,6 +32,18 @@ export const STORIES_ROOT = "/stories";
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 
+/** Up to 3 different ids from repeated keys (`?ref=a&ref=b`); anything that is not an id is left out. */
+function idList(values: string[]): string[] {
+  return [...new Set(values.filter((v) => ID.test(v)))].slice(0, 3);
+}
+
+/** A video length from `?sec=`: whole seconds from 15 to 90, else none. */
+function lengthOf(value: string | null): number | null {
+  if (!value || !/^\d{1,3}$/.test(value)) return null;
+  const n = Number(value);
+  return n >= 15 && n <= 90 ? n : null;
+}
+
 export function isStoriesPath(pathname: string): boolean {
   return pathname === STORIES_ROOT || pathname.startsWith(STORIES_ROOT + "/");
 }
@@ -46,7 +62,7 @@ export function matchStories(pathname: string, search: string): StoriesPage {
   }
   if (a === "production") {
     if (b === undefined) return { name: "production" };
-    if (b === "new") return { name: "production_new", ideaId: q.get("idea") };
+    if (b === "new") return { name: "production_new", ideaId: q.get("idea"), refIds: idList(q.getAll("ref")), castIds: idList(q.getAll("cast")), durationSec: lengthOf(q.get("sec")) };
     if (ID.test(b)) return { name: "production_story", storyId: b };
   }
   if (a === "review") {
@@ -80,8 +96,15 @@ export function storiesHref(page: StoriesPage): string {
       return `${STORIES_ROOT}/characters/${encodeURIComponent(page.characterId)}`;
     case "character_new":
       return `${STORIES_ROOT}/characters/new`;
-    case "production_new":
-      return `${STORIES_ROOT}/production/new${page.ideaId ? `?idea=${encodeURIComponent(page.ideaId)}` : ""}`;
+    case "production_new": {
+      const q = new URLSearchParams();
+      if (page.ideaId) q.set("idea", page.ideaId);
+      for (const r of (page.refIds ?? []).slice(0, 3)) q.append("ref", r);
+      for (const c of (page.castIds ?? []).slice(0, 3)) q.append("cast", c);
+      if (page.durationSec) q.set("sec", String(page.durationSec));
+      const qs = q.toString();
+      return `${STORIES_ROOT}/production/new${qs ? `?${qs}` : ""}`;
+    }
     case "production_story":
       return `${STORIES_ROOT}/production/${encodeURIComponent(page.storyId)}`;
     case "review_story":

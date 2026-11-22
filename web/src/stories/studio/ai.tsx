@@ -515,12 +515,15 @@ export function TaskLine({
 }
 
 /** The Lamo Stories setting a stop sentence sends the owner to (§45.25: "… in Lamo Stories › Settings › AI"). */
-export function settingsFor(sentence: string | null | undefined): "ai" | "agents" | null {
+export function settingsFor(sentence: string | null | undefined): "ai" | "agents" | "video" | null {
   if (!sentence) return null;
   if (/Settings\s*›\s*Agents/i.test(sentence)) return "agents";
   if (/Settings\s*›\s*AI\b/i.test(sentence)) return "ai";
+  if (/Settings\s*›\s*Video\b/i.test(sentence)) return "video";
   return null;
 }
+
+const FIX_WORDS: Record<"ai" | "agents" | "video", string> = { ai: "Open Settings › AI", agents: "Open Settings › Agents", video: "Open Settings › Video" };
 
 /** The button that opens the setting a stop sentence names (nothing when it names none). */
 export function SettingsFix({ sentence }: { sentence: string | null | undefined }) {
@@ -528,12 +531,22 @@ export function SettingsFix({ sentence }: { sentence: string | null | undefined 
   if (!section) return null;
   return (
     <A href={storiesHref({ name: "settings", section })} className="st-btn">
-      {section === "agents" ? "Open Settings › Agents" : "Open Settings › AI"}
+      {FIX_WORDS[section]}
     </A>
   );
 }
 
 type ModelUse = ProductionJob["meta"]["models"][number];
+
+/**
+ * Whether this step stopped on its model (§45.34 "A failed model call still shows what was asked"): the record says
+ * `failed`, or (an API that leaves that key out) an effort that was asked but not applied on a step that failed in
+ * that run. Its model and effort are what the step was asked with; no answer came.
+ */
+export function stoppedOn(job: Pick<ProductionJob, "steps">, m: ModelUse): boolean {
+  if (m.failed === true) return true;
+  return !m.effortApplied && !!m.effort && job.steps.some((s) => s.key === m.step && s.status === "failed");
+}
 
 /**
  * Which model and effort made each step of the video as it is now: for each step, the newest run that finished it
@@ -569,8 +582,11 @@ export function madeWith(list: (ProductionJob | null | undefined)[]): ModelUse[]
  */
 export function ModelsUsed({ info, job, jobs, title = "Made with" }: { info: AiInfo; job: ProductionJob | null; jobs?: ProductionJob[] | null; title?: string }) {
   const working = !!job && (job.status === "queued" || job.status === "running");
-  const used = working || !jobs ? (job?.meta.models ?? []) : madeWith([job, ...jobs]);
+  const own = working || !jobs;
+  const used = own ? (job?.meta.models ?? []) : madeWith([job, ...jobs]);
   if (!used.length) return null;
+  // madeWith keeps only finished steps; a stopped one is told apart only in a run's own list.
+  const stopped = (u: ModelUse) => stoppedOn(own && job ? job : { steps: [] }, u);
   return (
     <div className="st-s-used">
       <h3 className="st-s-details__title">{title}</h3>
@@ -578,9 +594,9 @@ export function ModelsUsed({ info, job, jobs, title = "Made with" }: { info: AiI
         {used.map((u, i) => (
           <li key={`${u.step}:${i}`} className="st-s-used__row">
             <span className="st-s-used__step">{STEP_WORDS[u.step] ?? u.step}</span>
-            <span className="st-s-used__model">{modelLine(info, u.model, u.effort, u.effortApplied)}</span>
+            <span className="st-s-used__model">{stopped(u) ? modelLine(info, u.model, u.effort, null) : modelLine(info, u.model, u.effort, u.effortApplied)}</span>
             <Tag>{AGENT_WORDS[u.agentId] ?? u.agentId}</Tag>
-            {!u.effortApplied ? <span className="st-s-used__note">This model has no effort setting; it ran at its own level.</span> : null}
+            {stopped(u) ? <span className="st-s-used__note">This step stopped on this model. This is what it was asked with.</span> : !u.effortApplied ? <span className="st-s-used__note">This model has no effort setting; it ran at its own level.</span> : null}
           </li>
         ))}
       </ul>
@@ -588,14 +604,32 @@ export function ModelsUsed({ info, job, jobs, title = "Made with" }: { info: AiI
   );
 }
 
-/** What the next run of this video uses when nothing else is picked: its own setting over the writer's usual. */
-export function storyUsual(info: AiInfo, story: Pick<Story, "ai">): Usual {
-  const base = usualFor(info, "storyboard");
+/** What the next run of this video uses when nothing else is picked: its own setting over the task's usual (the writer's). */
+export function storyUsual(info: AiInfo, story: Pick<Story, "ai">, kind: TaskKind = "storyboard"): Usual {
+  const base = usualFor(info, kind);
   if (!story.ai.model && !story.ai.effort) return base;
   const model = story.ai.model ?? base.model;
   const m = modelOf(info, model);
   const applied = m ? m.efforts.length > 0 : base.effortApplied;
   return { model, effort: applied ? (story.ai.effort ?? base.effort) : null, effortApplied: applied, from: "project", modelKnown: !!story.ai.model, effortKnown: !!story.ai.effort };
+}
+
+/**
+ * What the next run of this video uses (CONTRACTS §45.34 Story.effective, the API's own sum of §45.25's levels); before
+ * the API sends it, the same sum from Lamo Stories' settings. "Next run: Claude Opus 5.5 · High".
+ */
+export function nextRunLine(info: AiInfo, story: Pick<Story, "ai" | "effective">): string {
+  const e = story.effective;
+  if (e) return `Next run: ${modelName(info, e.model)} · ${e.effortApplied === false || !e.effort ? "its own effort level" : EFFORT_LABEL[e.effort]}`;
+  const p = merged(info, storyUsual(info, story), null);
+  if (!p.modelKnown) return "Next run: your usual model and effort";
+  if (!p.effortApplied) return `Next run: ${modelName(info, p.model)} · its own effort level`;
+  return `Next run: ${modelName(info, p.model)} · ${p.effortKnown && p.effort ? EFFORT_LABEL[p.effort] : "your usual effort"}`;
+}
+
+/** The "Next run: …" line of Review and Production (§45.34). */
+export function NextRun({ info, story }: { info: AiInfo; story: Pick<Story, "ai" | "effective"> }) {
+  return <p className="st-s-nextrun">{nextRunLine(info, story)}</p>;
 }
 
 /** The video's own model and effort, kept with it (§45.25 level 2): shown, and changed while it waits for review. */

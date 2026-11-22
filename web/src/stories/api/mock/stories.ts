@@ -19,6 +19,8 @@ import {
   STEP_ORDER,
   type Captions,
   type Character,
+  type DownloadFormat,
+  type Effective,
   type IdeaCategory,
   type LibraryItem,
   type ModelOverride,
@@ -29,13 +31,14 @@ import {
   type StoriesConfig,
   type Story,
   type StorySafety,
+  type StoryFormat,
   type StoryStatus,
   type TaskKind,
 } from "../types.ts";
-import { checkOverride, citationsFor, effectiveFor, shownSteps, topicFor } from "./ideas.ts";
+import { checkOverride, citationsFor, effectiveFor, shownSteps, startMockTask, topicFor } from "./ideas.ts";
 import { delay, type MockStore } from "./store.ts";
 
-export const KEYS = ["listStories", "createStory", "getStory", "storyJobs", "patchStory", "deleteStory", "produce", "cancelStory", "approve", "reject", "requestChanges", "download"] as const;
+export const KEYS = ["listStories", "createStory", "getStory", "storyJobs", "patchStory", "deleteStory", "produce", "cancelStory", "approve", "reject", "requestChanges", "writeCaptions", "download"] as const;
 
 // ---------- Shared helpers (the ideas and characters parts use them too) ----------
 
@@ -112,6 +115,54 @@ function wsConfig(store: MockStore, ws: string): Partial<StoriesConfig> {
 }
 
 const NO_GUIDANCE = "Lamo Stories only makes driving-safety videos from checked advice, and this one isn't in the list yet.";
+
+// ---------- Video shape and copies (§45.34) ----------
+
+/** Each shape's sizes (the resolution must match the aspect). */
+export const SHAPES: Record<StoryFormat["aspect"], [number, number][]> = {
+  "9:16": [
+    [1080, 1920],
+    [720, 1280],
+  ],
+  "1:1": [
+    [1080, 1080],
+    [720, 720],
+  ],
+  "16:9": [
+    [1920, 1080],
+    [1280, 720],
+  ],
+};
+
+const VERTICAL: StoryFormat = { aspect: "9:16", width: 1080, height: 1920 };
+
+/** The workspace's default shape (StoriesConfig.video), as a story's format. */
+function defaultFormat(cfg: Partial<StoriesConfig>): StoryFormat {
+  const v = (cfg.video ?? {}) as { aspect?: string; resolution?: string };
+  const aspect = (v.aspect ?? "9:16") as StoryFormat["aspect"];
+  const [w, h] = (v.resolution ?? "").split("x").map(Number);
+  const fits = SHAPES[aspect]?.some(([a, b]) => a === w && b === h);
+  return fits && w && h ? { aspect, width: w, height: h } : VERTICAL;
+}
+
+/** A create body's format, checked like the API: a known aspect and one of its sizes. */
+function checkFormat(f: unknown): StoryFormat {
+  const v = (f ?? {}) as Partial<StoryFormat>;
+  const sizes = typeof v.aspect === "string" ? SHAPES[v.aspect as StoryFormat["aspect"]] : undefined;
+  if (!sizes) fail(400, "bad_request", "Pick tall (9:16), square (1:1) or wide (16:9).");
+  if (!sizes.some(([w, h]) => w === v.width && h === v.height)) fail(400, "bad_request", "That size does not fit that shape. Pick one of its sizes.");
+  return { aspect: v.aspect as StoryFormat["aspect"], width: v.width!, height: v.height! };
+}
+
+/** The extra copies new videos get (StoriesConfig.production.extraFormats, or the test knob extraFormats). */
+function extraFormats(store: MockStore, ws: string): DownloadFormat[] {
+  const knob = store.knobs.extraFormats;
+  const set = Array.isArray(knob) ? knob : ((wsConfig(store, ws).production as { extraFormats?: unknown } | undefined)?.extraFormats ?? []);
+  return (Array.isArray(set) ? set : []).filter((f): f is DownloadFormat => f === "webm" || f === "mov");
+}
+
+const FORMAT_WORD: Record<DownloadFormat, string> = { mp4: "MP4", webm: "WebM", mov: "MOV" };
+const FORMAT_TYPE: Record<DownloadFormat, string> = { mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime" };
 
 // ---------- The practice writer: a real engine script from a brief and a cast ----------
 
@@ -338,7 +389,21 @@ function cuesFor(s: StoryScript, texts: Record<string, { text: string; ref?: str
   return out;
 }
 
-function writeScript(chars: Character[], brief: Brief, o: { seed: number; topicId: string | null; captionsOn: boolean; musicMood: MusicMood; durationSec: number; note?: string | null }): StoryScript {
+function writeScript(chars: Character[], brief: Brief, o: { seed: number; topicId: string | null; captionsOn: boolean; musicMood: MusicMood; durationSec: number; note?: string | null; format?: StoryFormat }): StoryScript {
+  // The video's own size (§45.34); an engine that only draws 9:16 refuses another size, so the practice writer then
+  // writes it at 1080 × 1920.
+  const f = o.format;
+  if (f && (f.width !== 1080 || f.height !== 1920)) {
+    try {
+      return writeSized(chars, brief, o, f.width, f.height);
+    } catch {
+      // the engine here only draws 9:16
+    }
+  }
+  return writeSized(chars, brief, o, 1080, 1920);
+}
+
+function writeSized(chars: Character[], brief: Brief, o: { seed: number; topicId: string | null; captionsOn: boolean; musicMood: MusicMood; durationSec: number; note?: string | null }, width: number, height: number): StoryScript {
   const safety = brief.category === "driving_safety" && o.topicId ? o.topicId : null;
   const n = Math.min(8, Math.max(safety ? 5 : 4, Math.round(o.durationSec / 7.5)));
   const drafts = safety ? drivingDrafts(chars, safety, n) : storyDrafts(chars, brief.category === "driving_safety" ? "explainer" : brief.category, n);
@@ -366,8 +431,8 @@ function writeScript(chars: Character[], brief: Brief, o: { seed: number; topicI
   const raw: StoryScript = {
     engine: ENGINE_VERSION,
     fps: 30,
-    width: 1080,
-    height: 1920,
+    width: width as StoryScript["width"],
+    height: height as StoryScript["height"],
     durationSec: r1(d * scenes.length),
     title: brief.title.slice(0, 80),
     seed: o.seed,
@@ -578,7 +643,7 @@ function progressOf(job: ProductionJob): number {
 
 function addAsset(store: MockStore, story: Story, kind: LibraryItem["kind"], url: string, contentType: string, bytes: number, sceneId?: string): void {
   for (const a of store.assets)
-    if (a.storyId === story.storyId && a.kind === kind && (sceneId === undefined || a.meta.sceneId === sceneId)) a.meta = { ...a.meta, current: 0 };
+    if (a.storyId === story.storyId && a.kind === kind && (sceneId === undefined || a.meta.sceneId === sceneId) && a.meta.format === undefined) a.meta = { ...a.meta, current: 0 };
   store.assets.push({
     assetId: mockId(),
     kind,
@@ -595,6 +660,34 @@ function addAsset(store: MockStore, story: Story, kind: LibraryItem["kind"], url
 }
 
 const EMPTY_VIDEO = "data:video/mp4;base64,";
+
+/** The MP4, then each extra copy the workspace asks for (an ASSET# of kind video with meta.format, as the agent writes it, §45.34). */
+function addVideos(store: MockStore, story: Story, sec: number): void {
+  addAsset(store, story, "final_video", EMPTY_VIDEO, "video/mp4", Math.round(sec * 1_400_000));
+  for (const a of store.assets) if (a.storyId === story.storyId && a.kind === "video") a.meta = { ...a.meta, current: 0 };
+  for (const f of extraFormats(store, story.workspaceId)) {
+    store.assets.push({
+      assetId: mockId(),
+      kind: "video",
+      storyId: story.storyId,
+      characterId: null,
+      title: story.title,
+      url: `data:${FORMAT_TYPE[f]};base64,`,
+      contentType: FORMAT_TYPE[f],
+      bytes: Math.round(sec * (f === "mov" ? 4_000_000 : 1_100_000)),
+      version: story.scriptVersion,
+      createdAt: iso(),
+      meta: { current: 1, format: f },
+    });
+  }
+}
+
+/** The extra copies the video has now (its current kind-video items with meta.format). */
+function copiesOf(store: MockStore, story: Story): DownloadFormat[] {
+  return store.assets
+    .filter((a) => a.storyId === story.storyId && (a.kind === "video" || a.kind === "final_video") && a.meta.current !== 0 && (a.meta.format === "webm" || a.meta.format === "mov"))
+    .map((a) => a.meta.format as DownloadFormat);
+}
 
 function sceneCount(store: MockStore, job: ProductionJob, key: StepKey): number {
   if (key !== "scenes" && key !== "animation") return 0;
@@ -616,7 +709,7 @@ function finishStep(store: MockStore, job: ProductionJob, key: StepKey, run: Run
     const next =
       script && sceneIds?.length && !note
         ? retake(script, sceneIds, story.scriptVersion)
-        : writeScript(chars.length ? chars : [], extra.brief, { seed, topicId: story.safetyTopicId, captionsOn: story.captionsOn, musicMood: story.musicMood, durationSec: story.durationSec, note });
+        : writeScript(chars.length ? chars : [], extra.brief, { seed, topicId: story.safetyTopicId, captionsOn: story.captionsOn, musicMood: story.musicMood, durationSec: story.durationSec, note, format: story.format });
     story.scriptVersion += 1;
     store.scripts[story.storyId] = next;
     story.scenes = next.scenes.map((sc) => ({ sceneId: sc.sceneId, title: sc.title, durationSec: sc.durationSec }));
@@ -648,7 +741,7 @@ function finishStep(store: MockStore, job: ProductionJob, key: StepKey, run: Run
     story.actualDurationSec = script.durationSec;
     job.meta.actualSec = script.durationSec;
     extra.cover = true;
-    addAsset(store, story, "final_video", EMPTY_VIDEO, "video/mp4", Math.round(script.durationSec * 1_400_000));
+    addVideos(store, story, script.durationSec);
     const mid = script.scenes[Math.floor(script.scenes.length / 2)];
     if (mid) addAsset(store, story, "cover", stillOf(story.storyId, script, mid.sceneId), "image/jpeg", 30_000);
   }
@@ -832,8 +925,20 @@ function startJob(
   return job;
 }
 
+/** What the next run of this video uses for the task storyboard (§45.34: §45.25's levels, as the API computes it). */
+function nextRun(store: MockStore, story: Story): Effective {
+  const e = effectiveFor(store, "storyboard", { project: story.ai });
+  const agent = store.agents.find((a) => a.agentId === "storyboard");
+  const task = store.ai?.tasks?.storyboard;
+  const own = !!(story.ai.model || story.ai.effort);
+  const from: Effective["from"] = own ? "project" : task?.model || task?.effort ? "task" : agent?.model || agent?.effort ? "agent" : "default";
+  return { model: e.model, effort: e.effort, effortApplied: e.effortApplied, from };
+}
+
 function storyOut(store: MockStore, story: Story): Story {
   const copy = clone(story);
+  copy.effective = nextRun(store, story);
+  copy.format = copy.format ?? { ...VERTICAL };
   const extra = extraOf(store, story.storyId);
   const script = store.scripts[story.storyId];
   if (script && extra.stills) copy.scenes = copy.scenes.map((sc) => ({ ...sc, stillUrl: stillOf(story.storyId, script, sc.sceneId) }));
@@ -1003,7 +1108,7 @@ function seedStory(store: MockStore, spec: SeedSpec, now: number): void {
   for (const sc of script.scenes) addAsset(store, story, "scene_clip", EMPTY_VIDEO, "video/mp4", Math.round(sc.durationSec * 900_000), sc.sceneId);
   addAsset(store, story, "audio", "data:audio/mp4;base64,", "audio/mp4", Math.round(script.durationSec * 24_000));
   if (story.captionsOn) addAsset(store, story, "captions", `data:text/plain;charset=utf-8,${encodeURIComponent("[Script Info]\nTitle: " + story.title)}`, "text/plain", 2_000);
-  addAsset(store, story, "final_video", EMPTY_VIDEO, "video/mp4", Math.round(script.durationSec * 1_400_000));
+  addVideos(store, story, script.durationSec);
   const mid = script.scenes[Math.floor(script.scenes.length / 2)];
   if (mid) addAsset(store, story, "cover", stillOf(spec.id, script, mid.sceneId), "image/jpeg", 30_000);
   if (spec.status === "approved" || spec.status === "published") story.approvedAt = iso(at + 3_600_000);
@@ -1079,6 +1184,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (!MOODS.has(musicMood)) fail(400, "bad_request", "Pick a music mood.");
       const referenceIds = checkReferences(store, body.referenceIds);
       if (body.ai) checkOverride(body.ai);
+      const format = body.format !== undefined ? checkFormat(body.format) : defaultFormat(cfg);
       await delay(220);
       const now = Date.now();
       const storyId = mockId();
@@ -1103,6 +1209,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         safetyTopicId,
         safety: null,
         ai: { model: body.ai?.model ?? null, effort: body.ai?.effort ?? null },
+        format,
         referenceIds,
         reviewNote: null,
         currentJobId: null,
@@ -1340,12 +1447,51 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       addActivity(store, "changes", story);
       return { story: storyOut(store, story), job: clone(job) };
     },
-    async download(ws, storyId) {
+    async writeCaptions(ws, storyId, body = {}) {
+      guardWs(store, ws);
+      settle();
+      const story = find(store, ws, storyId);
+      for (const k of Object.keys(body ?? {})) if (k !== "override") fail(400, "bad_request", "Something in that request was not right.");
+      if (!store.scripts[storyId]) fail(409, "conflict", "This video has no storyboard yet. Tap Try again first.");
+      checkOverride(body?.override);
+      await delay(160);
+      const version = story.scriptVersion;
+      const round = store.tasks.filter((t) => t.kind === "captions").length + 1;
+      // The storyboard agent's captions task: a draft the owner reads and saves with PATCH (postCaptions), never saved here.
+      return startMockTask(
+        store,
+        ws,
+        "captions",
+        body?.override,
+        () => {
+          const now = store.stories.find((s) => s.storyId === storyId);
+          if (!now) throw new Error("That video was deleted while the helper worked on it.");
+          const brief = extraOf(store, storyId).brief;
+          const fresh = postCaptionsFor(now.title, brief.logline, now.category === "driving_safety" ? now.safetyTopicId : null);
+          const hook = ["Wait for the end!", "Watch this!", "You will not believe this one.", "Can you guess what happens?"][round % 4]!;
+          const postCaptions: Captions = {
+            ...fresh,
+            youtubeTitle: `${now.title}: ${hook} #Shorts`.slice(0, 100),
+            tiktok: `${hook} ${brief.logline} #LamoStories #animation #fyp`.slice(0, 2200),
+            instagram: `${hook} ${fresh.instagram}`.slice(0, 2200),
+            x: `${hook} ${now.title}`.slice(0, 270),
+          };
+          return { storyId, scriptVersion: version, postCaptions };
+        },
+        story.ai,
+      );
+    },
+    async download(ws, storyId, body = {}) {
       guardWs(store, ws);
       await delay(120);
       const story = find(store, ws, storyId);
       if (story.status !== "approved" && story.status !== "published") fail(409, "conflict", "Approve the video first, then download it.");
-      return { url: EMPTY_VIDEO, filename: `${slug(story.title)}.mp4` };
+      const format = body?.format ?? "mp4";
+      if (!(format in FORMAT_WORD)) fail(400, "bad_request", "format must be mp4, webm or mov.");
+      if (format === "mp4") return { url: EMPTY_VIDEO, filename: `${slug(story.title)}.mp4` };
+      if (!copiesOf(store, story).includes(format))
+        fail(404, "not_found", "That format was not made for this video.");
+      return { url: `data:${FORMAT_TYPE[format]};base64,`, filename: `${slug(story.title)}.${format}` };
     },
   };
 }

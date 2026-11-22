@@ -1,9 +1,13 @@
 // Lamo Stories mock: the publishing part (docs/CONTRACTS.md §45.14, §45.16.8). The seed has a publishing job in every
 // status (queued, publishing, posted with numbers, failed, needs_attention) on the stories that are approved or
 // published. Publish and Try again check the destination like validate_destination: only this workspace's connected
-// account, never a default; anything else stops the job with needs_attention and a plain sentence.
+// account, never a default; anything else stops the job with needs_attention and a plain sentence. Each job carries
+// the exact account (accountName, handle, externalAccountId). As in the API (§45.34), a TikTok Lamo Stories cannot tell
+// from Lamo Clips' own (reason clips_unknown, or the knob tiktokUnsure) answers 409 naming the account until the owner
+// sends confirmAccount for it (asked once per identity), and Try again on a post whose account changed answers 409
+// naming the new account until confirmAccount matches it. The 409 carries `account` on its ApiError, like the client.
 import { ApiError } from "../../../api/errors.ts";
-import { STORIES_PLATFORMS, type Platform, type PublishingJob, type PublishTarget, type StoriesApi, type Story } from "../types.ts";
+import { STORIES_PLATFORMS, type ErrorAccount, type Platform, type PublishingJob, type PublishTarget, type SocialAccount, type StoriesApi, type Story } from "../types.ts";
 import { PLATFORM_NAME } from "./social.ts";
 import { ago, delay, HOUR, mockId, type MockStore } from "./store.ts";
 import { storiesWorkspace } from "./workspace.ts";
@@ -42,17 +46,20 @@ export function afterSeed(store: MockStore): void {
   const published = store.stories.find((s) => s.status === "published");
   const approved = store.stories.find((s) => s.status === "approved");
   const name = (p: Platform) => store.social.find((a) => a.platform === p && a.workspaceId === (published ?? approved)?.workspaceId)?.accountName ?? null;
+  const at = (p: Platform) => where(store.social.find((a) => a.platform === p && a.workspaceId === (published ?? approved)?.workspaceId));
   if (published) {
     const postedAt = published.publishedAt ?? ago(58 * HOUR);
     const url = POST_URL.youtube(published.storyId);
     store.publishing.push(
       job(published, "youtube", "posted", 58, {
+        ...at("youtube"),
         accountName: name("youtube"),
         url,
         postedAt,
         metrics: { views: 1520, likes: 214, comments: 18, shares: 9, checkedAt: ago(10 * HOUR) },
       }),
       job(published, "tiktok", "needs_attention", 57, {
+        ...at("tiktok"),
         accountName: name("tiktok"),
         error: "Lamo Stories' TikTok (Lamo Stories) needs connecting again. Open Lamo Stories › Social accounts, then tap Try again.",
       }),
@@ -62,9 +69,10 @@ export function afterSeed(store: MockStore): void {
   }
   if (approved) {
     store.publishing.push(
-      job(approved, "youtube", "publishing", 0.1, { accountName: name("youtube") }),
+      job(approved, "youtube", "publishing", 0.1, { ...at("youtube"), accountName: name("youtube") }),
       job(approved, "instagram", "queued", 0.05, { accountName: null }),
       job(approved, "x", "needs_attention", 0.1, {
+        ...at("x"),
         accountName: name("x"),
         error: "This X account is the one Lamo Clips posts to. Pick another in Lamo Stories › Social accounts, then tap Try again.",
       }),
@@ -125,6 +133,46 @@ function run(store: MockStore, id: string): void {
 
 const copy = <T>(v: T): T => structuredClone(v);
 
+/** The TikTok identities the owner said are Lamo Stories' own (SOCIAL#tiktok.notClipsConfirmed). */
+const confirmed = new WeakMap<MockStore, Set<string>>();
+function confirmedOf(store: MockStore): Set<string> {
+  let c = confirmed.get(store);
+  if (!c) {
+    c = new Set();
+    confirmed.set(store, c);
+  }
+  return c;
+}
+
+/** A 409 that names the account, as Lamo Stories' client hands it to the screens (`error.account`). */
+function accountConflict(message: string, a: SocialAccount): ApiError {
+  const account: ErrorAccount = { externalAccountId: a.externalAccountId ?? "", accountName: a.accountName, handle: a.handle };
+  return Object.assign(new ApiError(409, "conflict", message), { account });
+}
+
+/** Rule 5's TikTok case: Lamo Stories cannot tell this account from Lamo Clips' own until the owner says it once. */
+function unsure(store: MockStore, a: SocialAccount | undefined, confirm: string | undefined): ApiError | null {
+  if (!a || a.platform !== "tiktok" || a.connectionStatus !== "connected" || !a.externalAccountId) return null;
+  if (a.reason !== "clips_unknown" && store.knobs.tiktokUnsure !== true) return null;
+  if (confirmedOf(store).has(a.externalAccountId)) return null;
+  if (confirm === a.externalAccountId) {
+    confirmedOf(store).add(a.externalAccountId);
+    return null;
+  }
+  const name = a.accountName ?? a.handle ?? a.externalAccountId;
+  return accountConflict(`Lamo Stories cannot tell if ${name} is Lamo Clips' TikTok, because TikTok gives each app its own id. Tap Post to ${name} if it is your Lamo Stories TikTok.`, a);
+}
+
+function changed(a: SocialAccount): ApiError {
+  const name = a.accountName ?? a.externalAccountId ?? "another account";
+  return accountConflict(`Lamo Stories' ${PLATFORM_NAME[a.platform]} is a different account now: ${name}. Tap Post to ${name} if that is right.`, a);
+}
+
+/** The exact account a job goes to (§45.34). */
+function where(a: SocialAccount | undefined): Pick<PublishingJob, "accountName" | "handle" | "externalAccountId"> {
+  return { accountName: a?.accountName ?? null, handle: a?.handle ?? null, externalAccountId: a?.externalAccountId ?? null };
+}
+
 export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
   return {
     async publish(ws, storyId, targets: PublishTarget[]) {
@@ -138,12 +186,22 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       for (const t of targets) {
         if (!STORIES_PLATFORMS.includes(t.platform) || seen.has(t.platform)) throw new ApiError(400, "bad_request", "Pick each app once.");
         if (t.socialAccountId !== `${ws}.${t.platform}`) throw new ApiError(409, "conflict", "That account is not one of Lamo Stories' own. Pick it again.");
+        if (t.confirmAccount !== undefined && (typeof t.confirmAccount !== "string" || !t.confirmAccount || t.confirmAccount.length > 200))
+          throw new ApiError(400, "bad_request", "confirmAccount must be the account the app showed.");
         seen.add(t.platform);
+      }
+      // The account checks at the tap (§45.34): nothing is written while one of them asks the owner first.
+      for (const t of targets) {
+        const a = store.social.find((s) => s.workspaceId === ws && s.platform === t.platform);
+        if (!a || a.connectionStatus !== "connected") continue;
+        const ask = unsure(store, a, t.confirmAccount);
+        if (ask) throw ask;
+        if (t.confirmAccount !== undefined && t.confirmAccount !== a.externalAccountId) throw changed(a);
       }
       const made = targets.map((t) => {
         const a = store.social.find((s) => s.workspaceId === ws && s.platform === t.platform);
         const stop = stopReason(store, ws, t.platform);
-        const j = job(story, t.platform, stop ? "needs_attention" : "queued", 0, { accountName: a?.accountName ?? null, ...(stop ? { error: stop } : {}) });
+        const j = job(story, t.platform, stop ? "needs_attention" : "queued", 0, { ...where(a), ...(stop ? { error: stop } : {}) });
         store.publishing.unshift(j);
         if (!stop) run(store, j.publishingJobId);
         return j;
@@ -159,13 +217,22 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       );
     },
-    async retryPublishing(ws, publishingJobId) {
+    async retryPublishing(ws, publishingJobId, body = {}) {
       await delay(220);
       storiesWorkspace(store, ws);
       const j = store.publishing.find((p) => p.publishingJobId === publishingJobId && p.workspaceId === ws);
       if (!j) throw new ApiError(404, "not_found", "We could not find that post.");
       if (j.publishingStatus !== "failed" && j.publishingStatus !== "needs_attention") throw new ApiError(409, "conflict", "That post is not stuck. Wait for it to finish.");
+      const confirm = body.confirmAccount;
+      if (confirm !== undefined && (typeof confirm !== "string" || !confirm || confirm.length > 200)) throw new ApiError(400, "bad_request", "confirmAccount must be the account the app showed.");
       const stop = stopReason(store, ws, j.platform);
+      const a = store.social.find((s) => s.workspaceId === ws && s.platform === j.platform);
+      if (!stop && a) {
+        const ask = unsure(store, a, confirm);
+        if (ask) throw ask;
+        // The account changed since the post was asked for: only the owner's yes for the new one sends it there.
+        if (j.externalAccountId && a.externalAccountId !== j.externalAccountId && confirm !== a.externalAccountId) throw changed(a);
+      }
       j.updatedAt = new Date().toISOString();
       if (stop) {
         j.publishingStatus = "needs_attention";
@@ -173,7 +240,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       } else {
         j.publishingStatus = "queued";
         delete j.error;
-        j.accountName = store.social.find((s) => s.workspaceId === ws && s.platform === j.platform)?.accountName ?? j.accountName;
+        Object.assign(j, where(a));
         run(store, j.publishingJobId);
       }
       return copy(j);

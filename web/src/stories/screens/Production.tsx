@@ -1,8 +1,10 @@
-// Lamo Stories › Production (docs/CONTRACTS.md §45.9, §45.16.5, §45.25, §45.28; spec §5.D). Make a new video (an idea
-// or a short concept, the cast of 1 to 3, the length, captions, music, up to 3 reference videos to learn from, and the
-// model and effort for this video, kept with it), the list of every video being made or made with its eight-step
-// track, and each video's own page: the step track, the storyboard filmstrip (live previews and the finished stills),
-// Cancel, Try again (with its own "just this one" model and effort), and the production details with the model and
+// Lamo Stories › Production (docs/CONTRACTS.md §45.9, §45.16.5, §45.25, §45.28, §45.34; spec §5.D). Make a new video
+// (an idea or a short concept, the cast of 1 to 3, the length, captions, music, up to 3 reference videos to learn
+// from, the shape and size, and the model and effort for this video, kept with it), filled in from the address
+// (`?idea=`, `?ref=`, `?cast=`, `?sec=`: the chat's and a reference video's hand-over) and starting at a picked idea's
+// own length; the list of every video being made or made with its eight-step track and Show more; and each video's own
+// page: the step track, the storyboard filmstrip (live previews and the finished stills), Cancel, Try again (with its
+// own "just this one" model and effort), "Next run: {model} · {effort}", and the production details with the model and
 // effort that made each step. A running job is checked every 2 seconds.
 import "../styles/studio.css";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -26,23 +28,31 @@ import {
   type ReferenceVideo,
   type StoriesConfig,
   type Story,
+  type StoryFormat,
   type StoryInput,
   type StoryScript,
 } from "../api/types.ts";
 import { CATALOG } from "../engine/catalog.ts";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { storiesHref } from "../routes.ts";
-import { cleanPick, effortName, madeWith, ModelMenu, modelName, ModelsUsed, SettingsFix, shortName, StoryAi, storyUsual, useAiInfo, usualFor, type AiInfo } from "../studio/ai.tsx";
+import { cleanPick, effortName, madeWith, ModelMenu, modelName, ModelsUsed, NextRun, SettingsFix, shortName, stoppedOn, StoryAi, storyUsual, useAiInfo, usualFor, type AiInfo } from "../studio/ai.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
-import { useSameScript, useWorkspace } from "../studio/hooks.ts";
-import { Busy, celebrate, Notice, Pick, Slider, Switch, Tag, TextField } from "../studio/kit.tsx";
+import { usePaged, useSameScript, useWorkspace } from "../studio/hooks.ts";
+import { formatOf, formatWords, sameFormat, ShapePicker } from "../studio/shape.tsx";
+import { Busy, celebrate, Notice, Pick, ShowMore, Slider, Switch, Tag, TextField } from "../studio/kit.tsx";
 import { StepTrack } from "../studio/StepTrack.tsx";
 import { ago, CATEGORY_LABEL, isConflict, NO_GUIDANCE, say, seconds, STATUS_LABEL, STATUS_TONE } from "../studio/words.ts";
 import { KIND_OPTIONS } from "./Ideas.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
 export function ProductionScreen({ ws, page }: StoriesScreenProps) {
-  if (page.name === "production_new") return <NewVideo ws={ws} ideaId={page.ideaId} />;
+  if (page.name === "production_new") {
+    const refIds = page.refIds ?? [];
+    const castIds = page.castIds ?? [];
+    // A new hand-over (another chat button, another reference video) starts the form again from its address.
+    const from = [page.ideaId ?? "", refIds.join(","), castIds.join(","), page.durationSec ?? ""].join("|");
+    return <NewVideo key={from} ws={ws} ideaId={page.ideaId} refIds={refIds} castIds={castIds} durationSec={page.durationSec ?? null} />;
+  }
   if (page.name === "production_story") return <StoryProduction ws={ws} storyId={page.storyId} />;
   return <ProductionList ws={ws} />;
 }
@@ -57,30 +67,30 @@ export const MOOD_FOR: Record<IdeaCategory, MusicMood> = { driving_safety: "tens
 
 // ---------- The list ----------
 
-function ProductionList({ ws }: { ws: string }) {
-  const list = useLoad(
-    async () => {
-      const { stories } = await storiesApi().listStories(ws, { status: "all", limit: 50 });
-      const jobs: Record<string, ProductionJob | null> = {};
-      await Promise.all(
-        stories
-          .filter((s) => s.status === "producing" || s.status === "failed" || s.currentJobId)
-          .map(async (s) => {
-            try {
-              jobs[s.storyId] = (await storiesApi().getStory(ws, s.storyId)).job;
-            } catch {
-              jobs[s.storyId] = null;
-            }
-          }),
-      );
-      return { stories, jobs };
-    },
-    ws,
-    "st-production",
+type Run = { story: Story; job: ProductionJob | null };
+
+/** One page of videos, each with its latest job when it is being made or stopped (for its step track). */
+async function runsPage(ws: string, cursor?: string): Promise<{ items: Run[]; nextCursor: string | null }> {
+  const { stories, nextCursor } = await storiesApi().listStories(ws, cursor ? { status: "all", limit: 50, cursor } : { status: "all", limit: 50 });
+  const items = await Promise.all(
+    stories.map(async (story): Promise<Run> => {
+      if (!(story.status === "producing" || story.status === "failed" || story.currentJobId)) return { story, job: null };
+      try {
+        return { story, job: (await storiesApi().getStory(ws, story.storyId)).job };
+      } catch {
+        return { story, job: null };
+      }
+    }),
   );
-  const making = (list.data?.stories ?? []).filter((s) => s.status === "producing" || s.status === "draft" || s.status === "failed");
-  const made = (list.data?.stories ?? []).filter((s) => !making.includes(s));
-  usePoll(() => list.reload(), making.some((s) => s.status === "producing"), 2000);
+  return { items, nextCursor };
+}
+
+function ProductionList({ ws }: { ws: string }) {
+  const list = usePaged((cursor) => runsPage(ws, cursor), ws, "st-production-runs", (r) => r.story.storyId);
+  const all = list.data ?? [];
+  const making = all.filter((r) => r.story.status === "producing" || r.story.status === "draft" || r.story.status === "failed");
+  const made = all.filter((r) => !making.includes(r));
+  usePoll(() => list.reload(), making.some((r) => r.story.status === "producing"), 2000);
 
   return (
     <section className="st-page st-studio">
@@ -99,7 +109,7 @@ function ProductionList({ ws }: { ws: string }) {
         </Notice>
       ) : !list.data ? (
         <Busy>Getting your videos…</Busy>
-      ) : list.data.stories.length === 0 ? (
+      ) : all.length === 0 ? (
         <div className="st-s-empty">
           <span className="st-s-empty__film" aria-hidden="true" />
           <h2 className="st-s-empty__title">No videos yet</h2>
@@ -114,8 +124,8 @@ function ProductionList({ ws }: { ws: string }) {
             <>
               <h2 className="st-s-section">Being made</h2>
               <ul className="st-s-runs">
-                {making.map((s) => (
-                  <RunRow key={s.storyId} story={s} job={list.data!.jobs[s.storyId] ?? null} />
+                {making.map((r) => (
+                  <RunRow key={r.story.storyId} story={r.story} job={r.job} />
                 ))}
               </ul>
             </>
@@ -124,12 +134,13 @@ function ProductionList({ ws }: { ws: string }) {
             <>
               <h2 className="st-s-section">Made</h2>
               <ul className="st-s-runs">
-                {made.map((s) => (
-                  <RunRow key={s.storyId} story={s} job={list.data!.jobs[s.storyId] ?? null} />
+                {made.map((r) => (
+                  <RunRow key={r.story.storyId} story={r.story} job={r.job} />
                 ))}
               </ul>
             </>
           ) : null}
+          <ShowMore list={list} what="videos" />
         </>
       )}
     </section>
@@ -173,7 +184,7 @@ function RunRow({ story, job }: { story: Story; job: ProductionJob | null }) {
 
 // ---------- Make a new video ----------
 
-function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
+function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws: string; ideaId: string | null; refIds: string[]; castIds: string[]; durationSec: number | null }) {
   const toast = useToast();
   const workspace = useWorkspace(ws);
   const cfg = (workspace?.configuration ?? {}) as Partial<StoriesConfig>;
@@ -190,15 +201,17 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
   const [title, setTitle] = useState("");
   const [logline, setLogline] = useState("");
   const [category, setCategory] = useState<IdeaCategory | "">("");
-  const [cast, setCast] = useState<string[]>([]);
-  const castTouched = useRef(false);
-  const [length, setLength] = useState<number | null>(null);
+  // The address may bring the cast, the length and the reference videos (the chat's or a reference video's hand-over).
+  const [cast, setCast] = useState<string[]>(() => castIds.slice(0, 3));
+  const castTouched = useRef(castIds.length > 0);
+  const [length, setLength] = useState<number | null>(durationSec);
+  const [shape, setShape] = useState<StoryFormat | null>(null);
   const [captions, setCaptions] = useState<boolean | null>(null);
   const [mood, setMood] = useState<MusicMood | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [noAdvice, setNoAdvice] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [refIds, setRefIds] = useState<string[]>([]);
+  const [refIds, setRefIds] = useState<string[]>(() => givenRefs.slice(0, 3));
   const [ai, setAi] = useState<ModelOverride | null>(null);
   const info = useAiInfo(ws);
   const refs = useLoad(() => storiesApi().listReferences(ws), ws, "st-s-refvids");
@@ -224,14 +237,37 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
     if (data.data && !data.data.ideas.some((i) => !blockedIdea(i)) && !ideaId) setSource("own");
   }, [data.data, ideaId]);
 
-  // The idea's own characters come along until the owner picks the cast himself.
+  // The idea's own characters come along until the owner picks the cast himself (or the address brought one).
   useEffect(() => {
     if (castTouched.current || !idea?.characterIds?.length) return;
     setCast(idea.characterIds.filter((id) => characters.some((c) => c.characterId === id)).slice(0, 3));
   }, [idea, characters]);
 
+  // Reference videos from the address keep only this workspace's own (a deleted one is dropped, so it never uses up
+  // one of the 3 picks without a tile to unpick it).
+  useEffect(() => {
+    const list = refs.data;
+    if (!list || !givenRefs.length) return;
+    setRefIds((ids) => ids.filter((id) => list.some((r) => r.refId === id)));
+    // Once, when the reference videos arrive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refs.data]);
+
+  // A cast from the address keeps only this workspace's own characters.
+  useEffect(() => {
+    if (!data.data || !castIds.length) return;
+    setCast((c) => c.filter((id) => characters.some((x) => x.characterId === id)));
+    // Once, when the characters arrive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.data]);
+
   const kind: IdeaCategory | "" = source === "idea" ? (idea?.category ?? "") : category;
-  const lengthSec = length ?? Math.min(90, Math.max(15, cfg.defaultDurationSec ?? 45));
+  // The length: the owner's, else the address's, else a picked idea's own (its full idea was written for it), else
+  // the workspace's default.
+  const ideaLength = source === "idea" ? (idea?.concept?.durationSec ?? null) : null;
+  const lengthSec = Math.min(90, Math.max(15, length ?? ideaLength ?? cfg.defaultDurationSec ?? 45));
+  const usualShape = formatOf(workspace ? cfg : null);
+  const format = shape ?? usualShape;
   const captionsOn = captions ?? cfg.captionsOn ?? true;
   const music: MusicMood = mood ?? (cfg.musicOn === false ? "none" : kind ? MOOD_FOR[kind] : "playful");
 
@@ -261,6 +297,9 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
     setBusy(true);
     setProblem(null);
     const body: StoryInput = { characterIds: cast, durationSec: lengthSec, captionsOn, musicMood: music };
+    // This video's own shape, only when the owner picked one that is not the workspace's (§45.34). Nothing picked:
+    // the API uses Settings › Video itself (also while it has not loaded here, or could not be read).
+    if (shape && (!workspace || !sameFormat(shape, usualShape))) body.format = { ...shape };
     const own = cleanPick(ai);
     if (own) body.ai = { model: own.model ?? null, effort: own.effort ?? null };
     const usable = refIds.filter((id) => refs.data?.some((r) => r.refId === id));
@@ -383,11 +422,19 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
               <span className="st-s-num">3</span> How long
             </h2>
             <Slider label="Length" min={15} max={90} step={5} value={lengthSec} onChange={setLength} words={seconds(lengthSec)} marks={{ from: 30, to: 60, label: "30 to 60 seconds works best." }} />
+            {length === null && ideaLength ? <p className="st-s-field__hint">The full idea was written for {seconds(ideaLength)}.</p> : null}
+          </section>
+
+          <section className="st-s-panel" aria-labelledby="st-nv-shape">
+            <h2 className="st-s-panel__title" id="st-nv-shape">
+              <span className="st-s-num">4</span> Shape and size
+            </h2>
+            <ShapePicker value={format} usual={usualShape} onChange={setShape} usualKnown={!!workspace} picked={shape !== null} />
           </section>
 
           <section className="st-s-panel" aria-labelledby="st-nv-4">
             <h2 className="st-s-panel__title" id="st-nv-4">
-              <span className="st-s-num">4</span> Words and music
+              <span className="st-s-num">5</span> Words and music
             </h2>
             <Switch label="Captions" line="Short words on screen. No talking in Lamo Stories videos." checked={captionsOn} onChange={setCaptions} />
             <Pick label="Music" value={music} options={CATALOG.musicMoods.map((m) => ({ value: m.id, label: m.id === "none" ? "No music" : m.label }))} onChange={setMood} />
@@ -395,14 +442,14 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
 
           <section className="st-s-panel" aria-labelledby="st-nv-5">
             <h2 className="st-s-panel__title" id="st-nv-5">
-              <span className="st-s-num">5</span> Videos to learn from <span className="st-s-panel__hint">(you can skip this)</span>
+              <span className="st-s-num">6</span> Videos to learn from <span className="st-s-panel__hint">(you can skip this)</span>
             </h2>
             <RefPicker refs={refs.data} error={refs.error} onRetry={() => void refs.reload()} picked={refIds} onChange={setRefIds} />
           </section>
 
           <section className="st-s-panel" aria-labelledby="st-nv-6">
             <h2 className="st-s-panel__title" id="st-nv-6">
-              <span className="st-s-num">6</span> Model and effort for this video
+              <span className="st-s-num">7</span> Model and effort for this video
             </h2>
             <p className="st-s-field__hint">The AI that writes and checks this video. It stays with the video, so its remakes use it too.</p>
             <div className="st-s-aiwho">
@@ -465,7 +512,8 @@ function RefPicker({
         No reference videos yet. Upload one in <A href={storiesHref({ name: "references" })}>References</A> and Lamo Stories studies how it is made.
       </p>
     );
-  const full = picked.length >= 3;
+  // Only the picks that have a tile count (one that is not in the list can never be unpicked).
+  const full = picked.filter((id) => refs.some((r) => r.refId === id)).length >= 3;
   return (
     <>
       <p className="st-s-field__hint">Pick up to 3. Lamo Stories borrows their timing and structure, never their characters or footage.</p>
@@ -670,6 +718,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
               {busy === "cancel" ? "Stopping…" : "Cancel"}
             </button>
           ) : null}
+          {canTryAgain && !pick ? <NextRun info={info} story={story} /> : null}
           {canTryAgain ? (
             <>
               <ModelMenu info={info} usual={usual} value={pick} onChange={setPick} note="Just for this run. This video's own setting and yours stay the same." />
@@ -725,7 +774,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
             {story.actualDurationSec ? `, made ${seconds(story.actualDurationSec)}` : ""}
           </dd>
           <dt>Size</dt>
-          <dd>Vertical 9:16, 1080 × 1920, 30 frames a second</dd>
+          <dd>{formatWords(story.format)}, 30 frames a second</dd>
           {job ? (
             <>
               <dt>Made with</dt>
@@ -735,6 +784,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
           <dt>Model and effort for this video</dt>
           <dd>
             <StoryAi info={info} story={story} editable={editable && busy === "none"} onChange={(v) => void keepAi(v)} />
+            <NextRun info={info} story={story} />
           </dd>
           {story.referenceIds.length ? (
             <>
@@ -767,8 +817,13 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
   );
 }
 
-/** One run's models in a line: "Write the story: Opus 5.5 · High". */
-function runModels(info: AiInfo, j: ProductionJob): string {
+/** One run's models in a line: "Write: Opus 5.5 · High"; a step that stopped on its model: "Write: Opus 5.5 · High (stopped)". */
+export function runModels(info: AiInfo, j: ProductionJob): string {
   const word: Record<string, string> = { storyboard: "Write", safety: "Check", preview: "Last look" };
-  return j.meta.models.map((m) => `${word[m.step] ?? m.step}: ${shortName(modelName(info, m.model))}${m.effortApplied && m.effort ? ` · ${effortName(m.effort)}` : ""}`).join(" · ");
+  return j.meta.models
+    .map((m) => {
+      const stopped = stoppedOn(j, m);
+      return `${word[m.step] ?? m.step}: ${shortName(modelName(info, m.model))}${(m.effortApplied || stopped) && m.effort ? ` · ${effortName(m.effort)}` : ""}${stopped ? " (stopped)" : ""}`;
+    })
+    .join(" · ");
 }
