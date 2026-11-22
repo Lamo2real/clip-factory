@@ -44,15 +44,34 @@ export async function open({ visible = false } = {}) {
   fs.mkdirSync(PROFILE, { recursive: true });
   if (!(await cdpUp())) {
     const how = visible ? ["-n", "-a", CHROME_APP] : ["-g", "-j", "-n", "-a", CHROME_APP];
-    const where = visible ? ["--window-position=80,60", "--window-size=1280,900"] : ["--window-position=-2600,40", "--window-size=1280,900"];
+    // In the background Chrome starts with no window at all (a first window would bring it to the front and take
+    // the owner's keyboard: seen 22 Nov); the helper's tab is then made through CDP as a background target.
+    const where = visible
+      ? ["--window-position=80,60", "--window-size=1280,900"]
+      : ["--no-startup-window", "--window-position=-2600,40", "--window-size=1280,900"];
     await run("/usr/bin/open", [...how, "--args", ...FLAGS, ...where]);
     for (let i = 0; i < 60 && !(await cdpUp()); i++) await sleep(500);
     if (!(await cdpUp())) throw new Error("The helper's Chrome did not start.");
   }
   const browser = await chromium.connectOverCDP(`http://127.0.0.1:${CDP_PORT}`);
   const context = browser.contexts()[0];
-  // Reuse the first tab: opening new windows could bring Chrome forward.
-  const page = context.pages()[0] || (await context.newPage());
+  let page = context.pages()[0];
+  if (!page) {
+    // A background target in its own off-screen window: Chrome is never activated, the owner's app keeps the focus.
+    const session = await browser.newBrowserCDPSession();
+    await session.send("Target.createTarget", {
+      url: "about:blank",
+      newWindow: true,
+      background: true,
+      left: -2600,
+      top: 40,
+      width: 1280,
+      height: 900,
+    });
+    for (let i = 0; i < 40 && !context.pages()[0]; i++) await sleep(150);
+    page = context.pages()[0];
+    if (!page) throw new Error("The helper's Chrome did not open its tab.");
+  }
   page.setDefaultTimeout(30_000);
   return { browser, page };
 }
