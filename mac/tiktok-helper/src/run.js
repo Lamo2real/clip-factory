@@ -6,12 +6,24 @@ import path from "node:path";
 import { ApiError, client } from "./api.js";
 import { SignInNeeded, accessToken, appConfig } from "./auth.js";
 import * as chrome from "./chrome.js";
+import { frame, frameAvailable } from "./frame.js";
 import { freeName } from "./match.js";
 import { event, log, notify } from "./notify.js";
 import { DOWNLOADS, LOCK, VERSION } from "./paths.js";
 import { nextAction } from "./plan.js";
 import { loadSettings, loadState, remember, saveState } from "./store.js";
 import { Stop, find, post } from "./tiktok.js";
+
+// What the notification says at each step (the red frame stays up the whole time).
+const STEP_WORDS = {
+  video: "Saving the video to Downloads",
+  opening: "Opening TikTok Studio",
+  uploading: "Uploading the video to TikTok",
+  settings: "Caption, Everyone, Comment, Duet and Stitch",
+  pressing: "Pressing Post",
+  finding: "Finding the new post's link",
+};
+const quoteHook = (job) => (job.hook ? ` “${job.hook}”` : "");
 
 const MAX_TRIES = 3; // tries before Post is pressed that end in an unexpected error; then it stops and asks
 const FIND_FOR_MS = 30 * 60_000; // after a press with no proof, look this long before asking "Did it post?"
@@ -84,15 +96,17 @@ async function finished(api, state, job, link, { counted }) {
   await notify("On TikTok ✓", job.hook ? `“${job.hook}” is on TikTok for everyone.` : "Your clip is on TikTok for everyone.");
 }
 
-async function doPost(api, state, job, { fresh = false } = {}) {
+async function doPost(api, state, job, { fresh = false, fr } = {}) {
   const mine = state.ledger[job.clipId] || {};
   // A fresh claim starts counting again; a resumed try counts on.
   const tries = (fresh ? 0 : mine.tries || 0) + 1;
   remember(state, job.clipId, { device: state.device, step: "claimed", tries });
   let file = null;
   let browser = null;
+  let posted = false;
   const awake = stayAwake();
   try {
+    await fr.step(`${STEP_WORDS.video}${quoteHook(job)}`);
     await api.step(job.clipId, state.device, "video", job.attempt);
     file = await download(api, job);
     const opened = await chrome.open();
@@ -107,10 +121,12 @@ async function doPost(api, state, job, { fresh = false } = {}) {
         remember(state, job.clipId, { step });
       }
       await api.step(job.clipId, state.device, step, job.attempt);
+      await fr.step(STEP_WORDS[step] || step);
     };
     const result = await post(opened.page, job, file, onStep);
     if (result.link || result.sure) {
       await finished(api, state, job, result.link, { counted: !result.existing });
+      posted = true;
     } else {
       // Pressed, but no proof yet: later ticks only look for it in Studio › Posts (never press again), and after
       // 30 minutes without it the owner is asked "Did it post?".
@@ -141,16 +157,24 @@ async function doPost(api, state, job, { fresh = false } = {}) {
     if (browser) await chrome.quit(browser);
     awake();
     if (file) fs.rmSync(file, { force: true }); // the owner's rule: the video leaves Downloads after every try
+    if (posted) await fr.done(`On TikTok ✓${quoteHook(job)}`);
+    else await fr.off();
   }
 }
 
 async function doFind(api, state, job) {
   let browser = null;
+  let found = false;
+  const fr = frame();
+  if (!(await fr.on(`Looking for${quoteHook(job)} on TikTok`))) return log("frame.missing", { clipId: job.clipId });
   try {
     const opened = await chrome.open();
     browser = opened.browser;
     const link = await find(opened.page, job, state.ledger[job.clipId]?.baseline || []);
-    if (link) return await finished(api, state, job, link, { counted: true });
+    if (link) {
+      found = true;
+      return await finished(api, state, job, link, { counted: true });
+    }
     const pressedAt = Date.parse(job.pressedAt || state.ledger[job.clipId]?.pressedAt || 0);
     if (Date.now() - pressedAt > FIND_FOR_MS) {
       await stopped(api, state, job, "Your Mac pressed Post but couldn't confirm it.", false);
@@ -160,6 +184,8 @@ async function doFind(api, state, job) {
     else log("find.error", { clipId: job.clipId, error: String(e.message || e) });
   } finally {
     if (browser) await chrome.quit(browser);
+    if (found) await fr.done(`On TikTok ✓${quoteHook(job)}`);
+    else await fr.off();
   }
 }
 
@@ -187,9 +213,13 @@ export async function tick() {
     const api = client(config.apiUrl, token);
     const { on, helper, queue = [] } = await api.queue();
     const needsYou = helper?.state === "needs_you";
-    const action = needsYou
+    let action = needsYou
       ? { action: "paused", reason: helper.reason || "Your Mac needs you." }
       : nextAction({ on, queue, state, settings, device: state.device, now: new Date() });
+    // No red frame, no driving (the owner's rule): the clip waits on the server until the frame is back.
+    if (["post", "resume", "find"].includes(action.action) && !frameAvailable()) {
+      action = { action: "paused", reason: "The red frame is missing on your Mac, so TikTok waits." };
+    }
     const pingState = needsYou ? "needs_you" : action.action === "paused" ? "paused" : "ok";
     await api.ping({
       state: pingState,
@@ -198,18 +228,25 @@ export async function tick() {
       device: state.device,
     });
     log("tick", { action: action.action, clipId: action.job?.clipId, waiting: queue.length, reason: action.reason });
-    if (action.action === "post") {
-      let job = action.job;
-      try {
-        const claimed = await api.claim(action.job.clipId, state.device);
-        job = { ...action.job, ...(claimed?.job || {}) }; // its new attempt number
-      } catch (e) {
-        log("claim.refused", { clipId: action.job.clipId, error: String(e.message || e) });
-        return { action: "claim_refused" };
+    if (action.action === "post" || action.action === "resume") {
+      // The red frame goes up before anything is claimed or driven; if it can't be shown, nothing happens.
+      const fr = frame();
+      if (!(await fr.on(`Getting${quoteHook(action.job)} ready for TikTok`))) {
+        log("frame.missing", { clipId: action.job.clipId });
+        return { action: "frame_missing" };
       }
-      await doPost(api, state, job, { fresh: true });
-    } else if (action.action === "resume") {
-      await doPost(api, state, action.job);
+      let job = action.job;
+      if (action.action === "post") {
+        try {
+          const claimed = await api.claim(action.job.clipId, state.device);
+          job = { ...action.job, ...(claimed?.job || {}) }; // its new attempt number
+        } catch (e) {
+          await fr.off();
+          log("claim.refused", { clipId: action.job.clipId, error: String(e.message || e) });
+          return { action: "claim_refused" };
+        }
+      }
+      await doPost(api, state, job, { fresh: action.action === "post", fr });
     } else if (action.action === "find") {
       await doFind(api, state, action.job);
     }

@@ -10,6 +10,7 @@
 //                                 for a post, reads every setting back, then stops before Post (nothing is posted,
 //                                 nothing is claimed). Saves a picture of the filled-in page as probe.png.
 import { client } from "./api.js";
+import { frame } from "./frame.js";
 import { accessToken, appConfig, readRefreshToken, saveRefreshToken } from "./auth.js";
 import * as chrome from "./chrome.js";
 import { event, log } from "./notify.js";
@@ -91,10 +92,17 @@ async function probe(clipId) {
   if (!res.ok) throw new Error(`The video did not download (${res.status}).`);
   const file = path.join(DOWNLOADS, freeName(filename, (n) => fs.existsSync(path.join(DOWNLOADS, n))));
   fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+  const fr = frame();
+  if (!(await fr.on(`Check run: filling in TikTok for “${job.hook}” (nothing is posted)`))) {
+    fs.rmSync(file, { force: true });
+    throw new Error("The red frame couldn't be shown, so the check didn't run.");
+  }
   const { browser, page } = await chrome.open();
+  let ok = false;
   try {
     const steps = [];
-    const result = await post(page, job, file, async (s) => steps.push(s), { dryRun: true });
+    const result = await post(page, job, file, async (s) => { steps.push(s); await fr.step(`Check run: ${s}`); }, { dryRun: true });
+    ok = true;
     await page.screenshot({ path: path.join(BASE, "probe.png"), fullPage: true }).catch(() => {});
     console.log(JSON.stringify({ ok: true, steps, ...result, baseline: undefined }, null, 2));
   } catch (e) {
@@ -103,6 +111,8 @@ async function probe(clipId) {
   } finally {
     await chrome.quit(browser);
     fs.rmSync(file, { force: true });
+    if (ok) await fr.done("Check run done: nothing was posted");
+    else await fr.off();
   }
 }
 
