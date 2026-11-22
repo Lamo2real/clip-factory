@@ -119,7 +119,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), helpCorpus(), versionFile(version), serviceWorker(version)],
     define: { "import.meta.env.VITE_APP_VERSION": JSON.stringify(version) },
     // The app imports config/monetization.json from the repo root (docs/CONTRACTS.md §25.2): let the dev server read it.
-    server: { port: 5173, fs: { allow: [root, join(root, "..", "config")] } },
+    // stories/config: Lamo Stories' own config (docs/CONTRACTS.md §45.34), read by its screens in dev mode only.
+    server: { port: 5173, fs: { allow: [root, join(root, "..", "config"), join(root, "..", "stories", "config")] } },
     build: { outDir: "dist", sourcemap: false, target: "es2022" },
   };
 });
