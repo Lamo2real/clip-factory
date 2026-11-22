@@ -84,6 +84,12 @@ class FakeRuntime:
     ) -> None:
         self._record("process_portrait", user_id=user_id, workspace_id=workspace_id, character_id=character_id)
 
+    def start_provider_check(
+        self, *, user_id: str, workspace_id: str, provider_id: str, job_id: str, session_id: str
+    ) -> None:
+        self._record("provider_check", user_id=user_id, workspace_id=workspace_id, provider_id=provider_id,
+                     job_id=job_id, session_id=session_id)  # fmt: skip
+
     def cancel(self, item_id: str, session_id: str, *, attempts: int = 2) -> None:
         self.calls.append({"action": "cancel", "id": item_id, "session_id": session_id, "attempts": attempts})
 
@@ -218,7 +224,7 @@ def upload_skill(
 INTERNAL = (
     "sessionId",
     "heartbeatAt",
-    "requested",
+    # ``requested`` is checked by ``_requested_problems``: only an assistant message returns it (§45.35 D4)
     "uploadId",
     "analysisKey",
     "uploads",
@@ -258,6 +264,26 @@ def _strings(value: Any, path: str = "") -> Iterable[tuple[str, str]]:
         yield path, value
 
 
+def _requested_problems(value: Any) -> list[str]:
+    """``requested`` anywhere but on an assistant message, or holding anything but a ``ModelOverride`` (§45.35 D4:
+    an assistant message returns its one-time choice; the user's message and every other shape never do)."""
+    found: list[str] = []
+    if isinstance(value, dict):
+        if "requested" in value:
+            got = value["requested"]
+            override = got is None or (
+                isinstance(got, dict) and set(got) <= {"model", "effort"} and all(isinstance(v, str) for v in got.values())
+            )
+            if value.get("role") != "assistant" or not override:
+                found.append("field requested")
+        for v in value.values():
+            found += _requested_problems(v)
+    elif isinstance(value, list):
+        for v in value:
+            found += _requested_problems(v)
+    return found
+
+
 def leaked(responses: Iterable[Any], *, allowed_key_paths: Iterable[str] = (".key",)) -> list[str]:
     """Internal attributes, raw S3 keys, partition keys or secret names found in responses. The skill upload
     answer's ``key`` is the one raw key the contract hands out (§45.5 ``skills/uploads``)."""
@@ -266,6 +292,7 @@ def leaked(responses: Iterable[Any], *, allowed_key_paths: Iterable[str] = (".ke
     for body in responses:
         text = json.dumps(body)
         found += [f"field {name}" for name in INTERNAL if f'"{name}"' in text]
+        found += _requested_problems(body)
         found += ["USER#"] if "USER#" in text else []
         found += ["a secret name"] if "cf-prod/" in text else []
         for where, value in _strings(body):

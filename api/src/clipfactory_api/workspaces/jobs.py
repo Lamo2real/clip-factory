@@ -37,8 +37,17 @@ PORTRAIT_STOPPED = "Making the picture stopped. Tap Try again."
 PORTRAIT_NOT_STARTED = "Making the picture did not start. Tap Try again."
 PORTRAIT_NOT_SET_UP = "The picture maker is not switched on yet, so making the picture did not start."
 REFERENCE_STOPPED = "Looking at the video stopped. Tap Try again."
+# "Try it" on Amazon Nova Reel (§45.35 D2): a ``provider_check`` job of content type ``provider``
+CHECK_STOPPED = "Trying Amazon Nova Reel stopped. Tap Try it again."
+CHECK_NOT_STARTED = "Trying Amazon Nova Reel did not start. Tap Try it again."
+CHECK_NOT_SET_UP = "Lamo Stories' helper is not switched on yet, so Amazon Nova Reel could not be tried."
 CANCELED_STEP = "You stopped it."
-STOPPED_BY_KIND: Final = {"animation": STOPPED, "character": PORTRAIT_STOPPED, "reference": REFERENCE_STOPPED}
+STOPPED_BY_KIND: Final = {
+    "animation": STOPPED,
+    "character": PORTRAIT_STOPPED,
+    "reference": REFERENCE_STOPPED,
+    "provider": CHECK_STOPPED,
+}
 
 Item = dict[str, Any]
 Stop = Callable[[str], None]

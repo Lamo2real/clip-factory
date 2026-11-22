@@ -468,3 +468,62 @@ def test_no_stop_is_made_when_the_request_has_no_time_left(
     status, body = wcall("POST", f"{BASE}/chat/{conv['convId']}/messages/{first['assistant']['msgId']}/stop")
     assert (status, body["message"]["status"]) == (200, "stopped")  # fenced all the same
     assert runtime.stopped == []
+
+
+# --- §45.35 D4: the one-time choice comes back; D5: what the call really used ----------------------------------
+
+
+def test_an_answer_returns_its_one_time_choice_on_every_read(wcall: WsCall, table: FakeTable) -> None:
+    """"Just for this message" is kept on the answer (``requested``) and returned, so Try again and the chat cards
+    use it on every device; the user's own message never carries it, and an answer sent without one says null."""
+    conv = _conv(wcall)
+    status, body = _send(wcall, conv["convId"], override={"effort": "low"})
+    assert status == 202
+    assert body["assistant"]["requested"] == {"effort": "low"}
+    assert "requested" not in body["user"]
+    _finish(table, conv["convId"], body["assistant"]["msgId"])
+    status, plain = _send(wcall, conv["convId"], text="And another?")
+    assert status == 202
+    assert plain["assistant"]["requested"] is None
+    _, got = wcall("GET", f"{BASE}/chat/{conv['convId']}")
+    by_id = {m["msgId"]: m for m in got["messages"]}
+    assert by_id[body["assistant"]["msgId"]]["requested"] == {"effort": "low"}
+    assert by_id[plain["assistant"]["msgId"]]["requested"] is None
+    assert [m for m in got["messages"] if m["role"] == "user" and "requested" in m] == []
+    assert leaked([body, plain, got]) == []
+    # a stored choice with anything else in it shows only the model and effort
+    item = table.items[(pk(), f"MSG#{conv['convId']}#{plain['assistant']['msgId']}")]
+    item["requested"] = {"model": "fable-5-2", "effort": "max", "note": "x"}
+    shown = chat.public_message(_App(), item)
+    assert shown["requested"] == {"model": "fable-5-2", "effort": "max"}
+
+
+class _App:
+    class media:  # noqa: N801 (the app's media helper, as public_message reads it)
+        @staticmethod
+        def presign_get(key: str, seconds: int) -> str:
+            return f"https://example.test/{seconds}"
+
+
+def test_an_answer_shows_the_model_id_and_region_it_really_called(wcall: WsCall, table: FakeTable) -> None:
+    """§45.35 D5: the agent records ``modelId`` (the Bedrock id or profile really called), ``region``, ``task`` and
+    ``failed: true`` on the answer; the API passes them through (left out while not recorded)."""
+    conv = _conv(wcall)
+    _, body = _send(wcall, conv["convId"])
+    answer_id = body["assistant"]["msgId"]
+    assert not {"modelId", "region", "task", "failed"} & set(body["assistant"])
+    item = table.items[(pk(), f"MSG#{conv['convId']}#{answer_id}")]
+    item.update(status="failed", error="Amazon Bedrock refused it.", modelId="global.anthropic.claude-opus-5-5",
+                region="eu-north-1", task="chat", failed=True)  # fmt: skip
+    _, got = wcall("GET", f"{BASE}/chat/{conv['convId']}")
+    shown = next(m for m in got["messages"] if m["msgId"] == answer_id)
+    assert {k: shown[k] for k in ("model", "modelId", "region", "task", "failed")} == {
+        "model": "opus-5-5",
+        "modelId": "global.anthropic.claude-opus-5-5",
+        "region": "eu-north-1",
+        "task": "chat",
+        "failed": True,
+    }
+    item["failed"] = "yes"  # only a real true counts
+    _, got = wcall("GET", f"{BASE}/chat/{conv['convId']}")
+    assert "failed" not in next(m for m in got["messages"] if m["msgId"] == answer_id)

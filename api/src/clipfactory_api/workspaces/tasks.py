@@ -33,7 +33,7 @@ from ..clock import iso
 from ..errors import ApiError
 from ..ids import ulid
 from ..log import log
-from . import config, jobs
+from . import config, jobs, shapes
 from . import types as ws
 from .agent import new_session_id, time_for_call
 
@@ -115,6 +115,7 @@ def public_task(item: Mapping[str, Any]) -> dict[str, Any]:
         "model": item.get("model") if isinstance(item.get("model"), str) else None,
         "effort": effort if effort in config.EFFORTS else None,
         "effortApplied": applied if isinstance(applied, bool) else None,
+        **shapes.call_record(item),  # what the call really used (§45.35 D5)
         "result": dict(result) if isinstance(result, Mapping) else None,
         "createdAt": str(item.get("createdAt") or ""),
         "updatedAt": str(item.get("updatedAt") or ""),

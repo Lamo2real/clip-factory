@@ -21,6 +21,7 @@ from ws_support import (
     agent_step,
     caller,
     install,
+    leaked,
     pk,
     prefix,
     seed_asset,
@@ -1080,6 +1081,26 @@ def test_each_steps_model_and_effort_show_on_the_job(call: Call, store: db.Store
         {"step": "storyboard", "agentId": "storyboard", "model": "fable-5-2", "effort": "high", "effortApplied": True},
         {"step": "safety", "agentId": "quality_assurance", "model": "opus-5-5", "effort": None, "effortApplied": False},
     ]
+
+
+def test_a_jobs_model_records_are_exact(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    """§45.35 D5 (and §45.34 "A failed model call still shows what was asked"): each ``meta.models`` entry keeps the
+    model id or inference profile really called, its Region, the task, and ``failed: true`` for a step that stopped
+    on its model; the API passes all of them through, so an added model edited later still shows what ran."""
+    story = seed_story(store, s3_client)
+    asked = {"step": "storyboard", "agentId": "storyboard", "task": "storyboard", "model": "custom-llama",
+             "modelId": "us.meta.llama4-maverick-17b-instruct-v1:0", "region": "us-east-1", "effort": None,
+             "effortApplied": False, "failed": True}  # fmt: skip
+    ran = {"step": "safety", "agentId": "quality_assurance", "task": "fact_check", "model": "opus-5-5",
+           "modelId": "global.anthropic.claude-opus-5-5", "region": "eu-north-1", "effort": "high",
+           "effortApplied": True, "usage": {"input": 5}}  # fmt: skip
+    seed_job(store, story, status="failed", meta={"models": [asked, ran, {**ran, "failed": "true"}]})
+    (shown,) = call("GET", f"{BASE}/stories/{story['storyId']}/jobs")[1]["jobs"]
+    first, second, third = shown["meta"]["models"]
+    assert first == asked
+    assert second == {k: v for k, v in ran.items() if k != "usage"}  # only the record's own fields
+    assert "failed" not in third
+    assert leaked([shown]) == []
 
 
 def test_a_switched_off_storyboard_agent_refuses_runs_that_write_the_story(

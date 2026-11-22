@@ -63,6 +63,7 @@ CHARACTER_CHANGED = "This character changed on another screen. Reload it and try
 IMAGES_OFF = "AI pictures are off. Turn them on in Lamo Stories › Settings › Video › Picture maker."
 SCRIPT_UNREADABLE = "We could not open the storyboard just now. Try again in a minute."
 CANCEL_ATTEMPTS = 3
+CHECK_JOBS_READ = 50  # the newest jobs looked at for a "Try it" still running (one takes a minute or two)
 # A delete still deletes items and files after its stops: that much more of the 29 s is kept for it.
 DELETE_RESERVE_SECONDS = 4.0
 
@@ -1208,8 +1209,8 @@ def _default_format(config: Mapping[str, Any]) -> Item:
 
 
 def _refuse_not_ready(ctx: Ctx) -> None:
-    """409 with the maker's own sentence while the picked video or picture maker is not ready (§45.34): nothing
-    switches to another maker by itself."""
+    """409 with the maker's own sentence while the picked video maker is not ready (§45.34): nothing switches to
+    another maker by itself. The picture maker never stops a video (§45.35 D3: it gates portraits only)."""
     sentence = providers.not_ready(ctx.config, _all(ctx, ws.PROVIDER_SK, ws.TYPE_PROVIDER))
     if sentence:
         raise conflict(sentence)
@@ -1739,9 +1740,70 @@ def get_providers(app: App, req: Request) -> Response:
     found = ctx.store.query_all(ctx.pk, ws.PJOB_SK, newest_first=True, cap=providers.JOBS_READ)
     story_jobs = [j for j in (ctx.owned(x, ws.TYPE_PJOB) for x in found) if j is not None]
     model_statuses = _all(ctx, ws.MODELSTATUS_SK, ws.TYPE_MODELSTATUS)
+    checks = {p: _check_job(ctx, story_jobs, p) for p in providers.CHECKABLE}
+    if any(j is not None and j.get("status") == "ready" for j in checks.values()):
+        records = _all(ctx, ws.PROVIDER_SK, ws.TYPE_PROVIDER)  # a check that just ended wrote its proof first
     shown = providers.statuses(ctx.config, records, story_jobs, model_statuses)
+    for row in shown:
+        if row["id"] in checks:  # "Try it" (§45.35 D2): its newest job, so Settings › Video shows how it went
+            job = checks[row["id"]]
+            row["check"] = shapes.public_job(job) if job is not None else None
     shown += provider_keys.statuses(ctx.store, ctx.user_id, ctx.ws_id)  # each with its ``key`` (§45.34)
     return ok({"providers": shown})
+
+
+def _check_job(ctx: Ctx, found: list[Item], provider_id: str) -> Item | None:
+    """The newest "Try it" job of the maker (after the stale-heartbeat fence), or None."""
+    job = providers.check_job_of(found, provider_id)
+    return jobs.settle(ctx.store, job, ctx.now, stop=ctx.stop()) if job is not None else None
+
+
+def check_provider(app: App, req: Request) -> Response:
+    """``POST …/providers/nova-reel/check`` → ``202 { job }`` (§45.35 D2, "Try it" in Settings › Video): a one-step
+    ``provider_check`` job; Lamo Stories' agent makes one 6-second test shot (Amazon bills it), proves
+    ``PROVIDER#animation#nova-reel`` or records Bedrock's sentence, and deletes the test file. Never behind the
+    not-ready guard (that is how the maker becomes ready), and one at a time."""
+    ctx = _ctx(app, req)
+    provider_id = "nova-reel"
+    validate.only_keys(req.json(), ())
+    with ctx.stops_last():  # the fence's stops wait: the start may need the whole 29 s
+        newest = ctx.store.query_page(ctx.pk, ws.PJOB_SK, newest_first=True, limit=CHECK_JOBS_READ).items
+        previous = _check_job(ctx, [j for j in (ctx.owned(x, ws.TYPE_PJOB) for x in newest) if j], provider_id)
+        if jobs.active(previous):
+            raise conflict(providers.CHECK_BUSY)
+        job_id = ulid()
+        job = jobs.new_job(
+            ctx.user_id,
+            ctx.ws_id,
+            job_id=job_id,
+            content_type=providers.CHECK_CONTENT_TYPE,
+            content_id=provider_id,
+            job_type=providers.CHECK_JOB_TYPE,
+            run=[providers.CHECK_STEP],
+            steps=[{"key": providers.CHECK_STEP, "label": shapes.STEP_LABEL["check"], "status": "pending"}],
+            now=ctx.now,
+            meta={"providers": {providers.CHECKABLE[provider_id]: provider_id}},
+        )
+        ctx.store.put(job, if_absent=True)
+        agent = ctx.deps.agent
+        if agent is None or not getattr(agent, "ready", False):
+            failed = jobs.fail_start(ctx.store, job, None, ctx.now, jobs.CHECK_NOT_SET_UP)
+            return ok({"job": shapes.public_job(failed)}, 202)
+        try:
+            agent.start_provider_check(
+                user_id=ctx.user_id,
+                workspace_id=ctx.ws_id,
+                provider_id=provider_id,
+                job_id=job_id,
+                session_id=job["sessionId"],
+            )
+        except Exception as e:
+            log("warning", "stories.provider_check_start_failed", jobId=job_id, error=type(e).__name__)
+            session_id = str(job["sessionId"])
+            job = jobs.fail_start(ctx.store, job, None, ctx.now, jobs.CHECK_NOT_STARTED)
+            _stop_after_failed_start(ctx, session_id)
+        log("info", "stories.provider_check_started", jobId=job_id, provider=provider_id)
+        return ok({"job": shapes.public_job(job)}, 202)
 
 
 def get_guidance(app: App, req: Request) -> Response:
@@ -1819,5 +1881,6 @@ ROUTES: list[Route] = [
     route("POST", W + "/stories/{storyId}/download", download),
     route("GET", W + "/library", get_library),
     route("GET", W + "/providers", get_providers),
+    route("POST", W + "/providers/nova-reel/check", check_provider),
     route("GET", W + "/guidance", get_guidance),
 ]

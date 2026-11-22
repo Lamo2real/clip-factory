@@ -276,29 +276,32 @@ CANVAS_NOT_READY = (
 )
 
 
-def test_a_picked_picture_maker_that_is_not_ready_stops_create_produce_and_changes(
+def test_a_picked_picture_maker_never_stops_a_video(
     call: Call, store: db.Store, s3_client: FakeS3, hero: dict[str, Any], agentcore: FakeAgentCore
 ) -> None:
-    """§45.34: ``configuration.providers.video`` *or* ``images``. Nova Canvas is on only after a real call (its first
-    portrait); until then a video waits with its own sentence and nothing switches to the built-in characters."""
+    """§45.35 D3 (it replaces §45.34's "video or images"): only ``configuration.providers.video`` stops a story's
+    create, produce and changes. Nova Canvas makes portraits only, so while it is not on yet (no portrait made) the
+    videos are still made, with the built-in characters, and its own state gates the portraits alone."""
     made = seed_story(store, s3_client)
     _configure(call, providers={"images": "nova-canvas"})
+    shown = {p["id"]: p for p in call("GET", f"{BASE}/providers")[1]["providers"]}
+    assert shown["nova-canvas"]["state"] == "needs_setup"  # not on yet, and the page says so
     status, body = _create(call, hero)
-    assert (status, body["error"]["message"]) == (409, CANVAS_NOT_READY)
+    assert status == 201, body
+    assert body["job"]["meta"]["providers"]["images"] == "builtin-rig"  # the characters in a video: always the rig
     status, body = call("POST", f"{BASE}/stories/{made['storyId']}/produce", {"from": "animation"})
-    assert (status, body["error"]["message"]) == (409, CANVAS_NOT_READY)
-    status, body = call("POST", f"{BASE}/stories/{made['storyId']}/changes", {"note": "Funnier"})
-    assert (status, body["error"]["message"]) == (409, CANVAS_NOT_READY)
-    assert agentcore.calls == []
-    # a portrait is still allowed (it is the real call that turns it on)
+    assert status == 202, body
+    assert CANVAS_NOT_READY not in json.dumps(body)
+    assert [c["payload"]["action"] for c in agentcore.calls] == ["process_story", "process_story"]
+    # a portrait is the real call that turns Nova Canvas on
     assert call("POST", f"{BASE}/characters/{hero['characterId']}/portrait")[0] == 202
-    # once a portrait worked it is on, and videos are made again
+    # the video maker still gates videos, whatever the picture maker's state
     seed_item(store, "PROVIDER#images#nova-canvas", ws.TYPE_PROVIDER, state="on", checkedAt="2026-11-15T11:30:00.000Z")
-    assert _create(call, hero)[0] == 201
-    # the built-in characters never wait
-    _configure(call, providers={"images": "builtin-rig"})
-    store.delete(pk(), "PROVIDER#images#nova-canvas")
-    assert _create(call, hero)[0] == 201
+    _configure(call, providers={"video": "nova-reel"})
+    status, body = _create(call, hero)
+    assert (status, body["error"]["message"]) == (409, REEL_NOT_READY)
+    assert providers.not_ready({"providers": {"images": "nova-canvas", "video": "builtin-2d"}}, []) is None
+    assert providers.GATES_VIDEOS == ("animation",)
 
 
 # --- approve ---------------------------------------------------------------------------------------------------

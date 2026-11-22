@@ -53,7 +53,9 @@ def test_defaults_come_from_lamo_stories_own_model_list(wcall: WsCall, table: Fa
     opus = next(m for m in body["models"] if m["key"] == "opus-5-5")
     assert opus["status"] == "not_checked"  # nothing is shown as available because it is listed
     assert opus["statusLine"] == "Not checked yet. Tap Check models to try it."
-    assert opus["provider"] == "Amazon Bedrock"
+    # who makes it and who runs it (§45.35 D8: "Claude Opus 5.5 · Anthropic on Amazon Bedrock")
+    assert (opus["provider"], opus["host"]) == ("Anthropic", "Amazon Bedrock")
+    assert {(m["provider"], m["host"]) for m in body["models"]} == {("Anthropic", "Amazon Bedrock")}
     assert opus["efforts"] == ["low", "medium", "high", "xhigh", "max"]
     assert opus["defaultEffort"] == "medium"
     assert opus["price"]["source"] == "anthropic_list"

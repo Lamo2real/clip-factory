@@ -37,7 +37,7 @@ from ..errors import ApiError, bad_request, conflict
 from ..ids import random_suffix, ulid
 from ..log import log
 from . import ai_resolve as res
-from . import deps, guard
+from . import deps, guard, shapes
 from . import types as ws
 
 # Provider ids with a price the owner may type (§45.34 "Provider usage and cost"): per picture or per second of video,
@@ -551,8 +551,34 @@ def model_status_items(store: db.Store, user_id: str, workspace_id: str) -> dict
     return out
 
 
+# Who runs Lamo Stories' models (§45.35 D8): every one of them is called on Amazon Bedrock.
+HOST: Final = "Amazon Bedrock"
+# The maker of a bundled model whose file entry still names the host as its provider, by its Bedrock id's first part.
+MAKERS: Final = {"anthropic": "Anthropic", "amazon": "Amazon", "meta": "Meta", "mistral": "Mistral"}
+PROFILE_PREFIXES: Final = ("global", "us", "eu", "apac", "jp", "au", "ca", "us-gov")
+
+
+def model_host(m: Mapping[str, Any]) -> str:
+    """Who runs the model (``ModelInfo.host``): the file's or the added model's ``host``, else Amazon Bedrock."""
+    host = m.get("host")
+    return " ".join(host.split()) if isinstance(host, str) and host.strip() else HOST
+
+
+def model_maker(m: Mapping[str, Any]) -> str:
+    """Who makes the model (``ModelInfo.provider``, D8). An entry whose ``provider`` is empty or names the host (the
+    first ``models.json`` said "Amazon Bedrock") is named from its Bedrock model id (``anthropic.…`` → Anthropic)."""
+    provider = " ".join(str(m.get("provider") or "").split())
+    if provider and provider.lower() != model_host(m).lower():
+        return provider
+    parts = str(m.get("modelId") or "").rsplit("/", 1)[-1].split(".")
+    if len(parts) > 2 and parts[0] in PROFILE_PREFIXES:
+        parts = parts[1:]
+    return MAKERS.get(parts[0], provider) if len(parts) > 1 else provider
+
+
 def model_info(m: Mapping[str, Any], status: Mapping[str, Any] | None, ai: Mapping[str, Any]) -> dict[str, Any]:
-    """``ModelInfo`` (§45.6): the owner's price beats the file's list price."""
+    """``ModelInfo`` (§45.6): the owner's price beats the file's list price. ``provider`` is who makes the model and
+    ``host`` who runs it (§45.35 D8: screens say "{provider} on {host}")."""
     key = str(m.get("key"))
     owner_price = (ai.get("prices") or {}).get(key)
     listed = m.get("pricing") if isinstance(m.get("pricing"), Mapping) else None
@@ -564,7 +590,8 @@ def model_info(m: Mapping[str, Any], status: Mapping[str, Any] | None, ai: Mappi
     out: dict[str, Any] = {
         "key": key,
         "label": str(m.get("label") or key),
-        "provider": str(m.get("provider") or ""),
+        "provider": model_maker(m),
+        "host": model_host(m),
         "modelId": str(m.get("modelId") or ""),
         "efforts": [str(e) for e in m.get("efforts") or [] if e in res.EFFORTS],
         "defaultEffort": str(m["defaultEffort"]) if m.get("defaultEffort") in res.EFFORTS else None,
@@ -575,9 +602,12 @@ def model_info(m: Mapping[str, Any], status: Mapping[str, Any] | None, ai: Mappi
         "price": price,
         "custom": bool(m.get("custom")),
     }
-    if out["custom"]:  # what the owner typed, so Settings › AI can show and change it (§45.34)
+    if out["custom"]:  # what the owner typed, so Settings › AI can show and change it (§45.34, §45.35 D1)
         out["region"] = str(m.get("region") or "")
         out["maxOutputTokens"] = int(m.get("maxOutputTokens") or 0) or None
+        out["effortField"] = str(m.get("effortField") or "none")
+        out["tools"] = bool(m.get("tools"))
+        out["cache"] = bool(m.get("cache"))
     return out
 
 
@@ -653,6 +683,7 @@ def public_task(item: Mapping[str, Any]) -> dict[str, Any]:
         "model": item.get("model"),
         "effort": item.get("effort"),
         "effortApplied": item.get("effortApplied") if isinstance(item.get("effortApplied"), bool) else None,
+        **shapes.call_record(item),  # what the call really used (§45.35 D5)
         "result": item.get("result") if isinstance(item.get("result"), Mapping) else None,
         "createdAt": item.get("createdAt"),
         "updatedAt": item.get("updatedAt"),

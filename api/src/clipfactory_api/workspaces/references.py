@@ -26,7 +26,7 @@ from ..log import log
 from . import agents as agents_mod
 from . import ai_config as cfg
 from . import ai_resolve as res
-from . import retention
+from . import retention, shapes
 from . import types as ws
 
 MAX_BYTES: Final = 2 * 1024 * 1024 * 1024
@@ -130,7 +130,7 @@ def public_job(item: Mapping[str, Any]) -> dict[str, Any]:
             "actualSec": (meta or {}).get("actualSec"),
             "safetyTopicId": (meta or {}).get("safetyTopicId"),
             "providers": dict((meta or {}).get("providers") or {}),
-            "models": [dict(m) for m in (meta or {}).get("models") or [] if isinstance(m, Mapping)],
+            "models": shapes.model_records((meta or {}).get("models")),  # the same records as a story job's (D5)
         },
         "createdAt": item.get("createdAt"),
         "updatedAt": item.get("updatedAt"),

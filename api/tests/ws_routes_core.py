@@ -50,5 +50,6 @@ EXPECTED: set[tuple[str, str]] = {
     ("POST", f"{STORY}/download"),
     ("GET", f"{W}/library"),
     ("GET", f"{W}/providers"),
+    ("POST", f"{W}/providers/nova-reel/check"),
     ("GET", f"{W}/guidance"),
 }

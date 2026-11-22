@@ -130,9 +130,55 @@ def test_each_of_the_first_three_steps_ticks_on_its_own_pick(wcall: WsCall, tabl
 
 def test_check_models_ticks_step_one(wcall: WsCall, store: db.Store) -> None:
     assert _states(wcall)["ai"] == "todo"
-    seed(store, "MODELSTATUS#opus-5-5", ws.TYPE_MODELSTATUS, model="opus-5-5", status="ok", checkedAt=AT)
+    # Check models marks what it writes (``by: "check"``, §45.35 D7)
+    seed(store, "MODELSTATUS#opus-5-5", ws.TYPE_MODELSTATUS, model="opus-5-5", status="ok", checkedAt=AT, by="check")
     states = _states(wcall)
     assert (states["ai"], states["model"], states["effort"]) == ("done", "todo", "todo")
+
+
+def test_a_model_status_from_a_chat_or_a_job_leaves_step_one_open(wcall: WsCall, store: db.Store) -> None:
+    """§45.35 D7: the agent writes ``MODELSTATUS#`` after every model call (chat, ideas, storyboard). Only one Check
+    models wrote, or "These look right" (``pickedAt.environment``), ticks "Set up the AI"."""
+    seed(store, "MODELSTATUS#opus-5-5", ws.TYPE_MODELSTATUS, model="opus-5-5", status="ok", checkedAt=AT)
+    seed(store, "MODELSTATUS#haiku-5-5", ws.TYPE_MODELSTATUS, model="haiku-5-5", status="ok", checkedAt=AT,
+         by="chat")  # fmt: skip
+    assert _states(wcall)["ai"] == "todo"
+    # another owner's check in the same partition never ticks it
+    store.put({"pk": pk(), "sk": "MODELSTATUS#sonnet-5-5", "type": ws.TYPE_MODELSTATUS, "userId": "someone-else",
+               "workspaceId": WS, "model": "sonnet-5-5", "status": "ok", "checkedAt": AT, "by": "check"})  # fmt: skip
+    assert _states(wcall)["ai"] == "todo"
+    body = {"defaultModel": "opus-5-5", "defaultEffort": "high", "version": 0, "picked": ["environment"]}
+    assert wcall("PUT", f"{BASE}/ai", body)[0] == 200
+    assert _states(wcall)["ai"] == "done"
+
+
+def test_a_connected_account_that_lamo_clips_has_too_is_not_a_done_step(
+    wcall: WsCall, store: db.Store, table: FakeTable
+) -> None:
+    """§45.35 D11: Lamo Clips connected the same YouTube channel after Lamo Stories did, and nobody shared it. The
+    stored status still says ``connected`` (nothing read it through Social accounts yet), but setup shows the step
+    to do with the same-as-Lamo-Clips line, as the Social accounts page would."""
+    seed(store, f"{ws.SOCIAL_SK}youtube", ws.TYPE_SOCIAL, platform="youtube", connectionStatus="connected",
+         externalAccountId="UC-owner", socialAccountId=ws.social_account_id(WS, "youtube"))  # fmt: skip
+    seed(store, f"{ws.SOCIAL_SK}x", ws.TYPE_SOCIAL, platform="x", connectionStatus="connected",
+         externalAccountId="x-own", socialAccountId=ws.social_account_id(WS, "x"))  # fmt: skip
+    assert (_states(wcall)["youtube"], _states(wcall)["x"]) == ("done", "done")
+    clips = {"pk": f"USER#{USER}", "sk": "ACCOUNT#youtube", "platform": "youtube", "status": "connected",
+             "accountId": "UC-owner"}  # fmt: skip
+    store.put(clips)
+    store.put({**clips, "sk": "ACCOUNT#x", "platform": "x", "accountId": "x-clips"})
+    _, got = wcall("GET", f"{BASE}/onboarding")
+    steps = {s["step"]: s for s in got["onboarding"]["steps"]}
+    assert steps["youtube"]["state"] == "todo"
+    assert steps["youtube"]["line"] == (
+        "This is Lamo Clips' YouTube account. Pick another in Social accounts, or tap Use it for both."
+    )
+    assert (steps["x"]["state"], "line" in steps["x"]) == ("done", False)  # another X account: Lamo Stories' own
+    # "Use it for both" for this very channel makes it a Lamo Stories connection again
+    store.update(pk(), f"{ws.SOCIAL_SK}youtube", {"sharedWithClips": True, "sharedExternalAccountId": "UC-owner"})
+    assert _states(wcall)["youtube"] == "done"
+    # setup only reads: nothing of Lamo Clips' changed
+    assert table.raw(f"USER#{USER}", "ACCOUNT#youtube") == clips
 
 
 def test_a_configuration_saved_before_the_picks_keeps_its_ticks(
