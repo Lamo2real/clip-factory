@@ -276,6 +276,12 @@
   text-shadow: none;
   background: var(--selected);
 }
+/* The window look and the picture look (glass.css): the dock is the shell's, over whichever app is on screen, so its
+   track holds its words by itself, as a glass button does: the pick-one track's own fill (--fill-control, never weaker
+   than the panel tint), not a tint that leans on the panel under it (§45.37). */
+html:where(.see-through, [data-backdrop]) .ws-dock .ws-switch {
+  background: var(--fill-control);
+}
 /* No shadow: nothing of the switcher paints outside its own box (the before/after pixel check, §45.19). */
 .glide--ws {
   border-radius: calc(var(--r-md) - 4px);
