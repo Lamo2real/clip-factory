@@ -128,6 +128,10 @@ SOUND_KEY = (
     "Paste your ElevenLabs key in Lamo Stories › Settings › AI › Provider keys first, or pick Built-in sounds in "
     "Settings › Video, then tap Try again."
 )
+KEY_UNREADABLE = (
+    "Lamo Stories could not read the key you saved for {words}. Tap Try again. If it keeps happening, paste the key "
+    "again in Lamo Stories › Settings › AI › Provider keys."
+)
 SOUND_FAILED = (
     "{label} could not make the sounds. Tap Try again, or pick Built-in sounds in Lamo Stories › Settings › Video."
 )
@@ -186,6 +190,27 @@ class ProviderFailed(Exception):
         self.state = state
         self.last_error = last_error
         self.detail = detail
+
+
+def read_key(ctx: ProviderContext, host: str) -> str | None:
+    """This workspace's key for a keyed host, read for this call (§45.37 G4); None when none is saved. A key that is
+    there but cannot be read (Secrets Manager denied or throttled the read) stops the step with a plain sentence and
+    proves nothing about the maker (``state`` None: no ``PROVIDER#`` record is written for a read that never reached
+    it)."""
+    if ctx.provider_key is None:
+        return None
+    try:
+        return ctx.provider_key(host)
+    except (keyed.HostError, ValueError) as e:
+        words = keyed.host_words(host)
+        found = e.found[1] if isinstance(e, keyed.HostError) and e.found else ""
+        log("warn", "stories.provider_key_failed", host=host, error=type(e).__name__)
+        raise ProviderFailed(KEY_UNREADABLE.format(words=words), last_error=_said(found) or None) from e
+
+
+def _said(text: str) -> str:
+    text = " ".join(str(text or "").split())
+    return "" if not text else (text[:1].upper() + text[1:]).rstrip(".") + "."
 
 
 Ask = Callable[..., Awaitable[Any]]  # pipeline.StoryJob.ask(task=..., messages=..., schema=..., max_tokens=...)
@@ -416,7 +441,7 @@ class NovaCanvas(_Base):
     line = ENDED_STATE_LINE
 
     async def image(self, prompt: str, width: int, height: int, seed: int, refs: list[Path]) -> bytes:
-        raise ProviderUnavailable(ended_line("images", None, self.label))
+        raise ProviderUnavailable(ended_line("images", None, bundled_label(self.id, self.kind, self.label)))
 
     async def bedrock_canvas(self, prompt: str, width: int, height: int, seed: int) -> bytes:
         """One TEXT_IMAGE call of the Nova Canvas request shape (``ctx.image_model_id`` on ``ctx.image_client``).
@@ -524,10 +549,11 @@ class AiPictures(_Base):
         label = str(entry.get("label") or self.label)
         if config.host_of(entry) == "openai_compatible":
             return await self._openai(entry, label, prompt, width, height)
-        model_id = str(entry["modelId"])
-        if model_id.startswith("stability."):
+        model_id = str(entry["modelId"])  # called as saved; its shape is the foundation model's (profile id, ARN)
+        bare = config.bare_model_id(model_id)
+        if bare.startswith("stability."):
             body = stability_body(prompt, width, height, seed)
-        elif model_id.startswith(("amazon.titan-image", "amazon.nova-canvas")):
+        elif bare.startswith(("amazon.titan-image", "amazon.nova-canvas")):
             body = _canvas_body(prompt, width, height, seed)
         else:
             raise ProviderUnavailable(PICTURE_UNKNOWN.format(label=label))
@@ -567,7 +593,7 @@ class AiPictures(_Base):
         return picture_from(data, label)
 
     async def _openai(self, entry: dict[str, Any], label: str, prompt: str, width: int, height: int) -> bytes:
-        key = self.ctx.provider_key("openai_compatible") if self.ctx.provider_key else None
+        key = read_key(self.ctx, "openai_compatible")
         if not key:
             raise ProviderFailed(PICTURE_SETUP.format(why="there is no OpenAI-compatible key saved in Settings › AI › "
                                  "Provider keys"), state="needs_setup", last_error="No key is saved.")  # fmt: skip
@@ -724,10 +750,10 @@ class NovaReel(_Base):
     async def render_scene(
         self, script: dict[str, Any], scene_id: str, assets: dict[str, Path], out: Path
     ) -> SceneClip:
-        raise ProviderUnavailable(ended_line("animation", None, self.label))
+        raise ProviderUnavailable(ended_line("animation", None, bundled_label(self.id, self.kind, self.label)))
 
     async def shot(self, prompt: str, seed: int, dimension: str, prefix: str) -> str:
-        raise ProviderUnavailable(ended_line("animation", None, self.label))
+        raise ProviderUnavailable(ended_line("animation", None, bundled_label(self.id, self.kind, self.label)))
 
     async def reel_scene(self, script: dict[str, Any], scene_id: str, assets: dict[str, Path], out: Path) -> SceneClip:
         """One cut-away with the Nova Reel request shape (``ctx.video_model_id`` into ``ctx.video_bucket``)."""
@@ -845,6 +871,8 @@ class AiVideo(_Base):
             raise ProviderUnavailable(NO_OWN_MODEL.format(what="video"))
         if config.ended(entry):
             raise ProviderUnavailable(ended_line("animation", entry, str(entry.get("label") or self.label)))
+        if not config.bare_model_id(entry.get("modelId")).startswith(config.BEDROCK_VIDEO):  # before any call
+            raise ProviderUnavailable(VIDEO_UNKNOWN.format(label=str(entry.get("label") or self.label)))
         return entry
 
     def _region(self, entry: dict[str, Any]) -> str:
@@ -857,11 +885,11 @@ class AiVideo(_Base):
         return self.ctx.video_bucket if region == "us-east-1" else ""
 
     def shot_seconds(self, entry: dict[str, Any] | None = None) -> int:
-        model_id = str((entry or self.ctx.video_model or {}).get("modelId") or "")
+        model_id = config.bare_model_id((entry or self.ctx.video_model or {}).get("modelId"))
         return REEL_SHOT if model_id.startswith("amazon.nova-reel") else LUMA_SHOT
 
     def model_input(self, entry: dict[str, Any], prompt: str, seed: int, width: int, height: int) -> dict[str, Any]:
-        model_id = str(entry.get("modelId") or "")
+        model_id = config.bare_model_id(entry.get("modelId"))  # the request's shape; the call keeps the saved id
         label = str(entry.get("label") or self.label)
         if model_id.startswith("luma."):
             return luma_input(prompt, width, height)
@@ -1030,15 +1058,16 @@ class BuiltinSynth(_Base):
         self.made_seconds = 0.0  # seconds of sound an outside maker made (its USAGE#); 0 for the synth
         self.made_units: tuple[float, str] | None = None  # what an outside maker bills: (units, "second" | "character")
         self.made: dict[str, Any] = {}  # which models made which part (the audio asset's meta)
+        # what each outside model made, billed part by part (one USAGE# each, also for the parts made before a later
+        # call failed): ``{"role", "key", "modelId", "units", "unit"}``
+        self.made_parts: list[dict[str, Any]] = []
 
     async def mix(self, script: dict[str, Any], out: Path) -> Path:
         work = self.ctx.workdir / "sound"
         script_path = write_json(work / "script.json", script)
         events = await self.ctx.engine.audio(script_path)
         seconds = frame_count(script) / 30.0
-        m = script.get("music") or {}
-        mood = str(m.get("mood") or "none") if isinstance(m, dict) else "none"
-        volume = float(m.get("volume") or 0.4) if isinstance(m, dict) else 0.0
+        mood, volume = music_of(script)
         effects, bed, voices = await self.made_sounds(script, events, seconds, mood, work)
         extra: dict[str, Any] = {}
         if effects:
@@ -1107,6 +1136,21 @@ MOOD_WORDS = {
 }
 
 
+def music_of(script: dict[str, Any]) -> tuple[str, float]:
+    """The story's music: its mood and its volume, as the mix reads them."""
+    m = script.get("music") or {}
+    if not isinstance(m, dict):
+        return "none", 0.0
+    return str(m.get("mood") or "none"), float(m.get("volume") or 0.4)
+
+
+def music_heard(script: dict[str, Any], seconds: float) -> bool:
+    """True when the mix plays music under this story (a known mood, a volume above 0, some length): only then is a
+    music bed worth asking a maker for."""
+    mood, volume = music_of(script)
+    return mood in audio.MOODS and volume > 0 and seconds > 0
+
+
 def music_prompt(mood: str) -> str:
     """Words for the music bed: the story's mood, instrumental only."""
     words = MOOD_WORDS.get(mood, f"{mood.replace('_', ' ')} background music")
@@ -1139,6 +1183,9 @@ def natural_seconds(sfx_id: str) -> float:
         return 1.0
 
 
+EL = keyed.ElevenLabs  # its limits: an effect is 0.5-30 s, a music bed 3-600 s (what each call is billed for)
+
+
 class MadeSound(BuiltinSynth):
     """A sound maker with the owner's ElevenLabs key (§45.37 G3, G7): each distinct effect of the story made once from
     words (``/v1/sound-generation``) and, when the story has music, an instrumental bed for the whole video
@@ -1158,7 +1205,7 @@ class MadeSound(BuiltinSynth):
             raise ProviderUnavailable(NO_OWN_MODEL.format(what="sound"))
         if any(config.host_of(m) == "bedrock" for m in roles.values()):
             raise ProviderUnavailable(SOUND_BEDROCK)
-        key = self.ctx.provider_key("elevenlabs") if self.ctx.provider_key else None
+        key = read_key(self.ctx, "elevenlabs")
         if not key:
             raise ProviderFailed(SOUND_KEY, state="needs_setup", last_error="No ElevenLabs key is saved.")
         client = keyed.ElevenLabs(key, self.ctx.http or keyed.https)
@@ -1175,6 +1222,7 @@ class MadeSound(BuiltinSynth):
         effects: dict[str, Any] = {}
         bed: Any = None
         label = self.label
+        billed = {"effects": 0.0, "music": 0.0}  # seconds each model made (billed), even when a later call fails
         try:
             fx = roles.get("effects")
             if fx is not None:
@@ -1183,16 +1231,16 @@ class MadeSound(BuiltinSynth):
                     ask = functools.partial(asyncio.to_thread, client.effect, effect_prompt(sid), wanted[sid],
                                             loop=sid in audio.LOOPING, model_id=str(fx["modelId"]))  # fmt: skip
                     data = await retry(ask, what="elevenlabs.effect", attempts=3)
+                    billed["effects"] += min(EL.EFFECT_MAX, max(EL.EFFECT_MIN, wanted[sid]))
                     effects[sid] = await decode(data, work / "made", f"fx-{len(effects)}")
-                    self.made_seconds += max(0.5, wanted[sid])
             tune = roles.get("music")
-            if tune is not None and mood and mood != "none" and seconds > 0:
+            if tune is not None and music_heard(script, seconds):  # never a bed the mix would leave out
                 label = str(tune.get("label") or label)
                 ask = functools.partial(asyncio.to_thread, client.music, music_prompt(mood), seconds,
                                         model_id=str(tune["modelId"]))  # fmt: skip
                 data = await retry(ask, what="elevenlabs.music", attempts=3)
+                billed["music"] += min(EL.MUSIC_MAX_MS, max(EL.MUSIC_MIN_MS, seconds * 1000)) / 1000
                 bed = await decode(data, work / "made", "music")
-                self.made_seconds += max(3.0, seconds)
         except keyed.HostError as e:
             said = keyed.redact(str(e), key)[:300]
             log("warn", "stories.sound_maker_failed", maker=self.id, status=e.status_code, kind=e.kind, detail=said)
@@ -1203,12 +1251,24 @@ class MadeSound(BuiltinSynth):
                 raise ProviderFailed(SOUND_FAILED.format(label=label), state="needs_setup",
                                      last_error=e.found[1][:1].upper() + e.found[1][1:] + ".", detail=said) from e  # fmt: skip
             raise ProviderFailed(SOUND_FAILED.format(label=label), detail=said) from e
+        finally:
+            self._bill(roles, billed)
         self.made = {
             "effects": (roles.get("effects") or {}).get("key") if effects else None,
             "music": (roles.get("music") or {}).get("key") if bed is not None else None,
         }
         self.made_units = (round(self.made_seconds, 3), "second")
         return effects or None, bed, None
+
+    def _bill(self, roles: dict[str, dict[str, Any]], billed: dict[str, float]) -> None:
+        """One part per model that made something (its own model id and seconds), for the job's ``USAGE#`` rows."""
+        self.made_parts = [
+            {"role": role, "key": roles[role].get("key"), "modelId": str(roles[role].get("modelId") or ""),
+             "units": round(secs, 3), "unit": "second"}
+            for role, secs in billed.items()
+            if secs > 0 and role in roles
+        ]  # fmt: skip
+        self.made_seconds = round(sum(billed.values()), 3)
 
 
 class ElevenLabsSound(MadeSound):
@@ -1276,6 +1336,9 @@ class PollyVoice(BuiltinSynth):
         free_at = 0.0
         characters = 0
         for i, (at, text) in enumerate(lines):
+            start = max(at, free_at)  # a line never talks over the one before it
+            if start >= seconds:  # past the end: never asked for (or billed)
+                break
             try:
                 speak = functools.partial(asyncio.to_thread, client.synthesize_speech, Engine=engine, VoiceId=voice,
                                           OutputFormat="mp3", SampleRate="24000", Text=text, TextType="text")  # fmt: skip
@@ -1289,15 +1352,14 @@ class PollyVoice(BuiltinSynth):
                                          last_error="Amazon Polly refused this account in Europe (Ireland).",
                                          detail=said) from e  # fmt: skip
                 raise ProviderFailed(VOICE_FAILED, detail=said) from e
+            characters += len(text)  # billed once Polly answered
+            self.made_parts = [{"role": "voice", "key": entry.get("key"), "modelId": engine,
+                                "units": float(characters), "unit": "character"}]  # fmt: skip
             stream = r.get("AudioStream")
             data = stream.read() if hasattr(stream, "read") else bytes(stream or b"")
             samples = await decode(data, work / "voice", f"line-{i}")
-            start = max(at, free_at)  # a line never talks over the one before it
-            if start >= seconds:
-                break
             spoken.append((start, samples))
             free_at = start + len(samples) / audio.SR + 0.15
-            characters += len(text)
         self.made = {"voice": entry.get("key"), "lines": len(spoken)}
         self.made_units = (float(characters), "character")
         return None, None, spoken
@@ -1381,6 +1443,13 @@ def ended_line(kind: str, entry: dict[str, Any] | None, label: str) -> str:
     return ENDED_LINE.format(label=label, day=day, what=WHAT.get(kind, kind))
 
 
+def bundled_label(pid: str, kind: str, fallback: str) -> str:
+    """The label of a maker's first bundled model (models.json), which the API's ended sentence also uses: "Amazon
+    Nova Reel 1.1 was ended by Amazon …"."""
+    listed = config.models_of(pid, config.MAKER_KIND_OF.get(kind, kind))
+    return str(listed[0].get("label") or fallback) if listed else fallback
+
+
 def maker_model(
     kind: str, configuration: dict[str, Any] | None, makers: dict[str, list[dict[str, Any]]] | None = None
 ) -> dict[str, Any] | None:
@@ -1397,8 +1466,8 @@ def maker_model(
     pick = raw.get(MODEL_FIELDS[kind]) if isinstance(raw, dict) else None
     model_kind = config.MAKER_KIND_OF[kind]
     listed = config.models_of(pid, model_kind, makers)
-    if pid in ENDED_MAKERS:
-        raise ProviderUnavailable(ended_line(kind, listed[0] if listed else None, cls.label))
+    if pid in ENDED_MAKERS:  # named by its model's label, as the API's sentence names it ("Amazon Nova Reel 1.1")
+        raise ProviderUnavailable(ended_line(kind, listed[0] if listed else None, bundled_label(pid, kind, cls.label)))
     if not listed:
         if pid.startswith("own-"):
             raise ProviderUnavailable(NO_OWN_MODEL.format(what=WHAT[kind]))

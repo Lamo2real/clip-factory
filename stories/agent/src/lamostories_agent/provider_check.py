@@ -24,12 +24,14 @@ from .providers import (
     LUMA_NOT_READY,
     LUMA_SETUP,
     LUMA_SHOT,
+    NOT_ITS_MODEL,
     WEST,
     LumaRay,
     NovaReel,
     ProviderContext,
     ProviderFailed,
     ProviderUnavailable,
+    bundled_label,
     ended_line,
     provider_item,
 )
@@ -120,8 +122,10 @@ class ProviderCheckJob(Job):
                              state, now_iso(), last_error)  # fmt: skip
 
     async def _model(self) -> dict[str, Any]:
-        """The Luma model Try it uses: the workspace's pick when its video maker is Luma AI Ray2, else the maker's first
-        model (read for this job, §45.37 G1)."""
+        """The Luma model Try it uses (read for this job, §45.37 G1): the workspace's pick when its video maker is Luma
+        AI Ray2, else the maker's first model that has not ended. A pick that is no longer one of Luma AI Ray2's
+        models stops with the story job's own sentence before any call: Try it never tests another model in its place
+        (it would show ready while every story stops on that pick)."""
         ws = await self.data.workspace(self.fence.user_id, self.fence.workspace_id)
         providers = ((ws or {}).get("configuration") or {}).get("providers") or {}
         picked = (
@@ -130,16 +134,20 @@ class ProviderCheckJob(Job):
             else None
         )
         makers = await self.makers()
-        entry = config.pick_model("video", "luma-ray", picked, makers) or config.pick_model(
-            "video", "luma-ray", None, makers
-        )
+        entry = config.pick_model("video", "luma-ray", picked or None, makers)
+        if entry is None and picked:
+            raise ProviderUnavailable(NOT_ITS_MODEL.format(what="video", label=LumaRay.label))
         if entry is None:
             raise ProviderUnavailable(LUMA_SETUP)
+        if config.ended(entry):
+            raise ProviderUnavailable(ended_line("animation", entry, str(entry.get("label") or LumaRay.label)))
         return entry
 
     async def _try(self) -> None:
         if self.content_id == "nova-reel":  # ended by Amazon: nothing is called (§45.37 G7)
-            raise ProviderUnavailable(ended_line("animation", None, NovaReel.label))
+            raise ProviderUnavailable(
+                ended_line("animation", None, bundled_label(NovaReel.id, "animation", NovaReel.label))
+            )
         if self.content_id not in PROVIDERS:
             raise StoryFailed(UNKNOWN)
         if not self.svc.video_west_bucket:  # nothing is called: the API's own sentence, no record written

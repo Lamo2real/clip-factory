@@ -5,12 +5,20 @@ picture, video or sound model, written to ``MAKERSTATUS#{key}`` (type ``ws_maker
 * **Amazon Bedrock** (Stability AI, Luma AI Ray2, a Bedrock model the owner added): ``GetFoundationModelAvailability``
   in the model's own Region (its authorization, entitlement, agreement and Region availability), and
   ``GetFoundationModel`` where that is not answered. Nothing is generated, so nothing is billed.
-* **ElevenLabs** (the owner's key): ``GET /v1/models``, which proves the key is accepted.
+* **ElevenLabs** (the owner's key): ``GET /v1/models``, which proves the key is accepted; the model reads Works only
+  when it is one ElevenLabs documents for sound effects or music (the bundled ``eleven_text_to_sound_v2`` and
+  ``music_v1``) or one that list names. Any other model name reads Not found with a sentence: a key check alone never
+  reads Works for a model nobody confirmed.
 * **Amazon Polly**: ``DescribeVoices`` for neural voices in eu-west-1: the voice is there for this account.
 * **An OpenAI-compatible images API** (the owner's key): ``GET {baseUrl}/models``: the key is accepted and the model
   is listed.
 * A model Amazon ended (Nova Canvas, Nova Reel) is never called: it reads ``not_found`` with "Ended by Amazon on 30
   Sep 2026."
+* A model the job would refuse anyway is never called either: a Bedrock video model Lamo Stories cannot ask (not Luma
+  AI or Amazon Nova Reel) and a Bedrock sound model (Amazon Bedrock has none yet) read ``not_found`` with the job's own
+  sentence, so the check never says Works for a model every video would stop on.
+* A Bedrock model saved as a cross-Region profile id or an ARN is checked as its foundation model
+  (``config.bare_model_id``): those two calls take a foundation model id.
 
 Each line is the provider's own answer in a plain sentence; nothing is shown as working because it is listed."""
 
@@ -22,6 +30,7 @@ from typing import Any
 
 from . import config, keys
 from . import hosts as keyed
+from .providers import SOUND_BEDROCK, VIDEO_UNKNOWN
 from .util import log
 
 REGION_WORDS = {
@@ -65,9 +74,12 @@ class MakerChecker:
         if config.ended(entry):
             return "not_found", ENDED.format(day=config.ended_words(str(entry["ended"])))
         host = config.host_of(entry)
+        refused = self._refused(entry, host)
+        if refused is not None:
+            return refused
         try:
             if host == "elevenlabs":
-                return self._elevenlabs(workspace_id)
+                return self._elevenlabs(workspace_id, entry)
             if host == "polly":
                 return self._polly(entry)
             if host == "openai_compatible":
@@ -78,13 +90,27 @@ class MakerChecker:
                 return e.found[0], _sentence(e.found[1][:1].upper() + e.found[1][1:])
             return "error", _sentence(f"{keyed.host_words(host)} did not answer the check. Try again later")
 
+    @staticmethod
+    def _refused(entry: dict[str, Any], host: str) -> tuple[str, str] | None:
+        """The job's own refusal, before any call, for a model every job would stop on."""
+        if host != "bedrock":
+            return None
+        label = str(entry.get("label") or entry.get("key"))
+        if entry.get("kind") == "audio":
+            return "not_found", SOUND_BEDROCK
+        if entry.get("kind") == "video" and not config.bare_model_id(entry.get("modelId")).startswith(
+            config.BEDROCK_VIDEO
+        ):
+            return "not_found", VIDEO_UNKNOWN.format(label=label)
+        return None
+
     # --- Amazon Bedrock ----------------------------------------------------------------------------------------
 
     def _bedrock(self, entry: dict[str, Any]) -> tuple[str, str]:
         label = str(entry.get("label") or entry.get("key"))
         region = str(entry.get("region") or config.MAKER_REGION)
         where = region_words(region)
-        model_id = str(entry.get("modelId") or "")
+        model_id = config.bare_model_id(entry.get("modelId"))  # both checks take a foundation model id
         if self.bedrock is None:
             return "error", "Lamo Stories cannot reach Amazon Bedrock right now. Try again later."
         client = self.bedrock(region)
@@ -140,10 +166,18 @@ class MakerChecker:
             raise keyed.no_key(host)
         return found
 
-    def _elevenlabs(self, workspace_id: str) -> tuple[str, str]:
+    def _elevenlabs(self, workspace_id: str, entry: dict[str, Any]) -> tuple[str, str]:
         key = self._key(workspace_id, "elevenlabs")
-        keyed.ElevenLabs(key, self.http or keyed.https).check()
-        return "ok", "ElevenLabs accepted your key."
+        listed = keyed.ElevenLabs(key, self.http or keyed.https).check()
+        model_id = str(entry.get("modelId") or "")
+        label = str(entry.get("label") or model_id)
+        if model_id in elevenlabs_sound_models() or model_id in listed:
+            return "ok", f"ElevenLabs accepted your key for {label}."
+        known = " and ".join(sorted(elevenlabs_sound_models()))
+        return "not_found", (
+            f"ElevenLabs accepted your key, but Lamo Stories cannot confirm a sound model called {model_id}. "
+            f"ElevenLabs' sound models are {known}."
+        )
 
     def _openai(self, workspace_id: str, entry: dict[str, Any]) -> tuple[str, str]:
         key = self._key(workspace_id, "openai_compatible")
@@ -171,6 +205,13 @@ class MakerChecker:
         if voice not in names:
             return "not_found", f"Amazon Polly has no {voice} voice in {region_words(region)}."
         return "ok", f"Amazon Polly can speak with the {voice} voice in {region_words(region)}."
+
+
+def elevenlabs_sound_models() -> set[str]:
+    """The ElevenLabs sound-effect and music model ids ElevenLabs documents (the bundled ones of models.json)."""
+    return {
+        str(m["modelId"]) for m in config.bundled_makers("audio") if config.host_of(m) == "elevenlabs" and m["modelId"]
+    }
 
 
 def status_item(

@@ -164,7 +164,7 @@ def test_the_pick_is_the_makers_model_and_an_ended_or_foreign_pick_stops_with_a_
     with pytest.raises(ProviderUnavailable) as reel:
         pick("animation", "nova-reel", "nova-reel")
     assert str(reel.value) == (
-        "Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Lamo Stories › Settings › "
+        "Amazon Nova Reel 1.1 was ended by Amazon on 30 Sep 2026. Pick another video maker in Lamo Stories › Settings › "
         "Video."
     )
     with pytest.raises(ProviderUnavailable) as foreign:
@@ -387,9 +387,16 @@ def test_the_sound_step_uses_the_picked_maker_records_its_usage_and_proves_it(tm
     assert asset["meta"]["provider"] == "elevenlabs" and asset["meta"]["madeEffects"] == "elevenlabs-effects"
     prov = table.item(keys.provider_sk("audio", "elevenlabs"))
     assert prov is not None and prov["state"] == "on"
-    (usage,) = table.prefix("USAGE#")
-    assert (usage["provider"], usage["unit"], usage["kind"]) == ("elevenlabs", "second", "provider")
-    assert usage["modelId"] == "eleven_text_to_sound_v2" and usage["units"] > 0 and usage["cost"] is None
+    # one USAGE# per model that made a part, each with its own model id and seconds (§45.37 G1: per-model prices)
+    rows = {u["modelId"]: u for u in table.prefix("USAGE#")}
+    assert set(rows) == {"eleven_text_to_sound_v2", "music_v1"}
+    for usage in rows.values():
+        assert (usage["provider"], usage["unit"], usage["kind"]) == ("elevenlabs", "second", "provider")
+        assert usage["units"] > 0 and usage["cost"] is None and usage["soundSec"] == usage["units"]
+    assert rows["music_v1"]["units"] == 4.0  # the whole video's bed
+    assert rows["eleven_text_to_sound_v2"]["units"] == pytest.approx(
+        2.0 + max(0.5, providers.natural_seconds("pop")), abs=0.01
+    )  # engine (2 s) and pop (ElevenLabs makes 0.5 s at least), each made once
     # a refused key is recorded on the maker, and the step fails with the sentence that says what to do
     svc.provider_keys = FakeKeys({})
     job2 = StoryJob(svc, JobFence(USER, WS, "J1", "S1"), STORY)

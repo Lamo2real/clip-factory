@@ -1,12 +1,25 @@
 """Which chat messages are short text edits (docs/CONTRACTS.md §45.37 G5; the owner's second request §4: "Simple text
-modifications: Low").
+modifications: Low", "Detailed animation planning: High").
 
-A short message that only asks to rename something, fix a word, a typo or the spelling, or shorten a caption, a title
-or a line goes through the task ``text_edit`` (the creative director, with its tools; the owner's model and effort for
-that task, suggested Low); everything else stays ``chat``. A message with pictures, or one that also asks for new
-work (ideas, a story, a video, a remake, a study), is never a text edit. The rule is plain words, so the owner can
-predict it, and it only picks the task: §45.25's precedence still decides the model and the effort (a one-time choice
-or the conversation's own setting wins over the task's), and nothing else changes about the answer."""
+A message goes through the task ``text_edit`` (the creative director, with its tools; the owner's model and effort for
+that task, suggested Low) only when it is nothing but one small text change, said up front:
+
+* rename or retitle something ("Rename Lamo to Bobo", "Retitle it Icy Ride"),
+* call it something ("Call it \"Icy Ride\""),
+* fix or change a word, a typo, the spelling, a name, a title, a caption or a line ("Fix the typo in the title",
+  "Change the name of the dog to Rex"),
+* shorten or trim a caption, a title or a line ("Shorten the caption of scene 2", "Make the title shorter"),
+* replace one word with another ("Replace slid with skidded", "Change \"slid\" to \"skidded\"").
+
+Everything else stays ``chat``: a question (a ``?``, or a message that starts like one), a message with pictures, one
+longer than 200 characters, one that also asks for something else (a second clause such as "… and make the dog fly",
+"… then render it", or a second sentence), or one that asks for new or bigger work anywhere in it (next, another, new,
+add, remove, render, post, ideas, a plan, a remake, a study). Words inside double quotes are the new text itself and
+never count against it ("Call it \"The Next Ride\"" is still an edit). A message that is not clearly a text edit is
+answered as ``chat``, so new stories and re-staging are never planned at the Low effort meant for small text changes.
+The rule is plain words, so the owner can predict it, and it only picks the task: §45.25's precedence still decides
+the model and the effort (a one-time choice or the conversation's own setting wins over the task's), and nothing else
+changes about the answer."""
 
 from __future__ import annotations
 
@@ -16,43 +29,69 @@ MAX_EDIT_CHARS = 200
 TEXT_EDIT = "text_edit"
 CHAT = "chat"
 
+_THING = (
+    r"(name|names|title|word|words|wording|caption|captions|line|lines|spelling|typo|typos|grammar|text|description)"
+)
+_OF = r"(the\s+|a\s+|this\s+|that\s+|its\s+|his\s+|her\s+|my\s+|their\s+)?"
+
+# What may come before the edit: "please", "ok", "now", "just".
+_LEAD = re.compile(r"(?i)^(please,?\s+|pls\s+|ok(ay)?,?\s+|now,?\s+|just\s+)*")
+# The whole message (after that) is one of these, said first.
 _EDIT = re.compile(
-    r"""(?ix)
-    \b(
-        re-?name | re-?title
-      | call\s+(it|him|her|them|this|that|the\s+\w+)\s+["'“‘]?\w
-      | (change|fix|correct|edit|tweak|update)\s+(the\s+|a\s+|this\s+|that\s+|its\s+|his\s+|her\s+)?
-        (\w+\s+)?(name|title|word|words|wording|caption|captions|line|spelling|typo|typos|grammar|text)\b
-      | typos?
-      | misspel\w*
-      | shorten | shorter | trim\s+(the\s+|this\s+|that\s+)?(\w+\s+)?(caption|title|line|text|description)
-      | make\s+(it|the\s+\w+|this|that)\s+(shorter|snappier|punchier|tighter)
-      | replace\s+["'“‘]?\S+.*\bwith\b
-      | change\s+["'“‘][^"'”’]+["'”’]\s+(to|into)\b
-      | spell\s+(it|the\s+\w+|\w+)\s+(as|with)\b
+    rf"""(?ix)
+    ^(
+        re-?name\b
+      | re-?title\b
+      | call\s+(it|him|her|them|this|that|the\s+\w+)\s+["“]?\w
+      | (fix|correct|change|edit|tweak|update)\s+{_OF}(\w+\s+)?{_THING}\b
+      | (shorten|trim|tighten)\s+{_OF}(\w+\s+)?(caption|captions|title|line|lines|text|description|name)\b
+      | make\s+{_OF}(\w+\s+)?(caption|captions|title|line|lines|text|description|name)\s+
+        (shorter|snappier|punchier|tighter|clearer)\b
+      | replace\s+["“]?[\w'’-]+["”]?\s+with\s+["“]?\w
+      | change\s+["“][^"“”]+["”]\s+(to|into)\s+\S
+      | spell\s+(it|the\s+\w+|\w+)\s+(as|with)\s+\S
     )
     """
 )
-_NEW_WORK = re.compile(
+# Anything here (outside double quotes) makes it more than a text edit.
+_MORE = re.compile(
     r"""(?ix)
     \b(
-        new\s+(idea|ideas|story|stories|video|videos|character|characters|scene|scenes)
-      | (make|produce|render|create)\s+(a|the|another|this|that)\s+(video|story|clip)
-      | brainstorm | ideas\s+(for|about) | write\s+(a|an|me|another)\b
-      | remake | redo\s+the\s+(scene|video) | analy[sz]e | study\s+(this|the)
-    )
+        next | another | new | add | adding | remove | removing | delete | render | rerender | re-render | produce
+      | post | publish | upload | remake | redo | regenerate | brainstorm | ideas? | plan | story\s+about
+      | analy[sz]e | study | animate | draw | scene\s+changes?
+    )\b
     """
 )
+# A second clause that asks for something else: "… and make …", "…, then render …", "… also add …".
+_SECOND = re.compile(
+    r"""(?ix)
+    (\band\b|\bthen\b|\balso\b|\bplus\b|;|,)\s+(then\s+|also\s+|please\s+|can\s+you\s+|could\s+you\s+)*
+    (make|add|remove|render|produce|post|publish|create|write|redo|remake|change|keep|give|draw|animate|put|move|let|
+     have|turn|use|set|show|plan|study|analy[sz]e|check|fix|rename|shorten|trim|replace|call|try|start|send|
+     generate|swap|delete|do)\b
+    """
+)
+_QUESTION = re.compile(
+    r"(?i)^(why|how|what|when|where|who|which|could|can|would|will|should|shall|do|does|did|is|are|was|were|may)\b"
+)
+_QUOTED = re.compile(r"\"[^\"]*\"|“[^”]*”")
+_SENTENCES = re.compile(r"[.!]\s+\S")
 
 
 def is_text_edit(text: str, *, pictures: int = 0) -> bool:
-    """True for a short message that only asks for a small text change (rename, a word, a typo, shorter)."""
+    """True for a short message that is nothing but one small text change (rename, a word, a typo, shorter)."""
     words = " ".join(str(text or "").split())
     if not words or pictures or len(words) > MAX_EDIT_CHARS:
         return False
-    if _NEW_WORK.search(words):
+    lead = _LEAD.match(words)
+    body = words[lead.end() :] if lead else words
+    if not _EDIT.search(body):
         return False
-    return bool(_EDIT.search(words))
+    rest = _QUOTED.sub(" ", body)  # the new words themselves never count against the edit
+    if "?" in rest or _QUESTION.search(rest):
+        return False
+    return not (_MORE.search(rest) or _SECOND.search(rest) or _SENTENCES.search(rest))
 
 
 def chat_task(text: str, *, pictures: int = 0) -> str:

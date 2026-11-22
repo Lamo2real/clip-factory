@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 from botocore.exceptions import ClientError
 
-from lamostories_agent import agents, config, maker_check
+from lamostories_agent import agents, config, maker_check, providers
 from lamostories_agent.chat import edits
 from lamostories_agent.chat.turn import run_turn
 from lamostories_agent.hosts import Answer
@@ -116,6 +116,47 @@ def test_a_bedrock_maker_is_checked_in_its_own_region_for_free(
     assert bedrock.asked == [("us-west-2", "luma.ray-v2:0")]
 
 
+def _own(key: str, kind: str, model_id: str, **fields: Any) -> dict[str, Any]:
+    item = {"pk": PK, "sk": f"MAKERDEF#{key}", "type": "ws_makerdef", "key": key, "kind": kind, "host": "bedrock",
+            "modelId": model_id, "region": "us-west-2", "label": key, **fields}  # fmt: skip
+    entry = config.maker_from_def(item)
+    assert entry is not None, model_id
+    return entry
+
+
+@pytest.mark.parametrize(
+    ("kind", "model_id", "bare"),
+    [
+        ("image", "us.stability.sd3-5-large-v1:0", "stability.sd3-5-large-v1:0"),
+        (
+            "image",
+            "arn:aws:bedrock:us-west-2::foundation-model/stability.sd3-5-large-v1:0",
+            "stability.sd3-5-large-v1:0",
+        ),
+        ("video", "us.luma.ray-v2:0", "luma.ray-v2:0"),
+        ("video", "arn:aws:bedrock:us-west-2::foundation-model/luma.ray-v2:0", "luma.ray-v2:0"),
+    ],
+)
+def test_a_profile_id_or_an_arn_is_checked_as_its_foundation_model(kind: str, model_id: str, bare: str) -> None:
+    entry = _own("custom-m", kind, model_id)
+    assert entry["modelId"] == model_id  # kept as saved: the job calls it with this id
+    bedrock = FakeBedrock(AVAILABLE)
+    assert MakerChecker(bedrock=bedrock).check(WS, entry)[0] == "ok"
+    assert bedrock.asked == [("us-west-2", bare)]
+
+
+def test_a_model_every_job_would_refuse_is_never_checked_as_working() -> None:
+    bedrock = FakeBedrock(AVAILABLE)
+    sound = _own("custom-bsound", "audio", "anthropic.claude-opus-5-5")
+    assert MakerChecker(bedrock=bedrock).check(WS, sound) == ("not_found", providers.SOUND_BEDROCK)
+    video = _own("custom-pika", "video", "amazon.nova-pro-v1:0", label="Nova Pro")
+    assert MakerChecker(bedrock=bedrock).check(WS, video) == (
+        "not_found",
+        "Lamo Stories can't ask Nova Pro for video. Pick another video maker in Settings › Video.",
+    )
+    assert bedrock.asked == []
+
+
 def test_an_ended_model_reads_ended_and_is_never_asked_about() -> None:
     bedrock = FakeBedrock(AVAILABLE)
     for key in ("nova-canvas", "nova-reel"):
@@ -128,8 +169,23 @@ def test_elevenlabs_polly_and_an_openai_compatible_picture_model_are_checked_for
     http = FakeHttp(Answer(200, b'[{"model_id": "eleven_multilingual_v2"}]'))
     keys_ = FakeKeys({(WS, "elevenlabs"): "el-owner", (WS, "openai_compatible"): "oc-owner"})
     checker = MakerChecker(keys=keys_, http=http)
-    assert checker.check(WS, EFFECTS) == ("ok", "ElevenLabs accepted your key.")  # type: ignore[arg-type]
+    assert checker.check(WS, EFFECTS) == ("ok", "ElevenLabs accepted your key for ElevenLabs sound effects.")  # type: ignore[arg-type]
     assert http.calls[0]["method"] == "GET" and http.calls[0]["headers"]["xi-api-key"] == "el-owner"
+    music = config.pick_model("audio", "elevenlabs", "elevenlabs-music")
+    assert checker.check(WS, music) == ("ok", "ElevenLabs accepted your key for ElevenLabs music.")  # type: ignore[arg-type]
+    # an own ElevenLabs model whose name nobody confirmed never reads Works because the key was accepted
+    for mistyped in ("eleven_text_to_sound_v3", "musc_v1"):
+        own = {"key": "custom-fx", "label": "My effects", "maker": "own-sound", "hostId": "elevenlabs",
+               "kind": "audio", "modelId": mistyped, "role": "effects"}  # fmt: skip
+        assert checker.check(WS, own) == (
+            "not_found",
+            f"ElevenLabs accepted your key, but Lamo Stories cannot confirm a sound model called {mistyped}. "
+            "ElevenLabs' sound models are eleven_text_to_sound_v2 and music_v1.",
+        )
+    # one ElevenLabs itself lists is confirmed
+    listed = {"key": "custom-ml", "label": "Listed", "maker": "own-sound", "hostId": "elevenlabs", "kind": "audio",
+              "modelId": "eleven_multilingual_v2", "role": "effects"}  # fmt: skip
+    assert checker.check(WS, listed) == ("ok", "ElevenLabs accepted your key for Listed.")
     assert MakerChecker(keys=FakeKeys({}), http=http).check(WS, EFFECTS) == (  # type: ignore[arg-type]
         "denied",
         "There is no key for ElevenLabs saved yet (paste one in Lamo Stories › Settings › AI › Provider keys).",
@@ -245,6 +301,31 @@ def test_check_models_with_nothing_named_checks_every_model_and_every_maker_that
         ("What do you think of the ending?", "chat"),
         ("remake scene 2 and fix the caption", "chat"),
         ("Rename it " + "x" * 300, "chat"),  # not short
+        # nothing but the edit, said first
+        ('Please rename the story to "The Next Big Ride"', "text_edit"),  # quoted words are the new text
+        ("Change the name of the dog to Rex", "text_edit"),
+        ("Make the title shorter", "text_edit"),
+        ('Change "slid" to "skidded"', "text_edit"),
+        ("Fix the spelling of Bobo", "text_edit"),
+        ("trim the caption", "text_edit"),
+        ("ok, rename it to Bobo", "text_edit"),
+        ("Rename Lamo to Bobo, please", "text_edit"),
+        ("change the title to Bread and Butter", "text_edit"),  # "and" with no second request
+        ("Shorten the caption, and add a joke", "chat"),
+        # new work, a second request, or a question is never a text edit (the review's misrouted messages)
+        ("Make the next one about a dog, and keep it shorter", "chat"),
+        ("Make it shorter and add a second character who skids on ice", "chat"),
+        ("Change the name of the dog to Rex and make the dog fly in scene 2", "chat"),
+        ("Rename the story and then render it", "chat"),
+        ("Could you plan a story with typos as the joke?", "chat"),
+        ("Why did the video come out shorter than 45 seconds?", "chat"),
+        ("Make a shorter video about a dog learning to cross the road", "chat"),
+        ("Check the script for typos and render it", "chat"),
+        ("Rename Lamo to Bobo. Then make another video", "chat"),
+        ("Fix the typo in the title, then post it", "chat"),
+        ("Rename Lamo to Bobo in the next video", "chat"),
+        ("Can you rename it to Bobo?", "chat"),
+        ("Make it shorter", "chat"),  # the video, not a line of text
     ],
 )
 def test_which_messages_are_short_text_edits(text: str, task: str) -> None:
@@ -273,6 +354,6 @@ def test_a_short_edit_in_the_chat_runs_as_text_edit_with_the_same_agent_and_tool
     (call,) = model.calls
     assert call["task"] == "text_edit" and call["ctx"].agent_id == "creative_director" and call["tools"]
     answer = db.get(PK, f"MSG#{CONV}#{ANSWER}")
-    assert answer["status"] == "done"
-    model2, _ = _turn(tmp_path / "b", "Give me an idea about picnics")
-    assert model2.calls[0]["task"] == "chat"
+    assert answer["status"] == "done" and answer["task"] == "text_edit"  # the answer says the task it ran as
+    model2, db2 = _turn(tmp_path / "b", "Give me an idea about picnics")
+    assert model2.calls[0]["task"] == "chat" and db2.get(PK, f"MSG#{CONV}#{ANSWER}")["task"] == "chat"

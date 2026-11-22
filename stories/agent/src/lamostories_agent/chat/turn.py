@@ -322,6 +322,7 @@ class Turn:
             "effort": last.effort if last else None,
             "effortApplied": last.effort_applied if last else None,
             "usage": dict(self.usage),
+            "task": self.task,  # chat, or text_edit for a short text edit (§45.37 G5)
             "heartbeatAt": now_iso(),
         }
         if notice:
@@ -340,6 +341,7 @@ class Turn:
             "error": clip(sentence, 500),
             "actions": actions,
             "usage": dict(self.usage),
+            "task": self.task,
             "heartbeatAt": now_iso(),
         }
         asked = asked_of(error)

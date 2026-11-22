@@ -64,6 +64,9 @@ MAKER_HOSTS = {"image": ("bedrock", "openai_compatible"), "video": ("bedrock",),
 # What a Bedrock maker model the owner adds may be: Lamo Stories knows how to ask these for pictures and video.
 BEDROCK_PICTURES = ("stability.", "amazon.titan-image", "amazon.nova-canvas")
 BEDROCK_VIDEO = ("luma.", "amazon.nova-reel")
+# The geography prefixes of Amazon Bedrock's cross-Region inference profile ids (``us.stability.…``), as the API's
+# ``makers._bare_model_id`` strips them.
+PROFILE_GEOS = ("us", "eu", "apac", "global", "jp", "au", "ca", "us-gov")
 ROLES = ("effects", "music", "voice")  # which part of the sound a sound model makes
 MAKER_KIND_OF = {"images": "image", "animation": "video", "audio": "audio"}  # registry kind -> model kind
 MAKER_REGION = "us-west-2"  # a Bedrock maker model's Region when its entry names none (Stability AI, Luma AI Ray2)
@@ -375,14 +378,29 @@ def bundled_keys() -> set[str]:
     return found | {m["key"] for kind in MAKER_KINDS for m in bundled_makers(kind)}
 
 
+def bare_model_id(model_id: Any) -> str:
+    """The foundation model id inside a Bedrock model id as the owner may save it (the API's rule, §45.37 G2): an ARN's
+    last part (``arn:aws:bedrock:us-west-2::foundation-model/stability.…`` → ``stability.…``) and a cross-Region
+    profile id without its geography (``us.stability.sd3-5-large-v1:0`` → ``stability.sd3-5-large-v1:0``). Only for
+    choosing the request's shape and for the free access check: a call is always made with the id as saved."""
+    tail = str(model_id or "").strip().rsplit("/", 1)[-1]
+    parts = tail.split(".")
+    if len(parts) > 2 and parts[0] in PROFILE_GEOS:
+        tail = ".".join(parts[1:])
+    return tail
+
+
 def maker_from_def(item: Mapping[str, Any]) -> dict[str, Any] | None:
     """A ``MAKERDEF#{key}`` item (the owner's own picture, video or sound model: label, provider, kind, host, modelId,
     region, baseUrl, price, note, and for sound an optional ``role``) as a maker entry of the kind's own maker
     (``own-images`` | ``own-video`` | ``own-sound``), or None when it cannot be used: a key that is not ``custom-…``
     or shadows a bundled key, an unknown kind, a host that kind cannot use (pictures: Amazon Bedrock or an
-    OpenAI-compatible API; video: Amazon Bedrock; sound: ElevenLabs or Amazon Bedrock), a Bedrock picture or video
-    model Lamo Stories cannot ask (pictures: ``stability.*``, ``amazon.titan-image*``, ``amazon.nova-canvas*``; video:
-    ``luma.*``, ``amazon.nova-reel*``), no model id, or an OpenAI-compatible model without a safe https base URL."""
+    OpenAI-compatible API; video: Amazon Bedrock; sound: ElevenLabs or Amazon Bedrock), a Bedrock picture model Lamo
+    Stories cannot ask (``stability.*``, ``amazon.titan-image*``, ``amazon.nova-canvas*``, also as a cross-Region
+    profile id or an ARN, ``bare_model_id``, the API's own rule), no model id, or an OpenAI-compatible model without a
+    safe https base URL. A Bedrock video model the API saved is always kept, whatever its id: one Lamo Stories cannot
+    ask (not ``luma.*`` or ``amazon.nova-reel*``) is refused when it is used, and by Check models, with a sentence,
+    never dropped from the list without a word."""
     nested = item.get("model")
     body: Mapping[str, Any] = nested if isinstance(nested, Mapping) else item
     key = str(item.get("key") or body.get("key") or str(item.get("sk") or "").removeprefix(MAKERDEF_PREFIX))
@@ -395,9 +413,7 @@ def maker_from_def(item: Mapping[str, Any]) -> dict[str, Any] | None:
     model_id = str(body.get("modelId") or "").strip()
     if host not in MAKER_HOSTS[kind] or not model_id:
         return None
-    if host == "bedrock" and kind == "image" and not model_id.startswith(BEDROCK_PICTURES):
-        return None
-    if host == "bedrock" and kind == "video" and not model_id.startswith(BEDROCK_VIDEO):
+    if host == "bedrock" and kind == "image" and not bare_model_id(model_id).startswith(BEDROCK_PICTURES):
         return None
     base_url = safe_base_url(body.get("baseUrl")) if host == "openai_compatible" else None
     if host == "openai_compatible" and base_url is None:

@@ -478,7 +478,7 @@ def test_a_story_that_still_picks_nova_reel_stops_with_the_ended_line_and_calls_
     assert run_job(svc) == "failed"
     job = table.item("PJOB#J1")
     assert job is not None and job["error"] == (
-        "Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Lamo Stories › Settings › "
+        "Amazon Nova Reel 1.1 was ended by Amazon on 30 Sep 2026. Pick another video maker in Lamo Stories › Settings › "
         "Video."
     )
     assert called == [] and not [a for a in table.prefix("ASSET#") if a["kind"] == "scene_clip"]

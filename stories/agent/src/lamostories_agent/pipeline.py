@@ -1870,13 +1870,17 @@ class StoryJob(Job):
         pid = chosen(self.config)["audio"]
         # The picked sound maker on its picked model (§45.37 G3): an own maker with no model, or a pick that is not its
         # maker's, stops here with its sentence before any call; nothing switches to another maker by itself.
-        parts = sound_models(self.config, self.maker_models) if pid != DEFAULTS["audio"] else {}
+        if pid != DEFAULTS["audio"]:
+            sound_models(self.config, self.maker_models)
         provider = self._provider("audio", self._ctx())
         out = self.work / "sound" / "mix.m4a"
         try:
             path: Path = await provider.mix(script, out)
-        except ProviderFailed as e:
-            if e.state:  # what the real call proved about the maker is kept (a refused key: needs_setup)
+        except JobSuperseded:
+            raise
+        except Exception as e:
+            await self._sound_usage(pid, provider)  # what was made before the failure was billed all the same
+            if isinstance(e, ProviderFailed) and e.state:  # what the real call proved (a refused key: needs_setup)
                 await self.prove("audio", pid, e.state, e.last_error)
             raise
         meta: dict[str, Any] = {"provider": pid}
@@ -1886,12 +1890,22 @@ class StoryJob(Job):
             meta.update({f"made{k[:1].upper()}{k[1:]}": v for k, v in made.items() if isinstance(v, str | int)})
         await self._save(path, self._key(keys.audio_key, self.version), "audio", "audio/mp4", meta=meta)
         await self.prove("audio", pid)
-        units = getattr(provider, "made_units", None)
-        if pid != DEFAULTS["audio"] and isinstance(units, tuple) and units[0] > 0:
-            model = next(iter(parts.values()), {}) if parts else {}
-            await self.provider_usage(pid, str(model.get("modelId") or ""), provider=pid, units=units[0],
-                                      unit=str(units[1]), soundSec=round(float(getattr(provider, "made_seconds", 0.0)), 3))  # fmt: skip
+        await self._sound_usage(pid, provider)
         return path
+
+    async def _sound_usage(self, pid: str, provider: Any) -> None:
+        """One ``USAGE#`` per model that made part of the sound (§45.37 G1: each with its own model id and units, so
+        each model's own price applies): the effects, the music bed, the spoken lines. The built-in sounds bill
+        nothing."""
+        if pid == DEFAULTS["audio"]:
+            return
+        for part in getattr(provider, "made_parts", None) or []:
+            units, unit = float(part.get("units") or 0), str(part.get("unit") or "second")
+            if units <= 0:
+                continue
+            amounts = {"soundSec": units} if unit == "second" else {"characters": units}
+            await self.provider_usage(pid, str(part.get("modelId") or ""), provider=pid, units=units, unit=unit,
+                                      **amounts)  # fmt: skip
 
     async def sound(self) -> str | None:
         script = await self._load_script()
