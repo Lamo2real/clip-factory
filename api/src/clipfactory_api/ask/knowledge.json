@@ -1,5 +1,5 @@
 {
- "version": "00ff67d4196e",
+ "version": "5fe663495f82",
  "parts": [
   {
    "id": "app-map",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Lamo Stories: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Lamo Stories",
-   "chars": 180421
+   "chars": 192641
   },
   {
    "id": "contracts-46",
@@ -753,7 +753,7 @@
    "id": "adr-77",
    "title": "DECISIONS: ADR-77 Models and reasoning effort are the owner's, per workspace, agent, task and request, never substituted",
    "line": "Context. The owner wants complete control over which model powers Lamo Stories (examples \"Sable 5.2, Sable 5.1,",
-   "chars": 1629
+   "chars": 2300
   },
   {
    "id": "adr-78",
@@ -825,7 +825,7 @@
    "id": "deployment-what-a-deploy-does",
    "title": "DEPLOYMENT: What a deploy does",
    "line": "Triggered by a push to main ([deploy.yml](../.github/workflows/deploy.yml)) or by hand (Actions → deploy → Run workflow).",
-   "chars": 5992
+   "chars": 6948
   },
   {
    "id": "deployment-desktop-downloads",

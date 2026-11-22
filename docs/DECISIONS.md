@@ -1988,6 +1988,12 @@ button there. Numbers come from the post found on the connected account (`video/
 - **Consequences.** The owner can mix models per task; jobs are reproducible; a model the account cannot reach is
   visible as such. A refusal is shown rather than retried on another model, so an occasional task needs the owner's
   tap to continue.
+- **Later (2026-11-22, CONTRACTS §45.34–§45.35).** The owner asked that new models and providers can be added without
+  rebuilding the app. `stories/config/models.json` is now only the bundled starting list: the owner adds Bedrock-hosted
+  models (any maker) as `MODELDEF#` items, each saying how it is called (effort field, tools, prompt cache), merged per
+  call by the API and the agent. The runtime role's model grant became a wildcard over the account's Bedrock models
+  and inference profiles, so an added model works after Check models with no deploy. A maker outside Bedrock still
+  needs code (a new client), which the `host` field on every model makes visible.
 
 ## ADR-78 Lamo Stories' own agents, skills, chat and memory live in its runtime; actions wait for the owner's tap
 
