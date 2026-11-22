@@ -628,7 +628,16 @@ function startModelStep(store: MockStore, job: ProductionJob, story: Story, key:
     return e.problem;
   }
   job.meta.models = [...job.meta.models.filter((m) => m.step !== key), { step: key, agentId: e.agentId, task: kind, model: e.model, ...call, effort: e.effort, effortApplied: e.effortApplied }];
-  if (key === "storyboard") job.meta.writerModel = e.model;
+  if (key !== "storyboard") return null;
+  job.meta.writerModel = e.model;
+  // The storyboard step then writes the six post captions: the agent's second call in that step, its own record.
+  const c = effectiveFor(store, "captions", { request: run.override, project: story.ai });
+  const asked = { step: key, agentId: c.agentId, task: "captions", model: c.model, ...(modelCall(c.model) ?? {}), effort: c.effort };
+  if (c.problem) {
+    if (c.denied) job.meta.models = [...job.meta.models, { ...asked, effortApplied: false, failed: true }];
+    return c.problem;
+  }
+  job.meta.models = [...job.meta.models, { ...asked, effortApplied: c.effortApplied }];
   return null;
 }
 

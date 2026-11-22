@@ -7,6 +7,7 @@
 // parts; nothing leaves the machine.
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import bundled from "../../stories/config/models.json";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setStoriesApi } from "../src/stories/api/client.ts";
 import { mockStoriesApi } from "../src/stories/api/mock/index.ts";
@@ -254,6 +255,17 @@ describe("the chat says who makes a model and who runs it (§45.35 D8)", () => {
     expect(providerWords(null)).toBeNull();
   });
 
+  it("the bundled list as shipped: each model's words built from stories/config/models.json's own fields", () => {
+    // Exact, from the file itself: "{provider} on {host}" once the file names both (D8), its one provider before that.
+    const file = bundled.models as { key: string; provider: string; host?: string }[];
+    expect(file.length).toBeGreaterThan(0);
+    for (const m of file) {
+      const words = m.host && m.host !== m.provider ? `${m.provider} on ${m.host}` : m.provider;
+      expect(providerWords(fileModels().find((x) => x.key === m.key))).toBe(words);
+      expect(providerOf(fileModels(), m.key)).toBe(words);
+    }
+  });
+
   it("the model line, its spoken name and every model in the picker", async () => {
     models.push({ ...info("haiku-5-5", { provider: "Meta" }), key: "custom-llama", label: "Llama 5", custom: true, modelId: "meta.llama5-v1:0" });
     await openChat(CONV.winter);
@@ -307,6 +319,8 @@ describe("a reference video whose file was cleared (§45.35 D9)", () => {
     expect($(".st-ref-player__none")?.textContent).toBe("The video was removed to save space.");
     expect(host.textContent).not.toContain("Its study stays.");
     expect($(".st-ref-removed")?.textContent).toBe("The video file is gone, so it cannot be analyzed.");
+    // The mock's Analyze refusal says what the API says for a video that was never studied (no study stays).
+    await expect(api.analyzeReference("stories", REF.ready)).rejects.toMatchObject({ status: 409, message: "The video was removed to save space." });
   });
 
   it("a studied video keeps its study, and its page says so", async () => {
@@ -315,6 +329,7 @@ describe("a reference video whose file was cleared (§45.35 D9)", () => {
     await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.analyzed })} />);
     await until(() => !!$(".st-ref-analysis"));
     expect($(".st-ref-player__none")?.textContent).toBe(FILE_REMOVED);
+    await expect(api.analyzeReference("stories", REF.analyzed)).rejects.toMatchObject({ status: 409, message: FILE_REMOVED });
   });
 
   it("the mock's Clear now clears reference videos as keepReferences says", async () => {

@@ -689,7 +689,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
   const canTryAgain = !live && ["draft", "failed", "review", "needs_check"].includes(story.status) && story.stale.length > 0;
   const watch = ["review", "needs_check", "approved", "published"].includes(story.status);
   // The writer of the storyboard in the video now: the latest run's, else the newest run that wrote it.
-  const wrote = job?.meta.writerModel ?? (live ? null : (madeWith([job, ...(jobs.data ?? [])]).find((u) => u.step === "storyboard")?.model ?? null));
+  const wrote = job?.meta.writerModel ?? (live ? null : (madeWith([job, ...(jobs.data ?? [])]).find((u) => u.step === "storyboard" && u.task !== "captions")?.model ?? null));
   const writer = wrote ? modelName(info, wrote) : null;
   const editable = !live && ["review", "needs_check", "failed"].includes(story.status);
   const usual = storyUsual(info, story);
@@ -832,10 +832,12 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
 /** One run's models in a line: "Write: Opus 5.5 · High"; a step that stopped on its model: "Write: Opus 5.5 · High (stopped)". */
 export function runModels(info: AiInfo, j: ProductionJob): string {
   const word: Record<string, string> = { storyboard: "Write", safety: "Check", preview: "Last look" };
+  // A step's other calls have their own words (the storyboard step's post captions, §45.35 D5).
+  const task: Record<string, string> = { scene_rewrite: "New take", captions: "Captions" };
   return j.meta.models
     .map((m) => {
       const stopped = stoppedOn(j, m);
-      return `${word[m.step] ?? m.step}: ${shortName(modelName(info, m.model))}${(m.effortApplied || stopped) && m.effort ? ` · ${effortName(m.effort)}` : ""}${stopped ? " (stopped)" : ""}`;
+      return `${(m.task ? task[m.task] : undefined) ?? word[m.step] ?? m.step}: ${shortName(modelName(info, m.model))}${(m.effortApplied || stopped) && m.effort ? ` · ${effortName(m.effort)}` : ""}${stopped ? " (stopped)" : ""}`;
     })
     .join(" · ");
 }

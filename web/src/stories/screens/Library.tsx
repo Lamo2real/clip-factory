@@ -18,7 +18,7 @@ import { useLoad } from "../../lib/hooks.ts";
 import { navigate } from "../../lib/router.ts";
 import { storiesApi } from "../api/client.ts";
 import { STEP_LABEL, type AssetKind, type Character, type DownloadFormat, type LibraryItem, type ProductionJob, type StepKey, type Story } from "../api/types.ts";
-import { modelIdLine, stoppedOn } from "../studio/ai.tsx";
+import { modelIdLine, modelUseWords, stoppedOn } from "../studio/ai.tsx";
 import { usePaged } from "../studio/hooks.ts";
 import { TechDetails } from "../studio/kit.tsx";
 import { HELPER_KIND, providerName, STORAGE_WORDS, topicTitle } from "../studio/words.ts";
@@ -433,9 +433,9 @@ function Details({ ws, story }: { ws: string; story: Story }) {
                     <dd>{providerName(id)}</dd>
                   </div>
                 ))}
-                {(job.meta.models ?? []).map((m) => (
-                  <div key={`${m.step}|${m.agentId}`}>
-                    <dt>{STEP_WORDS[m.step] ?? m.step}</dt>
+                {(job.meta.models ?? []).map((m, i) => (
+                  <div key={`${m.step}|${m.task ?? ""}|${i}`}>
+                    <dt>{modelUseWords(m, STEP_WORDS)}</dt>
                     <dd>
                       {modelName(m.model)}
                       {m.effort ? ` · ${EFFORT_WORDS[m.effort] ?? m.effort}${stoppedOn(job, m) || m.effortApplied ? "" : " (not offered)"}` : ""}
@@ -464,10 +464,10 @@ function Details({ ws, story }: { ws: string; story: Story }) {
                         <dt>Exact models</dt>
                         <dd>
                           <ul className="st-tech__ids">
-                            {(job.meta.models ?? []).map((m) =>
+                            {(job.meta.models ?? []).map((m, i) =>
                               modelIdLine(m) ? (
-                                <li key={`id|${m.step}|${m.agentId}`}>
-                                  {STEP_WORDS[m.step] ?? m.step}: <span className="st-facts__code">{modelIdLine(m)}</span>
+                                <li key={`id|${m.step}|${m.task ?? ""}|${i}`}>
+                                  {modelUseWords(m, STEP_WORDS)}: <span className="st-facts__code">{modelIdLine(m)}</span>
                                 </li>
                               ) : null,
                             )}

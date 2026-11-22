@@ -639,7 +639,8 @@ describe("Production", () => {
     await show(<ProductionScreen {...page({ name: "production_story", storyId: S.failed })} />);
     document.querySelector<HTMLDetailsElement>(".st-s-details")!.open = true;
     const used = () => Array.from(document.querySelectorAll(".st-s-used__row")).map((r) => r.textContent);
-    expect(used()).toEqual(["Write the storyClaude Opus 5.5 · High effortStoryboard", "Check the factsClaude Opus 5.5 · High effortQuality check"]);
+    // The storyboard step's post captions call is its own row, as the agent records it (§45.35 D5).
+    expect(used()).toEqual(["Write the storyClaude Opus 5.5 · High effortStoryboard", "Post captionsClaude Opus 5.5 · High effortStoryboard", "Check the factsClaude Opus 5.5 · High effortQuality check"]);
     expect(text()).toContain("Your usual settings");
     // The video's own setting (kept): it can change while the video waits.
     await click(control(/^Model and effort for this video/), 50);
@@ -774,7 +775,7 @@ describe("Review", () => {
     const produce = vi.spyOn(api, "produce");
     await show(<ReviewScreen {...page({ name: "review_story", storyId: S.review })} />);
     document.querySelector<HTMLDetailsElement>(".st-s-made")!.open = true;
-    expect(Array.from(document.querySelectorAll(".st-s-made .st-s-used__row")).map((r) => r.querySelector(".st-s-used__step")?.textContent)).toEqual(["Write the story", "Check the facts", "Last look"]);
+    expect(Array.from(document.querySelectorAll(".st-s-made .st-s-used__row")).map((r) => r.querySelector(".st-s-used__step")?.textContent)).toEqual(["Write the story", "Post captions", "Check the facts", "Last look"]);
     const remakes = document.querySelector(".st-s-decide__ai")!;
     await click(control(/^Model and effort for this one/, remakes), 50);
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Just for the next remake.");
@@ -807,7 +808,7 @@ describe("Review", () => {
     await show(<ReviewScreen {...page({ name: "review_story", storyId: S.review })} />);
     document.querySelector<HTMLDetailsElement>(".st-s-made")!.open = true;
     const rows = () => Array.from(document.querySelectorAll(".st-s-made .st-s-used__row")).map((r) => `${r.querySelector(".st-s-used__step")?.textContent}: ${r.querySelector(".st-s-used__model")?.textContent}`);
-    expect(rows()).toEqual(["Write the story: Claude Opus 5.5 · High effort", "Check the facts: Claude Opus 5.5 · High effort", "Last look: Claude Fable 5.2 · Low effort"]);
+    expect(rows()).toEqual(["Write the story: Claude Opus 5.5 · High effort", "Post captions: Claude Opus 5.5 · High effort", "Check the facts: Claude Opus 5.5 · High effort", "Last look: Claude Fable 5.2 · Low effort"]);
     expect(text()).not.toContain("No model notes for this version.");
   });
 

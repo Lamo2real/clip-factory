@@ -224,6 +224,71 @@ describe("each step's exact model id is in a details line (§45.35 D5)", () => {
   });
 });
 
+describe("a step that makes two calls lists each by its own task (§45.35 D5)", () => {
+  // The agent's own shape: the storyboard step writes the story (or a new take of some scenes), then the post captions.
+  const call = { modelId: "global.anthropic.claude-opus-5-5", region: "eu-north-1", effort: "high" as const, effortApplied: true };
+  const AGENT: ProductionJob["meta"]["models"] = [
+    { step: "storyboard", agentId: "storyboard", task: "storyboard", model: "opus-5-5", ...call },
+    { step: "storyboard", agentId: "storyboard", task: "captions", model: "sonnet-5-5", ...call },
+    { step: "safety", agentId: "quality_assurance", task: "fact_check", model: "opus-5-5", ...call },
+  ];
+  function run(jobId: string, createdAt: string, models: ProductionJob["meta"]["models"]): ProductionJob {
+    const j = structuredClone(store.jobs.find((x) => x.contentId === S.approved)!);
+    Object.assign(j, { jobId, createdAt, updatedAt: createdAt });
+    j.meta.models = models;
+    return j;
+  }
+  const steps = () => Array.from(document.querySelectorAll(".st-s-used__step")).map((e) => e.textContent);
+
+  it("Models working on it, Made with and a run's line: Write the story and Post captions, never the same words twice", async () => {
+    const { madeWith } = await import("../src/stories/studio/ai.tsx");
+    const { runModels } = await import("../src/stories/screens/Production.tsx");
+    const job = run("01JSTJBTWOCALLS00000000000", "2026-11-22T07:00:00.000Z", AGENT);
+    await show(<ModelsUsed info={LISTED_INFO} job={job} />);
+    expect(steps()).toEqual(["Write the story", "Post captions", "Check the facts"]);
+    expect(runModels(LISTED_INFO, job)).toBe("Write: Opus 5.5 · High · Captions: Sonnet 5.5 · High · Check: Opus 5.5 · High");
+    // A new take of two scenes: its own words, and the video now keeps that run's calls for the step, not the older ones.
+    const take = run("01JSTJBNEWTAKE00000000000", "2026-11-22T07:30:00.000Z", [
+      { step: "storyboard", agentId: "storyboard", task: "captions", model: "haiku-5-5", ...call },
+      { step: "storyboard", agentId: "storyboard", task: "scene_rewrite", model: "fable-5-2", ...call },
+    ]);
+    expect(madeWith([take, job]).map((u) => `${u.task}:${u.model}`)).toEqual(["scene_rewrite:fable-5-2", "captions:haiku-5-5", "fact_check:opus-5-5"]);
+    expect(runModels(LISTED_INFO, take)).toBe("Captions: Haiku 5.5 · High · New take: Fable 5.2 · High");
+    // An older record with no task (an API before §45.35) still shows once per step.
+    const old = run("01JSTJBOLDRECORD000000000", "2026-11-22T06:00:00.000Z", AGENT.map(({ task: _task, ...m }) => m));
+    expect(madeWith([old]).map((u) => u.step)).toEqual(["storyboard", "safety"]);
+  });
+
+  it("the Library's How it was made and its Exact models: one row per call, each with its own words and key", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    store.jobs.find((j) => j.contentId === S.review)!.meta.models = structuredClone(AGENT);
+    await show(<LibraryScreen {...page({ name: "library", kind: null, storyId: S.review })} />);
+    await wait();
+    const run = document.querySelector(".st-details .st-run")!;
+    const rows = Array.from(run.querySelectorAll(":scope > .st-facts dt")).map((d) => d.textContent);
+    expect(rows.filter((t) => t === "Write the story")).toHaveLength(1);
+    expect(rows).toContain("Post captions");
+    const ids = Array.from(run.querySelectorAll(".st-tech__ids li")).map((li) => li.textContent);
+    expect(ids).toEqual(["Write the story: Model ID global.anthropic.claude-opus-5-5 in eu-north-1", "Post captions: Model ID global.anthropic.claude-opus-5-5 in eu-north-1", expect.stringMatching(/: Model ID global\.anthropic\.claude-opus-5-5 in eu-north-1$/)]);
+    expect(errors.mock.calls.some((c) => String(c[0]).includes("same key"))).toBe(false);
+    errors.mockRestore();
+  });
+
+  it("the mock records the post captions call as its own record, like the agent", async () => {
+    const made = api.createStory("stories", { brief: { title: "Hats", logline: "Pip tries on hats.", category: "comedy" }, characterIds: [C.pip] });
+    await wait(1500);
+    const { story } = await made;
+    await wait(12_000);
+    const read = api.getStory("stories", story.storyId);
+    await wait(1500);
+    const job = (await read).job!;
+    expect(job.status).toBe("ready");
+    expect(job.meta.models.filter((m) => m.step === "storyboard").map((m) => m.task)).toEqual(["storyboard", "captions"]);
+    expect(job.meta.models.find((m) => m.task === "captions")).toMatchObject({ agentId: "storyboard", model: "opus-5-5", modelId: expect.stringMatching(/anthropic\.claude-/), region: "eu-north-1", effortApplied: true });
+    expect(job.meta.writerModel).toBe("opus-5-5");
+  });
+});
+
 // ---------- D10: the Videos tab ---------
 
 describe("the Library's Videos tab lists a video's WebM and MOV copies (§45.35 D10)", () => {
@@ -364,6 +429,20 @@ describe("previews show each character's own face (§45.35 D21)", () => {
     const made = { ...now, name: "Frost", expressions: ["neutral", "proud", "sad"] };
     await act(async () => root.render(<ActionCard ws="stories" id="m4:0" action={{ kind: "save_character", label: "Save this character", payload: { character: made } }} />));
     expect(document.querySelector('[aria-label="How Frost looks"]')?.getAttribute("data-face")).toBe("proud");
+  });
+
+  it("a character's own page opens its big preview on its own face, never a smile it does not make", async () => {
+    const bolt = store.characters.find((c) => c.characterId === C.bolt)!;
+    bolt.expressions = ["neutral", "angry", "sad"];
+    await show(<CharactersScreen {...page({ name: "character", characterId: C.bolt })} />);
+    const stage = document.querySelector('[aria-label^="Bolt, "][aria-label*=" face, "]');
+    expect(stage?.getAttribute("data-face")).toBe("angry");
+    expect(stage?.getAttribute("aria-label")).not.toContain("Happy");
+    // A character that has the happy face still opens on it.
+    await act(async () => root.unmount());
+    host.remove();
+    await show(<CharactersScreen {...page({ name: "character", characterId: C.pip })} />);
+    expect(document.querySelector('[aria-label^="Pip, "][aria-label*=" face, "]')?.getAttribute("data-face")).toBe("happy");
   });
 });
 

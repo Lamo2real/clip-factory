@@ -16,7 +16,8 @@
 // Like the API, a reference past uploading carries `url` (here a pretend link: mock mode plays nothing), except once
 // its file was cleared to save space (§45.34 "Keeping and clearing files"): then `url` is left out, `bytes` is 0,
 // `fileRemoved` is true and `studyKept` says whether its study stays (§45.35 D9), and Analyze answers 409 "The video was
-// removed to save space. Its study stays." clearReferenceFile does that; clearByKeepSetting applies the workspace's
+// removed to save space. Its study stays." (only "The video was removed to save space." when it was never studied, as
+// the API says). clearReferenceFile does that; clearByKeepSetting applies the workspace's
 // keepReferences the way the API's storage cleanup does (index.ts runs it with POST …/storage/cleanup).
 //
 // Test knobs: refSeconds (how long an analysis takes, default 5), refFail (the next analysis fails with this sentence),
@@ -64,6 +65,8 @@ export const SEED_IDS = { analyzed: "01JSTRF0000000000000000001", ready: "01JSTR
 
 /** The API's sentence for a reference whose file was cleared (§45.34). */
 export const FILE_REMOVED = "The video was removed to save space. Its study stays.";
+/** The same, for a video cleared before it was ever studied: no study stays (the API's REMOVED_NO_STUDY). */
+export const REMOVED_NO_STUDY = "The video was removed to save space.";
 
 function isCleared(store: MockStore, refId: string): boolean {
   const knob = store.knobs.refFileRemoved;
@@ -326,7 +329,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       advance(store);
       if (ref.status === "uploading") throw new ApiError(409, "conflict", "Wait until the video has finished uploading.");
       if (ref.status === "analyzing") throw new ApiError(409, "conflict", "It is being analyzed right now.");
-      if (isCleared(store, refId)) throw new ApiError(409, "conflict", FILE_REMOVED);
+      if (isCleared(store, refId)) throw new ApiError(409, "conflict", state(store).analyses.has(refId) ? FILE_REMOVED : REMOVED_NO_STUDY);
       if (override) for (const k of Object.keys(override)) if (!["model", "effort"].includes(k)) throw bad("Something in that request was not right.", "override");
       const low = lowerLevels(store, "reference_analysis", "video_analysis");
       if (low.agentOff) throw new ApiError(409, "conflict", low.agentOff);

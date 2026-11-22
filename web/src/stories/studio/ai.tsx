@@ -90,6 +90,22 @@ const STEP_WORDS: Record<string, string> = {
   portrait: "Draw the picture",
 };
 
+/**
+ * A step can make more than one call (the storyboard step writes the story, or a new take of some scenes, and then
+ * the post captions), each its own record with its own `task` (§45.35 D5): those calls have their own words.
+ */
+const TASK_WORDS: Record<string, string> = { scene_rewrite: "Write a new take", captions: "Post captions" };
+
+/** The words for one model record: its own task's when the step makes more than one call, else its step's. */
+export function modelUseWords(u: Pick<ModelUse, "step" | "task">, steps: Record<string, string> = STEP_WORDS): string {
+  return (u.task ? TASK_WORDS[u.task] : undefined) ?? steps[u.step] ?? STEP_WORDS[u.step] ?? u.step;
+}
+
+/** Captions come after the call that wrote the story (the order the agent makes them). */
+function taskRank(u: Pick<ModelUse, "task">): number {
+  return u.task === "captions" ? 1 : 0;
+}
+
 const AGENT_WORDS: Record<string, string> = {
   creative_director: "Creative director",
   video_analysis: "Video analysis",
@@ -564,7 +580,8 @@ export function stoppedOn(job: Pick<ProductionJob, "steps">, m: ModelUse): boole
 
 /**
  * Which model and effort made each step of the video as it is now: for each step, the newest run that finished it
- * (a later run of only some steps keeps the earlier runs' writer and checks), in the order of the steps.
+ * (a later run of only some steps keeps the earlier runs' writer and checks), in the order of the steps. A step that
+ * made more than one call keeps each of that run's calls once (the story and its post captions, §45.35 D5).
  */
 export function madeWith(list: (ProductionJob | null | undefined)[]): ModelUse[] {
   const ids = new Set<string>();
@@ -575,19 +592,25 @@ export function madeWith(list: (ProductionJob | null | undefined)[]): ModelUse[]
     jobs.push(j);
   }
   jobs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const out = new Map<string, ModelUse>();
+  const from = new Map<string, string>(); // step -> the run that made it
+  const out: ModelUse[] = [];
   for (const j of jobs)
     for (const u of j.meta.models) {
-      if (out.has(u.step)) continue;
-      const step = j.steps.find((s) => s.key === u.step);
-      if (step && step.status !== "done") continue; // it did not finish in that run, so an older run's is in the video
-      out.set(u.step, u);
+      const made = from.get(u.step);
+      if (made !== undefined && made !== j.jobId) continue;
+      if (made === undefined) {
+        const step = j.steps.find((s) => s.key === u.step);
+        if (step && step.status !== "done") continue; // it did not finish in that run, so an older run's is in the video
+        from.set(u.step, j.jobId);
+      }
+      if (out.some((o) => o.step === u.step && (o.task ?? null) === (u.task ?? null))) continue;
+      out.push(u);
     }
   const rank = (step: string) => {
     const i = (STEP_ORDER as readonly string[]).indexOf(step);
     return i < 0 ? STEP_ORDER.length : i;
   };
-  return [...out.values()].sort((a, b) => rank(a.step) - rank(b.step));
+  return out.sort((a, b) => rank(a.step) - rank(b.step) || taskRank(a) - taskRank(b));
 }
 
 /**
@@ -608,7 +631,7 @@ export function ModelsUsed({ info, job, jobs, title = "Made with" }: { info: AiI
         {used.map((u, i) => (
           <li key={`${u.step}:${i}`} className="st-s-used__item">
             <div className="st-s-used__row">
-              <span className="st-s-used__step">{STEP_WORDS[u.step] ?? u.step}</span>
+              <span className="st-s-used__step">{modelUseWords(u)}</span>
               <span className="st-s-used__model">{stopped(u) ? modelLine(info, u.model, u.effort, null) : modelLine(info, u.model, u.effort, u.effortApplied)}</span>
               <Tag>{AGENT_WORDS[u.agentId] ?? u.agentId}</Tag>
               {stopped(u) ? <span className="st-s-used__note">This step stopped on this model. This is what it was asked with.</span> : !u.effortApplied ? <span className="st-s-used__note">This model has no effort setting; it ran at its own level.</span> : null}

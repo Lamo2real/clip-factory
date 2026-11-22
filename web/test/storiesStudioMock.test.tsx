@@ -304,6 +304,8 @@ describe("a new story", () => {
     // Each model step recorded its model and effort (the writer's in writerModel too).
     expect(done.job?.meta.models.map((m) => [m.step, m.agentId, m.model, m.effort, m.effortApplied])).toEqual([
       ["storyboard", "storyboard", "opus-5-5", "high", true],
+      // The storyboard step's second call, the post captions (task "captions"), as the agent records it (§45.35 D5).
+      ["storyboard", "storyboard", "opus-5-5", "high", true],
       ["safety", "quality_assurance", "opus-5-5", "high", true],
       ["preview", "quality_assurance", "opus-5-5", "high", true],
     ]);
