@@ -1,8 +1,10 @@
 // The studio screens' small building blocks (docs/CONTRACTS.md §45.16.2): pick-one bars on <Glide> (the owner's
 // sliding highlight), colour swatches, fields with counters, switches, sliders, chips, a modal sheet and the eased
-// progress bar. Styled by web/src/stories/styles/studio.css. Sounds come from the app's global click handler: a
-// switched-off control carries aria-disabled (so it plays the deny sound) and ignores the tap.
-import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+// progress bar. Styled by web/src/stories/styles/studio.css on the warm liquid glass (styles/GLASS-CONTRACT.md: the
+// switch is the contract's orange .st-toggle, a sheet is hero float glass, its × a round glass button). Sounds come
+// from the app's global click handler: a switched-off control carries aria-disabled (so it plays the deny sound) and
+// ignores the tap.
+import { useEffect, useId, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Glide } from "../../components/Glide.tsx";
 import { trapTab } from "../../components/Sheet.tsx";
@@ -199,7 +201,7 @@ export function Switch({
       <button
         type="button"
         role="switch"
-        className="st-s-switch"
+        className="st-s-switch st-toggle"
         aria-checked={checked}
         aria-labelledby={`${id}-l`}
         aria-describedby={line ? `${id}-d` : undefined}
@@ -208,7 +210,9 @@ export function Switch({
           if (!disabled) onChange(!checked);
         }}
       >
-        <span className="st-s-switch__thumb" />
+        <span className="st-toggle__track" aria-hidden="true">
+          <span className="st-toggle__knob st-s-switch__thumb" />
+        </span>
       </button>
     </div>
   );
@@ -256,6 +260,7 @@ export function Slider({
           id={id}
           type="range"
           className="st-s-range"
+          style={{ "--st-s-at": `${pct(value)}%` } as CSSProperties}
           min={min}
           max={max}
           step={step}
@@ -323,10 +328,11 @@ export function ProgressBar({ value, label }: { value: number; label: string }) 
   );
 }
 
-/** A turning circle for a short wait, with its words. */
-export function Busy({ children }: { children: ReactNode }) {
+/** A turning circle for a short wait, with its words. `plate` when it stands loose on the page (a backing plate in
+ * Picture and See-through, where anything can be behind it). */
+export function Busy({ children, plate = false }: { children: ReactNode; plate?: boolean }) {
   return (
-    <p className="st-s-busy" role="status">
+    <p className={`st-s-busy${plate ? " st-plate" : ""}`} role="status">
       <span className="st-s-busy__dot" aria-hidden="true" />
       {children}
     </p>
@@ -397,7 +403,7 @@ export function StSheet({
     <div className="st-s-scrim" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={box}
-        className={`st-s-sheet${wide ? " st-s-sheet--wide" : ""}${className ? ` ${className}` : ""}`}
+        className={`st-s-sheet st-glass st-glass--hero st-glass--float${wide ? " st-s-sheet--wide" : ""}${className ? ` ${className}` : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${id}-t`}
@@ -408,7 +414,7 @@ export function StSheet({
           <h2 className="st-s-sheet__title" id={`${id}-t`}>
             {title}
           </h2>
-          <button type="button" className="st-s-iconbtn" aria-label="Close" onClick={onClose}>
+          <button type="button" className="st-s-iconbtn st-round-btn" aria-label="Close" onClick={onClose}>
             <span aria-hidden="true">×</span>
           </button>
         </header>

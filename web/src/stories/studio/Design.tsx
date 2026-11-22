@@ -244,7 +244,7 @@ export function DesignPanel({
 
   if (!open)
     return (
-      <section className="st-s-design st-s-design--closed" aria-labelledby="st-design-title" ref={box}>
+      <section className="st-s-design st-s-design--closed st-glass st-glass--hero" aria-labelledby="st-design-title" ref={box}>
         <div>
           <h2 className="st-s-design__title" id="st-design-title">
             Design with AI
@@ -258,7 +258,7 @@ export function DesignPanel({
     );
 
   return (
-    <section className="st-s-design" aria-labelledby="st-design-title" ref={box}>
+    <section className="st-s-design st-glass st-glass--hero" aria-labelledby="st-design-title" ref={box}>
       <h2 className="st-s-design__title" id="st-design-title">
         Design with AI
       </h2>
