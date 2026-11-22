@@ -382,8 +382,23 @@ for (const size of SIZES) {
       const box = panel(page).getByLabel("Your question");
       await box.fill("What does Keep do?");
       const send = panel(page).getByRole("button", { name: "Send", exact: true });
+      // The fade class lives only for its 300 ms, so on a busy runner a check after the click can miss it. Record
+      // every class the plane gets (and any trail) from the click on, then check what happened: it faded, it never
+      // flew, and no trail was ever drawn.
+      await send.evaluate((el) => {
+        const w = window as unknown as { __fly: { classes: string[]; trail: boolean } };
+        w.__fly = { classes: [], trail: false };
+        new MutationObserver(() => {
+          const fly = el.querySelector(".fly");
+          if (fly) w.__fly.classes.push(fly.className);
+          if (el.querySelector(".fly__trail")) w.__fly.trail = true;
+        }).observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ["class"] });
+      });
       await send.click();
-      await expect(send.locator(".fly")).toHaveClass(/is-fading/);
+      const fly = () => page.evaluate(() => (window as unknown as { __fly: { classes: string[]; trail: boolean } }).__fly);
+      await expect.poll(async () => (await fly()).classes.join(" ")).toMatch(/is-fading/);
+      expect((await fly()).classes.join(" ")).not.toMatch(/is-flying/);
+      expect((await fly()).trail).toBe(false);
       await expect(send.locator(".fly__trail")).toHaveCount(0);
       const names = await send.evaluate((el) => el.getAnimations({ subtree: true }).map((a) => (a as CSSAnimation).animationName ?? ""));
       expect(names.every((n) => n === "fly-fade" || n === ""), names.join(", ")).toBe(true);
