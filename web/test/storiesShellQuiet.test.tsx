@@ -105,7 +105,7 @@ describe("while Clip Factory is on screen (Lamo Stories kept behind it)", () => 
   });
 
   it("Lamo Stories switched off: nothing is behind anything, sounds play as before", () => {
-    localStorage.removeItem("cf.storiesPreview");
+    localStorage.setItem("cf.storiesPreview", "0");
     history.replaceState(null, "", "/library");
     storiesSound("success");
     expect(log()).toEqual([expect.objectContaining({ kind: "success" })]);

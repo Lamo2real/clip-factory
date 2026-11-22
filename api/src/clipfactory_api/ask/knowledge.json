@@ -1,5 +1,5 @@
 {
- "version": "7866aa3ec7d0",
+ "version": "bb0c83b88bc7",
  "parts": [
   {
    "id": "app-map",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Lamo Stories: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Lamo Stories",
-   "chars": 192641
+   "chars": 200479
   },
   {
    "id": "contracts-46",
@@ -711,7 +711,7 @@
    "id": "adr-70",
    "title": "DECISIONS: ADR-70 Workspaces: Lamo Clips is the built-in workspace, new workspaces live in partitions of their own",
    "line": "Context. The owner asked (2026-11-21) for a second studio, Lamo Stories, inside the same app and sign-in, with",
-   "chars": 2222
+   "chars": 2299
   },
   {
    "id": "adr-71",
@@ -1011,7 +1011,7 @@
    "id": "testing-lamo-stories-contracts-45",
    "title": "TESTING: Lamo Stories (CONTRACTS §45)",
    "line": "The list is CONTRACTS §45.19. Three checks matter most, because the owner put protecting Lamo Clips first:",
-   "chars": 1546
+   "chars": 1620
   },
   {
    "id": "testing-manual-checks-after-the-first-deploy",
