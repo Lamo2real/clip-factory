@@ -35,7 +35,9 @@ Both drawers must follow it exactly.
 * Inside, the engine lays a frame out in design pixels whose short side is 1080 (1080 × 1920, 1080 × 1080 or
   1920 × 1080). A character, a car, a line width, a radius and a letter are the same size against the short side in
   every shape, and the pen scales the whole list to the script's size: a 720 video is exactly the 1080 one scaled to
-  two thirds. A 1080 × 1920 frame draws exactly what engine 4 drew (a cast with its own faces aside, below).
+  two thirds. A 1080 × 1920 frame draws exactly what engine 4 drew, with two exceptions: a cast with its own faces
+  (below), and a safety story's end-card seconds, whose bubbles keep below the 9:16 end card, which now fits the
+  platforms' safe area (Text, below) and so can be a size smaller.
 * Each place is laid out for the tall frame and kept in the same parts of any other frame: the horizon, the road, a
   window or a desk stay at the same height and across the same part of the width, things keep their size, and rows of
   trees, lamps and buildings repeat across a wider frame. A walk without `to` keeps its pace in pixels (so it crosses
@@ -84,8 +86,10 @@ Text is not part of the prims. Captions and bubble symbols are drawn on top of t
   about `size × 0.09`) or put a rounded panel behind the block (`#1c1842` at 72 %). The browser draws the panel.
   `bubble` text sits inside a balloon the frames already drew, so it has no outline and no panel.
 * Where things go (`TEXT_BOXES` in `text.ts`, design px; the track itself is in output px of the script's size).
-  9:16: captions at y 1400 (above the platforms' bottom bar, x 520 keeps clear of the right-hand buttons), scene
-  teaching text at y 330 (under the top tabs) in sunshine yellow, the safety end card at y 420. 1:1 and 16:9 use
+  9:16 keeps inside the safe area of TikTok, Reels and Shorts (x 80 to 910, y 260 to 1440: under their top tabs,
+  above their bottom bar and 170 px clear of their right-hand buttons; the same box the agent's `ass.py` keeps to),
+  every block centred across it at x 495: captions at y 1345, scene teaching text at y 350 in sunshine yellow, the
+  safety end card at y 420 (engine 4 used x 520 / 540, y 1400 and 330, which reached past that box). 1:1 and 16:9 use
   centred bands: captions at y 925, teaching text at y 145 and the end card at y 195, centred across the frame, with
   wider lines in 16:9. The end card shows for the last 2.5 s of the last scene (never reaching into the scene before).
   Every block, its panel included, stays inside its format's `safe` area (`cli.ts catalog` `formats`). In 1:1 and

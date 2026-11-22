@@ -15,10 +15,12 @@ export const SHORT = 1080;
 
 type Safe = VideoFormat["safe"];
 
-/** Where text may go in each shape, in design px (the short side 1080): under the platforms' top tabs, above their
- * bottom bar and away from their right-hand buttons in 9:16; a centred band 5% in from each edge in 1:1 and 16:9. */
+/** Where text may go in each shape, in design px (the short side 1080). 9:16 is the safe area of TikTok, Reels and
+ * Shorts that the agent's caption writer already keeps to (stories/agent ass.py): 80 px in from the left, 170 px clear
+ * of the right-hand buttons, 260 px under the top tabs and 480 px above the bottom bar of names and captions. 1:1 and
+ * 16:9 use a centred band 5% in from each edge. */
 const SAFE: Record<VideoAspect, Safe> = {
-  "9:16": { left: 60, top: 220, right: 1020, bottom: 1520 },
+  "9:16": { left: 80, top: 260, right: 910, bottom: 1440 },
   "1:1": { left: 54, top: 54, right: 1026, bottom: 1026 },
   "16:9": { left: 96, top: 54, right: 1824, bottom: 1026 },
 };

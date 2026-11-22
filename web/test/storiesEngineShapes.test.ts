@@ -2,7 +2,8 @@
 // aspect ratio."): 9:16, 1:1 and 16:9, each at 1080 or 720 on its short side. validateScript takes only those six,
 // every set, character, prop, bubble, caption and the driving-safety end card is laid out for each shape (positions
 // 0..1 of the frame, text inside each shape's safe area), the draw lists are in output pixels of the script's size,
-// and a 720 video is the 1080 one scaled down. The 1080 × 1920 frames are exactly what they were before.
+// and a 720 video is the 1080 one scaled down. The sample's 1080 × 1920 frames are exactly what they were before, and
+// 9:16 text keeps to the platforms' own safe area (the one the agent's caption writer uses).
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -397,7 +398,33 @@ function wordy(f: VideoFormat, citations: string[] = ["highway-code", "rospa"].f
   return valid(s);
 }
 
+/** The safe area of TikTok, Reels and Shorts on a 1080 × 1920 video: what their buttons and text leave free, the
+ * numbers the agent's caption writer keeps to (stories/agent ass.py: left 80, right 1080 - 170, top 260, bottom
+ * 1920 - 480). Pinned here so 9:16 text is checked against the platforms, not against the engine's own box. */
+const PLATFORM_SAFE = { left: 80, top: 260, right: 910, bottom: 1440 };
+
 describe("text stays inside each shape", () => {
+  it("the 9:16 safe area is the platforms' own (the one the agent's caption writer uses), scaled for 720 × 1280", () => {
+    for (const f of FORMATS.filter((x) => x.aspect === "9:16")) {
+      const k = f.width / 1080;
+      expect(f.safe, f.resolution).toEqual({ left: Math.round(PLATFORM_SAFE.left * k), top: Math.round(PLATFORM_SAFE.top * k), right: Math.round(PLATFORM_SAFE.right * k), bottom: Math.round(PLATFORM_SAFE.bottom * k) });
+    }
+  });
+
+  it("1080 × 1920: the agent's caption writer leaves every caption, teaching text and end card where the preview shows it", () => {
+    // ass.py keeps a block's centre at x 280..710 and y top + h..bottom - h, h = size × 0.62 × lines; text the engine
+    // already placed inside the platforms' area is never moved, so the video shows what the preview shows.
+    for (const citations of [undefined, ...guidance.topics.map((t) => t.citations)]) {
+      for (const e of textTrack(wordy(DEFAULT_FORMAT, citations)).filter((x) => x.kind !== "bubble")) {
+        const h = e.size * 0.62 * e.text.split("\n").length;
+        expect(e.x, `${e.kind} "${e.text}"`).toBeGreaterThanOrEqual(PLATFORM_SAFE.left + 200);
+        expect(e.x, `${e.kind} "${e.text}"`).toBeLessThanOrEqual(PLATFORM_SAFE.right - 200);
+        expect(e.y, `${e.kind} "${e.text}" (${e.size}px)`).toBeGreaterThanOrEqual(PLATFORM_SAFE.top + h);
+        expect(e.y, `${e.kind} "${e.text}" (${e.size}px)`).toBeLessThanOrEqual(PLATFORM_SAFE.bottom - h);
+      }
+    }
+  });
+
   for (const f of FORMATS) {
     it(`${f.resolution}: captions, teaching text and the end card inside the safe area, bubbles inside the frame`, () => {
       const s = wordy(f);

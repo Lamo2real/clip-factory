@@ -79,7 +79,8 @@ export const RULES: { id: string; text: string }[] = [
   {
     id: "frame_shape",
     text:
-      "The video is the script's width × height: tall 9:16 (1080 × 1920 or 720 × 1280), square 1:1 (1080 × 1080 or " +
+      "The request's format (aspect, width and height) says which shape this video is; with no format it is tall " +
+      "9:16 1080 × 1920. The shapes are tall 9:16 (1080 × 1920 or 720 × 1280), square 1:1 (1080 × 1080 or " +
       "720 × 720) or wide 16:9 (1920 × 1080 or 1280 × 720). x and y are 0 to 1 of that frame in every shape, so the " +
       "ground (y 0.62 to 0.85) and a top view's road (x 0.25 to 0.75) keep their numbers. Characters and things keep " +
       "their size against the frame's short side: a standing character is about a quarter of a tall frame's height " +

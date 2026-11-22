@@ -178,6 +178,10 @@ describe("the writer's rules", () => {
     const text = rule("frame_shape");
     for (const words of ["9:16", "1:1", "16:9", "1080 × 1920", "720 × 1280", "1080 × 1080", "720 × 720", "1920 × 1080", "1280 × 720", "0 to 1 of that frame"]) expect(text).toContain(words);
   });
+
+  it("point the writer at the request's format to know the shape (the writer never writes width or height)", () => {
+    expect(rule("frame_shape")).toMatch(/^The request's format \(aspect, width and height\) says which shape this video is; with no format it is tall 9:16 1080 × 1920\./);
+  });
 });
 
 describe("a noise's voice is AudioEvent's own field", () => {

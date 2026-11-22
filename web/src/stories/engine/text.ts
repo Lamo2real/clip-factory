@@ -18,16 +18,20 @@ export interface TextBox {
   maxLines: number;
 }
 
-/** Captions sit in the platforms' safe area: above the bottom bar of names and buttons, away from the right column. */
-export const CAPTION = { x: 520, y: 1400, maxW: 840, sizes: [64, 58, 52, 46, 40], color: "#fff6e5", maxLines: 2 };
-/** Scene teaching text: under the platforms' top tabs. */
-export const HEADER = { x: 520, y: 330, maxW: 840, sizes: [60, 54, 48, 42, 40], color: "#ffc94a", maxLines: 2 };
-/** The safety end card: high up, over the background, so it never covers a face. */
-export const ENDCARD = { x: 540, y: 420, maxW: 860, sizes: [52, 48, 44, 40], color: "#fff6e5", seconds: 2.5, maxLines: 4 };
+// The 9:16 boxes keep every block, its panel included (half a size to each side, 0.28 of a size above and below),
+// inside the platforms' safe area (frame.ts: x 80..910, y 260..1440), centred across it (x 495).
+/** Captions sit in the platforms' safe area: above the bottom bar of names and buttons, away from the right column
+ * (two lines at 64 px reach down to y 1438.4). */
+export const CAPTION = { x: 495, y: 1345, maxW: 760, sizes: [64, 58, 52, 46, 40], color: "#fff6e5", maxLines: 2 };
+/** Scene teaching text: under the platforms' top tabs (two lines at 60 px reach up to y 262.4). */
+export const HEADER = { x: 495, y: 350, maxW: 760, sizes: [60, 54, 48, 42, 40], color: "#ffc94a", maxLines: 2 };
+/** The safety end card: high up, over the background, so it never covers a face (four lines at 52 px reach up to
+ * y 282.7). */
+export const ENDCARD = { x: 495, y: 420, maxW: 770, sizes: [52, 48, 44, 40], color: "#fff6e5", seconds: 2.5, maxLines: 4 };
 
-/** Where text goes in each shape (CONTRACTS §45.34). 9:16 keeps clear of the platforms' tabs, bottom bar and
- * right-hand buttons (the boxes above); 1:1 and 16:9 use centred bands: captions low down, teaching text and the end
- * card at the top, above the heads of the characters standing on the ground. */
+/** Where text goes in each shape (CONTRACTS §45.34). 9:16 keeps inside the platforms' safe area, clear of their tabs,
+ * bottom bar and right-hand buttons (the boxes above); 1:1 and 16:9 use centred bands: captions low down, teaching
+ * text and the end card at the top, above the heads of the characters standing on the ground. */
 export const TEXT_BOXES: Record<VideoAspect, { caption: TextBox; header: TextBox; endcard: TextBox }> = {
   "9:16": { caption: CAPTION, header: HEADER, endcard: ENDCARD },
   "1:1": {

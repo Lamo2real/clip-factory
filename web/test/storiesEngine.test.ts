@@ -377,11 +377,11 @@ describe("frames", () => {
 describe("textTrack", () => {
   it("captions sit in the bottom safe area in at most 2 lines, and a scene caption that repeats one is not shown twice", () => {
     const t = textTrack(sample());
-    expect(t).toEqual([{ start: 0.5, end: 2.5, kind: "caption", text: "Ease off the accelerator", x: 520, y: 1400, size: 64, color: "#fff6e5" }]);
+    expect(t).toEqual([{ start: 0.5, end: 2.5, kind: "caption", text: "Ease off the\naccelerator", x: 495, y: 1345, size: 64, color: "#fff6e5" }]);
     for (const e of textTrack(iceSkid()).filter((x) => x.kind === "caption")) {
       expect(e.text.split("\n").length).toBeLessThanOrEqual(2);
       expect(e.size).toBeGreaterThanOrEqual(40);
-      expect(e.y === 1400 || e.y === 330).toBe(true);
+      expect(e.y === 1345 || e.y === 350).toBe(true);
     }
   });
 
