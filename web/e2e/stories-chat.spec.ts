@@ -545,3 +545,45 @@ test("round 3: a reference video keeps its own model and effort, and a stopped a
     await ctx.close();
   }
 });
+
+test("round 3: a reference video whose file was cleared says so and keeps its study; quick Keep taps build on each other", async ({ browser }) => {
+  test.setTimeout(90_000);
+  const removed = "The video was removed to save space. Its study stays.";
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    await ctx.addInitScript((id) => ((window as StoriesWindow).__cfStoriesMock = { knobs: { refFileRemoved: [id] } } as never), REF.analyzed);
+    const page = await ctx.newPage();
+    await open(page, `/stories/references/${REF.analyzed}`);
+    await expect(page.locator(".st-ref-player__none")).toHaveText(removed);
+    await expect(page.locator(".st-ref-removed")).toHaveText("The video file is gone, so it cannot be analyzed again.");
+    await expect(page.getByRole("heading", { name: "What happens", exact: true })).toBeVisible();
+    await settle(page);
+    expect(await audit(page, `a cleared video ${w}`, touch && w < 768)).toEqual([]);
+    await expect(page.getByRole("button", { name: "Analyze again" })).toHaveAttribute("aria-disabled", "true");
+    await page.getByRole("button", { name: "Analyze again" }).click({ force: true });
+    await page.waitForTimeout(500);
+    await expect(page.locator(".st-ref-track")).toHaveCount(0);
+    await expect(page.locator(".st-ref__meta")).not.toContainText("Analyzing");
+    // The study still goes into a new video.
+    await page.getByRole("button", { name: "Use in a video" }).click();
+    await expect(page).toHaveURL(new RegExp(`/stories/production/new\\?ref=${REF.analyzed}$`));
+    await ctx.close();
+  }
+
+  // Keep with this video: the model, then the effort, at once; both stay.
+  const ctx = await context(browser, 1280, 800, false);
+  const page = await ctx.newPage();
+  await open(page, `/stories/references/${REF.ready}`);
+  await page.getByRole("button", { name: "Just for this run" }).click();
+  const sheet = page.getByRole("dialog", { name: /Model and effort for this (run|video)/ });
+  await sheet.getByRole("radio", { name: "Keep with this video" }).click();
+  await sheet.getByRole("radio", { name: /Claude Sonnet 5\.5/ }).click();
+  await sheet.getByRole("radio", { name: /^Low/ }).click();
+  await expect(sheet.getByRole("status")).toHaveText("Kept with this video.");
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(page.locator(".st-chat-ai__line")).toHaveText("Model: Claude Sonnet 5.5 · Effort: Low");
+  await ctx.close();
+});

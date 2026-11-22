@@ -8,6 +8,10 @@
 // stops, the job's own reason ("{Model} isn't available right now: …"), after a reload too. Without a job in the
 // answer (an older API): `failed` is a failure, and a video that goes back to `analyzed` with the very same analysis
 // as before was a re-run that did not finish (Lamo Stories' agent keeps the last analysis then).
+//
+// A video whose file was cleared to save space (§45.34 "Keeping and clearing files": the API then leaves `url` out of
+// a reference that is past uploading) says "The video was removed to save space. Its study stays." and is not
+// analyzed again (the API refuses it); its study and "Use in a video" stay.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { A } from "../../../components/ui.tsx";
 import { usePoll } from "../../../lib/hooks.ts";
@@ -38,6 +42,8 @@ export const ANALYSIS_FAILED = "The video analysis agent could not finish this o
 export const RERUN_FAILED = "The new analysis did not finish, so this is still the last one. Try again, or pick another model.";
 /** A re-run that stopped with its own reason (the job in the answer, §45.34): the reason follows this. */
 const RERUN_LEAD = "The new analysis did not finish, so this is still the last one.";
+/** A video whose file was cleared by the keep setting (§45.34): the study stays. */
+export const FILE_REMOVED = "The video was removed to save space. Its study stays.";
 
 const same = (a: ReferenceAnalysis | null | undefined) => (a ? JSON.stringify(a) : null);
 
@@ -55,6 +61,12 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
   /** Where the sheet's choice goes: this run only, or kept with this video (§45.34 "Keep with this video"). */
   const [scope, setScope] = useState<AiScope>("once");
   const [keepNote, setKeepNote] = useState<{ saved: string | null; problem: string | null }>({ saved: null, problem: null });
+  /**
+   * "Keep with this video" saves on every tap. The setting as last picked (null: as the server last said), so the next
+   * tap builds on it and never on an older answer; and the saves sent, so only the newest one's answer is shown.
+   */
+  const [keptNow, setKeptNow] = useState<AiSetting | null>(null);
+  const keeping = useRef<{ picked: AiSetting | null; sent: number; saved: number; answer: ReferenceVideo | null }>({ picked: null, sent: 0, saved: 0, answer: null });
   const [busy, setBusy] = useState(false);
   const [actionProblem, setActionProblem] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -151,11 +163,16 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
   const current = projectEffective(task, ref.ai, override);
   const model = findModel(models.models, current.model);
   const effortBad = effortProblem(model, current.effort);
-  const src = ref.url ?? localVideo(ref.refId);
-  const analyzable = ref.status === "ready" || ref.status === "analyzed" || ref.status === "failed";
+  // The file itself when it was sent from this device this visit, else the server's link.
+  const src = localVideo(ref.refId) ?? ref.url ?? null;
+  // Past uploading without a link: the keep setting cleared the file (§45.34).
+  const removed = ref.status !== "uploading" && !ref.url;
+  const analyzable = !removed && (ref.status === "ready" || ref.status === "analyzed" || ref.status === "failed");
 
   async function analyze() {
     if (busy) return;
+    // A cleared file: the line above the button already says why.
+    if (removed) return;
     if (!analyzable) return setWhyNot(ref.status === "analyzing" ? "It is being analyzed right now." : "Wait until the video has finished uploading.");
     if (effortBad) return setWhyNot(effortBad);
     setBusy(true);
@@ -216,16 +233,46 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
     navigate(storiesHref({ name: "references" }));
   }
 
-  /** "Keep with this video": the video's own model and effort, saved with it (every analysis of it uses it). */
+  /** The video's own setting as the sheet shows it: the last pick while its save is on the way. */
+  const keptAi = (): AiSetting => keeping.current.picked ?? ref.ai;
+
+  /**
+   * "Keep with this video": the video's own model and effort, saved with it (every analysis of it uses it). Each tap
+   * sends the whole setting, built from the last pick; only the newest save's answer is shown.
+   */
   async function keep(next: AiSetting) {
+    const k = keeping.current;
+    k.sent += 1;
+    const seq = k.sent;
+    k.picked = next;
+    setKeptNow(next);
     setKeepNote({ saved: null, problem: null });
+    let problem: string | null = null;
     try {
       const saved = await storiesApi().patchReference(ws, ref.refId, { ai: next });
-      setData((d) => (d ? { ...d, reference: saved } : d));
-      setKeepNote({ saved: next.model || next.effort ? "Kept with this video." : "This video uses the usual setting again.", problem: null });
+      if (seq > k.saved) {
+        k.saved = seq;
+        k.answer = saved;
+      }
     } catch (e) {
-      setKeepNote({ saved: null, problem: sentence(e, "That did not save. Try again.") });
+      problem = sentence(e, "That did not save. Try again.");
     }
+    if (seq !== k.sent) return; // a newer tap's save is on the way: its answer is the one shown
+    const answer = k.answer;
+    k.picked = null;
+    k.answer = null;
+    setKeptNow(null);
+    if (answer) setData((d) => (d ? { ...d, reference: answer } : d));
+    setKeepNote(problem ? { saved: null, problem } : { saved: next.model || next.effort ? "Kept with this video." : "This video uses the usual setting again.", problem: null });
+  }
+
+  /** A model picked to keep: the kept effort stays only when that model offers it (else the usual effort). */
+  function keepModel(key: string) {
+    const base = keptAi();
+    const modelKey = key === DEFAULT ? null : key;
+    const runs = findModel(models.models, modelKey ?? task?.model ?? null);
+    const effort = base.effort && runs && runs.efforts.includes(base.effort) ? base.effort : null;
+    void keep({ model: modelKey, effort });
   }
 
   function openSheet() {
@@ -243,7 +290,8 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
   const rerunStopped = jobFailed ? (jobFailed === ANALYSIS_FAILED ? RERUN_FAILED : `${RERUN_LEAD} ${jobFailed}`) : null;
   const failedLine = ref.status === "failed" ? failed || jobFailed || ANALYSIS_FAILED : ref.status === "analyzed" ? (failed ?? rerunStopped) : null;
   const stoppedSteps = !!job && job.status === "failed" && job.steps.length > 0;
-  const keepValues = { model: ref.ai.model ?? DEFAULT, effort: ref.ai.effort ?? DEFAULT };
+  const kept = keptNow ?? ref.ai;
+  const keepValues = { model: kept.model ?? DEFAULT, effort: kept.effort ?? DEFAULT };
 
   return (
     <section className="st-page st-refs st-ref">
@@ -302,7 +350,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
           ) : (
             <div className="st-ref-player__none">
               <Icon name="film" size={40} />
-              <span>{ref.status === "uploading" ? "The video is still on its way." : "The video plays here."}</span>
+              <span>{ref.status === "uploading" ? "The video is still on its way." : removed ? FILE_REMOVED : "The video plays here."}</span>
             </div>
           )}
         </div>
@@ -361,6 +409,11 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
               ) : null}
               <h2 className="st-ref-block__title">{ref.status === "analyzed" ? "Analyze it again" : "Analyze it"}</h2>
               <p>The video analysis agent looks at the shots, the timing, the jokes and the sound. Your videos borrow the ideas, never the characters or the footage.</p>
+              {removed ? (
+                <p className="st-chat-note st-ref-removed" role="status">
+                  {ref.status === "analyzed" ? "The video file is gone, so it cannot be analyzed again." : "The video file is gone, so it cannot be analyzed."}
+                </p>
+              ) : null}
               <AiLine
                 models={models.models}
                 current={current}
@@ -464,16 +517,16 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
             setScope(next === "keep" ? "keep" : "once");
           }}
           values={scope === "keep" ? keepValues : { model: current.model, effort: current.effort }}
-          effortModel={scope === "keep" ? findModel(models.models, ref.ai.model ?? task?.model ?? current.model) : model}
+          effortModel={scope === "keep" ? findModel(models.models, kept.model ?? task?.model ?? current.model) : model}
           suggested={models.tasks?.find((t) => t.kind === "reference_analysis")?.suggestedEffort ?? null}
           problem={scope === "keep" ? keepNote.problem : null}
           saved={scope === "keep" ? keepNote.saved : null}
           onModel={(key) => {
-            if (scope === "keep") void keep({ model: key === DEFAULT ? null : key, effort: ref.ai.effort });
+            if (scope === "keep") keepModel(key);
             else setOverride((o) => ({ ...(o ?? {}), model: key }));
           }}
           onEffort={(e) => {
-            if (scope === "keep") void keep({ model: ref.ai.model, effort: e === DEFAULT ? null : (e as NonNullable<AiSetting["effort"]>) });
+            if (scope === "keep") void keep({ model: keptAi().model, effort: e === DEFAULT ? null : (e as NonNullable<AiSetting["effort"]>) });
             else setOverride((o) => ({ ...(o ?? {}), effort: e as NonNullable<ModelOverride["effort"]> }));
           }}
           onClose={() => setSheet(false)}

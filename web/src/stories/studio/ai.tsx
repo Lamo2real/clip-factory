@@ -539,6 +539,16 @@ export function SettingsFix({ sentence }: { sentence: string | null | undefined 
 type ModelUse = ProductionJob["meta"]["models"][number];
 
 /**
+ * Whether this step stopped on its model (§45.34 "A failed model call still shows what was asked"): the record says
+ * `failed`, or (an API that leaves that key out) an effort that was asked but not applied on a step that failed in
+ * that run. Its model and effort are what the step was asked with; no answer came.
+ */
+export function stoppedOn(job: Pick<ProductionJob, "steps">, m: ModelUse): boolean {
+  if (m.failed === true) return true;
+  return !m.effortApplied && !!m.effort && job.steps.some((s) => s.key === m.step && s.status === "failed");
+}
+
+/**
  * Which model and effort made each step of the video as it is now: for each step, the newest run that finished it
  * (a later run of only some steps keeps the earlier runs' writer and checks), in the order of the steps.
  */
@@ -572,8 +582,11 @@ export function madeWith(list: (ProductionJob | null | undefined)[]): ModelUse[]
  */
 export function ModelsUsed({ info, job, jobs, title = "Made with" }: { info: AiInfo; job: ProductionJob | null; jobs?: ProductionJob[] | null; title?: string }) {
   const working = !!job && (job.status === "queued" || job.status === "running");
-  const used = working || !jobs ? (job?.meta.models ?? []) : madeWith([job, ...jobs]);
+  const own = working || !jobs;
+  const used = own ? (job?.meta.models ?? []) : madeWith([job, ...jobs]);
   if (!used.length) return null;
+  // madeWith keeps only finished steps; a stopped one is told apart only in a run's own list.
+  const stopped = (u: ModelUse) => stoppedOn(own && job ? job : { steps: [] }, u);
   return (
     <div className="st-s-used">
       <h3 className="st-s-details__title">{title}</h3>
@@ -581,9 +594,9 @@ export function ModelsUsed({ info, job, jobs, title = "Made with" }: { info: AiI
         {used.map((u, i) => (
           <li key={`${u.step}:${i}`} className="st-s-used__row">
             <span className="st-s-used__step">{STEP_WORDS[u.step] ?? u.step}</span>
-            <span className="st-s-used__model">{modelLine(info, u.model, u.effort, u.effortApplied)}</span>
+            <span className="st-s-used__model">{stopped(u) ? modelLine(info, u.model, u.effort, null) : modelLine(info, u.model, u.effort, u.effortApplied)}</span>
             <Tag>{AGENT_WORDS[u.agentId] ?? u.agentId}</Tag>
-            {!u.effortApplied ? <span className="st-s-used__note">This model has no effort setting; it ran at its own level.</span> : null}
+            {stopped(u) ? <span className="st-s-used__note">This step stopped on this model. This is what it was asked with.</span> : !u.effortApplied ? <span className="st-s-used__note">This model has no effort setting; it ran at its own level.</span> : null}
           </li>
         ))}
       </ul>

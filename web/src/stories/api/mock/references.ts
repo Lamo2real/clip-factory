@@ -13,9 +13,14 @@
 // A reference video is deleted with deleteReferenceVideo (§45.34); deleteReference is a character's picture (the
 // characters part).
 //
+// Like the API, a reference past uploading carries `url` (here a pretend link: mock mode plays nothing), except once
+// its file was cleared to save space (§45.34 "Keeping and clearing files"): then `url` is left out and Analyze answers
+// 409 "The video was removed to save space. Its study stays." clearReferenceFile does that (the storage part's cleanup
+// may call it).
+//
 // Test knobs: refSeconds (how long an analysis takes, default 5), refFail (the next analysis fails with this sentence),
 // refJobInGet (kept for older tests: the job is always in the answer now), refNoJob (the answer leaves `job` out, as
-// the API did before §45.34, for the page's own fallback).
+// the API did before §45.34, for the page's own fallback), refFileRemoved (refIds whose file was cleared).
 import { ApiError } from "../../../api/errors.ts";
 import type { AiSetting, ModelOverride, ProductionJob, ReferenceAnalysis, ReferenceVideo, StoriesApi, StoryStep } from "../types.ts";
 import { checkWs, lowerLevels, MODELS, newId, resolve } from "./chat.ts";
@@ -40,19 +45,46 @@ interface RefState {
   analyses: Map<string, ReferenceAnalysis>;
   uploads: Map<string, { uploadId: string; parts: number; size: number }>;
   runs: Map<string, { start: number; fail: string | null }>;
+  /** References whose file was cleared to save space (their study stays). */
+  cleared: Set<string>;
 }
 
 const states = new WeakMap<MockStore, RefState>();
 function state(store: MockStore): RefState {
   let s = states.get(store);
   if (!s) {
-    s = { owner: new Map(), analyses: new Map(), uploads: new Map(), runs: new Map() };
+    s = { owner: new Map(), analyses: new Map(), uploads: new Map(), runs: new Map(), cleared: new Set() };
     states.set(store, s);
   }
   return s;
 }
 
 export const SEED_IDS = { analyzed: "01JSTRF0000000000000000001", ready: "01JSTRF0000000000000000002" };
+
+/** The API's sentence for a reference whose file was cleared (§45.34). */
+export const FILE_REMOVED = "The video was removed to save space. Its study stays.";
+
+function isCleared(store: MockStore, refId: string): boolean {
+  const knob = store.knobs.refFileRemoved;
+  return state(store).cleared.has(refId) || (Array.isArray(knob) && knob.includes(refId));
+}
+
+/** Clears a reference's file and keeps its study, as the keep setting `study_only` does (§45.34). */
+export function clearReferenceFile(store: MockStore, refId: string): boolean {
+  const ref = store.references.find((r) => r.refId === refId);
+  if (!ref || ref.status === "uploading" || ref.currentJobId || isCleared(store, refId)) return false;
+  state(store).cleared.add(refId);
+  ref.updatedAt = iso();
+  return true;
+}
+
+/** A reference as the API answers it: a link to the file once it is uploaded, none after the file was cleared. */
+function pub(store: MockStore, ref: ReferenceVideo): ReferenceVideo {
+  const out = structuredClone(ref);
+  delete out.url;
+  if (ref.status !== "uploading" && !isCleared(store, ref.refId)) out.url = `data:text/plain;charset=utf-8,${encodeURIComponent(`Pretend reference video "${ref.title}" (mock mode plays nothing).`)}`;
+  return out;
+}
 
 /** A believable analysis for a video of this length (the real one comes from the frames and the loudness). */
 export function pretendAnalysis(title: string, durationSec: number): ReferenceAnalysis {
@@ -219,7 +251,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       return store.references
         .filter((r) => (s.owner.get(r.refId) ?? "stories") === ws)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .map((r) => structuredClone(r));
+        .map((r) => pub(store, r));
     },
 
     async createReference(ws: string, body: { filename: string; contentType: string; size: number; title: string }) {
@@ -239,7 +271,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const uploadId = `mock-upload-${ref.refId}`;
       s.uploads.set(ref.refId, { uploadId, parts: count, size: body.size });
       return {
-        reference: structuredClone(ref),
+        reference: pub(store, ref),
         upload: { uploadId, parts: Array.from({ length: count }, (_, i) => ({ partNumber: i + 1, url: `mock://references/${ref.refId}/part/${i + 1}` })) },
       };
     },
@@ -254,7 +286,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       ref.status = "ready";
       ref.updatedAt = iso();
       s.uploads.delete(refId);
-      return structuredClone(ref);
+      return pub(store, ref);
     },
 
     async analyzeReference(ws: string, refId: string, override?: ModelOverride) {
@@ -263,6 +295,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       advance(store);
       if (ref.status === "uploading") throw new ApiError(409, "conflict", "Wait until the video has finished uploading.");
       if (ref.status === "analyzing") throw new ApiError(409, "conflict", "It is being analyzed right now.");
+      if (isCleared(store, refId)) throw new ApiError(409, "conflict", FILE_REMOVED);
       if (override) for (const k of Object.keys(override)) if (!["model", "effort"].includes(k)) throw bad("Something in that request was not right.", "override");
       const low = lowerLevels(store, "reference_analysis", "video_analysis");
       if (low.agentOff) throw new ApiError(409, "conflict", low.agentOff);
@@ -300,7 +333,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       ref.status = "analyzing";
       ref.currentJobId = job.jobId;
       ref.updatedAt = iso(now);
-      return { reference: structuredClone(ref), job: structuredClone(job) };
+      return { reference: pub(store, ref), job: structuredClone(job) };
     },
 
     async getReference(ws: string, refId: string) {
@@ -309,7 +342,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       advance(store);
       const analysis = s.analyses.get(refId) ?? null;
       const job = jobOf(store, ref);
-      const out = { reference: structuredClone(ref), analysis: analysis ? structuredClone(analysis) : null, job: job ? structuredClone(job) : null };
+      const out = { reference: pub(store, ref), analysis: analysis ? structuredClone(analysis) : null, job: job ? structuredClone(job) : null };
       if (store.knobs.refNoJob === true && store.knobs.refJobInGet !== true) {
         const { job: _left, ...older } = out;
         return older as typeof out;
@@ -340,7 +373,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       ref.title = title;
       ref.ai = ai;
       ref.updatedAt = iso();
-      return structuredClone(ref);
+      return pub(store, ref);
     },
 
     async deleteReferenceVideo(ws: string, refId: string): Promise<void> {
@@ -352,6 +385,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       s.analyses.delete(refId);
       s.uploads.delete(refId);
       s.owner.delete(refId);
+      s.cleared.delete(refId);
     },
   };
   return out as unknown as Pick<StoriesApi, (typeof KEYS)[number]>;

@@ -14,6 +14,7 @@ import { useLoad } from "../../lib/hooks.ts";
 import { navigate } from "../../lib/router.ts";
 import { storiesApi } from "../api/client.ts";
 import { STEP_LABEL, type AssetKind, type Character, type DownloadFormat, type LibraryItem, type ProductionJob, type StepKey, type Story } from "../api/types.ts";
+import { stoppedOn } from "../studio/ai.tsx";
 import { usePaged } from "../studio/hooks.ts";
 import { storiesHref } from "../routes.ts";
 import { STATUS_WORDS, StButton, StEmpty, StError, StIcon, StLinkButton, StLoading, StPageHead, type MascotMood, type StIconName, type StTone } from "../ui.tsx";
@@ -424,7 +425,8 @@ function Details({ ws, story }: { ws: string; story: Story }) {
                     <dt>{STEP_WORDS[m.step] ?? m.step}</dt>
                     <dd>
                       {modelName(m.model)}
-                      {m.effort ? ` · ${EFFORT_WORDS[m.effort] ?? m.effort}${m.effortApplied ? "" : " (not offered)"}` : ""}
+                      {m.effort ? ` · ${EFFORT_WORDS[m.effort] ?? m.effort}${stoppedOn(job, m) || m.effortApplied ? "" : " (not offered)"}` : ""}
+                      {stoppedOn(job, m) ? " (stopped)" : ""}
                     </dd>
                   </div>
                 ))}

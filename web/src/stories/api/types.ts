@@ -481,7 +481,8 @@ export interface ProductionJob {
     actualSec: number | null;
     safetyTopicId: string | null;
     providers: Record<string, string>;
-    models: { step: string; agentId: string; model: string; effort: Effort | null; effortApplied: boolean }[];
+    /** `failed`: the step stopped on this model; model and effort are what was asked (§45.34), no answer came */
+    models: { step: string; agentId: string; model: string; effort: Effort | null; effortApplied: boolean; failed?: boolean }[];
   };
   error?: string;
   createdAt: string;

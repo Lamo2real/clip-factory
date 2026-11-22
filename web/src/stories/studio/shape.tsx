@@ -51,8 +51,12 @@ export function formatWords(f: StoryFormat | null | undefined): string {
   return `${SHAPE_WORD[x.aspect] ?? x.aspect} (${x.aspect}), ${x.width} × ${x.height}`;
 }
 
-/** The shape picker of Production › New: the shape, then its size (both on <Glide> pick bars). */
-export function ShapePicker({ value, onChange, usual }: { value: StoryFormat; onChange: (f: StoryFormat) => void; usual: StoryFormat }) {
+/**
+ * The shape picker of Production › New: the shape, then its size (both on <Glide> pick bars).
+ * `usualKnown`: Settings › Video has loaded (until then `usual` is only the tall default, and nothing picked means the
+ * workspace's own shape is used); `picked`: the owner chose this video's shape here.
+ */
+export function ShapePicker({ value, onChange, usual, usualKnown = true, picked = false }: { value: StoryFormat; onChange: (f: StoryFormat) => void; usual: StoryFormat; usualKnown?: boolean; picked?: boolean }) {
   const sizes = SHAPE_SIZES[value.aspect];
   return (
     <div className="st-s-shape">
@@ -82,7 +86,9 @@ export function ShapePicker({ value, onChange, usual }: { value: StoryFormat; on
           onChange({ aspect: value.aspect, width: w!, height: h! });
         }}
       />
-      <p className="st-s-field__hint">{sameFormat(value, usual) ? "From Settings › Video." : "Just for this video. Settings › Video stays the same."}</p>
+      <p className="st-s-field__hint">
+        {!usualKnown && !picked ? "Your usual shape from Settings › Video is used, unless you pick one here." : usualKnown && sameFormat(value, usual) ? "From Settings › Video." : "Just for this video. Settings › Video stays the same."}
+      </p>
     </div>
   );
 }

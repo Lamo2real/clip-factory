@@ -29,6 +29,7 @@ HTMLCanvasElement.prototype.getContext = (() => null) as never;
 const { ChatScreen } = await import("../src/stories/screens/Chat.tsx");
 const { ReferencesScreen } = await import("../src/stories/screens/References.tsx");
 const { forgetSentWith, PAGE } = await import("../src/stories/chat/ConversationView.tsx");
+const { FILE_REMOVED } = await import("../src/stories/chat/references/RefPage.tsx");
 
 const CONV = chat.SEED_IDS.conversations;
 const REF = references.SEED_IDS;
@@ -232,6 +233,38 @@ describe("a failed answer and Try again (§45.34)", () => {
     await click(byText(".st-chat-msg--assistant.is-failed button", "Try again"));
     expect(spies.sendMessage).toHaveBeenLastCalledWith("stories", CONV.winter, { text: "Ideas about snow", override: { model: "haiku-5-5" } });
   });
+
+  it("after a reload, Try again still sends the choice the answer was asked with (kept on this device)", async () => {
+    await openChat(CONV.winter);
+    await justThisMessage(/^Claude Haiku 5\.5/, /^Low/);
+    store.knobs.chatFail = "The director could not answer this time. Try again.";
+    await type($("textarea"), "Ideas about fog");
+    await click($(".st-chat-send"));
+    await until(() => !!$(".st-chat-msg--assistant.is-failed"), 8000);
+    // A reload: this visit's memory is gone; the API never sends the choice back.
+    act(() => root.unmount());
+    forgetSentWith();
+    root = createRoot(host);
+    await render(<ChatScreen key="again" ws="stories" page={page({ name: "chat_conv", convId: CONV.winter })} />);
+    await until(() => !!$(".st-chat-msg--assistant.is-failed"), 8000);
+    expect($(".st-chat-msg--assistant.is-failed .st-chat-msg__meta")?.textContent).toBe("Claude Haiku 5.5 · Low");
+    expect($(".st-chat-ai__line")?.textContent).toBe("Model: Claude Opus 5.5 · Effort: High");
+    await click(byText(".st-chat-msg--assistant.is-failed button", "Try again"));
+    expect(spies.sendMessage).toHaveBeenLastCalledWith("stories", CONV.winter, { text: "Ideas about fog", override: { model: "haiku-5-5", effort: "low" } });
+  });
+
+  it("the device keeps only the newest choices, and a bad stored one is ignored", async () => {
+    const { rememberSentWith, sentWith, SENT_WITH_KEY, SENT_WITH_MAX } = await import("../src/stories/chat/sentWith.ts");
+    for (let i = 0; i < SENT_WITH_MAX + 5; i++) rememberSentWith("stories", `m${i}`, { model: "opus-5-5" });
+    forgetSentWith();
+    expect(sentWith("stories", "m0")).toBeNull();
+    expect(sentWith("stories", `m${SENT_WITH_MAX + 4}`)).toEqual({ model: "opus-5-5" });
+    expect(sentWith("other", `m${SENT_WITH_MAX + 4}`)).toBeNull();
+    localStorage.setItem(SENT_WITH_KEY, JSON.stringify({ "stories/x": { model: "<script>", effort: "huge" }, "stories/y": { effort: "max" } }));
+    forgetSentWith();
+    expect(sentWith("stories", "x")).toBeNull();
+    expect(sentWith("stories", "y")).toEqual({ effort: "max" });
+  });
 });
 
 describe("the director's buttons carry the model menu (§45.34)", () => {
@@ -245,6 +278,24 @@ describe("the director's buttons carry the model menu (§45.34)", () => {
     const menu = byLabel(".st-chat-action--analyze_reference button", /^Model and effort for this analysis/)!;
     expect(menu.getAttribute("aria-label")).toMatch(/Claude Sonnet 5\.5/);
     expect(card.textContent).toContain("Just this one");
+    await click(byText(".st-chat-action--analyze_reference button", "Analyze this reference video"));
+    await until(() => spies.analyzeReference.mock.calls.length === 1);
+    expect(spies.analyzeReference).toHaveBeenCalledWith("stories", REF.ready, { model: "sonnet-5-5" });
+  });
+
+  it("after a reload, the button on an older answer still starts from that message's own choice", async () => {
+    await openChat(CONV.winter);
+    await justThisMessage(/^Claude Sonnet 5\.5/);
+    await type($("textarea"), "Can you analyze my reference video?");
+    await click($(".st-chat-send"));
+    await until(() => !!byText("button", "Analyze this reference video"), 8000);
+    act(() => root.unmount());
+    forgetSentWith();
+    forgetActions();
+    root = createRoot(host);
+    await render(<ChatScreen key="again" ws="stories" page={page({ name: "chat_conv", convId: CONV.winter })} />);
+    await until(() => !!byText("button", "Analyze this reference video"), 8000);
+    expect(byLabel(".st-chat-action--analyze_reference button", /^Model and effort for this analysis/)!.getAttribute("aria-label")).toMatch(/Claude Sonnet 5\.5/);
     await click(byText(".st-chat-action--analyze_reference button", "Analyze this reference video"));
     await until(() => spies.analyzeReference.mock.calls.length === 1);
     expect(spies.analyzeReference).toHaveBeenCalledWith("stories", REF.ready, { model: "sonnet-5-5" });
@@ -311,6 +362,66 @@ describe("a reference video's page (§45.34)", () => {
       [expect.stringContaining("Write it up"), "is-pending"],
     ]);
     expect(byText("a", "Open Settings › AI") ?? byText("button", /Pick another model/)).not.toBeNull();
+  });
+
+  it("Keep with this video: quick taps build on each other, and only the newest answer is shown", async () => {
+    await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.ready })} />);
+    await until(() => !!byText("button", "Analyze it"));
+    await click(byText("button", "Just for this run"));
+    await click(byText(".st-chat-sheet [role=radio]", "Keep with this video"));
+    // The model, then the effort, before the first save has answered.
+    await click(byText(".st-chat-sheet [role=radio]", /^Claude Sonnet 5\.5/));
+    expect(spies.patchReference.mock.calls.length).toBe(1);
+    await click(byText(".st-chat-sheet [role=radio]", /^Low/));
+    expect(spies.patchReference.mock.calls.map((c) => c[2])).toEqual([{ ai: { model: "sonnet-5-5", effort: null } }, { ai: { model: "sonnet-5-5", effort: "low" } }]);
+    await until(() => !!byText(".st-chat-sheet [role=status]", "Kept with this video."));
+    expect(store.references.find((r) => r.refId === REF.ready)!.ai).toEqual({ model: "sonnet-5-5", effort: "low" });
+    expect(byText(".st-chat-sheet [role=radio]", /^Claude Sonnet 5\.5/)?.getAttribute("aria-checked")).toBe("true");
+    expect(byText(".st-chat-sheet [role=radio]", /^Low/)?.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("Keep with this video: a model that does not offer the kept effort drops it (no refusal)", async () => {
+    store.references.find((r) => r.refId === REF.ready)!.ai = { model: null, effort: "max" };
+    models = models.map((m) => (m.key === "haiku-5-5" ? { ...m, efforts: [] } : m));
+    await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.ready })} />);
+    await until(() => !!byText("button", "Analyze it"));
+    await click(byText("button", "Just for this run"));
+    await click(byText(".st-chat-sheet [role=radio]", "Keep with this video"));
+    // A model that offers it keeps it.
+    await click(byText(".st-chat-sheet [role=radio]", /^Claude Sonnet 5\.5/));
+    expect(spies.patchReference).toHaveBeenLastCalledWith("stories", REF.ready, { ai: { model: "sonnet-5-5", effort: "max" } });
+    await click(byText(".st-chat-sheet [role=radio]", /^Claude Haiku 5\.5/));
+    expect(spies.patchReference).toHaveBeenLastCalledWith("stories", REF.ready, { ai: { model: "haiku-5-5", effort: null } });
+    await until(() => !!byText(".st-chat-sheet [role=status]", "Kept with this video."));
+    expect($(".st-chat-sheet [role=alert]")).toBeNull();
+    expect(store.references.find((r) => r.refId === REF.ready)!.ai).toEqual({ model: "haiku-5-5", effort: null });
+  });
+
+  it("a video whose file was cleared says so, keeps its study and is not analyzed again", async () => {
+    store.knobs.refFileRemoved = [REF.analyzed];
+    await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.analyzed })} />);
+    await until(() => !!$(".st-ref-analysis"));
+    expect($(".st-ref-player__none")?.textContent).toBe(FILE_REMOVED);
+    expect($(".st-ref-player__video")).toBeNull();
+    expect($(".st-ref-removed")?.textContent).toBe("The video file is gone, so it cannot be analyzed again.");
+    const again = byText("button", "Analyze again")!;
+    expect(again.getAttribute("aria-disabled")).toBe("true");
+    await click(again);
+    expect(spies.analyzeReference).not.toHaveBeenCalled();
+    // The study stays usable.
+    await click(byText("button", "Use in a video"));
+    expect(location.pathname + location.search).toBe(`/stories/production/new?ref=${REF.analyzed}`);
+  });
+
+  it("the mock, like the API: a link once uploaded, none after the file is cleared, and Analyze refused", async () => {
+    expect((await api.getReference("stories", REF.ready)).reference.url).toMatch(/^data:/);
+    expect(references.clearReferenceFile(store, REF.ready)).toBe(true);
+    expect(references.clearReferenceFile(store, REF.ready)).toBe(false);
+    expect((await api.getReference("stories", REF.ready)).reference.url).toBeUndefined();
+    expect((await api.listReferences("stories")).find((r) => r.refId === REF.ready)?.url).toBeUndefined();
+    await expect(api.analyzeReference("stories", REF.ready)).rejects.toMatchObject({ status: 409, message: references.FILE_REMOVED });
+    const made = await api.createReference("stories", { filename: "a.mp4", contentType: "video/mp4", size: 1000, title: "New one" });
+    expect(made.reference.url).toBeUndefined();
   });
 
   it("Use in a video opens Production › New with it picked (?ref=)", async () => {

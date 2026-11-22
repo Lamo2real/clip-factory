@@ -361,6 +361,15 @@ test("round 3, Production › New: the hand-over keys, the idea's own length, an
   const page = await ctx.newPage();
   await open(page, `/stories/production/new?idea=${I.skid}`);
   await expect(page.getByText(/The full idea was written for \d+ seconds\./)).toBeVisible();
+  // Reference videos from the address that are not in the list (deleted since) are dropped: they never use up the 3
+  // picks, so a real one can still be picked.
+  await go(page, `/stories/production/new?idea=${I.sandwich}&ref=01JSTRFGONE000000000000001&ref=01JSTRFGONE000000000000002&ref=01JSTRFGONE000000000000003`);
+  const tile = page.locator(".st-s-reftile", { hasText: "Penguin on the ice rink" });
+  await expect(tile).toBeVisible();
+  await expect(page.locator('.st-s-reftile[aria-pressed="true"]')).toHaveCount(0);
+  await expect(tile).not.toHaveAttribute("aria-disabled", "true");
+  await tile.click();
+  await expect(tile).toHaveAttribute("aria-pressed", "true");
   await ctx.close();
 });
 

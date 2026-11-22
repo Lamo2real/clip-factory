@@ -20,6 +20,7 @@ import { Btn, Chip, Director, Empty, Icon, Progress, sentence, Waiting } from ".
 import { afterId, askedBefore, inFlight, LOCAL, mergeMessages } from "./messages.ts";
 import { effortLabel, effortProblem, findModel, modelLabel, useModels, withOverride } from "./models.ts";
 import { ProjectChip } from "./ProjectChip.tsx";
+import { forgetSentWithVisit, rememberSentWith, sentWith } from "./sentWith.ts";
 import { ChatText } from "./text.tsx";
 import { pictureProblem, PICTURES_PER_MESSAGE, putPicture } from "./upload.ts";
 
@@ -41,15 +42,9 @@ export const ADD_AGAIN = "Add the pictures again, then tap Send.";
 /** How many messages one read answers (the API's SHOWN): a full page may have more before it. */
 export const PAGE = 500;
 
-/**
- * The "just this message" choice each answer was asked with this visit, by the answer's id: Try again sends it again,
- * a failed answer still names it, and the director's buttons on that answer start from it (CONTRACTS §45.34).
- */
-const sentWith = new Map<string, ModelOverride>();
-
-/** Test hook: forget the choices answers were asked with. */
+/** Test hook: forget this visit's copy of the choices answers were asked with (sentWith.ts keeps them on the device). */
 export function forgetSentWith(): void {
-  sentWith.clear();
+  forgetSentWithVisit();
 }
 
 interface Attached {
@@ -276,7 +271,7 @@ export function ConversationView({
       if (attachmentIds.length) body.attachments = attachmentIds.map((assetId) => ({ assetId }));
       if (once && (once.model || once.effort)) body.override = { ...(once.model ? { model: once.model } : {}), ...(once.effort ? { effort: once.effort } : {}) };
       const r = await storiesApi().sendMessage(ws, conv.convId, body);
-      if (body.override) sentWith.set(r.assistant.msgId, body.override);
+      if (body.override) rememberSentWith(ws, r.assistant.msgId, body.override);
       setMessages((prev) => [...prev.filter((m) => m.msgId !== temp.msgId), r.user, r.assistant]);
       setOverride(null);
       void storiesApi()
@@ -304,7 +299,7 @@ export function ConversationView({
    */
   async function askAgain(asked: Message, failedId: string) {
     if (!conv || sending || writing) return;
-    const once = override && (override.model || override.effort) ? override : (sentWith.get(failedId) ?? null);
+    const once = override && (override.model || override.effort) ? override : sentWith(ws, failedId);
     const ids = asked.attachments.map((a) => a.assetId);
     if (!ids.length) return send(asked.text, [], once);
     const files = ids.map((id) => localFiles.get(id) ?? null);
@@ -561,7 +556,7 @@ export function ConversationView({
                 m={m}
                 models={models.models}
                 info={aiInfo}
-                once={sentWith.get(m.msgId) ?? null}
+                once={m.role === "assistant" ? sentWith(ws, m.msgId) : null}
                 failedSend={failedSend?.localId === m.msgId}
                 onRetry={() => {
                   const asked = askedBefore(messages, m.msgId);

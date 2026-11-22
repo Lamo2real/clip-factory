@@ -35,7 +35,7 @@ import {
 import { CATALOG } from "../engine/catalog.ts";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { storiesHref } from "../routes.ts";
-import { cleanPick, effortName, madeWith, ModelMenu, modelName, ModelsUsed, NextRun, SettingsFix, shortName, StoryAi, storyUsual, useAiInfo, usualFor, type AiInfo } from "../studio/ai.tsx";
+import { cleanPick, effortName, madeWith, ModelMenu, modelName, ModelsUsed, NextRun, SettingsFix, shortName, stoppedOn, StoryAi, storyUsual, useAiInfo, usualFor, type AiInfo } from "../studio/ai.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
 import { usePaged, useSameScript, useWorkspace } from "../studio/hooks.ts";
 import { formatOf, formatWords, sameFormat, ShapePicker } from "../studio/shape.tsx";
@@ -243,6 +243,16 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
     setCast(idea.characterIds.filter((id) => characters.some((c) => c.characterId === id)).slice(0, 3));
   }, [idea, characters]);
 
+  // Reference videos from the address keep only this workspace's own (a deleted one is dropped, so it never uses up
+  // one of the 3 picks without a tile to unpick it).
+  useEffect(() => {
+    const list = refs.data;
+    if (!list || !givenRefs.length) return;
+    setRefIds((ids) => ids.filter((id) => list.some((r) => r.refId === id)));
+    // Once, when the reference videos arrive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refs.data]);
+
   // A cast from the address keeps only this workspace's own characters.
   useEffect(() => {
     if (!data.data || !castIds.length) return;
@@ -287,8 +297,9 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
     setBusy(true);
     setProblem(null);
     const body: StoryInput = { characterIds: cast, durationSec: lengthSec, captionsOn, musicMood: music };
-    // This video's own shape when it is not the workspace's (or the workspace could not be read): §45.34.
-    if (!workspace || !sameFormat(format, usualShape)) body.format = { ...format };
+    // This video's own shape, only when the owner picked one that is not the workspace's (§45.34). Nothing picked:
+    // the API uses Settings › Video itself (also while it has not loaded here, or could not be read).
+    if (shape && (!workspace || !sameFormat(shape, usualShape))) body.format = { ...shape };
     const own = cleanPick(ai);
     if (own) body.ai = { model: own.model ?? null, effort: own.effort ?? null };
     const usable = refIds.filter((id) => refs.data?.some((r) => r.refId === id));
@@ -418,7 +429,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
             <h2 className="st-s-panel__title" id="st-nv-shape">
               <span className="st-s-num">4</span> Shape and size
             </h2>
-            <ShapePicker value={format} usual={usualShape} onChange={setShape} />
+            <ShapePicker value={format} usual={usualShape} onChange={setShape} usualKnown={!!workspace} picked={shape !== null} />
           </section>
 
           <section className="st-s-panel" aria-labelledby="st-nv-4">
@@ -501,7 +512,8 @@ function RefPicker({
         No reference videos yet. Upload one in <A href={storiesHref({ name: "references" })}>References</A> and Lamo Stories studies how it is made.
       </p>
     );
-  const full = picked.length >= 3;
+  // Only the picks that have a tile count (one that is not in the list can never be unpicked).
+  const full = picked.filter((id) => refs.some((r) => r.refId === id)).length >= 3;
   return (
     <>
       <p className="st-s-field__hint">Pick up to 3. Lamo Stories borrows their timing and structure, never their characters or footage.</p>
@@ -805,8 +817,13 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
   );
 }
 
-/** One run's models in a line: "Write the story: Opus 5.5 · High". */
-function runModels(info: AiInfo, j: ProductionJob): string {
+/** One run's models in a line: "Write: Opus 5.5 · High"; a step that stopped on its model: "Write: Opus 5.5 · High (stopped)". */
+export function runModels(info: AiInfo, j: ProductionJob): string {
   const word: Record<string, string> = { storyboard: "Write", safety: "Check", preview: "Last look" };
-  return j.meta.models.map((m) => `${word[m.step] ?? m.step}: ${shortName(modelName(info, m.model))}${m.effortApplied && m.effort ? ` · ${effortName(m.effort)}` : ""}`).join(" · ");
+  return j.meta.models
+    .map((m) => {
+      const stopped = stoppedOn(j, m);
+      return `${word[m.step] ?? m.step}: ${shortName(modelName(info, m.model))}${(m.effortApplied || stopped) && m.effort ? ` · ${effortName(m.effort)}` : ""}${stopped ? " (stopped)" : ""}`;
+    })
+    .join(" · ");
 }

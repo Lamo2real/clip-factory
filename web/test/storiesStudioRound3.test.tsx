@@ -25,10 +25,10 @@ HTMLCanvasElement.prototype.getContext = (() => null) as never;
 
 const { IdeasScreen, ideaProblem, ideaPatch } = await import("../src/stories/screens/Ideas.tsx");
 const { CharactersScreen } = await import("../src/stories/screens/Characters.tsx");
-const { ProductionScreen } = await import("../src/stories/screens/Production.tsx");
+const { ProductionScreen, runModels } = await import("../src/stories/screens/Production.tsx");
 const { ReviewScreen } = await import("../src/stories/screens/Review.tsx");
 const { LibraryScreen } = await import("../src/stories/screens/Library.tsx");
-const { LISTED_INFO, nextRunLine } = await import("../src/stories/studio/ai.tsx");
+const { LISTED_INFO, ModelsUsed, nextRunLine } = await import("../src/stories/studio/ai.tsx");
 const { changedParts } = await import("../src/stories/studio/Design.tsx");
 const { cueLabel, isPlaceSound } = await import("../src/stories/studio/SfxEditor.tsx");
 const { captionsDraft } = await import("../src/stories/studio/CaptionEditor.tsx");
@@ -246,6 +246,45 @@ describe("Production › New from the address (§45.34)", () => {
     await wait();
     expect(cast()).toEqual(["Nana Rose"]);
     expect(document.querySelector<HTMLInputElement>('input[type="range"]')!.value).toBe("60");
+  });
+
+  it("reference videos from the address keep only the ones in the list, so a deleted one never uses up a pick", async () => {
+    store.references.push({ ...structuredClone(REFS[0]!), refId: "01JSTRV0000000000000000003", title: "The third one" });
+    const create = vi.spyOn(api, "createStory");
+    await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich, refIds: [REFS[0]!.refId, "01JSTRVGONE0000000000000000", REFS[1]!.refId], castIds: [C.bolt], durationSec: null })} />);
+    const on = () => Array.from(document.querySelectorAll('.st-s-reftile[aria-pressed="true"]')).map((t) => t.querySelector(".st-s-reftile__title")?.textContent);
+    expect(on()).toEqual(["The banana slip", "Pip on the ice"]);
+    const third = Array.from(document.querySelectorAll<HTMLElement>(".st-s-reftile")).find((t) => t.textContent?.includes("The third one"))!;
+    expect(third.getAttribute("aria-disabled")).toBeNull();
+    await click(third, 50);
+    expect(on()).toEqual(["The banana slip", "Pip on the ice", "The third one"]);
+    await click(control("Make the video"));
+    expect(create.mock.calls[0]![1]).toMatchObject({ referenceIds: [REFS[0]!.refId, REFS[1]!.refId, "01JSTRV0000000000000000003"] });
+  });
+
+  it("sends no shape while Settings › Video has not loaded, unless the owner picks one", async () => {
+    const create = vi.spyOn(api, "createStory");
+    vi.spyOn(api, "getWorkspace").mockImplementation(() => new Promise(() => undefined));
+    await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich, refIds: [], castIds: [C.bolt], durationSec: null })} />);
+    expect(text()).toContain("Your usual shape from Settings › Video is used, unless you pick one here.");
+    await click(control("Make the video"));
+    expect(create.mock.calls[0]![1]).not.toHaveProperty("format");
+    // A shape the owner picks goes with this video.
+    await act(async () => root.unmount());
+    host.remove();
+    await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich, refIds: [], castIds: [C.bolt], durationSec: null })} />);
+    await pick("Shape", "Square");
+    expect(text()).toContain("Just for this video. Settings › Video stays the same.");
+    await click(control("Make the video"));
+    expect(create.mock.calls[1]![1]).toMatchObject({ format: { aspect: "1:1" } });
+  });
+
+  it("with Settings › Video loaded, the usual shape is not sent (the API uses it)", async () => {
+    const create = vi.spyOn(api, "createStory");
+    await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich, refIds: [], castIds: [C.bolt], durationSec: null })} />);
+    expect(text()).toContain("From Settings › Video.");
+    await click(control("Make the video"));
+    expect(create.mock.calls[0]![1]).not.toHaveProperty("format");
   });
 
   it("a cast from the address keeps only this workspace's characters", async () => {
@@ -563,6 +602,50 @@ describe("Characters (§45.34)", () => {
 });
 
 // ---------- Copies ----------
+
+// ---------- A step that stopped on its model ----------
+
+describe("a step that stopped on its model shows what it was asked with (§45.34)", () => {
+  function stoppedJob() {
+    const job = structuredClone(store.jobs.find((j) => j.contentId === S.failed)!);
+    job.steps = job.steps.map((st) => (st.key === "storyboard" ? { ...st, status: "failed" } : st));
+    job.meta.models = [{ step: "storyboard", agentId: "storyboard", model: "opus-5-5", effort: "high", effortApplied: false, failed: true }];
+    return job;
+  }
+
+  it("the Production runs list: the model and the effort, marked stopped", () => {
+    expect(runModels(LISTED_INFO, stoppedJob())).toBe("Write: Opus 5.5 · High (stopped)");
+    const ok = stoppedJob();
+    ok.meta.models = [{ step: "storyboard", agentId: "storyboard", model: "opus-5-5", effort: "high", effortApplied: true }];
+    expect(runModels(LISTED_INFO, ok)).toBe("Write: Opus 5.5 · High");
+    // An API that leaves `failed` out: an asked effort not applied on a step that failed is the same record.
+    const bare = stoppedJob();
+    bare.meta.models = [{ step: "storyboard", agentId: "storyboard", model: "opus-5-5", effort: "high", effortApplied: false }];
+    expect(runModels(LISTED_INFO, bare)).toBe("Write: Opus 5.5 · High (stopped)");
+    // A model with no effort setting on a finished step is not a stop.
+    const own = stoppedJob();
+    own.steps = own.steps.map((st) => (st.key === "storyboard" ? { ...st, status: "done" } : st));
+    own.meta.models = [{ step: "storyboard", agentId: "storyboard", model: "opus-5-5", effort: null, effortApplied: false }];
+    expect(runModels(LISTED_INFO, own)).toBe("Write: Opus 5.5");
+  });
+
+  it("Models working on it: never 'no effort setting' for a step that stopped", async () => {
+    await show(<ModelsUsed info={LISTED_INFO} job={stoppedJob()} />);
+    expect(document.querySelector(".st-s-used__model")?.textContent).toBe("Claude Opus 5.5 · High effort");
+    expect(document.querySelector(".st-s-used__note")?.textContent).toBe("This step stopped on this model. This is what it was asked with.");
+    expect(text()).not.toContain("no effort setting");
+  });
+
+  it("the Library's How it was made: '(stopped)', not '(not offered)'", async () => {
+    const job = store.jobs.find((j) => j.contentId === S.failed)!;
+    job.meta.models = [...job.meta.models.filter((m) => m.step !== "preview"), { step: "preview", agentId: "quality_assurance", model: "opus-5-5", effort: "high", effortApplied: false, failed: true }];
+    await show(<LibraryScreen {...page({ name: "library", kind: null, storyId: S.failed })} />);
+    await wait();
+    const row = Array.from(document.querySelectorAll(".st-runs dt")).find((d) => d.textContent === "Ready to watch")!.nextElementSibling!;
+    expect(row.textContent).toBe("Claude Opus 5.5 · High (stopped)");
+    expect(text()).not.toContain("(not offered)");
+  });
+});
 
 describe("Download offers the video's extra copies (§45.34)", () => {
   it("an approved video with a WebM copy offers Download MP4 and Download WebM", async () => {
