@@ -19,6 +19,21 @@
 - **Content Rewards or Whop asks Clip Factory to stop reading its pages**: set `cr_finder_enabled` back to `false` in
   `infra/envs/prod` the same day, in a one-line pull request, and let `deploy.yml` apply it (never a local AWS CLI);
   every finder route then answers 503 and no look starts ([DEPLOYMENT.md](DEPLOYMENT.md#campaign-finder-contracts-41)).
+- **Your bank: a lost device, or a bank link you don't recognise**: sign out globally (above), then on Settings ›
+  Posting › Get paid › Your bank tap "Stop reading Swedbank" on each bank, or "Forget my bank" to remove every
+  payment and link Clip Factory kept. To cut it off at the source too, delete the app on Enable Banking's **API
+  applications** page; the bank's own app or website can also end the link.
+- **Your bank: the bank key may have leaked** (a .pem file left in Downloads, say): stop reading every bank, make a new
+  bank key (`POST /v1/getpaid/bank/key` with `{"again": true}`; it keeps `hashKey`, so stored payments keep their ids),
+  do steps 3 to 5 for a new Enable Banking app,
+  delete the old app on **API applications**, then "Connect your bank" again.
+- **Enable Banking says Clip Factory's use isn't personal use, or sends notice that the app will be deactivated**:
+  first the owner taps "Forget my bank" (or "Stop reading" on each bank) while Your bank is still on, so no daily read
+  touches a link again and Enable Banking closes each session. Then set `bank_reading_enabled` back to `false` in
+  `infra/envs/prod` the same day, in a one-line pull request, and let `deploy.yml` apply it (never a local AWS CLI).
+  Every bank route then answers 503 and every screen says "Clip Factory can't see your bank. Look in your bank's app to
+  see what arrived." again. If the switch has to go off first, a link that is still connected keeps being read once a
+  day until its bank link ends (90 to 180 days) or he ends it in his bank's app or on Enable Banking.
 - **The help assistant says something wrong or unwanted**: set the kill switch (`HELP` / `SWITCH`, `enabled: false`, or
   `model: false` to keep answers from search only) with the command in
   [DEPLOYMENT.md](DEPLOYMENT.md#ask-clip-factory-kill-switch); it takes effect within 60 seconds, no deploy needed.

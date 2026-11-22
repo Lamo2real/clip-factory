@@ -1551,9 +1551,9 @@ only on each place's own pages (AdSense for YouTube, Meta, TikTok, Stripe, Whop)
 | X | Not available from X | Your ticks, plus X's Premium and verified-follower counts | Not available from X |
 | Content Rewards | Content Rewards' own numbers, as on Money | "Whop says", once "Connect Whop" works (ID check, bank), plus your ticks | What Whop sent, once "Connect Whop" works (all your Whop money, Content Rewards too) |
 
-Money that **reached** your bank can only come from your bank. Until you choose how Clip Factory may see it, every
-screen says: "Clip Factory can't see your bank. Look in your bank's app to see what arrived." (The choices are in
-[CONTRACTS.md §40.5](CONTRACTS.md#405-your-bank-waits-for-the-owners-choice); nothing of it is built yet.)
+Money that **reached** your bank can only come from your bank: that is [Your bank](#your-bank), the **Your bank**
+card under the place cards. Until it is set up (and while it is switched off), every screen says: "Clip Factory can't
+see your bank. Look in your bank's app to see what arrived."
 
 Clip Factory shows only money a place reported. It never works money out, guesses it, changes it into another money
 type or lets you type it in. A place that doesn't tell apps says "Not available from TikTok" and where to look,
@@ -2263,8 +2263,8 @@ are written in words because Ask hides every link that has a `?` part.
   Whop's MCP server ([guide](https://docs.whop.com/developer/guides/ai_and_mcp.md),
   [its sign-in metadata](https://mcp.whop.com/.well-known/oauth-authorization-server))
 
-**Your bank** (for the owner's choice in [CONTRACTS.md §40.5](CONTRACTS.md#405-your-bank-waits-for-the-owners-choice);
-nothing of it is built)
+**Your bank: the choice** (the pages the owner chose option A from; what was checked again for the build is under
+[Your bank](#your-bank))
 - Enable Banking: [terms](https://enablebanking.com/terms/) (last updated 9 Jan 2026; the Control Panel's own words
   too), [the EBA register entry](https://euclid.eba.europa.eu/register/pir/view/PSD_AISP/FI_FIN_FSA!29884997),
   [linked accounts](https://enablebanking.com/docs/api/linked-accounts/), its public list of Swedish banks
@@ -2294,6 +2294,156 @@ nothing of it is built)
   [Gmail permissions](https://developers.google.com/workspace/gmail/api/auth/scopes) (for payout emails), and how
   [Swedbank](https://enkelbok.se/hur-du-kan-exportera-banktransaktioner-fran-swedbank/) and
   [Nordea](https://enkelbok.se/importera-banktransaktioner-fran-nordea-i-enkelbok/) export a file (third party)
+
+## Your bank
+
+See how much money from each app really reached your bank. About 25 minutes, once · Free · Steps checked on 22 Nov
+2026, for an owner in Sweden. You chose this way ("A: bank connection") on 22 Nov 2026.
+
+It is the **Your bank** card under the place cards in **Settings › Posting › Get paid**, and its own page
+(`/settings/posting/getpaid/bank`). Clip Factory reads your bank through **Enable Banking**, a company the banks let
+read accounts in the EU. You use BankID on Enable Banking's page and your bank's own page. **Clip Factory never asks
+for, sees or keeps your bank login, your account number or your name.** It only looks at money coming in.
+
+It ships switched off. Until it is on, every screen keeps "Clip Factory can't see your bank. Look in your bank's app
+to see what arrived."
+
+### Is Enable Banking free for me?
+
+Yes. Its restricted mode is free "for the personal use of private individuals", on accounts you link yourself. The
+steps keep its three rules: the Enable Banking account and app are your own (never tap **Share**); you link only your
+own private accounts (**Usage type** **personal**; a business account is left out); and nobody else uses it (never tap
+**Request activation** or **Request unrestriction**: those are for companies and cost money). Its terms also rule out
+"any commercial purpose", and app money read once a day is a grey area. So the first step is optional: a ready email
+that asks Enable Banking. Sending it is your choice. If they say no, Your bank is switched off again, and your bank's
+app still shows what arrived.
+
+### The steps
+
+One numbered card per step, like Get paid's. **Bold** is Enable Banking's own label, word for word. Tapping the green
+answer ("I'm in", "I did this") is how you finish a step, and the next one opens. The one red button is the next
+step's main button, pinned at the bottom right on phones. Enable Banking's sign-in page and the banks' pages may look
+a little different: look for the same words.
+
+#### Optional: Ask Enable Banking first
+"Open email" opens a ready email to Enable Banking (or copy "Their email" and "The email" into your webmail). Send
+it, then tap "I asked". They say yes: do step 1. They say no: don't do the next steps (did them already? tap "Forget
+my bank"). No answer: you can wait, or go on. It never counts in the ring.
+
+#### 1. Make an Enable Banking account
+Tap "Open Enable Banking", type your email and tap the button under it. Open Enable Banking's email and tap its link.
+Come back and tap "I'm in". **Authenticator app**: you can skip it (once it's on, it can never be turned off).
+
+#### 2. Make your bank key
+Tap "Make my bank key". Clip Factory makes a secret key and keeps it locked away. It isn't your bank login. You copy
+its public part in the next step, and that part is safe to share. The step ticks itself.
+
+#### 3. Add Clip Factory on Enable Banking
+Tap "Open your Enable Banking apps" (it opens **API applications**). Under **Add a new application**, tap
+**Production**, pick **Generate outside the browser and import public certificate**, and paste the "Bank key" chip in
+**Public certificate in PEM format**. Tap "I did this". Still on **Sandbox**? Tap **Production**: a Sandbox app
+can't read real banks. Enable Banking says no to the key? Paste the "Other bank key" chip instead.
+
+#### 4. Fill in the app's details
+Paste each Copy chip in its box: **Application name**, **Allowed redirect URLs (one per line)**, **Application
+description**, **Privacy URL of the application** and **Terms URL of the application**. Type your own email in
+**Email for data protection matters**, tap **Register**, then "I did this". The message **New application … has
+been added.** holds your app ID: copy the whole message.
+
+#### 5. Give Clip Factory the app ID
+Paste the message in "App ID" (Clip Factory finds the ID in it) and tap "Save". Clip Factory asks Enable Banking
+whether it knows your app; "Check again" asks again. Your computer saved a .pem file (Enable Banking's default)?
+Better: make a new app (steps 3 and 4). Or add the file under "Have a .pem file instead?", then delete it from
+Downloads and tap "I deleted it".
+
+#### 6. Link your bank accounts
+Tap "Open your Enable Banking apps" and, on your new app, **Activate by linking accounts**. Pick Sweden in
+**Country**, your bank in **ASPSP** and **personal** in **Usage type**, tap **Link** and use BankID. Link every account
+your app money lands in (PayPal too, with **Link accounts**). Then tap "I linked them". Payoneer, business accounts,
+Avanza and Nordnet can't be linked this way.
+
+#### 7. Connect your bank
+Tap "Connect your bank" and pick a bank you linked. Use BankID again: yes, again, because this time it lets Clip
+Factory read it. Then go back to Clip Factory; in another browser the page says "Done! Go back to Clip Factory. You can
+close this tab." Another bank or PayPal: "Connect another bank" (up to 4).
+
+### After setup
+
+- Clip Factory looks at your bank once a day by itself, and when you tap "Check now" on the Your bank page (Money's
+  Check now doesn't read the bank). The first read goes as far back as your bank shows, often 90 days ("Counted from 3
+  Aug 2026, as far back as your bank shows.").
+- When a payment may be from an app, the page asks under **Is this from an app?**: one tap ("Yes, it's YouTube") or
+  two ("No, another app", then the app). You never type an amount. A payer your bank names is learned after one yes;
+  PayPal, Stripe, Payoneer and a name only in the payment's message are asked about every time.
+- Every 90 to 180 days (your bank decides), your bank asks for BankID again. Clip Factory tells you 7 days before: tap
+  "Reconnect Swedbank" and use BankID.
+- "Stop reading Swedbank" stops one bank (8-second Undo); the money it found stays. "Forget my bank" removes every
+  payment and bank link Clip Factory kept.
+
+### Reached your bank
+
+Money your bank booked and Clip Factory matched to an app is **"Reached your bank"**, tagged "Your bank says": per app
+and per money type, plus "In total" per money type. Different money types are never added together or changed, and an
+app with nothing says "No money from TikTok or X reached your bank yet.", never $0. Meta pays Instagram and Facebook in
+one payment, so it can count as "Instagram and Facebook together"; Whop's money is all your Whop money, Content Rewards
+too. Payments waiting for your answer are never counted.
+
+It shows on the Your bank card ("Reached your bank: kr 4 102,10 so far"), on the Your bank page, on each place's Get
+paid page (under **Sent to your bank**, and "Reached your bank on 28 Oct (Your bank says)" under the Google or Whop
+payment it matched) and on Money (**Reached your bank, so far**). It is never added to "Sent to your bank" or the
+30-day total. A payment whose bank text names no app can't be told apart, so that app keeps saying "Nothing from
+Instagram reached your bank yet."
+
+### What Clip Factory keeps
+
+- Only money from apps: the day, the amount and which app.
+- Payments it asks you about stay until you answer, at most 180 days.
+- Never your account number, your name or any other payment.
+- Your bank and PayPal logins stay with them. Clip Factory never sees them.
+- Enable Banking forgets your bank's answer within a minute.
+- Forget my bank removes every payment and bank link Clip Factory kept.
+
+### How many taps
+
+Counted from the Your bank page, as Get paid counts them. Clip Factory's own taps are in brackets.
+
+| What | Taps (Clip Factory's) |
+|---|---|
+| One bank | **64** (18), in one sitting of about 25 minutes; **68** (20) with the optional email |
+| One bank and PayPal | **80** (20); **84** (22) with the email |
+| The .pem way (Enable Banking's default) | about 3 fewer (1 fewer of Clip Factory's) |
+| A question card | 1 ("Yes, it's YouTube") or 2 ("No, another app" and the app) |
+| Reconnect, every 90 to 180 days | 6 (1) |
+| Check now, Stop reading Swedbank | 1 each |
+
+BankID comes twice at setup (steps 6 and 7), because Enable Banking's own link "won't handle authorization on behalf
+of the app".
+
+### Sources (checked on 22 Nov 2026)
+
+What could not be checked before the first real connect is listed under "Not verified live" in
+[CONTRACTS.md §40.5.14](CONTRACTS.md#40514-not-verified-live-each-is-checked-at-his-first-connect-a-failure-becomes-a-plain-sentence-never-a-number).
+
+- Enable Banking: [Terms of Service](https://enablebanking.com/terms/) (last updated 9 Jan 2026: restricted mode, free
+  of charge, "the personal use of private individuals", no commercial purpose, no bots, termination; the page's text
+  comes from the site's own script), the Control Panel's labels ([API applications](https://enablebanking.com/cp/applications),
+  read from its own script) and [its sign-in page](https://enablebanking.com/sign-in/) (its button was not seen),
+  [linked accounts](https://enablebanking.com/docs/api/linked-accounts/) ("individual non-commercial use"; BankID
+  through the API too), [the quick start](https://enablebanking.com/docs/api/quick-start/) (the signed token; the
+  browser's .pem in Downloads, named by the app ID), [the API reference](https://enablebanking.com/docs/api/reference/)
+  and [its API file](https://enablebanking.com/docs/api/reference/enablebanking-api.yaml) (links, sessions, booked
+  transactions, personal and business accounts, the headers a bank needs, the error codes), its public list of
+  Swedish banks (`enablebanking.com/api/aspsps`, country SE, PayPal too, each bank's longest link), [the end-user
+  Privacy Notice](https://tilisy.enablebanking.com/terms) (7 Mar 2025: 60 seconds, 180 days, 30 days, the EEA) and
+  [its EBA register entry](https://euclid.eba.europa.eu/register/pir/view/PSD_AISP/FI_FIN_FSA!29884997)
+- EU rules: [Delegated Regulation (EU) 2018/389](https://eur-lex.europa.eu/eli/reg_del/2018/389/oj) (Article 36(5)(b):
+  at most four reads in 24 hours without you) and [Delegated Regulation (EU) 2022/2360](https://publications.europa.eu/resource/celex/32022R2360)
+  (BankID again after 180 days)
+- Telling payments apart: [Google's test payment](https://support.google.com/adsense/answer/2975858) and
+  [when Google's payments arrive](https://support.google.com/adsense/answer/7164703), [Stripe's name on your bank
+  statement](https://docs.stripe.com/connect/payout-statement-descriptors.md), and Whop's
+  [troubleshoot payouts](https://docs.whop.com/manage-your-business/manage-payouts/troubleshoot-payouts.md) (the payer
+  name "Whop", the trace ID) and [a payout](https://docs.whop.com/api-reference/payouts/payout.md) (`trace_code`)
 
 ## For maintainers: keeping the app and this page in step
 
@@ -2334,6 +2484,17 @@ nothing of it is built)
   [ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner).
   How its two read-only connections are kept: [SECURITY.md](SECURITY.md#get-paid-contracts-40). How the statuses and
   the payout reads run: [ARCHITECTURE.md flow 24](ARCHITECTURE.md#24-get-paid-payout-steps-honest-statuses-and-money-sent-to-the-bank-contracts-40-adr-64).
+- **Your bank** is one more data file, `web/src/getpaid/bank.ts` (`BANK_GUIDE`), and the server's `bank/__init__.py`
+  `STEPS` keeps the same step ids, roles and autos. The contract for its words, steps and sentences is
+  [CONTRACTS.md §40.5](CONTRACTS.md#405-your-bank-what-really-reached-it-read-through-enable-banking-owners-choice-a-2026-11-22).
+  Under `## Your bank` each step title is a `####` heading, word for word and in the app's order (`#### 1. …`, the
+  optional email as `#### Optional: …`). Its "Steps checked on" date is its own (22 Nov 2026), with its sources at the
+  end of that section. **Bold** is Enable Banking's exact label; when it renames one, change `BANK_GUIDE`, `STEPS` and
+  this page together and keep the step id. A new platform word on bank statements (the hint list) is a one-line PR in
+  `bankread/filter.py`, with a golden case. Why it is built this way:
+  [ADR-82](DECISIONS.md#adr-82-your-bank-enable-banking-restricted-mode-read-once-a-day-keep-only-matched-app-money).
+  How the bank key, the links and the least-data rules are kept: [SECURITY.md](SECURITY.md#your-bank-contracts-405).
+  How connecting and reading run: [ARCHITECTURE.md flow 25](ARCHITECTURE.md#25-your-bank-the-connect-flow-through-bank-done-and-the-daily-read-contracts-405-adr-82).
 
 ## Research sources (checked on 16 Nov 2026)
 

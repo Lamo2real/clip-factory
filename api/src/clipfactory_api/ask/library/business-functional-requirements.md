@@ -579,14 +579,41 @@ total of my exact number that I've gotten into my bank account". ([CONTRACTS.md
   Whop"), per place and as one total per money type, with when it should arrive. Different money types are never added
   together, an amount Clip Factory can't read is shown as written and not added, and the other places say "Not
   available" with where to look, never $0. Whop's total covers all his Whop money, and says so.
-- AC6: Money that reached his bank can only come from his bank. Until the owner chooses how Clip Factory may see it
-  (Enable Banking, his bank's file, payout emails, or nothing new), every screen says "Clip Factory can't see your bank.
-  Look in your bank's app to see what arrived."
+- AC6: Money that reached his bank can only come from his bank: that is Your bank (BR-31). Until it is set up, and
+  while it is switched off, every screen says "Clip Factory can't see your bank. Look in your bank's app to see what
+  arrived."
 - AC7: Clip Factory never asks for or stores bank details, card numbers or tax numbers; every payout is set up on the
   place's own pages.
 - AC8: The facts are the places' own, checked on 21 Nov 2026 for Sweden: YouTube pays in kronor to the bank once there
   is kr 700; TikTok's Creator Rewards isn't open in Sweden (Gifts may be); Meta pays from $25 through one payout
   account shared by Instagram and Facebook; X's Original Content Rewards leaves out automated and reuploaded posts, so
   X's page warns that Clip Factory clips probably won't earn there; Content Rewards pays through Whop.
+
+### BR-31 Your bank: the money from each app that really reached your bank
+"after I've connected I want to know exactly how much I earn per platform and that includes content rewards, and then
+I wanna know a total of my exact number that I've gotten into my bank account or accounts, but in total for each of
+those platforms meaning content rewards meaning U2 TikTok, Instagram, Facebook and X, all of them". Offered four bank
+sources (A Enable Banking, B his bank's file, C payout emails, D nothing new), he chose on 22 Nov 2026: "A: bank
+connection". ([CONTRACTS.md §40.5](CONTRACTS.md#405-your-bank-what-really-reached-it-read-through-enable-banking-owners-choice-a-2026-11-22),
+[ADR-82](DECISIONS.md#adr-82-your-bank-enable-banking-restricted-mode-read-once-a-day-keep-only-matched-app-money), the
+steps in [SETUP_POSTING.md](SETUP_POSTING.md#your-bank))
+- AC1: A **Your bank** card under Get paid's place cards opens one page of step cards (an optional email to Enable
+  Banking, then seven numbered steps) that walk him through his own Enable Banking account and app and connect each
+  bank with BankID: about 25 minutes in one sitting, 64 taps (18 of them Clip Factory's). Up to 4 banks, PayPal too.
+- AC2: "Reached your bank", tagged "Your bank says", shows per place (YouTube, TikTok, Instagram, Facebook, "Instagram
+  and Facebook together" for Meta, X, Content Rewards) and per money type, plus a total per money type, on the Your
+  bank card and page, each place's Get paid page and Money. Only money his bank booked and Clip Factory matched to an
+  app counts. Money types are never added together; nothing is converted or estimated; a place with nothing is named
+  ("No money from TikTok or X reached your bank yet."), never $0; it is never added to "Sent to your bank" or the
+  30-day total.
+- AC3: He never types an amount. A payment matches Google's or Whop's own payout record, Whop's trace code or a payer
+  he confirmed; otherwise a card asks "Is this money from YouTube?" and he answers with one or two taps. A tap never
+  changes an amount, and a match can be undone ("Not from YouTube?").
+- AC4: Clip Factory reads his bank once a day and when he taps Check now. A bank link lasts 90 to 180 days, as his
+  bank sets, with a notice 7 days before it ends and one-tap "Reconnect Swedbank". "Stop reading Swedbank" and "Forget
+  my bank" are only his own taps, with an 8-second Undo.
+- AC5: Enable Banking's free terms are kept: his own account and app, only his own personal accounts (business
+  accounts are dropped), only the owner. The optional first step holds a ready email that asks Enable Banking whether
+  his app money counts as personal use; sending it is his choice.
 
 ---

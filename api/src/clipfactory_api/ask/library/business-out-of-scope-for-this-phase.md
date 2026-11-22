@@ -13,8 +13,9 @@
 - Money from TikTok, Instagram and X (their tools tell apps nothing about it); they say "not available" with where to
   look (BR-27). What left Content Rewards for Whop and the bank shows only through Whop's own payouts, once "Connect
   Whop" is on (BR-30 AC5).
-- Reading his bank (what reached it): it waits for the owner's choice of source (BR-30 AC6, I-60). Typing in amounts
-  for places with no API stays refused (I-59).
+- From his bank, everything but booked incoming payments from apps: balances, debits, other payments, business
+  accounts, moving money, and his bank's file (B) or payout emails (C), which stay possible later through the same
+  deposit rows (BR-31, I-60). Typing in amounts for places with no API stays refused (I-59).
 - Turning a normal clip into a campaign clip in place (a copy is made instead, BR-28 AC5), and campaigns that want
   their own picture on top of the video (a hard stop "Pick another campaign").
 - Auto-posting to TikTok (TikTok's rules want the creator's own pick for each post; he posts it himself with **Post

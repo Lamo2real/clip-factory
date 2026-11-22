@@ -113,7 +113,7 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 | AWS Lambda | `cf-prod-stats` | The numbers poller ([flow 13](#13-clip-numbers-the-poller-and-refresh-numbers)): every tick it reads the posts that are due from the sparse `gsi2`, reserves each platform's budget, reads the numbers in batches and writes them to the posts and `STAT#` snapshots. The Refresh button runs the same code at once. After the platform poll, the same tick checks Content Rewards when it is switched on (membership, reviews, views, proof reminders and money, [flow 19](#19-content-rewards-campaigns-contracts-38-adr-62)); `{"action": "contentrewards"}` runs that for one owner. While the campaign finder is on, the same tick starts its look in `cf-prod-campaigns` every 6 hours ([flow 22](#22-campaign-finder-contracts-41-adr-65)). Reads `cf-prod/platforms/*`, writes only a refreshed token (`cf-prod/platforms/*/token-*`). See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
 | AWS Lambda | `cf-prod-learn` | The weekly best ([flow 14](#14-best-of-the-week)): marks the starred clips' vectors `best`, asks Claude Fable 5.1 (with the skills block) for one "Best of week" learning. See [ADR-31](DECISIONS.md#adr-31-the-weekly-best-is-an-explicit-owner-signal). |
 | AWS Lambda | `cf-prod-campaigns` | Content Rewards ([flow 19](#19-content-rewards-campaigns-contracts-38-adr-62), [CONTRACTS.md §38.10](CONTRACTS.md#3810-reading-a-campaign)): reads a campaign's rules from the brand's brief with Claude (one Bedrock Converse call per read, checked field by field in code), fetches the campaign logo from a Google Drive or Dropbox link and copies the brand's picture into the media bucket (`campaigns/*`). For the campaign finder ([flow 22](#22-campaign-finder-contracts-41-adr-65)) it also reads Content Rewards' **public** campaign pages that robots.txt allows (`/robots.txt`, `/sitemap.xml`, `/c/campaigns/{uuid}`), anonymously and politely, into a shared cache, and matches each owner's wants. Started only by `cf-prod-api` and `cf-prod-stats` (async). It reads untrusted brand text and outside pages, so it has **no Secrets Manager access at all** and **never calls Content Rewards' API** (no MCP call and no `/api/…` path); the brief is already on the `CAMPAIGN#` item. See [ADR-62](DECISIONS.md#adr-62-content-rewards-the-official-sign-in-through-the-desktop-apps-loopback-door-sending-from-the-cloud-a-reminder-when-it-cant) and [ADR-65](DECISIONS.md#adr-65-campaign-finder-content-rewards-public-pages-read-politely-joining-stays-the-owners-own-tap). |
-| AWS Lambda | `cf-prod-money` | Real earnings ([CONTRACTS.md §25](CONTRACTS.md#25-real-earnings-paid-programme-progress-and-platform-reported-money-owner-request-2026-11-18)): once a day reads each connected platform's account numbers and the money the platform itself reports (YouTube Analytics `estimatedRevenue` with the monetary scope; Facebook only after its live check), through the shared token manager and rate budgets, and writes `ACCTSTAT#`, `REVENUE#` and `MONEYSTATE#` items. After the platforms it reads the optional payout connections of Get paid (AdSense `payments`, Whop `payouts`) into `PAYSTATE#` and `PAYOUT#` items ([flow 24](#24-get-paid-payout-steps-honest-statuses-and-money-sent-to-the-bank-contracts-40-adr-64)). No DeleteItem. See [ADR-47](DECISIONS.md#adr-47-only-platform-reported-money-the-estimates-are-removed) and [ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner). |
+| AWS Lambda | `cf-prod-money` | Real earnings ([CONTRACTS.md §25](CONTRACTS.md#25-real-earnings-paid-programme-progress-and-platform-reported-money-owner-request-2026-11-18)): once a day reads each connected platform's account numbers and the money the platform itself reports (YouTube Analytics `estimatedRevenue` with the monetary scope; Facebook only after its live check), through the shared token manager and rate budgets, and writes `ACCTSTAT#`, `REVENUE#` and `MONEYSTATE#` items. After the platforms it reads the optional payout connections of Get paid (AdSense `payments`, Whop `payouts`) into `PAYSTATE#` and `PAYOUT#` items ([flow 24](#24-get-paid-payout-steps-honest-statuses-and-money-sent-to-the-bank-contracts-40-adr-64)), and, only in the daily run and only while `BANK_READING` is on, the owner's bank through Enable Banking, keeping only payments matched to an app (`DEPOSIT#`, [flow 25](#25-your-bank-the-connect-flow-through-bank-done-and-the-daily-read-contracts-405-adr-82)); his bank Check now invokes it with `{"action": "bank"}`. No DeleteItem. See [ADR-47](DECISIONS.md#adr-47-only-platform-reported-money-the-estimates-are-removed) and [ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner). |
 | Amazon EventBridge | rule `cf-prod-stats`, `rate(15 minutes)` | The stats poller's schedule: one tick for the stats poller, its rate taken from the smallest interval in `config/platforms.json`. A few thousand invocations a month. See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
 | Amazon EventBridge | rule `cf-prod-autopost-hourly`, `cron(0 * * * ? *)` | Auto-posting ([flow 23](#23-auto-posting-the-hourly-tick-the-due-check-and-uploads-code-contracts-46-adr-81)): fires every hour on the hour (UTC) at the unqualified `cf-prod-autopost`, with 2 retries and an event age of 55 minutes (3,300 s, before the next tick). A run happens only when the owner's X hours are up, so the rule never changes when he saves. 24 short invocations a day. See [ADR-81](DECISIONS.md#adr-81-auto-posting-an-hourly-eventbridge-rule-a-due-check-and-uploads-own-code). |
 | AWS Lambda | `cf-prod-autopost` | Auto-posting ([flow 23](#23-auto-posting-the-hourly-tick-the-due-check-and-uploads-code-contracts-46-adr-81)): on each tick, one Query of the owner registry `AUTOPOSTOWNERS`, then per owner the due check, the pick (the oldest clips in Review), the claim (one transaction) and, for each clip, **Upload's own code** (`uploads.upload_review_clip`: the clip's conditional confirm transaction and the clip flow's idempotent start). It never calls a platform itself: the clip flow posts. No S3, no Bedrock and no Secrets Manager: the campaign fit check reads only the table. |
@@ -1700,8 +1700,9 @@ state)` builds each place's line; `sent_totals(lines)` sums per currency on the 
 across currencies and never converted. Whop's amount is its own `destination_amount` in `destination_currency` (else
 `net_amount` in `currency`), turned into micros on write (a unit change); `requested`, `in_review` and `processing`
 are "on its way", `failed`, `canceled` and `denied` "didn't go through", `reversed` "came back". These are "Sent to
-your bank by Google/Whop", never "Reached your bank", which is kept for bank-booked credits (§40.5, not built). The
-web only formats.
+your bank by Google/Whop", never "Reached your bank", which is kept for bank-booked credits
+([flow 25](#25-your-bank-the-connect-flow-through-bank-done-and-the-daily-read-contracts-405-adr-82)). The web only
+formats.
 
 **The reads** (`payouts/collect.py`, in `cf-prod-money`; no new schedule). After the five platforms, the daily run
 and Check now call `payouts.collect.run(deps, user_id, now)` inside its own try, so it can never stop the money run,
@@ -1742,8 +1743,163 @@ see why." and "Money sent to your bank: …" once each, only after the first rea
 
 Nothing deletes a `PAYOUT#` or `PAYSTATE#` item (the money role has no DeleteItem); a stopped connection keeps them.
 The prod plan stays 0 to destroy and 0 to replace; nothing that holds the owner's data or connections changes. The
-bank part ([§40.5](CONTRACTS.md#405-your-bank-waits-for-the-owners-choice)) has a defined shape but no code until the
-owner chooses a source.
+bank part, what really reached his bank, is [flow 25](#25-your-bank-the-connect-flow-through-bank-done-and-the-daily-read-contracts-405-adr-82).
+
+### 25. Your bank: the connect flow through /bank-done and the daily read (CONTRACTS §40.5, ADR-82)
+
+The last part of the owner's Get paid ask, "a total of my exact number that I've gotten into my bank account or
+accounts, but in total for each of those platforms", can only come from his bank. He chose option A on 22 Nov 2026:
+Enable Banking's free restricted mode, on his own Control Panel app and his own personal accounts, with BankID
+([CONTRACTS.md §40.5](CONTRACTS.md#405-your-bank-what-really-reached-it-read-through-enable-banking-owners-choice-a-2026-11-22),
+[ADR-82](DECISIONS.md#adr-82-your-bank-enable-banking-restricted-mode-read-once-a-day-keep-only-matched-app-money),
+the owner's steps in [SETUP_POSTING.md](SETUP_POSTING.md#your-bank), the protections in
+[SECURITY.md](SECURITY.md#your-bank-contracts-405)). No new Lambda, table, index, bucket, role, route on the public API
+or Terraform-made secret: eleven routes under `/v1/getpaid/bank` in `cf-prod-api`, `bank` on the existing callback in
+`cf-prod-hooks`, the read inside `cf-prod-money`, new sort keys, two runtime secrets, two Deny statements, two stream
+filters changed in place and one api setting, `BANK_READING` (Terraform `bank_reading_enabled`, default `false`).
+While it is off, `GET /v1/getpaid/bank` answers `{"on": false}`, the other routes 503, and every screen keeps "Clip
+Factory can't see your bank. Look in your bank's app to see what arrived."
+
+The code is split by side, so the api and the reader meet only through items, secrets and golden files: `bank/`
+(`keys.py`, `eb.py`, `grants.py`, `view.py`, `answers.py`) and `routes/bank.py` for setup, connect, the view and his
+answers; `bankread/` (`client.py`, `filter.py`, `match.py`, `collect.py`) for reading. Both sign the same JWT (RS256,
+`kid` = his app ID, one hour) with the private key in `cf-prod/platforms/bank/app`, read fresh each time, and call only
+`https://api.enablebanking.com`.
+
+**Setup.** "Make my bank key" (`POST /v1/getpaid/bank/key`) claims `BANKOWNER` (the first owner only; anyone else
+gets 403) and makes an RSA-4096 key pair, a 10-year self-signed certificate and, once, a 32-byte `hashKey`, straight
+into the secret; `BANKCONN.app` gets `status "key_made"`. He pastes the public part into a new Production app on
+Enable Banking, then the app ID into Clip Factory (`PUT /v1/getpaid/bank/app`; the .pem upload is the one exception,
+[SECURITY.md](SECURITY.md#your-bank-contracts-405)). The check (`POST /v1/getpaid/bank/app/check`, also run by Save and
+"I linked them") calls `GET /application` and stores `BANKCONN.app.check` (`ok`, `not_active`, `redirect_missing`,
+`sandbox`, `key_wrong`, `not_found`); a `down` answer sets only `app.downAt`, so an outage never un-ticks a step. The
+steps tick from stored items only (`BANKCONN.stepsDone` for his green answers, the check, any `BANKLINK#`), and
+`bank/view.py` picks `next`, the page's one vermilion.
+
+**Connect** (once per bank, up to 4, and again every 90 to 180 days):
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant O as Owner (web app)
+  participant A as cf-prod-api
+  participant SM as Secrets Manager
+  participant D as DynamoDB
+  participant EB as Enable Banking (api.enablebanking.com and its pages)
+  participant B as His bank (BankID)
+  participant H as cf-prod-hooks (REST GET /oauth/bank/callback)
+  O->>A: GET /v1/getpaid/bank/banks
+  A->>EB: GET /aspsps?country=SE&psu_type=personal&service=AIS (cached 1 h)
+  O->>A: POST /v1/getpaid/bank/connect {bank} (or {linkId} to reconnect)
+  A->>SM: read cf-prod/platforms/bank/app (fresh), sign the JWT
+  A->>D: OAUTH#{nonce} (platform bank, linkId, reconnect, bank, maxDays, psuHeaders, history)
+  A->>EB: POST /auth {access: valid_until ≤ 180 days, balances false}, psu_type personal, state, redirect_url
+  A-->>O: authorizeUrl (https only)
+  O->>EB: same tab (the Mac app: the system browser)
+  EB->>B: his bank's page, BankID
+  B->>EB: allowed
+  EB->>H: 302 ?code&state (or ?error)
+  H->>D: verify and consume OAUTH#{nonce} once
+  H->>SM: read cf-prod/platforms/bank/app (fresh), sign
+  H->>EB: POST /sessions {code}
+  H->>H: keep uid and identification_hash of each non-ORGA account, drop the rest in memory
+  H->>SM: create or put cf-prod/platforms/bank/token_{linkId}
+  H->>D: BANKLINK#{linkId} connected (one at for connectedAt), BANKCONN.lastConnect
+  H-->>O: 302 {APP_URL}/bank-done?result=bank_connected (no-store, no-referrer)
+  O->>O: /bank-done is public and makes no API call, signed in it forwards to /settings/posting/getpaid/bank?result=…
+  O->>A: POST /v1/getpaid/bank/check {first: true} (once per link)
+```
+
+* **The way back.** BankID can bring him back in another browser, or in the Mac app's system browser, so the callback
+  never depends on a cookie and always lands on the public page `/bank-done?result={code}` (`BankDone.tsx`, shown by
+  `App.tsx` before the sign-in gate). Signed in, it forwards to the bank page with `?result`, which the page removes
+  at once; not signed in, it says "Done! Go back to Clip Factory. You can close this tab." (or that the bank didn't
+  connect), with no button, link or data. Every result once the state was read also lands on
+  `BANKCONN.lastConnect {result, linkId, bank, reconnect, at}`, so a waiting bank page reads the view again on focus or
+  on the live `bank` event and shows what happened.
+* **Results.** `bank_connected`, `bank_denied`, `bank_no_accounts`, `bank_business_only` (only `ORGA` accounts:
+  the session is closed and nothing is written), `bank_expired` (a bad, old or reused state writes nothing),
+  `bank_key_wrong`, `bank_error`. The callback has a 25 s deadline (`POST /sessions` gets `min(15 s, remaining − 3
+  s)`) and always answers the 302, `bank_error` when time ran out.
+* **A reconnect** keeps the link's id: the new session's secret carries the old session id in `closeLater`, and the
+  next `GET /v1/getpaid/bank` closes it at Enable Banking (at most 5 s) before answering, so a slow close can never
+  push the callback past its deadline.
+
+**The read** (`bankread.collect.run`, in `cf-prod-money`):
+
+```mermaid
+flowchart LR
+  daily["cf-prod-money 06:00 UTC<br/>run_user(…, bank=True), after the payout reads"] --> lease
+  now["POST /v1/getpaid/bank/check (his Check now:<br/>15 min, 12 a day) → AsyncInvoker.bank_check<br/>{action: bank, psu: ip, ua, lang, at}"] --> drop{"event older<br/>than 120 s?"}
+  drop -- "yes: unattended, psu dropped" --> lease
+  drop -- "no: attended" --> lease
+  lease["claim BANKCONN.readLease (300 s)"] --> link["each BANKLINK# connected, no limitUntil<br/>secrets fresh, connectedAt must match"]
+  link --> eb["GET /sessions/{id}<br/>GET /accounts/{uid}/transactions?transaction_status=BOOK<br/>(PSU headers all or none; ≤ 3 unattended in 24 h)"]
+  eb --> filter["filter.py (memory): CRDT + BOOK, amount in minor units,<br/>hint, hintFrom, payerKey and depositId (HMAC with hashKey)"]
+  filter --> match["match.py: payout record › Whop trace code › Google test (drop)<br/>› not app money (drop) › learned payer › own PayPal move › ask › drop"]
+  payouts[("PAYOUT#youtube#…, PAYOUT#contentrewards#…<br/>BANKPAYERS")] --> match
+  match --> dep[("DEPOSIT#{date}#{depositId}<br/>matched / needs_you (ttl 180 d)")]
+  match --> state[("BANKLINK#: readThrough, reads, lastError,<br/>failingSince, ends; BANKCONN.lastNotice")]
+  dep -- "stream: BANKCONN, BANKLINK#, DEPOSIT#, BANKPAYERS" --> live["cf-prod-broadcast → one bank event per owner<br/>cf-prod-notify → reached / ask / expiring / ended"]
+  dep --> view["bank/view.py → GET /v1/getpaid/bank<br/>Reached your bank per place and per currency"]
+```
+
+* **When.** Only the daily run (`bank=True`, in its own try, skipped with less than 20 s left) and his bank Check now
+  (`{"action": "bank"}`, 240 s) read the bank. Money's own Check now (`{"action": "refresh"}`) never does, because
+  each tap there would spend one of the bank's unattended reads. A link's first read is `strategy=longest` from today
+  − 400 days only when it is his own (the bank page sends it right after BankID, while banks still give full history);
+  a first read without him uses `default` from today − 89 days. Later reads
+  use `default` from `readThrough` − 10 days; the overlap gives the same `depositId`s, so nothing counts twice. Short
+  on time, a read stops after a whole page and keeps `resume` for the next run.
+* **Least data.** Only seven fields of each transaction are looked at, in memory, and the rest of the page is gone
+  when it is done. Only `matched` rows and the rows waiting for his tap are written; "not app money" keeps only its id
+  and day. No name, account number, IBAN, balance, debit or bank text is stored ([SECURITY.md](SECURITY.md#your-bank-contracts-405)).
+* **Matching** is pure and ordered: a Google or Whop payout with the same currency and exact amount within 10
+  workdays (a candidate whose hint fits wins a tie; one payout pairs with one deposit), Whop's trace code (10 or more
+  characters, as whole words, 15 workdays, any amount), Google's tiny test payment dropped by per-currency ceilings,
+  his "not app money" payers, a payer he confirmed, money moved from his own linked PayPal, then a question card for
+  any other hint. Stored `needs_you` rows are matched again each run, on the condition that he hasn't answered
+  meanwhile. Only a platform word in the bank's payer name is ever learned.
+* **Ends and errors** come from Enable Banking's `error` code: an expired session ends the link (`consent_over` or
+  `ended_early`), a revoked one is `stopped_at_bank`, a bank's "too many" pauses it 6 hours, and every unknown answer
+  sets `lastError` and `failingSince` (shown as "Can't read Swedbank" after 26 hours). Every write to a `BANKLINK#` is
+  conditional on `status "connected"` and the `connectedAt` the read started with, so a Stop or a reconnect during a
+  read wins; Forget re-checks `BANKCONN.forgottenAt` before each batch of writes. The reader deletes nothing.
+* **The numbers.** `bank/view.py` (pure, golden cases) sums `matched` rows per place and per currency, plus "In total"
+  per currency; nothing is added across currencies or converted, a place with nothing is named in `notYet`, and
+  `meta` ("Instagram and Facebook together") is its own place, also shown in Instagram's and Facebook's lines. It is
+  never added to "Sent to your bank" (flow 24) or the 30-day total.
+
+**Stop and Forget.** "Stop reading Swedbank" (`DELETE /v1/getpaid/bank/links/{linkId}`) closes the session at Enable
+Banking and deletes `token_{linkId}`, or keeps it with `closePending` when the close failed; the link becomes `stopped`
+and its deposits stay. "Forget my bank" (`DELETE /v1/getpaid/bank`) claims the read lease, stops every link, deletes
+every `DEPOSIT#`, `BANKPAYERS` and every `BANKLINK#` whose session is closed, and keeps the bank key, the app ID and `BANKCONN.app`, so
+Connect works again without the Enable Banking steps.
+
+**Live and notifications.** `cf-prod-broadcast`'s `TYPES` gain `BANKCONN`, `BANKLINK#`, `DEPOSIT#` and `BANKPAYERS`,
+each sent as `{type: "bank", op: "upsert", id: "bank", partial: true}`, folded to one message per owner and kind, so a
+run's many deposits send one event; the web's `lib/bank.ts` reads the view again (debounced 1 s). At the end of a run
+with news the reader writes `BANKCONN.lastNotice`, and `cf-prod-notify` (stream filter + `BANKCONN`, MODIFY only)
+sends each message once under `notify.getPaid`: money reached your bank, a payment may be from an app, a link ends in 7
+days, a link ended. None for a link's first read (`quiet`).
+
+**Data** (additive only, [CONTRACTS.md §40.5.11](CONTRACTS.md#40511-data-secrets-live-notifications-infra-the-switch-and-mock-mode)):
+
+| Item | Written by |
+|---|---|
+| `BANKOWNER` (its own partition, conditional put) | api (the first key) |
+| `BANKCONN` (`stepsDone`, `app`, `manual`, `lastConnect`, `readLease`, `lastNotice`, …) | api; hooks (`lastConnect` only); money (`readLease`, `lastNotice`, `lastRunAt` only) |
+| `BANKLINK#{linkId}` | hooks (connect), api (stop, forget, closing, the first-read claim), money (read state, ends) |
+| `DEPOSIT#{yyyy-mm-dd}#{depositId}` | money (new rows, matches again), api (his answers, forget) |
+| `BANKPAYERS` (`rules`, `notIncome`: keyed hashes to places) | api (his answers only) |
+| Secrets `cf-prod/platforms/bank/app`, `cf-prod/platforms/bank/token_{linkId}` (runtime, never Terraform) | api; hooks (the callback) |
+| `NoBankSecrets` Deny on `cf-prod-clip-flow` and `cf-prod-stats`; the realtime and notify stream filters | Terraform, in place |
+| api env `BANK_READING` from `bank_reading_enabled` (default `false`) | Terraform, in place |
+
+The prod plan stays 0 to destroy and 0 to replace: role policies, two stream filters and one environment variable
+change in place, and nothing that holds the owner's data or connections is touched. The switch is an api setting
+only: the daily read in `cf-prod-money` reads whatever `BANKLINK#` is still `connected`, so links are stopped (or
+forgotten) before it goes off.
 
 ## Failure handling
 
@@ -1839,6 +1995,19 @@ owner chooses a source.
 | One owner's run fails inside a tick | Logged and skipped; the other owners in `AUTOPOSTOWNERS` still run. Lambda errors raise the new auto-posting alarms. |
 | The owner turns auto-posting off while a run is sending | Clips already handed to the clip flow keep posting, as after Upload; no new run starts. |
 | A test run is tapped again within a minute | 409 "A test run just started. Wait a minute." (`AUTOPOST.lastNowAt`); the first one shows in Recent. |
+| Your bank is switched off (`BANK_READING` off), or the api is older than §40.5 | `GET /v1/getpaid/bank` answers `{"on": false}` (or 404) and every screen keeps "Clip Factory can't see your bank. Look in your bank's app to see what arrived."; the other bank routes answer 503 "Coming soon.". |
+| Enable Banking doesn't answer the app check | `down`: "Enable Banking didn't answer. Try again in a few minutes."; the stored check is kept (only `app.downAt` is set), so no step un-ticks. |
+| BankID brings him back in another browser, or in the Mac app's system browser | The callback needs no cookie and lands on the public `/bank-done`: "Done! Go back to Clip Factory. You can close this tab."; the waiting bank page reads `BANKCONN.lastConnect` on focus or on the live `bank` event. |
+| The callback's state is bad, old or reused, or Enable Banking is slow | `bank_expired` writes nothing; any other failure is `bank_error`; the 302 to `/bank-done` always comes inside the 25 s deadline. |
+| His bank shares only a business account | The callback closes the session (best effort) and writes nothing: `bank_business_only`, "That bank only shared a business account. …". |
+| A bank says it was read too often (`ASPSP_RATE_LIMIT_EXCEEDED`) | No read of that link for 6 hours (`limitUntil`); "Swedbank asked Clip Factory to wait. It looks again later.". |
+| A bank or Enable Banking fails a read (5xx, a timeout, an unknown code) | `lastError` "Swedbank didn't answer. Clip Factory tries again tomorrow." and `failingSince`; after 26 hours "Can't read Swedbank", after 3 days a Reconnect. Stored deposits stay. |
+| The bank link ends (180 days, or early), or is revoked at the bank | The link becomes `ended` or `stopped_at_bank` with the one vermilion "Reconnect Swedbank"; a notice 7 days before the end, and one when it ends. Its deposits stay. |
+| The daily run and a Check now meet, or Forget comes during a read | `BANKCONN.readLease` lets one read through (the other is skipped, `bank.read_busy`); Forget is refused while a read holds it, and a read stops writing once `forgottenAt` is later than its start. |
+| A reconnect while a warm container still has the old session | Bank secrets are always read fresh, and a read acts only when the secret's `connectedAt` equals the link's, so the old session never ends the new link (`bank.stale_secret`). |
+| Closing a session at Enable Banking fails (Stop, Forget, a reconnect) | The secret stays with `closePending`, and the next `GET /v1/getpaid/bank`, Stop or Forget tries again (at most 5 s); nothing else waits for it. |
+| A payout's bank text names no app | It can't be told from his other money, so it is dropped in memory and never counted; the place keeps "Nothing from Instagram reached your bank yet.", and a new hint word is a one-line PR. |
+| `bankread.collect.run` raises | It runs in its own try at the end of `run_user`, so the money and payout reads of that run are already written. |
 
 ## Cost notes
 
@@ -1859,7 +2028,7 @@ Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything
 | EventBridge rule + `cf-prod-autopost` | 24 short invocations a day (about 730 a month), almost all "not due"; a few writes per run (`AUTORUN#` items expire after 180 days). The posts themselves cost what Upload's cost | cents |
 | YouTube, TikTok, Instagram, Facebook APIs | Free within their quotas; the budgets stay well under them | $0 |
 | X API | Pay per use: $0.015 per post; about $0.005 per post read, a post read again on the same UTC day free, so about $0.15 per post over its 30 days | posts and reads together capped at $10 by the app ([DEPLOYMENT.md](DEPLOYMENT.md#x-api-credits-for-clip-numbers)) |
-| AWS Secrets Manager | At most about 25 secrets ([ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager): the state key, the push key, an app and a token secret per platform, Instagram's and Facebook's short-lived pending choice, Content Rewards' app and token, Get paid's AdSense token and Whop app and token, the four badge keys, Ask's search key and the optional YouTube proxy) at $0.40 each, plus API calls (cached 5 minutes) | about $10 at most |
+| AWS Secrets Manager | At most about 30 secrets ([ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager): the state key, the push key, an app and a token secret per platform, Instagram's and Facebook's short-lived pending choice, Content Rewards' app and token, Get paid's AdSense token and Whop app and token, Your bank's key and one session per bank link (at most 4), the four badge keys, Ask's search key and the optional YouTube proxy) at $0.40 each, plus API calls (cached 5 minutes) | about $12 at most |
 | `cf-prod-learn` | One small Fable 5.1 call per changed set of weekly picks | cents |
 | Bedrock, Claude Haiku 5.5 (help) | Only questions that found a match: about 1 to 2.5k input and 150 to 400 output tokens each; capped at 2,000 answers per 30 days | cents at normal use; a few dollars at the cap |
 | S3 | Clips kept; sources expire after 14 days | under $1 |
@@ -1867,6 +2036,7 @@ Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything
 | OpenSearch Serverless | not deployed (would have a standing minimum of OCUs) | $0 |
 | GitHub Actions | macOS and Windows runners for the desktop app | free (public repository) |
 | Content Rewards | `cf-prod-campaigns` (one small Lambda), one Bedrock call per campaign rules read (about $0.02), a few CR calls a tick (free), two more secrets | about $1 a month plus $0.02 a campaign read |
+| Your bank | Enable Banking's restricted mode is free; one read a day per bank plus his Check nows (a few small calls each, inside `cf-prod-money`'s daily run), and a few deposit writes; its up to 5 secrets are in the Secrets Manager line | cents |
 | Campaign finder | at most 6 looks a day of `cf-prod-campaigns` (512 MB, at most about 100 s each, about 9,000 GB-seconds a month), about 155 public pages a day (about 40 MB in, free), a few hundred small DynamoDB writes a day, no model call | cents a month |
 
 `maxSourceHours` (default 6) is the main cost lever: it limits how much audio is transcribed and read by Claude, and

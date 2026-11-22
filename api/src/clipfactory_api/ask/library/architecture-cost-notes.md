@@ -17,7 +17,7 @@ Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything
 | EventBridge rule + `cf-prod-autopost` | 24 short invocations a day (about 730 a month), almost all "not due"; a few writes per run (`AUTORUN#` items expire after 180 days). The posts themselves cost what Upload's cost | cents |
 | YouTube, TikTok, Instagram, Facebook APIs | Free within their quotas; the budgets stay well under them | $0 |
 | X API | Pay per use: $0.015 per post; about $0.005 per post read, a post read again on the same UTC day free, so about $0.15 per post over its 30 days | posts and reads together capped at $10 by the app ([DEPLOYMENT.md](DEPLOYMENT.md#x-api-credits-for-clip-numbers)) |
-| AWS Secrets Manager | At most about 25 secrets ([ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager): the state key, the push key, an app and a token secret per platform, Instagram's and Facebook's short-lived pending choice, Content Rewards' app and token, Get paid's AdSense token and Whop app and token, the four badge keys, Ask's search key and the optional YouTube proxy) at $0.40 each, plus API calls (cached 5 minutes) | about $10 at most |
+| AWS Secrets Manager | At most about 30 secrets ([ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager): the state key, the push key, an app and a token secret per platform, Instagram's and Facebook's short-lived pending choice, Content Rewards' app and token, Get paid's AdSense token and Whop app and token, Your bank's key and one session per bank link (at most 4), the four badge keys, Ask's search key and the optional YouTube proxy) at $0.40 each, plus API calls (cached 5 minutes) | about $12 at most |
 | `cf-prod-learn` | One small Fable 5.1 call per changed set of weekly picks | cents |
 | Bedrock, Claude Haiku 5.5 (help) | Only questions that found a match: about 1 to 2.5k input and 150 to 400 output tokens each; capped at 2,000 answers per 30 days | cents at normal use; a few dollars at the cap |
 | S3 | Clips kept; sources expire after 14 days | under $1 |
@@ -25,6 +25,7 @@ Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything
 | OpenSearch Serverless | not deployed (would have a standing minimum of OCUs) | $0 |
 | GitHub Actions | macOS and Windows runners for the desktop app | free (public repository) |
 | Content Rewards | `cf-prod-campaigns` (one small Lambda), one Bedrock call per campaign rules read (about $0.02), a few CR calls a tick (free), two more secrets | about $1 a month plus $0.02 a campaign read |
+| Your bank | Enable Banking's restricted mode is free; one read a day per bank plus his Check nows (a few small calls each, inside `cf-prod-money`'s daily run), and a few deposit writes; its up to 5 secrets are in the Secrets Manager line | cents |
 | Campaign finder | at most 6 looks a day of `cf-prod-campaigns` (512 MB, at most about 100 s each, about 9,000 GB-seconds a month), about 155 public pages a day (about 40 MB in, free), a few hundred small DynamoDB writes a day, no model call | cents a month |
 
 `maxSourceHours` (default 6) is the main cost lever: it limits how much audio is transcribed and read by Claude, and
