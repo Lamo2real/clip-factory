@@ -200,6 +200,7 @@ def create_for_clip(
     campaign_id: str | None = None,
     campaign_options: Mapping[str, Any] | None = None,
     post_fields: Mapping[str, Any] | None = None,
+    clip_condition: db.Condition | None = None,
 ) -> list[Item]:
     """Creates the clip's Posts, one per chosen platform (the clip's ``uploadTo``, §33) or, when the clip has none,
     one per platform enabled in settings, and returns all its posts (public shape).
@@ -211,7 +212,8 @@ def create_for_clip(
     ``post_options`` (per platform) are stored on that platform's post as the internal ``postOptions`` (§17.8).
     A campaign clip's posts (§38.14) get the public ``campaignId`` and, in every post's ``postOptions``, the internal
     ``campaign`` (``campaign_options``: paid partnership, disclosure, required items). ``post_fields`` are internal
-    fields every new post gets (the auto-posting run that made it, ``autoRun``, §46.10).
+    fields every new post gets (the auto-posting run that made it, ``autoRun``, §46.10). ``clip_condition`` is one more
+    condition on the clip's write (an auto-posting run's: the clip is not held by a Throw away, §46.7).
     """
     clip_id = str(clip["clipId"])
     if clip.get("postsCreated"):
@@ -264,6 +266,7 @@ def create_for_clip(
         {"postsCreated": True, "postIds": [p["postId"] for p in existing + created], **(clip_fields or {})},
         expect_in={"status": list(expect_status)} if expect_status is not None else None,
         expect_absent=["postsCreated"],
+        also=clip_condition,
     )
     store.transact(puts=items, updates=[update])
     return existing + created

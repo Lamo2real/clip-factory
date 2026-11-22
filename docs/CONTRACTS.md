@@ -13363,8 +13363,15 @@ toast "Saved.":
    set up yet." (with "Set up X" → `/settings/posting/setup/x`). With nothing set up: "Nothing is set up to post to.
    Set up a place first." and runs post nothing.
 4. **Next up** (`autopost.nextUp`, at most 10): cover, hook, and its time ("Sun 15:00"; with it off, no times and the
-   title "Would go first"), each with **Throw away** (the Review card's own decline with its Undo, §20.7, accessible
-   name "Throw away, {hook}"). Empty: "Nothing in Review. New clips join the line when they are made."
+   title "Would go first"; a clip with no `runAt` shows no time), each with **Throw away** (the Review card's own
+   decline with its Undo, §20.7, accessible name "Throw away, {hook}"). Empty: "Nothing in Review. New clips join the
+   line when they are made."
+   **Throw away holds the clip on the server at once** (here and on the Review card): the tap sends
+   `POST /v1/clips/{clipId}/hold` (§46.9), so no run sends the clip while the 8 s Undo toast is up, nor before a
+   decline that comes late (a phone locked during the toast stops its timer; the hold lasts a day); **Undo** lifts the
+   hold (`DELETE /v1/clips/{clipId}/hold`); the decline itself (`POST …/decline`) still goes when the toast ends. A
+   hold answered 409 "Auto-posting already sent this clip." means a run sent it first: the app says that sentence and
+   does not throw it away (§46.13).
 5. **Waits for you** (`autopost.waiting`): clips in Review that runs skip, each with its reason (§46.5) and **Open in
    Review**.
 6. **Didn't work** (`autopost.failed`): one row per failed auto-posted post: place mark and name, hook, the saved
@@ -13387,7 +13394,8 @@ Review and Library live as today (the clip item's stream news, §14.2).
 
 **Review card** (§36), only while `autoPost.on`: one quiet line above the actions. A clip in Next up: "Goes up by
 itself {Sun 15:00}. Throw it away to stop it." (practice: "Practice picks it {Sun 15:00}. Nothing gets sent."); a
-waiting clip: "Auto-posting skips this one: {reason} Upload it yourself." Upload and Throw away work as before.
+waiting clip: "Auto-posting skips this one: {reason} Upload it yourself." Upload works as before; Throw away works as
+before and also holds the clip at the tap (item 4).
 
 **Home** (`NewJobForm.tsx`): the hint "Nothing gets posted until you tap Upload." becomes, while on, "Auto-posting is
 on: your clips go up by themselves every {h} hour(s), oldest first." (practice: unchanged hint).
@@ -13420,7 +13428,16 @@ practice: boolean /* false */, onAt?: string /* read-only: when it was last swit
   term alone. `nextFullHour(t)` is the first whole hour strictly after `t`. A slot runs when `slot ≥ nextRunAt`. So
   runs fall exactly `everyHours` apart (5 h: 00, 05, 10, 15, 20, 01, 06 …); a changed `everyHours` counts from the last
   run (if that time has passed, the next full hour runs); switching on runs at the next full hour, never sooner than
-  `everyHours` after the last run. Shown as `nextRunAt`, or the next full hour when that is already past.
+  `everyHours` after the last run.
+* **Shown** (`autopost.nextRunAt`, `schedule.next_run_at`): let `cur = floorHour(now)` and `evaluated =
+  max(lastRunAt, lastTickAt)` (either may be absent; `lastTickAt` is the last slot a tick found not due, §46.7 step 1).
+  When `nextRunAt ≤ cur`, `evaluated` is absent or `< cur`, and `now < cur + 3300 s` (`TICK_EVENT_AGE`, the
+  Terraform `maximum_event_age_in_seconds`, §46.11: until then this hour's tick, or its retry, can still arrive), the
+  shown run is `cur` (between :00 and the tick's claim it still says this hour). Otherwise `nextRunAt` when it is after
+  `now`, else the next full hour (a lost tick, or one that already found the slot not due before a change made it
+  due, is caught up by the next one). Examples (every 5 h, last run 08:00): 13:00:20 before the claim → 13:00; after
+  the claim → 18:00; past 13:55 with no claim → 14:00. Last run 10:00, the 13:00 tick not due, `everyHours` lowered
+  to 2 at 13:20 → 14:00.
 * A run that finds nothing still counts (`lastRunAt` moves), so the gaps stay even.
 * Practice runs (`practice: true`) keep the same times. Run-now actions (§46.8) never move the schedule.
 * Why not a schedule the app changes (ADR-81): EventBridge Scheduler needs `iam:PassRole`, which the cf-prod-* role
@@ -13442,11 +13459,20 @@ Candidates: the owner's clips with `status: "review"` (one `query_all` of `CLIP#
    with those places) passes. Reasons: "It's for a campaign, and Content Rewards can't take clips from Clip Factory by
    itself yet." (not connected or read only), "It's for a campaign you send by hand." (`manual`), else the refusal's
    own sentence.
-5. A clip planned by another run that is still going (an `AUTORUN#` item with `state: "planned"` from the last 15
-   minutes lists it) is skipped silently (not waiting).
+5. A clip planned by another run that is still going (an `AUTORUN#` item with `state: "planned"` lists it, within
+   15 minutes of its `plannedAt`, or of its `at` on runs stored before `plannedAt` existed) is skipped silently (not
+   waiting). Counting from `plannedAt` keeps a tick that arrived late in its hour protecting its clips.
+
+Before rules 1 to 5: a clip the owner is throwing away (its hold, `holdUntil`, is still in the future, §46.2) is
+left out silently: not a candidate (a run whose only clips are held says "Nothing in Review, so nothing posted."),
+neither taken nor waiting, so the next clip takes its turn. The hold ends by itself a day after the tap, or at once
+with Undo (a lost Undo only keeps auto-posting off that clip for that day; Upload ignores the hold).
 
 `nextUp` lists taken clips in order, at most 10; the i-th (0-based) gets `runAt = nextRunAt + floor(i / perRun) ×
-everyHours h` (no `runAt` while off). `waiting` lists the waiting ones (not rule 5), at most 20.
+everyHours h`, only when it has places (§46.6: a normal clip the run's places, a campaign clip its own; with nothing
+set up no clip gets one) and, while `practice` is on, only for the first `perRun` (practice sends nothing, so every
+practice run picks the same first clips again). No `runAt` while off. `waiting` lists the waiting ones (not rule 5 or
+a hold), at most 20.
 
 ### 46.6 Places and options
 
@@ -13467,9 +13493,11 @@ everyHours h` (no `runAt` while off). `waiting` lists the waiting ones (not rule
 "{slot}#{kind}"` (slot = ISO UTC to the second for run-now).
 1. **Scheduled only:** settings off → return `off`; this slot's own `AUTORUN#{runId}` already there (a retried
    delivery, or an overlapping invocation) → **resume** it (step 3), before any due check (the claim moved
-   `lastRunAt` to this slot, so the slot is no longer due); `slot < nextRunAt` → `not_due`.
+   `lastRunAt` to this slot, so the slot is no longer due); `slot < nextRunAt` → `not_due`, writing
+   `AUTOPOST.lastTickAt = slot` (an UpdateItem with no condition; it creates the item when absent) so the page stops
+   showing this hour (§46.4).
 2. **Plan:** pick (§46.5) the first `perRun` taken clips (`private_now`: 1, never a campaign clip), each with its
-   places and options.
+   places and options. Every run item stores `plannedAt` (the clock's time when it planned; `at` stays the slot).
 3. **Claim** (scheduled): one `TransactWriteItems`: Put `AUTORUN#{runId}` (`state: "planned"`, `mode`, `clips:
    [{clipId, hook, places}]`, `note?`) on `attribute_not_exists(pk)`, and Update `AUTOPOST` `SET lastRunAt = :slot` on
    `attribute_not_exists(lastRunAt) OR lastRunAt < :slot`. Cancelled because the run item exists → **resume**: read it;
@@ -13477,21 +13505,31 @@ everyHours h` (no `runAt` while off). `waiting` lists the waiting ones (not rule
    (a later slot already moved `lastRunAt`) → return `not_due`; cancelled for another reason (a conflict, throttling)
    → claim again, at most a few times. Run-now: a Put of `AUTORUN#{runId}` alone, after `AUTOPOST.lastNowAt` moved on the condition
    that it is absent or ≥ 60 s old (else 409, §46.9).
+   **Earlier stuck starts:** right after a live scheduled run claims (never while practising: nothing gets sent), and
+   before it sends its own clips, it finishes the start of every clip an earlier scheduled run confirmed whose clip
+   flow never started after all of that run's Lambda retries (`publishState: pending`, internal `autoRun` of another
+   scheduled run, `status` `confirmed`/`publishing`/`posted`): each is read again and started with
+   `release.start_flow` (Upload's own call), logging `autopost.finished_start` with `runId` and `clipId`; one that
+   fails is logged (`autopost.finish_start_failed`) and skipped. One only starts while 30 s are left for it and for
+   each of the run's own planned clips (30 s × (planned + 1)), so earlier clips never push its own into "Out of time.
+   It goes next run."; earlier ones left over are finished by the next run.
 4. **Send each planned clip** (`live` and `private`) through **Upload's own code**: `uploads.upload_review_clip(...)`,
    the review branch of `routes/clips.confirm` moved into one function the route now calls (Upload's behaviour,
    messages and tests unchanged), with `platforms` = its places, `options`, no `tiktok`, no caption patch, and
    `auto = {runId, at, test?}`. It writes `confirmed` and the posts in one transaction conditional on `status = review`
-   and `attribute_not_exists(postsCreated)` (§14.5), then starts `clip-{clipId}-{flowRun}`. Outcomes: `sent`; the
+   and `attribute_not_exists(postsCreated)` (§14.5) and, only because `auto` is set, `attribute_not_exists(holdUntil)
+   OR holdUntil < :now` (no live Throw away hold; Upload by hand ignores the hold), then starts
+   `clip-{clipId}-{flowRun}`. A planned clip read with a live hold is not tried at all. Outcomes: `sent`; the
    condition failed → read the clip: its `autoRun` is this run → `sent` (and when its `publishState` is `pending`,
    finish the start, §14.5); another run's `autoRun` → `skipped` "Another auto-posting run sent it first."; else
-   `skipped` with "You threw it away first." (`declined`, or the clip is gone), "You uploaded it yourself." (any other
-   status), "It changed while it was being sent. It goes next run." (Upload's own race answer) or the campaign/fit
-   refusal's sentence. `practice`: no write, outcome `would_send`.
+   `skipped` with "You threw it away first." (`declined`, the clip is gone, or still in Review with a live hold),
+   "You uploaded it yourself." (any other status), "It changed while it was being sent. It goes next run." (Upload's
+   own race answer) or the campaign/fit refusal's sentence. `practice`: no write, outcome `would_send`.
 5. Update `AUTORUN#{runId}`: `state: "done"`, each clip's `outcome`/`reason`. Out of time (`AUTOPOST_TIME_BUDGET_SECONDS`
    240, a new clip only starts with ≥ 30 s left) → the rest `skipped` "Out of time. It goes next run." (still in
    Review). Notes, in this order: a Private test with no normal clip taken → "Nothing in Review to test with."; no
-   candidates → "Nothing in Review, so nothing posted."; no places → "Nothing is set up to post to."; candidates but
-   none taken → "Every clip in Review is waiting for you.".
+   candidates (a held clip is none) → "Nothing in Review, so nothing posted."; no places → "Nothing is set up to post
+   to."; candidates but none taken → "Every clip in Review is waiting for you.".
 6. **The hourly Lambda** runs every owner; one owner's failure is logged (`autopost.owner_failed`) and the others still
    run, then the invocation fails, so Lambda's retry (the same event, the same slot) resumes that owner's run while
    every finished run answers `done`.
@@ -13500,8 +13538,9 @@ The clip flow then posts each place one after another (§17.6), so one place fai
 
 ### 46.8 Testing with nothing public
 
-* **Practice** (`autoPost.practice`): scheduled runs plan, claim and record as usual and send nothing (`would_send`);
-  clips stay in Review, so the next practice run may pick the same ones.
+* **Practice** (`autoPost.practice`): scheduled runs plan, claim and record as usual and send nothing (`would_send`,
+  and no earlier stuck start is finished, §46.7 step 3); clips stay in Review, so the next practice run picks the same
+  ones (only they get a `runAt`, §46.5).
 * **Practice run now** (`POST /v1/autopost/run {"kind": "practice"}`): one practice run now, inline in cf-prod-api.
 * **Private test run** (`{"kind": "private"}`): one live run now, inline, of the first taken clip that is not a
   campaign clip (a campaign post would be sent to Content Rewards), with `auto.test = "private"`. Every post of it carries the internal `postOptions.test = "private"`, which only this run sets (no route
@@ -13522,16 +13561,18 @@ The clip flow then posts each place one after another (§17.6), so one place fai
 |---|---|---|
 | GET `/v1/autopost` | – | `AutoPostStatus` |
 | POST `/v1/autopost/run` | `{ "kind": "practice" \| "private" }` | `{ "run": AutoRun }` |
+| POST `/v1/clips/{clipId}/hold` (`routes/clips.py`) | none or `{}` | `{ "clip": Clip }` |
+| DELETE `/v1/clips/{clipId}/hold` | – | 204 |
 
 ```ts
 interface AutoPostSettings { on: boolean; everyHours: number; perRun: number; practice: boolean; onAt?: string }
 interface AutoPostStatus {
   autoPost: AutoPostSettings;
-  nextRunAt: string | null;               // null while off
+  nextRunAt: string | null;               // null while off; the shown rule of §46.4
   perDay: number;                         // perRun * 24 / everyHours, not rounded
   places: Platform[];                     // a normal clip's places now (§46.6)
   leftOut: { platform: Platform; reason: "tiktok_yourself" | "not_set_up" }[];
-  nextUp: { clipId: string; jobId: string; hook: string; coverUrl?: string; runAt?: string }[];   // ≤ 10
+  nextUp: { clipId: string; jobId: string; hook: string; coverUrl?: string; runAt?: string }[];   // ≤ 10; §46.5
   waiting: { clipId: string; jobId: string; hook: string; coverUrl?: string; reason: string }[];  // ≤ 20
   runs: AutoRun[];                        // newest first, ≤ 10
   failed: { postId: string; clipId: string; hook: string; platform: Platform; error: string; at: string }[]; // ≤ 20
@@ -13554,20 +13595,43 @@ interface AutoRun {
 * POST: unknown keys 400; `kind` missing or other → 400 "Pick practice or private.". A second run-now within 60 s →
   409 "A test run just started. Wait a minute." `private` with no taken clip → 200 with the run's note "Nothing in
   Review to test with." and no clips. Runs regardless of `on` (testing before switching on is the point).
-* Mock mode (`web/src/api/mock/autopost.ts`) follows the same rules, with a fake clock the e2e tests can move.
+* **Hold** (`POST /v1/clips/{clipId}/hold`, Throw away's tap, §46.2): on a clip with `status: "review"` (the
+  update's condition) sets the internal `holdUntil = now + 24 h` (ISO, `clips.HOLD_FOR`: a day, so a decline that
+  comes late, from a phone locked during the toast, still finds the clip held) and answers 200 `{"clip"}` (public
+  shape: `holdUntil` never appears in it, or anywhere in the API). A second hold restarts the day. Unknown body keys
+  → 400 "Unknown field: {key}." (no body, or `{}`, is fine). A clip not in Review → 409 "Auto-posting already sent
+  this clip." when it has the internal `autoRun` (a run, or a Private test run, sent it), else 409 "This clip has
+  already been uploaded or thrown away." (Upload's `ALREADY_DECIDED`). Not the caller's clip → 404 "We could not find
+  that clip." as every clip route.
+* **Undo** (`DELETE /v1/clips/{clipId}/hold`): removes `holdUntil`; 204 every time (safe to repeat, and never refused
+  because the clip moved on: uploaded, declined or sent); 404 only when the clip is not the caller's.
+* Neither changes `status`: the decline (`POST …/decline`) is still what throws the clip away. Upload
+  (`POST …/confirm`) ignores the hold. Both write the clip item, so its live clip event (§14.2, still `review`, no
+  `holdUntil`) arrives: the app keeps a clip it is throwing away hidden until its toast ends or Undo.
+* Mock mode (`web/src/api/mock/autopost.ts`) follows the same rules, with a fake clock the e2e tests can move: the
+  two hold routes, a held clip skipped by the pick and its run (outcome "You threw it away first."), and the shown
+  `nextRunAt` and `runAt` rules of §46.4 and §46.5.
 
 ### 46.10 Data (additive: new sort keys and attributes only)
 
 | Item | pk | sk | Attributes |
 |---|---|---|---|
-| Auto-post state | `USER#{userId}` | `AUTOPOST` | `type="autopost"`, `lastRunAt?`, `lastRunId?`, `lastNowAt?` |
-| Run | `USER#{userId}` | `AUTORUN#{runId}` | `type="autorun"`, `runId`, `at`, `kind`, `mode`, `state`, `clips`, `note?`, `ttl` (180 days) |
+| Auto-post state | `USER#{userId}` | `AUTOPOST` | `type="autopost"`, `lastRunAt?`, `lastRunId?`, `lastNowAt?`, `lastTickAt?` (the last slot a tick found not due, §46.4) |
+| Run | `USER#{userId}` | `AUTORUN#{runId}` | `type="autorun"`, `runId`, `at` (the slot), `plannedAt` (when it planned; rule 5 counts from it), `kind`, `mode`, `state`, `clips`, `note?`, `ttl` (180 days) |
 | Owner registry | `AUTOPOSTOWNERS` | `USER#{userId}` | `type="autopostowner"`, `userId`, `since` |
-| Clip | (as §6) | | `autoRun`, `autoAt`, `autoTest?` (internal; public `auto`) |
+| Clip | (as §6) | | `autoRun`, `autoAt`, `autoTest?` (internal; public `auto`), `holdUntil?` (internal: Throw away's hold, §46.9) |
 | Post | (as §6) | | `autoRun` (internal; public `auto: true`), `postOptions.test?` (internal; public `test`) |
 
 Runs are listed with a `Query` of `AUTORUN#` (newest first, `ScanIndexForward=false`, limit 10). Nothing here is ever
-deleted except by TTL.
+deleted except by TTL (`holdUntil` is removed by Undo, or simply ends). Runs stored before `plannedAt` read their `at`
+instead.
+
+**Settings saves never undo each other.** `PUT /v1/settings` reads the stored item, merges the patch, and puts it on
+the condition that its `updatedAt` is still the one read (`attribute_not_exists(pk) OR updatedAt = :old`, or
+`attribute_not_exists(updatedAt)` when it had none; each save's `updatedAt` is later than the one it replaces, even in
+the same millisecond). A failed condition reads it again and merges the same patch, at most 3 times, then 409 "Your
+settings just changed. Try again.", so a save that began before the owner turned auto-posting off can never turn it
+back on. `onAt` and the `AUTOPOSTOWNERS` registry work as in §46.3.
 
 ### 46.11 Lambda and Terraform (new module `infra/modules/autopost`, wired in `envs/prod`)
 
@@ -13607,8 +13671,18 @@ how to test with Practice and the Private test run.
 
 ### 46.13 Edge cases
 
-* He throws a clip away before its turn: it is `declined` and never picked; if a run had planned it a moment before,
-  the run's conditional write fails and the outcome is "You threw it away first.".
+* He throws a clip away before its turn: the hold lands at the tap (§46.9), before the 8 s Undo toast ends and the
+  decline goes, so no run picks or sends it meanwhile; if a run had planned it a moment before, the run sees the hold
+  (or its conditional write fails on it) and the outcome is "You threw it away first."; Undo lifts the hold and the
+  clip keeps its place. The hold lasts a day, so a decline that comes late (the phone was locked during the toast)
+  still finds the clip held. If a run already sent it, the hold answers 409 and he is told "Auto-posting already sent
+  this clip." (the clip is not thrown away).
+* A tick that finds the slot not due marks it (`lastTickAt`), so a lower `everyHours` saved later that hour shows the
+  next full hour, not a run that already passed (§46.4).
+* A clip a run confirmed whose clip-flow start failed through every Lambda retry is started by the next live run
+  (§46.7 step 3).
+* Two settings saves at once (two tabs, or a slow save and the switch): the later one re-reads and merges, so neither
+  undoes the other (§46.10).
 * He taps Upload on a clip a run planned at the same instant: one transaction wins; the other side sees it taken.
 * Two deliveries of one tick, or a retry after a crash: the same `runId`; the second resumes the first's plan.
 * A tick that arrives late inside its hour still has its own slot; a tick lost entirely is caught up by the next one
@@ -13629,14 +13703,28 @@ run and the first hours of practice.
 
 * `api/tests/test_autopost_schedule.py`: every `everyHours` 1..24 over 10 days from several `onAt` minutes gives runs
   exactly `everyHours` apart, across midnight and month ends; switching on, changing `everyHours` (up and down), off and
-  on again, practice; a late tick and a lost tick; `nextRunAt` shown.
+  on again, practice; a late tick and a lost tick; `nextRunAt` shown: at 13:00:20 before the claim (13:00), after the
+  claim, after lowering `everyHours` at 13:20 once the 13:00 tick marked `lastTickAt` (14:00), past the event age
+  (14:00); `TICK_EVENT_AGE` equals both of Terraform's `maximum_event_age_in_seconds`.
 * `test_autopost_run.py`: oldest first by job then rank; each waiting rule and its sentence; `perRun`; places (TikTok
   never, X only when ready, nothing set up); My settings options (never made for kids) and the campaign versions;
   nothing in Review does nothing but moves `lastRunAt`; off and not due; the same event twice, two overlapping
   invocations, a crash after the claim and its retry: every clip confirmed once and its flow started once; a clip
-  thrown away or uploaded by hand after planning; out of time; one owner failing does not stop another.
-* `test_autopost_routes.py`: settings validation and `onAt`, the registry write, `GET /v1/autopost` (each list, the
-  `runAt`s), run-now practice and private, the 60 s limit, private with nothing.
+  thrown away or uploaded by hand after planning; out of time; one owner failing does not stop another; a not-due tick
+  writes only `lastTickAt`; a late run (planned 16 min after its slot) still protects its clips from a Private test
+  run (`plannedAt`); an earlier run's start that failed every retry is finished by the next live run (logged), one
+  that fails again is logged and skipped, practice leaves it alone, earlier starts leave the time for the run's own
+  clips (the rest are finished by the next run).
+* `test_autopost_hold.py`: the hold and Undo routes (24 h, 200/204, 400 unknown keys, 404 another owner's, 409 with
+  each sentence, `holdUntil` never public), a held clip skipped by the pick, Next up and a Private test run while the
+  next clip takes its turn, a run inside the Undo toast, a hold after the plan (never even tried) and at the same
+  instant as the run's write ("You threw it away first."), a hold that ended, Upload by hand ignoring it, a decline
+  that comes hours late still finding the clip held, a run whose only clip is held ("Nothing in Review, so nothing
+  posted.").
+* `test_autopost_routes.py`: settings validation and `onAt`, the registry write, a save that loaded before auto-posting
+  went off never turns it back on (and 409 after 3 lost races), `GET /v1/autopost` (each list, the `runAt`s: none
+  with nothing set up, only the first `perRun` while practising; the shown `nextRunAt` before and after the claim and
+  after a not-due tick), run-now practice and private, the 60 s limit, private with nothing.
 * `test_autopost_private.py`: the three publishers' test behaviour, that only `postOptions.test` turns it on, that
   Upload's `options` can't set it, no `gsi2`.
 * Upload's existing tests (`test_upload_to.py`, `test_campaign_posting.py`, `test_clips.py`, `test_release.py`) pass
@@ -13650,13 +13738,16 @@ run and the first hours of practice.
 ### 46.16 Who builds what (parallel builders; each stays inside its files)
 
 * **S (server)**: `api/src/clipfactory_api/autopost/**` (new: `__init__.py`, `schedule.py`, `pick.py`, `run.py`,
-  `handler.py`), `uploads.py` (new, the moved Upload core), `routes/clips.py`, `routes/autopost.py` (new), the route
-  table, `settings.py`, `post_preset.py`, `posts.py`, `clips.py` (public `auto`), `platforms/{youtube,facebook,
-  instagram}.py` (private test), `api/tests/test_autopost_*.py`, `api/scripts/build_lambda.py` if handlers are listed.
+  `handler.py`), `uploads.py` (new, the moved Upload core), `routes/clips.py` (and the hold routes),
+  `routes/autopost.py` (new), the route table, `settings.py` and `routes/system.py` (the conditional save), `db.py`
+  (an update's extra condition), `post_preset.py`, `posts.py`, `clips.py` (public `auto`, the hold),
+  `platforms/{youtube,facebook,instagram}.py` (private test), `api/tests/test_autopost_*.py`,
+  `api/scripts/build_lambda.py` if handlers are listed.
 * **I (infra)**: `infra/modules/autopost/**` (new), `infra/envs/prod/main.tf`.
 * **W (web)**: `web/src/screens/settings/AutoPostBranch.tsx` (new), `Settings.tsx`, `branches.tsx`, `web/src/lib/
-  autopost.ts` (new), `web/src/api/**` (types, client, `mock/autopost.ts`), Review's line, `NewJobForm.tsx`, Library's
-  post-row words, `web/test/autopost.test.ts`, `web/e2e/autopost.spec.ts`.
+  autopost.ts` (new), `web/src/api/**` (types, client, `mock/autopost.ts`, the hold routes), Throw away's hold and
+  Undo (Next up and the Review card), Review's line, `NewJobForm.tsx`, Library's post-row words,
+  `web/test/autopost.test.ts`, `web/e2e/autopost.spec.ts`.
 * **D (docs and help)**: `docs/BUSINESS_REQUIREMENTS.md`, `ARCHITECTURE.md`, `TESTING.md`, `SECURITY.md`,
   `DEPLOYMENT.md` (nothing to do by hand), `ROADMAP.md`, `web/src/features/help/helpKb.json` (the guide); then the
   generated help corpus and Ask knowledge are regenerated once everything is merged.

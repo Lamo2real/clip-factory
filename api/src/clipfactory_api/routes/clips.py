@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -24,7 +25,7 @@ from .. import (
 from ..app import App
 from ..clock import iso, parse
 from ..errors import bad_request, conflict, not_found
-from ..http import Request, Response, ok
+from ..http import Request, Response, no_content, ok
 from ..ids import is_ulid
 from ..log import log
 from ..oauth import setup as platform_setup
@@ -34,6 +35,7 @@ from ..stats import config as stats_config
 
 ALREADY_DECIDED = "This clip has already been uploaded or thrown away."
 ALREADY_DECLINED = "This clip was thrown away, so it cannot be uploaded."
+AUTO_SENT = "Auto-posting already sent this clip."
 
 
 def _clip_or_404(app: App, req: Request) -> dict[str, Any]:
@@ -525,6 +527,35 @@ def decline(app: App, req: Request) -> Response:
     _delete_vector(app, req.user_id, item["clipId"])
     log("info", "clip.declined", clipId=item["clipId"])
     return ok({"clip": clips.public_clip(updated, app.media)})
+
+
+def hold(app: App, req: Request) -> Response:
+    """``POST /v1/clips/{clipId}/hold`` (§46.2, §46.9): Throw away holds a clip in Review on the server the moment it
+    is tapped, for a day (internal ``holdUntil``, ``clips.HOLD_FOR``), so no auto-posting run sends it while Undo's
+    toast is up, or before a decline that comes late (a phone locked during the toast). The decline itself still goes
+    when the toast ends; Undo lifts the hold. A clip no longer in Review → 409: "Auto-posting already sent this clip."
+    when a run sent it, else Upload's own sentence."""
+    validate.only_keys(req.json(), ())
+    item = _clip_or_404(app, req)
+    until = iso(app.clock() + clips.HOLD_FOR)
+    try:
+        updated = app.store.update(item["pk"], item["sk"], {"holdUntil": until}, expect_in={"status": ["review"]})
+    except db.ConditionFailed:
+        item = _clip_or_404(app, req)
+        raise conflict(AUTO_SENT if item.get("autoRun") else ALREADY_DECIDED) from None
+    log("info", "clip.held", clipId=item["clipId"])
+    return ok({"clip": clips.public_clip(updated, app.media)})
+
+
+def hold_undo(app: App, req: Request) -> Response:
+    """``DELETE /v1/clips/{clipId}/hold`` (§46.2, §46.9): Undo lifts the hold. Safe to repeat, and never refused
+    because the clip moved on meanwhile (204 either way); 404 only for a clip that is not the caller's."""
+    item = _clip_or_404(app, req)
+    with contextlib.suppress(db.ConditionFailed):  # the clip's job was deleted meanwhile: nothing holds it any more
+        app.store.update_expr(
+            item["pk"], item["sk"], "REMOVE #h", condition="attribute_exists(pk)", names={"#h": "holdUntil"}
+        )
+    return no_content()
 
 
 def _delete_vector(app: App, user_id: str, clip_id: str) -> None:

@@ -10,8 +10,11 @@ this order; then it **waits** for the owner, with the reason he sees:
 4. It is for a campaign, and Content Rewards can't take it from Clip Factory by itself (§38.6): it goes only when
    Content Rewards is on and connected, the owner is ``in`` the campaign (not ``manual``), the campaign takes clips,
    it has places and the fit check passes; then it goes the campaign way (§38.14).
-5. A run that is still going (an ``AUTORUN#`` item still ``planned`` from the last 15 minutes) has it: skipped
-   silently, so two runs never take the same clip.
+5. A run that is still going (an ``AUTORUN#`` item still ``planned`` within 15 minutes of its ``plannedAt``) has it:
+   skipped silently, so two runs never take the same clip.
+
+Before all of these, a clip the owner is throwing away right now (a Throw away's hold, ``holdUntil`` still in the future,
+§46.2) is left out silently: not a candidate, neither taken nor waiting, so the next clip takes its turn.
 
 Places of a normal clip: every platform ready on Set up posting except TikTok (TikTok's rules want the creator's own
 pick for each post, §17.8), in STATS_ORDER; Settings › Where clips go is not read (Upload ignores it too, §33).
@@ -66,8 +69,8 @@ class Waiting:
 
 @dataclass
 class Picked:
-    """What a run (or the page) sees now: how many clips are in Review, the ones taken (in order) and the ones that
-    wait, and a normal clip's places."""
+    """What a run (or the page) sees now: how many clips are in Review (a held one not counted), the ones taken (in
+    order) and the ones that wait, and a normal clip's places."""
 
     candidates: int = 0
     taken: list[Taken] = field(default_factory=list)
@@ -109,12 +112,13 @@ def ordered(store: db.Store, user_id: str, found: list[Item]) -> list[Item]:
 
 
 def busy(store: db.Store, user_id: str, now: datetime) -> set[str]:
-    """Rule 5: the clips of runs still going (``planned``, from the last 15 minutes)."""
+    """Rule 5: the clips of runs still going (``planned``, within 15 minutes of when they planned: ``plannedAt``, or
+    the slot ``at`` on runs stored before it existed). A tick that arrives late in its hour still protects its clips."""
     page = store.query_page(db.user_pk(user_id), RUN_PREFIX, newest_first=True, limit=RECENT_RUNS, consistent=True)
     out: set[str] = set()
     for run in page.items:
-        at = parse(run.get("at"))
-        if run.get("state") != "planned" or at is None or now - at > PLANNED_FRESH:
+        planned_at = parse(run.get("plannedAt")) or parse(run.get("at"))
+        if run.get("state") != "planned" or planned_at is None or now - planned_at > PLANNED_FRESH:
             continue
         out.update(str(c.get("clipId")) for c in run.get("clips") or [] if isinstance(c, Mapping))
     return out
@@ -189,7 +193,10 @@ def pick(
     Private test run: a campaign post is never sent to Content Rewards as a test)."""
     store = app.store
     pk = db.user_pk(user_id)
-    candidates = ordered(store, user_id, found if found is not None else clips.all_clips(store, user_id))
+    every = ordered(store, user_id, found if found is not None else clips.all_clips(store, user_id))
+    # Being thrown away (§46.2): neither counted, taken nor waiting, so the next clip takes its turn and a run whose only
+    # clips are held says "Nothing in Review, so nothing posted." (not that they wait for him: Waiting leaves them out).
+    candidates = [c for c in every if not clips.is_held(c, now)]
     setups = platform_setup.all_setups(store, user_id, now)
     normal = places_now(setups)
     out = Picked(candidates=len(candidates), places=normal)

@@ -2039,4 +2039,7 @@ button there. Numbers come from the post found on the connected account (`video/
   existing grants, so cf-prod-api's infrastructure is unchanged.
 - **Consequences.** One new Lambda, role, log group, rule and two alarms. 24 short invocations a day, almost all
   "not due". Auto-posting is off for every owner until he turns it on. Practice mode and a private test run let him test
-  the whole flow with nothing public. Saving takes effect from the next full hour, not that same minute.
+  the whole flow with nothing public. Saving takes effect from the next full hour, not that same minute. Throw away
+  holds a clip on the server the moment it is tapped (a 24 h `holdUntil` that runs skip and a run's write refuses;
+  Undo lifts it), because the decline itself only goes when Undo's 8 s toast ends and a run could fall in that gap;
+  a day, because a phone locked during the toast stops its timer, so that decline can come hours late.

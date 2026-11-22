@@ -268,7 +268,25 @@ def register_autopost(store: db.Store, user_id: str, patch: Mapping[str, Any], n
         autopost.register_owner(store, user_id, now)
 
 
-def save(store: db.Store, user_id: str, values: Mapping[str, Any], now: str) -> None:
+def _item(user_id: str, values: Mapping[str, Any], now: str) -> dict[str, Any]:
     item = {"pk": db.user_pk(user_id), "sk": db.SETTINGS_SK, "type": "settings", "userId": user_id, "updatedAt": now}
     item.update({k: values[k] for k in EDITABLE if k in values})
-    store.put(item)
+    return item
+
+
+def save(store: db.Store, user_id: str, values: Mapping[str, Any], now: str) -> None:
+    store.put(_item(user_id, values, now))
+
+
+def save_if_unchanged(
+    store: db.Store, user_id: str, values: Mapping[str, Any], now: str, before: Mapping[str, Any] | None
+) -> None:
+    """Saves ``values`` only while the stored item is still ``before`` (the raw item they were merged from): its
+    ``updatedAt`` is unchanged, or it had none and still has none. Raises ``db.ConditionFailed`` when another save
+    landed in between, so a save that began before the owner turned auto-posting off can never turn it back on."""
+    old = (before or {}).get("updatedAt")
+    if isinstance(old, str) and old:
+        condition, values_ = "attribute_not_exists(pk) OR #u = :old", {":old": old}
+    else:
+        condition, values_ = "attribute_not_exists(#u)", None
+    store.put_when(_item(user_id, values, now), condition, names={"#u": "updatedAt"}, values=values_)

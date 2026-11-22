@@ -147,6 +147,8 @@ def test_every_contract_route_is_registered() -> None:
         ("PATCH", "/v1/clips/X"),
         ("POST", "/v1/clips/X/confirm"),
         ("POST", "/v1/clips/X/decline"),
+        ("POST", "/v1/clips/X/hold"),
+        ("DELETE", "/v1/clips/X/hold"),
         ("GET", "/v1/clips/X/file"),
         ("POST", "/v1/clips/X/tiktok/posted"),
         ("DELETE", "/v1/clips/X/tiktok/posted"),

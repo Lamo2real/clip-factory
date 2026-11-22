@@ -118,12 +118,15 @@ def status(app: App, req: Request) -> Response:
     picked = pick.pick(app, user_id, now, found=every)
     next_at = schedule.next_run_at(auto, state, now)
     per_run = int(auto["perRun"])
+    # Practice sends nothing, so every practice run picks the same first clips again: only they get a time.
+    timed = per_run if auto.get("practice") else pick.NEXT_UP_MAX
     next_up: list[Item] = []
     for i, taken in enumerate(picked.taken[: pick.NEXT_UP_MAX]):
         clip = taken.clip
         row: Item = {"clipId": clip["clipId"], "jobId": clip.get("jobId"), "hook": str(clip.get("hook") or "")}
         row.update(_cover(app, clip))
-        if next_at is not None:
+        # A clip with nowhere to go (nothing set up) is not sent, so it gets no time (§46.5).
+        if next_at is not None and taken.places and i < timed:
             row["runAt"] = iso(next_at + schedule.every(auto) * (i // per_run))
         next_up.append(row)
     waiting = [
