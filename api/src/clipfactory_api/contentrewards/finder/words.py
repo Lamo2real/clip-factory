@@ -22,6 +22,7 @@ CANT_MONEY = "I can't tell how much money is left."
 CANT_TOPIC = "I can't tell what it's about."
 CANT_LANGUAGE = "I can't tell the language."
 TAG = "Content Rewards' numbers"
+ANYONE = "Anyone can join"
 BANNED = ("cpm", "budget", "api", "mcp", "scrape", "sitemap", "robots")
 
 
@@ -80,7 +81,7 @@ def why(
     left: int | None,
     access: str,
 ) -> str:
-    """``"{pay} on {counted places}."`` + the category he picked + the money left + who can join."""
+    """``"{pay} on {counted places}."`` + the category he picked + how much money is left + who can join."""
     if kind == "cpm" and tops:
         best = max(tops)
         pay = (
@@ -100,8 +101,22 @@ def why(
     if category:
         text += f" {category}."
     if left is not None:
-        text += f" {left}% of the money left."
-    return text + (" You apply first." if access == "application" else " Open to join.")
+        text += f" {left_line(left)}"
+    return text + (" You apply first." if access == "application" else f" {ANYONE}.")
+
+
+def left_line(left: int) -> str:
+    """How much of the money is left, in plain words (the exact amounts are on the money row above it). The bands
+    are the "Money left" choices: "Some left" (25), "Half or more" (50), "Most left" (75)."""
+    if left >= 100:
+        return "All the money is left."
+    if left >= 75:
+        return "Most of the money is left."
+    if left >= 50:
+        return "Half or more of the money is left."
+    if left >= 25:
+        return "Some of the money is left."
+    return "A little money is left."
 
 
 def money_left(left: int | None, total: int | None) -> str | None:
@@ -122,7 +137,12 @@ def page_in(code: str) -> str:
     return f"Its page is in {config.LANGUAGE_NAMES.get(code, code)}."
 
 
-_LEFT = {25: "a quarter of the money", 50: "half the money", 75: "three quarters of the money"}
+# "Why not more?" for each "Money left" choice ("Any", 0, never refuses).
+_LEFT = {
+    25: ("has only a little money left.", "have only a little money left."),
+    50: ("has less than half the money left.", "have less than half the money left."),
+    75: ("has less money left than you want.", "have less money left than you want."),
+}
 
 
 def skipped(code: str, n: int, want: Mapping[str, Any]) -> str:
@@ -133,8 +153,8 @@ def skipped(code: str, n: int, want: Mapping[str, Any]) -> str:
         verb = "pays" if one else "pay"
         return f"{lead} {verb} less than {rate(int(want['minPer1kCents']))} per 1,000 views."
     if code == "budget_low":
-        part = _LEFT.get(int(want.get("minLeftPct") or 0), "a quarter of the money")
-        return f"{lead} {'has' if one else 'have'} less than {part} left."
+        singular, plural = _LEFT.get(int(want.get("minLeftPct") or 0), _LEFT[25])
+        return f"{lead} {singular if one else plural}"
     texts = {
         "budget_gone": ("has almost no money left.", "have almost no money left."),
         "not_your_places": ("doesn't pay for the places you post.", "don't pay for the places you post."),

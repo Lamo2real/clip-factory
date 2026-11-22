@@ -26,9 +26,10 @@ import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
 export const SKIP_LINE = "I skip campaigns Clip Factory can't make clips for, like ones that need their own sound or picture on the video.";
 export const NEWS_OFF = "Content Rewards news is off in Settings.";
 
-function Row({ label, line, children, id }: { label: string; line?: string; children: ReactNode; id: string }) {
+/** `even`: a pick-one bar whose choices take even halves on phones (finder.css), never one alone on a second row. */
+function Row({ label, line, children, id, even }: { label: string; line?: string; children: ReactNode; id: string; even?: boolean }) {
   return (
-    <div className="finder-want__row" role="group" aria-labelledby={`${id}-label`}>
+    <div className={even ? "finder-want__row finder-want__row--even" : "finder-want__row"} role="group" aria-labelledby={`${id}-label`}>
       <p className="finder-want__label" id={`${id}-label`}>
         {label}
         {line ? <span className="finder-want__line">{line}</span> : null}
@@ -194,7 +195,7 @@ export function FinderWant({
         ) : null}
       </Row>
 
-      <Row label="Money left" id={`${id}-left`}>
+      <Row label="Money left" id={`${id}-left`} even>
         <Segmented
           label="Money left"
           value={String(want.minLeftPct)}
@@ -203,7 +204,7 @@ export function FinderWant({
         />
       </Row>
 
-      <Row label="Who can join" id={`${id}-access`}>
+      <Row label="Who can join" id={`${id}-access`} even>
         <Segmented label="Who can join" value={want.access} options={ACCESS_CHOICES} onChange={(v) => onChange({ access: v })} />
       </Row>
 

@@ -289,30 +289,31 @@ def match_cases() -> dict[str, Any]:
 
     default_lines = {
         FUNDING: _lines(
-            "Pays $6.00 per 1,000 views on YouTube and Instagram. 41% of the money left. Open to join.",
+            "Pays $6.00 per 1,000 views on YouTube and Instagram. Some of the money is left. Anyone can join.",
             [rules4, TIKTOK_NOTE],
             pay=["$6.00 per 1,000 views · up to $100 a clip", "$6.00 per 1,000 views · up to $100 a clip"],
         ),
         COD: _lines(
-            "Pays $1.50 per 1,000 views on Instagram. 46% of the money left. Open to join.",
+            "Pays $1.50 per 1,000 views on Instagram. Some of the money is left. Anyone can join.",
             [TIKTOK_NOTE],
             pay=["$1.50 per 1,000 views · up to $1,200 a clip"],
         ),
         PICKLE: _lines(
-            "Pays $1.50 per 1,000 views on YouTube and Instagram. 96% of the money left. Open to join.",
+            "Pays $1.50 per 1,000 views on YouTube and Instagram. Most of the money is left. Anyone can join.",
             [TIKTOK_NOTE],
             pay=["$1.50 per 1,000 views · up to $250 a clip", "$1.50 per 1,000 views · up to $250 a clip"],
         ),
         SANTA: _lines(
-            "Pays $1.00 per 1,000 views on YouTube and Instagram. 44% of the money left. Open to join.", [TIKTOK_NOTE]
+            "Pays $1.00 per 1,000 views on YouTube and Instagram. Some of the money is left. Anyone can join.",
+            [TIKTOK_NOTE],
         ),
         ENERGY: _lines(
-            "Pays $1.00 per 1,000 views on YouTube, Instagram and X. 98% of the money left. Open to join.",
+            "Pays $1.00 per 1,000 views on YouTube, Instagram and X. Most of the money is left. Anyone can join.",
             [rule1, TIKTOK_NOTE],
             [AUDIENCE],
         ),
         LANCO: _lines(
-            "Pays $1.00 per 1,000 views on Instagram. 99% of the money left. Open to join.",
+            "Pays $1.00 per 1,000 views on Instagram. Most of the money is left. Anyone can join.",
             [rules2, TIKTOK_NOTE],
             [SOUND],
         ),
@@ -332,7 +333,7 @@ def match_cases() -> dict[str, Any]:
                         ["apply", 2, "2 want you to apply first."],
                         ["budget_gone", 1, "1 campaign has almost no money left."],
                         ["other_pay", 1, "1 campaign pays per post or shares a prize."],
-                        ["budget_low", 1, "1 campaign has less than a quarter of the money left."],
+                        ["budget_low", 1, "1 campaign has only a little money left."],
                     ],
                     "looked": 15,
                     "refused": {
@@ -358,7 +359,7 @@ def match_cases() -> dict[str, Any]:
                     "looked": 15,
                     "lines": {
                         HABLANDO: _lines(
-                            "Pays $1.00 per 1,000 views on Instagram. 29% of the money left. You apply first.",
+                            "Pays $1.00 per 1,000 views on Instagram. Some of the money is left. You apply first.",
                             [TIKTOK_NOTE],
                             pay=[
                                 "$0.20 per 1,000 views · up to $30 a clip",
@@ -366,7 +367,7 @@ def match_cases() -> dict[str, Any]:
                             ],
                         ),
                         UNGODLY: _lines(
-                            "Pays $1.75 per 1,000 views on YouTube. 95% of the money left. You apply first.",
+                            "Pays $1.75 per 1,000 views on YouTube. Most of the money is left. You apply first.",
                             [TIKTOK_NOTE],
                             [AUDIENCE],
                         ),
@@ -389,7 +390,7 @@ def match_cases() -> dict[str, Any]:
                     "refused": {MACK: "cant_make"},
                     "lines": {
                         UNGODLY: _lines(
-                            "Pays $1.75 per 1,000 views on YouTube. Gaming. 95% of the money left. You apply first.",
+                            "Pays $1.75 per 1,000 views on YouTube. Gaming. Most of the money is left. You apply first.",
                             [TIKTOK_NOTE],
                             [AUDIENCE],
                         )
@@ -405,12 +406,12 @@ def match_cases() -> dict[str, Any]:
                     "looked": 15,
                     "lines": {
                         KAI: _lines(
-                            "Shares the prize money on YouTube, Instagram and X. 100% of the money left. Open to join.",
+                            "Shares the prize money on YouTube, Instagram and X. All the money is left. Anyone can join.",
                             [TIKTOK_NOTE],
                             pay=["Shares the prize money", "Shares the prize money", "Shares the prize money"],
                         ),
                         SPLIT: _lines(
-                            "Pays up to $3.00 per 1,000 views on YouTube, Instagram and X. 21% of the money left. Open to join.",
+                            "Pays up to $3.00 per 1,000 views on YouTube, Instagram and X. A little money is left. Anyone can join.",
                             [rule1, TIKTOK_NOTE],
                             [AUDIENCE],
                         ),
@@ -431,7 +432,7 @@ def match_cases() -> dict[str, Any]:
                     "looked": 15,
                     "lines": {
                         SPLIT: _lines(
-                            "Pays $3.00 per 1,000 views on Instagram and X. 21% of the money left. Open to join.",
+                            "Pays $3.00 per 1,000 views on Instagram and X. A little money is left. Anyone can join.",
                             [rule1, TIKTOK_NOTE],
                             [AUDIENCE],
                             pay=[
@@ -460,11 +461,11 @@ def match_cases() -> dict[str, Any]:
                     "refused": {COD: "not_your_places", LANCO: "not_your_places"},
                     "lines": {
                         FUNDING: _lines(
-                            "Pays $6.00 per 1,000 views on YouTube. 41% of the money left. Open to join.",
+                            "Pays $6.00 per 1,000 views on YouTube. Some of the money is left. Anyone can join.",
                             [rules4, "Also pays on Instagram.", TIKTOK_NOTE],
                         ),
                         ENERGY: _lines(
-                            "Pays $1.00 per 1,000 views on YouTube. 98% of the money left. Open to join.",
+                            "Pays $1.00 per 1,000 views on YouTube. Most of the money is left. Anyone can join.",
                             [rule1, "Also pays on Instagram and X.", TIKTOK_NOTE],
                             [AUDIENCE],
                         ),
@@ -487,7 +488,7 @@ def match_cases() -> dict[str, Any]:
                     "noNote": TIKTOK_NOTE,
                     "lines": {
                         COD: _lines(
-                            "Pays up to $2.00 per 1,000 views on TikTok and Instagram. 46% of the money left. Open to join.",
+                            "Pays up to $2.00 per 1,000 views on TikTok and Instagram. Some of the money is left. Anyone can join.",
                             ["Pays less in some countries."],
                             pay=[
                                 "Up to $2.00 per 1,000 views · up to $1,200 a clip",
@@ -495,7 +496,7 @@ def match_cases() -> dict[str, Any]:
                             ],
                         ),
                         FUNDING: _lines(
-                            "Pays $6.00 per 1,000 views on YouTube, TikTok and Instagram. 41% of the money left. Open to join.",
+                            "Pays $6.00 per 1,000 views on YouTube, TikTok and Instagram. Some of the money is left. Anyone can join.",
                             [rules4],
                         ),
                     },
@@ -512,12 +513,12 @@ def match_cases() -> dict[str, Any]:
                     "looked": 15,
                     "lines": {
                         SPLIT: _lines(
-                            "Pays up to $3.00 per 1,000 views on YouTube, Instagram and X. 21% of the money left. Open to join.",
+                            "Pays up to $3.00 per 1,000 views on YouTube, Instagram and X. A little money is left. Anyone can join.",
                             [rule1, TIKTOK_NOTE],
                             [AUDIENCE],
                         ),
                         HABLANDO: _lines(
-                            "Pays $1.00 per 1,000 views on Instagram. 29% of the money left. You apply first.",
+                            "Pays $1.00 per 1,000 views on Instagram. Some of the money is left. You apply first.",
                             [TIKTOK_NOTE],
                             [],
                             ["I can't tell the language."],

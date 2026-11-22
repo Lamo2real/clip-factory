@@ -34,10 +34,10 @@
   match from CR's public fields only (pay per 1,000 views with geo rates, places, money left, open or apply, category,
   language) and refuses only what the public page shows (drafts first, its own sound, including a description that says
   a sound must be used, its own overlay, slideshows, almost no money left); a brand that counts only some countries'
-  viewers gets a heads-up; whatever the page can't tell is said as "I can't tell…", never as a pass. Its defaults are
-  chosen for him: at least $1.00 per 1,000 views, the places he set up, at least a quarter of the money left (a percent,
-  so big campaigns with thousands of dollars left stay in), open to join. Rates and money left are CR's own numbers,
-  tagged so; nothing estimates what a clip would earn. At most one notification a day, and never right after he asked.
+  viewers gets a watch-out line; whatever the page can't tell is said as "I can't tell…", never as a pass. Its defaults
+  are chosen for him: at least $1.00 per 1,000 views, the places he set up, "Some left" of the money (at least 25% of
+  it: a percent, so big campaigns with thousands of dollars left stay in), only campaigns anyone can join. Rates and
+  money left are CR's own numbers, tagged so; nothing estimates what a clip would earn. At most one notification a day, and never right after he asked.
   Joining stays his tap on **Join Campaign**, and the page says so plainly ("You join each campaign yourself on Content
   Rewards."); "I joined: add it" uses §38's add with the link it already has, and while Clip Factory can't read an open
   campaign's rules the same step takes his pasted rules; once signed in, a listed campaign he opened from the finder in
