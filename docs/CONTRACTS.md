@@ -15628,8 +15628,14 @@ then log into tiktok and upload them then delete the video you downloaded after 
   `clip-factory-….mp4`, recorded in its ledger), and only once the post's link is found in TikTok Studio › Posts. A
   failed try keeps it for the retry; a clip that got onto TikTok another way has its kept file removed. Nothing else
   in Downloads is touched.
-* **The red frame** (`~/.claude-control`) is up whenever the helper drives Chrome or TikTok Studio, from before the claim
-  to the end (green when posted, down on a stop); without it the helper claims and drives nothing.
+* **Nothing on the owner's screen** (the owner: "i want that process to upload to tiktok to be done behind the scenes, it
+  should not appear on my screen it should allow me to work like normal in parallel"; this replaced his earlier
+  red-frame rule): a normal run starts Chrome headless (new headless mode, the helper's own profile and TikTok login),
+  spawned directly, so there is no window on screen, no Dock icon, no Cmd-Tab entry and no focus; it tells TikTok
+  what the visible Chrome would (user agent and client hints without HeadlessChrome, the Mac's screen, pixel ratio 2),
+  with Chrome's notifications off. No frame, no notification, no sound: results go to the clip's row and the helper's
+  events log. Only his own turn (a TikTok code, a puzzle, a login the Keychain can't do, the Clip Factory sign-in)
+  shows the yellow frame and one pop-up, with a visible login window. All input is CDP (no OS mouse or keyboard).
 * **API (additive, the `MACHELPER` item):** ping takes `login?: "saved" | "none"` and `loginDone?: ISO` (the `at` of the
   request it handled; a newer request stays). `POST /v1/tiktok/mac/login {action: "change" | "forget"}` → `{helper}`
   sets `loginRequestAction`/`loginRequestAt` (409 "Set up your Mac first. Then it can keep your TikTok login." when no
@@ -15646,7 +15652,7 @@ then log into tiktok and upload them then delete the video you downloaded after 
   clears a newer request, unknown keys refused, no login fields stored); `web/test/tiktokMac.test.ts` and
   `web/e2e/tiktok-mac.spec.ts` (the lines, the buttons, Forget's question); `mac/tiktok-helper/test/login.test.js` (at most
   twice a day, never after a refusal, a code or a puzzle is the owner's turn, never in a log, an event or a request),
-  `files.test.js` (only its own videos), `frame.test.js` (no frame, no run).
+  `files.test.js` (only its own videos), `frame.test.js` (a normal run never touches the frame).
 
 ### 47.7 Not verified live
 
