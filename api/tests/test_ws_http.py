@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import ws_routes_ai
 import ws_routes_core
 import ws_routes_social
@@ -38,3 +40,20 @@ def test_the_stories_lambda_does_not_load_clip_factorys_route_table() -> None:
 def test_the_stories_lambda_answers_404_outside_its_routes() -> None:
     out = ws_http.dispatch(make_event("GET", "/v1/jobs"), lambda: None, ROUTES)  # type: ignore[arg-type,return-value]
     assert out["statusCode"] == 404
+
+
+def test_the_stories_lambda_serves_the_public_oauth_callback(monkeypatch: Any) -> None:
+    """API Gateway sends GET /v1/stories-oauth/{platform}/callback to this Lambda (§45.13.3): with no JWT it answers
+    302 to Lamo Stories' Social accounts page, never 404 or 401 (otherwise no Connect could finish)."""
+    from types import SimpleNamespace
+
+    import ws_routes_social
+
+    monkeypatch.setenv("APP_URL", "https://app.example")
+    monkeypatch.setattr(ws_http, "_get_app", lambda: SimpleNamespace(oauth=None))
+    for method, path in ws_routes_social.CALLBACK:
+        out = ws_http.handler(make_event(method, path, query={"state": "w1.x", "code": "c"}, sub=None))
+        assert out["statusCode"] == 302, out
+        assert out["headers"]["location"].startswith("https://app.example/stories/connections?platform=youtube")
+    # Clip Factory's own callback path is still not this Lambda's.
+    assert ws_http.handler(make_event("GET", "/v1/oauth/youtube/callback", sub=None))["statusCode"] == 404

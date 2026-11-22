@@ -1542,7 +1542,7 @@ Four provider kinds, each picked separately in Settings: **reasoning** (§45.25)
 | Kind | Provider | State |
 |---|---|---|
 | video | `builtin-2d`: the engine and rasterizer (§45.10–§45.11) | on |
-| video | `nova-reel`: Amazon Nova Reel 1.1 on Bedrock, text or image to 6-second shots, used as scene backgrounds or cut-aways | built; needs an S3 bucket in us-east-1 (Nova Reel writes only there), a Terraform switch `stories_video_us_bucket` (off), and the model enabled for the account. Realistic AI footage: a story that uses it is posted only with the platforms' AI labels (§45.14) |
+| video | `nova-reel`: Amazon Nova Reel 1.1 on Bedrock, text or image to 6-second shots, used as cut-aways (scenes with no character; backgrounds behind the characters are a later step, §45.34) | built; needs an S3 bucket in us-east-1 (Nova Reel writes only there), a Terraform switch `stories_video_us_bucket` (off), and the model enabled for the account. Realistic AI footage: a story that uses it is posted only with the platforms' AI labels (§45.14) |
 | images | `builtin-rig`, `nova-canvas` | as §45.11.6 |
 | audio | `builtin-synth` | on |
 | any | a provider with an API key (structure only: `PROVCRED#{providerId}` metadata, the key in `cf-prod/workspaces/{ws}/providers/{providerId}`) | the registry and the key form are built; no external provider is called until one is added in code and checked live |
@@ -1620,3 +1620,128 @@ pixels. Each job records which providers made it (`PJOB#.meta.providers`).
   app-key secrets and the OAuth state key; `RATE#{platform}` writes only for the shared-app choice. Nothing else of
   Clip Factory is read or written. §45.32 #20 counts the shared-app choice's shared budget as the owner's own choice.
 * **Social accounts page**: each card shows the platform's logo mark (the same marks Clip Factory's setup uses).
+
+### 45.34 Round-3 decisions (the builders' open questions and the final audit; they win over anything above)
+
+Settled after all eleven round-2 pieces shipped. Each line names who builds it in round 3 (api, agent, web) or says it
+is already built and only written down here.
+
+**Routes and shapes**
+
+* **The OAuth callback is served** (lead, built): `workspaces/http.handler` dispatches `routes.ROUTES` plus
+  `routes.social.CALLBACK_ROUTES` (the public `GET /v1/stories-oauth/{platform}/callback`); `routes.ROUTES` stays
+  exactly the JWT `/v1/workspaces` table. `cf-prod-stories-api` has `STORIES_OAUTH_CALLBACK` = `{apiUrl}/v1/stories-oauth`
+  in its environment (§45.15's list gains it; infra already sets it).
+* **Write the post captions again** (api built, web): `POST /v1/workspaces/{ws}/stories/{storyId}/captions
+  { override?: ModelOverride }` → `202 { task: AiTask }` (kind `captions`, the storyboard agent; `409` while the story
+  has no storyboard). The finished task's `result` is `{ storyId, scriptVersion, postCaptions: Captions }`, a draft the
+  owner reads and saves with `PATCH …/stories/{storyId}` (`postCaptions`), never saved by itself. Route 40 of §45.5.
+  `StoriesApi.writeCaptions(ws, storyId, body?: { override?: ModelOverride }): Promise<AiTask>`; Review's post-captions
+  panel has "Write them again", which shows the draft next to the saved captions with "Use these".
+* **`Story.effective`** (api, web): every story the API returns carries `effective: Effective` for the task
+  `storyboard` (what the next run would use, from §45.25's precedence), and the job's `meta.models` keeps what each run
+  used. Review and Production show "Next run: {model} · {effort}".
+* **Model and effort pairs**: an effort saved together with a model that offers no efforts, in the same setting, is
+  refused when saved ("{Model} has no effort setting; it runs at its own level."). An effort that is only inherited
+  (from the agent or the workspace default) onto such a model runs that model with no effort sent, and shows
+  `effortApplied: false` ("This model runs at its own level"). An effort the chosen model does not offer is always
+  refused, never swapped (§45.25).
+* **Onboarding step 4** (api): `PATCH /v1/workspaces/{ws}` sets the workspace item's top-level `providersPickedAt`
+  (ISO time) whenever the body carries `configuration.providers`, even when the value is unchanged, so keeping the
+  built-in animator ticks step 4.
+* **Provider usage and cost** (api, agent, web; the owner's Settings › Video "Usage and costs"): `Price` gains
+  `perUnit: number | null` and `unit: "image" | "second" | null` (both null for models). A price for `nova-canvas`
+  (per image) or `nova-reel` (per second of video) is saved through `PUT …/ai` `prices` (by provider id) with
+  `inputPer1M` and `outputPer1M` 0 and `perUnit` set. `UsageSummary` gains `days[].renderMinutes` and
+  `days[].byProvider` and `totalsByProvider`, each `{ provider: string; units: number; unit: "image" | "second";
+  cost: number | null; currency: string | null }[]` (built-in render seconds count as `builtin-rig`, priced 0 with
+  `currency: null` and the line "Free: it runs on Lamo Stories' own computer"). Model rows never carry provider ids.
+  The agent writes `USAGE#` items with `kind: "provider"`, `provider`, `units`, `unit`; `usage.summary` sums them.
+  Settings › Video shows render minutes per day and each provider's units and cost (or "No price yet: add one").
+* **`ProviderStatus.key`** (api, web): `key?: { saved: boolean; hint: string | null; savedAt: string | null } | null`,
+  present only for a provider that takes a key; the key card shows "Remove the saved key" only when `saved`.
+* **A provider that is not ready** (api, agent): a story's create, produce and changes answer `409` with the
+  provider's own line when `configuration.providers.video` (or `images`) names a provider whose state is not `on`
+  ("Amazon Nova Reel is not ready yet: {what is missing}. Pick Built-in animation in Settings › Video, or finish its
+  setup."). Nothing switches to another provider by itself. The agent's `ProviderUnavailable` stays as the second guard
+  and fails the job with the same sentence. The providers route's line for Nova Reel says the same, never "the built-in
+  animation makes your videos".
+* **Built-in providers start `on`** (built): `builtin-2d`, `builtin-rig` and `builtin-synth` are `on` from the start;
+  `bedrock-claude`, `nova-canvas` and `nova-reel` are `on` only after a real call succeeded. §45.11.6's sentence "A
+  provider shows on only after a real call succeeded" is about those three only.
+* **Nova Reel makes cut-aways** (built): scenes with no character. Scene backgrounds behind the built-in characters
+  stay a later step; §45.31's table reads "cut-aways (scenes with no character)".
+* **Social account reasons** (built; web types): `SocialAccount.reason` is a code, `SocialReason = "keys_changed" |
+  "token_dead" | "expired" | "expires_soon" | "missing_permissions" | "clips_unknown"`; the web says each in words.
+  `KeyCheck` carries `account?: "ok" | "dead" | "none"`. `ClipsDestination.name` is always `null` (the `ACCOUNT#` read
+  is limited to five attributes, §45.15). PUT or DELETE `/app` on one Meta platform writes or removes the one own Meta
+  app's keys for both Instagram and Facebook.
+* **The receiving account before a post** (api built, web): `PublishTarget` gains `confirmAccount?: string` (an
+  `externalAccountId` the owner saw); `PublishingJob` gains `handle: string | null` and `externalAccountId: string |
+  null`. A `409` for an account that changed, or for a TikTok that Lamo Stories cannot tell from Lamo Clips' own
+  (TikTok gives each app its own id), carries `error.account: { externalAccountId, accountName, handle }`. The web's
+  `ApiError` keeps the error's `account`; the publish sheet and Posts' retry then ask "Post to {name}?" with the
+  account shown and send the same request again with `confirmAccount`. Lamo Stories asks once per TikTok identity
+  (`SOCIAL#tiktok.notClipsConfirmed`).
+* **Reference videos** (api, web): `GET …/references/{refId}` answers `{ reference, analysis, job: ProductionJob |
+  null }` (the analysis job of `currentJobId`, else the latest one), so the page shows each step and the failure's own
+  reason. `StoryStep.key` also takes the analysis steps `"look" | "listen" | "write"` (Look at it, Listen, Write it
+  up). `StoriesApi.deleteReference(ws, refId)` is renamed `deleteReferenceVideo`; `deleteReference(ws, characterId,
+  assetId)` stays the character's picture.
+* **From the chat to a new video** (web): Production › New reads `?idea=`, `?ref=` (repeatable, ≤ 3 reference ids),
+  `?cast=` (repeatable, ≤ 3 character ids) and `?sec=` (15–90), and starts with those picked; `StoriesPage.production_new`
+  carries `ideaId`, `refIds`, `castIds`, `durationSec`. "Use in a video" on a reference opens it with `?ref=`.
+* **`ChatAction.payload` per kind** (built): `make_video { story: StoryInput }` or `{ ideaId }`; `remake_scene { storyId,
+  sceneIds, note? }` (a note or scene ids at least); `analyze_reference { refId }`; `save_character { character }`;
+  `save_idea { idea }` or `{ ideaId, patch }`; `open { href }` (a Lamo Stories address only).
+* **Chat pictures on Try again** (built): a retry uploads the pictures again; an `assetId` is used by one message only.
+* **The dashboard's account sentence** (api) says "Open Social accounts and tap Connect".
+* **Approving a driving-safety story** (api): approve refuses a `safety.status` of `skipped` whenever the story has a
+  `safetyTopicId`, whatever its category (a second guard; the agent never skips it).
+
+**Agent**
+
+* **The writer and the fact checker get the engine's rules** (agent): the storyboard, scene-rewrite, fix and
+  fact-check requests carry `catalog`, `rules`, `propStates` and `limits` from `cli.ts catalog` (§45.10), so a skid's
+  `dir` is the side the rear slides to.
+* **Humming** (agent; engine built): noise events carry `voice: "babble" | "hum"` (`AudioEvent.voice`); `audio.py`
+  makes a closed-mouth hum for `"hum"`.
+* **A remade scene keeps the place's sounds** (agent): `merge_scenes` sets the remade scene's new seed after
+  `normalizeScript`, on the normalized script, before the second validate.
+* **Check models is tiny** (agent): `check_models` sends one short request per model with no agent instructions,
+  skills or memory, logs no task-agent mismatch, and writes one `MODELSTATUS#` item per model with the attribute
+  `model` (never `modelKey`; the API reads `model` and also accepts an old `modelKey`).
+* **ModelClient** (agent): the Protocol lists `allow_inactive`; `on_text` receives the current call's whole text so
+  far; the creative packages reach the client through `lamostories_agent.services.get().models`.
+* **The model-call guard** counts per task: writer 3 (storyboard, scene rewrite, fix), captions 2, checker 2, final
+  review 1; at most 8 `complete()` calls and 16 Bedrock requests per job.
+* **The quality agent switched off** still runs the fact check and the final review for driving content (category
+  `driving_safety`, a `safetyTopicId`, or a writer `teachesSafety` flag).
+* **Produce** (built): `produce { from: "scenes" | "animation" }` with no `sceneIds` re-renders every scene; with
+  `sceneIds`, those scenes plus every stale one. "Check again" (`from: "safety"`) and runs with no `from` stay
+  content-based. A re-render within one script version overwrites that version's scene, still and audio files and
+  their `ASSET#` rows; older script versions stay in the Library.
+* **Effects per scene**: at most 40 (`LIMITS.sfx`, the API's `MAX_SFX`). A script's `durationSec` is the sum of its
+  scene lengths within 0.05 s (`validateScript`). New scenes get the place's ambient effects as `Scene.sfx` cues with
+  ids `{sceneId}.amb{k}` at 0 s; the sound editor labels them "(whole scene)".
+
+**Internal attributes** (never returned; listed in the tests' leak lists): `STORY#` `ownerEdits {captions,
+sceneCaptions, postCaptions}`, `staleScenes`, `brief`, `lastJobId`, `safety.checkStatus`, `safety.lastLook`; the
+writer sidecar `script/v{n}.writer.json` `{ by, jobId, texts, postCaptions, teachesSafety }`; `CONV#.rev`;
+`AICONFIG.configSavedAt`; workspace `providersPickedAt`; `SOCIAL#tiktok.notClipsConfirmed`. `currentJobId` is cleared
+with `REMOVE` on `STORY#` and `REFVID#`; conditions accept a missing value or `null`.
+
+**Deploys and the Clip Factory check** (built; written into docs/DEPLOYMENT.md): the deploy's "Clip Factory check"
+step reads the plan when Lamo Stories work that feeds it is in the deploy (first-parent commits since the live release,
+cf-prod-api's `VERSION`): it fails when anything of Clip Factory's agent, `cf-prod-api`, `cf-prod-hooks` (other than
+`STORIES_OAUTH_CALLBACK`), the HTTP API's settings, authorizer, Lambda permission or stage (other than Lamo Stories' own
+`route_settings`) changes, or a Clip Factory route is not a no-op. Lamo Stories' image is built before the plan once its
+runtime is live; a failed build keeps the live tag and still ships Clip Factory. The `workflow_dispatch` input
+`allow_clip_factory_change` ("Clip Factory changes on purpose") reruns a deploy whose findings are another PR's Clip
+Factory change landing in the same unapplied range; it never lets a Lamo Stories route take a Clip Factory path.
+
+**Web layout notes** (built): the switcher's phone toggle is 29 × 48 px at 320 px wide (48 × 48 from about 340 px) and
+44 × 28 in the folded sidebar; below about 570 px tall the folded sidebar has no switcher (unfolding shows it). §45.17's
+`App.tsx` row also covers `redirectAtStart()` and `<WorkspaceSwitch place="topbar" />` in the phone top bar, and the
+`glide.css` row covers the switcher's own `.ws-*` styles. `web/vite.config.ts` lets the dev server read
+`stories/config` (dev mode only).

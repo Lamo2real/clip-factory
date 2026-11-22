@@ -310,6 +310,8 @@ export interface AudioEvent {
   dur?: number;
   /** -1 (left) .. 1 (right) */
   pan?: number;
+  /** noises: how the character makes it (CONTRACTS §45.34): "hum" is closed-mouth humming, "babble" an open voice */
+  voice?: "babble" | "hum";
 }
 
 export interface CatalogEntry<T extends string> {
