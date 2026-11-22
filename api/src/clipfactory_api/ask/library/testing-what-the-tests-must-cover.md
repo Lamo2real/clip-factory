@@ -677,6 +677,108 @@ All your money while their routes answer 404, and the golden case files are read
 - **Live checks, not done here** ([§39.6](CONTRACTS.md#396-not-verified-live)): see step 16 of
   [Manual checks after the first deploy](#manual-checks-after-the-first-deploy).
 
+### Campaign finder (CONTRACTS §41)
+From [CONTRACTS.md §41.6](CONTRACTS.md#416-who-builds-what-the-switch-tests-not-verified-live). Offline, fakes only:
+no AWS, no Content Rewards, no network. `cf-prod-campaigns`' fakes have no MCP client and no Secrets client, and in
+every `test_finder_*` module `socket.getaddrinfo` and `socket.create_connection` are patched to raise (one autouse
+fixture in `api/tests/conftest.py`), so a real DNS look-up or socket fails the test. Each part passes CI on its own,
+in any order: before the routes merge, a look finds no `CRFIND` owner; before the reader merges, the routes answer
+`state: "new"` or `looking`; the web hides everything on 404 and 503; the help guides merge after the web (their
+highlights must be real anchors).
+
+- **Reader** (pytest, `api/tests/test_finder_{robots,sitemap,rsc,source,normalize,match,run,fixtures}.py`, the fakes
+  in `api/tests/finder_fakes.py`: a recording `opener`, `resolver=lambda _h: ["104.18.0.1"]`, a fake monotonic clock
+  whose fake `sleep` advances it, a fake datetime clock and a fake store; the golden files written by
+  `api/tests/finder_cases.py` to `api/tests/fixtures/finder/{samples.json, match_cases.json, normalize_cases.json,
+  plan_cases.json}` from the saved samples of 21 Nov 2026, with other creators' data removed):
+  - robots.txt against Content Rewards' file of 21 Nov 2026: `/sitemap.xml` and `/c/campaigns/{uuid}` allowed,
+    `/api/campaign/campaigns/discover`, `/home`, `/home/x` and `/home?x` disallowed, `/homepage` allowed; `$` and `*`,
+    the longest match, `Allow` on a tie, the `clipfactory` group, a stale copy used up to 7 days, none → `down`,
+    forbidding → `not_allowed`;
+  - the sitemap (a urlset, an index with children, only exact `/c/campaigns/{uuid}` locs, an upper-case uuid lowered,
+    a query refused, a missing `lastmod`, the 5,000 and 4 MB caps) and `entriesGz` (5,000 entries with 8 KB of
+    robots.txt stay under 350 KB, and round-trip);
+  - the page parser on each trimmed page: detail and card found, `$undefined` absent, a `T` row resolved, `$$`
+    unescaped, the soft 404 → gone, a changed page → unreadable, a bot wall → challenge on the first and on the
+    tenth page of a look; no committed fixture contains `"username"` or a non-empty `topClips`, `topEarners` or
+    `chartPoints`;
+  - the reader with the recording opener: **every recorded URL is allowed by robots.txt and none contains `/api/`**,
+    one request at a time, starts at least 1 s apart, at most 40 pages, the 100 s deadline, `User-Agent:
+    ClipFactory/1` and no cookie, auth or referer header, a redirect off `contentrewards.com` refused, 429 with
+    `Retry-After` → backoff (doubling, 24 h cap) written before the look ends, 403 three looks in a row → `blocked`,
+    a 5xx skipped and three → stop, five unreadable → `unreadable` with a 6 h wait, the 30-minute gap and 6 a day;
+    **a look that raises or times out after its first page, then a second invoke 15 minutes later, reads nothing**;
+  - the plan (`plan_cases.json`): stale matches first, never-read entries newest first, then missing group siblings,
+    live rechecks after 2 days, others after 14, gone only on a new `lastmod`, failing entries at 14 days, every
+    sitemap entry eligible whatever its age;
+  - normalize for all 15 samples (pay with geo rates, pool, money left, toggles, categories, types, the overlay,
+    sound and viewer-country signals, languages, hidden rules, group siblings, `onDiscover`); match for every golden
+    case of §41.3 (default, also apply, gaming, other pay with any money, $2 and up, YouTube only, TikTok after its
+    audit, English, hidden and own), the `skipped` counts, `looked`, ranking ties and the 20 cap; the words (each
+    sentence of §41.3, at most 26 words, none of the banned words, no amount that isn't Content Rewards' number
+    formatted); `matchedWant` against the one literal case;
+  - the run (each `why`, the lease lost, owners from `CROWNERS` with `want.on`, `CRFIND` only updated and never
+    created, the notice once a day and never on `start`, `check_now` or `want`, the first look never, `tellMe`
+    false, one owner's failure, the `STATE` counters) and `handler.find` with `CR_FINDER` off → `off`.
+- **Routes** (pytest, `api/tests/test_finder_{routes,adopt,notify,tick}.py` with literal item shapes from §41.5, and
+  the updated `test_http.py`, `test_realtime.py`, `test_cr_poll.py`, `test_cr_routes.py`, `test_cr_gates.py`): every
+  route 503 while off and §38.8's 404/503 rule; the want checks and the defaults literal; the first `PATCH` →
+  `CRFIND` with all defaults, `CROWNERS` and a `start` look; a change → a `want` look; `unhideAll` REMOVEs `hidden`;
+  a stale `matchedWant` on GET → at most one `want` look per 10 minutes; "Look again now" at most once per 30 minutes
+  and 4 a day; `said` opened, not for me, undo and the 404; add for open and application, signed in or not (the right
+  `said`, the membership, `added`, `canSayInBy = addedAt`; CR's JSON down → from a fresh `PUB#` copy with
+  `budget.asOf` equal to its `readAt`, 404 when stale); joined (not signed in → nothing; listed opened ones added as
+  `unknown`, then a `MODIFY` to `in`; ambiguous never; **a campaign added, removed and still listed is not added
+  again**; **a stored match never opened is not added**; an open older than 48 hours is not added; the 30 s limit;
+  at most 5); ask (409 not signed in, the exact `send_feedback` payload with no personal data, URL or token, once per
+  30 days); the view (`state` order, `looking` for 10 minutes, `isNew`, hidden and added dropped, the resolved places
+  with TikTok before and after its audit, `signedIn`); the overview's `finder` (absent while off, `started: false`
+  and zeros with no `CRFIND`); the seven rows in `test_every_contract_route_is_registered`; broadcast `CRFIND` →
+  `{type: "contentrewards", id: "finder", partial: true}`; notify (once per key, the dedupe, `tellMe` false, `on`
+  false, `notify.contentRewards` false, the singular); the tick (it starts a look only when on, due and not
+  running); the poll hook (signed in only, only with an adopt candidate, inside the 25 calls); gates (§41.6 changes
+  10 and 11, and §38's own adds unchanged).
+- **Infrastructure** (`terraform test`, mock providers): `CR_FINDER = "off"` by default and `"on"` with the variable,
+  on `cf-prod-api`, `cf-prod-stats` and `cf-prod-campaigns` (each module's exact env key set updated);
+  `cf-prod-campaigns` still has no `secretsmanager` action; the realtime and notify filters include `CRFIND`
+  (notify still `MODIFY` only); `envs/prod` defaults to `false` and still plans with `true`; nothing replaced (the
+  delete gate test).
+- **Web units** (Vitest, `web/test/finder.test.ts`, `web/test/finderPage.test.tsx`, and the updated
+  `backLink.test.ts` and `noGuesses.test.ts`): `lib/finder.ts` (404 and 503 → hidden, the debounced `PATCH`, `places:
+  null` when the picked chips equal every ready place, `finderHref` only for the Discover link and only while the
+  overview has `finder`, the frozen "New" set for the visit); the Find page in every state of §41.1's table with its
+  single vermilion (`off` shows no match; `down`, `blocked`, `not_allowed` and `unreadable` keep the open match's);
+  **every match has "Open on Content Rewards" and exactly one button on the screen is vermilion**, moving with the
+  open match; "Not for me" opens the next one; opened → the steps and "I joined: add it" / "I applied: add it"
+  (`opened` kept when the `PATCH` fails, one retry), the vermilion back on Open after two hours; not signed in → the
+  rules box and `…/read {"pastedRules"}` right after the add; the application steps with the Copy chips; the
+  If-you-see fold word for word; **after `joinedOnCr` + return + a live refetch, "Make clips for this campaign" is
+  still on screen**; "Reading the rules…" that can't be tapped, then the vermilion; "Why not more?"; the want card's
+  controls and their `PATCH` bodies; "Updating your matches…"; the TikTok chip disabled; "Set up another place"; the
+  no-place `new` state; the Ask card only while signed in.
+- **Playwright** (mock mode, `web/e2e/finder.spec.ts` at 375×812 and 1440×900, light and dark; the mock in
+  `web/src/api/mock/finder.ts`, state in `sessionStorage` `cf-mock-finder`, knobs on `window.__cfMock.finder`):
+  never started → defaults → "Find campaigns for me" → looking → six matches; "Who can join" brings Hablando and
+  UnGodly; Open (a new page, `opened` sent) → "I joined: add it" → the campaign card; signed in: `joinedOnCr` +
+  return (`visibilitychange`, and window `focus`) → "You're in! …" with "Reading the rules…", then "Make clips for
+  this campaign"; Home's "3 new campaigns match" chip, Home's "Find campaigns" chip never started and the Campaigns
+  entry card; the notification's url; 404, 503 and `setState("unavailable")` hide every entry and the page says
+  coming soon; `content-rewards.spec.ts`'s empty Campaigns page both ways (with the finder "Find campaigns" is the
+  vermilion and `join-find`'s Open is glass; unavailable, Open is the vermilion as before); `two-ways.spec.ts` still
+  counts **5 taps** for the normal way; on every new screen no sideways scroll at 320–1920, no edges, targets ≥ 44 px
+  (48 on phones), the arrow cursor only, axe contrast light and dark, reduced motion, the phone vermilion bottom
+  right, Ask never over the main button. `screenshots.spec.ts` adds `finder` and `finder-want` at 375 and 1440. Run it
+  on a port of its own: `CF_E2E_PORT=4745 npx playwright test e2e/finder.spec.ts`.
+- **Help and docs**: the guides `cr-find`, `cr-find-join`, `cr-find-why-not` and `cr-find-missing` each have one
+  question in `helpEvals.json` that both retrievers rank first (`web/test/helpRetrieve.test.ts`,
+  `api/tests/test_help_evals.py`), and the owner's own words ("Can I find campaigns and join them based on
+  requirements I set?") find `cr-find`. They highlight only the Find page's anchors (`cr-finder`, `cr-finder-want`,
+  `cr-finder-match`, `cr-finder-entry`, `cr-finder-ask`), so `node scripts/help-corpus.mjs --check` (every highlight
+  is a real `data-help` anchor) passes only once the web part has merged; then it and `node scripts/ask-knowledge.mjs
+  --check` pass after running `node scripts/help-corpus.mjs --write-docs` and `node scripts/ask-knowledge.mjs`.
+- **Live checks, not done here** ([§41.6](CONTRACTS.md#416-who-builds-what-the-switch-tests-not-verified-live)): see
+  step 17 of [Manual checks after the first deploy](#manual-checks-after-the-first-deploy).
+
 ### Auto-posting (CONTRACTS §46)
 From [CONTRACTS.md §46.15](CONTRACTS.md#4615-tests-offline-fakes-only). Offline, fakes only: a fake clock, a fake
 store, a fake Lambda client for the clip flow's start and fake publishers. No AWS, no platform, no network.

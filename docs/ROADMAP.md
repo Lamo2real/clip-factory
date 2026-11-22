@@ -86,6 +86,24 @@ able to understand how to navigate it"):
 - Switched off in prod until all six parts (api, posting, agent, web, desktop, docs) had merged; the one-line switch
   PR #88 turned it on (21 Nov 2026), and PR #93 turned on "Make a campaign copy" (§39).
 
+**Built by the campaign finder request** ([CONTRACTS.md §41](CONTRACTS.md#41-campaign-finder-campaigns-that-match-what-you-want-owner-request-2026-11-21),
+[ADR-65](DECISIONS.md#adr-65-campaign-finder-content-rewards-public-pages-read-politely-joining-stays-the-owners-own-tap);
+the owner's words: "will I be able to find campaigns and join them based on some requirements that I set"):
+
+- **Find campaigns** (`/campaigns/find`, a card on the Campaigns page, a chip on Home's campaigns row): he says once
+  what he wants (at least $X per 1,000 views, where he posts, how much money is left, open to join or also apply,
+  topics, language; the defaults are picked for him), and Clip Factory reads Content Rewards' public campaign pages 4
+  times a day, skips campaigns it can't make clips for, ranks the matches and tells him "3 new campaigns match what
+  you want." (at most once a day). Only Content Rewards' own numbers, never a guess of earnings.
+- **Join with his own tap**: every match has "Open on Content Rewards"; he taps **Join Campaign** there, then "I
+  joined: add it" (no link to copy or paste). Once Content Rewards' sign-in yes arrives, the campaign is added by itself
+  when he comes back, and "You're in!" follows.
+- **Polite and anonymous**: only what robots.txt allows (`/sitemap.xml`, `/c/campaigns/{uuid}`), never an `/api/…`
+  path, at most 40 pages a look, 1 s apart, from AWS only, with no cookie and nothing about the owner; a backoff, a
+  `blocked` state, and "Look on Content Rewards yourself" always there.
+- Ships switched off (`cr_finder_enabled = false`) until its five parts (reader, routes, infra, web, docs and help)
+  have merged; then one switch PR turns it on. It goes off again the same day if Content Rewards or Whop asks.
+
 **Built by the auto-posting request** ([CONTRACTS.md §46](CONTRACTS.md#46-auto-posting-the-oldest-clips-in-review-go-up-by-themselves-every-x-hours-owner-request-2026-11-22),
 [ADR-81](DECISIONS.md#adr-81-auto-posting-an-hourly-eventbridge-rule-a-due-check-and-uploads-own-code); the owner's
 words: "On each scheduled run, take the next clips from the review list, oldest first, and post them", and "Yes, all
@@ -109,7 +127,9 @@ fires within the first minute).
 Still open for Content Rewards: CR's sign-in pilot must grant `my_submissions:write` before Clip Factory can send by
 itself (until then: read only and reminders, or, if the sign-in is refused, checking and sending by hand); campaigns
 that need drafts first or the brand's own sound; TikTok campaign clips (after TikTok's audit); uploading proof of
-views for the owner; and everything CR's live API may still change (CONTRACTS §38.21).
+views for the owner; official tools to search Discover and to join or apply (the finder reads public pages until
+then, and "Ask Content Rewards" asks for them); and everything CR's live API may still change (CONTRACTS §38.21,
+§41.6).
 
 Still open in phase 2:
 1. **Clips kept before a platform was connected** stay "Waiting for connection" and are **not posted automatically**

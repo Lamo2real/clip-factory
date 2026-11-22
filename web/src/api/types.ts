@@ -1983,9 +1983,10 @@ export interface Api {
   listAccounts(): Promise<Account[]>;
   /**
    * POST /v1/accounts/{platform}/connect: where to send the owner to approve (same tab). `grant: "money"` is "Allow
-   * money reading" (§25.4): YouTube and TikTok only, merged into the existing connection.
+   * money reading" (§25.4): YouTube and TikTok only, merged into the existing connection. `grant: "payments"` is
+   * "Allow payment reading" (§40.6): YouTube only, its own connection (PAYCONN#adsense).
    */
-  connectAccount(platform: Platform, grant?: "money"): Promise<{ authorizeUrl: string; expiresAt: string }>;
+  connectAccount(platform: Platform, grant?: "money" | "payments"): Promise<{ authorizeUrl: string; expiresAt: string }>;
   /** POST /v1/accounts/{platform}/choose (Meta with several Pages or Instagram accounts). */
   chooseAccount(platform: Platform, accountId: string): Promise<PlatformSetup>;
   /** DELETE /v1/accounts/{platform}: the keys stay. */
@@ -2122,6 +2123,21 @@ export interface Api {
   crFinderAsk(): Promise<{ askedAt: string }>;
   /** GET /v1/money/everywhere: All your money (§39.2). */
   getMoneyEverywhere(): Promise<MoneyEverywhere>;
+  // Get paid (§40.7). An API from before §40 answers 404.
+  /** GET /v1/getpaid. */
+  getPaid(): Promise<GetPaid>;
+  /** GET /v1/getpaid/{place}: the card and the payouts (newest first, at most 36). */
+  getPaidPlace(place: GetPaidPlace): Promise<{ card: GetPaidCard; payouts: PayoutRow[] }>;
+  /** PATCH /v1/getpaid/steps `{ step, done }` (Content Rewards' steps stay on PATCH /v1/contentrewards/connection). */
+  setGetPaidStep(step: string, done: boolean): Promise<GetPaid>;
+  /** DELETE /v1/getpaid/connections/adsense: "Stop payment reading" (no call to Google's revoke). */
+  stopPaymentReading(): Promise<void>;
+  /** PUT /v1/getpaid/whop/key `{ clientId }` (503 while WHOP_CONNECT is off). */
+  saveWhopKey(clientId: string): Promise<GetPaid>;
+  /** POST /v1/getpaid/whop/connect (409 without a key; 503 while off). */
+  connectWhop(): Promise<{ authorizeUrl: string; expiresAt: string }>;
+  /** DELETE /v1/getpaid/connections/whop: "Stop reading Whop" (503 while off). */
+  stopWhop(): Promise<void>;
   // Auto-posting (§46.9). An api from before it answers 404.
   /** GET /v1/autopost: on or off, the next run, the line, what waits, what did not work, the recent runs. */
   autoPostStatus(): Promise<AutoPostStatus>;

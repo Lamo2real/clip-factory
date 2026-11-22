@@ -537,6 +537,12 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
               Disconnect
             </Button>
           </div>
+          {/* §40.1 item 4: how this platform pays him, with the way back here. */}
+          <div className="done-panel__actions">
+            <LinkButton href={`/settings/posting/getpaid/${platform}?back=/settings/posting/setup/${platform}`} variant="glass" icon="coin" iconAfter="chevronRight" data-setup="getpaid">
+              Get paid
+            </LinkButton>
+          </div>
         </section>
       ) : null}
     </div>

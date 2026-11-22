@@ -1,5 +1,5 @@
 {
-  "version": "7f0669977604",
+  "version": "708d1520f488",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -73,6 +73,7 @@
     "/settings/clip-making/streamers",
     "/settings/clip-making/youtube",
     "/settings/posting/setup",
+    "/settings/posting/getpaid",
     "/settings/posting/where",
     "/settings/posting/my-settings",
     "/settings/posting/auto",
@@ -123,7 +124,10 @@
     "whop": "content rewards",
     "clipping campaign": "content rewards",
     "brand deal": "content rewards",
-    "cpm": "content rewards"
+    "cpm": "content rewards",
+    "find campaigns": "find campaigns",
+    "campaign finder": "find campaigns",
+    "discover": "find campaigns"
   },
   "stopwords": [
     "a",
@@ -3132,7 +3136,11 @@
         "campaign link",
         "join campaign",
         "new campaign",
-        "content rewards link"
+        "content rewards link",
+        "i joined a campaign",
+        "joined on content rewards",
+        "found on discover",
+        "add a campaign i joined"
       ],
       "answer": "Join the campaign on Content Rewards, tap its share icon, then **Copy campaign link**. In Clip Factory tap **Paste**, then **Add campaign**. I read the pay and the rules, and check by myself if you're in.",
       "steps": [
@@ -3217,6 +3225,165 @@
           "to": "/campaigns",
           "highlight": [
             "cr-next-step"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-find",
+      "kind": "guide",
+      "route": "/campaigns/find",
+      "where": "Your campaigns › Find campaigns",
+      "title": "Find campaigns that pay what I want",
+      "keywords": [
+        "find campaigns",
+        "campaign finder",
+        "find a campaign",
+        "find new campaigns",
+        "campaigns that match",
+        "match what i want",
+        "my requirements",
+        "set requirements",
+        "pays at least",
+        "money left",
+        "who can join",
+        "discover",
+        "search campaigns",
+        "look again now",
+        "new campaigns match"
+      ],
+      "answer": "Tell me once what you want: how much it pays per 1,000 views, where you post, how much money is left and who can join. I look at Content Rewards' campaigns 4 times a day, skip ones Clip Factory can't make clips for, and tell you when new ones match. Every match has **Open on Content Rewards**. You join it there yourself.",
+      "steps": [
+        "Open **Your campaigns** and tap **Find campaigns**. Or tap the **Find campaigns** chip on Home.",
+        "Pick **Pays at least**, **Where you post**, **Money left** and **Who can join**.",
+        "Tap **Find campaigns for me**.",
+        "Wait a minute or two. The best matches come first.",
+        "To change it later, tap **Change**. It saves by itself."
+      ],
+      "actions": [
+        {
+          "id": "cr-find:open",
+          "label": "Find campaigns",
+          "to": "/campaigns/find",
+          "highlight": [
+            "cr-finder-want"
+          ]
+        },
+        {
+          "id": "cr-find:entry",
+          "label": "Open your campaigns",
+          "to": "/campaigns",
+          "highlight": [
+            "cr-finder-entry"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-find-join",
+      "kind": "guide",
+      "route": "/campaigns/find",
+      "where": "Your campaigns › Find campaigns",
+      "title": "I found a campaign. How do I join it?",
+      "keywords": [
+        "join a match",
+        "found a campaign",
+        "join a campaign i found",
+        "open on content rewards",
+        "i joined add it",
+        "i applied add it",
+        "add a match"
+      ],
+      "answer": "Tap **Open on Content Rewards** on the match, then **Join Campaign** there (or **Apply**, then **Submit application**). Come back and tap **I joined: add it**. No link to copy. Once Content Rewards lets Clip Factory sign in, I add it by myself when you come back and say You're in!",
+      "steps": [
+        "On the match, tap **Open on Content Rewards**.",
+        "Tap **Join Campaign**. Does it say **Apply** instead? Tap **Apply**. Tick your accounts. Answer the questions. Tap **Submit application**.",
+        "Joined? Content Rewards shows **Submit clip**. Applied? It shows **Pending review**.",
+        "Joined, but Clip Factory isn't signed in to Content Rewards yet? Copy everything under **Brief** and **Content requirements**.",
+        "Come back to Clip Factory. Copied something? Paste it in the box. Tap **I joined: add it** or **I applied: add it**.",
+        "Once you're in, tap **Make clips for this campaign**."
+      ],
+      "actions": [
+        {
+          "id": "cr-find-join:open",
+          "label": "Open Find campaigns",
+          "to": "/campaigns/find",
+          "highlight": [
+            "cr-finder-match"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-find-why-not",
+      "kind": "guide",
+      "route": "/campaigns/find",
+      "where": "Your campaigns › Find campaigns",
+      "title": "Why can't Clip Factory join campaigns for me?",
+      "keywords": [
+        "join campaigns for me",
+        "clip factory join for me",
+        "do it for me",
+        "automatically",
+        "auto join",
+        "apply for me",
+        "on my behalf",
+        "by itself",
+        "ask content rewards",
+        "robot"
+      ],
+      "answer": "Content Rewards has no way yet for apps to join or apply. Joining also means saying yes to the brand's rules, and only you can do that. A robot tapping for you would break Whop's rules and could hold back your money. So you tap **Join Campaign**, and I do the rest. Signed in? Tap **Ask Content Rewards** to ask them for a way.",
+      "steps": [
+        "Open **Find campaigns**.",
+        "Near the bottom, find the card Clip Factory can't join for you. It shows once Clip Factory is signed in to Content Rewards.",
+        "Tap **Ask Content Rewards**. It sends one short note to their team.",
+        "To read the note first, tap **Show more**."
+      ],
+      "actions": [
+        {
+          "id": "cr-find-why-not:ask",
+          "label": "Ask Content Rewards",
+          "to": "/campaigns/find",
+          "highlight": [
+            "cr-finder-ask"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-find-missing",
+      "kind": "guide",
+      "route": "/campaigns/find",
+      "where": "Your campaigns › Find campaigns",
+      "title": "A campaign isn't in Find campaigns",
+      "keywords": [
+        "campaign missing",
+        "campaign not showing",
+        "can't find a campaign",
+        "why not more",
+        "no matches",
+        "none match",
+        "no campaign matches",
+        "not for me",
+        "bring them back",
+        "hidden campaign",
+        "left out"
+      ],
+      "answer": "Open **Why not more?** under the matches. It says how many were left out, and why. Some pay too little or have too little money left. Others don't pay for your places, want you to apply or need what Clip Factory can't make. Tap **Change** and ask for less. Paused, ended and private campaigns never show. A new one can take a few hours, and the first few days I'm still looking at them all.",
+      "steps": [
+        "Open **Find campaigns**.",
+        "Under the matches, open **Why not more?**.",
+        "Tap **Change** and pick less, like a lower **Pays at least**.",
+        "Said **Not for me** by mistake? Tap **Bring them back**.",
+        "Still not there? Tap **Look on Content Rewards yourself**."
+      ],
+      "actions": [
+        {
+          "id": "cr-find-missing:change",
+          "label": "Change what you want",
+          "to": "/campaigns/find#want",
+          "highlight": [
+            "cr-finder-want"
           ]
         }
       ]
@@ -4629,12 +4796,13 @@
       "title": "Posting",
       "keywords": [
         "Set up posting",
+        "Get paid",
         "Where clips go",
         "My settings",
         "Auto-posting",
         "Money"
       ],
-      "answer": "Where your clips go. It has Set up posting, Where clips go, My settings, Auto-posting, Money.",
+      "answer": "Where your clips go. It has Set up posting, Get paid, Where clips go, My settings, Auto-posting, Money.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**."
@@ -4933,6 +5101,70 @@
       ],
       "highlight": [
         "campaign-finder"
+      ]
+    },
+    {
+      "id": "settings-posting-getpaid",
+      "kind": "page",
+      "route": "/settings/posting/getpaid",
+      "where": "Settings › Posting › Get paid",
+      "title": "Get paid",
+      "keywords": [
+        "Get paid"
+      ],
+      "answer": "Set up how each app pays you. See if money can reach you.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Get paid**."
+      ],
+      "actions": [
+        {
+          "id": "settings-posting-getpaid:open",
+          "label": "Open Get paid",
+          "to": "/settings/posting/getpaid"
+        }
+      ]
+    },
+    {
+      "id": "apple-getpaid",
+      "kind": "apple",
+      "route": "/settings/posting/getpaid",
+      "hash": "getpaid",
+      "where": "Settings › Posting › Get paid",
+      "title": "Get paid",
+      "keywords": [
+        "get paid",
+        "payout",
+        "payouts",
+        "bank",
+        "bank account",
+        "paypal",
+        "stripe",
+        "adsense",
+        "whop",
+        "tax",
+        "money on hold",
+        "withdraw",
+        "cash out"
+      ],
+      "answer": "One card per place. Do the steps once so money can reach you.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Get paid**.",
+        "Find **Get paid**."
+      ],
+      "actions": [
+        {
+          "id": "apple-getpaid:open",
+          "label": "Open Get paid",
+          "to": "/settings/posting/getpaid#getpaid",
+          "highlight": [
+            "getpaid"
+          ]
+        }
+      ],
+      "highlight": [
+        "getpaid"
       ]
     },
     {
@@ -5869,7 +6101,7 @@
     {
       "id": "apple-money-payouts",
       "kind": "apple",
-      "route": "/settings/posting/money",
+      "route": "/settings/posting/getpaid",
       "hash": "money-payouts",
       "where": "Settings › Posting › Money",
       "title": "Getting your money out",
@@ -5888,7 +6120,7 @@
         "payment",
         "card"
       ],
-      "answer": "Each app pays you itself. Add your bank or PayPal inside each app.",
+      "answer": "Each app pays you itself. Get paid shows the steps for each one.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Money**.",
@@ -5898,7 +6130,7 @@
         {
           "id": "apple-money-payouts:open",
           "label": "Open Money",
-          "to": "/settings/posting/money#money-payouts",
+          "to": "/settings/posting/getpaid",
           "highlight": [
             "money-payouts"
           ]
@@ -6417,6 +6649,7 @@
         "Picked up again",
         "Every step",
         "Content Rewards news",
+        "Money on hold or sent to your bank",
         "Number on the app icon",
         "Lock Screen widget",
         "Send a test"
@@ -6646,6 +6879,42 @@
       ],
       "highlight": [
         "notify-contentrewards"
+      ]
+    },
+    {
+      "id": "apple-notify-getpaid",
+      "kind": "apple",
+      "route": "/settings/app/notifications",
+      "hash": "notify-getpaid",
+      "where": "Settings › App & account › Notifications",
+      "title": "Money on hold or sent to your bank",
+      "keywords": [
+        "get paid",
+        "payout",
+        "bank",
+        "on hold",
+        "money sent",
+        "adsense",
+        "whop"
+      ],
+      "answer": "When Google or Whop holds your money, or sends it to your bank.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Notifications**.",
+        "Find **Money on hold or sent to your bank**."
+      ],
+      "actions": [
+        {
+          "id": "apple-notify-getpaid:open",
+          "label": "Open Notifications",
+          "to": "/settings/app/notifications#notify-getpaid",
+          "highlight": [
+            "notify-getpaid"
+          ]
+        }
+      ],
+      "highlight": [
+        "notify-getpaid"
       ]
     },
     {

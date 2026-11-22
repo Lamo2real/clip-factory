@@ -85,6 +85,10 @@ export const SYNONYMS = {
   "clipping campaign": "content rewards",
   "brand deal": "content rewards",
   cpm: "content rewards",
+  // Campaign finder (docs/CONTRACTS.md §41.6).
+  "find campaigns": "find campaigns",
+  "campaign finder": "find campaigns",
+  discover: "find campaigns",
 };
 
 /** Keys, ids and infra words never reach the corpus. "Cookies" stays: it is the YouTube cookies setting. */

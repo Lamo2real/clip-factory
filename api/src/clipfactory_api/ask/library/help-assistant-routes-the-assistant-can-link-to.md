@@ -25,6 +25,7 @@ the generator with `--check` and fails when this table is out of date. Do not ed
 | settings | `/settings/clip-making/streamers` |
 | settings | `/settings/clip-making/youtube` |
 | settings | `/settings/posting/setup` |
+| settings | `/settings/posting/getpaid` |
 | settings | `/settings/posting/where` |
 | settings | `/settings/posting/my-settings` |
 | settings | `/settings/posting/auto` |

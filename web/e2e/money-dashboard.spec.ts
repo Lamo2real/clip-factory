@@ -197,9 +197,11 @@ for (const v of VIEWPORTS) {
         bar.evaluate((el) => [...el.querySelectorAll("button, .segmented__opt")].every((c) => c.getBoundingClientRect().left >= innerWidth / 2 - 80));
       expect(await inRightHalf()).toBe(true);
       // Wheel over the page itself (not the sidebar under the mouse's start point), then wait for the scroll to land.
+      // Past the band's own place on the page: All your money and Get paid (§40.1) come first, so it starts lower.
+      const at = await page.locator(".dash-band").evaluate((el) => el.getBoundingClientRect().top + scrollY);
       await page.mouse.move(v.w * 0.6, v.h * 0.6);
-      await page.mouse.wheel(0, 1500);
-      await expect.poll(() => page.evaluate(() => document.scrollingElement!.scrollTop)).toBeGreaterThan(600);
+      await page.mouse.wheel(0, Math.max(1500, at + 600));
+      await expect.poll(() => page.evaluate(() => document.scrollingElement!.scrollTop)).toBeGreaterThan(Math.max(600, at));
       await page.waitForTimeout(150);
       const box = await bar.boundingBox();
       expect(box!.y).toBeGreaterThanOrEqual(0);
@@ -453,14 +455,39 @@ test.describe("flows", () => {
     expect(await page.title()).toBe("Money · Clip Factory");
   });
 
-  test("All your money comes right after the title, then the filters, in reading and tab order (§39.2)", async ({ page }) => {
+  test("All your money comes right after the title, then Get paid, then the filters, in reading and tab order (§39.2, §40.8 change 6)", async ({ page }) => {
     await open(page);
-    const order = await page.evaluate(() => [...document.querySelector(".money-dash")!.children].slice(0, 3).map((el) => el.className));
+    await page.locator(".gp-money__rows").waitFor();
+    const order = await page.evaluate(() => [...document.querySelector(".money-dash")!.children].slice(0, 4).map((el) => el.className));
     expect(order[0]).toContain("dash-head");
     expect(order[1]).toContain("cr-all");
+    expect(order[2]).toContain("gp-money");
     // The filters lead the part they change (the dock's sticky box on a phone).
-    expect(order[2]).toContain("dash-filtered");
+    expect(order[3]).toContain("dash-filtered");
     expect(await page.evaluate(() => document.querySelector(".dash-filtered")!.firstElementChild!.className)).toContain("money-dock");
+  });
+
+  test("Get paid comes right after All your money and before the filters; no vermilion; one glass button per row (§40.1)", async ({ page }) => {
+    await open(page);
+    const getPaid = page.locator("[data-help='getpaid-card']");
+    await expect(getPaid.locator("h2")).toHaveText("Get paid");
+    await expect(getPaid).toContainText("Can money reach you from each place?");
+    await expect(getPaid.locator(".gp-money__row")).toHaveCount(6);
+    const order = await page.evaluate(() => {
+      const all = document.querySelector(".cr-all")!;
+      const gp = document.querySelector(".gp-money")!;
+      const band = document.querySelector(".dash-band, .money-dock")!;
+      return [all.compareDocumentPosition(gp) & Node.DOCUMENT_POSITION_FOLLOWING, gp.compareDocumentPosition(band) & Node.DOCUMENT_POSITION_FOLLOWING];
+    });
+    expect(order.every(Boolean)).toBe(true);
+    await expect(getPaid.locator(".btn--primary")).toHaveCount(0);
+    for (const row of await getPaid.locator(".gp-money__row").all()) {
+      await expect(row.getByRole("link")).toHaveCount(1);
+      await expect(row.getByRole("link")).toHaveText(/^See (steps|why|more)$/);
+      await expect(row.getByRole("link")).toHaveAttribute("href", /^\/settings\/posting\/getpaid\/[a-z]+\?back=\/money$/);
+    }
+    // Status only: what was sent to the bank is in All your money.
+    await expect(getPaid).not.toContainText("Sent to your bank");
   });
 
   test("phones without All your money (an API from before §39): the dock floats at the bottom right as before", async ({ page }) => {

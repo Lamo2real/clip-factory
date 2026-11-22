@@ -246,6 +246,14 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     crFinderJoined: async () => (await call<{ added: CampaignSummary[] }>("POST", "/contentrewards/finder/joined")).added,
     crFinderAsk: () => call("POST", "/contentrewards/finder/ask"),
     getMoneyEverywhere: () => call("GET", "/money/everywhere"),
+    // §40: Get paid.
+    getPaid: () => call("GET", "/getpaid"),
+    getPaidPlace: (place) => call("GET", `/getpaid/${id(place)}`),
+    setGetPaidStep: (step, done) => call("PATCH", "/getpaid/steps", { step, done }),
+    stopPaymentReading: () => call("DELETE", "/getpaid/connections/adsense", undefined, true),
+    saveWhopKey: (clientId) => call("PUT", "/getpaid/whop/key", { clientId }),
+    connectWhop: () => call("POST", "/getpaid/whop/connect"),
+    stopWhop: () => call("DELETE", "/getpaid/connections/whop", undefined, true),
     // §46.9: auto-posting's status, and the two test runs.
     autoPostStatus: () => call<AutoPostStatus>("GET", "/autopost"),
     autoPostRun: async (kind) => (await call<{ run: AutoRun }>("POST", "/autopost/run", { kind })).run,

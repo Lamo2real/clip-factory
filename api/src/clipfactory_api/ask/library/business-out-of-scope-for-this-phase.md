@@ -4,8 +4,10 @@
   [roadmap](ROADMAP.md#phase-2-social-integrations)).
 - Webhook signature checks and acting on webhook events.
 - OpenSearch Serverless (an option, not deployed).
-- Browsing, joining or applying to Content Rewards campaigns inside Clip Factory (that stays on Content Rewards; its
-  tools offer no way to do it). Reading and following joined campaigns is in scope (BR-25).
+- Joining or applying to Content Rewards campaigns inside Clip Factory (that stays the owner's own tap on Content
+  Rewards; its tools offer no way to do it, and a robot on its site would break Whop's terms). Reading and following
+  joined campaigns is in scope (BR-25), and so is finding campaigns that match what he wants from Content Rewards'
+  public pages (I-50).
 - Content Rewards campaigns that want drafts first or the brand's own sound, and sending proof of views for the owner
   (Clip Factory reminds him and says how).
 - Money from TikTok, Instagram and X (their tools tell apps nothing about it), and what left Content Rewards for Whop

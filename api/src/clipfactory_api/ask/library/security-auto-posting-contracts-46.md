@@ -3,7 +3,7 @@
 The owner can let the oldest clips in Review go up by themselves every X hours
 ([CONTRACTS.md §46](CONTRACTS.md#46-auto-posting-the-oldest-clips-in-review-go-up-by-themselves-every-x-hours-owner-request-2026-11-22),
 [ADR-81](DECISIONS.md#adr-81-auto-posting-an-hourly-eventbridge-rule-a-due-check-and-uploads-own-code),
-[ARCHITECTURE.md flow 22](ARCHITECTURE.md#22-auto-posting-the-hourly-tick-the-due-check-and-uploads-code-contracts-46-adr-81)).
+[ARCHITECTURE.md flow 23](ARCHITECTURE.md#23-auto-posting-the-hourly-tick-the-due-check-and-uploads-code-contracts-46-adr-81)).
 It is off for everyone until he turns it on, so nothing is posted without his Upload unless he chose this.
 
 | What | How it is protected |

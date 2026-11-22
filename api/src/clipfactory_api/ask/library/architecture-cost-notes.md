@@ -25,6 +25,7 @@ Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything
 | OpenSearch Serverless | not deployed (would have a standing minimum of OCUs) | $0 |
 | GitHub Actions | macOS and Windows runners for the desktop app | free (public repository) |
 | Content Rewards | `cf-prod-campaigns` (one small Lambda), one Bedrock call per campaign rules read (about $0.02), a few CR calls a tick (free), two more secrets | about $1 a month plus $0.02 a campaign read |
+| Campaign finder | at most 6 looks a day of `cf-prod-campaigns` (512 MB, at most about 100 s each, about 9,000 GB-seconds a month), about 155 public pages a day (about 40 MB in, free), a few hundred small DynamoDB writes a day, no model call | cents a month |
 
 `maxSourceHours` (default 6) is the main cost lever: it limits how much audio is transcribed and read by Claude, and
 how much picture the two models watch. There is no cost ceiling on a job (the owner's decision of 2026-11-17); the

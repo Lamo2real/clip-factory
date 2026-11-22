@@ -19,6 +19,7 @@ import { crMockApi } from "./contentrewards.ts";
 import { catalogOf, finderMockApi, type FinderMock } from "./finder.ts";
 import { clipFit, fitOne, remakeRefusal, sourceKept, uploadRefusal, type FitInputs } from "./fit.ts";
 import { everywhere, MONETARY_SCOPE } from "./moneyEverywhere.ts";
+import { getPaidMockApi } from "./getpaid.ts";
 import { adFirst, hasItem, liveFit } from "../../lib/crFit.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
 import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../../lib/background.ts";
@@ -626,10 +627,40 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   const lessons = lessonsApi(() => store.clips, () => faults.lessons, () => delay());
   const follows = followsApi((ev) => mockLive.publish(ev), () => delay());
   const money = moneyApi(() => delay(), { clips: () => store.clips, posts: () => store.posts });
+  // Get paid (§40): statuses from the pretend owner's ticks and signals; Content Rewards' part reads its connection.
+  const getpaid = getPaidMockApi(() => delay(), {
+    accounts: () => setup.accounts(),
+    country: () => {
+      try {
+        return (JSON.parse(sessionStorage.getItem("cf-mock-money") ?? "null") as { country?: string | null } | null)?.country ?? null;
+      } catch {
+        return null;
+      }
+    },
+    // At once (a test or screenshot goes to the page right after picking its start).
+    setCountry: (c) => {
+      try {
+        const raw = (JSON.parse(sessionStorage.getItem("cf-mock-money") ?? "null") as Record<string, unknown> | null) ?? { scenario: "start", seen: [] };
+        sessionStorage.setItem("cf-mock-money", JSON.stringify({ ...raw, country: c }));
+      } catch {
+        /* no storage: no country */
+      }
+    },
+    connect: (platforms) => {
+      for (const p of platforms) if (!setup.connected().includes(p)) setup.controls.finish(p);
+    },
+    cr: () => {
+      const items = cr.moneyItems();
+      const m = items.crmoney as { paidTotalCents?: number; stillEarningCents?: number; readyToMoveCents?: number; onItsWayCents?: number } | null;
+      const above = !!m && [m.paidTotalCents, m.stillEarningCents, m.readyToMoveCents, m.onItsWayCents].some((v) => (v ?? 0) > 0);
+      return { on: items.on, conn: items.on ? items.crconn : null, moneyAboveZero: above, readyCents: m?.readyToMoveCents ?? null };
+    },
+    publish: () => mockLive.publish({ type: "getpaid", op: "upsert", id: "getpaid", partial: true }),
+  });
   if (typeof window !== "undefined") {
     // Merge, never replace: posting (above) and setup (mock/setup.ts) keep their knobs on the same object.
     const w = window as unknown as { __cfMock?: Record<string, unknown> & Partial<MockSkillControls> };
-    w.__cfMock = Object.assign(w.__cfMock ?? {}, skills.controls, { follows: follows.controls, money: money.controls });
+    w.__cfMock = Object.assign(w.__cfMock ?? {}, skills.controls, { follows: follows.controls, money: money.controls, getpaid: getpaid.controls });
   }
 
   /**
@@ -873,8 +904,11 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         crOn: items.on,
         crconn: items.crconn,
         crmoney: items.crmoney as Parameters<typeof everywhere>[0]["crmoney"],
+        // §40.4's sent lines from the pretend Get paid payouts.
+        ...getpaid.sentInputs(),
       });
     },
+    ...getpaid.api,
     async health() {
       await delay();
       return { ok: true, version: "mock" };
@@ -1300,6 +1334,12 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       await delay();
       // §25.4 "Allow money reading": the pretend platform approves at once and comes back to the Money page.
       if (grant === "money") return mockMoneyGrant(platform);
+      // §40.6 "Allow payment reading": its own connection; the pretend Google comes straight back to Get paid.
+      if (grant === "payments") {
+        if (platform !== "youtube") throw bad('grant can be "money" or "payments".');
+        if (!setup.get("youtube").keys.saved) throw conflict("Paste your YouTube keys first. Tap Set up YouTube.");
+        return getpaid.connectPayments();
+      }
       return setup.connect(platform);
     },
     async chooseAccount(platform, accountId) {

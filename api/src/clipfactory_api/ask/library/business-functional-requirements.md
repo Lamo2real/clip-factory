@@ -492,7 +492,7 @@ approval. I can still decline a clip before its turn, which removes it." "If the
 does nothing." "A clip is never posted twice, even if a run is retried or two runs overlap." "If posting fails on one
 platform, retry once, record the error, and still post to the other platforms." "Save the live link of every post
 next to its clip and campaign." Asked seven questions before building, he answered "Yes, all your picks"
-(2026-11-22); those answers are the rules below (I-50 to I-55).
+(2026-11-22); those answers are the rules below (I-51 to I-56).
 ([CONTRACTS.md §46](CONTRACTS.md#46-auto-posting-the-oldest-clips-in-review-go-up-by-themselves-every-x-hours-owner-request-2026-11-22),
 [ADR-81](DECISIONS.md#adr-81-auto-posting-an-hourly-eventbridge-rule-a-due-check-and-uploads-own-code))
 Built by §46 (its four parts, §46.16). It ships off for everyone: nothing posts by itself until the owner turns it on.
