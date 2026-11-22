@@ -562,12 +562,16 @@ CLAUDE: dict[str, Any] = {
 }
 
 
+# an Amazon model with no word on how it is called: no effort, no tool use, the prompt cache on
+NOVA_PLAIN: dict[str, Any] = {**{k: v for k, v in NOVA.items() if k != "effortField"}, "efforts": [],
+                              "defaultEffort": None}  # fmt: skip
+
+
 @pytest.mark.parametrize(
     ("body", "how"),
     [
         (CLAUDE, {"effortField": "output_config", "tools": True, "cache": True}),
-        ({**NOVA, "efforts": [], "defaultEffort": None, "effortField": None},
-         {"effortField": "none", "tools": False, "cache": True}),  # fmt: skip
+        (NOVA_PLAIN, {"effortField": "none", "tools": False, "cache": True}),
         (LLAMA, {"effortField": "none", "tools": False, "cache": False}),
         ({**LLAMA, "provider": " anthropic "}, {"effortField": "output_config", "tools": True, "cache": True}),
         ({**CLAUDE, "tools": False, "cache": False}, {"effortField": "output_config", "tools": False, "cache": False}),
@@ -580,7 +584,7 @@ def test_how_an_added_model_is_called_comes_from_its_maker_unless_said(
 ) -> None:
     """``effortField`` (default output_config for Anthropic, else none), ``tools`` (default on for Anthropic) and
     ``cache`` (default on for Anthropic and Amazon): kept on the item for the agent, shown in Settings › AI."""
-    model = _add(wcall, "custom-x", {k: v for k, v in body.items() if v is not None})
+    model = _add(wcall, "custom-x", body)
     assert {k: model[k] for k in how} == how
     assert model["host"] == "Amazon Bedrock"
     item = table.raw(pk(), "MODELDEF#custom-x")
@@ -590,9 +594,7 @@ def test_how_an_added_model_is_called_comes_from_its_maker_unless_said(
     assert entry["host"] == "Amazon Bedrock"
 
 
-def test_a_model_saved_before_the_calling_fields_reads_with_its_makers_defaults(
-    wcall: WsCall, store: db.Store
-) -> None:
+def test_a_model_saved_before_the_calling_fields_reads_with_its_makers_defaults(wcall: WsCall, store: db.Store) -> None:
     """An item from before §45.35 has no ``effortField``, ``tools`` or ``cache``: they read as the maker's defaults,
     and a non-Anthropic model that listed efforts lists none (no effort would be sent to it)."""
     base = {k: v for k, v in LLAMA.items() if k not in ("efforts", "defaultEffort")}

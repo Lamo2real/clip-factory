@@ -104,7 +104,8 @@ def test_one_try_at_a_time_and_a_stopped_one_is_fenced(
     assert (shown["jobId"], shown["status"], shown["error"]) == (first["jobId"], "failed", jobs.CHECK_STOPPED)
     assert shown["steps"][0]["status"] == "pending"
     stored = store.get(pk(), f"PJOB#{first['jobId']}")
-    assert stored is not None and stored["sessionId"] != agentcore.calls[0]["runtimeSessionId"]  # fenced
+    assert stored is not None
+    assert stored["sessionId"] != agentcore.calls[0]["runtimeSessionId"]  # fenced
     assert agentcore.stopped == [agentcore.calls[0]["runtimeSessionId"]]
     second = call("POST", CHECK)
     assert second[0] == 202
@@ -114,7 +115,7 @@ def test_one_try_at_a_time_and_a_stopped_one_is_fenced(
 def test_the_providers_page_shows_the_newest_try_and_the_proof(
     call: Call, store: db.Store, agentcore: FakeAgentCore
 ) -> None:
-    status, body = call("GET", f"{BASE}/providers")
+    _, body = call("GET", f"{BASE}/providers")
     rows = {p["id"]: p for p in body["providers"]}
     assert rows["nova-reel"]["check"] is None  # never tried
     assert all("check" not in p for i, p in rows.items() if i != "nova-reel")

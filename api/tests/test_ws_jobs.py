@@ -298,7 +298,9 @@ def test_fenced_writes_only_touch_the_workspace_partition(
         for a in kw["TransactItems"]
     ]
     assert written
-    assert all(w["Key"]["pk"] == pk() for w in written)
+    # an update names its Key, a put (the failed activity, §45.35 D11) its Item: every one is the workspace's
+    assert all((w.get("Key") or w["Item"])["pk"] == pk() for w in written)
+    assert [w["Item"]["kind"] for w in written if "Item" in w] == ["failed"]
 
 
 def test_no_second_try_after_a_slow_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -319,6 +321,7 @@ def test_every_action_names_its_item_on_lamo_stories_own_runtime() -> None:
     agent.start_task(user_id="u", workspace_id="w", task_id="t", kind="brainstorm", session_id="x4")
     agent.start_task(user_id="u", workspace_id="w", task_id="t", kind="check_models", session_id="x5")
     agent.start_chat_turn(user_id="u", workspace_id="w", conv_id="c", msg_id="m", session_id="x6")
+    agent.start_provider_check(user_id="u", workspace_id="w", provider_id="nova-reel", job_id="j", session_id="x8")
     agent.cancel("j", "x1")
     base = {"userId": "u", "workspaceId": "w"}
     assert [c["payload"] for c in core.calls] == [
@@ -328,10 +331,11 @@ def test_every_action_names_its_item_on_lamo_stories_own_runtime() -> None:
         {"action": "run_task", **base, "taskId": "t"},
         {"action": "check_models", **base, "taskId": "t"},
         {"action": "chat_turn", **base, "convId": "c", "msgId": "m"},
+        {"action": "provider_check", **base, "providerId": "nova-reel", "jobId": "j"},  # "Try it" (§45.35 D2)
         {"action": "cancel", "id": "j"},
     ]
     assert {c["agentRuntimeArn"] for c in core.calls} == {ARN}
-    assert [c["runtimeSessionId"] for c in core.calls] == ["x1", "x2", "x3", "x4", "x5", "x6", "x1"]
+    assert [c["runtimeSessionId"] for c in core.calls] == ["x1", "x2", "x3", "x4", "x5", "x6", "x8", "x1"]
     core.reply = {"accepted": False}
     with pytest.raises(AgentError):
         agent.start_task(user_id="u", workspace_id="w", task_id="t", kind="captions", session_id="x7")

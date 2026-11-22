@@ -5,8 +5,9 @@ The API writes the job item (every step, ``configuration.run``, ``sessionId``, `
 ``status = queued``); the agent then writes each step, ``progress``, ``heartbeatAt``, ``status``, ``error`` and
 ``meta``, every write conditional on the job's ``sessionId``. ``settle`` is called by every read that returns or checks
 a job: a job ``queued`` with a heartbeat older than 3 minutes, or ``running`` older than 6, is failed in one
-transaction (a new ``sessionId`` fences the old run out), then the old session is stopped (best effort). A refused
-condition means someone wrote meanwhile: the stored item is read again and returned.
+transaction (a new ``sessionId`` fences the old run out; a story's job writes the story's ``failed`` activity with it,
+like the agent's own failures, §45.35 D11), then the old session is stopped (best effort). A refused condition means
+someone wrote meanwhile: the stored item is read again and returned.
 
 Tasks and chat answers are fenced the same way on their own item (``settle_task``, ``settle_message``): a task
 ``queued`` for more than 3 minutes or ``running`` for more than 6 without a heartbeat, and an answer ``pending`` or
@@ -23,7 +24,7 @@ from typing import Any, Final
 from .. import db
 from ..clock import iso, parse
 from ..log import log
-from . import shapes
+from . import activity, shapes
 from . import types as ws
 from .agent import new_session_id
 from .expr import Update
@@ -224,7 +225,8 @@ def _fail(
     story: Mapping[str, Any] | None,
     expect_status: Iterable[str],
 ) -> bool:
-    """Fails the job (and its story when the story still points at it) in one transaction. False when refused."""
+    """Fails the job (and its story when the story still points at it) in one transaction, with the story's
+    ``failed`` activity (``ACT#``, as the agent writes for its own failures, §45.35 D11). False when refused."""
     at = iso(now)
     pjob = Update(
         str(job["pk"]),
@@ -241,10 +243,12 @@ def _fail(
     if job.get("heartbeatAt") is not None:
         pjob.equals("heartbeatAt", job["heartbeatAt"])
     updates = [pjob.request()]
+    puts: list[Item] = []
     if story is not None and story.get("currentJobId") == job.get("jobId"):
         updates.append(_story_fail(story, job, at).request())
+        puts.append(activity.item(str(job["userId"]), str(job["workspaceId"]), "failed", story, now=now))
     try:
-        store.transact(updates=updates)
+        store.transact(updates=updates, puts=puts)
     except db.ConditionFailed:
         return False
     return True

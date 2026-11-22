@@ -99,8 +99,10 @@ def _platform_status(store: db.Store, user_id: str, platform: str, item: Mapping
     Lamo Clips' own destination, not shared on purpose, is ``same_as_clips``."""
     status = str((item or {}).get("connectionStatus") or "not_connected")
     # ``social.clips_identity`` is the one read of Lamo Clips' ACCOUNT# (five attributes, §45.15)
-    if status == "connected" and item is not None and social.same_as_clips(
-        item, social.clips_identity(store, user_id, platform)
+    if (
+        status == "connected"
+        and item is not None
+        and social.same_as_clips(item, social.clips_identity(store, user_id, platform))
     ):
         return "same_as_clips"
     return status

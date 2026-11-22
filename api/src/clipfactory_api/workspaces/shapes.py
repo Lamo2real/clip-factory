@@ -39,6 +39,7 @@ ASSET_KINDS: Final = (
     "audio",
     "captions",
     "design_ref",  # a picture for "Design with AI" (§45.5); the Library hides it
+    "video",  # a WebM or MOV copy of a final video (§45.34 "Output formats"; the Library's Videos tab, §45.35 D10)
 )
 LIBRARY_HIDDEN: Final = frozenset({"design_ref"})
 SAFETY_STATUSES: Final = ("pending", "ok", "problems", "skipped")

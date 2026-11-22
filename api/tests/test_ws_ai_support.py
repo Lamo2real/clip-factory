@@ -272,7 +272,9 @@ def _requested_problems(value: Any) -> list[str]:
         if "requested" in value:
             got = value["requested"]
             override = got is None or (
-                isinstance(got, dict) and set(got) <= {"model", "effort"} and all(isinstance(v, str) for v in got.values())
+                isinstance(got, dict)
+                and set(got) <= {"model", "effort"}
+                and all(isinstance(v, str) for v in got.values())
             )
             if value.get("role") != "assistant" or not override:
                 found.append("field requested")

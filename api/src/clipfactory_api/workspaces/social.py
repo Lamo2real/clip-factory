@@ -547,18 +547,39 @@ def public_of(scope: Scope, platform: str, now: datetime) -> Item:
     """The public account, checked against the chosen app's current keys (a key change → ``needs_reconnect``). A
     status worked out here is also stored (``settle``), so every reader of ``SOCIAL#`` (the dashboard too) sees
     what the Social accounts page shows."""
-    item = scope.account(platform)
-    client_id: str | Keep | None = KEEP
-    if item is not None and item.get("connectionStatus") in (*POSTABLE, "needs_reconnect"):
-        chosen = apps.app_keys(scope.store, scope.secrets, scope.user_id, scope.workspace_id, platform, account=item)
+    return _public_of(scope.store, scope.secrets, scope.user_id, scope.workspace_id, platform, now=now)
+
+
+def _public_of(
+    store: db.Store,
+    secrets: WorkspaceSecrets | None,
+    user_id: str,
+    workspace_id: str,
+    platform: str,
+    *,
+    now: datetime,
+) -> Item:
+    item = account_item(store, user_id, workspace_id, platform)
+    client_id: str | Keep | None = KEEP  # no secrets wrapper (posting not switched on): the keys are not checked
+    if secrets is not None and item is not None and item.get("connectionStatus") in (*POSTABLE, "needs_reconnect"):
+        chosen = apps.app_keys(store, secrets, user_id, workspace_id, platform, account=item)
         client_id = chosen.client_id if chosen is not None else None
     clips = None
     if item is not None and item.get("connectionStatus") in ("connected", "same_as_clips"):  # every platform (§45.34)
-        clips = clips_identity(scope.store, scope.user_id, platform)
-    shown = public_account(item, scope.workspace_id, platform, app_client_id=client_id, now=now, clips=clips)
+        clips = clips_identity(store, user_id, platform)
+    shown = public_account(item, workspace_id, platform, app_client_id=client_id, now=now, clips=clips)
     if item is not None:
-        settle(scope.store, scope.user_id, scope.workspace_id, platform, item, shown=shown, now=now)
+        settle(store, user_id, workspace_id, platform, item, shown=shown, now=now)
     return shown
+
+
+def accounts_shown(
+    store: db.Store, secrets: WorkspaceSecrets | None, user_id: str, workspace_id: str, now: datetime
+) -> list[Item]:
+    """Every platform's account as the Social accounts page shows it (and settled the same way), for the dashboard
+    (§45.35 D11). ``secrets`` is None while posting is not switched on: the app keys are then not checked, Lamo Clips'
+    identity still is."""
+    return [_public_of(store, secrets, user_id, workspace_id, p, now=now) for p in ws.PLATFORMS]
 
 
 def settle(

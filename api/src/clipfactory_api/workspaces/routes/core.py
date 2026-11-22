@@ -40,11 +40,13 @@ from ...workspaces import (
     provider_keys,
     providers,
     shapes,
+    social,
     stories,
     tasks,
 )
 from ...workspaces import agent as story_agent
 from ...workspaces import agents as agents_mod
+from ...workspaces import secrets as ws_secrets
 from ...workspaces import types as ws
 from ...workspaces.expr import Update
 
@@ -1829,10 +1831,18 @@ def get_dashboard(app: App, req: Request) -> Response:
         story_items,
         current_jobs,
         _all(ctx, ws.PUBJOB_SK, ws.TYPE_PUBJOB),
-        _all(ctx, ws.SOCIAL_SK, ws.TYPE_SOCIAL),
+        social.accounts_shown(ctx.store, _workspace_secrets(ctx), ctx.user_id, ctx.ws_id, ctx.now),  # §45.35 D11
         recent,
     )
     return ok({"dashboard": built})
+
+
+def _workspace_secrets(ctx: Ctx) -> Any:
+    """The workspace secrets wrapper the Social accounts routes use (tests install fakes), or None while posting is
+    not switched on (``WS_SECRET_PREFIX`` unset)."""
+    if ctx.deps.secrets is None:
+        ctx.deps.secrets = ws_secrets.from_env()
+    return ctx.deps.secrets
 
 
 BASE = "/v1/workspaces"

@@ -11,6 +11,7 @@ import pytest
 
 from clipfactory_api import db
 from clipfactory_api.app import App
+from clipfactory_api.workspaces import ai_config
 from clipfactory_api.workspaces import ai_resolve as res
 from clipfactory_api.workspaces import types as ws
 from conftest import USER
@@ -346,3 +347,30 @@ def test_a_picture_or_video_maker_is_priced_per_unit(wcall: WsCall, table: FakeT
     assert not [m for m in got["models"] if m["key"].startswith("nova-")]
     # the price route stays for models only
     assert wcall("PUT", f"{BASE}/ai/prices/nova-reel", {"inputPer1M": 0, "outputPer1M": 0, "currency": "USD"})[0] == 404
+
+
+# --- §45.35 D8: who makes a model and who runs it ---------------------------------------------------------------
+
+
+META_ARN = "arn:aws:bedrock:us-east-1::foundation-model/meta.llama4-maverick-17b-instruct-v1:0"
+BEDROCK = "Amazon Bedrock"
+
+
+@pytest.mark.parametrize(
+    ("entry", "maker", "host"),
+    [
+        # the first stories/config/models.json named the host as the provider: the maker comes from the Bedrock id
+        ({"provider": BEDROCK, "modelId": "anthropic.claude-opus-5-5"}, "Anthropic", BEDROCK),
+        ({"provider": BEDROCK, "modelId": "global.anthropic.claude-opus-5-5"}, "Anthropic", BEDROCK),
+        ({"provider": "", "modelId": "amazon.nova-pro-v1:0"}, "Amazon", BEDROCK),
+        ({"provider": BEDROCK, "modelId": META_ARN}, "Meta", BEDROCK),
+        # the file as §45.35 writes it, and an added model: as given
+        ({"provider": "Anthropic", "host": BEDROCK, "modelId": "anthropic.claude-haiku-5-5"}, "Anthropic", BEDROCK),
+        ({"provider": "Mistral", "modelId": "us.mistral.pixtral-large-2502-v1:0"}, "Mistral", BEDROCK),
+        ({"provider": "Cohere", "host": " Amazon  Bedrock ", "modelId": "cohere.command-r-v1:0"}, "Cohere", BEDROCK),
+        ({"provider": BEDROCK, "modelId": "custom"}, BEDROCK, BEDROCK),  # nothing better to say
+    ],
+)
+def test_model_info_names_the_maker_and_the_host(entry: dict[str, Any], maker: str, host: str) -> None:
+    info = ai_config.model_info({"key": "k", **entry}, None, {})
+    assert (info["provider"], info["host"]) == (maker, host)

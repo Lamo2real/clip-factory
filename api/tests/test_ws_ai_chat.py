@@ -474,7 +474,7 @@ def test_no_stop_is_made_when_the_request_has_no_time_left(
 
 
 def test_an_answer_returns_its_one_time_choice_on_every_read(wcall: WsCall, table: FakeTable) -> None:
-    """"Just for this message" is kept on the answer (``requested``) and returned, so Try again and the chat cards
+    """ "Just for this message" is kept on the answer (``requested``) and returned, so Try again and the chat cards
     use it on every device; the user's own message never carries it, and an answer sent without one says null."""
     conv = _conv(wcall)
     status, body = _send(wcall, conv["convId"], override={"effort": "low"})
@@ -499,7 +499,7 @@ def test_an_answer_returns_its_one_time_choice_on_every_read(wcall: WsCall, tabl
 
 
 class _App:
-    class media:  # noqa: N801 (the app's media helper, as public_message reads it)
+    class media:  # the app's media helper, as public_message reads it
         @staticmethod
         def presign_get(key: str, seconds: int) -> str:
             return f"https://example.test/{seconds}"
