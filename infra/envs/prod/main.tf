@@ -416,7 +416,7 @@ module "api" {
   cr_finder_enabled = var.cr_finder_enabled
   # §40.6: "Connect Whop" (WHOP_CONNECT), on since its switch PR (503 "Coming soon." when off); an in-place env change.
   whop_connect_enabled = var.whop_connect_enabled
-  # §40.5.11: Your bank (BANK_READING), off until its switch PR; an in-place env change.
+  # §40.5.11: Your bank (BANK_READING), on since its switch PR (503 "Coming soon." when off); an in-place env change.
   bank_reading_enabled = var.bank_reading_enabled
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
