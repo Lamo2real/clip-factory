@@ -1,3 +1,4 @@
+import type { AnimationEvent } from "react";
 import { api } from "../../api/index.ts";
 import type { Clip, Job } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
@@ -222,6 +223,15 @@ function WorkingCard({ jobs, failed, onRetry }: { jobs: Job[] | null; failed: bo
   );
 }
 
+/**
+ * Once a cover is dealt, its entrance animation is dropped (`data-dealt`, screens.css). Chromium (the Windows app's
+ * WebView2) keeps even a finished animation of transform on the element, and while it is there the hover's fan-out
+ * runs on the page's main thread instead of the compositor, so it stuttered whenever the page was busy.
+ */
+function dealt(e: AnimationEvent<HTMLSpanElement>) {
+  if (e.animationName === "deal") e.currentTarget.dataset.dealt = "";
+}
+
 /** The newest covers, fanned like prints on a table: proof of what the agent makes. Decorative. */
 function CoverStack({ clips }: { clips: Clip[] }) {
   const covers = clips.filter((c) => c.coverUrl).slice(0, 3);
@@ -229,7 +239,12 @@ function CoverStack({ clips }: { clips: Clip[] }) {
   return (
     <div className="cover-stack" aria-hidden="true">
       {covers.map((c, i) => (
-        <span key={c.clipId} className="cover-stack__item" style={{ ["--n" as string]: i - (covers.length - 1) / 2 }}>
+        <span
+          key={c.clipId}
+          className="cover-stack__item"
+          style={{ ["--n" as string]: i - (covers.length - 1) / 2 }}
+          onAnimationEnd={dealt}
+        >
           <img src={c.coverUrl} alt="" />
         </span>
       ))}

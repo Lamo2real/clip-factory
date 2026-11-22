@@ -132,8 +132,18 @@
     box-shadow: 0 24px 40px -22px rgb(var(--shadow-rgb) / 0.85);
     transform: translateX(calc(var(--n) * clamp(64px, 6vw, 92px))) rotate(calc(var(--n) * 7deg)) translateY(calc(var(--n) * var(--n) * 14px));
     transition: transform var(--dur-3) var(--ease-spring);
-    animation: deal 700ms var(--ease-out) both;
+    /* Backwards, never both: an animation that stays filled after it ends keeps hold of transform, and Chromium
+       (the Windows app's WebView2) then starts no transition, so the fan jumped in one frame instead of springing
+       open as it does in WebKit. The deal ends on the resting transform, so nothing moves when the fill lets go. */
+    animation: deal 700ms var(--ease-out) backwards;
     animation-delay: calc((var(--n) + 1) * 90ms);
+    /* Each cover keeps its own layer, so a hover does not repaint the hero round it as the fan starts and stops. */
+    will-change: transform;
+  }
+  /* Dealt (Home.tsx sets it when the deal ends): the finished deal is dropped, or Chromium would keep the hover's
+     spring off the compositor. Nothing moves: the deal ended on this very transform. */
+  .cover-stack__item[data-dealt] {
+    animation: none;
   }
   .cover-stack__item:nth-child(2) {
     z-index: 1;
