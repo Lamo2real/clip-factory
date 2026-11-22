@@ -42,12 +42,13 @@ REFERENCE_STOPPED = "Looking at the video stopped. Tap Try again."
 CHECK_STOPPED = "Trying Amazon Nova Reel stopped. Tap Try it again."
 CHECK_NOT_STARTED = "Trying Amazon Nova Reel did not start. Tap Try it again."
 CHECK_NOT_SET_UP = "Lamo Stories' helper is not switched on yet, so Amazon Nova Reel could not be tried."
+CHECK_KIND: Final = "provider"  # the content type of a "Try it" job (providers.CHECK_CONTENT_TYPE)
 CANCELED_STEP = "You stopped it."
 STOPPED_BY_KIND: Final = {
     "animation": STOPPED,
     "character": PORTRAIT_STOPPED,
     "reference": REFERENCE_STOPPED,
-    "provider": CHECK_STOPPED,
+    CHECK_KIND: CHECK_STOPPED,
 }
 
 Item = dict[str, Any]
@@ -147,11 +148,14 @@ def is_stale(job: Mapping[str, Any], now: datetime) -> bool:
     return now - beat > limit
 
 
-def _failed_steps(steps: Iterable[Mapping[str, Any]], message: str) -> list[Item]:
+def _failed_steps(steps: Iterable[Mapping[str, Any]], message: str, *, pending_too: bool = False) -> list[Item]:
+    """The running step fails with the sentence. ``pending_too``: a "Try it" job's one step fails with it even before
+    it ran (a failed start, or a try that never began), since the Nova Reel row shows the step's sentence (§45.35
+    D2); a story's later steps stay pending, as before."""
     out = []
     for step in steps:
         s = dict(step)
-        if s.get("status") == "running":
+        if s.get("status") == "running" or (pending_too and s.get("status") == "pending"):
             s["status"] = "failed"
             s["message"] = message
         out.append(s)
@@ -233,7 +237,7 @@ def _fail(
         str(job["sk"]),
         sets={
             "status": "failed",
-            "steps": _failed_steps(job.get("steps") or [], message),
+            "steps": _failed_steps(job.get("steps") or [], message, pending_too=job.get("contentType") == CHECK_KIND),
             "error": message,
             "sessionId": new_session_id(str(job["jobId"])),
             "updatedAt": at,

@@ -121,6 +121,13 @@ class WorkspaceSecrets:
             raise
 
 
+CONNECT_SECONDS = 3
+READ_SECONDS = 5
+ATTEMPTS = 2
+# one secret read at worst: two attempts of connect + read, and standard mode's short wait between them
+WORST_READ_SECONDS = ATTEMPTS * (CONNECT_SECONDS + READ_SECONDS) + 1
+
+
 def from_env() -> WorkspaceSecrets | None:
     """The workspace secrets of a Lambda: only when ``WS_SECRET_PREFIX`` is set (the deploy sets it; tests never)."""
     prefix = os.environ.get("WS_SECRET_PREFIX", "")
@@ -134,6 +141,10 @@ def from_env() -> WorkspaceSecrets | None:
     client = boto3.client(
         "secretsmanager",
         region_name=region(),
-        config=Config(retries={"mode": "standard", "max_attempts": 2}, connect_timeout=3, read_timeout=5),
+        config=Config(
+            retries={"mode": "standard", "max_attempts": ATTEMPTS},
+            connect_timeout=CONNECT_SECONDS,
+            read_timeout=READ_SECONDS,
+        ),
     )
     return WorkspaceSecrets(client, prefix, app_prefix=os.environ.get("SECRET_PREFIX") or APP_PREFIX)

@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import timedelta
+from typing import Any
 
 import pytest
 
 import ws_social_support as sup
 from clipfactory_api import db
 from clipfactory_api.app import App
-from clipfactory_api.workspaces import apps, sentences
+from clipfactory_api.workspaces import apps, sentences, social
+from clipfactory_api.workspaces import secrets as ws_secrets
 from conftest import OTHER, USER, Call, Clock
 from fakes import FakeS3, FakeSecretsManager
 from test_oauth_state_formats import GOOD
@@ -260,6 +263,53 @@ def test_a_secret_that_cannot_be_read_never_breaks_the_dashboard(
     status, body = call("GET", f"{BASE}/dashboard")
     assert status == 200
     assert {a["platform"]: a["status"] for a in body["dashboard"]["accounts"]}["youtube"] == "connected"
+
+
+class _SlowClock:
+    """``time.monotonic`` for ``workspaces.social``: every secret read moves it on by ``step`` seconds."""
+
+    def __init__(self) -> None:
+        self.start = time.monotonic()
+        self.waited = 0.0
+
+    def monotonic(self) -> float:
+        return self.start + self.waited
+
+
+@pytest.mark.parametrize("answers", [False, True])
+def test_a_slow_secrets_manager_never_holds_the_dashboard_past_its_29_seconds(
+    app: App,
+    call: Call,
+    store: db.Store,
+    secrets_client: FakeSecretsManager,
+    monkeypatch: pytest.MonkeyPatch,
+    answers: bool,
+) -> None:
+    """Every platform connected and each key read slow: failing ones after the worst wait (both attempts time out),
+    or answering ones after 6 s each. The dashboard stops waiting on Secrets Manager after the first failure, and
+    before one more slow read could pass the request's 29 s; every account is still shown."""
+    sup.install(app, secrets_client)
+    for platform in ("youtube", "tiktok", "instagram", "facebook", "x"):
+        sup.social(store, secrets_client, platform)
+    clock = _SlowClock()
+    monkeypatch.setattr(social, "time", clock)
+    real = apps.app_keys
+    reads: list[str] = []
+
+    def slow(*a: Any, **k: Any) -> Any:
+        reads.append(str(a[4]))
+        if not answers:
+            clock.waited += ws_secrets.WORST_READ_SECONDS
+            raise TimeoutError("Secrets Manager did not answer")
+        clock.waited += 6.0
+        return real(*a, **k)
+
+    monkeypatch.setattr(apps, "app_keys", slow)
+    status, body = call("GET", f"{BASE}/dashboard")
+    assert status == 200, body
+    assert {a["status"] for a in body["dashboard"]["accounts"]} == {"connected"}
+    assert len(reads) == (1 if not answers else 2)  # never one read per platform
+    assert clock.waited + social.DASHBOARD_SPARE_SECONDS <= social.DASHBOARD_REQUEST_SECONDS
 
 
 def test_without_posting_switched_on_the_dashboard_still_compares_with_lamo_clips(call: Call, store: db.Store) -> None:

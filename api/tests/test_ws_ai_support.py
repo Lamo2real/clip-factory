@@ -27,6 +27,7 @@ from clipfactory_api.workspaces import types as ws
 from clipfactory_api.workspaces.routes import ROUTES
 from conftest import USER, make_event
 from fakes import FakeS3, FakeTable
+from ws_support import model_status_problems
 
 WS = "stories"
 BASE = f"/v1/workspaces/{WS}"
@@ -250,6 +251,7 @@ INTERNAL = (
     "fileRemovedAt",
     "sourceRemovedAt",
     "picturesRemovedAt",
+    "checkJobId",  # the "Try it" lock (``CHECKLOCK#``, §45.35 D2)
 )
 
 
@@ -295,6 +297,7 @@ def leaked(responses: Iterable[Any], *, allowed_key_paths: Iterable[str] = (".ke
         text = json.dumps(body)
         found += [f"field {name}" for name in INTERNAL if f'"{name}"' in text]
         found += _requested_problems(body)
+        found += model_status_problems(body)
         found += ["USER#"] if "USER#" in text else []
         found += ["a secret name"] if "cf-prod/" in text else []
         for where, value in _strings(body):

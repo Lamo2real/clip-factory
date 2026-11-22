@@ -1769,9 +1769,14 @@ def check_provider(app: App, req: Request) -> Response:
     provider_id = "nova-reel"
     validate.only_keys(req.json(), ())
     with ctx.stops_last():  # the fence's stops wait: the start may need the whole 29 s
-        newest = ctx.store.query_page(ctx.pk, ws.PJOB_SK, newest_first=True, limit=CHECK_JOBS_READ).items
+        lock_sk = providers.check_lock_sk(provider_id)
+        lock = ctx.store.get(ctx.pk, lock_sk)
+        held = _held_check(ctx, lock)
+        newest = ctx.store.query_page(
+            ctx.pk, ws.PJOB_SK, newest_first=True, limit=CHECK_JOBS_READ, consistent=True
+        ).items
         previous = _check_job(ctx, [j for j in (ctx.owned(x, ws.TYPE_PJOB) for x in newest) if j], provider_id)
-        if jobs.active(previous):
+        if jobs.active(held) or jobs.active(previous):
             raise conflict(providers.CHECK_BUSY)
         job_id = ulid()
         job = jobs.new_job(
@@ -1786,7 +1791,11 @@ def check_provider(app: App, req: Request) -> Response:
             now=ctx.now,
             meta={"providers": {providers.CHECKABLE[provider_id]: provider_id}},
         )
-        ctx.store.put(job, if_absent=True)
+        claim = _check_claim(ctx, lock_sk, provider_id, job_id, lock)
+        try:
+            ctx.store.transact(puts=[job], raw_puts=[claim])
+        except db.ConditionFailed:
+            raise conflict(providers.CHECK_BUSY) from None  # another tap claimed it a moment ago: one shot only
         agent = ctx.deps.agent
         if agent is None or not getattr(agent, "ready", False):
             failed = jobs.fail_start(ctx.store, job, None, ctx.now, jobs.CHECK_NOT_SET_UP)
@@ -1806,6 +1815,36 @@ def check_provider(app: App, req: Request) -> Response:
             _stop_after_failed_start(ctx, session_id)
         log("info", "stories.provider_check_started", jobId=job_id, provider=provider_id)
         return ok({"job": shapes.public_job(job)}, 202)
+
+
+def _held_check(ctx: Ctx, lock: Mapping[str, Any] | None) -> Item | None:
+    """The "Try it" job the maker's ``CHECKLOCK#`` names, read by its key and settled (a stopped one is fenced)."""
+    held = (lock or {}).get("checkJobId")
+    if not isinstance(held, str) or not held:
+        return None
+    job = ctx.owned(ctx.store.get(ctx.pk, jobs.job_sk(held)), ws.TYPE_PJOB)
+    return jobs.settle(ctx.store, job, ctx.now, stop=ctx.stop()) if job is not None else None
+
+
+def _check_claim(ctx: Ctx, lock_sk: str, provider_id: str, job_id: str, lock: Mapping[str, Any] | None) -> Item:
+    """The ``CHECKLOCK#`` put that claims the one try, conditional on the lock as it was read: absent, or still
+    naming the same (finished) job. A second tap that read the same state fails the transaction (409)."""
+    item = {
+        "pk": ctx.pk,
+        "sk": lock_sk,
+        "type": ws.TYPE_CHECKLOCK,
+        "userId": ctx.user_id,
+        "workspaceId": ctx.ws_id,
+        "providerId": provider_id,
+        "checkJobId": job_id,
+        "updatedAt": iso(ctx.now),
+    }
+    if lock is None:
+        return db.Store.put_if(item, "attribute_not_exists(pk)")
+    held = lock.get("checkJobId")
+    if held is None:
+        return db.Store.put_if(item, "attribute_exists(pk) AND attribute_not_exists(#j)", names={"#j": "checkJobId"})
+    return db.Store.put_if(item, "#j = :held", names={"#j": "checkJobId"}, values={":held": held})
 
 
 def get_guidance(app: App, req: Request) -> Response:
@@ -1831,7 +1870,9 @@ def get_dashboard(app: App, req: Request) -> Response:
         story_items,
         current_jobs,
         _all(ctx, ws.PUBJOB_SK, ws.TYPE_PUBJOB),
-        social.accounts_shown(ctx.store, _workspace_secrets(ctx), ctx.user_id, ctx.ws_id, ctx.now),  # §45.35 D11
+        social.accounts_shown(  # §45.35 D11, the app keys only while the request has time for a slow secret read
+            ctx.store, _workspace_secrets(ctx), ctx.user_id, ctx.ws_id, ctx.now, started=ctx.req.started
+        ),
         recent,
     )
     return ok({"dashboard": built})

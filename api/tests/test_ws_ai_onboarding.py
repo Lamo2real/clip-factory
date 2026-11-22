@@ -21,6 +21,7 @@ from test_ws_ai_support import (
     WsCall,
     dynamodb_rules,  # noqa: F401 (the DynamoDB expression rules, after each test)
     install,
+    leaked,
     pk,
     seed,
     seed_social,
@@ -65,6 +66,10 @@ def test_done_states_come_from_the_real_state(wcall: WsCall, store: db.Store) ->
     assert wcall("PUT", f"{BASE}/ai", body)[0] == 200
     seed_social(store, "youtube", "connected")
     seed_social(store, "tiktok", "same_as_clips")
+    # as a real ``same_as_clips`` is stored: with its identity, which is Lamo Clips' own TikTok (§45.35 D11 reads it)
+    store.update(pk(), f"{ws.SOCIAL_SK}tiktok", {"externalAccountId": "tt-owner"})
+    store.put({"pk": f"USER#{USER}", "sk": "ACCOUNT#tiktok", "platform": "tiktok", "status": "connected",
+               "accountId": "tt-owner"})  # fmt: skip
     seed_social(store, "instagram", "choose_account")
     states = _states(wcall)
     # the model was picked, the effort not yet: step 3 stays to do (§45.34)
@@ -179,6 +184,44 @@ def test_a_connected_account_that_lamo_clips_has_too_is_not_a_done_step(
     assert _states(wcall)["youtube"] == "done"
     # setup only reads: nothing of Lamo Clips' changed
     assert table.raw(f"USER#{USER}", "ACCOUNT#youtube") == clips
+
+
+def test_an_account_lamo_clips_let_go_of_is_a_done_step(wcall: WsCall, store: db.Store) -> None:
+    """The reverse of the case above, as ``social.public_account`` works it out: Social accounts stored
+    ``same_as_clips`` while Lamo Clips had this channel; Lamo Clips then disconnected it (or moved to another one).
+    The account is Lamo Stories' own now, so setup shows the step done, with no line, before anything re-reads it."""
+    for platform, identity in (("youtube", "UC-owner"), ("tiktok", "tt-owner")):
+        seed(store, f"{ws.SOCIAL_SK}{platform}", ws.TYPE_SOCIAL, platform=platform, connectionStatus="same_as_clips",
+             externalAccountId=identity, socialAccountId=ws.social_account_id(WS, platform))  # fmt: skip
+    clips = {"pk": f"USER#{USER}", "sk": "ACCOUNT#youtube", "platform": "youtube", "status": "not_connected",
+             "accountId": "UC-owner"}  # fmt: skip
+    store.put(clips)
+    store.put({**clips, "sk": "ACCOUNT#tiktok", "platform": "tiktok", "status": "connected", "accountId": "tt-other"})
+    _, got = wcall("GET", f"{BASE}/onboarding")
+    steps = {s["step"]: s for s in got["onboarding"]["steps"]}
+    assert (steps["youtube"]["state"], "line" in steps["youtube"]) == ("done", False)  # Lamo Clips disconnected it
+    assert (steps["tiktok"]["state"], "line" in steps["tiktok"]) == ("done", False)  # Lamo Clips moved to another
+    # Lamo Clips still on this very account: the step stays to do, with its line
+    store.put({**clips, "status": "connected"})
+    _, got = wcall("GET", f"{BASE}/onboarding")
+    steps = {s["step"]: s for s in got["onboarding"]["steps"]}
+    assert steps["youtube"]["state"] == "todo"
+    assert steps["youtube"]["line"].startswith("This is Lamo Clips' YouTube account.")
+
+
+def test_a_model_status_never_returns_who_wrote_it(wcall: WsCall, store: db.Store) -> None:
+    """``MODELSTATUS#.by`` is internal (§45.35 D7): it ticks step 1 and is never in ``GET …/ai``, Setup or a task."""
+    seed(store, "MODELSTATUS#opus-5-5", ws.TYPE_MODELSTATUS, model="opus-5-5", status="ok", checkedAt=AT, by="check",
+         line="Works.")  # fmt: skip
+    seed(store, "MODELSTATUS#haiku-5-5", ws.TYPE_MODELSTATUS, model="haiku-5-5", status="failed", checkedAt=AT,
+         by="chat")  # fmt: skip
+    shown = [wcall("GET", f"{BASE}/ai"), wcall("GET", f"{BASE}/onboarding")]
+    assert all(status == 200 for status, _ in shown)
+    models = shown[0][1]["models"]
+    assert {m["key"] for m in models} >= {"opus-5-5", "haiku-5-5"}
+    assert leaked([body for _, body in shown]) == []
+    assert all("by" not in m for m in models)
+    assert _states(wcall)["ai"] == "done"
 
 
 def test_a_configuration_saved_before_the_picks_keeps_its_ticks(

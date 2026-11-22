@@ -14,7 +14,8 @@ real state and cannot be ticked by hand (§45.34 "Setup steps 1–3", "Onboardin
 * steps 6–10 when that platform's own Lamo Stories account is ``connected`` (Lamo Clips' own account,
   ``same_as_clips``, is not: nothing can be posted there, so the step stays to do with a line saying why). A stored
   ``connected`` whose account is Lamo Clips' own destination (Lamo Clips connected it later and nobody shared it)
-  counts as ``same_as_clips`` too (§45.35 D11), as the Social accounts page shows it.
+  counts as ``same_as_clips`` too (§45.35 D11), and a stored ``same_as_clips`` that Lamo Clips let go of counts as
+  ``connected``, as the Social accounts page shows them.
 
 Only 5 and 11 are ticked by hand. The ``ONBOARD`` item keeps only the hand ticks, the skips and ``finishedAt``.
 """
@@ -95,17 +96,16 @@ def ai_steps(store: db.Store, user_id: str, workspace_id: str) -> dict[str, bool
 
 
 def _platform_status(store: db.Store, user_id: str, platform: str, item: Mapping[str, Any] | None) -> str:
-    """The account's status as the Social accounts page works it out (§45.34, D11): a stored ``connected`` that is
-    Lamo Clips' own destination, not shared on purpose, is ``same_as_clips``."""
+    """The account's status as the Social accounts page works it out (``social.public_account``, §45.34, D11), both
+    ways: a stored ``connected`` that is Lamo Clips' own destination, not shared on purpose, is ``same_as_clips``;
+    a stored ``same_as_clips`` that Lamo Clips let go of (disconnected, or moved to another account) is
+    ``connected``, Lamo Stories' own."""
     status = str((item or {}).get("connectionStatus") or "not_connected")
+    if item is None or status not in ("connected", "same_as_clips"):
+        return status
     # ``social.clips_identity`` is the one read of Lamo Clips' ACCOUNT# (five attributes, §45.15)
-    if (
-        status == "connected"
-        and item is not None
-        and social.same_as_clips(item, social.clips_identity(store, user_id, platform))
-    ):
-        return "same_as_clips"
-    return status
+    clips = social.clips_identity(store, user_id, platform)
+    return "same_as_clips" if social.same_as_clips(item, clips) else "connected"
 
 
 def _item(store: db.Store, user_id: str, workspace_id: str) -> dict[str, Any] | None:

@@ -29,6 +29,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import re
+import time
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -44,6 +45,7 @@ from ..oauth.providers import AppKeys, Linked
 from ..platforms import errors as platform_errors
 from ..platforms.base import NotConnectedError, ReconnectNeededError, RetryablePublishError, obj
 from . import apps
+from . import secrets as ws_secrets
 from . import types as ws
 from .apps import CLIPS, OWN, AppNotReady, CallbackOff, ChosenApp
 from .secrets import WorkspaceSecrets
@@ -573,21 +575,46 @@ def _public_of(
     return shown
 
 
+# the dashboard reads app keys only while one more worst-case secret read still leaves this much of the 29 s request
+DASHBOARD_REQUEST_SECONDS: Final = 29.0
+DASHBOARD_SPARE_SECONDS: Final = 4.0
+
+
+def _time_for_keys(started: float | None) -> bool:
+    if started is None:
+        return True
+    left = DASHBOARD_REQUEST_SECONDS - (time.monotonic() - started)
+    return left >= ws_secrets.WORST_READ_SECONDS + DASHBOARD_SPARE_SECONDS
+
+
 def accounts_shown(
-    store: db.Store, secrets: WorkspaceSecrets | None, user_id: str, workspace_id: str, now: datetime
+    store: db.Store,
+    secrets: WorkspaceSecrets | None,
+    user_id: str,
+    workspace_id: str,
+    now: datetime,
+    *,
+    started: float | None = None,
 ) -> list[Item]:
     """Every platform's account as the Social accounts page shows it (and settled the same way), for the dashboard
     (§45.35 D11). ``secrets`` is None while posting is not switched on: the app keys are then not checked, Lamo Clips'
-    identity still is. A secret that cannot be read just now never breaks the dashboard: that platform is shown
-    without the key check (the Social accounts page says the rest)."""
+    identity still is. A secret that cannot be read just now never breaks or stalls the dashboard: after the first
+    one that fails, and once the request (``started``, its ``time.monotonic()`` on arrival) has no room left for one
+    more slow read, the remaining platforms are shown without the key check (the Social accounts page says the
+    rest)."""
     out: list[Item] = []
+    keys = secrets
     for platform in ws.PLATFORMS:
+        if keys is not None and not _time_for_keys(started):
+            log("warning", "ws_social.dashboard_keys_skipped", platform=platform)
+            keys = None
         try:
-            out.append(_public_of(store, secrets, user_id, workspace_id, platform, now=now))
+            out.append(_public_of(store, keys, user_id, workspace_id, platform, now=now))
         except Exception as e:
-            if secrets is None:
+            if keys is None:
                 raise
             log("warning", "ws_social.dashboard_keys_unread", platform=platform, error=type(e).__name__)
+            keys = None  # Secrets Manager is failing or slow just now: no more waits on it for this answer
             out.append(_public_of(store, None, user_id, workspace_id, platform, now=now))
     return out
 

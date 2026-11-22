@@ -146,6 +146,14 @@ def check_job_of(jobs: Iterable[Mapping[str, Any]], provider_id: str) -> Mapping
     return None
 
 
+def check_lock_sk(provider_id: str) -> str:
+    """``CHECKLOCK#{providerId}``: names the maker's newest "Try it" job (``checkJobId``). Every new try replaces it
+    in one transaction with its job, on the condition that it still names the job that was read (or is absent), so
+    two taps at the same moment never start two billed shots (§45.35 D2, "one at a time"). Internal: never returned,
+    written only by the API, never read by the agent."""
+    return f"{ws.CHECKLOCK_SK}{provider_id}"
+
+
 def provider_sk(kind: str, provider_id: str) -> str:
     return f"{ws.PROVIDER_SK}{kind}#{provider_id}"
 

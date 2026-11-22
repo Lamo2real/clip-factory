@@ -5,6 +5,7 @@ one at a time, fenced like every job), and ``GET …/providers`` shows its newes
 
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 from typing import Any
 
@@ -15,7 +16,8 @@ from clipfactory_api.app import App
 from clipfactory_api.workspaces import jobs, providers
 from clipfactory_api.workspaces import types as ws
 from conftest import NOW, OTHER, Call, Clock
-from fakes import FakeAgentCore, FakeS3
+from fakes import FakeAgentCore, FakeS3, FakeTable
+from test_ws_ai_support import dynamodb_rules  # noqa: F401 (the claim's condition expressions, after each test)
 from ws_support import ARN, BASE, USER, WS, caller, install, leaked, pk, seed_item, seed_workspace
 
 CHECK = f"{BASE}/providers/nova-reel/check"
@@ -102,7 +104,8 @@ def test_one_try_at_a_time_and_a_stopped_one_is_fenced(
     clock.now = NOW + timedelta(minutes=4)
     shown = _reel(call)["check"]
     assert (shown["jobId"], shown["status"], shown["error"]) == (first["jobId"], "failed", jobs.CHECK_STOPPED)
-    assert shown["steps"][0]["status"] == "pending"
+    # its one step says so too: the Nova Reel row shows the step's sentence (it never ran, so it was pending)
+    assert shown["steps"] == [{"key": "check", "label": "Try it", "status": "failed", "message": jobs.CHECK_STOPPED}]
     stored = store.get(pk(), f"PJOB#{first['jobId']}")
     assert stored is not None
     assert stored["sessionId"] != agentcore.calls[0]["runtimeSessionId"]  # fenced
@@ -110,6 +113,65 @@ def test_one_try_at_a_time_and_a_stopped_one_is_fenced(
     second = call("POST", CHECK)
     assert second[0] == 202
     assert second[1]["job"]["jobId"] != first["jobId"]
+
+
+def test_two_taps_at_the_same_moment_start_one_billed_shot(
+    call: Call, store: db.Store, table: FakeTable, agentcore: FakeAgentCore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two tabs, or the phone and the Mac, tap Try it together: both read before either wrote. The try is claimed on
+    one ``CHECKLOCK#`` item in the same transaction as its job, so the second tap gets 409 and nothing is billed."""
+    status, body = call("POST", CHECK)
+    assert status == 202, body
+    first = body["job"]
+    lock = table.raw(pk(), "CHECKLOCK#nova-reel")
+    assert lock is not None
+    assert (lock["type"], lock["userId"], lock["workspaceId"], lock["checkJobId"]) == (
+        ws.TYPE_CHECKLOCK,
+        USER,
+        WS,
+        first["jobId"],
+    )
+    real_get, real_query = table.get_item, table.query
+
+    def no_jobs_yet(**kw: Any) -> dict[str, Any]:
+        if kw["ExpressionAttributeValues"].get(":prefix") == ws.PJOB_SK:
+            return {"Items": []}
+        return real_query(**kw)
+
+    def no_lock_yet(**kw: Any) -> dict[str, Any]:
+        return {} if kw["Key"]["sk"].startswith(ws.CHECKLOCK_SK) else real_get(**kw)
+
+    # the list of jobs does not show the first try yet: the lock names it, so it is still found and counted
+    monkeypatch.setattr(table, "query", no_jobs_yet)
+    status, body = call("POST", CHECK)
+    assert (status, body["error"]["message"]) == (409, providers.CHECK_BUSY)
+    # neither the list nor the lock showed it when this tap read: the claim's condition refuses the second try
+    monkeypatch.setattr(table, "get_item", no_lock_yet)
+    status, body = call("POST", CHECK)
+    assert (status, body["error"]["message"]) == (409, providers.CHECK_BUSY)
+    monkeypatch.undo()
+    assert len(agentcore.calls) == 1  # one 6-second shot
+    checks = [i for i in table.all() if i["sk"].startswith(ws.PJOB_SK) and i.get("jobType") == "provider_check"]
+    assert [c["jobId"] for c in checks] == [first["jobId"]]
+    assert table.raw(pk(), "CHECKLOCK#nova-reel") == lock
+    # once that try ended, the next one claims the lock from it
+    store.update(pk(), f"PJOB#{first['jobId']}", {"status": "ready"})
+    status, body = call("POST", CHECK)
+    assert status == 202, body
+    assert table.raw(pk(), "CHECKLOCK#nova-reel")["checkJobId"] == body["job"]["jobId"]  # type: ignore[index]
+    assert leaked([body, _reel(call)]) == []
+    assert "checkJobId" not in json.dumps(_reel(call))
+
+
+def test_a_lock_without_a_job_never_blocks_trying(call: Call, store: db.Store, agentcore: FakeAgentCore) -> None:
+    store.put({"pk": pk(), "sk": "CHECKLOCK#nova-reel", "type": ws.TYPE_CHECKLOCK, "userId": USER,
+               "workspaceId": WS, "providerId": "nova-reel"})  # fmt: skip
+    assert call("POST", CHECK)[0] == 202
+    store.update(pk(), "CHECKLOCK#nova-reel", {"checkJobId": "01J99999999999999999999999"})  # a job that is gone
+    for j in store.query_all(pk(), ws.PJOB_SK):
+        store.update(pk(), str(j["sk"]), {"status": "failed"})
+    assert call("POST", CHECK)[0] == 202
+    assert len(agentcore.calls) == 2
 
 
 def test_the_providers_page_shows_the_newest_try_and_the_proof(
@@ -160,10 +222,16 @@ def test_a_runtime_that_is_off_or_refuses_fails_the_try_with_a_plain_sentence(
     status, body = call("POST", CHECK)
     assert status == 202
     assert (body["job"]["status"], body["job"]["error"]) == ("failed", jobs.CHECK_NOT_STARTED)
+    # the sentence is on the job's one step as well, which is what the Nova Reel row reads (§45.35 D2)
+    failed = {"key": "check", "label": "Try it", "status": "failed", "message": jobs.CHECK_NOT_STARTED}
+    assert body["job"]["steps"] == [failed]
+    assert _reel(call)["check"]["steps"] == [failed]
     install(app, None, s3_client)  # Lamo Stories' runtime not switched on
     status, body = call("POST", CHECK)
     assert status == 202
     assert (body["job"]["status"], body["job"]["error"]) == ("failed", jobs.CHECK_NOT_SET_UP)
+    assert body["job"]["steps"] == [{**failed, "message": jobs.CHECK_NOT_SET_UP}]
+    assert _reel(call)["check"]["steps"][0]["message"] == jobs.CHECK_NOT_SET_UP  # this try's sentence, not an older one
     # a failed start never blocks the next try
     install(app, agentcore, s3_client)
     agentcore.fail = False
