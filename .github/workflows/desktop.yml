@@ -31,7 +31,10 @@
 #
 #   resolve     - which deploy run (trusted only as above), its commit and number, and its hand-off. Fails (red)
 #               when the hand-off is broken or missing from a deploy that should have one, so installed apps never
-#               stop updating without a sign.
+#               stop updating without a sign, and when it is not the only one made since the run's latest successful
+#               infra job started, and before it ended (anything earlier in the deploy could have uploaded one; an
+#               earlier attempt's is left out). It downloads that very artifact, by id. Every other job needs resolve
+#               and runs only when it enabled the build (scripts/test-deploy-workflow.sh checks).
 #   desktop-plan, desktop, desktop-upload, desktop-manifest - the Mac and Windows apps are rebuilt only when what they
 #               are built from changed or the file is missing, both together. The build job has no OIDC token (it
 #               runs npm and cargo) and is the only job given the updater signing key; desktop-upload copies the
@@ -106,10 +109,16 @@ jobs:
           if [ "$EVENT" = "workflow_dispatch" ]; then
             [ "$REF" = "refs/heads/main" ] || { echo "::error::Run this from main: only main is deployed, and the deploy role trusts main only."; exit 1; }
             # branch=main also lists a fork's pull request from a branch it calls main: only this repository's
-            # pushes and runs by hand.
-            run="$(gh api "repos/${REPO}/actions/workflows/deploy.yml/runs?branch=main&status=success&per_page=50" \
-              | jq -r --arg repo "$REPO" '[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch")
-                  and .head_repository.full_name == $repo)][0] // empty | "\(.id) \(.run_number) \(.head_sha)"')"
+            # pushes and runs by hand, asked for by event on GitHub's side (so a stream of such runs can never push
+            # them off the page), and the newest of the two by run number.
+            # Each page on its own: a failed gh fails the step here (a run step has no pipefail), so the newest run
+            # is never picked from one page alone.
+            runs="repos/${REPO}/actions/workflows/deploy.yml/runs?branch=main&status=success&per_page=20"
+            pushes="$(gh api "${runs}&event=push")"
+            dispatches="$(gh api "${runs}&event=workflow_dispatch")"
+            run="$(printf '%s\n%s\n' "$pushes" "$dispatches" \
+              | jq -rs --arg repo "$REPO" '[.[].workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch")
+                  and .head_repository.full_name == $repo)] | max_by(.run_number) // empty | "\(.id) \(.run_number) \(.head_sha)"')"
             [ -n "$run" ] || { echo "::error::No successful deploy of main yet: run deploy first."; exit 1; }
             read -r RUN_ID RUN_NUMBER SHA <<<"$run"
           fi
@@ -130,13 +139,33 @@ jobs:
             *) echo "::error::Commit ${SHA} of deploy run ${RUN_NUMBER} is not on main (${on_main})."; exit 1 ;;
           esac
           # found: hand-offs still there; uploaded: every one, expired too (30 days).
-          read -r found uploaded <<<"$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts?name=desktop-handoff" \
-            --jq '"\([.artifacts[] | select(.expired | not)] | length) \(.artifacts | length)"')"
+          handoffs="$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts?name=desktop-handoff&per_page=100" \
+            --jq '[.artifacts[] | {id, expired, created_at}]')"
+          read -r found uploaded <<<"$(jq -r '"\([.[] | select(.expired | not)] | length) \(length)"' <<<"$handoffs")"
           [[ "$found" =~ ^[0-9]+$ ]] && [[ "$uploaded" =~ ^[0-9]+$ ]] || { echo "::error::Could not list the artifacts of deploy run ${RUN_NUMBER}."; exit 1; }
+          artifact_id=""
+          if [ "$found" -gt 0 ]; then
+            # Only the one hand-off made since the run's latest successful infra job started, and before it ended (a
+            # minute's grace, for the clocks of two services). An earlier one is an earlier attempt's (each re-run
+            # keeps its own), or was uploaded by code that ran earlier in the same deploy (a bad npm dependency in its
+            # build job, say): then infra's own upload was refused, the name being taken, so none is left to build.
+            infra="$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/jobs?filter=latest&per_page=100" \
+              --jq '[.jobs[] | select(.name == "infra" and .conclusion == "success") | {started_at, completed_at}]')"
+            why="$(jq -rn --argjson h "$handoffs" --argjson i "$infra" 'if ($i | length) != 1 then "\($i | length) successful infra jobs, not one"
+              else ($i[0].started_at | fromdateiso8601) as $from | ($i[0].completed_at | fromdateiso8601) as $to
+                | [$h[] | select(.expired | not) | select((.created_at | fromdateiso8601) >= $from)] as $new
+                | if ($new | length) != 1 then "\($new | length) desktop-handoff artifacts made since its infra job started (\($i[0].started_at)), not one"
+                  elif ($new[0].created_at | fromdateiso8601) > ($to + 60) then "a desktop-handoff made at \($new[0].created_at), over a minute after its infra job ended (\($i[0].completed_at))"
+                  else "ok \($new[0].id)" end
+              end')" || why="times that could not be read"
+            [[ "$why" =~ ^ok\ ([0-9]+)$ ]] || { echo "::error title=Hand-off not trusted::Deploy run ${RUN_NUMBER} has ${why}: nothing is built or signed. Run deploy again (Actions, deploy, Run workflow, from main)."; exit 1; }
+            artifact_id="${BASH_REMATCH[1]}"
+          fi
           {
             echo "run_id=${RUN_ID}"
             echo "run_number=${RUN_NUMBER}"
             echo "sha=${SHA}"
+            echo "artifact_id=${artifact_id}"
             if [ "$found" -gt 0 ]; then echo "found=true"; else echo "found=false"; fi
           } >> "$GITHUB_OUTPUT"
           if [ "$found" -eq 0 ]; then
@@ -162,7 +191,10 @@ jobs:
       - if: steps.run.outputs.found == 'true'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: desktop-handoff
+          # The very hand-off checked above, by id: if a newer one has come since (a deploy re-run), the download
+          # fails instead of taking it. merge-multiple keeps the file at handoff/handoff.json.
+          artifact-ids: ${{ steps.run.outputs.artifact_id }}
+          merge-multiple: true
           path: ${{ runner.temp }}/handoff
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
