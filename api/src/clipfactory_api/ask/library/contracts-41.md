@@ -78,8 +78,8 @@ jargon ("CPM", "budget", "API", "MCP", "scrape", "sitemap", "robots" never appea
 **Done**, **Discover**); one vermilion button
 per screen, everything else glass or green; no `cursor:` rule; no visible edges (soft fills only); pick-one bars are
 `<Glide>`; reduced motion skips slides and confetti; WCAG AA; on phones and touch tablets the screen's vermilion is
-pinned bottom right; brand text (names, brands, CR's category names) is plain escaped text, at most 300 characters,
-never a link Clip Factory didn't make. "Content Rewards", never "CR", on a screen.
+pinned bottom right (on `/campaigns/find` at every width: on a wide screen it was below the fold); brand text (names,
+brands, CR's category names) is plain escaped text, at most 300 characters, never a link Clip Factory didn't make. "Content Rewards", never "CR", on a screen.
 
 **Where it lives.**
 * **The page** `/campaigns/find` (route `{ name: "campaigns_find" }`, matched **before** `/campaigns/{id}`, whose
@@ -113,21 +113,26 @@ never a link Clip Factory didn't make. "Content Rewards", never "CR", on a scree
    once it has run, "Looked at 2:10 pm" with the glass "Look again now" (§41.5; while limited: "You can look again at
    2:40 pm." in place of the button).
 2. **What you want** (`FinderWant.tsx`, `data-help="cr-finder-want"`, anchor `#want`). Open the first time and when the
-   owner taps "Change"; otherwise folded to one summary line ("At least $1 per 1,000 views · YouTube, Instagram · At
-   least a quarter of the money left · Open to join") with a glass "Change". Every change saves at once (`PATCH`, 500
-   ms debounce; no Save button) and the matches update by themselves; a glass "Done" folds it. Controls, in this
+   owner taps "Change"; otherwise folded to one summary line ("At least $1 per 1,000 views · YouTube, Instagram · Some
+   money left · Anyone can join") with a glass "Change". Every change saves at once (`PATCH`, 500 ms debounce; no
+   Save button) and the matches update by themselves; a glass "Done" folds it. Controls, in this
    order:
 
    | Control | Kind | Choices (`FinderWant` value) | Default (chosen for him) |
    |---|---|---|---|
    | "Pays at least" + the line "for every 1,000 views" | `<Glide>` | "$0.50" (50) · "$1" (100) · "$2" (200) · "$3" (300) → `minPer1kCents` | "$1" |
    | "Where you post" | chips, many | YouTube, Instagram, Facebook, X, TikTok → `places` (`null` = "the places you set up") | `null`: the places `ready` in `GET /v1/setup`, the line "The places you set up." |
-   | "Money left" | `<Glide>` | "Any" (0) · "A quarter" (25) · "Half" (50) · "Most" (75) → `minLeftPct` | "A quarter" (a percent of the budget: a big campaign with half its money spent still has a lot left) |
-   | "Who can join" | `<Glide>` | "Open to join" (`open`) · "Also ones I apply to" (`any`) → `access` | "Open to join" |
+   | "Money left" | `<Glide>` | "Any" (0) · "Some left" (25) · "Half or more" (50) · "Most left" (75) → `minLeftPct` | "Some left" (a percent of the budget: a big campaign with half its money spent still has a lot left) |
+   | "Who can join" | `<Glide>` | "Anyone can join" (`open`) · "Also ones I apply to" (`any`) → `access` | "Anyone can join" |
    | "What it's about" | chips, many | "Anything" + up to 12 of CR's categories seen in the cache, most common first → `categories` (ids) | "Anything" (`[]`) |
    | "Language" | chips, many | "Any" + English, Spanish, Portuguese, French, German, Italian → `languages` (codes) | "Any" (`[]`) |
    | "Other kinds of pay" | switch | "Also show campaigns that pay per post or share a prize." → `otherPay` | off |
    | "Tell me about new ones" | switch | "At most once a day." → `tellMe` (with "Content Rewards news is off in Settings." under it while `notify.contentRewards` is `false`, from the settings S already loads) | on |
+
+   Where their words don't fit on one row (the row narrower than 400 px: phones up to about 465 px), the "Money left"
+   and "Who can join" bars lay their choices out in even halves (a 2 × 2 grid, and two halves side by side), a long
+   label wrapping inside its own half, so no choice sits alone on a second row; the 2 × 2 grid's track and `<Glide>`
+   highlight turn into rounded rectangles to match.
 
    Under the controls, fixed (not a control): "I skip campaigns Clip Factory can't make clips for, like ones that need
    their own sound or picture on the video." The TikTok chip, until TikTok's posting audit passes (§17.4 gate
@@ -149,26 +154,38 @@ never a link Clip Factory didn't make. "Content Rewards", never "CR", on a scree
    Rewards"**, and **only the open match's button is vermilion** (while a "You're in!" row shows, that row holds the
    vermilion and every match's button is glass). A match, top to bottom:
    * Head: a round letter of the brand (no outside picture), the campaign name (two lines at most), the brand, a "New"
-     chip when it is new to him (§41.4), and the access chip "Open to join" or "You apply first".
+     chip when it is new to him (§41.4), and the access chip "Anyone can join" or "You apply first". (Clip Factory's
+     own words, not a Content Rewards label, so never bold; "Open to join" was too hard a word.)
    * Pay, one row per place he posts to that the campaign pays for (STATS_ORDER): the place's mark and name and the
      server's line (§41.3): "$1.50 per 1,000 views · up to $250 a clip", "Up to $2.00 per 1,000 views · up to $1,200 a
      clip" (geo-priced), "$5.00 for each approved post", "Shares the prize money", "Pays picked creators each month".
-   * Money left: "$2,410.10 left of $2,500" over the §38.4 soft bar and its chip ("Plenty left" under 50% used, "Half
-     used" from 50%), then the grey "Content Rewards' numbers, 2:10 pm".
-   * **Why it matched**, one line made by the server (§41.3): "Pays $1.50 per 1,000 views on YouTube and Instagram. 96%
-     of the money left. Open to join."
+   * Money left: "$2,410.10 left of $2,500" over the §38.4 soft bar and a chip in the same bands as Why it matched's
+     money words, so the card never says "used" in one place and "left" in another: "All left" (100%), "Most left"
+     (75–99%), "Half or more left" (50–74%), green; "Some left" (25–49%), quiet; "A little left" (under 25%), amber
+     (`leftChip`, from the server's own left percent worked out from `totalCents` and `leftCents`, `leftPctOf`; the
+     Campaigns page keeps §38.4's "Plenty left" / "Half used" / "Almost gone"). Then the grey "Content Rewards'
+     numbers, 2:10 pm".
+   * **Why it matched**, one line made by the server (§41.3): "Pays $1.50 per 1,000 views on YouTube and Instagram. Most
+     of the money is left. Anyone can join." The money left is said in plain words, never as a percent or a "quarter"
+     (the exact amounts are on the money row right above it).
    * Up to three quiet notes ("Pays less in some countries.", "It has 2 rules you see once you join.", "Also pays on
-     TikTok, once TikTok checks Clip Factory."), up to three heads-ups with a warning `Icon` ("It may need its own
+     TikTok, once TikTok checks Clip Factory."), up to three watch-out lines with a warning `Icon` ("It may need its own
      sound. Clip Factory can't add one.", "This brand wants your face on camera.", "This brand only counts viewers from
      some countries. Check where yours are first."), and up to three "can't tell" lines with a question mark ("I can't
      tell how much money is left.").
+   * The steps (below) show **as soon as a match is open**, not only after Open. Before Open they come after the
+     facts, under the lead "On Content Rewards:", right above Open, so he takes them with him; after Open they move
+     right under the head, with the If you see fold (and, not signed in, the rules box).
    * Buttons, before he opened it: vermilion **"Open on Content Rewards"** (→ `https://contentrewards.com/c/campaigns/
      {uuid}`, a new tab or the system browser, `rel="noopener noreferrer"`). The same tap sets `opened` in the page's
      store at once (so the steps show even when the network fails) and sends `PATCH …/matches/{id} {"said":
      "opened"}`, never awaited before the open and retried once after 2 s when it fails (the add accepts a stored
      match anyway, §41.5). Then the quiet "Not for me" (hides it; 8 s toast "Hidden. Undo").
    * After he opened it (`opened` in the last 2 hours): the steps, then the vermilion **"I joined: add it"** (an
-     application campaign: **"I applied: add it"**), with "Open on Content Rewards" glass and "Not for me" quiet. Two
+     application campaign: **"I applied: add it"**), with "Open on Content Rewards" glass and "Not for me" quiet. Not
+     signed in (an open campaign, the rules box below), "I joined: add it" becomes the vermilion **only once the rules
+     box has text**: while it is empty, the button stays glass and in place right under the box and the screen has no
+     vermilion (adding it now would mean a second trip for the rules; "There are no rules to copy" still adds it). Two
      hours after `opened` with no add, the vermilion goes back to "Open on Content Rewards" and "I joined: add it"
      turns glass (it still works). The steps:
      * Open campaign, `signedIn`: "1 Tap **Join Campaign**." "2 Does the big button now say **Submit clip**? Then tap I
@@ -192,6 +209,14 @@ never a link Clip Factory didn't make. "Content Rewards", never "CR", on a scree
        the sign-in line "Sign in with your email code, then tap the big button again.", plus **Submit clip** →
        "You're in already. Tap I joined: add it." and **Pending review** → "You applied already. Tap I applied: add
        it."
+   * **Pinned.** On this page the match's vermilion is pinned at the bottom right at **every width** (the shared
+     `.cr-pin`: the last thing in its card, riding over the card while the card is on screen; on a wide screen it was
+     below the fold), and so are the "You're in!" row's and What you want's. At every width the page has a
+     `scroll-padding-bottom` of the pinned bar's lane (the tab bar's band + the home bar's safe area + the pin's 22 px
+     over it + the bar's height, 60 px with a two-line label, + 12 px), so a control he focuses or scrolls to is never
+     under the bar (WCAG 2.4.11; a category or language chip on a wide screen too). On phones and touch tablets
+     (up to 767 px wide, or a touch screen) the page also ends with room for the bar (its height + 12 px + the home
+     bar's safe area), so every line of the open match (Why it matched included) scrolls up above it.
    * "I joined: add it" sends `POST …/matches/{id}/add` (§41.5), shows "Adding…" on the button, then opens the
      campaign's card `/campaigns/{uuid}`, where §38.4's next step takes over: "You're in!" with confetti once when
      Content Rewards lists it; signed in but not listed yet, "Checking that you joined… This can take a few minutes."
@@ -215,7 +240,7 @@ never a link Clip Factory didn't make. "Content Rewards", never "CR", on a scree
    campaigns show their rules only after you join. I read them right after."; else: "Open campaigns show their rules
    only after you join. Then I'll ask you to copy them here once." Then the fold **"Why not more?"**: "I looked at 154
    campaigns. 6 match." and one line per reason with a count, most first (§41.3 `skipped`): "62 pay less than $1.00
-   per 1,000 views.", "31 have less than a quarter of the money left.", "12 don't pay for the places you post.", "9
+   per 1,000 views.", "31 have only a little money left.", "12 don't pay for the places you post.", "9
    want you to apply first.", "5 need something Clip Factory can't make.", "3 you said Not for me." (+ the quiet "Bring
    them back", `{"unhideAll": true}`).
 5. Glass "Look on Content Rewards yourself" (→ `https://contentrewards.com/c/discover`, new tab).
@@ -237,7 +262,7 @@ never a link Clip Factory didn't make. "Content Rewards", never "CR", on a scree
 | `looking` (a look or a change is being worked on, ≤ 10 min) | "Looking at Content Rewards' campaigns… This takes a minute or two."; right after his own change to What you want (S knows it sent that `PATCH`): "Updating your matches…" (the old matches stay below, dimmed) | none |
 | `ok`, the first look not finished (`looked.pending > 0`) and no match yet | "No match yet. I've looked at 120 campaigns so far. I'll look at more later today." and, while `tellMe` is on, "You don't need to do anything. I'll tell you when one matches." | none |
 | `ok`, no match | "No campaign matches right now. I look again 4 times a day." + glass "Change what you want" (opens the card) | none |
-| `ok`, with matches | the matches (and any "You're in!" rows) | the newest "You're in!" row's, else the open match's |
+| `ok`, with matches | the matches (and any "You're in!" rows) | the newest "You're in!" row's, else the open match's (not signed in, after Open: only once its rules box has text) |
 | `down` (Content Rewards' pages didn't answer; matches from the last good look, if any, stay) | "Content Rewards didn't answer. I'll try again in a few hours." | the open match's, else none |
 | `blocked` (Content Rewards stopped Clip Factory's reads) | "Content Rewards isn't letting Clip Factory look right now. Tap Look on Content Rewards yourself." | the open match's, else none |
 | `not_allowed` (CR's robots.txt now forbids these pages) | "Content Rewards asked apps not to read its campaign pages. Tap Look on Content Rewards yourself." | the open match's, else none |
@@ -257,6 +282,10 @@ the page: 1 (the notification, the Home chip or the Campaigns card). The very fi
 | Signed in to Content Rewards (after CR's pilot yes) | "Open on Content Rewards" · on CR **Join Campaign** (+ **Hold to confirm** when it asks) · back to Clip Factory (the page adds the campaign by itself; its "You're in!" row shows "Reading the rules… (about 30 seconds)", then turns into the vermilion) · "Make clips for this campaign" | **2** of his own + the Join tap on CR |
 | Not signed in, an open campaign (today: CR's pilot yes is pending, and CR shows an open campaign's rules only to members) | "Open on Content Rewards" · on CR **Join Campaign**, then copy everything under **Brief** and **Content requirements** · back · paste · "I joined: add it" · on its card, once the rules are read, "Make clips for this campaign" | **4** of his own + the Join tap and the copy on CR |
 | An application campaign | "Open on Content Rewards" · on CR **Apply**, tick, answer, **Submit application** · back · "I applied: add it" · "Waiting for the brand" (signed in: "You're in!" comes by itself; not signed in: "It says Submit clip" once CR shows **Submit clip**) | **2** of his own + CR's apply taps, then the brand's wait |
+
+Each count can be **one more** when a soft stop asks: when §38.4's next step is `anyway` (a soft stop such as half
+the money used), the "You're in!" row shows its sentence with the vermilion "Make clips anyway" (the same accept the
+card sends), so he answers it there without opening the card, then makes clips.
 
 Compared with §38.2 journey B (open Discover, sort, pick, **Join Campaign**, share icon, **Copy campaign link**, Paste,
 "Add campaign": 6–7 taps), the finder removes the search, the copy of the link and its paste.
@@ -412,7 +441,7 @@ campaigns" adds up with the shown `skipped` counts and the matches; `not_listed`
 
 **Defaults** (the same literal in P's `finder/config.py` and Q's `finderapi.py`, both tested against this line):
 `{"on": true, "minPer1kCents": 100, "places": null, "categories": [], "minLeftPct": 25, "access": "open",
-"otherPay": false, "languages": [], "tellMe": true}`. (`minLeftPct` is a percent of the budget, so "a quarter" keeps
+"otherPay": false, "languages": [], "tellMe": true}`. (`minLeftPct` is a percent of the budget, so "Some left" (25) keeps
 big campaigns that still have thousands of dollars left: in the samples, Fundingpips at $6.00 per 1,000 views with
 $1,668 left, COD DMZ with $13,864 left and Santa Cruz with $5,258 left.)
 
@@ -424,7 +453,7 @@ public page):
 | 1 | already his | uuid in `own` (`own`) | |
 | 2 | Not for me | uuid in `hidden` (`hidden`) | |
 | 3 | on Discover | not `onDiscover` (`not_listed`, never counted on the page) | |
-| 4 | Clip Factory can make it | `toggles.preApproval` (drafts first), `toggles.sound` or `sound == "needed"` (its own sound: after the join §38.4's `sound_needed` would stop it), `overlay == "needed"`, or content types not empty and without `clipping` (slideshows, face-only UGC) (`cant_make`) | heads-up "It may need its own sound. Clip Factory can't add one." when `sound` is a content type or `sound == "maybe"`; "It may want its own picture on top of the video. Clip Factory can't add one." when `overlay == "maybe"`; "This brand wants your face on camera." when `toggles.faceOnCamera`; "This brand only counts viewers from some countries. Check where yours are first." when `audience` (it never refuses) |
+| 4 | Clip Factory can make it | `toggles.preApproval` (drafts first), `toggles.sound` or `sound == "needed"` (its own sound: after the join §38.4's `sound_needed` would stop it), `overlay == "needed"`, or content types not empty and without `clipping` (slideshows, face-only UGC) (`cant_make`) | watch-out line "It may need its own sound. Clip Factory can't add one." when `sound` is a content type or `sound == "maybe"`; "It may want its own picture on top of the video. Clip Factory can't add one." when `overlay == "maybe"`; "This brand wants your face on camera." when `toggles.faceOnCamera`; "This brand only counts viewers from some countries. Check where yours are first." when `audience` (it never refuses) |
 | 5 | money left | used ≥ 95% (`budget_gone`) | |
 | 6 | places | no paid place in `places` (`not_your_places`) | note "Also pays on Facebook and X." (paid places not in his list, never TikTok) and "Also pays on TikTok, once TikTok checks Clip Factory." (TikTok paid, its audit not passed) |
 | 7 | how it pays | `kind != "cpm"` and not `want.otherPay` (`other_pay`) | |
@@ -432,13 +461,13 @@ public page):
 | 9 | pay | `kind == "cpm"` and no place of `places` with `top ≥ want.minPer1kCents` (`low_pay`) | note "Pays less in some countries." when a counted place is geo-priced |
 | 10 | money left, his choice | `used_bps > 10000 − 100 × want.minLeftPct` (`budget_low`); unknown total or spent passes | can't tell "I can't tell how much money is left." when unknown |
 | 11 | topic | **only when `want.categories` is not empty**: the card has categories and none of them is picked (`topic`) | (only then) can't tell "I can't tell what it's about." when the card has none |
-| 12 | language | **only when `want.languages` is not empty**: the card's `namedLanguages` is not empty and none of them is picked (`language`) | (only then) heads-up "Its page is in Spanish." when only `pageLanguage` is known and not picked; can't tell "I can't tell the language." when neither is known |
+| 12 | language | **only when `want.languages` is not empty**: the card's `namedLanguages` is not empty and none of them is picked (`language`) | (only then) watch-out line "Its page is in Spanish." when only `pageLanguage` is known and not picked; can't tell "I can't tell the language." when neither is known |
 
 Numbers: `used_bps = round(10000 × spentCents / totalCents)` (CR's numbers; null when either is null or the total is
 0); for a CPM place, `top` = the largest of its `per1kCents`, `otherCountriesPer1kCents` and every `countryRates[].
 per1kCents` (what Discover shows as "Up to $2.00"), geo-priced when it has country rates; the "counted" places are the
 places in `places` that pay (for CPM: with `top ≥ minPer1kCents`). Hidden rules: note "It has 2 rules you see once you
-join." ("1 rule") for an open campaign with `hiddenRules > 0`. Notes, heads-ups and can't-tell lines keep the table's
+join." ("1 rule") for an open campaign with `hiddenRules > 0`. Notes, watch-out lines and can't-tell lines keep the table's
 order, at most 3 each.
 
 **Sentences** (`normalize.sentences(text)`): every "U.S." is first written "US"; then the text is split at `.`, `!`,
@@ -455,13 +484,13 @@ livestream!" → needed.) The logo is not an overlay: Clip Factory adds logos (�
 **The sound signal** (`normalize.sound(text)`): the same rule over the whole words `sound` and `sounds` only (never
 `audio`, `music` or `track`: UnGodly's "Audio: Use your own voice or any music…" stays null). The Weeknd's "Must add
 the official sound (muted) + #TheWeeknd #fayewong" → **needed** (`cant_make`); 8lanco's name "…'Every Little Thing'
-Sound" and "Official sound at 100% volume" → **maybe** (the heads-up).
+Sound" and "Official sound at 100% volume" → **maybe** (the watch-out line).
 
 **The audience signal** (`normalize.audience(text) -> bool`): a sentence with one of `US`, `USA`, `UK` (upper case
 only, so the word "us" never counts) or `United States`, `Canada`, `Tier 1`, `tier-1`, `tier one` (any case), and one
 of `views`, `viewers`, `audience`, `based`. In the samples: ENERGY DRINKS ("Creators must be 21+ and US-based, with at
 least 50% US views per clip"), Split-Screen UGC ("…targets tier 1 audience") and UnGodly's guidelines ("Only verified
-views from the US, UK, …") → true; the rest false. A wrong audience gets clips turned down, so this is a heads-up,
+views from the US, UK, …") → true; the rest false. A wrong audience gets clips turned down, so this is a watch-out line,
 never a refusal.
 
 **Languages** (`normalize.languages(name, description)`): `namedLanguages` = §39.3's table through A's
@@ -469,7 +498,7 @@ never a refusal.
 count over the **description** only when it has at least 25 words, for en, es, pt, fr, de, it only (the lists live in
 `config.py`, ten common words each), the winner needing at least 6 hits and 1.5 times the runner-up, else null.
 
-**Ranking.** Sort key, smallest first: (1) `0` when the match has no heads-up and no can't-tell line, else `1`; (2)
+**Ranking.** Sort key, smallest first: (1) `0` when the match has no watch-out line and no can't-tell line, else `1`; (2)
 kind: `cpm` 0, `per_post` 1, `pool` 2, `retainer` 3, `other` 4; (3) minus the best `top` over the counted places (0 when
 not CPM); (4) minus `leftCents` (unknown last); (5) minus `launchedAt` (newest first; unknown last); (6) the uuid. The
 first 20 are kept.
@@ -481,14 +510,18 @@ first 20 are kept.
   `minViews`; pool "Shares the prize money"; retainer "Pays picked creators each month"; other "Pays in its own way.
   See its page." A place under his minimum still shows its own rate (never hidden, never in the why line).
 * Why line: `"{pay} on {counted places}."` + (`" {category name}."` when he picked categories and one matched) +
-  (`" {100 − ceil(used_bps / 100)}% of the money left."` when known) + `" Open to join."` / `" You apply first."`, where
+  (when known, with `left = 100 − ceil(used_bps / 100)`, the plain words of `words.left_line`: `" All the money is
+  left."` (100), `" Most of the money is left."` (75–99), `" Half or more of the money is left."` (50–74), `" Some of the
+  money is left."` (25–49), `" A little money is left."` (under 25): the bands are the "Money left" choices, never a
+  percent or a "quarter" on a screen) + `" Anyone can join."` / `" You apply first."`, where
   `{pay}` is "Pays $1.50 per 1,000 views" (one rate), "Pays up to $2.00 per 1,000 views" (geo, or different rates:
   the highest `top`), "Pays $5.00 for each approved post", "Shares the prize money", "Pays picked creators each
   month", "Pays in its own way" and places are joined "YouTube, Instagram and X".
 * Money left: `"{money(leftCents)} left of {money(totalCents)}"`; with `asOf` = the card's `readAt`.
 * `skipped` (one per code with a count > 0, biggest first; `not_listed` never shown): `low_pay` "{n} pay less than
-  $1.00 per 1,000 views." (his minimum), `budget_low` "{n} have less than a quarter of the money left." ("half the
-  money" for 50, "three quarters of the money" for 75; never for 0), `budget_gone` "{n} have almost no money left.",
+  $1.00 per 1,000 views." (his minimum), `budget_low` "{n} have only a little money left." (his choice "Some left"),
+  "{n} have less than half the money left." ("Half or more"), "{n} have less money left than you want." ("Most
+  left"; never for "Any"), `budget_gone` "{n} have almost no money left.",
   `not_your_places` "{n} don't pay for the places you post.", `apply` "{n} want you to apply first.", `other_pay` "{n}
   pay per post or share a prize.", `cant_make` "{n} need something Clip Factory can't make.", `topic` "{n} are about
   other things.", `language` "{n} want another language.", `hidden` "{n} you said Not for me.", `own` "{n} are in your
@@ -499,27 +532,29 @@ normalize_cases.json, plan_cases.json}`; `samples.json` is `cards-and-details.js
 `chartPoints` and usernames removed). Each case is `{name, want, places, tiktokOk, own, hidden, now, expect: {order,
 skipped, lines}}`. With `places` = YouTube, Instagram, Facebook and X set up, TikTok's audit not passed, `now` =
 2026-11-21T12:00:00Z (percent left = `100 − ceil(used_bps / 100)`):
-* **default** → in order: Fundingpips `c0c37381-…` ("Pays $6.00 per 1,000 views on YouTube and Instagram. 41% of the
-  money left. Open to join."; notes "It has 4 rules you see once you join.", the TikTok note), COD DMZ `a1cefc3b-…`
-  ("Pays $1.50 per 1,000 views on Instagram. 46% of the money left. Open to join."; the TikTok note), CNPL Pickleball
-  `3d9ef19f-…` ("Pays $1.50 per 1,000 views on YouTube and Instagram. 96% of the money left. Open to join."; the
-  TikTok note), Santa Cruz `c49840ae-…` ("Pays $1.00 per 1,000 views on YouTube and Instagram. 44% of the money left.
-  Open to join."; the TikTok note), then the two with a heads-up: ENERGY DRINKS `e4a9465f-…` ("Pays $1.00 per 1,000
-  views on YouTube, Instagram and X. 98% of the money left. Open to join."; heads-up audience; notes "It has 1 rule you
-  see once you join.", the TikTok note) and 8lanco `d5d8b659-…` (Instagram, $1.00, 99%; heads-up sound; "It has 2
-  rules you see once you join.", the TikTok note). Refused: KreekCraft (overlay), TradeLens (slideshows), Mack (drafts
+* **default** → in order: Fundingpips `c0c37381-…` ("Pays $6.00 per 1,000 views on YouTube and Instagram. Some of the
+  money is left. Anyone can join."; notes "It has 4 rules you see once you join.", the TikTok note), COD DMZ
+  `a1cefc3b-…` ("Pays $1.50 per 1,000 views on Instagram. Some of the money is left. Anyone can join."; the TikTok
+  note), CNPL Pickleball `3d9ef19f-…` ("Pays $1.50 per 1,000 views on YouTube and Instagram. Most of the money is left.
+  Anyone can join."; the TikTok note), Santa Cruz `c49840ae-…` ("Pays $1.00 per 1,000 views on YouTube and Instagram.
+  Some of the money is left. Anyone can join."; the TikTok note), then the two with a watch-out line: ENERGY DRINKS
+  `e4a9465f-…` ("Pays $1.00 per 1,000 views on YouTube, Instagram and X. Most of the money is left. Anyone can
+  join."; the audience watch-out line; notes "It has 1 rule you see once you join.", the TikTok note) and 8lanco
+  `d5d8b659-…` (Instagram, $1.00, 99% left: "Most of the money is left."; the sound watch-out line; "It has 2 rules
+  you see once you join.", the TikTok note). Refused: KreekCraft (overlay), TradeLens (slideshows), Mack (drafts
   first) and The Weeknd (its own sound, `sound: needed`) `cant_make`; UnGodly and Hablando `apply`; Kai Cenat
   `other_pay`; Split-Screen UGC `budget_low` (21% left); ForgeGUI `budget_gone`. `skipped`: `cant_make` 4, `apply` 2,
-  `other_pay` 1, `budget_low` 1, `budget_gone` 1; `looked` 15.
+  `other_pay` 1, `budget_low` 1 ("1 campaign has only a little money left."), `budget_gone` 1; `looked` 15.
 * **also apply** (`access: any`) → Fundingpips, COD DMZ, Pickleball, Santa Cruz, Hablando `e815a623-…` (Instagram
-  $1.00, 29%, "You apply first."), then with a heads-up UnGodly `0d341d7d-…` (YouTube $1.75, 95%, "You apply first.";
-  heads-up audience), ENERGY DRINKS, 8lanco.
+  $1.00, 29% left: "Some of the money is left.", "You apply first."), then with a watch-out line UnGodly `0d341d7d-…`
+  (YouTube $1.75, 95% left: "Most of the money is left.", "You apply first."; the audience watch-out line), ENERGY
+  DRINKS, 8lanco.
 * **gaming** (`access: any`, `categories: ["gaming"]`) → UnGodly only (Mack's categories include `gaming` from its
   card, but it is `cant_make`); `topic` 7.
 * **other pay, any money** (`otherPay: true`, `minLeftPct: 0`) → Fundingpips, COD DMZ, Pickleball, Santa Cruz, Kai
-  Cenat (pool, "Shares the prize money on YouTube, Instagram and X."), then with a heads-up Split-Screen UGC ("Pays up
-  to $3.00 per 1,000 views on YouTube, Instagram and X. 21% of the money left. Open to join."; heads-up audience),
-  ENERGY DRINKS, 8lanco.
+  Cenat (pool, "Shares the prize money on YouTube, Instagram and X. All the money is left. Anyone can join."), then
+  with a watch-out line Split-Screen UGC ("Pays up to $3.00 per 1,000 views on YouTube, Instagram and X. A little
+  money is left. Anyone can join."; the audience watch-out line), ENERGY DRINKS, 8lanco.
 * **$2 and up** (`minPer1kCents: 200`, `access: any`, `minLeftPct: 0`) → Fundingpips, Split-Screen UGC ("Pays $3.00
   per 1,000 views on Instagram and X."; its YouTube row still shows "$1.50 per 1,000 views"); `low_pay` 7.
 * **YouTube only** (`places: ["youtube"]`) → Fundingpips, Pickleball, Santa Cruz, ENERGY DRINKS; `not_your_places` 2.
@@ -585,7 +620,9 @@ pasted rules, §41.1); signed in and not listed yet, the membership stays `not_j
 says "Checking that you joined…" for 15 minutes (§41.6 change 11) and its quiet "I joined, but it still says not
 joined" shows at once (`canSayInBy = addedAt`). `CRFIND.added[uuid] = now`, `addedBy: "finder"` on the `CAMPAIGN#`
 item. When the public read fails (`platform_down`) and `CRPUBLIC/PUB#{uuid}` is at most 24 hours old, the item is made
-from that copy instead (the adopt path below, without a listed row). Both paths that use a `PUB#` copy call
+from that copy instead (the adopt path below, without a listed row); with no copy or an older one, the read's own
+error stands: **503 `platform_down`** "Content Rewards didn't answer. Try again in a minute." (never a 404: the match
+is still his, so the same button can try again; the mock answers the same). Both paths that use a `PUB#` copy call
 `campaigns.apply_public(item, public, parse(pub["readAt"]))`, never with `now`, so `publicAt` and `budget.asOf` say
 when Content Rewards' numbers were read (the card shows "as of" that time, and the next owner action re-reads the
 page's JSON as §38.10 says). The answer is §38.8's `Campaign`.
@@ -707,7 +744,8 @@ routes and the overview's `finder`. Fixtures from the golden samples: the six de
 (refused by money left until "Any"), and a `skipped` list. A look takes 3 s on the fake clock (`looking`, then `ok`).
 `window.__cfMock.finder.{newMatches(n), setState(state | "unavailable") /* "unavailable": only the finder routes
 answer 503 and the overview has no finder */, joinedOnCr(uuid) /* the next joined call adds it, as signed in */,
-signedIn(bool), reset()}`. A joined campaign answers `nextStepKind: "stop"` with "Reading the rules… (about 30
+signedIn(bool), reset()}`. An add whose campaign the mock has no copy of answers 503 `platform_down`, as the server
+does with no fresh copy (§41.5 Add). A joined campaign answers `nextStepKind: "stop"` with "Reading the rules… (about 30
 seconds)" first and `make_clips` 3 s later (a live event). Mock words match the server's (§41.3).
 
 ### 41.6 Who builds what, the switch, tests, not verified live
@@ -826,7 +864,7 @@ and no Secrets client; the `test_finder_*` modules fail on any real DNS look-up 
   GET with a stale `matchedWant` → invoke `want` at most once per 10 minutes; check limits 30 min and 4 a day; `said`
   opened, not_for_me, null, the 404; add for open/application × signed in/not → the right `said` and membership,
   `added` set, `canSayInBy = addedAt` for an open one signed in, `platform_down` → from `PUB#` when fresh with
-  `budget.asOf` equal to the `PUB#` `readAt`, 404 when stale; joined: not signed in → `[]`, signed in → listed
+  `budget.asOf` equal to the `PUB#` `readAt`, 503 `platform_down` when stale or missing (never 404); joined: not signed in → `[]`, signed in → listed
   opened ones added as `unknown` then updated to `in` (a `MODIFY`, `celebrate: "in"`), `added` set, ambiguous never
   added, **a campaign added, removed and still listed → not added again**, **a stored match never opened → not
   added**, an open older than 48 hours → not added, 30 s limit, at most 5; ask: 409 not signed in, the exact
@@ -862,7 +900,11 @@ and no Secrets client; the `test_finder_*` modules fail on any real DNS look-up 
   card; the notification's url; 404, 503 and `setState("unavailable")` hide every entry and the page says coming
   soon; `content-rewards.spec.ts` change 1 both ways; §39.5's `two-ways.spec.ts` still counts 5 taps for the normal
   way; every new screen: no sideways scroll at 320–1920, no edges, targets ≥ 44 px (48 on phones), the arrow cursor
-  only, axe contrast light and dark, reduced motion, the phone vermilion bottom right, Ask never over the main button.
+  only, axe contrast light and dark, reduced motion, the phone vermilion bottom right, Ask never over the main button;
+  at 320×568, 375×812 and 430×932 (never started, before Open, after Open signed in, and by hand with the rules
+  pasted) every line of the card with the pinned bar clears it at some point of the scroll, a focused control is never
+  under it, and the page ends with room for it; at 1280×720 and 1024×768 (never started and before Open) a focused
+  control, every category and language chip included, is never under it either.
 * **T**: `node web/scripts/help-corpus.mjs --check` (every highlight is a real anchor) and `node
   web/scripts/ask-knowledge.mjs --check`.
 
@@ -880,7 +922,7 @@ pages a look, 1 s apart, a few looks a day, is fine with CR (no published limit 
 listing every public campaign page (the samples show its `lastmod` is the first listing and never moves, so the plan
 re-reads pages on its own clock); that the page's RSC format and the two query keys stay (CR's web app is version
 2.1.435 and changes often; a change is `unreadable`, not a wrong match); a `per_post` campaign's `payoutModel` shape (no
-sample); what the content type `sound` means on a campaign that also allows `clipping` (a heads-up only); the
+sample); what the content type `sound` means on a campaign that also allows `clipping` (a watch-out line only); the
 overlay, sound and audience sentence rules and the page-language guess on more briefs; that a signed-in creator's
 campaign page shows **Join Campaign** for open campaigns and **Apply** for application ones as the logged-out samples
 suggest; that `list_my_campaigns` lists a campaign right after **Join Campaign** (else change 11's "Checking that you

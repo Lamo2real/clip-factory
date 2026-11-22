@@ -66,7 +66,7 @@ const match = (id: string, over: Partial<FinderMatch> = {}): FinderMatch => ({
   maxPerClipCents: 25_000,
   budget: { totalCents: 250_000, leftCents: 241_010, usedPct: 4, line: "$2,410.10 left of $2,500", asOf: "2026-11-21T14:10:00Z", tag: "Content Rewards' numbers" },
   categories: [],
-  why: "Pays $1.50 per 1,000 views on YouTube and Instagram. 96% of the money left. Open to join.",
+  why: "Pays $1.50 per 1,000 views on YouTube and Instagram. Most of the money is left. Anyone can join.",
   notes: ["It has 2 rules you see once you join."],
   headsUp: [],
   cantTell: [],
@@ -584,7 +584,7 @@ describe("what you want and the rest of the page", () => {
       return { ...structuredClone(current), state: "looking" as const };
     });
     await draw();
-    expect(text()).toContain("At least $1 per 1,000 views · YouTube, Instagram · At least a quarter of the money left · Open to join");
+    expect(text()).toContain("At least $1 per 1,000 views · YouTube, Instagram · Some money left · Anyone can join");
     await tap(button("Change"));
     await tap(host.querySelector<HTMLElement>("input[value='any']")!);
     await tap(host.querySelector<HTMLElement>("[role='group'][aria-labelledby*='left'] input[value='50']")!);

@@ -1409,20 +1409,24 @@ each one himself on Content Rewards. The server decides every match and writes e
   back"); a glass "Look on Content Rewards yourself"; while signed in, the quiet card "Clip Factory can't join for
   you" with a glass "Ask Content Rewards" (`data-help="cr-finder-ask"`); the quiet "Stop finding campaigns".
 - **What you want** (`data-help="cr-finder-want"`, anchor `#want`): open the first time and on "Change", else folded to
-  one summary line ("At least $1 per 1,000 views · YouTube, Instagram · At least a quarter of the money left · Open to
-  join") with a glass "Change". Every change saves at once (no Save button) and the matches update by themselves; a
+  one summary line ("At least $1 per 1,000 views · YouTube, Instagram · Some money left · Anyone can join") with a
+  glass "Change". Every change saves at once (no Save button) and the matches update by themselves; a
   glass "Done" folds it. Never started, its vermilion "Find campaigns for me" is the screen's only one.
 
   | Control | Kind | Choices | Picked for him |
   |---|---|---|---|
   | "Pays at least", "for every 1,000 views" | `Glide` | $0.50 · $1 · $2 · $3 | $1 |
   | "Where you post" | chips, many | YouTube, Instagram, Facebook, X, TikTok | the places he set up ("The places you set up.") |
-  | "Money left" | `Glide` | Any · A quarter · Half · Most | A quarter |
-  | "Who can join" | `Glide` | Open to join · Also ones I apply to | Open to join |
+  | "Money left" | `Glide` | Any · Some left · Half or more · Most left | Some left |
+  | "Who can join" | `Glide` | Anyone can join · Also ones I apply to | Anyone can join |
   | "What it's about" | chips, many | Anything + up to 12 of Content Rewards' categories | Anything |
   | "Language" | chips, many | Any + English, Spanish, Portuguese, French, German, Italian | Any |
   | "Other kinds of pay" | switch | "Also show campaigns that pay per post or share a prize." | off |
   | "Tell me about new ones" | switch | "At most once a day." | on |
+
+  Where their words don't fit on one row (the row under 400 px, phones up to about 465 px), "Money left" and "Who can
+  join" lay their choices out in even halves (a 2 × 2 grid with a rounded track and highlight, and two halves side by
+  side), never one choice alone on a second row.
 
   Under them, fixed: "I skip campaigns Clip Factory can't make clips for, like ones that need their own sound or
   picture on the video." Chips are toggle buttons (`aria-pressed`), soft-filled when on, at least 44 px (48 on
@@ -1431,15 +1435,16 @@ each one himself on Content Rewards. The server decides every match and writes e
 - **The match card** (`FinderMatchCard`, `data-help="cr-finder-match"`), one open at a time (the first on load;
   tapping another's head opens it and folds the rest; after "Not for me" the next one opens). Top to bottom:
   1. **Head**: a round letter of the brand (never an outside picture), the campaign name (two lines at most), the
-     brand, a "New" chip when it is new to him, and the access chip "Open to join" or "You apply first".
+     brand, a "New" chip when it is new to him, and the access chip "Anyone can join" or "You apply first".
   2. **Pay**: one row per place he posts to that the campaign pays for, with the place's mark and the server's line
      ("$1.50 per 1,000 views · up to $250 a clip", "Up to $2.00 per 1,000 views", "$5.00 for each approved post",
      "Shares the prize money", "Pays picked creators each month").
-  3. **Money left**: "$2,410.10 left of $2,500" over the soft bar with its chip ("Plenty left", "Half used"), then the
+  3. **Money left**: "$2,410.10 left of $2,500" over the soft bar with its chip, in the bands of Why it matched's
+     money words ("All left", "Most left", "Half or more left" green; "Some left" quiet; "A little left" amber), then the
      grey "Content Rewards' numbers, 2:10 pm". Amounts are only formatted (`tabular-nums`), never a guess of what a
      clip would earn.
-  4. **Why it matched**, one line: "Pays $1.50 per 1,000 views on YouTube and Instagram. 96% of the money left. Open
-     to join."
+  4. **Why it matched**, one line: "Pays $1.50 per 1,000 views on YouTube and Instagram. Most of the money is left.
+     Anyone can join." The money left is in plain words, never a percent.
   5. Up to three quiet **notes** ("It has 2 rules you see once you join."), up to three **heads-ups** with a warning
      `Icon` ("It may need its own sound. Clip Factory can't add one.") and up to three **can't tell** lines with a
      question mark ("I can't tell how much money is left."). Never colour alone: each has its mark and words.
