@@ -55,3 +55,26 @@ variable "permissions_boundary_arn" {
   default     = ""
   description = "Permissions boundary for this module's IAM role (infra/bootstrap's cf-prod-role-boundary). Empty: none."
 }
+
+# ---------- Your bank (docs/CONTRACTS.md §40.5.6, §40.5.11) ----------
+variable "bank_reading_enabled" {
+  type        = bool
+  default     = false
+  description = "§40.5.11: BANK_READING on/off for the bank reader (the same switch as cf-prod-api). Off: nothing is read from any bank; stored deposits, payers and links stay."
+}
+
+variable "content_rewards_enabled" {
+  type        = bool
+  default     = false
+  description = "§38.16: CONTENT_REWARDS on/off. The bank reader suggests Content Rewards for a Whop payment only while it is on (§40.5.8 rule 8)."
+}
+
+variable "app_url" {
+  type        = string
+  default     = ""
+  description = "The app's https address (APP_URL): the psu-referer header of his own bank Check now. Empty: that header can't be filled, so a bank that needs it is read unattended."
+  validation {
+    condition     = var.app_url == "" || (startswith(var.app_url, "https://") && !endswith(var.app_url, "/"))
+    error_message = "app_url must be empty or an https address without a trailing slash."
+  }
+}

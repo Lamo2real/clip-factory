@@ -337,6 +337,26 @@ jobs:
       - name: read-logs.yml prints the Content Rewards lines and connection, with nothing secret (fake aws)
         run: bash scripts/test-read-logs.sh
 
+  # The Mac's TikTok helper (mac/tiktok-helper, CONTRACTS §47): its rules (never twice, pacing, the trial pause, the
+  # caption match) and its install scripts. It runs on the owner's Mac, so no browser is started here.
+  mac-helper:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: mac/tiktok-helper
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: mac/tiktok-helper/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - name: shellcheck
+        run: shellcheck install.sh uninstall.sh
+
   changes:
     runs-on: ubuntu-24.04
     timeout-minutes: 5

@@ -11,7 +11,9 @@ Per platform, on its own (one failing never stops the others, and nothing here c
 5. Celebrations are queued once per key (``pendingCelebrations``) and acknowledged by the owner (``POST
    /v1/money/seen``). First money waits until it survived a later re-read at least 3 days on.
 
-Then, in its own try, Get paid's payout reads (``payouts.collect.run``, §40.7).
+Then, in its own try, Get paid's payout reads (``payouts.collect.run``, §40.7), and, only for the daily run
+(``bank=True``), in its own try again, the bank read (``bankread.collect.run``, §40.5.6). Money's own Check now never
+reads the bank: each tap there would spend one of the bank's unattended reads.
 """
 
 from __future__ import annotations
@@ -69,6 +71,11 @@ class MoneyDeps:
     graph_version: str = "v27.0"
     time_budget_seconds: float = 240.0
     monotonic: Callable[[], float] = time.monotonic
+    # Your bank (§40.5.11): BANK_READING (off: nothing is read), the app's address for the psu-referer header, and
+    # whether Content Rewards is on (a Whop hint suggests Content Rewards only then).
+    bank_reading: bool = False
+    app_url: str = ""
+    content_rewards: bool = False
 
     def cfg(self) -> money_rules.Monetization:
         return self.rules or money_rules.load()
@@ -554,7 +561,9 @@ def run_platform(deps: MoneyDeps, user_id: str, platform: str, *, now: datetime,
     return out
 
 
-def run_user(deps: MoneyDeps, user_id: str, *, platforms: tuple[str, ...] = MONEY_ORDER) -> list[Outcome]:
+def run_user(
+    deps: MoneyDeps, user_id: str, *, platforms: tuple[str, ...] = MONEY_ORDER, bank: bool = False
+) -> list[Outcome]:
     from . import get_prefs
 
     started = deps.monotonic()
@@ -589,14 +598,29 @@ def run_user(deps: MoneyDeps, user_id: str, *, platforms: tuple[str, ...] = MONE
         rows=sum(o.rows for o in outcomes),
         errors=sum(1 for o in outcomes if o.error),
     )
+
     # §40.7: Get paid's payout reads (AdSense for YouTube, Whop) after the five platforms, in their own try: they can
     # never stop the money run, and they are skipped when less than 20 s of the time budget is left.
+    def remaining() -> float:
+        return deps.time_budget_seconds - (deps.monotonic() - started)
+
     try:
         from ..payouts import collect as payouts_collect
 
-        payouts_collect.run(
-            deps, user_id, deps.clock(), remaining=lambda: deps.time_budget_seconds - (deps.monotonic() - started)
-        )
+        payouts_collect.run(deps, user_id, deps.clock(), remaining=remaining)
     except Exception as e:
         log("error", "money.payouts_failed", error=type(e).__name__)
+    # §40.5.6: Your bank, only from the daily run, at the very end (the day's new PAYOUT# rows are there to match), in
+    # its own try (it can never stop the money run), skipped when less than 20 s of the time budget is left.
+    if bank:
+        try:
+            from ..bankread import MIN_SECONDS_LEFT
+            from ..bankread import collect as bank_collect
+
+            if remaining() < MIN_SECONDS_LEFT:
+                log("warning", "money.bank_time_budget")
+            else:
+                bank_collect.run(deps, user_id, deps.clock(), psu=None, mine=False, remaining=remaining)
+        except Exception as e:
+            log("error", "money.bank_failed", error=type(e).__name__)
     return outcomes

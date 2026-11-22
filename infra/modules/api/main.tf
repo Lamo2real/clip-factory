@@ -33,7 +33,14 @@ locals {
   }, local.cr_on ? { CAMPAIGNS_FUNCTION_ARN = var.campaigns_function_arn } : {})
   # Get paid (docs/CONTRACTS.md §40.6): "Connect Whop" waits behind WHOP_CONNECT, an in-place env change. The Whop
   # secrets are made at runtime under the existing PlatformSecrets grant: no new permission.
-  getpaid_env = { WHOP_CONNECT = var.whop_connect_enabled ? "on" : "off" }
+  # Your bank (§40.5.11): BANK_READING, off until BA, BR, BW and BD have merged (then one switch PR); off, GET
+  # /v1/getpaid/bank answers {on: false} and every other bank route 503 "Coming soon.". The bank secrets are made at
+  # runtime under the existing PlatformSecrets grant and the Check now invoke uses the existing money grant: no new
+  # permission, an in-place env change.
+  getpaid_env = {
+    WHOP_CONNECT = var.whop_connect_enabled ? "on" : "off"
+    BANK_READING = var.bank_reading_enabled ? "on" : "off"
+  }
   cr_permissions = local.cr_on ? [
     { Sid = "Campaigns", Action = ["lambda:InvokeFunction"], Resource = [var.campaigns_function_arn] },
   ] : []
