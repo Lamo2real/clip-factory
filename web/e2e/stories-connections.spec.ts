@@ -181,3 +181,36 @@ test("round 5: reconnecting clears the old warning (§45.36 E18)", async ({ page
   await expect(tiktok.locator(".st-chip").first()).toHaveText("Connected");
   await expect(tiktok).not.toContainText("app keys changed");
 });
+
+test("round 5: on Social accounts the Needs you bar never sends the owner there again; Show me brings the card into view (§45.36 E17)", async ({ page }) => {
+  await on(page);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/stories/ideas");
+  await ready(page);
+  // Only the account problems are left (no stuck post), so the first thing that needs him is TikTok's sign-in.
+  await page.evaluate(() => {
+    const store = (window as unknown as { __cfStoriesMock?: { store?: { publishing: { publishingStatus: string }[] } } }).__cfStoriesMock?.store;
+    if (store) store.publishing = store.publishing.filter((j) => j.publishingStatus !== "needs_attention" && j.publishingStatus !== "failed");
+  });
+  await page.waitForTimeout(2100);
+  await page.locator(".st-rail .st-rail__item", { hasText: "Dashboard" }).click();
+  const bar = page.getByRole("complementary", { name: "Needs you" });
+  await expect(bar).toContainText("TikTok");
+  // Elsewhere: Fix it opens Social accounts.
+  await expect(bar.getByRole("link", { name: "Fix it" })).toHaveAttribute("href", "/stories/connections");
+  await page.locator(".st-rail .st-rail__item", { hasText: "Social accounts" }).click();
+  await expect(page).toHaveURL(/\/stories\/connections$/);
+  await expect(bar).toContainText("below");
+  expect(await bar.evaluate((el) => (el as HTMLElement).innerText)).not.toContain("Social accounts");
+  await expect(bar.getByRole("link", { name: "Fix it" })).toHaveCount(0);
+  const tiktok = cardOf(page, "TikTok");
+  await expect(tiktok).toBeAttached();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(tiktok).not.toBeInViewport();
+  await bar.getByRole("button", { name: "Show me" }).click();
+  // (It glides there.)
+  await expect.poll(() => tiktok.evaluate((el) => Math.round(el.getBoundingClientRect().top)), { timeout: 6000 }).toBeGreaterThanOrEqual(0);
+  await expect.poll(() => tiktok.evaluate((el) => el.getBoundingClientRect().top < innerHeight / 2), { timeout: 6000 }).toBe(true);
+  await expect(tiktok).toBeInViewport();
+  await expect(tiktok).toBeFocused();
+});

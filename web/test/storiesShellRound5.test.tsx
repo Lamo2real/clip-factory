@@ -8,6 +8,8 @@
 // - E15: after Finish with steps skipped, the dashboard keeps "Finish setting up: {n} left" with them;
 // - E16: Lamo Stories' rail keeps its brand and its switcher in view (only the pages scroll), and Clip Factory's phone
 //   top bar drops the brand's name before its switch gets under 44 px (only while the switcher asks for it);
+// - E17: the Needs you bar on the page it points to never sends the owner there again: Social accounts' sentence says
+//   "below", and Show me brings the card to fix into view;
 // - E18: Social accounts' cards flow by their own height; a reconnect clears the old warning (the mock, as the API).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -21,7 +23,7 @@ import { setStoriesApi } from "../src/stories/api/client.ts";
 import { mockStoriesApi } from "../src/stories/api/mock/index.ts";
 import { setMockLatency, type MockStore } from "../src/stories/api/mock/store.ts";
 import type { StoriesApi } from "../src/stories/api/types.ts";
-import { forgetDashboards, forgetOnboarding, plainFirst } from "../src/stories/ui.tsx";
+import { forgetDashboards, forgetOnboarding, NeedsYouBar, plainFirst, socialHere } from "../src/stories/ui.tsx";
 import { followReading, noteReading, READ_REST_MS, REACH_UP_MS, readingPlace, resetWorkspaceMemory } from "../src/stories/workspace.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -336,5 +338,86 @@ describe("Finish setting up (§45.36 E15)", () => {
     });
     await dashboard();
     expect(host.querySelector(".st-setupcard")).toBeNull();
+  });
+});
+
+describe("the Needs you bar on the page it points to (§45.36 E17)", () => {
+  let host: HTMLElement;
+  let root: Root;
+
+  const STUCK = "Lamo Stories' TikTok (Lamo Stories) needs connecting again. Open Lamo Stories › Social accounts, then tap Try again.";
+  async function render(here: string, item: { sentence: string; href: string; platform: "tiktok" | null }) {
+    const api = mockStoriesApi();
+    const real = await api.dashboard("stories");
+    setStoriesApi({ ...api, dashboard: async () => ({ ...real, needsYou: [{ publishingJobId: null, storyId: null, title: "TikTok", ...item }] }) });
+    await act(async () =>
+      root.render(
+        <ToastProvider>
+          <NeedsYouBar ws="stories" here={here} />
+          {here === "/stories/connections" ? <ConnectionsScreen ws="stories" page={{ name: "connections", platform: null, result: null, ws: null }} /> : null}
+        </ToastProvider>,
+      ),
+    );
+    for (let i = 0; i < 6; i++) await act(async () => await new Promise((r) => setTimeout(r, 0)));
+  }
+
+  beforeEach(async () => {
+    await loadConfig(async () => new Response(JSON.stringify({ region: "eu-north-1", userPoolId: "eu-north-1_x", userPoolClientId: "c", apiUrl: "https://api.test/" })));
+    localStorage.clear();
+    resetWorkspaceMemory();
+    forgetDashboards();
+    forgetOnboarding();
+    setMockLatency(0);
+    host = document.createElement("div");
+    document.body.appendChild(host);
+    root = createRoot(host);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+    setStoriesApi(null);
+    forgetDashboards();
+  });
+
+  it("says the Social accounts trip in words for this page", () => {
+    expect(socialHere(STUCK)).toBe("Lamo Stories' TikTok (Lamo Stories) needs connecting again. Fix it below, then tap Try again.");
+    expect(socialHere("Lamo Stories' TikTok needs connecting again. Open Social accounts and tap Connect.")).toBe("Lamo Stories' TikTok needs connecting again. Tap Connect below.");
+    expect(socialHere("Lamo Stories' X is not connected. Open Lamo Stories › Social accounts, connect it, then tap Try again.")).toBe("Lamo Stories' X is not connected. Connect it below, then tap Try again.");
+    expect(socialHere("The TikTok app keys changed. Connect TikTok again in Lamo Stories › Social accounts, then tap Try again.")).toBe("The TikTok app keys changed. Connect TikTok again below, then tap Try again.");
+    expect(socialHere("“Bike lights” needs a check before you can approve it.")).toBe("“Bike lights” needs a check before you can approve it.");
+  });
+
+  it("on another page: the server's sentence and Fix it, which opens Social accounts", async () => {
+    await render("/stories/ideas", { sentence: STUCK, href: "/stories/connections", platform: "tiktok" });
+    const bar = host.querySelector<HTMLElement>(".st-needs")!;
+    expect(bar.textContent).toContain("Open Lamo Stories › Social accounts, then tap Try again.");
+    expect(bar.querySelector<HTMLAnchorElement>("a.st-needs__go")?.getAttribute("href")).toBe("/stories/connections");
+  });
+
+  it("on Social accounts: never sends him there again, and Show me brings the card into view", async () => {
+    await render("/stories/connections", { sentence: STUCK, href: "/stories/connections", platform: "tiktok" });
+    const bar = host.querySelector<HTMLElement>(".st-needs")!;
+    expect(bar.textContent).toContain("needs connecting again. Fix it below, then tap Try again.");
+    expect(bar.textContent).not.toContain("Social accounts");
+    expect(bar.querySelector("a")).toBeNull();
+    const tiktok = host.querySelector<HTMLElement>('.st-conn[data-platform="tiktok"]')!;
+    const seen = vi.fn();
+    tiktok.scrollIntoView = seen;
+    const show = Array.from(bar.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent?.trim() === "Show me")!;
+    await act(async () => show.click());
+    expect(seen).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(tiktok);
+  });
+
+  it("on the page of a story that needs a check: no Fix it to the same page", async () => {
+    await render("/stories/review/st-1", { sentence: "“Bike lights” needs a check before you can approve it.", href: "/stories/review/st-1", platform: null });
+    const bar = host.querySelector<HTMLElement>(".st-needs")!;
+    expect(bar.textContent).toContain("needs a check before you can approve it.");
+    expect(bar.querySelector("a, .st-needs__go")).toBeNull();
+    expect(bar.querySelector('[aria-label="Hide this for now"]')).not.toBeNull();
+  });
+
+  it("StoriesApp tells the bar which page is on screen", () => {
+    expect(source("stories/StoriesApp.tsx")).toContain("<NeedsYouBar ws={ws} here={storiesHref(page)} />");
   });
 });

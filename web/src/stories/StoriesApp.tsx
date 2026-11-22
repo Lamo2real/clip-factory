@@ -551,7 +551,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
         </header>
         <main className="st-main" id={active ? "main" : undefined} ref={main} tabIndex={-1}>
           <CrSendNow route={{ name: "stories", page }} />
-          {ws && !solo ? <NeedsYouBar ws={ws} /> : null}
+          {ws && !solo ? <NeedsYouBar ws={ws} here={storiesHref(page)} /> : null}
           {problem ? (
             <section className="st-page">
               <h1 className="sr-only">Lamo Stories</h1>
