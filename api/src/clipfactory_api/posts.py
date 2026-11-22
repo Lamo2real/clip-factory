@@ -57,10 +57,21 @@ def is_refreshing(item: Mapping[str, Any], now: datetime | None = None) -> bool:
     return started is not None and (now or utcnow()) - started < REFRESH_CLAIM
 
 
+def is_private_test(item: Mapping[str, Any]) -> bool:
+    """A post of auto-posting's Private test run (§46.8): only that run writes the internal ``postOptions.test``."""
+    options = item.get("postOptions")
+    return isinstance(options, Mapping) and options.get("test") == "private"
+
+
 def public_post(item: Item, now: datetime | None = None) -> Item:
     """The Post shape of §5/§16.3. Internal fields (``platformPostId``, ``statsId``, ``statsDueAt``, ``gsi2*``,
-    ``refreshStartedAt``, ``lastSnapshotAt``, ``insightsDueAt``, ``statsError``) never leave."""
+    ``refreshStartedAt``, ``lastSnapshotAt``, ``insightsDueAt``, ``statsError``, ``postOptions``, ``autoRun``) never
+    leave. An auto-posted post says ``auto: true``, a Private test run's ``test: "private"`` (§46.9)."""
     out = {k: item[k] for k in POST_FIELDS if k in item}
+    if item.get("autoRun"):
+        out["auto"] = True
+    if is_private_test(item):
+        out["test"] = "private"
     metrics = public_metrics(item.get("metrics"))
     if metrics is not None:
         out["metrics"] = metrics
@@ -71,8 +82,9 @@ def public_post(item: Item, now: datetime | None = None) -> Item:
 def mark_posted(store: db.Store, post: Mapping[str, Any], published: Any, now: datetime) -> Item:
     """Writes a queued post as ``posted`` with the stats fields of §16.3 (conditional on ``status = queued``).
 
-    ``published`` is a ``platforms.Published``. A post with a ``statsId`` joins the poller's sparse ``gsi2`` with its
-    first poll ``minIntervalMinutes`` after posting; a private TikTok post (no ``statsId``) never does. A campaign
+    ``published`` is a ``platforms.Published``. A public post with a ``statsId`` joins the poller's sparse ``gsi2`` with
+    its first poll ``minIntervalMinutes`` after posting; a private post (a private TikTok post, a Private test run's
+    post, §46.8) never does. A campaign
     post whose platform refused the paid-partnership switch (``published.paid_label``, §38.14) gets ``paidLabel``.
     Raises ``db.ConditionFailed`` when the post is no longer queued."""
     from .stats import config
@@ -80,11 +92,12 @@ def mark_posted(store: db.Store, post: Mapping[str, Any], published: Any, now: d
     posted_at = parse(published.posted_at) or now
     fields: Item = {
         "status": "posted",
-        "url": published.url,
         "postedAt": iso(posted_at),
         "perfCheckAt": iso(posted_at + PERF_CHECK_DELAY),
         "privacy": published.privacy if published.privacy in {"public", "private"} else "public",
     }
+    if published.url:  # a Private test run's Facebook draft and checked Instagram upload have no link (§46.8)
+        fields["url"] = published.url
     if published.platform_post_id:
         fields["platformPostId"] = published.platform_post_id
     if getattr(published, "paid_label", None) == "not_set":
@@ -186,6 +199,7 @@ def create_for_clip(
     post_options: Mapping[str, Mapping[str, Any]] | None = None,
     campaign_id: str | None = None,
     campaign_options: Mapping[str, Any] | None = None,
+    post_fields: Mapping[str, Any] | None = None,
 ) -> list[Item]:
     """Creates the clip's Posts, one per chosen platform (the clip's ``uploadTo``, §33) or, when the clip has none,
     one per platform enabled in settings, and returns all its posts (public shape).
@@ -196,7 +210,8 @@ def create_for_clip(
     When the flag is already set nothing is written. Raises ``db.ConditionFailed`` if the condition fails.
     ``post_options`` (per platform) are stored on that platform's post as the internal ``postOptions`` (§17.8).
     A campaign clip's posts (§38.14) get the public ``campaignId`` and, in every post's ``postOptions``, the internal
-    ``campaign`` (``campaign_options``: paid partnership, disclosure, required items).
+    ``campaign`` (``campaign_options``: paid partnership, disclosure, required items). ``post_fields`` are internal
+    fields every new post gets (the auto-posting run that made it, ``autoRun``, §46.10).
     """
     clip_id = str(clip["clipId"])
     if clip.get("postsCreated"):
@@ -238,6 +253,7 @@ def create_for_clip(
                 "userId": user_id,
                 "createdAt": now,
                 "flowRun": run,
+                **(post_fields or {}),
                 **post,
                 **({"postOptions": options} if options or (post_options and platform in post_options) else {}),
             }

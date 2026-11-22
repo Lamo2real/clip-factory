@@ -58,6 +58,7 @@ HANDLERS = (
     "clipfactory_api/stats/handler.py",  # cf-prod-stats (§16.5)
     "clipfactory_api/weekly.py",  # cf-prod-learn (§16.6)
     "clipfactory_api/money/handler.py",  # cf-prod-money (§25.6)
+    "clipfactory_api/autopost/handler.py",  # cf-prod-autopost (§46.11)
     "clipfactory_api/ask/worker.py",  # cf-prod-ask (§28.5)
     "clipfactory_api/push/notify.py",  # cf-prod-notify (§32.5)
 )

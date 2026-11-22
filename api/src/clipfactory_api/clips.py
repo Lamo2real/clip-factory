@@ -42,6 +42,10 @@ INTERNAL_FIELDS = (
     # §16.12: what the clip says (for the daily second look) and every key of its creator stay server side.
     "spokenText",
     "creatorKeys",
+    # §46.10: the auto-posting run that uploaded the clip (public as ``auto``).
+    "autoRun",
+    "autoAt",
+    "autoTest",
 )
 PUBLISH_PENDING = "pending"
 PUBLISH_STARTED = "started"
@@ -59,11 +63,15 @@ def public_clip(
     """The Clip shape of §5. With ``media`` it carries 1-hour ``coverUrl`` (and, unless ``video=False``,
     ``videoUrl``) links; without (the live WebSocket events) it carries none, and the web keeps the links it already
     has. With the clip's ``posts`` it carries ``totalViews`` (absent when nothing was measured). ``startPending: true``
-    when the clip was uploaded but its flow has not started (``publishState: pending``, §14.5)."""
+    when the clip was uploaded but its flow has not started (``publishState: pending``, §14.5). ``auto`` when an
+    auto-posting run uploaded it (§46.9)."""
     clip = db.strip_keys(item, INTERNAL_FIELDS)
     clip.pop("totalViews", None)
     if item.get("publishState") == PUBLISH_PENDING and item.get("status") in STARTABLE:
         clip["startPending"] = True  # uploaded, but its flow has not started yet: the Library offers Try again
+    auto = public_auto(item)
+    if auto is not None:
+        clip["auto"] = auto
     if media is not None and item.get("status") != "declined":
         if video and item.get("videoKey"):
             clip["videoUrl"] = media.presign_get(item["videoKey"])
@@ -74,6 +82,18 @@ def public_clip(
         if total is not None:
             clip["totalViews"] = total
     return clip
+
+
+def public_auto(item: Item) -> Item | None:
+    """``Clip.auto`` (§46.9): the auto-posting run that uploaded the clip, ``test: "private"`` for a Private test run;
+    None for a clip the owner uploaded himself (or one still in Review)."""
+    run = item.get("autoRun")
+    if not isinstance(run, str) or not run:
+        return None
+    auto: Item = {"runId": run, "at": str(item.get("autoAt") or "")}
+    if item.get("autoTest") == "private":
+        auto["test"] = "private"
+    return auto
 
 
 def total_views(posts: list[Item]) -> int | None:

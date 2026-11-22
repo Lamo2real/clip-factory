@@ -14,10 +14,10 @@ from .. import (
     posts,
     release,
     s3,
-    settings,
     tiktok_find,
     tiktok_link,
     tiktok_self,
+    uploads,
     validate,
     vectors,
 )
@@ -318,7 +318,8 @@ def confirm(app: App, req: Request) -> Response:
     ``posted``, ``failed`` or ``confirmed`` clip, ``platforms`` names the failed posts to try again (one platform's
     Try again) and the waiting posts to send now that their place is connected (Post now, §33.6). A campaign clip
     (§38.14) must name its places, only ones the campaign pays for, while the campaign takes clips, public and never
-    made for kids; its posts carry ``campaignId`` and ``postOptions.campaign``."""
+    made for kids; its posts carry ``campaignId`` and ``postOptions.campaign``. The upload itself is
+    ``uploads.upload_review_clip``, the code auto-posting sends its clips through too (§46.7)."""
     body = req.json()
     validate.only_keys(body, {"captions", "tiktok", "platforms", "options"})
     patch = clips.caption_patch(body["captions"]) if body.get("captions") is not None else {}
@@ -328,66 +329,14 @@ def confirm(app: App, req: Request) -> Response:
     per_clip = post_preset.clip_options(body["options"]) if body.get("options") is not None else {}
     item = _clip_or_404(app, req)
     if item.get("status") == "review":
-        now = iso(app.clock())
-        current_settings = settings.load(app.store, req.user_id)
-        campaign = campaign_clip(app, req.user_id, item)
-        if campaign is not None and chosen is None:
-            raise bad_request(CAMPAIGN_PICK)  # Settings › Where clips go never decides for a campaign clip
-        if chosen is not None:
-            _require_set_up(app, req.user_id, chosen)
-            tiktok_queued = "tiktok" in chosen
-        else:
-            tiktok_queued = "tiktok" in current_settings.get("platforms", []) and (
-                posts.connected_account(app.store, req.user_id, "tiktok") is not None
-            )
-        if tiktok_queued and options is None:
-            raise bad_request("Pick who can see it on TikTok.")
-        if campaign is not None and chosen is not None:
-            _require_campaign_open(app, campaign)
-            _require_campaign_places(app, req.user_id, campaign, chosen)
-            if "youtube" in chosen:
-                per_clip = {**per_clip, "youtube": _campaign_youtube(per_clip)}
-            _require_campaign_tiktok(options if "tiktok" in chosen else None)
-            _require_fit(
-                app,
-                req.user_id,
-                item,
-                captions=clips.merged_captions(item.get("captions"), patch),
-                chosen=chosen,
-                tiktok=options if "tiktok" in chosen else None,
-            )
-        fields: dict[str, Any] = {
-            "status": "confirmed",
-            "decidedAt": now,
-            "captions": clips.merged_captions(item.get("captions"), patch),
-            "publishState": clips.PUBLISH_PENDING,
-            "flowRun": 1,
-        }
-        if chosen is not None:
-            fields["uploadTo"] = chosen
         try:
-            created = posts.create_for_clip(
-                app.store,
-                req.user_id,
-                item,
-                current_settings,
-                now,
-                clip_fields=fields,
-                expect_status=["review"],
-                post_options={
-                    **{p: o for p, o in per_clip.items() if chosen is None or p in chosen},
-                    **({"tiktok": options} if options else {}),
-                }
-                or None,
-                campaign_id=campaign.campaign_id if campaign else None,
-                campaign_options=campaign.options if campaign else None,
+            confirmed, created = uploads.upload_review_clip(
+                app, req.user_id, item, platforms=chosen, options=per_clip, tiktok=options, captions_patch=patch
             )
-        except db.ConditionFailed:
-            # Another Confirm (or a Decline) won the race: carry on from the clip's current state.
+        except uploads.ClipTaken:
+            # Another Confirm (or a Decline, or an auto-posting run) won the race: carry on from the clip's state.
             item = _clip_or_404(app, req)
         else:
-            confirmed = _start_flow(app, {**item, **fields, "postsCreated": True})
-            log("info", "clip.confirmed", clipId=item["clipId"], posts=len(created))
             return ok({"clip": clips.public_clip(confirmed, app.media), "posts": created})
     status = item.get("status")
     if status == "declined":
