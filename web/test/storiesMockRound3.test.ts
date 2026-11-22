@@ -234,7 +234,8 @@ describe("a reference video's own setting and its job", () => {
     expect((await refused(api.patchReference("stories", references.SEED_IDS.ready, {}))).code).toBe("bad_request");
     const started = await call(api.analyzeReference("stories", references.SEED_IDS.ready));
     expect(started.job.meta.models[0]).toMatchObject({ model: "sonnet-5-5", effort: "low" });
-    expect((await refused(api.patchReference("stories", references.SEED_IDS.ready, { ai: { model: null, effort: null } }))).status).toBe(409);
+    // As the API: the setting can change while a run works (that run keeps what it started with).
+    expect((await call(api.patchReference("stories", references.SEED_IDS.ready, { ai: { model: null, effort: null } }))).ai).toEqual({ model: null, effort: null });
     const got = await call(api.getReference("stories", references.SEED_IDS.ready));
     expect(got.job?.jobId).toBe(started.job.jobId);
     expect(got.job?.steps.map((s) => s.key)).toEqual(["look", "listen", "write"]);

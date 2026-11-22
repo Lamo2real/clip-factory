@@ -337,7 +337,6 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         const r = resolve({ project: ai, task: low.task, agent: low.agent, ai: low.ai });
         if ("error" in r) throw bad(r.sentence, "ai");
       }
-      if (ref.status === "analyzing" && patch.ai !== undefined) throw new ApiError(409, "conflict", "It is being analyzed right now. Change the model when it is done.");
       ref.title = title;
       ref.ai = ai;
       ref.updatedAt = iso();
