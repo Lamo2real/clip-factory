@@ -168,3 +168,9 @@ def test_an_unread_payout_never_matches_by_amount() -> None:
     for payout in (unread, other_money):
         out, _ = m.match([c], m.Context(payouts=[payout]))
         assert out[0].state == "needs_you"
+
+
+def test_across_two_banks_the_deposit_whose_hint_fits_takes_the_payout() -> None:
+    found = decisions("two_banks_the_fitting_hint_wins_the_payout")
+    assert (found["google"]["state"], found["google"]["payoutRef"]) == ("matched", YT)
+    assert (found["stranger"]["state"], found["stranger"]["rule"]) == ("dropped", "no_hint")

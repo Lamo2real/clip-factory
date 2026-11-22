@@ -11,11 +11,14 @@ batch of ``DEPOSIT#`` writes it reads ``BANKCONN.forgottenAt`` again and stops w
 the run's start.
 
 **Per connected link** (no ``limitUntil`` ahead): the session secret and the app secret, both read fresh; the secret's
-``connectedAt`` must equal the link's (read once more, else skip: ``bank.stale_secret``); ``GET /sessions/{id}``; then
-each account's booked transactions, page by page with the same parameters, filtered in memory
-(``bankread.filter``), matched (``bankread.match``) and written; then the link's read state. Every link write is
-conditional on ``status = "connected"`` and the ``connectedAt`` the read started with, so a Stop or a reconnect during
-a read wins. Nothing is ever deleted.
+``connectedAt`` must equal the link's (read once more, else skip: ``bank.stale_secret``); ``GET /sessions/{id}``; the
+rolling 24 hours (``reads``) saved before the first transactions call, so a run that dies mid-read has still used its
+read; then each account's booked transactions, page by page with the same parameters, filtered in memory
+(``bankread.filter``). Once every link is read, all their candidates are matched at once (``bankread.match``, so a
+payout picks the best deposit across banks) and written; then each link's read state. Every link write is conditional
+on ``status = "connected"`` and the ``connectedAt`` the read started with, so a Stop or a reconnect during a read wins.
+A failure of Clip Factory's own mid-read (not the bank's) never leaves a link looking healthy: it gets ``lastError``
+and ``failingSince``, and ``readThrough`` doesn't move. Nothing is ever deleted.
 
 **Least data**: only §40.5.7's attributes are stored; the rest of every row is gone once the page is done. Logs carry
 counts and Enable Banking's error code only, never an amount, a name, a text, an IBAN, a uid, a session id, a hash, the
@@ -54,6 +57,7 @@ from . import (
     NOTICE_REACHED_MAX,
     PAYPAL,
     PLACES,
+    READ_FAILED,
     REASON_CONSENT_OVER,
     REASON_ENDED_EARLY,
     REASON_PSU_ACTION,
@@ -82,6 +86,8 @@ MAX_PAGES = 100  # per account per run; more waits for the next run (``resume``)
 WRITE_BATCH = 25
 LONGEST = "longest"
 DEFAULT = "default"
+FAILED = "failed"  # Clip Factory's own failure mid-read (an outcome next to client's kinds)
+COUNTS = ("matched", "asked", "dropped", "kept")
 
 
 class Forgotten(Exception):
@@ -130,6 +136,7 @@ class LinkRead:
     link_id: str
     headers: dict[str, str] | None
     reads: dict[str, Any]
+    link: Mapping[str, Any] = field(default_factory=dict)
     candidates: list[Candidate] = field(default_factory=list)
     finished: bool = False
     resume: dict[str, Any] | None = None
@@ -142,6 +149,17 @@ class LinkRead:
     seen: int = 0
     called: bool = False
     psu_retried: bool = False
+
+
+@dataclass
+class Pending:
+    """One link read, waiting for this run's one matching and write, then its read state."""
+
+    link: dict[str, Any]
+    read: LinkRead
+    plan: Plan
+    first: bool
+    bank: str
 
 
 @dataclass
@@ -253,41 +271,44 @@ class Reader:
             raise Forgotten()
 
     def finish(self, lease: Mapping[str, Any]) -> None:
-        """Releases the lease (only its own) and writes ``lastRunAt`` and, when the run found something, ``lastNotice``."""
-        names = {"#l": "readLease"}
-        values: dict[str, Any] = {":mine": dict(lease)}
-        if self.forgotten:
+        """Releases the lease (only its own) and writes ``lastRunAt`` and, when the run found something, ``lastNotice``,
+        never once Forget my bank happened since the run began (``forgottenAt`` later than its start) and never while
+        someone else holds the lease (a Forget still under way)."""
+        mine: dict[str, Any] = {":mine": dict(lease)}
+        if not self.forgotten:
+            sets: dict[str, tuple[str, Any]] = {"#r": ("lastRunAt", iso(self.now))}
+            if self.notice.any():
+                sets["#n"] = ("lastNotice", self.notice.item(iso(self.now)))
+            names = {"#l": "readLease", "#f": "forgottenAt", **{k: v[0] for k, v in sets.items()}}
+            values: dict[str, Any] = {":start": iso(self.now), **{f":{k[1:]}": v[1] for k, v in sets.items()}}
+            update = "SET " + ", ".join(f"{k} = :{k[1:]}" for k in sets)
+            not_forgotten = "(attribute_not_exists(#f) OR #f <= :start)"
+            try:
+                self.store.update_expr(
+                    self.pk,
+                    BANKCONN_SK,
+                    update + " REMOVE #l",
+                    condition=f"#l = :mine AND {not_forgotten}",
+                    names=names,
+                    values={**values, **mine},
+                )
+                return
+            except db.ConditionFailed:
+                pass
+            # Our lease ran out (another read may have come and gone), or Forget happened: only with no lease held.
             with contextlib.suppress(db.ConditionFailed):
                 self.store.update_expr(
-                    self.pk, BANKCONN_SK, "REMOVE #l", condition="#l = :mine", names=names, values=values
+                    self.pk,
+                    BANKCONN_SK,
+                    update,
+                    condition=f"attribute_exists(pk) AND attribute_not_exists(#l) AND {not_forgotten}",
+                    names=names,
+                    values=values,
                 )
-            return
-        sets: dict[str, tuple[str, Any]] = {"#r": ("lastRunAt", iso(self.now))}
-        if self.notice.any():
-            sets["#n"] = ("lastNotice", self.notice.item(iso(self.now)))
-        names.update({k: v[0] for k, v in sets.items()})
-        values.update({f":{k[1:]}": v[1] for k, v in sets.items()})
-        update = "SET " + ", ".join(f"{k} = :{k[1:]}" for k in sets)
-        try:
+        with contextlib.suppress(db.ConditionFailed):
             self.store.update_expr(
-                self.pk, BANKCONN_SK, update + " REMOVE #l", condition="#l = :mine", names=names, values=values
+                self.pk, BANKCONN_SK, "REMOVE #l", condition="#l = :mine", names={"#l": "readLease"}, values=mine
             )
-            return
-        except db.ConditionFailed:
-            pass
-        # Another read or Forget took the lease meanwhile (ours ran out): never write over a Forget.
-        try:
-            self.check_forgotten()
-        except Forgotten:
-            return
-        values.pop(":mine")
-        names.pop("#l")
-        try:
-            self.store.update_expr(
-                self.pk, BANKCONN_SK, update, condition="attribute_exists(pk)", names=names, values=values
-            )
-        except db.ConditionFailed:
-            return
 
     # --- what matching needs ------------------------------------------------------------------------------------
 
@@ -428,37 +449,47 @@ class Reader:
             {"depositId": deposit_id, "place": place, "amountMinor": minor, "exponent": exp, "currency": currency}
         )
 
-    def write(self, candidates: list[Candidate], links: list[dict[str, Any]], quiet: bool) -> dict[str, int]:
-        """Matches one read's candidates (and every stored ``needs_you`` row again) and writes the outcome."""
-        counts = {"matched": 0, "asked": 0, "dropped": 0, "kept": 0}
+    def write(
+        self, candidates: list[Candidate], links: list[dict[str, Any]], quiet: set[str]
+    ) -> dict[str, dict[str, int]]:
+        """Matches this run's candidates of every link at once (and every stored ``needs_you`` row again) and writes
+        the outcome. ``quiet``: the links on their first read. Returns the counts by ``linkId``."""
+        counts: dict[str, dict[str, int]] = {}
+
+        def count(link_id: str, name: str) -> None:
+            counts.setdefault(link_id, dict.fromkeys(COUNTS, 0))[name] += 1
+            if name != "kept":
+                self.counts[name] += 1
+
         self.writes = 0  # each batch starts by reading forgottenAt again
         ctx, waiting = self.context(links)
         decisions, rematches = match(candidates, ctx)
         by_id = {c.deposit_id: c for c in candidates}
         for d in decisions:
-            if d.state in ("dropped", "kept"):
-                counts[d.state] += 1
-                continue
             c = by_id[d.deposit_id]
+            if d.state in ("dropped", "kept"):
+                count(c.link_id, d.state)
+                continue
+            hush = c.link_id in quiet
             self._batch()
             try:
-                self.store.put_when(self._deposit(c, d, quiet), "attribute_not_exists(pk)")
+                self.store.put_when(self._deposit(c, d, hush), "attribute_not_exists(pk)")
             except db.ConditionFailed:
-                counts["kept"] += 1  # written meanwhile: his answer (or another read) wins
+                count(c.link_id, "kept")  # written meanwhile: his answer (or another read) wins
                 continue
             if d.state == "matched":
-                counts["matched"] += 1
-                if not quiet and d.place:
+                count(c.link_id, "matched")
+                if not hush and d.place:
                     self._reached(c.deposit_id, d.place, c.amount_minor, c.exponent, c.currency)
             else:
-                counts["asked"] += 1
-                if not quiet:
+                count(c.link_id, "asked")
+                if not hush:
                     self.notice.asks += 1
         for r in rematches:
             stored = waiting.get(r.deposit_id) or {}
             self._batch()
             if self._rematch(r):
-                counts["matched"] += 1
+                count(str(stored.get("linkId") or ""), "matched")
                 if not stored.get("quiet"):
                     minor, exp = _int(stored.get("amountMinor")), _int(stored.get("exponent"))
                     if minor is not None and exp is not None:
@@ -638,11 +669,17 @@ class Reader:
         account.key, account.from_resume, account.found = None, False, []
         account.filter = Filter(read.hash_key, read.link_id, self.today)
 
+    def save_reads(self, read: LinkRead) -> bool:
+        """The rolling 24 hours, saved before the call they count: a run that dies mid-read has still used its read.
+        False when the link was stopped or reconnected meanwhile (then it isn't read)."""
+        return self.update_link(read.link, {"reads": read.reads})
+
     def _retry(self, kind: str, account: Account, read: LinkRead) -> bool:
         """The errors that get one more try (§40.5.6): True when the account is read again."""
         if kind == eb.PERIOD and not account.retried:
             account.retried = True
             self._restart(account, read)
+            read.floor = account.date_from  # "Counted from" is never earlier than the restart's first day
             return True
         if kind == eb.CONTINUATION and account.from_resume and not account.retried:
             account.retried = True
@@ -655,6 +692,8 @@ class Reader:
             cost = 2 if account.strategy == LONGEST else 1
             if eb.may_read_unattended(read.reads, self.now, cost):
                 read.reads = eb.record_read(read.reads, self.now, attended=False, cost=cost)
+                if not self.save_reads(read):
+                    return False
                 account.key, account.from_resume, account.found = None, False, []
                 account.filter = Filter(read.hash_key, read.link_id, self.today)
                 return True
@@ -732,69 +771,57 @@ class Reader:
                 }
             )
 
-    def read_link(self, link: dict[str, Any], links: list[dict[str, Any]], token: str, hash_key: bytes) -> bool:
-        """One link's read; True when it reached the bank (so rule 9 already ran)."""
+    def read_link(self, link: dict[str, Any], token: str, hash_key: bytes) -> Pending | None:
+        """One link's read, in memory (written once every link is read); None when it wasn't read at all."""
         link_id = str(link.get("linkId") or "")
         bank = str(link.get("bank") or "your bank")
         limit = parse(link.get("limitUntil"))
         if limit is not None and limit > self.now:
             log("info", "bank.limited", link=link_id)
-            return False
+            return None
         secret = self.session_secret(link)
         if secret is None:
-            return False
+            return None
         plan = self.plan(link)
         if plan is None:
             log("info", "bank.read_limit", link=link_id)
             self.update_link(link, {"lastError": LIMIT_HIT.format(bank=bank)})
-            return False
+            return None
         first = not link.get("firstReadDone")
         raw_reads = link.get("reads")
         reads: dict[str, Any] = dict(raw_reads) if isinstance(raw_reads, Mapping) else {}
         client = eb.Client(self.deps.http, token)
-        read = LinkRead(client, hash_key, link_id, headers=plan.headers, reads=reads, floor=plan.floor)
-        session: dict[str, Any] = {}
-        ending = None
+        read = LinkRead(client, hash_key, link_id, headers=plan.headers, reads=reads, link=link, floor=plan.floor)
         try:
             session = client.session(str(secret["sessionId"]))
             ending = eb.session_outcome(session)
-        except eb.BankError as e:
+            if ending is not None:
+                read.outcome = ending
+            else:
+                allowed = set(eb.session_accounts(session))
+                uids = [
+                    str(a["uid"])
+                    for a in secret.get("accounts") or []
+                    if isinstance(a, Mapping) and isinstance(a.get("uid"), str) and a["uid"] in allowed
+                ]
+                if not uids:  # the session shares none of the link's accounts: nothing is read, nothing moves on
+                    read.outcome = eb.ACCOUNT
+                else:
+                    attended = plan.headers is not None
+                    read.reads = eb.record_read(read.reads, self.now, attended=attended, cost=plan.cost)
+                    if not self.save_reads(read):
+                        return None
+                    self.read_accounts(uids, plan, read)
+        except eb.BankError as e:  # the session call (each account catches its own)
             read.outcome, read.error = eb.outcome(e), e
             log("warning", "bank.error", link=link_id, code=e.code or "HTTP", status=e.status, kind=read.outcome)
-        if ending is not None:
-            read.outcome = ending
-        elif read.outcome is None:
-            allowed = set(eb.session_accounts(session))
-            uids = [
-                str(a["uid"])
-                for a in secret.get("accounts") or []
-                if isinstance(a, Mapping) and isinstance(a.get("uid"), str) and a["uid"] in allowed
-            ]
-            if uids:
-                read.reads = eb.record_read(read.reads, self.now, attended=plan.headers is not None, cost=plan.cost)
-                self.read_accounts(uids, plan, read)
-            else:  # the session shares none of the link's accounts: nothing is read, and nothing moves on
-                read.outcome = eb.ACCOUNT
+        except Forgotten:
+            raise
+        except Exception as e:  # Clip Factory's own failure: the link says so, and readThrough stays
+            log("error", "bank.read_failed", link=link_id, error=type(e).__name__)
+            read.outcome, read.error = FAILED, None
         self.counts["links"] += 1
-        written = {"matched": 0, "asked": 0, "dropped": 0, "kept": 0}
-        if read.candidates or read.called:
-            written = self.write(read.candidates, links, quiet=first)
-        for name in ("matched", "asked", "dropped"):
-            self.counts[name] += written[name]
-        log(
-            "info",
-            "bank.read",
-            link=link_id,
-            pages=read.pages,
-            seen=read.seen,
-            kept=len(read.candidates),
-            asked=written["asked"],
-            matched=written["matched"],
-            dropped=written["dropped"],
-            finished=read.finished,
-        )
-        self.after(link, read, plan, first, bank)
-        return read.called
+        return Pending(link, read, plan, first, bank)
 
     def after(self, link: Mapping[str, Any], read: LinkRead, plan: Plan, first: bool, bank: str) -> None:
         """The link's read state from this read (§40.5.6 "then update the BANKLINK#" and "Ends and errors")."""
@@ -863,6 +890,8 @@ class Reader:
             sets["lastError"] = KEY_WRONG
         elif kind == eb.ACCOUNT:
             sets["lastError"] = ACCOUNT_SKIPPED.format(bank=bank)
+        elif kind == FAILED:
+            sets["lastError"] = READ_FAILED.format(bank=bank)
         else:
             sets["lastError"] = DOWN.format(bank=bank)
         self.update_link(link, sets, failing=failing)
@@ -909,21 +938,50 @@ class Reader:
                 log("error", "bank.bad_key", error=type(e).__name__)
         elif connected:
             log("warning", "bank.no_app")
-        read_any = False
-        ended: set[str] = set()
+        pending: list[Pending] = []
         if token:
             for link in sorted(connected, key=lambda li: str(li.get("linkId") or "")):
                 if self.deps.remaining() < MIN_SECONDS_LEFT:
                     log("warning", "bank.time_budget", link=str(link.get("linkId") or ""))
                     break
-                before = len(self.notice.ended)
-                read_any = self.read_link(link, links, token, hash_key) or read_any
-                if len(self.notice.ended) > before:
-                    ended.add(str(link.get("linkId") or ""))
-        if not read_any:
-            self.write([], links, quiet=False)  # rule 9: stored questions match a payout that appeared since
+                found = self.read_link(link, token, hash_key)
+                if found is not None:
+                    pending.append(found)
+        # One matching for the whole run (also rule 9 when nothing was read: stored questions match a payout that
+        # appeared since), so rule 2 picks the deposit whose hint fits across every bank, not only within one.
+        candidates = [c for p in pending for c in p.read.candidates]
+        quiet = {p.read.link_id for p in pending if p.first}
+        written: dict[str, dict[str, int]] = {}
+        try:
+            written = self.write(candidates, links, quiet)
+        except Forgotten:
+            raise
+        except Exception as e:  # nothing moves on: each read link says so, and its readThrough stays
+            log("error", "bank.write_failed", error=type(e).__name__)
+            for p in pending:
+                if p.read.outcome is None:
+                    p.read.outcome, p.read.error = FAILED, None
+        ended: set[str] = set()
+        for p in pending:
+            got = written.get(p.read.link_id) or dict.fromkeys(COUNTS, 0)
+            log(
+                "info",
+                "bank.read",
+                link=p.read.link_id,
+                pages=p.read.pages,
+                seen=p.read.seen,
+                kept=len(p.read.candidates),
+                asked=got["asked"],
+                matched=got["matched"],
+                dropped=got["dropped"],
+                finished=p.read.finished,
+            )
+            before = len(self.notice.ended)
+            self.after(p.link, p.read, p.plan, p.first, p.bank)
+            if len(self.notice.ended) > before:
+                ended.add(p.read.link_id)
         self.expiry([li for li in links if str(li.get("linkId") or "") not in ended])
-        return "read" if read_any else "nothing_read"
+        return "read" if any(p.read.called for p in pending) else "nothing_read"
 
 
 def run(

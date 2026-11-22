@@ -152,6 +152,9 @@ def test_errors_are_typed_and_never_carry_the_body() -> None:
         ("", 401, eb.DOWN),  # decided by the code, never by the HTTP status alone
         ("", 500, eb.DOWN),
         ("", 429, eb.EB_LIMIT),  # Enable Banking's own 429
+        ("TOO_MANY_REQUESTS", 429, eb.EB_LIMIT),  # with a code of its own: still at least an hour's wait
+        ("ASPSP_ERROR", 429, eb.EB_LIMIT),
+        ("EXPIRED_SESSION", 429, eb.END_EXPIRED),  # an end stays an end
         (eb.UNREADABLE, 200, eb.DOWN),
         (eb.NETWORK, 0, eb.DOWN),
     ],
@@ -396,3 +399,149 @@ def test_past_the_rolling_three_the_link_is_skipped(world: World) -> None:
     world.run()
     assert world.eb.calls == []
     assert world.link()["lastError"] == "Clip Factory looked at Swedbank 3 times in a day. It looks again later."
+
+
+# --- answers that never fully came, redirects, and its own HTTP ----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        "IncompleteRead",
+        "RemoteDisconnected",
+        "ConnectionResetError",
+        "UnicodeDecodeError",
+    ],
+)
+def test_an_answer_cut_off_is_a_typed_network_error_that_carries_nothing(error: str) -> None:
+    import http.client
+
+    raised: BaseException = {
+        "IncompleteRead": http.client.IncompleteRead(b"Anna Andersson SE4550000000058398257466"),
+        "RemoteDisconnected": http.client.RemoteDisconnected("Anna Andersson"),
+        "ConnectionResetError": ConnectionResetError("Anna Andersson"),
+        "UnicodeDecodeError": UnicodeDecodeError("utf-8", b"Anna Andersson", 0, 1, "bad"),
+    }[error]
+
+    def cut(_request: HttpRequest) -> HttpResponse:
+        raise raised
+
+    with pytest.raises(eb.BankError) as found:
+        eb.Client(cut, "T").transactions("uid", {"transaction_status": "BOOK"})
+    assert found.value.code == eb.NETWORK
+    assert found.value.__cause__ is None
+    assert found.value.__suppress_context__ is True
+    assert "Anna" not in str(found.value)
+
+
+def test_a_bug_in_the_caller_is_never_hidden_as_the_bank_down() -> None:
+    def bug(_request: HttpRequest) -> HttpResponse:
+        raise KeyError("a bug")
+
+    with pytest.raises(KeyError):
+        eb.Client(bug, "T").session("s")
+
+
+@pytest.mark.parametrize("status", [301, 302, 303, 307, 308])
+def test_a_redirect_is_unreadable(status: int) -> None:
+    e = error_of(status, {"error": "ASPSP_ERROR"}, {"Location": "http://elsewhere.example/steal"})
+    assert (e.code, e.status) == (eb.UNREADABLE, status)
+    assert eb.outcome(e) == eb.DOWN
+
+
+def test_only_whole_error_codes_are_kept() -> None:
+    assert error_of(502, {"error": "ASPSP_ERROR\n"}).code == ""
+    assert error_of(502, {"error": "ASPSP_ERROR"}).code == "ASPSP_ERROR"
+
+
+class _Https:
+    """A fake server for urllib's opener, with no network at all (it stands in for both of urllib's HTTP handlers): the
+    first answer redirects to another host over http, any next one is 200. It records every request it gets."""
+
+    def __init__(self) -> None:
+        self.seen: list[tuple[str, dict[str, str]]] = []
+
+    def handler(self) -> Any:
+        import email.message
+        import io
+        import urllib.request
+        import urllib.response
+
+        outer = self
+
+        class Handler(urllib.request.HTTPHandler, urllib.request.HTTPSHandler):
+            def _answer(self, req: Any) -> Any:
+                outer.seen.append((req.full_url, {k.lower(): v for k, v in req.header_items()}))
+                headers = email.message.Message()
+                if len(outer.seen) == 1:
+                    headers["Location"] = "http://elsewhere.example/steal"
+                    resp = urllib.response.addinfourl(io.BytesIO(b""), headers, req.full_url, 302)
+                    resp.msg = "Found"  # type: ignore[attr-defined]
+                    return resp
+                resp = urllib.response.addinfourl(io.BytesIO(b'{"status": "AUTHORIZED"}'), headers, req.full_url, 200)
+                resp.msg = "OK"  # type: ignore[attr-defined]
+                return resp
+
+            def http_open(self, req: Any) -> Any:
+                return self._answer(req)
+
+            def https_open(self, req: Any) -> Any:
+                return self._answer(req)
+
+        return Handler()
+
+
+def test_its_own_http_never_follows_a_redirect_so_the_token_stays_with_enable_banking() -> None:
+    import urllib.request
+
+    request = HttpRequest(
+        "GET",
+        "https://api.enablebanking.com/sessions/s",
+        {"Authorization": "Bearer TOKEN", "Accept": "application/json", "Psu-Ip-Address": "203.0.113.9"},
+    )
+    # What this guards against: urllib's own redirect handler sends the token and the PSU headers on, even over http.
+    follow = _Https()
+    urllib.request.build_opener(follow.handler()).open(urllib.request.Request(request.url, headers=request.headers))  # noqa: S310
+    assert [url for url, _ in follow.seen] == [request.url, "http://elsewhere.example/steal"]
+    assert follow.seen[1][1]["authorization"] == "Bearer TOKEN"
+    # The reader's own HTTP: the 302 comes back as itself, and nothing more is sent anywhere.
+    server = _Https()
+    answer = eb.no_redirects(request, via=eb.opener(server.handler()))
+    assert answer.status == 302
+    assert [url for url, _ in server.seen] == [request.url]
+    with pytest.raises(eb.BankError) as found:
+        eb.Client(lambda r: eb.no_redirects(r, via=eb.opener(_Https().handler())), "T").session("s")
+    assert found.value.code == eb.UNREADABLE
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://api.enablebanking.com/sessions/s",
+        "https://api.enablebanking.com.evil.example/sessions/s",
+        "https://api.enablebanking.co/sessions/s",
+        "https://elsewhere.example/",
+    ],
+)
+def test_its_own_http_calls_only_enable_banking(url: str) -> None:
+    from clipfactory_api.platforms.base import NetworkError
+
+    with pytest.raises(NetworkError):
+        eb.no_redirects(HttpRequest("GET", url, {"Authorization": "Bearer TOKEN"}))
+
+
+def test_production_reads_with_its_own_http(world: World) -> None:
+    from clipfactory_api import bankread
+    from clipfactory_api.money.collect import MoneyDeps
+    from clipfactory_api.platforms.base import urllib_client
+
+    class Tokens:
+        class env:
+            secrets = world.secrets
+
+    found = bankread.from_money(MoneyDeps(store=world.store, tokens=Tokens(), http=urllib_client))
+    assert found is not None
+    assert found.http is eb.no_redirects
+    fake = bankread.from_money(MoneyDeps(store=world.store, tokens=Tokens(), http=world.eb))
+    assert fake is not None
+    assert fake.http is world.eb

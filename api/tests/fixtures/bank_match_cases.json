@@ -1996,5 +1996,124 @@
    ],
    "rematches": []
   }
+ },
+ {
+  "name": "two_banks_the_fitting_hint_wins_the_payout",
+  "about": "A stranger's exact amount (no hint) on the first bank, Google's on the second: one matching for the whole run, so the YouTube payout pairs with Google's and the stranger's is dropped.",
+  "transactions": [
+   {
+    "entry_reference": null,
+    "transaction_amount": {
+     "currency": "SEK",
+     "amount": "1234.56"
+    },
+    "creditor": {
+     "name": "Anna Andersson",
+     "postal_address": {
+      "street_name": "Storgatan 1"
+     }
+    },
+    "creditor_account": {
+     "iban": "SE4550000000058398257466"
+    },
+    "creditor_agent": {
+     "bic_fi": "SWEDSESS"
+    },
+    "debtor": {
+     "name": "Erik Eriksson"
+    },
+    "debtor_account": {
+     "iban": "SE4550000000058398257466",
+     "other": {
+      "identification": "8123-4"
+     }
+    },
+    "credit_debit_indicator": "CRDT",
+    "status": "BOOK",
+    "booking_date": "2026-10-22",
+    "value_date": "2026-10-22",
+    "transaction_date": "2026-10-22",
+    "balance_after_transaction": {
+     "currency": "SEK",
+     "amount": "98765.43"
+    },
+    "reference_number": "8123-4",
+    "remittance_information": [],
+    "note": "Anna Andersson",
+    "_label": "stranger",
+    "_link": "link1"
+   },
+   {
+    "entry_reference": null,
+    "transaction_amount": {
+     "currency": "SEK",
+     "amount": "1234.56"
+    },
+    "creditor": {
+     "name": "Anna Andersson",
+     "postal_address": {
+      "street_name": "Storgatan 1"
+     }
+    },
+    "creditor_account": {
+     "iban": "SE4550000000058398257466"
+    },
+    "creditor_agent": {
+     "bic_fi": "SWEDSESS"
+    },
+    "debtor": {
+     "name": "GOOGLE IRELAND LTD"
+    },
+    "debtor_account": {
+     "iban": "SE4550000000058398257466",
+     "other": {
+      "identification": "8123-4"
+     }
+    },
+    "credit_debit_indicator": "CRDT",
+    "status": "BOOK",
+    "booking_date": "2026-10-23",
+    "value_date": "2026-10-23",
+    "transaction_date": "2026-10-23",
+    "balance_after_transaction": {
+     "currency": "SEK",
+     "amount": "98765.43"
+    },
+    "reference_number": "8123-4",
+    "remittance_information": [],
+    "note": "Anna Andersson",
+    "_label": "google",
+    "_link": "link2"
+   }
+  ],
+  "payouts": [
+   {
+    "sk": "PAYOUT#youtube#2026-10-21#3456",
+    "place": "youtube",
+    "date": "2026-10-21",
+    "amountText": "SEK 1,234.56",
+    "state": "sent"
+   }
+  ],
+  "expected": {
+   "filteredOut": [],
+   "decisions": [
+    {
+     "label": "stranger",
+     "state": "dropped",
+     "rule": "no_hint"
+    },
+    {
+     "label": "google",
+     "state": "matched",
+     "rule": "payout",
+     "place": "youtube",
+     "how": "payout",
+     "payoutRef": "PAYOUT#youtube#2026-10-21#3456",
+     "payoutDate": "2026-10-21"
+    }
+   ],
+   "rematches": []
+  }
  }
 ]

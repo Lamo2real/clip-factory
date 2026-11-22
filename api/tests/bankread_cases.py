@@ -88,6 +88,7 @@ def txn(
     status: str = "BOOK",
     label: str | None = None,
     account: str | None = None,
+    link: str | None = None,
 ) -> dict[str, Any]:
     """One booked transaction in Enable Banking's shape, with every field Clip Factory must not read filled in."""
     row: dict[str, Any] = {
@@ -112,6 +113,8 @@ def txn(
         row["_label"] = label  # the tests' own name for a row; the filter never reads it
     if account is not None:
         row["_account"] = account  # the golden cases' account (each account has its own filter)
+    if link is not None:
+        row["_link"] = link  # the golden cases' bank link (one run matches every link's rows at once)
     return row
 
 
@@ -504,6 +507,16 @@ CASES: list[dict[str, Any]] = [
             txn("500.00", "2026-11-12", payer="TIKTOK PTE LTD", label="a2", account="acc2"),
         ],
     },
+    {
+        "name": "two_banks_the_fitting_hint_wins_the_payout",
+        "about": "A stranger's exact amount (no hint) on the first bank, Google's on the second: one matching for the "
+        "whole run, so the YouTube payout pairs with Google's and the stranger's is dropped.",
+        "transactions": [
+            txn("1234.56", "2026-10-22", payer="Erik Eriksson", label="stranger", link="link1"),
+            txn("1234.56", "2026-10-23", payer="GOOGLE IRELAND LTD", label="google", link="link2"),
+        ],
+        "payouts": [youtube_payout(YT, "2026-10-21", "SEK 1,234.56")],
+    },
 ]
 
 
@@ -521,7 +534,8 @@ def run_case(case: Mapping[str, Any]) -> dict[str, Any]:
     for row in case.get("transactions", []):
         label = str(row.get("_label") or "")
         account = str(row.get("_account") or "acc1")
-        found = filters.setdefault(account, bank_filter.Filter(HASH_KEY, "link1", TODAY)).add(row)
+        link = str(row.get("_link") or "link1")
+        found = filters.setdefault(f"{link}/{account}", bank_filter.Filter(HASH_KEY, link, TODAY)).add(row)
         if found is None:
             filtered_out.append(label)
             continue

@@ -157,7 +157,9 @@ DEPOSIT_MATCHED_ATTRS = frozenset(
         "quiet",
     }
 )
-DEPOSIT_NEEDS_YOU_ATTRS = (DEPOSIT_MATCHED_ATTRS - {"place", "how", "payoutRef", "payoutDate"}) | {
+# "The same without place and how, plus …" (§40.5.7): a question has no payout and no confirmedAt yet (his answer sets
+# confirmedAt only as it becomes matched).
+DEPOSIT_NEEDS_YOU_ATTRS = (DEPOSIT_MATCHED_ATTRS - {"place", "how", "payoutRef", "payoutDate", "confirmedAt"}) | {
     "suggested",
     "kind",
     "hint",
@@ -165,6 +167,27 @@ DEPOSIT_NEEDS_YOU_ATTRS = (DEPOSIT_MATCHED_ATTRS - {"place", "how", "payoutRef",
     "shared",
     "notSure",
     "ttl",
+}
+_DEPOSIT_READ = frozenset(
+    {
+        "type",
+        "state",
+        "depositId",
+        "date",
+        "amountMinor",
+        "exponent",
+        "currency",
+        "linkId",
+        "source",
+        "fetchedAt",
+        "quiet",
+    }
+)
+# What the reader itself sets on a DEPOSIT#, by state (a new row, or a question that matches now: rule 9). It never
+# writes ``not_income``, ``notPayout``, ``notSure`` or ``confirmedAt`` (his answers, the API's).
+DEPOSIT_READER_WRITES = {
+    "matched": _DEPOSIT_READ | {"place", "how", "payoutRef", "payoutDate", "payerKey", "hintFrom", "shared"},
+    "needs_you": _DEPOSIT_READ | {"kind", "suggested", "hint", "hintFrom", "shared", "payerKey", "ttl"},
 }
 DEPOSIT_NOT_INCOME_ATTRS = frozenset({"type", "state", "depositId", "date", "linkId", "why", "ttl"})
 BANKPAYERS_ATTRS = frozenset({"type", "rules", "notIncome", "updatedAt"})
@@ -201,6 +224,8 @@ WAIT = "{bank} asked Clip Factory to wait. It looks again later."
 DOWN = "{bank} didn't answer. Clip Factory tries again tomorrow."
 ACCOUNT_SKIPPED = "{bank} didn't share one of your accounts today."
 KEY_WRONG = "Enable Banking didn't know your bank key. Tap Check again in step 5."
+# Clip Factory's own failure mid-read (not the bank's): honest, and the read is counted all the same.
+READ_FAILED = "Clip Factory couldn't finish reading {bank} today. It tries again tomorrow."
 
 # §40.5.6: the read stops after a whole page when less than this is left; the money run skips the bank below it too.
 MIN_SECONDS_LEFT = 20.0
@@ -233,13 +258,17 @@ class BankReadDeps:
 def from_money(deps: Any, remaining: Callable[[], float] | None = None) -> BankReadDeps | None:
     """The bank deps of a ``MoneyDeps``: the same table, HTTP client and clock, and the platform secrets of its token
     provider (``SecretsTokenProvider.env.secrets``). None without secrets (nothing can be read)."""
+    from ..platforms.base import urllib_client
+    from .client import no_redirects
+
     secrets = getattr(getattr(deps.tokens, "env", None), "secrets", None)
     if secrets is None:
         return None
     out = BankReadDeps(
         store=deps.store,
         secrets=secrets,
-        http=deps.http,
+        # Production's urllib client follows redirects with every header: the reader uses its own, which never does.
+        http=no_redirects if deps.http is urllib_client else deps.http,
         clock=deps.clock,
         app_url=str(getattr(deps, "app_url", "") or ""),
         content_rewards=bool(getattr(deps, "content_rewards", False)),

@@ -31,13 +31,31 @@ def test_only_booked_credits_go_on_and_both_are_checked_again() -> None:
 
 @pytest.mark.parametrize(
     "amount",
-    ["-700.00", "0", "0.00", "1e3", " 12.00", "12,00", "1234567890123456", "12.1234567", 12.5, 12, None, "NaN"],
+    [
+        "-700.00",
+        "0",
+        "0.00",
+        "1e3",
+        " 12.00",
+        "12,00",
+        "1234567890123456",
+        "12.1234567",
+        12.5,
+        12,
+        None,
+        "NaN",
+        "12.00\n",  # a trailing newline
+        "\u0661\u0662.00",  # Arabic-Indic digits
+        "\uff11\uff12.00",  # full-width digits
+    ],
 )
 def test_bad_amounts_are_refused(amount: Any) -> None:
     assert one(txn(amount, "2026-11-01", payer="GOOGLE")) is None
 
 
-@pytest.mark.parametrize("currency", ["sek", "SEKK", "SE", "XXX", "XAU", "XDR", "XBA", "XUA", "", None, 752])
+@pytest.mark.parametrize(
+    "currency", ["sek", "SEKK", "SE", "XXX", "XAU", "XDR", "XBA", "XUA", "", None, 752, "SEK\n", "S\u0395K"]
+)
 def test_bad_money_codes_are_refused(currency: Any) -> None:
     row = txn("100.00", "2026-11-01", payer="GOOGLE")
     row["transaction_amount"]["currency"] = currency
@@ -71,6 +89,8 @@ def test_the_booking_day_is_real_and_no_later_than_tomorrow() -> None:
     assert one(txn("1.00", "2026-11-24", payer="TIKTOK")) is not None  # tomorrow
     assert one(txn("1.00", "2026-11-25", payer="TIKTOK")) is None
     assert one(txn("1.00", "2026-02-30", payer="TIKTOK")) is None
+    assert one(txn("1.00", "2026-11-01\n", payer="TIKTOK")) is None  # whole strings only
+    assert one(txn("1.00", "\u0662\u0660\u0662\u0666-11-01", payer="TIKTOK")) is None  # ASCII digits only
     row = txn("1.00", "2026-11-01", payer="TIKTOK")
     row["booking_date"] = None
     row["value_date"] = "2026-10-31"

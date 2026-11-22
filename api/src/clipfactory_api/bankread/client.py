@@ -12,20 +12,32 @@
   empty and every header on it can be filled.
 * **The rolling 24 hours** of unattended reads (PSD2 RTS Art. 36(5)(b)): at most 3 in any 24 hours, so one of the
   bank's 4 is always left over; an unattended ``strategy=longest`` pass counts twice.
+* **Its own HTTP** (``no_redirects``): only ``https://api.enablebanking.com/…``, and a redirect is never followed, so
+  the token and the PSU headers can never be sent to another host (urllib's own redirects copy every header).
 """
 
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import re
+import urllib.error
+import urllib.request
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import quote, urlencode
 
 from ..clock import iso, parse
-from ..platforms.base import HttpClient, HttpRequest, HttpResponse, NetworkError
+from ..platforms.base import (
+    HTTP_TIMEOUT_SECONDS,
+    MAX_RESPONSE_BYTES,
+    HttpClient,
+    HttpRequest,
+    HttpResponse,
+    NetworkError,
+)
 
 API = "https://api.enablebanking.com"
 JWT_SECONDS = 3600
@@ -64,7 +76,7 @@ def jwt(app_id: str, private_key_pem: str, now: datetime) -> str:
 
 NETWORK = "NETWORK"  # no HTTP answer at all
 UNREADABLE = "UNREADABLE"  # an answer that can't be read
-_CODE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
+_CODE = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
 
 
 class BankError(Exception):
@@ -80,7 +92,7 @@ class BankError(Exception):
 def _error_code(response: HttpResponse) -> str:
     body = response.json()
     code = body.get("error") if isinstance(body, dict) else None
-    return code if isinstance(code, str) and _CODE.match(code) else ""
+    return code if isinstance(code, str) and _CODE.fullmatch(code) else ""
 
 
 def _retry_after(response: HttpResponse) -> int | None:
@@ -136,14 +148,13 @@ ENDS = frozenset({END_EXPIRED, END_REVOKED, END_CLOSED})
 
 
 def outcome(error: BankError) -> str:
-    """What an error means (§40.5.6): by the code; Enable Banking's own 429 (no bank code) is ``EB_LIMIT``; any other
-    code, ``WRONG_REQUEST_PARAMETERS`` included, and an unreadable answer or no answer at all, is ``DOWN``."""
+    """What an error means (§40.5.6): by the code; a 429 is Enable Banking's own (``EB_LIMIT``, at least an hour's
+    wait) unless its code is the bank's ``ASPSP_RATE_LIMIT_EXCEEDED`` or ends the session; any other code,
+    ``WRONG_REQUEST_PARAMETERS`` included, and an unreadable answer or no answer at all, is ``DOWN``."""
     found = CODES.get(error.code)
-    if found is not None:
-        return found
-    if error.status == 429 and not error.code:
+    if error.status == 429 and found not in (ASPSP_LIMIT, *ENDS):
         return EB_LIMIT
-    return DOWN
+    return found if found is not None else DOWN
 
 
 def session_outcome(session: Mapping[str, Any]) -> str | None:
@@ -185,8 +196,12 @@ class Client:
         self.calls += 1
         try:
             response = self._http(HttpRequest("GET", url, headers))
-        except NetworkError as e:
-            raise BankError(NETWORK, 0) from e
+        except (NetworkError, http.client.HTTPException, OSError, ValueError):
+            # No whole answer (a broken connection, a cut-off body): typed, and never chained, so nothing of a
+            # half-read answer can reach a log line.
+            raise BankError(NETWORK, 0) from None
+        if 300 <= response.status < 400:
+            raise BankError(UNREADABLE, response.status)  # a redirect is never followed (``no_redirects``)
         if not 200 <= response.status < 300:
             raise BankError(_error_code(response), response.status, _retry_after(response))
         body = response.json()
@@ -210,6 +225,45 @@ class Client:
             raise BankError(UNREADABLE, 200)
         key = body.get("continuation_key")
         return rows, key if isinstance(key, str) and key else None
+
+
+# --- its own HTTP: Enable Banking only, never a redirect ----------------------------------------------------------
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A 3xx comes back as itself (an ``HTTPError``) instead of being followed with the same headers."""
+
+    def redirect_request(self, *_args: Any, **_kwargs: Any) -> None:
+        return None
+
+
+def opener(*handlers: Any) -> urllib.request.OpenerDirector:
+    return urllib.request.build_opener(_NoRedirect, *handlers)
+
+
+_OPENER = opener()
+
+
+def no_redirects(request: HttpRequest, *, via: urllib.request.OpenerDirector | None = None) -> HttpResponse:
+    """The reader's production ``HttpClient``: ``https://api.enablebanking.com/…`` only, never a redirect."""
+    if not request.url.startswith(f"{API}/"):
+        raise NetworkError("only Enable Banking")
+    req = urllib.request.Request(request.url, data=request.body, method=request.method, headers=request.headers)  # noqa: S310
+    try:
+        with (via or _OPENER).open(req, timeout=HTTP_TIMEOUT_SECONDS) as resp:
+            return HttpResponse(resp.status, _lower(resp.headers.items()), resp.read(MAX_RESPONSE_BYTES))
+    except urllib.error.HTTPError as e:
+        try:
+            body = e.read(MAX_RESPONSE_BYTES)
+        except (http.client.HTTPException, OSError):
+            body = b""
+        return HttpResponse(e.code, _lower(e.headers.items() if e.headers else []), body)
+    except (urllib.error.URLError, http.client.HTTPException, TimeoutError, OSError) as e:
+        raise NetworkError(type(e).__name__) from None
+
+
+def _lower(items: Any) -> dict[str, str]:
+    return {str(k).lower(): str(v) for k, v in items}
 
 
 # --- the PSU headers (§40.5.6) ----------------------------------------------------------------------------------

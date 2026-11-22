@@ -73,14 +73,18 @@ def _bank(event: dict[str, Any], deps: MoneyDeps) -> dict[str, Any]:
     fresh = at is not None and now - at <= PSU_FRESH
     psu = event.get("psu") if fresh and isinstance(event.get("psu"), dict) else None
     started = deps.monotonic()
-    out = bank_collect.run(
-        deps,
-        target,
-        now,
-        psu=psu,
-        mine=fresh,
-        remaining=lambda: deps.time_budget_seconds - (deps.monotonic() - started),
-    )
+    try:
+        out = bank_collect.run(
+            deps,
+            target,
+            now,
+            psu=psu,
+            mine=fresh,
+            remaining=lambda: deps.time_budget_seconds - (deps.monotonic() - started),
+        )
+    except Exception as e:  # like run_user's own try: a logged count, never a failed invocation with a traceback
+        log("error", "money.bank_failed", error=type(e).__name__)
+        return {"action": "bank", "result": "failed"}
     return {"action": "bank", "result": out.get("result")}
 
 

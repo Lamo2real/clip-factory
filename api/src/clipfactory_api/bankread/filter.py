@@ -26,9 +26,10 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-AMOUNT = re.compile(r"^\d{1,15}(\.\d{1,6})?$")
-CURRENCY = re.compile(r"^[A-Z]{3}$")
-DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# Whole strings only (``fullmatch``: no trailing newline) and ASCII digits only (``\d`` takes any script's digits).
+AMOUNT = re.compile(r"[0-9]{1,15}(?:\.[0-9]{1,6})?")
+CURRENCY = re.compile(r"[A-Z]{3}")
+DAY = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 # Fund and metal codes: never money he can spend.
 NOT_MONEY = frozenset({"XAU", "XAG", "XPT", "XPD", "XDR", "XTS", "XXX", "XBA", "XBB", "XBC", "XBD", "XSU", "XUA"})
 EXPONENT_0 = frozenset(
@@ -108,7 +109,7 @@ def booking_day(row: Mapping[str, Any], today: date) -> str | None:
         raw = row.get(name)
         if raw is None or raw == "":
             continue
-        if not isinstance(raw, str) or not DAY.match(raw):
+        if not isinstance(raw, str) or not DAY.fullmatch(raw):
             return None
         try:
             day = date.fromisoformat(raw)
@@ -124,7 +125,7 @@ def any_day(row: Any) -> str | None:
         return None
     for name in ("booking_date", "value_date", "transaction_date"):
         raw = row.get(name)
-        if isinstance(raw, str) and DAY.match(raw):
+        if isinstance(raw, str) and DAY.fullmatch(raw):
             try:
                 date.fromisoformat(raw)
             except ValueError:
@@ -177,7 +178,13 @@ def _payer(row: Mapping[str, Any]) -> str:
 
 class Filter:
     """One account's read: keeps the count ``n`` among identical rows without an entry reference (same day, amount,
-    currency and letters), in the bank's order, across that account's pages."""
+    currency and letters), in the bank's order, across that account's pages.
+
+    The count lives in memory only (storing it would keep a trace of rows that aren't app money). So when a read stops
+    for time between two pages and goes on in a later run (``resume``), the count starts again at 1 there: a second
+    identical row without a reference on that very booking day, on the far side of the stop, gets the first one's
+    ``depositId`` and counts as kept already. That takes two credits alike to the öre, same payer and same message, on
+    one day, split exactly by a stop; accepted, and the 10-day overlap reads that day whole again when it is recent."""
 
     def __init__(self, hash_key: bytes, link_id: str, today: date) -> None:
         self._key = hash_key
@@ -194,9 +201,9 @@ class Filter:
         if not isinstance(money, Mapping):
             return None
         amount, currency = money.get("amount"), money.get("currency")
-        if not isinstance(amount, str) or not AMOUNT.match(amount):
+        if not isinstance(amount, str) or not AMOUNT.fullmatch(amount):
             return None  # a float, a negative "credit", a number with too many decimals
-        if not isinstance(currency, str) or not CURRENCY.match(currency) or currency in NOT_MONEY:
+        if not isinstance(currency, str) or not CURRENCY.fullmatch(currency) or currency in NOT_MONEY:
             return None
         exp = exponent(currency)
         minor = to_minor(amount, exp)

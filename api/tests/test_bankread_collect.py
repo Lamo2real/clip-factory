@@ -749,30 +749,135 @@ CONTRACT_ATTRS = {
     "DEPOSIT#": bankread.DEPOSIT_MATCHED_ATTRS | bankread.DEPOSIT_NEEDS_YOU_ATTRS | bankread.DEPOSIT_NOT_INCOME_ATTRS,
     "BANKPAYERS": bankread.BANKPAYERS_ATTRS,
 }
-READER_WRITES = {
-    "BANKLINK#": bankread.BANKLINK_READER_WRITES,
-    "DEPOSIT#": bankread.DEPOSIT_MATCHED_ATTRS | bankread.DEPOSIT_NEEDS_YOU_ATTRS,
+# A DEPOSIT# entry with a ``state`` is held to that state's attributes (the API's file has one entry per state).
+DEPOSIT_BY_STATE = {
+    "matched": bankread.DEPOSIT_MATCHED_ATTRS,
+    "needs_you": bankread.DEPOSIT_NEEDS_YOU_ATTRS,
+    "not_income": bankread.DEPOSIT_NOT_INCOME_ATTRS,
 }
 ITEM_KEYS = {"pk", "sk", "userId"}
 
 
+def reader_writes(prefix: str, state: Any) -> frozenset[str]:
+    """What the reader itself writes on that item, which the API's file must know (none on a ``not_income`` row)."""
+    if prefix == "BANKCONN":
+        return bankread.BANKCONN_READER_WRITES
+    if prefix == "BANKLINK#":
+        return bankread.BANKLINK_READER_WRITES
+    if prefix == "DEPOSIT#":
+        return bankread.DEPOSIT_READER_WRITES.get(state, frozenset()) if isinstance(state, str) else frozenset()
+    return frozenset()
+
+
+def check_items(data: Any) -> int:
+    """Both sides write their item shapes from §40.5.11: every attribute an API entry names is in the contract (for a
+    DEPOSIT#, its state's), and every attribute the reader writes on that item is one the entry lists. Returns how many
+    entries were checked."""
+    entries = data.get("items") if isinstance(data, dict) else data
+    checked = 0
+    for entry in entries or []:
+        if not isinstance(entry, dict) or not isinstance(entry.get("sk"), str):
+            continue  # the secrets: never an item
+        prefix = next((p for p in CONTRACT_ATTRS if entry["sk"].startswith(p)), None)
+        if prefix is None:
+            continue  # BANKOWNER: the API's alone
+        state = entry.get("state")
+        allowed = DEPOSIT_BY_STATE.get(state, frozenset()) if prefix == "DEPOSIT#" else CONTRACT_ATTRS[prefix]
+        if prefix == "DEPOSIT#" and state is None:
+            allowed = CONTRACT_ATTRS[prefix]
+        assert allowed, f"{entry['sk']}: a state the contract doesn't know: {state}"
+        example = entry.get("example") if isinstance(entry.get("example"), dict) else {}
+        listed = {a for a in entry.get("attributes") or [] if isinstance(a, str)}
+        theirs = listed | set(example)
+        assert not theirs - allowed - ITEM_KEYS, f"{entry['sk']} {state}: {sorted(theirs - allowed - ITEM_KEYS)}"
+        if isinstance(example.get("state"), str) and state is not None:
+            assert example["state"] == state, entry["sk"]
+        if listed:
+            missing = reader_writes(prefix, state) - listed
+            assert not missing, f"{entry['sk']} {state}: the API doesn't know {sorted(missing)}"
+        checked += 1
+    return checked
+
+
 @pytest.mark.skipif(not GOLDEN_ITEMS.exists(), reason="bank_items.json arrives with the API builder's part (§40.5.12)")
 def test_the_items_match_the_api_builders_golden_file() -> None:
-    """Both sides write their item shapes from §40.5.11: every attribute the API's file names is in the contract, and
-    every attribute the reader writes on a link or a deposit is one the API's file knows (when it lists them)."""
-    data = json.loads(GOLDEN_ITEMS.read_text())
-    entries = data.get("items") if isinstance(data, dict) else data
-    found = [e for e in entries or [] if isinstance(e, dict) and isinstance(e.get("sk"), str)]
-    for entry in found:
-        for prefix, allowed in CONTRACT_ATTRS.items():
-            if not entry["sk"].startswith(prefix):
-                continue
-            example = entry.get("example") if isinstance(entry.get("example"), dict) else {}
-            theirs = {a for a in entry.get("attributes") or [] if isinstance(a, str)} | set(example)
-            assert not theirs - allowed - ITEM_KEYS, f"{entry['sk']}: {theirs - allowed - ITEM_KEYS}"
-            if prefix in READER_WRITES and entry.get("attributes"):
-                assert not READER_WRITES[prefix] - theirs - ITEM_KEYS, f"{entry['sk']}: the API doesn't know these"
-    assert found
+    assert check_items(json.loads(GOLDEN_ITEMS.read_text())) >= 4
+
+
+# The API builder's file as it is shaped: a top-level list, one DEPOSIT# entry per state, secrets without an sk.
+API_SHAPED_ITEMS: list[dict[str, Any]] = [
+    {"sk": "BANKOWNER", "skPattern": "^BANKOWNER$", "attributes": ["type", "userId", "claimedAt"], "example": {}},
+    {
+        "sk": "BANKCONN",
+        "skPattern": "^BANKCONN$",
+        "attributes": sorted(bankread.BANKCONN_ATTRS),
+        "example": {"type": "bankconn", "app": {"status": "saved"}, "updatedAt": "2026-11-01T09:00:00.000Z"},
+    },
+    {
+        "sk": "BANKLINK#{linkId}",
+        "skPattern": "^BANKLINK#[0-9a-f]{12}$",
+        "attributes": sorted(bankread.BANKLINK_ATTRS),
+        "example": {"type": "banklink", "linkId": LINK, "status": "connected"},
+    },
+    {
+        "sk": "DEPOSIT#{yyyy-mm-dd}#{depositId}",
+        "skPattern": "^DEPOSIT#\\d{4}-\\d{2}-\\d{2}#[0-9a-f]{32}$",
+        "state": "matched",
+        "attributes": sorted(bankread.DEPOSIT_MATCHED_ATTRS),
+        "example": {"sk": "DEPOSIT#2026-11-04#" + "a" * 32, "state": "matched", "place": "youtube", "how": "payout"},
+    },
+    {
+        "sk": "DEPOSIT#{yyyy-mm-dd}#{depositId}",
+        "skPattern": "^DEPOSIT#\\d{4}-\\d{2}-\\d{2}#[0-9a-f]{32}$",
+        "state": "needs_you",
+        "attributes": sorted(bankread.DEPOSIT_NEEDS_YOU_ATTRS),
+        "example": {"sk": "DEPOSIT#2026-11-05#" + "b" * 32, "state": "needs_you", "kind": "place", "ttl": 1},
+    },
+    {
+        "sk": "DEPOSIT#{yyyy-mm-dd}#{depositId}",
+        "skPattern": "^DEPOSIT#\\d{4}-\\d{2}-\\d{2}#[0-9a-f]{32}$",
+        "state": "not_income",
+        "attributes": ["type", "state", "depositId", "date", "linkId", "why", "ttl"],
+        "example": {"state": "not_income", "why": "you"},
+    },
+    {"sk": "BANKPAYERS", "skPattern": "^BANKPAYERS$", "attributes": sorted(bankread.BANKPAYERS_ATTRS), "example": {}},
+    {"secret": "cf-prod/platforms/bank/app", "attributes": ["appId", "privateKeyPem", "hashKey"], "example": {}},
+]
+
+
+def test_the_api_builders_file_shape_is_checked_state_by_state() -> None:
+    assert check_items(API_SHAPED_ITEMS) == 6
+    # A needs_you entry listing a matched-only attribute, or a not_income one keeping the amount, is refused.
+    for state, extra in (("needs_you", "payoutRef"), ("needs_you", "confirmedAt"), ("not_income", "amountMinor")):
+        broken = [dict(e) for e in API_SHAPED_ITEMS]
+        entry = next(e for e in broken if e.get("state") == state)
+        entry["attributes"] = [*entry["attributes"], extra]
+        with pytest.raises(AssertionError, match=extra):
+            check_items(broken)
+    # An API entry that doesn't know an attribute the reader writes is refused too.
+    broken = [dict(e) for e in API_SHAPED_ITEMS]
+    entry = next(e for e in broken if e.get("state") == "needs_you")
+    entry["attributes"] = [a for a in entry["attributes"] if a != "quiet"]
+    with pytest.raises(AssertionError, match="quiet"):
+        check_items(broken)
+
+
+def test_every_deposit_the_reader_writes_is_in_its_states_reader_set(world: World) -> None:
+    world.ready(firstReadDone=True, readThrough="2026-11-01")
+    world.put_payout(youtube_payout("PAYOUT#youtube#2026-11-11#3456", "2026-11-11", "SEK 1,234.56"))
+    world.eb.pages["uid-acc-1"] = [
+        [
+            txn("1234.56", "2026-11-13", payer="GOOGLE IRELAND LTD"),
+            txn("85.00", "2026-11-14", payer="Erik Eriksson", text="youtube"),
+            txn("321.70", "2026-11-15", payer="STRIPE PAYMENTS"),
+        ]
+    ]
+    world.run()
+    found = world.deposits()
+    assert {d["state"] for d in found} == {"matched", "needs_you"}
+    for item in found:
+        assert set(item) - {"pk", "sk"} <= bankread.DEPOSIT_READER_WRITES[item["state"]], item["state"]
+        assert set(item) - {"pk", "sk"} <= DEPOSIT_BY_STATE[item["state"]]
 
 
 def test_a_session_that_shares_none_of_the_links_accounts_reads_nothing(world: World) -> None:
@@ -792,3 +897,222 @@ def test_only_stopped_links_read_no_secret(world: World) -> None:
     assert world.run()["result"] == "nothing_read"
     assert world.sm.calls == []
     assert world.eb.calls == []
+
+
+# --- a run that dies mid-read, and Clip Factory's own failures ----------------------------------------------------
+
+
+def test_the_read_is_counted_before_the_first_transactions_call(world: World) -> None:
+    world.ready(firstReadDone=True, readThrough="2026-11-20")
+    seen: list[Any] = []
+    world.eb.hook = lambda _uid: seen.append(world.link().get("reads"))
+    world.run()
+    assert seen == [{"unattendedAt": [iso(NOW)]}]
+
+
+def test_a_cut_off_answer_five_runs_in_a_row_never_passes_the_rolling_three(world: World) -> None:
+    """A bank without PSU headers, and every transactions answer cut off mid-body (``IncompleteRead``, which urllib
+    doesn't wrap): each run has used its read, and the link says it is failing."""
+    from http.client import IncompleteRead
+
+    world.ready(firstReadDone=True, readThrough="2026-11-20")
+    made = 0
+    for n in range(5):
+        world.now = NOW + timedelta(hours=n)
+        world.eb.fail["uid-acc-1"] = [IncompleteRead(b"Anna Andersson SE4550000000058398257466")]
+        before = len(calls(world))
+        world.run()
+        made += len(calls(world)) - before
+    link = world.link()
+    assert made == 3  # never more than 3 reads without him in any 24 hours
+    assert len(link["reads"]["unattendedAt"]) == 3
+    assert link["lastError"] == "Clip Factory looked at Swedbank 3 times in a day. It looks again later."
+    assert link["failingSince"] == iso(NOW)
+    assert link["readThrough"] == "2026-11-20"
+
+
+def test_a_crash_of_its_own_mid_read_says_so_and_keeps_the_read_counted(
+    world: World, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.ready(firstReadDone=True, readThrough="2026-11-20")
+    world.eb.pages["uid-acc-1"] = [[txn("85.00", "2026-11-21", payer="GOOGLE")]]
+
+    def broken(self: Any, row: Any) -> Any:
+        raise KeyError("Anna Andersson")
+
+    monkeypatch.setattr(collect.Filter, "add", broken)
+    capsys.readouterr()
+    assert world.run()["result"] == "read"
+    link = world.link()
+    assert link["lastError"] == bankread.READ_FAILED.format(bank="Swedbank")
+    assert link["failingSince"] == iso(NOW)
+    assert link["reads"]["unattendedAt"] == [iso(NOW)]
+    assert link["readThrough"] == "2026-11-20"  # nothing moves on
+    assert "readLease" not in world.conn()
+    logs = capsys.readouterr().out
+    assert '"bank.read_failed"' in logs
+    assert "Anna" not in logs
+
+
+def test_a_table_error_while_writing_moves_nothing_on(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    world.ready(firstReadDone=True, readThrough="2026-11-20")
+    world.eb.pages["uid-acc-1"] = [[txn("85.00", "2026-11-21", payer="GOOGLE")]]
+
+    def throttled(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("ProvisionedThroughputExceededException")
+
+    monkeypatch.setattr(world.store, "put_when", throttled)
+    world.run()
+    link = world.link()
+    assert link["lastError"] == bankread.READ_FAILED.format(bank="Swedbank")
+    assert link["failingSince"] == iso(NOW)
+    assert link["readThrough"] == "2026-11-20"
+    assert link["reads"]["unattendedAt"] == [iso(NOW)]
+    assert world.deposits() == []
+
+
+def test_a_link_stopped_before_its_first_transactions_call_is_never_read(world: World) -> None:
+    world.ready(firstReadDone=True, readThrough="2026-11-20")
+    fake = world.eb
+
+    def http(request: Any) -> Any:
+        if "/sessions/" in request.url:
+            world.store.update(PK, f"BANKLINK#{LINK}", {"status": "stopped", "stoppedAt": iso(NOW)})
+        return fake(request)
+
+    world.deps.http = http
+    assert world.run()["result"] == "nothing_read"
+    assert calls(world) == []
+    assert "reads" not in world.link()
+
+
+def test_the_money_bank_action_logs_a_failure_instead_of_raising(
+    world: World, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def boom(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("bank bug")
+
+    monkeypatch.setattr(collect, "run", boom)
+    event = {"action": "bank", "userId": USER, "at": iso(NOW)}
+    assert handler.handle(event, money_deps(world)) == {"action": "bank", "result": "failed"}
+    assert '"money.bank_failed"' in capsys.readouterr().out
+
+
+# --- Forget my bank and the notice ------------------------------------------------------------------------------
+
+
+def test_no_notice_is_written_once_forget_happened_after_the_run_began(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world.ready(firstReadDone=True, readThrough="2026-11-20")
+    world.put_payout(youtube_payout("PAYOUT#youtube#2026-11-11#3456", "2026-11-11", "SEK 1,234.56"))
+    world.eb.pages["uid-acc-1"] = [[txn("1234.56", "2026-11-13", payer="GOOGLE")]]
+    real = collect.Reader.expiry
+
+    def then_forget(self: Any, links: Any) -> None:
+        real(self, links)  # the deposits are written; Forget lands after the last forgottenAt check
+        world.store.update(PK, "BANKCONN", {"forgottenAt": iso(NOW + timedelta(seconds=5))})
+
+    monkeypatch.setattr(collect.Reader, "expiry", then_forget)
+    world.run()
+    conn = world.conn()
+    assert "lastNotice" not in conn
+    assert "lastRunAt" not in conn
+    assert "readLease" not in conn  # its own lease is still given back
+
+
+def test_no_notice_is_written_while_someone_else_holds_the_lease(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Our lease ran out and Forget my bank holds a new one, still under way (``forgottenAt`` not yet set)."""
+    world.ready(firstReadDone=True, readThrough="2026-11-20")
+    world.put_payout(youtube_payout("PAYOUT#youtube#2026-11-11#3456", "2026-11-11", "SEK 1,234.56"))
+    world.eb.pages["uid-acc-1"] = [[txn("1234.56", "2026-11-13", payer="GOOGLE")]]
+    real = collect.Reader.expiry
+    theirs = {"until": iso(NOW + timedelta(seconds=600))}
+
+    def forget_starts(self: Any, links: Any) -> None:
+        real(self, links)
+        world.store.update(PK, "BANKCONN", {"readLease": theirs})
+
+    monkeypatch.setattr(collect.Reader, "expiry", forget_starts)
+    world.run()
+    conn = world.conn()
+    assert "lastNotice" not in conn
+    assert conn["readLease"] == theirs  # never taken from its holder
+
+
+def test_an_expired_lease_gone_meanwhile_still_gets_the_notice(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    world.ready(firstReadDone=True, readThrough="2026-11-20")
+    world.put_payout(youtube_payout("PAYOUT#youtube#2026-11-11#3456", "2026-11-11", "SEK 1,234.56"))
+    world.eb.pages["uid-acc-1"] = [[txn("1234.56", "2026-11-13", payer="GOOGLE")]]
+    real = collect.Reader.expiry
+
+    def another_read_came_and_went(self: Any, links: Any) -> None:
+        real(self, links)
+        world.store.update_expr(PK, "BANKCONN", "REMOVE readLease")
+
+    monkeypatch.setattr(collect.Reader, "expiry", another_read_came_and_went)
+    world.run()
+    assert world.conn()["lastNotice"]["reached"][0]["place"] == "youtube"
+
+
+# --- matching across banks --------------------------------------------------------------------------------------
+
+
+def test_a_payout_picks_the_fitting_deposit_across_banks(world: World) -> None:
+    """Rule 2 over every link of the run: a stranger's transfer of the exact amount, without a hint, on the link read
+    first never takes YouTube's payout from the GOOGLE deposit on the other bank."""
+    world.ready(firstReadDone=True, readThrough="2026-11-20")
+    seed_link(
+        world.store,
+        world.sm,
+        world.eb,
+        "f0f0f0f0f0f0",
+        bank="Handelsbanken",
+        accounts=("uid-hb-1",),
+        session_id="sess-hb",
+        firstReadDone=True,
+        readThrough="2026-11-20",
+    )
+    world.put_payout(youtube_payout("PAYOUT#youtube#2026-11-11#3456", "2026-11-11", "SEK 1,234.56"))
+    world.eb.pages["uid-acc-1"] = [[txn("1234.56", "2026-11-12", payer="Erik Eriksson")]]  # read first
+    world.eb.pages["uid-hb-1"] = [[txn("1234.56", "2026-11-13", payer="GOOGLE IRELAND LTD")]]
+    world.run()
+    found = world.deposits()
+    assert [(d["linkId"], d["state"], d.get("place"), d.get("how")) for d in found] == [
+        ("f0f0f0f0f0f0", "matched", "youtube", "payout")
+    ]
+    assert [c["uid"] for c in calls(world)] == ["uid-acc-1", "uid-hb-1"]
+    assert world.link()["readThrough"] == TODAY.isoformat()
+    assert world.link("f0f0f0f0f0f0")["readThrough"] == TODAY.isoformat()
+
+
+def test_a_first_read_on_one_bank_is_quiet_and_the_other_isnt(world: World) -> None:
+    world.ready(firstReadDone=True, readThrough="2026-11-20")
+    seed_link(
+        world.store,
+        world.sm,
+        world.eb,
+        "f0f0f0f0f0f0",
+        bank="Handelsbanken",
+        accounts=("uid-hb-1",),
+        session_id="sess-hb",
+    )
+    world.eb.pages["uid-acc-1"] = [[txn("85.00", "2026-11-21", payer="TIKTOK")]]
+    world.eb.pages["uid-hb-1"] = [[txn("86.00", "2026-11-21", payer="X CORP")]]
+    world.run()
+    quiet = {d["linkId"]: d.get("quiet", False) for d in world.deposits()}
+    assert quiet == {LINK: False, "f0f0f0f0f0f0": True}
+    assert world.conn()["lastNotice"]["asks"] == 1
+
+
+# --- a restarted first read ---------------------------------------------------------------------------------------
+
+
+def test_a_first_read_restarted_for_its_period_counts_from_the_restart(world: World) -> None:
+    world.ready(**FRESH_LINK)
+    world.eb.fail["uid-acc-1"] = [(422, "WRONG_TRANSACTIONS_PERIOD")]
+    world.run(psu={"ip": "203.0.113.9"}, mine=True)
+    tries = calls(world)
+    assert [(t["strategy"], t["date_from"]) for t in tries] == [("longest", days_ago(400)), ("default", days_ago(89))]
+    # Nothing came back: "Counted from" is the restart's first day, never 400 days ago.
+    assert world.link()["historyFrom"] == days_ago(89)
