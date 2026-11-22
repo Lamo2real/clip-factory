@@ -4,9 +4,7 @@
 // unless it is an antialiased pixel in either picture: an edge pixel between two flat areas whose neighbours both
 // pictures share, which text or a curve drawn twice can shade a little differently. Those are counted apart (`aa`),
 // never as a difference, so a real change of layout or colour still fails while font smoothing does not. `exact`
-// counts every pixel that is not byte-identical, as the script did before. Pixels inside a `mask` box are left out,
-// and so are the pixels in `ignore`: where the first picture (the merge base) changes when it is only shot again, so
-// a page that moves by itself (a line of text snapping 1 px) is never blamed on the branch.
+// counts every pixel that is not byte-identical, as the script did before. Pixels inside a `mask` box are left out.
 //
 // No imports and plain JavaScript on purpose: the script also runs this file in a browser page (it is put in as a
 // classic script there, so `export` is taken off and cfPixelDiff is the global it calls).
@@ -18,17 +16,13 @@
  * @param {Uint8ClampedArray | Uint8Array} b RGBA of the second, the same size
  * @param {number} width
  * @param {number} height
- * @param {{ threshold?: number; exact?: boolean; mask?: Box[]; ignore?: Uint8Array | null }} [opts] ignore: one byte per
- *   pixel, non-zero where the first picture moves on its own (the kinds of the first picture against itself shot
- *   again): those pixels are left out and counted apart (`moving`)
- * @returns {{ diff: number; aa: number; moving: number; kinds: Uint8Array }} kinds: 0 the same (or masked or moving),
- *   1 antialiased, 2 differs
+ * @param {{ threshold?: number; exact?: boolean; mask?: Box[] }} [opts]
+ * @returns {{ diff: number; aa: number; kinds: Uint8Array }} kinds: 0 the same (or masked), 1 antialiased, 2 differs
  */
 export function pixelDiff(a, b, width, height, opts = {}) {
   const threshold = opts.threshold ?? 0.1;
   const exact = opts.exact === true;
   const mask = opts.mask ?? [];
-  const ignore = opts.ignore ?? null;
   const W = width;
   const H = height;
   const kinds = new Uint8Array(W * H);
@@ -128,17 +122,12 @@ export function pixelDiff(a, b, width, height, opts = {}) {
   const maxDelta = 35215 * threshold * threshold;
   let diff = 0;
   let aa = 0;
-  let moving = 0;
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       const p = y * W + x;
       const i = p * 4;
       if (a[i] === b[i] && a[i + 1] === b[i + 1] && a[i + 2] === b[i + 2] && a[i + 3] === b[i + 3]) continue;
       if (masked(x, y)) continue;
-      if (ignore && ignore[p]) {
-        moving++;
-        continue;
-      }
       if (exact) {
         kinds[p] = 2;
         diff++;
@@ -153,5 +142,5 @@ export function pixelDiff(a, b, width, height, opts = {}) {
         diff++;
       }
     }
-  return { diff, aa, moving, kinds };
+  return { diff, aa, kinds };
 }

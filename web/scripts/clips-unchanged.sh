@@ -12,11 +12,12 @@
 #   web/scripts/clips-unchanged.sh [base-ref] [--out <dir>] [--sizes 390x844,1440x900]
 #
 # base-ref defaults to the merge base of HEAD and origin/main. --out keeps before, after and a diff picture (the
-# differing pixels in red) of every shot that differs. A pair that differs is shot again (CF_TRIES, default 3), each
-# time in a fresh browser and in the other order (a line of text can snap 1 px one way for a whole browser run), so
-# only a difference every pair shows counts. And in each pair that differs, the base is shot once more in the same
-# browser: the pixels where the base changes by itself are left out (it moved on its own, the branch did not move
-# it), every other pixel still counts. Exits 1 when any shot differs. Nothing leaves the machine:
+# differing pixels in red) of every shot that differs. Chromium draws a line of text that sits at a fractional
+# height 1 px up or down from one shot to the next (the layout itself exactly the same, in the base as in the
+# branch), and a few mock pages move on their own, so a shot that differs is taken again of both (CF_TRIES, default
+# 4), each time in a fresh browser and in the other order. It counts as the same as soon as one of the branch's shots
+# matches one of the base's shots (the branch can draw exactly what the base draws); it differs only when none do,
+# and the closest pair is reported. Exits 1 when any shot differs. Nothing leaves the machine:
 # the mock build talks to no server, and the only network use is `npm ci` for the base checkout's packages.
 set -euo pipefail
 
@@ -98,7 +99,7 @@ const EXACT = process.env.CF_EXACT === "1";
 const THRESHOLD = EXACT ? 0 : Number(process.env.CF_THRESHOLD || 0.1);
 /** A fixed moment, so every "2 h ago" and every chart reads the same in both runs. */
 const CLOCK = new Date("2026-11-21T12:00:00.000Z");
-const TRIES = Number(process.env.CF_TRIES || 3);
+const TRIES = Number(process.env.CF_TRIES || 4);
 const STILL = "*, *::before, *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }";
 
 if (out) mkdirSync(out, { recursive: true });
@@ -158,12 +159,14 @@ async function shot(browser, base, path, [w, h], folded, on) {
  * web/scripts/pixeldiff.mjs: pixelmatch's test with includeAA false (§45.35 D20). Antialiased edge pixels are counted
  * apart (`aa`, yellow in the diff picture); real differences are red.
  */
-async function compare(page, a, b, mask, again = null) {
+async function compare(page, a, b, mask) {
+  // The same bytes are the same pixels (one encoder): nothing to decode.
+  if (a.equals(b)) return { diff: 0, aa: 0, size: "", png: null };
   return page.evaluate(
-    async ({ a, b, mask, threshold, exact, again }) => {
+    async ({ a, b, mask, threshold, exact }) => {
       const load = async (b64) => createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
-      const [ia, ib, ic] = await Promise.all([load(a), load(b), again ? load(again) : null]);
-      if (ia.width !== ib.width || ia.height !== ib.height) return { diff: -1, aa: 0, moving: 0, size: `${ia.width}×${ia.height} vs ${ib.width}×${ib.height}`, png: null };
+      const [ia, ib] = await Promise.all([load(a), load(b)]);
+      if (ia.width !== ib.width || ia.height !== ib.height) return { diff: -1, aa: 0, size: `${ia.width}×${ia.height} vs ${ib.width}×${ib.height}`, png: null };
       const read = (img) => {
         const c = new OffscreenCanvas(img.width, img.height);
         const x = c.getContext("2d");
@@ -174,9 +177,7 @@ async function compare(page, a, b, mask, again = null) {
       const H = ia.height;
       const da = read(ia).data;
       const db = read(ib).data;
-      // The base shot again in the same browser: where it changes by itself, nothing is the branch's doing.
-      const ignore = ic && ic.width === W && ic.height === H ? window.cfPixelDiff(da, read(ic).data, W, H, { threshold, exact, mask }).kinds : null;
-      const { diff, aa, moving, kinds } = window.cfPixelDiff(da, db, W, H, { threshold, exact, mask, ignore });
+      const { diff, aa, kinds } = window.cfPixelDiff(da, db, W, H, { threshold, exact, mask });
       let png = null;
       if (diff > 0) {
         const outImg = new ImageData(W, H);
@@ -196,9 +197,9 @@ async function compare(page, a, b, mask, again = null) {
         for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
         png = btoa(s);
       }
-      return { diff, aa, moving, size: `${W}×${H}`, png };
+      return { diff, aa, size: `${W}×${H}`, png };
     },
-    { a: a.toString("base64"), b: b.toString("base64"), mask, threshold: THRESHOLD, exact: EXACT, again: again ? again.toString("base64") : null },
+    { a: a.toString("base64"), b: b.toString("base64"), mask, threshold: THRESHOLD, exact: EXACT },
   );
 }
 
@@ -211,26 +212,35 @@ const rows = [];
 for (const size of SIZES)
   for (const folded of size[0] >= 768 ? [false, true] : [false])
     for (const path of PAGES) {
-      // A few mock pages move on their own (live job progress, timed numbers, a line of text snapping 1 px), so one
-      // pair can differ by chance: a differing pair is shot again, up to TRIES times, each time in a fresh browser
-      // and in the other order, and only a difference every pair shows is reported. In a pair that differs, the base
-      // is shot a third time in the same browser, and the pixels where it changed by itself are left out.
-      let a, b, r;
-      for (let t = 0; t < TRIES; t++) {
+      // A line of text can be drawn 1 px up or down from one shot to the next, and a few mock pages move on their own
+      // (live job progress, timed numbers), so one pair can differ by chance: a differing shot is taken again of both,
+      // up to TRIES times, each time in a fresh browser and in the other order, and it is the same as soon as one of
+      // the branch's shots matches one of the base's. Only when none do is it reported, with its closest pair.
+      const as = [];
+      const bs = [];
+      let r = null;
+      let a = null;
+      let b = null;
+      const rank = (x) => (x.diff < 0 ? Infinity : x.diff);
+      for (let t = 0; t < TRIES && !(r && r.diff === 0); t++) {
         const run = t === 0 ? browser : await chromium.launch();
         try {
+          let na, nb;
           if (t % 2 === 0) {
-            a = await shot(run, before, path, size, folded, false);
-            b = await shot(run, after, path, size, folded, storiesOn);
+            na = await shot(run, before, path, size, folded, false);
+            nb = await shot(run, after, path, size, folded, storiesOn);
           } else {
-            b = await shot(run, after, path, size, folded, storiesOn);
-            a = await shot(run, before, path, size, folded, false);
+            nb = await shot(run, after, path, size, folded, storiesOn);
+            na = await shot(run, before, path, size, folded, false);
           }
-          r = await compare(blank, a.png, b.png, storiesOn ? b.mask : []);
-          if (r.diff === 0) break;
-          const again = await shot(run, before, path, size, folded, false);
-          r = await compare(blank, a.png, b.png, storiesOn ? b.mask : [], again.png);
-          if (r.diff === 0) break;
+          as.push(na);
+          bs.push(nb);
+          // The new pairs: this branch shot against every base shot so far, this base shot against the earlier branch shots.
+          for (const [x, y] of [...as.map((x) => [x, nb]), ...bs.slice(0, -1).map((y) => [na, y])]) {
+            const got = await compare(blank, x.png, y.png, storiesOn ? y.mask : []);
+            if (!r || rank(got) < rank(r)) [r, a, b] = [got, x, y];
+            if (r.diff === 0) break;
+          }
         } finally {
           if (run !== browser) await run.close();
         }
@@ -238,7 +248,7 @@ for (const size of SIZES)
       const name = `${path === "/" ? "home" : path.slice(1)}-${size[0]}x${size[1]}${folded ? "-folded" : ""}`;
       if (r.diff !== 0) failed++;
       rows.push(
-        `${r.diff === 0 ? "same" : "DIFF"}  ${name.padEnd(28)} ${r.diff < 0 ? `size ${r.size}` : `${r.diff} px differ`}${r.aa ? `, ${r.aa} antialiased edge px left out` : ""}${r.moving ? `, ${r.moving} px the base moves by itself left out` : ""}${storiesOn && b.mask.length ? ` (switcher box left out: ${b.mask.map((m) => `${m.w}×${m.h} at ${m.x},${m.y}`).join(", ")})` : ""}`,
+        `${r.diff === 0 ? "same" : "DIFF"}  ${name.padEnd(28)} ${r.diff < 0 ? `size ${r.size}` : `${r.diff} px differ`}${r.aa ? `, ${r.aa} antialiased edge px left out` : ""}${as.length > 1 ? ` (${as.length} shots of each)` : ""}${storiesOn && b.mask.length ? ` (switcher box left out: ${b.mask.map((m) => `${m.w}×${m.h} at ${m.x},${m.y}`).join(", ")})` : ""}`,
       );
       console.log(rows.at(-1));
       if (out && r.diff !== 0) {

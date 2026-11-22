@@ -10,5 +10,5 @@ export function pixelDiff(
   b: Uint8ClampedArray | Uint8Array,
   width: number,
   height: number,
-  opts?: { threshold?: number; exact?: boolean; mask?: PixelBox[]; ignore?: Uint8Array | null },
-): { diff: number; aa: number; moving: number; kinds: Uint8Array };
+  opts?: { threshold?: number; exact?: boolean; mask?: PixelBox[] },
+): { diff: number; aa: number; kinds: Uint8Array };

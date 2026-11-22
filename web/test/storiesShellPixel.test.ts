@@ -56,29 +56,18 @@ describe("the pixel check's comparison", () => {
     expect(pixelDiff(picture(), moved, W, H, { mask: [{ x: 0, y: 0, w: W, h: H / 2 }] }).diff).toBeGreaterThan(0);
   });
 
-  it("leaves out only the pixels where the base changes when it is shot again (a line snapping 1 px), and counts them apart", () => {
-    // The base's block, shot again, sits 1 px further right: the two columns that changed are the base's own motion.
-    const base = picture();
-    const again = picture({ x0: 7, x1: 15 });
-    const ignore = pixelDiff(base, again, W, H).kinds;
-    // The branch's shot snapped the same way: nothing of it is the branch's doing.
-    expect(pixelDiff(base, again, W, H, { ignore })).toMatchObject({ diff: 0, moving: 2 * H });
-    // A real change elsewhere (a colour in the block's middle) still counts, every pixel of it.
-    const changed = picture({ x0: 7, x1: 15 });
-    for (let y = 0; y < H; y++) changed.set([200, 40, 30, 255], (y * W + 10) * 4);
-    expect(pixelDiff(base, changed, W, H, { ignore }).diff).toBe(H);
-    // Without a second shot of the base nothing is left out.
-    expect(pixelDiff(base, again, W, H).diff).toBe(2 * H);
-  });
-
   it("is the comparison the script runs, with includeAA off and threshold 0.1, on every size the switcher has", () => {
     const script = readFileSync(join(import.meta.dirname, "..", "scripts", "clips-unchanged.sh"), "utf8");
     expect(script).toContain('export CF_PIXELDIFF="$here/scripts/pixeldiff.mjs"');
-    expect(script).toContain("window.cfPixelDiff(da, db, W, H, { threshold, exact, mask, ignore })");
-    // The base shot again in the same browser gives what moves by itself; each retry is a fresh browser, the other way round.
-    expect(script).toContain("window.cfPixelDiff(da, read(ic).data, W, H, { threshold, exact, mask }).kinds");
+    expect(script).toContain("window.cfPixelDiff(da, db, W, H, { threshold, exact, mask })");
+    // A shot that differs is taken again of both, each time in a fresh browser and the other way round, and it is the
+    // same only when one of the branch's shots matches one of the base's (the switcher's box from the branch's shot).
+    expect(script).toContain('const TRIES = Number(process.env.CF_TRIES || 4);');
     expect(script).toContain("const run = t === 0 ? browser : await chromium.launch();");
     expect(script).toContain("if (t % 2 === 0) {");
+    expect(script).toContain("for (const [x, y] of [...as.map((x) => [x, nb]), ...bs.slice(0, -1).map((y) => [na, y])]) {");
+    expect(script).toContain("const got = await compare(blank, x.png, y.png, storiesOn ? y.mask : []);");
+    expect(script).toContain("if (r.diff !== 0) failed++;");
     expect(script).toContain('const THRESHOLD = EXACT ? 0 : Number(process.env.CF_THRESHOLD || 0.1);');
     // The folded sidebar of a short window (the slim toggle beside the fold button, §45.35 D19) is shot too.
     expect(script).toMatch(/"390x844,1000x560,1000x600,1000x650,1000x720,1440x900"/);
