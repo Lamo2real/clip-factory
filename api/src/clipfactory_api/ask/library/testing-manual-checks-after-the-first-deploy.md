@@ -186,12 +186,17 @@
 
 20. **Your bank** ([CONTRACTS §40.5.14](CONTRACTS.md#40514-not-verified-live-each-is-checked-at-his-first-connect-a-failure-becomes-a-plain-sentence-never-a-number),
    "Not verified live"): the plan lines at each deploy, the rest only after the switch PR (`bank_reading_enabled =
-   true`), at the owner's first connect. Each failure becomes a plain sentence, never a number.
+   true`), at the owner's first connect. Each failure becomes a plain sentence, never a number. The switch PR #172
+   merged on 22 Nov 2026, so Your bank is on and the rest can be done now.
    - BR's merge, in the deploy log: the plan changes only the two stream filters, the `NoBankSecrets` statements of
-     `cf-prod-clip-flow` and `cf-prod-stats` and the api's environment (`BANK_READING` set to `off`), all in place,
-     with 0 to destroy and 0 to replace.
-   - The switch PR, in the deploy log: the plan changes only `cf-prod-api`'s `BANK_READING`, `off` to `on`, in place,
-     and the PR says "Delete gate: the plan deletes or replaces nothing that holds the owner's data."
+     `cf-prod-clip-flow` and `cf-prod-stats` and the environment of `cf-prod-api` and `cf-prod-money` (`BANK_READING`
+     set to `off`), all in place, with 0 to destroy and 0 to replace. Done: in its deploy log (#158, run 45029295590)
+     the plan was "Plan: 0 to add, 24 to change, 0 to destroy." (the two filters, the two role policies and the usual
+     per-deploy function updates), `BANK_READING` was added as `"off"` on both functions, and the delete gate passed.
+   - Done: in the deploy log of the switch PR #172 (run 45049909216), the plan was "Plan: 0 to add, 3 to change, 0 to
+     destroy.": `BANK_READING` `"off"` → `"on"` in place on `cf-prod-api` and `cf-prod-money`, plus the usual
+     per-deploy `VERSION` update on `cf-prod-stories-api`; nothing added, deleted or replaced, and the log says
+     "Delete gate: the plan deletes or replaces nothing that holds the owner's data."
    - Enable Banking: whether **Public certificate in PEM format** takes the bare public key or wants the certificate
      (the "Other bank key" chip); where the app ID shows on **API applications** once the **New application … has been
      added.** message is gone; what `GET /application`'s `countries` holds for a restricted app; which errors a wrong

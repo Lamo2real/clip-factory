@@ -456,6 +456,52 @@ for (const w of [320, 390, 768, 1024, 1920] as const)
     expect(fails, fails.join("\n")).toEqual([]);
   });
 
+// Ask's round button rests at the right on phones and the page scrolls under it (§19.8). On the question cards (one
+// with a suggestion, one with the place rows) and on Money's bank block, every button and link is brought to Ask's
+// height in turn (as far as the page scrolls) and none of it may be under Ask's resting box: the clear column of
+// bank.css and getpaid.css, as in All your money (§27.4).
+for (const w of [320, 390, 430] as const)
+  test(`nothing to tap under Ask at ${w} px: the question cards and Money's bank block`, async ({ browser }) => {
+    test.setTimeout(120_000);
+    const ctx = await ctxFor(browser, w, 844, true, "light");
+    const page = await ctx.newPage();
+    const fails: string[] = [];
+    for (const [path, scope] of [
+      [BANK, ".bank-ask"],
+      ["/money", "[data-help='money-reached']"],
+    ] as const) {
+      await start(page, path, "connected", path === BANK ? [["newAsk", ["paypal"]]] : []);
+      if (path === BANK) {
+        await expect(page.locator(".bank-ask[data-suggested='x']").getByRole("button", { name: "Not money from an app" })).toBeVisible();
+        await expect(page.locator(".bank-ask[data-suggested='none'] .bank-places__row").first()).toBeVisible();
+      } else await expect(page.locator(scope).getByRole("link", { name: "Answer them" })).toBeVisible();
+      const found = await page.evaluate((scope) => {
+        const out: string[] = [];
+        const ask = document.querySelector<HTMLElement>(".help-launcher");
+        if (!ask) return ["no Ask button"];
+        // Its resting box (fixed, so the offsets are the window's; a fade or its shrink never changes them).
+        const a = { left: ask.offsetLeft, right: ask.offsetLeft + ask.offsetWidth, top: ask.offsetTop, bottom: ask.offsetTop + ask.offsetHeight };
+        const controls = [...document.querySelectorAll<HTMLElement>(`${scope} :is(button, a[href])`)].filter((e) => e.getBoundingClientRect().width > 0);
+        if (!controls.length) out.push(`nothing to tap in ${scope}`);
+        for (const el of controls) {
+          const r0 = el.getBoundingClientRect();
+          window.scrollBy({ top: r0.top + r0.height / 2 - (a.top + a.bottom) / 2, behavior: "instant" });
+          const r = el.getBoundingClientRect();
+          const name = (el.textContent ?? "").trim().slice(0, 40);
+          const level = Math.min(r.bottom, a.bottom) > Math.max(r.top, a.top);
+          const max = document.documentElement.scrollHeight - innerHeight;
+          if (!level && scrollY > 0.5 && scrollY < max - 0.5) out.push(`"${name}" did not reach Ask's height (scrollY ${Math.round(scrollY)} of ${max})`);
+          if (level && Math.min(r.right, a.right) - Math.max(r.left, a.left) > 0)
+            out.push(`"${name}" ${Math.round(r.left)}-${Math.round(r.right)} x ${Math.round(r.top)}-${Math.round(r.bottom)} is under Ask ${a.left}-${a.right} x ${a.top}-${a.bottom}`);
+        }
+        return out;
+      }, scope);
+      fails.push(...found.map((f) => `${w} ${path}: ${f}`));
+    }
+    await ctx.close();
+    expect(fails, fails.join("\n")).toEqual([]);
+  });
+
 test("reduced motion: nothing on the bank page keeps moving", async ({ browser }) => {
   const ctx = await ctxFor(browser, 375, 812, true, "light");
   const page = await ctx.newPage();

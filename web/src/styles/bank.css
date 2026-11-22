@@ -320,6 +320,8 @@
 .bank-places__row {
   width: 100%;
   justify-content: flex-start;
+  /* A name that wraps on a narrow phone stays at the start like the others, never centred. */
+  text-align: start;
 }
 .bank-places__quiet {
   justify-self: start;
@@ -628,5 +630,28 @@
   }
   .bank-ask__actions > .btn {
     flex: 0 1 auto;
+  }
+  /* Ask's round button rests at the window's right, above the tab bar (§19.8), and the page scrolls under it. So, as
+     in All your money (§27.4), every row of buttons here keeps that column clear: the buttons still sit at the right,
+     under the thumb, but end before Ask, so Ask is never over one (and never has to fade). Inside a card that is
+     64 px; the page's own Back row adds the card's inset, so it lines up with them. The big full-width rows (a step,
+     the folds, step 5's paste box) and the pinned main button keep their places (§19.8, §40.1). */
+  .bank-ask__actions,
+  .bank-ask > .bank-places,
+  .bank-status__actions,
+  .bank-status__need,
+  .bank-link__actions,
+  .bank-link.is-stopped,
+  .bank-reached__need,
+  .bank-row,
+  .bank-key__actions,
+  .bank-page .copy-chip,
+  .bank-page .gstep__actions,
+  .bank-page .gstep__done-row,
+  .bank-page .done-panel__actions {
+    padding-inline-end: 64px;
+  }
+  .bank-back {
+    padding-inline-end: calc(var(--inset) + 64px);
   }
 }

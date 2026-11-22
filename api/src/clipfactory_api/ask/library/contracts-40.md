@@ -28,9 +28,9 @@ Enable Banking, which he chose on 22 Nov 2026):
 | Content Rewards | Content Rewards' numbers, as today (§39.2) | "Whop says" once Connect Whop works (ID check, payout method), plus his ticks | Whop's completed payouts once Connect Whop works (all his Whop money, Content Rewards too), else not available |
 
 "Reached your bank" (money his bank booked) can only come from his bank. That part is §40.5 (Enable Banking, his
-choice A, ADR-82), behind the switch `BANK_READING`; while it is off, every screen says "Clip Factory can't see your
-bank. Look in your bank's app to see what arrived." Once it is on, every place can show what reached his bank, per currency
-and in total: YouTube's and Content Rewards' deposits are matched to Google's and Whop's own payment records, and the
+choice A, ADR-82), behind the switch `BANK_READING` (on since the switch PR #172, 22 Nov 2026); while it is off,
+every screen says "Clip Factory can't see your bank. Look in your bank's app to see what arrived." Now that it is on,
+every place can show what reached his bank, per currency and in total: YouTube's and Content Rewards' deposits are matched to Google's and Whop's own payment records, and the
 others once he taps to confirm who paid (once per payer; Stripe, PayPal and Payoneer each time, because they carry
 money from more than one place).
 
@@ -533,10 +533,13 @@ All sums are on the server, per currency, never across currencies, never convert
 The owner chose **A** on 22 Nov 2026 ("A: bank connection") from the four options this sub-section used to list (A
 Enable Banking, B his bank's file, C payout emails, D nothing new). Decision record: ADR-82. It answers the last part of
 his ask: *"a total of my exact number that I've gotten into my bank account or accounts, but in total for each of
-those platforms"*. Everything here sits behind the api switch `BANK_READING` (Terraform `bank_reading_enabled`,
-**default `false`**). While it is off, every screen keeps today's words, "Clip Factory can't see your bank. Look in
-your bank's app to see what arrived." (`BANK_TEXT`), and nothing below runs. A deposit keeps its `source`, so a bank
-file (B) could later fill the same rows with no change to matching, totals or screens.
+those platforms"*. Everything here sits behind the switch `BANK_READING`, set on both `cf-prod-api` and
+`cf-prod-money` from one Terraform variable, `bank_reading_enabled`. It was built switched off and is **on** in prod
+since the switch PR #172 (22 Nov 2026) set that variable's default to `true` (§40.5.11 **The switch**). While it is
+off, every screen keeps the words "Clip Factory can't see your bank. Look in your bank's app to see what arrived."
+(`BANK_TEXT`), and nothing below runs. To turn it off, set the default back to `false` in
+`infra/envs/prod/variables.tf` in a one-line PR and let `deploy.yml` apply it. A deposit keeps its `source`, so a
+bank file (B) could later fill the same rows with no change to matching, totals or screens.
 
 **Rulings.** The old placeholder and the owner's least-data rule disagreed in seven places. His rule wins, and these
 replace the placeholder's words:
@@ -585,8 +588,8 @@ Checked on 22 Nov 2026 against Enable Banking's docs, API spec, Control Panel te
     three reads in any 24 hours without him, and a 6-hour pause when a bank says it has had too many. Money's own
     Check now never reads the bank;
   * if Enable Banking says no, or sends written notice that the app will be deactivated, one line,
-    `bank_reading_enabled = false`, puts every screen back to `BANK_TEXT` at once. Stored deposits, learned payers and
-    links stay (they are his records), until he taps "Forget my bank".
+    `bank_reading_enabled = false`, puts every screen back to `BANK_TEXT` at once and stops every bank read. Stored
+    deposits, learned payers and links stay (they are his records), until he taps "Forget my bank".
 * **What Enable Banking keeps** (its Privacy Notice): account data "a maximum of 60 seconds", session data "up to 180
   days", IP address and user agent 30 days, all in the EEA (Google Cloud Dublin, AWS Luxembourg). It is a registered
   AISP supervised by the FIN-FSA. BankID happens on Enable Banking's page and his bank's own page. **Clip Factory
@@ -1395,7 +1398,7 @@ PutItem; no table, index, bucket, Lambda, role or Terraform-made secret):
 | `BANKLINK#{linkId}` | `type "banklink"`, `linkId`, `bank` (Enable Banking's name, at most 60 characters), `country`, `status` (`connected`, `ended`, `stopped_at_bank`, `stopped`), `reason` (`consent_over`, `ended_early`, `psu_action`), `consentUntil`, `connectedAt`, `firstConnectedAt`, `accountCount`, `psuHeaders` (names only, lower-cased), `historyWanted`, `firstReadDone`, `firstReadStartedAt`, `historyFrom`, `readThrough`, `lastReadAt`, `lastError`, `failingSince`, `limitUntil`, `reads {unattendedAt (at most 4 ISO times), lastAttendedAt}`, `resume` (internal), `warnedFor`, `endedAt`, `stoppedAt`, `closePending`, `updatedAt` | hooks (connect), api (stop, forget, closing, the first-read claim), money (read state, ends) |
 | `DEPOSIT#{yyyy-mm-dd}#{depositId}` | the table of §40.5.7, plus `type "deposit"` | money (new rows, matches again), api (answers, forget) |
 | `BANKPAYERS` | `type "bankpayers"`, `rules`, `notIncome`, `updatedAt` | api (his answers only) |
-| api env | `BANK_READING` from `bank_reading_enabled` (default `false`): an in-place env change | Terraform |
+| api and money env | `BANK_READING` on `cf-prod-api` and `cf-prod-money`, both from `bank_reading_enabled` (prod default `true` since the switch PR #172; `false` turns it off): an in-place env change | Terraform |
 
 **Secrets** (Secrets Manager only, made at runtime with tags `app=cf-prod`, `platform=bank`; never in DynamoDB, logs,
 responses, URLs or the browser; never in Terraform, so a deploy can't touch them):
@@ -1441,14 +1444,22 @@ Factory". Never a link, a secret, an account number or the bank's text in a mess
 
 **Infra** (builder BR; additive, in place): `infra/modules/realtime/main.tf` (+4 prefixes), `infra/modules/notify/main.tf`
 (+`BANKCONN`), the two `NoBankSecrets` Deny statements (`infra/modules/flows/main.tf`, `infra/modules/stats/main.tf`),
-and `bank_reading_enabled` (bool, default `false`) through `infra/modules/api` and `infra/envs/prod` to `BANK_READING
-= "on" | "off"` on `cf-prod-api`. No new Lambda, table, index, bucket, route, role, Allow statement or Terraform
-secret. The prod plan: 0 to destroy, 0 to replace (role policies, stream filters and one env var update in place).
+and `bank_reading_enabled` (bool; `false` in the modules) from `infra/envs/prod` through `infra/modules/api` and
+`infra/modules/money` to `BANK_READING = "on" | "off"` on both `cf-prod-api` and `cf-prod-money`. No new Lambda,
+table, index, bucket, route, role, Allow statement or Terraform secret. The prod plan: 0 to destroy, 0 to replace
+(role policies, stream filters and the two functions' env var update in place).
 
-**The switch.** `bank_reading_enabled` stays `false` until BA, BR, BW and BD have all merged. Then one PR, "Get paid:
-switch on Your bank" (`feature/bank-switch-on`), sets its default to `true` in `infra/envs/prod/variables.tf` (with
-its description) and updates `infra/envs/prod/tests/wiring.tftest.hcl`. Turning it off again is the same one line, and
-every stored item and secret stays.
+**The switch.** `bank_reading_enabled` stayed `false` in prod until BA, BR, BW and BD had all merged (#157, #158,
+#162, #156). Then one PR, "Get paid: switch on Your bank" (`feature/bank-switch-on`, #172, merged 22 Nov 2026), set
+its default to `true` in `infra/envs/prod/variables.tf` (with its description) and updated
+`infra/envs/prod/tests/wiring.tftest.hcl` (`bank_reading_is_wired_and_on`; it still plans with the switch off). Its
+deploy changed `BANK_READING` from `off` to `on` in place on `cf-prod-api` and `cf-prod-money`, so Your bank is **on**.
+**To turn it off**: set that default back to `false` in a one-line PR and let `deploy.yml` apply it (never a local AWS
+CLI). The same in-place change of the two functions then puts every screen back to `BANK_TEXT`, makes every bank route
+but `GET /v1/getpaid/bank` answer 503 and stops every bank read (the daily one and his Check now); every stored item
+and secret stays. `cf-prod-hooks`' callback doesn't read the switch, so a connect already on its way back from BankID
+can still save its link, which nothing reads while the switch is off. If Enable Banking says no, he first taps "Stop
+reading" on each bank while it is still on (that also closes each link at Enable Banking), then the switch goes off.
 
 **Mock mode** (`VITE_MOCK=1`, `web/src/api/mock/bank.ts`, builder BW): `on: true`, nothing set up. "Make my bank key"
 gives a short fake public key (`-----BEGIN PUBLIC KEY-----` / `MOCK…`). Any UUID saves with `not_active`; "I linked
@@ -1587,8 +1598,9 @@ a browser that isn't signed in. Answers change the mock in memory.
     prefixes → `bank`, partial, and many `DEPOSIT#` records plus a `PAYOUT#` folded to one `bank` and one `getpaid`
     message;
   * `terraform test`: the filters change in place; `NoBankSecrets` on `clip-flow` and `stats` only, with `Effect =
-    "Deny"`; `bank_reading_enabled` defaults to `false` → `BANK_READING = "off"`, and `true` → `"on"`; nothing
-    replaced.
+    "Deny"`; `bank_reading_enabled` defaults to `false` in the modules → `BANK_READING = "off"`, and `true` → `"on"`,
+    on `cf-prod-api` and `cf-prod-money`; `envs/prod` defaults to `true` since the switch PR #172 and still plans with
+    `false`; nothing replaced.
 * **web (BW)**, Vitest:
   * the guide's ids, roles and autos equal `bank_steps.json` (when present); every title 6 words or fewer, every line
     26 words or fewer, at most 4 lines a card; https Opens (the one `mailto:` aside); bold only for Enable Banking's

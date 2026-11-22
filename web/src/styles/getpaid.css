@@ -471,16 +471,19 @@ html:has(.gp-page.has-pin) {
   }
 }
 /* Phones and touch tablets with the money dock: Ask's home spot sits at the card's right end, as in All your money,
-   so the card keeps that column clear (its words and buttons never come under Ask). */
+   so the card keeps that column clear (its words and buttons never come under Ask). Your bank's "Reached your bank,
+   so far" too (§40.5.9): its Answer them sits at the right, before Ask. */
 .money-dash.is-dock .gp-money__row,
 .money-dash.is-dock .gp-money__head,
-.money-dash.is-dock .cr-all__sentsofar {
+.money-dash.is-dock .cr-all__sentsofar,
+.money-dash.is-dock .cr-all__reached {
   padding-inline-end: 64px;
 }
 @media (min-width: 768px) {
   .money-dash.is-dock .gp-money__row,
   .money-dash.is-dock .gp-money__head,
-  .money-dash.is-dock .cr-all__sentsofar {
+  .money-dash.is-dock .cr-all__sentsofar,
+  .money-dash.is-dock .cr-all__reached {
     padding-inline-end: 112px;
   }
 }
