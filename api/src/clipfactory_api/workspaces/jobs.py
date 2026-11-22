@@ -38,10 +38,11 @@ PORTRAIT_STOPPED = "Making the picture stopped. Tap Try again."
 PORTRAIT_NOT_STARTED = "Making the picture did not start. Tap Try again."
 PORTRAIT_NOT_SET_UP = "The picture maker is not switched on yet, so making the picture did not start."
 REFERENCE_STOPPED = "Looking at the video stopped. Tap Try again."
-# "Try it" on Amazon Nova Reel (§45.35 D2): a ``provider_check`` job of content type ``provider``
-CHECK_STOPPED = "Trying Amazon Nova Reel stopped. Tap Try it again."
-CHECK_NOT_STARTED = "Trying Amazon Nova Reel did not start. Tap Try it again."
-CHECK_NOT_SET_UP = "Lamo Stories' helper is not switched on yet, so Amazon Nova Reel could not be tried."
+# "Try it" on Luma AI Ray2 (§45.35 D2, moved from the ended Amazon Nova Reel by §45.37 G7): a ``provider_check`` job
+# of content type ``provider``
+CHECK_STOPPED = "Trying Luma AI Ray2 stopped. Tap Try it again."
+CHECK_NOT_STARTED = "Trying Luma AI Ray2 did not start. Tap Try it again."
+CHECK_NOT_SET_UP = "Lamo Stories' helper is not switched on yet, so Luma AI Ray2 could not be tried."
 CHECK_KIND: Final = "provider"  # the content type of a "Try it" job (providers.CHECK_CONTENT_TYPE)
 CANCELED_STEP = "You stopped it."
 STOPPED_BY_KIND: Final = {
@@ -150,7 +151,7 @@ def is_stale(job: Mapping[str, Any], now: datetime) -> bool:
 
 def _failed_steps(steps: Iterable[Mapping[str, Any]], message: str, *, pending_too: bool = False) -> list[Item]:
     """The running step fails with the sentence. ``pending_too``: a "Try it" job's one step fails with it even before
-    it ran (a failed start, or a try that never began), since the Nova Reel row shows the step's sentence (§45.35
+    it ran (a failed start, or a try that never began), since the Luma AI Ray2 row shows the step's sentence (§45.35
     D2); a story's later steps stay pending, as before."""
     out = []
     for step in steps:

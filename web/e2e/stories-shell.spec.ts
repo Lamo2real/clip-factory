@@ -676,7 +676,8 @@ test.describe("the pages", () => {
     await expect(yt.locator(".st-auth")).toContainText("Allowed: Lamo Stories may post here.");
     await expect(yt.locator(".st-auth")).toContainText("Last checked");
     await expect(yt).toContainText("Clip Factory posts to: Clip Factory Gaming");
-    await expect(yt.locator(".st-app")).toContainText("Uses Clip Factory's YouTube app, on purpose.");
+    await expect(yt.locator(".st-app")).toContainText("Shares Clip Factory's YouTube app, on purpose. Clip Factory's posts always go first. Stories uses what's left.");
+    await expect(yt.locator(".st-app")).toContainText("Even with Clip Factory's app, sign in with a different account made for Clip Factory Stories.");
     // Check now: a live check, and when it was last checked.
     await yt.getByRole("button", { name: "Check now" }).click();
     await expect(page.locator(".toast").filter({ hasText: "YouTube answered. All good." })).toBeVisible();
@@ -692,26 +693,26 @@ test.describe("the pages", () => {
     await fb.getByRole("button", { name: "Connect Facebook" }).click();
     await expect(page).toHaveURL(/\/stories\/connections$/);
     await expect(page.locator(".toast").filter({ hasText: "Now pick the Facebook Page Lamo Stories posts to." })).toBeVisible();
-    await expect(fb.getByRole("button", { name: /Clip Factory uses this/ })).toBeVisible();
+    await expect(fb.getByRole("button", { name: /Clip Factory's own/ })).toHaveAttribute("aria-disabled", "true");
     await fb.getByRole("button", { name: /^Lamo Stories/ }).click();
     await expect(fb.locator(".st-chip").first()).toHaveText("Connected");
     await expect(fb.locator(".st-who__id code")).toHaveText("109876543210987");
   });
 
-  test("Social accounts: the same place as Clip Factory is only used for both after Are you sure", async ({ page }) => {
+  test("Social accounts: Clip Factory's own account is never shared; every card asks for a new account (§45.37 G8)", async ({ page }) => {
     await on(page);
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/stories/connections");
     await storiesReady(page);
+    // Up front on every card: a new account made for Clip Factory Stories.
+    await expect(page.locator(".st-conn .st-conn__new")).toHaveText(Array(5).fill("Use a new account made for Clip Factory Stories, not lamo.clips."));
     const x = page.locator(".st-conn").filter({ has: page.getByRole("heading", { name: "X" }) });
-    await expect(x).toContainText("This is the same account Lamo Clips posts to.");
-    await x.getByRole("button", { name: "Use it for both" }).click();
-    await expect(x.getByRole("group", { name: "Are you sure?" })).toBeVisible();
-    await x.getByRole("button", { name: "No, keep it as it is" }).click();
-    await expect(x.locator(".st-chip").first()).toHaveText("Same as Clip Factory");
-    await x.getByRole("button", { name: "Use it for both" }).click();
-    await x.getByRole("button", { name: "Yes, use it for both" }).click();
-    await expect(x).toContainText("You chose to use this account for both Clip Factory and Lamo Stories.");
+    await expect(x).toContainText("This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.");
+    await expect(x.locator(".st-chip").first()).toHaveText("Clip Factory's own");
+    // No way to use it for both, anywhere on the page.
+    await expect(page.getByRole("button", { name: /for both/i })).toHaveCount(0);
+    await expect(page.getByText(/use it for both/i)).toHaveCount(0);
+    await expect(x.getByRole("button", { name: "Pick another account" })).toBeVisible();
 
     // Disconnect asks first, and then says where the app can be removed by hand (nothing is revoked).
     const yt = page.locator(".st-conn").filter({ has: page.getByRole("heading", { name: "YouTube" }) });
@@ -738,13 +739,17 @@ test.describe("the pages", () => {
 
     // X: the choice comes first; Connect stays put until an app is picked.
     const x = card("X");
-    await expect(x.getByRole("radiogroup", { name: "Which X app Lamo Stories uses" }).getByRole("radio")).toHaveText([/A separate app for Lamo Stories/, /Clip Factory's app \(quicker\)/]);
+    await expect(x.getByRole("radiogroup", { name: "Which X app Lamo Stories uses" }).getByRole("radio")).toHaveText([
+      /A separate app for Lamo Stories/,
+      /Share Clip Factory's app.*Clip Factory's posts always go first\. Stories uses what's left\. Even with Clip Factory's app, sign in with a different account made for Clip Factory Stories\./,
+    ]);
+    await expect(x).not.toContainText("quicker");
     await expect(x.getByRole("button", { name: "Connect X" })).toHaveAttribute("aria-disabled", "true");
     await x.getByRole("button", { name: "Connect X" }).click({ force: true });
     await expect(page.locator(".toast").filter({ hasText: "Pick which X app Lamo Stories uses first." })).toBeVisible();
-    await x.getByRole("radio", { name: /Clip Factory's app/ }).click();
-    await x.getByRole("button", { name: "Use Clip Factory's app" }).click();
-    await expect(x.locator(".st-app")).toContainText("Uses Clip Factory's X app, on purpose.");
+    await x.getByRole("radio", { name: /Share Clip Factory's app/ }).click();
+    await x.getByRole("button", { name: "Share Clip Factory's app" }).click();
+    await expect(x.locator(".st-app")).toContainText("Shares Clip Factory's X app, on purpose. Clip Factory's posts always go first. Stories uses what's left.");
     await x.getByRole("button", { name: "Connect X" }).click();
     await expect(x.locator(".st-chip").first()).toHaveText("Connected");
 

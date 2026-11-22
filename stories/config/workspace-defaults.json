@@ -1,12 +1,15 @@
 {
-  "$comment": "Lamo Stories' workspace defaults (docs/CONTRACTS.md \u00a745.6 StoriesConfig). The one source: the API's guard reads it when it creates a workspace, and a web test checks it against the StoriesConfig type.",
+  "$comment": "Lamo Stories' workspace defaults (docs/CONTRACTS.md \u00a745.6 StoriesConfig). The one source: the API's guard reads it when it creates a workspace, and a web test checks it against the StoriesConfig type. providers.imageModel, videoModel and audioModel name the model the picked maker uses (\u00a745.37 G1); null is that maker's first model that has not ended.",
   "defaultDurationSec": 45,
   "captionsOn": true,
   "musicOn": true,
   "providers": {
     "images": "builtin-rig",
     "video": "builtin-2d",
-    "audio": "builtin-synth"
+    "audio": "builtin-synth",
+    "imageModel": null,
+    "videoModel": null,
+    "audioModel": null
   },
   "video": {
     "resolution": "1080x1920",

@@ -252,6 +252,12 @@ INTERNAL = (
     "sourceRemovedAt",
     "picturesRemovedAt",
     "checkJobId",  # the "Try it" lock (``CHECKLOCK#``, §45.35 D2)
+    # §45.37: a maker check's writer, a publishing job's raw wait (shown as ``waitingUntil``), the share counters
+    "waitUntil",
+    "sharedExternalAccountId",
+    "requestsThisMinute",
+    "dayPostIds",
+    "blockedReason",
 )
 
 

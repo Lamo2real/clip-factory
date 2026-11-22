@@ -16,7 +16,7 @@ import json
 import math
 import re
 import struct
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -737,9 +737,18 @@ def mix(
     music_volume: float,
     seed: int,
     default_pitch: float = 1.0,
+    effects: Mapping[str, np.ndarray] | None = None,
+    bed: np.ndarray | None = None,
+    voices: Sequence[tuple[float, np.ndarray]] | None = None,
 ) -> np.ndarray:
     """The story's sound as (2, n) float32 at 48 kHz: every event at its time, volume and pan, over the mood's music
-    ducked while effects play. Not loudness-normalized yet (``master`` does that)."""
+    ducked while effects play. Not loudness-normalized yet (``master`` does that).
+
+    A sound maker other than the synth (§45.37 G3) may hand in ``effects`` (an effect id's own made sound, mono at
+    48 kHz, used instead of the synthesized one, held or cut to the event's length), ``bed`` (a made music bed, mono,
+    used instead of the mood's loop under the same ducking) and ``voices`` (spoken lines, ``(start second, mono
+    samples)``, in the middle; the music ducks under them too; only Amazon Polly's opt-in voice makes them). Character
+    noises are always the synth's own wordless ones. Without them the mix is exactly the synth's."""
     n = _n(seconds)
     fx = np.zeros((2, n))
     for i, e in enumerate(sorted(events, key=lambda e: float(e.get("at") or 0))):
@@ -749,6 +758,8 @@ def mix(
             if kind == "noise":
                 voice = hum_sound if e.get("voice") == "hum" else noise_sound  # a hum keeps the mouth closed
                 x = voice(sid, float(e.get("pitch") or default_pitch), rng)
+            elif kind == "sfx" and effects is not None and sid in effects and np.asarray(effects[sid]).size:
+                x = made_effect(np.asarray(effects[sid], dtype=np.float64), sid, e.get("dur"))
             elif kind == "sfx":
                 x = effect_sound(sid, rng, e.get("dur"))
             else:
@@ -762,16 +773,51 @@ def mix(
         stereo = _pan(x, float(e.get("pan") or 0.0)) * vol
         k = min(stereo.shape[1], n - at)
         fx[:, at : at + k] += stereo[:, :k]
+    spoken = np.zeros((2, n))
+    for start, samples in voices or ():
+        at = max(0, round(float(start) * SR))
+        line = np.asarray(samples, dtype=np.float64)
+        if at >= n or not line.size:
+            continue
+        stereo = _pan(_fade(_norm(line), 0.01, 0.05), 0.0) * VOICE_LEVEL
+        k = min(stereo.shape[1], n - at)
+        spoken[:, at : at + k] += stereo[:, :k]
+    fx = fx + spoken
     out = fx
     if mood and mood in MOODS and music_volume > 0:
-        bed = music(mood, seconds, seed).astype(np.float64) * MUSIC_LEVEL * min(1.0, music_volume)
+        if bed is not None and np.asarray(bed).size:
+            under = made_bed(np.asarray(bed, dtype=np.float64), n, seconds)
+        else:
+            under = music(mood, seconds, seed).astype(np.float64)
+        under = under * MUSIC_LEVEL * min(1.0, music_volume)
         duck = 1 - DUCK_DEPTH * np.clip(_envelope(fx.max(axis=0)) / 0.3, 0, 1)
-        out = fx + _pan(bed * duck, 0.0) * math.sqrt(2)
+        out = fx + _pan(under * duck, 0.0) * math.sqrt(2)
     out = compress(out)
     peak = float(np.max(np.abs(out))) if out.size else 0.0
     if peak > 0.98:
         out = out * (0.98 / peak)
     return out.astype(np.float32)
+
+
+VOICE_LEVEL = 0.85  # a spoken line sits above the effects and the music
+
+
+def made_effect(sound: np.ndarray, sfx_id: str, dur: Any) -> np.ndarray:
+    """A made effect at the event's length: an effect that holds (``LOOPING``) is looped or cut to ``dur``, any other
+    keeps its own length (cut only past ``MAX_EFFECT_SECONDS``); peaked like the synth's own effects."""
+    x = sound.astype(np.float64)
+    if dur is not None and sfx_id in LOOPING:
+        want = _n(min(MAX_EFFECT_SECONDS, max(0.2, float(dur))))
+        x = np.tile(x, want // max(1, x.size) + 1)[:want]
+    else:
+        x = x[: _n(MAX_EFFECT_SECONDS)]
+    return _norm(_fade(x))
+
+
+def made_bed(sound: np.ndarray, n: int, seconds: float) -> np.ndarray:
+    """A made music bed at the video's length: looped if it is shorter, faded in and out like the synth's loop."""
+    x = np.tile(sound, n // max(1, sound.size) + 1)[:n] if sound.size else np.zeros(n)
+    return _norm(_fade(x, 0.5, min(2.0, max(0.05, seconds / 4))), 1.0)
 
 
 def compress(stereo: np.ndarray, threshold: float = 0.25, ratio: float = 4.0, release: float = 0.15) -> np.ndarray:

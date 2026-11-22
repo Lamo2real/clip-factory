@@ -47,7 +47,7 @@ def test_built_in_agents_come_from_the_file(wcall: WsCall, table: FakeTable) -> 
     assert agent == {
         "agentId": "creative_director",
         "name": "Creative director",
-        "tasks": ["chat", "brainstorm", "expand_idea", "variations"],
+        "tasks": ["chat", "brainstorm", "expand_idea", "variations", "text_edit"],
         "instructions": default["instructions"],
         "defaultInstructions": default["instructions"],
         "active": True,

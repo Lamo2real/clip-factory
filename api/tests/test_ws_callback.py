@@ -285,6 +285,38 @@ def test_lamo_clips_own_account_is_held_as_same_as_clips(
     account = next(a for a in listed["accounts"] if a["platform"] == platform)
     assert account["connectionStatus"] == "same_as_clips"
     assert account["sharedWithClips"] is False
+    # §45.37 G8: it can never post, and the card says why up front
+    assert account["warning"] == (
+        "This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a "
+        "different one."
+    )
+
+
+@pytest.mark.parametrize("platform", ["tiktok", "x"])
+def test_clip_factorys_account_is_known_by_its_username_too(
+    call: Call,
+    land: Callable[[str, dict[str, str]], str],
+    http: FakeHttp,
+    store: db.Store,
+    table: FakeTable,
+    secrets_client: FakeSecretsManager,
+    platform: str,
+) -> None:
+    """§45.37 G8 (b): Clip Factory's account with another id (TikTok gives each app its own open id) but the same
+    username is still Clip Factory's: held as ``same_as_clips`` at connect, and Clip Factory's items only read."""
+    signed = sup.ws_start(call, platform)
+    http.answers.extend(SUCCESS[platform])
+    assert land(platform, {"code": "C", "state": signed}) == sup.landing(platform, "connected")
+    found = store.get(sup.PK, f"SOCIAL#{platform}") or {}
+    handle = str(found.get("handle") or "")
+    assert handle.startswith("@"), handle
+    sup.clips_account(store, None, platform, accountId="another-app-id", handle=handle.upper())
+    before = snapshot(table)
+    signed = sup.ws_start(call, platform)
+    http.answers.extend(SUCCESS[platform])
+    assert land(platform, {"code": "C", "state": signed}) == sup.landing(platform, "same_as_clips")
+    assert (store.get(sup.PK, f"SOCIAL#{platform}") or {})["connectionStatus"] == "same_as_clips"
+    assert_lamo_clips_untouched(table, before, secrets_client)
 
 
 SEVERAL = {

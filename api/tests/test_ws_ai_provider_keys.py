@@ -11,7 +11,7 @@ import pytest
 
 from clipfactory_api import db
 from clipfactory_api.app import App
-from clipfactory_api.workspaces import provider_keys
+from clipfactory_api.workspaces import hosts, provider_keys
 from clipfactory_api.workspaces import types as ws
 from conftest import STATE_SECRET
 from fakes import FakeSecretsManager, FakeTable
@@ -45,8 +45,10 @@ def keyed(monkeypatch: pytest.MonkeyPatch) -> provider_keys.KeyedProvider:
     return found
 
 
-def test_no_provider_takes_a_key_today(wcall: WsCall, secrets_client: FakeSecretsManager) -> None:
-    assert provider_keys.KEYED == {}
+def test_only_the_keyed_hosts_take_a_key(wcall: WsCall, secrets_client: FakeSecretsManager) -> None:
+    """§45.37 G4: the Anthropic API, an OpenAI-compatible API and ElevenLabs take the owner's key; every maker on
+    Lamo Stories' own AWS access (Bedrock, Polly) never asks for one."""
+    assert set(provider_keys.KEYED) == {"anthropic", "openai_compatible", "elevenlabs"}
     status, body = wcall("PUT", f"{BASE}/providers/runway/key", {"key": KEY})
     assert (status, body["error"]["message"]) == (
         404,
@@ -57,8 +59,31 @@ def test_no_provider_takes_a_key_today(wcall: WsCall, secrets_client: FakeSecret
         400,
         "Amazon Nova Canvas uses Lamo Stories' own AWS access, so it needs no key.",
     )
+    for aws in ("stability", "luma-ray", "polly", "bedrock"):
+        assert wcall("PUT", f"{BASE}/providers/{aws}/key", {"key": KEY})[0] == 400
     assert wcall("PUT", f"{BASE}/providers/Bad_Id/key", {"key": KEY})[0] == 404
     assert secrets_client.writes == []
+
+
+@pytest.mark.parametrize("host", ["anthropic", "openai_compatible", "elevenlabs"])
+def test_a_keyed_hosts_key_is_saved_as_json_under_its_own_name(
+    wcall: WsCall, secrets_client: FakeSecretsManager, table: FakeTable, host: str
+) -> None:
+    where = {"baseUrl": "https://api.groq.com/openai/v1"} if host == "openai_compatible" else {}
+    status, body = wcall("PUT", f"{BASE}/providers/{host}/key", {"key": KEY, **where})
+    assert status == 200, body
+    name = f"cf-prod/workspaces/stories/providers/{host}"
+    # an OpenAI-compatible key names the one address it is for, so it never goes anywhere else
+    assert secrets_client.json(name) == {"key": KEY, **({"origin": "https://api.groq.com"} if where else {})}
+    assert body["provider"]["key"] == {"saved": True, "hint": "4f2a", "savedAt": "2026-11-15T12:00:00.000Z"}
+    assert KEY not in json.dumps(body)
+    assert KEY not in json.dumps(table.all())
+    _, listed = wcall("GET", f"{BASE}/providers")
+    row = next(p for p in listed["providers"] if p["id"] == host)
+    assert row["key"]["saved"] is True
+    assert KEY not in json.dumps(listed)
+    assert wcall("DELETE", f"{BASE}/providers/{host}/key")[0] == 204
+    assert name not in secrets_client.values
 
 
 def test_a_key_is_stored_only_in_secrets_manager(
@@ -137,7 +162,8 @@ def test_the_providers_list_shows_each_keyed_providers_key_state(
     by = {p["id"]: p for p in body["providers"]}
     assert by["runway"]["key"] == {"saved": False, "hint": None, "savedAt": None}
     assert by["runway"]["state"] == "needs_setup"
-    assert all("key" not in p for i, p in by.items() if i != "runway")  # the others take no key
+    keyed = {"runway", "anthropic", "openai_compatible", "elevenlabs"}  # §45.37 G4: the keyed hosts too
+    assert all("key" not in p for i, p in by.items() if i not in keyed)  # the others take no key
     wcall("PUT", f"{BASE}/providers/runway/key", {"key": KEY})
     _, body = wcall("GET", f"{BASE}/providers")
     shown = next(p for p in body["providers"] if p["id"] == "runway")
@@ -148,6 +174,94 @@ def test_the_providers_list_shows_each_keyed_providers_key_state(
     assert next(p for p in body["providers"] if p["id"] == "runway")["key"]["saved"] is False
 
 
-def test_without_a_keyed_provider_the_list_is_the_registry_only(wcall: WsCall) -> None:
+def test_only_the_keyed_rows_carry_a_key(wcall: WsCall) -> None:
+    """The registry's makers on AWS take no key; ElevenLabs' key shows on its sound maker's row, the Anthropic API
+    and an OpenAI-compatible API have their own rows (§45.37 G4)."""
     _, body = wcall("GET", f"{BASE}/providers")
-    assert all("key" not in p for p in body["providers"])
+    keyed = {p["id"] for p in body["providers"] if "key" in p}
+    assert keyed == {"elevenlabs", "anthropic", "openai_compatible"}
+    assert next(p for p in body["providers"] if p["id"] == "elevenlabs")["kind"] == "audio"
+
+
+GROQ = "https://api.groq.com/openai/v1"
+TOGETHER = "https://api.together.xyz/v1"
+REASONING = {
+    "label": "Llama on Groq",
+    "provider": "Meta",
+    "host": "openai_compatible",
+    "baseUrl": GROQ,
+    "modelId": "meta-llama/llama-4-maverick",
+    "efforts": [],
+    "vision": False,
+    "maxOutputTokens": 8000,
+    "effortField": "none",
+}
+PICTURE_ON_OTHER = {
+    "kind": "image",
+    "label": "Pictures on Together",
+    "provider": "Black Forest Labs",
+    "host": "openai_compatible",
+    "baseUrl": TOGETHER,
+    "modelId": "black-forest-labs/flux-pro",
+}
+
+
+def test_the_openai_compatible_key_only_ever_goes_to_its_one_address(
+    wcall: WsCall, secrets_client: FakeSecretsManager, table: FakeTable
+) -> None:
+    """The reviewer's G4 major: one key per OpenAI-compatible host, so every model there must use the address the key
+    is for; another address is refused (409) until that key is removed, and the secret names its address for the
+    agent to check before every call."""
+    name = "cf-prod/workspaces/stories/providers/openai_compatible"
+    status, body = wcall("PUT", f"{BASE}/providers/openai_compatible/key", {"key": KEY})
+    assert (status, body["error"]["message"]) == (409, provider_keys.NEED_MODEL_FIRST)
+    assert wcall("PUT", f"{BASE}/ai/models/custom-llama", REASONING)[0] == 200
+    status, body = wcall("PUT", f"{BASE}/providers/openai_compatible/key", {"key": KEY})
+    assert status == 200, body
+    assert secrets_client.json(name) == {"key": KEY, "origin": "https://api.groq.com"}
+    assert body["provider"]["line"].startswith("Key saved for api.groq.com · ends 4f2a.")
+    assert table.raw(pk(), "PROVCRED#openai_compatible")["forOrigin"] == "https://api.groq.com"
+    assert "forOrigin" not in json.dumps(body)  # internal: only the host name, in the line
+    # a second service: refused while the first one's model is there
+    status, body = wcall("PUT", f"{BASE}/makers/models/custom-flux", PICTURE_ON_OTHER)
+    assert (status, body["error"]["message"]) == (409, hosts.ONE_SERVICE.format(host="api.groq.com"))
+    # moving the only model to another address: refused while the key is for the first one
+    status, body = wcall("PUT", f"{BASE}/ai/models/custom-llama", {**REASONING, "baseUrl": TOGETHER})
+    assert (status, body["error"]["message"]) == (
+        409,
+        hosts.KEY_FOR_OTHER.format(saved="api.groq.com", host="api.together.xyz"),
+    )
+    # the same address (another path) is fine
+    assert wcall("PUT", f"{BASE}/ai/models/custom-llama", {**REASONING, "baseUrl": GROQ + "/"})[0] == 200
+    # remove the key: then the model may move, and the new key is for the new address
+    assert wcall("DELETE", f"{BASE}/providers/openai_compatible/key")[0] == 204
+    assert wcall("PUT", f"{BASE}/ai/models/custom-llama", {**REASONING, "baseUrl": TOGETHER})[0] == 200
+    status, body = wcall("PUT", f"{BASE}/providers/openai_compatible/key", {"key": KEY, "baseUrl": GROQ})
+    assert (status, body["error"]["message"]) == (409, hosts.ONE_SERVICE.format(host="api.together.xyz"))
+    assert wcall("PUT", f"{BASE}/providers/openai_compatible/key", {"key": KEY})[0] == 200
+    assert secrets_client.json(name) == {"key": KEY, "origin": "https://api.together.xyz"}
+    status, body = wcall("PUT", f"{BASE}/providers/elevenlabs/key", {"key": KEY, "baseUrl": GROQ})
+    assert (status, body["error"]["message"]) == (400, provider_keys.BASE_URL_ONLY_FOR_OPENAI)
+
+
+def test_a_keyed_hosts_row_is_on_once_a_model_there_answered_its_check(wcall: WsCall, store: db.Store) -> None:
+    """The reviewer's G4 major: the Anthropic API's (and an OpenAI-compatible API's) row reads the checks of the
+    models the owner added there, made since the key was saved; nobody writes ``PROVIDER#writer#anthropic``."""
+    opus = {**REASONING, "label": "Opus on the Anthropic API", "provider": "Anthropic", "host": "anthropic",
+            "modelId": "claude-opus-5-5", "effortField": "output_config", "efforts": ["low", "high"]}  # fmt: skip
+    opus.pop("baseUrl")
+    assert wcall("PUT", f"{BASE}/ai/models/custom-opus", opus)[0] == 200
+    seed(store, "MODELSTATUS#custom-opus", ws.TYPE_MODELSTATUS, model="custom-opus", status="error",
+         line="No key yet.", checkedAt="2026-11-15T11:00:00.000Z", by="check")  # fmt: skip
+    assert wcall("PUT", f"{BASE}/providers/anthropic/key", {"key": KEY})[0] == 200  # saved at 12:00
+    rows = {p["id"]: p for p in wcall("GET", f"{BASE}/providers")[1]["providers"]}
+    assert rows["anthropic"]["state"] == "needs_setup"  # the check before the key says nothing of it
+    seed(store, "MODELSTATUS#custom-opus", ws.TYPE_MODELSTATUS, model="custom-opus", status="ok", line="Works.",
+         checkedAt="2026-11-15T12:05:00.000Z", by="check")  # fmt: skip
+    rows = {p["id"]: p for p in wcall("GET", f"{BASE}/providers")[1]["providers"]}
+    assert (rows["anthropic"]["state"], rows["anthropic"]["checkedAt"]) == ("on", "2026-11-15T12:05:00.000Z")
+    seed(store, "MODELSTATUS#custom-opus", ws.TYPE_MODELSTATUS, model="custom-opus", status="denied",
+         line="Anthropic says the key is not valid.", checkedAt="2026-11-15T12:10:00.000Z", by="check")  # fmt: skip
+    row = {p["id"]: p for p in wcall("GET", f"{BASE}/providers")[1]["providers"]}["anthropic"]
+    assert (row["state"], row["line"]) == ("needs_setup", "Anthropic says the key is not valid.")
+    assert KEY not in json.dumps(row)

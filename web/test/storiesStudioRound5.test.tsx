@@ -673,7 +673,9 @@ describe("a model the studio knows cannot be used is never pre-picked (§45.36 E
 
 describe("one name on screen: Clip Factory, and accounts by their place (§45.36 E13)", () => {
   it("the publish sheet's words", () => {
-    expect(accountState(account("x", "same_as_clips", "Lamo Stories"))).toBe("This is Clip Factory's account. Decide in Social accounts.");
+    // §45.37 G8: nothing to decide about Clip Factory's own account; a different one made for Clip Factory Stories.
+    expect(accountState(account("x", "same_as_clips", "Lamo Stories"))).toBe("This is Clip Factory's own account. Connect a different account made for Clip Factory Stories in Social accounts.");
+    expect(accountState(account("x", "same_as_clips", "Lamo Stories"))).not.toMatch(/Lamo Clips/);
     expect(checkProblem(account("x", "connected", "Lamo Stories"), account("x", "same_as_clips", "Lamo Stories"))).toContain("is Clip Factory's own account right now");
     expect(thisAccount("tiktok", "Lamo Stories")).toBe("this TikTok account (Lamo Stories)");
     expect(thisAccount("youtube", null)).toBe("this YouTube account");

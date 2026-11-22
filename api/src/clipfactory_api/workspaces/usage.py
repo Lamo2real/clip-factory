@@ -13,8 +13,11 @@ model row: it is summed into ``byProvider`` per day and ``totalsByProvider``, ea
 currency}``. The agent writes ``kind: "provider"`` with ``provider``, ``units`` and ``unit``; an older item's
 ``providerId`` with ``images``, ``videoSec`` or ``renderSec`` is read the same way. The built-in makers run on Lamo
 Stories' own computer: their seconds count as ``builtin-rig``, priced 0 with ``currency: null``, and are the day's
-``renderMinutes``. Nova Canvas and Nova Reel are priced by the owner's per-picture or per-second price (PUT ``…/ai``
-``prices``), else by the cost the agent recorded on the item, else not at all (``cost: null``).
+``renderMinutes``. Every other maker's use is priced per item (§45.37 G1, G2): by the price of the very model that
+made it (the item's ``modelId``: a bundled model's ``price`` or the owner's own ``MAKERDEF#`` price, when its unit
+is the item's), else by the owner's per-unit price of the maker (PUT ``…/ai`` ``prices``: per picture, per second of
+video or sound, per character spoken), else by the cost the agent recorded on the item, else not at all (``cost:
+null``). Units are pictures (``image``), seconds (``second``) and characters spoken (``character``, Amazon Polly).
 """
 
 from __future__ import annotations
@@ -72,6 +75,7 @@ def summary(store: db.Store, user_id: str, workspace_id: str, days: int, now: da
     """``UsageSummary``: the last ``days`` days (oldest first, every day listed), per model and per provider, and
     the totals."""
     ai = cfg.current(store, user_id, workspace_id)
+    prices = model_prices(store, user_id, workspace_id)
     out_days = []
     totals: dict[str, dict[str, Any]] = {}
     provider_totals: dict[tuple[str, str], dict[str, Any]] = {}
@@ -86,7 +90,7 @@ def summary(store: db.Store, user_id: str, workspace_id: str, days: int, now: da
                 for provider, units, unit in provider_units(item):
                     if provider in BUILTIN and unit == "second":
                         day_render += units
-                    _add_provider(by_provider, (provider, unit), units, item=item, ai=ai)
+                    _add_provider(by_provider, (provider, unit), units, item=item, ai=ai, prices=prices)
                 continue
             key = str(item.get("model") or "")
             if not key:
@@ -140,7 +144,7 @@ def _num(value: Any) -> float | None:
 # The built-in makers (§45.34): free, on Lamo Stories' own computer; their render seconds count as ``builtin-rig``.
 BUILTIN: Final = ("builtin-rig", "builtin-2d", "builtin-synth")
 BUILTIN_RENDER: Final = "builtin-rig"
-UNITS: Final = ("image", "second")
+UNITS: Final = ("image", "second", "character")
 OLD_UNITS: Final = (("images", "image"), ("videoSec", "second"), ("renderSec", "second"))
 
 
@@ -163,11 +167,42 @@ def provider_units(item: Mapping[str, Any]) -> list[tuple[str, float, str]]:
 
 
 def _provider_price(provider: str, unit: str, ai: Mapping[str, Any]) -> float | None:
-    """The owner's per-picture or per-second price of a provider (§45.34), else None."""
+    """The owner's per-picture, per-second or per-character price of a provider (§45.34), else None."""
     price = (ai.get("prices") or {}).get(provider)
     if not isinstance(price, Mapping) or price.get("unit") != unit:
         return None
     return _num(price.get("perUnit"))
+
+
+Prices = Mapping[tuple[str, str], Mapping[str, Any]]
+
+
+def model_prices(store: db.Store, user_id: str, workspace_id: str) -> dict[tuple[str, str], dict[str, Any]]:
+    """``(maker, modelId)`` → the price of that maker model (bundled, or the owner's own ``MAKERDEF#``), where it has
+    one."""
+    from . import makers
+
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    for m in makers.all_models(makers.custom(store, user_id, workspace_id)):
+        price = m.get("price")
+        if isinstance(price, Mapping) and m.get("modelId"):
+            out[(str(m.get("maker") or ""), str(m["modelId"]))] = dict(price)
+    return out
+
+
+def _item_price(
+    provider: str, unit: str, item: Mapping[str, Any], ai: Mapping[str, Any], prices: Prices
+) -> tuple[float, str] | None:
+    """The price of one use: the model that made it, else the owner's price of the maker."""
+    model_id = str(item.get("modelId") or "")
+    found = prices.get((provider, model_id)) if model_id else None
+    if found is not None and found.get("unit") == unit and _num(found.get("perUnit")) is not None:
+        return float(found["perUnit"]), str(found.get("currency") or "USD")
+    per_unit = _provider_price(provider, unit, ai)
+    if per_unit is not None:
+        owner = (ai.get("prices") or {}).get(provider) or {}
+        return per_unit, str(owner.get("currency") or "USD")
+    return None
 
 
 def _add_provider(
@@ -177,36 +212,39 @@ def _add_provider(
     *,
     item: Mapping[str, Any],
     ai: Mapping[str, Any],
+    prices: Prices | None = None,
 ) -> None:
-    """One provider usage into its row: free for a built-in maker, else the owner's price, else the cost the agent
-    recorded on the item (only when the item is about this one provider), else no cost."""
+    """One provider usage into its row: free for a built-in maker, else the price of the model that made it, else
+    the owner's price of the maker, else the cost the agent recorded on the item (only when the item is about this
+    one provider), else no cost (and then the row's sum is not known)."""
     provider, unit = which
     row = by_provider.get((provider, unit))
+    first = row is None
     if row is None:
         row = {"provider": provider, "units": 0.0, "unit": unit, "cost": None, "currency": None}
         if provider in BUILTIN:
             row["cost"] = 0.0
-        elif _provider_price(provider, unit, ai) is not None:
-            owner = (ai.get("prices") or {}).get(provider) or {}
-            row.update(cost=0.0, currency=str(owner.get("currency") or "USD"))
         by_provider[(provider, unit)] = row
     row["units"] += units
     if provider in BUILTIN:
         return
-    per_unit = _provider_price(provider, unit, ai)
-    if per_unit is not None:
-        if row["cost"] is not None:
-            row["cost"] += units * per_unit
+    priced = _item_price(provider, unit, item, ai, prices or {})
+    if priced is not None:
+        amount, currency = units * priced[0], priced[1]
+    else:
+        cost, recorded = _num(item.get("cost")), item.get("currency")
+        if cost is None or cost < 0 or not isinstance(recorded, str) or not recorded:
+            row["cost"], row["currency"], row["unknown"] = None, None, True  # one unpriced use: the sum is not known
+            return
+        amount, currency = cost, recorded
+    if row.get("unknown"):
         return
-    cost, currency = _num(item.get("cost")), item.get("currency")
-    if cost is None or cost < 0 or not isinstance(currency, str) or not currency:
-        if row["cost"] is not None and row["currency"] is not None:
-            row["cost"], row["currency"] = None, None  # one unpriced use: the sum is not known
-        return
-    if row["cost"] is None and row["units"] == units:
-        row.update(cost=0.0, currency=currency)
-    if row["cost"] is not None and row["currency"] == currency:
-        row["cost"] += cost
+    if first:
+        row.update(cost=amount, currency=currency)
+    elif row["cost"] is not None and row["currency"] == currency:
+        row["cost"] += amount
+    else:
+        row["cost"], row["currency"], row["unknown"] = None, None, True  # two currencies: no one sum
 
 
 def _rounded_provider(row: Mapping[str, Any]) -> dict[str, Any]:

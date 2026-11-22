@@ -74,11 +74,12 @@ const CASES: Case[] = [
   ["providers", (a) => a.providers("stories"), "GET", `${B}/stories/providers`, undefined, { providers: [28] }, [28]],
   // Nova Reel's Try it (§45.35 D2, builder W4b): one 6-second test shot, a provider_check job.
   ["tryNovaReel", (a) => a.tryNovaReel("stories"), "POST", `${B}/stories/providers/nova-reel/check`, undefined, { job: 28.5 }, 28.5],
+  // §45.37: Try it moved to Luma AI Ray2 (one 5-second test shot), the same route shape by the maker's id.
+  ["tryMaker", (a) => a.tryMaker("stories", "luma-ray"), "POST", `${B}/stories/providers/luma-ray/check`, undefined, { job: 28.6 }, 28.6],
   ["guidance", (a) => a.guidance("stories"), "GET", `${B}/stories/guidance`, undefined, { topics: [], checkedAt: "c" }, { topics: [], checkedAt: "c" }],
   ["social", (a) => a.social("stories"), "GET", `${B}/stories/social`, undefined, { accounts: [], clips: [] }, { accounts: [], clips: [] }],
   ["connectSocial", (a) => a.connectSocial("stories", "youtube"), "POST", `${B}/stories/social/youtube/connect`, undefined, { authorizeUrl: "https://a", expiresAt: "e" }, { authorizeUrl: "https://a", expiresAt: "e" }],
   ["chooseSocial", (a) => a.chooseSocial("stories", "instagram", "p1"), "POST", `${B}/stories/social/instagram/choose`, { choiceId: "p1" }, { account: 29 }, 29],
-  ["shareWithClips", (a) => a.shareWithClips("stories", "x"), "POST", `${B}/stories/social/x/share`, { confirm: true }, { account: 30 }, 30],
   ["checkSocial", (a) => a.checkSocial("stories", "tiktok"), "POST", `${B}/stories/social/tiktok/check`, undefined, { account: 31 }, 31],
   ["tiktokCreatorInfo", (a) => a.tiktokCreatorInfo("stories"), "GET", `${B}/stories/social/tiktok/creator-info`, undefined, { creator: 32 }, 32],
   ["disconnectSocial", (a) => a.disconnectSocial("stories", "facebook"), "DELETE", `${B}/stories/social/facebook`, undefined, null, undefined],
@@ -92,6 +93,27 @@ const CASES: Case[] = [
   ["deleteAiModel", (a) => a.deleteAiModel("stories", "custom-nova-premier"), "DELETE", `${B}/stories/ai/models/custom-nova-premier`, undefined, null, undefined],
   ["checkModels", (a) => a.checkModels("stories", ["opus-5-5"]), "POST", `${B}/stories/ai/check-models`, { models: ["opus-5-5"] }, { task: 44 }, 44],
   ["setModelPrice", (a) => a.setModelPrice("stories", "opus-5-5", null), "PUT", `${B}/stories/ai/prices/opus-5-5`, {}, { model: 45 }, 45],
+  // §45.37 G1, G2: the picture, video and sound makers' models, and the owner's own, come on the maker rows of
+  // GET …/providers (there is no route of their own), each once.
+  [
+    "makerModels",
+    (a) => a.makerModels("stories"),
+    "GET",
+    `${B}/stories/providers`,
+    undefined,
+    { providers: [{ id: "builtin-rig" }, { id: "stability", models: [{ key: "stable-image-core" }] }, { id: "own-images", models: [{ key: "custom-paint" }, { key: "stable-image-core" }] }, { id: "anthropic", key: { saved: true } }] },
+    [{ key: "stable-image-core" }, { key: "custom-paint" }],
+  ],
+  [
+    "putMakerModel",
+    (a) => a.putMakerModel("stories", "custom-rain", { label: "Rain", provider: "ElevenLabs", kind: "audio", host: "elevenlabs", modelId: "eleven_text_to_sound_v2", price: null, note: "" }),
+    "PUT",
+    `${B}/stories/makers/models/custom-rain`,
+    { label: "Rain", provider: "ElevenLabs", kind: "audio", host: "elevenlabs", modelId: "eleven_text_to_sound_v2", price: null, note: "" },
+    { model: 452 },
+    452,
+  ],
+  ["deleteMakerModel", (a) => a.deleteMakerModel("stories", "custom-rain"), "DELETE", `${B}/stories/makers/models/custom-rain`, undefined, null, undefined],
   ["usage", (a) => a.usage("stories", 30), "GET", `${B}/stories/usage?days=30`, undefined, { usage: 46 }, 46],
   ["getAgent", (a) => a.getAgent("stories", "storyboard"), "GET", `${B}/stories/agents/storyboard`, undefined, { agent: 47 }, 47],
   ["patchAgent", (a) => a.patchAgent("stories", "character", { reset: true }), "PATCH", `${B}/stories/agents/character`, { reset: true }, { agent: 48 }, 48],
@@ -141,6 +163,21 @@ describe("every Lamo Stories route", () => {
   it("covers every method of StoriesApi", () => {
     const { api } = fake();
     expect(CASES.map((c) => c[0]).sort()).toEqual(Object.keys(api).sort());
+  });
+
+  it("offers no way to share an account with Clip Factory (§45.37 G8, the owner's hard rule)", () => {
+    const { api } = fake();
+    expect(Object.keys(api)).not.toContain("shareWithClips");
+    expect(Object.keys(api).filter((k) => /share/i.test(k))).toEqual([]);
+    expect(CASES.some((c) => c[3].includes("/share"))).toBe(false);
+  });
+
+  it("Check models sends the makers' models apart from the AI models, and either alone (§45.37 G2)", async () => {
+    const { api, calls } = fake(() => ({ status: 200, body: { task: 1 } }));
+    await api.checkModels("stories", undefined, ["stable-image-core", "luma-ray2"]);
+    await api.checkModels("stories", ["opus-5-5"], ["polly-neural"]);
+    await api.checkModels("stories");
+    expect(calls.map((c) => c.body)).toEqual([{ makers: ["stable-image-core", "luma-ray2"] }, { models: ["opus-5-5"], makers: ["polly-neural"] }, {}]);
   });
 
   for (const [name, run, method, url, body, answer, result] of CASES)

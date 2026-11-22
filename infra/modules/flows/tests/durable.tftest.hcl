@@ -300,7 +300,7 @@ run "alias_arns_are_the_outputs" {
 
 # docs/CONTRACTS.md §45.15, ADR-73: cf-prod-story-flow, Lamo Stories' publisher. Durable for longer than the 7-day
 # numbers, its own role (not clip-flow's statements): DynamoDB writes only under USER#*#WS#* and RATE#*, reads on
-# USER#*#WS#*, USER#*#WSREG and RATE#*, plus GetItem of five attributes on USER#* (Lamo Clips' ACCOUNT#), the table
+# USER#*#WS#*, USER#*#WSREG and RATE#*, plus GetItem of seven attributes on USER#* (Lamo Clips' ACCOUNT# and settings' autoPost), the table
 # only; S3 GetObject on ws/* only; the workspace secrets and Clip Factory's YouTube, TikTok and X app keys read, a
 # workspace token put back; no Bedrock, no Delete, no Scan. IAM patterns are checked as globs against sample ARNs and
 # keys: "*" becomes ".*" and "?" becomes "." in an anchored regex, dots escaped.
@@ -316,8 +316,8 @@ run "story_flow_is_kept_apart" {
   }
 
   assert {
-    condition     = one(aws_lambda_function.fn["story-flow"].durable_config).execution_timeout == 777600
-    error_message = "story-flow execution_timeout must be 777600 s (9 days: the 7-day numbers and the publish loops)."
+    condition     = one(aws_lambda_function.fn["story-flow"].durable_config).execution_timeout == 3456000
+    error_message = "story-flow execution_timeout must be 3456000 s (40 days: the 7-day numbers, the publish loops and a post waiting for room on Clip Factory's shared app, §45.37 G6)."
   }
 
   assert {
@@ -374,9 +374,9 @@ run "story_flow_is_kept_apart" {
       for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement :
       s.Resource == ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"] &&
       s.Condition == { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["USER#*#WS#*", "RATE#*"] } }
-      if anytrue([for a in flatten([s.Action]) : contains(["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:BatchWriteItem", "dynamodb:TransactWriteItems", "dynamodb:ConditionCheckItem"], a)])
+      if s.Effect == "Allow" && anytrue([for a in flatten([s.Action]) : contains(["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:BatchWriteItem", "dynamodb:TransactWriteItems", "dynamodb:ConditionCheckItem"], a)])
     ])
-    error_message = "Every story-flow DynamoDB write is limited by dynamodb:LeadingKeys to USER#*#WS#* and RATE#*, on the table only."
+    error_message = "Every story-flow DynamoDB write Allow is limited by dynamodb:LeadingKeys to USER#*#WS#* and RATE#*, on the table only."
   }
 
   assert {
@@ -385,9 +385,9 @@ run "story_flow_is_kept_apart" {
         for key in ["USER#u1", "OAUTH#n1", "HOOK#h1", "USER#u1#WSREG"] : !anytrue([
           for r in try(s.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"], ["*"]) : can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", key))
         ])
-      ] if anytrue([for a in flatten([s.Action]) : contains(["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:TransactWriteItems", "dynamodb:ConditionCheckItem"], a)])
+      ] if s.Effect == "Allow" && anytrue([for a in flatten([s.Action]) : contains(["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:TransactWriteItems", "dynamodb:ConditionCheckItem"], a)])
     ]))
-    error_message = "No story-flow write reaches Lamo Clips' USER#{userId} partition, the workspace registry or any other partition."
+    error_message = "No story-flow write Allow reaches Lamo Clips' USER#{userId} partition, the workspace registry or any other partition."
   }
 
   assert {
@@ -419,11 +419,11 @@ run "story_flow_is_kept_apart" {
       s.Resource == ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"] &&
       s.Condition == {
         "ForAllValues:StringLike"   = { "dynamodb:LeadingKeys" = ["USER#*"] }
-        "ForAllValues:StringEquals" = { "dynamodb:Attributes" = ["pk", "sk", "platform", "status", "accountId"] }
+        "ForAllValues:StringEquals" = { "dynamodb:Attributes" = ["pk", "sk", "platform", "status", "accountId", "handle", "autoPost"] }
         "StringEqualsIfExists"      = { "dynamodb:Select" = "SPECIFIC_ATTRIBUTES", "dynamodb:ReturnValues" = "NONE" }
       }
     ])
-    error_message = "story-flow reads Lamo Clips' ACCOUNT# items only with GetItem of pk, sk, platform, status and accountId."
+    error_message = "story-flow reads Lamo Clips' items only with GetItem of pk, sk, platform, status, accountId, handle and autoPost (§45.37 G6, G8)."
   }
 
   # Every statement that reaches Lamo Clips' own partition (USER#u1) is that attribute-limited GetItem: no Query, no
@@ -431,12 +431,12 @@ run "story_flow_is_kept_apart" {
   assert {
     condition = alltrue([
       for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement :
-      flatten([s.Action]) == ["dynamodb:GetItem"] && try(s.Condition["ForAllValues:StringEquals"]["dynamodb:Attributes"], []) == ["pk", "sk", "platform", "status", "accountId"]
-      if anytrue([for a in flatten([s.Action]) : startswith(a, "dynamodb:")]) && anytrue([
+      flatten([s.Action]) == ["dynamodb:GetItem"] && try(s.Condition["ForAllValues:StringEquals"]["dynamodb:Attributes"], []) == ["pk", "sk", "platform", "status", "accountId", "handle", "autoPost"]
+      if s.Effect == "Allow" && anytrue([for a in flatten([s.Action]) : startswith(a, "dynamodb:")]) && anytrue([
         for r in try(s.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"], ["*"]) : can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", "USER#u1"))
       ])
     ])
-    error_message = "story-flow reaches USER#{userId} (Lamo Clips) only through the five-attribute GetItem."
+    error_message = "story-flow reaches USER#{userId} (Lamo Clips) only through the attribute-limited GetItem (a Deny grants nothing)."
   }
 
   assert {
@@ -448,7 +448,7 @@ run "story_flow_is_kept_apart" {
 
   assert {
     condition = toset(flatten([
-      for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : s.Resource if contains(flatten([s.Action]), "secretsmanager:GetSecretValue")
+      for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : s.Resource if s.Effect == "Allow" && contains(flatten([s.Action]), "secretsmanager:GetSecretValue")
       ])) == toset([
       "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/*",
       "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/youtube/app*",
@@ -556,6 +556,64 @@ run "story_flow_is_kept_apart" {
   }
 }
 
+# §45.37 G4 and G6 (a): two in-place Denys on story-flow's own role policy. The owner's AI provider keys are the
+# agent's alone (the publisher never reads <name>/workspaces/*/providers/*), and Clip Factory's own rate counters
+# (RATE#{platform}) are never written by Lamo Stories (its own are all RATE#WS#…). No Allow changes.
+run "story_flow_never_reads_provider_keys_or_writes_clip_factorys_counters" {
+  command = plan
+
+  assert {
+    condition = [for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : s if try(s.Sid, "") == "NoProviderKeys"] == [{
+      Sid      = "NoProviderKeys"
+      Effect   = "Deny"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/*/providers/*"]
+    }]
+    error_message = "story-flow has exactly one NoProviderKeys statement: Effect Deny, GetSecretValue, <name>/workspaces/*/providers/*."
+  }
+
+  assert {
+    condition = alltrue([
+      for sample in ["cf-test/workspaces/stories/providers/anthropic", "cf-test/workspaces/01JD0000000000000000000000/providers/elevenlabs-AbC123"] : anytrue([
+        for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : anytrue([
+          for r in flatten([s.Resource]) : can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", "arn:aws:secretsmanager:eu-north-1:123456789012:secret:${sample}"))
+        ]) if s.Effect == "Deny" && contains(flatten([s.Action]), "secretsmanager:GetSecretValue")
+      ])
+      ]) && !anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : anytrue([
+        for r in flatten([s.Resource]) : can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/stories/youtube/token"))
+      ]) if s.Effect == "Deny"
+    ])
+    error_message = "The Deny covers every workspace's provider keys (bare and suffixed) and never a workspace token."
+  }
+
+  assert {
+    condition = [for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : s if try(s.Sid, "") == "NoClipsRateWrites"] == [{
+      Sid       = "NoClipsRateWrites"
+      Effect    = "Deny"
+      Action    = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:TransactWriteItems"]
+      Resource  = ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"]
+      Condition = { "ForAnyValue:StringEquals" = { "dynamodb:LeadingKeys" = ["RATE#youtube", "RATE#tiktok", "RATE#x", "RATE#instagram", "RATE#facebook"] } }
+    }]
+    error_message = "story-flow has exactly one NoClipsRateWrites statement: Effect Deny on Clip Factory's RATE#{platform} counters, any write."
+  }
+
+  assert {
+    condition = alltrue([
+      for key in ["RATE#WS#~shared#youtube", "RATE#WS#stories#x"] : !anytrue([
+        for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement :
+        contains(try(s.Condition["ForAnyValue:StringEquals"]["dynamodb:LeadingKeys"], []), key) if s.Effect == "Deny"
+      ])
+    ])
+    error_message = "Lamo Stories' own counters (RATE#WS#…, the shared-app one too) stay writable."
+  }
+
+  assert {
+    condition     = aws_iam_role_policy.fn["story-flow"].name == "least-privilege" && aws_iam_role.fn["story-flow"].name == "cf-test-fn-story-flow"
+    error_message = "The Denys are an in-place change of story-flow's own role policy (same role, same policy name)."
+  }
+}
+
 # docs/CONTRACTS.md §40.5.11: clip-flow can read <name>/platforms/*, so an in-place Deny keeps it off Your bank's
 # secrets (the bank key and each bank link's session); only clip-flow gets it, and no Allow changes.
 run "clip_flow_never_reads_bank_secrets" {
@@ -574,10 +632,10 @@ run "clip_flow_never_reads_bank_secrets" {
   assert {
     condition = alltrue(flatten([
       for k, p in aws_iam_role_policy.fn : [
-        for s in jsondecode(p.policy).Statement : s.Effect == "Allow" if k != "clip-flow" || try(s.Sid, "") != "NoBankSecrets"
+        for s in jsondecode(p.policy).Statement : s.Effect == "Allow" if !(k == "clip-flow" && try(s.Sid, "") == "NoBankSecrets") && !(k == "story-flow" && contains(["NoProviderKeys", "NoClipsRateWrites"], try(s.Sid, "")))
       ]
     ]))
-    error_message = "Only clip-flow gets the Deny; every other statement stays an Allow."
+    error_message = "Only clip-flow gets the bank Deny and story-flow its two (§45.37 G4, G6); every other statement stays an Allow."
   }
 
   assert {

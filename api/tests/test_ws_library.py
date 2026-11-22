@@ -146,7 +146,12 @@ def test_a_key_outside_the_workspace_is_never_presigned(call: Call, store: db.St
 def _providers(call: Call) -> dict[tuple[str, str], dict[str, Any]]:
     status, body = call("GET", f"{BASE}/providers")
     assert status == 200
-    assert [(p["kind"], p["id"]) for p in body["providers"]] == [(p.kind, p.id) for p in providers.REGISTRY]
+    # the registry in order, then the keyed hosts' own rows (§45.37 G4: the Anthropic API, an OpenAI-compatible API)
+    assert [(p["kind"], p["id"]) for p in body["providers"]] == [
+        *((p.kind, p.id) for p in providers.REGISTRY),
+        ("writer", "anthropic"),
+        ("writer", "openai_compatible"),
+    ]
     return {(p["kind"], p["id"]): p for p in body["providers"]}
 
 
@@ -161,43 +166,66 @@ def test_built_ins_are_on_ai_providers_only_after_a_real_call(call: Call, store:
     for key in (("images", "builtin-rig"), ("animation", "builtin-2d"), ("audio", "builtin-synth")):
         assert states[key]["state"] == "on"
         assert "checkedAt" not in states[key]
-    # The writer is on only once a model answered; Nova Canvas is off until picked; Nova Reel is built but needs its
-    # United States bucket, picked or not (never "pick it to use it": picking it would not make it work).
+    # The writer is on only once a model answered; Amazon Nova Canvas and Nova Reel have ended (§45.37 G7), each with
+    # its one-tap replacement; Stability AI is off until picked; Luma AI Ray2 is built but needs its United States
+    # (Oregon) bucket, picked or not (never "pick it to use it": picking it would not make it work).
     assert states[("writer", "bedrock-claude")]["state"] == "needs_setup"
     assert "Check models" in states[("writer", "bedrock-claude")]["line"]
-    assert states[("images", "nova-canvas")]["state"] == "off"
-    unpicked_reel = states[("animation", "nova-reel")]
-    assert unpicked_reel["state"] == "needs_setup"
-    assert "United States" in unpicked_reel["line"]
-    assert unpicked_reel["line"] != providers.OFF_LINE
+    for key, replacement in ((("images", "nova-canvas"), "stability"), (("animation", "nova-reel"), "luma-ray")):
+        ended = states[key]
+        assert (ended["state"], ended["line"], ended["replacement"]) == (
+            "ended",
+            "Ended by Amazon on 30 Sep 2026.",
+            replacement,
+        )
+        assert ended["models"][0]["endedLine"] == "Ended by Amazon on 30 Sep 2026"
+    assert states[("images", "stability")]["state"] == "off"
+    assert [m["key"] for m in states[("images", "stability")]["models"]] == [
+        "stable-image-core",
+        "stable-image-ultra",
+        "sd3-5-large",
+    ]
+    assert all(m["regionLine"] == "Runs in the US (Oregon)" for m in states[("images", "stability")]["models"])
+    unpicked_ray = states[("animation", "luma-ray")]
+    assert unpicked_ray["state"] == "needs_setup"
+    assert unpicked_ray["line"] == providers.LUMA_NOT_READY
+    assert "United States (Oregon)" in unpicked_ray["line"]
+    assert unpicked_ray["line"] != providers.OFF_LINE
+    assert states[("audio", "polly")]["line"] == (
+        "Off. Adds words spoken aloud. Your videos are made without a voice unless you pick this."
+    )
+    assert states[("audio", "polly")]["label"] == "A spoken voice (Amazon Polly)"
+    assert all(not row["picked"] for key, row in states.items() if "picked" in row and not key[1].startswith("builtin"))
     seed_item(store, "PROVIDER#writer#bedrock-claude", "ws_provider", state="on")  # no checkedAt: not proven
     seed_item(store, "MODELSTATUS#fable-5-2", "ws_modelstatus", status="denied", checkedAt="2026-11-15T11:10:00.000Z")
     assert _providers(call)[("writer", "bedrock-claude")]["state"] == "needs_setup"
     seed_item(store, "MODELSTATUS#opus-5-5", "ws_modelstatus", status="ok", checkedAt="2026-11-15T11:20:00.000Z")
     writer = _providers(call)[("writer", "bedrock-claude")]
     assert (writer["state"], writer["checkedAt"]) == ("on", "2026-11-15T11:20:00.000Z")
-    _pick(call, {"images": "nova-canvas", "video": "nova-reel"})
+    _pick(call, {"images": "stability", "imageModel": "sd3-5-large", "video": "luma-ray"})
     states = _providers(call)
-    assert states[("images", "nova-canvas")]["state"] == "needs_setup"
-    reel = states[("animation", "nova-reel")]
-    assert reel["state"] == "needs_setup"
-    assert "United States" in reel["line"]
+    stability = states[("images", "stability")]
+    assert (stability["state"], stability["picked"], stability["model"]) == ("needs_setup", True, "sd3-5-large")
+    ray = states[("animation", "luma-ray")]
+    assert (ray["state"], ray["picked"], ray["model"]) == ("needs_setup", True, "luma-ray2")
+    assert "United States (Oregon)" in ray["line"]
     assert states[("animation", "builtin-2d")]["state"] == "on"  # not picked any more, still built in and working
+    assert states[("animation", "builtin-2d")]["picked"] is False
     seed_item(
         store,
-        "PROVIDER#images#nova-canvas",
+        "PROVIDER#images#stability",
         "ws_provider",
         state="needs_setup",
         checkedAt="2026-11-15T11:30:00.000Z",
-        lastError="Bedrock says Nova Canvas is not enabled for this account in Europe (Ireland).",
+        lastError="Bedrock says this Stability AI model is not enabled for this account in US West (Oregon).",
     )
-    canvas = _providers(call)[("images", "nova-canvas")]
-    assert canvas["state"] == "needs_setup"
-    assert canvas["line"].startswith("Bedrock says Nova Canvas is not enabled")
-    assert canvas["lastError"] == canvas["line"]
-    seed_item(store, "PROVIDER#images#nova-canvas", "ws_provider", state="on", checkedAt="2026-11-15T11:40:00.000Z")
-    canvas = _providers(call)[("images", "nova-canvas")]
-    assert (canvas["state"], canvas["checkedAt"]) == ("on", "2026-11-15T11:40:00.000Z")
+    picture = _providers(call)[("images", "stability")]
+    assert picture["state"] == "needs_setup"
+    assert picture["line"].startswith("Bedrock says this Stability AI model is not enabled")
+    assert picture["lastError"] == picture["line"]
+    seed_item(store, "PROVIDER#images#stability", "ws_provider", state="on", checkedAt="2026-11-15T11:40:00.000Z")
+    picture = _providers(call)[("images", "stability")]
+    assert (picture["state"], picture["checkedAt"]) == ("on", "2026-11-15T11:40:00.000Z")
 
 
 def test_another_owners_records_never_count(call: Call, store: db.Store) -> None:
@@ -215,11 +243,11 @@ def test_another_owners_records_never_count(call: Call, store: db.Store) -> None
             "checkedAt": "2026-11-15T11:00:00.000Z",
         }
     )
-    _pick(call, {"images": "nova-canvas"})
+    _pick(call, {"images": "stability"})
     store.put(
         {
             "pk": pk(),
-            "sk": "PROVIDER#images#nova-canvas",
+            "sk": "PROVIDER#images#stability",
             "type": "ws_provider",
             "userId": OTHER,
             "workspaceId": "stories",
@@ -229,7 +257,7 @@ def test_another_owners_records_never_count(call: Call, store: db.Store) -> None
     )
     states = _providers(call)
     assert states[("writer", "bedrock-claude")]["state"] == "needs_setup"
-    assert states[("images", "nova-canvas")]["state"] == "needs_setup"
+    assert states[("images", "stability")]["state"] == "needs_setup"
 
 
 def test_a_finished_job_dates_the_built_ins_and_a_later_failure_shows(
@@ -272,6 +300,14 @@ def test_the_mirror_names_the_agents_providers() -> None:
         ("animation", "builtin-2d"),
         ("animation", "nova-reel"),
         ("audio", "builtin-synth"),
+        # §45.37 G7: the makers after Amazon ended Nova Canvas and Nova Reel
+        ("images", "stability"),
+        ("images", "own-images"),
+        ("animation", "luma-ray"),
+        ("animation", "own-video"),
+        ("audio", "polly"),
+        ("audio", "elevenlabs"),
+        ("audio", "own-sound"),
     }
     defaults = config.workspace_defaults()["providers"]
     for kind, key in providers.CONFIG_KEY.items():
@@ -287,10 +323,11 @@ def test_the_mirror_names_the_agents_providers() -> None:
     assert missing == [], f"the agent registry does not name {missing}"
 
 
-def _agent_states() -> dict[str, str]:
-    """Each agent provider class's ``id`` and its ``state`` before any call (``kind, id, label = …``, ``state = …``)."""
-    out: dict[str, str] = {}
-    for node in ast.walk(ast.parse(AGENT_REGISTRY.read_text())):
+def _agent_states(source: Path | None = None) -> dict[str, str]:
+    """Each agent provider class's ``id`` and its ``state`` before any call (``kind, id, label = …`` or ``id, label =
+    …``, ``state = …``), a ``state`` a class does not set itself taken from its base classes in the same file."""
+    classes: dict[str, tuple[list[str], str | None, str | None]] = {}
+    for node in ast.walk(ast.parse((source or AGENT_REGISTRY).read_text())):
         if not isinstance(node, ast.ClassDef):
             continue
         provider_id = state = None
@@ -304,18 +341,42 @@ def _agent_states() -> dict[str, str]:
                     provider_id = value.elts[names.index("id")].value  # type: ignore[attr-defined]
             elif isinstance(target, ast.Name) and target.id == "state" and isinstance(value, ast.Constant):
                 state = value.value
-        if isinstance(provider_id, str) and isinstance(state, str):
-            out[provider_id] = state
+        bases = [b.id for b in node.bases if isinstance(b, ast.Name)]
+        classes[node.name] = (bases, provider_id, state)
+
+    def state_of(name: str) -> str | None:
+        bases, _, state = classes.get(name, ([], None, None))
+        if state is not None:
+            return state
+        return next((found for b in bases if (found := state_of(b)) is not None), None)
+
+    out: dict[str, str] = {}
+    for name, (_, provider_id, _) in classes.items():
+        found = state_of(name)
+        if isinstance(provider_id, str) and isinstance(found, str):
+            out[provider_id] = found
     return out
 
 
 def test_the_ai_providers_start_in_the_agents_state() -> None:
-    """Before any call, with the workspace defaults, Nova Canvas and Nova Reel show the state the agent's registry
-    starts them in (off, needs_setup). The built-ins and the writer follow §45.11.6's table and real proof here."""
+    """Before any call, with the workspace defaults, every AI maker shows the state the agent's registry starts it in
+    (§45.37 G7: Nova Canvas and Nova Reel ended; Luma AI Ray2 needs its bucket; the others off until picked). The
+    built-ins and the writer follow §45.11.6's table and real proof here."""
     defaults = {"providers": config.workspace_defaults()["providers"]}
     shown = {p.id: providers.status(p, defaults, None)["state"] for p in providers.REGISTRY}
-    assert shown["nova-canvas"] == "off"
-    assert shown["nova-reel"] == "needs_setup"
+    assert {
+        i: shown[i] for i in shown if i not in ("bedrock-claude", "builtin-rig", "builtin-2d", "builtin-synth")
+    } == {
+        "nova-canvas": "ended",
+        "nova-reel": "ended",
+        "stability": "off",
+        "own-images": "off",
+        "luma-ray": "needs_setup",
+        "own-video": "off",
+        "polly": "off",
+        "elevenlabs": "off",
+        "own-sound": "off",
+    }
     if not AGENT_REGISTRY.is_file():
         pytest.skip("the agent's registry (builder E, CONTRACTS §45.11.6) is not in this checkout yet")
     agent = _agent_states()

@@ -15,7 +15,7 @@ from clipfactory_api import db
 from clipfactory_api.app import App
 from clipfactory_api.workspaces import providers
 from clipfactory_api.workspaces import types as ws
-from conftest import OTHER, Call
+from conftest import OTHER, USER, Call
 from fakes import FakeAgentCore, FakeS3
 from ws_support import (
     BASE,
@@ -32,10 +32,14 @@ from ws_support import (
 
 BRIEF = {"title": "Ice", "logline": "The car slides on ice.", "category": "comedy"}
 DEFAULT = {"aspect": "9:16", "width": 1080, "height": 1920}
+# §45.37 G7, word for word: Luma AI Ray2 is the video maker for cut-aways now (Amazon Nova Reel has ended).
 REEL_NOT_READY = (
-    "Amazon Nova Reel is not ready yet: it needs a storage bucket in the United States (N. Virginia), which is "
-    "switched off, and Amazon Nova Reel turned on for your account. Pick Built-in animation in Settings › Video, or "
-    "finish its setup."
+    "Luma AI Ray2 is not ready yet: it needs a storage bucket in the United States (Oregon), which is switched off, "
+    "and Luma AI Ray2 turned on for your account. Pick Built-in animation in Settings › Video, or finish its setup."
+)
+REEL_ENDED = (
+    "Amazon Nova Reel 1.1 was ended by Amazon on 30 Sep 2026. Pick another video maker in Lamo Stories › Settings › "
+    "Video."
 )
 
 
@@ -228,7 +232,7 @@ def test_a_video_maker_that_is_not_ready_stops_create_produce_and_changes(
     call: Call, store: db.Store, s3_client: FakeS3, hero: dict[str, Any], agentcore: FakeAgentCore
 ) -> None:
     made = seed_story(store, s3_client)
-    _configure(call, providers={"video": "nova-reel"})
+    _configure(call, providers={"video": "luma-ray"})
     status, body = _create(call, hero)
     assert (status, body["error"]["message"]) == (409, REEL_NOT_READY)
     status, body = call("POST", f"{BASE}/stories/{made['storyId']}/produce", {"from": "animation"})
@@ -239,33 +243,67 @@ def test_a_video_maker_that_is_not_ready_stops_create_produce_and_changes(
     assert len(store.query_all(pk(), "STORY#")) == 1
     # the providers page says the same, never that something else makes the videos
     shown = {p["id"]: p for p in call("GET", f"{BASE}/providers")[1]["providers"]}
-    assert shown["nova-reel"]["line"] == REEL_NOT_READY
-    assert "makes your videos" not in shown["nova-reel"]["line"]
-    assert "scenes with no characters" in providers.REGISTRY[4].line_on
+    assert shown["luma-ray"]["line"] == REEL_NOT_READY
+    assert "makes your videos" not in shown["luma-ray"]["line"]
+    assert "scenes with no characters" in providers.find("luma-ray").line_on  # type: ignore[union-attr]
     # the built-in animator names no fixed size: a story may be 9:16, 1:1 or 16:9 (§45.34 "Video size and shape")
     assert shown["builtin-2d"]["line"] == (
         "Built in: animates every scene at the video's size, 30 frames a second. Nothing to set up."
     )
     assert "1080" not in shown["builtin-2d"]["line"]
     # a failure the agent recorded is said in its own words
-    seed_item(store, "PROVIDER#animation#nova-reel", ws.TYPE_PROVIDER, state="needs_setup",
-              lastError="Bedrock says Nova Reel is not enabled for this account in US East (N. Virginia).",
+    seed_item(store, "PROVIDER#animation#luma-ray", ws.TYPE_PROVIDER, state="needs_setup",
+              lastError="Bedrock says Luma AI Ray2 is not enabled for this account in US West (Oregon).",
               checkedAt="2026-11-15T11:00:00.000Z")  # fmt: skip
     status, body = _create(call, hero)
     assert (status, body["error"]["message"]) == (
         409,
-        "Bedrock says Nova Reel is not enabled for this account in US East (N. Virginia).",
+        "Bedrock says Luma AI Ray2 is not enabled for this account in US West (Oregon).",
     )
     # once a real call worked it is on
-    seed_item(store, "PROVIDER#animation#nova-reel", ws.TYPE_PROVIDER, state="on", checkedAt="2026-11-15T11:30:00.000Z")
-    assert _create(call, hero)[0] == 201
+    seed_item(store, "PROVIDER#animation#luma-ray", ws.TYPE_PROVIDER, state="on", checkedAt="2026-11-15T11:30:00.000Z")
+    status, body = _create(call, hero)
+    assert status == 201
+    assert body["job"]["meta"]["providers"]["animation"] == "luma-ray"
+    assert body["job"]["meta"]["providers"]["videoModel"] == "luma-ray2"  # the model it uses this run (G1)
+
+
+def test_an_ended_video_maker_stops_create_produce_and_changes_and_is_never_picked_again(
+    call: Call, store: db.Store, s3_client: FakeS3, hero: dict[str, Any], agentcore: FakeAgentCore
+) -> None:
+    """§45.37 G7: a workspace that still has Amazon Nova Reel picked from before it ended gets its ended sentence,
+    with no call and nothing switched by itself; picking it again is refused."""
+    made = seed_story(store, s3_client)
+    assert call("GET", BASE)[0] == 200  # the workspace exists
+    store.update(f"USER#{USER}#WSREG", "WS#stories", {"configuration": {"providers": {"video": "nova-reel"}}})
+    for status, body in (
+        _create(call, hero),
+        call("POST", f"{BASE}/stories/{made['storyId']}/produce", {"from": "animation"}),
+        call("POST", f"{BASE}/stories/{made['storyId']}/changes", {"note": "Funnier"}),
+    ):
+        assert (status, body["error"]["message"]) == (409, REEL_ENDED)
+    assert agentcore.calls == []
+    workspace = call("GET", BASE)[1]["workspace"]
+    assert workspace["configuration"]["providers"]["video"] == "nova-reel"
+    status, body = call(
+        "PATCH",
+        BASE,
+        {"version": workspace["version"], "configuration": {"providers": {"video": "builtin-2d"}}},
+    )
+    assert status == 200
+    status, body = call(
+        "PATCH",
+        BASE,
+        {"version": body["workspace"]["version"], "configuration": {"providers": {"video": "nova-reel"}}},
+    )
+    assert (status, body["error"]["message"]) == (400, REEL_ENDED)
 
 
 def test_another_owners_provider_record_does_not_make_it_ready(
     call: Call, store: db.Store, hero: dict[str, Any]
 ) -> None:
-    _configure(call, providers={"video": "nova-reel"})
-    store.put({"pk": pk(), "sk": "PROVIDER#animation#nova-reel", "type": ws.TYPE_PROVIDER, "userId": OTHER,
+    _configure(call, providers={"video": "luma-ray"})
+    store.put({"pk": pk(), "sk": "PROVIDER#animation#luma-ray", "type": ws.TYPE_PROVIDER, "userId": OTHER,
                "workspaceId": "stories", "state": "on", "checkedAt": "2026-11-15T11:30:00.000Z"})  # fmt: skip
     assert _create(call, hero)[0] == 409
 
@@ -280,12 +318,13 @@ def test_a_picked_picture_maker_never_stops_a_video(
     call: Call, store: db.Store, s3_client: FakeS3, hero: dict[str, Any], agentcore: FakeAgentCore
 ) -> None:
     """§45.35 D3 (it replaces §45.34's "video or images"): only ``configuration.providers.video`` stops a story's
-    create, produce and changes. Nova Canvas makes portraits only, so while it is not on yet (no portrait made) the
-    videos are still made, with the built-in characters, and its own state gates the portraits alone."""
+    create, produce and changes. A picture maker (Stability AI, §45.37 G7) makes portraits only, so while it is not on
+    yet (no portrait made) the videos are still made, with the built-in characters, and its own state gates the
+    portraits alone."""
     made = seed_story(store, s3_client)
-    _configure(call, providers={"images": "nova-canvas"})
+    _configure(call, providers={"images": "stability"})
     shown = {p["id"]: p for p in call("GET", f"{BASE}/providers")[1]["providers"]}
-    assert shown["nova-canvas"]["state"] == "needs_setup"  # not on yet, and the page says so
+    assert shown["stability"]["state"] == "needs_setup"  # not on yet, and the page says so
     status, body = _create(call, hero)
     assert status == 201, body
     assert body["job"]["meta"]["providers"]["images"] == "builtin-rig"  # the characters in a video: always the rig
@@ -293,15 +332,17 @@ def test_a_picked_picture_maker_never_stops_a_video(
     assert status == 202, body
     assert CANVAS_NOT_READY not in json.dumps(body)
     assert [c["payload"]["action"] for c in agentcore.calls] == ["process_story", "process_story"]
-    # a portrait is the real call that turns Nova Canvas on
+    # a portrait is the real call that turns the picture maker on
     assert call("POST", f"{BASE}/characters/{hero['characterId']}/portrait")[0] == 202
     # the video maker still gates videos, whatever the picture maker's state
-    seed_item(store, "PROVIDER#images#nova-canvas", ws.TYPE_PROVIDER, state="on", checkedAt="2026-11-15T11:30:00.000Z")
-    _configure(call, providers={"video": "nova-reel"})
+    seed_item(store, "PROVIDER#images#stability", ws.TYPE_PROVIDER, state="on", checkedAt="2026-11-15T11:30:00.000Z")
+    _configure(call, providers={"video": "luma-ray"})
     status, body = _create(call, hero)
     assert (status, body["error"]["message"]) == (409, REEL_NOT_READY)
+    assert providers.not_ready({"providers": {"images": "stability", "video": "builtin-2d"}}, []) is None
     assert providers.not_ready({"providers": {"images": "nova-canvas", "video": "builtin-2d"}}, []) is None
-    assert providers.GATES_VIDEOS == ("animation",)
+    # the picture maker never gates a video; a sound maker only for what only the owner can give (§45.37 G3)
+    assert providers.GATES_VIDEOS == ("animation", "audio")
 
 
 # --- approve ---------------------------------------------------------------------------------------------------

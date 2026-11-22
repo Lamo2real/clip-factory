@@ -41,6 +41,12 @@ variable "stories_video_us_bucket" {
   description = "Nova Reel (docs/CONTRACTS.md §45.31, ADR-80): true adds the S3 bucket <name>-stories-video-<account>-us in us-east-1 (Nova Reel writes only there; private, TLS only, files kept 14 days) and the runtime's StartAsyncInvoke/GetAsyncInvoke grants. Off until the owner allows Lamo Stories to keep generated shots in the US."
 }
 
+variable "stories_video_west_bucket" {
+  type        = bool
+  default     = false
+  description = "Luma AI Ray2 (docs/CONTRACTS.md §45.37 G7): true adds the S3 bucket <name>-stories-video-<account>-usw2 in us-west-2 (Luma AI Ray2 runs only there; private, TLS only, files kept 14 days), CF_VIDEO_WEST_BUCKET and the runtime's us-west-2 async video grants. Off until the owner allows Lamo Stories to keep generated shots in the US (Oregon)."
+}
+
 variable "permissions_boundary_arn" {
   type        = string
   default     = ""

@@ -27,11 +27,15 @@ longer checks out stops that job (``needs_attention``, a plain sentence) and not
 Clips' (``platforms.publishers``, unchanged) with the PublishJob of §45.14: ``settings = {}`` (Lamo Clips' settings
 and preset never apply), the allow-listed options only, the credentials from ``WorkspaceTokenProvider``; a story
 with realistic AI footage (``nova-reel``) goes through Lamo Stories' own labelling wrappers
-(``workspaces.publish.publisher``). Limits follow the developer app (§45.30): with Clip Factory's app the first X
-start is charged with ``budget.charge_post`` exactly as the clip flow does on the shared ``RATE#x`` (Lamo Clips'
-setup gates are never written); with Lamo Stories' own app the same calls use its own counters
-``RATE#WS#{ws}#{platform}`` and its ``xMonthlyLimitUsd``. Every numbers read checks ``blocked_until``,
-``reserve``s and ``record``s the same way.
+(``workspaces.publish.publisher``). Limits follow the developer app (§45.30, §45.37 G6): with Lamo Stories' own app
+the first X start is charged with ``budget.charge_post`` on its own counters ``RATE#WS#{ws}#{platform}`` (its
+``xMonthlyLimitUsd``), and every numbers read checks ``blocked_until``, ``reserve``s and ``record``s there. With Clip
+Factory's app (**shared, protected**: Clip Factory's posts always go first) Lamo Stories counts only in its own
+``SHAREUSE#{platform}#{window}`` items and uses only what Clip Factory's reserve leaves (``workspaces.shared_room``):
+it never writes Clip Factory's ``RATE#`` counters. Before ``publish-{platform}`` a ``room-{platform}-{n}`` step looks
+for room; with none the job keeps ``queued`` with ``waitUntil`` and the line "Waiting: Clip Factory's posts go first.
+Posts at …", the flow waits (``wait-room-{platform}-{n}``, no compute) and posts by itself after the reset. A
+platform call that finds no room at its own count (``…-w{k}``) waits the same way.
 
 Steps are at-least-once: a step reads its job first and never sends one that is no longer ``queued`` or
 ``publishing`` or belongs to another run, and every write is conditional, so a replayed step changes nothing twice.
@@ -69,7 +73,7 @@ from ..platforms.base import (
 )
 from ..platforms.publishers import publisher_for
 from ..stats import budget, config
-from ..workspaces import apps
+from ..workspaces import apps, shared_room
 from ..workspaces import publish as ws_publish
 from ..workspaces import types as ws
 from ..workspaces.destinations import Destination, DestinationProblem, story_sk, validate_destination
@@ -90,8 +94,19 @@ MAX_JOBS = 5
 
 
 class XCapReached(PublishError):
-    """The monthly X limit (shared with Lamo Clips on its app, Lamo Stories' own on its own) is used up: nothing
-    goes to X."""
+    """The monthly X limit of Lamo Stories' own X app is used up: nothing goes to X."""
+
+
+class SharedWait(Exception):
+    """No room for Lamo Stories on Clip Factory's shared app right now (§45.37 G6): the job waits until ``until``."""
+
+    def __init__(self, room: shared_room.Room) -> None:
+        super().__init__(room.reason)
+        self.room = room
+
+
+MAX_WAITS = 40  # room waits per platform call: X's month in daily looks, a few TikTok minutes, a YouTube day
+WAIT_SLACK = timedelta(seconds=30)
 
 
 def default_adapter(platform: str, tokens: Any, graph_api_version: str) -> Any:
@@ -334,6 +349,8 @@ def publish_chain(ctx: Any, deps: StoryFlowDeps, target: Target, job_id: str, pl
         return None
     if checked.get("state") != "ok":
         return None
+    if checked.get("shared") and not _wait_for_room(ctx, deps, target, job_id, platform, stop=stop):
+        return None  # Clip Factory's app: its posts go first; the job waited, or ended (G6)
     publisher = deps.publishers(platform)
     max_checks = int(deps.config.platform(platform).publish_settings.get("maxChecks", 20))
     start_semantics = _semantics(publisher.start_semantics)
@@ -343,10 +360,8 @@ def publish_chain(ctx: Any, deps: StoryFlowDeps, target: Target, job_id: str, pl
     def run(name: str, phase: str, semantics: StepSemantics) -> dict[str, Any] | None:
         nonlocal failed
         try:
-            result: dict[str, Any] = ctx.step(
-                lambda _sc: publish_step(deps, target, job_id, phase),
-                name=name,
-                config=retrying(RetryablePublishError, TransientError, semantics=semantics),
+            return _publish_with_waits(
+                ctx, deps, target, job_id, phase=phase, name=name, semantics=semantics, stop=stop
             )
         except StepError as e:
             kind = failure_kind(e, at_most_once=semantics == StepSemantics.AT_MOST_ONCE_PER_RETRY)
@@ -354,7 +369,6 @@ def publish_chain(ctx: Any, deps: StoryFlowDeps, target: Target, job_id: str, pl
             failed = True
             stop(kind)
             return None
-        return result
 
     progress = run(f"publish-{platform}", "start", start_semantics)
     checks = 0
@@ -391,7 +405,56 @@ def publish_chain(ctx: Any, deps: StoryFlowDeps, target: Target, job_id: str, pl
     return done
 
 
-def validate_step(deps: StoryFlowDeps, target: Target, job_id: str) -> dict[str, str]:
+def _publish_with_waits(
+    ctx: Any,
+    deps: StoryFlowDeps,
+    target: Target,
+    job_id: str,
+    *,
+    phase: str,
+    name: str,
+    semantics: StepSemantics,
+    stop: Callable[[str], None],
+) -> dict[str, Any]:
+    """One publishing step (``name``); when it found no room on Clip Factory's shared app at its own count, nothing
+    was sent: the flow waits (no compute) and calls it again as ``{name}-w{k}`` (G6). After ``MAX_WAITS`` such waits
+    the job ends (``rate``) and the step reads ``stopped``. A step that runs out of tries raises ``StepError``."""
+    for k in range(MAX_WAITS + 1):
+        step_name = name if k == 0 else f"{name}-w{k}"
+        result: dict[str, Any] = ctx.step(
+            lambda _sc: publish_step(deps, target, job_id, phase),
+            name=step_name,
+            config=retrying(RetryablePublishError, TransientError, semantics=semantics),
+        )
+        if result.get("state") != "waiting":
+            return result
+        ctx.wait(Duration.from_seconds(int(result.get("waitSec") or 60)), name=f"wait-{step_name}")
+    stop("rate")
+    return {"state": "stopped"}
+
+
+def _wait_for_room(
+    ctx: Any, deps: StoryFlowDeps, target: Target, job_id: str, platform: str, *, stop: Callable[[str], None]
+) -> bool:
+    """``room-{platform}-{n}`` until Clip Factory's reserve leaves room on its shared app (G6), waiting (no compute)
+    for each window's reset in between; False when the job ended or is no longer this run's."""
+    for n in range(1, MAX_WAITS + 1):
+        try:
+            found = ctx.step(
+                lambda _sc: room_step(deps, target, job_id), name=f"room-{platform}-{n}", config=retrying()
+            )
+        except StepError as e:
+            log("warning", "story_flow.room_failed", platform=platform, error=error_message(e))
+            stop("not_started")
+            return False
+        if found.get("state") != "waiting":
+            return bool(found.get("state") == "ok")
+        ctx.wait(Duration.from_seconds(int(found.get("waitSec") or 60)), name=f"wait-room-{platform}-{n}")
+    stop("rate")
+    return False
+
+
+def validate_step(deps: StoryFlowDeps, target: Target, job_id: str) -> dict[str, Any]:
     """The early stop: the same check every platform step runs again inside its own body."""
     job = _job(deps, target, job_id)
     if job is None:
@@ -401,10 +464,66 @@ def validate_step(deps: StoryFlowDeps, target: Target, job_id: str) -> dict[str,
     if not _mine(job, target):
         return {"state": "other_run"}
     try:
-        _guard(lambda: _check(deps, target, job))
+        destination = _guard(lambda: _check(deps, target, job))
     except DestinationProblem as e:
         end_job(deps, target, job_id, e.kind)
         return {"state": "stopped"}
+    return {"state": "ok", "shared": shared_room.is_shared(destination.app.choice, destination.platform)}
+
+
+def _share_scope(deps: StoryFlowDeps, target: Target) -> shared_room.Scope:
+    return shared_room.Scope(deps.store, target.user_id, target.workspace_id)
+
+
+def _wait_result(deps: StoryFlowDeps, target: Target, job_id: str, room: shared_room.Room) -> dict[str, Any]:
+    """Marks the job waiting (``waitUntil`` and the plain line, G6 c; it stays ``queued`` or ``publishing``) and
+    tells the chain how long to wait. Conditional on the job still being this run's and in flight."""
+    now = deps.clock()
+    until = max(room.until or now + timedelta(minutes=1), now) + WAIT_SLACK
+    with contextlib.suppress(db.ConditionFailed):
+        _guard(
+            lambda: deps.store.update(
+                target.pk,
+                pubjob_sk(job_id),
+                {"waitUntil": iso(until), "waiting": shared_room.waiting_line(until), "updatedAt": iso(now)},
+                expect_in={"publishingStatus": list(IN_FLIGHT), "flowRun": [target.run]},
+            )
+        )
+    log("info", "story_flow.waiting", platform=room.platform, reason=room.reason, until=iso(until))
+    return {"state": "waiting", "until": iso(until), "waitSec": max(1, math.ceil((until - now).total_seconds()))}
+
+
+def _clear_wait(deps: StoryFlowDeps, target: Target, job: Mapping[str, Any]) -> None:
+    if "waitUntil" not in job and "waiting" not in job:
+        return
+    with contextlib.suppress(db.ConditionFailed):
+        _guard(
+            lambda: deps.store.update(
+                target.pk,
+                pubjob_sk(str(job["publishingJobId"])),
+                {"updatedAt": iso(deps.clock())},
+                remove=["waitUntil", "waiting"],
+                expect_in={"publishingStatus": list(IN_FLIGHT), "flowRun": [target.run]},
+            )
+        )
+
+
+def room_step(deps: StoryFlowDeps, target: Target, job_id: str) -> dict[str, Any]:
+    """The early look for room on Clip Factory's shared app (G6): ``ok`` (the waiting line cleared), ``waiting``
+    (with ``waitSec``), or the job's own state when it is no longer this run's. Counts nothing: the platform call
+    counts at its own step."""
+    job = _job(deps, target, job_id)
+    if job is None:
+        return {"state": "missing"}
+    if job.get("publishingStatus") not in IN_FLIGHT:
+        return {"state": str(job.get("publishingStatus"))}
+    if not _mine(job, target):
+        return {"state": "other_run"}
+    platform = str(job.get("platform") or "")
+    found = _guard(lambda: shared_room.room(_share_scope(deps, target), platform, deps.clock(), cfg=deps.config))
+    if not found.ok:
+        return _wait_result(deps, target, job_id, found)
+    _clear_wait(deps, target, job)
     return {"state": "ok"}
 
 
@@ -449,8 +568,10 @@ def publish_step(deps: StoryFlowDeps, target: Target, job_id: str, phase: str) -
         return {"state": "other_run"}
     platform = str(job["platform"])
     tokens = deps.tokens(target)
+    shared_app = False
     try:
         destination = _guard(lambda: _check(deps, target, job))
+        shared_app = _shared(destination)
         if job.get("publishingStatus") == "queued":
             try:
                 _guard(
@@ -490,6 +611,8 @@ def publish_step(deps: StoryFlowDeps, target: Target, job_id: str, phase: str) -
             graph_api_version=deps.graph_api_version,
         )
         progress = _advance(deps, publisher, publish_job, phase, destination)
+    except SharedWait as e:
+        return _wait_result(deps, target, job_id, e.room)
     except DestinationProblem as e:
         end_job(deps, target, job_id, e.kind)
         return {"state": "stopped"}
@@ -506,11 +629,15 @@ def publish_step(deps: StoryFlowDeps, target: Target, job_id: str, phase: str) -
         tokens.mark_dead(platform)
         end_job(deps, target, job_id, "reconnect")
         return {"state": "stopped"}
+    except platform_errors.RetryablePlatformProblem as e:
+        if phase == "start" and shared_app and e.problem.kind in shared_room.RATE_KINDS:
+            # a slow-down on Clip Factory's shared app: step back (own counter only) and wait, never retry into it
+            return _problem(deps, target, job_id, e.problem.kind, waits=True)
+        raise  # the step's retry strategy tries again; out of tries → failed-{platform}
     except RetryablePublishError:
         raise  # the step's retry strategy tries again; out of tries → failed-{platform}
     except platform_errors.PlatformProblem as e:
-        end_job(deps, target, job_id, e.problem.kind)
-        return {"state": "failed"}
+        return _problem(deps, target, job_id, e.problem.kind, waits=phase == "start" and shared_app)
     except PublishError as e:
         end_job(deps, target, job_id, kind_of_message(str(e)))
         return {"state": "failed"}
@@ -519,19 +646,64 @@ def publish_step(deps: StoryFlowDeps, target: Target, job_id: str, phase: str) -
     return _mark_posted(deps, target, job, progress)
 
 
+def _problem(deps: StoryFlowDeps, target: Target, job_id: str, kind: str, *, waits: bool) -> dict[str, Any]:
+    """A platform's refusal. On Clip Factory's shared app (``waits``: the first call, nothing posted yet) a daily
+    limit or a slow-down means the app is at its limit: Lamo Stories steps back (its own counter only) and the post
+    waits, so Clip Factory's next post still has its share (G6). Anything else ends the job with its sentence."""
+    job = _job(deps, target, job_id) or {}
+    platform = str(job.get("platform") or "")
+    until = shared_room.block_after(platform, kind, deps.clock()) if waits else None
+    if until is not None:
+        scope = _share_scope(deps, target)
+        _guard(lambda: shared_room.block(scope, platform, until, kind, deps.clock()))
+        return _wait_result(deps, target, job_id, shared_room.Room(platform, False, until, kind))
+    end_job(deps, target, job_id, kind)
+    return {"state": "failed"}
+
+
 def rates(deps: StoryFlowDeps, destination: Destination) -> tuple[db.Store, config.PlatformsConfig]:
-    """The rate counters and budget configuration of the destination's developer app: Clip Factory's shared ones
-    with its app (on purpose, the owner's choice), Lamo Stories' own with its own app (§45.30)."""
+    """The rate counters and budget configuration of Lamo Stories' own developer app (§45.30): its own
+    ``RATE#WS#{ws}#{platform}`` and ``xMonthlyLimitUsd``. With Clip Factory's shared app the flow never calls this:
+    ``shared_room`` counts in Lamo Stories' own items and never writes Clip Factory's counters (§45.37 G6)."""
     choice = destination.app.choice
     workspace_id = str(destination.workspace.get("workspaceId") or "")
+    if shared_room.is_shared(choice, destination.platform):
+        raise ValueError("the shared app's limits are shared_room's: Clip Factory's counters are never written")
     store = apps.rate_store(deps.store, choice, workspace_id, destination.platform)
     return store, apps.rates_config(deps.config, choice, destination.workspace)
 
 
+def _shared(destination: Destination) -> bool:
+    return shared_room.is_shared(destination.app.choice, destination.platform)
+
+
+def _take_shared(deps: StoryFlowDeps, destination: Destination, **amount: Any) -> None:
+    """Counts one platform call of Lamo Stories on Clip Factory's shared app in its own counters, or raises
+    ``SharedWait`` when Clip Factory's reserve leaves no room (nothing is sent then)."""
+    scope = shared_room.Scope(deps.store, str(destination.workspace.get("userId") or ""), _ws_id(destination))
+    found = _guard(lambda: shared_room.take(scope, destination.platform, deps.clock(), cfg=deps.config, **amount))
+    if not found.ok:
+        raise SharedWait(found)
+
+
+def _ws_id(destination: Destination) -> str:
+    return str(destination.workspace.get("workspaceId") or "")
+
+
 def _advance(deps: StoryFlowDeps, publisher: Any, job: PublishJob, phase: str, destination: Destination) -> Progress:
     handle = job.handle
-    first_x = phase == "start" and job.post.get("platform") == "x" and publisher.needs_credentials and not handle
-    if first_x:
+    platform = str(job.post.get("platform") or "")
+    first_x = phase == "start" and platform == "x" and publisher.needs_credentials and not handle
+    if _shared(destination) and publisher.needs_credentials:
+        if first_x:
+            _take_shared(deps, destination, usd=float(deps.config.platform("x").budget.get("usdPerPost") or 0))
+        elif platform == "youtube" and phase == "start" and not handle:
+            _take_shared(deps, destination, posts=1)  # one of the project's uploads today
+        elif platform == "youtube":
+            _take_shared(deps, destination, units=1)  # a processing check: one unit of the 10,000-unit pool
+        elif platform == "tiktok":
+            _take_shared(deps, destination, requests=1)
+    elif first_x:
         store, cfg = rates(deps, destination)
         if not _guard(lambda: budget.charge_post(store, deps.clock(), cfg=cfg)):
             raise XCapReached(story_sentence("x", "x_cap", shared=destination.app.shared))
@@ -566,7 +738,7 @@ def _mark_posted(deps: StoryFlowDeps, target: Target, job: Item, progress: Progr
                 target.pk,
                 pubjob_sk(str(job["publishingJobId"])),
                 fields,
-                remove=["error"],
+                remove=["error", "waitUntil", "waiting"],
                 expect_in={"publishingStatus": list(IN_FLIGHT), "flowRun": [target.run]},
             )
         )
@@ -802,13 +974,23 @@ def numbers_step(deps: StoryFlowDeps, target: Target, job_ids: list[str], k: int
         except DestinationProblem as e:
             log("warning", "story_flow.numbers_skipped", platform=platform, kind=e.kind)
             continue  # never read with another account's token; the post keeps its last numbers
-        store, _cfg = rates(deps, destination)
-        if budget.blocked_until(_budget(store, platform), now) is not None:
+        if _shared(destination):
+            blocked = _shared_blocked(deps, target, platform, now)
+        else:
+            store, _cfg = rates(deps, destination)
+            blocked = budget.blocked_until(_budget(store, platform), now)
+        if blocked is not None:
             log("info", "story_flow.numbers_blocked", platform=platform, k=k)
             continue  # a blocked read waits for the next checkpoint
         if _read_numbers(deps, target, job, destination, now=now):
             read += 1
     return {"at": iso(now), "read": read}
+
+
+def _shared_blocked(deps: StoryFlowDeps, target: Target, platform: str, now: datetime) -> datetime | None:
+    """Clip Factory's own block on its shared app, or Lamo Stories' own (G6): either one stops a numbers read."""
+    own: Item = _guard(lambda: shared_room.used(_share_scope(deps, target), platform, now))
+    return shared_room.clips_blocked(deps.store, platform, now) or budget.blocked_until(own, now)
 
 
 def _budget(store: db.Store, platform: str) -> Item:
@@ -824,7 +1006,8 @@ def _read_numbers(deps: StoryFlowDeps, target: Target, job: Item, destination: D
     job_id = str(job["publishingJobId"])
     platform = str(job["platform"])
     identity = destination.external_account_id
-    store, cfg = rates(deps, destination)
+    shared = _shared(destination)
+    store, cfg = (deps.store, deps.config) if shared else rates(deps, destination)
     row: Item = {
         "postId": job_id,
         "platform": platform,
@@ -835,9 +1018,20 @@ def _read_numbers(deps: StoryFlowDeps, target: Target, job: Item, destination: D
     tokens = deps.tokens(target)
     adapter = deps.adapters(platform, tokens, deps.graph_api_version)
     cost = numbers_cost(platform, [row], cfg, now)
-    reservation = _guard(lambda: budget.reserve(store, platform, cost, now, ids=[str(job["statsId"])], cfg=cfg))
-    if isinstance(reservation, budget.Blocked):
-        return False
+    if shared:  # Lamo Stories' own counters, inside what Clip Factory's reserve leaves (G6)
+        amount: dict[str, Any] = (
+            {"units": cost}
+            if platform == "youtube"
+            else {"requests": cost, "read_ids": [str(job["statsId"])]}
+            if platform == "x"
+            else {"requests": cost}
+        )
+        if not _guard(lambda: shared_room.take(_share_scope(deps, target), platform, now, cfg=cfg, **amount)).ok:
+            return False
+    else:
+        reservation = _guard(lambda: budget.reserve(store, platform, cost, now, ids=[str(job["statsId"])], cfg=cfg))
+        if isinstance(reservation, budget.Blocked):
+            return False
     account = {"accountId": identity, "platformUserId": identity}
     try:
         batch = adapter.fetch_stats([row], account, now=now, want_insights=True, http=deps.http)
@@ -847,7 +1041,10 @@ def _read_numbers(deps: StoryFlowDeps, target: Target, job: Item, destination: D
     if platform in META and batch.meta.error_code == "190":
         tokens.mark_dead(platform)  # a dead Meta token: Lamo Stories' Connections shows Connect again
         return False
-    _guard(lambda: budget.record(store, platform, batch.meta, now, cfg=cfg))
+    if shared:
+        _note_shared(deps, target, platform, batch.meta, now)
+    else:
+        _guard(lambda: budget.record(store, platform, batch.meta, now, cfg=cfg))
     fast, slow = batch.results.get(job_id), batch.insights.get(job_id)
     if fast is None and slow is None:
         return False
@@ -869,6 +1066,21 @@ def _read_numbers(deps: StoryFlowDeps, target: Target, job: Item, destination: D
             )
         )
     return True
+
+
+def _note_shared(deps: StoryFlowDeps, target: Target, platform: str, meta: Any, now: datetime) -> None:
+    """What a numbers read on Clip Factory's shared app said about the app's limits, kept in Lamo Stories' own
+    counter only: a throttle or a quota answer stops Lamo Stories' own reads there (never Clip Factory's)."""
+    status = int(getattr(meta, "status", 0) or 0)
+    code = str(getattr(meta, "error_code", "") or "")
+    if platform == "youtube" and status == 403 and code in ("quotaExceeded", "rateLimitExceeded"):
+        until: datetime | None = budget.youtube_next_reset(now)
+    elif status == 429 or code == "rate_limit_exceeded":
+        until = now + timedelta(minutes=budget.X_WINDOW_MINUTES if platform == "x" else 1)
+    else:
+        until = None
+    if until is not None:
+        _guard(lambda: shared_room.block(_share_scope(deps, target), platform, until, code or str(status), now))
 
 
 # --- Lambda entry point ---------------------------------------------------------------------------------------------

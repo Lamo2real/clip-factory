@@ -38,10 +38,16 @@ locals {
   story_shared_app_platforms = ["youtube", "tiktok", "x"]
   story_app_secret_arns      = [for p in local.story_shared_app_platforms : "${trimsuffix(var.platform_secrets_arn, "*")}${p}/app*"]
 
-  # The five attributes of Lamo Clips' ACCOUNT# items the story flow may read, and only with GetItem (§45.15): what
-  # "not Lamo Clips' own destination" compares. IAM limits partitions, not sort keys; the code reads only
-  # ACCOUNT#{platform} with a ProjectionExpression of these names, so nothing else of USER#{userId} is ever returned.
-  clips_account_attributes = ["pk", "sk", "platform", "status", "accountId"]
+  # The attributes of Clip Factory's items the story flow may read, and only with GetItem (§45.15, §45.37): its
+  # ACCOUNT#{platform}'s id and username ("handle"), what "never Clip Factory's own account" compares (G8 b), and its
+  # SETTINGS item's autoPost, the schedule whose share Lamo Stories leaves to it on a shared developer app (G6 b). IAM
+  # limits partitions, not sort keys; the code reads only ACCOUNT#{platform} (pk, sk, platform, status, accountId,
+  # handle) and SETTINGS (pk, sk, autoPost) with a ProjectionExpression of those names, so nothing else of
+  # USER#{userId} is ever returned. Widened in place (more names in the same statement): nothing is replaced.
+  clips_account_attributes = ["pk", "sk", "platform", "status", "accountId", "handle", "autoPost"]
+
+  # Clip Factory's own rate counters (db.rate_pk): the story flow reads them, never writes them (§45.37 G6 a).
+  clips_rate_keys = ["RATE#youtube", "RATE#tiktok", "RATE#x", "RATE#instagram", "RATE#facebook"]
 
   functions = {
     job-flow = {
@@ -79,8 +85,11 @@ locals {
       handler = "clipfactory_api.flows.story_flow.handler"
       memory  = 1024 # the same 8 MB upload chunks and resumable uploads as clip-flow (§17.9)
       timeout = 900  # a replay may upload a video
-      # 9 days: numbers at 1 h, 24 h, 72 h and 7 days after each platform's post, plus the longest publish loop.
-      execution_timeout = 777600
+      # 40 days: numbers at 1 h, 24 h, 72 h and 7 days after each platform's post, the longest publish loop, and a
+      # post that waits for room on Clip Factory's shared developer app (§45.37 G6: up to the next month on X).
+      # Raised in place, like job-flow's: Terraform replaces a function only when durable_config is added or removed;
+      # running executions keep their own timeout.
+      execution_timeout = 3456000
       env = {
         TABLE_NAME       = var.table_name
         MEDIA_BUCKET     = var.media_bucket
@@ -141,9 +150,9 @@ locals {
         Resource  = [var.table_arn]
         Condition = { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["USER#*#WS#*", "USER#*#WSREG", "RATE#*"] } }
       },
-      # Lamo Clips' ACCOUNT#{platform} item, read only and only five attributes (the "not Lamo Clips' own destination"
-      # rule): GetItem with a ProjectionExpression of those names; no Query, no other attribute, nothing returned by
-      # a write.
+      # Lamo Clips' ACCOUNT#{platform} item (the "never Clip Factory's own account" rule) and its settings' autoPost
+      # (the share it keeps on a shared app), read only: GetItem with a ProjectionExpression of those names; no
+      # Query, no other attribute, nothing returned by a write.
       {
         Sid      = "ClipsAccountRead"
         Action   = ["dynamodb:GetItem"]
@@ -163,6 +172,20 @@ locals {
       # A refreshed (rotated) workspace token, put only: never create, delete or touch the pending choices. The pattern
       # is <name>/workspaces/*/token* (no "-"), so a put on a token a Disconnect deleted reads "not connected".
       { Sid = "WorkspaceTokens", Action = ["secretsmanager:PutSecretValue"], Resource = [var.workspace_token_secrets_arn] },
+      # §45.37 G4: the owner's AI provider keys (<name>/workspaces/{ws}/providers/{anthropic|openai_compatible|
+      # elevenlabs}) are read only by Lamo Stories' agent; the publisher never needs them. The explicit Deny wins over
+      # WorkspaceSecretsRead's Allow; an additive, in-place change of this role policy (like clip-flow's NoBankSecrets).
+      { Sid = "NoProviderKeys", Effect = "Deny", Action = ["secretsmanager:GetSecretValue"], Resource = ["${trimsuffix(var.workspace_secrets_arn, "*")}*/providers/*"] },
+      # §45.37 G6 (a): Lamo Stories never writes Clip Factory's own rate counters (RATE#{platform}); its own are all
+      # RATE#WS#… (its own app's, and the one counter of Clip Factory's shared app, RATE#WS#~shared#{platform}). The
+      # explicit Deny wins over WorkspaceWrites' RATE#* Allow; additive and in place.
+      {
+        Sid       = "NoClipsRateWrites"
+        Effect    = "Deny"
+        Action    = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:TransactWriteItems"]
+        Resource  = [var.table_arn]
+        Condition = { "ForAnyValue:StringEquals" = { "dynamodb:LeadingKeys" = local.clips_rate_keys } }
+      },
     ]
   }
 }

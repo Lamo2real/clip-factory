@@ -7,7 +7,7 @@ import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad, type Loaded } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
-import type { Agent, AgentId, AiPicked, Effort, ModelInfo, StoriesAiConfig, StoriesConfig, TaskInfo, Workspace } from "../api/types.ts";
+import type { Agent, AgentId, AiPicked, Effort, ModelInfo, StoriesAiConfig, StoriesConfig, StoriesConfigPatch, TaskInfo, Workspace } from "../api/types.ts";
 import workspaceDefaults from "../../../../stories/config/workspace-defaults.json";
 
 export type AiData = { ai: StoriesAiConfig; models: ModelInfo[]; agents: Agent[]; tasks: TaskInfo[] };
@@ -28,6 +28,11 @@ export function configOf(w: Workspace | null): StoriesConfig {
     video: { ...DEFAULTS.video, ...(c.video ?? {}) },
     production: { ...DEFAULTS.production, ...(c.production ?? {}) },
   };
+}
+
+/** The settings with a patch on top, as the API merges it (the makers' fields one by one). */
+export function withPatch(c: StoriesConfig, patch: StoriesConfigPatch): StoriesConfig {
+  return { ...c, ...patch, providers: { ...c.providers, ...(patch.providers ?? {}) } } as StoriesConfig;
 }
 
 /**
@@ -221,7 +226,7 @@ export function useAi(ws: string): Loaded<AiData> & {
 export function useWorkspaceConfig(ws: string): {
   workspace: Loaded<Workspace>;
   config: StoriesConfig;
-  save: (patch: Partial<StoriesConfig>) => void;
+  save: (patch: StoriesConfigPatch) => void;
   saved: number;
   busy: boolean;
 } {
@@ -230,7 +235,7 @@ export function useWorkspaceConfig(ws: string): {
   const { setData, reload } = workspace;
   const version = useRef<number | null>(null);
   if (workspace.data && (version.current === null || workspace.data.version > version.current)) version.current = workspace.data.version;
-  const pending = useRef<Partial<StoriesConfig> | null>(null);
+  const pending = useRef<StoriesConfigPatch | null>(null);
   const running = useRef(false);
   const [saved, setSaved] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -240,7 +245,7 @@ export function useWorkspaceConfig(ws: string): {
   // An answer is shown with the changes still waiting on top, so the next tap starts from what is on screen.
   const show = useCallback(
     (w: Workspace) => {
-      const shown: Workspace = pending.current ? { ...w, configuration: { ...configOf(w), ...pending.current } } : w;
+      const shown: Workspace = pending.current ? { ...w, configuration: withPatch(configOf(w), pending.current) } : w;
       latest.current = shown;
       setData(() => shown);
     },
@@ -282,17 +287,18 @@ export function useWorkspaceConfig(ws: string): {
   }, [ws, show, reload, toast]);
 
   const save = useCallback(
-    (patch: Partial<StoriesConfig>) => {
+    (patch: StoriesConfigPatch) => {
       const w = latest.current;
       if (!w) return;
-      // Nested parts are sent whole (StoriesConfig's video, production and providers are replaced, not merged).
+      // Video and production are sent whole. The makers send only what changed (§45.37 G1): the API merges them and
+      // checks only the picks the body names, so an older stored pick never blocks another maker's change.
       const c = configOf(w);
-      const full: Partial<StoriesConfig> = { ...patch };
-      if (patch.providers) full.providers = { ...c.providers, ...patch.providers };
+      const full: StoriesConfigPatch = { ...patch };
+      if (patch.providers) full.providers = { ...(pending.current?.providers ?? {}), ...patch.providers };
       if (patch.video) full.video = { ...c.video, ...patch.video };
       if (patch.production) full.production = { ...c.production, ...patch.production };
       pending.current = { ...(pending.current ?? {}), ...full };
-      const next: Workspace = { ...w, configuration: { ...c, ...full } };
+      const next: Workspace = { ...w, configuration: withPatch(c, full) };
       latest.current = next;
       setData(() => next);
       void flush();

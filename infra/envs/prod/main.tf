@@ -35,6 +35,20 @@ provider "aws" {
   }
 }
 
+# Lamo Stories' Luma AI Ray2 bucket only (docs/CONTRACTS.md §45.37 G7): Luma AI Ray2 runs only in us-west-2 and writes
+# its shots to a bucket there. Nothing uses this provider while stories_video_west_bucket is false.
+provider "aws" {
+  alias  = "us_west_2"
+  region = "us-west-2"
+  default_tags {
+    tags = {
+      Project     = "clip-factory"
+      Environment = "prod"
+      ManagedBy   = "terraform"
+    }
+  }
+}
+
 data "aws_caller_identity" "me" {}
 
 locals {
@@ -519,6 +533,7 @@ module "stories_agent" {
   providers = {
     aws           = aws
     aws.us_east_1 = aws.us_east_1
+    aws.us_west_2 = aws.us_west_2
   }
   table_name                     = module.data.table_name
   table_arn                      = module.data.table_arn
@@ -527,6 +542,8 @@ module "stories_agent" {
   workspace_provider_secrets_arn = local.workspace_provider_secrets_arn
   # §45.31: Nova Reel's us-east-1 bucket, off until the owner allows it.
   stories_video_us_bucket = var.stories_video_us_bucket
+  # §45.37 G7: Luma AI Ray2's us-west-2 bucket, off until the owner allows it.
+  stories_video_west_bucket = var.stories_video_west_bucket
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn

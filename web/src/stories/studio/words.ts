@@ -208,6 +208,14 @@ export const PROVIDER_WORDS: Record<string, string> = {
   "builtin-synth": "Built-in sounds",
   "nova-canvas": "Amazon Nova Canvas",
   "nova-reel": "Amazon Nova Reel",
+  // §45.37's makers
+  stability: "Stability AI pictures",
+  "luma-ray": "Luma AI Ray2",
+  "own-images": "Your own picture model",
+  "own-video": "Your own video model",
+  "own-sound": "Your own sound model",
+  elevenlabs: "ElevenLabs sound effects and music",
+  polly: "A spoken voice (Amazon Polly)",
 };
 
 /** The writer id of a model the owner added that is not Anthropic's (§45.36 E7): "bedrock-model:{key}". */

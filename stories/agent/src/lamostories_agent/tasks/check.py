@@ -12,6 +12,11 @@ client's ``allow_inactive`` when it has one), and a failure that sent nothing to
 Each check has the shape a real call to that model has (§45.35 D1): a model that takes tools gets one tiny tool with
 automatic choice, streamed as the chat calls it, so a model Bedrock refuses tools for shows the client's sentence
 ("… does not accept tool use here …", §45.36 E6) instead of "Works".
+
+The makers' models (picture, video and sound, §45.37 G2) are checked in the same task, with an access check that
+costs nothing (``maker_check``): ``input.makers`` names the ones to check (maker model keys); with neither
+``models`` nor ``makers`` every reasoning model and every maker model that has not ended is checked, and with only
+``makers`` no reasoning model is called. Each writes one ``MAKERSTATUS#{key}`` (``by: "check"``).
 """
 
 from __future__ import annotations
@@ -19,7 +24,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
-from lamostories_agent import config, models
+from lamostories_agent import config, maker_check, models
 
 from .ask import named, owner_sentence, usage_of, user
 from .common import Superseded, TaskFailed, clip, log, now_iso
@@ -148,14 +153,75 @@ def wanted(value: Any, catalog: dict[str, Any] | None = None) -> list[str]:
     return known
 
 
+def makers_of(env: TaskEnv) -> dict[str, list[dict[str, Any]]]:
+    """The bundled makers' models and the workspace's own (``MAKERDEF#``), read for this check only."""
+    defs = [
+        d
+        for d in env.svc.store.query(env.pk, config.MAKERDEF_PREFIX)
+        if d.get("userId") in (None, env.user_id) and d.get("workspaceId") in (None, env.workspace_id)
+    ]
+    return config.merged_makers(defs)
+
+
+def wanted_makers(value: Any, makers: dict[str, list[dict[str, Any]]], *, sweep: bool) -> list[dict[str, Any]]:
+    """The maker models to check: the named ones (any of them, an ended one too: it reads ended), or with ``sweep``
+    every one that has not ended."""
+    every = [m for kind in config.MAKER_KINDS for m in makers.get(kind) or []]
+    if isinstance(value, list) and value:
+        names = list(dict.fromkeys(str(v) for v in value))
+        return [m for name in names for m in every if m["key"] == name]
+    return [m for m in every if not config.ended(m)] if sweep else []
+
+
+def checker_of(env: TaskEnv) -> maker_check.MakerChecker:
+    """The maker checker: the task services' own, else one from the shared services' clients."""
+    found = getattr(env.svc, "maker_checker", None)
+    if found is not None:
+        return found
+    try:
+        from lamostories_agent import services as shared
+
+        svc = shared.get()
+        found = maker_check.MakerChecker(bedrock=svc.bedrock_control, polly=svc.polly, keys=svc.provider_keys,
+                                         http=svc.http)  # fmt: skip
+    except Exception as e:  # its own settings are missing: every maker check says so plainly
+        log("error", "stories.maker_checker_missing", error=type(e).__name__)
+        found = maker_check.MakerChecker()
+    env.svc.maker_checker = found
+    return found
+
+
+def check_makers(env: TaskEnv, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Each maker model once, with its access check (no cost); one ``MAKERSTATUS#`` per model."""
+    if not entries:
+        return []
+    checker = checker_of(env)
+    out: list[dict[str, Any]] = []
+    for entry in entries:
+        if env.fence.lost.is_set():
+            raise Superseded(env.fence.sk)
+        status, line = checker.check(env.workspace_id, entry)
+        at = now_iso()
+        item = maker_check.status_item(env.user_id, env.workspace_id, entry, status, line, at)
+        env.svc.store.update(env.pk, item["sk"], Expr().set({k: v for k, v in item.items() if k not in ("pk", "sk")}))
+        log("info", "stories.maker_checked", model=entry["key"], status=status)
+        out.append({"key": entry["key"], "label": str(entry.get("label") or entry["key"]), "kind": entry.get("kind"),
+                    "status": status, "line": line, "checkedAt": at})  # fmt: skip
+    return out
+
+
 def check_models(env: TaskEnv) -> Outcome:
     """Each model once. A failure that is not the model's (no call was made: the agent switched off, a setting) ends
-    the whole task with its sentence and leaves every status as it was."""
+    the whole task with its sentence and leaves every status as it was. The makers' models are checked after them,
+    at no cost (§45.37 G2)."""
     client = env.svc.model
     extra: dict[str, Any] = {"allow_inactive": True} if accepts(client, "allow_inactive") else {}
     results: list[dict[str, Any]] = []
     catalog = catalog_of(env)
-    for key in wanted(env.input.get("models"), catalog):
+    asked_models, asked_makers = env.input.get("models"), env.input.get("makers")
+    only_makers = isinstance(asked_makers, list) and bool(asked_makers) and not asked_models
+    makers = wanted_makers(asked_makers, makers_of(env), sweep=not asked_models and not only_makers)
+    for key in [] if only_makers else wanted(asked_models, catalog):
         if env.fence.lost.is_set():
             raise Superseded(env.fence.sk)
         info = config.model(key, catalog) or {}
@@ -187,4 +253,5 @@ def check_models(env: TaskEnv) -> Outcome:
         at = now_iso()
         write_status(env, key, status, line, at)
         results.append({"key": key, "label": label, "status": status, "line": line, "checkedAt": at, "usage": usage})
-    return Outcome({"models": results}, None, model=None, effort=None, effort_applied=None)
+    made = check_makers(env, makers)
+    return Outcome({"models": results, "makers": made}, None, model=None, effort=None, effort_applied=None)

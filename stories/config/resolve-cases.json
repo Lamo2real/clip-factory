@@ -1,5 +1,5 @@
 {
-  "$comment": "Shared cases for the model and effort resolver (docs/CONTRACTS.md \u00a745.25): the agent's lamostories_agent.models.resolve and the API's workspaces/ai_resolve.py must both pass every case. Model and effort are merged separately; precedence request > conversation or project > task > agent > workspace default. An effort the model does not offer is refused (expect.error), never swapped.",
+  "$comment": "Shared cases for the model and effort resolver (docs/CONTRACTS.md \u00a745.25): the agent's lamostories_agent.models.resolve and the API's workspaces/ai_resolve.py must both pass every case. Model and effort are merged separately; precedence request > conversation or project > task > agent > workspace default. An effort the model does not offer is refused (expect.error), never swapped. The tasks text_edit (a short chat edit, the creative director) and animation_plan (the writer's re-staging pass, the storyboard agent) follow the same rules with their own task settings (\u00a745.37 G5); a suggested effort is shown, never applied by the resolver.",
   "cases": [
     {
       "name": "workspace default",
@@ -157,6 +157,118 @@
       },
       "expect": {
         "error": "effort"
+      }
+    },
+    {
+      "name": "text_edit takes its own task setting",
+      "task": "text_edit",
+      "ai": {
+        "defaultModel": "opus-5-5",
+        "defaultEffort": "high",
+        "tasks": {
+          "chat": {
+            "model": "fable-5-2",
+            "effort": "max"
+          },
+          "text_edit": {
+            "model": "haiku-5-5",
+            "effort": "low"
+          }
+        }
+      },
+      "expect": {
+        "model": "haiku-5-5",
+        "effort": "low",
+        "from": "task"
+      }
+    },
+    {
+      "name": "text_edit never takes the chat task's setting",
+      "task": "text_edit",
+      "ai": {
+        "defaultModel": "opus-5-5",
+        "defaultEffort": "high",
+        "tasks": {
+          "chat": {
+            "model": "fable-5-2",
+            "effort": "max"
+          }
+        }
+      },
+      "expect": {
+        "model": "opus-5-5",
+        "effort": "high",
+        "from": "default"
+      }
+    },
+    {
+      "name": "the conversation beats text_edit's task, effort merged separately",
+      "task": "text_edit",
+      "conversation": {
+        "model": "fable-5-1"
+      },
+      "ai": {
+        "defaultModel": "opus-5-5",
+        "defaultEffort": "high",
+        "tasks": {
+          "text_edit": {
+            "model": "haiku-5-5",
+            "effort": "low"
+          }
+        }
+      },
+      "expect": {
+        "model": "fable-5-1",
+        "effort": "low",
+        "from": "conversation"
+      }
+    },
+    {
+      "name": "animation_plan takes its task setting over the storyboard agent",
+      "task": "animation_plan",
+      "agent": {
+        "model": "sonnet-5-5",
+        "effort": "medium"
+      },
+      "ai": {
+        "defaultModel": "opus-5-5",
+        "defaultEffort": "high",
+        "tasks": {
+          "storyboard": {
+            "model": "fable-5-1"
+          },
+          "animation_plan": {
+            "model": "fable-5-2",
+            "effort": "high"
+          }
+        }
+      },
+      "expect": {
+        "model": "fable-5-2",
+        "effort": "high",
+        "from": "task"
+      }
+    },
+    {
+      "name": "animation_plan without its own setting uses the agent's, not the storyboard task's",
+      "task": "animation_plan",
+      "agent": {
+        "model": "sonnet-5-5"
+      },
+      "ai": {
+        "defaultModel": "opus-5-5",
+        "defaultEffort": "high",
+        "tasks": {
+          "storyboard": {
+            "model": "fable-5-1",
+            "effort": "low"
+          }
+        }
+      },
+      "expect": {
+        "model": "sonnet-5-5",
+        "effort": "high",
+        "from": "agent"
       }
     }
   ]

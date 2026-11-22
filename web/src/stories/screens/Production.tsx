@@ -890,7 +890,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
 export function runModels(info: AiInfo, j: ProductionJob): string {
   const word: Record<string, string> = { storyboard: "Write", safety: "Check", preview: "Last look" };
   // A step's other calls have their own words (the storyboard step's post captions, §45.35 D5).
-  const task: Record<string, string> = { scene_rewrite: "New take", captions: "Captions" };
+  const task: Record<string, string> = { scene_rewrite: "New take", captions: "Captions", animation_plan: "Plan" };
   return j.meta.models
     .map((m) => {
       const stopped = stoppedOn(j, m);

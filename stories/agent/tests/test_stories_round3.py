@@ -20,7 +20,7 @@ from lamostories_agent import keys, media, writer
 from lamostories_agent.data import JobFence
 from lamostories_agent.models import ModelUnavailable
 from lamostories_agent.pipeline import StoryJob
-from lamostories_agent.providers import REEL_NO_BUCKET, REEL_NOT_READY, REEL_SETUP
+from lamostories_agent.providers import LUMA_NOT_READY, LUMA_SETUP, REEL_NO_BUCKET, REEL_NOT_READY, REEL_SETUP
 from ls_fakes import PK, USER, WS, ffmpeg_has, needs_deno, needs_ffmpeg, needs_libass
 from test_stories_pipeline import (
     POST,
@@ -153,8 +153,9 @@ def test_a_stray_face_or_noise_goes_back_to_the_writer_once_then_is_mended(
     replies = answers(storyboard=_stray_answer())
     svc, store, table, fake = world(tmp_path, replies, job=job_item("J1", "S1", run=WRITE_RUN))
     assert run_job(svc) == "ready"
-    writes = [c for c in fake.calls if c["task"] == "storyboard"]
+    writes = [c for c in fake.calls if c["task"] in ("storyboard", "animation_plan")]
     assert len(writes) == 2  # asked once more, with the problems
+    assert [c["task"] for c in writes] == ["storyboard", "animation_plan"]  # the re-staging pass (§45.37 G5)
     problems = request_of(writes[1])["problems"]
     assert any("face 'angry'" in p for p in problems) and any("noise 'yay'" in p for p in problems)
     first = request_of(writes[0])
@@ -174,7 +175,7 @@ def test_a_writer_that_fixes_its_faces_on_the_second_try_is_kept_as_it_wrote(tmp
     replies = answers(storyboard=[_stray_answer(), writer_answer()])
     svc, store, table, fake = world(tmp_path, replies, job=job_item("J1", "S1", run=WRITE_RUN))
     assert run_job(svc) == "ready"
-    assert fake.tasks().count("storyboard") == 2
+    assert fake.tasks().count("storyboard") == 1 and fake.tasks().count("animation_plan") == 1
     beat = saved_script(table, store)["scenes"][0]["beats"][0]
     assert (beat["face"], beat["noise"]) == ("shocked", "gasp")
 
@@ -424,31 +425,64 @@ def test_keep_versions_prunes_the_extra_formats_like_the_mp4(tmp_path: Path) -> 
     assert set(store.deleted) == {PREFIX + "final/v1.mp4", PREFIX + "final/v1.webm", PREFIX + "final/v1.mov"}
 
 
-# --- (20) Nova Reel not ready: the second guard ------------------------------------------------------------------
+# --- (20) Luma AI Ray2 not ready: the second guard (it replaced Nova Reel, §45.37 G7) ------------------------------
 
 
 @needs_deno
 @needs_ffmpeg
-def test_nova_reel_not_ready_fails_the_job_with_its_own_sentence_and_switches_nothing(tmp_path: Path) -> None:
+def test_luma_ray_not_ready_fails_the_job_with_its_own_sentence_and_switches_nothing(tmp_path: Path) -> None:
     answer = writer_answer()
-    answer["scenes"][1]["actors"] = []  # a cut-away: Nova Reel's
+    answer["scenes"][1]["actors"] = []  # a cut-away: Luma AI Ray2's
     answer["scenes"][1]["beats"] = [{"at": 0.2, "dur": 1.0, "who": "car1", "do": "appear"}]
     answer["scenes"][1]["props"] = [{"propId": "car1", "kind": "car", "x": 0.5, "y": 0.7, "scale": 1, "rot": 0}]
     svc, _store, table, _ = world(tmp_path, answers(storyboard=answer), config={"providers": {
-        "images": "builtin-rig", "video": "nova-reel", "audio": "builtin-synth"}})  # fmt: skip
+        "images": "builtin-rig", "video": "luma-ray", "audio": "builtin-synth"}})  # fmt: skip
     assert run_job(svc) == "failed"
     job = table.item("PJOB#J1")
-    assert job is not None and job["error"] == REEL_NO_BUCKET
-    assert REEL_NO_BUCKET == (  # word for word the API's 409 (§45.34: "the same sentence")
+    assert job is not None and job["error"] == LUMA_NOT_READY
+    assert LUMA_NOT_READY == (  # word for word the API's 409 (§45.34: "the same sentence")
+        "Luma AI Ray2 is not ready yet: it needs a storage bucket in the United States (Oregon), which is switched "
+        "off, and Luma AI Ray2 turned on for your account. Pick Built-in animation in Settings › Video, or finish its "
+        "setup."
+    )
+    assert REEL_NO_BUCKET == (  # Nova Reel's old line stays word for word the API's (it is ended now)
         "Amazon Nova Reel is not ready yet: it needs a storage bucket in the United States (N. Virginia), which is "
         "switched off, and Amazon Nova Reel turned on for your account. Pick Built-in animation in Settings › Video, "
         "or finish its setup."
     )
-    for line in (REEL_SETUP, REEL_NOT_READY.format(missing="x")):  # no client, or Bedrock says it is not turned on
-        assert line.startswith("Amazon Nova Reel is not ready yet: ")
+    for line in (LUMA_SETUP, REEL_SETUP, REEL_NOT_READY.format(missing="x")):  # no client, or Bedrock says not on
         assert line.endswith(". Pick Built-in animation in Settings › Video, or finish its setup.")
+    assert LUMA_SETUP.startswith("Luma AI Ray2 is not ready yet: ")
     assert next(s for s in job["steps"] if s["key"] == "animation")["status"] == "failed"
     assert not [a for a in table.prefix("ASSET#") if a["kind"] == "scene_clip"]  # nothing made by another animator
+
+
+@needs_deno
+@needs_ffmpeg
+def test_a_story_that_still_picks_nova_reel_stops_with_the_ended_line_and_calls_nothing(tmp_path: Path) -> None:
+    called: list[str] = []
+
+    class Reel:
+        def __init__(self, ctx: Any) -> None:
+            pass
+
+        async def render_scene(self, *a: Any) -> Any:
+            called.append("render")
+            raise AssertionError("Nova Reel must never be called")
+
+    from lamostories_agent.providers import REGISTRY
+
+    registry = {**REGISTRY, "animation": {**REGISTRY["animation"], "nova-reel": Reel}}
+    svc, _store, table, _ = world(tmp_path, answers(), config={"providers": {
+        "images": "builtin-rig", "video": "nova-reel", "audio": "builtin-synth"}}, registry=registry)  # fmt: skip
+    assert run_job(svc) == "failed"
+    job = table.item("PJOB#J1")
+    assert job is not None and job["error"] == (
+        "Amazon Nova Reel 1.1 was ended by Amazon on 30 Sep 2026. Pick another video maker in Lamo Stories › Settings › "
+        "Video."
+    )
+    assert called == [] and not [a for a in table.prefix("ASSET#") if a["kind"] == "scene_clip"]
+    assert next(s for s in job["steps"] if s["key"] == "animation")["status"] == "failed"
 
 
 # --- (16) the video's size and shape ---------------------------------------------------------------------------

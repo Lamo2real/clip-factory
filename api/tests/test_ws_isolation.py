@@ -236,7 +236,7 @@ def _flow(call: Call, app: App, store: db.Store, s3_client: FakeS3) -> list[Any]
 
     go("GET", "/v1/workspaces")
     version = go("GET", BASE)["workspace"]["version"]
-    go("PATCH", BASE, {"version": version, "configuration": {"providers": {"images": "nova-canvas"}}})
+    go("PATCH", BASE, {"version": version, "configuration": {"providers": {"images": "stability"}}})
     hero = go("POST", f"{BASE}/characters", character_body("Lamo"))["character"]
     cid = hero["characterId"]
     up = go(
@@ -245,8 +245,8 @@ def _flow(call: Call, app: App, store: db.Store, s3_client: FakeS3) -> list[Any]
     s3_client.objects[f"{prefix()}characters/{cid}/refs/{up['assetId']}.jpg"] = b"jpg"
     go("POST", f"{BASE}/characters/{cid}/references/{up['assetId']}/complete")
     go("POST", f"{BASE}/characters/{cid}/portrait")
-    # the agent made the portrait: Nova Canvas is on (a picked maker that is not on stops a video, §45.34)
-    seed_item(store, "PROVIDER#images#nova-canvas", "ws_provider", state="on", checkedAt="2026-11-15T10:00:00.000Z")
+    # the agent made the portrait: Stability AI is on (§45.37 G7; a picked video maker that is not on stops a video)
+    seed_item(store, "PROVIDER#images#stability", "ws_provider", state="on", checkedAt="2026-11-15T10:00:00.000Z")
     idea = go(
         "POST",
         f"{BASE}/ideas",
@@ -432,11 +432,11 @@ def test_no_presigned_url_or_key_outside_the_workspace(
             assert f".amazonaws.com/{prefix()}" in url, url  # every presigned link is a file of this workspace
 
 
-CLIPS_ACCOUNT_ATTRIBUTES = {"pk", "sk", "platform", "status", "accountId"}
+CLIPS_ACCOUNT_ATTRIBUTES = {"pk", "sk", "platform", "status", "accountId", "handle"}  # §45.37 G8 b: + handle
 
 
 def _clips_account_read(op: str, kw: dict[str, Any]) -> bool:
-    """§45.33's one allowed read of a Clip Factory item: a GetItem of its ``ACCOUNT#{platform}`` limited to five
+    """§45.33's one allowed read of a Clip Factory item: a GetItem of its ``ACCOUNT#{platform}`` limited to six
     attributes (the dashboard's accounts compare with Lamo Clips' identity, §45.35 D11)."""
     if op != "get_item" or kw["Key"]["pk"] != f"USER#{USER}" or not str(kw["Key"]["sk"]).startswith("ACCOUNT#"):
         return False
@@ -475,7 +475,7 @@ def test_every_key_the_core_routes_touch_is_lamo_stories_own(
     assert touched
     allowed = {ws.registry_pk(USER)}
     assert {k for k in touched if k not in allowed and not k.startswith(f"USER#{USER}#WS#")} == set()
-    # the dashboard compared the accounts with Lamo Clips' own (five attributes, never its tokens or names)
+    # the dashboard compared the accounts with Lamo Clips' own (six attributes, never its tokens or names)
     reads = [kw for op, kw in table.calls if _clips_account_read(op, kw)]
     assert all(kw["Key"]["sk"] in {f"ACCOUNT#{p}" for p in ws.PLATFORMS} for kw in reads)
     files = [p["Key"] for p in s3_client.puts] + list(s3_client.deleted) + list(s3_client.reads)

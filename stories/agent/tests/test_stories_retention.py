@@ -204,4 +204,4 @@ def test_a_portrait_records_one_image(tmp_path: Path) -> None:
     svc, _store, table = portrait_world(tmp_path, FakeCanvasClient())
     assert run_portrait(svc) == "ready"
     (usage,) = table.prefix("USAGE#")
-    assert (usage["provider"], usage["units"], usage["unit"], usage["cost"]) == ("nova-canvas", 1, "image", None)
+    assert (usage["provider"], usage["units"], usage["unit"], usage["cost"]) == ("stability", 1, "image", None)

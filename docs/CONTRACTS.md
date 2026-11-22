@@ -13160,12 +13160,14 @@ Lamo Stories first." Bodies are validated with `validate.py`; unknown keys are `
 | POST `/v1/workspaces/{ws}/stories/{storyId}/captions` **S** | `{ "override"?: ModelOverride }` | `202 { "task": AiTask }` (kind `captions`; result `{ storyId, scriptVersion, postCaptions }`, a draft; 409 without a storyboard; §45.34) |
 | GET `/v1/workspaces/{ws}/library` **S** | query `kind?` (an AssetKind or `all`), `storyId?`, `characterId?`, `limit` ≤ 100, `cursor` | `{ "items": LibraryItem[], "nextCursor" }` |
 | GET `/v1/workspaces/{ws}/providers` **S** | – | `{ "providers": ProviderStatus[] }` (§45.11.6) |
-| POST `/v1/workspaces/{ws}/providers/nova-reel/check` **S** | – | `202 { "job": ProductionJob }` (jobType `provider_check`, one step "Try it"; never behind the not-ready guard; §45.35 D2) |
+| POST `/v1/workspaces/{ws}/providers/nova-reel/check` **S** | – | `202 { "job": ProductionJob }` (jobType `provider_check`, one step "Try it"; never behind the not-ready guard; §45.35 D2). Since §45.37 G7: `409` with Nova Reel's ended sentence |
+| POST `/v1/workspaces/{ws}/providers/{luma-ray\|own-video}/check` **S** | – | `202 { "job": ProductionJob }` (Try it, one test shot; §45.37 G2, G7); own-video `409` "Add a video model first: …" |
+| PUT / DELETE `/v1/workspaces/{ws}/makers/models/{key}` **S** | PUT: `MakerModelDef { label, provider, kind, host, modelId, region?, baseUrl?, price, note }` | `{ "model": MakerModelInfo }` / `204` (`409` while picked; §45.37 G2). The maker models are listed only on the maker rows of `GET …/providers` |
 | GET `/v1/workspaces/{ws}/guidance` **S** | – | `{ "topics": GuidanceTopic[], "checkedAt" }` (§45.11.5) |
 | GET `/v1/workspaces/{ws}/social` **S** | – | `{ "accounts": SocialAccount[] /* 5, in STORIES_PLATFORMS order */, "clips": ClipsDestination[] }` |
 | POST `/v1/workspaces/{ws}/social/{platform}/connect` **S** | – | `{ "authorizeUrl", "expiresAt" }` (§45.13.2); `409` "Lamo Clips has no {Platform} app keys yet. Set up {Platform} in Lamo Clips first (Settings › Posting › Set up posting, up to the keys step)." |
 | POST `/v1/workspaces/{ws}/social/{platform}/choose` **S** | `{ "choiceId" }` (instagram and facebook only; other platforms `400`) | `{ "account" }` |
-| POST `/v1/workspaces/{ws}/social/{platform}/share` **S** | `{ "confirm": true }` | `{ "account" }` (the owner's explicit "use the same {place} as Lamo Clips", §45.13.4) |
+| ~~POST `/v1/workspaces/{ws}/social/{platform}/share`~~ | removed by §45.37 G8 | no account is ever shared with Clip Factory (404) |
 | POST `/v1/workspaces/{ws}/social/{platform}/check` **S** | – | `{ "account" }` (a live profile call; `token_dead` → `needs_reconnect`) |
 | GET `/v1/workspaces/{ws}/social/tiktok/creator-info` **S** | – | `{ "creator": TikTokCreator }` (the §17.4 shape, with the workspace token only); `409` "Lamo Stories' TikTok is not connected. Connect it in Lamo Stories › Connections." |
 | DELETE `/v1/workspaces/{ws}/social/{platform}` **S** | – | `204`: deletes only this workspace's token and pending secrets and sets the account `not_connected`; **no platform revoke call** (§45.13.6) |
@@ -13200,7 +13202,7 @@ Lamo Stories first." Bodies are validated with `validate.py`; unknown keys are `
 | POST `/v1/workspaces/{ws}/references/{refId}/analyze` **S** | `{ "override"?: ModelOverride }` | `202 { "reference", "job" }` |
 | GET / PATCH / DELETE `/v1/workspaces/{ws}/references/{refId}` **S** | PATCH: `{ "title" }` | `{ "reference", "analysis": ReferenceAnalysis \| null }` / `{ "reference" }` / `204` |
 | GET / PATCH `/v1/workspaces/{ws}/onboarding` **S** | PATCH: `{ "step": OnboardStep, "done"?: boolean, "skipped"?: boolean }` or `{ "finish": true }` | `{ "onboarding": Onboarding }` |
-| PUT / DELETE `/v1/workspaces/{ws}/providers/{providerId}/key` **S** | PUT: `{ "key" }` (≤ 4 KB) | `{ "provider": ProviderStatus }` (never returns the key) / `204` |
+| PUT / DELETE `/v1/workspaces/{ws}/providers/{providerId}/key` **S** | PUT: `{ "key", "baseUrl"? }` (≤ 4 KB; `baseUrl` only for `openai_compatible`, §45.37 G4) | `{ "provider": ProviderStatus }` (never returns the key) / `204` |
 | GET `/v1/workspaces/{ws}/storage` **S** | – | `{ "storage": StorageSummary }` |
 | POST `/v1/workspaces/{ws}/storage/cleanup` **S** | – | `{ "removed": { "files", "bytes" } }` (applies keepReferences, keepChatPictures and keepVersions now; §45.34) |
 | POST `/v1/workspaces/{ws}/stories/{storyId}/publish` **S** | `{ "targets": PublishTarget[] (1–5, each platform once) }` | `202 { "publishingJobs": PublishingJob[] }` (§45.14) |
@@ -13828,6 +13830,9 @@ It never writes `ACCOUNT#`, `SETUP#` or any `cf-prod/platforms/*` secret, and ne
 
 #### 45.13.4 Same place as Lamo Clips: only on purpose
 
+**Superseded by §45.37 G8 (the owner's hard rule, 22 Nov):** there is no "Use it for both" and no share route any
+more; an account that is Clip Factory's own is never posted to. The text below is the earlier rule, kept for history.
+
 A Lamo Stories account whose identity is Lamo Clips' own (same channel id, Page id, Instagram id, TikTok open id or X
 user id) is `same_as_clips` and cannot be posted to. The Connections page says "This is the same {place} Lamo Clips
 posts to." with **Pick another** (connect again) and **Use it for both** (the share route, after a second "Are you
@@ -14086,7 +14091,7 @@ each publishing job's status, account, link, numbers, its sentence and **Try aga
 * Library: tabs Projects (§45.12), Videos, Storyboards, Characters, Pictures, Sounds, Scenes, each item with its story
   or character and Download.
 * Connections: five cards (YouTube, Instagram, Facebook, TikTok, X), each with status, account name and id, Connect /
-  Pick another / Disconnect / Use it for both (with its "Are you sure?" step), the platform's limits (§45.13.5), the
+  Pick another / Disconnect (Use it for both is gone, §45.37 G8), the platform's limits (§45.13.5), the
   sign-in and Pages notes before Connect, the result of `?result=`, the account's warning, and Lamo Clips' destination
   name for that platform so the owner sees they differ.
 * Social accounts (the Connections page) also shows, per platform: the developer-app choice (§45.30) with its key
@@ -14920,6 +14925,247 @@ its own `task`. The dashboard checks app keys only while its request has time (i
 * **E18.** Small studio fixes: a cleared reference never plays a local copy (the page shows the D9 sentence); the mock's canned study fits the uploaded video's length; the play badge on square and wide scene thumbnails sits where it does not cover the caption; Social accounts' grid does not leave big empty areas at 1440 (cards flow by their own height); after reconnecting, the mock clears the old warning like the API.
 
 Not in round 5 (they would change Clip Factory's own code): Clip Factory's toast component (Lamo Stories uses it: 36 px close button, one glass for all toasts) and Clip Factory page changes after a request while Lamo Stories is on screen (NewJobForm addCampaign, CampaignPaste, SkillPages). The lead reports them as known limits.
+
+### 45.37 Stories AI makers and providers (2026-11-22; wins over anything above)
+
+Decision record: ADR-84. The owner: "Image-generation models. Video-generation models. Audio-generation models …
+allow me to select these providers and models independently", "support adding new models and providers without
+rebuilding", "Simple text modifications: Low", "Detailed animation planning: High", on Clip Factory's developer app
+"Keep it, protect CF", and (22 Nov 19:01, a hard rule that wins over everything here, §45.13.4 included) "I do not
+want videos generated in lamo stories … uploaded to the same accounts as clip factory thats a hard no". His first
+request also says "without traditional voice-over narration" and "There should be no requirement for a human
+voice-over": nothing here adds a voice by default. Built by three builders (API, agent, web) and integrated in one
+branch; the G-numbers are the ones the code's comments cite. Everything is additive: no table, index, Cognito or
+Clip Factory change; connected platforms, saved keys and stored picks read as before.
+
+**What the research settled (G7; it wins over G1 to G3 where they differ).** Checked on 2026-11-22 against AWS's own
+model cards (docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html and each model's own page): Amazon Nova
+Canvas (`amazon.nova-canvas-v1:0`) and Amazon Nova Reel (`amazon.nova-reel-v1:1`) reached end of life on 2026-09-30
+(calls fail "ResourceNotFoundException: This model version has reached the end of its life"); Stability AI Stable
+Image Core (`stability.stable-image-core-v1:1`), Stable Image Ultra (`stability.stable-image-ultra-v1:1`), Stable
+Diffusion 3.5 Large (`stability.sd3-5-large-v1:0`, InvokeModel) and Luma AI Ray2 (`luma.ray-v2:0`, StartAsyncInvoke)
+run in us-west-2 (Oregon) only; Bedrock lists no music or sound-effect model. Amazon Polly's neural voices run in
+eu-west-1 (docs.aws.amazon.com/polly/latest/dg/neural-voices.html). ElevenLabs from elevenlabs.io/docs/api-reference
+(text-to-sound-effects, music). No model id here was invented; prices stay `null` where neither AWS nor the provider
+documents one.
+
+#### G1 Makers are lists
+
+* **The file.** `stories/config/models.json` (one copy, read by the API, the agent and the web) gains `imageModels`,
+  `videoModels` and `audioModels`. An entry: `key`, `label`, `provider` (who makes it), `maker` (the
+  `StoriesConfig.providers` id that uses it), `host` ("Amazon Bedrock", "Amazon Polly" or a keyed host id such as
+  `elevenlabs`), `modelId`, `region` (null on a keyed host), `kind` (`image` | `video` | `audio`), `price`
+  (`{perUnit, unit, currency}` or null), `note`, and where it applies `ended` (ISO day), `role` (a sound model's part:
+  `effects` | `music` | `voice`), `voice` (Polly's) and `shotSec` (Luma AI Ray2's 5). The old single `imageModel` and
+  `videoModel` entries stay as legacy mirrors (Terraform's `model_invoke_arns` and older readers); every reader takes
+  the lists first, and a file with only the old shape still reads as one-item lists (`nova-canvas`, `nova-reel`).
+* **Makers and their bundled models** (the one set of ids all three use):
+
+  | Kind | Maker (`providers.*`) | Models (`key`: model id, Region) | State |
+  |---|---|---|---|
+  | images | `builtin-rig` | none (code in the image) | **the default** |
+  | images | `nova-canvas` | `nova-canvas`: `amazon.nova-canvas-v1:0`, eu-west-1 | `ended` 2026-09-30 |
+  | images | `stability` | `stable-image-core`, `stable-image-ultra`, `sd3-5-large` (ids above), us-west-2 | off until picked |
+  | images | `own-images` | the owner's (G2) | off until picked |
+  | video | `builtin-2d` | none | **the default** |
+  | video | `nova-reel` | `nova-reel`: `amazon.nova-reel-v1:1`, us-east-1 | `ended` 2026-09-30 |
+  | video | `luma-ray` | `luma-ray2`: `luma.ray-v2:0`, us-west-2 | needs setup until its Try it |
+  | video | `own-video` | the owner's (G2) | needs setup until its Try it |
+  | audio | `builtin-synth` | none | **the default** |
+  | audio | `polly` | `polly-neural`: Amazon Polly `neural` (voice Joanna), eu-west-1 | **opt-in only** |
+  | audio | `elevenlabs` | `elevenlabs-effects`: `eleven_text_to_sound_v2`; `elevenlabs-music`: `music_v1` (instrumental) | needs the owner's key |
+  | audio | `own-sound` | the owner's (G2, ElevenLabs only) | off until picked |
+
+* **The picks.** `StoriesConfig.providers` keeps `images`, `video`, `audio` (the maker) and gains `imageModel`,
+  `videoModel`, `audioModel`: a model key of the picked maker, or null for that maker's first model that has not
+  ended. `PATCH …/workspaces/{ws}` merges the body onto the stored picks (`makers.clean_providers`), checks only what
+  the body names, and resets a kind's model to null when its maker changes and no model is sent; an ended maker or
+  model, or a model of another maker, is refused (400) with its sentence and nothing is swapped. The web sends only
+  what changed (`{video, videoModel: null}` on a maker pick, `{videoModel}` on a model pick). The agent reads the
+  workspace's picks for every job (`providers.maker_model`, `sound_models`), never a cached process-wide choice.
+* **No route of their own.** The maker models come only on the maker rows of `GET …/providers`: each non-built-in
+  picture, video and sound row carries `models` (`MakerModelInfo`, the API's `makers.model_info`: `key`, `label`,
+  `provider`, `maker`, `host` (label), `hostId`, `modelId`, `region` (null on a keyed host), `regionLine` ("Runs in the
+  US (Oregon)"), `kind`, `price`, `note`, `custom`, `ended`, `endedLine`, `status`, `statusLine`, `checkedAt`, and
+  `baseUrl` on `openai_compatible`), `picked` and `model` (the model it uses); an ended row adds `replacement` and
+  `endedAt`. There is no `GET …/makers/models` and no `keySaved` field. An ended model reads `status` `not_found`,
+  `statusLine` "Ended by Amazon on 30 Sep 2026." (never "tap Check models"). `ProviderStatus.state` gains `ended`.
+
+#### G2 The owner's own maker models
+
+* `MAKERDEF#{key}` (type `ws_makerdef`; `kind`, `label`, `provider`, `host`, `modelId`, `region` or `baseUrl`,
+  `price`, `note`, `createdAt`, `updatedAt`) through `PUT` / `DELETE /v1/workspaces/{ws}/makers/models/{key}`: the key
+  `^custom-[a-z0-9-]{1,40}$`, at most 20 per kind, never a bundled key and never a Settings › AI model's key (one key
+  space: a new key from either screen avoids both), the kind fixed once saved (`KIND_FIXED`), and `DELETE` answers
+  409 naming the pick while it is picked or in use. Shown, edited and removed in Settings › Video like Settings › AI's
+  own models; the owner's own makers become pickable once a model of their kind exists.
+* **Only what the agent can call is saved** (400 with the sentence): Bedrock video other than `luma.*`
+  (`BAD_VIDEO_MODEL`); Bedrock pictures other than `stability.*` or `amazon.titan-image*` (`BAD_PICTURE_MODEL`); any
+  `amazon.nova-canvas*` or `amazon.nova-reel*` id (`ENDED_MODEL`); any Bedrock sound model (`NO_BEDROCK_SOUND`: sound
+  runs on ElevenLabs only); ElevenLabs ids other than `eleven_text_to_sound*` and `music_*` (`ELEVENLABS_ONLY_SOUND`:
+  never a voice). Cross-Region profile ids and ARNs are checked by their bare id (`us.luma.ray-v2:0` → `luma.ray-v2:0`;
+  the API's `_bare_model_id`, the agent's `config.bare_model_id`) and called exactly as saved. The agent keeps every
+  Bedrock video `MAKERDEF` it reads and refuses one it cannot ask with `VIDEO_UNKNOWN` before any call.
+* **Check models** takes `input.makers?: string[]` and checks maker models at no cost: Bedrock
+  `GetFoundationModelAvailability` (else `GetFoundationModel`) in the model's Region with the bare id; ElevenLabs a
+  `GET /v1/models` (Works only for a documented or listed sound model); Amazon Polly `DescribeVoices`; an
+  OpenAI-compatible `GET {baseUrl}/models`. The result is `MAKERSTATUS#{key}` (type `ws_makerstatus`: `model`, `kind`,
+  `status` `ok` | `denied` | `not_found` | `error`, `line` (the provider's own sentence), `checkedAt`, `by` `check`):
+  Works / No access / Not found. IAM, additive on `cf_prod_story_agent` only: `MakerCheckModel`
+  (`bedrock:GetFoundationModel` on `foundation-model/*`) and `MakerCheckAccess`
+  (`bedrock:GetFoundationModelAvailability`).
+* **Proofs name their model.** Every `PROVIDER#{kind}#{maker}` the agent writes (a story step, a portrait, a Try it)
+  carries `model`, the model key it was made with. The API counts a proof only for the model in use: one naming
+  another model, or older than the owner's last change of his own model in use (`MAKERDEF#.updatedAt`), proves
+  nothing, and a newer failed access check of the model in use wins over an older `on`.
+* **Try it for your own video model.** Its shots go to the same off-by-default us-west-2 bucket as Luma AI Ray2, so it
+  is `on` only after its own Try it: `POST …/providers/own-video/check` → 202 with a one-step `provider_check` job
+  (`meta.providers {animation: "own-video"}`), or 409 "Add a video model first: tap Add a model in Lamo Stories ›
+  Settings › Video." (busy: "Your own video model is being tried. Wait until it is done."). The agent makes one test
+  shot of the picked own video model (or its first) into its Region's bucket, proves `PROVIDER#animation#own-video`
+  with its `model`, records its usage and deletes the file; a switched-off bucket calls nothing
+  (`OWN_VIDEO_NOT_READY`). The access check never makes it `on`.
+
+#### G3 A real sound maker
+
+* **Chosen: ElevenLabs on the owner's key** (Bedrock has no sound or music model). It makes the sound effects
+  (`POST /v1/sound-generation`, `eleven_text_to_sound_v2`) and one instrumental music bed (`POST /v1/music`,
+  `music_v1`, `force_instrumental`), never its text-to-speech; character noises stay built in and wordless; no music
+  bed is asked for when the mix plays none. **What activates it:** the owner pastes his ElevenLabs key (`PUT
+  …/providers/elevenlabs/key`, Provider keys) and picks ElevenLabs as the Sound maker in Settings › Video (that picker
+  now saves: `audio`, `audioModel`). Until the key is there a story's create, produce and changes answer 409 with
+  "ElevenLabs is not ready yet: it needs your ElevenLabs key. …"; nothing switches to the built-in sounds by itself.
+  `own-sound` is the same on a model the owner adds (ElevenLabs only).
+* **A spoken voice exists only as Amazon Polly, opt-in** (`polly`, "A spoken voice (Amazon Polly)", line "Adds words
+  spoken aloud. Your videos are made without a voice unless you pick this."): never the default and never picked by
+  itself; it reads the story's captions at their times (the words already on screen) with the neural voice Joanna in
+  eu-west-1 through the agent's own role (`SpokenVoice`: `polly:SynthesizeSpeech`, `polly:DescribeVoices`), no key.
+  `hostId` `polly` is a display host for this bundled maker only: never offered for a model the owner adds, no key box.
+* **Usage and prices.** One `USAGE#` per model part (effects and music: unit `second`, `soundSec`; Polly: `modelId`
+  `neural`, unit `character`, `characters`), written even when a later part failed; `provider` stays the maker id.
+  The API prices provider usage by the model's own price (bundled or `MAKERDEF`) when the unit matches, then by the
+  owner's maker price: `PRICE_PROVIDERS` gains `elevenlabs` and `own-sound` (per second of sound) and `polly` (per
+  character spoken).
+
+#### G4 One keyed host for added models
+
+* `ModelDef` (Settings › AI › Add a model) and `MAKERDEF` gain `host`: `bedrock` (as before; left out reads so) |
+  `anthropic` (the Anthropic API) | `openai_compatible` (any https base URL that speaks the OpenAI chat-completions
+  API, with `baseUrl`), plus `elevenlabs` for sound only. A `baseUrl` is https only and public only (`hosts.private_host`
+  refuses loopback, private, link-local, shared CGNAT, the metadata service, multicast, reserved, odd IPv4 spellings,
+  local names, a user name or password, a query, `.`/`..`/`%` in the path), checked when saved and again on every call
+  (the agent resolves the name and connects only to the address it checked; redirects are never followed). Picture
+  makers on `openai_compatible` use `POST {baseUrl}/images/generations` (`b64_json`); video makers are Bedrock only.
+* **Keys.** `provider_keys.KEYED` gains `anthropic`, `openai_compatible` and `elevenlabs`: JSON at
+  `cf-prod/workspaces/{ws}/providers/{id}`, never returned (only a hint), read by the agent per call for the
+  workspace the call works for. **An OpenAI-compatible key is for one address**: its secret is `{"key", "origin"}`
+  (`https://host[:port]`, `PROVCRED#.forOrigin`, never returned); every OpenAI-compatible model of a workspace uses that
+  one origin (one service per workspace: another address answers 409 `ONE_SERVICE`, or `KEY_FOR_OTHER` while the key
+  is for another); `PUT …/providers/openai_compatible/key` takes an optional `baseUrl` and answers 409 "Add the model on
+  your OpenAI-compatible API first …" when there is neither a model nor a `baseUrl`; the row reads "Key saved for
+  api.example.com · ends 9k2q." The agent sends the key only to a base URL on that origin (scheme, host and port), and
+  never sends a key saved without its origin (`KeyForOtherAddress`: the model's sentence and `MODELSTATUS#` `denied`;
+  a picture step stops with its sentence and proves nothing). The Anthropic and OpenAI-compatible key rows take their
+  state from the newest check since the key was saved (`MODELSTATUS#`, `MAKERSTATUS#` of the models on that host).
+* **One contract per host.** `effortField` `output_config` | `reasoning_effort` (`openai_compatible` only; Low to
+  Extra high, never Maximum) | `none`. The Anthropic API is called through Anthropic's official SDK with the effort in
+  `output_config.effort`, its own retries off, and never its server-side `fallbacks` (no silent substitution); every
+  host's refusal reads like Bedrock's (the owner's sentence naming the host, `MODELSTATUS#`), and usage is recorded.
+* **IAM.** The agent's runtime role already reads only `<name>/workspaces/*/providers/*` (`CF_PROVIDER_KEYS_PREFIX`);
+  the story flow role gets an explicit Deny on those keys (`NoProviderKeys`, in place, like clip-flow's
+  `NoBankSecrets`). The `cf-prod-stories-api` role keeps managing them (it saves and removes the keys, §45.31 pins
+  that); no Deny is added there.
+
+#### G5 The owner's suggested efforts
+
+`text_edit` (the creative director, suggested Low: "Simple text modifications") and `animation_plan` (the storyboard,
+suggested High: "Detailed animation planning") join `TaskKind` (`ai_resolve.py`, `types.ts`, the mocks,
+`stories/config/agents.json`, `resolve-cases.json`; both resolvers pass every case). A chat message is `text_edit`
+only when, after an optional please/ok/now/just, it is nothing but one edit said first: rename or retitle, "call it
+X", fix or change a name, title, word, caption, line, typo or spelling, shorten or trim a caption, make the title
+shorter, replace X with Y, change "A" to "B". A question, a second clause with a verb, a second sentence, new-work
+words (next, another, new, add, remove, render, post, publish, plan, ideas, remake, study …), pictures, or more than
+200 characters keep it `chat`; words inside double quotes never count against it. `animation_plan` is the writer's
+re-staging pass after the engine refused the first staging; there is no two-call split. Every chat answer records its
+`task` (`chat` or `text_edit`); "Made with" says "Small word changes" and "Plan the animation".
+
+#### G6 Sharing Clip Factory's developer app, protected
+
+* The choice stays for YouTube, TikTok and X and reads **"Share Clip Factory's app"** with "Clip Factory's posts
+  always go first. Stories uses what's left." ("quicker" is gone). It is about the developer app (OAuth client and
+  quotas), never the account (G8): "Even with Clip Factory's app, sign in with a different account made for Clip
+  Factory Stories." Anything already connected through it keeps working with no reconnect.
+* **Own counters (a).** One counter for all of Lamo Stories, every owner and workspace together:
+  `RATE#WS#~shared#{platform}` / `SHAREUSE#{platform}#{window}` (type `ws_shareuse`; `posts`, `units`, `usd`,
+  `minuteKey`/`requestsThisMinute`, `dayKey`/`dayPostIds`, `blockedUntil`, `byWorkspace` per `{userId}#{workspaceId}`,
+  `cfAuto` (every owner's auto-posting schedule seen this window), `version`, `ttl`; "~" is in no workspace id). It
+  never writes Clip Factory's `RATE#{platform}`, configuration or X budget (the story flow role's Deny
+  `NoClipsRateWrites`); it reads Clip Factory's `RATE#{platform}` and the `autoPost` attribute of its settings item
+  read only (an attribute-limited GetItem; the separation test's allowed set grows by exactly that).
+* **Clip Factory's share is reserved (b):** its auto-posting schedule (`ceil(perRun × 24 / everyHours)` posts a day
+  while on; today 1 clip every 6 hours on every platform) plus headroom for its manual posts (10 YouTube uploads and 2
+  X posts a day). YouTube, per Google quota day: Lamo Stories may upload `100 − (auto + 10)` a day (`videos.insert`'s
+  own bucket), and of the 10,000-unit pool it may use `10,000 − 500 − max(5,000, Clip Factory's units today +
+  1,000)`. X, per UTC month: the owner's monthly X limit minus what Clip Factory spent minus its reserve for the days
+  left (the larger of its daily average and `(auto + 2) × (usdPerPost + 4 × usdPerPostRead)`); its 15-minute window
+  at most 1,000 requests. TikTok: of the app's 600 calls a minute Clip Factory keeps 300 plus 100, so Lamo Stories
+  makes at most 200; TikTok's daily post caps are per creator account and Lamo Stories' accounts are never Clip
+  Factory's, and when TikTok says the app's own daily limit is reached Lamo Stories stops there until the next UTC
+  day. While Clip Factory's own counter is blocked, Lamo Stories waits too. Clip Factory's own X charge counts only its
+  own spend, so if it posts far more than planned the month can go over the X limit by what Lamo Stories spent: the
+  card says so ("Clip Factory does not count Stories' X posts, …").
+* **No room: the post waits (c).** The story flow writes `waitUntil` and the line "Waiting: Clip Factory's posts go
+  first. Posts at <time>." on the publishing job; the public job shows `waitingUntil` and `waiting` while it is queued
+  or publishing (the post rows and the publish sheet); it waits with no compute and goes out by itself after the
+  reset, never failing silently and never taking Clip Factory's share. A slow-down from the shared app on the first
+  call (a retryable `rate` problem) waits for the window the same way. The story flow's execution timeout is raised in
+  place to 40 days (a month's wait on X).
+* **Tests (f):** a Lamo Stories post can never use up Clip Factory's reserved share on YouTube, X and TikTok, also
+  across three workspaces and owners; a waiting post goes out after the reset; Clip Factory's own posting path stays
+  byte-identical (the callback and separation tests). Copying Clip Factory's publishers is out.
+
+#### G7 Amazon's ended makers, Stability AI and Luma AI Ray2
+
+* Nothing offers or calls Nova Canvas or Nova Reel as live: Setup step 4, Settings › Video's rows, the portraits' AI
+  path and Try it read **ended** ("Ended by Amazon on 30 Sep 2026") with a one-tap replacement (Stability AI pictures,
+  Luma AI Ray2), never the default and never swapped by themselves; a pick of one is refused with no call: "Amazon
+  Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Lamo Stories › Settings › Video."
+  ("Amazon Nova Reel 1.1 … video maker"). A stored ended pick never ticks Setup step 4 (it is a step to do again,
+  also after `providersPickedAt`). Nova Reel's old Try it answers 409 with that sentence.
+* Stability AI makes the portraits when picked (the portraits use the picked picture maker), Luma AI Ray2 the
+  cut-aways (scenes with no character); each "Runs in the US (Oregon)", none picked by default; the built-ins stay
+  the default. **Luma AI Ray2 needs** the off-by-default Terraform switch `stories_video_west_bucket` (bucket
+  `${name}-stories-video-${account}-usw2` through the provider alias `aws.us_west_2`, private, TLS only, shots kept 14
+  days; `CF_VIDEO_WEST_BUCKET`; the agent's `WestVideoModel`, `WestVideoJobs`, `WestVideoFiles` grants) and Luma AI
+  Ray2 turned on for the account in us-west-2; then Try it (`POST …/providers/luma-ray/check`, one 5-second shot,
+  which Amazon bills). Until then: "Luma AI Ray2 is not ready yet: it needs a storage bucket in the United States
+  (Oregon), which is switched off, and Luma AI Ray2 turned on for your account. Pick Built-in animation in Settings ›
+  Video, or finish its setup." **Stability AI needs** its models turned on for the account in us-west-2 (Bedrock
+  console); its first portrait proves it.
+
+#### G8 Clip Factory Stories never posts to Clip Factory's accounts
+
+* **No account is shared.** "Use it for both" is gone: `destinations.py` rule 5 is absolute (never Clip Factory's
+  place, no exception); the share path (`social.share`, the share route and its `ws_routes_social` entry) is removed;
+  a stored `sharedWithClips` is ignored and cleared (Lamo Stories' own `SOCIAL#` only). No route or screen offers
+  sharing an account (tested).
+* **Same account = any stable identity matches** Clip Factory's `ACCOUNT#{platform}`: YouTube the channel id;
+  Facebook the Page id; Instagram the IG user id and the username; TikTok the open id (equal only on the shared app)
+  and the username (Clip Factory stores no `union_id`, so it is not compared); X the user id and the handle. It runs at
+  connect and before every upload. When it matches at connect the account is `same_as_clips` and no token is kept
+  (the old one is deleted too); when Clip Factory connects it later, Lamo Stories' connection is blocked from posting
+  (`clips_now`). Both are sticky: the identities found to be Clip Factory's are kept as `clipsMatched` `{ids,
+  usernames}` (at most 20 of each, never returned) on Lamo Stories' own `SOCIAL#`, across connects and disconnects,
+  and refused from then on, also once Clip Factory lets go of the account; only a connect of a different account
+  clears the status. Clip Factory's `ACCOUNT#` is read read-only, widened in place to `handle` (the API and the story
+  flow) and `autoPost` (the story flow, its settings item), with the separation tests' allowed sets to match; Clip
+  Factory's items and code are unchanged.
+* **Words.** Each Connect step and card: "Use a new account made for Clip Factory Stories, not lamo.clips."; the
+  same-as-Clips state: "This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign
+  in with a different one."; Clip Factory took it later: "This is Clip Factory's account now. Connect a different
+  account made for Clip Factory Stories."; the publish sheet: "This is Clip Factory's own account. Connect a different
+  account made for Clip Factory Stories in Social accounts." Every same-as-Clips account carries its `warning`, said
+  once on the card.
 
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 

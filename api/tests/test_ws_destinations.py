@@ -152,12 +152,17 @@ def test_a_good_destination_passes(store: db.Store, secrets_client: FakeSecretsM
     )
 
 
-def test_a_shared_destination_passes_only_for_its_identity(
+def test_a_stored_use_it_for_both_is_ignored_and_clip_factorys_account_is_refused(
     store: db.Store, secrets_client: FakeSecretsManager, ready: dict[str, Any]
 ) -> None:
+    """§45.37 G8 (a): rule 5 is absolute. An old "Use it for both" for exactly this identity no longer lets a post go
+    to Clip Factory's account."""
     _clips_same(store, secrets_client, ready)
     store.update(sup.PK, "SOCIAL#youtube", {"sharedWithClips": True, "sharedExternalAccountId": "UC-STORIES"})
-    assert validate_destination(store, WorkspaceSecrets(secrets_client), USER, "stories", ready).platform == "youtube"
+    with pytest.raises(DestinationProblem) as e:
+        validate_destination(store, WorkspaceSecrets(secrets_client), USER, "stories", ready)
+    assert (e.value.rule, e.value.kind) == (5, "same_as_clips")
+    assert "Clip Factory's own account" in e.value.sentence
 
 
 @pytest.mark.parametrize("name", sorted(RULES))
@@ -257,7 +262,7 @@ def test_the_check_runs_inside_the_publish_step_itself(
     http = FakeHttp()
     ctx = AfterStep("validate-youtube", changed)
     run_story_flow(ctx, sup.flow_event(), sup.flow_deps(store, secrets_client, http, clock))
-    assert ctx.steps == ["load-jobs", "validate-youtube", "publish-youtube"]
+    assert ctx.steps == ["load-jobs", "validate-youtube", "room-youtube-1", "publish-youtube"]
     assert http.calls == []
     job = table.raw(sup.PK, ready["sk"])
     assert job is not None

@@ -3,8 +3,10 @@
 
 Every ``/v1/workspaces`` route here is **S** (a ``stories`` workspace; Lamo Clips' id is a 409) and builds every key
 from the JWT's ``sub`` and the path's workspace id (``workspaces.guard``). Tokens and app secrets never leave
-Secrets Manager: no response, item or log holds one. Of Clip Factory's data only the five comparable attributes of
-its ``ACCOUNT#`` items and, for the shared-app choice, its YouTube, TikTok and X app keys are ever read.
+Secrets Manager: no response, item or log holds one. Of Clip Factory's data only the six comparable attributes of
+its ``ACCOUNT#`` items (§45.37 G8: the ids and the usernames) and, for the shared-app choice, its YouTube, TikTok and X
+app keys are ever read. There is no route to share an account with Clip Factory (§45.37 G8: "Use it for both" is
+gone).
 
 ``CALLBACK_ROUTES`` holds the public ``GET /v1/stories-oauth/{platform}/callback`` (§45.13.3: no JWT; the signed,
 single-use state is its authorization). It is kept out of ``ROUTES`` because ``ROUTES`` is, by its test, exactly the
@@ -19,7 +21,7 @@ from typing import Any
 
 from ... import validate
 from ...app import App
-from ...errors import ApiError, bad_request, not_found
+from ...errors import ApiError, not_found
 from ...http import Request, Response, no_content, ok, route
 from ...oauth import OAuthEnv
 from ...workspaces import deps as ws_deps
@@ -106,18 +108,6 @@ def choose(app: App, req: Request) -> Response:
     validate.only_keys(body, {"choiceId"})
     choice = validate.required_string(body, "choiceId", max_len=64)
     social.choose(scope, _env(app), platform, choice, app.clock())
-    return _account(app, scope, platform)
-
-
-def share(app: App, req: Request) -> Response:
-    scope = _scope(app, req)
-    platform = _platform(req)
-    body = req.json()
-    validate.only_keys(body, {"confirm"})
-    if body.get("confirm") is not True:
-        raise bad_request("Tap Use it for both again to say yes.", "confirm")
-    _env(app)
-    social.share(scope, platform, app.clock())
     return _account(app, scope, platform)
 
 
@@ -218,7 +208,6 @@ ROUTES = [
     route("GET", f"{WS}/social", list_social),
     route("POST", f"{WS}/social/{{platform}}/connect", connect),
     route("POST", f"{WS}/social/{{platform}}/choose", choose),
-    route("POST", f"{WS}/social/{{platform}}/share", share),
     route("POST", f"{WS}/social/{{platform}}/check", check),
     route("GET", f"{WS}/social/tiktok/creator-info", tiktok_creator_info),
     route("DELETE", f"{WS}/social/{{platform}}", disconnect),

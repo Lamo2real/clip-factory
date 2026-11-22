@@ -1,5 +1,5 @@
 {
- "version": "85dffd3a95f0",
+ "version": "74a7f3622942",
  "parts": [
   {
    "id": "app-map",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Lamo Stories: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Lamo Stories",
-   "chars": 200479
+   "chars": 224359
   },
   {
    "id": "contracts-46",
@@ -729,7 +729,7 @@
    "id": "adr-72",
    "title": "DECISIONS: ADR-72 Separate social connections: own tokens, one callback, the owner's choice of developer app",
    "line": "Context. The owner wants different accounts for Lamo Stories on every platform and no accidental posting to",
-   "chars": 2726
+   "chars": 2952
   },
   {
    "id": "adr-73",
@@ -771,13 +771,13 @@
    "id": "adr-79",
    "title": "DECISIONS: ADR-79 Developer apps: the owner picks Lamo Stories' own or Clip Factory's, per platform, never silently",
    "line": "Context. The second request: Lamo Stories' \"own OAuth credentials\", \"Do not reuse Clip Factory OAuth tokens. Do",
-   "chars": 1388
+   "chars": 1667
   },
   {
    "id": "adr-80",
    "title": "DECISIONS: ADR-80 Video generation is configured apart from the reasoning models; the built-in animator first",
    "line": "Context. The second request separates reasoning models from image, video and audio generation and says an LLM",
-   "chars": 1037
+   "chars": 1261
   },
   {
    "id": "adr-81",
@@ -796,6 +796,12 @@
    "title": "DECISIONS: ADR-83 Your Mac posts it on TikTok: a post that waits for the owner's Mac, claimed once, finished by I posted it's write",
    "line": "Context. TikTok keeps an unaudited app's posts \"Only me\" on a private account, his account is public on purpose,",
    "chars": 3862
+  },
+  {
+   "id": "adr-84",
+   "title": "DECISIONS: ADR-84 Stories makers are lists of checked models, keyed hosts carry the owner's own keys, Clip Factory's app is shared only behind its reserve, and ",
+   "line": "Context. The owner asked to pick picture, video and sound models independently and to add models and providers",
+   "chars": 2995
   },
   {
    "id": "architecture-overview",
@@ -843,7 +849,7 @@
    "id": "deployment-what-a-deploy-does",
    "title": "DEPLOYMENT: What a deploy does",
    "line": "Triggered by a push to main ([deploy.yml](../.github/workflows/deploy.yml)) or by hand (Actions → deploy → Run workflow).",
-   "chars": 6948
+   "chars": 7974
   },
   {
    "id": "deployment-desktop-downloads",

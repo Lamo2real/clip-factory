@@ -16,6 +16,13 @@ export const USAGE_NAME: Record<string, string> = {
   "builtin-synth": "Built-in sounds and music",
   "nova-canvas": "Amazon Nova Canvas",
   "nova-reel": "Amazon Nova Reel 1.1",
+  stability: "Stability AI pictures",
+  "luma-ray": "Luma AI Ray2",
+  "own-images": "Your own picture model",
+  "own-video": "Your own video model",
+  "own-sound": "Your own sound model",
+  elevenlabs: "ElevenLabs sound effects and music",
+  polly: "A spoken voice (Amazon Polly)",
 };
 
 export const FREE_LINE = "Free: it runs on Lamo Stories' own computer";
@@ -31,7 +38,8 @@ export function makerName(id: string, providers: ProviderStatus[] | null): strin
 export function unitsText(u: Pick<ProviderUsage, "provider" | "units" | "unit">): string {
   const n = Math.round(u.units * 10) / 10;
   if (u.unit === "image") return `${n.toLocaleString("en-GB")} ${n === 1 ? "picture" : "pictures"}`;
-  const what = u.provider === "nova-reel" ? "of video" : "of rendering";
+  if (u.unit === "character") return `${Math.round(u.units).toLocaleString("en-GB")} ${Math.round(u.units) === 1 ? "character" : "characters"} spoken`;
+  const what = u.provider === "nova-reel" || u.provider === "luma-ray" || u.provider === "own-video" ? "of video" : u.provider === "elevenlabs" || u.provider === "own-sound" || u.provider === "polly" ? "of sound" : "of rendering";
   if (n >= 120) {
     const min = Math.round(n / 60);
     return `${min.toLocaleString("en-GB")} minutes ${what}`;

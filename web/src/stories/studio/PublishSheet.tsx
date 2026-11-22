@@ -38,7 +38,7 @@ import { storiesApi } from "../api/client.ts";
 import { STORIES_PLATFORMS, type ErrorAccount, type Platform, type PublishOptions, type PublishingJob, type PublishTarget, type SocialAccount, type StoriesConfig, type Story, type TikTokCreator } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
 import { Busy, celebrate, Notice, Pick, StSheet, Switch, TechDetails } from "./kit.tsx";
-import { PostRow, SocialAccountsLink } from "./PostsPanel.tsx";
+import { PostRow, SocialAccountsLink, waitingLine } from "./PostsPanel.tsx";
 import { accountOf, accountProblem, accountShown, ago, PLATFORM_LABEL, say, thisAccount } from "./words.ts";
 
 type YouTubeOptions = { privacy: "public" | "unlisted" | "private"; category: string; notifySubscribers: boolean };
@@ -68,7 +68,7 @@ export function accountState(a: SocialAccount): string {
     case "choose_account":
       return "Pick which account to use first.";
     case "same_as_clips":
-      return "This is Clip Factory's account. Decide in Social accounts.";
+      return "This is Clip Factory's own account. Connect a different account made for Clip Factory Stories in Social accounts.";
     default:
       return "Not connected yet.";
   }
@@ -627,7 +627,13 @@ function SentSheet({ sent, onClose, onRetry }: { sent: PublishingJob[]; onClose:
         </button>
       }
     >
-      <p className="st-s-field__hint">{done ? "Your video is up. The numbers come in over the next 7 days." : "Each place shows here as it goes. You can close this: it keeps going."}</p>
+      <p className="st-s-field__hint">
+        {done
+          ? "Your video is up. The numbers come in over the next 7 days."
+          : sent.some((j) => waitingLine(j))
+            ? "Each place shows here as it goes. A place that waits goes out by itself at its time. You can close this."
+            : "Each place shows here as it goes. You can close this: it keeps going."}
+      </p>
       <ul className="st-s-posts">
         {sent.map((j) => (
           <PostRow key={j.publishingJobId} job={j} onRetry={onRetry} />

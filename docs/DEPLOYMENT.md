@@ -389,6 +389,15 @@ Triggered by a push to `main` ([deploy.yml](../.github/workflows/deploy.yml)) or
    on Amazon Nova Reel in us-east-1 and Amazon Nova Canvas in eu-west-1 (Ireland) for character pictures. Lamo Stories'
    reasoning models (Claude on Bedrock, and any model the owner adds in Settings › AI) need model access in their
    Regions; Settings › AI › Check models and Settings › Video › Try it (Nova Reel) show what works.
+   **Since §45.37 (2026-11-22)** Amazon has ended Nova Reel and Nova Canvas (both read ended; never called), so the
+   AI makers are: **Luma AI Ray2** for cut-aways, which needs `stories_video_west_bucket = true` in `infra/envs/prod`
+   (a one-line pull request; it adds only the bucket `cf-prod-stories-video-<account>-usw2` in us-west-2 through the
+   `aws.us_west_2` provider, private, TLS only, shots kept 14 days, and lets `cf_prod_story_agent` start Luma AI Ray2
+   there), then Bedrock › Model access › Luma AI Ray2 in us-west-2 (Oregon), then Settings › Video › Try it;
+   **Stability AI** pictures for portraits, which need Bedrock › Model access for Stability AI's models in us-west-2;
+   **ElevenLabs** sound effects and instrumental music, which need only the owner's ElevenLabs key (Provider keys)
+   and his pick of ElevenLabs as the Sound maker; and **Amazon Polly**'s spoken voice in eu-west-1, opt-in only (the
+   runtime's own role; nothing to set up). The built-in makers stay the default and need nothing.
 6. **Web**: [scripts/write-web-config.sh](../scripts/write-web-config.sh) writes `config.json` from the Terraform
    outputs, including `wsUrl` from `ws_url` and `oauthCallbackBase` from `oauth_callback_base` (both required; the
    script stops if one is missing); the build is synced to the web bucket (the sync never deletes TikTok's

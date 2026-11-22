@@ -6,7 +6,7 @@ chat, memory, references, onboarding, provider keys, usage, storage), then a swe
 own route table (core, AI, social and publishing) with seeded ids and sample bodies. Every DynamoDB key, S3 key or
 prefix and Secrets Manager name touched is recorded, and must be inside Lamo Stories' own namespaces:
 ``USER#{u}#WS#…``, ``USER#{u}#WSREG``, ``OAUTH#ws.…``, ``ws/{u}/…`` and ``cf-prod/workspaces/…``. The only allowed
-exceptions are §45.33's reads: five attributes of Clip Factory's ``ACCOUNT#`` items, the YouTube, TikTok and X app-key
+exceptions are §45.33's reads: six attributes of Clip Factory's ``ACCOUNT#`` items (§45.37 G8 b: + its username), the YouTube, TikTok and X app-key
 secrets and the OAuth state key. Before and after, every Clip Factory item, secret and file is byte-identical, and
 neither Clip Factory's agent runtime nor its functions were called. No network: sockets are refused.
 """
@@ -50,7 +50,7 @@ from test_ws_ai_support import (
 SRC = Path(__file__).resolve().parents[1] / "src" / "clipfactory_api"
 GROUP = re.compile(r"\(\?P<(\w+)>\[\^/\]\+\)")
 SOME_ID = "01JD0000000000000000000000"
-ACCOUNT_ATTRIBUTES = {"pk", "sk", "platform", "status", "accountId"}
+ACCOUNT_ATTRIBUTES = {"pk", "sk", "platform", "status", "accountId", "handle"}  # §45.37 G8 b: + the username
 SHARED_APP_SECRETS = {f"cf-prod/platforms/{p}/app" for p in ("youtube", "tiktok", "x")}
 WS_PREFIXES = (f"USER#{USER}#WS#", "OAUTH#ws.")
 WS_EXACT = (f"USER#{USER}#WSREG",)
@@ -316,7 +316,9 @@ def _ai_flow(call: Recorder, s3: RecordingS3) -> None:
     )
     ok("PUT", "/ai/prices/opus-5-5", {"inputPer1M": 5, "outputPer1M": 25, "currency": "USD"})
     ok("PUT", "/ai/models/custom-llama", MODEL_DEF)  # a model the owner adds (§45.34), kept in MODELDEF# only
+    ok("PUT", "/makers/models/custom-pictures", MAKER_DEF)  # a picture model he adds (§45.37 G2), MAKERDEF# only
     ok("POST", "/ai/check-models", {"models": ["opus-5-5"]}, 202)
+    ok("POST", "/ai/check-models", {"makers": ["custom-pictures", "stable-image-core", "elevenlabs-effects"]}, 202)
     ok("GET", "/usage")
     agent = ok("GET", "/agents/storyboard")["agent"]
     ok("PATCH", "/agents/storyboard", {"version": agent["version"], "model": "sonnet-5-5", "effort": "max"})
@@ -365,6 +367,7 @@ def _ai_flow(call: Recorder, s3: RecordingS3) -> None:
     ok("GET", "/storage")
     ok("POST", "/storage/cleanup", {})
     ok("DELETE", "/ai/models/custom-llama", expect=204)
+    ok("DELETE", "/makers/models/custom-pictures", expect=204)
     ok("DELETE", "/providers/runway/key", expect=204)
     ok("DELETE", f"/memory/{mem['memId']}", expect=204)
     ok("DELETE", f"/references/{ref_id}", expect=204)
@@ -381,6 +384,15 @@ MODEL_DEF = {
     "defaultEffort": None,
     "vision": False,
     "maxOutputTokens": 8192,
+    "price": None,
+}
+MAKER_DEF = {
+    "kind": "image",
+    "label": "My Stability picture",
+    "provider": "Stability AI",
+    "host": "bedrock",
+    "modelId": "stability.stable-image-core-v1:1",
+    "region": "us-west-2",
     "price": None,
 }
 LOOK = {
@@ -430,7 +442,8 @@ def _sample_bodies(r: Route, ids: dict[str, str]) -> list[Any]:
         ("POST", "/design", {"description": "A tall driver."}),
         ("POST", "/design", {"description": "Taller.", "characterId": ids["characterId"]}),
         ("POST", "/download", {"format": "webm"}),
-        ("PUT", "/models/(?P<modelKey>[^/]+)", MODEL_DEF),
+        ("PUT", "/ai/models/(?P<modelKey>[^/]+)", MODEL_DEF),
+        ("PUT", "/makers/models/(?P<modelKey>[^/]+)", MAKER_DEF),
         (
             "PATCH",
             "/v1/workspaces/(?P<ws>[^/]+)",
@@ -448,7 +461,6 @@ def _sample_bodies(r: Route, ids: dict[str, str]) -> list[Any]:
         ("POST", "/reject", {"reason": "no"}),
         ("POST", "/changes", {"note": "Faster."}),
         ("POST", "/publish", {"targets": [{"platform": "youtube", "socialAccountId": "stories.youtube"}]}),
-        ("POST", "/share", {"confirm": True}),
         ("POST", "/choose", {"choiceId": "page-1"}),
         ("PUT", "/app", {"choice": "clips"}),
         ("PUT", "/app", {"choice": "own", "clientId": "own-id", "clientSecret": "own-secret"}),
@@ -503,7 +515,7 @@ def test_every_lamo_stories_route_stays_in_its_own_namespaces(
         for m, p, s, _ in flow
         if m == r.method and r.pattern.match(p) and s < 300
     }
-    assert len(hit) == len(ai_routes.ROUTES) == 41  # the real flow answered every AI route
+    assert len(hit) == len(ai_routes.ROUTES) == 43  # the real flow answered every AI route
 
     # every route of Lamo Stories' own table, with every id a seeded or a made-up one, writes and reads first
     values = {"ws": "stories", "platform": "youtube", "agentId": "creative_director", "modelKey": "custom-sweep",
@@ -514,6 +526,8 @@ def test_every_lamo_stories_route_stays_in_its_own_namespaces(
             call(r.method, _path(r, values), body)
         if r.method != "DELETE":
             call(r.method, _path(r, {"ws": "stories"}), {} if r.method not in {"GET", "DELETE"} else None)
+    call("POST", f"{BASE}/providers/luma-ray/check", {})  # the one maker with a Try it (§45.37 G7)
+    call("POST", f"{BASE}/providers/nova-reel/check", {})  # ended: refused, nothing written
 
     # the sweep turned the keep settings on and cleared files with them (§45.34), inside the workspace only
     stored = table.items[(ws.registry_pk(USER), ws.workspace_sk("stories"))]["configuration"]["production"]
@@ -532,10 +546,12 @@ def test_every_lamo_stories_route_stays_in_its_own_namespaces(
     # every runtime call went to Lamo Stories' own runtime
     assert runtime.calls
     assert all(str(c.get("session_id", "cfstory-")).startswith("cfstory-") for c in runtime.calls)
-    # Nova Reel's "Try it" (§45.35 D2) was swept too: a job in the workspace partition, Lamo Stories' own action
-    tried = [s for m, p, s, _ in call.responses if m == "POST" and p.endswith("/providers/nova-reel/check")]
+    # Luma AI Ray2's "Try it" (§45.35 D2, §45.37 G7) was swept too: a job in the workspace partition, Lamo Stories'
+    # own action; Amazon Nova Reel's ended one is refused
+    tried = [s for m, p, s, _ in call.responses if m == "POST" and p.endswith("/providers/luma-ray/check")]
     assert 202 in tried
-    assert [c["provider_id"] for c in runtime.calls if c["action"] == "provider_check"] == ["nova-reel"]
+    assert 409 in [s for m, p, s, _ in call.responses if m == "POST" and p.endswith("/providers/nova-reel/check")]
+    assert [c["provider_id"] for c in runtime.calls if c["action"] == "provider_check"] == ["luma-ray"]
     assert [c for c in runtime.calls if c["action"] == "provider_check" and c["workspace_id"] != "stories"] == []
     # the AI flow itself: no server errors and nothing internal in any answer
     assert [(m, p, s) for m, p, s, _ in flow if s >= 500] == []

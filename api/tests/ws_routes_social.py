@@ -12,7 +12,6 @@ EXPECTED: set[tuple[str, str]] = {
     ("GET", f"{WS}/social"),
     ("POST", f"{WS}/social/youtube/connect"),
     ("POST", f"{WS}/social/instagram/choose"),
-    ("POST", f"{WS}/social/youtube/share"),
     ("POST", f"{WS}/social/youtube/check"),
     ("GET", f"{WS}/social/tiktok/creator-info"),
     ("DELETE", f"{WS}/social/youtube"),
