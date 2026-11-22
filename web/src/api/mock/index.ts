@@ -13,6 +13,7 @@ import { statsApi, type StatsFaults } from "./stats.ts";
 import { savedSkillCopy, skillsApi, type MockSkillControls } from "./skills.ts";
 import { lessonsApi, type LessonsFault } from "./lessons.ts";
 import { followsApi } from "./follows.ts";
+import { followersApi } from "./followers.ts";
 import { dashData, mockMoneyGrant, moneyApi } from "./money.ts";
 import { pushApi } from "./push.ts";
 import { crMockApi } from "./contentrewards.ts";
@@ -657,10 +658,11 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     },
     publish: () => mockLive.publish({ type: "getpaid", op: "upsert", id: "getpaid", partial: true }),
   });
+  const followers = followersApi(() => delay());
   if (typeof window !== "undefined") {
     // Merge, never replace: posting (above) and setup (mock/setup.ts) keep their knobs on the same object.
     const w = window as unknown as { __cfMock?: Record<string, unknown> & Partial<MockSkillControls> };
-    w.__cfMock = Object.assign(w.__cfMock ?? {}, skills.controls, { follows: follows.controls, money: money.controls, getpaid: getpaid.controls });
+    w.__cfMock = Object.assign(w.__cfMock ?? {}, skills.controls, { follows: follows.controls, money: money.controls, getpaid: getpaid.controls, followers: followers.controls });
   }
 
   /**
@@ -1243,6 +1245,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     ...lessons,
     ...follows.api,
     ...money.api,
+    ...followers.api,
     ...pushApi(),
     async getSettings() {
       await delay();
