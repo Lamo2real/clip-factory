@@ -126,7 +126,9 @@
   grid-area: steps;
   min-width: 0;
 }
-.st-steps__list {
+/* Two classes, so the shell's list reset (.stories-app ol: padding 0) never takes the 6 px gap away: the rows and the
+   cream highlight sit 6 px inside the 20 px glass, so their 14 px corners nest in it and its light edge shows. */
+.st-setup .st-steps__list {
   position: relative;
   isolation: isolate;
   display: grid;
@@ -295,15 +297,16 @@
   display: grid;
   gap: var(--st-space-2);
 }
-/* Rows that only show something: a step deeper than the panel with a soft top highlight (never lighter, so their
-   words keep the panel's contrast over every background); nothing in them is a control. */
+/* Rows that only show something: warm translucent tiles with a soft top highlight. --st-fill-control follows the look:
+   over the colours a light cream lift (over Ember's lightest pixel every word keeps 4.5:1 or more), over a picture or
+   the desktop a card's veil, so there they are a step deeper than the panel. Nothing in them is a control. */
 .st-setup__facts li {
   display: flex;
   align-items: flex-start;
   gap: var(--st-space-3);
   padding: var(--st-space-3) var(--st-space-4);
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.24);
+  background: var(--st-fill-control);
   box-shadow: var(--st-sheen-control);
   color: var(--st-text);
 }
@@ -349,7 +352,7 @@
   gap: var(--st-space-3);
   padding: var(--st-space-2) var(--st-space-3) var(--st-space-2) var(--st-space-2);
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.24);
+  background: var(--st-fill-control);
   box-shadow: var(--st-sheen-control);
 }
 .st-agent.is-off {
@@ -373,7 +376,8 @@
   overflow-wrap: anywhere;
 }
 
-/* What is left: a glass surface with glass pills (GlassPill), one tap back to each step. */
+/* What is left: a glass surface with glass pills (GlassPill), one tap back to each step. None is cream: the step list
+   beside it already shows the open step, and one choice gets one cream marker. */
 .st-left {
   grid-area: left;
   display: grid;
@@ -411,16 +415,15 @@
   color: var(--st-text-amber);
   font-size: var(--st-fs-min);
 }
-.st-left__item.is-on .st-left__tag {
-  color: var(--st-on-cream-orange);
-}
 /* A platform held because its account is Clip Factory's own: why, under the list (§45.35 D11). */
 .st-left__why {
   display: grid;
   gap: var(--st-space-2);
 }
 
-/* Wider: the steps (and what is left under them) beside the step; wider still, what is left in a column of its own. */
+/* Wider: the steps, and what is left under them, beside the step, from a setup 560 px wide (about a 885 px window with
+   the rail, as before the glass: 900 px windows and up keep the steps in view beside the step). The step stays the
+   widest column at every width. */
 @container st-setup (min-width: 640px) {
   .st-setup__head {
     grid-template-columns: auto minmax(0, 1fr) auto;
@@ -443,21 +446,21 @@
     align-self: start;
   }
 }
-@container st-setup (min-width: 720px) {
+@container st-setup (min-width: 560px) {
   .st-setup__grid {
-    grid-template-columns: minmax(232px, 280px) minmax(0, 1fr);
+    grid-template-columns: minmax(220px, 0.42fr) minmax(0, 1fr);
     grid-template-areas:
       "steps panel"
       "left panel";
     grid-template-rows: auto 1fr;
   }
 }
-@container st-setup (min-width: 1100px) {
+@container st-setup (min-width: 900px) {
   .st-setup__grid {
-    grid-template-columns: minmax(240px, 280px) minmax(0, 1fr) minmax(240px, 300px);
-    grid-template-areas: "steps panel left";
-    grid-template-rows: auto;
+    grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
   }
+}
+@container st-setup (min-width: 1100px) {
   .st-setup__dial.st-dial {
     width: 152px;
   }
@@ -466,10 +469,12 @@
   }
 }
 
-/* The platform's card inside a connect step sits on the step's glass: no second backdrop filter under it. */
-.st-setup .st-conn {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+/* The platform's card inside a connect step (PlatformCard inStep): flat on the step's own glass, no second veil, edge,
+   glow or corner of its own; its rows nest in the panel. */
+.st-setup .st-conn--in-step {
+  padding: 0;
+  background: none;
+  box-shadow: none;
 }
 
 /* ---------- The dashboard's setup card and Continue (Dashboard.tsx markup; their rules came here with the file split.

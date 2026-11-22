@@ -46,7 +46,7 @@
   color: var(--st-text-strong);
 }
 
-/* The setup's first step: the models and their state, rows that only show (a step deeper than the panel). */
+/* The setup's first step: the models and their state, tiles that only show (the look-aware control fill). */
 .st-setup .st-setup__sub {
   margin-top: var(--st-space-1);
   color: var(--st-text-strong);
@@ -64,7 +64,7 @@
   gap: 2px var(--st-space-3);
   padding: var(--st-space-3) var(--st-space-4);
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.24);
+  background: var(--st-fill-control);
   box-shadow: var(--st-sheen-control);
 }
 .st-setup__model-name {

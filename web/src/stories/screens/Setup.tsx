@@ -501,6 +501,7 @@ function ConnectStep({ ws, platform, line }: { ws: string; platform: Platform; l
       ) : null}
       <ul className="st-conns st-conns--one">
         <PlatformCard
+          inStep
           ws={ws}
           a={a}
           all={social.data.accounts}
@@ -792,8 +793,8 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
           </Foot>
         </div>
 
-        {/* What is left: glass pills, one tap back to each step, the open one solid cream (in the grid: under the steps,
-            or a column of its own). */}
+        {/* What is left: glass pills, one tap back to each step (in the grid, under the steps). None is cream: the step
+            list already marks the open step, so one choice has one cream marker. */}
         {left.length ? (
           <section className="st-left st-glass" aria-labelledby="st-left-title">
             <h2 className="st-left__title st-display" id="st-left-title">
@@ -804,8 +805,6 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
                 <li key={s.step}>
                   <GlassPill
                     className="st-left__item"
-                    active={s.step === step}
-                    aria-current={s.step === step ? "step" : undefined}
                     icon={<StIcon name={ICON[s.step]} size={18} />}
                     onClick={() => go(s.step)}
                   >

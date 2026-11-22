@@ -1,9 +1,11 @@
 /* ---------- Social accounts (Connections.tsx) on the liquid glass (styles/GLASS-CONTRACT.md) ----------
    Five glass account cards (.st-conn.st-glass), each with a round glass puck for the platform's mark, its name in
-   Playfair and its status chip; the boxes inside are glass rows a step deeper than the card with a soft top
-   highlight (rows that only show), wells deeper still (what is copied or typed), the notes are tinted with the measured veil (--st-veil-tinted, the colour cut to --st-tint-cut),
-   so every word keeps 4.5:1 over Ember, a picture, and a white or busy desktop. Tokens only; radii from --st-r-*;
-   light, never a border; no cursor; hover on every control. */
+   Playfair and its status chip. A card that needs the owner is hero glass (brighter edge and sheen, its rim may bend;
+   padded past the rim's band). The boxes inside are warm translucent tiles with a soft top highlight
+   (--st-fill-control: a light cream lift over the colours, a card's veil over a picture or the desktop), wells deeper
+   (what is copied or typed), the notes tinted with the measured veil (--st-veil-tinted, the colour cut to
+   --st-tint-cut), so every word keeps 4.5:1 over Ember, a picture, and a white or busy desktop. Tokens only; radii
+   from --st-r-*; light, never a border; no cursor; hover on every control. */
 
 .st-conns {
   display: grid;
@@ -34,7 +36,11 @@
   padding: var(--st-inset);
   animation: st-rise var(--st-dur-enter) var(--st-ease-out) both;
 }
-/* A card that needs the owner: a warm tint from the top left over the measured tinted veil. */
+/* A card that needs the owner: hero glass (PlatformCard), padded so a bending rim never reaches words, with a warm
+   tint from the top left over the measured tinted veil. */
+.st-conn.st-lens {
+  padding: max(var(--st-inset), var(--st-lens-band));
+}
 .st-conn--needs_reconnect,
 .st-conn--same_as_clips {
   background: linear-gradient(165deg, rgb(var(--st-coral-rgb) / var(--st-tint-cut)), rgb(var(--st-coral-rgb) / 0) 60%), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
@@ -57,7 +63,7 @@
   height: var(--st-tap);
   border-radius: var(--st-r-round);
   color: var(--st-text-strong);
-  background: rgb(var(--st-cream-rgb) / 0.1);
+  background: var(--st-fill-control);
   box-shadow: var(--st-sheen-control);
 }
 .st-conn .st-conn__name {
@@ -68,15 +74,14 @@
   font-weight: var(--st-weight-display);
   overflow-wrap: anywhere;
 }
-/* The account: its picture, name and handle, a row that only shows (a step deeper than the card: never lighter, so
-   its words keep the card's contrast over every background). */
+/* The account: its picture, name and handle, a tile that only shows. */
 .st-who {
   display: flex;
   align-items: center;
   gap: var(--st-space-3);
   padding: var(--st-space-3);
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.24);
+  background: var(--st-fill-control);
   box-shadow: var(--st-sheen-control);
 }
 .st-who__avatar {
@@ -265,7 +270,7 @@
   gap: 6px;
   padding: var(--st-space-3) var(--st-space-4);
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.24);
+  background: var(--st-fill-control);
   box-shadow: var(--st-sheen-control);
 }
 .st-conn .st-limits__title {

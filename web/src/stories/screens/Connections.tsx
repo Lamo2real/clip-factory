@@ -103,6 +103,9 @@ const STATUS: Record<SocialAccount["connectionStatus"], { label: string; tone: S
   not_connected: { label: "Not connected", tone: "sky", auth: "Not allowed yet: nothing is connected." },
 };
 
+/** The cards that need the owner (a warm tint): on Social accounts they are hero glass, their rim may bend. */
+const NEEDS_OWNER: ReadonlySet<SocialAccount["connectionStatus"]> = new Set(["choose_account", "needs_reconnect", "same_as_clips"]);
+
 /** The callback's result code (§17.5's codes plus same_as_clips and clips_meta_check) in plain words. */
 export function resultSentence(code: string, p: Platform): { text: string; good: boolean } {
   const name = PLATFORM_NAME[p];
@@ -675,6 +678,7 @@ export function PlatformCard({
   onDisconnected,
   askIntended = false,
   onAnswered,
+  inStep = false,
 }: {
   ws: string;
   a: SocialAccount;
@@ -686,6 +690,8 @@ export function PlatformCard({
   /** just connected: ask whether this is the intended account */
   askIntended?: boolean;
   onAnswered?: () => void;
+  /** inside a setup step: flat on the step's own glass panel, not a glass card of its own */
+  inStep?: boolean;
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState<Busy>(null);
@@ -754,7 +760,7 @@ export function PlatformCard({
   const otherReason = a.reason && a.connectionStatus !== "needs_reconnect" && a.reason !== "expires_soon" && a.reason !== "expired" && !a.warning ? reasonSentence(a.reason, p) : null;
 
   return (
-    <li className={`st-conn st-conn--${a.connectionStatus} st-glass`} data-platform={p}>
+    <li className={`st-conn st-conn--${a.connectionStatus} ${inStep ? "st-conn--in-step" : NEEDS_OWNER.has(a.connectionStatus) ? "st-glass st-glass--hero st-lens" : "st-glass"}`} data-platform={p}>
       <header className="st-conn__head">
         <span className={`st-conn__mark st-conn__mark--${p}`}>
           <PlatformMark platform={p} size={24} title={`${name} logo`} />
@@ -1022,9 +1028,10 @@ function SetupBack({ ws }: { ws: string }) {
   const { data } = useOnboarding(ws);
   if (!data || data.finishedAt) return null;
   return (
-    <aside className="st-setupback st-glass" aria-label="Setting up Lamo Stories">
+    <aside className="st-setupback st-glass st-glass--hero st-lens" aria-label="Setting up Lamo Stories">
       <ArcDial className="st-setupback__dial" value={data.done} max={data.total} label={`${data.done} of ${data.total} done`} valueText={`${data.done} of ${data.total} done`}>
         <span className="st-setupback__num st-num">{data.done}</span>
+        <span className="st-setupback__of">of {data.total}</span>
       </ArcDial>
       <p className="st-setupback__text">
         <strong>Setting up Lamo Stories:</strong> {data.done} of {data.total} done.
