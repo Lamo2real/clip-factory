@@ -272,7 +272,7 @@ export function autoPostMock(deps: AutoPostDeps) {
             ? PLATFORM_ORDER.flatMap((p) =>
                 posts
                   .filter((x) => x.clipId === c.clipId && x.platform === p && c.places.includes(p))
-                  .map((x) => ({ platform: x.platform, status: x.status, ...(x.url ? { url: x.url } : {}), ...(x.error ? { error: x.error } : {}), ...(x.test ? { test: x.test } : {}) })),
+                  .map((x) => ({ platform: x.platform, status: x.status, ...(x.url ? { url: x.url } : {}), ...(x.error ? { error: x.error } : {}), ...(x.test ? { test: x.test } : {}), ...(x.status === "mac" && x.mac ? { mac: x.mac.state } : {}) })),
               )
             : [],
       })),
@@ -377,12 +377,13 @@ export function autoPostMock(deps: AutoPostDeps) {
         nextRunAt: next === null ? null : iso(next),
         perDay: perDay(s.perRun, s.everyHours),
         places,
-        // §47.2: while the owner's Mac posts TikTok, TikTok is not left out: it is the Mac's place.
-        leftOut: PLATFORM_ORDER.filter((p) => !places.includes(p) && !(p === "tiktok" && macOn(deps.settings()))).map((p) => ({
+        // §47.2: while the owner's Mac posts TikTok, TikTok is not left out: it is the Mac's place (only when a run has
+        // another place to post to; with none it sends nothing, §46.6).
+        leftOut: PLATFORM_ORDER.filter((p) => !places.includes(p) && !(p === "tiktok" && macOn(deps.settings()) && places.length > 0)).map((p) => ({
           platform: p,
           reason: p === "tiktok" ? ("tiktok_yourself" as const) : ("not_set_up" as const),
         })),
-        macPlaces: macOn(deps.settings()) ? (["tiktok"] as Platform[]) : [],
+        macPlaces: macOn(deps.settings()) && places.length > 0 ? (["tiktok"] as Platform[]) : [],
         nextUp: picked.taken.slice(0, 10).map((c, i) => ({
           clipId: c.clipId,
           jobId: c.jobId,

@@ -390,6 +390,8 @@ export interface AutoRunPost {
   url?: string;
   error?: string;
   test?: "private";
+  /** §47: a Mac post's state (only with `status: "mac"`). */
+  mac?: "waiting" | "working" | "stopped";
 }
 
 export interface AutoRunClip {

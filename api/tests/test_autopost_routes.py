@@ -363,6 +363,25 @@ def test_while_the_mac_posts_tiktok_left_out_drops_it_and_mac_places_names_it(ca
     ]
 
 
+def test_with_nowhere_else_to_post_the_mac_gets_nothing_either(call: Call, store: db.Store) -> None:
+    # A run with no place set up sends nothing (§46.6), so the page must not say "TikTok: your Mac posts it." then.
+    assert call("PUT", "/v1/settings", {"tiktokMac": {"on": True}})[0] == 200
+    body = call("GET", "/v1/autopost")[1]
+    assert body["places"] == []
+    assert body["macPlaces"] == []
+    assert {"platform": "tiktok", "reason": "tiktok_yourself"} in body["leftOut"]
+
+
+def test_recent_tells_a_mac_posts_state(app: Any, call: Call, store: db.Store, s3_client: FakeS3, clock: Clock) -> None:
+    ready(store, "youtube")
+    turn_on(store, tiktokMac={"on": True})
+    review_clip(store, s3_client)
+    clock.now = SLOT + timedelta(seconds=5)
+    run.run_once(deps(app), USER, "scheduled", SLOT)
+    posts_of_run = call("GET", "/v1/autopost")[1]["runs"][0]["clips"][0]["posts"]
+    assert {"platform": "tiktok", "status": "mac", "mac": "waiting"} in posts_of_run
+
+
 def test_tiktok_yourself_drops_clips_the_mac_has_or_posted(
     app: Any, call: Call, store: db.Store, s3_client: FakeS3, clock: Clock
 ) -> None:

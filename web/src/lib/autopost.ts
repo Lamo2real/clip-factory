@@ -152,6 +152,10 @@ export interface RunLine {
   opens: { platform: Platform; url: string }[];
 }
 
+/** §47: TikTok with the owner's Mac: "TikTok (your Mac)" while it waits or works, "TikTok (your Mac stopped)". */
+const macPart = (p: AutoRun["clips"][number]["posts"][number]) =>
+  `${PLATFORM_LABEL[p.platform]} (${p.mac === "stopped" ? "your Mac stopped" : "your Mac"})`;
+
 /** ✓ posted, ✗ didn't work, … still on its way. */
 const mark = (status: Post["status"]) => (status === "posted" ? "✓" : status === "failed" ? "✗" : "…");
 
@@ -179,7 +183,7 @@ export function runLines(run: AutoRun, now: number = Date.now()): RunLine[] {
       );
       return { key, text: `${lead} · ${quoted(c.hook)}: ${parts.join(" · ")}`, opens };
     }
-    const parts = posts.map((p) => `${PLATFORM_LABEL[p.platform]} ${mark(p.status)}`);
+    const parts = posts.map((p) => (p.status === "mac" ? macPart(p) : `${PLATFORM_LABEL[p.platform]} ${mark(p.status)}`));
     return { key, text: `${lead} · ${quoted(c.hook)}${parts.length ? `: ${parts.join(" ")}` : ""}`, opens };
   });
 }

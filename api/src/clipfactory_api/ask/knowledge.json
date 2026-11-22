@@ -1,5 +1,5 @@
 {
- "version": "d73713ad53eb",
+ "version": "859af6b47637",
  "parts": [
   {
    "id": "app-map",
@@ -309,7 +309,7 @@
    "id": "contracts-47",
    "title": "CONTRACTS: 47. Your Mac posts it on TikTok (owner request, 2026-11-22)",
    "line": "The owner (2026-11-22, verbatim): \"can you create a automation for my mac so everytime the clip factory wants upload to",
-   "chars": 21836
+   "chars": 22598
   },
   {
    "id": "adr-01",

@@ -78,6 +78,8 @@ def public_run(item: Mapping[str, Any], by_id: Mapping[str, Item], found: Mappin
                 if post is None or post.get("autoRun") != item.get("runId"):
                     continue
                 row: Item = {"platform": post.get("platform"), "status": post.get("status")}
+                if post.get("status") == posts.MAC_STATUS and post.get("macState"):
+                    row["mac"] = str(post["macState"])  # §47: waiting, working or stopped, for Recent's words
                 for key in ("url", "error"):
                     if post.get(key):
                         row[key] = post[key]
@@ -193,9 +195,10 @@ def status(app: App, req: Request) -> Response:
             "nextRunAt": iso(next_at) if next_at is not None else None,
             "perDay": schedule.per_day(auto),
             "places": picked.places,
-            "leftOut": pick.left_out(picked.places, mac=mac),
+            "leftOut": pick.left_out(picked.places, mac=mac and bool(picked.places)),
             # §47: the places the owner's Mac posts each auto-posted clip to (TikTok while Your Mac posts TikTok is on).
-            "macPlaces": ["tiktok"] if mac else [],
+            # With no other place set up a run sends nothing (§46.6), so the Mac gets nothing either.
+            "macPlaces": ["tiktok"] if mac and picked.places else [],
             "nextUp": next_up,
             "waiting": waiting,
             "runs": [public_run(r, by_id, run_posts) for r in runs],

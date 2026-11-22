@@ -129,6 +129,13 @@ def _post(store: db.Store, clip: dict[str, Any], platform: str, **fields: Any) -
     return item
 
 
+def _raw_post(store: db.Store, clip_id: str) -> dict[str, Any]:
+    """The clip's TikTok post as stored (internal fields included)."""
+    found = [p for p in posts.posts_for_clip(store, USER, clip_id, consistent=True) if p.get("platform") == "tiktok"]
+    assert len(found) == 1
+    return found[0]
+
+
 def _claim(call: Call, clip_id: str, device: str = DEVICE) -> tuple[int, Any]:
     return call("POST", f"/v1/clips/{clip_id}/tiktok/mac/claim", {"device": device})
 
@@ -431,12 +438,62 @@ def test_auto_posted_mac_posts_wait_while_auto_posting_is_off(call: Call, store:
     auto = _mac_clip(store, source="auto")
     upload = _mac_clip(store, source="upload")
     working = _mac_clip(store, source="auto", macState="working", macDevice=DEVICE, macBeatAt=iso(NOW))
+    pressed = _mac_clip(
+        store, source="auto", macState="working", macDevice=DEVICE, macBeatAt=iso(NOW), macPressedAt=iso(NOW)
+    )
     queue = call("GET", "/v1/tiktok/mac")[1]["queue"]
-    assert {j["clipId"] for j in queue} == {upload["clipId"], working["clipId"]}  # a working one stays (its helper's)
+    # "While it is off, nothing posts": an auto post waits, also one a Mac claimed but never pressed Post for. One
+    # whose Post was pressed stays, so its Mac can still find the link.
+    assert {j["clipId"] for j in queue} == {upload["clipId"], pressed["clipId"]}
     status, body = _claim(call, auto["clipId"])
     assert (status, _message(body)) == (409, "Auto-posting is off, so this one waits.")
     call("PUT", "/v1/settings", {"autoPost": {"on": True}})
+    assert {auto["clipId"], working["clipId"]} <= {j["clipId"] for j in call("GET", "/v1/tiktok/mac")[1]["queue"]}
+
+
+def test_turning_auto_posting_off_stops_an_auto_post_the_mac_already_claimed(
+    call: Call, store: db.Store, clock: Clock
+) -> None:
+    """The auto-posting review's case: claimed, then auto-posting goes off (the Mac slept, or he turned it off), then
+    the Mac wakes and carries on. Nothing more happens before Post: the step is refused and the post waits again."""
+    _mac_on(call)
+    call("PUT", "/v1/settings", {"autoPost": {"on": True}})
+    auto = _mac_clip(store, source="auto")
+    assert _claim(call, auto["clipId"])[0] == 200
+    assert _step(call, auto["clipId"], "uploading")[0] == 200
+    call("PUT", "/v1/settings", {"autoPost": {"on": False}})
+    status, body = _step(call, auto["clipId"], "pressing")
+    assert (status, _message(body)) == (409, "Auto-posting is off, so this one waits.")
+    raw = _raw_post(store, auto["clipId"])
+    assert raw["macState"] == "waiting"
+    assert not {"macPressedAt", "macDevice", "macClaimedAt", "macStep", "macBeatAt"} & set(raw)
+    status, body = _claim(call, auto["clipId"])
+    assert (status, _message(body)) == (409, "Auto-posting is off, so this one waits.")
+    assert auto["clipId"] not in {j["clipId"] for j in call("GET", "/v1/tiktok/mac")[1]["queue"]}
+    # On again: it is claimed and posted as usual.
+    call("PUT", "/v1/settings", {"autoPost": {"on": True}})
+    assert _claim(call, auto["clipId"])[0] == 200
+    assert _step(call, auto["clipId"], "pressing")[0] == 200
+
+
+def test_after_post_was_pressed_turning_auto_posting_off_still_lets_the_mac_find_the_link(
+    call: Call, store: db.Store, clock: Clock
+) -> None:
+    _mac_on(call)
+    call("PUT", "/v1/settings", {"autoPost": {"on": True}})
+    auto = _mac_clip(store, source="auto")
+    assert _claim(call, auto["clipId"])[0] == 200
+    assert _step(call, auto["clipId"], "pressing")[0] == 200
+    call("PUT", "/v1/settings", {"autoPost": {"on": False}})
+    assert _step(call, auto["clipId"], "finding")[0] == 200
     assert auto["clipId"] in {j["clipId"] for j in call("GET", "/v1/tiktok/mac")[1]["queue"]}
+
+
+def test_an_upload_mac_post_is_not_held_by_the_auto_posting_switch(call: Call, store: db.Store, clock: Clock) -> None:
+    _mac_on(call)
+    upload = _mac_clip(store, source="upload")
+    assert _claim(call, upload["clipId"])[0] == 200
+    assert _step(call, upload["clipId"], "pressing")[0] == 200
 
 
 def test_the_queue_holds_at_most_fifty(call: Call, store: db.Store) -> None:

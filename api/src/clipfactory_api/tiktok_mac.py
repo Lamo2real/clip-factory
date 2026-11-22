@@ -188,10 +188,11 @@ def queue(store: db.Store, user_id: str, settings: Mapping[str, Any]) -> list[It
         if p.get("type") == "post"
         and p.get("platform") == "tiktok"
         and p.get("status") == MAC_STATUS
-        and (
-            p.get("macState") == "working"
-            or (p.get("macState") == "waiting" and (auto or p.get("macSource") != "auto"))
-        )
+        and p.get("macState") in ("working", "waiting")
+        # While auto-posting is off, nothing auto-posted goes on ("While it is off, nothing posts"): not a waiting one,
+        # and not one a Mac claimed but never pressed Post for. One whose Post was pressed stays, so the Mac can still
+        # find its link.
+        and (auto or p.get("macSource") != "auto" or bool(p.get("macPressedAt")))
     ]
     pk = db.user_pk(user_id)
     clip_ids = sorted({str(p.get("clipId")) for p in rows})
@@ -267,7 +268,7 @@ def claim(store: db.Store, clip: Mapping[str, Any], device: str, now: datetime, 
     row, _rows = mac_row(store, clip)
     if not is_on(settings):
         raise Refused(MAC_OFF)
-    if row.get("macSource") == "auto" and row.get("macState") == "waiting" and not auto_on(settings):
+    if row.get("macSource") == "auto" and not auto_on(settings):
         raise Refused(AUTO_OFF)
     condition = db.Condition(
         "#mState = :mWaiting OR (#mState = :mWorking AND attribute_not_exists(#mPressed) AND #mBeat < :mStale)",
@@ -326,6 +327,22 @@ def step(
     _own(row, device, ("working",), attempt)
     if not is_on(settings) and not row.get("macPressedAt"):
         raise Refused(MAC_OFF)
+    if row.get("macSource") == "auto" and not row.get("macPressedAt") and not auto_on(settings):
+        # Auto-posting was turned off while the Mac worked on it, before Post: it goes back to waiting (so the owner
+        # sees "Waiting · auto-posting is off") and nothing more happens until auto-posting is on again.
+        back = db.update_request(
+            str(row["pk"]),
+            str(row["sk"]),
+            {"macState": "waiting"},
+            remove=[k for k in ("macStep", "macClaimedAt", "macDevice", "macBeatAt") if k in row],
+            expect_in=_claim_of(device, ["working"], attempt),
+            expect_absent=["macPressedAt"],
+        )
+        try:
+            store.transact(updates=[back])
+        except db.ConditionFailed:
+            raise Refused(MAC_TAKEN) from None
+        raise Refused(AUTO_OFF)
     fields: Item = {"macStep": name, "macBeatAt": iso(now)}
     if name == "pressing" and not row.get("macPressedAt"):
         fields["macPressedAt"] = iso(now)

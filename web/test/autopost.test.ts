@@ -209,6 +209,29 @@ describe("Recent (§46.2 item 8)", () => {
       { platform: "instagram", url: "https://i/1" },
     ]);
   });
+  it("TikTok with the owner's Mac (§47): your Mac while it waits or works, your Mac stopped, ✓ once posted", () => {
+    const line = (mac: "waiting" | "working" | "stopped") =>
+      runLines(
+        run({
+          clips: [
+            {
+              clipId: "c1",
+              hook: "hook",
+              places: ["youtube"],
+              outcome: "sent",
+              posts: [
+                { platform: "youtube", status: "posted", url: "https://y/1" },
+                { platform: "tiktok", status: "mac", mac },
+              ],
+            },
+          ],
+        }),
+        NOW,
+      )[0]!.text;
+    expect(line("waiting")).toBe("Sun 10:00 · “hook”: YouTube ✓ TikTok (your Mac)");
+    expect(line("working")).toBe("Sun 10:00 · “hook”: YouTube ✓ TikTok (your Mac)");
+    expect(line("stopped")).toBe("Sun 10:00 · “hook”: YouTube ✓ TikTok (your Mac stopped)");
+  });
   it("nothing, practice, a skipped clip and the Private test", () => {
     const five = new Date(local(5)).toISOString();
     expect(runLines(run({ at: five, note: "Nothing in Review, so nothing posted." }), NOW)[0]!.text).toBe("Sun 05:00 · Nothing in Review, so nothing posted.");

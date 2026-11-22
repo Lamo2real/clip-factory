@@ -73,12 +73,18 @@ Upload and auto-posting write the Mac post in the same transaction as the clip's
    gets a TikTok Mac post (`source: "auto"`) through `upload_review_clip(..., tiktok_mac=True)`; its options are My
    settings' (§36: Everyone, Comment, Duet and Stitch on). TikTok is **not** added to the run's places (`uploadTo`
    never names it). Practice and Private test runs never make one ("Nothing gets sent"). `GET /v1/autopost`:
-   `leftOut` drops TikTok while on, `macPlaces: ["tiktok"]` (else `[]`), and `tiktokYourself` drops clips whose TikTok
+   `leftOut` drops TikTok while on, `macPlaces: ["tiktok"]` (else `[]`; also `[]`, with TikTok back in `leftOut`, when
+   no other place is set up: such a run sends nothing, §46.6), and `tiktokYourself` drops clips whose TikTok
    post is a Mac post (any state) or was posted `via: "mac"`, except while **Your Mac posts TikTok is off**: then a
    clip whose Mac post waits or stopped (not working, Post never pressed) is listed again with `mac: true`, and the
-   page offers **Post it yourself instead** on it. **Off switch:** while `autoPost.on` is false, Mac posts
-   with `source: "auto"` that are still `waiting` are left out of the queue and refused to a claim ("Auto-posting is
-   off, so this one waits."); the app shows "Waiting for your Mac · auto-posting is off".
+   page offers **Post it yourself instead** on it. **Off switch** ("While it is off, nothing posts"): while
+   `autoPost.on` is false, no Mac post with `source: "auto"` goes on before Post is pressed. It is left out of the queue
+   (waiting, or working with no `macPressedAt`) and every claim of it is refused ("Auto-posting is off, so this one
+   waits."). A step from a Mac that claimed it before auto-posting went off is refused the same way and puts it back to
+   `waiting` (claim, device, step and heartbeat removed), so a sleeping or crashed Mac can never carry it on to Post. One
+   whose Post was already pressed stays in the queue, so its Mac can still find the link. The app shows "Waiting for
+   your Mac · auto-posting is off". In Recent (§46.2 item 8) a run's Mac post reads "TikTok (your Mac)" while it waits
+   or works and "TikTok (your Mac stopped)" when stopped (`runs[].clips[].posts[].mac`: its `macState`).
 3. **Send these to my Mac** (`POST /v1/tiktok/mac/send {clipIds: string[] 1–25}` → `{results: [{clipId, sent,
    reason?}]}`, in order, each id once; 409 `MAC_OFF` while the switch is off). A clip goes when Post it yourself would
    show (§42.1): uploaded, its TikTok not out for everyone, not `by: "you"`, not `queued`, not a Mac post already; never
@@ -122,8 +128,8 @@ Unknown body keys → 400 everywhere; `device` is required text (at most 100 cha
 caller's → 404 "We could not find that clip." `MAC_OFF` is "Your Mac posting is off. Turn it on in Settings › Posting ›
 Your Mac posts TikTok."
 
-* **Queue:** empty while the switch is off. Else the Mac posts that are `waiting` (minus `source: "auto"` while
-  `autoPost.on` is false) plus the `working` ones (a restarted helper sees its own). Order: `source: "upload"` first,
+* **Queue:** empty while the switch is off. Else the Mac posts that are `waiting` plus the `working` ones (a restarted
+  helper sees its own), minus `source: "auto"` ones whose Post was not pressed while `autoPost.on` is false (§47.2). Order: `source: "upload"` first,
   then the rest; oldest `since` first, then the oldest clip (`decidedAt`); at most 50. `caption` is the clip's stored
   TikTok caption, repaired as §5 says and in NFC; `fileName` is the web's `videoFileName(hook)`; `privacy` and the
   three switches come from the post's options.

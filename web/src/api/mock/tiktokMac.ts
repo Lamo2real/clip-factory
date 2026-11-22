@@ -9,6 +9,7 @@ import { canSendToMac, MAC_MAY_HAVE_POSTED, MAC_NOT_POSTING, MAC_PRESSED_REASON,
 import { tiktokState, videoFileName } from "../../lib/tiktokYourself.ts";
 import { ulid } from "./fixtures.ts";
 
+const AUTO_OFF = "Auto-posting is off, so this one waits.";
 const conflict = (msg: string) => new ApiError(409, "conflict", msg);
 const bad = (msg: string) => new ApiError(400, "bad_request", msg);
 const notFound = () => new ApiError(404, "not_found", "We could not find that clip.");
@@ -129,7 +130,8 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     const decided = (p: Post) => deps.clips().find((c) => c.clipId === p.clipId)?.decidedAt ?? "";
     return deps
       .posts()
-      .filter((p) => p.status === "mac" && p.mac && (p.mac.state === "working" || (p.mac.state === "waiting" && (autoOn || p.mac.source !== "auto"))))
+      // While auto-posting is off nothing auto-posted goes on: not a waiting one, not one claimed but never pressed.
+      .filter((p) => p.status === "mac" && p.mac && (p.mac.state === "working" || p.mac.state === "waiting") && (autoOn || p.mac.source !== "auto" || !!p.mac.pressedAt))
       .filter((p) => deps.clips().some((c) => c.clipId === p.clipId))
       .sort(
         (a, b) =>
@@ -166,6 +168,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     claim(clipId, device = "mock-mac") {
       if (!macOn(deps.settings())) throw conflict(MAC_OFF);
       const p = macOf(clipId);
+      if (p.mac.source === "auto" && deps.settings().autoPost?.on !== true) throw conflict(AUTO_OFF);
       const now = deps.now();
       const claim = claims.get(p.postId);
       const stale = p.mac.state === "working" && !p.mac.pressedAt && (!claim || now - claim.beatAt > MAC_STALE_CLAIM_MS);
@@ -183,6 +186,13 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       const p = macOf(clipId);
       const claim = fromDevice(p, device, ["working"]);
       if (!macOn(deps.settings()) && !p.mac.pressedAt) throw conflict(MAC_OFF);
+      if (p.mac.source === "auto" && !p.mac.pressedAt && deps.settings().autoPost?.on !== true) {
+        // Auto-posting went off before Post: back to waiting until it is on again.
+        p.mac = { state: "waiting", source: p.mac.source, since: p.mac.since };
+        claims.delete(p.postId);
+        deps.publishPost(p);
+        throw conflict(AUTO_OFF);
+      }
       const now = deps.now();
       claim.beatAt = now;
       p.mac = { ...p.mac, step, ...(step === "pressing" && !p.mac.pressedAt ? { pressedAt: iso(now) } : {}) };
