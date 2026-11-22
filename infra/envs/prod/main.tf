@@ -267,7 +267,7 @@ module "stats" {
   # §38.12: Content Rewards checking rides the stats tick; a changed brief starts a rules read.
   content_rewards_enabled = var.content_rewards_enabled
   campaigns_function_arn  = module.contentrewards.campaigns_function_arn
-  # §41.5: the campaign finder's scheduled look rides the same tick (CR_FINDER), off until its switch PR.
+  # §41.5: the campaign finder's scheduled look rides the same tick (CR_FINDER), on since its switch PR.
   cr_finder_enabled = var.cr_finder_enabled
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
@@ -293,7 +293,7 @@ module "contentrewards" {
   model_invoke_arns       = local.model_invoke_arns
   app_url                 = module.frontend.app_url
   content_rewards_enabled = var.content_rewards_enabled
-  # §41.2: the campaign finder's look (CR_FINDER), off until its switch PR.
+  # §41.2: the campaign finder's look (CR_FINDER), on since its switch PR.
   cr_finder_enabled = var.cr_finder_enabled
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
@@ -376,7 +376,7 @@ module "api" {
   campaigns_function_arn  = module.contentrewards.campaigns_function_arn
   # §39.3: the campaign copy of a clip (CR_REMAKE), on since its switch PR.
   cr_remake_enabled = var.cr_remake_enabled
-  # §41.5: the campaign finder's seven routes (CR_FINDER), 503 "Coming soon." until its switch PR.
+  # §41.5: the campaign finder's seven routes (CR_FINDER), on since its switch PR (503 "Coming soon." when off).
   cr_finder_enabled = var.cr_finder_enabled
   # §40.6: "Connect Whop" (WHOP_CONNECT), off until its switch PR; an in-place env change.
   whop_connect_enabled = var.whop_connect_enabled

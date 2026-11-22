@@ -514,17 +514,18 @@ run "cr_remake_switch_off_plans" {
   }
 }
 
-# docs/CONTRACTS.md §41.6: the campaign finder. cr_finder_enabled defaults to false until P, Q, R, S and T have merged
-# (then one switch PR sets it true); it is wired to exactly the three functions that read CR_FINDER (cf-prod-api,
-# cf-prod-stats and cf-prod-campaigns) and nowhere else. Each module's own test proves the switch reaches only that
-# env var (one use, CR_FINDER = var.cr_finder_enabled ? "on" : "off"), so flipping it changes three env vars in place
-# and can never delete or replace what holds the owner's data (the deploy's delete gate stays quiet).
-run "cr_finder_is_wired_and_off" {
+# docs/CONTRACTS.md §41.6: the campaign finder. cr_finder_enabled defaults to true now that P, Q, R, S and T have
+# merged; it is wired to exactly the three functions that read CR_FINDER (cf-prod-api, cf-prod-stats and
+# cf-prod-campaigns) and nowhere else. Each module's own test proves the switch reaches only that env var (one use,
+# CR_FINDER = var.cr_finder_enabled ? "on" : "off"), so flipping it changes three env vars in place and can never
+# delete or replace what holds the owner's data (the deploy's delete gate stays quiet). The stack still plans with it
+# off, the one-line way to stop the finder the same day if Content Rewards or Whop asks.
+run "cr_finder_is_wired_and_on" {
   command = plan
 
   assert {
-    condition     = var.cr_finder_enabled == false
-    error_message = "cr_finder_enabled defaults to false until every builder's part of §41.6 has merged."
+    condition     = var.cr_finder_enabled == true
+    error_message = "cr_finder_enabled defaults to true now that P, Q, R, S and T of §41.6 have merged."
   }
 
   assert {
@@ -536,20 +537,12 @@ run "cr_finder_is_wired_and_off" {
     strcontains(regex("(?s)\nmodule \"contentrewards\" \\{\n(.*?)\n\\}\n", file("main.tf"))[0], "\n  cr_finder_enabled = var.cr_finder_enabled\n"))
     error_message = "cr_finder_enabled is passed to the api, stats and contentrewards modules, and to nothing else."
   }
-}
-
-run "cr_finder_switch_on_plans" {
-  command = plan
-
-  variables {
-    cr_finder_enabled = true
-  }
 
   assert {
     condition = (module.contentrewards.function_names == { campaigns = "cf-prod-campaigns" } &&
       module.api.function_names == { api = "cf-prod-api" } &&
     output.stats_function_name == "cf-prod-stats" && output.stats_rule_name == "cf-prod-stats")
-    error_message = "With the finder switched on the stack still plans: the same cf-prod-api, cf-prod-stats (and its tick) and cf-prod-campaigns."
+    error_message = "With the finder on the stack plans the same cf-prod-api, cf-prod-stats (and its tick) and cf-prod-campaigns."
   }
 
   assert {
@@ -564,6 +557,27 @@ run "cr_finder_switch_on_plans" {
       "campaigns", "story-flow", "stories-api",
     ])
     error_message = "No new function: the finder runs in cf-prod-campaigns, started by the stats tick and the api."
+  }
+}
+
+run "cr_finder_switch_off_plans" {
+  command = plan
+
+  variables {
+    cr_finder_enabled = false
+  }
+
+  assert {
+    condition = (module.contentrewards.function_names == { campaigns = "cf-prod-campaigns" } &&
+      module.api.function_names == { api = "cf-prod-api" } &&
+    output.stats_function_name == "cf-prod-stats" && output.stats_rule_name == "cf-prod-stats")
+    error_message = "With the finder switched off the stack still plans: the same cf-prod-api, cf-prod-stats (and its tick) and cf-prod-campaigns."
+  }
+
+  assert {
+    condition = (output.table_name == "cf-prod-data" && output.media_bucket == "cf-prod-media-123456789012" &&
+    output.vector_bucket == "cf-prod-vectors-123456789012" && output.web_bucket == "cf-prod-web-123456789012")
+    error_message = "Switching the finder off keeps the table and the buckets that hold the owner's data: the stored items stay."
   }
 }
 
