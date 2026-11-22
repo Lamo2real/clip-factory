@@ -13,12 +13,33 @@
 // Bedrock's prompt cache. They start right for its maker (Anthropic: all three; Amazon: the cache; anyone else: none)
 // until the owner changes one. Changing its model ID or Region makes it "Not checked yet" again (D6), and every
 // line says who makes it and who runs it ("Mistral on Amazon Bedrock", D8).
+//
+// §45.37 G4: where it runs (the Host picker): Amazon Bedrock (Lamo Stories' own AWS access, a model ID and its
+// Region), the Anthropic API (the model's API name; the owner's Anthropic key from Provider keys) or an
+// OpenAI-compatible service (its https address and the owner's key; its effort, when it has one, goes in
+// reasoning_effort, Low to Extra high, and it has no prompt cache). A model on a keyed host has no Region.
 import { useId, useState, type ReactNode } from "react";
 import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
 import { storiesApi } from "../api/client.ts";
-import { callingFor, CUSTOM_MODEL_KEY, EFFORT_LABEL, MAX_CUSTOM_MODELS, type Effort, type EffortField, type ModelCalling, type ModelDef, type ModelInfo, type Price } from "../api/types.ts";
-import { Btn, cheer, Chip, MODEL_STATUS, Note, SetCard, SetPick, SetSelect, SetSwitch, SIcon, whenText } from "./bits.tsx";
+import {
+  callingFor,
+  CUSTOM_MODEL_KEY,
+  EFFORT_LABEL,
+  HOST_LABEL,
+  hostIdOf,
+  MAX_CUSTOM_MODELS,
+  REASONING_EFFORTS,
+  type Effort,
+  type EffortField,
+  type ModelCalling,
+  type ModelDef,
+  type ModelHost,
+  type ModelInfo,
+  type Price,
+} from "../api/types.ts";
+import { baseUrlProblem } from "./MakerModels.tsx";
+import { Btn, cheer, Chip, hostName, MODEL_STATUS, Note, SetCard, SetPick, SetSelect, SetSwitch, SIcon, whenText } from "./bits.tsx";
 
 const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 
@@ -83,6 +104,23 @@ export function keyFor(label: string, taken: readonly string[]): string {
   return key;
 }
 
+/** The hosts a reasoning model can run on, in the form's words (§45.37 G4). */
+type ReasoningHost = Exclude<ModelHost, "elevenlabs">;
+export const HOST_CHOICES: { value: ReasoningHost; label: string; line: string }[] = [
+  { value: "bedrock", label: "Amazon Bedrock", line: "Lamo Stories' own AWS access. No key." },
+  { value: "anthropic", label: "Anthropic", line: "The Anthropic API, with your Anthropic key." },
+  { value: "openai_compatible", label: "An OpenAI-compatible service", line: "Any https address that speaks the OpenAI chat API, with your key." },
+];
+
+/** A model's name on a keyed host (the API's hosts.KEYED_MODEL_ID): claude-opus-5-5, meta-llama/Llama-4-Maverick. */
+const KEYED_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$/;
+export function keyedIdProblem(id: string, host: ModelHost): string | null {
+  const v = id.trim();
+  if (!v) return host === "anthropic" ? "Type the model's name in the Anthropic API, like claude-opus-5-5." : "Type the model's name as the service lists it.";
+  if (!KEYED_ID.test(v) || v.includes("..")) return "Type the model's name exactly as its API spells it, like claude-opus-5-5 or meta-llama/Llama-4-Maverick.";
+  return null;
+}
+
 /** A Bedrock model id, inference profile id or ARN: no spaces, at most 200 characters (Bedrock says the rest). */
 export function modelIdProblem(id: string): string | null {
   const v = id.trim();
@@ -92,6 +130,10 @@ export function modelIdProblem(id: string): string | null {
 }
 
 interface Draft {
+  /** where it runs (§45.37 G4); missing: Amazon Bedrock (a draft from before hosts) */
+  host?: ReasoningHost;
+  /** an OpenAI-compatible service's https address */
+  baseUrl?: string;
   label: string;
   maker: string;
   otherMaker: string;
@@ -119,10 +161,10 @@ interface Draft {
  * one with none ticked has no effort setting, whatever it was saved with (an Anthropic model saved before round 4 reads
  * back as output_config with no levels: nothing is ever sent to it, so it shows, and saves again, as none).
  */
-export function callingOf(m: Pick<ModelInfo, "provider" | "efforts" | "effortField" | "tools" | "cache">): ModelCalling {
-  const usual = callingFor(m.provider);
+export function callingOf(m: Pick<ModelInfo, "provider" | "efforts" | "effortField" | "tools" | "cache"> & Partial<Pick<ModelInfo, "host" | "hostId">>): ModelCalling {
+  const usual = callingFor(m.provider, hostIdOf(m.hostId ?? m.host));
   return {
-    effortField: m.efforts.length ? (m.effortField ?? "output_config") : "none",
+    effortField: m.efforts.length ? (m.effortField ?? (hostIdOf(m.hostId ?? m.host) === "openai_compatible" ? "reasoning_effort" : "output_config")) : "none",
     tools: m.tools ?? usual.tools,
     cache: m.cache ?? usual.cache,
   };
@@ -132,10 +174,10 @@ export function callingOf(m: Pick<ModelInfo, "provider" | "efforts" | "effortFie
 const makerOf = (d: Pick<Draft, "maker" | "otherMaker">) => (d.maker === SOMEONE_ELSE ? d.otherMaker.trim() : d.maker);
 
 /** The draft after the maker changed: the three ways of calling it follow the new maker unless the owner set them. */
-export function withMaker(d: Draft, patch: Partial<Pick<Draft, "maker" | "otherMaker">>): Draft {
+export function withMaker(d: Draft, patch: Partial<Pick<Draft, "maker" | "otherMaker" | "host">>): Draft {
   const next = { ...d, ...patch };
   if (d.ownCalling) return next;
-  const usual = callingFor(makerOf(next));
+  const usual = callingFor(makerOf(next), next.host ?? "bedrock");
   return { ...next, ...usual, efforts: usual.effortField === "none" ? [] : next.efforts, defaultEffort: usual.effortField === "none" ? null : next.defaultEffort };
 }
 
@@ -143,7 +185,10 @@ function draftOf(m: ModelInfo | null): Draft {
   const known = m && (MAKERS as readonly string[]).includes(m.provider);
   const price = m?.price ?? null;
   const calling = m ? callingOf(m) : callingFor("Anthropic");
+  const host = (m ? hostIdOf(m.hostId ?? m.host) : "bedrock") as ReasoningHost;
   return {
+    host,
+    baseUrl: m?.baseUrl ?? "",
     label: m?.label ?? "",
     maker: m ? (known ? m.provider : SOMEONE_ELSE) : "Anthropic",
     otherMaker: m && !known ? m.provider : "",
@@ -174,13 +219,18 @@ export function defOf(d: Draft): ModelDef | { problem: string } {
   const provider = d.maker === SOMEONE_ELSE ? d.otherMaker.trim() : d.maker;
   if (!provider) return { problem: "Say who makes the model." };
   if (provider.length > 40) return { problem: "Keep who makes it to 40 letters or fewer." };
-  const idProblem = modelIdProblem(d.modelId);
+  const host = d.host ?? "bedrock";
+  const bedrock = host === "bedrock";
+  const idProblem = bedrock ? modelIdProblem(d.modelId) : keyedIdProblem(d.modelId, host);
   if (idProblem) return { problem: idProblem };
   const region = d.region === ANOTHER_REGION ? d.otherRegion.trim() : d.region;
-  const badRegion = regionProblem(region);
+  const badRegion = bedrock ? regionProblem(region) : null;
   if (badRegion) return { problem: badRegion };
+  const badUrl = host === "openai_compatible" ? baseUrlProblem(d.baseUrl ?? "") : null;
+  if (badUrl) return { problem: badUrl };
   const efforts = d.effortField === "none" ? [] : EFFORTS.filter((e) => d.efforts.includes(e));
-  if (d.effortField === "output_config" && !efforts.length) return { problem: "Tick the effort levels it accepts, or switch off It has effort levels." };
+  if (d.effortField !== "none" && !efforts.length) return { problem: "Tick the effort levels it accepts, or switch off It has effort levels." };
+  if (d.effortField === "reasoning_effort" && efforts.includes("max")) return { problem: "An OpenAI-compatible service takes levels up to Extra high. Untick Maximum." };
   if (efforts.length && (!d.defaultEffort || !efforts.includes(d.defaultEffort))) return { problem: "Pick its own level, the one it uses when nothing else is set." };
   const tokens = num(d.maxTokens);
   if (!Number.isInteger(tokens) || tokens < 1 || tokens > MAX_TOKENS) return { problem: `Type how many tokens it may write, a whole number from 1 to ${MAX_TOKENS.toLocaleString("en-GB")}.` };
@@ -195,7 +245,7 @@ export function defOf(d: Draft): ModelDef | { problem: string } {
     label,
     provider,
     modelId: d.modelId.trim(),
-    region,
+    ...(bedrock ? { region } : {}),
     efforts,
     defaultEffort: efforts.length ? d.defaultEffort : null,
     vision: d.vision,
@@ -203,13 +253,16 @@ export function defOf(d: Draft): ModelDef | { problem: string } {
     price,
     effortField: d.effortField,
     tools: d.tools,
-    cache: d.cache,
+    cache: host === "openai_compatible" ? false : d.cache,
+    // Left out on Amazon Bedrock, so a Bedrock model is saved exactly as before hosts (no host means Bedrock).
+    ...(bedrock ? {} : { host }),
+    ...(host === "openai_compatible" ? { baseUrl: (d.baseUrl ?? "").trim().replace(/\/+$/, "") } : {}),
   };
 }
 
 /** "Effort levels · tools · prompt cache", or what it does without them, in a few words. */
 export function callingWords(c: ModelCalling): string {
-  return [c.effortField === "output_config" ? "Takes effort levels" : "No effort levels", c.tools ? "uses tools" : "no tools", c.cache ? "prompt cache on" : "no prompt cache"].join(" · ");
+  return [c.effortField !== "none" ? "Takes effort levels" : "No effort levels", c.tools ? "uses tools" : "no tools", c.cache ? "prompt cache on" : "no prompt cache"].join(" · ");
 }
 
 /** A field with its label above it. */
@@ -232,6 +285,7 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const set = (patch: Partial<Draft>) => setD((x) => ({ ...x, ...patch }));
+  const host: ReasoningHost = d.host ?? "bedrock";
   const toggleEffort = (e: Effort) =>
     setD((x) => {
       const efforts = x.efforts.includes(e) ? x.efforts.filter((y) => y !== e) : EFFORTS.filter((y) => y === e || x.efforts.includes(y));
@@ -296,14 +350,57 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
           <input id={`${id}-other`} className="st-stg-input" value={d.otherMaker} maxLength={40} placeholder="Cohere" onChange={(e) => setD((x) => withMaker(x, { otherMaker: e.target.value }))} />
         </Field>
       ) : null}
-      <Field
-        id={`${id}-mid`}
-        label="Bedrock model ID or inference profile"
-        hint="Copy it from the Amazon Bedrock console: a model ID, an inference profile like eu.amazon.nova-premier-v1:0, or its ARN."
-      >
-        <input id={`${id}-mid`} className="st-stg-input st-stg-input--code" value={d.modelId} spellCheck={false} autoComplete="off" maxLength={200} placeholder="eu.amazon.nova-premier-v1:0" onChange={(e) => set({ modelId: e.target.value })} />
-      </Field>
-      <span className="st-stg-region">
+      <span className="st-stg-field">
+        <span className="st-stg-label">Where it runs</span>
+        <SetPick<ReasoningHost>
+          label="Where it runs"
+          stack
+          value={host}
+          options={HOST_CHOICES}
+          onChange={(v) =>
+            setD((x) => {
+              // The Anthropic API runs Anthropic's models; the levels an OpenAI-compatible service takes stop at Extra high.
+              const next = withMaker(x, { host: v, ...(v === "anthropic" ? { maker: "Anthropic" } : {}) });
+              const efforts = v === "openai_compatible" ? next.efforts.filter((e) => REASONING_EFFORTS.includes(e)) : next.efforts;
+              const effortField: EffortField = next.effortField === "none" ? "none" : v === "openai_compatible" ? "reasoning_effort" : "output_config";
+              return { ...next, efforts, effortField, defaultEffort: next.defaultEffort && efforts.includes(next.defaultEffort) ? next.defaultEffort : (efforts[0] ?? null), cache: v === "openai_compatible" ? false : next.cache };
+            })
+          }
+        />
+      </span>
+      {host === "openai_compatible" ? (
+        <Field id={`${id}-url`} label="The service's address" hint="Its https address, the part before /chat/completions, like https://api.example.com/v1.">
+          <input id={`${id}-url`} className="st-stg-input st-stg-input--code" inputMode="url" value={d.baseUrl ?? ""} spellCheck={false} autoComplete="off" maxLength={300} placeholder="https://api.example.com/v1" onChange={(e) => set({ baseUrl: e.target.value })} />
+        </Field>
+      ) : null}
+      {host === "bedrock" ? (
+        <Field
+          id={`${id}-mid`}
+          label="Bedrock model ID or inference profile"
+          hint="Copy it from the Amazon Bedrock console: a model ID, an inference profile like eu.amazon.nova-premier-v1:0, or its ARN."
+        >
+          <input id={`${id}-mid`} className="st-stg-input st-stg-input--code" value={d.modelId} spellCheck={false} autoComplete="off" maxLength={200} placeholder="eu.amazon.nova-premier-v1:0" onChange={(e) => set({ modelId: e.target.value })} />
+        </Field>
+      ) : (
+        <Field
+          id={`${id}-mid`}
+          label="Model name"
+          hint={host === "anthropic" ? "The model's name in the Anthropic API, like claude-opus-5-5." : "The model's name as the service lists it, like meta-llama/Llama-4-Maverick."}
+        >
+          <input
+            id={`${id}-mid`}
+            className="st-stg-input st-stg-input--code"
+            value={d.modelId}
+            spellCheck={false}
+            autoComplete="off"
+            maxLength={200}
+            placeholder={host === "anthropic" ? "claude-opus-5-5" : "meta-llama/Llama-4-Maverick"}
+            onChange={(e) => set({ modelId: e.target.value })}
+          />
+        </Field>
+      )}
+      {host !== "bedrock" ? <p className="st-stg-small">It uses your {HOST_LABEL[host]} key, saved under Provider keys below. The key is never shown again.</p> : null}
+      {host === "bedrock" ? <span className="st-stg-region">
         <SetSelect label="AWS Region" value={d.region} options={[...REGIONS, { value: ANOTHER_REGION, label: "Another Region: type its code" }]} onChange={(v) => set({ region: v })} />
         {d.region === ANOTHER_REGION ? (
           <Field id={`${id}-region`} label="Its Region code" hint="The Bedrock console shows it at the top right, like eu-west-2.">
@@ -319,29 +416,37 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
             />
           </Field>
         ) : null}
-      </span>
+      </span> : null}
 
       <span className="st-stg-field st-stg-calling">
         <span className="st-stg-label">How Lamo Stories talks to it</span>
         <span className="st-stg-small">
           {d.ownCalling
-            ? "Change these only if Amazon Bedrock says the model does not take them."
-            : `These start right for ${makerOf(d) || "its maker"}'s models. Change one only if Amazon Bedrock says the model does not take it.`}
+            ? `Change these only if ${HOST_LABEL[host]} says the model does not take them.`
+            : `These start right for ${host === "bedrock" ? `${makerOf(d) || "its maker"}'s models` : HOST_LABEL[host]}. Change one only if ${HOST_LABEL[host]} says the model does not take it.`}
         </span>
       </span>
       <SetSwitch
         label="It has effort levels"
-        description={d.effortField === "output_config" ? "Lamo Stories sends the level you pick, the way Claude models take it." : "It runs at its own level. Lamo Stories never sends it one."}
-        checked={d.effortField === "output_config"}
-        onChange={(v) => setD((x) => ({ ...x, ownCalling: true, effortField: v ? "output_config" : "none", efforts: v ? x.efforts : [], defaultEffort: v ? x.defaultEffort : null }))}
+        description={
+          d.effortField === "none"
+            ? "It runs at its own level. Lamo Stories never sends it one."
+            : d.effortField === "reasoning_effort"
+              ? "Lamo Stories sends the level you pick in reasoning_effort, the way OpenAI-compatible services take it."
+              : "Lamo Stories sends the level you pick, the way Claude models take it."
+        }
+        checked={d.effortField !== "none"}
+        onChange={(v) =>
+          setD((x) => ({ ...x, ownCalling: true, effortField: v ? ((x.host ?? "bedrock") === "openai_compatible" ? "reasoning_effort" : "output_config") : "none", efforts: v ? x.efforts : [], defaultEffort: v ? x.defaultEffort : null }))
+        }
       />
-      {d.effortField === "output_config" ? (
+      {d.effortField !== "none" ? (
         <span className="st-stg-field">
           <span className="st-stg-label" id={`${id}-eff`}>
             Effort levels it accepts
           </span>
           <span className="st-stg-toggles" role="group" aria-labelledby={`${id}-eff`}>
-            {EFFORTS.map((e) => (
+            {(host === "openai_compatible" ? REASONING_EFFORTS : EFFORTS).map((e) => (
               <button key={e} type="button" className={`st-stg-toggle${d.efforts.includes(e) ? " is-on" : ""}`} aria-pressed={d.efforts.includes(e)} onClick={() => toggleEffort(e)}>
                 {d.efforts.includes(e) ? <SIcon name="check" size={18} /> : null}
                 {EFFORT_LABEL[e]}
@@ -351,7 +456,7 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
           <span className="st-stg-small">{d.efforts.length ? "Only these levels are ever sent to it." : "Tick the levels it accepts. Only those are ever sent to it."}</span>
         </span>
       ) : null}
-      {d.effortField === "output_config" && d.efforts.length ? (
+      {d.effortField !== "none" && d.efforts.length ? (
         <span className="st-stg-field">
           <span className="st-stg-label">Its own level</span>
           <SetPick<Effort> label="Its own level" value={d.defaultEffort} onChange={(v) => set({ defaultEffort: v })} options={d.efforts.map((e) => ({ value: e, label: EFFORT_LABEL[e] }))} />
@@ -365,12 +470,17 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
         checked={d.tools}
         onChange={(v) => set({ tools: v, ownCalling: true })}
       />
-      <SetSwitch
-        label="It can reuse its instructions"
-        description={d.cache ? "Amazon Bedrock keeps the long instructions for a few minutes (its prompt cache), so answers come faster and cost less." : "Every answer reads the whole instructions again. Fine for a model that has no prompt cache."}
-        checked={d.cache}
-        onChange={(v) => set({ cache: v, ownCalling: true })}
-      />
+      {/* An OpenAI-compatible service has no cache setting (the API refuses one). */}
+      {host !== "openai_compatible" ? (
+        <SetSwitch
+          label="It can reuse its instructions"
+          description={
+            d.cache ? `${HOST_LABEL[host]} keeps the long instructions for a few minutes (its prompt cache), so answers come faster and cost less.` : "Every answer reads the whole instructions again. Fine for a model that has no prompt cache."
+          }
+          checked={d.cache}
+          onChange={(v) => set({ cache: v, ownCalling: true })}
+        />
+      ) : null}
       <SetSwitch label="It can look at pictures" description="On for models that read pictures, like chat photos and reference videos." checked={d.vision} onChange={(v) => set({ vision: v })} />
       <Field id={`${id}-max`} label="Most tokens it may write in one answer" hint="Its maker's page says this. 16,000 suits most stories.">
         <input id={`${id}-max`} className="st-stg-input" inputMode="numeric" value={d.maxTokens} onChange={(e) => set({ maxTokens: e.target.value })} />
@@ -437,9 +547,14 @@ function OwnRow({ ws, m, stale = false, onChanged, onEdit }: { ws: string; m: Mo
         {stale && m.status !== "not_checked" ? <Chip tone="sun">Check it again</Chip> : <Chip tone={s.tone}>{s.label}</Chip>}
       </div>
       <p className="st-stg-small">
-        Made by {m.provider} · on {m.host ?? "Amazon Bedrock"}
-        {m.region ? ` in ${m.region}` : ""} · <code className="st-stg-code">{m.modelId}</code>
+        Made by {m.provider} · on {hostName(m.host ?? "Amazon Bedrock", m.baseUrl, m.hostId)}
+        {m.region && hostIdOf(m.hostId ?? m.host) === "bedrock" ? ` in ${m.region}` : ""} · <code className="st-stg-code">{m.modelId}</code>
       </p>
+      {m.keySaved === false ? (
+        <Note tone="sun" icon="key">
+          Paste your {HOST_LABEL[hostIdOf(m.hostId ?? m.host)]} key in Provider keys below, then tap Check models.
+        </Note>
+      ) : null}
       <p className="st-stg-small">
         {m.efforts.length ? `Levels: ${m.efforts.map((e) => EFFORT_LABEL[e]).join(", ")}. Its own: ${m.defaultEffort ? EFFORT_LABEL[m.defaultEffort] : "none"}.` : "No effort setting: it runs at its own level."}
         {m.vision ? " Looks at pictures." : " Words only."}
@@ -528,7 +643,7 @@ export function OwnModels({ ws, models, onChanged, check }: { ws: string; models
       title="Add a model"
       icon="plus"
       id="add-a-model"
-      lede="Use another AI model from Amazon Bedrock, with no new version of the app. Paste its ID from the Bedrock console, then check that it answers."
+      lede="Use another AI model from Amazon Bedrock, the Anthropic API or an OpenAI-compatible service, with no new version of the app. Paste its ID, then check that it answers."
       actions={
         open === null ? (
           <Btn main off={full ? `You can add up to ${MAX_CUSTOM_MODELS} models. Remove one first.` : undefined} onClick={() => setOpen("new")}>
@@ -576,7 +691,12 @@ export function OwnModels({ ws, models, onChanged, check }: { ws: string; models
                   onSaved={(saved) => {
                     setOpen(null);
                     // The check it had before this change (the API answers with the cleared one when it moved).
-                    setAdded({ key: saved.key, moved: saved.modelId !== m.modelId || saved.region !== m.region, edited: true, checkedAt: m.checkedAt ?? null });
+                    setAdded({
+                      key: saved.key,
+                      moved: saved.modelId !== m.modelId || (saved.region ?? "") !== (m.region ?? "") || (saved.hostId ?? "bedrock") !== (m.hostId ?? "bedrock") || (saved.baseUrl ?? null) !== (m.baseUrl ?? null),
+                      edited: true,
+                      checkedAt: m.checkedAt ?? null,
+                    });
                     void onChanged();
                   }}
                 />
@@ -587,7 +707,7 @@ export function OwnModels({ ws, models, onChanged, check }: { ws: string; models
           )}
         </ul>
       ) : open === null ? (
-        <p className="st-stg-small">No models added yet. The ones above come with Lamo Stories; add any other Bedrock model here.</p>
+        <p className="st-stg-small">No models added yet. The ones above come with Lamo Stories; add any other model here.</p>
       ) : null}
     </SetCard>
   );

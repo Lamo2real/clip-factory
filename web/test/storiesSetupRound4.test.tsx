@@ -115,7 +115,8 @@ describe("Lamo Clips' own account (§45.35 D11)", () => {
 
   it("an account that is Lamo Stories' own says nothing of the kind", async () => {
     await start({}, (s) => {
-      Object.assign(s.social.find((a) => a.platform === "x")!, { connectionStatus: "connected", sharedWithClips: false, externalAccountId: "1600000000000000002" });
+      // Its own id and its own handle (§45.37 G8: a matching handle alone would make it Clip Factory's).
+      Object.assign(s.social.find((a) => a.platform === "x")!, { connectionStatus: "connected", sharedWithClips: false, externalAccountId: "1600000000000000002", accountName: "Lamo Stories", handle: "@lamostories" });
     });
     expect(host.querySelector(".st-left__why")).toBeNull();
     expect($$(".st-steps__item").find((b) => b.textContent?.includes("Connect X"))!.className).toContain("is-done");

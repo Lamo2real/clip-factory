@@ -4,6 +4,10 @@
 // only). Connect lands straight back on Lamo Stories › Social accounts with a result, as the real callback does.
 // Each platform's developer app is the owner's choice (§45.30): Lamo Stories' own keys (always for Facebook and
 // Instagram, one Meta app) or Clip Factory's on purpose (YouTube, TikTok, X); never a silent default.
+// §45.37 G8 (the owner's hard rule): an account is never shared with Clip Factory. It is Clip Factory's own when any
+// stable identity matches Clip Factory's account there (YouTube the channel id, Facebook the Page id, Instagram the
+// user id or username, TikTok the username or handle, X the user id or handle), at connect and before every post, also
+// when Clip Factory connects it later (then same_as_clips with reason clips_later). There is no share route.
 import { ApiError } from "../../../api/errors.ts";
 import type { KeyName } from "../../../api/types.ts";
 import { cleanKey, extractConfigId, keyNames, keyProblem } from "../../../lib/keyFormats.ts";
@@ -11,16 +15,19 @@ import { SHARED_APP_PLATFORMS, STORIES_PLATFORMS, type KeyCheck, type Platform, 
 import { ago, DAY, delay, HOUR, type MockStore } from "./store.ts";
 import { storiesWorkspace } from "./workspace.ts";
 
-export const KEYS = ["social", "connectSocial", "chooseSocial", "shareWithClips", "checkSocial", "tiktokCreatorInfo", "disconnectSocial", "setSocialApp", "checkSocialApp", "deleteSocialApp"] as const;
+export const KEYS = ["social", "connectSocial", "chooseSocial", "checkSocial", "tiktokCreatorInfo", "disconnectSocial", "setSocialApp", "checkSocialApp", "deleteSocialApp"] as const;
 
 export const PLATFORM_NAME: Record<Platform, string> = { youtube: "YouTube", tiktok: "TikTok", instagram: "Instagram", facebook: "Facebook", x: "X" };
 
-/** §45.13.5 in plain words: what each platform allows for a second account, with Clip Factory's app. */
+/**
+ * §45.13.5 in plain words: what each platform allows for a second account, with Clip Factory's app shared. Clip
+ * Factory's posts always go first (§45.37 G6): Lamo Stories uses only what is left of the app's quotas.
+ */
 export const LIMITS: Record<Platform, string[]> = {
   youtube: [
     "One Google sign-in can hold several channels.",
     "Lamo Stories posts to the one channel you pick in Google's list. To use a different one, tap Pick another channel.",
-    "Both channels share the same daily uploads: about 6 a day in all.",
+    "Both channels share Clip Factory's daily uploads, about 6 a day in all. Clip Factory's come first: Lamo Stories uses what is left, and a post waits for the next day when none are left.",
   ],
   instagram: [
     "It needs its own professional account (Business or Creator), linked to a Facebook Page.",
@@ -35,10 +42,11 @@ export const LIMITS: Record<Platform, string[]> = {
     "While TikTok is still checking the app, only test accounts added in TikTok's Sandbox can connect.",
     "Until TikTok says yes, the account must be private and posts are seen by you only.",
     "When TikTok says yes, Lamo Stories asks you to connect again.",
+    "Clip Factory's posts come first: Lamo Stories uses what is left of the app's daily posts.",
   ],
   x: [
     "It needs its own X account. X connects the account that is signed in on x.com.",
-    "Posts use the same X app and the same monthly X limit as Lamo Clips.",
+    "Posts use Clip Factory's X app. Clip Factory's posts come first: Lamo Stories uses what is left of the month's credits.",
   ],
 };
 
@@ -77,7 +85,7 @@ const CLIPS_NAMES: Record<Platform, string> = {
   x: "Clip Factory",
 };
 
-const CLIPS_IDS: Record<Platform, string> = {
+export const CLIPS_IDS: Record<Platform, string> = {
   youtube: "UCclipfactorygaming00000",
   tiktok: "-000clipfactory-open-id",
   instagram: "17841400000000002",
@@ -85,19 +93,52 @@ const CLIPS_IDS: Record<Platform, string> = {
   x: "1500000000000000001",
 };
 
+/** Clip Factory's own handles there (its ACCOUNT# items' username or handle; YouTube and Facebook compare ids only). */
+export const CLIPS_HANDLES: Partial<Record<Platform, string>> = { tiktok: "@clipfactory", instagram: "clipfactory.gg", x: "@clipfactorygg" };
+
 /**
- * Lamo Clips' own account on this platform, found later (§45.34, §45.35 D11): a stored "connected" whose account is
- * the one Lamo Clips posts to, not shared on purpose, is the same as Clip Factory's (as the API's public_of settles
- * it), and so is a stored same_as_clips.
+ * Clip Factory's identity on a platform: the mock's own, or the one a test says Clip Factory connected later
+ * (`store.knobs.clipsIdentity[platform] = { id?, handle? }`).
  */
-export function sameAsClips(a: Pick<SocialAccount, "platform" | "connectionStatus" | "externalAccountId" | "sharedWithClips">): boolean {
-  if (a.connectionStatus === "same_as_clips") return true;
-  return a.connectionStatus === "connected" && !a.sharedWithClips && a.externalAccountId === CLIPS_IDS[a.platform];
+function clipsIdentity(platform: Platform, store?: MockStore): { id: string | null; handle: string | null } {
+  const later = (store?.knobs.clipsIdentity as Partial<Record<Platform, { id?: string; handle?: string }>> | undefined)?.[platform];
+  return later ? { id: later.id ?? null, handle: later.handle ?? null } : { id: CLIPS_IDS[platform], handle: CLIPS_HANDLES[platform] ?? null };
 }
 
-/** The account as Social accounts shows it: one that turned out to be Lamo Clips' own reads same_as_clips. */
-function settled(a: SocialAccount): SocialAccount {
-  return a.connectionStatus === "connected" && sameAsClips(a) ? { ...a, connectionStatus: "same_as_clips" } : a;
+const plainHandle = (h: string | null | undefined) => (h ?? "").trim().replace(/^@/, "").toLowerCase();
+
+/**
+ * Any stable identity matches Clip Factory's account on that platform (§45.37 G8 (b)): the channel, Page or user id,
+ * or, where the platform has one, the username or handle (TikTok gives each app its own open_id, so there the handle
+ * is what both sides have).
+ */
+export function matchesClips(platform: Platform, who: { externalAccountId?: string | null; handle?: string | null; accountName?: string | null }, store?: MockStore): boolean {
+  const clips = clipsIdentity(platform, store);
+  if (who.externalAccountId && clips.id && who.externalAccountId === clips.id) return true;
+  if (platform === "youtube" || platform === "facebook") return false;
+  const theirs = plainHandle(clips.handle);
+  if (!theirs) return false;
+  return plainHandle(who.handle) === theirs || (platform === "instagram" && plainHandle(who.accountName) === theirs);
+}
+
+/**
+ * Clip Factory's own account on this platform (§45.34, §45.35 D11, §45.37 G8): a stored same_as_clips, or a stored
+ * "connected" whose account Clip Factory connected later. Never shared: a stored sharedWithClips is ignored.
+ */
+export function sameAsClips(a: Pick<SocialAccount, "platform" | "connectionStatus" | "externalAccountId" | "handle" | "accountName">, store?: MockStore): boolean {
+  if (a.connectionStatus === "same_as_clips") return true;
+  return a.connectionStatus === "connected" && matchesClips(a.platform, a, store);
+}
+
+/**
+ * The account as Social accounts shows it: one Clip Factory connected later reads same_as_clips with reason
+ * clips_later, blocked from posting (the API's public_of); one no longer Clip Factory's is connected again.
+ */
+function settled(a: SocialAccount, store: MockStore): SocialAccount {
+  const { sharedWithClips: _gone, ...plain } = a;
+  if (plain.connectionStatus === "connected" && sameAsClips(plain, store)) return { ...plain, connectionStatus: "same_as_clips", reason: "clips_later" };
+  if (plain.connectionStatus === "same_as_clips" && plain.reason === "clips_later" && !matchesClips(plain.platform, plain, store)) return { ...plain, connectionStatus: "connected", reason: null };
+  return plain;
 }
 
 /** What a connect in the pretend app finds for each platform: the Lamo Stories account the owner picked. */
@@ -139,7 +180,6 @@ function base(ws: string, platform: Platform, app: SocialAccount["app"] = NO_APP
     accountName: null,
     handle: null,
     avatarUrl: null,
-    sharedWithClips: false,
     connectedAt: null,
     missing: [],
     reason: null,
@@ -165,7 +205,6 @@ function connectedAs(a: SocialAccount, who: { id: string; name: string; handle: 
     avatarUrl: avatar(who.name, bg),
     connectedAt: new Date().toISOString(),
     lastCheckedAt: new Date().toISOString(),
-    sharedWithClips: false,
     reason: null,
     reconnectBy: null,
     choices: null,
@@ -224,7 +263,7 @@ export function seed(store: MockStore): void {
     connectionStatus: "same_as_clips",
     externalAccountId: CLIPS_IDS.x,
     accountName: CLIPS_NAMES.x,
-    handle: "@clipfactorygg",
+    handle: CLIPS_HANDLES.x!,
     avatarUrl: avatar("Clip Factory", "#0F372B"),
     connectedAt: ago(3 * HOUR),
   };
@@ -263,7 +302,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       await delay(160);
       storiesWorkspace(store, ws);
       // Settled as the API's public_of does: Lamo Clips connecting the same account later shows here (§45.35 D11).
-      const accounts = STORIES_PLATFORMS.map((p) => replace(store, settled(account(store, ws, p))));
+      const accounts = STORIES_PLATFORMS.map((p) => replace(store, settled(account(store, ws, p), store)));
       return { accounts: structuredClone(accounts), clips: structuredClone(store.clips) };
     },
     async connectSocial(ws, platform) {
@@ -281,8 +320,12 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         );
       // A test can pick what the pretend platform answers; otherwise each platform does what it does for real.
       const forced = typeof store.knobs.connectResult === "string" ? (store.knobs.connectResult as string) : null;
-      const result = forced ?? (platform === "instagram" || platform === "facebook" ? "choose" : "connected");
-      if (result === "connected") replace(store, connectedAs(a, STORIES_IDENTITY[platform]));
+      const who = STORIES_IDENTITY[platform];
+      // The same-account check at connect (§45.37 G8): the account signed in with is Clip Factory's by any identity.
+      const theirs = matchesClips(platform, { externalAccountId: who.id, handle: who.handle, accountName: who.name }, store);
+      const result = forced ?? (platform === "instagram" || platform === "facebook" ? "choose" : theirs ? "same_as_clips_signed_in" : "connected");
+      if (result === "connected") replace(store, connectedAs(a, who));
+      else if (result === "same_as_clips_signed_in") replace(store, { ...connectedAs(a, who), connectionStatus: "same_as_clips" });
       else if (result === "choose")
         replace(store, {
           ...a,
@@ -291,7 +334,6 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
           accountName: null,
           handle: null,
           avatarUrl: null,
-          sharedWithClips: false,
           choices: [
             { id: STORIES_IDENTITY[platform].id, name: STORIES_IDENTITY[platform].name, avatarUrl: avatar(STORIES_IDENTITY[platform].name, "#62C6FF"), usedByClips: false },
             { id: CLIPS_IDS[platform], name: CLIPS_NAMES[platform], avatarUrl: avatar(CLIPS_NAMES[platform], "#0F372B"), usedByClips: true },
@@ -299,12 +341,13 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
           warning: null,
         });
       else if (result === "same_as_clips")
+        // Signed in with Clip Factory's own account: refused at connect (§45.37 G8), kept only so the card says why.
         replace(store, {
-          ...connectedAs(a, { id: CLIPS_IDS[platform], name: CLIPS_NAMES[platform], handle: CLIPS_NAMES[platform] }, "#0F372B"),
+          ...connectedAs(a, { id: CLIPS_IDS[platform], name: CLIPS_NAMES[platform], handle: CLIPS_HANDLES[platform] ?? CLIPS_NAMES[platform] }, "#0F372B"),
           connectionStatus: "same_as_clips",
         });
       else if (result === "clips_meta_check") replace(store, { ...connectedAs(a, STORIES_IDENTITY[platform]), warning: META_WARNING(platform) });
-      return { authorizeUrl: landing(platform, result, ws), expiresAt: new Date(Date.now() + 10 * 60_000).toISOString() };
+      return { authorizeUrl: landing(platform, result === "same_as_clips_signed_in" ? "same_as_clips" : result, ws), expiresAt: new Date(Date.now() + 10 * 60_000).toISOString() };
     },
     async chooseSocial(ws, platform, choiceId) {
       await delay(200);
@@ -312,15 +355,10 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const a = account(store, ws, platform);
       const choice = a.choices?.find((c) => c.id === choiceId);
       if (!choice) throw new ApiError(409, "conflict", "That list is old. Tap Connect again.");
-      const clipsOwn = choice.id === CLIPS_IDS[platform];
+      // Clip Factory's own is never connected for posting (§45.37 G8): it stays same_as_clips, and the card says why.
+      const clipsOwn = choice.usedByClips || matchesClips(platform, { externalAccountId: choice.id, handle: choice.name, accountName: choice.name }, store);
       const next = connectedAs(a, { id: choice.id, name: choice.name, handle: choice.name }, clipsOwn ? "#0F372B" : "#62C6FF");
       return replace(store, { ...next, connectionStatus: clipsOwn ? "same_as_clips" : "connected", warning: a.warning });
-    },
-    async shareWithClips(ws, platform) {
-      await delay(200);
-      const a = account(store, ws, platform);
-      if (a.connectionStatus !== "same_as_clips") throw new ApiError(409, "conflict", "This account is not the one Lamo Clips posts to.");
-      return replace(store, { ...a, connectionStatus: "connected", sharedWithClips: true });
     },
     async checkSocial(ws, platform) {
       await delay(400);
@@ -328,7 +366,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (a.connectionStatus === "not_connected") throw new ApiError(409, "conflict", `Lamo Stories' ${PLATFORM_NAME[platform]} is not connected. Tap Connect first.`);
       // A live profile call: a dead token turns the account to needs_reconnect (a test knob plays that).
       if (store.knobs.tokenDead === platform) return replace(store, { ...a, connectionStatus: "needs_reconnect", reason: "token_dead", lastCheckedAt: new Date().toISOString() });
-      return replace(store, { ...a, lastCheckedAt: new Date().toISOString() });
+      // Check it settles the account as the page does: Clip Factory connecting it later blocks it (§45.37 G8).
+      return replace(store, { ...settled(a, store), lastCheckedAt: new Date().toISOString() });
     },
     async tiktokCreatorInfo(ws) {
       await delay(200);

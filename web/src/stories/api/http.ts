@@ -17,6 +17,7 @@ import type {
   Idea,
   KeyCheck,
   LibraryItem,
+  MakerModelInfo,
   MemoryItem,
   Message,
   ModelInfo,
@@ -198,12 +199,13 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     },
     providers: async (ws) => (await call<{ providers: ProviderStatus[] }>("GET", w(ws, "/providers"))).providers,
     tryNovaReel: async (ws) => (await call<{ job: ProductionJob }>("POST", w(ws, "/providers/nova-reel/check"))).job,
+    // §45.37: Try it moved to Luma AI Ray2 (Nova Reel was ended by Amazon); the same route shape, by provider id.
+    tryMaker: async (ws, providerId) => (await call<{ job: ProductionJob }>("POST", w(ws, `/providers/${id(providerId)}/check`))).job,
     guidance: (ws) => call<{ topics: GuidanceTopic[]; checkedAt: string }>("GET", w(ws, "/guidance")),
 
     social: (ws) => call<{ accounts: SocialAccount[]; clips: ClipsDestination[] }>("GET", w(ws, "/social")),
     connectSocial: (ws, platform) => call<{ authorizeUrl: string; expiresAt: string }>("POST", w(ws, `/social/${id(platform)}/connect`)),
     chooseSocial: async (ws, platform, choiceId) => (await call<{ account: SocialAccount }>("POST", w(ws, `/social/${id(platform)}/choose`), { choiceId })).account,
-    shareWithClips: async (ws, platform) => (await call<{ account: SocialAccount }>("POST", w(ws, `/social/${id(platform)}/share`), { confirm: true })).account,
     checkSocial: async (ws, platform) => (await call<{ account: SocialAccount }>("POST", w(ws, `/social/${id(platform)}/check`))).account,
     tiktokCreatorInfo: async (ws) => (await call<{ creator: TikTokCreator }>("GET", w(ws, "/social/tiktok/creator-info"))).creator,
     disconnectSocial: (ws, platform) => call<void>("DELETE", w(ws, `/social/${id(platform)}`)),
@@ -216,8 +218,13 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     putAi: async (ws, ai) => (await call<{ ai: StoriesAiConfig }>("PUT", w(ws, "/ai"), ai)).ai,
     putAiModel: async (ws, key, def) => (await call<{ model: ModelInfo }>("PUT", w(ws, `/ai/models/${id(key)}`), def)).model,
     deleteAiModel: (ws, key) => call<void>("DELETE", w(ws, `/ai/models/${id(key)}`)),
-    checkModels: async (ws, models) => (await call<{ task: AiTask }>("POST", w(ws, "/ai/check-models"), models ? { models } : {})).task,
+    // `makers` (§45.37 G2): picture, video and sound models checked in the same task (a free access check).
+    checkModels: async (ws, models, makers) => (await call<{ task: AiTask }>("POST", w(ws, "/ai/check-models"), { ...(models ? { models } : {}), ...(makers ? { makers } : {}) })).task,
     setModelPrice: async (ws, modelKey, price) => (await call<{ model: ModelInfo }>("PUT", w(ws, `/ai/prices/${id(modelKey)}`), price ?? {})).model,
+    // The makers' models (§45.37 G1, G2): bundled and added, each with its access check's status.
+    makerModels: async (ws) => (await call<{ models: MakerModelInfo[] }>("GET", w(ws, "/makers/models"))).models,
+    putMakerModel: async (ws, key, def) => (await call<{ model: MakerModelInfo }>("PUT", w(ws, `/makers/models/${id(key)}`), def)).model,
+    deleteMakerModel: (ws, key) => call<void>("DELETE", w(ws, `/makers/models/${id(key)}`)),
     usage: async (ws, days) => (await call<{ usage: UsageSummary }>("GET", w(ws, `/usage${q({ days })}`))).usage,
     getAgent: async (ws, agentId) => (await call<{ agent: Agent }>("GET", w(ws, `/agents/${id(agentId)}`))).agent,
     patchAgent: async (ws, agentId, patch) => (await call<{ agent: Agent }>("PATCH", w(ws, `/agents/${id(agentId)}`), patch)).agent,

@@ -6,8 +6,9 @@
 //   starting from its maker's defaults; the body carries them, and the mock refuses levels on a model that has none;
 // - D6: changing its model ID or Region makes it "Not checked yet" again, also after the page is opened again;
 // - D8: "{maker} on {host}" wherever a model is named;
-// - D2: Settings › Video's Nova Reel row has Try it (one 6-second test shot, which Amazon bills), follows the job and
-//   says how it went: what is missing, Amazon Bedrock's sentence, or that it works;
+// - D2: Settings › Video's AI video maker has Try it (one test shot, which Amazon bills), follows the job and says how
+//   it went: what is missing, Amazon Bedrock's sentence, or that it works. Since §45.37 that is Luma AI Ray2 (a
+//   5-second shot): Amazon ended Nova Reel on 30 Sep 2026, so its Try it is refused and never shown;
 // - D9: the storage card says a study stays only if the video was studied.
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -17,7 +18,7 @@ import { forgetLoaded } from "../src/lib/hooks.ts";
 import { setStoriesApi } from "../src/stories/api/client.ts";
 import { mockStoriesApi } from "../src/stories/api/mock/index.ts";
 import { setMockLatency, type MockStore } from "../src/stories/api/mock/store.ts";
-import { REEL_DENIED, REEL_NOT_READY } from "../src/stories/api/mock/workspace.ts";
+import { LUMA_BUSY, LUMA_DENIED, LUMA_NOT_READY, REEL_ENDED } from "../src/stories/api/mock/workspace.ts";
 import { callingFor, type ModelInfo, type ProductionJob, type StoriesApi } from "../src/stories/api/types.ts";
 import { madeBy } from "../src/stories/settings/bits.tsx";
 import { callingOf, callingWords, defOf, movedUnchecked, withMaker } from "../src/stories/settings/OwnModels.tsx";
@@ -259,49 +260,54 @@ describe("who makes a model, on who runs it (§45.35 D8)", () => {
   });
 });
 
-describe("Try it on Amazon Nova Reel (§45.35 D2)", () => {
-  it("the row says what it does; without the US storage it says what is missing, and nothing switches", async () => {
+describe("Try it on Luma AI Ray2 (§45.35 D2, moved from Nova Reel by §45.37)", () => {
+  it("the row says what it does; without the Oregon storage it says what is missing, and nothing switches", async () => {
     start();
     await open("video");
-    const row = $<HTMLElement>('[data-provider="nova-reel"]')!;
+    // Nova Reel's Try it is gone: Amazon ended the model, so a test shot could only fail.
+    expect($('[data-provider="nova-reel"]')).toBeNull();
+    const row = $<HTMLElement>('[data-provider="luma-ray"]')!;
     expect(row).not.toBeNull();
     expect(row.textContent).toContain(TRY_LINE);
     expect(row.textContent).toContain("Amazon bills that one shot");
     await click(byText("button", "Try it", row));
     await settle(8);
-    expect(calls.filter((c) => c.name === "tryNovaReel")).toHaveLength(1);
+    expect(calls.filter((c) => c.name === "tryMaker").map((c) => c.args)).toEqual([["stories", "luma-ray"]]);
+    expect(calls.filter((c) => c.name === "tryNovaReel")).toHaveLength(0);
     expect(row.textContent).toContain("It did not work");
-    expect(row.textContent).toContain(REEL_NOT_READY);
-    expect(document.body.textContent).toContain(REEL_NOT_READY);
+    expect(row.textContent).toContain(LUMA_NOT_READY);
+    expect(document.body.textContent).toContain(LUMA_NOT_READY);
     // The video maker is still the built-in animator.
     expect((await api.getWorkspace("stories")).configuration).toMatchObject({ providers: { video: "builtin-2d" } });
     expect(byText("button", "Try it again", row)).toBeTruthy();
   });
 
-  it("with the US storage on it works: the row and a toast say so, and picking Nova Reel shows it Working", async () => {
-    start({ reelBucket: true });
+  it("with the Oregon storage on it works: the row and a toast say so, and picking Luma AI Ray2 shows it Working", async () => {
+    start({ lumaBucket: true });
     await open("video");
-    const row = $<HTMLElement>('[data-provider="nova-reel"]')!;
+    const row = $<HTMLElement>('[data-provider="luma-ray"]')!;
     await click(byText("button", "Try it", row));
     await settle(8);
     expect(row.textContent).toContain("It worked");
-    expect(row.textContent).toContain("Nova Reel made a test shot");
-    expect(document.body.textContent).toContain("It works! Nova Reel made its test shot.");
-    await click(byText("[role=radio]", /Amazon Nova Reel/, byText(".st-stg-card", /^Video maker/)));
+    expect(row.textContent).toContain("Luma AI Ray2 made a test shot");
+    expect(document.body.textContent).toContain("It works! Luma AI Ray2 made its test shot.");
+    await click(byText("[role=radio]", /Luma AI Ray2/, byText(".st-stg-card", /^Video maker/)));
     await settle(8);
-    expect((await api.providers("stories")).find((p) => p.id === "nova-reel")).toMatchObject({ state: "on" });
-    expect(byText("[role=radio]", /Amazon Nova Reel/, byText(".st-stg-card", /^Video maker/)).textContent).toContain("Working");
+    expect((await api.providers("stories")).find((p) => p.id === "luma-ray")).toMatchObject({ state: "on" });
+    expect(byText("[role=radio]", /Luma AI Ray2/, byText(".st-stg-card", /^Video maker/)).textContent).toContain("Working");
   });
 
-  it("Amazon Bedrock saying no is shown in its own words; a try already running is refused", async () => {
-    start({ reelBucket: true, reelDenied: true, reelTryMs: 60_000 });
-    const job = await api.tryNovaReel("stories");
-    expect(job).toMatchObject({ jobType: "provider_check", contentType: "provider", contentId: "nova-reel", steps: [{ key: "check", label: "Try it" }] });
-    await expect(api.tryNovaReel("stories")).rejects.toMatchObject({ status: 409, message: "Amazon Nova Reel is being tried. Wait until it is done." });
-    store.knobs.reelTryMs = 0;
-    const reel = (await api.providers("stories")).find((p) => p.id === "nova-reel")!;
-    expect(reel.check).toMatchObject({ jobId: job.jobId, status: "failed" });
-    expect(tryProblem(reel.check ?? null, reel)).toBe(REEL_DENIED);
+  it("Amazon Bedrock saying no is shown in its own words; a try already running is refused; Nova Reel's is refused", async () => {
+    start({ lumaBucket: true, lumaDenied: true, tryMs: 60_000 });
+    const job = await api.tryMaker("stories", "luma-ray");
+    expect(job).toMatchObject({ jobType: "provider_check", contentType: "provider", contentId: "luma-ray", steps: [{ key: "check", label: "Try it" }] });
+    await expect(api.tryMaker("stories", "luma-ray")).rejects.toMatchObject({ status: 409, message: LUMA_BUSY });
+    store.knobs.tryMs = 0;
+    const luma = (await api.providers("stories")).find((p) => p.id === "luma-ray")!;
+    expect(luma.check).toMatchObject({ jobId: job.jobId, status: "failed" });
+    expect(tryProblem(luma.check ?? null, luma)).toBe(LUMA_DENIED);
+    await expect(api.tryNovaReel("stories")).rejects.toMatchObject({ status: 409, message: REEL_ENDED });
+    expect(REEL_ENDED).toBe("Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Lamo Stories › Settings › Video.");
   });
 
   it("shows the try just started until the list knows it, then the list's newest", () => {

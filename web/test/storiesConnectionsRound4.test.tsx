@@ -108,11 +108,12 @@ describe("one toast per pick (§45.35 D21)", () => {
     expect(toasts()).toEqual(["Great! Lamo Stories posts to lamo.stories on Instagram."]);
   });
 
-  it("picking Lamo Clips' own place still says so (there is no question then)", async () => {
+  it("tapping Clip Factory's own place says why once, sends nothing and asks nothing (§45.37 G8)", async () => {
     await render();
     await click(button(card("instagram"), /clipfactory\.gg/));
-    expect(toasts()).toEqual(["clipfactory.gg is Clip Factory's own. Check the card below."]);
+    expect(toasts()).toEqual(["This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one."]);
     expect(card("instagram").querySelector(".st-intended")).toBeNull();
+    expect((await api.social("stories")).accounts.find((a) => a.platform === "instagram")?.connectionStatus).toBe("choose_account");
   });
 });
 
@@ -149,11 +150,12 @@ describe("Lamo Clips' account found later (§45.35 D11)", () => {
     expect(sameAsClips(x)).toBe(true);
     const o = await api.getOnboarding("stories");
     expect(o.steps.find((s) => s.step === "x")).toEqual({ step: "x", label: "Connect X", state: "todo", line: sameAsClipsLine("x") });
-    expect(sameAsClipsLine("x")).toBe("This is Lamo Clips' X account. Pick another in Social accounts, or tap Use it for both.");
+    // §45.37 G8: never "use it for both"; a separate account.
+    expect(sameAsClipsLine("x")).toBe("This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.");
     const fresh = await api.social("stories");
-    expect(fresh.accounts.find((a) => a.platform === "x")?.connectionStatus).toBe("same_as_clips");
-    // Used for both on purpose: connected, and the step ticks.
-    await api.shareWithClips("stories", "x");
+    expect(fresh.accounts.find((a) => a.platform === "x")).toMatchObject({ connectionStatus: "same_as_clips", reason: "clips_later" });
+    // A separate account made for Clip Factory Stories: connected, and the step ticks.
+    await api.connectSocial("stories", "x");
     const after = await api.getOnboarding("stories");
     expect(after.steps.find((s) => s.step === "x")).toEqual({ step: "x", label: "Connect X", state: "done" });
   });

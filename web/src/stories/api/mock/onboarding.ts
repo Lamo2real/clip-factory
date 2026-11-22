@@ -59,9 +59,12 @@ export function seed(store: MockStore): void {
 /** A platform step is done only once Lamo Stories' own account there is connected (§45.34): Lamo Clips' own on hold is not. */
 const COUNTS_CONNECTED: SocialAccount["connectionStatus"][] = ["connected"];
 
-/** Why a platform's step stays to do while its account is Lamo Clips' own (the API's same_as_clips_line, word for word). */
-export function sameAsClipsLine(step: OnboardStep): string {
-  return `This is Lamo Clips' ${SOCIAL_LABEL[step] ?? step} account. Pick another in Social accounts, or tap Use it for both.`;
+/**
+ * Why a platform's step stays to do while its account is Clip Factory's own (the API's same_as_clips_line, word for
+ * word, §45.37 G8 (c)): never "use it for both", a separate account. The same sentence on every platform's step.
+ */
+export function sameAsClipsLine(_step: OnboardStep): string {
+  return "This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.";
 }
 
 /** The platform's Lamo Stories account in this workspace when it is Lamo Clips' own (stored so, or found later, D11). */

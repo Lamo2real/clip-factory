@@ -66,6 +66,8 @@ export const TASK_WORD: Partial<Record<TaskKind, string>> = {
   fact_check: "Checking the facts",
   final_review: "Taking a last look",
   captions: "Writing the captions",
+  text_edit: "Changing the words",
+  animation_plan: "Planning the animation",
 };
 
 /** The agent each task belongs to (CONTRACTS §45.26). */
@@ -81,6 +83,9 @@ const TASK_AGENT: Record<TaskKind, TaskInfo["agentId"]> = {
   reference_analysis: "video_analysis",
   fact_check: "quality_assurance",
   final_review: "quality_assurance",
+  // §45.37 G5: short chat edits go with the chat; scene planning with the storyboard.
+  text_edit: "creative_director",
+  animation_plan: "storyboard",
 };
 
 /** The steps of a video and the words for them in the "Made with" list. */

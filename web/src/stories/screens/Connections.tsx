@@ -1,13 +1,19 @@
 // Lamo Stories › Social accounts (docs/CONTRACTS.md §45.13, §45.16.7, §45.30, §45.33): Lamo Stories' own social
 // accounts, separate from Clip Factory's. Five cards (YouTube, TikTok, Instagram, Facebook, X), each with the
 // platform's logo mark, its status, the account's name AND id, the authorization status and when it was last checked
-// (Check now), Connect / Reconnect / Pick another / Disconnect / Use it for both (after an "Are you sure?" step), what
-// the platform allows for a second account, the sign-in and Pages notes before Connect, the account's warning, and
-// Clip Factory's own destination for that platform so the owner sees they differ.
+// (Check now), Connect / Reconnect / Pick another / Disconnect, what the platform allows for a second account, the
+// sign-in and Pages notes before Connect, the account's warning, and Clip Factory's own destination for that platform
+// so the owner sees they differ.
+//
+// The owner's hard rule (§45.37 G8): Clip Factory Stories never posts to Clip Factory's own accounts, so there is no
+// "Use it for both" any more. Every card says up front to use a new account made for Clip Factory Stories; an account
+// that is Clip Factory's own (any stable identity matches) is refused at connect and before every upload, also when
+// Clip Factory connects it later, and the card says why.
 //
 // Before the first Connect each card asks which developer app Lamo Stories uses (§45.30): a separate app of its own
 // (its keys pasted here, with Check it and Lamo Stories' own redirect URI to copy) or, for YouTube, TikTok and X only,
-// Clip Factory's app on purpose. Facebook and Instagram always use Lamo Stories' own Meta app, whose keys are entered
+// Clip Factory's app on purpose ("Share Clip Factory's app": Clip Factory's posts always go first, §45.37 G6; still
+// with a different account). Facebook and Instagram always use Lamo Stories' own Meta app, whose keys are entered
 // once for both. Nothing is ever chosen silently, and the keys never come back from the server (masked hints only).
 // Disconnect never revokes anything at the platform (§45.13.6): the page says where to remove the app by hand, in
 // words that follow the app chosen (§45.34). Both Meta cards show both redirect URIs (Instagram's and Facebook's),
@@ -66,6 +72,22 @@ export function beforeConnect(p: Platform, choice: SocialAccount["app"]["choice"
   }
 }
 
+/** Said up front on every card and Connect step (§45.37 G8, the owner's hard rule): a new account, never Clip Factory's. */
+export const NEW_ACCOUNT_LINE = "Use a new account made for Clip Factory Stories, not lamo.clips.";
+/** The shared developer app's promise (§45.37 G6): Clip Factory's posts are never squeezed out. */
+export const SHARED_APP_LINE = "Clip Factory's posts always go first. Stories uses what's left.";
+/** Sharing the app never means sharing the account (§45.37 G8 (c)). */
+export const SHARED_APP_ACCOUNT_LINE = "Even with Clip Factory's app, sign in with a different account made for Clip Factory Stories.";
+/** The account just signed in with is Clip Factory's own (§45.37 G8 (c)). */
+export const SAME_AS_CLIPS_LINE = "This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.";
+/** Clip Factory connected this very account later: it is blocked from posting (§45.37 G8 (a)). */
+export const CLIPS_LATER_LINE = "This is Clip Factory's account now. Connect a different account made for Clip Factory Stories.";
+
+/** Why an account that is Clip Factory's own is stopped, for the code the API sends (§45.37 G8). */
+export function sameAsClipsLine(a: Pick<SocialAccount, "reason">): string {
+  return a.reason === "clips_later" ? CLIPS_LATER_LINE : SAME_AS_CLIPS_LINE;
+}
+
 /** After a Disconnect with Clip Factory's app (shared on purpose): removing that app would touch Lamo Clips too. */
 export const AFTER_DISCONNECT =
   "To remove Clip Factory from this account completely, remove the app in the account's own settings. Only do that if Lamo Clips does not use the same account.";
@@ -88,7 +110,7 @@ const STATUS: Record<SocialAccount["connectionStatus"], { label: string; tone: S
   connected: { label: "Connected", tone: "mint", auth: "Allowed: Lamo Stories may post here." },
   choose_account: { label: "Pick one", tone: "sun", auth: "Allowed, but pick where Lamo Stories posts first." },
   needs_reconnect: { label: "Connect again", tone: "coral", auth: "Stopped: the sign-in needs renewing. Tap Reconnect." },
-  same_as_clips: { label: "Same as Clip Factory", tone: "coral", auth: "On hold: this is Clip Factory's own place." },
+  same_as_clips: { label: "Clip Factory's own", tone: "coral", auth: "Stopped: Clip Factory Stories never posts to Clip Factory's own account." },
   not_connected: { label: "Not connected", tone: "sky", auth: "Not allowed yet: nothing is connected." },
 };
 
@@ -101,7 +123,7 @@ export function resultSentence(code: string, p: Platform): { text: string; good:
     case "choose":
       return { text: `Now pick the ${name} ${PLACE[p]} Lamo Stories posts to.`, good: true };
     case "same_as_clips":
-      return { text: `This is the same ${PLACE[p]} Lamo Clips posts to. Pick another, or use it for both.`, good: false };
+      return { text: SAME_AS_CLIPS_LINE, good: false };
     case "clips_meta_check":
       return { text: `${name} is connected. But Lamo Clips may have lost ${name}: connect it again in Lamo Clips, keeping its Page ticked.`, good: false };
     case "denied":
@@ -149,6 +171,8 @@ export function reasonSentence(code: string | null, p: Platform): string {
       return `That took too long. Tap Connect ${name} again.`;
     case "clips_unknown":
       return `Lamo Stories cannot tell this ${name} account apart from Lamo Clips' own. Check which account is signed in.`;
+    case "clips_later":
+      return CLIPS_LATER_LINE;
     default:
       return `Lamo Stories' ${name} needs connecting again.`;
   }
@@ -424,8 +448,8 @@ function AppPart({
           <p className="st-app__now">
             {choice === "clips" ? (
               <>
-                Uses <strong>Clip Factory's {name} app</strong>, on purpose. Lamo Stories still gets its own sign-in and its own
-                keys to the account, never Clip Factory's. Quotas{p === "x" ? ", credits" : ""} and the app's review are shared.
+                Shares <strong>Clip Factory's {name} app</strong>, on purpose. {SHARED_APP_LINE} Lamo Stories still gets its own
+                sign-in and its own keys to the account, never Clip Factory's. {SHARED_APP_ACCOUNT_LINE}
               </>
             ) : (
               <>
@@ -520,7 +544,7 @@ function AppPart({
                 value={(want ?? "none") as "own" | "clips"}
                 options={[
                   { value: "own", label: "A separate app for Lamo Stories", line: "Fully separate. You make a second app and paste its keys here." },
-                  { value: "clips", label: "Clip Factory's app (quicker)", line: "No new app. Lamo Stories still gets its own sign-in; quotas and review are shared." },
+                  { value: "clips", label: "Share Clip Factory's app", line: `${SHARED_APP_LINE} ${SHARED_APP_ACCOUNT_LINE}` },
                 ]}
                 onChange={(v) => setPicking(v)}
               />
@@ -551,12 +575,12 @@ function AppPart({
                         setPicking(null);
                         setChanging(false);
                       },
-                      { text: `Lamo Stories uses Clip Factory's ${name} app. Now tap Connect ${name}.`, cheer: el },
+                      { text: `Lamo Stories shares Clip Factory's ${name} app. Now tap Connect ${name} and sign in with the Clip Factory Stories account.`, cheer: el },
                     );
                   }}
                 >
                   <StIcon name="check" size={18} />
-                  Use Clip Factory's app
+                  Share Clip Factory's app
                 </StButton>
               </div>
             </div>
@@ -595,7 +619,7 @@ function AppPart({
   );
 }
 
-type Ask = { kind: "share" } | { kind: "disconnect" } | null;
+type Ask = { kind: "disconnect" } | null;
 
 /** After a connect: "Is this your Lamo Stories {place}?" with Yes and Pick another (§45.34). */
 function IntendedAsk({ a, busy, onYes, onAnother }: { a: SocialAccount; busy: boolean; onYes: (el: HTMLElement) => void; onAnother: () => void }) {
@@ -709,7 +733,8 @@ export function PlatformCard({
   const reasonText = a.connectionStatus === "needs_reconnect" ? reasonSentence(a.reason, p) : null;
   // Any other code is said in words too (the two with their own lines below excepted); the server's warning, when
   // there is one, already says it.
-  const otherReason = a.reason && a.connectionStatus !== "needs_reconnect" && a.reason !== "expires_soon" && a.reason !== "expired" && !a.warning ? reasonSentence(a.reason, p) : null;
+  const otherReason =
+    a.reason && a.connectionStatus !== "needs_reconnect" && a.connectionStatus !== "same_as_clips" && a.reason !== "expires_soon" && a.reason !== "expired" && !a.warning ? reasonSentence(a.reason, p) : null;
 
   return (
     <li className={`st-conn st-conn--${a.connectionStatus}`} data-platform={p}>
@@ -720,6 +745,11 @@ export function PlatformCard({
         <h2 className="st-conn__name">{name}</h2>
         <span className={`st-chip st-chip--${status.tone}`}>{status.label}</span>
       </header>
+      {/* Up front, before anything is connected (§45.37 G8): a new account, never Clip Factory's. */}
+      <p className="st-note st-note--sky st-conn__new" role="note">
+        <StIcon name="user" size={18} />
+        {NEW_ACCOUNT_LINE}
+      </p>
 
       <Identity a={a} />
       <dl className="st-auth">
@@ -732,16 +762,10 @@ export function PlatformCard({
           <dd>{a.lastCheckedAt ? relative(a.lastCheckedAt) : a.connectionStatus === "not_connected" ? "Not connected yet" : "Not checked yet"}</dd>
         </div>
       </dl>
-      {connected && a.sharedWithClips ? (
-        <p className="st-note st-note--sun">
-          <StIcon name="link" size={18} />
-          You chose to use this {PLACE[p]} for both Clip Factory and Lamo Stories.
-        </p>
-      ) : null}
       {a.connectionStatus === "same_as_clips" ? (
-        <p className="st-note st-note--coral">
+        <p className="st-note st-note--coral" role="status">
           <StIcon name="alert" size={18} />
-          This is the same {PLACE[p]} Lamo Clips posts to. Lamo Stories will not post here unless you say so.
+          {sameAsClipsLine(a)}
         </p>
       ) : null}
       {reasonText ? (
@@ -795,21 +819,23 @@ export function PlatformCard({
                   type="button"
                   className={`st-choice${c.usedByClips ? " st-choice--clips" : ""}`}
                   disabled={busy !== null}
+                  // Clip Factory's own is never picked (§45.37 G8): the tap says why and sends nothing.
+                  aria-disabled={c.usedByClips || undefined}
                   onClick={() => {
-                    // One toast per pick (§45.35 D21): Lamo Clips' own place says so here; Lamo Stories' own is asked
-                    // "Is this your Lamo Stories {place}?" next, whose Yes cheers and says it once.
-                    void run(
-                      "choose",
-                      () => storiesApi().chooseSocial(ws, p, c.id),
-                      c.usedByClips ? { text: `${c.name} is Clip Factory's own. Check the card below.` } : undefined,
-                    ).then((ok) => {
-                      if (ok && !c.usedByClips) setPicked(true);
+                    if (c.usedByClips) {
+                      toast.error(SAME_AS_CLIPS_LINE);
+                      return;
+                    }
+                    // One toast per pick (§45.35 D21): Lamo Stories' own is asked "Is this your Lamo Stories {place}?"
+                    // next, whose Yes cheers and says it once.
+                    void run("choose", () => storiesApi().chooseSocial(ws, p, c.id)).then((ok) => {
+                      if (ok) setPicked(true);
                     });
                   }}
                 >
                   {c.avatarUrl ? <img src={c.avatarUrl} alt="" width={36} height={36} /> : <StIcon name="user" size={22} />}
                   <span className="st-choice__name">{c.name}</span>
-                  {c.usedByClips ? <span className="st-chip st-chip--coral">Clip Factory uses this</span> : <span className="st-choice__go">Use this</span>}
+                  {c.usedByClips ? <span className="st-chip st-chip--coral">Clip Factory's own</span> : <span className="st-choice__go">Use this</span>}
                 </button>
               </li>
             ))}
@@ -849,43 +875,27 @@ export function PlatformCard({
       ) : ask ? (
         <div className="st-sure" role="group" aria-label="Are you sure?">
           <p className="st-sure__ask">
-            <strong>Are you sure?</strong>{" "}
-            {ask.kind === "share"
-              ? `Clip Factory and Lamo Stories will both post to ${a.accountName ?? `this ${PLACE[p]}`}.`
-              : `Lamo Stories stops posting to ${a.accountName ?? name}. Clip Factory is not touched.`}
+            <strong>Are you sure?</strong> Lamo Stories stops posting to {a.accountName ?? name}. Clip Factory is not touched.
           </p>
           <div className="st-sure__buttons">
             <StButton onClick={() => setAsk(null)}>No, keep it as it is</StButton>
-            {ask.kind === "share" ? (
-              <StButton
-                main
-                disabled={busy !== null}
-                onClick={(e) => {
-                  const el = e.currentTarget;
-                  void run("share", () => storiesApi().shareWithClips(ws, p), { text: `Lamo Stories now posts to ${a.accountName ?? name} too.`, cheer: el });
-                }}
-              >
-                Yes, use it for both
-              </StButton>
-            ) : (
-              <StButton
-                main
-                className="st-btn--coral"
-                disabled={busy !== null}
-                onClick={() =>
-                  void run(
-                    "disconnect",
-                    async () => {
-                      await storiesApi().disconnectSocial(ws, p);
-                      onDisconnected(p, a.app.choice);
-                    },
-                    { text: `${name} is disconnected from Lamo Stories.` },
-                  )
-                }
-              >
-                Yes, disconnect
-              </StButton>
-            )}
+            <StButton
+              main
+              className="st-btn--coral"
+              disabled={busy !== null}
+              onClick={() =>
+                void run(
+                  "disconnect",
+                  async () => {
+                    await storiesApi().disconnectSocial(ws, p);
+                    onDisconnected(p, a.app.choice);
+                  },
+                  { text: `${name} is disconnected from Lamo Stories.` },
+                )
+              }
+            >
+              Yes, disconnect
+            </StButton>
           </div>
         </div>
       ) : (
@@ -908,12 +918,6 @@ export function PlatformCard({
             >
               <StIcon name="retry" size={18} />
               {busy === "check" ? "Checking…" : "Check now"}
-            </StButton>
-          ) : null}
-          {a.connectionStatus === "same_as_clips" ? (
-            <StButton disabled={busy !== null} onClick={() => setAsk({ kind: "share" })}>
-              <StIcon name="link" size={18} />
-              Use it for both
             </StButton>
           ) : null}
           {a.connectionStatus !== "not_connected" ? (

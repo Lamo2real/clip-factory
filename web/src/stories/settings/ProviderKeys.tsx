@@ -3,8 +3,8 @@
 // it is ProviderStatus.key (saved or not, its last four, when) and the provider's own line ("Key saved · ends 4f2a.").
 // "Remove the saved key" shows only while a key is saved. ProviderStatus.key is present only for a provider that takes
 // a key; for an API that does not send it yet, the contract's provider tables say which need none (§45.11.6, §45.31:
-// the built-in makers, Claude, Nova Canvas and Nova Reel use Lamo Stories' own AWS access). None takes a key today, so
-// the card says so and the form waits.
+// the built-in makers, Claude, Stability AI, Luma AI, Amazon Polly and the ended Nova makers use Lamo Stories' own AWS
+// access). Since §45.37 G4 the keyed hosts take one: the Anthropic API, an OpenAI-compatible API and ElevenLabs.
 import { useState } from "react";
 import { friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
@@ -13,7 +13,22 @@ import type { ProviderStatus } from "../api/types.ts";
 import { Btn, cheer, Chip, Note, PROVIDER_STATE, SIcon, whenText } from "./bits.tsx";
 
 /** The providers that use Lamo Stories' own AWS access, so a key is never asked for (§45.11.6, §45.31). */
-export const NO_KEY: ReadonlySet<string> = new Set(["bedrock-claude", "builtin-rig", "nova-canvas", "builtin-2d", "nova-reel", "builtin-synth"]);
+export const NO_KEY: ReadonlySet<string> = new Set([
+  "bedrock-claude",
+  "builtin-rig",
+  "nova-canvas",
+  "builtin-2d",
+  "nova-reel",
+  "builtin-synth",
+  // §45.37: Stability AI and Luma AI on Amazon Bedrock and Amazon Polly use Lamo Stories' own AWS access; the owner's
+  // own makers use the key of the host each model runs on (anthropic, openai_compatible, elevenlabs), never their own.
+  "stability",
+  "luma-ray",
+  "polly",
+  "own-images",
+  "own-video",
+  "own-sound",
+]);
 
 export function takesKey(p: ProviderStatus): boolean {
   if (p.key) return true;
@@ -138,8 +153,21 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
 }
 
 /** The providers of some kinds that take a key, each with its form; or a plain line when none does. */
-export function ProviderKeys({ ws, providers, kinds, onChange }: { ws: string; providers: ProviderStatus[]; kinds?: ProviderStatus["kind"][]; onChange: (p: ProviderStatus) => void }) {
-  const list = providers.filter((p) => (!kinds || kinds.includes(p.kind)) && takesKey(p));
+export function ProviderKeys({
+  ws,
+  providers,
+  kinds,
+  also = [],
+  onChange,
+}: {
+  ws: string;
+  providers: ProviderStatus[];
+  kinds?: ProviderStatus["kind"][];
+  /** providers shown whatever their kind (the OpenAI-compatible API also makes pictures, §45.37) */
+  also?: string[];
+  onChange: (p: ProviderStatus) => void;
+}) {
+  const list = providers.filter((p) => (!kinds || kinds.includes(p.kind) || also.includes(p.id)) && takesKey(p));
   if (!list.length)
     return (
       <Note tone="sky" icon="key">

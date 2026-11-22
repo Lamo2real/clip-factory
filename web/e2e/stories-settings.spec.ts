@@ -384,16 +384,21 @@ test.describe("Video and storage", () => {
     await openSection(page, "video");
     const maker = page.getByRole("radiogroup", { name: "Video maker" });
     await expect(maker.getByRole("radio", { name: /Built-in animator/ })).toHaveAttribute("aria-checked", "true");
-    // Nova Reel is built but not ready until its US bucket is switched on (§45.11.6): it can be picked, and says so.
-    const reel = maker.getByRole("radio", { name: /Amazon Nova Reel/ });
+    // Amazon ended Nova Reel on 30 Sep 2026 (§45.37): it reads ended and cannot be picked again.
+    const ended = maker.getByRole("radio", { name: /Amazon Nova Reel/ });
+    await expect(ended).toHaveAttribute("aria-disabled", "true");
+    await expect(ended).toContainText("Ended by Amazon on 30 Sep 2026.");
+    // Luma AI Ray2 is built but not ready until its Oregon bucket is switched on (§45.11.6): it can be picked, and says so.
+    const reel = maker.getByRole("radio", { name: /Luma AI Ray2/ });
     await expect(reel).not.toHaveAttribute("aria-disabled", "true");
+    await expect(reel).toContainText("Runs in the US (Oregon)");
     await reel.click();
     await expect(reel).toHaveAttribute("aria-checked", "true");
     // The API's own sentence (§45.34): it says what to do, and nothing switches to the built-in animation by itself.
-    await expect(card(page, "Video maker").getByRole("status")).toContainText("Amazon Nova Reel is not ready yet: ");
+    await expect(card(page, "Video maker").getByRole("status")).toContainText("Luma AI Ray2 is not ready yet: ");
     await expect(card(page, "Video maker").getByRole("status")).toContainText("Pick Built-in animation in Settings › Video, or finish its setup.");
-    // Said once, though the API's label (Amazon Nova Reel 1.1 (AI video)) is not the name its sentence uses.
-    await expect(card(page, "Video maker").getByRole("status")).toHaveText(/^Amazon Nova Reel is not ready yet: /);
+    // Said once, though the API's label (Luma AI Ray2 (AI video)) is not the name its sentence uses.
+    await expect(card(page, "Video maker").getByRole("status")).toHaveText(/^Luma AI Ray2 is not ready yet: /);
     await expect(card(page, "Video maker").getByRole("status")).not.toContainText("(AI video) is not ready yet");
     await expect(reel).toContainText("Not ready yet");
     await maker.getByRole("radio", { name: /Built-in animator/ }).click();
@@ -421,9 +426,9 @@ test.describe("Video and storage", () => {
     await expect(page.locator(".st-stg-length__value strong")).toHaveText("50");
 
     // The AI makers' prices: none is known, so the owner types one (a price for one unit, §45.34).
-    const price = page.locator(".st-stg-price").filter({ hasText: "Amazon Nova Reel" });
+    const price = page.locator(".st-stg-price").filter({ hasText: "Luma AI Ray2" });
     await expect(price).toContainText("No price set.");
-    await price.getByRole("button", { name: /Type a price for Amazon Nova Reel/ }).click();
+    await price.getByRole("button", { name: /Type a price for Luma AI Ray2/ }).click();
     await price.getByLabel("Price for one second").fill("0.08");
     await price.getByRole("button", { name: "Save the price" }).click();
     await expect(price).toContainText("Your price");
@@ -513,18 +518,20 @@ test.describe("round 4 (§45.35)", () => {
     }, knobs);
   }
 
-  test("D2: Try it on Nova Reel makes one test shot; without the US storage it says what is missing, and nothing switches", async ({ page }) => {
+  test("D2: Try it on Luma AI Ray2 makes one test shot; without the Oregon storage it says what is missing, and nothing switches", async ({ page }) => {
     await on(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await openSection(page, "video");
-    const row = page.locator('[data-provider="nova-reel"]');
-    await expect(row).toContainText("Try it makes one 6-second test shot to see if Nova Reel works for you. Amazon bills that one shot.");
-    await row.getByRole("button", { name: "Try Amazon Nova Reel" }).click();
-    await expect(row.getByRole("progressbar", { name: "Trying Amazon Nova Reel" })).toBeVisible();
+    // Nova Reel's Try it is gone (Amazon ended it, §45.37); Luma AI Ray2 has it now.
+    await expect(page.locator('[data-provider="nova-reel"]')).toHaveCount(0);
+    const row = page.locator('[data-provider="luma-ray"]');
+    await expect(row).toContainText("Try it makes one 5-second test shot to see if Luma AI Ray2 works for you. Amazon bills that one shot.");
+    await row.getByRole("button", { name: "Try Luma AI Ray2" }).click();
+    await expect(row.getByRole("progressbar", { name: "Trying Luma AI Ray2" })).toBeVisible();
     await expect(row).toContainText("It did not work", { timeout: 15_000 });
-    await expect(row).toContainText("its storage place in the USA (N. Virginia) is not switched on");
-    await expect(page.locator(".toast").filter({ hasText: "its storage place in the USA" })).toBeVisible();
-    await expect(row.getByRole("button", { name: "Try Amazon Nova Reel" })).toContainText("Try it again");
+    await expect(row).toContainText("it needs a storage bucket in the United States (Oregon), which is switched off");
+    await expect(page.locator(".toast").filter({ hasText: "storage bucket in the United States (Oregon)" })).toBeVisible();
+    await expect(row.getByRole("button", { name: "Try Luma AI Ray2" })).toContainText("Try it again");
     // Nothing switched: the built-in animator still makes the videos.
     await expect(page.getByRole("radiogroup", { name: "Video maker" }).getByRole("radio", { name: /Built-in animator/ })).toHaveAttribute("aria-checked", "true");
     // The owner's rules on the row, on the smallest phone.
@@ -533,23 +540,23 @@ test.describe("round 4 (§45.35)", () => {
     const o = await findOverflow(page);
     expect(o.page).toBeLessThanOrEqual(o.viewport);
     expect(o.items).toEqual([]);
-    const axe = await new AxeBuilder({ page }).include('[data-provider="nova-reel"]').withRules(["color-contrast"]).analyze();
+    const axe = await new AxeBuilder({ page }).include('[data-provider="luma-ray"]').withRules(["color-contrast"]).analyze();
     expect(axe.violations.flatMap((v) => v.nodes.map((n) => n.target.join(" ")))).toEqual([]);
     expect((await visibleEdges(page)).filter((e) => /st-stg-try/.test(e))).toEqual([]);
-    const button = (await row.getByRole("button", { name: "Try Amazon Nova Reel" }).boundingBox())!;
+    const button = (await row.getByRole("button", { name: "Try Luma AI Ray2" }).boundingBox())!;
     expect(button.height).toBeGreaterThanOrEqual(47.5);
   });
 
-  test("D2: with the US storage on, Try it works: the row and a toast say so, and Nova Reel shows Working once picked", async ({ page }) => {
-    await withKnobs(page, { reelBucket: true, reelTryMs: 1200 });
+  test("D2: with the Oregon storage on, Try it works: the row and a toast say so, and Luma AI Ray2 shows Working once picked", async ({ page }) => {
+    await withKnobs(page, { lumaBucket: true, tryMs: 1200 });
     await page.setViewportSize({ width: 1280, height: 900 });
     await openSection(page, "video");
-    const row = page.locator('[data-provider="nova-reel"]');
-    await row.getByRole("button", { name: "Try Amazon Nova Reel" }).click();
+    const row = page.locator('[data-provider="luma-ray"]');
+    await row.getByRole("button", { name: "Try Luma AI Ray2" }).click();
     await expect(row).toContainText("It worked", { timeout: 15_000 });
     await expect(row).toContainText("It is ready for cut-aways.");
-    await expect(page.locator(".toast").filter({ hasText: "It works! Nova Reel made its test shot." })).toBeVisible();
-    const reel = page.getByRole("radiogroup", { name: "Video maker" }).getByRole("radio", { name: /Amazon Nova Reel/ });
+    await expect(page.locator(".toast").filter({ hasText: "It works! Luma AI Ray2 made its test shot." })).toBeVisible();
+    const reel = page.getByRole("radiogroup", { name: "Video maker" }).getByRole("radio", { name: /Luma AI Ray2/ });
     await reel.click();
     await expect(reel).toContainText("Working", { timeout: 10_000 });
   });
@@ -585,5 +592,74 @@ test.describe("round 4 (§45.35)", () => {
     await ready(page);
     await expect(card(page, "Add a model").locator(".st-stg-own").filter({ hasText: "Mistral Large" }).locator(".st-stg-chip")).toHaveText(["Added by you", "Not checked yet"]);
     await expect(page.getByRole("radiogroup", { name: "Default model" }).getByRole("radio", { name: /Mistral Large/ })).toContainText("Not checked yet");
+  });
+});
+
+test.describe("the makers' models (§45.37)", () => {
+  test("each maker's model with its price line and status, the Sound maker saves, a voice only on purpose, and an added model", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openSection(page, "video");
+    const pictures = page.getByRole("radiogroup", { name: "Picture maker" });
+    await expect(pictures.getByRole("radio", { name: /Amazon Nova Canvas/ })).toHaveAttribute("aria-disabled", "true");
+    await pictures.getByRole("radio", { name: /Stability AI/ }).click();
+    const models = page.getByRole("radiogroup", { name: "Picture maker's model" });
+    await expect(models.getByRole("radio")).toHaveText([/Stable Image Core/, /Stable Image Ultra/, /Stable Diffusion 3\.5 Large/]);
+    await expect(models.getByRole("radio", { name: /Stable Image Ultra/ })).toContainText("Stability AI on Amazon Bedrock · Runs in the US (Oregon) · No price known");
+    await models.getByRole("radio", { name: /Stable Image Ultra/ }).click();
+    await expect(models.getByRole("radio", { name: /Stable Image Ultra/ })).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator(".st-stg-saved")).toHaveText("Saved");
+
+    const sound = page.getByRole("radiogroup", { name: "Sound maker" });
+    await expect(sound.getByRole("radio", { name: /Built-in sounds and music/ })).toHaveAttribute("aria-checked", "true");
+    await expect(sound.getByRole("radio", { name: /A spoken voice \(Amazon Polly\)/ })).toContainText("Your videos are made without a voice unless you pick this.");
+    await sound.getByRole("radio", { name: /ElevenLabs/ }).click();
+    await expect(sound.getByRole("radio", { name: /ElevenLabs/ })).toHaveAttribute("aria-checked", "true");
+    await sound.getByRole("radio", { name: /Amazon Polly/ }).click();
+    await expect(card(page, "Sound maker")).toContainText("Your videos now have a spoken voice.");
+    // Saved in the workspace: another visit still shows the voice picked.
+    await page.locator(".st-stg-tab", { hasText: "Storage" }).click();
+    await ready(page);
+    await page.locator(".st-stg-tab", { hasText: "Video" }).click();
+    await ready(page);
+    await expect(page.getByRole("radiogroup", { name: "Sound maker" }).getByRole("radio", { name: /Amazon Polly/ })).toHaveAttribute("aria-checked", "true");
+    await page.getByRole("radiogroup", { name: "Sound maker" }).getByRole("radio", { name: /Built-in sounds and music/ }).click();
+
+    // Add a picture model on an OpenAI-compatible service, then check it (a free access check).
+    const add = card(page, "Add a picture, video or sound model");
+    await add.getByRole("button", { name: "Add a model" }).click();
+    const form = page.getByRole("form", { name: "Add a picture, video or sound model" });
+    await form.getByRole("radiogroup", { name: "Where it runs" }).getByRole("radio", { name: /An OpenAI-compatible service/ }).click();
+    await form.getByLabel("Name", { exact: true }).fill("Soft paint");
+    await form.getByLabel("Who makes it").fill("Acme");
+    await form.getByLabel("The service's address").fill("https://api.example.com/v1");
+    await form.getByLabel("Model name").fill("soft-paint-2");
+    await form.getByRole("button", { name: "Add the model" }).click();
+    const row = add.locator(".st-stg-own").filter({ hasText: "Soft paint" });
+    await expect(row).toContainText("Added by you");
+    await expect(row).toContainText("Made by Acme on api.example.com");
+    await expect(row).toContainText("Paste your OpenAI-compatible API key under Prices and keys below");
+    await add.getByRole("button", { name: "Check models" }).first().click();
+    await expect(row).toContainText("No access", { timeout: 10_000 });
+  });
+
+  test("320 px: the maker cards and the add form fit, with AA contrast and big targets", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 320, height: 700 });
+    await openSection(page, "video");
+    await page.getByRole("radiogroup", { name: "Picture maker" }).getByRole("radio", { name: /Stability AI/ }).click();
+    await card(page, "Add a picture, video or sound model").getByRole("button", { name: "Add a model" }).click();
+    const form = page.getByRole("form", { name: "Add a picture, video or sound model" });
+    await form.getByRole("radiogroup", { name: "Where it runs" }).getByRole("radio", { name: /An OpenAI-compatible service/ }).click();
+    await page.waitForTimeout(300);
+    const o = await findOverflow(page);
+    expect(o.page).toBeLessThanOrEqual(o.viewport);
+    expect(o.items).toEqual([]);
+    const axe = await new AxeBuilder({ page }).include(".st-stg-section").withRules(["color-contrast"]).analyze();
+    expect(axe.violations.flatMap((v) => v.nodes.map((n) => n.target.join(" ")))).toEqual([]);
+    for (const b of await form.getByRole("button").all()) {
+      const box = await b.boundingBox();
+      if (box) expect(box.height).toBeGreaterThanOrEqual(43.5);
+    }
   });
 });

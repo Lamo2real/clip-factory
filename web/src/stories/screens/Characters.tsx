@@ -149,7 +149,9 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
   const [draft, setDraft] = useState<CharacterInput | null>(null);
   /** A redesign the owner has not taken yet: shown beside the character as it is (§45.34). */
   const [proposal, setProposal] = useState<CharacterInput | null>(null);
-  const aiOn = ((workspace?.configuration ?? {}) as Partial<StoriesConfig>).providers?.images === "nova-canvas";
+  // The picked AI picture maker makes the portraits (§45.37: Stability AI or the owner's own; Amazon ended Nova Canvas).
+  const pictures = ((workspace?.configuration ?? {}) as Partial<StoriesConfig>).providers?.images;
+  const aiOn = pictures === "stability" || pictures === "own-images";
   const [saving, setSaving] = useState(false);
   const [stale, setStale] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);

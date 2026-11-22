@@ -168,6 +168,9 @@ export const TASK_AGENT: Record<TaskKind, AgentId> = {
   reference_analysis: "video_analysis",
   fact_check: "quality_assurance",
   final_review: "quality_assurance",
+  // §45.37 G5: short chat edits go with the chat; scene planning with the storyboard.
+  text_edit: "creative_director",
+  animation_plan: "storyboard",
 };
 
 export function modelLabel(key: string): string {

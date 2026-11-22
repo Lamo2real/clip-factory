@@ -8,10 +8,12 @@
 // naming the new account until confirmAccount matches it. The 409 carries `account` on its ApiError, like the client.
 // The sentences call the other app "Clip Factory" and name an account by its place first ("this TikTok account (Lamo
 // Stories)"), so they read right when the account is itself called Lamo Stories; a question says "Tap Yes", as its
-// button does (§45.36 E13).
+// button does (§45.36 E13). On Clip Factory's shared developer app, Clip Factory's posts always go first (§45.37 G6):
+// with no room left (knob `clipsFirst`) a post waits in its queue with `waitUntil` (the window's reset) and goes out by
+// itself after it. Clip Factory's own account is refused before every post, also when Clip Factory connected it later.
 import { ApiError } from "../../../api/errors.ts";
 import { STORIES_PLATFORMS, type ErrorAccount, type Platform, type PublishingJob, type PublishTarget, type SocialAccount, type StoriesApi, type Story } from "../types.ts";
-import { PLATFORM_NAME } from "./social.ts";
+import { PLATFORM_NAME, sameAsClips } from "./social.ts";
 import { ago, delay, HOUR, mockId, type MockStore } from "./store.ts";
 import { storiesWorkspace } from "./workspace.ts";
 
@@ -97,8 +99,39 @@ function stopReason(store: MockStore, ws: string, platform: Platform): string | 
   if (!a || a.connectionStatus === "not_connected") return `Lamo Stories' ${name} is not connected. Connect it in Lamo Stories › Social accounts, then tap Try again.`;
   if (a.connectionStatus === "needs_reconnect") return `${upper(thisAccount(platform, a.accountName))} needs connecting again. Open Lamo Stories › Social accounts, then tap Try again.`;
   if (a.connectionStatus === "choose_account") return `Pick which ${name} account Lamo Stories posts to in Lamo Stories › Social accounts, then tap Try again.`;
-  if (a.connectionStatus === "same_as_clips") return `${upper(thisAccount(platform, a.accountName))} is the one Clip Factory posts to. Pick another in Lamo Stories › Social accounts, then tap Try again.`;
+  // Before every upload too (§45.37 G8): Clip Factory's own account, also when Clip Factory connected it later.
+  if (sameAsClips(a, store)) return `${upper(thisAccount(platform, a.accountName))} is the one Clip Factory posts to. Pick another in Lamo Stories › Social accounts, then tap Try again.`;
   return null;
+}
+
+/**
+ * When Clip Factory's shared developer app has room again for this platform (§45.37 G6): YouTube's Google project
+ * resets each day at midnight Pacific time, TikTok's per-app limits each day, X's credits each month. The mock's
+ * nearest such time (a test can pin it with `store.knobs.clipsFirstUntil`).
+ */
+export function nextReset(platform: Platform, now = new Date()): string {
+  const d = new Date(now);
+  if (platform === "x") return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)).toISOString();
+  // Midnight Pacific is 08:00 UTC (07:00 in summer: the mock keeps 08:00); TikTok's day is UTC.
+  const hour = platform === "youtube" ? 8 : 0;
+  const at = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour));
+  if (at.getTime() <= now.getTime()) at.setUTCDate(at.getUTCDate() + 1);
+  return at.toISOString();
+}
+
+/**
+ * Whether a post on Clip Factory's shared app waits (§45.37 G6): Clip Factory's posts always go first, so when what
+ * is left for Clip Factory Stories is used up (knob `clipsFirst`: true or a list of platforms) the post waits in its
+ * queue until the window resets, then goes out by itself. Never on Clip Factory Stories' own app.
+ */
+function waitFor(store: MockStore, j: PublishingJob): string | null {
+  const a = store.social.find((s) => s.workspaceId === j.workspaceId && s.platform === j.platform);
+  if (!a || a.app.choice !== "clips") return null;
+  const full = store.knobs.clipsFirst;
+  if (!(full === true || (Array.isArray(full) && full.includes(j.platform)))) return null;
+  // Its window reset: there is room again.
+  if (j.waitUntil && Date.parse(j.waitUntil) <= Date.now()) return null;
+  return j.waitUntil ?? (typeof store.knobs.clipsFirstUntil === "string" ? store.knobs.clipsFirstUntil : nextReset(j.platform));
 }
 
 /** A started job walks queued → publishing → posted (or stops), a few seconds a step, like the story flow. */
@@ -112,16 +145,34 @@ function run(store: MockStore, id: string): void {
       then?.();
     }, ms);
   const fast = (store.knobs.publishMs as number | undefined) ?? 2500;
+  let waits: string | null = null;
   step(
     (j) => {
       const stop = stopReason(store, j.workspaceId, j.platform);
+      waits = stop ? null : waitFor(store, j);
       if (stop) {
         j.publishingStatus = "needs_attention";
         j.error = stop;
-      } else j.publishingStatus = "publishing";
+        delete j.waitUntil;
+        delete j.waitReason;
+      } else if (waits) {
+        // Waiting in its queue, saying until when; never failed, never taking Clip Factory's share.
+        j.publishingStatus = "queued";
+        j.waitUntil = waits;
+        j.waitReason = "clips_first";
+      } else {
+        j.publishingStatus = "publishing";
+        delete j.waitUntil;
+        delete j.waitReason;
+      }
     },
     fast,
-    () =>
+    () => {
+      // After the reset it goes out by itself: the same walk again, from the account check.
+      if (waits) {
+        setTimeout(() => run(store, id), Math.min(Math.max(0, Date.parse(waits) - Date.now()), 2_147_000_000));
+        return;
+      }
       step((j) => {
         if (j.publishingStatus !== "publishing") return;
         j.publishingStatus = "posted";
@@ -136,7 +187,8 @@ function run(store: MockStore, id: string): void {
           story.updatedAt = j.postedAt;
         }
         store.activity.unshift({ at: j.postedAt, kind: "posted", storyId: j.contentId, title: story?.title ?? "A story", platform: j.platform });
-      }, fast),
+      }, fast);
+    },
   );
 }
 

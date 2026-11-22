@@ -2,7 +2,8 @@
 // its place, the exact Lamo Stories account it went to (its name and handle; the account id is behind "Technical
 // details", §45.36 E14), its status, the link, the numbers (read 1 hour, 1 day, 3 days and 7 days after posting) and,
 // when it stopped, its plain sentence and Try again; a post that stopped on an account problem also has "Open Social
-// accounts" (§45.36 E9).
+// accounts" (§45.36 E9). On Clip Factory's shared developer app a post with no room left waits for the window to reset
+// and then goes out by itself; its row says so with the time (§45.37 G6: "Waiting: Clip Factory's posts go first.").
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { A } from "../../components/ui.tsx";
 import type { PublishingJob } from "../api/types.ts";
@@ -19,9 +20,28 @@ export function SocialAccountsLink({ className = "st-btn st-s-small" }: { classN
   );
 }
 
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const two = (n: number) => String(n).padStart(2, "0");
+
+/** When a waiting post goes, in the owner's own time: "Sun 15:00" within the week, else "1 Dec 00:00". */
+export function waitTime(iso: string, now: Date = new Date()): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "the next reset";
+  const time = `${two(d.getHours())}:${two(d.getMinutes())}`;
+  return d.getTime() - now.getTime() < 6 * 86_400_000 ? `${DAYS[d.getDay()]} ${time}` : `${d.getDate()} ${MONTHS[d.getMonth()]} ${time}`;
+}
+
+/** The line of a post waiting on Clip Factory's shared app (§45.37 G6), or null when it is not waiting. */
+export function waitingLine(job: Pick<PublishingJob, "publishingStatus" | "waitUntil">, now?: Date): string | null {
+  if (job.publishingStatus !== "queued" || !job.waitUntil) return null;
+  return `Waiting: Clip Factory's posts go first. Posts at ${waitTime(job.waitUntil, now)}.`;
+}
+
 export function PostRow({ job, onRetry, busy = false }: { job: PublishingJob; onRetry: (j: PublishingJob) => void; busy?: boolean }) {
   const stuck = job.publishingStatus === "failed" || job.publishingStatus === "needs_attention";
   const m = job.metrics;
+  const waiting = waitingLine(job);
   return (
     <li className={`st-s-post is-${job.publishingStatus}`}>
       <span className="st-s-post__mark">
@@ -37,6 +57,10 @@ export function PostRow({ job, onRetry, busy = false }: { job: PublishingJob; on
         </span>
         {job.publishingStatus === "posted" ? (
           <span className="st-s-post__when">Posted {ago(job.postedAt ?? job.updatedAt)}</span>
+        ) : waiting ? (
+          <span className="st-s-post__when st-s-post__wait" role="status">
+            {waiting}
+          </span>
         ) : job.publishingStatus === "queued" || job.publishingStatus === "publishing" ? (
           <span className="st-s-post__when">{job.publishingStatus === "queued" ? "Waiting to send…" : "Sending now…"}</span>
         ) : null}
