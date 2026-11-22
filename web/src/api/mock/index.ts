@@ -16,6 +16,7 @@ import { followsApi } from "./follows.ts";
 import { dashData, mockMoneyGrant, moneyApi } from "./money.ts";
 import { pushApi } from "./push.ts";
 import { crMockApi } from "./contentrewards.ts";
+import { catalogOf, finderMockApi, type FinderMock } from "./finder.ts";
 import { clipFit, fitOne, remakeRefusal, sourceKept, uploadRefusal, type FitInputs } from "./fit.ts";
 import { everywhere, MONETARY_SCOPE } from "./moneyEverywhere.ts";
 import { adFirst, hasItem, liveFit } from "../../lib/crFit.ts";
@@ -470,11 +471,27 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     onConnected: releaseWaiting,
   });
   // Content Rewards (§38.18): its own state; it reads the setups for each campaign's places.
+  const crPublish = (id: string) => mockLive.publish({ type: "contentrewards", op: "upsert", id, partial: true });
+  // The campaign finder (§41.5) reads Content Rewards' campaigns and connection, and the overview carries its summary.
+  let finder: FinderMock | null = null;
   const cr = crMockApi({
     store,
     setup: () => setup.overview(),
-    publish: (id) => mockLive.publish({ type: "contentrewards", op: "upsert", id, partial: true }),
+    publish: crPublish,
+    finder: () => finder?.overview(),
+    catalog: (uuid, rules) => catalogOf(uuid, rules),
   });
+  finder = finderMockApi({
+    setup: () => setup.overview(),
+    publish: crPublish,
+    guard: () => cr.guard(),
+    signedIn: () => cr.signedIn(),
+    setSignedIn: (on) => cr.setSignedIn(on),
+    ownIds: () => cr.ownIds(),
+    add: (uuid, cat, how) => cr.finderAdd(uuid, cat, how),
+    rules: (partial) => cr.rules(partial),
+  });
+  const finderApi = finder.api;
 
   const job = (jobId: string) => {
     const j = store.jobs.find((x) => x.jobId === jobId);
@@ -599,6 +616,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
 
   const api: Api = {
     ...cr.api,
+    ...finderApi,
     async crFit(clipId) {
       await delay(80, 160);
       cr.guard();
