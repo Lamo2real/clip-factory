@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { drawFrame, frameCount, sceneFrames, textTrack } from "../engine/engine.ts";
 import type { StoryScript } from "../engine/types.ts";
+import { useAppActive } from "../pane.tsx";
 import { storiesReduceMotion } from "../prefs.ts";
 import { drawPrims, drawText } from "./draw.ts";
 
@@ -35,13 +36,16 @@ export function StoryPreview({ script, sceneId, width, playing = true, loop = tr
     onTimeRef.current = onTime;
   }, [onTime]);
   const text = useMemo(() => textTrack(script), [script]);
+  // Lamo Stories kept hidden behind Clip Factory: no painting at all (the last frame stays), again once it is back.
+  const active = useAppActive();
   useEffect(() => {
     const canvas = ref.current;
     const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
+    if (!canvas || !ctx || !active) return;
     const dpr = typeof window !== "undefined" ? Math.min(2, window.devicePixelRatio || 1) : 1;
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
+    // Set only when it changes: setting a canvas's size clears it, and the picture would blink on coming back.
+    if (canvas.width !== Math.round(width * dpr)) canvas.width = Math.round(width * dpr);
+    if (canvas.height !== Math.round(height * dpr)) canvas.height = Math.round(height * dpr);
     const scale = canvas.width / script.width;
     const [from, to] = sceneId ? sceneFrames(script, sceneId) : [0, frameCount(script)];
     const still = !playing || storiesReduceMotion();
@@ -62,6 +66,6 @@ export function StoryPreview({ script, sceneId, width, playing = true, loop = tr
     };
     raf = requestAnimationFrame(paint);
     return () => cancelAnimationFrame(raf);
-  }, [script, sceneId, width, height, playing, loop, text]);
+  }, [script, sceneId, width, height, playing, loop, text, active]);
   return <canvas ref={ref} className="st-story-preview" style={{ width, height }} role="img" aria-label={label} />;
 }

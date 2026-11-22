@@ -24,6 +24,7 @@ import { navigate, useRoute } from "../../lib/router.ts";
 import { plural } from "../../lib/format.ts";
 import { useUnsaved } from "../../features/help/unsaved.ts";
 import { canMacFetch, macBridge } from "../../lib/macFetch.ts";
+import { useKeptSearch } from "../../stories/pane.tsx";
 
 const MAX_UPLOAD = 5 * 1024 ** 3;
 
@@ -71,7 +72,8 @@ export async function stopMacCopy(from: string, newJobId: string): Promise<boole
  */
 export function NewJobForm() {
   useRoute();
-  const way = typeof location !== "undefined" && campaignStart(location.search).campaignId ? "campaign" : "normal";
+  const search = useKeptSearch();
+  const way = campaignStart(search).campaignId ? "campaign" : "normal";
   return <JobForm key={way} />;
 }
 
@@ -79,9 +81,10 @@ function JobForm() {
   const id = useId();
   const { me, refresh } = useSession();
   const toast = useToast();
-  const [start] = useState(() => fileStart(location.search));
+  const search = useKeptSearch();
+  const [start] = useState(() => fileStart(search));
   const [mode, setMode] = useState<Mode>(start.file ? "upload" : "link");
-  const [fromCampaign] = useState(() => campaignStart(location.search));
+  const [fromCampaign] = useState(() => campaignStart(search));
   const [link, setLink] = useState(fromCampaign.link ?? "");
   // Content Rewards (§38.4, §38.5): the campaign these clips are for, and a pasted campaign link.
   const cr = useCr();

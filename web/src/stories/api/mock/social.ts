@@ -85,6 +85,21 @@ const CLIPS_IDS: Record<Platform, string> = {
   x: "1500000000000000001",
 };
 
+/**
+ * Lamo Clips' own account on this platform, found later (§45.34, §45.35 D11): a stored "connected" whose account is
+ * the one Lamo Clips posts to, not shared on purpose, is the same as Clip Factory's (as the API's public_of settles
+ * it), and so is a stored same_as_clips.
+ */
+export function sameAsClips(a: Pick<SocialAccount, "platform" | "connectionStatus" | "externalAccountId" | "sharedWithClips">): boolean {
+  if (a.connectionStatus === "same_as_clips") return true;
+  return a.connectionStatus === "connected" && !a.sharedWithClips && a.externalAccountId === CLIPS_IDS[a.platform];
+}
+
+/** The account as Social accounts shows it: one that turned out to be Lamo Clips' own reads same_as_clips. */
+function settled(a: SocialAccount): SocialAccount {
+  return a.connectionStatus === "connected" && sameAsClips(a) ? { ...a, connectionStatus: "same_as_clips" } : a;
+}
+
 /** What a connect in the pretend app finds for each platform: the Lamo Stories account the owner picked. */
 const STORIES_IDENTITY: Record<Platform, { id: string; name: string; handle: string }> = {
   youtube: { id: "UC7stories0lamo00000000a", name: "Lamo Stories", handle: "@lamostories" },
@@ -247,7 +262,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
     async social(ws) {
       await delay(160);
       storiesWorkspace(store, ws);
-      const accounts = STORIES_PLATFORMS.map((p) => account(store, ws, p));
+      // Settled as the API's public_of does: Lamo Clips connecting the same account later shows here (§45.35 D11).
+      const accounts = STORIES_PLATFORMS.map((p) => replace(store, settled(account(store, ws, p))));
       return { accounts: structuredClone(accounts), clips: structuredClone(store.clips) };
     },
     async connectSocial(ws, platform) {

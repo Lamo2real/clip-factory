@@ -2,9 +2,12 @@
 # Clip Factory, pixel for pixel (docs/CONTRACTS.md §45.19). Builds the mock app of the merge base and of this branch
 # on this one machine (Mac and CI render fonts differently, so both shots must come from the same machine), serves
 # both, and screenshots Clip Factory's main pages (/, /jobs, /review, /library, /money, /settings) at 390×844,
-# 1000×600, 1000×650, 1000×720 and 1440×900 (sidebar open and folded) with a fixed clock, fixed mock data and no
-# motion. Twice: with Lamo Stories switched off every pixel must match; switched on (cf.storiesPreview = 1) every
-# pixel outside the workspace switcher's own box must match. The lead runs it on the switch PR and in the final check.
+# 1000×560, 1000×600, 1000×650, 1000×720 and 1440×900 (sidebar open and folded) with a fixed clock, fixed mock data
+# and no motion. Twice: with Lamo Stories switched off every pixel must match; switched on (cf.storiesPreview = 1)
+# every pixel outside the workspace switcher's own box must match. The lead runs it on the switch PR and in the final
+# check. Pixels are compared as pixelmatch does with includeAA false and threshold 0.1 (§45.35 D20): only the
+# antialiased edge pixels of text and curves (which differ between two renders of the same page) are left out; any
+# change of layout or colour still fails. CF_EXACT=1 compares every pixel exactly, as before.
 #
 #   web/scripts/clips-unchanged.sh [base-ref] [--out <dir>] [--sizes 390x844,1440x900]
 #
@@ -24,7 +27,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --out) out="$2"; shift 2 ;;
     --sizes) sizes="$2"; shift 2 ;;
-    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) base="$1"; shift ;;
   esac
 done
@@ -67,7 +70,7 @@ done
 
 # The comparison itself (Playwright from this checkout's packages).
 cat > "$work/compare.mjs" <<'NODE'
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 const { chromium } = await import(pathToFileURL(process.env.CF_PLAYWRIGHT).href);
@@ -87,7 +90,10 @@ const [before, after] = urls.map((u) => u.replace(/\/+$/, ""));
 const storiesOn = flag("--stories-on");
 const out = value("--out");
 const PAGES = ["/", "/jobs", "/review", "/library", "/money", "/settings"];
-const SIZES = (value("--sizes") ?? "390x844,1000x600,1000x650,1000x720,1440x900").split(",").map((s) => s.split("x").map(Number));
+const SIZES = (value("--sizes") ?? "390x844,1000x560,1000x600,1000x650,1000x720,1440x900").split(",").map((s) => s.split("x").map(Number));
+/** pixelmatch's colour threshold (0..1) and whether antialiased pixels count (§45.35 D20); CF_EXACT=1: every pixel. */
+const EXACT = process.env.CF_EXACT === "1";
+const THRESHOLD = EXACT ? 0 : Number(process.env.CF_THRESHOLD || 0.1);
 /** A fixed moment, so every "2 h ago" and every chart reads the same in both runs. */
 const CLOCK = new Date("2026-11-21T12:00:00.000Z");
 const TRIES = Number(process.env.CF_TRIES || 3);
@@ -145,38 +151,40 @@ async function shot(browser, base, path, [w, h], folded, on) {
   return { png, mask };
 }
 
-/** Counts differing pixels in a blank page (the browser decodes the PNGs), outside the masked boxes. */
+/**
+ * Counts differing pixels in a blank page (the browser decodes the PNGs), outside the masked boxes, with
+ * web/scripts/pixeldiff.mjs: pixelmatch's test with includeAA false (§45.35 D20). Antialiased edge pixels are counted
+ * apart (`aa`, yellow in the diff picture); real differences are red.
+ */
 async function compare(page, a, b, mask) {
   return page.evaluate(
-    async ({ a, b, mask }) => {
+    async ({ a, b, mask, threshold, exact }) => {
       const load = async (b64) => createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
       const [ia, ib] = await Promise.all([load(a), load(b)]);
-      if (ia.width !== ib.width || ia.height !== ib.height) return { diff: -1, size: `${ia.width}×${ia.height} vs ${ib.width}×${ib.height}`, png: null };
+      if (ia.width !== ib.width || ia.height !== ib.height) return { diff: -1, aa: 0, size: `${ia.width}×${ia.height} vs ${ib.width}×${ib.height}`, png: null };
       const read = (img) => {
         const c = new OffscreenCanvas(img.width, img.height);
         const x = c.getContext("2d");
         x.drawImage(img, 0, 0);
         return x.getImageData(0, 0, img.width, img.height);
       };
-      const da = read(ia);
-      const db = read(ib);
-      const outImg = new ImageData(ia.width, ia.height);
-      const masked = (x, y) => mask.some((m) => x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h);
-      let diff = 0;
-      for (let y = 0; y < ia.height; y++)
-        for (let x = 0; x < ia.width; x++) {
-          const i = (y * ia.width + x) * 4;
-          const same = da.data[i] === db.data[i] && da.data[i + 1] === db.data[i + 1] && da.data[i + 2] === db.data[i + 2] && da.data[i + 3] === db.data[i + 3];
-          const skip = !same && masked(x, y);
-          if (!same && !skip) diff++;
-          outImg.data[i] = !same && !skip ? 255 : da.data[i] / 3;
-          outImg.data[i + 1] = !same && !skip ? 0 : da.data[i + 1] / 3;
-          outImg.data[i + 2] = !same && !skip ? 0 : da.data[i + 2] / 3;
-          outImg.data[i + 3] = 255;
-        }
+      const W = ia.width;
+      const H = ia.height;
+      const da = read(ia).data;
+      const db = read(ib).data;
+      const { diff, aa, kinds } = window.cfPixelDiff(da, db, W, H, { threshold, exact, mask });
       let png = null;
       if (diff > 0) {
-        const c = new OffscreenCanvas(ia.width, ia.height);
+        const outImg = new ImageData(W, H);
+        for (let p = 0; p < W * H; p++) {
+          const i = p * 4;
+          const k = kinds[p];
+          outImg.data[i] = k ? 255 : da[i] / 3;
+          outImg.data[i + 1] = k === 1 ? 255 : k === 2 ? 0 : da[i + 1] / 3;
+          outImg.data[i + 2] = k ? 0 : da[i + 2] / 3;
+          outImg.data[i + 3] = 255;
+        }
+        const c = new OffscreenCanvas(W, H);
         c.getContext("2d").putImageData(outImg, 0, 0);
         const blob = await c.convertToBlob({ type: "image/png" });
         const bytes = new Uint8Array(await blob.arrayBuffer());
@@ -184,14 +192,16 @@ async function compare(page, a, b, mask) {
         for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
         png = btoa(s);
       }
-      return { diff, size: `${ia.width}×${ia.height}`, png };
+      return { diff, aa, size: `${W}×${H}`, png };
     },
-    { a: a.toString("base64"), b: b.toString("base64"), mask },
+    { a: a.toString("base64"), b: b.toString("base64"), mask, threshold: THRESHOLD, exact: EXACT },
   );
 }
 
 const browser = await chromium.launch();
 const blank = await (await browser.newContext()).newPage();
+// The pixel test runs in the blank page: pixeldiff.mjs as a classic script (its one `export` taken off).
+await blank.addScriptTag({ content: `${readFileSync(process.env.CF_PIXELDIFF, "utf8").replace(/^export function pixelDiff/m, "function pixelDiff")}\nwindow.cfPixelDiff = pixelDiff;` });
 let failed = 0;
 const rows = [];
 for (const size of SIZES)
@@ -208,7 +218,9 @@ for (const size of SIZES)
       }
       const name = `${path === "/" ? "home" : path.slice(1)}-${size[0]}x${size[1]}${folded ? "-folded" : ""}`;
       if (r.diff !== 0) failed++;
-      rows.push(`${r.diff === 0 ? "same" : "DIFF"}  ${name.padEnd(28)} ${r.diff < 0 ? `size ${r.size}` : `${r.diff} px differ`}${storiesOn && b.mask.length ? ` (switcher box left out: ${b.mask.map((m) => `${m.w}×${m.h} at ${m.x},${m.y}`).join(", ")})` : ""}`);
+      rows.push(
+        `${r.diff === 0 ? "same" : "DIFF"}  ${name.padEnd(28)} ${r.diff < 0 ? `size ${r.size}` : `${r.diff} px differ`}${r.aa ? `, ${r.aa} antialiased edge px left out` : ""}${storiesOn && b.mask.length ? ` (switcher box left out: ${b.mask.map((m) => `${m.w}×${m.h} at ${m.x},${m.y}`).join(", ")})` : ""}`,
+      );
       console.log(rows.at(-1));
       if (out && r.diff !== 0) {
         writeFileSync(join(out, `${name}-before.png`), a.png);
@@ -217,11 +229,16 @@ for (const size of SIZES)
       }
     }
 await browser.close();
-console.log(failed ? `\n${failed} of ${rows.length} shots differ.` : `\nAll ${rows.length} shots match pixel for pixel${storiesOn ? " outside the switcher" : ""}.`);
+console.log(
+  failed
+    ? `\n${failed} of ${rows.length} shots differ.`
+    : `\nAll ${rows.length} shots match pixel for pixel${EXACT ? "" : " (antialiased edges left out)"}${storiesOn ? " outside the switcher" : ""}.`,
+);
 process.exit(failed ? 1 : 0);
 NODE
 
 export CF_PLAYWRIGHT="$here/node_modules/@playwright/test/index.mjs"
+export CF_PIXELDIFF="$here/scripts/pixeldiff.mjs"
 args=()
 [ -n "$out" ] && args+=(--out "$out")
 [ -n "$sizes" ] && args+=(--sizes "$sizes")

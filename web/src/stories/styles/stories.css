@@ -1042,11 +1042,17 @@
   display: grid;
   gap: 6px;
 }
+/* A long name takes two lines, and where the row is narrow (a phone) the chip goes under it on the right: nothing is
+   cut off (§45.35 D21). */
 .st-accounts__row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 4px 10px;
   min-height: 36px;
+}
+.st-accounts__row > .st-chip {
+  margin-left: auto;
 }
 .st-accounts__mark {
   display: grid;
@@ -1059,12 +1065,11 @@
   color: var(--st-ink);
 }
 .st-accounts__name {
-  flex: 1;
+  flex: 1 1 9rem;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   font-weight: 700;
+  line-height: 1.25;
 }
 
 .st-perf {
@@ -2539,6 +2544,14 @@ a.st-file__title:hover {
   color: var(--st-sun-ink);
   font-size: 0.8rem;
 }
+/* A platform held because its account is Lamo Clips' own: why, under the list (§45.35 D11). */
+.st-left__why {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
 @media (min-width: 900px) {
   .st-setup__grid {
     grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
@@ -2680,5 +2693,14 @@ a.st-file__title:hover {
   }
   .st-bar__fill {
     transition: none;
+  }
+}
+
+/* ---------- Round 4 (CONTRACTS §45.35 D21): the toasts clear an open sheet's buttons on a phone ---------- */
+/* StoriesApp sets st-toasts-up and --st-toast-lift on the page's body while a Lamo Stories sheet is open on a phone
+   (the height of its action bar from the bottom of the window, plus 8 px of air), and takes both away after. */
+@media (max-width: 767px) {
+  .st-toasts-up .toasts {
+    bottom: var(--st-toast-lift, calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 24px));
   }
 }

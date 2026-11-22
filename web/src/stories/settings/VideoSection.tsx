@@ -15,6 +15,7 @@ import { Chip, Failed, Loading, Note, PROVIDER_STATE, SavedMark, SetCard, SetPic
 import { useAi, useWorkspaceConfig } from "./data.ts";
 import { keepName, ProviderKeys } from "./ProviderKeys.tsx";
 import { MakerPrices } from "./ProviderPrices.tsx";
+import { ReelTry } from "./ReelTry.tsx";
 import { VideoUsage } from "./VideoUsage.tsx";
 
 type VideoMaker = StoriesConfig["providers"]["video"];
@@ -176,6 +177,8 @@ export function VideoSection({ ws }: { ws: string }) {
       <SetCard title="Video maker" icon="film" lede="What turns each story into moving pictures.">
         <SetPick<VideoMaker> label="Video maker" stack value={c.providers.video} options={[makerOption(p, "builtin-2d"), makerOption(p, "nova-reel")]} onChange={(v) => save({ providers: { ...c.providers, video: v } })} />
         <ModelLine providers={p} id={c.providers.video} />
+        {/* Nova Reel's own row: Try it, one 6-second test shot, so it can become ready before any video (§45.35 D2). */}
+        {p?.some((x) => x.id === "nova-reel") ? <ReelTry ws={ws} p={stateOf(p, "nova-reel")} reload={providers.reload} /> : null}
       </SetCard>
       <SetCard title="Picture maker" icon="brush" id="picture-maker" lede="How the characters are drawn.">
         <SetPick<PictureMaker> label="Picture maker" stack value={c.providers.images} options={[makerOption(p, "builtin-rig"), makerOption(p, "nova-canvas")]} onChange={(v) => save({ providers: { ...c.providers, images: v } })} />

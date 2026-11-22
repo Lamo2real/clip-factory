@@ -30,7 +30,7 @@ import type {
   TaskKind,
   UsageSummary,
 } from "../types.ts";
-import { CUSTOM_MODEL_KEY, EFFORT_LABEL, MAX_CUSTOM_MODELS } from "../types.ts";
+import { callingFor, CUSTOM_MODEL_KEY, EFFORT_LABEL, MAX_CUSTOM_MODELS, type ModelCalling } from "../types.ts";
 import { delay, type MockStore } from "./store.ts";
 
 export const KEYS = [
@@ -61,9 +61,14 @@ interface ModelEntry {
   defaultEffort: Effort | null;
   vision: boolean;
   pricing: Price | null;
-  /** one the owner added (MODELDEF#), with its own Region and output limit */
-  custom?: { region: string; maxOutputTokens: number };
+  /** who runs it (§45.35 D8): the file's `host`, else Amazon Bedrock */
+  host?: string;
+  /** one the owner added (MODELDEF#), with its own Region, output limit and way of being called (§45.35 D1) */
+  custom?: { region: string; maxOutputTokens: number } & ModelCalling;
 }
+
+/** Who runs Lamo Stories' models (§45.35 D8): every one is called on Amazon Bedrock. */
+export const MODEL_HOST = "Amazon Bedrock";
 
 /**
  * The models Lamo Stories may use: stories/config/models.json, plus one mock-only entry that shows the two rarer
@@ -80,6 +85,7 @@ export const MOCK_MODELS: ModelEntry[] = [
     defaultEffort: m.defaultEffort,
     vision: m.vision,
     pricing: m.pricing ? { ...m.pricing } : null,
+    ...(m.host ? { host: m.host } : {}),
   })),
   { key: "nova-pro", label: "Amazon Nova Pro", provider: "Amazon Bedrock", modelId: "amazon.nova-pro-v1:0", efforts: [], defaultEffort: null, vision: true, pricing: null },
 ];
@@ -329,7 +335,8 @@ export function allModels(store: MockStore): ModelEntry[] {
       defaultEffort: d.defaultEffort,
       vision: d.vision,
       pricing: d.price ? { ...d.price } : null,
-      custom: { region: d.region, maxOutputTokens: d.maxOutputTokens },
+      host: MODEL_HOST,
+      custom: { region: d.region, maxOutputTokens: d.maxOutputTokens, effortField: d.effortField ?? "none", tools: d.tools ?? false, cache: d.cache ?? false },
     }),
   );
   return [...MOCK_MODELS, ...own];
@@ -351,7 +358,8 @@ function modelInfo(store: MockStore, m: ModelEntry): ModelInfo {
     checkedAt: st.checkedAt,
     price: owner ? { ...owner } : m.pricing ? { ...m.pricing } : null,
     custom: !!m.custom,
-    ...(m.custom ? { region: m.custom.region, maxOutputTokens: m.custom.maxOutputTokens } : {}),
+    host: m.host ?? MODEL_HOST,
+    ...(m.custom ? { region: m.custom.region, maxOutputTokens: m.custom.maxOutputTokens, effortField: m.custom.effortField, tools: m.custom.tools, cache: m.custom.cache } : {}),
   };
 }
 
@@ -493,7 +501,7 @@ function cleanDef(store: MockStore, key: string, value: unknown): ModelDef {
   if (MOCK_MODELS.some((m) => m.key === key)) throw bad("That name is taken by a model Lamo Stories comes with.", "key");
   if (!value || typeof value !== "object") throw bad("Fill in the model's details.");
   const v = value as Partial<ModelDef> & Record<string, unknown>;
-  const allowed = ["label", "provider", "modelId", "region", "efforts", "defaultEffort", "vision", "maxOutputTokens", "price"];
+  const allowed = ["label", "provider", "modelId", "region", "efforts", "defaultEffort", "vision", "maxOutputTokens", "price", "effortField", "tools", "cache"];
   for (const k of Object.keys(v)) if (!allowed.includes(k)) throw bad(`Unknown field '${k}'.`, k);
   const label = typeof v.label === "string" ? v.label.trim() : "";
   if (!label || label.length > 60) throw bad("Give it a name of 1 to 60 letters.", "label");
@@ -513,7 +521,17 @@ function cleanDef(store: MockStore, key: string, value: unknown): ModelDef {
   const max = v.maxOutputTokens;
   if (typeof max !== "number" || !Number.isInteger(max) || max < 1 || max > MAX_OUTPUT_TOKENS) throw bad(`Type how many tokens it may write, from 1 to ${MAX_OUTPUT_TOKENS.toLocaleString("en-GB")}.`, "maxOutputTokens");
   const price = v.price === null || v.price === undefined ? null : cleanPrice(v.price, "price");
-  return { label, provider, modelId, region, efforts, defaultEffort, vision: v.vision, maxOutputTokens: max, price };
+  // How it is called (§45.35 D1): each may be left out, then its maker's defaults; an older body that lists levels
+  // without saying where they go means output_config (how they were always sent).
+  if (v.effortField !== undefined && v.effortField !== null && v.effortField !== "output_config" && v.effortField !== "none")
+    throw bad("Say how the model takes an effort: output_config (like Anthropic's Claude models) or none (it runs at its own level).", "effortField");
+  for (const [name, what] of [["tools", "takes tool use"], ["cache", "takes Bedrock's prompt cache"]] as const)
+    if (v[name] !== undefined && v[name] !== null && typeof v[name] !== "boolean") throw bad(`Say whether the model ${what} (true or false), or leave it out.`, name);
+  const usual = callingFor(provider);
+  const effortField = (v.effortField ?? (efforts.length ? "output_config" : usual.effortField)) as ModelCalling["effortField"];
+  if (effortField === "none" && efforts.length) throw bad("This model has no effort setting (effortField none), so leave its efforts empty. Only a model that takes output_config can list efforts.", "efforts");
+  const calling: ModelCalling = { effortField, tools: typeof v.tools === "boolean" ? v.tools : usual.tools, cache: typeof v.cache === "boolean" ? v.cache : usual.cache };
+  return { label, provider, modelId, region, efforts, defaultEffort, vision: v.vision, maxOutputTokens: max, price, ...calling };
 }
 
 /** The first saved setting that uses a model, in words, or null (DELETE answers 409 naming it). */
@@ -629,9 +647,10 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (!before && Object.keys(s.custom).length >= MAX_CUSTOM_MODELS) throw bad(`You can add up to ${MAX_CUSTOM_MODELS} models. Remove one first.`, "key");
       const at = iso(Date.now());
       s.custom[key] = { ...clean, createdAt: before?.createdAt ?? at, updatedAt: at };
-      // A new model is not checked yet: nothing is shown as working because it is listed. A changed one keeps its last
-      // check, as the API does (model_defs.put); the card asks for a new check when its ID or Region changed.
-      if (!before) s.status[key] = { status: "not_checked", line: "Not checked yet. Tap Check models.", checkedAt: null };
+      // A new model is not checked yet: nothing is shown as working because it is listed. A changed model ID or Region
+      // is another model, so its last check is cleared too (model_defs.put, §45.35 D6); a new name alone keeps it.
+      const moved = !!before && (before.modelId !== clean.modelId || before.region !== clean.region);
+      if (!before || moved) s.status[key] = { status: "not_checked", line: "Not checked yet. Tap Check models.", checkedAt: null };
       return modelInfo(store, allModels(store).find((m) => m.key === key)!);
     },
 

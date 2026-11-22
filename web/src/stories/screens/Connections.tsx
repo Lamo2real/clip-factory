@@ -24,6 +24,7 @@ import { relative, shortDate } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { KEY_LABEL, keyNames, keyProblem, normaliseKey } from "../../lib/keyFormats.ts";
 import { navigate } from "../../lib/router.ts";
+import { storiesAwayLater, storiesGoLater } from "../pane.tsx";
 import { storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
 import { SHARED_APP_PLATFORMS, type ClipsDestination, type KeyCheck, type Platform, type SocialAccount } from "../api/types.ts";
@@ -683,8 +684,10 @@ export function PlatformCard({
       const { authorizeUrl } = await storiesApi().connectSocial(ws, p);
       const where = safeAuthorizeUrl(authorizeUrl);
       if (!where) throw new Error("bad authorize url");
-      if (where === "away") location.assign(authorizeUrl);
-      else navigate(authorizeUrl);
+      // The sign-in page comes after a wait: while Clip Factory is on screen it waits, and opens the moment Lamo
+      // Stories is back (§45.35 D17), so the owner is never taken out of Clip Factory.
+      if (where === "away") storiesAwayLater(authorizeUrl);
+      else storiesGoLater(authorizeUrl);
     } catch (e) {
       toast.error(e instanceof Error && e.message === "bad authorize url" ? `${name} sent a link we do not trust. Try again in a minute.` : friendlyMessage(e));
     } finally {
@@ -792,12 +795,14 @@ export function PlatformCard({
                   type="button"
                   className={`st-choice${c.usedByClips ? " st-choice--clips" : ""}`}
                   disabled={busy !== null}
-                  onClick={(e) => {
-                    const el = e.currentTarget;
-                    void run("choose", () => storiesApi().chooseSocial(ws, p, c.id), {
-                      text: c.usedByClips ? `${c.name} is Clip Factory's own. Check the card below.` : `Lamo Stories posts to ${c.name} now.`,
-                      cheer: c.usedByClips ? undefined : el,
-                    }).then((ok) => {
+                  onClick={() => {
+                    // One toast per pick (§45.35 D21): Lamo Clips' own place says so here; Lamo Stories' own is asked
+                    // "Is this your Lamo Stories {place}?" next, whose Yes cheers and says it once.
+                    void run(
+                      "choose",
+                      () => storiesApi().chooseSocial(ws, p, c.id),
+                      c.usedByClips ? { text: `${c.name} is Clip Factory's own. Check the card below.` } : undefined,
+                    ).then((ok) => {
                       if (ok && !c.usedByClips) setPicked(true);
                     });
                   }}
@@ -885,7 +890,8 @@ export function PlatformCard({
         </div>
       ) : (
         <div className="st-conn__actions">
-          {a.connectionStatus !== "not_connected" ? (
+          {/* Not while a Page or account is still to be picked: there is nothing to check yet (the API's 409, §45.35 D21). */}
+          {a.connectionStatus !== "not_connected" && a.connectionStatus !== "choose_account" ? (
             <StButton
               disabled={busy !== null}
               onClick={(e) => {
