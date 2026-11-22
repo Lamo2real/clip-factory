@@ -566,7 +566,7 @@ function crCard(i: Inputs): GetPaidCard {
   });
   const nextStep: GetPaidNext | null =
     finance === undefined
-      ? { stepId: null, label: "Answer: do you see Finance?", href: "#cr-finance", external: false, vermilion: true }
+      ? { stepId: null, label: "Answer: do you see Finance?", href: "/settings/posting/getpaid/contentrewards#cr-finance", external: false, text: "Next: say if you see Finance.", vermilion: false }
       : firstNotDone
         ? asNext(firstNotDone.id)
         : null;
