@@ -445,8 +445,9 @@ using eaither the content rewards way of videos or normal way we have done so fa
   Balance."), never a number and never $0. Nothing is calculated, guessed, converted or typed in; all arithmetic is on
   the server.
 - AC3: The Content Rewards row also shows, in money's time order and only what Content Rewards reported: "Right now":
-  Still earning, Ready to move to Whop, On its way to Whop; "Earned so far, since you started"; and "Paid out to your
-  bank: not available from Content Rewards. Look on Whop: **Balances**."
+  Still earning, Ready to move to Whop, On its way to Whop; "Earned so far, since you started"; and "Sent to your
+  bank: not available from Content Rewards. Look on Whop: **Balances**." (or, once "Connect Whop" is on, what Whop
+  sent: BR-30 AC5)
 - AC4: A place that isn't set up, needs his OK or must sign in again has one glass button to its own page; a setup
   page brings him back to Money when it's done.
 - AC5: The Monthly, Weekly, Daily and Yearly cards keep their numbers and words, apps only. While the Content Rewards
@@ -548,5 +549,44 @@ Built by §46 (its four parts, §46.16). It ships off for everyone: nothing post
   bucket, Cognito or `cf-prod-api` infrastructure change; existing settings, clips and posts read exactly as before;
   the deploy needs no step from the owner. Upload, Use my settings, TikTok's rules, Post it yourself and the campaign
   rules are unchanged.
+
+### BR-30 Get paid: set up each place's payout, see if money can reach you, and what was sent to your bank
+"I want the same system that we had for setting them up. I want that for setting the payment up so I can get paid
+for each platform that goes for content rewards as well so I just want to be a status check … if I'm not connected
+anything so I can't get paid even though I'm allowed to get paid then it should say disconnected or something like
+that … I want to know exactly how much I earn per platform and that includes content rewards, and then I wanna know a
+total of my exact number that I've gotten into my bank account". ([CONTRACTS.md
+§40](CONTRACTS.md#40-get-paid-set-up-payouts-see-if-you-can-get-paid-and-what-reached-your-bank-owner-request-2026-11-21),
+[ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner), the steps in [SETUP_POSTING.md](SETUP_POSTING.md#get-paid))
+- AC1: **Settings › Posting › Get paid**, right after Set up posting, has one card per place (YouTube, TikTok,
+  Instagram, Facebook, X, then Content Rewards while it is on); each card opens a page of numbered step cards that
+  walk the owner to that place's own payout pages in the order things happen, like Set up posting. The Money page has
+  a **Get paid** card with each place's status and one button to its page. A platform's setup page links to its Get
+  paid page.
+- AC2: Get paid is not part of Set up posting: the five setup cards, "2 of 5 ready" and the floating to-do list (still
+  exactly five rows) are unchanged, and no Get paid tick is stored with the posting setup.
+- AC3: Each place shows one honest status that says how it is known: "Can get paid ✓ (YouTube says)" or "(Whop says)"
+  when the place itself says so; "Can get paid (you said it's done)" when only his ticks say so; "Not set up yet" (not
+  red) with "You can earn here. Do the payout steps so money can reach you." when he can earn but a payout step isn't
+  done; red "Not set up (YouTube says)" or "Payment on hold" only when the place says so; "Not allowed yet" when the
+  place's rules aren't met; "Checking…"; "Clip Factory can't check"; "Not started". A sign from the place always beats
+  a tick, and "Live" is never shown. His word "disconnected" is "Clip Factory can't check" or "Not set up".
+- AC4: What he earned per place stays as on Money (BR-27): YouTube's estimate, Content Rewards' numbers, Facebook
+  "Coming soon", and "Not available from TikTok", "… Instagram" and "… X" with where to look. Nothing is typed in,
+  worked out, guessed or converted.
+- AC5: Money a place reports as sent shows as "Sent to your bank by Google" (AdSense for YouTube's payments, after the
+  optional "Allow payment reading") or "Sent to your bank by Whop" (Whop's payouts, after the optional "Connect
+  Whop"), per place and as one total per money type, with when it should arrive. Different money types are never added
+  together, an amount Clip Factory can't read is shown as written and not added, and the other places say "Not
+  available" with where to look, never $0. Whop's total covers all his Whop money, and says so.
+- AC6: Money that reached his bank can only come from his bank. Until the owner chooses how Clip Factory may see it
+  (Enable Banking, his bank's file, payout emails, or nothing new), every screen says "Clip Factory can't see your bank.
+  Look in your bank's app to see what arrived."
+- AC7: Clip Factory never asks for or stores bank details, card numbers or tax numbers; every payout is set up on the
+  place's own pages.
+- AC8: The facts are the places' own, checked on 21 Nov 2026 for Sweden: YouTube pays in kronor to the bank once there
+  is kr 700; TikTok's Creator Rewards isn't open in Sweden (Gifts may be); Meta pays from $25 through one payout
+  account shared by Instagram and Facebook; X's Original Content Rewards leaves out automated and reuploaded posts, so
+  X's page warns that Clip Factory clips probably won't earn there; Content Rewards pays through Whop.
 
 ---
