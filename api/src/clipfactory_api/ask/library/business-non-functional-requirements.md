@@ -216,12 +216,17 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
 - AC1: Clip Factory never moves money and never asks for, sees or stores a bank login: BankID happens on Enable
   Banking's and his bank's own pages.
 - AC2: Only booked incoming payments are looked at, in memory. Stored are only matched payments (day, amount in minor
-  units, money type, place, how it matched, a keyed id) and those waiting for his tap (at most 180 days); never an
-  account number or IBAN, a name, a balance, a debit, another payment or the bank's text. Logs carry counts only.
-- AC3: The bank key and each bank link live only in Secrets Manager, made at runtime (never in Terraform, DynamoDB,
-  logs or the browser), read fresh, and denied to `cf-prod-clip-flow` and `cf-prod-stats`. His IP address, browser and
+  units, money type, place, how it matched, a keyed id) and those waiting for his tap (about 180 days at most); a payer
+  is kept only as a keyed hash; never an account number or IBAN, a name, a balance, a debit, another payment or the
+  bank's text. Logs carry counts only.
+- AC3: The private bank key and each bank link's session live only in Secrets Manager, made at runtime (never in
+  Terraform, DynamoDB or logs), read fresh, and denied to `cf-prod-clip-flow` and `cf-prod-stats`; the private key
+  passes through his browser only on the .pem path (I-63). A link's database item keeps only its state (bank name,
+  account count, end date). His IP address, browser and
   language go to Enable Banking only for his own Check now and are never stored.
 - AC4: Additive only: new sort keys, two runtime secrets, two Deny statements, two stream filters and one api setting
   changed in place; nothing that holds his data or connections is replaced, and a read never deletes.
 - AC5: It ships switched off (`bank_reading_enabled = false`); one switch PR turns it on once the api, the reader,
-  the web and the docs have merged, and the same line turns it off if Enable Banking says no.
+  the web and the docs have merged. The switch is the api's only: off again, it hides the screens and routes, but the
+  daily read goes on for links still connected, so if Enable Banking says no he taps "Stop reading" on each bank
+  first, then the same line turns it off (I-64).

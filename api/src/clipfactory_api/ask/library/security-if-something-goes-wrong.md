@@ -24,12 +24,13 @@
   payment and link Clip Factory kept. To cut it off at the source too, delete the app on Enable Banking's **API
   applications** page; the bank's own app or website can also end the link.
 - **Your bank: the bank key may have leaked** (a .pem file left in Downloads, say): stop reading every bank, make a new
-  bank key (`POST /v1/getpaid/bank/key` with `{"again": true}`; it keeps `hashKey`, so stored payments keep their ids),
-  do steps 3 to 5 for a new Enable Banking app,
+  bank key (no button yet: `POST /v1/getpaid/bank/key` with `{"again": true}`; it keeps `hashKey`, so stored payments
+  keep their ids), do steps 3 to 6 for a new Enable Banking app (a restricted app reads only accounts linked to it),
   delete the old app on **API applications**, then "Connect your bank" again.
 - **Enable Banking says Clip Factory's use isn't personal use, or sends notice that the app will be deactivated**:
-  first the owner taps "Forget my bank" (or "Stop reading" on each bank) while Your bank is still on, so no daily read
-  touches a link again and Enable Banking closes each session. Then set `bank_reading_enabled` back to `false` in
+  first the owner taps "Stop reading Swedbank" on each bank while Your bank is still on: Enable Banking closes each
+  link, no daily read touches it again, and the money found stays (his records). Only if he also wants Clip
+  Factory's records gone does he tap "Forget my bank". Then set `bank_reading_enabled` back to `false` in
   `infra/envs/prod` the same day, in a one-line pull request, and let `deploy.yml` apply it (never a local AWS CLI).
   Every bank route then answers 503 and every screen says "Clip Factory can't see your bank. Look in your bank's app to
   see what arrived." again. If the switch has to go off first, a link that is still connected keeps being read once a

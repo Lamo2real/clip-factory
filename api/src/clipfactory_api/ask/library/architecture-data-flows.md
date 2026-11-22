@@ -1579,7 +1579,8 @@ or Terraform-made secret: eleven routes under `/v1/getpaid/bank` in `cf-prod-api
 `cf-prod-hooks`, the read inside `cf-prod-money`, new sort keys, two runtime secrets, two Deny statements, two stream
 filters changed in place and one api setting, `BANK_READING` (Terraform `bank_reading_enabled`, default `false`).
 While it is off, `GET /v1/getpaid/bank` answers `{"on": false}`, the other routes 503, and every screen keeps "Clip
-Factory can't see your bank. Look in your bank's app to see what arrived."
+Factory can't see your bank. Look in your bank's app to see what arrived." Only the api reads it: `cf-prod-money`'s
+daily read and `cf-prod-hooks`' callback don't (see the end of this flow).
 
 The code is split by side, so the api and the reader meet only through items, secrets and golden files: `bank/`
 (`keys.py`, `eb.py`, `grants.py`, `view.py`, `answers.py`) and `routes/bank.py` for setup, connect, the view and his
@@ -1613,7 +1614,7 @@ sequenceDiagram
   A->>EB: GET /aspsps?country=SE&psu_type=personal&service=AIS (cached 1 h)
   O->>A: POST /v1/getpaid/bank/connect {bank} (or {linkId} to reconnect)
   A->>SM: read cf-prod/platforms/bank/app (fresh), sign the JWT
-  A->>D: OAUTH#{nonce} (platform bank, linkId, reconnect, bank, maxDays, psuHeaders, history)
+  A->>D: OAUTH#{nonce} (platform bank, linkId, reconnect, bank, country, maxDays, psuHeaders, history)
   A->>EB: POST /auth {access: valid_until ≤ 180 days, balances false}, psu_type personal, state, redirect_url
   A-->>O: authorizeUrl (https only)
   O->>EB: same tab (the Mac app: the system browser)
@@ -1719,5 +1720,6 @@ days, a link ended. None for a link's first read (`quiet`).
 
 The prod plan stays 0 to destroy and 0 to replace: role policies, two stream filters and one environment variable
 change in place, and nothing that holds the owner's data or connections is touched. The switch is an api setting
-only: the daily read in `cf-prod-money` reads whatever `BANKLINK#` is still `connected`, so links are stopped (or
-forgotten) before it goes off.
+only: the daily read in `cf-prod-money` reads whatever `BANKLINK#` is still `connected`, and the callback in
+`cf-prod-hooks` still saves a connect that was started before it went off. So he taps "Stop reading" on each bank
+before it goes off (the money found stays).

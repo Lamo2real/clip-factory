@@ -872,15 +872,20 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
 - AC1: Clip Factory never moves money and never asks for, sees or stores a bank login: BankID happens on Enable
   Banking's and his bank's own pages.
 - AC2: Only booked incoming payments are looked at, in memory. Stored are only matched payments (day, amount in minor
-  units, money type, place, how it matched, a keyed id) and those waiting for his tap (at most 180 days); never an
-  account number or IBAN, a name, a balance, a debit, another payment or the bank's text. Logs carry counts only.
-- AC3: The bank key and each bank link live only in Secrets Manager, made at runtime (never in Terraform, DynamoDB,
-  logs or the browser), read fresh, and denied to `cf-prod-clip-flow` and `cf-prod-stats`. His IP address, browser and
+  units, money type, place, how it matched, a keyed id) and those waiting for his tap (about 180 days at most); a payer
+  is kept only as a keyed hash; never an account number or IBAN, a name, a balance, a debit, another payment or the
+  bank's text. Logs carry counts only.
+- AC3: The private bank key and each bank link's session live only in Secrets Manager, made at runtime (never in
+  Terraform, DynamoDB or logs), read fresh, and denied to `cf-prod-clip-flow` and `cf-prod-stats`; the private key
+  passes through his browser only on the .pem path (I-63). A link's database item keeps only its state (bank name,
+  account count, end date). His IP address, browser and
   language go to Enable Banking only for his own Check now and are never stored.
 - AC4: Additive only: new sort keys, two runtime secrets, two Deny statements, two stream filters and one api setting
   changed in place; nothing that holds his data or connections is replaced, and a read never deletes.
 - AC5: It ships switched off (`bank_reading_enabled = false`); one switch PR turns it on once the api, the reader,
-  the web and the docs have merged, and the same line turns it off if Enable Banking says no.
+  the web and the docs have merged. The switch is the api's only: off again, it hides the screens and routes, but the
+  daily read goes on for links still connected, so if Enable Banking says no he taps "Stop reading" on each bank
+  first, then the same line turns it off (I-64).
 
 ## Design and experience requirements
 
@@ -1171,7 +1176,7 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 | I-61 | "U2 TikTok, Instagram, Facebook and X, all of them" | All six places have a Get paid page. For Sweden: TikTok's Creator Rewards isn't open (Gifts may be), and X's Original Content Rewards leaves out automated and reuploaded posts, so X's page warns that Clip Factory clips probably won't earn there (BR-30 AC8). | No. |
 | I-62 | "In total for each of those platforms … all of them" | One "Reached your bank" line per place and per money type, plus a total per money type, never added across money types or converted. Meta pays Instagram and Facebook in one payment, so that money is "Instagram and Facebook together" (it shows on both pages) instead of a split Clip Factory would have to guess. A payout whose bank text names no app can't be told apart from his other money, so that place says "Nothing from Instagram reached your bank yet." until a new word is added; TikTok, Instagram, Facebook and X tell apps nothing, so only the bank's text and his taps can name them (BR-31 AC2, AC3). | Checked at his first payments ([CONTRACTS.md §40.5.14](CONTRACTS.md#40514-not-verified-live-each-is-checked-at-his-first-connect-a-failure-becomes-a-plain-sentence-never-a-number)). |
 | I-63 | His rule that the bank's private key lives only in Secrets Manager, never in the browser, and a paste or upload box like the TikTok file box (asked for in the build task) | The main way makes the bank key inside Clip Factory, so the private key never touches his browser. If he already let Enable Banking make the key, step 5 has a folded box that takes its .pem file once, straight into Secrets Manager, and then asks him to delete the file: the one place the private key passes through his browser ([SECURITY.md](SECURITY.md#your-bank-contracts-405)). | **Yes: keep the .pem box, or remove it?** (a one-file change) |
-| I-64 | "A: bank connection", offered with the risk that Enable Banking's free terms say "personal use of private individuals" and no "commercial purpose" | Creator income on his own personal account, read once a day, is a grey area. It is built switched off, with an optional ready email that asks Enable Banking, as little reading as possible, and the switch as the way back (BR-31 AC5, NFR-21 AC5). | Enable Banking's answer, if he sends the email. |
+| I-64 | "A: bank connection", offered with the risk that Enable Banking's free terms say "personal use of private individuals" and no "commercial purpose" | Creator income on his own personal account, read once a day, is a grey area. It is built switched off, with an optional ready email that asks Enable Banking, as little reading as possible, and a way back: "Stop reading" on each bank, then the switch. The switch is set on `cf-prod-api` only, so on its own it hides the screens and routes but doesn't stop `cf-prod-money`'s daily read of a link still connected, or a connect already on its way back from BankID (BR-31 AC5, NFR-21 AC5). | Enable Banking's answer, if he sends the email. And for the spec ([CONTRACTS.md §40.5.11](CONTRACTS.md#40511-data-secrets-live-notifications-infra-the-switch-and-mock-mode)): should the switch also reach `cf-prod-money` and the callback, so one line stops every read? |
 
 ## Out of scope for this phase
 

@@ -19,6 +19,7 @@
   Banking's default; it is kept only for his OK, and the main path never does that ([Your bank](#your-bank-contracts-405)).
 - Enable Banking's free restricted mode is for "the personal use of private individuals", and its Terms also say
   "any commercial purpose whatsoever" is not allowed. Reading his own creator income once a day is a grey area, so it
-  ships switched off, with a ready email for him to ask first and a one-line way back ([Your bank](#your-bank-contracts-405)).
+  ships switched off, with a ready email for him to ask first and a way back ("Stop reading" on each bank, then one
+  line) ([Your bank](#your-bank-contracts-405)).
 - The desktop `.dmg` and `.exe` are not code-signed yet ([ADR-19](DECISIONS.md#adr-19-unsigned-desktop-builds-for-now)).
   Download them only from the app's own Get the app card, never from a copy someone sends you.

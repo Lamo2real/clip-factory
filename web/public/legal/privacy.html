@@ -49,10 +49,10 @@
             This information is used only to show which accounts are connected, to upload clips the owner has watched
             and approved with Upload, to show the owner how each clip did, to show the owner how close they are to each
             platform's paid program and what the platform says they earned, and, only if the owner sets up
-            <a href="#bank">Your bank</a>, which money from the apps reached the owner's bank. Apart from the names on
-            money coming into the owner's bank, which are looked at only in memory and never kept, the app does not read
-            private messages, followers or other people's data, and does not use any data for advertising, profiling or
-            selling.
+            <a href="#bank">Your bank</a>, which money from the apps reached the owner's bank. Apart from the money
+            coming into the owner's bank (each payment's payer name, message and amount, which are looked at only in
+            memory and dropped unless it is money from an app), the app does not read private messages, followers or
+            other people's data, and does not use any data for advertising, profiling or selling.
           </p>
 
           <h2>YouTube API Services</h2>
@@ -101,24 +101,34 @@
           <ul>
             <li>
               <strong>What it looks at.</strong> Once a day, and when the owner taps <strong>Check now</strong>, Enable
-              Banking passes the booked payments of the linked accounts to Clip Factory. They are looked at in the
-              computer's memory only. Everything that isn't money coming in from an app is dropped straight away.
+              Banking passes the booked payments of the linked accounts to Clip Factory. Of each payment, only whether it
+              is booked and coming in, the payer's name, the message, the amount, the day and the bank's reference number
+              are looked at, in the computer's memory only, for other people's payments too. Everything that isn't money
+              coming in from an app is dropped straight away. When the owner connects a bank, Enable Banking also sends
+              the account holder's name, the account number (IBAN) and address; Clip Factory drops them at once.
             </li>
             <li>
               <strong>What it keeps.</strong> Only payments from apps: the day, the amount, the money type, which app it
-              came from, how Clip Factory knows, and a coded number made from the payment with a secret key, so it can't
-              be turned back into the payment. A payment Clip Factory asks the owner about is kept the same way until he
-              answers, and at most 180 days. When he says a payment isn't from an app, only its coded number and day stay,
-              for 400 days, so it isn't asked about again. For a payer he confirmed, it keeps a coded form of the payer's
-              name, never the name.
+              came from, how Clip Factory knows (and the Google or Whop payout it matched), which bank link it came
+              through, and a coded number made from the payment with a secret key, so it can't be turned back into the
+              payment. A payment Clip Factory asks the owner about is kept the same way until he answers, and about 180
+              days at most. When he says a payment isn't from an app, only its coded number, day and bank link stay, for
+              400 days, and a coded form of that payer's name is kept until he taps <strong>Forget my bank</strong>, so it
+              isn't asked about again. For payments it asks about or matched by payer, it keeps a coded form of the
+              payer's name, never the name.
             </li>
             <li>
               <strong>What it never keeps.</strong> Account numbers or IBANs, names (the owner's, or the names of people
               who paid him), addresses, balances, money going out, any other payment, and the bank's own text.
             </li>
             <li>
-              <strong>The bank link.</strong> Clip Factory's key for Enable Banking and each bank link are kept only in AWS
-              Secrets Manager, never in the database, in logs or in the browser.
+              <strong>The bank link.</strong> Clip Factory's private key for Enable Banking and each bank link's access
+              (its session with Enable Banking) are kept only in AWS Secrets Manager, never in the database or in logs.
+              Clip Factory makes that private key itself, so it never reaches the browser; only if the owner uploads a
+              key file that Enable Banking's own page made does it pass through his browser, once, straight into Secrets
+              Manager. The
+              database keeps only each bank link's state: the bank's name and country, how many accounts it shared,
+              when the link ends and how its reads went.
             </li>
             <li>
               <strong>Check now.</strong> When the owner taps Check now, his IP address, browser name and language are
@@ -153,7 +163,7 @@
             <li>
               Your bank: in Settings › Posting › Get paid › Your bank, tap <strong>Stop reading</strong> on a bank to end
               that bank link at Enable Banking (the payments it found stay), or <strong>Forget my bank</strong> to delete
-              every payment and bank link Clip Factory kept. A bank link can also be ended in the bank's own app, and the
+              every payment, coded payer name and bank link Clip Factory kept. A bank link can also be ended in the bank's own app, and the
               owner can delete his app on Enable Banking's own pages.
             </li>
             <li>

@@ -185,11 +185,13 @@
      own or a business balance, and the units of `destination_amount`.
 
 20. **Your bank** ([CONTRACTS §40.5.14](CONTRACTS.md#40514-not-verified-live-each-is-checked-at-his-first-connect-a-failure-becomes-a-plain-sentence-never-a-number),
-   "Not verified live"): only after the switch PR (`bank_reading_enabled = true`), at the owner's first connect. Each
-   failure becomes a plain sentence, never a number.
-   - In the deploy log, the plan changes only the two stream filters, the `NoBankSecrets` statements of
-     `cf-prod-clip-flow` and `cf-prod-stats` and the api's environment (`BANK_READING`) in place, and destroys and
-     replaces nothing.
+   "Not verified live"): the plan lines at each deploy, the rest only after the switch PR (`bank_reading_enabled =
+   true`), at the owner's first connect. Each failure becomes a plain sentence, never a number.
+   - BR's merge, in the deploy log: the plan changes only the two stream filters, the `NoBankSecrets` statements of
+     `cf-prod-clip-flow` and `cf-prod-stats` and the api's environment (`BANK_READING` set to `off`), all in place,
+     with 0 to destroy and 0 to replace.
+   - The switch PR, in the deploy log: the plan changes only `cf-prod-api`'s `BANK_READING`, `off` to `on`, in place,
+     and the PR says "Delete gate: the plan deletes or replaces nothing that holds the owner's data."
    - Enable Banking: whether **Public certificate in PEM format** takes the bare public key or wants the certificate
      (the "Other bank key" chip); where the app ID shows on **API applications** once the **New application … has been
      added.** message is gone; what `GET /application`'s `countries` holds for a restricted app; which errors a wrong

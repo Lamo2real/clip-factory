@@ -42,8 +42,8 @@
   [CONTRACTS.md §40.5](CONTRACTS.md#405-your-bank-what-really-reached-it-read-through-enable-banking-owners-choice-a-2026-11-22).
   Under `## Your bank` each step title is a `####` heading, word for word and in the app's order (`#### 1. …`, the
   optional email as `#### Optional: …`). Its "Steps checked on" date is its own (22 Nov 2026), with its sources at the
-  end of that section. **Bold** is Enable Banking's exact label; when it renames one, change `BANK_GUIDE`, `STEPS` and
-  this page together and keep the step id. A new platform word on bank statements (the hint list) is a one-line PR in
+  end of that section. There **bold** is only Enable Banking's exact label (Clip Factory's own words are in quotes);
+  when it renames one, change `BANK_GUIDE`, `STEPS` and this page together and keep the step id. A new platform word on bank statements (the hint list) is a one-line PR in
   `bankread/filter.py`, with a golden case. Why it is built this way:
   [ADR-82](DECISIONS.md#adr-82-your-bank-enable-banking-restricted-mode-read-once-a-day-keep-only-matched-app-money).
   How the bank key, the links and the least-data rules are kept: [SECURITY.md](SECURITY.md#your-bank-contracts-405).
