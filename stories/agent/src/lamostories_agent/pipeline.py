@@ -55,7 +55,6 @@ from .providers import (
     DEFAULTS,
     REEL_SHOT,
     REGISTRY,
-    WRITER_ID,
     ProviderContext,
     ProviderFailed,
     ProviderUnavailable,
@@ -63,6 +62,7 @@ from .providers import (
     has_actors,
     provider_item,
     render_still,
+    writer_id,
 )
 from .util import JobSuperseded, UserFacingError, log, now_iso, ulid
 
@@ -77,6 +77,7 @@ HELD_TOPIC = (
 )
 QUALITY_OFF = "Quality check is off"
 LAST_LOOK = "Last look: "
+WRITER_TASKS = ("storyboard", "scene_rewrite")  # the writer's own calls (a whole story, a rewrite, named scenes)
 REALISTIC = frozenset({"nova-reel"})  # generators whose footage looks real: the post must carry the AI labels (§45.14)
 META_KEYS = ("writerModel", "engineVersion", "seed", "scriptVersion", "targetSec", "actualSec", "safetyTopicId")
 STORY_KINDS = ("storyboard", "scene_still", "scene_clip", "audio", "captions", "final_video", "cover", "video")
@@ -296,6 +297,7 @@ class Job:
         self._closed = False
         self._proven: set[tuple[str, str]] = set()
         self._prices: dict[str, Any] | None = None
+        self._makers: dict[str, str] = {}  # each model's maker as its reply said it (§45.36 E7)
 
     # --- the run ------------------------------------------------------------------------------------------------
 
@@ -515,6 +517,8 @@ class Job:
         except Exception as e:  # a refusal, a bad answer or Bedrock's own error: each carries what was asked
             self._note_failed_call(step, agent_id, task, e)
             raise
+        if isinstance(reply.maker, str) and reply.maker:
+            self._makers[reply.model] = reply.maker
         entry = {
             "step": step,
             "agentId": agent_id,
@@ -634,6 +638,7 @@ class StoryJob(Job):
         self.story_id = story_id
         self.story: dict[str, Any] = {}
         self.assets: list[dict[str, Any]] = []
+        self._writer_planned: str | None = None  # who is about to write this job's storyboard (§45.36 E7)
         self.script: dict[str, Any] | None = None
         self.post: dict[str, str] | None = None
         self.writer_texts: dict[str, str] | None = None
@@ -660,6 +665,7 @@ class StoryJob(Job):
         self.assets = await self.data.assets(self.fence.user_id, self.fence.workspace_id, story_id=self.story_id)
         for k in META_KEYS:  # every key of §45.6's meta, null until this job knows it
             self.meta.setdefault(k, None)
+        await self._plan_writer()
         actual = story.get("actualDurationSec")
         self.meta.update(
             {
@@ -960,7 +966,58 @@ class StoryJob(Job):
             animation = picked["animation"] if picked["animation"] not in REALISTIC else DEFAULTS["animation"]
         sound = self._current("audio")
         audio = str((sound.get("meta") or {}).get("provider") or picked["audio"]) if sound else picked["audio"]
-        return {"writer": WRITER_ID, "images": DEFAULTS["images"], "animation": animation, "audio": audio}
+        helpers = {"images": DEFAULTS["images"], "animation": animation, "audio": audio}
+        wrote = self._writer()
+        return {"writer": wrote, **helpers} if wrote else helpers
+
+    def _wrote(self) -> str | None:
+        """This job's writer, once it answered: the model of its last writer call (§45.36 E7)."""
+        found = next(
+            (
+                m
+                for m in reversed(self.meta.get("models") or [])
+                if m.get("step") == "storyboard" and m.get("task") in WRITER_TASKS and not m.get("failed")
+            ),
+            None,
+        )
+        if not found or not isinstance(found.get("model"), str):
+            return None
+        return writer_id(found["model"], self._makers.get(found["model"]))
+
+    def _writer(self) -> str | None:
+        """Who wrote the storyboard the video is made of, as ``meta.providers.writer`` names it (§45.36 E7): this
+        job's writer once it answered; while this job's storyboard step is still to run, the model about to write
+        it; else the writer the newest written storyboard recorded. None when that is not known: the line then names
+        no writer rather than a wrong one."""
+        wrote = self._wrote()
+        if wrote:
+            return wrote
+        if "storyboard" in self.todo and self._step_open("storyboard"):
+            return self._writer_planned
+        newest = self._newest_writer_script()
+        found = ((newest or {}).get("meta") or {}).get("writer")
+        return found if isinstance(found, str) and found else None
+
+    def _step_open(self, key: str) -> bool:
+        step = next((s for s in self.steps if s.get("key") == key), None)
+        return step is not None and step.get("status") not in ("done", "skipped")
+
+    async def _plan_writer(self) -> None:
+        """The model about to write this job's storyboard, from the model client (resolved as its call will be,
+        nothing sent), so the job names its writer while it writes. A client that cannot say leaves it unknown."""
+        planned = getattr(self.svc.models, "planned", None)
+        if not callable(planned) or "storyboard" not in self.todo:
+            return
+        conf = self.job.get("configuration") or {}
+        task = "scene_rewrite" if self.job.get("jobType") == "changes" and conf.get("sceneIds") else "storyboard"
+        call = functools.partial(planned, self.call_context("storyboard"), task=task)
+        try:
+            key, maker = await asyncio.get_running_loop().run_in_executor(self.svc.model_pool, call)
+        except Exception as e:  # the step itself says what is wrong with the model; the line waits for its answer
+            log("info", "stories.writer_not_planned", job=self.fence.job_id, error=type(e).__name__)
+            return
+        if isinstance(key, str) and key:
+            self._writer_planned = writer_id(key, str(maker or ""))
 
     def _note_providers(self) -> None:
         made = self._made_with()
@@ -1217,6 +1274,7 @@ class StoryJob(Job):
         self.meta["writerModel"] = next(
             (m["model"] for m in reversed(self.meta.get("models") or []) if m.get("step") == "storyboard"), None
         )
+        self._note_providers()  # the writer that really answered (§45.36 E7)
         if mode == "scenes":  # a new take of some scenes: the rest of the story still teaches what it taught
             teaches = teaches or await self._teaches()
         self.teaches = teaches
@@ -1320,8 +1378,9 @@ class StoryJob(Job):
                     "teachesSafety": bool(self.teaches)}  # fmt: skip
         sidecar = key.removesuffix(".json") + ".writer.json"
         await self.data.put_bytes(self.fence, sidecar, json.dumps(snapshot).encode(), "application/json")
+        wrote = self._wrote() if by == "writer" else None  # kept for later jobs' meta.providers.writer (E7)
         put = AssetPut(kind="storyboard", key=key, content_type="application/json", bytes=size, version=n,
-                       story_id=self.story_id, meta={"by": by})  # fmt: skip
+                       story_id=self.story_id, meta={"by": by, **({"writer": wrote} if wrote else {})})  # fmt: skip
         retired = self._retire("storyboard")
         fields = {
             "scriptVersion": n,
