@@ -292,9 +292,10 @@ run "role_matches_the_contract" {
 }
 
 # The Bedrock grants: every reasoning model the owner may pick or add (§45.34: any foundation model, any inference
-# profile and application inference profile of this account, Converse and ConverseStream only), which covers each
-# model of stories/config/models.json (model_invoke_arns, built from that file as the clip agent's are built from
-# config/models.json), plus Nova Canvas in eu-west-1; never Clip Factory's file.
+# profile and application inference profile of this account; §45.35 D12: and its provisioned, custom, custom-deployed
+# and imported models; Converse and ConverseStream only), which covers each model of stories/config/models.json
+# (model_invoke_arns, built from that file as the clip agent's are built from config/models.json), plus Nova Canvas
+# in eu-west-1; never Clip Factory's file.
 run "models_come_from_the_stories_file" {
   command = plan
 
@@ -305,9 +306,13 @@ run "models_come_from_the_stories_file" {
         "arn:aws:bedrock:*::foundation-model/*",
         "arn:aws:bedrock:*:123456789012:inference-profile/*",
         "arn:aws:bedrock:*:123456789012:application-inference-profile/*",
+        "arn:aws:bedrock:*:123456789012:provisioned-model/*",
+        "arn:aws:bedrock:*:123456789012:custom-model/*",
+        "arn:aws:bedrock:*:123456789012:custom-model-deployment/*",
+        "arn:aws:bedrock:*:123456789012:imported-model/*",
       ])
     ])
-    error_message = "StoryModels grants Converse and ConverseStream on every foundation model and on this account's inference profiles and application inference profiles, nothing more (§45.34)."
+    error_message = "StoryModels grants Converse and ConverseStream on every foundation model and on this account's inference profiles, application inference profiles, provisioned, custom, custom-deployed and imported models, nothing more (§45.34, §45.35 D12)."
   }
 
   assert {
@@ -317,13 +322,17 @@ run "models_come_from_the_stories_file" {
         "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc123",
         "arn:aws:bedrock:us-west-2::foundation-model/mistral.mistral-large-custom",
         "arn:aws:bedrock:::foundation-model/anthropic.claude-fable-5-2",
+        "arn:aws:bedrock:us-east-1:123456789012:provisioned-model/pm123",
+        "arn:aws:bedrock:us-west-2:123456789012:custom-model/amazon.nova-micro-v1:0:128k/abc123",
+        "arn:aws:bedrock:eu-north-1:123456789012:custom-model-deployment/dep123",
+        "arn:aws:bedrock:us-east-1:123456789012:imported-model/llama-own",
         ]) : anytrue([
         for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : anytrue([
           for r in s.Resource : can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", arn))
         ]) if s.Sid == "StoryModels"
       ])
     ])
-    error_message = "Every bundled model (its profile and foundation models) and a model the owner adds (any Region, profile or application profile of this account) is covered by StoryModels."
+    error_message = "Every bundled model (its profile and foundation models) and a model the owner adds (any Region, profile, application profile, provisioned, custom, custom-deployed or imported model of this account) is covered by StoryModels."
   }
 
   assert {
@@ -333,6 +342,22 @@ run "models_come_from_the_stories_file" {
       ]) if s.Sid == "StoryModels"
     ])
     error_message = "Inference profiles of another account are never granted."
+  }
+
+  assert {
+    condition = !anytrue(flatten([
+      for arn in [
+        "arn:aws:bedrock:us-east-1:999999999999:provisioned-model/pm123",
+        "arn:aws:bedrock:us-west-2:999999999999:custom-model/amazon.nova-micro-v1:0:128k/abc123",
+        "arn:aws:bedrock:eu-north-1:999999999999:custom-model-deployment/dep123",
+        "arn:aws:bedrock:us-east-1:999999999999:imported-model/llama-own",
+        ] : [
+        for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : anytrue([
+          for r in s.Resource : can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", arn))
+        ]) if s.Sid == "StoryModels"
+      ]
+    ]))
+    error_message = "Provisioned, custom, custom-deployed and imported models of another account are never granted (§45.35 D12)."
   }
 
   assert {

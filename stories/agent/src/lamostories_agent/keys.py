@@ -37,6 +37,10 @@ STEP_LABELS: Final = {
 }
 PORTRAIT_STEP: Final = "portrait"
 PORTRAIT_LABEL: Final = "Draw the picture"
+# Try it (§45.35 D2): a ``provider_check`` job has one step of its own.
+CHECK_JOB_TYPE: Final = "provider_check"
+CHECK_STEP: Final = "check"
+CHECK_LABEL: Final = "Try it"
 
 # What the owner reads when a step fails: the step in plain words and the button to tap, never a tool's output.
 FAILED: Final = {
@@ -210,6 +214,13 @@ def reference_prefix(user_id: str, workspace_id: str, ref_id: str) -> str:
     if not SAFE_ID.match(ref_id):
         raise ValueError("bad reference id")
     return f"{ws_prefix(user_id, workspace_id)}references/{ref_id}/"
+
+
+def check_prefix(user_id: str, workspace_id: str, provider_id: str, job_id: str) -> str:
+    """Where Try it's test shot goes in the US bucket (the same ``ws/`` layout, §45.35 D2); deleted after the check."""
+    if not SAFE_ID.match(provider_id) or not SAFE_ID.match(job_id):
+        raise ValueError("bad id")
+    return f"{ws_prefix(user_id, workspace_id)}checks/{provider_id}/{job_id}/"
 
 
 def reel_prefix(user_id: str, workspace_id: str, story_id: str, scene_id: str, n: int) -> str:

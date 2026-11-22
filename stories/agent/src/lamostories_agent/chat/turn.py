@@ -34,7 +34,7 @@ from lamostories_agent.tasks.common import Refused, Superseded, TaskFailed, clip
 from lamostories_agent.tasks.fence import MSG_LIVE, Fence, run_with_heartbeat
 from lamostories_agent.tasks.services import Services
 from lamostories_agent.tasks.store import Expr
-from lamostories_agent.tasks.work import agent_off, asked_of, merge_override
+from lamostories_agent.tasks.work import agent_off, asked_of, called_of, merge_override, reply_called
 
 from . import history, tools
 
@@ -46,6 +46,12 @@ GONE = "This conversation was deleted."
 TOO_MANY_STEPS = "\n\n(I stopped after several steps. Ask me to carry on.)"
 EMPTY = "I don't have an answer for that. Try asking another way."
 PICK_MODEL = {"kind": "open", "label": "Pick another model", "payload": {"href": "/stories/settings/ai"}}
+# A model that takes no tools (ModelDef ``tools`` false, §45.35 D1): the chat runs without its tool actions and says
+# so once per conversation (``toolsNotice`` on the answer that said it, internal).
+NO_TOOLS = (
+    "This model can only talk here. It can't use Lamo Stories' tools, so it can't look at your ideas or characters "
+    "or give you buttons. To get those, pick a Claude model in Lamo Stories › Settings › AI."
+)
 STOPS_THE_TURN = frozenset({"ModelUnavailable", "EffortUnavailable", "AgentOff"})
 
 CHAT_BRIEF = """Lamo Stories studio notes for the creative chat (from the app, not the owner):
@@ -132,6 +138,7 @@ class Turn:
         self.toolbox = tools.Toolbox(svc, user_id, workspace_id, self.pk, fence, catalog=svc.catalog)
         self.usage = {"input": 0, "output": 0}
         self.reply: models.Reply | None = None
+        self.earlier: list[dict[str, Any]] = []  # this conversation's earlier messages (whatever is summarized)
 
     # --- the conversation ----------------------------------------------------------------------------------------
 
@@ -141,6 +148,7 @@ class Turn:
         # Everything but this answer: the owner's question can share its millisecond (and so sort after it), and
         # nothing newer exists while an answer is pending (the API refuses a second message).
         before = [m for m in msgs if str(m.get("msgId") or "") != self.msg_id]
+        self.earlier = before
         cut = self.conv.get("summaryUpToMsgId")
         if isinstance(cut, str) and cut:
             before = [m for m in before if str(m.get("msgId")) > cut]
@@ -272,18 +280,23 @@ class Turn:
         if not text and not self.toolbox.actions:
             text = EMPTY
         last = self.reply
-        self.fence.write(
-            {
-                "text": text,
-                "status": "done",
-                "actions": self.toolbox.actions,
-                "model": last.model if last else None,
-                "effort": last.effort if last else None,
-                "effortApplied": last.effort_applied if last else None,
-                "usage": dict(self.usage),
-                "heartbeatAt": now_iso(),
-            }
-        )
+        notice = bool(last and last.tools_off) and not any(m.get("toolsNotice") for m in self.earlier)
+        if notice:
+            text = f"{text}\n\n{NO_TOOLS}".strip()[:MAX_TEXT] if text != EMPTY else NO_TOOLS
+        fields: dict[str, Any] = {
+            "text": text,
+            "status": "done",
+            "actions": self.toolbox.actions,
+            "model": last.model if last else None,
+            **(reply_called(last) if last else {}),  # what was really called (§45.35 D5)
+            "effort": last.effort if last else None,
+            "effortApplied": last.effort_applied if last else None,
+            "usage": dict(self.usage),
+            "heartbeatAt": now_iso(),
+        }
+        if notice:
+            fields["toolsNotice"] = True
+        self.fence.write(fields)
 
     def fail(self, sentence: str, *, pick_model: bool, error: BaseException | None = None) -> bool:
         """Ends the answer ``failed``. With no reply yet, the model and effort it was sent with stay on the message
@@ -299,12 +312,15 @@ class Turn:
             "usage": dict(self.usage),
             "heartbeatAt": now_iso(),
         }
+        asked = asked_of(error)
         if reply is not None:
             fields.update({"model": reply.model, "effort": reply.effort, "effortApplied": reply.effort_applied})
-        else:
-            asked = asked_of(error)
-            if asked is not None:
-                fields.update({"model": asked[0], "effort": asked[1], "effortApplied": False})
+            fields.update(reply_called(reply))
+        elif asked is not None:
+            fields.update({"model": asked[0], "effort": asked[1], "effortApplied": False})
+            fields.update(called_of(error))
+        if asked is not None:  # the answer stopped on its model call (§45.35 D5)
+            fields["failed"] = True
         return self.fence.try_write(fields)
 
 

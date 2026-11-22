@@ -2,8 +2,9 @@
 
 The contract every Lamo Stories AI call goes through. ``BedrockModels`` implements ``ModelClient`` (Bedrock Converse
 and ConverseStream with ``additionalModelRequestFields={"output_config": {"effort": ...}}`` exactly when the model
-offers efforts, adaptive thinking left to the model, refusals, MODELSTATUS# and USAGE#); the pipeline, the chat, the
-tasks and the reference analysis call it. Precedence, strongest first, model and effort merged separately: the
+offers efforts and takes that field, ``toolConfig`` and cache points only for a model that takes them, §45.35 D1;
+adaptive thinking left to the model, refusals, MODELSTATUS# and USAGE#); the pipeline, the chat, the tasks and the
+reference analysis call it. Precedence, strongest first, model and effort merged separately: the
 per-request override, the conversation's or the project's setting, the task's, the agent's, the workspace default.
 There is never an automatic fallback to another model, and an effort the model does not offer is refused, never
 swapped. ``stories/config/resolve-cases.json`` holds the shared cases (the API's resolver passes the same ones).
@@ -115,7 +116,7 @@ def resolve(
             model=model_key,
             effort=effort,
         )
-    offered = list(info.get("efforts") or [])
+    offered = config.offered_efforts(info)  # none for a model that takes no effort field (§45.35 D1)
     if not offered:
         return Choice(model_key, None, False, source)
     if effort not in offered:
@@ -152,6 +153,10 @@ class Reply:
     effort: str | None
     effort_applied: bool
     usage: dict[str, int] = field(default_factory=dict)
+    model_id: str | None = None  # the Bedrock model id or inference profile really called (§45.35 D5)
+    region: str | None = None  # the Region it was called in
+    tools_off: bool = False  # the caller gave tools, but this model takes none: they were not sent (§45.35 D1)
+    task: str | None = None  # the task the call was for (§45.35 D5)
 
 
 class ModelClient(Protocol):
@@ -177,7 +182,11 @@ class ModelClient(Protocol):
         ``on_text`` receives the current call's whole text so far each time it grows (after a retried stream it
         starts again from the beginning), never only the newest piece. ``allow_inactive`` lets a task run while its
         agent is switched off (the quality agent's checks of driving content, Check models). ``task="check_models"``
-        is the tiny check of §45.25: no agent instructions, skills or memory, and the check writes MODELSTATUS#."""
+        is the tiny check of §45.25: no agent instructions, skills or memory, and the check writes MODELSTATUS#.
+
+        A model that takes no tools (``tools`` false, §45.35 D1) is sent none: a ``schema`` answer is asked for as
+        JSON in its text (checked the same way, asked once more), and the caller's ``tools`` are left out
+        (``Reply.tools_off``). The reply (and any error) says the ``model_id``, ``region`` and ``task`` (D5)."""
         ...
 
 
@@ -185,6 +194,13 @@ class ModelClient(Protocol):
 
 ANSWER_TOOL = "submit_answer"
 ANSWER_NUDGE = f"Answer only by calling the {ANSWER_TOOL} tool once, with every required field."
+# A model that takes no tools (§45.35 D1) is asked for its structured answer as JSON in its text, and told it has
+# no tools when a caller (the chat) offered some.
+JSON_NUDGE = (
+    "Answer with only one JSON object, with no other words and no code fences. It must fit this JSON schema:\n{schema}"
+)
+JSON_AGAIN = "Answer again with only the whole JSON object, fixed."
+NO_TOOLS_NUDGE = "You have no tools in this conversation: answer in words only and never pretend to use a tool."
 NO_EFFORT_LINE = "This model has no effort setting; it runs at its own level."
 UNAVAILABLE = (
     "{label} isn't available right now: {reason}. Pick another model in Lamo Stories › Settings › AI, or try again."
@@ -244,9 +260,18 @@ class AnswerInvalid(Exception):
         self.effort = effort
 
 
-def _asked(e: BaseException, choice: Choice) -> None:
-    """Puts the model and effort a call was sent with on an error that does not carry them (§45.34)."""
-    for name, value in (("model", choice.model), ("effort", choice.effort)):
+def _asked(
+    e: BaseException,
+    choice: Choice,
+    model_id: str | None = None,
+    region: str | None = None,
+    task: str | None = None,
+) -> None:
+    """Puts the model and effort a call was sent with on an error that does not carry them (§45.34), and the model id
+    and Region it was sent to and its task (§45.35 D5)."""
+    pairs = (("model", choice.model), ("effort", choice.effort), ("model_id", model_id), ("region", region),
+             ("task", task))  # fmt: skip
+    for name, value in pairs:
         if getattr(e, name, None) is None:
             with contextlib.suppress(AttributeError, TypeError):
                 setattr(e, name, value)
@@ -490,18 +515,54 @@ class BedrockModels:
         limit = info.get("maxOutputTokens")
         if isinstance(limit, int) and limit > 0:
             max_tokens = min(int(max_tokens), limit)
+        model_id, region = self.called_as(info)
+        _, takes_tools, _ = config.call_shape(info)
         msgs = [dict(m) for m in messages]
-        tool_list = [tool_spec(t) for t in tools or []]
-        if schema is not None:
+        tool_list = [tool_spec(t) for t in tools or []] if takes_tools else []
+        tools_off = bool(tools) and not takes_tools
+        if tools_off:  # the chat runs without its tool actions on this model and says so (§45.35 D1)
+            msgs = _nudge(msgs, NO_TOOLS_NUDGE)
+        if schema is not None and takes_tools:
             tool_list.append(
                 {"toolSpec": {"name": ANSWER_TOOL, "description": "Give your answer.", "inputSchema": {"json": schema}}}
             )
             msgs = _nudge(msgs)
+        elif schema is not None:  # no tools: the answer is asked for as JSON in the text, checked the same way
+            msgs = _nudge(msgs, JSON_NUDGE.format(schema=json.dumps(schema, ensure_ascii=False, separators=(",", ":"))))
+        try:
+            return self._answer(
+                ctx, task, choice, info, system, msgs, tool_list, schema, max_tokens, on_text, ai, catalog,
+                record=not bare, takes_tools=takes_tools, tools_off=tools_off,
+            )  # fmt: skip
+        except Exception as e:  # every failure also says the model id and Region it was sent to (§45.35 D5)
+            _asked(e, choice, model_id, region, task)
+            raise
+
+    def _answer(
+        self,
+        ctx: CallContext,
+        task: str,
+        choice: Choice,
+        info: dict[str, Any],
+        system: list[str],
+        msgs: list[dict[str, Any]],
+        tool_list: list[dict[str, Any]],
+        schema: dict[str, Any] | None,
+        max_tokens: int,
+        on_text: Callable[[str], None] | None,
+        ai: dict[str, Any],
+        catalog: dict[str, Any],
+        *,
+        record: bool,
+        takes_tools: bool,
+        tools_off: bool,
+    ) -> Reply:
+        """The call and, for a schema, its check and one more ask (§45.7)."""
+        model_id, region = self.called_as(info)
         total: dict[str, int] = {}
         for attempt in (1, 2):
-            answer = self._send(
-                ctx, task, choice, info, system, msgs, tool_list, max_tokens, on_text, ai, catalog, record=not bare
-            )
+            answer = self._send(ctx, task, choice, info, system, msgs, tool_list, max_tokens, on_text, ai, catalog,
+                                record=record)  # fmt: skip
             total = _add(total, answer.usage)
             text = "".join(str(b.get("text") or "") for b in answer.content if "text" in b)
             calls = [
@@ -517,12 +578,15 @@ class BedrockModels:
             use = next((c for c in calls if c["name"] == ANSWER_TOOL), None)
             wants_tools = use is None and any(c["name"] != ANSWER_TOOL for c in calls)
             if schema is not None and not wants_tools:  # a caller's tool first: its tool loop runs it, then asks again
-                value = use["input"] if use else _json_text(text)
-                problems = check(schema, value) if isinstance(value, dict) else [f"You did not call {ANSWER_TOOL}."]
+                value = use["input"] if use else (_json_text(text) if takes_tools else _json_in(text))
+                missing = (
+                    f"You did not call {ANSWER_TOOL}." if takes_tools else "You did not answer with one JSON object."
+                )
+                problems = check(schema, value) if isinstance(value, dict) else [missing]
                 if problems:
                     if attempt == 2 or answer.stop_reason == "max_tokens":
                         raise AnswerInvalid(problems, model=choice.model, effort=choice.effort)
-                    msgs = _ask_again(msgs, answer.content, problems)
+                    msgs = _ask_again(msgs, answer.content, problems, json_text=not takes_tools)
                     continue
                 assert isinstance(value, dict)
                 data = value
@@ -536,8 +600,19 @@ class BedrockModels:
                 effort=choice.effort,
                 effort_applied=choice.effort_applied,
                 usage=total,
+                model_id=model_id,
+                region=region,
+                tools_off=tools_off,
+                task=task,
             )
         raise AssertionError("unreachable")
+
+    def called_as(self, info: dict[str, Any]) -> tuple[str, str | None]:
+        """The Bedrock model id or inference profile a call to this model is sent to, and the Region (the model's own
+        for one the owner added in another Region, else this runtime's), as each record keeps them (§45.35 D5)."""
+        model_id = str(info.get("profile") or info.get("modelId") or "")
+        own = str(info.get("region") or "") if info.get("custom") else ""
+        return model_id, own or self._region
 
     def request(
         self,
@@ -548,8 +623,11 @@ class BedrockModels:
         tools: list[dict[str, Any]],
         max_tokens: int,
     ) -> dict[str, Any]:
-        """The Converse request body (a test records it): the model's profile, the system blocks, the effort exactly
-        when the model offers efforts, never ``thinking``, tools with automatic choice only."""
+        """The Converse request body (a test records it), built from how the model is called (``config.call_shape``,
+        §45.35 D1): the model's profile, the system blocks, a cache point only for a model that takes one, the effort
+        as ``output_config.effort`` only for a model whose ``effortField`` is ``output_config`` (and only when it offers
+        efforts), never ``thinking``, and tools with automatic choice only for a model that takes tools."""
+        effort_field, takes_tools, _ = config.call_shape(info)
         blocks: list[dict[str, Any]] = [{"text": b} for b in system if b.strip()]
         model_id = str(info.get("profile") or info.get("modelId"))
         if blocks and self.caches(info):
@@ -560,9 +638,9 @@ class BedrockModels:
             "messages": messages,
             "inferenceConfig": {"maxTokens": int(max_tokens)},
         }
-        if choice.effort_applied and choice.effort:
+        if choice.effort_applied and choice.effort and effort_field == "output_config":
             body["additionalModelRequestFields"] = {"output_config": {"effort": choice.effort}}
-        if tools:
+        if tools and takes_tools:
             body["toolConfig"] = {"tools": tools, "toolChoice": {"auto": {}}}
         return body
 
@@ -572,8 +650,9 @@ class BedrockModels:
         return region, str(info.get("profile") or info.get("modelId"))
 
     def caches(self, info: dict[str, Any]) -> bool:
-        """Whether a call to this model carries a cache point (every model, until Bedrock refused one for it)."""
-        return self._cache_key(info) not in self._no_cache
+        """Whether a call to this model carries a cache point: a model that takes one (``cache``, §45.35 D1), until
+        Bedrock refused one for it."""
+        return config.call_shape(info)[2] and self._cache_key(info) not in self._no_cache
 
     def _send(
         self,
@@ -704,19 +783,29 @@ class BedrockModels:
             log("warn", "stories.bookkeeping_failed", sk=item.get("sk"), error=type(e).__name__)
 
     def _model_status(self, ctx: CallContext, model_key: str, status: str, line: str) -> None:
-        self._put(
-            {
-                "pk": keys.ws_pk(ctx.user_id, ctx.workspace_id),
-                "sk": keys.modelstatus_sk(model_key),
-                "type": keys.TYPE_MODELSTATUS,
-                "userId": ctx.user_id,
-                "workspaceId": ctx.workspace_id,
-                "model": model_key,
-                "status": status,
-                "line": line,
-                "checkedAt": now_iso(),
-            }
-        )
+        """``MODELSTATUS#{model}`` after a real call: an update of its fields, so the mark of a Check models run
+        (``by: "check"``, what ticks setup step 1, §45.35 D7) stays when a later chat or job call writes the status."""
+        fields = {
+            "type": keys.TYPE_MODELSTATUS,
+            "userId": ctx.user_id,
+            "workspaceId": ctx.workspace_id,
+            "model": model_key,
+            "status": status,
+            "line": line,
+            "checkedAt": now_iso(),
+        }
+        names = {f"#f{i}": k for i, k in enumerate(fields)}
+        values = {f":v{i}": _to_ddb(v) for i, v in enumerate(fields.values())}
+        sk = keys.modelstatus_sk(model_key)
+        try:
+            self.table().update_item(
+                Key={"pk": keys.ws_pk(ctx.user_id, ctx.workspace_id), "sk": sk},
+                UpdateExpression="SET " + ", ".join(f"{n} = :v{i}" for i, n in enumerate(names)),
+                ExpressionAttributeNames=names,
+                ExpressionAttributeValues=values,
+            )
+        except Exception as e:  # a bookkeeping write never fails the call it records
+            log("warn", "stories.bookkeeping_failed", sk=sk, error=type(e).__name__)
 
     def _usage(
         self,
@@ -762,24 +851,24 @@ class BedrockModels:
         self._put(item)
 
 
-def _nudge(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _nudge(messages: list[dict[str, Any]], nudge: str = ANSWER_NUDGE) -> list[dict[str, Any]]:
     """The last user message ends with the instruction to answer through ``submit_answer`` (tool choice stays
-    automatic: these models refuse a forced one)."""
+    automatic: these models refuse a forced one), or with another instruction (``nudge``)."""
     out = [dict(m) for m in messages]
     for m in reversed(out):
         if m.get("role") == "user":
-            m["content"] = [*list(m.get("content") or []), {"text": ANSWER_NUDGE}]
+            m["content"] = [*list(m.get("content") or []), {"text": nudge}]
             return out
-    return [*out, {"role": "user", "content": [{"text": ANSWER_NUDGE}]}]
+    return [*out, {"role": "user", "content": [{"text": nudge}]}]
 
 
 def _ask_again(
-    messages: list[dict[str, Any]], content: list[dict[str, Any]], problems: list[str]
+    messages: list[dict[str, Any]], content: list[dict[str, Any]], problems: list[str], *, json_text: bool = False
 ) -> list[dict[str, Any]]:
     """The model's own answer back, with exactly what is wrong (asked once more, §45.7). Every ``toolUse`` in the
     answer gets its ``toolResult`` (Converse refuses a turn that leaves one out): ``submit_answer``'s says what is
-    wrong, any other tool's says it was not run."""
-    feedback = "Problems: " + "; ".join(problems[:20]) + " " + ANSWER_NUDGE
+    wrong, any other tool's says it was not run. A model without tools (``json_text``) is asked for the JSON again."""
+    feedback = "Problems: " + "; ".join(problems[:20]) + " " + (JSON_AGAIN if json_text else ANSWER_NUDGE)
     out = [*messages, {"role": "assistant", "content": content or [{"text": "(no answer)"}]}]
     results: list[dict[str, Any]] = []
     answered = False
@@ -811,6 +900,27 @@ def _json_text(text: str) -> Any:
         return json.loads(text) if text else None
     except ValueError:
         return None
+
+
+def _json_in(text: str) -> Any:
+    """The JSON object a model without tools answered in its text (§45.35 D1): the whole text, or its first complete
+    object when the model put words or a code fence around it."""
+    found = _json_text(text)
+    if isinstance(found, dict):
+        return found
+    decoder = json.JSONDecoder()
+    raw = text or ""
+    start = raw.find("{")
+    while start != -1:
+        try:
+            value, _ = decoder.raw_decode(raw, start)
+        except ValueError:
+            start = raw.find("{", start + 1)
+            continue
+        if isinstance(value, dict):
+            return value
+        start = raw.find("{", start + 1)
+    return found
 
 
 def _to_ddb(value: Any) -> Any:
