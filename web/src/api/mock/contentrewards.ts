@@ -1131,7 +1131,9 @@ export function crMockApi({ store, setup, publish, finder, catalog }: CrMockDeps
     w.__cfMock = { ...(w.__cfMock ?? {}), cr: controls };
   }
 
-  const wait = (ms = 60) => new Promise((r) => setTimeout(r, ms));
+  // A test can make every answer slow (window.__cfMockFaults.latencyMs, as the rest of the mock API reads it).
+  const slow = () => (typeof window === "undefined" ? undefined : (window as unknown as { __cfMockFaults?: { latencyMs?: number } }).__cfMockFaults?.latencyMs);
+  const wait = (ms = 60) => new Promise((r) => setTimeout(r, slow() ?? ms));
   let lastCheck = 0;
 
   function onPosts(clip: Clip, posts: Post[]) {

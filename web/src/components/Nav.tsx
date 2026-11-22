@@ -7,6 +7,7 @@ import { section, useRoute } from "../lib/router.ts";
 import { plural } from "../lib/format.ts";
 import { useDeletedJobs } from "../lib/jobDeletes.ts";
 import { useInstall } from "../lib/pwa.ts";
+import { useLiveStatus } from "../lib/live.ts";
 import { LiveDot } from "./LiveDot.tsx";
 import { Icon, type IconName } from "./Icon.tsx";
 import { A } from "./ui.tsx";
@@ -61,6 +62,7 @@ export function Sidebar() {
   // Next to Lamo Stories the shell draws the workspace switch and the Live chip for both apps, in this very place
   // (app/WorkspaceDock.tsx, §45.37): the rows under them stay exactly where they are.
   const hosted = useShellHosted();
+  const live = useLiveStatus() === "live";
   return (
     <nav className={`sidebar glass glass--refract${sidebarCollapsed ? " is-collapsed" : ""}`} aria-label="Main">
       <div className="sidebar__top">
@@ -121,7 +123,10 @@ export function Sidebar() {
         ))}
       </ul>
       <div className="sidebar__foot">
-        {hosted ? null : (
+        {hosted ? (
+          // The room of the Live chip's row the shell draws here, so every row of the foot stays where it was.
+          live ? <span className="sidebar__live-room" aria-hidden="true" /> : null
+        ) : (
           <span className="sidebar__live">
             <LiveDot compact={sidebarCollapsed} />
           </span>

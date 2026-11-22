@@ -1,14 +1,15 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
 
-// Lamo Clips does not change (docs/CONTRACTS.md §45.1, §45.16.1, §45.17). With Lamo Stories switched off the shell
-// has no new element at all: no switcher in the page, the six menu items and the six phone tabs exactly as before,
-// and every /stories address is Lamo Clips' own "page does not exist". Switched on (cf.storiesPreview = 1) the six
-// items, their boxes and the tab bar are identical to the switched-off page, and the switcher sits only in space that
-// was empty at every size: the sidebar foot (or a round toggle beside the live dot, or a slim one between the menu and
-// the foot, or, in a folded sidebar too short for that, a slim one beside the fold button) and the phone top bar,
-// never covering or pushing anything (on the smallest phones, 320 px, the brand drops its name so the switch keeps a full
-// 48 px, §45.36 E16). Pixel before/after shots against main are taken by the lead on one machine (web/scripts/clips-unchanged.sh).
+// Lamo Clips does not change (docs/CONTRACTS.md §45.1, §45.16.1, §45.17, §45.37). With Lamo Stories switched off the
+// shell has no new element at all: no switcher in the page, the six menu items and the six phone tabs exactly as
+// before, and every /stories address is Lamo Clips' own "page does not exist". Switched on (cf.storiesPreview = 1) the
+// six items, their boxes, the Live chip, Get the app, the jobs line and the tab bar are identical to the switched-off
+// page, and the shell's switch (app/WorkspaceDock.tsx) sits only in space that was empty at every size: above the
+// Live chip in the sidebar's foot (or a round toggle beside or above it, or a slim one between the menu and the foot,
+// or, in a folded sidebar too short for that, a slim one beside the fold button) and, on a phone, in the top bar
+// between the brand and the Live chip, never covering or pushing anything (on the smallest phones, 320 px, the brand
+// drops its name, §45.36 E16). Pixel before/after shots against main are taken on one machine (web/scripts/clips-unchanged.sh).
 
 const ITEMS = [
   ["home", "/", "Home"],
@@ -98,12 +99,20 @@ async function layout(page: Page): Promise<Layout> {
       top: { brand: box(document.querySelector(".topbar .brand")), live: box(document.querySelector(".topbar .live-dot")), bar: box(document.querySelector(".topbar")) },
       mainTop: Math.round(document.querySelector("main")!.getBoundingClientRect().top),
       page: box(document.querySelector(".shell > .main")),
-      switcher: Array.from(document.querySelectorAll(".ws-switch-host")).map((el) => ({
-        mode: el.getAttribute("data-ws-switch"),
-        squeeze: el.hasAttribute("data-ws-squeeze"),
-        box: box(el),
-        place: el.classList.contains("ws-switch-host--topbar") ? "topbar" : el.classList.contains("ws-switch-host--sidebar-top") ? "sidebar-top" : "sidebar",
-      })),
+      // The shell's switch (§45.37): on a computer the dock's (its place in data-ws-dock), on a phone the top bar's toggle.
+      switcher: Array.from(document.querySelectorAll(".ws-switch-host"))
+        .filter((el) => box(el))
+        .map((el) => {
+          const top = el.classList.contains("ws-switch-host--topbar");
+          const dock = el.closest(".ws-dock")?.getAttribute("data-ws-dock");
+          return {
+            mode: el.getAttribute("data-ws-switch"),
+            squeeze: el.hasAttribute("data-ws-squeeze"),
+            // On a phone the toggle's own box (the Live chip sits beside it in the same host).
+            box: box(top ? el.querySelector(".ws-round") : el),
+            place: top ? "topbar" : dock === "top" ? "sidebar-top" : "sidebar",
+          };
+        }),
     };
   }, ITEMS.map(([k]) => k));
 }
@@ -115,7 +124,7 @@ test.describe("with Lamo Stories switched off", () => {
     test(`the shell has no new element at ${size.w}×${size.h}`, async ({ browser }) => {
       const page = await open(browser, size, false);
       await steady(page, size.w < 768);
-      await expect(page.locator(".ws-switch-host, .ws-switch, .ws-round, [data-ws-switch]")).toHaveCount(0);
+      await expect(page.locator(".ws-dock, .ws-switch-host, .ws-switch, .ws-round, [data-ws-switch], [data-ws-dock]")).toHaveCount(0);
       // The six menu items and the six phone tabs, in order, with their own words and addresses.
       const side = page.locator("nav.sidebar .sidebar__list .sidebar__item");
       await expect(side).toHaveCount(6);
@@ -209,14 +218,11 @@ test.describe("with Lamo Stories switched on", () => {
       expect(after.mainTop).toBe(before.mainTop);
 
       // A folded sidebar in a window under about 570 px tall has no room in its foot: then the way across is the slim
-      // toggle beside the fold button (§45.35 D19), and the foot holds none; everywhere else that one is not there.
+      // toggle beside the fold button (§45.35 D19); everywhere else the switch is in the foot. One switch, always.
       const short = !phone && !!size.folded && size.h < 570;
-      const foot = after.switcher.find((s) => s.place === "sidebar")!;
-      const beside = after.switcher.find((s) => s.place === "sidebar-top");
-      if (!phone) expect(beside, "the toggle beside the fold button, in the page while switched on").toBeTruthy();
-      if (short) expect(foot.mode, "the foot of a short folded sidebar").toBe("none");
-      else if (beside) expect(beside.mode, "beside the fold button").toBe("none");
-      const here = short ? beside! : after.switcher.find((s) => s.place === (phone ? "topbar" : "sidebar"))!;
+      expect(after.switcher, "one switch on screen").toHaveLength(1);
+      const here = after.switcher[0]!;
+      expect(here.place, "where the switch is").toBe(phone ? "topbar" : short ? "sidebar-top" : "sidebar");
       expect(here, "a switcher host in the shell").toBeTruthy();
       const others = [...after.items, ...after.tabs, ...Object.values(after.foot), after.top.brand, after.top.live].filter((b): b is Box => !!b);
       // There is a way across at every size (§45.16.1): never missing, never covering or moving anything.
@@ -232,8 +238,8 @@ test.describe("with Lamo Stories switched on", () => {
         expect(box.x).toBeGreaterThanOrEqual(after.top.brand!.x + after.top.brand!.width + 3.5);
         if (after.top.live) expect(box.x + box.width).toBeLessThanOrEqual(after.top.live.x - 3.5);
         expect(box.height).toBeGreaterThanOrEqual(48);
-        // A full finger's target at every width: 48 px, or a slim one of at least 44 px (§45.36 E16).
-        expect(box.width).toBeGreaterThanOrEqual(here.mode === "slim" ? 44 : 48);
+        // A full finger's target at every width: at least 44 px (§45.36 E16).
+        expect(box.width).toBeGreaterThanOrEqual(44);
       } else if (short) {
         // Right of the fold button with 4 px of air, as tall as it is, and short of the page with 4 px of air.
         const toggle = after.foot.toggle!;
@@ -262,9 +268,10 @@ test.describe("with Lamo Stories switched on", () => {
       // name and the toggle is the round 48 px one (§45.36 E16).
       if (!phone && !size.folded) expect(here.mode, "sidebar open").toBe(size.h >= 650 ? "bar" : "corner");
       if (!phone && size.folded && !short) expect(here.mode, "sidebar folded").toBe(size.h >= 650 ? "round" : "slim");
-      if (phone && size.w >= 360) expect(["label", "stack"], `phone at ${size.w}`).toContain(here.mode);
-      if (phone && size.w === 340) expect(here.mode, `phone at ${size.w}`).toBe("slim");
-      if (phone && size.w < 340) expect([here.mode, here.squeeze], `phone at ${size.w}`).toEqual(["round", true]);
+      // On a phone it is the round toggle in both apps (the same box: 48 px, 44 by 48 below 360 px); the brand drops its
+      // name only below 340 px.
+      if (phone) expect([here.mode, here.squeeze], `phone at ${size.w}`).toEqual(["round", size.w < 340]);
+      if (phone) expect(here.box!.width, `phone at ${size.w}`).toBe(size.w < 360 ? 44 : 48);
       await on.context().close();
     });
 
@@ -280,7 +287,8 @@ test.describe("with Lamo Stories switched on", () => {
 
   test("the switcher is a pick bar on the sliding highlight, never a menu item and never a new tab", async ({ browser }) => {
     const page = await open(browser, { w: 1440, h: 900 }, true);
-    const bar = page.locator(".sidebar__foot .ws-switch");
+    // The shell's own (§45.37), laid over the sidebar's foot: never one of the sidebar's own items.
+    const bar = page.locator(".ws-dock .ws-switch");
     await expect(bar).toBeVisible();
     // One choice per workspace the server lists; Lamo Clips goes by the app's own name.
     await expect(bar.locator(".ws-switch__opt")).toHaveText(["Clip Factory", "Lamo Stories"]);

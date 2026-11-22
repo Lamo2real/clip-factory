@@ -177,8 +177,17 @@
     position: absolute;
     pointer-events: auto;
   }
+  /* The switch over the Live chip's row (a toggle beside the chip sits in that row); the row itself takes no clicks
+     beyond the chip. */
   .ws-dock > .ws-switch-host {
     display: grid;
+    z-index: 1;
+  }
+  .ws-dock > .ws-dock__live {
+    pointer-events: none;
+  }
+  .ws-dock > .ws-dock__live > * {
+    pointer-events: auto;
   }
   /* A round toggle is the host's own size; a slim one fills it (as wide or as tall as the gap allows). */
   .ws-dock > .ws-switch-host > .ws-round--slim {
@@ -190,6 +199,12 @@
     justify-content: center;
     padding-inline: 0;
   }
+}
+/* The room of the Live chip's row in Clip Factory's sidebar foot while the shell draws the chip itself (Nav.tsx): as
+   tall as the shell's row (its measured height), so Get the app and the jobs line stay exactly where they were. */
+.sidebar__live-room {
+  display: block;
+  height: var(--ws-live-row, 36px);
 }
 /* A phone's top bar: the toggle and the Live chip at its right end, 4 px apart, 4 px clear of the brand (the bar's
    12 px gap, less 8). Narrower than the brand and both of them (320 px) the brand drops its name (its mark stays). */

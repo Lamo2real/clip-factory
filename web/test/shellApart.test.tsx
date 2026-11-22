@@ -221,8 +221,13 @@ describe("the shell's one workspace switch: where it sits (dockLayout, §45.37)"
     // Right of the fold button with 4 px of air, and short of the page (at 80 + 14 + 32 px) with 4 px of air.
     expect(top.sw!.left + 14).toBe(14 + SIDEBAR.rim + SIDEBAR.padX + SIDEBAR.foldLeft + SIDEBAR.fold + 4);
     expect(top.sw!.left + 14 + top.sw!.width).toBeLessThanOrEqual(80 + 14 + 32 - 4);
-    // Open in a window too short for anything in the foot: a slim toggle in the strip before the page, at the foot.
-    const edge = dockLayout({ ...at1440, vw: 1280, frameH: 520 - 28 });
+    // A window too short for the menu and the foot: the foot runs on right under the menu (as the sidebar draws it),
+    // and the toggle sits beside the Live chip there.
+    const under = dockLayout({ ...at1440, vw: 1280, frameH: 520 - 28 });
+    expect(under.mode).toBe("corner");
+    expect(under.live.top).toBe(SIDEBAR.rim + SIDEBAR.padY + SIDEBAR.head + SIDEBAR.gap + SIDEBAR.menu + SIDEBAR.gap);
+    // With no Live chip (not connected) and no room at all: a slim toggle in the strip before the page, at the foot.
+    const edge = dockLayout({ ...at1440, vw: 1280, frameH: 520 - 28, liveH: 0 });
     expect(edge.mode).toBe("edge");
     expect(edge.sw!.left + 14).toBe(14 + 252 + 4);
     expect(edge.sw!.width).toBeGreaterThanOrEqual(28);

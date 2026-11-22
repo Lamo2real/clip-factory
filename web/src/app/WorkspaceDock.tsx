@@ -142,7 +142,8 @@ export function dockLayout(i: DockInput): DockLayout {
   const listBottom = S.rim + S.padY + S.head + S.gap + S.menu;
   const parts = [...(i.liveH > 0 ? [i.liveH] : []), ...(i.getApp ? [S.getApp] : []), ...(i.jobs ? [S.jobs] : [])];
   const footH = parts.reduce((a, b) => a + b, 0) + S.footGap * Math.max(0, parts.length - 1);
-  const footTop = bottom - footH;
+  // Pinned to the bottom; in a window too short for the menu and the foot, right under the menu (and past the bottom).
+  const footTop = Math.max(bottom - footH, listBottom + S.gap);
   const above = parts.length ? S.footGap : 0;
   const live = { top: footTop, left: x0, width: cw };
   const free = footTop - (listBottom + S.gap);
@@ -420,8 +421,9 @@ function Bar({ list, current, stacked, barRef }: { list: Workspace[]; current: s
       const glide = barRef.current?.querySelector<HTMLElement>(":scope > .glide");
       const slide = glide?.getAnimations?.().find((a) => a.id === GLIDE_ANIMATION_ID);
       if (slide) slide.finished.then(land, land);
-      // Never longer than the slide and a little: a browser that starts no animation still switches.
-      setTimeout(land, slide ? GLIDE_MS + 400 : 0);
+      // A browser that starts no slide switches at once; one whose slide never says it ended (a window hidden mid-way)
+      // switches well after it would have.
+      setTimeout(land, slide ? GLIDE_MS + 2000 : 0);
     });
   };
 
@@ -517,6 +519,9 @@ export function WorkspaceDock() {
       }
       const r = el.getBoundingClientRect();
       const dot = row.querySelector<HTMLElement>(".live-dot");
+      const rowH = px(getComputedStyle(row).height);
+      // Clip Factory's sidebar keeps the room of this row in its foot (Nav.tsx), so the rows under it stay put.
+      document.documentElement.style.setProperty("--ws-live-row", `${rowH}px`);
       const next = dockLayout({
         frameH: r.height,
         left: r.left,
@@ -524,7 +529,7 @@ export function WorkspaceDock() {
         folded,
         // Layout sizes to the fraction (a font's line can be 28.72 px tall), never the painted box (the chip pops in
         // with a little scale).
-        liveH: dot ? px(getComputedStyle(row).height) : 0,
+        liveH: dot ? rowH : 0,
         liveDotW: dot ? px(getComputedStyle(dot).width) : 0,
         liveDotH: dot ? px(getComputedStyle(dot).height) : 0,
         getApp,
@@ -576,6 +581,7 @@ export function WorkspaceDock() {
       delete root.dataset.wsDock;
       root.style.removeProperty("--ws-dock-room");
       root.style.removeProperty("--ws-dock-name");
+      root.style.removeProperty("--ws-live-row");
     },
     [],
   );
