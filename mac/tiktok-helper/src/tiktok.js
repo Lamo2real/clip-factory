@@ -5,6 +5,7 @@
 //   stops the try (Stop) before Post is pressed. No puzzle solving, no anti-detection tricks, no typed passwords.
 // - Every setting is read back before Post. TikTok carries the last post's privacy over, so it is set every time.
 // - Success is a new row in Studio › Posts with this caption, never just a redirect.
+import { loginOutcome } from "./login.js";
 import { captionMatches, findExisting, findNewPost, normalize, postLink, videoId } from "./match.js";
 
 export const STUDIO = "https://www.tiktok.com/tiktokstudio";
@@ -33,6 +34,7 @@ export const REASONS = {
   toggle: (name) => `TikTok didn't keep ${name} the way it should be. Post it yourself for now.`,
   toggleOff: (name) => `TikTok has ${name} turned off for your account. Turn it on in TikTok's settings, then tap Try again.`,
   noPost: "TikTok's Post button didn't work. Post it yourself for now.",
+  noLoginPage: "TikTok's login page looks different. Log in on your Mac.",
 };
 
 const PRIVACY_WORDS = {
@@ -384,6 +386,42 @@ export async function find(page, job, sinceIds = []) {
   const rows = await listPosts(page);
   const found = sinceIds.length ? findNewPost(rows, job.caption, sinceIds) : findExisting(rows, job.caption);
   return found ? postLink(found.href) : null;
+}
+
+export const LOGIN_URL = "https://www.tiktok.com/login/phone-or-email/email?lang=en";
+
+/**
+ * Logs in with the saved login (login.js). ``onTry`` is called right before the password is sent (it counts the
+ * try). Returns loginOutcome's answer: "ok", "needs_you" (a code, a puzzle or a new-device check), "refused" or
+ * "waiting" (no answer in a minute). The page stays as it is, so a code page can be handed to the owner.
+ */
+export async function passwordLogin(page, login, { onTry }) {
+  await page.goto(LOGIN_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+  await sleep(1500);
+  await dismissHarmless(page);
+  if (await loggedIn(page)) return "ok";
+  const user = page.locator('input[name="username"], input[placeholder*="email or username" i], input[type="email"]').first();
+  const pass = page.locator('input[type="password"]').first();
+  try {
+    await user.waitFor({ state: "visible", timeout: 20_000 });
+    await pass.waitFor({ state: "visible", timeout: 5_000 });
+  } catch {
+    throw new Stop(REASONS.noLoginPage, { needsYou: true });
+  }
+  const button = page.locator('button[data-e2e="login-button"], button[type="submit"]').first();
+  const before = await visibleText(page);
+  await onTry();
+  await user.fill(login.username);
+  await pass.fill(login.password);
+  await button.click();
+  const until = Date.now() + 60_000;
+  while (Date.now() < until) {
+    await sleep(2000);
+    const outcome = loginOutcome({ loggedIn: await loggedIn(page), text: await visibleText(page), before, url: page.url() });
+    if (outcome !== "waiting") return outcome;
+  }
+  return "waiting";
 }
 
 export { captionMatches, videoId };

@@ -6,16 +6,20 @@
 //   node src/cli.js status        what the helper sees
 //   node src/cli.js off | on      pause or resume on this Mac (the switch in Clip Factory is the main one)
 //   node src/cli.js trial <n|none>  posts before the trial pause (none = no limit)
+//   node src/cli.js login          ON THE OWNER'S COMMAND: two Mac dialogs ask for the TikTok login once and keep it
+//                                 in the Keychain, so the helper can log back in by itself (yellow frame meanwhile)
+//   node src/cli.js forget-login   deletes the saved TikTok login from the Keychain
 //   node src/cli.js probe <clipId>  a check run in the hidden Chrome: fills in TikTok Studio for that clip exactly as
 //                                 for a post, reads every setting back, then stops before Post (nothing is posted,
 //                                 nothing is claimed). Saves a picture of the filled-in page as probe.png.
 import { client } from "./api.js";
-import { frame } from "./frame.js";
+import { frame, yourTurn } from "./frame.js";
+import { askAndSaveLogin, forgetLogin, hasLogin } from "./login.js";
 import { accessToken, appConfig, readRefreshToken, saveRefreshToken } from "./auth.js";
 import * as chrome from "./chrome.js";
 import { event, log } from "./notify.js";
 import { APP_URL, BASE } from "./paths.js";
-import { loadSettings, loadState, saveSettings } from "./store.js";
+import { loadSettings, loadState, saveSettings, saveState } from "./store.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -157,6 +161,21 @@ try {
   } else if (cmd === "off" || cmd === "on") {
     saveSettings({ paused: cmd === "off" });
     console.log(cmd === "off" ? "Paused on this Mac." : "Running on this Mac.");
+  } else if (cmd === "login") {
+    const saved = await yourTurn("Type your TikTok login in the two Mac dialogs (kept only in your Keychain)", () => askAndSaveLogin());
+    if (saved) {
+      const state = loadState();
+      delete state.loginRefused; // a new login may be tried again
+      state.loginTries = [];
+      saveState(state);
+      event("login_saved", {});
+    }
+    console.log(saved ? "Saved in the Keychain." : "Not saved (cancelled or no answer).");
+    process.exitCode = saved ? 0 : 1;
+  } else if (cmd === "forget-login") {
+    await forgetLogin();
+    event("login_forgotten", {});
+    console.log((await hasLogin()) ? "Still there?" : "Forgotten.");
   } else if (cmd === "probe") {
     if (!arg) throw new Error("probe takes a clip id");
     await probe(arg);
@@ -166,7 +185,7 @@ try {
     saveSettings({ trialLimit: n });
     console.log(`Trial limit: ${n === null ? "none" : n}.`);
   } else {
-    console.log("Commands: run, setup, status, off, on, trial <n|none>, probe <clipId>");
+    console.log("Commands: run, setup, login, forget-login, status, off, on, trial <n|none>, probe <clipId>");
     process.exitCode = 2;
   }
 } catch (e) {

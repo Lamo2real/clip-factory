@@ -78,6 +78,23 @@ export function ask(message) {
   }
 }
 
+/** The yellow frame (the owner's turn) while ``fn`` runs, then the frame as it was before. */
+export async function yourTurn(message, fn) {
+  const before = readState();
+  if (frameAvailable()) {
+    writeState("yourturn", message);
+    if (!(await appRunning())) await run("/usr/bin/open", ["-g", APP()]).catch(() => {});
+  }
+  try {
+    return await fn();
+  } finally {
+    if (frameAvailable()) {
+      if (before.mode === "control" || before.mode === "yourturn") writeState(before.mode, before.message);
+      else writeState("off", "");
+    }
+  }
+}
+
 /** Is the frame there to be shown? (No frame app: the helper does not post.) */
 export function frameAvailable() {
   return fs.existsSync(APP());

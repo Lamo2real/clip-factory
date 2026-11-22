@@ -1,4 +1,5 @@
 // Clip Factory's routes the helper uses (docs/CONTRACTS.md §42, §47). Every call carries the owner's access token.
+import { holdsSecret } from "./notify.js";
 
 export class ApiError extends Error {
   constructor(status, message, code) {
@@ -12,6 +13,10 @@ const withAttempt = (attempt) => (Number.isInteger(attempt) && attempt >= 1 ? { 
 
 export function client(apiUrl, token, fetchImpl = fetch) {
   async function call(method, path, body) {
+    // The saved TikTok password never leaves the Mac: a request that would carry it is never sent.
+    if (holdsSecret(path) || (body && holdsSecret(JSON.stringify(body)))) {
+      throw new ApiError(0, "The helper refused to send something secret.", "secret");
+    }
     const res = await fetchImpl(`${apiUrl}/v1${path}`, {
       method,
       headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },

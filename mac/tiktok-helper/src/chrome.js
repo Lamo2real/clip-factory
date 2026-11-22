@@ -6,6 +6,9 @@ import { promisify } from "node:util";
 
 import { chromium } from "playwright-core";
 
+import os from "node:os";
+import path from "node:path";
+
 import { CDP_PORT, CHROME_APP, PROFILE } from "./paths.js";
 
 const run = promisify(execFile);
@@ -69,6 +72,44 @@ export async function quit(browser) {
   }
   // Wait until it has really gone, so the next open (maybe visible, for a login) starts a fresh window.
   for (let i = 0; i < 40 && (await cdpUp()); i++) await sleep(250);
+}
+
+/**
+ * Brings the helper's own Chrome window forward on the screen, as it is (a TikTok code page stays open), for the
+ * owner's turn. Only the helper's Chrome (its own profile) is touched. Returns false when it could not.
+ */
+export async function show(browser) {
+  try {
+    const session = await browser.newBrowserCDPSession();
+    const { targetInfos } = await session.send("Target.getTargets");
+    const target = targetInfos.find((t) => t.type === "page");
+    if (target) {
+      const { windowId } = await session.send("Browser.getWindowForTarget", { targetId: target.targetId });
+      await session.send("Browser.setWindowBounds", { windowId, bounds: { windowState: "normal" } });
+      await session.send("Browser.setWindowBounds", { windowId, bounds: { left: 80, top: 60, width: 1280, height: 900 } });
+    }
+  } catch {
+    return false;
+  }
+  try {
+    const { stdout } = await run("/bin/ps", ["-axo", "pid=,command="]);
+    const main = stdout
+      .split("\n")
+      .map((l) => l.trim())
+      .find((l) => l.includes(`--user-data-dir=${PROFILE}`) && !l.includes("--type="));
+    const pid = main ? Number(main.split(/\s+/)[0]) : 0;
+    if (!pid) return false;
+    const aeosa = path.join(os.homedir(), ".claude-control", "aeosa");
+    await run(aeosa, [
+      "-e",
+      `tell application "System Events" to set visible of (first process whose unix id is ${pid}) to true`,
+      "-e",
+      `tell application "System Events" to set frontmost of (first process whose unix id is ${pid}) to true`,
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function running() {

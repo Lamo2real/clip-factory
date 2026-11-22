@@ -12,7 +12,8 @@ import { event, log, notify } from "./notify.js";
 import { DOWNLOADS, LOCK, VERSION } from "./paths.js";
 import { nextAction } from "./plan.js";
 import { loadSettings, loadState, remember, saveState } from "./store.js";
-import { REASONS, Stop, find, loggedIn, post } from "./tiktok.js";
+import { countTry, passwordAllowed, readLogin } from "./login.js";
+import { LOGIN_URL, REASONS, Stop, find, loggedIn, passwordLogin, post } from "./tiktok.js";
 
 // What the notification says at each step (the red frame stays up the whole time).
 const STEP_WORDS = {
@@ -118,24 +119,65 @@ async function finished(api, state, job, link, { counted }) {
 
 const LOGIN_WAIT_MS = 20 * 60_000;
 export const LOGIN_ASK = "TikTok logged the helper out: log in again in the helper window";
+const CODE_ASK = "TikTok wants a code or a check for the helper's login: finish it in the helper window";
 
 /**
- * TikTok logged the helper's Chrome out: the yellow frame and a pop-up ask him to log in again, the helper's window
- * opens on TikTok's login, and the post waits (still this Mac's). Once he is logged in, the frame goes red again and
+ * TikTok logged the helper's Chrome out. First, under the red frame, the saved login (Keychain) is tried, at most
+ * twice a day and never after TikTok refused it. If TikTok then asks for a code, a puzzle or a new-device check, or
+ * there is no saved login, it is the owner's turn: the yellow frame and a pop-up, and the helper's own window comes
+ * forward as it is (a code page stays open). The post waits, still this Mac's. Once logged in, the frame goes red and
  * the helper carries on. Returns false when no login came within 20 minutes.
  */
-async function relogin(fr) {
-  const closeAsk = ask(LOGIN_ASK);
-  event("login_needed", {});
-  await notify("TikTok: log in again", LOGIN_ASK);
-  const { browser, page } = await chrome.open({ visible: true });
+async function relogin(fr, state, browser, page) {
+  const allowed = passwordAllowed(state);
+  const login = allowed.ok ? await readLogin() : null;
+  let ask_ = LOGIN_ASK;
+  if (login) {
+    await fr.step("Logging back in to TikTok with your saved login");
+    const outcome = await passwordLogin(page, login, {
+      onTry: async () => {
+        countTry(state);
+        saveState(state);
+      },
+    }).catch((e) => (e instanceof Stop ? "needs_you" : "waiting"));
+    log("login.saved_try", { outcome });
+    if (outcome === "ok") {
+      event("setup", { part: "tiktok", again: true, how: "saved login" });
+      await fr.step("Logged in to TikTok again, carrying on");
+      return true;
+    }
+    if (outcome === "refused") {
+      state.loginRefused = new Date().toISOString();
+      saveState(state);
+      event("login_refused", {});
+    }
+    if (outcome === "needs_you") ask_ = CODE_ASK;
+  } else if (!allowed.ok) {
+    log("login.saved_not_tried", { reason: allowed.reason });
+  }
+  // The owner's turn, in the helper's own window.
+  const closeAsk = ask(ask_);
+  event("login_needed", { why: ask_ === CODE_ASK ? "code" : "logged_out" });
+  await notify("TikTok: your turn", ask_);
+  let shownBrowser = browser;
+  let shownPage = page;
+  let opened = null;
+  if (!(await chrome.show(browser))) {
+    // Couldn't bring it forward: open it visibly on the login page instead.
+    await chrome.quit(browser);
+    opened = await chrome.open({ visible: true });
+    shownBrowser = opened.browser;
+    shownPage = opened.page;
+    await shownPage.goto(LOGIN_URL).catch(() => {});
+  } else if (!login) {
+    await page.goto(LOGIN_URL).catch(() => {});
+  }
   try {
-    if (!(await loggedIn(page))) await page.goto("https://www.tiktok.com/login?lang=en").catch(() => {});
     const until = Date.now() + LOGIN_WAIT_MS;
     while (Date.now() < until) {
-      if (await loggedIn(page).catch(() => false)) {
+      if (await loggedIn(shownPage).catch(() => false)) {
         closeAsk();
-        event("setup", { part: "tiktok", again: true });
+        event("setup", { part: "tiktok", again: true, how: "owner" });
         await fr.step("Logged in to TikTok again, carrying on");
         return true;
       }
@@ -144,7 +186,7 @@ async function relogin(fr) {
     closeAsk();
     return false;
   } finally {
-    await chrome.quit(browser);
+    if (opened) await chrome.quit(shownBrowser);
   }
 }
 
@@ -156,6 +198,7 @@ async function doPost(api, state, job, { fresh = false, fr, relogged = false } =
   const tries = (fresh ? 0 : mine.tries || 0) + 1;
   remember(state, job.clipId, { device: state.device, step: "claimed", tries });
   let browser = null;
+  let page = null;
   let posted = false;
   let handedOn = false;
   const awake = stayAwake();
@@ -165,6 +208,7 @@ async function doPost(api, state, job, { fresh = false, fr, relogged = false } =
     const file = await videoFile(api, state, job);
     const opened = await chrome.open();
     browser = opened.browser;
+    page = opened.page;
     const onStep = async (step, extra = {}) => {
       if (step === "pressing") {
         // On disk first, then the server: if either fails, Post is not pressed. The ids already in Studio › Posts
@@ -189,11 +233,12 @@ async function doPost(api, state, job, { fresh = false, fr, relogged = false } =
     }
   } catch (e) {
     const pressed = state.ledger[job.clipId]?.step === "pressing" || state.ledger[job.clipId]?.step === "finding";
-    if (isLogin(e) && !pressed && !relogged) {
-      // Logged out: hold this post, ask him to log in, then carry on with it.
-      if (browser) await chrome.quit(browser);
+    if (isLogin(e) && !pressed && !relogged && browser) {
+      // Logged out: hold this post, log back in (saved login, else his turn), then carry on with it.
+      const back = await relogin(fr, state, browser, page);
+      await chrome.quit(browser);
       browser = null;
-      if (await relogin(fr)) {
+      if (back) {
         handedOn = true;
         return await doPost(api, state, job, { fr, relogged: true });
       }
@@ -228,13 +273,15 @@ async function doPost(api, state, job, { fresh = false, fr, relogged = false } =
 
 async function doFind(api, state, job, { relogged = false, fr = frame() } = {}) {
   let browser = null;
+  let page = null;
   let found = false;
   let handedOn = false;
   if (!fr.shown && !(await fr.on(`Looking for${quoteHook(job)} on TikTok`))) return log("frame.missing", { clipId: job.clipId });
   try {
     const opened = await chrome.open();
     browser = opened.browser;
-    const link = await find(opened.page, job, state.ledger[job.clipId]?.baseline || []);
+    page = opened.page;
+    const link = await find(page, job, state.ledger[job.clipId]?.baseline || []);
     if (link) {
       found = true;
       return await finished(api, state, job, link, { counted: true });
@@ -244,10 +291,11 @@ async function doFind(api, state, job, { relogged = false, fr = frame() } = {}) 
       await stopped(api, state, job, "Your Mac pressed Post but couldn't confirm it.", false);
     }
   } catch (e) {
-    if (isLogin(e) && !relogged) {
-      if (browser) await chrome.quit(browser);
+    if (isLogin(e) && !relogged && browser) {
+      const back = await relogin(fr, state, browser, page);
+      await chrome.quit(browser);
       browser = null;
-      if (await relogin(fr)) {
+      if (back) {
         handedOn = true;
         return await doFind(api, state, job, { relogged: true, fr });
       }
