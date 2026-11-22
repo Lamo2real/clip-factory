@@ -35,11 +35,6 @@ export function PostRow({ job, onRetry, busy = false }: { job: PublishingJob; on
         <span className="st-s-post__account">
           {job.externalAccountId ? accountWords({ accountName: job.accountName, handle: job.handle ?? null, externalAccountId: job.externalAccountId }) : (job.accountName ?? job.handle ?? "Lamo Stories account")}
         </span>
-        {job.externalAccountId ? (
-          <TechDetails className="st-s-post__tech">
-            <span className="st-s-post__id">Account id {job.externalAccountId}</span>
-          </TechDetails>
-        ) : null}
         {job.publishingStatus === "posted" ? (
           <span className="st-s-post__when">Posted {ago(job.postedAt ?? job.updatedAt)}</span>
         ) : job.publishingStatus === "queued" || job.publishingStatus === "publishing" ? (
@@ -63,6 +58,12 @@ export function PostRow({ job, onRetry, busy = false }: { job: PublishingJob; on
           </span>
         ) : job.publishingStatus === "posted" ? (
           <span className="st-s-post__when">No numbers yet. They come in until 7 days after posting.</span>
+        ) : null}
+        {/* The plain words first; the account's own id is one tap away (§45.36 E14). */}
+        {job.externalAccountId ? (
+          <TechDetails className="st-s-post__tech">
+            <span className="st-s-post__id">Account id {job.externalAccountId}</span>
+          </TechDetails>
         ) : null}
       </span>
       <span className="st-s-post__actions">
