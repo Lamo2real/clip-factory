@@ -13367,7 +13367,8 @@ toast "Saved.":
    decline with its Undo, §20.7, accessible name "Throw away, {hook}"). Empty: "Nothing in Review. New clips join the
    line when they are made."
    **Throw away holds the clip on the server at once** (here and on the Review card): the tap sends
-   `POST /v1/clips/{clipId}/hold` (§46.9), so no run sends the clip while the 8 s Undo toast is up; **Undo** lifts the
+   `POST /v1/clips/{clipId}/hold` (§46.9), so no run sends the clip while the 8 s Undo toast is up, nor before a
+   decline that comes late (a phone locked during the toast stops its timer; the hold lasts a day); **Undo** lifts the
    hold (`DELETE /v1/clips/{clipId}/hold`); the decline itself (`POST …/decline`) still goes when the toast ends. A
    hold answered 409 "Auto-posting already sent this clip." means a run sent it first: the app says that sentence and
    does not throw it away (§46.13).
@@ -13463,8 +13464,9 @@ Candidates: the owner's clips with `status: "review"` (one `query_all` of `CLIP#
    waiting). Counting from `plannedAt` keeps a tick that arrived late in its hour protecting its clips.
 
 Before rules 1 to 5: a clip the owner is throwing away (its hold, `holdUntil`, is still in the future, §46.2) is
-skipped silently too, neither taken nor waiting, so the next clip takes its turn. The hold ends by itself 60 s after
-the tap, or at once with Undo.
+left out silently: not a candidate (a run whose only clips are held says "Nothing in Review, so nothing posted."),
+neither taken nor waiting, so the next clip takes its turn. The hold ends by itself a day after the tap, or at once
+with Undo (a lost Undo only keeps auto-posting off that clip for that day; Upload ignores the hold).
 
 `nextUp` lists taken clips in order, at most 10; the i-th (0-based) gets `runAt = nextRunAt + floor(i / perRun) ×
 everyHours h`, only when it has places (§46.6: a normal clip the run's places, a campaign clip its own; with nothing
@@ -13508,7 +13510,9 @@ a hold), at most 20.
    flow never started after all of that run's Lambda retries (`publishState: pending`, internal `autoRun` of another
    scheduled run, `status` `confirmed`/`publishing`/`posted`): each is read again and started with
    `release.start_flow` (Upload's own call), logging `autopost.finished_start` with `runId` and `clipId`; one that
-   fails is logged (`autopost.finish_start_failed`) and skipped. It stops when only time for its own clips is left.
+   fails is logged (`autopost.finish_start_failed`) and skipped. One only starts while 30 s are left for it and for
+   each of the run's own planned clips (30 s × (planned + 1)), so earlier clips never push its own into "Out of time.
+   It goes next run."; earlier ones left over are finished by the next run.
 4. **Send each planned clip** (`live` and `private`) through **Upload's own code**: `uploads.upload_review_clip(...)`,
    the review branch of `routes/clips.confirm` moved into one function the route now calls (Upload's behaviour,
    messages and tests unchanged), with `platforms` = its places, `options`, no `tiktok`, no caption patch, and
@@ -13524,8 +13528,8 @@ a hold), at most 20.
 5. Update `AUTORUN#{runId}`: `state: "done"`, each clip's `outcome`/`reason`. Out of time (`AUTOPOST_TIME_BUDGET_SECONDS`
    240, a new clip only starts with ≥ 30 s left) → the rest `skipped` "Out of time. It goes next run." (still in
    Review). Notes, in this order: a Private test with no normal clip taken → "Nothing in Review to test with."; no
-   candidates → "Nothing in Review, so nothing posted."; no places → "Nothing is set up to post to."; candidates but
-   none taken → "Every clip in Review is waiting for you.".
+   candidates (a held clip is none) → "Nothing in Review, so nothing posted."; no places → "Nothing is set up to post
+   to."; candidates but none taken → "Every clip in Review is waiting for you.".
 6. **The hourly Lambda** runs every owner; one owner's failure is logged (`autopost.owner_failed`) and the others still
    run, then the invocation fails, so Lambda's retry (the same event, the same slot) resumes that owner's run while
    every finished run answers `done`.
@@ -13592,12 +13596,13 @@ interface AutoRun {
   409 "A test run just started. Wait a minute." `private` with no taken clip → 200 with the run's note "Nothing in
   Review to test with." and no clips. Runs regardless of `on` (testing before switching on is the point).
 * **Hold** (`POST /v1/clips/{clipId}/hold`, Throw away's tap, §46.2): on a clip with `status: "review"` (the
-  update's condition) sets the internal `holdUntil = now + 60 s` (ISO) and answers 200 `{"clip"}` (public shape:
-  `holdUntil` never appears in it, or anywhere in the API). A second hold restarts the 60 s. Unknown body keys → 400
-  "Unknown field: {key}." (no body, or `{}`, is fine). A clip not in Review → 409 "Auto-posting already sent this
-  clip." when it has the internal `autoRun` (a run, or a Private test run, sent it), else 409 "This clip has already
-  been uploaded or thrown away." (Upload's `ALREADY_DECIDED`). Not the caller's clip → 404 "We could not find that
-  clip." as every clip route.
+  update's condition) sets the internal `holdUntil = now + 24 h` (ISO, `clips.HOLD_FOR`: a day, so a decline that
+  comes late, from a phone locked during the toast, still finds the clip held) and answers 200 `{"clip"}` (public
+  shape: `holdUntil` never appears in it, or anywhere in the API). A second hold restarts the day. Unknown body keys
+  → 400 "Unknown field: {key}." (no body, or `{}`, is fine). A clip not in Review → 409 "Auto-posting already sent
+  this clip." when it has the internal `autoRun` (a run, or a Private test run, sent it), else 409 "This clip has
+  already been uploaded or thrown away." (Upload's `ALREADY_DECIDED`). Not the caller's clip → 404 "We could not find
+  that clip." as every clip route.
 * **Undo** (`DELETE /v1/clips/{clipId}/hold`): removes `holdUntil`; 204 every time (safe to repeat, and never refused
   because the clip moved on: uploaded, declined or sent); 404 only when the clip is not the caller's.
 * Neither changes `status`: the decline (`POST …/decline`) is still what throws the clip away. Upload
@@ -13669,8 +13674,9 @@ how to test with Practice and the Private test run.
 * He throws a clip away before its turn: the hold lands at the tap (§46.9), before the 8 s Undo toast ends and the
   decline goes, so no run picks or sends it meanwhile; if a run had planned it a moment before, the run sees the hold
   (or its conditional write fails on it) and the outcome is "You threw it away first."; Undo lifts the hold and the
-  clip keeps its place. If a run already sent it, the hold answers 409 and he is told "Auto-posting already sent this
-  clip." (the clip is not thrown away).
+  clip keeps its place. The hold lasts a day, so a decline that comes late (the phone was locked during the toast)
+  still finds the clip held. If a run already sent it, the hold answers 409 and he is told "Auto-posting already sent
+  this clip." (the clip is not thrown away).
 * A tick that finds the slot not due marks it (`lastTickAt`), so a lower `everyHours` saved later that hour shows the
   next full hour, not a run that already passed (§46.4).
 * A clip a run confirmed whose clip-flow start failed through every Lambda retry is started by the next live run
@@ -13707,11 +13713,14 @@ run and the first hours of practice.
   thrown away or uploaded by hand after planning; out of time; one owner failing does not stop another; a not-due tick
   writes only `lastTickAt`; a late run (planned 16 min after its slot) still protects its clips from a Private test
   run (`plannedAt`); an earlier run's start that failed every retry is finished by the next live run (logged), one
-  that fails again is logged and skipped, practice leaves it alone.
-* `test_autopost_hold.py`: the hold and Undo routes (60 s, 200/204, 400 unknown keys, 404 another owner's, 409 with
+  that fails again is logged and skipped, practice leaves it alone, earlier starts leave the time for the run's own
+  clips (the rest are finished by the next run).
+* `test_autopost_hold.py`: the hold and Undo routes (24 h, 200/204, 400 unknown keys, 404 another owner's, 409 with
   each sentence, `holdUntil` never public), a held clip skipped by the pick, Next up and a Private test run while the
   next clip takes its turn, a run inside the Undo toast, a hold after the plan (never even tried) and at the same
-  instant as the run's write ("You threw it away first."), a hold that ended, Upload by hand ignoring it.
+  instant as the run's write ("You threw it away first."), a hold that ended, Upload by hand ignoring it, a decline
+  that comes hours late still finding the clip held, a run whose only clip is held ("Nothing in Review, so nothing
+  posted.").
 * `test_autopost_routes.py`: settings validation and `onAt`, the registry write, a save that loaded before auto-posting
   went off never turns it back on (and 409 after 3 lost races), `GET /v1/autopost` (each list, the `runAt`s: none
   with nothing set up, only the first `perRun` while practising; the shown `nextRunAt` before and after the claim and

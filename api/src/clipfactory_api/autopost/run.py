@@ -16,7 +16,8 @@ is ``live``, ``practice`` (a scheduled run while Practice is on, or ``practice_n
    same slot, so the gaps stay even. A test run first moves ``AUTOPOST.lastNowAt`` (at most one a minute, else 409)
    and puts its run alone; it never moves the schedule. Once a live scheduled run has claimed, it first finishes the
    start of every clip an earlier scheduled run confirmed whose clip flow never started (``publishState: pending``
-   after all of that run's Lambda retries), with Upload's own ``release.start_flow``.
+   after all of that run's Lambda retries), with Upload's own ``release.start_flow``, while ``clip_seconds`` are
+   left for that start and for each of its own planned clips (earlier ones left over wait for the next run).
 4. **Send** each planned clip through Upload's own code (``uploads.upload_review_clip``): the same conditional
    transaction (``status = review``, no live Throw away hold, posts created once) and idempotent flow start, so a clip
    is confirmed and its flow started only once, whichever run, retry or Upload gets there first. Practice sends
@@ -157,7 +158,7 @@ def run_once(deps: RunDeps, user_id: str, kind: str, slot: datetime) -> Outcome:
         else:
             raise ClaimFailed(run_id)
         if mode == "live":  # Practice sends nothing, not even an earlier run's clip
-            _finish_starts(deps, run_id, found, deadline)
+            _finish_starts(deps, run_id, found, deadline, own=len(planned))
     else:
         store.put(item, if_absent=True)
     log("info", "autopost.planned", runId=run_id, mode=mode, clips=len(planned), note=note or "")
@@ -184,10 +185,12 @@ def _not_due(store: db.Store, pk: str, slot: datetime) -> Outcome:
     return Outcome("not_due")
 
 
-def _finish_starts(deps: RunDeps, run_id: str, found: list[Item], deadline: float) -> None:
+def _finish_starts(deps: RunDeps, run_id: str, found: list[Item], deadline: float, *, own: int) -> None:
     """§46.7 step 3: a clip an earlier scheduled run confirmed whose clip flow never started (its run's Lambda retries
     ran out) gets its start finished now, with Upload's own ``release.start_flow`` (idempotent on the execution name,
-    conditional on ``publishState: pending``). Each is read again first; one that fails is logged and skipped."""
+    conditional on ``publishState: pending``). Each is read again first; one that fails is logged and skipped. One
+    only starts while ``clip_seconds`` are left for it and for each of this run's ``own`` planned clips, so earlier
+    clips never push this run's own into "Out of time. It goes next run."."""
     app = deps.app
     for stale in found:
         earlier = stale.get("autoRun")
@@ -200,8 +203,8 @@ def _finish_starts(deps: RunDeps, run_id: str, found: list[Item], deadline: floa
             and stale.get("status") in clips.STARTABLE
         ):
             continue
-        if deps.monotonic() + deps.clip_seconds > deadline:
-            return  # this run's own clips need the time left; the next run finishes the rest
+        if deps.monotonic() + deps.clip_seconds * (own + 1) > deadline:
+            return  # the time left is this run's own clips'; the next run finishes the rest
         clip_id = str(stale.get("clipId"))
         try:
             clip = app.store.get(str(stale["pk"]), str(stale["sk"]))

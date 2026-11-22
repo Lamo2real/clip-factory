@@ -968,6 +968,48 @@ def test_a_start_that_fails_again_is_logged_and_the_run_still_sends_its_own(
     assert [(line["clipId"], line["error"]) for line in failed] == [(stuck["clipId"], "RuntimeError")]
 
 
+def test_earlier_starts_leave_time_for_this_runs_own_clips(
+    app: App,
+    store: db.Store,
+    s3_client: FakeS3,
+    at_slot: Clock,
+    lambda_client: FakeLambda,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ready(store, "youtube")
+    turn_on(store, per_run=5)
+    stuck = [review_clip(store, s3_client, made=f"2026-11-15T0{n}:00:00.000Z") for n in range(1, 6)]
+    every_retry_fails(app, lambda_client)  # the 13:00 run confirmed five clips whose flows never started
+    assert {clip_of(store, c["clipId"])["publishState"] for c in stuck} == {"pending"}
+    turn_on(store, per_run=3)
+    own = [review_clip(store, s3_client, made=f"2026-11-15T0{n}:00:00.000Z") for n in range(6, 9)]
+    # Every flow start takes 30 s (one clip's time); the run has 210 s.
+    now = [0.0]
+    real = release.start_flow
+
+    def slow(store_: Any, flows: Any, clip: Any) -> Any:
+        now[0] += 30.0
+        return real(store_, flows, clip)
+
+    monkeypatch.setattr(release, "start_flow", slow)
+    next_slot = SLOT + timedelta(hours=5)
+    at_slot.now = next_slot + timedelta(seconds=5)
+    capsys.readouterr()
+    assert tick(app, next_slot, deadline=210.0, clip_seconds=30.0, monotonic=lambda: now[0]).result == "ran"
+    # Its own three clips all go: earlier ones only start while time is left for them as well.
+    assert outcomes(store, f"{iso(next_slot)}#scheduled") == [(c["clipId"], "sent", None) for c in own]
+    left = [c["clipId"] for c in stuck if clip_of(store, c["clipId"])["publishState"] == "pending"]
+    assert len(left) == 1
+    assert len(finished_starts(capsys)) == 4
+    # The next run finishes the last one.
+    third = SLOT + timedelta(hours=10)
+    at_slot.now = third + timedelta(seconds=5)
+    now[0] = 0.0
+    assert tick(app, third, deadline=210.0, clip_seconds=30.0, monotonic=lambda: now[0]).result == "ran"
+    assert clip_of(store, left[0])["publishState"] == "started"
+
+
 def test_practice_leaves_an_earlier_start_alone(
     app: App, store: db.Store, s3_client: FakeS3, at_slot: Clock, lambda_client: FakeLambda
 ) -> None:

@@ -1,5 +1,5 @@
 {
- "version": "52954a5961fd",
+ "version": "762d7638091f",
  "parts": [
   {
    "id": "app-map",
@@ -291,7 +291,7 @@
    "id": "contracts-46",
    "title": "CONTRACTS: 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)",
    "line": "Decision record: ADR-81. Builders: §46.16. Everything here is additive: no table, index, secret, bucket, Cognito or",
-   "chars": 37802
+   "chars": 38791
   },
   {
    "id": "adr-01",
@@ -759,7 +759,7 @@
    "id": "adr-81",
    "title": "DECISIONS: ADR-81 Auto-posting: an hourly EventBridge rule, a due check and Upload's own code",
    "line": "Context. The owner asked for auto-posting (CONTRACTS §46): the oldest clips in Review go to every connected",
-   "chars": 2559
+   "chars": 2662
   },
   {
    "id": "architecture-overview",

@@ -55,8 +55,10 @@ PUBLISH_STARTED = "started"
 # Uploaded clips whose flow start Confirm finishes when it is still pending (§14.5): the public ``startPending``.
 STARTABLE = ("confirmed", "publishing", "posted")
 # §46.2: Throw away holds the clip on the server the moment it is tapped (internal ``holdUntil``), so auto-posting never
-# sends it while Undo's 8 s toast is up; the decline itself goes when the toast ends, and Undo lifts the hold.
-HOLD_FOR = timedelta(seconds=60)
+# sends it while Undo's 8 s toast is up; the decline itself goes when the toast ends, and Undo lifts the hold. A day,
+# not a minute: a phone locked (or an app switched) during the toast pauses its timer, so the decline can come hours
+# later, when the owner comes back. A lost Undo only keeps auto-posting off that clip for a day (Upload ignores the hold).
+HOLD_FOR = timedelta(hours=24)
 
 
 def is_held(item: Mapping[str, Any], now: datetime) -> bool:

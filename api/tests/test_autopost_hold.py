@@ -1,8 +1,9 @@
 """Throw away holds the clip at the tap (docs/CONTRACTS.md §46.2, §46.5, §46.7, §46.9, §46.13; tests §46.15).
 
 The Review card's Throw away only sends its decline when Undo's 8 s toast ends; ``POST /v1/clips/{clipId}/hold`` puts a
-60 s hold on the clip the moment it is tapped, so no auto-posting run sends it in that gap, and ``DELETE`` (Undo)
-lifts it. Upload by hand ignores the hold. Offline: in-memory items and the fake Lambda client only.
+day's hold on the clip the moment it is tapped, so no auto-posting run sends it in that gap (or before a decline that
+comes late, from a phone locked during the toast), and ``DELETE`` (Undo) lifts it. Upload by hand ignores the hold.
+Offline: in-memory items and the fake Lambda client only.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ RUN_ID = f"{iso(SLOT)}#scheduled"
 ALREADY_DECIDED = "This clip has already been uploaded or thrown away."
 AUTO_SENT = "Auto-posting already sent this clip."
 THROWN_AWAY = "You threw it away first."
+NOTHING_IN_REVIEW = "Nothing in Review, so nothing posted."
 
 
 def hold(call: Call, clip_id: str, body: Any = None, **kw: Any) -> tuple[int, Any]:
@@ -53,7 +55,7 @@ def held_until(table: FakeTable, clip_id: str) -> Any:
 # --- the routes (§46.9) ---------------------------------------------------------------------------------------------
 
 
-def test_hold_puts_a_60_second_hold_and_undo_lifts_it(
+def test_hold_puts_a_day_long_hold_and_undo_lifts_it(
     call: Call, store: db.Store, table: FakeTable, s3_client: FakeS3
 ) -> None:
     clip = review_clip(store, s3_client)
@@ -62,7 +64,7 @@ def test_hold_puts_a_60_second_hold_and_undo_lifts_it(
     assert body["clip"]["clipId"] == clip["clipId"]
     assert body["clip"]["status"] == "review"
     assert "holdUntil" not in body["clip"]
-    assert held_until(table, clip["clipId"]) == iso(NOW + timedelta(seconds=60))
+    assert held_until(table, clip["clipId"]) == iso(NOW + timedelta(hours=24))
     assert hold(call, clip["clipId"], {})[0] == 200  # an empty body is fine too
     assert "holdUntil" not in call("GET", f"/v1/clips/{clip['clipId']}")[1]["clip"]
     assert all("holdUntil" not in c for c in call("GET", "/v1/clips")[1]["clips"])
@@ -122,11 +124,11 @@ def test_a_held_clip_is_skipped_and_the_next_one_takes_its_turn(
     # Undo lifts the hold: it is first in line again.
     assert undo(call, first["clipId"])[0] == 204
     assert [t.clip["clipId"] for t in pick.pick(app, USER, clock()).taken] == [first["clipId"], second["clipId"]]
-    # A hold whose decline never came (the page closed) ends by itself after 60 s.
+    # A hold whose decline never came (the page closed) and whose Undo was lost ends by itself after a day.
     assert hold(call, first["clipId"])[0] == 200
-    clock.now = NOW + timedelta(seconds=59)
+    clock.now = NOW + timedelta(hours=23, minutes=59, seconds=59)
     assert [t.clip["clipId"] for t in pick.pick(app, USER, clock()).taken] == [second["clipId"]]
-    clock.now = NOW + timedelta(seconds=60, milliseconds=1)
+    clock.now = NOW + timedelta(hours=24, milliseconds=1)
     assert [t.clip["clipId"] for t in pick.pick(app, USER, clock()).taken] == [first["clipId"], second["clipId"]]
 
 
@@ -148,6 +150,53 @@ def test_a_run_during_the_undo_toast_sends_the_next_clip(
     assert call("POST", f"/v1/clips/{first['clipId']}/decline")[0] == 200
     assert clip_of(store, first["clipId"])["status"] == "declined"
     assert list(lambda_client.started) == [f"clip-{second['clipId']}-1"]
+
+
+def test_a_decline_that_comes_late_still_finds_the_clip_held(
+    app: App, call: Call, store: db.Store, table: FakeTable, s3_client: FakeS3, clock: Clock, lambda_client: FakeLambda
+) -> None:
+    ready(store, "youtube")
+    turn_on(store)
+    first = review_clip(store, s3_client, made="2026-11-15T08:00:00.000Z")
+    second = review_clip(store, s3_client, made="2026-11-15T09:00:00.000Z")
+    # Throw away at 12:58:30, then the phone is locked inside the 8 s toast: its timer stops, so no decline goes.
+    clock.now = SLOT - timedelta(seconds=90)
+    assert hold(call, first["clipId"])[0] == 200
+    clock.now = SLOT + timedelta(seconds=5)
+    assert tick(app).result == "ran"
+    assert outcomes(store) == [(second["clipId"], "sent", None)]
+    # Five hours later he still has not come back: the 18:00 run leaves it alone too.
+    later = SLOT + timedelta(hours=5)
+    clock.now = later + timedelta(seconds=5)
+    assert tick(app, later).result == "ran"
+    item = run_item(store, f"{iso(later)}#scheduled")
+    assert item is not None
+    assert (item["clips"], item.get("note")) == ([], NOTHING_IN_REVIEW)
+    # He unlocks the phone at 18:30: the toast's timer ends and the decline goes. It was never posted.
+    clock.now = later + timedelta(minutes=30)
+    assert call("POST", f"/v1/clips/{first['clipId']}/decline")[0] == 200
+    assert (clip_of(store, first["clipId"])["status"], post_count(table, first["clipId"])) == ("declined", 0)
+    assert list(lambda_client.started) == [f"clip-{second['clipId']}-1"]
+
+
+def test_a_run_whose_only_clip_is_held_says_nothing_is_in_review(
+    app: App, call: Call, store: db.Store, s3_client: FakeS3, clock: Clock
+) -> None:
+    ready(store, "youtube")
+    turn_on(store)
+    clip = review_clip(store, s3_client)
+    clock.now = SLOT - timedelta(seconds=3)  # his last clip, thrown away just before 13:00
+    assert hold(call, clip["clipId"])[0] == 200
+    clock.now = SLOT + timedelta(seconds=2)
+    found = pick.pick(app, USER, clock())
+    assert (found.candidates, found.taken, found.waiting) == (0, [], [])
+    assert tick(app).result == "ran"
+    item = run_item(store, RUN_ID)
+    assert item is not None
+    # Not "Every clip in Review is waiting for you.": Waiting is empty on the page.
+    assert (item["clips"], item.get("note")) == ([], NOTHING_IN_REVIEW)
+    assert call("GET", "/v1/autopost")[1]["waiting"] == []
+    assert clip_of(store, clip["clipId"])["status"] == "review"
 
 
 def test_a_private_test_run_never_takes_a_held_clip(call: Call, store: db.Store, s3_client: FakeS3) -> None:
@@ -243,7 +292,7 @@ def test_a_hold_that_ended_no_longer_stops_the_run(
     ready(store, "youtube")
     turn_on(store)
     clip = review_clip(store, s3_client)
-    clock.now = SLOT - timedelta(seconds=61)
+    clock.now = SLOT - timedelta(hours=24, seconds=1)
     assert hold(call, clip["clipId"])[0] == 200
     clock.now = SLOT + timedelta(seconds=5)
     assert tick(app).result == "ran"

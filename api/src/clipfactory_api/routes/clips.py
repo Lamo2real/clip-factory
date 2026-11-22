@@ -531,8 +531,9 @@ def decline(app: App, req: Request) -> Response:
 
 def hold(app: App, req: Request) -> Response:
     """``POST /v1/clips/{clipId}/hold`` (§46.2, §46.9): Throw away holds a clip in Review on the server the moment it
-    is tapped, for 60 s (internal ``holdUntil``), so no auto-posting run sends it while Undo's toast is up. The decline
-    itself still goes when the toast ends. A clip no longer in Review → 409: "Auto-posting already sent this clip."
+    is tapped, for a day (internal ``holdUntil``, ``clips.HOLD_FOR``), so no auto-posting run sends it while Undo's
+    toast is up, or before a decline that comes late (a phone locked during the toast). The decline itself still goes
+    when the toast ends; Undo lifts the hold. A clip no longer in Review → 409: "Auto-posting already sent this clip."
     when a run sent it, else Upload's own sentence."""
     validate.only_keys(req.json(), ())
     item = _clip_or_404(app, req)
