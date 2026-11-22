@@ -9,6 +9,7 @@ import { A } from "../../components/ui.tsx";
 import { storiesHref, type SettingsSection } from "../routes.ts";
 import { AgentsSection } from "../settings/AgentsSection.tsx";
 import { AiSection } from "../settings/AiSection.tsx";
+import { LookSection } from "../settings/LookSection.tsx";
 import { SettingsPageProvider, SIcon, type SettingsPageName, type SIconName } from "../settings/bits.tsx";
 import { MemorySection } from "../settings/MemorySection.tsx";
 import { SkillsSection } from "../settings/SkillsSection.tsx";
@@ -86,6 +87,8 @@ export function SettingsScreen({ ws, page }: StoriesScreenProps) {
           {section === "memory" ? <MemorySection key={ws} ws={ws} /> : null}
           {section === "video" ? <VideoSection key={ws} ws={ws} /> : null}
           {section === "storage" ? <StorageSection key={ws} ws={ws} /> : null}
+          {/* Look (the glass contract): what is behind the glass, this device's own like Sounds and motion. */}
+          {section === "storage" ? <LookSection /> : null}
         </SettingsPageProvider>
       </div>
     </section>

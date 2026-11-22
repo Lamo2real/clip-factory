@@ -8,10 +8,6 @@
   justify-items: center;
   padding: 12px;
   background: rgba(8, 6, 30, 0.66);
-  --st-s-fill: rgba(255, 246, 229, 0.08);
-  --st-s-fill-2: rgba(255, 246, 229, 0.13);
-  --st-s-fill-3: rgba(255, 246, 229, 0.2);
-  --st-s-ink-2: rgba(255, 246, 229, 0.82);
   animation: st-s-fade 200ms ease;
 }
 

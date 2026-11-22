@@ -9,35 +9,7 @@
    in web/src/stories/styles/studio.css with these tokens. */
 
 .stories-app {
-  --st-stage: #1c1842; /* deep night-indigo stage */
-  --st-stage-2: #26205a;
-  --st-stage-3: #322a73;
-  --st-panel: rgba(255, 246, 229, 0.08);
-  --st-panel-strong: rgba(255, 246, 229, 0.14);
-  --st-panel-hover: rgba(255, 246, 229, 0.2);
-  --st-ink: #fff6e5; /* warm cream words */
-  --st-ink-soft: rgba(255, 246, 229, 0.78);
-  --st-sun: #ffc94a; /* every main action */
-  --st-sun-deep: #f2a900;
-  --st-sun-hover: #ffd56e;
-  --st-on-sun: #1c1842;
-  --st-coral: #ff6f61;
-  --st-mint: #47d6a0;
-  --st-sky: #62c6ff;
-  /* Words in a tone, for chips and notes on tinted fills (light enough for AA on any of them). */
-  --st-sun-ink: #ffe3a1;
-  --st-coral-ink: #ffc9c2;
-  --st-mint-ink: #b8f3dd;
-  --st-sky-ink: #c9ebff;
-  --st-shadow: 0 10px 30px rgba(8, 6, 30, 0.45);
-  --st-shadow-soft: 0 6px 18px rgba(8, 6, 30, 0.35);
-  --st-font: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
-  /* As wide as Clip Factory's sidebar: the shell's workspace switch sits over both at the same place (§45.37). */
-  --st-rail-w: var(--sidebar-w, 252px);
-  --st-tab-h: 66px;
-  /* The app's focus ring and platform marks, in this stage's colours. */
-  --focus: 0 0 0 4px rgba(255, 201, 74, 0.35);
-  --mark-cut: var(--st-stage);
+  /* Every --st-* token lives in glass-tokens.css (imported first by stories.css); this file only uses them. */
   position: relative;
   isolation: isolate;
   min-height: 100vh;
@@ -48,19 +20,7 @@
   line-height: 1.5;
 }
 
-/* The stage: soft spotlights from above and the side, still (it is the backdrop, not a show). */
-.stories-app::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(60vmax 42vmax at 82% -12%, rgba(98, 198, 255, 0.2), transparent 62%),
-    radial-gradient(52vmax 40vmax at -8% 108%, rgba(255, 111, 97, 0.16), transparent 62%),
-    radial-gradient(42vmax 30vmax at 48% 42%, rgba(255, 201, 74, 0.06), transparent 70%),
-    var(--st-stage);
-}
+/* The stage behind the glass is .stories-app::before in glass.css (the background the Look setting picks). */
 
 .stories-app :focus-visible {
   outline-color: var(--st-sun);

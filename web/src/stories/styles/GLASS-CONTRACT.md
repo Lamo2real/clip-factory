@@ -1,0 +1,275 @@
+# Clip Factory Stories · the liquid-glass contract
+
+The owner's warm reference of 22 Nov (a dark espresso room, amber and copper light out of focus behind smoky glass,
+cream solids, an orange accent) on direction B's technical base (one radius scale, a liquid rim on a few hero
+surfaces, the three backgrounds). Colours, feel and kinds of shapes only: every screen stays Stories' own.
+
+Eight screen builders start on these names now while the foundation keeps refining the visuals **behind** them.
+
+## The rules for every builder
+
+1. **Only `glass-tokens.css` defines `--st-*` design tokens.** Screens use them and never set them. A builder that
+   needs a one-off value keeps it local to its own file with its own prefix (for example `--st-dash-gap`, set on
+   its own screen class, never on `.stories-app`) and lists it in its result.
+2. **Nobody renames or removes a contract name** (tokens, classes, components, props, data attributes). Add only.
+   Need another look of a figure? Ask for a modifier in the foundation's files; do not restyle a figure's inside.
+3. **Old names keep working** (`--st-ink`, `--st-sun`, `--st-panel`, `--st-stage`, `--st-s-fill`, …: listed below
+   as "old"). Move your screen to the new names; add no new use of an old name.
+4. **Radius: one scale, by kind, concentric.** Use `--st-r-*` only (the test accepts the old `--r-*` while screens
+   move over; the merge step makes it `--st-r-*` only). Never Clip Factory's `--r-*` for new rules: the shell's
+   switch in Stories' top bar uses `--r-md`, and it must look the same in both workspaces.
+   - surface 20: every glass surface (cards, hero, cream card, rail, top bar, tab bar, toasts, sheets, plates,
+     preview bezel)
+   - control 14: buttons (the main action too), fields, rows, tiles, option cards, pick-one tracks, steppers, a
+     media row's thumbnail
+   - inner 10: inside a control (segment options and their highlight, thumbs in a tile, icon pucks)
+   - tiny 6: inside an inner (a caption box on a player, a hairline bar's ends)
+   - round: only where round is the shape: pills and chips, counts, knobs and toggles, round icon buttons, avatars,
+     dots, the dial, the tab bar's active highlight
+   - **Concentric rule:** a child that hugs its parent's corner gets the parent's radius minus the gap between them.
+     The gaps are picked so the scale lines up: surface 20 − `--st-gap-surface` 6 = control 14; control 14 −
+     `--st-gap-control` 4 = inner 10; inner 10 − 4 = tiny 6; a surface around a player with `--st-bezel-pad` 10 =
+     inner 10. Any other gap: `calc(var(--st-r-…) - gap)`, never a new number.
+5. **Which words on which surface.**
+   - On glass (any `.st-glass*`, the stage): `--st-text-strong`, `--st-text`, `--st-text-soft`, `--st-text-amber`,
+     and the tone inks (`--st-coral-ink`, `--st-mint-ink`, `--st-sky-ink`).
+   - `--st-text-muted` only on a card veil or deeper (wells, fields), never loose on the page.
+   - On cream (`.st-cream`, the active pill, steppers) and on the action and status fills: `--st-on-cream`,
+     `--st-on-cream-soft`; orange words on cream: `--st-on-cream-orange` (6.3:1).
+   - **The bright orange `--st-accent` is for shapes only** (toggles, knobs' rings, the active dot, progress fills,
+     the dial's arc). It is never a text colour. Glyphs on it: `--st-on-accent`.
+   - The status fills `--st-coral`, `--st-mint`, `--st-sky` are fills and marks, never words.
+6. **Backing plates.** Words loose on the page (a page head, the studio title, the studio's tab bar, the phone top
+   bar) sit in `.st-plate`: invisible over Ember, a glass plate in Picture and See-through, where anything (a white
+   desktop, a busy photo) can be behind them.
+7. **Readability over all three backgrounds.** Every word at least 4.5:1, including a worst-case white or busy
+   desktop or photo. Never set a veil yourself: the glass classes use the veils `look.ts` puts on `.stories-app`.
+8. **The owner's standing rules.** The mouse cursor never changes (no `cursor` anywhere); hover on every control;
+   no visible borders (light only: the thin glass edge); nothing overflows from 320 px; targets 44 px, 48 px on
+   phones; no text under the floor (`--st-fs-min`, 13 px); reduced motion and reduced transparency honoured; never
+   animate `filter` or `backdrop-filter`, and never change either on hover; a glass surface never moves on hover
+   (controls may). Kid-proof: never `disabled` (use `aria-disabled` and the deny sound).
+9. **Hands off.** The workspace switch with the Live chip (the shell's `web/src/app/WorkspaceDock.tsx`, drawn
+   outside `.stories-app`): leave its box free through `--ws-dock-room`, exactly as today. Nothing in
+   `web/src/app/**`, `web/src/components/Nav.tsx` or `web/src/styles/glide.css` is restyled. The Stories logo
+   markup and visible name live on `feat/stories-rename-logo`; this contract only defines its four tokens. No new
+   import from `web/src/lib`, `web/src/screens` or `web/src/components` into `web/src/stories` (copy a small
+   helper into Stories instead; `web/src/app/shell.ts` is fine). Do not change user-visible words.
+
+## Ownership map
+
+- foundation: web/src/stories/styles/glass-tokens.css (the ONLY place --st-* design tokens are defined),
+  web/src/stories/styles/glass.css, web/src/stories/styles/glass-figures.css,
+  web/src/stories/styles/fonts.css, the index files web/src/stories/styles/stories.css and
+  web/src/stories/styles/studio.css (import order only), web/src/stories/glass/** (new: the shared figure
+  components), web/src/stories/look.ts, web/src/stories/settings/LookSection.tsx, the Look parts of
+  web/src/stories/prefs.ts, web/public/fonts/stories/**, web/test/storiesStyles.test.ts,
+  web/test/storiesGlass.test.tsx, web/src/stories/styles/GLASS-CONTRACT.md
+- shell: web/src/stories/styles/st-frame.css, web/src/stories/styles/st-parts.css,
+  web/src/stories/styles/st-controls.css, web/src/stories/styles/st-end.css, web/src/stories/StoriesApp.tsx
+  (classes and wrappers only: never the switch, the logo, or the background hook the contract put there),
+  web/src/stories/ui.tsx
+- dashboard: web/src/stories/styles/st-dashboard.css, web/src/stories/screens/Dashboard.tsx
+- library: web/src/stories/styles/st-library.css, web/src/stories/screens/Library.tsx
+- make: web/src/stories/styles/sd-ideas.css, web/src/stories/styles/sd-characters.css,
+  web/src/stories/screens/Ideas.tsx, web/src/stories/screens/Characters.tsx, and inside
+  web/src/stories/styles/sd-end.css only the rules whose selectors are Ideas' or Characters' own classes
+- produce: web/src/stories/styles/sd-kit.css, web/src/stories/styles/sd-production.css,
+  web/src/stories/styles/sd-review.css, web/src/stories/styles/sd-sheet.css, web/src/stories/styles/sd-end.css
+  (except the Ideas and Characters rules there), web/src/stories/screens/Production.tsx,
+  web/src/stories/screens/Review.tsx, web/src/stories/studio/**
+- settings: web/src/stories/styles/settings.css, web/src/stories/styles/st-settings.css,
+  web/src/stories/styles/st-settings-video.css, web/src/stories/screens/Settings.tsx (not the Look wiring the
+  contract added), web/src/stories/settings/** except LookSection.tsx
+- social: web/src/stories/styles/social.css, web/src/stories/styles/st-connections.css,
+  web/src/stories/styles/st-social-auth.css, web/src/stories/styles/st-setup.css,
+  web/src/stories/screens/Connections.tsx, web/src/stories/screens/Setup.tsx
+- chat: web/src/stories/styles/chat.css, web/src/stories/screens/Chat.tsx, web/src/stories/screens/References.tsx,
+  web/src/stories/chat/**
+
+Load order (stories.css): fonts.css, glass-tokens.css, glass.css, glass-figures.css, then the screens' files.
+Later files win at equal specificity, so a screen can place and size a figure, but must not set a token.
+
+## The data attributes on `.stories-app` (set by `useStoriesBackground`, never by a screen)
+
+| attribute | values | meaning |
+|---|---|---|
+| `data-look` | `window` · `picture` · `colours` | what is drawn behind the glass: the desktop through the window (See-through in the Mac or Windows app), the owner's picture, or the colours (also See-through in a browser or on a phone, and Picture with no picture yet) |
+| `data-strength` | `clear` · `frosted` | See-through's Glass strength (Frosted: a 0.30 frost, panels at 0.89) |
+| `data-glass` | `liquid` · `simple` · `solid` | how glass is drawn on this device: the liquid rim (Chromium on a capable device), plain CSS light (WebKit, low power), or solid (reduced transparency) |
+
+Inline custom properties it sets: `--st-veil-page`, `--st-veil-card`, `--st-veil-tinted`, `--st-veil-hero`,
+`--st-veil-rail`, `--st-veil-bar`, `--st-veil-float`, `--st-veil-plate`, `--st-stage-c1`, `--st-stage-c2-rgb`,
+`--st-stage-c3-rgb`, `--st-picture`. In `window` while Stories is on screen it adds `html.see-through` (only when
+Clip Factory had not, and takes away only what it added). Screens style by these attributes only through the
+glass classes; if a screen needs a look-specific rule, select `.stories-app[data-look="picture"] .your-class`.
+
+## Tokens (glass-tokens.css)
+
+### 1. Base and stage
+| token | first value | meaning |
+|---|---|---|
+| `--st-base` | #1c130e | espresso: the page and the glass tint |
+| `--st-base-2` | #2a1c14 | smoky brown: the lightest base stop |
+| `--st-base-3` | #0f0a07 | roast: the far corner |
+| `--st-glow-copper` | #e0763a | the copper light behind the glass (Ember's 2nd colour) |
+| `--st-glow-amber` | #ffa852 | the amber light behind the glass (Ember's 3rd colour) |
+| `--st-stage-c1`, `--st-stage-c2-rgb`, `--st-stage-c3-rgb` | Ember | what the stage draws (look.ts sets them) |
+| `--st-stage-a2`, `--st-stage-a3` | 0.3 | how strong the two lights are |
+| `--st-picture` | none | Picture: the owner's picture (look.ts) |
+| old: `--st-stage`, `--st-stage-2`, `--st-stage-3`, `--st-stage-copper`, `--st-stage-amber` | | |
+
+### 2. Words
+| token | value | where |
+|---|---|---|
+| `--st-text-strong` | #fffaf2 | headings, big numerals |
+| `--st-text` | #fff6ea | body text on glass |
+| `--st-text-soft` | #f2e5d4 | second lines |
+| `--st-text-muted` | #dccab4 | hints, only on a card veil or deeper |
+| `--st-text-amber` | #ffd9a8 | warm words on glass: chips, notes, "new" |
+| `--st-on-cream` | #2a160b | words on cream, on the action and on status fills |
+| `--st-on-cream-soft` | #5b3a24 | second lines on cream |
+| `--st-on-cream-orange` | #9a3e0e | ORANGE WORDS on cream (6.3:1) |
+| `--st-on-accent` | #2a160b | glyphs on the orange accent |
+| `--st-coral-ink`, `--st-mint-ink`, `--st-sky-ink` | #ffd6cc, #c9f2dc, #d3ecf5 | needs-you, done, tip words (with an icon) |
+| old: `--st-ink`, `--st-ink-soft`, `--st-ink-hint`, `--st-sun-ink`, `--st-on-sun`, `--st-on-cream-ember`, `--st-s-ink-2` | | |
+
+### 3. Accent, action, cream
+| token | value | meaning |
+|---|---|---|
+| `--st-accent` | #ff8a3d | orange SHAPES only: toggles, knobs' rings, active dot, progress, the dial's arc |
+| `--st-accent-hover`, `--st-accent-pressed` | #ffa25c, #ef7a2c | |
+| `--st-action` | #ff9a45 | the one main action of a screen (espresso words) |
+| `--st-action-top`, `--st-action-bottom`, `--st-action-hover`, `--st-action-pressed` | #ffb766, #ff8a3d, #ffc27a, #ef7a2c | |
+| `--st-cream` | #fff3e4 | solid cream: active pill, the one highlighted card, steppers |
+| `--st-cream-2`, `--st-cream-hover` | #f6e6d2, #fffaf3 | |
+| `--st-knob` | #fffaf3 | the white knob (dial, toggle) |
+| `--st-selected` | cream 0.96 | the sliding highlight (espresso words) |
+| `--st-coral`, `--st-mint`, `--st-sky` | #ff7f6a, #6fd9a4, #7cc6e6 | status fills and marks, never words |
+| channels | `--st-veil-rgb` `--st-well-rgb` `--st-ink-rgb` `--st-cream-rgb` `--st-shadow-rgb` `--st-accent-rgb` `--st-action-rgb` `--st-amber-rgb` `--st-copper-rgb` `--st-coral-rgb` `--st-mint-rgb` `--st-sky-rgb` | for `rgb(var(--x-rgb) / a)` |
+| old: `--st-sun`, `--st-sun-top`, `--st-sun-bottom`, `--st-sun-hover`, `--st-sun-deep`, `--st-ember`, `--st-sun-rgb`, `--st-ember-rgb` | | |
+
+### 4. Veils (numbers 0..1 of the smoky tint; look.ts sets each look's)
+| token | Ember | over a white desktop or photo (measured, worst contrast) |
+|---|---|---|
+| `--st-veil-page` | 0 | 0 (Frosted: 0.30 frost) |
+| `--st-veil-card` | 0.58 | 0.74 (5.34:1); Frosted 0.89 (9.91:1) |
+| `--st-veil-tinted` | 0.66 | 0.80 with the colour cut to `--st-tint-cut` 0.12 (5.12:1) |
+| `--st-veil-hero` | 0.60 | 0.76 (5.14:1), glare only in a top band with no words |
+| `--st-veil-rail` | 0.62 | 0.78 (6.47:1) |
+| `--st-veil-bar` | 0.72 | 0.78 |
+| `--st-veil-float` | 0.76 | 0.80 |
+| `--st-veil-plate` | 0 | 0.78 |
+| `--st-veil-solid` | 0.96 | reduced transparency |
+
+### 5. The glass recipe
+| token | meaning |
+|---|---|
+| `--st-tint-card`, `--st-tint-hero`, `--st-tint-rail`, `--st-tint-bar`, `--st-tint-float`, `--st-tint-plate`, `--st-tint-tinted`, `--st-tint-cream` | the fills of each kind of surface |
+| `--st-fill-control`, `--st-fill-control-hover` | a glass control or inactive pill (a card's veil loose in Picture/See-through) |
+| `--st-fill-well`, `--st-fill-well-hover` | fields, tracks, the toggle's off track |
+| `--st-track` | a progress bar's empty part |
+| `--st-blur` 28px, `--st-blur-float` 36px, `--st-saturate` 1.35 | heavy blur |
+| `--st-filter-glass` (none over Ember, blur in Picture/See-through), `--st-filter-bar`, `--st-filter-float` | the backdrop filters |
+| `--st-edge-width` 1.25px, `--st-edge`, `--st-edge-hero`, `--st-edge-cream` | the thin light edge (a masked gradient ring, never a border) |
+| `--st-sheen`, `--st-sheen-hero`, `--st-sheen-control`, `--st-sheen-cream` | the soft inner top highlight |
+| `--st-glow-behind`, `--st-glow-action`, `--st-glow-action-hover`, `--st-glow-accent` | the gentle warm outer glow |
+| `--st-depth-1`, `--st-depth-2`, `--st-depth-3` | soft dark depth |
+| `--st-focus-ring` | the focus ring (a box-shadow: cream then orange) |
+| old: `--st-panel`, `--st-panel-strong`, `--st-panel-hover`, `--st-s-fill`, `--st-s-fill-2`, `--st-s-fill-3`, `--st-shadow`, `--st-shadow-soft`, `--st-s-soft`, `--st-s-lift`, `--st-glow-sun`, `--st-glow-sun-hover` | |
+
+### 6. Liquid
+`--st-lens-url` (none; the lens code sets it), `--st-lens-band` 26px, `--st-lens-depth` 22px, `--st-saturate-lens`
+1.5. Chromium only (`html.refract`), `data-glass="liquid"` only, at most `LENS_BUDGET` (3) per screen, never animated;
+WebKit keeps the plain CSS light (`--st-edge-hero`, `--st-sheen-hero`).
+
+### 7. Radius
+`--st-r-surface` 20px, `--st-r-control` 14px, `--st-r-inner` 10px, `--st-r-tiny` 6px, `--st-r-round` 999px;
+gaps `--st-gap-surface` 6px, `--st-gap-control` 4px, `--st-bezel-pad` 10px (rule 4 above).
+
+### 8. Space
+`--st-space-1` 4 · `-2` 8 · `-3` 12 · `-4` 16 · `-5` 20 · `-6` 24 · `-7` 32 · `-8` 48 (px); `--st-gap` between
+surfaces (12 → 28 px), `--st-inset` inside a surface (16 → 28 px).
+
+### 9. Sizes
+`--st-tap` 44px, `--st-tap-phone` 48px, `--st-tap-main` 52px, `--st-rail-w` (the shell's sidebar width),
+`--st-tab-h` 66px, `--st-knob-size` 22px, `--st-toggle-w` 48px, `--st-toggle-h` 28px, `--st-thumb` 64px,
+`--st-dial` 168px, `--st-dial-track` 10px.
+
+### 10. Type
+`--st-font` Playfair (OFL, opsz 5-1200, wdth 87.5-112.5, wght 300-900; å ä ö covered), `--st-font-caps` Jost
+(OFL; short wide-tracked caps captions only), `--st-font-mark` (the logo's "C" stays Clip Factory's Times).
+Sizes: `--st-fs-hero` 34 → 72 px, `--st-fs-h1` 32 → 56, `--st-fs-h2` 24 → 36, `--st-fs-h3` 20 → 26, `--st-fs-body`
+17, `--st-fs-small` 15, `--st-fs-chip` 14, `--st-fs-caps` 13, **`--st-fs-min` 13 px: the floor**, `--st-fs-num`
+40 → 68 (big light numerals), `--st-fs-unit` 0.42em (the unit beside a numeral). Axes and weights:
+`--st-opsz-display` 600, `--st-opsz-num` 900, `--st-wdth-display` 92%, `--st-weight-display` 600,
+`--st-weight-num` 300, `--st-weight-body` 450, `--st-weight-ui` 650, `--st-lh-head` 1.08, `--st-lh-body` 1.5,
+`--st-track-caps` 0.14em.
+
+### 11. Motion
+`--st-dur-tap` 110ms, `--st-dur-hover` 160ms, `--st-dur-glide` 340ms, `--st-dur-enter` 420ms, `--st-dur-progress`
+900ms, `--st-dur-look` 480ms, `--st-dur-celebrate` 1400ms, `--st-dur-wiggle` 240ms (all travel ones 0 under reduced
+motion); `--st-ease-out`, `--st-ease-glide`, `--st-ease-progress` (slow start, fast middle, slow end),
+`--st-ease-spring` (a press release and the done tick only).
+
+### 12. Layers
+`--st-z-stage` -1, `--st-z-nav` 40 (the shell's dock is 41), `--st-z-float` 60, `--st-z-burst` 70.
+
+### 13. The logo (defined here only; the rename branch draws the markup)
+`--st-mark-tile` (cream tile gradient), `--st-mark-letter` (espresso "C", 14.6:1), `--st-mark-dot` (#ff8a3d),
+`--st-wordmark` (#fff6ea). Also the shell's `--focus` and `--mark-cut` in Stories' colours.
+
+## Classes
+
+glass.css:
+- `.st-glass`: a smoky warm translucent panel (card veil, inner top highlight, outer glow, thin light edge via
+  `::after`, radius surface, `--st-text` words). Give it `position` other than static only if you must: it is
+  `relative` already.
+- `.st-glass--hero`: brighter edge and sheen, its own veil; add `.st-lens` for a rim that may bend.
+- `.st-glass--bar`: a bar something scrolls under (top bar, phone tab bar): heavy blur in every look.
+- `.st-glass--float`: sheets, menus, toasts: the float veil and the heaviest blur.
+- `.st-glass--tinted`: a colour-tinted tile; set `--st-tone-rgb` (for example `var(--st-mint-rgb)`).
+- `.st-glass--control`: a glass control or inactive pill (radius control, control fill, hover deepens).
+- `.st-cream`: the solid cream surface with espresso words (the one highlighted card).
+- `.st-plate`: the backing plate for loose words (rule 6).
+- `.st-edge`: the thin light edge alone, for a surface with its own fill.
+- `.st-lens` (+ `.is-liquid` from the lens code), `.st-lens__defs`: the liquid rim.
+- `.st-display` (Playfair display), `.st-caps` (Jost caps caption), `.st-num` (lining tabular figures).
+- `.st-look`, `.st-look__picture`: Settings › Look (foundation only).
+- The stage is `.stories-app::before` (foundation only; nobody else draws `::before` on `.stories-app`).
+
+glass-figures.css (the figures' own classes; screens place and size them, never restyle their inside):
+`.st-pill` `.st-pill--small` `.st-pill.is-on` `.st-pill__icon` · `.st-round-btn` `.st-round-btn--lg`
+`.st-round-btn--cream` `.st-round-btn--accent` `.st-round-btn.is-on` `.st-round-btn__dot` · `.st-stat`
+`.st-stat__value` `.st-stat__num` `.st-stat__unit` `.st-stat__label` `.st-stat__hint` · `.st-dial` `.st-dial__svg`
+`.st-dial__groove` `.st-dial__arc` `.st-dial__knob` `.st-dial__centre` `.st-dial__value` (size: `--st-dial-size`)
+· `.st-stepper` `.st-stepper__btn` `.st-stepper__value` · `.st-toggle` `.st-toggle__track` `.st-toggle__knob` ·
+`.st-cream-card` `.st-cream-card__head` `.st-cream-card__eyebrow` `.st-cream-card__title` `.st-cream-card__body`
+`.st-cream-card__toggle` `.st-cream-card__foot` · `.st-media` `.st-media__thumb` `.st-media__text`
+`.st-media__title` `.st-media__meta` `.st-media__bar` `.st-media__track` `.st-media__fill` `.st-media__time`
+`.st-media__controls` · `.st-tab-orb`.
+
+## Components (`import { … } from "../glass/index.ts"`)
+
+- `Glass({ variant?: "card" | "hero" | "bar" | "float" | "tinted"; tone?: string /* "255 154 69" */; lens?: boolean; as?: "div" | "section" | "article" | "aside" | "header" | "nav" | "li"; …HTMLAttributes })`
+- `GlassPill({ active?: boolean; size?: "md" | "sm"; icon?: ReactNode; as?: "button" | "span"; children; …ButtonHTMLAttributes })`: active = solid cream, dark words; others glass. In a pick-one bar give each `role="radio"` and `aria-checked`, and keep the bar on `<Glide>`.
+- `RoundGlassButton({ label: string; children /* the icon */; tone?: "glass" | "cream" | "accent"; size?: "md" | "lg"; active?: boolean; dot?: boolean; …ButtonHTMLAttributes })`
+- `StatNumeral({ value: number | string; unit?: string; label: ReactNode; hint?: ReactNode; className? })`, plus `formatStat(value)`.
+- `ArcDial({ value: number; max?: number /* 1 */; label: string; valueText?: string; size?: number; sweep?: number /* 240 */; children?: ReactNode /* the centre */; className? })`: `role="progressbar"` with min, max, now and words; plus `dialFraction(value, max)`, `knobAt(fraction, sweep)`.
+- `Stepper({ value: number; onChange(next: number); label: string; min?; max?; step?; format?(n): string; onLimit?(); decreaseLabel?; increaseLabel?; className? })`: never disabled; at an end `aria-disabled` and `onLimit` (play the deny sound).
+- `GlassToggle({ checked: boolean; onChange(next: boolean); label: string; id?; className? })`: `role="switch"`, orange when on.
+- `CreamCard({ title: ReactNode; eyebrow?: ReactNode; children?; toggle?: ReactNode /* a GlassToggle */; footer?: ReactNode; as?: "section" | "article" | "div"; headingLevel?: 2 | 3 | 4; className? })`
+- `MediaRow({ thumb?: string | ReactNode; thumbAlt?: string; title: ReactNode; meta?: ReactNode; progress?: number | null /* 0..1 */; progressLabel?: string; progressText?: ReactNode; controls?: ReactNode; as?: "div" | "li" | "article"; className? })`
+- `PhoneTabHighlight({ className? })` and `TAB_ORB` ("st-tab-orb"): the round active highlight; put it in the active tab, or give the bar's `<Glide>` the class so it slides. The bar itself is `.st-glass.st-glass--bar`.
+- `cx(...names)`: Stories' own class joiner.
+
+## The background (look.ts, foundation)
+
+`useStoriesBackground(root, active)` is StoriesApp's one call. Stories' own setting in `cf.stories.prefs` (`more`):
+`look.mode` (`see-through` | `picture` | `colours`, default `colours`), `look.strength` (`clear` | `frosted`),
+`look.colours` (1-3 hex, default Ember `#1c130e #e0763a #ffa852`), `look.glass` (a device override for checks);
+the picture in its own `cf.stories.picture`. Never Clip Factory's `cf.prefs` or `cf.background`. Readers and
+writers: `useStoriesLook()`, `storiesLook()`, `setStoriesLook(patch)`, `setStoriesPicture(url | null)`,
+`veilsFor(look)`, `lookKind(look)`, `glassTier(env)`, `LENS_BUDGET`, `THEME_COLOUR` (#1C130E, for the shell to adopt
+with its theme-colour tests). Settings › Look is `settings/LookSection.tsx`, shown for now at the end of Settings ›
+Storage (this device's own choices, beside Sounds and motion); its own tab is a later step.

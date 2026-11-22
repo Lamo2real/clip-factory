@@ -23,6 +23,7 @@ import { navigate, useHash } from "../lib/router.ts";
 import { loadStoriesApi, setStoriesApi } from "./api/client.ts";
 import { GlideCalm } from "../components/Glide.tsx";
 import { AWAY_RAN_OUT, takeParkedStoriesAway, takeParkedStoriesGo, useAppPane } from "./pane.tsx";
+import { useStoriesBackground } from "./look.ts";
 import { followStoriesClicks, storiesReduceMotion } from "./prefs.ts";
 import type { StoriesApi, Workspace } from "./api/types.ts";
 import { storiesHref, type StoriesPage } from "./routes.ts";
@@ -364,6 +365,8 @@ function StoriesShell({ page }: { page: StoriesPage }) {
   const hash = useHash();
   const toast = useToast();
   const pageKey = JSON.stringify(page);
+  // The background behind the glass (Stories › Settings › Look, the glass contract): data-look and the veils on the root.
+  useStoriesBackground(root, active);
 
   const check = useCallback(
     async (skip: string[] = []) => {

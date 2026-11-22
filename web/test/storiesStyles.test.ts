@@ -1,7 +1,8 @@
 // Lamo Stories' own look keeps the owner's rules (docs/CONTRACTS.md §45.16.2), over every file in
 // web/src/stories/styles: the cursor never changes, no visible borders or outlines (shadows and fills instead, and no
 // hairline inset shadow posing as one), corner
-// radii from the --r-* scale, no type below 0.78rem, light only (no dark-scheme rules), nothing outside .stories-app
+// radii from Stories' own --st-r-* scale (or the old --r-* scale while the screens move over to the liquid-glass
+// contract, styles/GLASS-CONTRACT.md; the merge step makes it --st-r-* only), no type below 0.78rem, light only (no dark-scheme rules), nothing outside .stories-app
 // (or an st- class), and AA contrast: every --st-* text colour on the stage and the panels, words on the sunshine
 // and on each tinted chip, and the status fills at 3:1 where they are icons and marks.
 import { readdirSync, readFileSync } from "node:fs";
@@ -98,12 +99,12 @@ describe("the owner's rules hold in Lamo Stories' styles", () => {
     expect(rings).toEqual([]);
   });
 
-  it("round corners from the --r-* scale (8 px and up never hard-coded)", () => {
+  it("round corners from the --st-r-* scale or, while the screens move over, the old --r-* one (8 px and up never hard-coded)", () => {
     const loose: string[] = [];
     for (const [f, text] of files)
       for (const m of text.matchAll(/border(?:-[a-z-]+)?-radius:\s*([^;]+);/g))
-        for (const part of m[1]!.replace(/calc\(var\(--r-[a-z]+\)[^)]*\)/g, "var(--r-sm)").split(/\s+/)) {
-          if (/^var\(--r-(xs|sm|md|lg|xl|pill)\)$/.test(part) || /^(0|50%|inherit)$/.test(part)) continue;
+        for (const part of m[1]!.replace(/calc\(var\(--(?:st-)?r-[a-z]+\)[^)]*\)/g, "var(--r-sm)").split(/\s+/)) {
+          if (/^var\(--r-(xs|sm|md|lg|xl|pill)\)$/.test(part) || /^var\(--st-r-(surface|control|inner|tiny|round)\)$/.test(part) || /^(0|50%|inherit)$/.test(part)) continue;
           const px = /^(\d+(?:\.\d+)?)px$/.exec(part);
           if (px && Number(px[1]) < 8) continue;
           loose.push(`${f}: ${m[0]}`);
@@ -140,12 +141,23 @@ describe("the owner's rules hold in Lamo Stories' styles", () => {
     for (const [f, text] of files)
       for (const r of rules(text)) {
         if (/^(from|to|\d+%)(\s*,\s*(from|to|\d+%))*$/.test(r.selector)) continue; // keyframe steps
+        if (r.selector === "@font-face") continue; // Stories' own fonts: checked on their own below
         for (const sel of r.selector.split(",").map((s) => s.trim())) {
           if (/(^|[\s>+~])(:root|html|body)\b/.test(sel)) outside.push(`${f}: ${sel}`);
           else if (!/\.stories-app\b|\.st-[a-z]/.test(sel)) outside.push(`${f}: ${sel}`);
         }
       }
     expect(outside).toEqual([]);
+  });
+
+  it("declare only Stories' own fonts (Playfair and Jost, from /fonts/stories/), never one of Clip Factory's names", () => {
+    const faces = files.flatMap(([f, text]) => rules(text).filter((r) => r.selector === "@font-face").map((r) => [f, Object.fromEntries(decls(r.body))] as const));
+    expect(faces.length).toBeGreaterThan(0);
+    for (const [f, d] of faces) {
+      expect(d["font-family"], f).toMatch(/^"(Playfair|Jost)"$/);
+      expect(d.src, f).toMatch(/^url\("\/fonts\/stories\/[A-Za-z-]+\.woff2"\) format\("woff2"\)$/);
+      expect(d["font-display"], f).toBe("swap");
+    }
   });
 
   it("name every keyframes st-… (they share one page with Lamo Clips' own)", () => {
@@ -168,7 +180,7 @@ describe("contrast", () => {
     [`panel on stage${i ? "-2" : ""}`, over(panel, s)] as [string, Rgb],
   ]);
   /** Fills that are never words: the stage, the panels, the shadows, and the status tones used for icons and marks. */
-  const FILLS = /^--st-(stage|panel|shadow|on-)|^--st-(coral|mint|sky)$/;
+  const FILLS = /^--st-(stage|base|panel|shadow|on-)|^--st-(coral|mint|sky)$/;
   const colourTokens = [...t].filter(([, v]) => colour(v) !== null);
 
   it("finds the tokens", () => {
@@ -193,6 +205,17 @@ describe("contrast", () => {
     expect(contrast(solid("--st-on-sun"), solid("--st-sun-hover"))).toBeGreaterThanOrEqual(4.5);
     // Coral, mint and sky fills carry the stage's colour for their words and glyphs too (buttons, counts, icons).
     for (const fill of ["--st-coral", "--st-mint", "--st-sky"]) expect(contrast(solid("--st-on-sun"), solid(fill)), fill).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("words on cream (the active pill, the cream card, the steppers) reach 4.5:1, the orange words too", () => {
+    for (const fill of ["--st-cream", "--st-cream-2", "--st-cream-hover"])
+      for (const word of ["--st-on-cream", "--st-on-cream-soft", "--st-on-cream-orange"]) expect(contrast(solid(word), solid(fill)), `${word} on ${fill}`).toBeGreaterThanOrEqual(4.5);
+    // The bright accent is for shapes: glyphs on it are espresso.
+    for (const fill of ["--st-accent", "--st-accent-hover", "--st-action", "--st-action-hover"]) expect(contrast(solid("--st-on-accent"), solid(fill)), fill).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("the base and glow colours stay dark and warm (a fill, never words)", () => {
+    for (const name of ["--st-base", "--st-base-2", "--st-base-3"]) expect(luminance(solid(name)), name).toBeLessThan(0.02);
   });
 
   it("the status tones reach 3:1 as icons and marks on the stage and the panels", () => {
