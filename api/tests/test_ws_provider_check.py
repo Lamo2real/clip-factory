@@ -180,7 +180,7 @@ def test_the_providers_page_shows_the_newest_try_and_the_proof(
     _, body = call("GET", f"{BASE}/providers")
     rows = {p["id"]: p for p in body["providers"]}
     assert rows["luma-ray"]["check"] is None  # never tried
-    assert all("check" not in p for i, p in rows.items() if i != "luma-ray")
+    assert all("check" not in p for i, p in rows.items() if i not in providers.CHECKABLE)  # Luma, own video
     job = call("POST", CHECK)[1]["job"]
     reel = _reel(call)
     assert (reel["check"]["jobId"], reel["check"]["status"], reel["state"]) == (job["jobId"], "queued", "needs_setup")

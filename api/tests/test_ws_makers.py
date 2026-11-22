@@ -113,7 +113,15 @@ def test_the_bundled_makers_models_are_the_settled_ones() -> None:
     raw = config.load("models.json")
     assert raw["imageModel"]["modelId"] == "amazon.nova-canvas-v1:0"
     assert raw["videoModel"]["modelId"] == "amazon.nova-reel-v1:1"
-    assert raw["audioModels"][2]["instrumental"] is True  # ElevenLabs makes an instrumental music bed only
+    # one file for the API and the agent: the agent's own fields (``role``, ``voice``, ``shotSec``) are read there
+    sounds = {m["key"]: m for m in raw["audioModels"]}
+    assert {k: m.get("role") for k, m in sounds.items()} == {
+        "polly-neural": "voice",
+        "elevenlabs-effects": "effects",
+        "elevenlabs-music": "music",  # ElevenLabs makes an instrumental music bed only (force_instrumental)
+    }
+    assert sounds["polly-neural"]["label"] == "A spoken voice (Amazon Polly)"
+    assert found["polly-neural"]["hostId"] == "polly"  # Amazon Polly runs it, never Amazon Bedrock
 
 
 def test_an_older_file_with_single_entries_reads_as_one_item_lists(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -179,7 +187,10 @@ def test_the_sound_pick_is_saved_and_never_a_voice_unless_picked(wcall: WsCall) 
     assert (chosen["audio"], chosen["audioModel"]) == ("elevenlabs", "elevenlabs-music")
     rows = _rows(wcall)
     assert [m["key"] for m in rows["elevenlabs"]["models"]] == ["elevenlabs-effects", "elevenlabs-music"]
-    assert all("Never a voice" in m["note"] for m in rows["elevenlabs"]["models"])
+    notes = {m["key"]: m["note"] for m in rows["elevenlabs"]["models"]}
+    assert "wordless" in notes["elevenlabs-effects"]
+    assert "Never a voice" in notes["elevenlabs-music"]
+    assert all("speak" not in note and "narrat" not in note for note in notes.values())
     assert rows["elevenlabs"]["state"] == "needs_setup"  # it needs the owner's key first
     assert rows["elevenlabs"]["key"] == {"saved": False, "hint": None, "savedAt": None}
     assert rows["polly"]["state"] == "off"
@@ -438,6 +449,117 @@ def test_a_maker_works_once_the_model_it_uses_answered_its_check(wcall: WsCall, 
          line="Bedrock says no.", checkedAt="2026-11-15T12:10:00.000Z", by="check")  # fmt: skip
     rows = _rows(wcall)
     assert (rows["stability"]["state"], rows["stability"]["line"]) == ("needs_setup", "Bedrock says no.")
+
+
+@pytest.mark.parametrize(
+    ("body", "sentence"),
+    [
+        ({**VIDEO, "modelId": "anthropic.claude-opus-5-5", "region": "eu-west-1"}, makers.BAD_VIDEO_MODEL),
+        ({**VIDEO, "modelId": "amazon.nova-reel-v1:1", "region": "us-east-1"}, makers.ENDED_MODEL),
+        ({**PICTURE, "modelId": "amazon.nova-canvas-v1:0", "region": "eu-west-1"}, makers.ENDED_MODEL),
+        ({**PICTURE, "modelId": "us.amazon.nova-canvas-v1:0", "region": "us-east-1"}, makers.ENDED_MODEL),
+        ({**SOUND, "host": "bedrock", "modelId": "amazon.titan-text-express-v1", "region": "us-east-1"},
+         makers.NO_BEDROCK_SOUND),
+        ({**SOUND, "modelId": "eleven_multilingual_v2"}, makers.ELEVENLABS_ONLY_SOUND),
+        ({**SOUND, "modelId": "eleven_v3"}, makers.ELEVENLABS_ONLY_SOUND),
+        ({**SOUND, "modelId": "eleven_flash_v2_5"}, makers.ELEVENLABS_ONLY_SOUND),
+    ],
+    ids=["video-not-luma", "nova-reel", "nova-canvas", "nova-canvas-profile", "bedrock-sound", "tts-v2", "tts-v3",
+         "tts-flash"],
+)  # fmt: skip
+def test_only_models_the_agent_can_call_are_added(
+    wcall: WsCall, table: FakeTable, body: dict[str, Any], sentence: str
+) -> None:
+    """The reviewer's G2 majors: an added model the agent would drop (or that Amazon ended, or ElevenLabs'
+    text-to-speech) is refused with a sentence, so it can never read "Works" and turn its maker on."""
+    status, got = wcall("PUT", f"{BASE}/makers/models/custom-x", body)
+    assert (status, got["error"]["message"]) == (400, sentence)
+    assert not [k for k in table.items if k[1].startswith("MAKERDEF#")]
+
+
+def test_profile_ids_and_arns_of_a_picture_model_and_the_sound_families_are_added(wcall: WsCall) -> None:
+    arn = "arn:aws:bedrock:us-west-2::foundation-model/stability.sd3-5-large-v1:0"
+    for key, body in (
+        ("custom-a", {**PICTURE, "modelId": "us.stability.sd3-5-large-v1:0"}),
+        ("custom-b", {**PICTURE, "modelId": arn}),
+        ("custom-c", {**SOUND, "modelId": "eleven_text_to_sound_v2"}),
+        ("custom-d", {**SOUND, "label": "Music", "modelId": "music_v1"}),
+        ("custom-e", VIDEO),
+    ):
+        status, got = wcall("PUT", f"{BASE}/makers/models/{key}", body)
+        assert status == 200, (key, got)
+
+
+def test_the_bundled_voice_runs_on_amazon_polly_and_an_ended_model_says_so(wcall: WsCall) -> None:
+    rows = _rows(wcall)
+    polly = rows["polly"]["models"][0]
+    assert (polly["hostId"], polly["host"]) == ("polly", "Amazon Polly")
+    canvas = rows["nova-canvas"]["models"][0]
+    assert (canvas["status"], canvas["statusLine"]) == ("not_found", "Ended by Amazon on 30 Sep 2026.")
+    assert "Check models" not in canvas["statusLine"]
+    from clipfactory_api.workspaces import hosts
+
+    assert hosts.host_id("Amazon Polly") == "bedrock"  # an added model can never name Amazon Polly
+    assert hosts.host_id("Amazon Polly", bundled=True) == "polly"
+
+
+def test_your_own_video_model_is_on_only_after_its_try_it(wcall: WsCall, store: db.Store, runtime: FakeRuntime) -> None:
+    """The reviewer's G7 major: the free access check says nothing of the switched-off bucket your own video model
+    writes to, so only its own Try it shot (``PROVIDER#animation#own-video``) makes it ``on`` and lets videos through."""
+    hero = _hero(wcall)
+    story = {"characterIds": [hero], "brief": {"title": "Ice", "logline": "A skid.", "category": "comedy"}}
+    assert _pick(wcall, {"video": "own-video"})[0] == 200
+    status, body = wcall("POST", f"{BASE}/stories", story)
+    assert (status, body["error"]["message"]) == (409, "Add a video model first: tap Add a model in Lamo Stories › "
+                                                       "Settings › Video.")  # fmt: skip
+    assert wcall("POST", f"{BASE}/providers/own-video/check")[1]["error"]["message"].startswith("Add a video model")
+    assert wcall("PUT", f"{BASE}/makers/models/custom-ray", VIDEO)[0] == 200
+    seed(store, "MAKERSTATUS#custom-ray", ws.TYPE_MAKERSTATUS, model="custom-ray", status="ok", line="Works.",
+         checkedAt="2026-11-15T12:00:00.000Z", by="check")  # fmt: skip
+    assert _rows(wcall)["own-video"]["state"] == "needs_setup"
+    status, body = wcall("POST", f"{BASE}/stories", story)
+    assert (status, body["error"]["message"]) == (409, providers.NOT_READY["own-video"])
+    assert "storage bucket in the United States (Oregon)" in providers.NOT_READY["own-video"]
+    status, body = wcall("POST", f"{BASE}/providers/own-video/check")
+    assert status == 202, body
+    assert body["job"]["meta"]["providers"] == {"animation": "own-video"}
+    seed(store, "PROVIDER#animation#own-video", ws.TYPE_PROVIDER, kind="animation", providerId="own-video",
+         state="on", checkedAt="2099-01-01T00:00:00.000Z")  # fmt: skip
+    assert _rows(wcall)["own-video"]["state"] == "on"
+    # a proof of another model proves nothing
+    seed(store, "PROVIDER#animation#own-video", ws.TYPE_PROVIDER, kind="animation", providerId="own-video",
+         state="on", checkedAt="2099-01-01T00:00:00.000Z", model="custom-other")  # fmt: skip
+    assert _rows(wcall)["own-video"]["state"] == "needs_setup"
+
+
+def test_a_newer_failed_check_of_the_model_in_use_wins_over_an_older_proof(wcall: WsCall, store: db.Store) -> None:
+    assert _pick(wcall, {"images": "stability", "imageModel": "stable-image-ultra"})[0] == 200
+    seed(store, "PROVIDER#images#stability", ws.TYPE_PROVIDER, kind="images", providerId="stability", state="on",
+         checkedAt="2026-11-13T12:00:00.000Z")  # fmt: skip
+    assert _rows(wcall)["stability"]["state"] == "on"
+    seed(store, "MAKERSTATUS#stable-image-ultra", ws.TYPE_MAKERSTATUS, model="stable-image-ultra", status="denied",
+         line="Bedrock says no.", checkedAt="2026-11-15T12:00:00.000Z", by="check")  # fmt: skip
+    row = _rows(wcall)["stability"]
+    assert (row["state"], row["line"]) == ("needs_setup", "Bedrock says no.")
+    assert providers.portrait_problem({"providers": {"images": "stability"}}) is None  # portraits gate on the maker
+
+
+def test_an_own_model_on_a_keyed_host_needs_its_key_first(wcall: WsCall, runtime: FakeRuntime) -> None:
+    hero = _hero(wcall)
+    story = {"characterIds": [hero], "brief": {"title": "Ice", "logline": "A skid.", "category": "comedy"}}
+    assert wcall("PUT", f"{BASE}/makers/models/custom-sfx", SOUND)[0] == 200
+    assert _pick(wcall, {"audio": "own-sound"})[0] == 200
+    row = _rows(wcall)["own-sound"]
+    assert (row["state"], row["line"]) == ("needs_setup", providers.needs_key("elevenlabs"))
+    status, body = wcall("POST", f"{BASE}/stories", story)
+    assert (status, body["error"]["message"]) == (409, providers.needs_key("elevenlabs"))
+    gpt = {**PICTURE, "host": "openai_compatible", "modelId": "gpt-image-2", "region": None,
+           "baseUrl": "https://api.example.org/v1"}  # fmt: skip
+    assert wcall("PUT", f"{BASE}/makers/models/custom-gpt", gpt)[0] == 200
+    assert _pick(wcall, {"images": "own-images"})[0] == 200
+    row = _rows(wcall)["own-images"]
+    assert (row["state"], row["line"]) == ("needs_setup", providers.needs_key("openai_compatible"))
+    assert "Provider keys" in row["line"]
 
 
 # --- G3: what a sound maker needs before a video is made --------------------------------------------------------

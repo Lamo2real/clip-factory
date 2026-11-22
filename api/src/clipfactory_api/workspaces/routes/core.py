@@ -1792,7 +1792,8 @@ def _check_job(ctx: Ctx, found: list[Item], provider_id: str) -> Item | None:
 
 
 def check_provider(app: App, req: Request) -> Response:
-    """``POST …/providers/luma-ray/check`` → ``202 { job }`` (§45.35 D2, §45.37 G7: "Try it" in Settings › Video): a
+    """``POST …/providers/{luma-ray|own-video}/check`` → ``202 { job }`` (§45.35 D2, §45.37 G7: "Try it" in Settings
+    › Video; your own video model writes to the same off-by-default bucket, so it is tried the same way): a
     one-step ``provider_check`` job; Lamo Stories' agent makes one 5-second test shot (Amazon bills it), proves
     ``PROVIDER#animation#luma-ray`` or records Bedrock's sentence, and deletes the test file. Never behind the
     not-ready guard (that is how the maker becomes ready), and one at a time. Amazon Nova Reel's old "Try it" is
@@ -1803,8 +1804,11 @@ def check_provider(app: App, req: Request) -> Response:
     if gone is not None:
         raise conflict(makers.ended_sentence(gone))
     if provider_id not in providers.CHECKABLE:
-        raise not_found("Only Luma AI Ray2 has a Try it.")
+        raise not_found(providers.ONLY_TRY)
     validate.only_keys(req.json(), ())
+    problem = providers.try_problem(provider_id, ctx.config, _known(ctx))
+    if problem is not None:
+        raise conflict(problem)
     with ctx.stops_last():  # the fence's stops wait: the start may need the whole 29 s
         lock_sk = providers.check_lock_sk(provider_id)
         lock = ctx.store.get(ctx.pk, lock_sk)
@@ -1814,7 +1818,7 @@ def check_provider(app: App, req: Request) -> Response:
         ).items
         previous = _check_job(ctx, [j for j in (ctx.owned(x, ws.TYPE_PJOB) for x in newest) if j], provider_id)
         if jobs.active(held) or jobs.active(previous):
-            raise conflict(providers.CHECK_BUSY)
+            raise conflict(providers.CHECK_BUSY_LINE[provider_id])
         job_id = ulid()
         job = jobs.new_job(
             ctx.user_id,
@@ -1832,7 +1836,7 @@ def check_provider(app: App, req: Request) -> Response:
         try:
             ctx.store.transact(puts=[job], raw_puts=[claim])
         except db.ConditionFailed:
-            raise conflict(providers.CHECK_BUSY) from None  # another tap claimed it a moment ago: one shot only
+            raise conflict(providers.CHECK_BUSY_LINE[provider_id]) from None  # another tap claimed it: one shot only
         agent = ctx.deps.agent
         if agent is None or not getattr(agent, "ready", False):
             failed = jobs.fail_start(ctx.store, job, None, ctx.now, jobs.CHECK_NOT_SET_UP)

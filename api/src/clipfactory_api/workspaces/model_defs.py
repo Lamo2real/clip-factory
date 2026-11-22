@@ -94,6 +94,12 @@ BAD_EFFORT_FIELD: Final = (
     "Say how the model takes an effort: output_config (like Anthropic's Claude models), reasoning_effort (an "
     "OpenAI-compatible API's own field) or none (it runs at its own level)."
 )
+# The levels an OpenAI-compatible API's ``reasoning_effort`` takes (the web's REASONING_EFFORTS mirrors these): never
+# "max", which those APIs refuse.
+REASONING_EFFORTS: Final = ("low", "medium", "high", "xhigh")
+BAD_REASONING_EFFORT: Final = (
+    "An OpenAI-compatible model takes the efforts low, medium, high and xhigh only. Take max out of its efforts."
+)
 REASONING_EFFORT_ONLY_OPENAI: Final = (
     "Only a model on an OpenAI-compatible API takes reasoning_effort. Pick output_config or none."
 )
@@ -341,6 +347,8 @@ def clean_calling(body: Mapping[str, Any], efforts: list[str]) -> dict[str, Any]
     how = calling(body)
     if how["effortField"] == "none" and efforts:
         raise bad_request(NO_EFFORT_FIELD, "efforts")
+    if how["effortField"] == "reasoning_effort" and any(e not in REASONING_EFFORTS for e in efforts):
+        raise bad_request(BAD_REASONING_EFFORT, "efforts")
     return how
 
 
@@ -439,6 +447,10 @@ def put(
     if makers.get_item(store, user_id, workspace_id, key) is not None:
         raise bad_request("You already added a picture, video or sound model with that name. Pick another name.", "key")
     fields = clean(body)
+    if fields["host"] == hosts.OPENAI_COMPATIBLE:
+        from .provider_keys import check_openai_origin
+
+        check_openai_origin(store, user_id, workspace_id, key, str(fields["baseUrl"]))  # its key goes there only
     existing = cfg.get_owned(store, user_id, workspace_id, model_sk(key))
     if existing is None and len(items(store, user_id, workspace_id)) >= MAX_MODELS:
         raise conflict(TOO_MANY)

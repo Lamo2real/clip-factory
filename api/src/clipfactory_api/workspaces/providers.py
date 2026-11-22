@@ -15,18 +15,25 @@ States:
   switched away from by itself;
 * Luma AI Ray2 (``luma-ray``, US Oregon) is built but ``needs_setup`` until a ``PROVIDER#animation#luma-ray`` record
   says ``on`` (its "Try it" shot): it needs the off-by-default United States (Oregon) bucket and model access;
-* every other AI maker (``stability``, ``own-images``, ``own-video``, ``polly``, ``elevenlabs``, ``own-sound``) is
-  ``off`` until the owner picks it, then ``needs_setup`` until a real call (``PROVIDER#``) or the access check of the
-  model it uses (``MAKERSTATUS#`` ``ok``, Check models) says it works; ElevenLabs first needs the owner's key, an own
-  maker first needs a model. Amazon Polly is the only maker that speaks words and is opt-in only.
+* your own video model (``own-video``) is the same: it writes its shots to the same off-by-default bucket, so only
+  its own "Try it" shot (``PROVIDER#animation#own-video``) makes it ``on``, never the free access check;
+* every other AI maker (``stability``, ``own-images``, ``polly``, ``elevenlabs``, ``own-sound``) is ``off`` until the
+  owner picks it, then ``needs_setup`` until a real call (``PROVIDER#``) or the access check of the model it uses
+  (``MAKERSTATUS#`` ``ok``, Check models) says it works; ElevenLabs first needs the owner's key, an own maker first
+  needs a model, and an own model on a keyed host its key. Amazon Polly is the only maker that speaks words and is
+  opt-in only.
+
+A proof is of the model it was made with: a ``PROVIDER#`` record naming another ``model`` than the one in use, or
+older than the owner's last change of his own model in use, proves nothing, and a newer failed access check of the
+model in use wins over an older ``on``.
 
 Nothing is shown as working because it was configured. **A maker that is not ready** (§45.34, §45.35 D3): a story's
 create, produce and changes answer 409 with ``not_ready``'s sentence while the picked video maker is not ``on`` (or
 ended), or the picked sound maker still lacks what only the owner can give (ElevenLabs' key, an own sound model);
 nothing switches to another maker by itself (the agent's ``ProviderUnavailable`` is the second guard). Pictures
 never stop a video: the picture maker makes portraits only, and ``portrait_problem`` gates those alone. **Try it**
-(D2, G7): ``POST …/providers/luma-ray/check`` starts a one-step ``provider_check`` job (one 5-second shot), never
-behind that guard, so Luma AI Ray2 can become ready without making a video first.
+(D2, G7): ``POST …/providers/{luma-ray|own-video}/check`` starts a one-step ``provider_check`` job (one 5-second
+shot), never behind that guard, so the maker can become ready without making a video first.
 
 ``StoriesConfig.providers`` names the kinds ``images``, ``video`` and ``audio``; ``ProviderStatus.kind`` calls the
 video kind ``animation`` (the registry's name).
@@ -194,6 +201,26 @@ PROOF_STEP: Final = {"writer": "storyboard", "images": "scenes", "animation": "a
 NOTHING_MADE: Final = "Nothing changed"  # the agent's message for a step that had nothing to (re)make
 JOBS_READ: Final = 200  # the newest story jobs looked at for proof
 NEEDS_KEY: Final = {"elevenlabs": "Paste your ElevenLabs key in Lamo Stories › Settings › Video to use it."}
+KEY_PLACE: Final = {
+    "elevenlabs": "Lamo Stories › Settings › Video",
+    "openai_compatible": "Lamo Stories › Settings › AI › Provider keys",
+    "anthropic": "Lamo Stories › Settings › AI › Provider keys",
+}
+
+
+def needs_key(host: str) -> str:
+    """What a maker whose model runs on a keyed host says while that host has no saved key."""
+    from .hosts import LABEL
+
+    return f"Paste your {LABEL.get(host, host)} key in {KEY_PLACE.get(host, KEY_PLACE['anthropic'])} to use it."
+
+
+def _model_needs_key(model: Mapping[str, Any] | None, known: Known) -> str | None:
+    """The keyed host of the model in use when its key is not saved, else None."""
+    from .provider_keys import KEYED
+
+    host = str((model or {}).get("hostId") or "")
+    return host if host in KEYED and host not in known.keys else None
 
 
 def off_line(p: Provider) -> str:
@@ -213,8 +240,9 @@ def own_missing(p: Provider) -> str:
 NOT_READY: Final = {
     "luma-ray": LUMA_NOT_READY,
     "own-video": (
-        "Your own video model is not ready yet: tap Check models in Settings › Video to check it. Pick Built-in "
-        "animation in Settings › Video, or finish its setup."
+        "Your own video model is not ready yet: it needs a storage bucket in the United States (Oregon), which is "
+        "switched off, and the model turned on for your account. Pick Built-in animation in Settings › Video, or "
+        "finish its setup and tap Try it."
     ),
     "elevenlabs": (
         "ElevenLabs is not ready yet: it needs your ElevenLabs key. Paste it in Settings › Video, or pick Built-in "
@@ -228,11 +256,28 @@ NOT_READY: Final = {
 
 
 # "Try it" (§45.35 D2, G7): the makers that can be tried once from Settings › Video, by id → their registry kind.
-CHECKABLE: Final = {"luma-ray": "animation"}
+CHECKABLE: Final = {"luma-ray": "animation", "own-video": "animation"}
 CHECK_JOB_TYPE: Final = "provider_check"
 CHECK_CONTENT_TYPE: Final = "provider"
 CHECK_STEP: Final = "check"
 CHECK_BUSY: Final = "Luma AI Ray2 is being tried. Wait until it is done."
+CHECK_BUSY_LINE: Final = {
+    "luma-ray": CHECK_BUSY,
+    "own-video": "Your own video model is being tried. Wait until it is done.",
+}
+ONLY_TRY: Final = "Only Luma AI Ray2 and your own video model have a Try it."
+
+
+def try_problem(provider_id: str, config: Mapping[str, Any], known: Known) -> str | None:
+    """Why "Try it" cannot start for this maker (409), or None: an own video model must be added first."""
+    p = find(provider_id, CHECKABLE.get(provider_id))
+    if p is None or not p.own:
+        return None
+    model = _maker_model(p, config, known)
+    if model is None:
+        return own_missing(p)
+    keyless = _model_needs_key(model, known)
+    return needs_key(keyless) if keyless is not None else None
 
 
 def check_job_of(jobs: Iterable[Mapping[str, Any]], provider_id: str) -> Mapping[str, Any] | None:
@@ -376,19 +421,25 @@ def status(
     model = None if p.builtin else _maker_model(p, config, known)
     if p.own and model is None:
         return {**out, "state": "needs_setup", "line": own_missing(p)}
-    if state == "on" and checked:
+    keyless = _model_needs_key(model, known)
+    if keyless is not None:
+        return {**out, "state": "needs_setup", "line": needs_key(keyless)}
+    access = (known.checks or {}).get(str((model or {}).get("key") or "")) if model is not None else None
+    access_at = str((access or {}).get("checkedAt") or "")
+    if state == "on" and checked and not _proves(record, model, checked):
+        state = None  # a proof of another model (or of this own model before the owner changed it)
+    newer_access = access is not None and access_at > (checked or "")
+    failed_since = newer_access and str((access or {}).get("status") or "") in ("denied", "not_found", "error")
+    if state == "on" and checked and not failed_since:
         return {**out, "state": "on", "line": p.line_on, "checkedAt": max(checked, proven_at or "")}
     if p.builtin:
         failed_later = state not in (None, "on") and checked and checked > (proven_at or "")
         if not failed_later:
             on = {**out, "state": "on", "line": p.line_on}
             return {**on, "checkedAt": proven_at} if proven_at else on
-    access = (known.checks or {}).get(str((model or {}).get("key") or "")) if model is not None else None
-    access_at = str((access or {}).get("checkedAt") or "")
-    newer_access = access is not None and access_at > (checked or "")
     if p.id not in CHECKABLE and newer_access and (access or {}).get("status") == "ok":
-        # the access check of the model it uses answered "Works" (G2): Luma AI Ray2 also needs its bucket, so only
-        # its own "Try it" shot makes it on
+        # the access check of the model it uses answered "Works" (G2): Luma AI Ray2 and your own video model also
+        # need their bucket, so only their own "Try it" shot makes them on
         return {**out, "state": "on", "line": p.line_on, "checkedAt": access_at}
     out.update(state="needs_setup", line=str(error) if error else p.line_unchecked)
     failed = str((access or {}).get("status") or "")
@@ -402,6 +453,18 @@ def status(
     if error:
         out["lastError"] = str(error)
     return out
+
+
+def _proves(record: Mapping[str, Any] | None, model: Mapping[str, Any] | None, checked: str) -> bool:
+    """Whether a ``PROVIDER#`` proof covers the model in use: one that names its ``model`` must name this one, and an
+    own model the owner changed after the proof was made is not the one proven."""
+    if model is None:
+        return True
+    named = (record or {}).get("model")
+    if isinstance(named, str) and named and named != model.get("key"):
+        return False
+    changed = str(model.get("changedAt") or "")
+    return not (model.get("custom") and changed and changed > checked)
 
 
 def statuses(
@@ -468,9 +531,14 @@ def not_ready(
             return makers.ended_sentence(model)
         record = by_key.get(provider_sk(p.kind, p.id))
         shown = status(p, config, record, known=known)
+        if p.own and model is None:  # nothing to check yet: the owner adds a model first
+            return NOT_READY["own-sound"] if kind == "audio" else own_missing(p)
+        keyless = _model_needs_key(model, known)
         if kind == "audio":
-            if (p.key_host is not None and p.key_host not in known.keys) or (p.own and model is None):
+            if p.key_host is not None and p.key_host not in known.keys:
                 return NOT_READY.get(p.id, str(shown["line"]))
+            if keyless is not None:
+                return needs_key(keyless)
             continue
         if shown["state"] == "on":
             continue
@@ -498,4 +566,7 @@ def portrait_problem(config: Mapping[str, Any], known: Known | None = None) -> s
         return makers.ended_sentence(model)
     if p.own and model is None:
         return own_missing(p)
+    keyless = _model_needs_key(model, known)
+    if keyless is not None:
+        return needs_key(keyless)
     return None

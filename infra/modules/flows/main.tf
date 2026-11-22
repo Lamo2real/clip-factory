@@ -46,6 +46,9 @@ locals {
   # USER#{userId} is ever returned. Widened in place (more names in the same statement): nothing is replaced.
   clips_account_attributes = ["pk", "sk", "platform", "status", "accountId", "handle", "autoPost"]
 
+  # Clip Factory's own rate counters (db.rate_pk): the story flow reads them, never writes them (§45.37 G6 a).
+  clips_rate_keys = ["RATE#youtube", "RATE#tiktok", "RATE#x", "RATE#instagram", "RATE#facebook"]
+
   functions = {
     job-flow = {
       handler = "clipfactory_api.flows.job_flow.handler"
@@ -169,6 +172,20 @@ locals {
       # A refreshed (rotated) workspace token, put only: never create, delete or touch the pending choices. The pattern
       # is <name>/workspaces/*/token* (no "-"), so a put on a token a Disconnect deleted reads "not connected".
       { Sid = "WorkspaceTokens", Action = ["secretsmanager:PutSecretValue"], Resource = [var.workspace_token_secrets_arn] },
+      # §45.37 G4: the owner's AI provider keys (<name>/workspaces/{ws}/providers/{anthropic|openai_compatible|
+      # elevenlabs}) are read only by Lamo Stories' agent; the publisher never needs them. The explicit Deny wins over
+      # WorkspaceSecretsRead's Allow; an additive, in-place change of this role policy (like clip-flow's NoBankSecrets).
+      { Sid = "NoProviderKeys", Effect = "Deny", Action = ["secretsmanager:GetSecretValue"], Resource = ["${trimsuffix(var.workspace_secrets_arn, "*")}*/providers/*"] },
+      # §45.37 G6 (a): Lamo Stories never writes Clip Factory's own rate counters (RATE#{platform}); its own are all
+      # RATE#WS#… (its own app's, and the one counter of Clip Factory's shared app, RATE#WS#~shared#{platform}). The
+      # explicit Deny wins over WorkspaceWrites' RATE#* Allow; additive and in place.
+      {
+        Sid       = "NoClipsRateWrites"
+        Effect    = "Deny"
+        Action    = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:TransactWriteItems"]
+        Resource  = [var.table_arn]
+        Condition = { "ForAnyValue:StringEquals" = { "dynamodb:LeadingKeys" = local.clips_rate_keys } }
+      },
     ]
   }
 }

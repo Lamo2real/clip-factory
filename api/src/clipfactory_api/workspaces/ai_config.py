@@ -49,6 +49,10 @@ PRICE_PROVIDERS: Final = {
     "luma-ray": "second",
     "own-images": "image",
     "own-video": "second",
+    # the sound makers (§45.37 G3, G7): seconds of sound made, or characters spoken (Amazon Polly)
+    "elevenlabs": "second",
+    "polly": "character",
+    "own-sound": "second",
 }
 PROVIDER_LABEL: Final = {
     "nova-canvas": "Amazon Nova Canvas",
@@ -57,9 +61,13 @@ PROVIDER_LABEL: Final = {
     "luma-ray": "Luma AI Ray2",
     "own-images": "Your own picture model",
     "own-video": "Your own video model",
+    "elevenlabs": "ElevenLabs",
+    "polly": "Amazon Polly",
+    "own-sound": "Your own sound model",
 }
-UNIT_WORD: Final = {"image": "picture", "second": "second of video"}
-UNITS: Final = ("image", "second")
+UNIT_WORD: Final = {"image": "picture", "second": "second of video", "character": "character spoken"}
+SOUND_PRICED: Final = ("elevenlabs", "own-sound")  # priced per second of sound, not of video
+UNITS: Final = ("image", "second", "character")
 # What the setup's steps 1–3 record (§45.34 "Setup steps 1–3"): ``PUT …/ai`` ``picked``, stamped on ``pickedAt``.
 PICKED: Final = ("environment", "model", "effort")
 CURRENCY: Final = re.compile(r"^[A-Z]{3}$")
@@ -305,8 +313,9 @@ def clean_provider_price(provider_id: str, value: Any, field: str) -> dict[str, 
         ("inputPer1M", "outputPer1M", "cacheReadPer1M", "cacheWritePer1M", "longContext", "currency", "source",
          "note", "perUnit", "unit"),
     )  # fmt: skip
+    word = "second of sound" if provider_id in SOUND_PRICED else UNIT_WORD[unit]
     sentence = (
-        f"{PROVIDER_LABEL[provider_id]} is priced per {UNIT_WORD[unit]}: type the price of one {UNIT_WORD[unit]} "
+        f"{PROVIDER_LABEL[provider_id]} is priced per {word}: type the price of one {word} "
         "(perUnit), with inputPer1M and outputPer1M 0."
     )
     for name in ("inputPer1M", "outputPer1M"):

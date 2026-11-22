@@ -382,7 +382,11 @@ def test_there_is_no_way_to_use_clip_factorys_account_for_both(
     shown = accounts(call)["youtube"]
     assert (shown["connectionStatus"], shown["sharedWithClips"]) == ("same_as_clips", False)
     assert shown["warning"] == social.SAME_AT_CONNECT
-    assert store.get(sup.PK, "SOCIAL#youtube") == before
+    after = store.get(sup.PK, "SOCIAL#youtube")
+    assert after is not None
+    # the one write: its identity is remembered as Clip Factory's (sticky, §45.37 G8)
+    assert after.pop(social.MATCHED) == {"ids": ["UC123"], "usernames": ["lamostories"]}
+    assert {k: v for k, v in after.items() if k != "updatedAt"} == {k: v for k, v in before.items() if k != "updatedAt"}
     assert not hasattr(social, "share")
 
 
@@ -958,36 +962,39 @@ def test_lamo_clips_connecting_the_same_account_later_shows_same_as_clips(
 
 
 @pytest.mark.parametrize("platform", ["youtube", "tiktok", "instagram", "facebook", "x"])
-def test_same_as_clips_goes_back_to_connected_once_lamo_clips_lets_go_of_the_account(
+def test_same_as_clips_stays_so_once_clip_factory_lets_go_of_the_account(
     call: Call, store: db.Store, secrets_client: FakeSecretsManager, platform: str
 ) -> None:
+    """§45.37 G8 (the owner's hard rule): an account found to be Clip Factory's never turns back into Lamo Stories'
+    own, also when Clip Factory moves to another account or disconnects it (its app keys changing does that too)."""
     sup.social(store, secrets_client, platform, identity="shared-1")
     sup.clips_account(store, None, platform, accountId="shared-1")
     assert accounts(call)[platform]["connectionStatus"] == "same_as_clips"
-    # Lamo Clips moves to another account: Lamo Stories' is its own again, and onboarding ticks it
+    remembered = store.get(sup.PK, f"SOCIAL#{platform}")[social.MATCHED]
+    assert "shared-1" in remembered["ids"]
+    # Clip Factory moves to another account: still Clip Factory's, and onboarding does not tick it
     sup.clips_account(store, None, platform, accountId="another-1")
-    assert accounts(call)[platform]["connectionStatus"] == "connected"
-    assert store.get(sup.PK, f"SOCIAL#{platform}")["connectionStatus"] == "connected"
-    steps = {s["step"]: s for s in call("GET", "/v1/workspaces/stories/onboarding")[1]["onboarding"]["steps"]}
-    assert steps[platform]["state"] == "done"
-    # Lamo Clips connects it again, then disconnects: the same
-    sup.clips_account(store, None, platform, accountId="shared-1")
     assert accounts(call)[platform]["connectionStatus"] == "same_as_clips"
-    clips_setup.put_account(store, USER, platform, "not_connected", now=NOW, fields={"accountId": "shared-1"})
-    assert accounts(call)[platform]["connectionStatus"] == "connected"
-    assert store.get(sup.PK, f"SOCIAL#{platform}")["connectionStatus"] == "connected"
+    assert store.get(sup.PK, f"SOCIAL#{platform}")["connectionStatus"] == "same_as_clips"
+    steps = {s["step"]: s for s in call("GET", "/v1/workspaces/stories/onboarding")[1]["onboarding"]["steps"]}
+    assert steps[platform]["state"] == "todo"
+    # Clip Factory disconnects it (ACCOUNT# not_connected, no id): the same
+    clips_setup.put_account(store, USER, platform, "not_connected", now=NOW)
+    shown = accounts(call)[platform]
+    assert (shown["connectionStatus"], shown["warning"]) == ("same_as_clips", social.SAME_LATER)
+    assert store.get(sup.PK, f"SOCIAL#{platform}")["connectionStatus"] == "same_as_clips"
 
 
-def test_check_it_brings_same_as_clips_back_to_connected(
+def test_check_it_never_brings_same_as_clips_back_to_connected(
     call: Call, store: db.Store, secrets_client: FakeSecretsManager, http: FakeHttp
 ) -> None:
-    sup.social(store, secrets_client, "youtube", status="same_as_clips")  # stored before Lamo Clips moved on
-    sup.clips_account(store, None, "youtube", accountId="UC-SOMEONE-ELSE")
-    http.answers.append((200, {"items": [{"id": sup.IDENTITY["youtube"]}]}))
+    sup.social(store, secrets_client, "youtube", status="same_as_clips")  # stored while Clip Factory had it
+    sup.clips_account(store, None, "youtube", accountId="UC-SOMEONE-ELSE")  # Clip Factory moved on
     status, body = call("POST", f"{ROOT}/youtube/check")
     assert status == 200, body
-    assert body["account"]["connectionStatus"] == "connected"
-    assert store.get(sup.PK, "SOCIAL#youtube")["connectionStatus"] == "connected"
+    assert body["account"]["connectionStatus"] == "same_as_clips"
+    assert store.get(sup.PK, "SOCIAL#youtube")["connectionStatus"] == "same_as_clips"
+    assert http.calls == []  # Clip Factory's account is never called with Lamo Stories' token
 
 
 def test_a_different_lamo_clips_account_leaves_the_connection_as_it_is(

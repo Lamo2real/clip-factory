@@ -1,5 +1,5 @@
 {
-  "$comment": "Lamo Stories' five built-in agents (docs/CONTRACTS.md §45.26). The owner can edit each agent's instructions (Reset restores these; a stored text equal to one of an agent's formerInstructions, an earlier default, counts as not edited and gets today's), switch it off, and pick its model, effort and skills in Lamo Stories › Settings › Agents. Clip Factory's agents and skills are separate and never used here.",
+  "$comment": "Lamo Stories' five built-in agents (docs/CONTRACTS.md §45.26). The owner can edit each agent's instructions (Reset restores these; a stored text equal to one of an agent's formerInstructions, an earlier default, counts as not edited and gets today's), switch it off, and pick its model, effort and skills in Lamo Stories › Settings › Agents. Clip Factory's agents and skills are separate and never used here. Tasks (§45.37 G5): the creative director's text_edit is a short chat edit (rename, fix a word, shorten a caption; suggested effort Low); the storyboard agent's animation_plan is the writer's re-staging pass after the engine refused the first staging (suggested effort High).",
   "agents": [
     {
       "agentId": "creative_director",

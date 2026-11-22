@@ -114,14 +114,13 @@ def test_youtube_posts_with_the_workspace_token_and_lamo_stories_settings_only(
     # §45.37 G6: Clip Factory's counters are never written; Lamo Stories counts its upload, its two processing checks
     # and its four numbers reads (one Data API unit each) in its own item of its own partition
     assert store.get("RATE#youtube", "BUDGET") is None
-    own = table.raw(sup.PK, "SHAREUSE#youtube#2026-11-15")
+    own = table.raw("RATE#WS#~shared#youtube", "SHAREUSE#youtube#2026-11-15")
     assert own is not None
-    assert (own["type"], own["posts"], own["units"], own["userId"], own["workspaceId"]) == (
+    assert (own["type"], own["posts"], own["units"], own["byWorkspace"]) == (
         "ws_shareuse",
         1,
         6,
-        USER,
-        "stories",
+        {f"{USER}#stories": {"posts": 1, "units": 6}},
     )
     for _, name in secrets_client.calls:
         assert name.startswith("cf-prod/workspaces/stories/") or name.endswith("/app"), name
@@ -184,7 +183,7 @@ def test_x_waits_for_the_next_month_when_clip_factory_used_its_credits_and_then_
     assert "waitUntil" not in job
     assert "waiting" not in job
     assert store.get("RATE#x", "BUDGET") == {**cf_budget}  # Clip Factory's budget: byte for byte as it was
-    own = table.raw(sup.PK, "SHAREUSE#x#2026-12")
+    own = table.raw("RATE#WS#~shared#x", "SHAREUSE#x#2026-12")
     assert own is not None
     assert own["usd"] >= 0.015
     assert store.get(db.user_pk(USER), "SETUP#x") is None  # Clip Factory's setup gates are never written
@@ -201,7 +200,7 @@ def test_x_credits_run_out_without_touching_lamo_clips_gates(
     assert job["publishingStatus"] == "needs_attention"
     assert job["error"] == "X has no credits left. Buy more in console.x.com › Billing › Credits, then tap Try again."
     assert store.get("RATE#x", "BUDGET") is None  # §45.37 G6: Clip Factory's X budget is never written
-    own = table.raw(sup.PK, "SHAREUSE#x#2026-11")
+    own = table.raw("RATE#WS#~shared#x", "SHAREUSE#x#2026-11")
     assert own is not None
     assert float(own["usd"]) == 0.015  # Lamo Stories' own count of the shared app's credits
     assert store.get(db.user_pk(USER), "SETUP#x") is None

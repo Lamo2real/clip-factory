@@ -629,6 +629,11 @@ def publish_step(deps: StoryFlowDeps, target: Target, job_id: str, phase: str) -
         tokens.mark_dead(platform)
         end_job(deps, target, job_id, "reconnect")
         return {"state": "stopped"}
+    except platform_errors.RetryablePlatformProblem as e:
+        if phase == "start" and shared_app and e.problem.kind in shared_room.RATE_KINDS:
+            # a slow-down on Clip Factory's shared app: step back (own counter only) and wait, never retry into it
+            return _problem(deps, target, job_id, e.problem.kind, waits=True)
+        raise  # the step's retry strategy tries again; out of tries → failed-{platform}
     except RetryablePublishError:
         raise  # the step's retry strategy tries again; out of tries → failed-{platform}
     except platform_errors.PlatformProblem as e:

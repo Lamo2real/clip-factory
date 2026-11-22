@@ -29,9 +29,13 @@ model to null. The agent reads the workspace's pick per job (never a cached proc
 **The owner's own maker models** (G2): ``MAKERDEF#{key}`` items, ``PUT`` / ``DELETE
 /v1/workspaces/{ws}/makers/models/{key}``: a key ``^custom-[a-z0-9-]{1,40}$`` (never a bundled key, never an added
 reasoning model's key), at most ``MAX_PER_KIND`` per kind, ``409`` on delete while Settings › Video picks it. Where
-it runs (G4): pictures on ``bedrock`` (a ``stability.*``, ``amazon.titan-image*`` or ``amazon.nova-canvas*`` model)
-or ``openai_compatible`` (``POST {baseUrl}/images/generations``); video on ``bedrock`` only; sound on ``elevenlabs``
-or ``bedrock``. They belong to the ``own-*`` maker of their kind. **Check models** (``POST …/ai/check-models`` with
+it runs (G4), and only what Lamo Stories' agent can call is accepted: pictures on ``bedrock`` (a ``stability.*`` or
+``amazon.titan-image*`` model, also as a cross-Region profile id or an ARN) or ``openai_compatible`` (``POST
+{baseUrl}/images/generations``); video on ``bedrock`` only (a ``luma.*`` model); sound on ``elevenlabs`` only, and
+only its sound-effect (``eleven_text_to_sound*``) and music (``music_*``) models, never its text-to-speech. Amazon
+Bedrock has no sound model, so a Bedrock sound model is refused with a sentence (the host stays known, for the day
+Amazon adds one). A model id Amazon ended (Nova Canvas, Nova Reel) is never added again (G7). They belong to the
+``own-*`` maker of their kind. **Check models** (``POST …/ai/check-models`` with
 ``makers``) asks the agent for an access check that costs nothing (Bedrock ``GetFoundationModelAvailability`` /
 ``GetFoundationModel`` in the model's Region, ElevenLabs a GET of its model list, Polly ``DescribeVoices``), written
 to ``MAKERSTATUS#{key}`` (``ok`` "Works", ``denied`` "No access", ``not_found`` "Not found", with the provider's own
@@ -78,8 +82,15 @@ KIND_HOSTS: Final = {
     "video": (hosts.BEDROCK,),
     "audio": (hosts.ELEVENLABS, hosts.BEDROCK),
 }
-# A Bedrock picture model the agent knows how to call (G7): Stability AI's, Amazon Titan Image's or Nova Canvas'.
-BEDROCK_PICTURE: Final = re.compile(r"^(?:stability\.|amazon\.titan-image|amazon\.nova-canvas)")
+# A Bedrock picture model the agent knows how to call (G7): Stability AI's or Amazon Titan Image's (Nova Canvas, the
+# third family the agent knows, was ended by Amazon: ``ENDED_FAMILIES``).
+BEDROCK_PICTURE: Final = re.compile(r"^(?:stability\.|amazon\.titan-image)")
+# A Bedrock video model the agent knows how to call: Luma AI's (Nova Reel was ended by Amazon).
+BEDROCK_VIDEO: Final = re.compile(r"^luma\.")
+# Model families Amazon ended (G7): never added as an own model, whatever version or spelling.
+ENDED_FAMILIES: Final = re.compile(r"^amazon\.nova-(?:canvas|reel)")
+# ElevenLabs makes sound effects and music for Lamo Stories, never a voice (G3, G7).
+ELEVENLABS_SOUND: Final = re.compile(r"^(?:eleven_text_to_sound|music_)")
 KIND_WORD: Final = {"image": "picture", "video": "video", "audio": "sound"}
 MAX_PER_KIND: Final = 20
 LABEL_MAX: Final = 60
@@ -110,8 +121,23 @@ BUNDLED: Final = "That model comes with Lamo Stories, so it can't be changed or 
 REASONING_TAKEN: Final = "You already added an AI model with that name in Settings › AI. Pick another name."
 KIND_FIXED: Final = "A model you added keeps what it makes. Remove it and add it again as another kind."
 BAD_PICTURE_MODEL: Final = (
-    "Lamo Stories can make pictures on Amazon Bedrock with Stability AI's, Amazon Titan Image's or Amazon Nova "
-    "Canvas' models. Paste a model id like stability.stable-image-core-v1:1."
+    "Lamo Stories can make pictures on Amazon Bedrock with Stability AI's or Amazon Titan Image's models. Paste a "
+    "model id like stability.stable-image-core-v1:1."
+)
+BAD_VIDEO_MODEL: Final = (
+    "Lamo Stories can make video on Amazon Bedrock with Luma AI's models only. Paste a model id like luma.ray-v2:0."
+)
+ENDED_MODEL: Final = (
+    "Amazon ended that model on 30 Sep 2026, so it can't be added. Pick another model, like "
+    "stability.stable-image-core-v1:1 for pictures or luma.ray-v2:0 for video."
+)
+NO_BEDROCK_SOUND: Final = (
+    "Amazon Bedrock has no sound-effect or music model yet, so Lamo Stories can't add one there. Add an ElevenLabs "
+    "model instead, like eleven_text_to_sound_v2."
+)
+ELEVENLABS_ONLY_SOUND: Final = (
+    "ElevenLabs is used for sound effects and music only, never a voice. Paste a model like eleven_text_to_sound_v2 "
+    "or music_v1."
 )
 BAD_PRICE: Final = "Type the price of one picture, one second, one character or one request, like perUnit 0.04 USD."
 
@@ -163,7 +189,7 @@ def _entry(raw: Mapping[str, Any], kind: str, key: str, maker: str) -> dict[str,
         "label": _text(raw.get("label"), key),
         "provider": _text(raw.get("provider"), "Amazon"),
         "maker": maker,
-        "hostId": hosts.host_id(raw.get("host")),
+        "hostId": hosts.host_id(raw.get("host"), bundled=True),
         "host": _text(raw.get("host"), hosts.LABEL[hosts.BEDROCK]),
         "modelId": _text(raw.get("modelId")),
         "region": str(region) if isinstance(region, str) and region else None,
@@ -280,6 +306,8 @@ def as_model(item: Mapping[str, Any]) -> dict[str, Any] | None:
         "note": _text(item.get("note")),
         "ended": None,
         "custom": True,
+        # internal (never in MakerModelInfo): a proof older than this change is not one of this model (providers)
+        "changedAt": str(item.get("updatedAt") or ""),
     }
     if isinstance(base_url, str) and base_url:
         out["baseUrl"] = base_url
@@ -398,10 +426,10 @@ def model_info(m: Mapping[str, Any], status: Mapping[str, Any] | None) -> dict[s
     state = str((status or {}).get("status") or "not_checked")
     if state not in STATUSES:
         state = "error"
-    if m.get("ended"):
-        state = "not_checked"
     checked = (status or {}).get("checkedAt")
     line = str((status or {}).get("line") or "") if state not in ("not_checked", "ok") else ""
+    if m.get("ended"):  # final: never "tap Check models" (it is never called again, G7; Amazon answers not found)
+        state, line = "not_found", f"{ended_line(m)}."
     out: dict[str, Any] = {
         "key": str(m.get("key")),
         "label": str(m.get("label") or m.get("key")),
@@ -523,13 +551,22 @@ def clean(body: Mapping[str, Any], *, kind_was: str | None = None) -> dict[str, 
         mismatch = region_problem(model_id, region)
         if mismatch is not None:
             raise bad_request(mismatch, "region")
-        if kind == "image" and not BEDROCK_PICTURE.match(_bare_model_id(model_id)):
+        bare = _bare_model_id(model_id)
+        if ENDED_FAMILIES.match(bare) or bare in _ended_ids():
+            raise bad_request(ENDED_MODEL, "modelId")
+        if kind == "image" and not BEDROCK_PICTURE.match(bare):
             raise bad_request(BAD_PICTURE_MODEL, "modelId")
+        if kind == "video" and not BEDROCK_VIDEO.match(bare):
+            raise bad_request(BAD_VIDEO_MODEL, "modelId")
+        if kind == "audio":
+            raise bad_request(NO_BEDROCK_SOUND, "host")
         if not hosts.empty(body.get("baseUrl")):
             raise bad_request(hosts.BASE_URL_ONLY_OPENAI, "baseUrl")
         out.update(modelId=model_id, region=region)
     else:
         out["modelId"] = hosts.clean_keyed_model_id(body.get("modelId"))
+        if host == hosts.ELEVENLABS and not ELEVENLABS_SOUND.match(out["modelId"]):
+            raise bad_request(ELEVENLABS_ONLY_SOUND, "modelId")
         if not hosts.empty(body.get("region")):
             raise bad_request(hosts.REGION_ONLY_BEDROCK, "region")
         if host == hosts.OPENAI_COMPATIBLE:
@@ -537,6 +574,11 @@ def clean(body: Mapping[str, Any], *, kind_was: str | None = None) -> dict[str, 
         elif not hosts.empty(body.get("baseUrl")):
             raise bad_request(hosts.BASE_URL_ONLY_OPENAI, "baseUrl")
     return out
+
+
+def _ended_ids() -> set[str]:
+    """The model ids of every bundled model Amazon ended (G7)."""
+    return {str(m["modelId"]) for m in bundled() if m.get("ended") and m.get("modelId")}
 
 
 def _bare_model_id(model_id: str) -> str:
@@ -561,6 +603,10 @@ def put(
     key = clean_key(store, user_id, workspace_id, key)
     existing = get_item(store, user_id, workspace_id, key)
     fields = clean(body, kind_was=str(existing["kind"]) if existing else None)
+    if fields["host"] == hosts.OPENAI_COMPATIBLE:
+        from .provider_keys import check_openai_origin
+
+        check_openai_origin(store, user_id, workspace_id, key, str(fields["baseUrl"]))  # its key goes there only
     kind = fields["kind"]
     if (
         existing is None

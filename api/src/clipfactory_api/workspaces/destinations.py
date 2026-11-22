@@ -17,8 +17,10 @@ platform** (publish, check, finish, numbers). All five rules hold, or nothing is
 5. the account is never Clip Factory's own, with no exception (§45.37 G8, the owner's hard rule): **any** identity
    the platform gives (``social.same_account``: the id and, where the platform has one, the username, from the
    account and from the token secret) matching Clip Factory's ``ACCOUNT#{platform}`` (``accountId``, ``handle``,
-   read only) stops the post, also when Clip Factory connected that account after Lamo Stories did. A stored
-   ``sharedWithClips`` from before is ignored. With Lamo Stories' own TikTok app the open ids can never match (TikTok
+   read only) stops the post, also when Clip Factory connected that account after Lamo Stories did, and so does any
+   identity Lamo Stories' own ``SOCIAL#`` remembers as Clip Factory's (``clipsMatched``: sticky, so Clip Factory
+   disconnecting that account, or its app keys changing, never makes it postable here). A match found here is
+   remembered too (``social.note_clips_now``, best effort). A stored ``sharedWithClips`` from before is ignored. With Lamo Stories' own TikTok app the open ids can never match (TikTok
    gives each app its own ``open_id``), so the usernames decide; when either side has none
    (``social.clips_unknown``) the owner must have said once that this account is a different one (``confirmAccount``
    at the tap, then ``notClipsConfirmed`` on ``SOCIAL#tiktok``), or nothing is sent.
@@ -170,7 +172,9 @@ def validate_destination(
     if inside != identity:
         raise _fail(4, "changed", platform, name)
     # 5. never Clip Factory's own account, by any identity, with no exception (G8)
-    unsure = _rule_5(store, user_id, account, chosen, identity, token=token, confirm=confirm if at_tap else None)
+    unsure = _rule_5(
+        store, user_id, account, chosen, identity, token=token, confirm=confirm if at_tap else None, now=now
+    )
     return Destination(
         workspace=workspace,
         story=story,
@@ -194,6 +198,7 @@ def _rule_5(
     *,
     token: Mapping[str, Any] | None = None,
     confirm: str | None,
+    now: datetime | None = None,
 ) -> bool:
     """Rule 5; True when it passed only because the owner just confirmed a TikTok Lamo Stories cannot compare."""
     platform = chosen.platform
@@ -201,7 +206,8 @@ def _rule_5(
     clips = social.clips_identity(store, user_id, platform)
     inside = str((token or {}).get("username") or "").strip().lstrip("@")
     seen = [account, *([{"externalAccountId": identity, "handle": f"@{inside}"}] if inside else [])]
-    if any(social.same_account(platform, each, clips) for each in seen):
+    if any(social.is_clips(platform, each, clips, account) for each in seen):
+        social.note_clips_now(store, account, seen, clips, now=now or utcnow())
         raise _fail(5, "same_as_clips", platform, name)
     if not social.clips_unknown(platform, account, chosen.choice, clips):
         return False

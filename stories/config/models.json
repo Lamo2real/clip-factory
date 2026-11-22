@@ -1,5 +1,5 @@
 {
-  "$comment": "Lamo Stories' own model list (docs/CONTRACTS.md §45.25, ADR-77). Separate from config/models.json, which is Clip Factory's and is never read by Lamo Stories. Terraform records this file's model ids in the plan (model_invoke_arns); the Lamo Stories agent's bedrock:InvokeModel grant covers every foundation model and this account's profiles and model ARNs (§45.34, §45.35 D12). 'provider' is who makes the model (Anthropic, Amazon) and 'host' who runs it (Amazon Bedrock, §45.35 D8); the bundled Claude models take output_config.effort, tools and cache points (§45.35 D1). 'profile' is the inference profile the agent calls; 'regions' are that profile's destination Regions (for IAM; '*' for a global profile). 'efforts' are the output_config.effort levels the model accepts (empty: no effort setting, the model runs at its own level). 'pricing' is Anthropic's own list price for reference (source anthropic_list, checked 2026-11-21); Amazon Bedrock bills its own price, which can differ, so the owner may type Bedrock's in Lamo Stories › Settings › AI (source owner). null where no price is known. The owner's 'Sable 5.2 / Sable 5.1' are the Claude Fable 5.2 / 5.1 models below. The picture, video and sound makers' models (§45.37 G1, G7) are in imageModels, videoModels and audioModels: { key, label, provider (who makes it), maker (the StoriesConfig.providers id it belongs to), host ('Amazon Bedrock', 'Amazon Polly' or a keyed host id), modelId, region, kind, price ({perUnit, unit, currency} or null), note, ended? (the day its maker ended it) }. Amazon Nova Canvas and Nova Reel reached end of life on 2026-09-30 (AWS's model cards, docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html); the Stability AI and Luma AI models are on Bedrock in us-west-2 only. imageModel and videoModel stay as the older single entries until every reader uses the lists.",
+  "$comment": "Lamo Stories' own model list (docs/CONTRACTS.md §45.25, ADR-77). Separate from config/models.json, which is Clip Factory's and is never read by Lamo Stories. Terraform records this file's model ids in the plan (model_invoke_arns); the Lamo Stories agent's bedrock:InvokeModel grant covers every foundation model and this account's profiles and model ARNs (§45.34, §45.35 D12). 'provider' is who makes the model (Anthropic, Amazon) and 'host' who runs it (Amazon Bedrock, §45.35 D8); the bundled Claude models take output_config.effort, tools and cache points (§45.35 D1). 'profile' is the inference profile the agent calls; 'regions' are that profile's destination Regions (for IAM; '*' for a global profile). 'efforts' are the output_config.effort levels the model accepts (empty: no effort setting, the model runs at its own level). 'pricing' is Anthropic's own list price for reference (source anthropic_list, checked 2026-11-21); Amazon Bedrock bills its own price, which can differ, so the owner may type Bedrock's in Lamo Stories › Settings › AI (source owner). null where no price is known. The owner's 'Sable 5.2 / Sable 5.1' are the Claude Fable 5.2 / 5.1 models below. Makers (docs/CONTRACTS.md §45.37 G1, G3, G7): imageModels, videoModels and audioModels list the picture, video and sound models, each with 'maker' (the StoriesConfig.providers id that uses it), 'provider' (who makes it), 'host' (who runs it: Amazon Bedrock, Amazon Polly, or a keyed host id such as 'elevenlabs' that uses the owner's own key), 'region', 'kind', 'price' (null: no price confirmed) and 'note'; 'ended' is the day Amazon ended a model (never picked by default, never called: it reads Ended by Amazon). Checked on 2026-11-22 against AWS's own model cards (docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html and each model's page): Nova Canvas amazon.nova-canvas-v1:0 and Nova Reel reached end of life on 2026-09-30 ('ResourceNotFoundException: This model version has reached the end of its life'); Stable Image Core stability.stable-image-core-v1:1, Stable Image Ultra stability.stable-image-ultra-v1:1 and Stable Diffusion 3.5 Large stability.sd3-5-large-v1:0 (InvokeModel) and Luma AI Ray2 luma.ray-v2:0 (StartAsyncInvoke) run in us-west-2 (Oregon) only; Bedrock lists no music or sound-effect model. Amazon Polly's neural voices run in eu-west-1 (docs.aws.amazon.com/polly/latest/dg/neural-voices.html); they are opt-in, never the default. ElevenLabs from elevenlabs.io/docs/api-reference (text-to-sound-effects, music): effects and an instrumental music bed only, never its text-to-speech. 'role' says which part of the sound a model makes (effects, music, voice). imageModel and videoModel are the old single entries, kept for older readers and Terraform; the lists win.",
   "defaultModel": "opus-5-5",
   "defaultEffort": "high",
   "models": [
@@ -195,8 +195,8 @@
       "region": "eu-west-1",
       "kind": "image",
       "price": null,
-      "note": "Ended by Amazon on 30 Sep 2026.",
-      "ended": "2026-09-30"
+      "ended": "2026-09-30",
+      "note": "Ended by Amazon on 30 Sep 2026. Use Stability AI's pictures instead."
     },
     {
       "key": "stable-image-core",
@@ -208,7 +208,7 @@
       "region": "us-west-2",
       "kind": "image",
       "price": null,
-      "note": "Runs in the US (Oregon). Quick pictures for portraits."
+      "note": "Fast pictures. Runs in the US (Oregon)."
     },
     {
       "key": "stable-image-ultra",
@@ -220,7 +220,7 @@
       "region": "us-west-2",
       "kind": "image",
       "price": null,
-      "note": "Runs in the US (Oregon). The most detailed pictures."
+      "note": "The most detailed pictures. Runs in the US (Oregon)."
     },
     {
       "key": "sd3-5-large",
@@ -232,7 +232,7 @@
       "region": "us-west-2",
       "kind": "image",
       "price": null,
-      "note": "Runs in the US (Oregon). Detailed pictures in many styles."
+      "note": "Detailed pictures in many styles. Runs in the US (Oregon)."
     }
   ],
   "videoModels": [
@@ -246,8 +246,8 @@
       "region": "us-east-1",
       "kind": "video",
       "price": null,
-      "note": "Ended by Amazon on 30 Sep 2026.",
-      "ended": "2026-09-30"
+      "ended": "2026-09-30",
+      "note": "Ended by Amazon on 30 Sep 2026. Use Luma AI Ray2 instead."
     },
     {
       "key": "luma-ray2",
@@ -259,19 +259,22 @@
       "region": "us-west-2",
       "kind": "video",
       "price": null,
-      "note": "Runs in the US (Oregon). Makes 5-second AI shots for scenes with no characters (cut-aways)."
+      "shotSec": 5,
+      "note": "Realistic AI shots of 5 seconds for scenes with no characters. Runs in the US (Oregon). Posts that use them get the platforms' AI labels."
     }
   ],
   "audioModels": [
     {
       "key": "polly-neural",
-      "label": "Amazon Polly neural voices",
+      "label": "A spoken voice (Amazon Polly)",
       "provider": "Amazon",
       "maker": "polly",
       "host": "Amazon Polly",
       "modelId": "neural",
       "region": "eu-west-1",
       "kind": "audio",
+      "role": "voice",
+      "voice": "Joanna",
       "price": null,
       "note": "Adds words spoken aloud. Your videos are made without a voice unless you pick this."
     },
@@ -284,21 +287,22 @@
       "modelId": "eleven_text_to_sound_v2",
       "region": null,
       "kind": "audio",
+      "role": "effects",
       "price": null,
-      "note": "Sound effects from your ElevenLabs account. Never a voice."
+      "note": "Makes the sound effects with your own ElevenLabs key. Character noises stay built in and wordless."
     },
     {
       "key": "elevenlabs-music",
-      "label": "ElevenLabs music (instrumental)",
+      "label": "ElevenLabs music",
       "provider": "ElevenLabs",
       "maker": "elevenlabs",
       "host": "elevenlabs",
       "modelId": "music_v1",
       "region": null,
       "kind": "audio",
+      "role": "music",
       "price": null,
-      "note": "An instrumental music bed from your ElevenLabs account. Never a voice.",
-      "instrumental": true
+      "note": "Makes an instrumental music bed with your own ElevenLabs key. Never a voice or singing."
     }
   ]
 }

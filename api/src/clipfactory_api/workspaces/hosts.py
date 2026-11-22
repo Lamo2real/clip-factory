@@ -33,6 +33,9 @@ BEDROCK: Final = "bedrock"
 ANTHROPIC: Final = "anthropic"
 OPENAI_COMPATIBLE: Final = "openai_compatible"
 ELEVENLABS: Final = "elevenlabs"
+# Amazon Polly runs only the bundled spoken-voice maker (opt-in, G7): a display host id, never one an added model
+# may name, and keyless (the agent's own AWS access).
+POLLY: Final = "polly"
 HOSTS: Final = (BEDROCK, ANTHROPIC, OPENAI_COMPATIBLE, ELEVENLABS)
 REASONING_HOSTS: Final = (BEDROCK, ANTHROPIC, OPENAI_COMPATIBLE)  # where an added reasoning model may run
 KEYED: Final = (ANTHROPIC, OPENAI_COMPATIBLE, ELEVENLABS)  # the hosts that take the owner's key (Provider keys)
@@ -94,21 +97,35 @@ NOT_PUBLIC: Final = (
 )
 BASE_URL_ONLY_OPENAI: Final = "Only a model on an OpenAI-compatible API has an address (baseUrl). Leave it out."
 REGION_ONLY_BEDROCK: Final = "Only a model on Amazon Bedrock has a Region. Leave the Region out."
+ONE_SERVICE: Final = (
+    "Lamo Stories keeps one key for one OpenAI-compatible service. Your other OpenAI-compatible models use {host}: "
+    "use that address too, or remove those models first."
+)
+KEY_FOR_OTHER: Final = (
+    "Your OpenAI-compatible key is for {saved}. To use {host}, remove that key in Lamo Stories › Settings › AI › "
+    "Provider keys first, then paste the key for {host}."
+)
 BAD_KEYED_MODEL_ID: Final = (
     "Type the model's name exactly as its API spells it, like claude-opus-5-5 or meta-llama/Llama-4-Maverick."
 )
 
 
-def host_id(value: Any) -> str:
+def host_id(value: Any, *, bundled: bool = False) -> str:
     """The host id of a stored item or a ``models.json`` entry: one of ``HOSTS``. A file entry's ``host`` may be the
-    display name ("Amazon Bedrock"); anything not keyed is Amazon Bedrock, as every model was before hosts."""
+    display name ("Amazon Bedrock"); anything not keyed is Amazon Bedrock, as every model was before hosts. Only a
+    bundled entry (``bundled``) may be Amazon Polly's (``POLLY``)."""
     text = " ".join(str(value or "").split()).lower()
     if text in HOSTS:
         return text
+    if bundled and text in (POLLY, POLLY_LABEL.lower()):
+        return POLLY
     for host, label in LABEL.items():
         if text == label.lower():
             return host
     return BEDROCK
+
+
+POLLY_LABEL: Final = "Amazon Polly"
 
 
 def host_label(host: str, base_url: Any = None) -> str:
@@ -203,3 +220,16 @@ def clean_base_url(value: Any) -> str:
     if port is not None and port != 443:
         shown = f"{shown}:{port}"
     return f"https://{shown}{path}"
+
+
+def origin(base_url: Any) -> str:
+    """``https://{host}[:port]`` of a cleaned ``baseUrl`` ("" when there is none): who gets the key."""
+    if not isinstance(base_url, str) or not base_url:
+        return ""
+    parts = urlsplit(base_url)
+    return f"{parts.scheme.lower()}://{parts.netloc.lower()}" if parts.scheme and parts.netloc else ""
+
+
+def origin_host(found: str) -> str:
+    """The host name of an origin, for a sentence ("api.groq.com")."""
+    return urlsplit(found).hostname or found

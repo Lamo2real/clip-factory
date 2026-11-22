@@ -93,6 +93,10 @@ def assert_only_allowed(table: FakeTable, secrets_client: FakeSecretsManager, *,
                 continue
             if pk.startswith("RATE#WS#stories#"):
                 continue
+            if pk.startswith("RATE#WS#~shared#") and sk.startswith("SHAREUSE#"):
+                # §45.37 G6: Lamo Stories' one counter of Clip Factory's shared app, all workspaces together
+                assert rates, (op, pk)  # only the story flow, on Clip Factory's shared app, counts there
+                continue
             raise AssertionError(f"{op} touched {pk} {sk}")
     for _, name in secrets_client.calls:
         assert name.startswith(f"{sup.WSP}stories/") or name in CLIPS_APP_READS or name == STATE_SECRET, name

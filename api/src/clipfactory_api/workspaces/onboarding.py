@@ -15,8 +15,8 @@ real state and cannot be ticked by hand (§45.34 "Setup steps 1–3", "Onboardin
   (``social.accounts_shown``, settled the same way, round 5 E3): Clip Factory's own account (``same_as_clips``) is
   not, since nothing can be posted there, so the step stays to do with a line saying why; an account whose chosen
   app's keys changed (``needs_reconnect``) is not either. A stored ``connected`` whose account is Clip Factory's own
-  destination (Clip Factory connected it later; no account is ever shared, §45.37 G8) counts as ``same_as_clips`` (§45.35 D11), and a
-  stored ``same_as_clips`` that Clip Factory let go of counts as ``connected``. The app keys are read with the
+  destination (Clip Factory connected it later; no account is ever shared, §45.37 G8) counts as ``same_as_clips``
+  (§45.35 D11), and a stored ``same_as_clips`` stays so, also once Clip Factory lets go of it (sticky, G8). The app keys are read with the
   workspace secrets only while the request has time for one more slow read, as the dashboard does.
 
 Only 5 and 11 are ticked by hand. The ``ONBOARD`` item keeps only the hand ticks, the skips and ``finishedAt``.

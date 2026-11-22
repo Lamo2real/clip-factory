@@ -832,3 +832,15 @@ def test_an_openai_compatible_address_must_be_public_https(wcall: WsCall, table:
     assert status == 400, body
     assert body["error"].get("field") in (None, "baseUrl")
     assert not [k for k in table.items if k[1].startswith("MODELDEF#")]
+
+
+def test_an_openai_compatible_model_never_takes_max_as_its_reasoning_effort(wcall: WsCall, table: FakeTable) -> None:
+    """The reviewer's G4 minor: OpenAI-style APIs take ``reasoning_effort`` low to xhigh; "max" would be sent as it
+    is and refused, so it is refused here (the web's REASONING_EFFORTS are the same four)."""
+    from clipfactory_api.workspaces import model_defs
+
+    assert model_defs.REASONING_EFFORTS == ("low", "medium", "high", "xhigh")
+    status, body = wcall("PUT", f"{BASE}/ai/models/custom-llama-max", {**OPENAI_API, "efforts": ["high", "max"]})
+    assert (status, body["error"]["message"]) == (400, model_defs.BAD_REASONING_EFFORT)
+    assert table.raw(pk(), "MODELDEF#custom-llama-max") is None
+    assert wcall("PUT", f"{BASE}/ai/models/custom-llama-max", {**OPENAI_API, "efforts": ["high", "xhigh"]})[0] == 200

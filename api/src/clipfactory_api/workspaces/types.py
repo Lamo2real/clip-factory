@@ -176,6 +176,19 @@ def rate_pk(workspace_id: str, platform: str) -> str:
     return f"RATE#WS#{workspace_id}#{platform}"
 
 
+# §45.37 G6: the one counter of what **all** of Lamo Stories (every owner, every stories workspace) used of Clip
+# Factory's shared developer app: the app's quotas are one per app, as Clip Factory's own RATE#{platform} are. Never a
+# workspace id ("~" is in no WORKSPACE_ID), never one of Clip Factory's RATE#{platform} keys.
+SHARED_APP_KEY: Final = "~shared"
+
+
+def shared_rate_pk(platform: str) -> str:
+    """``RATE#WS#~shared#{platform}``: Lamo Stories' one shared-app counter partition per platform."""
+    if platform not in PLATFORMS:
+        raise ValueError(f"unknown platform: {platform}")
+    return f"RATE#WS#{SHARED_APP_KEY}#{platform}"
+
+
 def provider_secret_name(prefix: str, workspace_id: str, provider_id: str) -> str:
     """``cf-prod/workspaces/{ws}/providers/{providerId}`` (§45.31): an external provider's API key."""
     base = _workspace_base(prefix, workspace_id)

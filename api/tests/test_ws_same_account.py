@@ -17,6 +17,7 @@ import pytest
 import ws_social_support as sup
 from clipfactory_api import db
 from clipfactory_api.app import App
+from clipfactory_api.oauth import setup as clips_setup
 from clipfactory_api.oauth.providers import Linked
 from clipfactory_api.workspaces import social
 from clipfactory_api.workspaces import types as ws
@@ -110,6 +111,138 @@ def test_clip_factorys_account_is_refused_before_every_upload_also_when_it_conne
     assert json.dumps(sorted(after, key=str), default=str) == json.dumps(
         sorted((i for i in json.loads(clips_before) if not str(i["sk"]).startswith("ACCOUNT#")), key=str), default=str
     )
+
+
+def _options(platform: str) -> dict[str, Any]:
+    if platform != "tiktok":
+        return {}
+    return {
+        "options": {
+            "privacyLevel": "SELF_ONLY",
+            "disableComment": False,
+            "disableDuet": False,
+            "disableStitch": False,
+            "brandContent": False,
+            "brandOrganic": False,
+        }
+    }
+
+
+def _clip_factory_lets_go(store: db.Store, platform: str) -> None:
+    """Clip Factory disconnects (or its app keys change): its ACCOUNT# reads ``not_connected`` with no id or handle."""
+    clips_setup.put_account(store, USER, platform, "not_connected", now=NOW)
+
+
+@pytest.mark.parametrize(("platform", "what", "clips", "identity", "handle"), CASES, ids=IDS)
+def test_clip_factorys_account_stays_refused_once_clip_factory_disconnects_it(
+    app: App, call: Call, store: db.Store, table: FakeTable, secrets_client: FakeSecretsManager, platform: str,
+    what: str, clips: dict[str, Any], identity: str, handle: str
+) -> None:  # fmt: skip
+    """The reviewer's G8 blocker: Clip Factory connected, Lamo Stories connects the same account, Clip Factory then
+    disconnects it. It stays refused at GET, at the tap and in the story flow, and no token of it is ever kept."""
+    sup.ready(store, secrets_client)
+    sup.install(app, secrets_client, sup.FakeStarter())
+    sup.clips_account(store, None, platform, **clips)
+    sup.social(store, secrets_client, platform, identity="old-one", handle="@old.one")  # an earlier, own account
+    token_name = f"cf-prod/workspaces/stories/{platform}/token"
+    assert token_name in secrets_client.values
+    saved = social.save_connected(
+        _scope(store, secrets_client),
+        platform,
+        _linked(platform, identity, handle),
+        app_client_id=GOOD[platform]["clientId"],
+        now=NOW,
+    )
+    assert saved["connectionStatus"] == "same_as_clips", what
+    assert token_name not in secrets_client.values  # Lamo Stories keeps no way into Clip Factory's account
+    clips_items = [i for i in table.all() if i["pk"] == f"USER#{USER}" and str(i["sk"]).startswith("ACCOUNT#")]
+    _clip_factory_lets_go(store, platform)
+    assert social.clips_identity(store, USER, platform) == social.NO_CLIPS
+    # GET (and the settle it runs) keeps it Clip Factory's
+    for _ in range(2):
+        status, body = call("GET", "/v1/workspaces/stories/social")
+        assert status == 200
+        shown = next(a for a in body["accounts"] if a["platform"] == platform)
+        assert shown["connectionStatus"] == "same_as_clips", what
+        assert store.get(sup.PK, f"SOCIAL#{platform}")["connectionStatus"] == "same_as_clips"
+        assert social.MATCHED not in json.dumps(body)  # the remembered identities are never returned
+    # the tap
+    status, body = call(
+        "POST",
+        f"/v1/workspaces/stories/stories/{sup.STORY_ID}/publish",
+        {"targets": [{"platform": platform, "socialAccountId": f"stories.{platform}", **_options(platform)}]},
+    )
+    assert status == 409, body
+    # the story flow, even if the item were turned back by hand and a token put back
+    store.update(sup.PK, f"SOCIAL#{platform}", {"connectionStatus": "connected"}, remove=["reason"])
+    secrets_client.values[token_name] = json.dumps(_linked(platform, identity, handle).token)
+    job = sup.pubjob(store, platform, job_id="01JZ0000000000000000000PJ7", externalAccountId=identity)
+    with pytest.raises(DestinationProblem) as stopped:
+        validate_destination(store, WorkspaceSecrets(secrets_client), USER, "stories", job)
+    assert (stopped.value.rule, stopped.value.kind) == (5, "same_as_clips"), what
+    from clipfactory_api.flows.story_flow import run_story_flow
+    from conftest import Clock
+    from fakes import FakeDurableContext, FakeHttp
+
+    http = FakeHttp()
+    run_story_flow(
+        FakeDurableContext(),
+        sup.flow_event("01JZ0000000000000000000PJ7"),
+        sup.flow_deps(store, secrets_client, http, Clock(NOW)),
+    )
+    assert http.calls == []  # nothing was sent
+    ended = table.raw(sup.PK, "PUBJOB#01JZ0000000000000000000PJ7")
+    assert ended is not None
+    assert ended["publishingStatus"] == "needs_attention"
+    # Clip Factory's own items were only read
+    after = [i for i in table.all() if i["pk"] == f"USER#{USER}" and str(i["sk"]).startswith("ACCOUNT#")]
+    assert len(after) == len(clips_items)
+
+
+@pytest.mark.parametrize(("platform", "what", "clips", "identity", "handle"), CASES, ids=IDS)
+def test_an_account_clip_factory_took_later_stays_refused_after_it_lets_go(
+    store: db.Store, secrets_client: FakeSecretsManager, platform: str, what: str, clips: dict[str, Any],
+    identity: str, handle: str
+) -> None:  # fmt: skip
+    """Lamo Stories connected first; Clip Factory connects that account later (found before an upload, with no GET in
+    between), then disconnects it. Still refused, and connecting that very account again is refused at connect."""
+    sup.ready(store, secrets_client)
+    sup.social(store, secrets_client, platform, identity=identity, handle=handle)
+    job = sup.pubjob(store, platform, externalAccountId=identity)
+    secrets = WorkspaceSecrets(secrets_client)
+    sup.clips_account(store, None, platform, **clips)
+    with pytest.raises(DestinationProblem):
+        validate_destination(store, secrets, USER, "stories", job)
+    stored = store.get(sup.PK, f"SOCIAL#{platform}")
+    assert stored is not None
+    assert (stored["connectionStatus"], stored["reason"]) == ("same_as_clips", "clips_now")
+    _clip_factory_lets_go(store, platform)
+    with pytest.raises(DestinationProblem) as stopped:
+        validate_destination(store, secrets, USER, "stories", job)
+    assert stopped.value.kind == "same_as_clips", what
+    again = social.save_connected(
+        _scope(store, secrets_client),
+        platform,
+        _linked(platform, identity, handle),
+        app_client_id=GOOD[platform]["clientId"],
+        now=NOW,
+    )
+    assert again["connectionStatus"] == "same_as_clips", what
+    # a different account made for Clip Factory Stories connects and posts
+    fresh = _linked(platform, "brand-new-1", "@brand.new")
+    if "username" in fresh.token:
+        fresh.token["username"] = "brand.new"
+    other = social.save_connected(
+        _scope(store, secrets_client),
+        platform,
+        fresh,
+        app_client_id=GOOD[platform]["clientId"],
+        now=NOW,
+    )
+    assert other["connectionStatus"] == "connected"
+    assert identity in other[social.MATCHED]["ids"]  # still remembered for the next connect
+    job = sup.pubjob(store, platform, job_id="01JZ0000000000000000000PJ8", externalAccountId="brand-new-1")
+    assert validate_destination(store, secrets, USER, "stories", job).external_account_id == "brand-new-1"
 
 
 def test_the_username_inside_the_token_is_compared_too(store: db.Store, secrets_client: FakeSecretsManager) -> None:
