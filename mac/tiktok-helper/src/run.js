@@ -207,6 +207,8 @@ async function doPost(api, state, job, { fresh = false, fr, relogged = false } =
         // On disk first, then the server: if either fails, Post is not pressed. The ids already in Studio › Posts
         // are kept, so a later look finds only the new post.
         state.lastPressedAt = new Date().toISOString();
+        // One backlog clip per auto-posting run (plan.js): remember when the last one went.
+        if (job.source !== "upload" && job.source !== "auto") state.lastBacklogAt = state.lastPressedAt;
         remember(state, job.clipId, { step: "pressing", pressedAt: state.lastPressedAt, baseline: extra.baseline || [] });
       } else {
         remember(state, job.clipId, { step });
@@ -344,9 +346,20 @@ export async function tick() {
     const api = client(config.apiUrl, token);
     const { on, helper, queue = [] } = await api.queue();
     const needsYou = helper?.state === "needs_you";
+    // Auto-posting's schedule, only needed while a backlog clip waits (it goes ~30 minutes after each run).
+    let autopost = null;
+    if (queue.some((j) => j.state === "waiting" && j.source !== "upload" && j.source !== "auto")) {
+      try {
+        const a = await api.autopost();
+        const run = (a.runs || []).find((r) => r.kind === "scheduled" && r.mode === "live");
+        autopost = { on: a.autoPost?.on === true, lastRunAt: run?.at ?? null, nextRunAt: a.nextRunAt ?? null };
+      } catch (e) {
+        log("autopost.read_failed", { error: String(e.message || e) });
+      }
+    }
     let action = needsYou
       ? { action: "paused", reason: helper.reason || "Your Mac needs you." }
-      : nextAction({ on, queue, state, settings, device: state.device, now: new Date() });
+      : nextAction({ on, queue, state, settings, device: state.device, now: new Date(), autopost });
     // §47.6: the owner's Change TikTok login / Forget TikTok login, done between posts (never in the middle of one).
     let loginDone;
     const request = helper?.loginRequest;

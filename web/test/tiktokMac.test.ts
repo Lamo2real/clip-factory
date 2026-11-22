@@ -29,6 +29,7 @@ import {
   sendableLine,
   sendLots,
   waitingLine,
+  whenLine,
 } from "../src/lib/tiktokMac.ts";
 import { canPostYourself, canPostYourselfHere, offerAfterUpload, tiktokState } from "../src/lib/tiktokYourself.ts";
 import { timeWords } from "../src/lib/autopost.ts";
@@ -367,5 +368,14 @@ describe("the TikTok login on the Mac (§47.8)", () => {
     const api = mockApi();
     await expect(api.tiktokMacLogin("forget")).rejects.toThrow("Set up your Mac first. Then it can keep your TikTok login.");
     await expect(api.tiktokMacLogin("show" as never)).rejects.toThrow("Pick change or forget.");
+  });
+});
+
+describe("when the Mac posts (the owner, 22 Nov: TikTok follows auto-posting)", () => {
+  it("names auto-posting's next run and how many wait, or says it posts on Upload", () => {
+    const now = Date.parse("2026-11-22T20:15:00Z");
+    expect(whenLine(true, "2026-11-22T21:00:00Z", 14, now)).toMatch(/^Posts with auto-posting · next \S+ \d\d:\d\d · 14 waiting$/);
+    expect(whenLine(true, null, 2, now)).toBe("Posts with auto-posting · 2 waiting");
+    expect(whenLine(false, "2026-11-22T21:00:00Z", 0, now)).toBe("Posts when you tap Upload · 0 waiting");
   });
 });
