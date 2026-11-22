@@ -113,7 +113,7 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 | AWS Lambda | `cf-prod-money` | Real earnings ([CONTRACTS.md §25](CONTRACTS.md#25-real-earnings-paid-programme-progress-and-platform-reported-money-owner-request-2026-11-18)): once a day reads each connected platform's account numbers and the money the platform itself reports (YouTube Analytics `estimatedRevenue` with the monetary scope; Facebook only after its live check), through the shared token manager and rate budgets, and writes `ACCTSTAT#`, `REVENUE#` and `MONEYSTATE#` items. No DeleteItem. See [ADR-47](DECISIONS.md#adr-47-only-platform-reported-money-the-estimates-are-removed). |
 | Amazon EventBridge | rule `cf-prod-stats`, `rate(15 minutes)` | The stats poller's schedule: one tick for the stats poller, its rate taken from the smallest interval in `config/platforms.json`. A few thousand invocations a month. See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
 | Amazon EventBridge | rule `cf-prod-autopost-hourly`, `cron(0 * * * ? *)` | Auto-posting ([flow 22](#22-auto-posting-the-hourly-tick-the-due-check-and-uploads-code-contracts-46-adr-81)): fires every hour on the hour (UTC) at the unqualified `cf-prod-autopost`, with 2 retries and an event age of 55 minutes (3,300 s, before the next tick). A run happens only when the owner's X hours are up, so the rule never changes when he saves. 24 short invocations a day. See [ADR-81](DECISIONS.md#adr-81-auto-posting-an-hourly-eventbridge-rule-a-due-check-and-uploads-own-code). |
-| AWS Lambda | `cf-prod-autopost` | Auto-posting ([flow 22](#22-auto-posting-the-hourly-tick-the-due-check-and-uploads-code-contracts-46-adr-81)): on each tick, one Query of the owner registry `AUTOPOSTOWNERS`, then per owner the due check, the pick (the oldest clips in Review), the claim (one transaction) and, for each clip, **Upload's own code** (`uploads.upload_review_clip`: the clip's conditional confirm transaction and the clip flow's idempotent start). It never calls a platform itself: the clip flow posts. No S3, no Bedrock; platform secrets only for the campaign fit check. |
+| AWS Lambda | `cf-prod-autopost` | Auto-posting ([flow 22](#22-auto-posting-the-hourly-tick-the-due-check-and-uploads-code-contracts-46-adr-81)): on each tick, one Query of the owner registry `AUTOPOSTOWNERS`, then per owner the due check, the pick (the oldest clips in Review), the claim (one transaction) and, for each clip, **Upload's own code** (`uploads.upload_review_clip`: the clip's conditional confirm transaction and the clip flow's idempotent start). It never calls a platform itself: the clip flow posts. No S3, no Bedrock and no Secrets Manager: the campaign fit check reads only the table. |
 | AWS Lambda, durable function | `cf-prod-job-flow` (alias `live`) | Starts the agent for a job and waits (no compute) for its callback; fails the job if heartbeats stop. Replaces the watchdog. See [ADR-22](DECISIONS.md#adr-22-lambda-durable-functions-for-the-job-and-clip-workflows). |
 | AWS Lambda, durable function | `cf-prod-clip-flow` (alias `live`) | After Keep: makes the posts, publishes each one (start, durable waits and checks, finish; tokens from Secrets Manager), sends each campaign post to Content Rewards right after it is live (`cr-send-{platform}`, retried every minute up to 25 minutes, never failing the flow), waits 48 hours (no compute), reads metrics, writes a learning, updates the clip's vector. Reads `cf-prod/platforms/*`, writes only a refreshed token (`cf-prod/platforms/*/token-*`). Replaces the publish queue, the publisher, the scheduler and perf-check. |
 | AWS Lambda | `cf-prod-ws-authorizer` | Checks the Cognito access token on `$connect` (standard library RS256 check, no extra packages). |
@@ -1369,7 +1369,8 @@ yourself and the campaign rules work as before.
   builds them.
 * **Never twice.** The claim is one `TransactWriteItems`: Put `AUTORUN#{runId}` (`state: "planned"`, its clips) on
   `attribute_not_exists(pk)` and move `AUTOPOST.lastRunAt` to the slot. A second delivery, a retry after a crash or an
-  overlapping invocation finds the run item and resumes its own list (never a new pick). Each clip then goes through
+  overlapping invocation looks for the run item first, before the due check (the claim has already moved `lastRunAt`),
+  finds it and resumes its own list (never a new pick). Each clip then goes through
   **Upload's own code**, `uploads.upload_review_clip` (the review branch of `POST /v1/clips/{clipId}/confirm` moved into
   one function the route now calls): the clip's conditional transaction (`status = review` and
   `attribute_not_exists(postsCreated)`, [flow 6](#6-review-keep-and-throw-away)) and the flow start
@@ -1388,18 +1389,25 @@ sequenceDiagram
   E->>L: scheduled event, every hour at :00 UTC (slot = floorHour(event.time))
   L->>D: one Query: AUTOPOSTOWNERS (every owner who saved autoPost)
   loop each owner (one owner's failure is logged and skipped)
-    L->>D: settings.autoPost, AUTOPOST (lastRunAt)
-    alt off, or slot < nextRunAt
-      L->>L: off or not_due: nothing written
-    else due
-      L->>D: pick: Query CLIP# in review, oldest job first, then rank (the waiting rules, §46.5)
-      L->>D: claim: one TransactWriteItems: Put AUTORUN#{runId} planned (attribute_not_exists)<br/>+ Update AUTOPOST SET lastRunAt = slot (absent or older)
-      alt the run item exists (the same event again, a retry, an overlap)
-        L->>D: read AUTORUN#{runId}: done → stop; planned → resume its own clips
-      else only AUTOPOST failed the condition
-        L->>L: not_due
+    L->>D: settings.autoPost
+    alt off
+      L->>L: off: nothing written
+    else on
+      L->>D: get AUTORUN#{runId} (runId = slot#scheduled), before the due check
+      alt the run item is there (the same event again, a retry after a crash, an overlap)
+        L->>L: done → stop; planned → resume its own clips (never a new pick)
+      else no run item, and slot < nextRunAt (AUTOPOST lastRunAt)
+        L->>L: not_due: nothing written
+      else due
+        L->>D: pick: Query CLIP# in review, oldest job first, then rank (the waiting rules, §46.5)
+        L->>D: claim: one TransactWriteItems: Put AUTORUN#{runId} planned (attribute_not_exists)<br/>+ Update AUTOPOST SET lastRunAt = slot (absent or older)
+        alt cancelled because the run item exists (an overlap won the claim)
+          L->>D: read AUTORUN#{runId}: done → stop; planned → resume its own clips
+        else cancelled only on AUTOPOST
+          L->>L: not_due
+        end
       end
-      loop each planned clip, while 30 s of the 240 s budget are left
+      loop each planned clip of the new or resumed run, while 30 s of the 240 s budget are left
         alt Practice
           L->>L: would_send: nothing written, the clip stays in Review
         else live or private test
@@ -1520,7 +1528,7 @@ alarms.
 | Content Rewards' paid money by day isn't read yet (an owner from before §39) | Its row of All your money says "Checking Content Rewards…" until the day scan ends; the paid total and the campaign money never change. |
 | An auto-posting tick is delivered twice, retried after a crash, or two invocations overlap | Both have the same slot and `runId`; the claim transaction lets one write the run, and the other finds `AUTORUN#{runId}` and resumes its own list (`done`: nothing more). Each clip's confirm is conditional on `review` and `attribute_not_exists(postsCreated)`, and the flow start has a fixed name, so every clip is confirmed once and its flow started once. |
 | An auto-posting tick arrives late, or is lost | A late tick keeps its own slot (`event.time`); a lost one is caught up by the next tick, which is due because the X hours are up: one run, never two. Event age 3,300 s keeps a retry from running into the next tick. |
-| The owner throws a clip away or taps Upload while a run is sending it | One transaction wins. The run's conditional write fails, it reads the clip and records "You threw it away first." or "You uploaded it yourself."; nothing is posted twice. |
+| The owner throws a clip away or taps Upload while a run is sending it | One transaction wins. The run's conditional write fails, it reads the clip and records "You threw it away first." or "You uploaded it yourself."; nothing is posted twice. Throw away's request goes only when its 8-second Undo ends, so when the run's write comes first the clip posts, the decline gets 409 and the app shows its calm note ("This clip was already uploaded or thrown away somewhere else, so there is nothing more to do."). |
 | A place fails at 3 a.m. | The clip flow's normal retries (up to 3 tries on "did not answer", none where a retry could post twice); that post is `failed` with its plain sentence, shows in **Didn't work** and in Library with **Try again**, and the other places of the clip still post. |
 | An auto-posting run runs out of time | A new clip starts only while at least 30 s of the 240 s budget are left; the rest are `skipped` with "Out of time. It goes next run." and stay in Review. |
 | One owner's run fails inside a tick | Logged and skipped; the other owners in `AUTOPOSTOWNERS` still run. Lambda errors raise the new auto-posting alarms. |

@@ -1034,12 +1034,20 @@ store, a fake Lambda client for the clip flow's start and fake publishers. No AW
   Run it on a port of its own: `CF_E2E_PORT=4730 npx playwright test e2e/autopost.spec.ts`.
 - **Infrastructure** (`infra/modules/autopost/tests/autopost.tftest.hcl`, mock provider): the names, the cron
   `cron(0 * * * ? *)`, the rule ENABLED, retries 2 and event age 3,300 s, the target is the function, the permission's
-  source is the rule, the role carries the boundary, no `DeleteItem`, `Scan`, `iam:*` or `scheduler:*`, and the only
-  invoke grant is the clip flow. `scripts/test-check-plan-deletes.sh` is unchanged and still passes.
-- **Help**: the guide `autopost-turn-on` in `web/src/features/help/helpKb.json` (where the page is, each control, why
-  TikTok and campaign clips wait, Practice and the Private test run). After merging, `node scripts/help-corpus.mjs`
-  and `node scripts/ask-knowledge.mjs` regenerate the corpus and the Ask knowledge, and their `--check` runs pass
-  (every route a real page, every highlight a real `data-help` anchor).
+  source is the rule, the role carries the boundary, no `DeleteItem`, `Scan`, `iam:*` or `scheduler:*`, no Secrets
+  Manager action (the campaign fit check reads only the table), and the only invoke grant is the clip flow.
+  `scripts/test-check-plan-deletes.sh` is unchanged and still passes.
+- **Help**: the guides `autopost-turn-on` and `autopost-waits-failed` in `web/src/features/help/helpKb.json` (where the
+  page is, each control, why TikTok and campaign clips wait, Practice and the Private test run; Didn't work with Try
+  again, Waits for you with Open in Review). Their page `/settings/posting/auto` exists only with the web part's
+  `auto` branch in `web/src/lib/settingsTree.ts`, so on the docs branch alone `test/helpCorpus.test.ts` and both
+  `--check` runs fail; the docs part merges after the server, infrastructure and web parts. Then, in `web/`,
+  `node scripts/help-corpus.mjs --write-docs` (it also rewrites the routes table in
+  [HELP_ASSISTANT.md](HELP_ASSISTANT.md), which gains `/settings/posting/auto`) and `node scripts/ask-knowledge.mjs`
+  regenerate the corpus and the Ask knowledge. Commit `web/src/features/help/help-corpus.json`,
+  `docs/HELP_ASSISTANT.md`, `api/src/clipfactory_api/ask/knowledge.json` and
+  `api/src/clipfactory_api/ask/library/*.md`; then `node scripts/help-corpus.mjs --check` and
+  `node scripts/ask-knowledge.mjs --check` pass (every route a real page, every highlight a real `data-help` anchor).
 - **Live checks, not done here** ([§46.14](CONTRACTS.md#4614-not-verified-live)): see step 17 of
   [Manual checks after the first deploy](#manual-checks-after-the-first-deploy).
 
