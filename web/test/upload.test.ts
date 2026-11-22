@@ -4,6 +4,7 @@ import { mockApi, type MockFaults } from "../src/api/mock/index.ts";
 import { seed } from "../src/api/mock/fixtures.ts";
 import type { Api, Clip, Post } from "../src/api/types.ts";
 import { defaultUploadTo, needsUploadAgain, placeList, STILL_WORKING, uploadClip, uploadedMessage, uploadLabel } from "../src/lib/upload.ts";
+import { sentFirstLine } from "../src/lib/autopost.ts";
 
 beforeAll(() => {
   // The mock answers quickly and holds still under automation.
@@ -86,6 +87,45 @@ describe("uploadClip against the mock API", () => {
       listPosts: () => Promise.resolve([]),
     } as unknown as Api;
     expect(await uploadClip(api, "x")).toEqual({ kind: "busy" });
+  });
+});
+
+describe("a Review Upload after auto-posting took the clip (§46.13)", () => {
+  const auto = { runId: "2026-11-22T11:00:00.000Z#scheduled", at: "2026-11-22T11:00:00.000Z" };
+  const posts = [{ postId: "p1", clipId: "c1", platform: "youtube", status: "queued", auto: true }] as Post[];
+
+  it("the 200 answer (Upload on a clip a run already sent) brings back its auto clip, and the words say so", async () => {
+    const api = { confirmClip: () => Promise.resolve({ clip: { clipId: "c1", status: "confirmed", auto }, posts }) } as unknown as Api;
+    const out = await uploadClip(api, "c1", undefined, undefined, ["youtube"]);
+    expect(out).toMatchObject({ kind: "uploading", clip: { auto } });
+    if (out.kind === "uploading") expect(sentFirstLine(out.clip)).toBe("Auto-posting sent this clip first.");
+  });
+
+  it("the 409 answer reads the clip again: its auto (a Private test too) says so", async () => {
+    const api = {
+      confirmClip: () => Promise.reject(new ApiError(409, "conflict", "This clip has already been confirmed or declined.")),
+      getClip: () => Promise.resolve({ clipId: "c1", status: "publishing", auto: { ...auto, test: "private" } }),
+      listPosts: () => Promise.resolve(posts),
+    } as unknown as Api;
+    const out = await uploadClip(api, "c1", undefined, undefined, ["youtube"]);
+    expect(out).toMatchObject({ kind: "uploading", posts });
+    if (out.kind === "uploading") expect(sentFirstLine(out.clip)).toBe("Auto-posting sent this clip first, as a private test.");
+  });
+
+  it("against the mock: a run sends the clip first, then his Upload answers with it", async () => {
+    sessionStorage.clear();
+    const { store, api } = setup();
+    for (const p of ["youtube", "instagram", "facebook"]) (window as unknown as { __cfMock: { setup: { finish(p: string): void } } }).__cfMock.setup.finish(p);
+    const run = await api.autoPostRun("private");
+    const c = store.clips.find((x) => x.clipId === run.clips[0]!.clipId)!;
+    expect(c.auto).toBeDefined();
+    const out = await uploadClip(api, c.clipId, undefined, undefined, ["youtube"]);
+    expect(out.kind).toBe("uploading");
+    if (out.kind === "uploading") expect(sentFirstLine(out.clip)).toBe("Auto-posting sent this clip first, as a private test.");
+    // His own Upload never marks a clip auto.
+    const mine = await uploadClip(api, reviewClip(store).clipId, undefined, undefined, ["youtube"]);
+    if (mine.kind === "uploading") expect(sentFirstLine(mine.clip)).toBeNull();
+    expect(mine.kind).toBe("uploading");
   });
 });
 

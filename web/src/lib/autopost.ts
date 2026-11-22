@@ -2,7 +2,7 @@
 // local "Sun 15:00" times, where the clips go, the Recent lines, the Review card's line, Home's hint and the post-row
 // words in Library and on the clip page. Pure: no screen, no api.
 import type { AutoPostSettings, AutoRun, Clip, PerfStatus, Platform, Post } from "../api/types.ts";
-import { PLATFORM_LABEL, PLATFORM_ORDER, plural } from "./format.ts";
+import { PLATFORM_LABEL, PLATFORM_ORDER, plural, shortDate } from "./format.ts";
 import { failedForPublicAccount } from "./tiktokYourself.ts";
 
 /** What an owner who never saved it reads (§46.3): nothing changes for anyone until he turns it on. */
@@ -63,11 +63,20 @@ const HOUR_MS = 3_600_000;
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const two = (n: number) => String(n).padStart(2, "0");
 
-/** "Sun 15:00": the owner's local weekday and 24-hour time. Never "Today" or "Tomorrow" (§46.2). */
-export function timeWords(at: string | number | Date): string {
+/** From this far away (either way) a time also says its date, so two Sundays never read the same. */
+const WITH_DATE_MS = 6 * 24 * HOUR_MS;
+
+/**
+ * "Sun 15:00": the owner's local weekday and 24-hour time; 6 days or more from `now` (either way) it adds the date as
+ * lib/format.ts's shortDate says it, "Sun 29 Nov 15:00". Never "Today" or "Tomorrow" (§46.2).
+ */
+export function timeWords(at: string | number | Date, now: number = Date.now()): string {
   const d = new Date(at);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${DAYS[d.getDay()]} ${two(d.getHours())}:${two(d.getMinutes())}`;
+  const t = d.getTime();
+  if (Number.isNaN(t)) return "";
+  const time = `${two(d.getHours())}:${two(d.getMinutes())}`;
+  const day = DAYS[d.getDay()];
+  return Math.abs(t - now) >= WITH_DATE_MS ? `${day} ${shortDate(d.toISOString(), new Date(now))} ${time}` : `${day} ${time}`;
 }
 
 /** The first whole hour strictly after `t` (ms), as the API's nextFullHour (§46.4). */
@@ -87,7 +96,7 @@ export const OFF_LINE = "Off. Nothing posts by itself.";
 /** The line under "Post my clips by themselves". `next`: the next run (while on); unknown yet, the next full hour. */
 export function switchLine(a: Pick<AutoPostSettings, "on" | "practice">, next: string | null | undefined, now = Date.now()): string {
   if (!a.on) return OFF_LINE;
-  const at = timeWords(next ?? nextFullHour(now));
+  const at = timeWords(next ?? nextFullHour(now), now);
   return a.practice ? `On, practising. Next practice: ${at}. Nothing gets sent.` : `On. Next: ${at}.`;
 }
 
@@ -115,6 +124,8 @@ export function leftOutLine(platform: Platform, reason: "tiktok_yourself" | "not
 // ---------- Next up, Recent (§46.2 items 4 and 8) ----------
 
 export const NEXT_EMPTY = "Nothing in Review. New clips join the line when they are made.";
+/** Next up is empty but Waits for you is not: every clip in Review waits for his own tap. */
+export const NEXT_ALL_WAITING = "Every clip in Review is waiting for you.";
 
 const quoted = (hook: string) => `“${hook}”`;
 
@@ -150,8 +161,8 @@ const mark = (status: Post["status"]) => (status === "posted" ? "✓" : status =
  * "Sun 05:00 · Practice: would post “hook” to YouTube, Instagram and Facebook."; "Private test · “hook”: YouTube (only
  * you) · Facebook (draft) · Instagram (checked, not published)".
  */
-export function runLines(run: AutoRun): RunLine[] {
-  const lead = run.mode === "private" ? "Private test" : timeWords(run.at);
+export function runLines(run: AutoRun, now: number = Date.now()): RunLine[] {
+  const lead = run.mode === "private" ? "Private test" : timeWords(run.at, now);
   if (!run.clips.length) return [{ key: run.runId, text: `${lead} · ${run.note ?? "Nothing posted."}`, opens: [] }];
   return run.clips.map((c, i) => {
     const key = `${run.runId}:${c.clipId}:${i}`;
@@ -175,19 +186,52 @@ export function runLines(run: AutoRun): RunLine[] {
 
 // ---------- Review, Home (§46.2) ----------
 
-/** The Review card's one quiet line while auto-posting is on: in Next up, waiting, or nothing. */
+/** A clip in Next up while no place is set up: runs post nothing (§46.6). */
+export const NOWHERE_TO_POST = "Auto-posting has nowhere to post yet. Set up a place first.";
+/** Practising, a clip in line after the first ones: practice runs pick the same first clips each time (§46.8). */
+export const PRACTICE_IN_LINE = "In line. Practice picks the first clips each time. Nothing gets sent.";
+
+/**
+ * The Review card's one quiet line while auto-posting is on: in Next up, waiting, or nothing. `places`: the status's
+ * places (where a run posts now). Never a line with an empty time.
+ */
 export function reviewLine(
   a: Pick<AutoPostSettings, "on" | "practice">,
   next: { runAt?: string } | undefined,
   waiting: { reason: string } | undefined,
+  places: readonly Platform[],
+  now: number = Date.now(),
 ): string | null {
   if (!a.on) return null;
   if (next) {
-    const at = next.runAt ? timeWords(next.runAt) : "";
+    if (!places.length) return NOWHERE_TO_POST;
+    const at = next.runAt ? timeWords(next.runAt, now) : "";
+    if (!at) return a.practice ? PRACTICE_IN_LINE : null;
     return a.practice ? `Practice picks it ${at}. Nothing gets sent.` : `Goes up by itself ${at}. Throw it away to stop it.`;
   }
   if (waiting) return `Auto-posting skips this one: ${waiting.reason} Upload it yourself.`;
   return null;
+}
+
+/** Review's page lede (no job picked) while off or practising. */
+export const REVIEW_LEDE = "Watch each clip. Tap Upload to post it, or Throw away if you do not like it. Nothing posts until you tap Upload.";
+
+/** Review's page lede (no job picked): while on, the oldest clips go up by themselves, so it no longer says nothing posts. */
+export function reviewLede(a: Pick<AutoPostSettings, "on" | "practice" | "everyHours">): string {
+  if (!a.on || a.practice) return REVIEW_LEDE;
+  return `Watch each clip. Tap Upload to post it now, or Throw away if you do not like it. Auto-posting is on: the oldest clips go up by themselves every ${hoursWords(a.everyHours)}.`;
+}
+
+/** Throw away (or its decline) found the clip already taken by a run: nothing to throw away any more. */
+export const AUTO_ALREADY_SENT = "Auto-posting already sent this clip.";
+
+/**
+ * A Review card's own Upload never marks its clip `auto`: an Upload that answers with an `auto` clip found it already
+ * sent by a run (§46.13). The calm note it shows instead of the burst and "Uploading to…", or null for his own Upload.
+ */
+export function sentFirstLine(clip: Pick<Clip, "auto">): string | null {
+  if (!clip.auto) return null;
+  return clip.auto.test === "private" ? "Auto-posting sent this clip first, as a private test." : "Auto-posting sent this clip first.";
 }
 
 export const HOME_HINT = "Nothing gets posted until you tap Upload.";

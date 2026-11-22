@@ -20,6 +20,7 @@ import {
   EVERY_HOURS,
   hoursWords,
   leftOutLine,
+  NEXT_ALL_WAITING,
   NEXT_EMPTY,
   PER_RUN,
   placesLine,
@@ -316,7 +317,7 @@ export function AutoPostBranch() {
                 ))}
               </ol>
             ) : (
-              <p className="autopost__line muted">{NEXT_EMPTY}</p>
+              <p className="autopost__line muted">{status.waiting.length ? NEXT_ALL_WAITING : NEXT_EMPTY}</p>
             )
           ) : (
             loading

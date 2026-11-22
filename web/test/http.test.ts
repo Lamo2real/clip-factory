@@ -168,6 +168,21 @@ describe("httpApi", () => {
     await expect(api.writeSkill({ title: "X", description: "abc", instructions: "y" })).rejects.toMatchObject({ status: 409, field: "title" });
   });
 
+  it("Throw away's hold: POST /hold answers the clip, DELETE /hold the 204 (§46.13)", async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => (init?.method === "DELETE" ? new Response(null, { status: 204 }) : json(200, { clip: { clipId: "C/1" } })));
+    const api = httpApi({ baseUrl: "https://api.test", auth: auth(["tok"]), fetcher });
+    expect((await api.holdClip("C/1")).clipId).toBe("C/1");
+    await expect(api.unholdClip("C/1")).resolves.toBeUndefined();
+    const calls = fetcher.mock.calls as unknown as [string, RequestInit][];
+    expect(calls.map(([url, init]) => [init.method, url, init.body])).toEqual([
+      ["POST", "https://api.test/v1/clips/C%2F1/hold", undefined],
+      ["DELETE", "https://api.test/v1/clips/C%2F1/hold", undefined],
+    ]);
+    // A run sent it first: the server's sentence.
+    const refused = httpApi({ baseUrl: "https://api.test", auth: auth(["tok"]), fetcher: vi.fn(async () => json(409, { error: { code: "conflict", message: "Auto-posting already sent this clip." } })) });
+    await expect(refused.holdClip("C1")).rejects.toMatchObject({ status: 409, message: "Auto-posting already sent this clip." });
+  });
+
   it("treats 204 as success with no body", async () => {
     const fetcher = vi.fn(async () => new Response(null, { status: 204 }));
     const api = httpApi({ baseUrl: "https://api.test", auth: auth(["tok"]), fetcher });

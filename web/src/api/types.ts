@@ -1911,6 +1911,13 @@ export interface Api {
     options?: ClipPostOptions,
   ): Promise<{ clip: Clip; posts: Post[] }>;
   declineClip(clipId: string): Promise<Clip>;
+  /**
+   * POST /v1/clips/{clipId}/hold (§46.13): Throw away's tap keeps auto-posting off the clip for its Undo (60 s). 409
+   * "Auto-posting already sent this clip." when a run took it first (or the already-decided sentence); 404 when gone.
+   */
+  holdClip(clipId: string): Promise<Clip>;
+  /** DELETE /v1/clips/{clipId}/hold: Undo of Throw away lets auto-posting take the clip again (204). */
+  unholdClip(clipId: string): Promise<void>;
   /** GET /v1/clips/{clipId}/file: a link that saves the clip's video (Save the video, §42). */
   clipFile(clipId: string): Promise<ClipFile>;
   /** POST /v1/clips/{clipId}/tiktok/posted: the owner posted it on TikTok himself; `link` gives its views (§42). */

@@ -3,12 +3,13 @@
 // and the mock's schedule, pick, runs and run-now limits on a fake clock.
 import { beforeEach, describe, expect, it } from "vitest";
 import { ApiError } from "../src/api/errors.ts";
-import { autoPostMock, CR_CANT_TAKE, NOTE_ALL_WAITING, NOTE_NO_PLACES, NOTE_NOTHING, NOTE_NOTHING_TO_TEST, PICK_CLIPS, PICK_HOURS, PICK_KIND, STILL_BEING_MADE, THREW_AWAY, NOT_AN_OBJECT, UNKNOWN_SETTING, UPLOADED_YOURSELF, VIDEO_MISSING, WAIT_A_MINUTE, type AutoPostDeps } from "../src/api/mock/autopost.ts";
+import { autoPostMock, CR_CANT_TAKE, HOLD_MS, PLANNED_FRESH_MS, shownNextRun, TICK_MAX_AGE_MS, NOTE_ALL_WAITING, NOTE_NO_PLACES, NOTE_NOTHING, NOTE_NOTHING_TO_TEST, PICK_CLIPS, PICK_HOURS, PICK_KIND, STILL_BEING_MADE, THREW_AWAY, NOT_AN_OBJECT, UNKNOWN_SETTING, UPLOADED_YOURSELF, VIDEO_MISSING, WAIT_A_MINUTE, type AutoPostDeps } from "../src/api/mock/autopost.ts";
 import { mockApi } from "../src/api/mock/index.ts";
 import { TIKTOK_PRIVATE_ONLY } from "../src/lib/tiktokYourself.ts";
 import { seed } from "../src/api/mock/fixtures.ts";
 import type { AutoRun, Clip, ClipPostOptions, Job, Platform, Post, Settings } from "../src/api/types.ts";
 import {
+  AUTO_ALREADY_SENT,
   AUTO_POST_DEFAULTS,
   autoPerfLabel,
   autoPostLabel,
@@ -22,23 +23,32 @@ import {
   isPrivateTest,
   leftOutLine,
   MORE_THAN_FIVE,
+  NEXT_ALL_WAITING,
   NEXT_EMPTY,
   nextFullHour,
+  NOWHERE_TO_POST,
   OFF_LINE,
   PER_RUN,
   perDay,
   placesLine,
+  PRACTICE_IN_LINE,
   resultLine,
+  REVIEW_LEDE,
+  reviewLede,
   reviewLine,
   runLines,
+  sentFirstLine,
   switchLine,
   timeWords,
   YOUTUBE_LIMIT,
 } from "../src/lib/autopost.ts";
 
 const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
 /** A local time, so the words read the same in any time zone (the owner's own, §46.2). */
 const local = (h: number, m = 0, day = 22) => new Date(2026, 10, day, h, m).getTime();
+/** "Now" for the words, pinned to that same Sunday morning so a time a week away reads the same on any day. */
+const NOW = local(9, 30);
 
 describe("the result line (§46.2 item 2)", () => {
   it("has every pair 1..5 clips × 1..24 hours: whole days plain, the rest about and rounded half up", () => {
@@ -92,14 +102,38 @@ describe("the warnings (§46.2 item 2)", () => {
 
 describe("time words (§46.2)", () => {
   it("say the local weekday and 24-hour time, never Today or Tomorrow", () => {
-    expect(timeWords(local(15))).toBe("Sun 15:00");
-    expect(timeWords(new Date(local(5, 7)).toISOString())).toBe("Sun 05:07");
-    expect(timeWords(local(0, 0, 23))).toBe("Mon 00:00");
-    expect(timeWords(local(23, 59, 28))).toBe("Sat 23:59");
-    const week = Array.from({ length: 7 }, (_, i) => timeWords(local(12, 0, 22 + i)).slice(0, 3));
+    const mid = local(14, 0, 25);
+    expect(timeWords(local(15), mid)).toBe("Sun 15:00");
+    expect(timeWords(new Date(local(5, 7)).toISOString(), mid)).toBe("Sun 05:07");
+    expect(timeWords(local(0, 0, 23), mid)).toBe("Mon 00:00");
+    expect(timeWords(local(23, 59, 28), mid)).toBe("Sat 23:59");
+    const week = Array.from({ length: 7 }, (_, i) => timeWords(local(12, 0, 22 + i), mid).slice(0, 3));
     expect(week).toEqual(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
     for (let i = 0; i < 48; i++) expect(timeWords(Date.now() + i * HOUR)).not.toMatch(/today|tomorrow/i);
     expect(timeWords("not a time")).toBe("");
+  });
+
+  it("6 days or more away, either way, they add the date as shortDate says it", () => {
+    // Under 6 days: weekday and time only, both ways.
+    expect(timeWords(local(15), NOW)).toBe("Sun 15:00");
+    expect(timeWords(NOW + 6 * DAY - 60_000, NOW)).toBe("Sat 09:29");
+    expect(timeWords(NOW - 6 * DAY + 60_000, NOW)).toBe("Mon 09:31");
+    // From 6 days: the date too, so next Sunday never reads as this one.
+    expect(timeWords(NOW + 6 * DAY, NOW)).toBe("Sat 28 Nov 09:30");
+    expect(timeWords(local(15, 0, 29), NOW)).toBe("Sun 29 Nov 15:00");
+    expect(timeWords(local(15, 0, 29), NOW)).not.toBe(timeWords(local(15), NOW));
+    expect(timeWords(new Date(local(15, 0, 29)).toISOString(), NOW)).toBe("Sun 29 Nov 15:00");
+    // Recent's old runs too.
+    expect(timeWords(local(10, 0, 15), NOW)).toBe("Sun 15 Nov 10:00");
+    // Another year: shortDate's year as well.
+    expect(timeWords(new Date(2027, 0, 3, 8, 0).getTime(), NOW)).toBe("Sun 3 Jan 2027 08:00");
+    // Next up, the Review line and Recent all say it.
+    expect(switchLine({ on: true, practice: false }, new Date(local(15, 0, 29)).toISOString(), NOW)).toBe("On. Next: Sun 29 Nov 15:00.");
+    expect(reviewLine({ on: true, practice: false }, { runAt: new Date(local(15, 0, 29)).toISOString() }, undefined, ["youtube"], NOW)).toBe(
+      "Goes up by itself Sun 29 Nov 15:00. Throw it away to stop it.",
+    );
+    const old: AutoRun = { runId: "r", at: new Date(local(10, 0, 15)).toISOString(), kind: "scheduled", mode: "live", state: "done", note: NOTE_NOTHING, clips: [] };
+    expect(runLines(old, NOW)[0]!.text).toBe("Sun 15 Nov 10:00 · Nothing in Review, so nothing posted.");
   });
 
   it("whole hours: the next one strictly after, the one at or before", () => {
@@ -114,12 +148,13 @@ describe("time words (§46.2)", () => {
   it("the switch's line: off, on with the next run, practising", () => {
     expect(switchLine({ on: false, practice: false }, null)).toBe(OFF_LINE);
     expect(OFF_LINE).toBe("Off. Nothing posts by itself.");
-    expect(switchLine({ on: true, practice: false }, new Date(local(15)).toISOString())).toBe("On. Next: Sun 15:00.");
-    expect(switchLine({ on: true, practice: true }, new Date(local(15)).toISOString())).toBe("On, practising. Next practice: Sun 15:00. Nothing gets sent.");
+    expect(switchLine({ on: true, practice: false }, new Date(local(15)).toISOString(), NOW)).toBe("On. Next: Sun 15:00.");
+    expect(switchLine({ on: true, practice: true }, new Date(local(15)).toISOString(), NOW)).toBe("On, practising. Next practice: Sun 15:00. Nothing gets sent.");
     // The status not read yet: the next full hour (a whole UTC hour, so 14:30 in a half-hour time zone).
     const t = local(14, 20);
-    expect(switchLine({ on: true, practice: false }, null, t)).toBe(`On. Next: ${timeWords(nextFullHour(t))}.`);
-    expect(switchLine({ on: true, practice: false }, null, Date.UTC(2026, 10, 22, 14, 20))).toBe(`On. Next: ${timeWords(Date.UTC(2026, 10, 22, 15))}.`);
+    expect(switchLine({ on: true, practice: false }, null, t)).toBe(`On. Next: ${timeWords(nextFullHour(t), t)}.`);
+    const u = Date.UTC(2026, 10, 22, 14, 20);
+    expect(switchLine({ on: true, practice: false }, null, u)).toBe(`On. Next: ${timeWords(Date.UTC(2026, 10, 22, 15), u)}.`);
   });
 });
 
@@ -165,6 +200,7 @@ describe("Recent (§46.2 item 8)", () => {
           },
         ],
       }),
+      NOW,
     );
     expect(lines.map((l) => l.text)).toEqual(["Sun 10:00 · “hook”: YouTube ✓ Instagram ✓ Facebook ✗"]);
     expect(lines[0]!.opens).toEqual([
@@ -174,12 +210,12 @@ describe("Recent (§46.2 item 8)", () => {
   });
   it("nothing, practice, a skipped clip and the Private test", () => {
     const five = new Date(local(5)).toISOString();
-    expect(runLines(run({ at: five, note: "Nothing in Review, so nothing posted." }))[0]!.text).toBe("Sun 05:00 · Nothing in Review, so nothing posted.");
+    expect(runLines(run({ at: five, note: "Nothing in Review, so nothing posted." }), NOW)[0]!.text).toBe("Sun 05:00 · Nothing in Review, so nothing posted.");
     expect(
-      runLines(run({ at: five, mode: "practice", clips: [{ clipId: "c", hook: "hook", places: ["facebook", "youtube", "instagram"], outcome: "would_send", posts: [] }] }))[0]!
+      runLines(run({ at: five, mode: "practice", clips: [{ clipId: "c", hook: "hook", places: ["facebook", "youtube", "instagram"], outcome: "would_send", posts: [] }] }), NOW)[0]!
         .text,
     ).toBe("Sun 05:00 · Practice: would post “hook” to YouTube, Instagram and Facebook.");
-    expect(runLines(run({ clips: [{ clipId: "c", hook: "hook", places: ["youtube"], outcome: "skipped", reason: THREW_AWAY, posts: [] }] }))[0]!.text).toBe(
+    expect(runLines(run({ clips: [{ clipId: "c", hook: "hook", places: ["youtube"], outcome: "skipped", reason: THREW_AWAY, posts: [] }] }), NOW)[0]!.text).toBe(
       "Sun 10:00 · “hook”: You threw it away first.",
     );
     const test = runLines(
@@ -210,14 +246,61 @@ describe("Recent (§46.2 item 8)", () => {
 
 describe("Review's line and Home's hint (§46.2)", () => {
   const at = new Date(local(15)).toISOString();
+  const places: Platform[] = ["youtube", "instagram", "facebook"];
   it("Review: only while on; goes up by itself, practice, or why it waits", () => {
-    expect(reviewLine({ on: false, practice: false }, { runAt: at }, undefined)).toBeNull();
-    expect(reviewLine({ on: true, practice: false }, { runAt: at }, undefined)).toBe("Goes up by itself Sun 15:00. Throw it away to stop it.");
-    expect(reviewLine({ on: true, practice: true }, { runAt: at }, undefined)).toBe("Practice picks it Sun 15:00. Nothing gets sent.");
-    expect(reviewLine({ on: true, practice: false }, undefined, { reason: STILL_BEING_MADE })).toBe(
+    expect(reviewLine({ on: false, practice: false }, { runAt: at }, undefined, places, NOW)).toBeNull();
+    expect(reviewLine({ on: true, practice: false }, { runAt: at }, undefined, places, NOW)).toBe("Goes up by itself Sun 15:00. Throw it away to stop it.");
+    expect(reviewLine({ on: true, practice: true }, { runAt: at }, undefined, places, NOW)).toBe("Practice picks it Sun 15:00. Nothing gets sent.");
+    expect(reviewLine({ on: true, practice: false }, undefined, { reason: STILL_BEING_MADE }, places, NOW)).toBe(
       "Auto-posting skips this one: It is still being made. Upload it yourself.",
     );
-    expect(reviewLine({ on: true, practice: false }, undefined, undefined)).toBeNull();
+    expect(reviewLine({ on: true, practice: false }, undefined, undefined, places, NOW)).toBeNull();
+  });
+  it("Review: nowhere to post yet, a practice clip further down the line, and never an empty time", () => {
+    expect(NOWHERE_TO_POST).toBe("Auto-posting has nowhere to post yet. Set up a place first.");
+    expect(PRACTICE_IN_LINE).toBe("In line. Practice picks the first clips each time. Nothing gets sent.");
+    // In Next up while nothing is set up: before the practice words, with or without a time.
+    expect(reviewLine({ on: true, practice: false }, {}, undefined, [], NOW)).toBe(NOWHERE_TO_POST);
+    expect(reviewLine({ on: true, practice: true }, {}, undefined, [], NOW)).toBe(NOWHERE_TO_POST);
+    expect(reviewLine({ on: true, practice: false }, { runAt: at }, undefined, [], NOW)).toBe(NOWHERE_TO_POST);
+    // A waiting clip still says why, set up or not; off says nothing.
+    expect(reviewLine({ on: true, practice: false }, undefined, { reason: STILL_BEING_MADE }, [], NOW)).toMatch(/^Auto-posting skips this one: /);
+    expect(reviewLine({ on: false, practice: false }, {}, undefined, [], NOW)).toBeNull();
+    // Practising, a clip after the first perRun has no time: in line, never "Practice picks it ."
+    expect(reviewLine({ on: true, practice: true }, {}, undefined, places, NOW)).toBe(PRACTICE_IN_LINE);
+    // On with no time (a status from before it was switched on): no line rather than an empty time.
+    expect(reviewLine({ on: true, practice: false }, {}, undefined, places, NOW)).toBeNull();
+    for (const practice of [false, true])
+      for (const p of [[], places])
+        for (const next of [{}, { runAt: at }, { runAt: "not a time" }]) {
+          const line = reviewLine({ on: true, practice }, next, undefined, p, NOW) ?? "";
+          expect(line, JSON.stringify({ practice, p, next })).not.toMatch(/it \.|itself \.| {2}/);
+        }
+  });
+  it("Review's page lede: unchanged while off or practising; on says the oldest clips go up by themselves", () => {
+    expect(REVIEW_LEDE).toBe("Watch each clip. Tap Upload to post it, or Throw away if you do not like it. Nothing posts until you tap Upload.");
+    expect(reviewLede({ on: false, practice: false, everyHours: 5 })).toBe(REVIEW_LEDE);
+    expect(reviewLede({ on: true, practice: true, everyHours: 5 })).toBe(REVIEW_LEDE);
+    expect(reviewLede(autoPostOf(undefined))).toBe(REVIEW_LEDE);
+    expect(reviewLede({ on: true, practice: false, everyHours: 5 })).toBe(
+      "Watch each clip. Tap Upload to post it now, or Throw away if you do not like it. Auto-posting is on: the oldest clips go up by themselves every 5 hours.",
+    );
+    expect(reviewLede({ on: true, practice: false, everyHours: 1 })).toBe(
+      "Watch each clip. Tap Upload to post it now, or Throw away if you do not like it. Auto-posting is on: the oldest clips go up by themselves every 1 hour.",
+    );
+  });
+  it("Review's Upload after a run took the clip: a calm note, never his own Upload's", () => {
+    expect(sentFirstLine({})).toBeNull();
+    expect(sentFirstLine({ auto: undefined })).toBeNull();
+    expect(sentFirstLine({ auto: { runId: "r", at } })).toBe("Auto-posting sent this clip first.");
+    expect(sentFirstLine({ auto: { runId: "r", at, test: "private" } })).toBe("Auto-posting sent this clip first, as a private test.");
+    expect(AUTO_ALREADY_SENT).toBe("Auto-posting already sent this clip.");
+  });
+  it("Next up's words: empty, or every clip in Review waiting for him", () => {
+    expect(NEXT_EMPTY).toBe("Nothing in Review. New clips join the line when they are made.");
+    expect(NEXT_ALL_WAITING).toBe("Every clip in Review is waiting for you.");
+    // The same sentence as a run's note when every clip waits.
+    expect(NEXT_ALL_WAITING).toBe(NOTE_ALL_WAITING);
   });
   it("Home: unchanged while off or practising, else every hours, oldest first", () => {
     expect(HOME_HINT).toBe("Nothing gets posted until you tap Upload.");
@@ -285,6 +368,8 @@ function world(
     refuse?: Record<string, string>;
     /** Campaign clips are taken (Content Rewards can take them by itself), going to these places. */
     campaignTakes?: Platform[];
+    /** Each send waits for this first (a run that is still going). */
+    gate?: Promise<void>;
   } = {},
 ) {
   const now = new Date().toISOString();
@@ -303,6 +388,7 @@ function world(
     ready: () => opts.ready ?? ["youtube", "tiktok", "instagram", "facebook"],
     campaign: () => (opts.campaignTakes ? { wait: null, places: opts.campaignTakes } : { wait: CR_CANT_TAKE, places: [] }),
     async send(c, places, options, auto) {
+      await opts.gate;
       const during = opts.during;
       opts.during = undefined;
       during?.(clips);
@@ -586,6 +672,132 @@ describe("the mock's pick and runs (§46.5–§46.8)", () => {
   });
 });
 
+describe("the mock's holds and the server's latest rules (§46.4, §46.5, §46.13)", () => {
+  beforeEach(() => sessionStorage.clear());
+  const three = () => world({ clips: ["A", "B", "C"].map((id, i) => ({ clipId: id, jobId: "J1", rank: i + 1, hook: id.toLowerCase() })) });
+
+  it("Throw away's hold: the pick skips the clip silently for 60 s, Undo lets it go again", async () => {
+    const w = three();
+    w.m.controls.set("2026-11-22T10:59:50.000Z");
+    w.turnOn();
+    w.m.hold("A");
+    expect(w.m.controls.held()).toEqual(["A"]);
+    const s = await w.m.status();
+    // Neither in line nor waiting: it is on its way out (or back, if he taps Undo).
+    expect(s.nextUp.map((c) => c.clipId)).toEqual(["B", "C"]);
+    expect(s.waiting).toEqual([]);
+    // The 11:00 tick inside the Undo window takes the next clip.
+    expect(await w.m.controls.advance(15_000)).toEqual(["2026-11-22T11:00:00.000Z#scheduled"]);
+    expect(w.sent.map((x) => x.clipId)).toEqual(["B"]);
+    // Undo: back in line, first again.
+    w.m.unhold("A");
+    expect(w.m.controls.held()).toEqual([]);
+    expect((await w.m.status()).nextUp.map((c) => c.clipId)).toEqual(["A", "C"]);
+    // A hold ends by itself after 60 s.
+    w.m.hold("A");
+    w.m.controls.skip(HOLD_MS - 1000);
+    expect((await w.m.status()).nextUp.map((c) => c.clipId)).toEqual(["C"]);
+    w.m.controls.skip(1000);
+    expect(w.m.controls.held()).toEqual([]);
+    expect((await w.m.status()).nextUp.map((c) => c.clipId)).toEqual(["A", "C"]);
+  });
+
+  it("a run's send refuses a clip held after it planned: You threw it away first; the others still go", async () => {
+    const w = world({
+      clips: ["A", "B", "C"].map((id, i) => ({ clipId: id, jobId: "J1", rank: i + 1, hook: id.toLowerCase() })),
+      during: () => w.m.hold("B"),
+    });
+    w.m.controls.set("2026-11-22T10:20:00.000Z");
+    w.turnOn({ perRun: 3 });
+    await w.m.controls.advance(HOUR);
+    expect(w.m.controls.runs()[0]!.clips.map((c) => [c.clipId, c.outcome, c.reason])).toEqual([
+      ["A", "sent", undefined],
+      ["B", "skipped", THREW_AWAY],
+      ["C", "sent", undefined],
+    ]);
+    expect(w.sent.map((x) => x.clipId)).toEqual(["A", "C"]);
+    // Still in Review: Undo (or the decline) decides it.
+    expect(w.clips.find((c) => c.clipId === "B")!.status).toBe("review");
+  });
+
+  it("practising, only the first perRun rows get a time; with nowhere to post, none does", async () => {
+    const five = world({ clips: ["A", "B", "C", "D", "E"].map((id, i) => ({ clipId: id, jobId: "J1", rank: i + 1, hook: id })) });
+    five.m.controls.set("2026-11-22T10:20:00.000Z");
+    five.turnOn({ perRun: 2, practice: true });
+    expect((await five.m.status()).nextUp.map((c) => c.runAt)).toEqual(["2026-11-22T11:00:00.000Z", "2026-11-22T11:00:00.000Z", undefined, undefined, undefined]);
+    five.settings.autoPost = five.m.merge(five.settings.autoPost, { practice: false });
+    expect((await five.m.status()).nextUp.map((c) => c.runAt)).toEqual([
+      "2026-11-22T11:00:00.000Z",
+      "2026-11-22T11:00:00.000Z",
+      "2026-11-22T16:00:00.000Z",
+      "2026-11-22T16:00:00.000Z",
+      "2026-11-22T21:00:00.000Z",
+    ]);
+
+    const nowhere = world({ ready: ["tiktok"] });
+    nowhere.m.controls.set("2026-11-22T10:20:00.000Z");
+    nowhere.turnOn();
+    const s = await nowhere.m.status();
+    expect(s.places).toEqual([]);
+    expect(s.nextUp.map((c) => [c.clipId, c.runAt])).toEqual([["C1", undefined]]);
+    // The Review card says so instead of a time.
+    expect(reviewLine(s.autoPost, s.nextUp[0], undefined, s.places)).toBe(NOWHERE_TO_POST);
+  });
+
+  it("the shown next run: this hour while its own tick may still come, then the next full hour", () => {
+    const at = (h: number, m = 0) => Date.UTC(2026, 10, 22, h, m);
+    // Still ahead: as it is.
+    expect(shownNextRun(at(15), at(10), at(13, 10))).toBe(at(15));
+    // Due by now and this hour's tick has not come: this hour, until EventBridge stops trying (3300 s).
+    expect(shownNextRun(at(12), at(10), at(13, 10))).toBe(at(13));
+    expect(shownNextRun(at(13), at(10), at(13))).toBe(at(13));
+    expect(shownNextRun(at(12), at(10), at(13) + TICK_MAX_AGE_MS - 1)).toBe(at(13));
+    expect(shownNextRun(at(12), at(10), at(13) + TICK_MAX_AGE_MS)).toBe(at(14));
+    // This hour's tick came (it ran, or it was not due): the next full hour.
+    expect(shownNextRun(at(12), at(13), at(13, 10))).toBe(at(14));
+  });
+
+  it("a tick that was not due is remembered (lastTickAt), so a shorter everyHours never shows an hour already gone", async () => {
+    const w = world();
+    w.m.controls.set("2026-11-22T09:30:00.000Z");
+    w.turnOn({ everyHours: 10 });
+    expect(await w.m.controls.advance(HOUR)).toEqual(["2026-11-22T10:00:00.000Z#scheduled"]);
+    // 11:00, 12:00 and 13:00 come and are not due.
+    expect(await w.m.controls.advance(3 * HOUR)).toEqual(["not_due", "not_due", "not_due"]);
+    // Every 2 hours from the 10:00 run: 12:00 is past, and 13:00's tick already came, so the next one is 14:00.
+    w.settings.autoPost = w.m.merge(w.settings.autoPost, { everyHours: 2 });
+    expect((await w.m.status()).nextRunAt).toBe("2026-11-22T14:00:00.000Z");
+    expect(await w.m.controls.advance(30 * 60_000)).toEqual(["2026-11-22T14:00:00.000Z#scheduled"]);
+  });
+
+  it("a run still going keeps its clips out of Next up for 15 minutes from when it planned, not from its slot", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const w = world({ clips: ["A", "B"].map((id, i) => ({ clipId: id, jobId: "J1", rank: i + 1, hook: id })), gate });
+    w.m.controls.set("2026-11-22T11:20:00.000Z");
+    w.turnOn();
+    // A late delivery of 11:00's tick (its slot), planning at 11:20 and still sending.
+    w.settings.autoPost = { ...w.settings.autoPost!, onAt: "2026-11-22T10:20:00.000Z" };
+    const going = w.m.controls.tick("2026-11-22T11:00:00.000Z");
+    await Promise.resolve();
+    expect(w.m.controls.runs()[0]).toMatchObject({ runId: "2026-11-22T11:00:00.000Z#scheduled", state: "planned", clips: [{ clipId: "A" }] });
+    // 25 minutes after its slot, 5 after it planned: A is still the run's.
+    w.m.controls.skip(5 * 60_000);
+    let s = await w.m.status();
+    expect(s.nextUp.map((c) => c.clipId)).toEqual(["B"]);
+    expect(s.waiting).toEqual([]);
+    // Planned more than 15 minutes ago and still not done: it stopped, and A is in line again.
+    w.m.controls.skip(PLANNED_FRESH_MS - 5 * 60_000 + 1000);
+    s = await w.m.status();
+    expect(s.nextUp.map((c) => c.clipId)).toEqual(["A", "B"]);
+    release();
+    await going;
+    // plannedAt is the mock's own: never part of a run the page reads.
+    expect(Object.keys(w.m.controls.runs()[0]!)).not.toContain("plannedAt");
+    expect(Object.keys((await w.m.status()).runs[0]!)).not.toContain("plannedAt");
+  });
+});
+
 describe("the mock api (wired like the other mock modules)", () => {
   beforeEach(() => sessionStorage.clear());
 
@@ -609,5 +821,20 @@ describe("the mock api (wired like the other mock modules)", () => {
     // A Private test with nothing set up sends nothing.
     const run = await a.autoPostRun("private");
     expect(run.note).toBe(NOTE_NO_PLACES);
+  });
+
+  it("hold: a clip in Review only; one auto-posting already sent says so; Undo's DELETE always answers", async () => {
+    const a = mockApi(seed(), { keepStopsAfterSave: 0, resumeAfterMs: 60_000 });
+    const [first, second] = await a.listClips({ status: "review" });
+    expect((await a.holdClip(first!.clipId)).clipId).toBe(first!.clipId);
+    await expect(a.unholdClip(first!.clipId)).resolves.toBeUndefined();
+    await a.declineClip(second!.clipId);
+    await expect(a.holdClip(second!.clipId)).rejects.toMatchObject({ status: 409, message: "This clip has already been confirmed or declined." });
+    await expect(a.holdClip("nope")).rejects.toMatchObject({ status: 404 });
+    // Sent by a run first (a Private test here, the one run that needs no switch).
+    for (const p of ["youtube", "instagram", "facebook"] as const) (window as unknown as { __cfMock: { setup: { finish(p: string): void } } }).__cfMock.setup.finish(p);
+    const test = await a.autoPostRun("private");
+    const sent = test.clips[0]!.clipId;
+    await expect(a.holdClip(sent)).rejects.toMatchObject({ status: 409, message: AUTO_ALREADY_SENT });
   });
 });

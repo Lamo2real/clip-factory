@@ -119,6 +119,10 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
         ...(options && Object.keys(options).length ? { options } : {}),
       }),
     declineClip: async (clipId) => (await call<{ clip: Clip }>("POST", `/clips/${id(clipId)}/decline`)).clip,
+    holdClip: async (clipId) => (await call<{ clip: Clip }>("POST", `/clips/${id(clipId)}/hold`)).clip,
+    unholdClip: async (clipId) => {
+      await call<void>("DELETE", `/clips/${id(clipId)}/hold`);
+    },
     clipFile: (clipId) => call<ClipFile>("GET", `/clips/${id(clipId)}/file`),
     markTikTokPosted: (clipId, link, since) =>
       call<TikTokMarked>("POST", `/clips/${id(clipId)}/tiktok/posted`, { ...(link ? { link } : {}), ...(since ? { since } : {}) }),
