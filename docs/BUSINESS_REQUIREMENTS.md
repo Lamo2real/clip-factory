@@ -105,8 +105,9 @@ structure." ([CONTRACTS.md §18](CONTRACTS.md#18-skills-full-create-read-update-
 "If I click confirm on each video, then you will upload each video to those social media accounts."
 - AC1: Nothing is ever posted without the owner pressing **Confirm** on that clip.
   The one exception is auto-posting, and only once the owner turns it on himself (BR-29, 2026-11-22): then the oldest
-  clips in Review go up by themselves every X hours, without his approval, and **Throw away** before a clip's turn
-  keeps it from ever posting. While it is off (the default for everyone), this AC holds exactly as written.
+  clips in Review go up by themselves every X hours, without his approval, and **Throw away** at least 8 seconds
+  before a clip's turn (its Undo time, AC3) keeps it from ever posting. While it is off (the default for everyone),
+  this AC holds exactly as written.
 - AC2: Confirm creates one post per enabled platform and queues it for publishing.
 - AC3: **Decline** removes the clip and deletes its video files. It is offered with an 8-second Undo first (UX-13 AC7);
   the request is sent only when the Undo window passes.
@@ -549,8 +550,10 @@ Built by §46 (its four parts, §46.16). It ships off for everyone: nothing post
   waits too (answer 4), and so does a clip still being made or with its video missing. Each is listed under **Waits
   for you** with its reason and **Open in Review**, and its Review card says "Auto-posting skips this one: {reason}
   Upload it yourself."
-- AC6: **Decline before its turn.** **Throw away** (with its 8-second Undo) on Review or in **Next up** removes the
-  clip and it is never posted; a run that had just planned it says "You threw it away first.". **Upload** by hand
+- AC6: **Decline before its turn.** **Throw away** on Review or in **Next up** removes the clip and it is never
+  posted, once its 8-second Undo has passed before the clip's turn (the request is sent only then, BR-08 AC3); tapped
+  later, the run may post it first and Throw away says "This clip was already uploaded or thrown away somewhere else,
+  so there is nothing more to do.". A run that had just planned it says "You threw it away first.". **Upload** by hand
   still works at any time, and one of the two wins, never both.
 - AC7: **Never twice.** A clip is never posted twice, even if a run is retried or two runs overlap: a run claims its
   hour and lists its clips in one write, a retry resumes that same list, and each clip goes up through Upload's own
@@ -569,7 +572,8 @@ Built by §46 (its four parts, §46.16). It ships off for everyone: nothing post
 - AC11: **Test it with nothing public.** In the fold **Test it first**: **Practice** (runs pick the clips on time but
   send nothing, and the clips stay in Review), **Practice run now**, and **Private test run** (the next clip, so only
   he can see it: YouTube as Only me, Facebook as a draft on his Page, Instagram uploaded and checked but not
-  published). The two run-now buttons work while auto-posting is off too, and never move the schedule.
+  published; that clip leaves Review). The two run-now buttons work while auto-posting is off too, and never move the
+  schedule.
 - AC12: **Serverless and additive.** One EventBridge rule every hour on the hour (`cf-prod-autopost-hourly`, answer 7)
   and one small Lambda (`cf-prod-autopost`) with its own least-privilege role
   ([SECURITY.md](SECURITY.md#auto-posting-contracts-46)). No table, index, secret,
