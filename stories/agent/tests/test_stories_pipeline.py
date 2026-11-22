@@ -414,7 +414,9 @@ def test_remake_this_scene_only_remakes_that_scene(tmp_path: Path) -> None:
 
     # "Remake this scene": changes { sceneIds: ["s1"] } with no note (the API's job and story writes, seeded here)
     new_take = copy.deepcopy(old_script["scenes"][0])
-    new_take["beats"] = [{"at": 0.3, "dur": 1.2, "who": "c1", "do": "jump", "face": "surprised", "noise": "whoa"}]
+    # Lamo's own faces and noises only (neutral/happy/shocked/relieved; gasp/phew): since the cast's faces and noises
+    # are checked (§45.37), a take with "surprised"/"whoa" is refused and the remake keeps the old take.
+    new_take["beats"] = [{"at": 0.3, "dur": 1.2, "who": "c1", "do": "jump", "face": "shocked", "noise": "gasp"}]
     new_take["durationSec"] = 9  # the writer may not change a new take's length
     models.answers["scene_rewrite"] = {"scenes": [new_take]}
     table.seed({**table.items[(PK, f"STORY#{STORY}")], "status": "producing", "currentJobId": "J2"})
