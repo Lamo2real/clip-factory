@@ -9,10 +9,11 @@ import { BASE, SETTINGS, STATE } from "./paths.js";
 export const DEFAULT_SETTINGS = Object.freeze({
   // The owner's trial (22 Nov 2026): the first 3 posts, then a pause until their views are checked. null = no limit.
   trialLimit: 3,
-  // Minutes between two TikTok posts the Mac makes (clips already waiting, auto-posting runs).
-  spacingMinutes: 30,
-  // A clip the owner just uploaded by hand goes first, with this smaller gap.
-  onDemandSpacingMinutes: 5,
+  // The owner (22 Nov): TikTok follows auto-posting. A run's own clips go at once (this small gap between them), one
+  // backlog clip ("Send these to my Mac") goes this long after each run, and a clip he uploads goes at once, first.
+  autoSpacingMinutes: 1,
+  backlogAfterRunMinutes: 30,
+  onDemandSpacingMinutes: 1,
   // A local pause (cli.js off). The Settings switch in Clip Factory is the main off switch.
   paused: false,
 });
@@ -43,7 +44,7 @@ export function saveSettings(patch) {
 }
 
 export function emptyState() {
-  return { device: `mac-${crypto.randomUUID()}`, ledger: {}, posted: [], lastPressedAt: null };
+  return { device: `mac-${crypto.randomUUID()}`, ledger: {}, posted: [], lastPressedAt: null, lastBacklogAt: null };
 }
 
 export function loadState() {

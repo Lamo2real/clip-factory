@@ -59,11 +59,14 @@ On a stop:
 - A login or check the Keychain can't solve is his turn (yellow frame, one pop-up). If he isn't there within 20
   minutes, the helper is in "needs you" and pauses everything until he taps Try again.
 
-## Pace and trial
+## When it posts
 
-- At most one post every 30 minutes (5 after an Upload he tapped himself).
-- The owner's trial: it pauses after 3 posts (`settings.json` `trialLimit`) until their views are checked. To lift
-  it: `node src/cli.js trial none`.
+The owner set this on 22 Nov: TikTok follows auto-posting, and his own Upload goes at once.
+- A clip he uploads ("Upload to 4" with TikTok ticked) goes at once, ahead of everything else.
+- An auto-posting run's own clips go at once, a minute apart.
+- At most one backlog clip ("Send these to my Mac", oldest first) goes about 30 minutes after each auto-posting run,
+  until the backlog is empty. With auto-posting off, the backlog waits.
+- The trial (`settings.json` `trialLimit`) is lifted: `node src/cli.js trial none`.
 
 ## Off switch
 

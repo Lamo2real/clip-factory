@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { nextAction } from "../src/plan.js";
 
-const settings = { trialLimit: 3, spacingMinutes: 30, onDemandSpacingMinutes: 5, paused: false };
+const settings = { trialLimit: 3, autoSpacingMinutes: 1, backlogAfterRunMinutes: 30, onDemandSpacingMinutes: 1, paused: false };
 const now = new Date("2026-11-22T15:00:00Z");
 const device = "mac-1";
 const fresh = () => ({ device, ledger: {}, posted: [], lastPressedAt: null });
@@ -18,7 +18,7 @@ test("paused on the Mac: nothing happens", () => {
   assert.equal(r.action, "paused");
 });
 
-test("a waiting clip is posted", () => {
+test("an auto-posting run's own clip is posted at once", () => {
   const r = nextAction({ on: true, queue: [job()], state: fresh(), settings, device, now });
   assert.deepEqual([r.action, r.job.clipId], ["post", "c1"]);
 });
@@ -64,22 +64,55 @@ test("no trial limit: keeps going", () => {
   assert.equal(r.action, "post");
 });
 
-test("30 minutes between posts of waiting and auto-posted clips", () => {
+// The owner (22 Nov): TikTok follows auto-posting, and his own Upload goes at once.
+const run = (at, next = "2026-11-22T21:00:00Z") => ({ on: true, lastRunAt: at, nextRunAt: next });
+const sent = (over = {}) => job({ clipId: "b1", source: "sent", ...over });
+
+test("a clip he uploads goes at once, ahead of everything else", () => {
   const state = fresh();
-  state.lastPressedAt = "2026-11-22T14:45:00Z";
-  const r = nextAction({ on: true, queue: [job()], state, settings, device, now });
+  state.lastPressedAt = "2026-11-22T14:58:00Z"; // two minutes ago
+  const r = nextAction({ on: true, queue: [sent(), job({ clipId: "u1", source: "upload" })], state, settings, device, now, autopost: run("2026-11-22T14:00:00Z") });
+  assert.deepEqual([r.action, r.job.clipId], ["post", "u1"]);
+});
+
+test("a run's own clips go one right after the other (a minute apart)", () => {
+  const state = fresh();
+  state.lastPressedAt = "2026-11-22T14:59:40Z";
+  const r = nextAction({ on: true, queue: [job({ clipId: "a2" })], state, settings, device, now });
   assert.equal(r.action, "wait");
-  assert.equal(r.until, "2026-11-22T15:15:00.000Z");
+  assert.equal(r.until, "2026-11-22T15:00:40.000Z");
 });
 
-test("a clip he just uploaded by hand only waits 5 minutes", () => {
+test("a backlog clip waits for an auto-posting run, and goes 30 minutes after it", () => {
+  const atRun = nextAction({ on: true, queue: [sent()], state: fresh(), settings, device, now, autopost: run("2026-11-22T14:45:00Z") });
+  assert.equal(atRun.action, "wait");
+  assert.equal(atRun.until, "2026-11-22T15:15:00.000Z");
+  const later = nextAction({ on: true, queue: [sent()], state: fresh(), settings, device, now, autopost: run("2026-11-22T14:00:00Z") });
+  assert.deepEqual([later.action, later.job.clipId], ["post", "b1"]);
+});
+
+test("only one backlog clip per run: the next waits for the next run", () => {
   const state = fresh();
-  state.lastPressedAt = "2026-11-22T14:45:00Z";
-  const r = nextAction({ on: true, queue: [job({ source: "upload" })], state, settings, device, now });
-  assert.equal(r.action, "post");
+  state.lastBacklogAt = "2026-11-22T14:31:00Z";
+  state.lastPressedAt = state.lastBacklogAt;
+  const r = nextAction({ on: true, queue: [sent()], state, settings, device, now, autopost: run("2026-11-22T14:00:00Z", "2026-11-22T20:00:00Z") });
+  assert.equal(r.action, "wait");
+  assert.equal(r.until, "2026-11-22T20:30:00.000Z");
 });
 
-test("the server's order decides which waiting clip goes first", () => {
-  const r = nextAction({ on: true, queue: [job({ clipId: "a", source: "upload" }), job({ clipId: "b" })], state: fresh(), settings, device, now });
+test("with auto-posting off, or its schedule unknown, the backlog waits (nothing drips)", () => {
+  for (const autopost of [null, { on: false, lastRunAt: "2026-11-22T14:00:00Z", nextRunAt: null }]) {
+    const r = nextAction({ on: true, queue: [sent()], state: fresh(), settings, device, now, autopost });
+    assert.equal(r.action, "wait");
+  }
+});
+
+test("a run's own clip goes before the backlog", () => {
+  const r = nextAction({ on: true, queue: [sent(), job({ clipId: "a1" })], state: fresh(), settings, device, now, autopost: run("2026-11-22T14:00:00Z") });
+  assert.equal(r.job.clipId, "a1");
+});
+
+test("of several clips a run sent, the server's order decides which goes first", () => {
+  const r = nextAction({ on: true, queue: [job({ clipId: "a" }), job({ clipId: "b" })], state: fresh(), settings, device, now });
   assert.equal(r.job.clipId, "a");
 });

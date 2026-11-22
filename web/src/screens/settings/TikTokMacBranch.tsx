@@ -25,7 +25,7 @@ import {
   sendableLine,
   sendLots,
   sentLine,
-  waitingLine,
+  whenLine,
 } from "../../lib/tiktokMac.ts";
 import { Apple, AppleSwitch, Panel } from "./parts.tsx";
 import "../../styles/autopost.css";
@@ -212,6 +212,22 @@ export function TikTokMacBranch() {
   const toast = useToast();
   const on = macOn(me?.settings);
   const { status, error, reload } = useTikTokMac(true);
+  // When the Mac posts: with auto-posting (its next run), and at once on Upload.
+  const [nextRunAt, setNextRunAt] = useState<string | null>(null);
+  const autoOn = me?.settings?.autoPost?.on === true;
+  useEffect(() => {
+    if (!on || !autoOn) return;
+    let live = true;
+    api()
+      .autoPostStatus()
+      .then((a) => {
+        if (live) setNextRunAt(a.nextRunAt);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [on, autoOn, status]);
   const [ids, setIds] = useState<string[] | null>(null);
   const readSendable = useCallback(() => {
     sendable()
@@ -263,7 +279,11 @@ export function TikTokMacBranch() {
               <p className="autopost__line" data-mac="helper">
                 {helperLine(status.helper)}
               </p>
-              {on ? <p className="autopost__line">{waitingLine(waiting)}</p> : null}
+              {on ? (
+                <p className="autopost__line" data-mac="when">
+                  {whenLine(autoOn, nextRunAt, waiting)}
+                </p>
+              ) : null}
             </div>
           ) : error ? (
             <ErrorPanel message={error} onRetry={() => void reload()} />

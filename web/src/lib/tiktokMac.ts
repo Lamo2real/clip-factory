@@ -161,6 +161,15 @@ export function loginRequestLine(helper: MacHelper | null): string | null {
     : "Your Mac forgets the login the next time it checks in, within a minute.";
 }
 
+/**
+ * When the Mac posts (the owner, 22 Nov: TikTok follows auto-posting, and his Upload goes at once): "Posts with
+ * auto-posting · next Sun 22:00 · 14 waiting", or "Posts when you tap Upload · 14 waiting" while auto-posting is off.
+ */
+export function whenLine(autoOn: boolean, nextRunAt: string | null | undefined, waiting: number, now: number = Date.now()): string {
+  const lead = autoOn ? `Posts with auto-posting${nextRunAt ? ` · next ${timeWords(nextRunAt, now)}` : ""}` : "Posts when you tap Upload";
+  return `${lead} · ${waiting} waiting`;
+}
+
 /** "{n} waiting for your Mac". */
 export function waitingLine(n: number): string {
   return `${n} waiting for your Mac`;

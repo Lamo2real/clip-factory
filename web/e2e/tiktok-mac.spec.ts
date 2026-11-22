@@ -94,7 +94,7 @@ test("settings: the switch, the Mac's check-in and Send these to my Mac", async 
 
   await turnOn(page);
   await expect(page.getByText("Saved.")).toBeVisible();
-  await expect(page.getByText("0 waiting for your Mac")).toBeVisible();
+  await expect(page.getByText("Posts when you tap Upload · 0 waiting")).toBeVisible();
   const line = page.getByText(/^\d+ clips? shows? Post it yourself\.$/);
   await expect(line).toBeVisible();
   const n = Number((await line.innerText()).split(" ")[0]);
@@ -104,12 +104,12 @@ test("settings: the switch, the Mac's check-in and Send these to my Mac", async 
   await page.getByRole("button", { name: "Send these to my Mac" }).click();
   await expect(page.getByText("They go one at a time, oldest first.")).toBeVisible();
   await page.getByRole("button", { name: "Not now" }).click();
-  await expect(page.getByText("0 waiting for your Mac")).toBeVisible();
+  await expect(page.getByText("Posts when you tap Upload · 0 waiting")).toBeVisible();
 
   await page.getByRole("button", { name: "Send these to my Mac" }).click();
   await page.getByRole("button", { name: "Yes, send them" }).click();
   await expect(page.getByText(`Sent ${n} clip${n === 1 ? "" : "s"} to your Mac.`)).toBeVisible();
-  await expect(page.getByText(`${n} waiting for your Mac`)).toBeVisible();
+  await expect(page.getByText(`Posts when you tap Upload · ${n} waiting`)).toBeVisible();
   await expect(page.getByText("0 clips show Post it yourself.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Send these to my Mac" })).toHaveCount(0);
 

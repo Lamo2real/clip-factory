@@ -266,6 +266,14 @@ then log into tiktok and upload them then delete the video you downloaded after 
   with Chrome's notifications off. No frame, no notification, no sound: results go to the clip's row and the helper's
   events log. Only his own turn (a TikTok code, a puzzle, a login the Keychain can't do, the Clip Factory sign-in)
   shows the yellow frame and one pop-up, with a visible login window. All input is CDP (no OS mouse or keyboard).
+* **When the Mac posts** (the owner: "if auto posting is set to every 6 hours then it should also run the tiktok upload
+  every time thats run so its dependent on that automation" and "or if i hit upload on a video it should be invoked as
+  well"): a clip he uploads (`source: "upload"`) goes at once, ahead of everything; an auto-posting run's own clips
+  (`source: "auto"`, its "Clips each time") go at once, a minute apart; and at most one backlog clip (`source:
+  "sent"`, Send these to my Mac, oldest first) goes about 30 minutes after each live scheduled run, read from `GET
+  /v1/autopost` (`runs`, `nextRunAt`), until the backlog is empty. With auto-posting off the backlog waits. Settings ›
+  Posting › Your Mac posts TikTok says it: "Posts with auto-posting · next Sun 22:00 · 14 waiting", or "Posts when you
+  tap Upload · 14 waiting" while auto-posting is off.
 * **API (additive, the `MACHELPER` item):** ping takes `login?: "saved" | "none"` and `loginDone?: ISO` (the `at` of the
   request it handled; a newer request stays). `POST /v1/tiktok/mac/login {action: "change" | "forget"}` → `{helper}`
   sets `loginRequestAction`/`loginRequestAt` (409 "Set up your Mac first. Then it can keep your TikTok login." when no

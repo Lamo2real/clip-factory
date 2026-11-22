@@ -33,6 +33,7 @@ export function client(apiUrl, token, fetchImpl = fetch) {
   const clip = (id) => `/clips/${encodeURIComponent(id)}`;
   return {
     queue: () => call("GET", "/tiktok/mac"),
+    autopost: () => call("GET", "/autopost"),
     ping: (body) => call("POST", "/tiktok/mac/ping", body),
     claim: (clipId, device) => call("POST", `${clip(clipId)}/tiktok/mac/claim`, { device }),
     // ``attempt`` (the claim's number, MacJob.attempt) makes an older try of this Mac unable to write (§47.3).
