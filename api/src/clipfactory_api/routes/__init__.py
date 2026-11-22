@@ -9,6 +9,7 @@ from . import (
     clips,
     contentrewards,
     finder,
+    followers,
     follows,
     getpaid,
     help,
@@ -114,6 +115,8 @@ ROUTES: list[Route] = [
     route("DELETE", "/v1/getpaid/connections/adsense", getpaid.stop_adsense),
     route("DELETE", "/v1/getpaid/connections/whop", getpaid.stop_whop),
     route("GET", "/v1/getpaid/{place}", getpaid.get_place),
+    # §43: follower counts, read from the snapshots the daily money run already stores.
+    route("GET", "/v1/followers", followers.get_followers),
     route("GET", "/v1/weeks/{week}", weeks.get_week),
     route("PUT", "/v1/weeks/{week}/best", weeks.put_best),
     # §46: Auto-posting. Its status, and a Practice or Private test run now (inline, at most one a minute).
