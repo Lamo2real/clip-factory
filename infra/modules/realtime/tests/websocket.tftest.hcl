@@ -4,7 +4,7 @@
 # docs/CONTRACTS.md §14.2 and §14.12: the WebSocket authorizer sets no HTTP-only settings, the token in the query
 # string never reaches a log, the stream mapping has exactly one filter with the item prefixes (§16.9 adds WEEK#,
 # §17.9 adds ACCOUNT# and SETUP#, §24 FOLLOW#, §31 JOBLIVE#, §38.11 the Content Rewards items, §41.5 CRFIND, §40.7
-# Get paid's four), and each function may do only what its code does.
+# Get paid's four, §40.5.11 Your bank's four), and each function may do only what its code does.
 
 mock_provider "aws" {
   override_during = plan
@@ -130,9 +130,21 @@ run "stream_mapping_has_one_filter_with_the_item_prefixes" {
 
   assert {
     condition = jsondecode(one(one(aws_lambda_event_source_mapping.broadcast.filter_criteria).filter).pattern) == {
-      dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }, { prefix = "ACCOUNT#" }, { prefix = "SETUP#" }, { prefix = "FOLLOW#" }, { prefix = "JOBLIVE#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRCONN" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRFIND" }, { prefix = "GETPAID" }, { prefix = "PAYCONN#" }, { prefix = "PAYSTATE#" }, { prefix = "PAYOUT#" }] } } }
+      dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }, { prefix = "ACCOUNT#" }, { prefix = "SETUP#" }, { prefix = "FOLLOW#" }, { prefix = "JOBLIVE#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRCONN" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRFIND" }, { prefix = "GETPAID" }, { prefix = "PAYCONN#" }, { prefix = "PAYSTATE#" }, { prefix = "PAYOUT#" }, { prefix = "BANKCONN" }, { prefix = "BANKLINK#" }, { prefix = "DEPOSIT#" }, { prefix = "BANKPAYERS" }] } } }
     }
-    error_message = "The filter must pass only JOB#, CLIP#, POST#, LEARNING#, WEEK#, ACCOUNT#, SETUP#, FOLLOW#, JOBLIVE#, the Content Rewards CAMPAIGN#, CRCONN, CRSUB#, CRMONEY and CRFIND items and Get paid's GETPAID, PAYCONN#, PAYSTATE#, PAYOUT# (§40.7; never STAT#, RATE#, OAUTH#/STATE, FOLLOWKEYS#, CRSTATE#, CROWNERS or the CRPUBLIC cache)."
+    error_message = "The filter must pass only JOB#, CLIP#, POST#, LEARNING#, WEEK#, ACCOUNT#, SETUP#, FOLLOW#, JOBLIVE#, the Content Rewards CAMPAIGN#, CRCONN, CRSUB#, CRMONEY and CRFIND items, Get paid's GETPAID, PAYCONN#, PAYSTATE#, PAYOUT# (§40.7) and Your bank's BANKCONN, BANKLINK#, DEPOSIT#, BANKPAYERS (§40.5.11; never STAT#, RATE#, OAUTH#/STATE, FOLLOWKEYS#, CRSTATE#, CROWNERS or the CRPUBLIC cache)."
+  }
+
+  # §40.5.11: Your bank's four items travel (the bank page refetches on them); the BANKOWNER registry item and the
+  # notify dedupe items (NOTIFIED#getpaid#bank:…) never do.
+  assert {
+    condition = (
+      alltrue([for sk in ["BANKCONN", "BANKLINK#a1b2c3d4e5f6", "DEPOSIT#2026-10-28#0123456789abcdef0123456789abcdef", "BANKPAYERS"] :
+      anytrue([for p in jsondecode(one(one(aws_lambda_event_source_mapping.broadcast.filter_criteria).filter).pattern).dynamodb.Keys.sk.S : startswith(sk, p.prefix)])]) &&
+      alltrue([for sk in ["BANKOWNER", "NOTIFIED#getpaid#bank:reached:d1"] :
+      !anytrue([for p in jsondecode(one(one(aws_lambda_event_source_mapping.broadcast.filter_criteria).filter).pattern).dynamodb.Keys.sk.S : startswith(sk, p.prefix)])])
+    )
+    error_message = "BANKCONN, BANKLINK#, DEPOSIT# and BANKPAYERS must pass the filter; BANKOWNER and NOTIFIED# must not."
   }
 
   # §41.5: the owner's CRFIND item travels (the finder page refetches on it); the shared CRPUBLIC cache (CAMP#{uuid},

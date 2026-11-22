@@ -93,6 +93,12 @@ variable "whop_connect_enabled" {
   description = "\"Connect Whop\" on the Content Rewards Get paid page (docs/CONTRACTS.md §40.6, WHOP_CONNECT on cf-prod-api). On: K, L and M of §40.8 have merged. Set false to turn it off again: the card says \"Coming soon: your Whop payouts here.\", the Whop routes answer 503 and every saved key, token and payout stays."
 }
 
+variable "bank_reading_enabled" {
+  type        = bool
+  default     = false
+  description = "Your bank (docs/CONTRACTS.md §40.5, ADR-82: Enable Banking restricted mode, BANK_READING on cf-prod-api and cf-prod-money). Off until BA, BR, BW and BD of §40.5.12 have merged; then one switch PR sets it to true. Set false to turn it off again (the same day if Enable Banking says no): every screen says \"Clip Factory can't see your bank.\", the bank routes answer 503, the daily read stops, and every stored deposit, payer, link and secret stays."
+}
+
 variable "help_enabled" {
   type        = bool
   default     = true

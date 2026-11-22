@@ -103,8 +103,10 @@ run "environment_names_the_flow_aliases" {
       CR_FINDER = "off"
       # §40.6 module default: Connect Whop off.
       WHOP_CONNECT = "off"
+      # §40.5.11 module default: Your bank off.
+      BANK_READING = "off"
     })
-    error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9, §17.9, §19.9, §38.16, §40.6 and §41.6 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID, HELP_*; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
+    error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9, §17.9, §19.9, §38.16, §40.5.11, §40.6 and §41.6 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID, HELP_*; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
   }
 }
 
@@ -908,5 +910,39 @@ run "whop_connect_on" {
   assert {
     condition     = length([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s if can(regex("(?i)whop", jsonencode(s)))]) == 0
     error_message = "Connect Whop needs no new permission: its secrets ride the existing PlatformSecrets grant."
+  }
+}
+
+# docs/CONTRACTS.md §40.5.11: Your bank waits behind BANK_READING, off by default; the switch is an in-place
+# environment change of the same function (no new grant, nothing replaced).
+run "bank_reading_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = var.bank_reading_enabled == false && one(aws_lambda_function.fn["api"].environment).variables["BANK_READING"] == "off"
+    error_message = "bank_reading_enabled defaults to false: BANK_READING is off."
+  }
+}
+
+run "bank_reading_on" {
+  command = plan
+
+  variables {
+    bank_reading_enabled = true
+  }
+
+  assert {
+    condition     = one(aws_lambda_function.fn["api"].environment).variables["BANK_READING"] == "on"
+    error_message = "With bank_reading_enabled, BANK_READING is on."
+  }
+
+  assert {
+    condition     = aws_lambda_function.fn["api"].function_name == "cf-test-api" && keys(aws_lambda_function.fn) == ["api"]
+    error_message = "The switch changes only cf-test-api's environment: the same function, nothing replaced."
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s if can(regex("(?i)bank", jsonencode(s)))]) == 0
+    error_message = "Your bank needs no new permission: its secrets ride the existing PlatformSecrets grant."
   }
 }

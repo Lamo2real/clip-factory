@@ -5,7 +5,9 @@ The event source mapping delivers only ``MODIFY`` records of ``JOB#`` items and 
 sign in again, did they say yes) and ``CRFIND`` (§41.4: new campaigns match, at most once a day); one each, deduped by
 ``NOTIFIED#cr#{key}``, under ``notify.contentRewards``, and of ``PAYSTATE#`` (§40.7: money on hold, money sent to
 your bank; one each, deduped by ``NOTIFIED#getpaid#{key}``, under ``notify.getPaid``, never for the first read after
-a grant). Each job record compares the job before and after the write and sends at most one notification:
+a grant) and of ``BANKCONN`` (§40.5.11: money reached your bank, a payment may be from an app, a bank link ends soon or
+ended; each event of a new ``lastNotice`` once, deduped by ``NOTIFIED#getpaid#bank:{key}``, also under
+``notify.getPaid``). Each job record compares the job before and after the write and sends at most one notification:
 
 - **ready**: the job became ``ready`` ("Your clips are ready. Tap to look."), when ``notify.ready`` is on;
 - **stopped**: it became ``failed`` ("It stopped. Tap Try again."), when ``notify.stopped`` is on;
@@ -610,20 +612,137 @@ def handle_getpaid_change(deps: NotifyDeps, sk: str, old: Mapping[str, Any], new
     return sent
 
 
+# --- Your bank (§40.5.11) ------------------------------------------------------------------------------------
+
+BANK_SK = "BANKCONN"
+BANK_URL = "/settings/posting/getpaid/bank"
+BANK_PLACES = {
+    "youtube": "YouTube",
+    "tiktok": "TikTok",
+    "instagram": "Instagram",
+    "facebook": "Facebook",
+    "meta": "Meta (Instagram and Facebook)",
+    "x": "X",
+    "contentrewards": "Content Rewards (Whop)",
+}
+BANK_ASK = "Your bank got money that may be from an app. Tap to say where it's from."
+BANK_ENDED = "Your bank link ended. Tap here to reconnect with BankID."
+
+
+def bank_amount(row: Mapping[str, Any]) -> str | None:
+    """A deposit's amount as words ("1,234.56 SEK"): its minor units as micros (a unit change, never a conversion)."""
+    minor, exp = row.get("amountMinor"), row.get("exponent")
+    if isinstance(minor, bool) or isinstance(exp, bool) or not isinstance(minor, int | Decimal):
+        return None
+    if not isinstance(exp, int | Decimal) or not 0 <= int(exp) <= 6:
+        return None
+    return money_words(int(minor) * 10 ** (6 - int(exp)), row.get("currency"))
+
+
+def _names(places: list[str]) -> str:
+    if len(places) == 1:
+        return places[0]
+    return ", ".join(places[:-1]) + " and " + places[-1]
+
+
+def _ends_in(days: Any) -> str:
+    n = int(days) if isinstance(days, int | Decimal) and not isinstance(days, bool) else 7
+    return "in 1 day" if n == 1 else f"in {n} days"
+
+
+def bank_events(old: Mapping[str, Any], new: Mapping[str, Any]) -> list[tuple[str, webpush.Message]]:
+    """(event key, message) for each event of a new ``BANKCONN.lastNotice`` (its ``key`` changed). The reader puts
+    only rows that aren't ``quiet`` in it (no notification for old money). Never a link, a secret, an account number
+    or the bank's text."""
+    notice: Mapping[str, Any] = new["lastNotice"] if isinstance(new.get("lastNotice"), Mapping) else {}
+    before: Mapping[str, Any] = old["lastNotice"] if isinstance(old.get("lastNotice"), Mapping) else {}
+    key = notice.get("key")
+    if not isinstance(key, str) or not key or key == before.get("key"):
+        return []
+    out: list[tuple[str, webpush.Message]] = []
+    reached = [r for r in notice.get("reached") or [] if isinstance(r, Mapping) and isinstance(r.get("depositId"), str)]
+    more = notice.get("reachedMore")
+    more = int(more) if isinstance(more, int | Decimal) and not isinstance(more, bool) else 0
+    if reached:
+        first = reached[0]
+        place = BANK_PLACES.get(str(first.get("place") or ""))
+        amount = bank_amount(first)
+        if len(reached) == 1 and more == 0 and place and amount:
+            body = f"Money reached your bank from {place}: {amount}."
+        else:
+            names = list(dict.fromkeys(n for r in reached if (n := BANK_PLACES.get(str(r.get("place") or "")))))
+            body = (
+                f"Money reached your bank from {_names(names)}. Tap to see how much."
+                if names
+                else "Money reached your bank. Tap to see how much."
+            )
+        out.append(
+            (
+                f"reached:{first['depositId']}",
+                webpush.Message(GETPAID_TITLE, body, "getpaid-bank-reached", SENT_URL, ttl=GETPAID_TTL),
+            )
+        )
+    asks = notice.get("asks")
+    if isinstance(asks, int | Decimal) and not isinstance(asks, bool) and int(asks) > 0:
+        day = key[:10]
+        out.append(
+            (f"ask:{day}", webpush.Message(GETPAID_TITLE, BANK_ASK, "getpaid-bank-ask", BANK_URL, ttl=GETPAID_TTL))
+        )
+    for link in notice.get("expiring") or []:
+        if not isinstance(link, Mapping) or not link.get("linkId") or not link.get("consentUntil"):
+            continue
+        body = f"Your bank link ends {_ends_in(link.get('days'))}. Tap here to reconnect it with BankID."
+        message = webpush.Message(
+            GETPAID_TITLE, body, f"getpaid-bank-link-{link['linkId']}", BANK_URL, ttl=GETPAID_TTL, urgency="high"
+        )
+        out.append((f"expiring:{link['linkId']}:{link['consentUntil']}", message))
+    for link in notice.get("ended") or []:
+        if not isinstance(link, Mapping) or not link.get("linkId") or not link.get("endedAt"):
+            continue
+        message = webpush.Message(
+            GETPAID_TITLE, BANK_ENDED, f"getpaid-bank-link-{link['linkId']}", BANK_URL, ttl=GETPAID_TTL, urgency="high"
+        )
+        out.append((f"ended:{link['linkId']}:{link['endedAt']}", message))
+    return out
+
+
+def handle_bank_change(deps: NotifyDeps, old: Mapping[str, Any], new: Mapping[str, Any]) -> list[str]:
+    """Sends each Your bank notification a ``BANKCONN`` change calls for (under ``notify.getPaid``); returns their
+    event keys. Each is sent once (``NOTIFIED#getpaid#bank:{key}``, 30 days)."""
+    pk = str(new.get("pk") or "")
+    user_id = str(new.get("userId") or (pk.removeprefix("USER#") if pk.startswith("USER#") else ""))
+    if not user_id:
+        return []
+    found = bank_events(old, new)
+    if not found or not _get_paid_on(deps, user_id):
+        return []
+    subs = devices.active(deps.store, user_id)
+    if not subs:
+        return []
+    sent = []
+    for key, message in found:
+        if _getpaid_first_time(deps, db.user_pk(user_id), f"bank:{key}"):
+            send_to_devices(deps, user_id, message, subs)
+            sent.append(key)
+    return sent
+
+
 def process(event: Mapping[str, Any], deps: NotifyDeps) -> dict[str, list[Any]]:
     records = [r for r in event.get("Records", []) if isinstance(r, Mapping)]
     sent = 0
     for record in records:
         data = record.get("dynamodb") or {}
         sk = str(((data.get("Keys") or {}).get("sk") or {}).get("S", ""))
-        watched = sk.startswith("JOB#") or sk.startswith(CR_PREFIXES) or sk.startswith(GETPAID_PREFIX)
+        watched = sk.startswith("JOB#") or sk.startswith(CR_PREFIXES) or sk.startswith(GETPAID_PREFIX) or sk == BANK_SK
         if record.get("eventName") != "MODIFY" or not watched:
             continue
         old, new = data.get("OldImage"), data.get("NewImage")
         if not isinstance(old, Mapping) or not isinstance(new, Mapping):
             continue
         try:
-            if sk.startswith(GETPAID_PREFIX):
+            if sk == BANK_SK:
+                sent += len(handle_bank_change(deps, deps.deserialize(old), deps.deserialize(new)))
+            elif sk.startswith(GETPAID_PREFIX):
                 sent += len(handle_getpaid_change(deps, sk, deps.deserialize(old), deps.deserialize(new)))
             elif sk.startswith(CR_PREFIXES):
                 if handle_cr_change(deps, sk, deps.deserialize(old), deps.deserialize(new)):

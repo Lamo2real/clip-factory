@@ -118,6 +118,12 @@ variable "whop_connect_enabled" {
   description = "§40.6: WHOP_CONNECT on/off, \"Connect Whop\" on the Content Rewards Get paid page. Off until K, L and M of §40.8 have merged; while off the Whop routes answer 503 \"Coming soon.\"."
 }
 
+variable "bank_reading_enabled" {
+  type        = bool
+  default     = false
+  description = "§40.5.11: BANK_READING on/off, Your bank (Enable Banking). Off until BA, BR, BW and BD of §40.5.12 have merged; while off GET /v1/getpaid/bank answers {on: false}, every other bank route 503 \"Coming soon.\" and every screen keeps \"Clip Factory can't see your bank.\"."
+}
+
 # ---------- Set up posting (docs/CONTRACTS.md §17.4, §17.9) ----------
 variable "hooks_url" {
   type        = string

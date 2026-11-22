@@ -630,6 +630,57 @@ run "whop_connect_switch_off_plans" {
   }
 }
 
+# docs/CONTRACTS.md §40.5.11 and ADR-82: Your bank (BANK_READING) defaults to off until BA, BR, BW and BD of §40.5.12
+# have merged (then one switch PR, "Get paid: switch on Your bank", sets it to true). It only changes the environment of
+# cf-prod-api and cf-prod-money (their modules' own tests prove BANK_READING = var.bank_reading_enabled ? "on" :
+# "off"), so flipping it is an in-place env change and can never delete or replace what holds the owner's data: the
+# bank secrets are made at runtime, never by Terraform, and every stored deposit, payer and link stays.
+run "bank_reading_is_wired_and_off" {
+  command = plan
+
+  assert {
+    condition     = var.bank_reading_enabled == false
+    error_message = "bank_reading_enabled defaults to false until every builder of §40.5.12 has merged."
+  }
+
+  assert {
+    condition = (module.api.function_names == { api = "cf-prod-api" } && module.money.function_names == { money = "cf-prod-money" } &&
+      strcontains(regex("(?s)\nmodule \"api\" \\{\n(.*?)\n\\}\n", file("main.tf"))[0], "\n  bank_reading_enabled = var.bank_reading_enabled\n") &&
+    strcontains(regex("(?s)\nmodule \"money\" \\{\n(.*?)\n\\}\n", file("main.tf"))[0], "\n  bank_reading_enabled    = var.bank_reading_enabled\n"))
+    error_message = "bank_reading_enabled is passed to the api module (cf-prod-api) and the money module (cf-prod-money): one line turns both off."
+  }
+
+  assert {
+    condition     = module.api.function_names == { api = "cf-prod-api" } && module.money.function_names == { money = "cf-prod-money" } && module.notify.notify_function_name == "cf-prod-notify"
+    error_message = "With the switch off the stack plans the same cf-prod-api, cf-prod-money and cf-prod-notify."
+  }
+
+  assert {
+    condition = (output.table_name == "cf-prod-data" && output.media_bucket == "cf-prod-media-123456789012" &&
+    output.vector_bucket == "cf-prod-vectors-123456789012" && output.web_bucket == "cf-prod-web-123456789012")
+    error_message = "Your bank keeps the table and the buckets that hold the owner's data."
+  }
+}
+
+run "bank_reading_switch_on_plans" {
+  command = plan
+
+  variables {
+    bank_reading_enabled = true
+  }
+
+  assert {
+    condition     = module.api.function_names == { api = "cf-prod-api" } && module.money.function_names == { money = "cf-prod-money" } && module.notify.notify_function_name == "cf-prod-notify"
+    error_message = "With the switch on the stack still plans the same cf-prod-api, cf-prod-money and cf-prod-notify."
+  }
+
+  assert {
+    condition = (output.table_name == "cf-prod-data" && output.media_bucket == "cf-prod-media-123456789012" &&
+    output.vector_bucket == "cf-prod-vectors-123456789012" && output.web_bucket == "cf-prod-web-123456789012")
+    error_message = "Switching Your bank on keeps the table and the buckets that hold the owner's data."
+  }
+}
+
 # docs/CONTRACTS.md §46.11 and ADR-81: auto-posting. cf-prod-autopost and its hourly rule are planned and watched (its
 # errors in monitoring, the rule's failed invocations by the module's own hourly alarm on the same topic: two new
 # alarms), it starts the clip flow on its live alias, gets SECRET_PREFIX but no secret grant (the campaign fit check

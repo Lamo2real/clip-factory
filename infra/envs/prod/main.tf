@@ -313,6 +313,11 @@ module "money" {
   secret_prefix              = module.hooks.secret_prefix
   platform_secrets_arn       = module.hooks.platform_secrets_arn
   platform_token_secrets_arn = module.hooks.platform_token_secrets_arn
+  # §40.5.11: the bank reader follows the same switch as cf-prod-api (off stops the daily read too), suggests Content
+  # Rewards only while it is on, and fills the psu-referer header from the app's address. In-place env changes.
+  bank_reading_enabled    = var.bank_reading_enabled
+  content_rewards_enabled = var.content_rewards_enabled
+  app_url                 = module.frontend.app_url
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn
@@ -411,6 +416,8 @@ module "api" {
   cr_finder_enabled = var.cr_finder_enabled
   # §40.6: "Connect Whop" (WHOP_CONNECT), on since its switch PR (503 "Coming soon." when off); an in-place env change.
   whop_connect_enabled = var.whop_connect_enabled
+  # §40.5.11: Your bank (BANK_READING), off until its switch PR; an in-place env change.
+  bank_reading_enabled = var.bank_reading_enabled
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn

@@ -867,6 +867,61 @@ def test_the_daily_run_reads_every_registered_owner(deps: MoneyDeps, store: db.S
     assert handler.handle({"what": "ever"}, deps) == {"action": "bad_event"}
 
 
+def test_refresh_never_reads_the_bank_and_only_the_daily_run_does(
+    deps: MoneyDeps, store: db.Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§40.5.6: Money's own Check now never spends one of the bank's unattended reads; the daily run reads it at the
+    end of ``run_user(…, bank=True)``, after the payout reads, unattended."""
+    from clipfactory_api.bankread import collect as bank_collect
+    from clipfactory_api.payouts import collect as payouts_collect
+
+    order: list[str] = []
+    monkeypatch.setattr(payouts_collect, "run", lambda *a, **k: order.append("payouts") or {})
+    monkeypatch.setattr(bank_collect, "run", lambda *a, **k: order.append(f"bank:{k['mine']}:{k['psu']}") or {})
+    money.register_owner(store, USER, NOW)
+    handler.handle({"action": "refresh", "userId": USER}, deps)
+    assert order == ["payouts"]
+    collect.run_user(deps, USER)
+    assert order == ["payouts", "payouts"]  # bank=False by default
+    order.clear()
+    handler.handle({"source": "aws.events"}, deps)
+    assert order == ["payouts", "bank:False:None"]
+
+
+def test_the_bank_action_runs_only_the_bank_read(deps: MoneyDeps, monkeypatch: pytest.MonkeyPatch) -> None:
+    from clipfactory_api.bankread import collect as bank_collect
+    from clipfactory_api.clock import iso
+
+    seen: list[dict[str, Any]] = []
+    monkeypatch.setattr(bank_collect, "run", lambda *a, **k: seen.append({"user": a[1], **k}) or {"result": "read"})
+    monkeypatch.setattr(collect, "run_user", lambda *a, **k: pytest.fail("the bank action never runs the money run"))
+    psu = {"ip": "203.0.113.9", "ua": "Safari", "lang": "sv"}
+    fresh = {"action": "bank", "userId": USER, "first": False, "psu": psu, "at": iso(NOW - timedelta(seconds=5))}
+    assert handler.handle(fresh, deps) == {"action": "bank", "result": "read"}
+    assert (seen[-1]["user"], seen[-1]["psu"], seen[-1]["mine"]) == (USER, psu, True)
+    handler.handle({**fresh, "at": iso(NOW - timedelta(seconds=200))}, deps)
+    assert (seen[-1]["psu"], seen[-1]["mine"]) == (None, False)
+    handler.handle({**fresh, "at": int((NOW - timedelta(seconds=5)).timestamp())}, deps)
+    assert seen[-1]["mine"] is True
+    assert handler.handle({"action": "bank", "userId": ""}, deps) == {"action": "bad_event"}
+
+
+def test_a_raising_bank_read_never_stops_the_money_run(
+    deps: MoneyDeps, store: db.Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from clipfactory_api.bankread import collect as bank_collect
+
+    def boom(*_a: Any, **_k: Any) -> Any:
+        raise RuntimeError("bank")
+
+    monkeypatch.setattr(bank_collect, "run", boom)
+    connect(store, "instagram", [], account_id="1784")
+    deps.http.answers.append((200, {"followers_count": 10}))  # type: ignore[attr-defined]
+    out = collect.run_user(deps, USER, platforms=("instagram",), bank=True)
+    assert [o.platform for o in out] == ["instagram"]
+    assert state(store, "instagram")["numbers"] == {"followers": 10}
+
+
 def test_the_money_lambda_never_writes_outside_the_owner_or_registry(
     deps: MoneyDeps, store: db.Store, fake_http: FakeHttp, table: FakeTable
 ) -> None:
