@@ -13601,7 +13601,8 @@ interface AutoRun {
 * **Undo** (`DELETE /v1/clips/{clipId}/hold`): removes `holdUntil`; 204 every time (safe to repeat, and never refused
   because the clip moved on: uploaded, declined or sent); 404 only when the clip is not the caller's.
 * Neither changes `status`: the decline (`POST …/decline`) is still what throws the clip away. Upload
-  (`POST …/confirm`) ignores the hold.
+  (`POST …/confirm`) ignores the hold. Both write the clip item, so its live clip event (§14.2, still `review`, no
+  `holdUntil`) arrives: the app keeps a clip it is throwing away hidden until its toast ends or Undo.
 * Mock mode (`web/src/api/mock/autopost.ts`) follows the same rules, with a fake clock the e2e tests can move: the
   two hold routes, a held clip skipped by the pick and its run (outcome "You threw it away first."), and the shown
   `nextRunAt` and `runAt` rules of §46.4 and §46.5.
