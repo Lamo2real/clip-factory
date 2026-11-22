@@ -151,8 +151,11 @@ for (const [name, use] of [
       await expect(page.locator("[data-cr='getpaid']")).toHaveAttribute("href", "/settings/posting/getpaid/contentrewards");
     });
 
-    test("YouTube: Clip Factory's taps are 15 (Partner Program, the reading step, five payout steps)", async ({ page }) => {
+    test("YouTube: Clip Factory's taps are 15 (Partner Program, the reading step, five payout steps)", async ({ page, browserName }) => {
       test.setTimeout(120_000);
+      // The longest walk in this file, 15 taps and a trip to Google and back in one test (the count spans all of it):
+      // 1.2 min on CI's WebKit iPhone with the backdrop still, and a slow runner there takes half as long again.
+      test.slow(browserName === "webkit", "the 15-tap walk paints in software in CI");
       await start(page, "/settings/posting/getpaid/youtube", "fresh", ["youtube"]);
       const t = tap(15);
       await expect(tomato(page)).toHaveCount(1);
