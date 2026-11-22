@@ -407,8 +407,9 @@ describe("joining the parts", () => {
   });
 
   it("deleteReference goes to a character's picture with three ids and to a reference video with two", async () => {
-    // Neither part is built in this branch: each call reaches its own part's stub (both say so plainly).
-    await expect(api.deleteReference("stories", "c1", "a1")).rejects.toThrow("Lamo Stories is not built yet.");
+    // The characters part is built (builder G), the references part is not yet (builder H): three ids reach the
+    // characters part (no such character here), two ids reach the references part's stub (it says so plainly).
+    await expect(api.deleteReference("stories", "c1", "a1")).rejects.toThrow("We could not find that character.");
     await expect(api.deleteReference("stories", "r1")).rejects.toThrow("Lamo Stories is not built yet.");
   });
 });
