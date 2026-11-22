@@ -12,7 +12,9 @@
   Get paid (§40.6) also comes back here: YouTube's "Allow payment reading" and ``whop`` ("Connect Whop", served on
   this callback only, never on ``/hooks/whop``), each to its fixed Get paid page.
   On ``connected`` the clips waiting for that place go out (``release``, §17.6): it starts the clip flow on the alias
-  in ``CLIP_FLOW_ARN``.
+  in ``CLIP_FLOW_ARN``. A Lamo Stories state (``w1.``, §45.13.3) is not handled here: it is forwarded, before
+  anything else, with ``302`` to Lamo Stories' own callback (``STORIES_OAUTH_CALLBACK``, from configuration) with the
+  query passed on unchanged.
 
 Query strings (OAuth ``code``/``state``, Meta's verify token) and bodies are never logged.
 """
@@ -30,6 +32,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Literal
+from urllib.parse import quote, urlencode
 
 from . import db
 from .clock import Clock, iso, utcnow
@@ -54,6 +57,7 @@ META = frozenset({"instagram", "facebook"})
 FOLLOW_HOOKS = ("twitch", "kick")
 # §40.6: Connect Whop comes back on the OAuth callback only; Whop never sends webhooks here (/hooks/whop is a 404).
 CALLBACK_ONLY = ("whop",)
+STORIES_STATE = "w1."  # §45.13.3: a Lamo Stories OAuth state; its callback is Lamo Stories' own
 HOOK_PLATFORMS: tuple[str, ...] = PLATFORMS + FOLLOW_HOOKS + CALLBACK_ONLY
 KEPT_HEADERS = (
     "content-type",
@@ -91,6 +95,8 @@ class HooksDeps:
     follow: FollowEnv | None = None  # §24: Twitch's EventSub secret; None: every Twitch delivery is a 401
     kick_keys: KickKeys | None = None  # §24: Kick's public key; None: every Kick delivery is a 401
     flows: ClipFlowStarter | None = None  # §17.6: starts the clip flow for posts released on connect; None: none
+    # §45.13.3: Lamo Stories' callback base (STORIES_OAUTH_CALLBACK); a w1. state is only forwarded there
+    stories_oauth_callback: str = ""
 
 
 def ssm_token_reader(client: Any, name: str, now: Callable[[], float] = time.time) -> Callable[[], str]:
@@ -184,6 +190,8 @@ def handle(event: Mapping[str, Any], deps: HooksDeps) -> dict[str, Any]:
 def _oauth_callback(platform: str, event: Mapping[str, Any], deps: HooksDeps) -> dict[str, Any]:
     from .oauth import callback
 
+    if str(_query(event).get("state") or "").startswith(STORIES_STATE):
+        return _forward_to_stories(platform, event, deps)
     result = "error"
     if deps.oauth is not None:
         try:
@@ -193,6 +201,23 @@ def _oauth_callback(platform: str, event: Mapping[str, Any], deps: HooksDeps) ->
             result = "error"
     headers = {"location": callback.location(deps.app_url, platform, result), "referrer-policy": "no-referrer"}
     return _response(302, headers=headers)
+
+
+def _forward_to_stories(platform: str, event: Mapping[str, Any], deps: HooksDeps) -> dict[str, Any]:
+    """§45.13.3: a ``w1.`` state is Lamo Stories': ``302`` to ``{STORIES_OAUTH_CALLBACK}/{platform}/callback`` with
+    every query parameter passed on as it came (the target is configuration, never the request). Nothing is read or
+    written here; without a configured target the owner lands on Lamo Stories' Connections page."""
+    base = deps.stories_oauth_callback.rstrip("/")
+    if base.startswith("https://"):
+        raw = event.get("multiValueQueryStringParameters")
+        if isinstance(raw, Mapping) and raw:
+            pairs = [(str(k), str(v)) for k, values in raw.items() for v in (values or [])]
+        else:
+            pairs = list(_query(event).items())
+        target = f"{base}/{platform}/callback?{urlencode(pairs, quote_via=quote)}"
+    else:
+        target = f"{deps.app_url.rstrip('/')}/stories/connections?platform={platform}&result=error"
+    return _response(302, headers={"location": target, "referrer-policy": "no-referrer"})
 
 
 def _challenge(query: Mapping[str, str]) -> str | None:
@@ -338,6 +363,7 @@ def _from_env() -> HooksDeps:
         ),
         kick_keys=KickKeys(urllib_client),
         flows=flows,
+        stories_oauth_callback=env.get("STORIES_OAUTH_CALLBACK", ""),
     )
 
 

@@ -203,6 +203,13 @@ export const TREES: Tree[] = [
             words: ["content rewards", "campaign", "campaigns", "brand", "join", "am i in", "whop"],
             href: "/campaigns",
           },
+          {
+            id: "campaign-finder",
+            name: "Find campaigns",
+            leaf: "Campaigns on Content Rewards that pay what you want.",
+            words: ["find campaigns", "campaign finder", "discover", "new campaigns", "requirements", "what i want", "content rewards"],
+            href: "/campaigns/find",
+          },
         ],
       },
       {
@@ -469,7 +476,7 @@ export const TREES: Tree[] = [
           {
             id: "notify-contentrewards",
             name: "Content Rewards news",
-            leaf: "You're in, send-now reminders, approvals, proof and money.",
+            leaf: "You're in, send-now reminders, approvals, proof, money and new campaigns.",
             words: ["content rewards", "campaign", "brand", "approved", "send now", "proof", "whop"],
           },
           {

@@ -1,0 +1,479 @@
+/* The campaign finder (docs/CONTRACTS.md §41.1): the Campaigns page's entry card, Home's chips, and /campaigns/find.
+   Glass and soft fills only (no lines), the arrow cursor everywhere (no cursor rules), targets of 44 px (48 on phones),
+   and the screen's one vermilion pinned at the bottom right while its card is on screen (the shared .cr-pin): on
+   phones as everywhere, and on this page at every width (on a wide screen it was below the fold). */
+
+/* ---------- The entry card on /campaigns ---------- */
+.finder-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 16px var(--inset);
+  border-radius: var(--r-lg);
+  min-width: 0;
+}
+.finder-entry__text {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 16ch;
+  min-width: 0;
+}
+.finder-entry__text .cr-section__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.finder-entry__line {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.finder-new {
+  flex: none;
+}
+.cr-row-chip.is-find .cr-row-chip__name {
+  white-space: normal;
+}
+
+/* ---------- The page ---------- */
+.finder-page {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+}
+.finder-page > .page-head {
+  margin-bottom: 0;
+}
+.finder-looked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.finder-looked__limit {
+  color: var(--ink-2);
+}
+
+/* A state of the page: one sentence that says what to do next. */
+.finder-state {
+  display: grid;
+  gap: 10px;
+  padding: 16px var(--inset);
+  border-radius: var(--r-lg);
+}
+.finder-state__text {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.finder-state__text > .icon,
+.finder-state__text > .spinner {
+  flex: none;
+  margin-top: 2px;
+}
+.finder-state__sub {
+  margin: 0;
+  color: var(--ink-2);
+}
+.finder-state__main,
+.finder-in__main,
+.finder-want__main,
+.finder-match__main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+/* "You're in!" rows of this visit. */
+.finder-ins,
+.finder-list,
+.finder-chips,
+.finder-skipped {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.finder-ins,
+.finder-list {
+  display: grid;
+  gap: 10px;
+}
+.finder-in {
+  display: grid;
+  gap: 12px;
+  padding: 16px var(--inset);
+  border-radius: var(--r-lg);
+}
+/* Focused by the page when the add by itself brings it (its button takes the focus ring when it has one). */
+.finder-in:focus {
+  outline: none;
+}
+.finder-in__sub {
+  margin: 0;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.finder-in__text {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+.finder-in__text > .icon {
+  flex: none;
+  color: var(--green-ink);
+}
+
+/* ---------- What you want ---------- */
+.finder-want {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--inset);
+  border-radius: var(--r-xl);
+  min-width: 0;
+  scroll-margin-top: 96px;
+}
+.finder-want--folded {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 16px var(--inset);
+  border-radius: var(--r-lg);
+}
+.finder-want__fold {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 20ch;
+  min-width: 0;
+}
+.finder-want__summary {
+  margin: 0;
+  color: var(--ink-2);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.finder-want__row {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  min-width: 0;
+}
+.finder-want__label {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  font-weight: 700;
+}
+.finder-want__line {
+  font-weight: 500;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.finder-want .segmented {
+  background: var(--fill);
+}
+.finder-want .segmented__opt {
+  min-height: 44px;
+}
+.finder-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.finder-chip-wrap {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+.finder-chip {
+  min-height: 44px;
+}
+.finder-chip[aria-disabled="true"] {
+  opacity: 0.55;
+}
+.finder-chip[aria-disabled="true"]:active {
+  transform: none;
+}
+.finder-want__note {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.finder-want__more {
+  font-weight: 650;
+}
+.finder-want__switches {
+  display: grid;
+  gap: 4px;
+}
+.finder-want__skip,
+.finder-want__noplace {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.finder-want__skip {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.finder-want__noplace {
+  font-weight: 650;
+}
+.finder-want__skip > .icon,
+.finder-want__noplace > .icon {
+  flex: none;
+  margin-top: 2px;
+}
+.finder-want.has-pin,
+.finder-match.has-pin {
+  display: flex;
+  flex-direction: column;
+}
+.finder-want.has-pin > *,
+.finder-match.has-pin .finder-match__body > * {
+  min-width: 0;
+}
+
+/* ---------- The matches ---------- */
+.finder-matches {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.finder-matches.is-dim {
+  opacity: 0.55;
+}
+.finder-asof {
+  margin: 0;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.finder-match {
+  display: grid;
+  border-radius: var(--r-lg);
+  min-width: 0;
+}
+.finder-match__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 14px var(--inset);
+  border: 0;
+  border-radius: var(--r-lg);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+}
+.finder-match__head:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.finder-match__title {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.finder-match__name {
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+.finder-match__brand {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.finder-match__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.finder-match__chev {
+  flex: none;
+  transition: transform var(--dur-2) var(--ease-out);
+}
+.finder-match.is-open .finder-match__chev {
+  transform: rotate(90deg);
+}
+.finder-match__folded {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0 var(--inset) 14px;
+}
+.finder-match__body {
+  display: grid;
+  gap: 14px;
+  padding: 0 var(--inset) var(--inset);
+  min-width: 0;
+}
+.finder-match.has-pin .finder-match__body {
+  display: flex;
+  flex-direction: column;
+}
+.finder-match__money p {
+  overflow-wrap: anywhere;
+}
+.finder-match__tag {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.finder-match__why {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--tint-leaf);
+  overflow-wrap: anywhere;
+}
+.finder-match__why-label {
+  font-weight: 750;
+}
+.finder-match__lines {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.finder-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  overflow-wrap: anywhere;
+}
+.finder-line > .icon {
+  flex: none;
+  margin-top: 2px;
+}
+.finder-line.is-heads > .icon {
+  color: var(--vermilion-ink);
+}
+.finder-steps {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.finder-steps__lead {
+  margin: 0;
+  font-weight: 650;
+}
+.finder-match__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+/* The rules box's foot (NextStep's RulesBox, here and on the §38.4 card): a glass Paste at the left, the count. */
+.cr-rules-box__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+/* ---------- Under the matches ---------- */
+.finder-quiet {
+  display: grid;
+  gap: 8px;
+  color: var(--ink-2);
+}
+.finder-quiet > p {
+  margin: 0;
+}
+.finder-why-not {
+  color: var(--ink);
+}
+.finder-why-not .cr-fold__body > p {
+  margin: 0;
+  font-weight: 650;
+}
+.finder-skipped {
+  display: grid;
+  gap: 6px;
+}
+.finder-skipped > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  overflow-wrap: anywhere;
+}
+.finder-ask {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  padding: 16px var(--inset);
+  border-radius: var(--r-lg);
+  background: var(--fill);
+}
+.finder-ask > p {
+  margin: 0;
+}
+.finder-ask__done {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+}
+.finder-ask .cr-fold {
+  width: 100%;
+}
+.finder-ask__what {
+  font-weight: 700;
+}
+.finder-ask__msg {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+  font-size: var(--fs-small);
+  overflow-wrap: anywhere;
+}
+.finder-stop {
+  display: flex;
+}
+
+/* Phones and touch tablets: the main buttons sit at the right, 48 px targets (§38.1). */
+@media (max-width: 767px), (pointer: coarse) {
+  .finder-state__main,
+  .finder-in__main,
+  .finder-want__main,
+  .finder-match__main,
+  .finder-entry {
+    justify-content: flex-end;
+  }
+  .finder-want .segmented__opt,
+  .finder-chip {
+    min-height: 48px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .finder-match__chev {
+    transition: none;
+  }
+}
