@@ -1487,7 +1487,7 @@ The list is CONTRACTS §45.19. Three checks matter most, because the owner put p
    - Check once a week that Content Rewards' robots.txt still allows `/sitemap.xml` and `/c/campaigns/` (the finder
      checks it every day and stops by itself when it doesn't).
 
-18. **Get paid** ([CONTRACTS §40.8](CONTRACTS.md#408-changes-to-earlier-sections-who-builds-what-tests-not-verified-live),
+19. **Get paid** ([CONTRACTS §40.8](CONTRACTS.md#408-changes-to-earlier-sections-who-builds-what-tests-not-verified-live),
    "Not verified live"): not checked live when built. Do them at the owner's first use; each failure becomes "not
    available" or "can't check", never a number.
    - In the deploy log, the plan changes only the two stream filters and the api's environment (`WHOP_CONNECT`) in
