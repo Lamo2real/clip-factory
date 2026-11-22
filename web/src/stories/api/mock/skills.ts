@@ -75,8 +75,9 @@ description: How Lamo Stories tells a whole story with no voice-over, only actio
 
 - **One clear want.** In the first two seconds the viewer must see who the character is and what they want (a coffee,
   to get home, to stay on the road). Show it with a pose and a look, not text.
-- **Faces carry the plot.** Change the expression at every turn of the story: calm → surprised → worried → determined
-  → relieved. Hold each face long enough to read on a phone (at least half a second).
+- **Faces carry the plot.** Change the expression at every turn of the story, using only the faces in that
+  character's own list (for example calm → surprised → worried → relieved, when it has them). Hold each face long
+  enough to read on a phone (at least half a second).
 `,
   },
   {
