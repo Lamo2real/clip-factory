@@ -331,7 +331,9 @@ export function followReading(path: () => string, topZone: () => number = () => 
     clear();
     for (const ms of [READ_REST_MS, TOP_REST_MS]) timers.push(setTimeout(() => noteReading(path(), window.scrollY, ms, topZone()), ms));
   };
-  noteReading(path(), window.scrollY, Number.POSITIVE_INFINITY, topZone());
+  // A page seen for the first time is where it is; back on the same page (its place being put back) the place it was
+  // read at stays until the page rests somewhere else.
+  noteReading(path(), window.scrollY, 0, topZone());
   window.addEventListener("scroll", moved, { passive: true });
   return () => {
     clear();

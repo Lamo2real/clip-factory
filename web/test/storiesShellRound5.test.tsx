@@ -104,6 +104,14 @@ describe("where the owner was reading on a phone (§45.36 E1)", () => {
       vi.advanceTimersByTime(TOP_REST_MS);
       expect(readingPlace("/review", 0)).toBe(0);
       stop();
+      // Back on the same page (Clip Factory on screen again before its place is put back): the reading place stays.
+      noteReading("/review", 1500, READ_REST_MS, 60);
+      const again = followReading(
+        () => "/review",
+        () => 60,
+      );
+      expect(readingPlace("/review", 0)).toBe(1500);
+      again();
     } finally {
       vi.useRealTimers();
       (window as { scrollY: number }).scrollY = 0;
