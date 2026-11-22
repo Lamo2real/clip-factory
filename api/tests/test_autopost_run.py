@@ -27,9 +27,9 @@ from autopost_support import (
     state,
     turn_on,
 )
-from clipfactory_api import db, post_preset, posts, release, uploads
+from clipfactory_api import db, post_preset, posts, release, settings, uploads
 from clipfactory_api.app import App
-from clipfactory_api.autopost import handler, pick, run
+from clipfactory_api.autopost import handler, pick, run, schedule
 from clipfactory_api.clock import iso
 from conftest import NOW, OTHER, USER, Call, Clock, seed_clip, seed_job
 from fakes import FakeLambda, FakeS3, FakeTable
@@ -507,6 +507,197 @@ def test_a_done_run_is_never_sent_again(
     assert_once(table, lambda_client, clips)
 
 
+def claim_patched(store: db.Store, monkeypatch: pytest.MonkeyPatch, before_claim: Any) -> list[str]:
+    """Calls ``before_claim(real_transact, kwargs)`` instead of each claim (the transaction that puts the run item);
+    every other transaction (Upload's) goes through as usual. Returns one entry per claim tried."""
+    real = store.transact
+    claims: list[str] = []
+
+    def transact(**kwargs: Any) -> None:
+        if any(p.get("type") == "autorun" for p in kwargs.get("puts") or []):
+            claims.append("claim")
+            return before_claim(real, kwargs)
+        return real(**kwargs)
+
+    monkeypatch.setattr(store, "transact", transact)
+    return claims
+
+
+def test_two_deliveries_that_both_planned_send_once(
+    app: App,
+    store: db.Store,
+    table: FakeTable,
+    s3_client: FakeS3,
+    at_slot: Clock,
+    lambda_client: FakeLambda,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clips = two_clips(store, s3_client)
+    inner: list[run.Outcome] = []
+
+    def second_delivery_first(real: Any, kwargs: dict[str, Any]) -> None:
+        if len(claims) == 1:
+            # Both deliveries planned; the second claims and sends before this one's claim commits.
+            inner.append(tick(app))
+        real(**kwargs)
+
+    claims = claim_patched(store, monkeypatch, second_delivery_first)
+    outer = tick(app)
+    assert (inner[0].result, outer.result) == ("ran", "done")  # the first resumed the second's finished run
+    assert claims == ["claim", "claim"]
+    assert_once(table, lambda_client, clips)
+    assert {o for _, o, _ in outcomes(store)} == {"sent"}
+    assert state(store)["lastRunAt"] == iso(SLOT)
+
+
+def test_a_later_slot_that_moved_the_schedule_first_is_not_due(
+    app: App, store: db.Store, table: FakeTable, s3_client: FakeS3, at_slot: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ready(store, "youtube")
+    turn_on(store)
+    clip = review_clip(store, s3_client)
+    later = iso(SLOT + timedelta(hours=5))
+
+    def later_run_first(real: Any, kwargs: dict[str, Any]) -> None:
+        store.put({"pk": PK, "sk": "AUTOPOST", "type": "autopost", "lastRunAt": later, "lastRunId": "x"})
+        real(**kwargs)
+
+    claim_patched(store, monkeypatch, later_run_first)
+    assert tick(app).result == "not_due"
+    assert run_item(store, RUN_ID) is None
+    assert state(store)["lastRunAt"] == later
+    assert clip_of(store, clip["clipId"])["status"] == "review"
+
+
+def test_a_claim_cancelled_by_a_conflict_is_claimed_again(
+    app: App, store: db.Store, s3_client: FakeS3, at_slot: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ready(store, "youtube")
+    turn_on(store)
+    clip = review_clip(store, s3_client)
+
+    def cancelled_once(real: Any, kwargs: dict[str, Any]) -> None:
+        if len(claims) == 1:  # a test run's write to AUTOPOST at that moment, or throttling: nothing was claimed
+            raise db.ConditionFailed("TransactionConflict")
+        real(**kwargs)
+
+    claims = claim_patched(store, monkeypatch, cancelled_once)
+    assert tick(app).result == "ran"
+    assert claims == ["claim", "claim"]
+    assert outcomes(store) == [(clip["clipId"], "sent", None)]
+    assert state(store)["lastRunAt"] == iso(SLOT)
+
+
+def test_a_claim_cancelled_every_time_fails_so_the_retry_claims_the_same_slot(
+    app: App, store: db.Store, table: FakeTable, s3_client: FakeS3, at_slot: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ready(store, "youtube")
+    turn_on(store)
+    clip = review_clip(store, s3_client)
+    event = {"source": "aws.events", "time": "2026-11-15T13:00:02Z"}
+
+    def always_cancelled(_real: Any, _kwargs: dict[str, Any]) -> None:
+        raise db.ConditionFailed("ThrottlingError")
+
+    with monkeypatch.context() as m:
+        claims = claim_patched(store, m, always_cancelled)
+        with pytest.raises(handler.OwnersFailed):  # the invocation fails: Lambda retries the same event
+            handler.handle(event, deps(app))
+        assert claims == ["claim", "claim"]
+    assert run_item(store, RUN_ID) is None
+    assert "lastRunAt" not in state(store)
+    assert clip_of(store, clip["clipId"])["status"] == "review"
+    # The retry is the same slot, so the run is never an hour late and the gaps stay even.
+    assert handler.handle(event, deps(app))["results"] == {USER: "ran"}
+    assert state(store)["lastRunAt"] == iso(SLOT)
+    assert outcomes(store) == [(clip["clipId"], "sent", None)]
+    auto = settings.load(store, USER)["autoPost"]
+    assert schedule.next_run_at(auto, state(store), at_slot()) == SLOT + timedelta(hours=5)
+
+
+def test_a_clip_still_in_review_after_its_upload_was_cancelled_is_tried_again(
+    app: App,
+    store: db.Store,
+    table: FakeTable,
+    s3_client: FakeS3,
+    at_slot: Clock,
+    lambda_client: FakeLambda,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ready(store, "youtube", "facebook")
+    turn_on(store)
+    clip = review_clip(store, s3_client)
+    real = posts.create_for_clip
+    calls: list[str] = []
+
+    def cancelled_once(*args: Any, **kwargs: Any) -> Any:
+        calls.append("x")
+        if len(calls) == 1:  # a caption PATCH on the clip at that moment: the clip is still in Review
+            raise db.ConditionFailed("TransactionConflict")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(posts, "create_for_clip", cancelled_once)
+    tick(app)
+    assert outcomes(store) == [(clip["clipId"], "sent", None)]
+    assert clip_of(store, clip["clipId"])["autoRun"] == RUN_ID
+    assert post_count(table, clip["clipId"]) == 2
+    assert list(lambda_client.started) == [f"clip-{clip['clipId']}-1"]
+
+
+def test_a_clip_whose_upload_is_cancelled_every_time_goes_next_run(
+    app: App, store: db.Store, table: FakeTable, s3_client: FakeS3, at_slot: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ready(store, "youtube")
+    turn_on(store)
+    clip = review_clip(store, s3_client)
+    real = posts.create_for_clip
+
+    def always_cancelled(*_args: Any, **_kwargs: Any) -> Any:
+        raise db.ConditionFailed("TransactionConflict")
+
+    with monkeypatch.context() as m:
+        m.setattr(posts, "create_for_clip", always_cancelled)
+        tick(app)
+    # Nothing took it, so it never says the owner uploaded it: it is still in Review and goes next run.
+    assert outcomes(store) == [(clip["clipId"], "skipped", "It changed while it was being sent. It goes next run.")]
+    assert clip_of(store, clip["clipId"])["status"] == "review"
+    assert post_count(table, clip["clipId"]) == 0
+    assert posts.create_for_clip is real
+    later = SLOT + timedelta(hours=5)
+    at_slot.now = later + timedelta(seconds=5)
+    assert tick(app, later).result == "ran"
+    assert outcomes(store, f"{iso(later)}#scheduled") == [(clip["clipId"], "sent", None)]
+
+
+def test_a_flow_that_did_not_start_keeps_the_run_planned_until_the_retry_starts_it(
+    app: App,
+    store: db.Store,
+    table: FakeTable,
+    s3_client: FakeS3,
+    at_slot: Clock,
+    lambda_client: FakeLambda,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clips = two_clips(store, s3_client)
+    event = {"source": "aws.events", "time": "2026-11-15T13:00:02Z"}
+    lambda_client.fail = True  # the clip flow does not answer
+    with pytest.raises(handler.OwnersFailed):  # both clips tried, then the invocation fails: Lambda retries it
+        handler.handle(event, deps(app))
+    planned = run_item(store, RUN_ID)
+    assert planned is not None
+    assert planned["state"] == "planned"
+    for clip in clips:
+        stored = clip_of(store, clip["clipId"])
+        assert (stored["status"], stored["publishState"], stored["autoRun"]) == ("confirmed", "pending", RUN_ID)
+    lambda_client.fail = False
+    assert handler.handle(event, deps(app))["results"] == {USER: "ran"}
+    assert {o for _, o, _ in outcomes(store)} == {"sent"}
+    assert [clip_of(store, c["clipId"])["publishState"] for c in clips] == ["started", "started"]
+    assert sorted(lambda_client.started) == sorted(f"clip-{c['clipId']}-1" for c in clips)
+    for clip in clips:
+        assert post_count(table, clip["clipId"]) == 3
+
+
 # --- the owner moves first ------------------------------------------------------------------------------------------
 
 
@@ -553,6 +744,33 @@ def test_a_clip_uploaded_by_hand_after_planning_is_skipped(
     assert outcomes(store) == [(clip["clipId"], "skipped", "You uploaded it yourself.")]
     assert set(posts_of(table, clip["clipId"])) == {"youtube"}
     assert "autoRun" not in clip_of(store, clip["clipId"])
+
+
+def test_a_clip_another_run_sent_first_says_so(
+    app: App,
+    call: Call,
+    store: db.Store,
+    table: FakeTable,
+    s3_client: FakeS3,
+    at_slot: Clock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ready(store, "youtube")
+    turn_on(store)
+    clip = review_clip(store, s3_client)
+    crashed_run(app, monkeypatch)
+    # Its retry comes late: a Private test run took the clip meanwhile.
+    at_slot.now = SLOT + timedelta(minutes=20)
+    status, body = call("POST", "/v1/autopost/run", {"kind": "private"})
+    assert (status, body["run"]["clips"][0]["clipId"], body["run"]["clips"][0]["outcome"]) == (
+        200,
+        clip["clipId"],
+        "sent",
+    )
+    tick(app)
+    assert outcomes(store) == [(clip["clipId"], "skipped", "Another auto-posting run sent it first.")]
+    assert post_count(table, clip["clipId"]) == 1
+    assert clip_of(store, clip["clipId"])["autoTest"] == "private"
 
 
 def test_a_throw_away_at_the_same_instant_wins_the_race(

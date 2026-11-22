@@ -57,7 +57,8 @@ def _run_posts(app: App, user_id: str, runs: list[Item], by_id: Mapping[str, Ite
 
 
 def public_run(item: Mapping[str, Any], by_id: Mapping[str, Item], found: Mapping[str, Item]) -> Item:
-    """The ``AutoRun`` shape (§46.9): each clip's posts are the ones this run made."""
+    """The ``AutoRun`` shape (§46.9): each clip's posts are the ones this run made (never a TikTok post the owner
+    posted himself, §42, or a place he added later)."""
     out: Item = {k: item[k] for k in ("runId", "at", "kind", "mode", "state", "note") if k in item}
     out["clips"] = []
     for planned in item.get("clips") or []:
@@ -74,7 +75,7 @@ def public_run(item: Mapping[str, Any], by_id: Mapping[str, Item], found: Mappin
         if clip is not None and clip.get("autoRun") == item.get("runId"):
             for post_id in clip.get("postIds") or []:
                 post = found.get(str(post_id))
-                if post is None:
+                if post is None or post.get("autoRun") != item.get("runId"):
                     continue
                 row: Item = {"platform": post.get("platform"), "status": post.get("status")}
                 for key in ("url", "error"):
