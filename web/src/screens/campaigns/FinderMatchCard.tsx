@@ -11,8 +11,8 @@ import type { FinderMatch } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { Button, Progress } from "../../components/ui.tsx";
-import { budgetChip, crCampaignUrl } from "../../lib/contentRewards.ts";
-import { ANYONE_CAN_JOIN, IF_YOU_SEE, STEPS_APPLY, STEPS_OPEN_BY_HAND, STEPS_OPEN_SIGNED_IN, clockTime, openedRecently } from "../../lib/finder.ts";
+import { crCampaignUrl } from "../../lib/contentRewards.ts";
+import { ANYONE_CAN_JOIN, IF_YOU_SEE, STEPS_APPLY, STEPS_OPEN_BY_HAND, STEPS_OPEN_SIGNED_IN, clockTime, leftChip, leftPctOf, openedRecently } from "../../lib/finder.ts";
 import { PLATFORM_LABEL } from "../../lib/format.ts";
 import { CR_DISCOVER } from "../../setup/contentrewards.ts";
 import { CopyChip, Rich } from "../settings/setup/bits.tsx";
@@ -77,7 +77,9 @@ export function FinderMatchCard({
   const addLabel = apply ? "I applied: add it" : "I joined: add it";
   const byHand = !apply && !signedIn;
   const steps = apply ? STEPS_APPLY : byHand ? STEPS_OPEN_BY_HAND : STEPS_OPEN_SIGNED_IN;
-  const chip = budgetChip(match.budget.usedPct);
+  // The chip says what the Why it matched line says, in the same bands (never "Half used" over "A little money is left").
+  const left = match.budget.usedPct === null ? null : leftPctOf(match.budget);
+  const chip = left === null ? null : leftChip(left);
   // Not signed in, the rules box empty: "I joined: add it" stays glass and in place, right under the box (adding it
   // now would mean a second trip for the rules). It takes the vermilion, pinned, once the box has text.
   const holds = main && !(byHand && addLeads && !rules.trim());
@@ -169,8 +171,8 @@ export function FinderMatchCard({
           <p>{match.budget.line}</p>
           {match.budget.usedPct !== null ? <Progress value={1 - match.budget.usedPct / 100} label="Money left" tone="success" /> : null}
           {chip ? (
-            <span className={`pill pill--${chip === "Half used" ? "neutral" : "success"}`}>
-              <span className="pill__text">{chip}</span>
+            <span className={`pill pill--${chip.tone}`}>
+              <span className="pill__text">{chip.text}</span>
             </span>
           ) : null}
           <span className="finder-match__tag">

@@ -260,6 +260,47 @@ describe("the money left, in plain words (no percent, no quarter)", () => {
     ]);
   });
 
+  it("the money row's chip says what the why line says (never \"Half used\" over \"A little money is left.\")", () => {
+    const pairs: Record<string, string> = {
+      "All the money is left.": "All left",
+      "Most of the money is left.": "Most left",
+      "Half or more of the money is left.": "Half or more left",
+      "Some of the money is left.": "Some left",
+      "A little money is left.": "A little left",
+    };
+    for (let left = 0; left <= 100; left++) expect(lib.leftChip(left).text, String(left)).toBe(pairs[leftLine(left)]);
+    expect([100, 75, 50, 25, 24].map((l) => lib.leftChip(l).tone)).toEqual(["success", "success", "success", "neutral", "warn"]);
+    // The server's own numbers (normalize.used_bps, then left_pct): halves round up, then up to a whole percent.
+    const server: [number, number, number][] = [
+      [400000, 166879, 41],
+      [10000, 4950, 49],
+      [10000, 5050, 50],
+      [10000, 5051, 50],
+      [10000, 7450, 74],
+      [3, 2, 66],
+      [3, 1, 33],
+      [7, 4, 57],
+      [22465300, 504035, 2],
+      [200000, 200000, 100],
+      [1000, 0, 0],
+      [10000, 9991, 99],
+      [10000, 9950, 99],
+    ];
+    for (const [totalCents, leftCents, left] of server) expect(lib.leftPctOf({ totalCents, leftCents }), `${leftCents} of ${totalCents}`).toBe(left);
+    expect(lib.leftPctOf({ totalCents: null, leftCents: 5 })).toBeNull();
+    expect(lib.leftPctOf({ totalCents: 0, leftCents: 0 })).toBeNull();
+    // Every match the mock can show: the chip and the why line agree.
+    const r = find(CARDS, { ...WANT_DEFAULTS, minPer1kCents: 50, minLeftPct: 0, access: "any", otherPay: true }, { places: ["youtube", "instagram", "facebook", "x"], tiktokOk: true, own: new Set(), hidden: new Set(), asOf: "2026-11-21T12:00:00Z" });
+    let n = 0;
+    for (const m of r.matches) {
+      const said = Object.keys(pairs).find((w) => m.why.includes(w));
+      if (!said || m.budget.usedPct === null) continue;
+      expect(lib.leftChip(lib.leftPctOf(m.budget)!).text, m.name).toBe(pairs[said]);
+      n++;
+    }
+    expect(n).toBeGreaterThan(5);
+  });
+
   it("Why not more? for each choice", () => {
     const low = (minLeftPct: FinderWant["minLeftPct"]) =>
       find(CARDS, { ...WANT_DEFAULTS, minLeftPct, access: "any", otherPay: true }, { places: ["youtube", "instagram", "facebook", "x"], tiktokOk: false, own: new Set(), hidden: new Set(), asOf: "2026-11-21T12:00:00Z" })

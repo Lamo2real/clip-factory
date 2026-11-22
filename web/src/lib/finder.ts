@@ -252,6 +252,31 @@ const LEFT_SUMMARY: Record<FinderWant["minLeftPct"], string> = {
   75: "Most of the money left",
 };
 
+/**
+ * How much of the money is left, as a whole percent, worked out the server's way (normalize.used_bps then left_pct:
+ * the used part rounded halves up to a basis point, then up to a whole percent), so it is the number behind the "Why
+ * it matched" line's money words. `null` when Content Rewards' numbers don't say.
+ */
+export function leftPctOf(budget: Pick<FinderMatch["budget"], "totalCents" | "leftCents">): number | null {
+  const { totalCents: total, leftCents: left } = budget;
+  if (total === null || left === null || total <= 0 || left < 0) return null;
+  const spent = Math.max(0, total - left);
+  const bps = Math.floor((20000 * spent + total) / (2 * total));
+  return Math.max(0, 100 - Math.ceil(bps / 100));
+}
+
+/**
+ * The money row's chip on a match, in the bands of the "Why it matched" words (words.left_line) and the "Money left"
+ * choices, so the card never says "used" in one place and "left" in another. The Campaigns page keeps budgetChip.
+ */
+export function leftChip(left: number): { text: string; tone: "success" | "neutral" | "warn" } {
+  if (left >= 100) return { text: "All left", tone: "success" };
+  if (left >= 75) return { text: "Most left", tone: "success" };
+  if (left >= 50) return { text: "Half or more left", tone: "success" };
+  if (left >= 25) return { text: "Some left", tone: "neutral" };
+  return { text: "A little left", tone: "warn" };
+}
+
 /** The folded card's one line: "At least $1 per 1,000 views · YouTube, Instagram · Some money left · Anyone can join". */
 export function wantSummary(want: FinderWant, places: readonly Platform[], categories: readonly { id: string; name: string }[] = []): string {
   const pay = PAY_CHOICES.find((c) => c.value === want.minPer1kCents)?.label ?? "$1";

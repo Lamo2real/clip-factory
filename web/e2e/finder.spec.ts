@@ -607,24 +607,31 @@ for (const scheme of ["light", "dark"] as const)
     });
 
 /**
- * The pinned vermilion rides over its card at the bottom right, so on a phone it is over some lines while he scrolls.
- * What the page owes him (§41.1): every line of the open match comes up above the pinned bar at some point of the
- * scroll, a control he focuses is never under it, and the page ends with room for it (so its last lines clear it).
+ * The pinned vermilion rides over its card at the bottom right, so it is over some lines while he scrolls. What the
+ * page owes him (§41.1): every line of the card (the open match, or What you want) comes up above the pinned bar at
+ * some point of the scroll, a control he focuses is never under it at any width (WCAG 2.4.11), and on phones the page
+ * ends with room for it (so its last lines clear it).
  */
-async function pinProblems(page: Page, label: string): Promise<string[]> {
-  return page.evaluate(async (label) => {
+async function pinProblems(page: Page, label: string, opts: { card?: "match" | "want"; phone?: boolean } = {}): Promise<string[]> {
+  const card = opts.card === "want" ? ".finder-want.has-pin" : ".finder-match.is-open";
+  const inner = opts.card === "want" ? ".finder-want.has-pin" : ".finder-match.is-open .finder-match__body";
+  return page.evaluate(async ([label, card, inner, phone]) => {
     const out: string[] = [];
     const tick = () => new Promise((r) => requestAnimationFrame(() => r(null)));
     const go = async (y: number) => {
       window.scrollTo({ top: y, behavior: "instant" });
       await tick();
     };
-    const pinEl = () => document.querySelector<HTMLElement>(".finder-match.is-open .cr-pin");
+    const pinEl = () => document.querySelector<HTMLElement>(`${card} .cr-pin`);
     if (!pinEl()) return [`${label}: no pinned vermilion`];
     const over = (a: DOMRect, b: DOMRect) => Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)) * (a.right > b.left && a.left < b.right ? 1 : 0);
-    const floor = () => Math.min(innerHeight, document.querySelector<HTMLElement>(".tabbar")?.getBoundingClientRect().top ?? innerHeight);
-    // 1. Every line of text in the open match, line by line.
-    const body = document.querySelector<HTMLElement>(".finder-match.is-open .finder-match__body")!;
+    // The phone tab bar's top (on a wide screen it isn't shown: the window's bottom).
+    const floor = () => {
+      const bar = document.querySelector<HTMLElement>(".tabbar");
+      return bar?.getClientRects().length ? Math.min(innerHeight, bar.getBoundingClientRect().top) : innerHeight;
+    };
+    // 1. Every line of text in the card, line by line.
+    const body = document.querySelector<HTMLElement>(inner)!;
     const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
       acceptNode: (n) => (n.textContent!.trim() && !n.parentElement!.closest(".cr-pin, .sr-only") && n.parentElement!.getClientRects().length ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
     });
@@ -662,10 +669,14 @@ async function pinProblems(page: Page, label: string): Promise<string[]> {
         // A text box scrolls only its caret's line into view: most of it shows, the line he types on included.
         const field = e.tagName === "TEXTAREA" || e.tagName === "INPUT";
         if (hidden > (field ? b.height / 2 : Math.max(2, b.height * 0.2))) {
-          out.push(`${label}: "${(e.textContent || e.getAttribute("aria-label") || e.tagName).trim().slice(0, 30)}" focused at ${y} is ${Math.round(hidden)} px under the pinned bar`);
+          out.push(`${label}: "${(e.textContent || e.getAttribute("aria-label") || e.closest("label")?.textContent || e.tagName).trim().slice(0, 30)}" focused at ${y} is ${Math.round(hidden)} px under the pinned bar`);
           break;
         }
       }
+    if (!phone) {
+      await go(0);
+      return out;
+    }
     // 3. Room at the end for the pinned bar (its height and 12 px), and the last line clears its lane.
     const pageEl = document.querySelector<HTMLElement>(".finder-page")!;
     const pin = pinEl()!;
@@ -677,7 +688,7 @@ async function pinProblems(page: Page, label: string): Promise<string[]> {
     if (last.getBoundingClientRect().bottom > lane) out.push(`${label}: the page's last line (${Math.round(last.getBoundingClientRect().bottom)}) is in the pinned bar's lane (${Math.round(lane)})`);
     await go(0);
     return out;
-  }, label);
+  }, [label, card, inner, opts.phone ?? true] as const);
 }
 
 for (const [width, height] of [
@@ -688,14 +699,18 @@ for (const [width, height] of [
   test.describe(`phone ${width} px: the pinned vermilion never hides a line`, () => {
     test.use({ viewport: { width, height }, hasTouch: true, isMobile: true });
 
-    test("before Open, after Open signed in, and after Open by hand with the rules pasted", async ({ page, context }) => {
-      test.setTimeout(150_000);
+    test("never started, before Open, after Open signed in, and after Open by hand with the rules pasted", async ({ page, context }) => {
+      test.setTimeout(180_000);
       await start(page);
       await fourPlaces(page);
       await knob(page, "finder", "signedIn", false);
-      await firstLook(page);
+      await page.goto(FIND);
       await settle(page);
       const failures: string[] = [];
+      failures.push(...(await pinProblems(page, "never started", { card: "want" })));
+      await page.getByRole("button", { name: "Find campaigns for me" }).click();
+      await expect(names(page)).toHaveCount(6, { timeout: 15_000 });
+      await settle(page);
       failures.push(...(await pinProblems(page, "before Open")));
       const first = page.locator(".finder-match").first();
       const popup = context.waitForEvent("page");
@@ -708,6 +723,31 @@ for (const [width, height] of [
       await knob(page, "finder", "signedIn", true);
       await expect(first).toContainText("Does the big button now say Submit clip? Then tap I joined: add it.");
       failures.push(...(await pinProblems(page, "signed in, opened")));
+      expect(failures, failures.join("\n")).toEqual([]);
+    });
+  });
+
+// The Find page pins its vermilion at every width, so a wide screen with a keyboard gets the same promise: a category
+// or language chip he tabs to is never under the pinned "Find campaigns for me" (the short Mac window, 1280 x 720).
+for (const [width, height] of [
+  [1280, 720],
+  [1024, 768],
+] as const)
+  test.describe(`desktop ${width} x ${height}: focus never lands under the pinned vermilion`, () => {
+    test.use({ viewport: { width, height } });
+
+    test("never started, and the matches before Open", async ({ page }) => {
+      test.setTimeout(150_000);
+      await start(page);
+      await fourPlaces(page);
+      await page.goto(FIND);
+      await settle(page);
+      const failures: string[] = [];
+      failures.push(...(await pinProblems(page, "never started", { card: "want", phone: false })));
+      await page.getByRole("button", { name: "Find campaigns for me" }).click();
+      await expect(names(page)).toHaveCount(6, { timeout: 15_000 });
+      await settle(page);
+      failures.push(...(await pinProblems(page, "before Open", { phone: false })));
       expect(failures, failures.join("\n")).toEqual([]);
     });
   });

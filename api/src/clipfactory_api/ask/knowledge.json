@@ -1,5 +1,5 @@
 {
- "version": "27deceba8f2e",
+ "version": "0ec3cd91d97c",
  "parts": [
   {
    "id": "app-map",
@@ -273,7 +273,7 @@
    "id": "contracts-41",
    "title": "CONTRACTS: 41. Campaign finder: campaigns that match what you want (owner request, 2026-11-21)",
    "line": "The owner's words: \"Also, will I be able to find campaigns and join them based on some requirements that I set if the",
-   "chars": 98309
+   "chars": 99490
   },
   {
    "id": "contracts-42",

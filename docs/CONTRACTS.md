@@ -10772,6 +10772,11 @@ brands, CR's category names) is plain escaped text, at most 300 characters, neve
    | "Other kinds of pay" | switch | "Also show campaigns that pay per post or share a prize." → `otherPay` | off |
    | "Tell me about new ones" | switch | "At most once a day." → `tellMe` (with "Content Rewards news is off in Settings." under it while `notify.contentRewards` is `false`, from the settings S already loads) | on |
 
+   Where their words don't fit on one row (the row narrower than 400 px: phones up to about 465 px), the "Money left"
+   and "Who can join" bars lay their choices out in even halves (a 2 × 2 grid, and two halves side by side), a long
+   label wrapping inside its own half, so no choice sits alone on a second row; the 2 × 2 grid's track and `<Glide>`
+   highlight turn into rounded rectangles to match.
+
    Under the controls, fixed (not a control): "I skip campaigns Clip Factory can't make clips for, like ones that need
    their own sound or picture on the video." The TikTok chip, until TikTok's posting audit passes (§17.4 gate
    `posting_audit: ok`): shown off and not tappable (`aria-disabled`), with the §38.4 line "TikTok: not yet. TikTok keeps
@@ -10797,8 +10802,12 @@ brands, CR's category names) is plain escaped text, at most 300 characters, neve
    * Pay, one row per place he posts to that the campaign pays for (STATS_ORDER): the place's mark and name and the
      server's line (§41.3): "$1.50 per 1,000 views · up to $250 a clip", "Up to $2.00 per 1,000 views · up to $1,200 a
      clip" (geo-priced), "$5.00 for each approved post", "Shares the prize money", "Pays picked creators each month".
-   * Money left: "$2,410.10 left of $2,500" over the §38.4 soft bar and its chip ("Plenty left" under 50% used, "Half
-     used" from 50%), then the grey "Content Rewards' numbers, 2:10 pm".
+   * Money left: "$2,410.10 left of $2,500" over the §38.4 soft bar and a chip in the same bands as Why it matched's
+     money words, so the card never says "used" in one place and "left" in another: "All left" (100%), "Most left"
+     (75–99%), "Half or more left" (50–74%), green; "Some left" (25–49%), quiet; "A little left" (under 25%), amber
+     (`leftChip`, from the server's own left percent worked out from `totalCents` and `leftCents`, `leftPctOf`; the
+     Campaigns page keeps §38.4's "Plenty left" / "Half used" / "Almost gone"). Then the grey "Content Rewards'
+     numbers, 2:10 pm".
    * **Why it matched**, one line made by the server (§41.3): "Pays $1.50 per 1,000 views on YouTube and Instagram. Most
      of the money is left. Anyone can join." The money left is said in plain words, never as a percent or a "quarter"
      (the exact amounts are on the money row right above it).
@@ -10845,10 +10854,12 @@ brands, CR's category names) is plain escaped text, at most 300 characters, neve
        it."
    * **Pinned.** On this page the match's vermilion is pinned at the bottom right at **every width** (the shared
      `.cr-pin`: the last thing in its card, riding over the card while the card is on screen; on a wide screen it was
-     below the fold), and so are the "You're in!" row's and What you want's. On phones (320–430 px) the page keeps the
-     pinned bar's lane free: room at its bottom equal to the pinned bar (its height, 60 px with a two-line label, + 12
-     px + the home bar's safe area) and a `scroll-padding-bottom` of the tab bar, the bar and 12 px, so every line of
-     the open match (Why it matched included) scrolls up above the bar and a control he focuses is never under it.
+     below the fold), and so are the "You're in!" row's and What you want's. At every width the page has a
+     `scroll-padding-bottom` of the pinned bar's lane (the tab bar's band + the home bar's safe area + the pin's 22 px
+     over it + the bar's height, 60 px with a two-line label, + 12 px), so a control he focuses or scrolls to is never
+     under the bar (WCAG 2.4.11; a category or language chip on a wide screen too). On phones and touch tablets
+     (up to 767 px wide, or a touch screen) the page also ends with room for the bar (its height + 12 px + the home
+     bar's safe area), so every line of the open match (Why it matched included) scrolls up above it.
    * "I joined: add it" sends `POST …/matches/{id}/add` (§41.5), shows "Adding…" on the button, then opens the
      campaign's card `/campaigns/{uuid}`, where §38.4's next step takes over: "You're in!" with confetti once when
      Content Rewards lists it; signed in but not listed yet, "Checking that you joined… This can take a few minutes."
@@ -11533,9 +11544,10 @@ and no Secrets client; the `test_finder_*` modules fail on any real DNS look-up 
   soon; `content-rewards.spec.ts` change 1 both ways; §39.5's `two-ways.spec.ts` still counts 5 taps for the normal
   way; every new screen: no sideways scroll at 320–1920, no edges, targets ≥ 44 px (48 on phones), the arrow cursor
   only, axe contrast light and dark, reduced motion, the phone vermilion bottom right, Ask never over the main button;
-  at 320×568, 375×812 and 430×932 (before Open, after Open signed in, and by hand with the rules pasted) every line
-  of the open match clears the pinned bar at some point of the scroll, a focused control is never under it, and the
-  page ends with room for it.
+  at 320×568, 375×812 and 430×932 (never started, before Open, after Open signed in, and by hand with the rules
+  pasted) every line of the card with the pinned bar clears it at some point of the scroll, a focused control is never
+  under it, and the page ends with room for it; at 1280×720 and 1024×768 (never started and before Open) a focused
+  control, every category and language chip included, is never under it either.
 * **T**: `node web/scripts/help-corpus.mjs --check` (every highlight is a real anchor) and `node
   web/scripts/ask-knowledge.mjs --check`.
 
