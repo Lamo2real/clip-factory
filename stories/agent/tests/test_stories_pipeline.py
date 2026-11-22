@@ -85,6 +85,8 @@ def answers(**over: Any) -> dict[str, Any]:
         "final_review": OK,
     }
     out.update(over)
+    # The writer's re-staging pass (task animation_plan, §45.37 G5) answers as the storyboard does unless a test says.
+    out.setdefault("animation_plan", out["storyboard"])
     return out
 
 
@@ -412,7 +414,9 @@ def test_remake_this_scene_only_remakes_that_scene(tmp_path: Path) -> None:
 
     # "Remake this scene": changes { sceneIds: ["s1"] } with no note (the API's job and story writes, seeded here)
     new_take = copy.deepcopy(old_script["scenes"][0])
-    new_take["beats"] = [{"at": 0.3, "dur": 1.2, "who": "c1", "do": "jump", "face": "surprised", "noise": "whoa"}]
+    # Lamo's own faces and noises only (neutral/happy/shocked/relieved; gasp/phew): since the cast's faces and noises
+    # are checked (§45.37), a take with "surprised"/"whoa" is refused and the remake keeps the old take.
+    new_take["beats"] = [{"at": 0.3, "dur": 1.2, "who": "c1", "do": "jump", "face": "shocked", "noise": "gasp"}]
     new_take["durationSec"] = 9  # the writer may not change a new take's length
     models.answers["scene_rewrite"] = {"scenes": [new_take]}
     table.seed({**table.items[(PK, f"STORY#{STORY}")], "status": "producing", "currentJobId": "J2"})
@@ -689,7 +693,9 @@ def test_the_writer_is_asked_once_more_with_the_engines_errors_then_the_job_fail
     bad["scenes"][0]["set"] = "the_moon"
     svc, _store, table, models = world(tmp_path, answers(storyboard=bad))
     assert run_job(svc) == "failed"
-    assert models.tasks() == ["storyboard", "storyboard"]
+    # the second call is the writer's re-staging pass, on the owner's model and effort for animation planning (G5)
+    assert models.tasks() == ["storyboard", "animation_plan"]
+    assert models.calls[1]["ctx"].agent_id == "storyboard" and models.calls[1]["schema"] == models.calls[0]["schema"]
     retry = json.loads(models.calls[1]["messages"][0]["content"][1]["text"].split("\n", 1)[1])
     assert retry["problems"] and any("set" in p for p in retry["problems"])
     job, story = table.item("PJOB#J1"), table.item(f"STORY#{STORY}")

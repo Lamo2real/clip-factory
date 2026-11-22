@@ -10,13 +10,14 @@ real state and cannot be ticked by hand (§45.34 "Setup steps 1–3", "Onboardin
   the default effort was picked (``pickedAt.effort``). A configuration saved before ``pickedAt`` existed keeps
   ticking all three from ``configSavedAt``, so nothing goes backwards;
 * step 4 when ``PATCH …/workspaces/{ws}`` saved ``configuration.providers`` (``providersPickedAt``, even unchanged:
-  keeping the built-in animator is a pick too) or a maker other than the built-in default is picked;
+  keeping the built-in animator is a pick too) or a maker other than the built-in default is picked; a picture or
+  video maker Amazon ended (Nova Canvas, Nova Reel, §45.37 G7) is never a pick and makes the step one to do again;
 * steps 6–10 when that platform's own Lamo Stories account is ``connected`` as the Social accounts page shows it
   (``social.accounts_shown``, settled the same way, round 5 E3): Clip Factory's own account (``same_as_clips``) is
   not, since nothing can be posted there, so the step stays to do with a line saying why; an account whose chosen
   app's keys changed (``needs_reconnect``) is not either. A stored ``connected`` whose account is Clip Factory's own
-  destination (Clip Factory connected it later and nobody shared it) counts as ``same_as_clips`` (§45.35 D11), and a
-  stored ``same_as_clips`` that Clip Factory let go of counts as ``connected``. The app keys are read with the
+  destination (Clip Factory connected it later; no account is ever shared, §45.37 G8) counts as ``same_as_clips``
+  (§45.35 D11), and a stored ``same_as_clips`` stays so, also once Clip Factory lets go of it (sticky, G8). The app keys are read with the
   workspace secrets only while the request has time for one more slow read, as the dashboard does.
 
 Only 5 and 11 are ticked by hand. The ``ONBOARD`` item keeps only the hand ticks, the skips and ``finishedAt``.
@@ -32,7 +33,7 @@ from .. import db, validate
 from ..clock import iso
 from ..errors import bad_request, conflict
 from . import ai_config as cfg
-from . import guard, social
+from . import guard, makers, social
 from . import types as ws
 from .secrets import WorkspaceSecrets
 
@@ -72,11 +73,10 @@ TICKS_ITSELF: Final = {
 
 
 def same_as_clips_line(platform: str) -> str:
-    """Why a platform's step is not done while its account is Clip Factory's own (§45.34)."""
-    return (
-        f"This is Clip Factory's {PLATFORM_LABEL.get(platform, platform)} account. Pick another in Social accounts, "
-        "or tap Use it for both."
-    )
+    """Why a platform's step is not done while its account is Clip Factory's own (§45.34, §45.37 G8: never shared)."""
+    from .social import SAME_AT_CONNECT
+
+    return SAME_AT_CONNECT
 
 
 def ai_steps(store: db.Store, user_id: str, workspace_id: str) -> dict[str, bool]:
@@ -103,11 +103,15 @@ def _item(store: db.Store, user_id: str, workspace_id: str) -> dict[str, Any] | 
 
 
 def _video_picked(workspace: Mapping[str, Any]) -> bool:
+    """Step 4: the owner saved the makers. A picture or video maker Amazon ended since (Nova Canvas, Nova Reel, §45.37
+    G7) is a step to do again: it stops what it makes until the owner picks another, and it never counts as picked."""
+    config = workspace.get("configuration") if isinstance(workspace.get("configuration"), Mapping) else {}
+    chosen = (config or {}).get("providers") if isinstance((config or {}).get("providers"), Mapping) else {}
+    if any(makers.maker_ended(str((chosen or {}).get(k) or "")) is not None for k in ("video", "images")):
+        return False
     picked_at = workspace.get("providersPickedAt")
     if isinstance(picked_at, str) and picked_at:
         return True
-    config = workspace.get("configuration") if isinstance(workspace.get("configuration"), Mapping) else {}
-    chosen = (config or {}).get("providers") if isinstance((config or {}).get("providers"), Mapping) else {}
     defaults = guard.default_stories_config().get("providers") or {}
     return any((chosen or {}).get(k) not in (None, defaults.get(k)) for k in ("video", "images"))
 

@@ -238,8 +238,13 @@ describe("characters", () => {
     expect(bolt.references.map((r) => r.assetId)).toContain(up.assetId);
     expect(store.assets.some((a) => a.assetId === up.assetId && a.kind === "character_ref")).toBe(true);
     expect((await refused(api.makePortrait("stories", C.bolt))).message).toMatch(/AI pictures are off/);
+    // Amazon ended Nova Canvas (§45.37): an older pick of it is refused with the API's sentence, never called.
     (store.workspaces[0]!.configuration as { providers: { images: string } }).providers.images = "nova-canvas";
+    expect((await refused(api.makePortrait("stories", C.bolt))).message).toBe("Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Lamo Stories › Settings › Video.");
+    // The picked picture maker makes the portrait: Stability AI on Amazon Bedrock.
+    (store.workspaces[0]!.configuration as { providers: { images: string } }).providers.images = "stability";
     const job = await call(api.makePortrait("stories", C.bolt));
+    expect(job.meta.providers).toEqual({ images: "stability" });
     expect(job.jobType).toBe("portrait");
     await finish(4);
     expect((await call(api.getCharacter("stories", C.bolt))).portrait).not.toBeNull();

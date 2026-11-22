@@ -35,6 +35,7 @@ from ...workspaces import (
     ideas,
     jobs,
     library,
+    makers,
     media,
     overrides,
     provider_keys,
@@ -265,11 +266,8 @@ CONFIG_CHOICES: dict[str, tuple[str, ...]] = {
     "youtubeCategory": ("1", "2", "23", "24", "27"),
     "youtubePrivacy": ("public", "unlisted", "private"),
 }
-PROVIDER_CHOICES: dict[str, tuple[str, ...]] = {
-    "images": ("builtin-rig", "nova-canvas"),
-    "video": ("builtin-2d", "nova-reel"),
-    "audio": ("builtin-synth",),
-}
+# The makers each kind may name (§45.37 G7); the model picks are checked by ``makers.clean_providers``.
+PROVIDER_CHOICES: dict[str, tuple[str, ...]] = {makers.MAKER_FIELD[k]: makers.MAKERS[k] for k in makers.KINDS}
 QUALITIES = ("standard", "high", "best")
 X_LIMIT_MAX = 10_000
 EXTRA_FORMATS = ("webm", "mov")  # every video is MP4 too (§45.34 "Output formats")
@@ -289,8 +287,12 @@ def _money(value: Any, field: str) -> int | float:
     return value if isinstance(value, int) or not float(value).is_integer() else int(value)
 
 
-def _config_patch(current: Mapping[str, Any], value: Any) -> Item:
-    """Partial<StoriesConfig> (§45.6) merged onto the current configuration; each section may be partial too."""
+def _config_patch(
+    current: Mapping[str, Any], value: Any, maker_models: list[Item] | Callable[[], list[Item]] | None = None
+) -> Item:
+    """Partial<StoriesConfig> (§45.6) merged onto the current configuration; each section may be partial too. The
+    makers and their model picks are checked against every maker model (``maker_models``: the bundled ones and the
+    workspace's own, read only when the body touches ``providers``)."""
     body = validate.obj(value, "configuration")
     validate.only_keys(body, current.keys())
     out = dict(current)
@@ -300,11 +302,10 @@ def _config_patch(current: Mapping[str, Any], value: Any) -> Item:
         elif key in {"captionsOn", "musicOn"}:
             out[key] = validate.boolean(v, f"configuration.{key}")
         elif key == "providers":
-            merged = _merge_section(current.get("providers") or {}, v, key)
-            for kind, provider_id in merged.items():
-                if provider_id not in PROVIDER_CHOICES.get(kind, ()):
-                    raise bad_request(f"configuration.providers.{kind} is not a provider of that kind.")
-            out[key] = merged
+            chosen = validate.obj(v, "configuration.providers")
+            found = maker_models() if callable(maker_models) else maker_models
+            listed = makers.all_models() if found is None else found
+            out[key] = makers.clean_providers(current.get("providers") or {}, chosen, listed)
         elif key == "video":
             merged = _merge_section(current.get("video") or {}, v, key)
             if merged.get("aspect") not in stories.ASPECTS:
@@ -367,7 +368,7 @@ def patch_workspace(app: App, req: Request) -> Response:
             raise conflict(f"You already have a workspace called {name}. Pick another name.", "workspaceName")
         sets["workspaceName"] = name
     if "configuration" in body:
-        sets["configuration"] = _config_patch(ctx.config, body["configuration"])
+        sets["configuration"] = _config_patch(ctx.config, body["configuration"], lambda: _maker_models(ctx))
         if isinstance(body["configuration"], Mapping) and "providers" in body["configuration"]:
             sets["providersPickedAt"] = ctx.at()  # the setup's step 4, even when the pick is unchanged (§45.34)
     if int(ctx.workspace.get("version") or 1) != version:
@@ -857,8 +858,13 @@ def make_portrait(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
     with ctx.stops_last():  # the fence's stops wait: the start may need the whole 29 s
         item = _character(ctx)
-        if ctx.config["providers"].get("images") != "nova-canvas":
-            raise conflict(IMAGES_OFF)
+        known = _known(ctx)
+        problem = providers.portrait_problem(ctx.config, known)
+        if problem is not None:
+            raise conflict(problem)
+        picture = providers.find(ctx.config["providers"].get("images"), "images")
+        picture_id = picture.id if picture is not None else "builtin-rig"
+        used = makers.effective_model(ctx.config["providers"], "image", known.models)
         if item.get("portraitJobId"):
             previous = ctx.owned(ctx.store.get(ctx.pk, jobs.job_sk(str(item["portraitJobId"]))), ws.TYPE_PJOB)
             if jobs.active(jobs.settle(ctx.store, previous, ctx.now, stop=ctx.stop())):
@@ -874,7 +880,7 @@ def make_portrait(app: App, req: Request) -> Response:
             run=["portrait"],
             steps=[{"key": "portrait", "label": shapes.STEP_LABEL["portrait"], "status": "pending"}],
             now=ctx.now,
-            meta={"providers": {"images": "nova-canvas"}},
+            meta={"providers": {"images": picture_id, **({"imageModel": str(used["key"])} if used else {})}},
         )
         mark = Update(ctx.pk, item["sk"], sets={"portraitJobId": job_id}).equals("userId", ctx.user_id)
         ctx.store.transact(puts=[job], updates=[mark.request()])
@@ -1061,6 +1067,12 @@ def _meta(ctx: Ctx, story: Mapping[str, Any]) -> Item:
     """What the API knows when a job starts; the agent adds the writer model, engine version, seed, actual length and
     each step's model and effort (``meta.models``) as it goes."""
     chosen = dict(ctx.config.get("providers") or {})
+    listed = _known(ctx).models
+    picks = {
+        name: str(found["key"])
+        for name, kind in (("videoModel", "video"), ("audioModel", "audio"))
+        if (found := makers.effective_model(chosen, kind, listed)) is not None
+    }
     return {
         "scriptVersion": int(story.get("scriptVersion") or 0) or None,
         "targetSec": story.get("durationSec"),
@@ -1070,6 +1082,7 @@ def _meta(ctx: Ctx, story: Mapping[str, Any]) -> Item:
             "images": "builtin-rig",
             "animation": str(chosen.get("video") or "builtin-2d"),
             "audio": str(chosen.get("audio") or "builtin-synth"),
+            **picks,  # the model each picked AI maker uses this run (§45.37 G1); the agent reads the pick per job too
         },
     }
 
@@ -1213,7 +1226,7 @@ def _default_format(config: Mapping[str, Any]) -> Item:
 def _refuse_not_ready(ctx: Ctx) -> None:
     """409 with the maker's own sentence while the picked video maker is not ready (§45.34): nothing switches to
     another maker by itself. The picture maker never stops a video (§45.35 D3: it gates portraits only)."""
-    sentence = providers.not_ready(ctx.config, _all(ctx, ws.PROVIDER_SK, ws.TYPE_PROVIDER))
+    sentence = providers.not_ready(ctx.config, _all(ctx, ws.PROVIDER_SK, ws.TYPE_PROVIDER), _known(ctx))
     if sentence:
         raise conflict(sentence)
 
@@ -1745,13 +1758,31 @@ def get_providers(app: App, req: Request) -> Response:
     checks = {p: _check_job(ctx, story_jobs, p) for p in providers.CHECKABLE}
     if any(j is not None and j.get("status") == "ready" for j in checks.values()):
         records = _all(ctx, ws.PROVIDER_SK, ws.TYPE_PROVIDER)  # a check that just ended wrote its proof first
-    shown = providers.statuses(ctx.config, records, story_jobs, model_statuses)
+    shown = providers.statuses(ctx.config, records, story_jobs, model_statuses, _known(ctx))
     for row in shown:
         if row["id"] in checks:  # "Try it" (§45.35 D2): its newest job, so Settings › Video shows how it went
             job = checks[row["id"]]
             row["check"] = shapes.public_job(job) if job is not None else None
+        p = providers.find(row["id"], row["kind"])
+        if p is not None and p.key_host is not None:  # ElevenLabs' key shows on its own maker row (G4)
+            row["key"] = provider_keys.key_of(ctx.store, ctx.user_id, ctx.ws_id, p.key_host)
     shown += provider_keys.statuses(ctx.store, ctx.user_id, ctx.ws_id)  # each with its ``key`` (§45.34)
     return ok({"providers": shown})
+
+
+def _maker_models(ctx: Ctx) -> list[Item]:
+    """Every maker model of this workspace: the bundled ones, then the owner's own (``MAKERDEF#``, §45.37 G2)."""
+    return makers.all_models(makers.custom(ctx.store, ctx.user_id, ctx.ws_id))
+
+
+def _known(ctx: Ctx) -> providers.Known:
+    """What the maker rows and guards read besides ``PROVIDER#``: the maker models, their access checks and the
+    keyed hosts whose key is saved (read for this request only, never cached across workspaces)."""
+    return providers.Known(
+        models=tuple(_maker_models(ctx)),
+        checks=makers.status_items(ctx.store, ctx.user_id, ctx.ws_id),
+        keys=provider_keys.saved_hosts(ctx.store, ctx.user_id, ctx.ws_id),
+    )
 
 
 def _check_job(ctx: Ctx, found: list[Item], provider_id: str) -> Item | None:
@@ -1761,13 +1792,23 @@ def _check_job(ctx: Ctx, found: list[Item], provider_id: str) -> Item | None:
 
 
 def check_provider(app: App, req: Request) -> Response:
-    """``POST …/providers/nova-reel/check`` → ``202 { job }`` (§45.35 D2, "Try it" in Settings › Video): a one-step
-    ``provider_check`` job; Lamo Stories' agent makes one 6-second test shot (Amazon bills it), proves
-    ``PROVIDER#animation#nova-reel`` or records Bedrock's sentence, and deletes the test file. Never behind the
-    not-ready guard (that is how the maker becomes ready), and one at a time."""
+    """``POST …/providers/{luma-ray|own-video}/check`` → ``202 { job }`` (§45.35 D2, §45.37 G7: "Try it" in Settings
+    › Video; your own video model writes to the same off-by-default bucket, so it is tried the same way): a
+    one-step ``provider_check`` job; Lamo Stories' agent makes one 5-second test shot (Amazon bills it), proves
+    ``PROVIDER#animation#luma-ray`` or records Bedrock's sentence, and deletes the test file. Never behind the
+    not-ready guard (that is how the maker becomes ready), and one at a time. Amazon Nova Reel's old "Try it" is
+    refused with its ended sentence: it is never called again."""
     ctx = _ctx(app, req)
-    provider_id = "nova-reel"
+    provider_id = req.params["providerId"]
+    gone = makers.maker_ended(provider_id)
+    if gone is not None:
+        raise conflict(makers.ended_sentence(gone))
+    if provider_id not in providers.CHECKABLE:
+        raise not_found(providers.ONLY_TRY)
     validate.only_keys(req.json(), ())
+    problem = providers.try_problem(provider_id, ctx.config, _known(ctx))
+    if problem is not None:
+        raise conflict(problem)
     with ctx.stops_last():  # the fence's stops wait: the start may need the whole 29 s
         lock_sk = providers.check_lock_sk(provider_id)
         lock = ctx.store.get(ctx.pk, lock_sk)
@@ -1777,7 +1818,7 @@ def check_provider(app: App, req: Request) -> Response:
         ).items
         previous = _check_job(ctx, [j for j in (ctx.owned(x, ws.TYPE_PJOB) for x in newest) if j], provider_id)
         if jobs.active(held) or jobs.active(previous):
-            raise conflict(providers.CHECK_BUSY)
+            raise conflict(providers.CHECK_BUSY_LINE[provider_id])
         job_id = ulid()
         job = jobs.new_job(
             ctx.user_id,
@@ -1795,7 +1836,7 @@ def check_provider(app: App, req: Request) -> Response:
         try:
             ctx.store.transact(puts=[job], raw_puts=[claim])
         except db.ConditionFailed:
-            raise conflict(providers.CHECK_BUSY) from None  # another tap claimed it a moment ago: one shot only
+            raise conflict(providers.CHECK_BUSY_LINE[provider_id]) from None  # another tap claimed it: one shot only
         agent = ctx.deps.agent
         if agent is None or not getattr(agent, "ready", False):
             failed = jobs.fail_start(ctx.store, job, None, ctx.now, jobs.CHECK_NOT_SET_UP)
@@ -1932,6 +1973,6 @@ ROUTES: list[Route] = [
     route("POST", W + "/stories/{storyId}/download", download),
     route("GET", W + "/library", get_library),
     route("GET", W + "/providers", get_providers),
-    route("POST", W + "/providers/nova-reel/check", check_provider),
+    route("POST", W + "/providers/{providerId}/check", check_provider),
     route("GET", W + "/guidance", get_guidance),
 ]

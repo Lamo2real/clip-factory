@@ -22,6 +22,7 @@ from clipfactory_api.oauth import OAuthEnv, providers, state
 from clipfactory_api.oauth import setup as clips_setup
 from clipfactory_api.oauth.providers import AppKeys
 from clipfactory_api.workspaces import apps, social
+from clipfactory_api.workspaces import types as ws
 from clipfactory_api.workspaces.secrets import WorkspaceSecrets
 from conftest import NOW, OTHER, STATE_KEY, USER, Call
 from fakes import FakeHttp, FakeSecretsManager, FakeTable
@@ -240,7 +241,14 @@ def test_list_shows_five_accounts_their_app_limits_and_lamo_clips_without_names(
     assert (x["connectionStatus"], x["externalAccountId"], x["accountName"]) == ("connected", "77", "Lamo Stories x")
     assert x["lastCheckedAt"] == "2026-11-15T10:00:00.000Z"
     assert x["app"] == {"choice": "clips", "saved": False}
-    assert any("shared with Clip Factory" in line for line in x["limits"])
+    # §45.37 G6 (d) and G8 (c): the shared app's words, a new account up front, and never "quicker"
+    assert "Clip Factory's posts always go first. Stories uses what's left." in x["limits"]
+    assert (
+        "Even with Clip Factory's app, sign in with a different account made for Clip Factory Stories." in x["limits"]
+    )
+    assert x["limits"][0] == "Use a new account made for Clip Factory Stories, not lamo.clips."
+    assert all(a["limits"][0] == x["limits"][0] for a in body["accounts"])
+    assert not any("quicker" in line for a in body["accounts"] for line in a["limits"])
     assert instagram["app"]["choice"] == "own"
     assert instagram["app"]["saved"] is True
     assert set(instagram["app"]["hints"]) == {"clientId", "clientSecret", "configId"}
@@ -248,14 +256,15 @@ def test_list_shows_five_accounts_their_app_limits_and_lamo_clips_without_names(
     assert youtube["app"] == {"choice": None, "saved": False}
     assert any("First pick which app" in line for line in youtube["limits"])
     assert "appClientId" not in x
-    # Only five attributes of Clip Factory's ACCOUNT# items can be read (§45.15): its names never are.
+    # Only six attributes of Clip Factory's ACCOUNT# items can be read (§45.15, §45.37 G8 b: the ids and the
+    # username, what "same account" compares): its names never are.
     assert body["clips"][0] == {"platform": "youtube", "connected": True, "name": None}
     assert body["clips"][1] == {"platform": "tiktok", "connected": False, "name": None}
     assert "UC123" not in json.dumps(body)  # Lamo Clips' ids never leave the server
     for op, kw in table.calls:
         if op == "get_item" and kw["Key"]["sk"].startswith("ACCOUNT#"):
             names = set(kw["ExpressionAttributeNames"].values())
-            assert names == {"pk", "sk", "platform", "status", "accountId"}, kw
+            assert names == {"pk", "sk", "platform", "status", "accountId", "handle"}, kw
             assert kw["ProjectionExpression"]
 
 
@@ -359,19 +368,45 @@ def test_an_old_list_of_pages_is_deleted(call: Call, store: db.Store, secrets_cl
     assert accounts(call)["facebook"]["connectionStatus"] == "not_connected"
 
 
-def test_use_it_for_both_only_on_purpose(call: Call, store: db.Store, secrets_client: FakeSecretsManager) -> None:
+def test_there_is_no_way_to_use_clip_factorys_account_for_both(
+    call: Call, store: db.Store, secrets_client: FakeSecretsManager
+) -> None:
+    """§45.37 G8 (a): "Use it for both" is gone. The share route does not exist on any platform, the account stays
+    Clip Factory's (``same_as_clips``) and nothing is written."""
     sup.clips_account(store, None, "youtube")
     sup.social(store, secrets_client, "youtube", status="same_as_clips", identity="UC123")
-    assert call("POST", f"{ROOT}/youtube/share", {})[0] == 400
-    assert call("POST", f"{ROOT}/youtube/share", {"confirm": "yes"})[0] == 400
-    status, body = call("POST", f"{ROOT}/youtube/share", {"confirm": True})
-    assert status == 200, body
-    assert (body["account"]["connectionStatus"], body["account"]["sharedWithClips"]) == ("connected", True)
-    item = store.get(sup.PK, "SOCIAL#youtube")
-    assert item is not None
-    assert item["sharedExternalAccountId"] == "UC123"
-    assert "sharedExternalAccountId" not in body["account"]
-    assert call("POST", f"{ROOT}/tiktok/share", {"confirm": True})[0] == 409
+    before = store.get(sup.PK, "SOCIAL#youtube")
+    for platform in ws.PLATFORMS:
+        for body in ({}, {"confirm": True}):
+            assert call("POST", f"{ROOT}/{platform}/share", body)[0] == 404
+    shown = accounts(call)["youtube"]
+    assert (shown["connectionStatus"], shown["sharedWithClips"]) == ("same_as_clips", False)
+    assert shown["warning"] == social.SAME_AT_CONNECT
+    after = store.get(sup.PK, "SOCIAL#youtube")
+    assert after is not None
+    # the one write: its identity is remembered as Clip Factory's (sticky, §45.37 G8)
+    assert after.pop(social.MATCHED) == {"ids": ["UC123"], "usernames": ["lamostories"]}
+    assert {k: v for k, v in after.items() if k != "updatedAt"} == {k: v for k, v in before.items() if k != "updatedAt"}
+    assert not hasattr(social, "share")
+
+
+@pytest.mark.parametrize("platform", ["youtube", "tiktok", "instagram", "facebook", "x"])
+def test_an_old_use_it_for_both_is_ignored_and_cleared(
+    call: Call, store: db.Store, secrets_client: FakeSecretsManager, platform: str
+) -> None:
+    """A ``sharedWithClips`` stored before G8 is never honoured: the account reads Clip Factory's (it cannot post)
+    and the flag is cleared from Lamo Stories' own ``SOCIAL#`` item only (Clip Factory's item is never written)."""
+    sup.social(store, secrets_client, platform, identity="shared-1", sharedWithClips=True)
+    store.update(sup.PK, f"SOCIAL#{platform}", {"sharedExternalAccountId": "shared-1"})
+    sup.clips_account(store, None, platform, accountId="shared-1")
+    clips_before = store.get(f"USER#{USER}", f"ACCOUNT#{platform}")
+    shown = accounts(call)[platform]
+    assert (shown["connectionStatus"], shown["sharedWithClips"]) == ("same_as_clips", False)
+    stored = store.get(sup.PK, f"SOCIAL#{platform}")
+    assert stored is not None
+    assert stored["sharedWithClips"] is False
+    assert "sharedExternalAccountId" not in stored
+    assert store.get(f"USER#{USER}", f"ACCOUNT#{platform}") == clips_before
 
 
 def test_check_marks_a_dead_token_and_brings_a_working_one_back(
@@ -752,14 +787,24 @@ def test_check_it_on_new_own_keys_says_the_account_must_connect_again(
 def test_an_own_tiktok_app_cannot_tell_lamo_clips_tiktok_and_says_so(
     call: Call, store: db.Store, secrets_client: FakeSecretsManager
 ) -> None:
-    # The very same TikTok account as Lamo Clips', connected through Lamo Stories' own app: another open_id.
-    sup.clips_account(store, secrets_client, "tiktok")
+    # Lamo Stories' own app gives another open_id; Clip Factory stored no username (only a display name): it cannot
+    # tell, and says so.
+    sup.clips_account(store, secrets_client, "tiktok", handle="Owner Plays")
     sup.social(store, secrets_client, "tiktok", choice="own", identity="open-same-person-other-app")
     shown = accounts(call)["tiktok"]
     assert shown["connectionStatus"] == "connected"
     assert (shown["reason"], shown["warning"]) == ("clips_unknown", social.TIKTOK_UNSURE)
     assert any("cannot tell" in line for line in shown["limits"])
-    # Clip Factory's app gives the same open_id: compared as before, no warning.
+    # Both have a username, and they differ: a different account, no question (§45.37 G8 b).
+    sup.clips_account(store, secrets_client, "tiktok", handle="@owner")
+    shown = accounts(call)["tiktok"]
+    assert (shown["connectionStatus"], shown["reason"], shown["warning"]) == ("connected", None, None)
+    # The same username through another app's open_id: Clip Factory's own account, it cannot post.
+    sup.clips_account(store, secrets_client, "tiktok", handle="@LamoStories")
+    shown = accounts(call)["tiktok"]
+    assert (shown["connectionStatus"], shown["warning"]) == ("same_as_clips", social.SAME_LATER)
+    # Clip Factory's app gives the same open_id: compared as before.
+    sup.clips_account(store, secrets_client, "tiktok", handle="@owner")
     sup.social(store, secrets_client, "tiktok", choice="clips")
     shown = accounts(call)["tiktok"]
     assert (shown["reason"], shown["warning"]) == (None, None)
@@ -903,51 +948,53 @@ def test_lamo_clips_connecting_the_same_account_later_shows_same_as_clips(
     assert accounts(call)[platform]["connectionStatus"] == "connected"
     sup.clips_account(store, None, platform, accountId="shared-1")  # Lamo Clips connects that very account later
     shown = accounts(call)[platform]
-    assert shown["connectionStatus"] == "same_as_clips"  # so the card offers Pick another and Use it for both
+    assert shown["connectionStatus"] == "same_as_clips"  # blocked from posting; the card says why (§45.37 G8)
+    assert (shown["reason"], shown["warning"]) == ("clips_now", social.SAME_LATER)
     assert shown["sharedWithClips"] is False
     stored = store.get(sup.PK, f"SOCIAL#{platform}")
     assert stored is not None
     assert stored["connectionStatus"] == "same_as_clips"  # settled, so every reader (the dashboard too) sees it
     assert "notClipsConfirmed" not in json.dumps(shown)
     assert "sharedExternalAccountId" not in json.dumps(shown)
-    # Use it for both, on purpose: connected and shared, and it stays so
-    status, body = call("POST", f"{ROOT}/{platform}/share", {"confirm": True})
-    assert status == 200, body
-    assert (body["account"]["connectionStatus"], body["account"]["sharedWithClips"]) == ("connected", True)
-    assert accounts(call)[platform]["connectionStatus"] == "connected"
+    # There is no "Use it for both" any more: it stays blocked
+    assert call("POST", f"{ROOT}/{platform}/share", {"confirm": True})[0] == 404
+    assert accounts(call)[platform]["connectionStatus"] == "same_as_clips"
 
 
 @pytest.mark.parametrize("platform", ["youtube", "tiktok", "instagram", "facebook", "x"])
-def test_same_as_clips_goes_back_to_connected_once_lamo_clips_lets_go_of_the_account(
+def test_same_as_clips_stays_so_once_clip_factory_lets_go_of_the_account(
     call: Call, store: db.Store, secrets_client: FakeSecretsManager, platform: str
 ) -> None:
+    """§45.37 G8 (the owner's hard rule): an account found to be Clip Factory's never turns back into Lamo Stories'
+    own, also when Clip Factory moves to another account or disconnects it (its app keys changing does that too)."""
     sup.social(store, secrets_client, platform, identity="shared-1")
     sup.clips_account(store, None, platform, accountId="shared-1")
     assert accounts(call)[platform]["connectionStatus"] == "same_as_clips"
-    # Lamo Clips moves to another account: Lamo Stories' is its own again, and onboarding ticks it
+    remembered = store.get(sup.PK, f"SOCIAL#{platform}")[social.MATCHED]
+    assert "shared-1" in remembered["ids"]
+    # Clip Factory moves to another account: still Clip Factory's, and onboarding does not tick it
     sup.clips_account(store, None, platform, accountId="another-1")
-    assert accounts(call)[platform]["connectionStatus"] == "connected"
-    assert store.get(sup.PK, f"SOCIAL#{platform}")["connectionStatus"] == "connected"
-    steps = {s["step"]: s for s in call("GET", "/v1/workspaces/stories/onboarding")[1]["onboarding"]["steps"]}
-    assert steps[platform]["state"] == "done"
-    # Lamo Clips connects it again, then disconnects: the same
-    sup.clips_account(store, None, platform, accountId="shared-1")
     assert accounts(call)[platform]["connectionStatus"] == "same_as_clips"
-    clips_setup.put_account(store, USER, platform, "not_connected", now=NOW, fields={"accountId": "shared-1"})
-    assert accounts(call)[platform]["connectionStatus"] == "connected"
-    assert store.get(sup.PK, f"SOCIAL#{platform}")["connectionStatus"] == "connected"
+    assert store.get(sup.PK, f"SOCIAL#{platform}")["connectionStatus"] == "same_as_clips"
+    steps = {s["step"]: s for s in call("GET", "/v1/workspaces/stories/onboarding")[1]["onboarding"]["steps"]}
+    assert steps[platform]["state"] == "todo"
+    # Clip Factory disconnects it (ACCOUNT# not_connected, no id): the same
+    clips_setup.put_account(store, USER, platform, "not_connected", now=NOW)
+    shown = accounts(call)[platform]
+    assert (shown["connectionStatus"], shown["warning"]) == ("same_as_clips", social.SAME_LATER)
+    assert store.get(sup.PK, f"SOCIAL#{platform}")["connectionStatus"] == "same_as_clips"
 
 
-def test_check_it_brings_same_as_clips_back_to_connected(
+def test_check_it_never_brings_same_as_clips_back_to_connected(
     call: Call, store: db.Store, secrets_client: FakeSecretsManager, http: FakeHttp
 ) -> None:
-    sup.social(store, secrets_client, "youtube", status="same_as_clips")  # stored before Lamo Clips moved on
-    sup.clips_account(store, None, "youtube", accountId="UC-SOMEONE-ELSE")
-    http.answers.append((200, {"items": [{"id": sup.IDENTITY["youtube"]}]}))
+    sup.social(store, secrets_client, "youtube", status="same_as_clips")  # stored while Clip Factory had it
+    sup.clips_account(store, None, "youtube", accountId="UC-SOMEONE-ELSE")  # Clip Factory moved on
     status, body = call("POST", f"{ROOT}/youtube/check")
     assert status == 200, body
-    assert body["account"]["connectionStatus"] == "connected"
-    assert store.get(sup.PK, "SOCIAL#youtube")["connectionStatus"] == "connected"
+    assert body["account"]["connectionStatus"] == "same_as_clips"
+    assert store.get(sup.PK, "SOCIAL#youtube")["connectionStatus"] == "same_as_clips"
+    assert http.calls == []  # Clip Factory's account is never called with Lamo Stories' token
 
 
 def test_a_different_lamo_clips_account_leaves_the_connection_as_it_is(
@@ -981,9 +1028,9 @@ def test_onboarding_ticks_a_platform_only_when_it_is_lamo_stories_own(
     accounts(call)
     steps = {s["step"]: s for s in call("GET", "/v1/workspaces/stories/onboarding")[1]["onboarding"]["steps"]}
     assert steps["x"]["state"] == "todo"
-    assert (
-        steps["x"]["line"]
-        == "This is Clip Factory's X account. Pick another in Social accounts, or tap Use it for both."
+    assert steps["x"]["line"] == (
+        "This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a "
+        "different one."
     )
 
 

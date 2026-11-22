@@ -62,8 +62,11 @@ export const CHECK_GIVE_UP_MS = 120_000;
 export const CHECK_MISSES = 3;
 const CHECK_STOPPED = "The check stopped before it finished. Try again.";
 
-/** Check models: one tiny real call per model (or only `only`), followed until it finishes. */
-export function CheckModels({ ws, count, onDone, only }: { ws: string; count: number; onDone: () => Promise<void>; only?: string[] }) {
+/**
+ * Check models: one tiny real call per model (or only `only`), followed until it finishes. With `makers` (§45.37 G2) it
+ * checks those picture, video and sound models instead: an access check that costs nothing.
+ */
+export function CheckModels({ ws, count, onDone, only, makers }: { ws: string; count: number; onDone: () => Promise<void>; only?: string[]; makers?: string[] }) {
   const toast = useToast();
   const [task, setTask] = useState<AiTask | null>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -98,7 +101,7 @@ export function CheckModels({ ws, count, onDone, only }: { ws: string; count: nu
     setTask(next);
     if (next.status === "done") {
       await onDone();
-      const results = (next.result?.models as { status: string }[] | undefined) ?? [];
+      const results = ((makers ? next.result?.makers : next.result?.models) as { status: string }[] | undefined) ?? [];
       const works = results.filter((r) => r.status === "ok").length;
       const no = results.length - works;
       cheer(anchor);
@@ -106,7 +109,9 @@ export function CheckModels({ ws, count, onDone, only }: { ws: string; count: nu
         results.length === 1
           ? works
             ? "Checked it: it works!"
-            : "Checked it: Amazon Bedrock said no. Its card says why."
+            : makers
+              ? "Checked it: it said no. Its row says why."
+              : "Checked it: Amazon Bedrock said no. Its card says why."
           : results.length
             ? `Checked ${results.length} models: ${works} work${no ? `, ${no} said no` : ""}.`
             : "All checked.",
@@ -115,7 +120,7 @@ export function CheckModels({ ws, count, onDone, only }: { ws: string; count: nu
       await onDone();
       toast.error(next.error ?? CHECK_STOPPED);
     }
-  }, [task, ws, onDone, toast, anchor, stop]);
+  }, [task, ws, onDone, toast, anchor, stop, makers]);
   usePoll(tick, running, 1000);
   return (
     <div className="st-stg-check">
@@ -127,8 +132,9 @@ export function CheckModels({ ws, count, onDone, only }: { ws: string; count: nu
           setAnchor(el);
           started.current = Date.now();
           misses.current = 0;
-          void storiesApi()
-            .checkModels(ws, only)
+          const api = storiesApi();
+          // The AI models' check is sent as before; the makers' models go in `makers` (§45.37 G2).
+          void (makers ? api.checkModels(ws, undefined, makers) : api.checkModels(ws, only))
             .then(setTask)
             .catch((err: unknown) => toast.error(friendlyMessage(err)));
         }}
@@ -136,8 +142,8 @@ export function CheckModels({ ws, count, onDone, only }: { ws: string; count: nu
         <SIcon name="retry" size={20} />
         {running ? "Checking…" : "Check models"}
       </Btn>
-      {running ? <Progress value={null} label={only ? `Checking ${only.length === 1 ? "the model" : `${only.length} models`}` : `Checking ${count} models`} /> : null}
-      {running ? <span className="st-stg-small">One tiny real call to each model. It takes a few seconds.</span> : null}
+      {running ? <Progress value={null} label={(makers ?? only) ? `Checking ${(makers ?? only)!.length === 1 ? "the model" : `${(makers ?? only)!.length} models`}` : `Checking ${count} models`} /> : null}
+      {running ? <span className="st-stg-small">{makers ? "It asks whether this account may use each model. Nothing is made, so it costs nothing." : "One tiny real call to each model. It takes a few seconds."}</span> : null}
     </div>
   );
 }
@@ -637,7 +643,7 @@ export function AiSection({ ws }: { ws: string }) {
       </div>
       <DefaultModel data={data} pending={pending} onPick={pickModel} ws={ws} reload={ai.reload} />
       <DefaultEffort data={data} pending={pending} onPick={pickEffort} />
-      <OwnModels ws={ws} models={data.models} onChanged={ai.reload} check={(key) => <CheckModels ws={ws} count={1} only={[key]} onDone={ai.reload} />} />
+      <OwnModels ws={ws} models={data.models} providers={providers.data} onChanged={ai.reload} check={(key) => <CheckModels ws={ws} count={1} only={[key]} onDone={ai.reload} />} />
       <Assignments
         data={data}
         saveAi={async (next) => {

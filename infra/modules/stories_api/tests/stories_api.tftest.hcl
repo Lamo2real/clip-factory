@@ -126,11 +126,11 @@ run "role_matches_the_contract" {
       s.Resource == ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"] &&
       s.Condition == {
         "ForAllValues:StringLike"   = { "dynamodb:LeadingKeys" = ["USER#*"] }
-        "ForAllValues:StringEquals" = { "dynamodb:Attributes" = ["pk", "sk", "platform", "status", "accountId"] }
+        "ForAllValues:StringEquals" = { "dynamodb:Attributes" = ["pk", "sk", "platform", "status", "accountId", "handle"] }
         "StringEqualsIfExists"      = { "dynamodb:Select" = "SPECIFIC_ATTRIBUTES", "dynamodb:ReturnValues" = "NONE" }
       }
     ])
-    error_message = "Lamo Clips' ACCOUNT# items: GetItem of pk, sk, platform, status and accountId only, nothing returned by a write (§45.15)."
+    error_message = "Lamo Clips' ACCOUNT# items: GetItem of pk, sk, platform, status, accountId and handle only, nothing returned by a write (§45.15, §45.37 G8)."
   }
 
   # Writes: never Lamo Clips' USER#{userId}, Clip Factory's OAUTH#{nonce}, the rate budgets or any other partition.
@@ -156,16 +156,16 @@ run "role_matches_the_contract" {
     error_message = "cf-prod-stories-api writes its workspace partitions, the registry and its own OAuth connect states."
   }
 
-  # The only statement that reaches USER#{userId} is the five-attribute GetItem.
+  # The only statement that reaches USER#{userId} is the six-attribute GetItem.
   assert {
     condition = alltrue([
       for s in jsondecode(aws_iam_role_policy.fn.policy).Statement :
-      flatten([s.Action]) == ["dynamodb:GetItem"] && try(s.Condition["ForAllValues:StringEquals"]["dynamodb:Attributes"], []) == ["pk", "sk", "platform", "status", "accountId"]
+      flatten([s.Action]) == ["dynamodb:GetItem"] && try(s.Condition["ForAllValues:StringEquals"]["dynamodb:Attributes"], []) == ["pk", "sk", "platform", "status", "accountId", "handle"]
       if anytrue([for a in flatten([s.Action]) : startswith(a, "dynamodb:")]) && anytrue([
         for r in try(s.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"], ["*"]) : can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", "USER#u1"))
       ])
     ])
-    error_message = "cf-prod-stories-api reaches USER#{userId} (Lamo Clips) only through the five-attribute GetItem."
+    error_message = "cf-prod-stories-api reaches USER#{userId} (Lamo Clips) only through the six-attribute GetItem."
   }
 
   assert {

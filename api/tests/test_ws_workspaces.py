@@ -44,6 +44,10 @@ def test_list_puts_lamo_clips_first_and_makes_lamo_stories_once(call: Call, tabl
         "images": "builtin-rig",
         "video": "builtin-2d",
         "audio": "builtin-synth",
+        # §45.37 G1: each AI maker's model; null is that maker's first model that has not ended
+        "imageModel": None,
+        "videoModel": None,
+        "audioModel": None,
     }
     puts = [c for c in table.calls if c[0] == "put_item"]
     assert len(puts) == 1
@@ -96,7 +100,7 @@ def test_patch_merges_the_configuration_with_a_version(call: Call) -> None:
             "workspaceName": "Lamo Stories Studio",
             "configuration": {
                 "defaultDurationSec": 30,
-                "providers": {"images": "nova-canvas"},
+                "providers": {"images": "stability", "imageModel": "stable-image-ultra"},
                 "video": {"quality": "best"},
                 "production": {"scenesAtOnce": 3, "keepVersions": 4},
                 "xMonthlyLimitUsd": 12.5,
@@ -109,9 +113,12 @@ def test_patch_merges_the_configuration_with_a_version(call: Call) -> None:
     assert w["workspaceName"] == "Lamo Stories Studio"
     assert w["configuration"]["defaultDurationSec"] == 30
     assert w["configuration"]["providers"] == {
-        "images": "nova-canvas",
+        "images": "stability",
         "video": "builtin-2d",
         "audio": "builtin-synth",
+        "imageModel": "stable-image-ultra",
+        "videoModel": None,
+        "audioModel": None,
     }
     assert w["configuration"]["video"] == {"resolution": "1080x1920", "aspect": "9:16", "quality": "best", "fps": 30}
     assert w["configuration"]["production"] == {

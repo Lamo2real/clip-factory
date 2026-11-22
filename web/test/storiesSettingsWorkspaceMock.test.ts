@@ -54,22 +54,39 @@ describe("storage and production", () => {
   });
 });
 
-describe("Nova Reel's line", () => {
+describe("Luma AI Ray2's line (the AI video maker since Amazon ended Nova Reel, §45.37)", () => {
   it("says it is not ready and what to do, never that the built-in animation makes the videos", async () => {
-    await patch({ providers: { images: "builtin-rig", video: "nova-reel", audio: "builtin-synth" } });
-    const reel = (await api.providers("stories")).find((p) => p.id === "nova-reel")!;
-    expect(reel.state).toBe("needs_setup");
-    expect(reel.line).toMatch(/^Amazon Nova Reel is not ready yet: .+\. Pick Built-in animation in Settings › Video, or finish its setup\.$/);
-    expect(reel.line).not.toMatch(/built-in animation makes|videos use the built-in animation/i);
+    await patch({ providers: { images: "builtin-rig", video: "luma-ray", audio: "builtin-synth" } });
+    const luma = (await api.providers("stories")).find((p) => p.id === "luma-ray")!;
+    expect(luma.state).toBe("needs_setup");
+    expect(luma.line).toBe(
+      "Luma AI Ray2 is not ready yet: it needs a storage bucket in the United States (Oregon), which is switched off, and Luma AI Ray2 turned on for your account. Pick Built-in animation in Settings › Video, or finish its setup.",
+    );
+    expect(luma.line).not.toMatch(/built-in animation makes|videos use the built-in animation/i);
   });
 
-  it("is said once on the Video page with the API's label (Amazon Nova Reel 1.1 (AI video)), which differs from the name in its line", async () => {
-    await patch({ providers: { images: "builtin-rig", video: "nova-reel", audio: "builtin-synth" } });
-    const reel = (await api.providers("stories")).find((p) => p.id === "nova-reel")!;
-    expect(reel.label).toBe("Amazon Nova Reel 1.1 (AI video)");
-    expect(notReadyLine(reel)).toBe(reel.line);
-    expect(notReadyLine(reel).match(/is not ready yet/g)).toHaveLength(1);
+  it("is said once on the Video page with the API's label (Luma AI Ray2 (AI video)), which differs from the name in its line", async () => {
+    await patch({ providers: { images: "builtin-rig", video: "luma-ray", audio: "builtin-synth" } });
+    const luma = (await api.providers("stories")).find((p) => p.id === "luma-ray")!;
+    expect(luma.label).toBe("Luma AI Ray2 (AI video)");
+    expect(notReadyLine(luma)).toBe(luma.line);
+    expect(notReadyLine(luma).match(/is not ready yet/g)).toHaveLength(1);
     // A line that does not say it yet gets the sentence once, in front.
-    expect(notReadyLine({ label: "Amazon Nova Canvas (AI pictures)", line: "Make one portrait to check it." })).toBe("Amazon Nova Canvas (AI pictures) is not ready yet. Make one portrait to check it.");
+    expect(notReadyLine({ label: "Stability AI pictures", line: "Make one portrait to check it." })).toBe("Stability AI pictures is not ready yet. Make one portrait to check it.");
+  });
+
+  it("Nova Reel and Nova Canvas read ended, are never picked again, and name their replacement", async () => {
+    const list = await api.providers("stories");
+    // The API's providers.status: the end day and the one-tap replacement (`replacement`), never a model in use.
+    expect(list.find((p) => p.id === "nova-reel")).toMatchObject({ state: "ended", line: "Ended by Amazon on 30 Sep 2026.", endedAt: "2026-09-30", replacement: "luma-ray", model: null });
+    expect(list.find((p) => p.id === "nova-canvas")).toMatchObject({ state: "ended", line: "Ended by Amazon on 30 Sep 2026.", endedAt: "2026-09-30", replacement: "stability", model: null });
+    await expect(patch({ providers: { images: "builtin-rig", video: "nova-reel", audio: "builtin-synth" } })).rejects.toMatchObject({
+      status: 400,
+      message: "Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Lamo Stories › Settings › Video.",
+    });
+    await expect(patch({ providers: { images: "nova-canvas", video: "builtin-2d", audio: "builtin-synth" } })).rejects.toMatchObject({
+      status: 400,
+      message: "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Lamo Stories › Settings › Video.",
+    });
   });
 });

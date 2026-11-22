@@ -17,7 +17,14 @@ use: the chat's actions and structured answers through ``toolConfig``) and ``cac
 ``cachePoint``). Each may be left out: an Anthropic model takes all three, an Amazon model the cache only, any other
 maker none. The agent builds every Bedrock request from them. Changing a model's ``modelId`` or Region clears its
 ``MODELSTATUS#`` (D6): it reads "Not checked yet" until it is checked again. ``provider`` is who makes the model;
-``host`` (D8) is who runs it, always "Amazon Bedrock" for a model added here.
+``host`` (D8) is who runs it.
+
+**Where it runs** (§45.37 G4): ``host`` is ``bedrock`` (Amazon Bedrock, the default: a Bedrock model id, inference
+profile id or ARN and its Region), ``anthropic`` (the Anthropic API: Anthropic's model name, no Region; its effort goes
+in ``output_config.effort``, with no server-side fallback model) or ``openai_compatible`` (``baseUrl``: a public
+``https`` address that speaks the OpenAI chat-completions API; its effort, when it takes one, goes in
+``reasoning_effort``). A keyed host's key is saved through Provider keys and read by the agent per call. Its
+``ModelInfo.host`` says who runs it ("Anthropic API", the address's host name).
 """
 
 from __future__ import annotations
@@ -33,6 +40,7 @@ from ..errors import bad_request, conflict, not_found
 from ..log import log
 from . import ai_config as cfg
 from . import ai_resolve as res
+from . import hosts
 from . import types as ws
 
 KEY: Final = re.compile(r"^custom-[a-z0-9-]{1,40}$")
@@ -63,10 +71,14 @@ FIELDS: Final = (
     "effortField",
     "tools",
     "cache",
+    "host",
+    "baseUrl",
 )
-# How an added model is called (§45.35 D1): where its effort goes ("none": nowhere, it runs at its own level).
-EFFORT_FIELDS: Final = ("output_config", "none")
-HOST: Final = "Amazon Bedrock"  # who runs every added model (D8); ``provider`` is who makes it
+# How an added model is called (§45.35 D1, §45.37 G4): where its effort goes ("output_config": Anthropic's
+# ``output_config.effort``, on Bedrock or the Anthropic API; "reasoning_effort": an OpenAI-compatible API's own field;
+# "none": nowhere, it runs at its own level).
+EFFORT_FIELDS: Final = ("output_config", "reasoning_effort", "none")
+HOST: Final = "Amazon Bedrock"  # who runs an added Bedrock model (D8); ``provider`` is who makes it
 
 NOT_FOUND: Final = "Lamo Stories has no added model with that name."
 BAD_KEY: Final = "A model you add needs a name like custom-my-model (small letters, digits and dashes)."
@@ -79,8 +91,17 @@ BAD_MODEL_ID: Final = (
 )
 BAD_REGION: Final = "Type the AWS Region code where the model runs, like us-east-1 or eu-north-1."
 BAD_EFFORT_FIELD: Final = (
-    "Say how the model takes an effort: output_config (like Anthropic's Claude models) or none (it runs at its own "
-    "level)."
+    "Say how the model takes an effort: output_config (like Anthropic's Claude models), reasoning_effort (an "
+    "OpenAI-compatible API's own field) or none (it runs at its own level)."
+)
+# The levels an OpenAI-compatible API's ``reasoning_effort`` takes (the web's REASONING_EFFORTS mirrors these): never
+# "max", which those APIs refuse.
+REASONING_EFFORTS: Final = ("low", "medium", "high", "xhigh")
+BAD_REASONING_EFFORT: Final = (
+    "An OpenAI-compatible model takes the efforts low, medium, high and xhigh only. Take max out of its efforts."
+)
+REASONING_EFFORT_ONLY_OPENAI: Final = (
+    "Only a model on an OpenAI-compatible API takes reasoning_effort. Pick output_config or none."
 )
 NO_EFFORT_FIELD: Final = (
     "This model has no effort setting (effortField none), so leave its efforts empty. Only a model that takes "
@@ -159,29 +180,45 @@ def _maker(provider: Any) -> str:
     return " ".join(str(provider or "").split()).lower()
 
 
-def default_effort_field(provider: Any) -> str:
-    """Anthropic's models take ``output_config.effort``; any other maker's model takes no effort unless told."""
+def default_effort_field(provider: Any, host: str = hosts.BEDROCK) -> str:
+    """Anthropic's models take ``output_config.effort`` (on Bedrock and on the Anthropic API); any other model takes
+    no effort unless told (an OpenAI-compatible API's ``reasoning_effort`` is the owner's pick)."""
+    if host == hosts.ANTHROPIC:
+        return "output_config"
+    if host == hosts.OPENAI_COMPATIBLE:
+        return "none"
     return "output_config" if _maker(provider) == "anthropic" else "none"
 
 
-def default_tools(provider: Any) -> bool:
+def default_tools(provider: Any, host: str = hosts.BEDROCK) -> bool:
+    if host == hosts.ANTHROPIC:
+        return True
+    if host == hosts.OPENAI_COMPATIBLE:
+        return False
     return _maker(provider) == "anthropic"
 
 
-def default_cache(provider: Any) -> bool:
+def default_cache(provider: Any, host: str = hosts.BEDROCK) -> bool:
+    if host == hosts.ANTHROPIC:
+        return True
+    if host == hosts.OPENAI_COMPATIBLE:
+        return False
     return _maker(provider) in ("anthropic", "amazon")
 
 
 def calling(item: Mapping[str, Any]) -> dict[str, Any]:
-    """``effortField``, ``tools`` and ``cache`` of a ``MODELDEF#`` item or a body, each defaulted from the maker
-    when it was left out (an item saved before they existed reads the same way)."""
+    """``effortField``, ``tools`` and ``cache`` of a ``MODELDEF#`` item or a body, each defaulted from the maker and
+    the host when it was left out (an item saved before they existed reads the same way)."""
     provider = item.get("provider")
+    host = hosts.host_id(item.get("host"))
     field = item.get("effortField")
+    if field == "reasoning_effort" and host != hosts.OPENAI_COMPATIBLE:
+        field = None
     tools, cache = item.get("tools"), item.get("cache")
     return {
-        "effortField": field if field in EFFORT_FIELDS else default_effort_field(provider),
-        "tools": tools if isinstance(tools, bool) else default_tools(provider),
-        "cache": cache if isinstance(cache, bool) else default_cache(provider),
+        "effortField": field if field in EFFORT_FIELDS else default_effort_field(provider, host),
+        "tools": tools if isinstance(tools, bool) else default_tools(provider, host),
+        "cache": cache if isinstance(cache, bool) else default_cache(provider, host),
     }
 
 
@@ -192,8 +229,14 @@ def as_model(item: Mapping[str, Any]) -> dict[str, Any] | None:
     """A ``MODELDEF#`` item as a ``models.json`` entry (``custom: True``), or None when it is not a usable one."""
     key = item.get("key")
     model_id = item.get("modelId")
-    region = item.get("region")
+    host = hosts.host_id(item.get("host"))
+    region = item.get("region") if host == hosts.BEDROCK else ""
     if not isinstance(key, str) or not KEY.match(key) or not isinstance(model_id, str) or not isinstance(region, str):
+        return None
+    if host not in hosts.REASONING_HOSTS:
+        return None
+    base_url = item.get("baseUrl") if host == hosts.OPENAI_COMPATIBLE else None
+    if host == hosts.OPENAI_COMPATIBLE and not (isinstance(base_url, str) and base_url):
         return None
     how = calling(item)
     # a model that takes no effort field never lists one: nothing would be sent (D1)
@@ -205,10 +248,12 @@ def as_model(item: Mapping[str, Any]) -> dict[str, Any] | None:
         "key": key,
         "label": str(item.get("label") or key),
         "provider": str(item.get("provider") or ""),
-        "host": HOST,
+        "host": hosts.host_label(host, base_url),
+        "hostId": host,
+        **({"baseUrl": base_url} if base_url else {}),
         "modelId": model_id,
         "profile": model_id,
-        "regions": [region],
+        "regions": [region] if region else [],
         "region": region,
         "efforts": efforts,
         "defaultEffort": default,
@@ -289,10 +334,12 @@ def clean_efforts(value: Any) -> list[str]:
 
 
 def clean_calling(body: Mapping[str, Any], efforts: list[str]) -> dict[str, Any]:
-    """``effortField``, ``tools`` and ``cache`` (each may be left out: the maker's defaults, D1)."""
+    """``effortField``, ``tools`` and ``cache`` (each may be left out: the maker's and the host's defaults, D1)."""
     field = body.get("effortField")
     if field is not None and field not in EFFORT_FIELDS:
         raise bad_request(BAD_EFFORT_FIELD, "effortField")
+    if field == "reasoning_effort" and hosts.host_id(body.get("host")) != hosts.OPENAI_COMPATIBLE:
+        raise bad_request(REASONING_EFFORT_ONLY_OPENAI, "effortField")
     for name in ("tools", "cache"):
         if body.get(name) is not None and not isinstance(body.get(name), bool):
             what = "takes tool use" if name == "tools" else "takes Bedrock's prompt cache"
@@ -300,6 +347,8 @@ def clean_calling(body: Mapping[str, Any], efforts: list[str]) -> dict[str, Any]
     how = calling(body)
     if how["effortField"] == "none" and efforts:
         raise bad_request(NO_EFFORT_FIELD, "efforts")
+    if how["effortField"] == "reasoning_effort" and any(e not in REASONING_EFFORTS for e in efforts):
+        raise bad_request(BAD_REASONING_EFFORT, "efforts")
     return how
 
 
@@ -316,13 +365,28 @@ def clean(body: Mapping[str, Any]) -> dict[str, Any]:
     price = body.get("price")
     label = _text(body, "label", LABEL_MAX, "Give the model a name people can read.")
     provider = _text(body, "provider", PROVIDER_MAX, "Say who makes the model, like Anthropic or Amazon.")
-    model_id = clean_model_id(body.get("modelId"))
-    region = clean_region(body.get("region"))
-    mismatch = region_problem(model_id, region)
-    if mismatch is not None:
-        raise bad_request(mismatch, "region")
-    how = clean_calling({**body, "provider": provider}, efforts)
+    host = hosts.clean_host(body.get("host"), allowed=hosts.REASONING_HOSTS, refused=hosts.SOUND_ONLY)
+    where: dict[str, Any] = {"host": host}
+    if host == hosts.BEDROCK:
+        model_id = clean_model_id(body.get("modelId"))
+        region = clean_region(body.get("region"))
+        mismatch = region_problem(model_id, region)
+        if mismatch is not None:
+            raise bad_request(mismatch, "region")
+        if not hosts.empty(body.get("baseUrl")):
+            raise bad_request(hosts.BASE_URL_ONLY_OPENAI, "baseUrl")
+    else:
+        model_id = hosts.clean_keyed_model_id(body.get("modelId"))
+        region = ""
+        if not hosts.empty(body.get("region")):
+            raise bad_request(hosts.REGION_ONLY_BEDROCK, "region")
+        if host == hosts.OPENAI_COMPATIBLE:
+            where["baseUrl"] = hosts.clean_base_url(body.get("baseUrl"))
+        elif not hosts.empty(body.get("baseUrl")):
+            raise bad_request(hosts.BASE_URL_ONLY_OPENAI, "baseUrl")
+    how = clean_calling({**body, "provider": provider, "host": host}, efforts)
     return {
+        **where,
         "label": label,
         "provider": provider,
         "modelId": model_id,
@@ -377,8 +441,16 @@ def put(
     store: db.Store, user_id: str, workspace_id: str, key: str, body: Mapping[str, Any], *, now: datetime
 ) -> dict[str, Any]:
     """Adds or replaces one model; returns its ``ModelInfo``."""
+    from . import makers
+
     key = clean_key(key)
+    if makers.get_item(store, user_id, workspace_id, key) is not None:
+        raise bad_request("You already added a picture, video or sound model with that name. Pick another name.", "key")
     fields = clean(body)
+    if fields["host"] == hosts.OPENAI_COMPATIBLE:
+        from .provider_keys import check_openai_origin
+
+        check_openai_origin(store, user_id, workspace_id, key, str(fields["baseUrl"]))  # its key goes there only
     existing = cfg.get_owned(store, user_id, workspace_id, model_sk(key))
     if existing is None and len(items(store, user_id, workspace_id)) >= MAX_MODELS:
         raise conflict(TOO_MANY)
@@ -418,7 +490,8 @@ def put(
 
 
 def _repointed(before: Mapping[str, Any], after: Mapping[str, Any]) -> bool:
-    return any(str(before.get(name) or "") != str(after.get(name) or "") for name in ("modelId", "region"))
+    names = ("modelId", "region", "host", "baseUrl")
+    return any(str(before.get(name) or "") != str(after.get(name) or "") for name in names)
 
 
 def _forget_status(store: db.Store, user_id: str, workspace_id: str, key: str) -> None:

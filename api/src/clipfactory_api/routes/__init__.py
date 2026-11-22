@@ -58,6 +58,7 @@ ROUTES: list[Route] = [
     route("GET", "/v1/tiktok/mac", tiktok_mac.status),
     route("POST", "/v1/tiktok/mac/ping", tiktok_mac.ping),
     route("POST", "/v1/tiktok/mac/send", tiktok_mac.send),
+    route("POST", "/v1/tiktok/mac/login", tiktok_mac.login),
     route("POST", "/v1/clips/{clipId}/tiktok/mac/claim", tiktok_mac.claim),
     route("POST", "/v1/clips/{clipId}/tiktok/mac/step", tiktok_mac.step),
     route("POST", "/v1/clips/{clipId}/tiktok/mac/done", tiktok_mac.done),

@@ -43,6 +43,19 @@ mock_provider "aws" {
   }
 }
 
+# Luma AI Ray2's us-west-2 bucket provider (§45.37 G7).
+mock_provider "aws" {
+  alias           = "us_west_2"
+  override_during = plan
+
+  mock_resource "aws_s3_bucket" {
+    defaults = {
+      arn = "arn:aws:s3:::cf-test-stories-video-123456789012-usw2"
+      id  = "cf-test-stories-video-123456789012-usw2"
+    }
+  }
+}
+
 variables {
   name                           = "cf-test"
   region                         = "eu-north-1"
@@ -98,14 +111,15 @@ run "its_own_repository_image_and_runtime" {
 
   assert {
     condition = aws_bedrockagentcore_agent_runtime.agent.environment_variables == tomap({
-      CF_STORIES_TABLE  = "cf-test-data"
-      CF_MEDIA_BUCKET   = "cf-test-media"
-      CF_REGION         = "eu-north-1"
-      CF_IMAGE_MODEL_ID = "amazon.nova-canvas-v1:0"
-      CF_IMAGE_REGION   = "eu-west-1"
-      AWS_REGION        = "eu-north-1"
+      CF_STORIES_TABLE        = "cf-test-data"
+      CF_MEDIA_BUCKET         = "cf-test-media"
+      CF_REGION               = "eu-north-1"
+      CF_IMAGE_MODEL_ID       = "amazon.nova-canvas-v1:0"
+      CF_IMAGE_REGION         = "eu-west-1"
+      CF_PROVIDER_KEYS_PREFIX = "cf-test/workspaces/"
+      AWS_REGION              = "eu-north-1"
     })
-    error_message = "The runtime gets §45.11.4's settings; CF_VIDEO_BUCKET only while the us-east-1 bucket exists."
+    error_message = "The runtime gets §45.11.4's settings and the workspaces' secret prefix (§45.37 G4); CF_VIDEO_BUCKET and CF_VIDEO_WEST_BUCKET only while their buckets exist."
   }
 
   assert {
@@ -124,6 +138,11 @@ run "its_own_repository_image_and_runtime" {
     condition     = length(aws_s3_bucket.video_us) == 0 && output.video_bucket == ""
     error_message = "The us-east-1 bucket is off by default (stories_video_us_bucket = false)."
   }
+
+  assert {
+    condition     = length(aws_s3_bucket.video_west) == 0 && output.video_west_bucket == ""
+    error_message = "The us-west-2 bucket is off by default (stories_video_west_bucket = false)."
+  }
 }
 
 run "role_matches_the_contract" {
@@ -141,6 +160,8 @@ run "role_matches_the_contract" {
       "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts", "s3:ListBucket",
       "bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream",
       "secretsmanager:GetSecretValue",
+      "bedrock:GetFoundationModel", "bedrock:GetFoundationModelAvailability",
+      "polly:SynthesizeSpeech", "polly:DescribeVoices",
     ])
     error_message = "The story agent's actions must match docs/CONTRACTS.md §45.15 (no Transcribe, no async video jobs while the switch is off)."
   }
@@ -387,10 +408,22 @@ run "models_come_from_the_stories_file" {
   assert {
     condition = alltrue(flatten([
       for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : [
-        for r in flatten([s.Resource]) : r != "*" && !strcontains(r, "titan-embed") && !strcontains(r, "nova-2-lite") && !strcontains(r, "nova-reel")
+        for r in flatten([s.Resource]) : (r != "*" || flatten([s.Action]) == ["bedrock:GetFoundationModelAvailability"]) && !strcontains(r, "titan-embed") && !strcontains(r, "nova-2-lite") && !strcontains(r, "nova-reel")
       ] if anytrue([for a in flatten([s.Action]) : startswith(a, "bedrock:")])
     ]))
-    error_message = "No Bedrock wildcard, none of Clip Factory's other models (embeddings, the watch model), and no Nova Reel while its switch is off."
+    error_message = "No Bedrock wildcard (only the read-only availability check, which takes no resource type), none of Clip Factory's other models (embeddings, the watch model), and no Nova Reel while its switch is off."
+  }
+
+  # §45.37 G2: the one "*" Bedrock statement is the availability check alone, never a call that makes anything.
+  assert {
+    condition = [
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : s.Sid
+      if anytrue([for a in flatten([s.Action]) : startswith(a, "bedrock:")]) && contains(flatten([s.Resource]), "*")
+      ] == ["MakerCheckAccess"] && anytrue([
+        for s in jsondecode(aws_iam_role_policy.agent.policy).Statement :
+        s.Sid == "MakerCheckAccess" && s.Action == ["bedrock:GetFoundationModelAvailability"] && s.Resource == "*"
+    ])
+    error_message = "Only bedrock:GetFoundationModelAvailability (no resource type, read only, no cost) may name every resource."
   }
 
   assert {
@@ -512,9 +545,153 @@ run "nova_reel_bucket_switch_on" {
   assert {
     condition = toset([for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : s.Sid if !startswith(s.Sid, "Video")]) == toset([
       "PullImage", "EcrToken", "Logs", "LogGroups", "Tracing", "Metrics", "WorkloadIdentity", "StoryWrites", "StoryReads",
-      "StoryFiles", "StoryFilesList", "StoryModels", "ImageModel", "ProviderKeys",
+      "StoryFiles", "StoryFilesList", "StoryModels", "ImageModel", "ProviderKeys", "MakerCheckModel", "MakerCheckAccess",
+      "SpokenVoice",
     ])
     error_message = "The switch adds only the Video statements."
+  }
+
+  assert {
+    condition     = length(aws_s3_bucket.video_west) == 0 && !contains(keys(aws_bedrockagentcore_agent_runtime.agent.environment_variables), "CF_VIDEO_WEST_BUCKET")
+    error_message = "The Nova Reel switch never turns on the us-west-2 bucket."
+  }
+}
+
+# §45.37 G2, G7: Check models' access checks for the makers' models (no cost) and Amazon Polly's opt-in voice, each
+# read only or in its one Region, added in place to the role's inline policy.
+run "maker_checks_and_the_spoken_voice" {
+  command = plan
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement :
+      s.Sid == "MakerCheckModel" && s.Action == ["bedrock:GetFoundationModel"] && s.Resource == ["arn:aws:bedrock:*::foundation-model/*"]
+    ])
+    error_message = "GetFoundationModel (read only) on foundation models only."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement :
+      s.Sid == "SpokenVoice" && toset(s.Action) == toset(["polly:SynthesizeSpeech", "polly:DescribeVoices"]) &&
+      s.Condition == { StringEquals = { "aws:RequestedRegion" = "eu-west-1" } }
+    ])
+    error_message = "Amazon Polly's voice and its check, in eu-west-1 only."
+  }
+
+  assert {
+    condition = length([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : s
+      if anytrue([for a in flatten([s.Action]) : startswith(a, "polly:")])
+    ]) == 1
+    error_message = "No other statement grants Amazon Polly."
+  }
+
+  assert {
+    condition = !anytrue(flatten([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : [
+        for a in flatten([s.Action]) : contains(["bedrock:InvokeModel", "bedrock:StartAsyncInvoke", "bedrock:GetAsyncInvoke"], a)
+      ] if s.Sid == "MakerCheckModel" || s.Sid == "MakerCheckAccess" || s.Sid == "SpokenVoice"
+    ]))
+    error_message = "A maker check never makes anything."
+  }
+}
+
+# §45.37 G7: the Luma AI Ray2 switch adds the us-west-2 bucket (private, TLS only, 14 days), its grants and
+# CF_VIDEO_WEST_BUCKET, and nothing else.
+run "luma_bucket_switch_on" {
+  command = plan
+
+  variables {
+    stories_video_west_bucket = true
+  }
+
+  assert {
+    condition     = aws_s3_bucket.video_west[0].bucket == "cf-test-stories-video-123456789012-usw2" && output.video_west_bucket == "cf-test-stories-video-123456789012-usw2"
+    error_message = "The bucket is <name>-stories-video-<account>-usw2."
+  }
+
+  assert {
+    condition = (length(aws_s3_bucket.video_west) == 1 && length(regexall("(?m)^  provider\\s+= aws\\.us_west_2$", file("main.tf"))) == 6 &&
+    length(regexall("(?m)^  provider\\s+= aws\\.us_east_1$", file("main.tf"))) == 6)
+    error_message = "Every us-west-2 bucket resource is made through the aws.us_west_2 provider; the us-east-1 ones are unchanged."
+  }
+
+  assert {
+    condition = (aws_s3_bucket_public_access_block.video_west[0].block_public_acls && aws_s3_bucket_public_access_block.video_west[0].block_public_policy &&
+      aws_s3_bucket_public_access_block.video_west[0].ignore_public_acls && aws_s3_bucket_public_access_block.video_west[0].restrict_public_buckets &&
+    one(aws_s3_bucket_ownership_controls.video_west[0].rule).object_ownership == "BucketOwnerEnforced")
+    error_message = "The us-west-2 bucket is private (public access blocked, owner-enforced)."
+  }
+
+  assert {
+    condition = jsondecode(aws_s3_bucket_policy.video_west[0].policy).Statement == [{
+      Sid       = "TlsOnly"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = "s3:*"
+      Resource  = ["arn:aws:s3:::cf-test-stories-video-123456789012-usw2", "arn:aws:s3:::cf-test-stories-video-123456789012-usw2/*"]
+      Condition = { Bool = { "aws:SecureTransport" = "false" } }
+    }]
+    error_message = "The us-west-2 bucket refuses anything but TLS."
+  }
+
+  assert {
+    condition = (one(one(aws_s3_bucket_lifecycle_configuration.video_west[0].rule).expiration).days == 14 &&
+    one(aws_s3_bucket_lifecycle_configuration.video_west[0].rule).status == "Enabled")
+    error_message = "Shots are deleted after 14 days."
+  }
+
+  assert {
+    condition     = aws_bedrockagentcore_agent_runtime.agent.environment_variables["CF_VIDEO_WEST_BUCKET"] == "cf-test-stories-video-123456789012-usw2" && !contains(keys(aws_bedrockagentcore_agent_runtime.agent.environment_variables), "CF_VIDEO_BUCKET")
+    error_message = "With the switch on, the runtime gets CF_VIDEO_WEST_BUCKET (and still no us-east-1 bucket)."
+  }
+
+  assert {
+    condition = (anytrue([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement :
+      s.Sid == "WestVideoModel" && s.Action == ["bedrock:InvokeModel"] && toset(s.Resource) == toset([
+        "arn:aws:bedrock:us-west-2::foundation-model/luma.ray-v2:0",
+        "arn:aws:bedrock:us-west-2::foundation-model/luma.*",
+        "arn:aws:bedrock:us-west-2:123456789012:async-invoke/*",
+      ])
+      ]) && anytrue([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement :
+      s.Sid == "WestVideoJobs" && s.Action == ["bedrock:GetAsyncInvoke"] && s.Resource == ["arn:aws:bedrock:us-west-2:123456789012:async-invoke/*"]
+    ]))
+    error_message = "With the switch on: Luma AI Ray2 jobs in us-west-2 only (StartAsyncInvoke is authorized as InvokeModel)."
+  }
+
+  assert {
+    condition = toset(flatten([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : s.Resource if startswith(s.Sid, "WestVideoFiles")
+    ])) == toset(["arn:aws:s3:::cf-test-stories-video-123456789012-usw2/*", "arn:aws:s3:::cf-test-stories-video-123456789012-usw2"])
+    error_message = "The us-west-2 video grants reach only the us-west-2 bucket."
+  }
+
+  assert {
+    condition = toset([for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : s.Sid if !startswith(s.Sid, "WestVideo")]) == toset([
+      "PullImage", "EcrToken", "Logs", "LogGroups", "Tracing", "Metrics", "WorkloadIdentity", "StoryWrites", "StoryReads",
+      "StoryFiles", "StoryFilesList", "StoryModels", "ImageModel", "ProviderKeys", "MakerCheckModel", "MakerCheckAccess",
+      "SpokenVoice",
+    ])
+    error_message = "The switch adds only the WestVideo statements."
+  }
+}
+
+# IAM keeps a role's inline policies under 10,240 characters (whitespace not counted; jsonencode writes none): the
+# role's one policy, with every switch on, stays well inside it.
+run "the_role_policy_fits_iam_s_size_limit" {
+  command = plan
+
+  variables {
+    stories_video_us_bucket   = true
+    stories_video_west_bucket = true
+  }
+
+  assert {
+    condition     = length(aws_iam_role_policy.agent.policy) < 9000
+    error_message = "The story agent's inline policy must stay under IAM's 10,240-character limit (kept below 9,000 here)."
   }
 }
 

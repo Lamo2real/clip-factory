@@ -8,7 +8,7 @@ import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, ty
 import { Glide } from "../../components/Glide.tsx";
 import { storiesBehind, storiesReduceMotion, storiesSound } from "../prefs.ts";
 import type { Effort, ModelInfo, ProviderStatus } from "../api/types.ts";
-import { EFFORT_LABEL } from "../api/types.ts";
+import { EFFORT_LABEL, HOST_LABEL, hostIdOf } from "../api/types.ts";
 
 // ---------- Icons: Lamo Stories' chunky round strokes (no generic AI sparkle anywhere) ----------
 
@@ -473,17 +473,51 @@ export const PROVIDER_STATE: Record<ProviderStatus["state"], { label: string; to
   off: { label: "Off", tone: "sky" },
   needs_setup: { label: "Not ready yet", tone: "sun" },
   unavailable: { label: "Not available yet", tone: "coral" },
+  /** §45.37: Amazon ended it (Nova Canvas, Nova Reel); the row offers its replacement */
+  ended: { label: "Ended by Amazon", tone: "coral" },
 };
 
 /**
- * Who makes a model and who runs it (§45.35 D8): "Anthropic on Amazon Bedrock", "Mistral on Amazon Bedrock"; just the
- * one name while they are the same (an older model list named Amazon Bedrock as the maker too).
+ * Who runs a model, in words (§45.37 G4, the API's hosts.host_label): "Amazon Bedrock", "Anthropic API",
+ * "ElevenLabs", or an OpenAI-compatible API's own address name ("api.example.com"). The API already sends the words;
+ * a host id (from an older answer or a model list) is turned into them here.
  */
-export function madeBy(m: Pick<ModelInfo, "provider" | "host">): string {
+export function hostName(host: string | null | undefined, baseUrl?: string | null, hostId?: string | null): string {
+  const id = hostIdOf(hostId ?? host);
+  if (id === "openai_compatible" && baseUrl) {
+    try {
+      return new URL(baseUrl).hostname;
+    } catch {
+      /* the label below */
+    }
+  }
+  const h = host?.trim() ?? "";
+  if (id !== "bedrock" && (!h || hostIdOf(h) === id) && !h.includes(".")) return HOST_LABEL[id];
+  return !h || h.toLowerCase() === "bedrock" ? "Amazon Bedrock" : h;
+}
+
+/**
+ * Who makes a model and who runs it (§45.35 D8): "Anthropic on Amazon Bedrock", "Mistral on Amazon Bedrock",
+ * "Meta on api.example.com" (§45.37 G4); just the one name while they are the same (an older model list named Amazon
+ * Bedrock as the maker too; an Anthropic model on the Anthropic API is "Anthropic API").
+ */
+export function madeBy(m: Pick<ModelInfo, "provider" | "host"> & { baseUrl?: string | null; hostId?: string | null }): string {
   const maker = m.provider.trim();
-  const host = m.host?.trim() ?? "";
-  if (!host || host.toLowerCase() === maker.toLowerCase()) return maker || host;
+  if (!m.host?.trim() && !m.hostId) return maker;
+  const host = hostName(m.host, m.baseUrl, m.hostId);
+  if (host.toLowerCase() === maker.toLowerCase() || host.toLowerCase() === `${maker.toLowerCase()} api`) return host;
   return maker ? `${maker} on ${host}` : host;
+}
+
+/**
+ * Who makes a picture, video or sound model and who runs it (§45.37 G1): like madeBy, but a maker that runs its own
+ * models says one name ("Amazon Polly", "ElevenLabs"), never "Amazon on Amazon Polly".
+ */
+export function makerWho(m: { provider: string; host: string; baseUrl?: string | null; hostId?: string | null }): string {
+  const host = m.host.trim();
+  const maker = m.provider.trim().toLowerCase();
+  if (host && maker && !/bedrock/i.test(host) && host.toLowerCase().startsWith(`${maker} `)) return host;
+  return madeBy({ provider: m.provider, host: m.host, baseUrl: m.baseUrl ?? null, hostId: m.hostId ?? null });
 }
 
 /** A model's status in a few words, for the end of a select option ("Claude Fable 5.1 · no access"). */

@@ -5,6 +5,7 @@
 //   stops the try (Stop) before Post is pressed. No puzzle solving, no anti-detection tricks, no typed passwords.
 // - Every setting is read back before Post. TikTok carries the last post's privacy over, so it is set every time.
 // - Success is a new row in Studio › Posts with this caption, never just a redirect.
+import { loginOutcome } from "./login.js";
 import { captionMatches, findExisting, findNewPost, normalize, postLink, videoId } from "./match.js";
 
 export const STUDIO = "https://www.tiktok.com/tiktokstudio";
@@ -30,9 +31,10 @@ export const REASONS = {
   slow: "TikTok took too long with the video. Try again later.",
   caption: "The caption didn't go in right on TikTok. Post it yourself for now.",
   privacy: (want) => `TikTok didn't keep "${want}" for who can watch. Post it yourself for now.`,
-  toggle: (name) => `TikTok didn't keep ${name} switched on. Post it yourself for now.`,
+  toggle: (name) => `TikTok didn't keep ${name} the way it should be. Post it yourself for now.`,
   toggleOff: (name) => `TikTok has ${name} turned off for your account. Turn it on in TikTok's settings, then tap Try again.`,
   noPost: "TikTok's Post button didn't work. Post it yourself for now.",
+  noLoginPage: "TikTok's login page looks different. Log in on your Mac.",
 };
 
 const PRIVACY_WORDS = {
@@ -87,13 +89,34 @@ async function check(page) {
 // Harmless pop-ups that are always safe to close: the cookie banner and the first-visit tours.
 const HARMLESS = [/^decline optional cookies$/i, /^got it$/i, /^skip$/i, /^not now$/i, /^close$/i, /^dismiss$/i];
 
+// TikTok's first-run questions, answered so nothing on his account changes (seen 22 Nov 2026 on the first upload).
+// "Turn on automatic content checks?" → Cancel: his settings stay as they are (he can turn it on in Profile ›
+// Settings). Anything else unknown still stops the try before Post.
+export const KNOWN_DIALOGS = [{ text: /turn on automatic content checks\?/i, button: /^cancel$/i }];
+
 async function dismissHarmless(page) {
-  for (const name of HARMLESS) {
-    const btn = page.getByRole("button", { name }).first();
-    if (await btn.isVisible().catch(() => false)) {
-      await btn.click({ timeout: 3000 }).catch(() => {});
-      await sleep(400);
+  for (let round = 0; round < 3; round++) {
+    let clicked = false;
+    for (const known of KNOWN_DIALOGS) {
+      const box = page.getByRole("dialog").filter({ hasText: known.text }).first();
+      if (await box.isVisible().catch(() => false)) {
+        const btn = box.getByRole("button", { name: known.button }).first();
+        if (await btn.isVisible().catch(() => false)) {
+          await btn.click({ timeout: 3000 }).catch(() => {});
+          clicked = true;
+          await sleep(600);
+        }
+      }
     }
+    for (const name of HARMLESS) {
+      const btn = page.getByRole("button", { name }).first();
+      if (await btn.isVisible().catch(() => false)) {
+        await btn.click({ timeout: 3000 }).catch(() => {});
+        clicked = true;
+        await sleep(400);
+      }
+    }
+    if (!clicked) return;
   }
 }
 
@@ -204,19 +227,20 @@ async function setCaption(page, caption) {
 }
 
 async function sectionOf(page, heading) {
-  const label = page.getByText(heading, { exact: false }).first();
+  const label = page.getByText(heading, { exact: true }).first();
   if (!(await label.isVisible().catch(() => false))) return null;
   // The heading's nearest box that also holds a control.
-  return label.locator("xpath=ancestor::*[.//button or .//*[@role='combobox'] or .//select][1]");
+  return label.locator("xpath=ancestor::*[.//*[@role='combobox'] or .//select][1]");
 }
 
 async function setPrivacy(page, privacy) {
   const want = privacyWord(privacy);
-  const section = await sectionOf(page, "Who can watch this video");
+  // Studio's heading was "Who can watch this video"; since late 2026 it is "Who can see this post".
+  const section = (await sectionOf(page, "Who can see this post")) || (await sectionOf(page, "Who can watch this video"));
   if (!section) throw new Stop(REASONS.noUpload);
   const current = normalize(await section.innerText().catch(() => ""));
   if (!current.includes(normalize(want)) || current.includes("only you") || current.includes("friends")) {
-    const control = section.locator("[role='combobox'], button, select").first();
+    const control = section.locator("[role='combobox'], select").first();
     await control.click();
     await sleep(500);
     const option = page.getByRole("option", { name: want, exact: true }).first();
@@ -233,31 +257,63 @@ async function setPrivacy(page, privacy) {
   }
 }
 
+/** The checkbox or switch whose own text (its nearest box with text) starts with ``name``; its id, or null. */
+async function switchId(page, name) {
+  return page.evaluate((want) => {
+    const norm = (t) => (t || "").trim().split("\n")[0].trim().toLowerCase();
+    for (const inp of document.querySelectorAll('input[type=checkbox], [role=switch], [role=checkbox]')) {
+      let el = inp;
+      for (let k = 0; k < 6 && el; k++, el = el.parentElement) {
+        const t = norm(el.innerText);
+        if (t) {
+          if (t === want.toLowerCase()) {
+            if (!inp.id) inp.id = `cf-switch-${Math.random().toString(36).slice(2)}`;
+            return inp.id;
+          }
+          break;
+        }
+      }
+    }
+    return null;
+  }, name);
+}
+
 async function setToggle(page, name, on) {
-  let box = page.getByRole("checkbox", { name, exact: true }).first();
-  if (!(await box.count().catch(() => 0))) {
+  let id = await switchId(page, name);
+  if (!id) {
     const more = page.getByText("Show more", { exact: true }).first();
     if (await more.isVisible().catch(() => false)) {
       await more.click();
-      await sleep(500);
+      await sleep(800);
     }
-    box = page.getByRole("checkbox", { name, exact: true }).first();
+    id = await switchId(page, name);
   }
-  if (!(await box.count().catch(() => 0))) {
-    // Some layouts put the label next to a plain input: find it through the label text.
-    box = page.locator(`label:has-text("${name}") input[type=checkbox], label:has-text("${name}") [role=checkbox]`).first();
-  }
-  if (!(await box.count().catch(() => 0))) throw new Stop(REASONS.noUpload);
+  if (!id) return false; // not on this page (the caller decides whether that is a stop)
+  const box = page.locator(`[id="${id}"]`);
   if (await box.isDisabled().catch(() => false)) {
-    if (on) throw new Stop(REASONS.toggleOff(name), { needsYou: true });
-    return;
+    if (on && !(await box.isChecked().catch(() => false))) throw new Stop(REASONS.toggleOff(name), { needsYou: true });
+    return true;
   }
   const isOn = async () => box.isChecked().catch(async () => (await box.getAttribute("aria-checked")) === "true");
   if ((await isOn()) !== on) {
     await box.click({ force: true });
     await sleep(400);
   }
-  if ((await isOn()) !== on) throw new Stop(on ? REASONS.toggle(name) : REASONS.toggle(name));
+  if ((await isOn()) !== on) throw new Stop(REASONS.toggle(name));
+  return true;
+}
+
+/** Comment, Duet and Stitch as the job says. Studio now has one "Reuse of content" switch for Duet and Stitch. */
+async function setInteractions(page, job) {
+  if (!(await setToggle(page, "Comment", job.comment !== false))) throw new Stop(REASONS.noUpload);
+  const reuse = job.duet !== false || job.stitch !== false;
+  if (!(await setToggle(page, "Reuse of content", reuse))) {
+    // An older layout with separate switches.
+    if (!(await setToggle(page, "Duet", job.duet !== false))) throw new Stop(REASONS.noUpload);
+    if (!(await setToggle(page, "Stitch", job.stitch !== false))) throw new Stop(REASONS.noUpload);
+  }
+  // Never limit who can see it (the owner's most reach): Audience control (18+) stays off.
+  await setToggle(page, "Audience control", false);
 }
 
 /**
@@ -281,14 +337,13 @@ export async function post(page, job, file, onStep, { dryRun = false } = {}) {
   await input.setInputFiles(file);
   await sleep(3000);
   await waitForUpload(page);
+  await dismissHarmless(page); // TikTok's first-run questions come up once the video is in
 
   await onStep("settings");
   await dismissHarmless(page);
   await setCaption(page, job.caption);
   await setPrivacy(page, job.privacy);
-  await setToggle(page, "Comment", job.comment !== false);
-  await setToggle(page, "Duet", job.duet !== false);
-  await setToggle(page, "Stitch", job.stitch !== false);
+  await setInteractions(page, job);
   await check(page);
   const dialog = await openDialogText(page);
   if (dialog) throw new Stop(REASONS.popup(dialog));
@@ -331,6 +386,42 @@ export async function find(page, job, sinceIds = []) {
   const rows = await listPosts(page);
   const found = sinceIds.length ? findNewPost(rows, job.caption, sinceIds) : findExisting(rows, job.caption);
   return found ? postLink(found.href) : null;
+}
+
+export const LOGIN_URL = "https://www.tiktok.com/login/phone-or-email/email?lang=en";
+
+/**
+ * Logs in with the saved login (login.js). ``onTry`` is called right before the password is sent (it counts the
+ * try). Returns loginOutcome's answer: "ok", "needs_you" (a code, a puzzle or a new-device check), "refused" or
+ * "waiting" (no answer in a minute). The page stays as it is, so a code page can be handed to the owner.
+ */
+export async function passwordLogin(page, login, { onTry }) {
+  await page.goto(LOGIN_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+  await sleep(1500);
+  await dismissHarmless(page);
+  if (await loggedIn(page)) return "ok";
+  const user = page.locator('input[name="username"], input[placeholder*="email or username" i], input[type="email"]').first();
+  const pass = page.locator('input[type="password"]').first();
+  try {
+    await user.waitFor({ state: "visible", timeout: 20_000 });
+    await pass.waitFor({ state: "visible", timeout: 5_000 });
+  } catch {
+    throw new Stop(REASONS.noLoginPage, { needsYou: true });
+  }
+  const button = page.locator('button[data-e2e="login-button"], button[type="submit"]').first();
+  const before = await visibleText(page);
+  await onTry();
+  await user.fill(login.username);
+  await pass.fill(login.password);
+  await button.click();
+  const until = Date.now() + 60_000;
+  while (Date.now() < until) {
+    await sleep(2000);
+    const outcome = loginOutcome({ loggedIn: await loggedIn(page), text: await visibleText(page), before, url: page.url() });
+    if (outcome !== "waiting") return outcome;
+  }
+  return "waiting";
 }
 
 export { captionMatches, videoId };

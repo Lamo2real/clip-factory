@@ -1,10 +1,10 @@
 // Settings › Posting › Your Mac posts TikTok (docs/CONTRACTS.md §47.4): the switch and its line, when the Mac last
-// checked in and how many clips wait for it, Send these to my Mac (the clips that show Post it yourself), and how to
-// stop it. GET /v1/tiktok/mac on open, on focus, every 60 s while open and after a post changes (its live news).
+// checked in and how many clips wait for it, Send these to my Mac (the clips that show Post it yourself), the TikTok
+// login kept on the Mac with Change and Forget (§47.8), and how to stop it. GET /v1/tiktok/mac on open, on focus, every 60 s while open and after a post changes (its live news).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
-import type { Clip, Post, TikTokMacStatus } from "../../api/types.ts";
+import type { Clip, MacHelper, MacLoginAction, Post, TikTokMacStatus } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { Button, ErrorPanel, Skeleton } from "../../components/ui.tsx";
@@ -14,6 +14,9 @@ import { useAction } from "../../lib/motion.ts";
 import {
   canSendToMac,
   helperLine,
+  loginLine,
+  loginRequestLine,
+  MAC_LOGIN_FORGET_CONFIRM,
   MAC_OFF_LINE,
   MAC_ON_LINE,
   MAC_SEND_CONFIRM,
@@ -22,7 +25,7 @@ import {
   sendableLine,
   sendLots,
   sentLine,
-  waitingLine,
+  whenLine,
 } from "../../lib/tiktokMac.ts";
 import { Apple, AppleSwitch, Panel } from "./parts.tsx";
 import "../../styles/autopost.css";
@@ -146,11 +149,85 @@ export function SendToMac({ clipIds, onSent }: { clipIds: readonly string[]; onS
   );
 }
 
+/** §47.8: Change TikTok login / Forget TikTok login. The Mac does it the next time it checks in. */
+function MacLogin({ helper, onAsked }: { helper: MacHelper; onAsked: () => void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState<MacLoginAction | null>(null);
+  const [asking, setAsking] = useState(false);
+  const line = loginLine(helper);
+  const next = loginRequestLine(helper);
+
+  async function ask(action: MacLoginAction) {
+    setBusy(action);
+    try {
+      await api().tiktokMacLogin(action);
+      toast.success(action === "change" ? "Your Mac asks for it in a minute." : "Your Mac forgets it in a minute.", { group: "tiktok-mac" });
+      setAsking(false);
+      onAsked();
+    } catch (e) {
+      toast.error(friendlyMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="autopost__where">
+      {line ? <p className="autopost__line" data-mac="login">{line}</p> : null}
+      {next ? (
+        <p className="autopost__line" role="status">
+          {next}
+        </p>
+      ) : null}
+      {asking ? (
+        <div className="mac-send" role="group" aria-label="Forget TikTok login">
+          <p className="mac-send__confirm">{MAC_LOGIN_FORGET_CONFIRM}</p>
+          <div className="mac-send__buttons">
+            <Button variant="primary" loading={busy === "forget"} onClick={() => void ask("forget")}>
+              Yes, forget it
+            </Button>
+            <Button variant="ghost" disabled={busy !== null} onClick={() => setAsking(false)}>
+              Not now
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="mac-send__buttons">
+          <Button variant="glass" icon="monitor" loading={busy === "change"} disabled={busy !== null} onClick={() => void ask("change")}>
+            Change TikTok login
+          </Button>
+          {helper.login !== "none" ? (
+            <Button variant="ghost" disabled={busy !== null} onClick={() => setAsking(true)}>
+              Forget TikTok login
+            </Button>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TikTokMacBranch() {
   const { me, saveSettings, refresh } = useSession();
   const toast = useToast();
   const on = macOn(me?.settings);
   const { status, error, reload } = useTikTokMac(true);
+  // When the Mac posts: with auto-posting (its next run), and at once on Upload.
+  const [nextRunAt, setNextRunAt] = useState<string | null>(null);
+  const autoOn = me?.settings?.autoPost?.on === true;
+  useEffect(() => {
+    if (!on || !autoOn) return;
+    let live = true;
+    api()
+      .autoPostStatus()
+      .then((a) => {
+        if (live) setNextRunAt(a.nextRunAt);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [on, autoOn, status]);
   const [ids, setIds] = useState<string[] | null>(null);
   const readSendable = useCallback(() => {
     sendable()
@@ -202,7 +279,11 @@ export function TikTokMacBranch() {
               <p className="autopost__line" data-mac="helper">
                 {helperLine(status.helper)}
               </p>
-              {on ? <p className="autopost__line">{waitingLine(waiting)}</p> : null}
+              {on ? (
+                <p className="autopost__line" data-mac="when">
+                  {whenLine(autoOn, nextRunAt, waiting)}
+                </p>
+              ) : null}
             </div>
           ) : error ? (
             <ErrorPanel message={error} onRetry={() => void reload()} />
@@ -211,6 +292,14 @@ export function TikTokMacBranch() {
           )}
         </Apple>
       </Panel>
+
+      {status?.helper ? (
+        <Panel>
+          <Apple id="tiktok-mac-login" wide>
+            <MacLogin helper={status.helper} onAsked={() => void reload()} />
+          </Apple>
+        </Panel>
+      ) : null}
 
       {on ? (
         <Panel>

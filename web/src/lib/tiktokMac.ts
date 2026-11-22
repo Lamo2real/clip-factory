@@ -141,6 +141,35 @@ export function helperLine(helper: MacHelper | null, now: number = Date.now()): 
   return `Your Mac checked in ${timeWords(helper.seenAt, now)}.`;
 }
 
+// §47.8: the TikTok login on the owner's Mac (kept in its Keychain; never in Clip Factory).
+export const MAC_LOGIN_SAVED = "Your TikTok login is kept in your Mac's Keychain, so your Mac logs back in to TikTok by itself.";
+export const MAC_LOGIN_NONE = "No TikTok login is kept on your Mac. If TikTok logs your Mac out, you log in again on the Mac.";
+export const MAC_LOGIN_FORGET_CONFIRM = "Forget it? Then your Mac can't log back in to TikTok by itself.";
+
+/** The login line, or null for a Mac helper from before it said (§47.8). */
+export function loginLine(helper: MacHelper | null): string | null {
+  if (!helper?.login) return null;
+  return helper.login === "saved" ? MAC_LOGIN_SAVED : MAC_LOGIN_NONE;
+}
+
+/** What happens next after Change or Forget. */
+export function loginRequestLine(helper: MacHelper | null): string | null {
+  const req = helper?.loginRequest;
+  if (!req) return null;
+  return req.action === "change"
+    ? "Your Mac asks for the new login the next time it checks in, within a minute."
+    : "Your Mac forgets the login the next time it checks in, within a minute.";
+}
+
+/**
+ * When the Mac posts (the owner, 22 Nov: TikTok follows auto-posting, and his Upload goes at once): "Posts with
+ * auto-posting · next Sun 22:00 · 14 waiting", or "Posts when you tap Upload · 14 waiting" while auto-posting is off.
+ */
+export function whenLine(autoOn: boolean, nextRunAt: string | null | undefined, waiting: number, now: number = Date.now()): string {
+  const lead = autoOn ? `Posts with auto-posting${nextRunAt ? ` · next ${timeWords(nextRunAt, now)}` : ""}` : "Posts when you tap Upload";
+  return `${lead} · ${waiting} waiting`;
+}
+
 /** "{n} waiting for your Mac". */
 export function waitingLine(n: number): string {
   return `${n} waiting for your Mac`;

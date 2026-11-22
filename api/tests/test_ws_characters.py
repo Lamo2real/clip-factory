@@ -32,10 +32,9 @@ def wired(app: App, agentcore: FakeAgentCore, s3_client: FakeS3) -> None:
 
 
 def _turn_on_pictures(call: Call) -> None:
+    """Picks Stability AI as the picture maker (§45.37 G7: Amazon Nova Canvas has ended)."""
     version = call("GET", BASE)[1]["workspace"]["version"]
-    assert (
-        call("PATCH", BASE, {"version": version, "configuration": {"providers": {"images": "nova-canvas"}}})[0] == 200
-    )
+    assert call("PATCH", BASE, {"version": version, "configuration": {"providers": {"images": "stability"}}})[0] == 200
 
 
 def test_create_list_get_and_put_with_a_version(call: Call) -> None:
@@ -194,6 +193,8 @@ def test_portrait_needs_ai_pictures_on(call: Call, agentcore: FakeAgentCore, tab
     )
     assert job["steps"] == [{"key": "portrait", "label": "Draw the picture", "status": "pending"}]
     assert job["configuration"]["run"] == ["portrait"]
+    # the picked picture maker and the model it uses (null: its first that has not ended), §45.37 G1, G7
+    assert job["meta"]["providers"] == {"images": "stability", "imageModel": "stable-image-core"}
     sent = agentcore.calls[-1]
     assert sent["payload"] == {
         "action": "process_portrait",
@@ -205,6 +206,38 @@ def test_portrait_needs_ai_pictures_on(call: Call, agentcore: FakeAgentCore, tab
     assert re.fullmatch(rf"cfstory-{job['jobId']}-[a-z0-9]{{8}}", sent["runtimeSessionId"])
     # A second tap while it runs is refused.
     assert call("POST", f"{BASE}/characters/{cid}/portrait")[0] == 409
+
+
+def test_an_ended_picture_maker_is_never_called_for_a_portrait(
+    call: Call, store: db.Store, agentcore: FakeAgentCore, table: FakeTable
+) -> None:
+    """§45.37 G7: a workspace that still has Amazon Nova Canvas picked (from before it ended) is refused with the
+    ended sentence and no call; picking it again is refused the same way, and nothing switches by itself."""
+    cid = call("POST", f"{BASE}/characters", character_body())[1]["character"]["characterId"]
+    store.update(f"USER#{USER}#WSREG", "WS#stories", {"configuration": {"providers": {"images": "nova-canvas"}}})
+    ended = (
+        "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Lamo Stories › "
+        "Settings › Video."
+    )
+    calls = len(agentcore.calls)
+    status, body = call("POST", f"{BASE}/characters/{cid}/portrait")
+    assert (status, body["error"]["message"]) == (409, ended)
+    assert len(agentcore.calls) == calls
+    assert not [i for i in table.all() if str(i["sk"]).startswith("PJOB#")]
+    workspace = call("GET", BASE)[1]["workspace"]
+    assert workspace["configuration"]["providers"]["images"] == "nova-canvas"  # never swapped by itself
+    status, body = call(
+        "PATCH",
+        BASE,
+        {"version": workspace["version"], "configuration": {"providers": {"video": "builtin-2d"}}},
+    )
+    assert status == 200, body  # another setting saves; the old pick is not looked at again
+    status, body = call(
+        "PATCH",
+        BASE,
+        {"version": body["workspace"]["version"], "configuration": {"providers": {"imageModel": "nova-canvas"}}},
+    )
+    assert status == 400
 
 
 def test_portrait_without_the_agent_fails_at_once(app: App, call: Call, s3_client: FakeS3) -> None:

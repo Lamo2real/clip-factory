@@ -45,6 +45,9 @@ class Services:
     ffprobe: str = "ffprobe"
     heartbeat_s: float = 20.0  # ≤ 30 s for tasks and chat turns, ≤ 60 s for jobs (§45.9.1, §45.11.1)
     stream_every_s: float = 0.5  # the chat's text is written at most this often (§45.27)
+    # Check models' access check for the makers' models (§45.37 G2): a ``maker_check.MakerChecker``; found on first
+    # use from the shared services when not given (tests give a fake).
+    maker_checker: Any = None
 
 
 _installed: Services | None = None

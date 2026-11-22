@@ -1,19 +1,29 @@
 // Prices for the picture and video makers (docs/CONTRACTS.md §45.34 "Provider usage and cost", §45.29 Video
-// "provider cost where known"). Neither has a known list price (stories/config/models.json: pricing null), so each
+// "provider cost where known"). None has a known list price (stories/config/models.json: price null), so each
 // starts at "No price set" with a form. The price is the owner's price for one unit, saved in the AI configuration
-// (PUT …/ai `prices`, by provider id, on its version) as a Price with `perUnit` and its `unit` (Nova Canvas by the
-// picture, Nova Reel by the second of video) and the token prices 0; the usage card's cost is units × perUnit.
+// (PUT …/ai `prices`, by provider id, on its version) as a Price with `perUnit` and its `unit` (pictures by the
+// picture, video by the second) and the token prices 0; the usage card's cost is units × perUnit.
 import { useState } from "react";
 import { useToast } from "../../components/Toasts.tsx";
 import type { Price } from "../api/types.ts";
-import modelsFile from "../../../../stories/config/models.json";
 import { Btn, cheer, Chip, money, SetSelect } from "./bits.tsx";
 import type { useAi } from "./data.ts";
 
-/** The makers that can carry a price, with the unit their use is counted in. */
-export const PRICED_MAKERS: { id: "nova-canvas" | "nova-reel"; label: string; unit: "image" | "second"; per: string; units: string; example: string }[] = [
-  { id: "nova-canvas", label: modelsFile.imageModel.label, unit: "image", per: "a picture", units: "picture", example: "0.04" },
-  { id: "nova-reel", label: modelsFile.videoModel.label, unit: "second", per: "a second of video", units: "second", example: "0.08" },
+/**
+ * The makers that can carry a price, with the unit their use is counted in (the API's ai_config.PRICE_PROVIDERS):
+ * Stability AI by the picture and Luma AI Ray2 by the second of video (§45.37), the sound makers by the second of
+ * sound (ElevenLabs, your own sound model) or the character spoken (Amazon Polly), and the two Amazon ended on 30 Sep
+ * 2026, kept for what they made before.
+ */
+export type PricedUnit = "image" | "second" | "character";
+export const PRICED_MAKERS: { id: "stability" | "luma-ray" | "elevenlabs" | "own-sound" | "polly" | "nova-canvas" | "nova-reel"; label: string; unit: PricedUnit; per: string; units: string; example: string }[] = [
+  { id: "stability", label: "Stability AI pictures", unit: "image", per: "a picture", units: "picture", example: "0.04" },
+  { id: "luma-ray", label: "Luma AI Ray2", unit: "second", per: "a second of video", units: "second", example: "0.75" },
+  { id: "elevenlabs", label: "ElevenLabs sound effects and music", unit: "second", per: "a second of sound", units: "second", example: "0.002" },
+  { id: "own-sound", label: "Your own sound model", unit: "second", per: "a second of sound", units: "second", example: "0.002" },
+  { id: "polly", label: "A spoken voice (Amazon Polly)", unit: "character", per: "a character spoken", units: "character", example: "0.000016" },
+  { id: "nova-canvas", label: "Amazon Nova Canvas", unit: "image", per: "a picture", units: "picture", example: "0.04" },
+  { id: "nova-reel", label: "Amazon Nova Reel 1.1", unit: "second", per: "a second of video", units: "second", example: "0.08" },
 ];
 
 /** The highest price for one picture or one second the form takes (Nova's prices are a few cents). */
@@ -26,7 +36,7 @@ export function unitPrice(p: Price): number {
 }
 
 /** The stored price for one unit (§45.34): perUnit and its unit, the token prices 0. */
-export function makerPrice(perUnit: number, currency: string, unit: "image" | "second", per: string): Price {
+export function makerPrice(perUnit: number, currency: string, unit: PricedUnit, per: string): Price {
   return {
     inputPer1M: 0,
     outputPer1M: 0,

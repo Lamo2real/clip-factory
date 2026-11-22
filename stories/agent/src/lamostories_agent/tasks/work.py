@@ -37,6 +37,7 @@ INPUT_KEYS = (
     "storyId",
     "models",
     "characterId",
+    "makers",
 )
 KIND_AGENT = {
     "brainstorm": "creative_director",

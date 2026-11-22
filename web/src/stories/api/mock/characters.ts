@@ -234,6 +234,8 @@ export function designFromWords(words: string, withPicture: boolean, salt: numbe
 
 /** The sentence for a portrait while AI pictures are off (CONTRACTS §45.34: it names Settings › Video › Picture maker). */
 export const PICTURES_OFF = "AI pictures are off. Turn them on in Lamo Stories › Settings › Video › Picture maker.";
+/** An older pick of Amazon Nova Canvas, which Amazon ended (the API's sentence, §45.37). */
+export const NOVA_CANVAS_ENDED = "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Lamo Stories › Settings › Video.";
 
 /**
  * The practice character agent redesigning a saved character (§45.34): it starts from the character as it is (CURRENT),
@@ -427,8 +429,11 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
     async makePortrait(ws, id) {
       guardWs(store, ws);
       const c = find(store, ws, id);
-      if ((config(store, ws).providers?.images ?? "builtin-rig") !== "nova-canvas")
-        fail(409, "conflict", PICTURES_OFF);
+      // §45.37: AI portraits come from Stability AI or the owner's own picture model; Amazon ended Nova Canvas, so an
+      // older pick of it is refused with the API's sentence (a call could only fail).
+      const images = config(store, ws).providers?.images ?? "builtin-rig";
+      if (images === "nova-canvas") fail(409, "conflict", NOVA_CANVAS_ENDED);
+      if (images !== "stability" && images !== "own-images") fail(409, "conflict", PICTURES_OFF);
       await delay(160);
       const at = iso();
       const job: ProductionJob = {
@@ -441,7 +446,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         steps: [{ key: "portrait", label: "Draw the picture", status: "pending" }],
         progress: 0,
         configuration: { run: ["portrait"], from: null, sceneIds: null, note: null },
-        meta: { writerModel: null, engineVersion: null, seed: 7, scriptVersion: null, targetSec: null, actualSec: null, safetyTopicId: null, providers: { images: "nova-canvas" }, models: [] },
+        meta: { writerModel: null, engineVersion: null, seed: 7, scriptVersion: null, targetSec: null, actualSec: null, safetyTopicId: null, providers: { images }, models: [] },
         createdAt: at,
         updatedAt: at,
       };

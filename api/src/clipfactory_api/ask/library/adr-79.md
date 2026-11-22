@@ -12,3 +12,6 @@
   limits follow the app chosen.
 - **Consequences.** Fully separate apps keep every Clip Factory authorization untouched and cost the owner the
   platforms' setup and reviews once; the quick choice shares quotas and review state and carries the Meta warning.
+- **Amended by ADR-84 (2026-11-22).** The shared choice reads "Share Clip Factory's app" and is protected: Lamo
+  Stories counts in its own counter and uses only what Clip Factory's reserve leaves; a post with no room waits
+  (§45.37 G6). It never means sharing an account (G8).

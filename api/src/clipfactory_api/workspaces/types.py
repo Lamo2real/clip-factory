@@ -62,6 +62,11 @@ ONBOARD_SK: Final = "ONBOARD"  # an exact sort key
 AICONFIG_SK: Final = "AICONFIG"  # an exact sort key
 MODELDEF_SK: Final = "MODELDEF#"  # MODELDEF#{key}: a reasoning model the owner added (§45.34 "Adding models")
 CHECKLOCK_SK: Final = "CHECKLOCK#"  # CHECKLOCK#{providerId}: the one "Try it" running (``checkJobId``, §45.35 D2)
+# §45.37 G2: a picture, video or sound model the owner added (MAKERDEF#{key}) and its access check (MAKERSTATUS#{key}).
+MAKERDEF_SK: Final = "MAKERDEF#"
+MAKERSTATUS_SK: Final = "MAKERSTATUS#"
+# §45.37 G6: what Lamo Stories used of Clip Factory's shared developer app, per platform and window (its own counters).
+SHAREUSE_SK: Final = "SHAREUSE#"
 ITEM_PREFIXES: Final = (
     IDEA_SK,
     CHAR_SK,
@@ -86,6 +91,9 @@ ITEM_PREFIXES: Final = (
     AICONFIG_SK,
     MODELDEF_SK,
     CHECKLOCK_SK,
+    MAKERDEF_SK,
+    MAKERSTATUS_SK,
+    SHAREUSE_SK,
 )
 
 # Item `type` values (never "job", "clip", "post", "account", "setup": Lamo Clips readers filter on those).
@@ -113,6 +121,9 @@ TYPE_ONBOARD: Final = "ws_onboard"
 TYPE_AICONFIG: Final = "ws_aiconfig"
 TYPE_MODELDEF: Final = "ws_modeldef"
 TYPE_CHECKLOCK: Final = "ws_checklock"
+TYPE_MAKERDEF: Final = "ws_makerdef"
+TYPE_MAKERSTATUS: Final = "ws_makerstatus"
+TYPE_SHAREUSE: Final = "ws_shareuse"
 
 
 def registry_pk(user_id: str) -> str:
@@ -144,7 +155,8 @@ def social_account_id(workspace_id: str, platform: str) -> str:
 
 WS_SECRET_PREFIX: Final = "cf-prod/workspaces/"  # noqa: S105 (a name prefix, not a secret); never under platforms/
 SECRET_KINDS: Final = ("app", "token", "pending")  # app: Lamo Stories' own developer app keys (§45.30)
-PROVIDER_ID: Final = re.compile(r"^[a-z0-9][a-z0-9-]{1,39}$")
+# A provider id (§45.31) or a keyed host id (§45.37 G4: ``anthropic``, ``openai_compatible``, ``elevenlabs``).
+PROVIDER_ID: Final = re.compile(r"^[a-z0-9][a-z0-9_-]{1,39}$")
 # Lamo Stories' OAuth state items use their own key prefix, so its roles never reach Clip Factory's OAUTH#{nonce}.
 WS_OAUTH_PK_PREFIX: Final = "OAUTH#ws."
 # Platforms whose shared-app choice is allowed (§45.30): Meta always uses Lamo Stories' own app.
@@ -162,6 +174,19 @@ def rate_pk(workspace_id: str, platform: str) -> str:
     if platform not in PLATFORMS:
         raise ValueError(f"unknown platform: {platform}")
     return f"RATE#WS#{workspace_id}#{platform}"
+
+
+# §45.37 G6: the one counter of what **all** of Lamo Stories (every owner, every stories workspace) used of Clip
+# Factory's shared developer app: the app's quotas are one per app, as Clip Factory's own RATE#{platform} are. Never a
+# workspace id ("~" is in no WORKSPACE_ID), never one of Clip Factory's RATE#{platform} keys.
+SHARED_APP_KEY: Final = "~shared"
+
+
+def shared_rate_pk(platform: str) -> str:
+    """``RATE#WS#~shared#{platform}``: Lamo Stories' one shared-app counter partition per platform."""
+    if platform not in PLATFORMS:
+        raise ValueError(f"unknown platform: {platform}")
+    return f"RATE#WS#{SHARED_APP_KEY}#{platform}"
 
 
 def provider_secret_name(prefix: str, workspace_id: str, provider_id: str) -> str:

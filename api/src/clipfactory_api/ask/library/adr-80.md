@@ -10,3 +10,5 @@
 - **Decision.** (CONTRACTS §45.31) Option 3.
 - **Consequences.** Videos are made today with the built-in animator; AI footage arrives when the owner allows the US
   bucket and enables the model; no external provider is claimed as working until one is added and checked live.
+- **Amended by ADR-84 (2026-11-22).** Amazon ended Nova Reel and Nova Canvas on 2026-09-30: they read ended, and
+  Luma AI Ray2 (us-west-2, behind `stories_video_west_bucket`) and Stability AI are the AI makers (§45.37 G7).

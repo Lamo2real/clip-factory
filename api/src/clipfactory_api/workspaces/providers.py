@@ -1,27 +1,39 @@
-"""Who makes what (docs/CONTRACTS.md §45.11.6, §45.31, ADR-75, ADR-80): a static mirror of the agent's provider
-registry (``stories/agent/src/lamostories_agent/providers.py``), so ``GET …/providers`` answers without the agent.
+"""Who makes what (docs/CONTRACTS.md §45.11.6, §45.31, §45.37 G1–G3 and G7, ADR-75, ADR-80): a static mirror of the
+agent's provider registry (``stories/agent/src/lamostories_agent/providers.py``), so ``GET …/providers`` answers
+without the agent. Each maker row also lists its models (``models``: ``makers.model_info``), whether it is the
+workspace's pick (``picked``) and the model it uses (``model``).
 
-States, as §45.11.6's table gives them:
+States:
 
 * the built-in animator, sounds and characters (``builtin-2d``, ``builtin-synth``, ``builtin-rig``) are code in Lamo
   Stories' own image with nothing to set up: ``on`` (picked or not), with ``checkedAt`` the last time a story job's
   step made by it finished with real work; a later failure the agent recorded (``PROVIDER#``) shows instead;
-* the writer (``bedrock-claude``) is ``on`` only after a model answered: a ``MODELSTATUS#`` item with ``ok`` (Check
-  models, or any real call) or a finished storyboard step; until then it says to tap Check models;
-* Amazon Nova Canvas is ``off`` until the owner picks it, then ``needs_setup`` until the agent's real call answers
-  (``PROVIDER#{kind}#{id}`` with ``state = on`` and ``checkedAt``);
-* Amazon Nova Reel is built but ``needs_setup`` (its United States bucket is switched off), picked or not, until a
-  ``PROVIDER#`` record says ``on``: picking it never makes it look ready. It makes cut-aways (scenes with no
-  character); its line says what is missing and that the owner picks Built-in animation or finishes its setup, never
-  that something else makes the videos (§45.34).
+* the writer (``bedrock-claude``) is ``on`` only after a model answered (a ``MODELSTATUS#`` with ``ok``) or a
+  finished storyboard step;
+* Amazon Nova Canvas and Amazon Nova Reel are ``ended`` (AWS ended both on 2026-09-30): "Ended by Amazon on 30 Sep
+  2026" with the one-tap ``replacement`` (Stability AI, Luma AI Ray2); never the default, never called, never
+  switched away from by itself;
+* Luma AI Ray2 (``luma-ray``, US Oregon) is built but ``needs_setup`` until a ``PROVIDER#animation#luma-ray`` record
+  says ``on`` (its "Try it" shot): it needs the off-by-default United States (Oregon) bucket and model access;
+* your own video model (``own-video``) is the same: it writes its shots to the same off-by-default bucket, so only
+  its own "Try it" shot (``PROVIDER#animation#own-video``) makes it ``on``, never the free access check;
+* every other AI maker (``stability``, ``own-images``, ``polly``, ``elevenlabs``, ``own-sound``) is ``off`` until the
+  owner picks it, then ``needs_setup`` until a real call (``PROVIDER#``) or the access check of the model it uses
+  (``MAKERSTATUS#`` ``ok``, Check models) says it works; ElevenLabs first needs the owner's key, an own maker first
+  needs a model, and an own model on a keyed host its key. Amazon Polly is the only maker that speaks words and is
+  opt-in only.
 
-Nothing is shown as working because it was configured. **A provider that is not ready** (§45.34, §45.35 D3): while
-``configuration.providers.video`` names Nova Reel and its state is not ``on``, a story's create, produce and changes
-answer 409 with ``not_ready``'s sentence; nothing switches to another provider by itself (the agent's
-``ProviderUnavailable`` is the second guard, with the same words). Pictures never stop a video: the picture maker
-(Nova Canvas) makes portraits only, and its own state gates those alone. **Try it** (D2): ``POST
-…/providers/nova-reel/check`` starts a one-step ``provider_check`` job (one 6-second test shot), never behind that
-guard, so Nova Reel can become ready without making a video first.
+A proof is of the model it was made with: a ``PROVIDER#`` record naming another ``model`` than the one in use, or
+older than the owner's last change of his own model in use, proves nothing, and a newer failed access check of the
+model in use wins over an older ``on``.
+
+Nothing is shown as working because it was configured. **A maker that is not ready** (§45.34, §45.35 D3): a story's
+create, produce and changes answer 409 with ``not_ready``'s sentence while the picked video maker is not ``on`` (or
+ended), or the picked sound maker still lacks what only the owner can give (ElevenLabs' key, an own sound model);
+nothing switches to another maker by itself (the agent's ``ProviderUnavailable`` is the second guard). Pictures
+never stop a video: the picture maker makes portraits only, and ``portrait_problem`` gates those alone. **Try it**
+(D2, G7): ``POST …/providers/{luma-ray|own-video}/check`` starts a one-step ``provider_check`` job (one 5-second
+shot), never behind that guard, so the maker can become ready without making a video first.
 
 ``StoriesConfig.providers`` names the kinds ``images``, ``video`` and ``audio``; ``ProviderStatus.kind`` calls the
 video kind ``animation`` (the registry's name).
@@ -33,10 +45,12 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Final
 
+from . import makers
 from . import types as ws
 
 KINDS: Final = ("writer", "images", "animation", "audio")
 CONFIG_KEY: Final = {"images": "images", "animation": "video", "audio": "audio"}
+MAKER_KIND: Final = {"images": "image", "animation": "video", "audio": "audio"}  # → makers.KINDS
 
 
 @dataclass(frozen=True)
@@ -47,8 +61,16 @@ class Provider:
     builtin: bool
     line_on: str
     line_unchecked: str
-    off_until_picked: bool = False  # only Nova Canvas: off until the owner picks it (§45.11.6)
+    off_until_picked: bool = False  # off until the owner picks it (§45.11.6, G7)
+    key_host: str | None = None  # the keyed host whose key it needs (G4: ElevenLabs)
+    own: bool = False  # the owner's own models (G2): it needs one first
 
+
+LUMA_NOT_READY: Final = (
+    "Luma AI Ray2 is not ready yet: it needs a storage bucket in the United States (Oregon), which is switched off, "
+    "and Luma AI Ray2 turned on for your account. Pick Built-in animation in Settings › Video, or finish its setup."
+)
+POLLY_LINE: Final = "Adds words spoken aloud. Your videos are made without a voice unless you pick this."
 
 REGISTRY: Final[tuple[Provider, ...]] = (
     Provider(
@@ -72,9 +94,8 @@ REGISTRY: Final[tuple[Provider, ...]] = (
         "nova-canvas",
         "Amazon Nova Canvas (AI pictures)",
         False,
-        "Makes AI portraits of your characters. They show in the app and the Library only, never in a posted video.",
-        "Make one portrait to check it. If Bedrock says it is not enabled, turn on Amazon Nova Canvas in the Bedrock "
-        "console in Europe (Ireland).",
+        "Made AI portraits of your characters.",
+        "Ended by Amazon on 30 Sep 2026.",
         off_until_picked=True,
     ),
     Provider(
@@ -90,11 +111,8 @@ REGISTRY: Final[tuple[Provider, ...]] = (
         "nova-reel",
         "Amazon Nova Reel 1.1 (AI video)",
         False,
-        "Makes 6-second AI shots for scenes with no characters (cut-aways). Videos that use them are posted with the "
-        "platforms' AI labels.",
-        "Amazon Nova Reel is not ready yet: it needs a storage bucket in the United States (N. Virginia), which is "
-        "switched off, and Amazon Nova Reel turned on for your account. Pick Built-in animation in Settings › Video, "
-        "or finish its setup.",
+        "Made 6-second AI shots for scenes with no characters (cut-aways).",
+        "Ended by Amazon on 30 Sep 2026.",
     ),
     Provider(
         "audio",
@@ -104,34 +122,162 @@ REGISTRY: Final[tuple[Provider, ...]] = (
         "Built in: makes every sound effect, character noise and music track itself. Nothing to set up.",
         "",
     ),
+    Provider(
+        "images",
+        "stability",
+        "Stability AI pictures",
+        False,
+        "Makes AI portraits of your characters with Stability AI on Amazon Bedrock. Runs in the US (Oregon). They "
+        "show in the app and the Library only, never in a posted video.",
+        "Make one portrait, or tap Check models, to check it. If Bedrock says no, turn on the Stability AI model in "
+        "the Bedrock console in US West (Oregon).",
+        off_until_picked=True,
+    ),
+    Provider(
+        "images",
+        "own-images",
+        "Your own picture model",
+        False,
+        "Makes AI portraits of your characters with the picture model you added. They show in the app and the "
+        "Library only, never in a posted video.",
+        "Tap Check models to see if your picture model works.",
+        off_until_picked=True,
+        own=True,
+    ),
+    Provider(
+        "animation",
+        "luma-ray",
+        "Luma AI Ray2 (AI video)",
+        False,
+        "Makes 5-second AI shots for scenes with no characters (cut-aways). Runs in the US (Oregon). Videos that use "
+        "them are posted with the platforms' AI labels.",
+        LUMA_NOT_READY,
+    ),
+    Provider(
+        "animation",
+        "own-video",
+        "Your own video model",
+        False,
+        "Makes AI shots for scenes with no characters (cut-aways) with the video model you added. Videos that use "
+        "them are posted with the platforms' AI labels.",
+        "Tap Check models to see if your video model works.",
+        off_until_picked=True,
+        own=True,
+    ),
+    Provider(
+        "audio",
+        "polly",
+        "A spoken voice (Amazon Polly)",
+        False,
+        POLLY_LINE,
+        "Tap Check models to see if Amazon Polly works for you. " + POLLY_LINE,
+        off_until_picked=True,
+    ),
+    Provider(
+        "audio",
+        "elevenlabs",
+        "ElevenLabs sound effects and music",
+        False,
+        "Makes the sound effects and an instrumental music bed with your ElevenLabs account. Never a voice.",
+        "Key saved. Tap Check models to see if ElevenLabs works.",
+        off_until_picked=True,
+        key_host="elevenlabs",
+    ),
+    Provider(
+        "audio",
+        "own-sound",
+        "Your own sound model",
+        False,
+        "Makes the sound effects and the music bed with the sound model you added. Never a voice.",
+        "Tap Check models to see if your sound model works.",
+        off_until_picked=True,
+        own=True,
+    ),
 )
+KIND_WORDS: Final = {"images": "Picture maker", "animation": "Video maker", "audio": "Sound maker"}
 OFF_LINE: Final = "Off. Pick it in Lamo Stories › Settings › Video › Picture maker to use it."
 WRITER_FAILED: Final = "No model has answered yet. Tap Check models in Lamo Stories › Settings › AI to see why."
 PROOF_STEP: Final = {"writer": "storyboard", "images": "scenes", "animation": "animation", "audio": "sound"}
 NOTHING_MADE: Final = "Nothing changed"  # the agent's message for a step that had nothing to (re)make
 JOBS_READ: Final = 200  # the newest story jobs looked at for proof
+NEEDS_KEY: Final = {"elevenlabs": "Paste your ElevenLabs key in Lamo Stories › Settings › Video to use it."}
+KEY_PLACE: Final = {
+    "elevenlabs": "Lamo Stories › Settings › Video",
+    "openai_compatible": "Lamo Stories › Settings › AI › Provider keys",
+    "anthropic": "Lamo Stories › Settings › AI › Provider keys",
+}
 
 
-# What a story's create, produce and changes say while the picked maker is not ready (§45.34).
+def needs_key(host: str) -> str:
+    """What a maker whose model runs on a keyed host says while that host has no saved key."""
+    from .hosts import LABEL
+
+    return f"Paste your {LABEL.get(host, host)} key in {KEY_PLACE.get(host, KEY_PLACE['anthropic'])} to use it."
+
+
+def _model_needs_key(model: Mapping[str, Any] | None, known: Known) -> str | None:
+    """The keyed host of the model in use when its key is not saved, else None."""
+    from .provider_keys import KEYED
+
+    host = str((model or {}).get("hostId") or "")
+    return host if host in KEYED and host not in known.keys else None
+
+
+def off_line(p: Provider) -> str:
+    """What an AI maker that is not picked says (one place to pick it, per kind)."""
+    if p.id == "polly":
+        return f"Off. {POLLY_LINE}"
+    return f"Off. Pick it in Lamo Stories › Settings › Video › {KIND_WORDS.get(p.kind, 'Picture maker')} to use it."
+
+
+def own_missing(p: Provider) -> str:
+    word = makers.KIND_WORD[MAKER_KIND[p.kind]]
+    return f"Add a {word} model first: tap Add a model in Lamo Stories › Settings › Video."
+
+
+# What a story's create, produce and changes say while the picked maker is not ready (§45.34, G7: Luma AI Ray2's
+# sentence word for word in the agent too).
 NOT_READY: Final = {
-    "nova-reel": (
-        "Amazon Nova Reel is not ready yet: it needs a storage bucket in the United States (N. Virginia), which is "
-        "switched off, and Amazon Nova Reel turned on for your account. Pick Built-in animation in Settings › Video, "
-        "or finish its setup."
+    "luma-ray": LUMA_NOT_READY,
+    "own-video": (
+        "Your own video model is not ready yet: it needs a storage bucket in the United States (Oregon), which is "
+        "switched off, and the model turned on for your account. Pick Built-in animation in Settings › Video, or "
+        "finish its setup and tap Try it."
     ),
-    "nova-canvas": (
-        "Amazon Nova Canvas is not ready yet: it has not made a picture for you yet. Pick Built-in characters in "
-        "Settings › Video › Picture maker, or make one AI portrait to finish its setup."
+    "elevenlabs": (
+        "ElevenLabs is not ready yet: it needs your ElevenLabs key. Paste it in Settings › Video, or pick Built-in "
+        "sounds and music there."
+    ),
+    "own-sound": (
+        "Your own sound model is not ready yet: add a sound model in Settings › Video, or pick Built-in sounds and "
+        "music there."
     ),
 }
 
 
-# "Try it" (§45.35 D2): the makers that can be tried once from Settings › Video, by id → their registry kind.
-CHECKABLE: Final = {"nova-reel": "animation"}
+# "Try it" (§45.35 D2, G7): the makers that can be tried once from Settings › Video, by id → their registry kind.
+CHECKABLE: Final = {"luma-ray": "animation", "own-video": "animation"}
 CHECK_JOB_TYPE: Final = "provider_check"
 CHECK_CONTENT_TYPE: Final = "provider"
 CHECK_STEP: Final = "check"
-CHECK_BUSY: Final = "Amazon Nova Reel is being tried. Wait until it is done."
+CHECK_BUSY: Final = "Luma AI Ray2 is being tried. Wait until it is done."
+CHECK_BUSY_LINE: Final = {
+    "luma-ray": CHECK_BUSY,
+    "own-video": "Your own video model is being tried. Wait until it is done.",
+}
+ONLY_TRY: Final = "Only Luma AI Ray2 and your own video model have a Try it."
+
+
+def try_problem(provider_id: str, config: Mapping[str, Any], known: Known) -> str | None:
+    """Why "Try it" cannot start for this maker (409), or None: an own video model must be added first."""
+    p = find(provider_id, CHECKABLE.get(provider_id))
+    if p is None or not p.own:
+        return None
+    model = _maker_model(p, config, known)
+    if model is None:
+        return own_missing(p)
+    keyless = _model_needs_key(model, known)
+    return needs_key(keyless) if keyless is not None else None
 
 
 def check_job_of(jobs: Iterable[Mapping[str, Any]], provider_id: str) -> Mapping[str, Any] | None:
@@ -158,9 +304,17 @@ def provider_sk(kind: str, provider_id: str) -> str:
     return f"{ws.PROVIDER_SK}{kind}#{provider_id}"
 
 
+def find(provider_id: Any, kind: str | None = None) -> Provider | None:
+    return next((p for p in REGISTRY if p.id == provider_id and (kind is None or p.kind == kind)), None)
+
+
+def _chosen(config: Mapping[str, Any]) -> Mapping[str, Any]:
+    found = config.get("providers")
+    return found if isinstance(found, Mapping) else {}
+
+
 def _selected(p: Provider, config: Mapping[str, Any]) -> bool:
-    chosen = config.get("providers") if isinstance(config.get("providers"), Mapping) else {}
-    return p.kind in CONFIG_KEY and (chosen or {}).get(CONFIG_KEY[p.kind]) == p.id
+    return p.kind in CONFIG_KEY and _chosen(config).get(CONFIG_KEY[p.kind]) == p.id
 
 
 def _used(p: Provider, job: Mapping[str, Any]) -> bool:
@@ -207,16 +361,51 @@ def _writer_ok(model_statuses: Sequence[Mapping[str, Any]]) -> str | None:
     return max(times) if times else None
 
 
+@dataclass(frozen=True)
+class Known:
+    """What the maker rows read besides ``PROVIDER#``: every maker model (bundled and the owner's), their access
+    checks (``MAKERSTATUS#`` by model key) and the keyed hosts whose key is saved."""
+
+    models: tuple[Mapping[str, Any], ...] = ()
+    checks: Mapping[str, Mapping[str, Any]] | None = None
+    keys: frozenset[str] = frozenset()
+
+    @classmethod
+    def bundled(cls) -> Known:
+        return cls(models=tuple(makers.bundled()))
+
+
+def _maker_model(p: Provider, config: Mapping[str, Any], known: Known) -> Mapping[str, Any] | None:
+    """The model this maker uses: the workspace's pick when the maker is picked, else its first that has not ended."""
+    kind = MAKER_KIND.get(p.kind)
+    if kind is None:
+        return None
+    providers = dict(_chosen(config))
+    providers[makers.MAKER_FIELD[kind]] = p.id
+    if not _selected(p, config):
+        providers[makers.PICK_FIELD[kind]] = None
+    return makers.effective_model(providers, kind, known.models)
+
+
 def status(
     p: Provider,
     config: Mapping[str, Any],
     record: Mapping[str, Any] | None,
     proven_at: str | None = None,
     model_statuses: Sequence[Mapping[str, Any]] = (),
+    *,
+    known: Known | None = None,
 ) -> dict[str, Any]:
+    known = known if known is not None else Known.bundled()
     out: dict[str, Any] = {"kind": p.kind, "id": p.id, "label": p.label}
+    gone = makers.maker_ended(p.id)
+    if gone is not None:  # G7: ended by its maker; never "off" or "needs setup" (nothing would make it work again)
+        out.update(state="ended", line=f"{makers.ended_line(gone)}.", endedAt=str(gone.get("ended")))
+        if p.id in makers.REPLACEMENT:
+            out["replacement"] = makers.REPLACEMENT[p.id]
+        return out
     if p.off_until_picked and not _selected(p, config):
-        return {**out, "state": "off", "line": OFF_LINE}
+        return {**out, "state": "off", "line": off_line(p)}
     state = (record or {}).get("state")
     checked = (record or {}).get("checkedAt")
     checked = checked if isinstance(checked, str) and checked else None
@@ -227,14 +416,38 @@ def status(
             return {**out, "state": "on", "line": p.line_on, "checkedAt": answered}
         line = WRITER_FAILED if model_statuses else p.line_unchecked
         return {**out, "state": "needs_setup", "line": line}
-    if state == "on" and checked:
+    if p.key_host is not None and p.key_host not in known.keys:
+        return {**out, "state": "needs_setup", "line": NEEDS_KEY.get(p.id, p.line_unchecked)}
+    model = None if p.builtin else _maker_model(p, config, known)
+    if p.own and model is None:
+        return {**out, "state": "needs_setup", "line": own_missing(p)}
+    keyless = _model_needs_key(model, known)
+    if keyless is not None:
+        return {**out, "state": "needs_setup", "line": needs_key(keyless)}
+    access = (known.checks or {}).get(str((model or {}).get("key") or "")) if model is not None else None
+    access_at = str((access or {}).get("checkedAt") or "")
+    if state == "on" and checked and not _proves(record, model, checked):
+        state = None  # a proof of another model (or of this own model before the owner changed it)
+    newer_access = access is not None and access_at > (checked or "")
+    failed_since = newer_access and str((access or {}).get("status") or "") in ("denied", "not_found", "error")
+    if state == "on" and checked and not failed_since:
         return {**out, "state": "on", "line": p.line_on, "checkedAt": max(checked, proven_at or "")}
     if p.builtin:
         failed_later = state not in (None, "on") and checked and checked > (proven_at or "")
         if not failed_later:
             on = {**out, "state": "on", "line": p.line_on}
             return {**on, "checkedAt": proven_at} if proven_at else on
+    if p.id not in CHECKABLE and newer_access and (access or {}).get("status") == "ok":
+        # the access check of the model it uses answered "Works" (G2): Luma AI Ray2 and your own video model also
+        # need their bucket, so only their own "Try it" shot makes them on
+        return {**out, "state": "on", "line": p.line_on, "checkedAt": access_at}
     out.update(state="needs_setup", line=str(error) if error else p.line_unchecked)
+    failed = str((access or {}).get("status") or "")
+    if newer_access and failed in ("denied", "not_found", "error"):
+        out["line"] = str((access or {}).get("line") or makers.STATUS_LINE[failed])
+        out["lastError"] = out["line"]
+        out["checkedAt"] = access_at
+        return out
     if checked:
         out["checkedAt"] = checked
     if error:
@@ -242,47 +455,118 @@ def status(
     return out
 
 
+def _proves(record: Mapping[str, Any] | None, model: Mapping[str, Any] | None, checked: str) -> bool:
+    """Whether a ``PROVIDER#`` proof covers the model in use: one that names its ``model`` must name this one, and an
+    own model the owner changed after the proof was made is not the one proven."""
+    if model is None:
+        return True
+    named = (record or {}).get("model")
+    if isinstance(named, str) and named and named != model.get("key"):
+        return False
+    changed = str(model.get("changedAt") or "")
+    return not (model.get("custom") and changed and changed > checked)
+
+
 def statuses(
     config: Mapping[str, Any],
     records: Sequence[Mapping[str, Any]],
     jobs: Iterable[Mapping[str, Any]] = (),
     model_statuses: Sequence[Mapping[str, Any]] = (),
+    known: Known | None = None,
 ) -> list[dict[str, Any]]:
+    """Every row of ``GET …/providers``: the registry in order, each maker with its models, ``picked`` and the model
+    it uses (``model``)."""
+    known = known if known is not None else Known.bundled()
     by_key = {str(r.get("sk")): r for r in records}
     proof = proven(jobs)
-    return [
-        status(
+    out = []
+    for p in REGISTRY:
+        row = status(
             p,
             config,
             by_key.get(provider_sk(p.kind, p.id)),
             proof.get(provider_sk(p.kind, p.id)),
             model_statuses,
+            known=known,
         )
-        for p in REGISTRY
-    ]
+        kind = MAKER_KIND.get(p.kind)
+        if kind is not None:
+            row["picked"] = _selected(p, config)
+            used = None if p.builtin or row["state"] == "ended" else _maker_model(p, config, known)
+            row["model"] = str(used["key"]) if used else None
+            if not p.builtin:
+                row["models"] = [
+                    makers.model_info(m, (known.checks or {}).get(str(m["key"])))
+                    for m in makers.models_of(p.id, known.models)
+                ]
+        out.append(row)
+    return out
 
 
-# The makers whose state stops a story's create, produce and changes (§45.35 D3: the video maker only; the picture
-# maker makes portraits, which never stop a video).
-GATES_VIDEOS: Final = ("animation",)
+# The makers whose state stops a story's create, produce and changes (§45.35 D3: the video maker; the sound maker
+# only for what only the owner can give; the picture maker makes portraits, which never stop a video).
+GATES_VIDEOS: Final = ("animation", "audio")
 
 
-def not_ready(config: Mapping[str, Any], records: Sequence[Mapping[str, Any]]) -> str | None:
-    """The sentence a story's create, produce or changes stops with (409) while ``configuration.providers.video``
-    names a maker that is not ``on`` (Nova Reel: on only after a real call, §45.34); None when it is ready. Nothing is
-    switched to a built-in maker. A recorded failure is said in the agent's own words. The picture maker is never
-    looked at here (§45.35 D3)."""
+def not_ready(
+    config: Mapping[str, Any], records: Sequence[Mapping[str, Any]], known: Known | None = None
+) -> str | None:
+    """The sentence a story's create, produce or changes stops with (409) while the picked video maker is not ``on``
+    (or has ended), or the picked sound maker lacks its key or model; None when it is ready. Nothing is switched to a
+    built-in maker. A recorded failure is said in the agent's own words. The picture maker is never looked at here
+    (§45.35 D3)."""
+    known = known if known is not None else Known.bundled()
     by_key = {str(r.get("sk")): r for r in records}
-    chosen = config.get("providers") if isinstance(config.get("providers"), Mapping) else {}
+    chosen = _chosen(config)
     for kind in GATES_VIDEOS:
-        picked = (chosen or {}).get(CONFIG_KEY[kind])
-        p = next((x for x in REGISTRY if x.kind == kind and x.id == picked), None)
+        picked = chosen.get(CONFIG_KEY[kind])
+        p = find(picked, kind)
         if p is None or p.builtin:
             continue
+        gone = makers.maker_ended(p.id)
+        if gone is not None:
+            return makers.ended_sentence(gone)
+        model = _maker_model(p, config, known)
+        if model is not None and model.get("ended"):
+            return makers.ended_sentence(model)
         record = by_key.get(provider_sk(p.kind, p.id))
-        shown = status(p, config, record)
+        shown = status(p, config, record, known=known)
+        if p.own and model is None:  # nothing to check yet: the owner adds a model first
+            return NOT_READY["own-sound"] if kind == "audio" else own_missing(p)
+        keyless = _model_needs_key(model, known)
+        if kind == "audio":
+            if p.key_host is not None and p.key_host not in known.keys:
+                return NOT_READY.get(p.id, str(shown["line"]))
+            if keyless is not None:
+                return needs_key(keyless)
+            continue
         if shown["state"] == "on":
             continue
         error = (record or {}).get("lastError")
         return str(error) if isinstance(error, str) and error.strip() else NOT_READY.get(p.id, shown["line"])
+    return None
+
+
+IMAGES_OFF: Final = "AI pictures are off. Turn them on in Lamo Stories › Settings › Video › Picture maker."
+
+
+def portrait_problem(config: Mapping[str, Any], known: Known | None = None) -> str | None:
+    """Why a portrait cannot be made with the picked picture maker (409), or None: the built-in characters make no
+    portraits, an ended maker or model is never called (G7), an own maker needs a model first."""
+    known = known if known is not None else Known.bundled()
+    picked = _chosen(config).get("images")
+    p = find(picked, "images")
+    if p is None or p.builtin:
+        return IMAGES_OFF
+    gone = makers.maker_ended(p.id)
+    if gone is not None:
+        return makers.ended_sentence(gone)
+    model = _maker_model(p, config, known)
+    if model is not None and model.get("ended"):
+        return makers.ended_sentence(model)
+    if p.own and model is None:
+        return own_missing(p)
+    keyless = _model_needs_key(model, known)
+    if keyless is not None:
+        return needs_key(keyless)
     return None

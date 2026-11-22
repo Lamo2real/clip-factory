@@ -231,3 +231,37 @@ def test_captions_count_as_scenes_and_a_cleared_reference_holds_nothing(wcall: W
     assert body["storage"]["bytes"]["scenes"] == 42
     assert body["storage"]["bytes"]["references"] == 0
     assert body["storage"]["files"] == 2
+
+
+def test_a_maker_models_own_price_counts_and_sound_is_priced_too(wcall: WsCall, store: db.Store) -> None:
+    """The reviewer's G1/G2 minor: the price the owner typed on his own maker model prices what it made (by the
+    item's ``modelId``), before his price of the maker; the sound makers can be priced (per second of sound, per
+    character spoken) and their characters are counted."""
+    picture = {"kind": "image", "label": "My SD", "provider": "Stability AI", "host": "bedrock",
+               "modelId": "stability.sd3-5-large-v1:0", "region": "us-west-2",
+               "price": {"perUnit": 0.08, "unit": "image", "currency": "USD"}}  # fmt: skip
+    assert wcall("PUT", f"{BASE}/makers/models/custom-sd", picture)[0] == 200
+    status, body = wcall("PUT", f"{BASE}/ai", {"defaultModel": "opus-5-5", "defaultEffort": "high", "version": 0,
+                                               "prices": {
+        "own-images": {"perUnit": 0.5, "unit": "image", "inputPer1M": 0, "outputPer1M": 0, "currency": "USD"},
+        "polly": {"perUnit": 0.00002, "unit": "character", "inputPer1M": 0, "outputPer1M": 0, "currency": "USD"},
+        "elevenlabs": {"perUnit": 0.01, "unit": "second", "inputPer1M": 0, "outputPer1M": 0, "currency": "USD"},
+    }})  # fmt: skip
+    assert status == 200, body
+    usage = ws.TYPE_USAGE
+    seed(store, "USAGE#2026-11-15#a", usage, kind="provider", provider="own-images", units=2, unit="image",
+         modelId="stability.sd3-5-large-v1:0")  # fmt: skip
+    seed(store, "USAGE#2026-11-15#b", usage, kind="provider", provider="polly", units=1000, unit="character",
+         modelId="neural")  # fmt: skip
+    seed(store, "USAGE#2026-11-15#c", usage, kind="provider", provider="elevenlabs", units=30, unit="second",
+         modelId="eleven_text_to_sound_v2")  # fmt: skip
+    _, body = wcall("GET", f"{BASE}/usage")
+    totals = {t["provider"]: t for t in body["usage"]["totalsByProvider"]}
+    assert (totals["own-images"]["cost"], totals["own-images"]["currency"]) == (0.16, "USD")  # the model's price
+    assert (totals["polly"]["units"], totals["polly"]["unit"], totals["polly"]["cost"]) == (1000, "character", 0.02)
+    assert totals["elevenlabs"]["cost"] == 0.3
+    wrong = {"elevenlabs": {"perUnit": 1, "unit": "image", "inputPer1M": 0, "outputPer1M": 0, "currency": "USD"}}
+    status, body = wcall("PUT", f"{BASE}/ai", {"defaultModel": "opus-5-5", "defaultEffort": "high", "version": 1,
+                                               "prices": wrong})  # fmt: skip
+    assert status == 400
+    assert body["error"]["message"].startswith("ElevenLabs is priced per second of sound")

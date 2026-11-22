@@ -8,8 +8,10 @@ The owner picks, per platform and before the first Connect, and the choice is st
   is Lamo Stories' own callback, ``{STORIES_OAUTH_CALLBACK}/{platform}/callback``, and its quotas are its own: the
   rate counters ``RATE#WS#{ws}#{platform}`` and the workspace's ``xMonthlyLimitUsd``;
 * ``clips`` (YouTube, TikTok and X only): Clip Factory's app, ``cf-prod/platforms/{platform}/app``, read only, with
-  its registered redirect URI (Clip Factory's callback forwards the ``w1.`` state, §45.13.3) and its shared limits
-  (``RATE#{platform}``, the owner's one monthly X limit). Lamo Stories still gets its own authorization and tokens.
+  its registered redirect URI (Clip Factory's callback forwards the ``w1.`` state, §45.13.3). Its limits are shared,
+  protected (§45.37 G6): Clip Factory's posts always go first, and Lamo Stories counts only in its own items and uses
+  only what Clip Factory's reserve leaves (``workspaces.shared_room``), never writing ``RATE#{platform}``. Lamo
+  Stories still gets its own authorization and tokens, for a different account than Clip Factory's (G8).
 
 ``app_keys`` is the one helper that picks the keys: Connect, the callback's exchange, the token refresh, Check,
 creator info and ``validate_destination`` all use it. No choice, or a chosen app whose keys are missing, is "not set
@@ -234,8 +236,9 @@ class OwnRates:
 
 
 def rate_store(store: db.Store, choice: str, workspace_id: str, platform: str) -> db.Store:
-    """The store ``stats.budget`` gets: Clip Factory's shared counters with its app (on purpose, the owner's
-    choice), Lamo Stories' own with its own app."""
+    """The store ``stats.budget`` gets with Lamo Stories' own app: its own counters. For Clip Factory's app this
+    returns the plain store, but the story flow never asks (its ``rates`` refuses the shared choice):
+    ``workspaces.shared_room`` counts in Lamo Stories' own items and never writes Clip Factory's (§45.37 G6)."""
     if choice == CLIPS:
         return store
     return cast(db.Store, OwnRates(store, workspace_id, platform))

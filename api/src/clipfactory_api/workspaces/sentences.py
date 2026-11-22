@@ -101,8 +101,8 @@ def story_sentence(platform: str, kind: str, account_name: str | None = None, *,
         return f"The {name} app keys changed. Connect {name} again in {CONNECTIONS}, then tap Try again."
     if kind == "same_as_clips":
         return (
-            f"{who_start} is the same place Clip Factory posts to. Pick another in {CONNECTIONS}, or tap Use it for "
-            "both there."
+            f"{who_start} is Clip Factory's own account. Clip Factory Stories needs its own separate account: connect "
+            f"a different one in {CONNECTIONS}, then tap Try again."
         )
     if kind == "clips_unknown":
         return f"Lamo Stories cannot tell if {who} is Clip Factory's {name}. Tap Try again to check the account first."

@@ -1,12 +1,16 @@
-"""A character's AI portrait (docs/CONTRACTS.md §45.8, §45.11.6, ADR-75): one step, ``portrait`` ("Draw the picture").
+"""A character's AI portrait (docs/CONTRACTS.md §45.8, §45.11.6, §45.37, ADR-75): one step, ``portrait`` ("Draw the
+picture").
 
-Only with the workspace's image provider switched to ``nova-canvas`` (Amazon Nova Canvas, Bedrock in eu-west-1); the
-API refuses the job while it is ``builtin-rig``, and the agent checks again. The picture is made from the
-character's description and look with a fixed seed (the same character gives the same picture), saved under
-``ws/{userId}/{workspaceId}/characters/{characterId}/portrait/{assetId}.png`` as a ``portrait`` asset, and shown in
-the app and the Library only, never inside a posted video. ``PROVIDER#images#nova-canvas`` is written only after the
-real call answered: ``on`` when it drew (or refused the content, which proves it works), ``needs_setup`` with the
-reason when Bedrock says the model cannot be used."""
+Drawn by the workspace's picked AI picture maker (§45.37 G1, G7): Stability AI on Amazon Bedrock (``stability``) or a
+picture model the owner added (``own-images``), on the model picked for this job
+(``configuration.providers.imageModel``; none: the maker's first model). The API refuses the job while the picture
+maker is the built-in ``builtin-rig``, and the agent checks again. Amazon Nova Canvas was ended by Amazon on 30
+September 2026: a workspace that still picks it stops with the ended line before any call, and nothing is swapped.
+The picture is made from the character's description and look with a fixed seed (the same character gives the same
+picture), saved under ``ws/{userId}/{workspaceId}/characters/{characterId}/portrait/{assetId}.png`` as a
+``portrait`` asset, and shown in the app and the Library only, never inside a posted video.
+``PROVIDER#images#{maker}`` is written only after the real call answered: ``on`` when it drew (or refused the
+content, which proves it works), ``needs_setup`` with the reason when the host says the model cannot be used."""
 
 from __future__ import annotations
 
@@ -15,7 +19,7 @@ from typing import Any, ClassVar
 from . import keys
 from .data import AssetPut
 from .pipeline import Job, StoryFailed
-from .providers import ProviderContext, ProviderFailed, chosen, provider_item
+from .providers import ProviderContext, ProviderFailed, ProviderUnavailable, chosen, maker_model, provider_item
 from .util import JobSuperseded, log, now_iso
 
 SIZE = 1024
@@ -114,6 +118,8 @@ class PortraitJob(Job):
             raise
         except ProviderFailed as e:
             return await self._fail(step, e.sentence, e)
+        except ProviderUnavailable as e:  # an ended maker, a pick that is not its maker's: its own sentence (§45.37)
+            return await self._fail(step, str(e), e)
         except StoryFailed as e:
             return await self._fail(step, str(e), e)
         except Exception as e:
@@ -126,8 +132,9 @@ class PortraitJob(Job):
         return "ready"
 
     def _provider_item(self, provider_id: str, state: str, last_error: str | None) -> dict[str, Any]:
+        model = self.meta.get("imageModel")  # the model key the call used (§45.37: the proof names it)
         return provider_item(self.fence.pk, self.fence.user_id, self.fence.workspace_id, "images", provider_id, state,
-                             now_iso(), last_error)  # fmt: skip
+                             now_iso(), last_error, str(model) if model else None)  # fmt: skip
 
     async def _portrait(self) -> None:
         ws = await self.data.workspace(self.fence.user_id, self.fence.workspace_id)
@@ -136,20 +143,31 @@ class PortraitJob(Job):
         config = dict(ws.get("configuration") or {})
         provider_id = chosen(config)["images"]
         self.meta.update({"providers": {"images": provider_id}})
-        if provider_id != "nova-canvas":
+        if provider_id == "builtin-rig":
             raise StoryFailed(keys.IMAGES_OFF)
+        # The picked maker on its picked model, read for this job (§45.37 G1); an ended maker or model stops here
+        # with its sentence, before any call.
+        entry = maker_model("images", config, await self.makers())
         ch = await self.data.character(self.fence.user_id, self.fence.workspace_id, self.content_id)
         if not ch:
             raise StoryFailed("This character no longer exists.")
         seed = keys.seed_for(self.content_id, "portrait")
         self.meta["seed"] = seed
+        if entry:
+            self.meta["imageModel"] = entry["key"]
+        else:
+            self.meta.pop("imageModel", None)
         ctx = ProviderContext(
             engine=self.engine,
             workdir=self.work,
-            image_model_id=self.svc.image_model_id,
+            image_model_id=str((entry or {}).get("modelId") or ""),
             image_client=self.svc.image_client,
             character=ch,
             seed=seed,
+            image_model=entry,
+            bedrock=self.svc.bedrock_runtime,
+            provider_key=self.key_reader(),
+            http=self.svc.http,
         )
         provider = self.svc.registry["images"][provider_id](ctx)
         try:
@@ -159,8 +177,8 @@ class PortraitJob(Job):
                 await self.data.write(self.fence, puts=[self._provider_item(provider_id, e.state, e.last_error)])
             raise
         self.report(1, 1)
-        await self.provider_usage(provider_id, self.svc.image_model_id, provider=provider_id, units=1, unit="image",
-                                  images=1)  # fmt: skip
+        await self.provider_usage(provider_id, str((entry or {}).get("modelId") or ""), provider=provider_id, units=1,
+                                  unit="image", images=1)  # fmt: skip
         rows = await self.data.assets(self.fence.user_id, self.fence.workspace_id, character_id=self.content_id)
         retired = [
             str(a["assetId"])
@@ -174,7 +192,7 @@ class PortraitJob(Job):
             bytes=len(png),
             version=None,
             character_id=self.content_id,
-            meta={"seed": seed, "provider": provider_id},
+            meta={"seed": seed, "provider": provider_id, **({"model": entry["key"]} if entry else {})},
         )
         put.item(self.fence, now_iso())  # gives it its id
         put.key = keys.portrait_key(self.fence.user_id, self.fence.workspace_id, self.content_id, put.asset_id)

@@ -47,6 +47,8 @@ TASK_KINDS: Final = (
     "fact_check",
     "final_review",
     "captions",
+    "text_edit",  # §45.37 G5: short chat edits (rename, fix a word, shorten a caption), the creative director's
+    "animation_plan",  # §45.37 G5: the storyboard's re-staging pass (detailed animation planning)
 )
 # Plain names for the tasks table (Settings › AI), in the owner's words.
 TASK_LABEL: Final = {
@@ -61,6 +63,8 @@ TASK_LABEL: Final = {
     "fact_check": "Check the facts",
     "final_review": "Last look at the video",
     "captions": "Write the post captions",
+    "text_edit": "Small text edits",
+    "animation_plan": "Plan the animation",
 }
 # Suggestions shown next to each task, never forced (§45.25; the owner's second request §4).
 SUGGESTED_EFFORT: Final = {
@@ -75,6 +79,8 @@ SUGGESTED_EFFORT: Final = {
     "fact_check": "high",
     "final_review": "high",
     "captions": "low",
+    "text_edit": "low",  # the owner's "Simple text modifications: Low"
+    "animation_plan": "high",  # the owner's "Detailed animation planning: High"
 }
 AGENT_IDS: Final = ("creative_director", "video_analysis", "storyboard", "character", "quality_assurance")
 

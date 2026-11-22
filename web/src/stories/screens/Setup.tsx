@@ -390,6 +390,9 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
   const [pick, setPick] = useState<StoriesConfig["providers"]["video"] | null>(null);
   const value = pick ?? config?.providers.video ?? "builtin-2d";
   const reel = providers.data?.find((p) => p.id === "nova-reel");
+  // §45.37 G7: Amazon ended Nova Reel on 30 Sep 2026, so it is never offered; Luma AI Ray2 makes the AI cut-aways.
+  const luma = providers.data?.find((p) => p.id === "luma-ray");
+  const ended = value === "nova-reel";
   if (w.error && !w.data) return <StError message={w.error} onRetry={() => void w.reload()} />;
   if (!config) return <StLoading label="Reading the video settings…" />;
   return (
@@ -404,11 +407,11 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
         value={value}
         options={[
           { value: "builtin-2d", label: "Built-in animation", line: BUILTIN_LINE },
-          { value: "nova-reel", label: "Amazon Nova Reel (AI video)", line: reel?.line ?? "AI cut-aways (scenes with no character). It needs a storage place in the USA first." },
+          { value: "luma-ray", label: "Luma AI Ray2 (AI video)", line: "AI cut-aways (scenes with no character), 5 seconds a shot. Runs in the US (Oregon). It needs its own setup first." },
         ]}
         onChange={setPick}
       />
-      {value === "nova-reel" && reel?.state !== "on" ? (
+      {value === "nova-reel" && reel?.state === "needs_setup" ? (
         <p className="st-note st-note--sun" role="note">
           <StIcon name="alert" size={18} />
           Nova Reel is not ready yet. Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in
@@ -416,15 +419,47 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
           test shot. Posts made with Nova Reel get the platforms' AI labels.
         </p>
       ) : null}
+      {value === "luma-ray" && luma?.state !== "on" ? (
+        <p className="st-note st-note--sun" role="note">
+          <StIcon name="alert" size={18} />
+          {luma?.line && /\bis not ready yet\b/.test(luma.line) ? `${luma.line} ` : "Luma AI Ray2 is not ready yet. "}
+          Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in animation by itself. Pick Built-in
+          animation above to keep making videos. To make it ready, tap Try it in Settings › Video: it makes one 5-second test shot. Posts made with Luma
+          AI Ray2 get the platforms' AI labels.
+        </p>
+      ) : null}
+      {ended ? (
+        <div role="status">
+          <p className="st-note st-note--coral">
+            <StIcon name="alert" size={18} />
+            Amazon Nova Reel: Ended by Amazon on 30 Sep 2026. It cannot make anything any more, so new videos stop until you pick another way. Nothing
+            switches by itself.
+          </p>
+          <div className="st-setup__row">
+            <StButton main onClick={() => setPick("luma-ray")}>
+              Use Luma AI Ray2
+            </StButton>
+            <StButton quiet onClick={() => setPick("builtin-2d")}>
+              Use Built-in animation
+            </StButton>
+          </div>
+        </div>
+      ) : null}
       <SaveBar
         busy={busy}
         label="Use this"
         onSave={async (el) => {
+          // An ended maker is never saved again: the API would keep an older pick, and nothing could make a video.
+          if (ended) {
+            toast.error("Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Lamo Stories › Settings › Video.");
+            return;
+          }
           setBusy(true);
           try {
-            await storiesApi().patchWorkspace(ws, { configuration: { providers: { ...config.providers, video: value } }, version: w.data!.version });
+            // Only the video maker and its model (the maker's first): the API checks only what the body names (§45.37 G1).
+            await storiesApi().patchWorkspace(ws, { configuration: { providers: { video: value, videoModel: null } }, version: w.data!.version });
             celebrate(centerOf(el));
-            toast.success(value === "builtin-2d" ? "Videos are made with the built-in animation." : "Saved. Nova Reel works once its setup is finished.");
+            toast.success(value === "builtin-2d" ? "Videos are made with the built-in animation." : "Saved. Luma AI Ray2 works once its setup is finished.");
             onSaved();
           } catch (e) {
             toast.error(friendlyMessage(e));
@@ -495,8 +530,8 @@ function ConnectStep({ ws, platform, line }: { ws: string; platform: Platform; l
       {a.connectionStatus === "same_as_clips" ? (
         <p className="st-note st-note--coral" role="note">
           <StIcon name="alert" size={18} />
-          This is Clip Factory's own {PLACE[platform]}, so this step stays to do. Tap Pick another {PLACE[platform]} below, or Use it for both if you really want
-          both apps to post there.
+          This is Clip Factory's own {PLACE[platform]}, so this step stays to do. Tap Pick another {PLACE[platform]} below and sign in with a different one made
+          for Clip Factory Stories.
         </p>
       ) : line ? (
         <p className="st-note st-note--coral" role="note">

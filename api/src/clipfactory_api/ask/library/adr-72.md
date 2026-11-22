@@ -25,3 +25,5 @@
   never touched.
   A Disconnect leaves the grant at the platform; the page says where to remove it by hand. `hooks.py` gains one
   forward, proven not to change the old path, and no IAM.
+- **Amended by ADR-84 (2026-11-22).** "Use it for both" is gone: an account that is Clip Factory's own is never
+  posted to, by any stable identity, at connect and before every upload, and the match is remembered (§45.37 G8).

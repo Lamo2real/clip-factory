@@ -1,10 +1,14 @@
 """What this runtime's work uses, built once from its environment (docs/CONTRACTS.md §45.11.4), on first use.
 
-Terraform passes ``CF_STORIES_TABLE``, ``CF_MEDIA_BUCKET``, ``CF_REGION``, ``CF_IMAGE_MODEL_ID``, ``CF_IMAGE_REGION``
-and ``CF_VIDEO_BUCKET`` (empty while the US bucket is off); the image sets ``CF_STORIES_CONFIG_DIR``,
+Terraform passes ``CF_STORIES_TABLE``, ``CF_MEDIA_BUCKET``, ``CF_REGION``, ``CF_IMAGE_MODEL_ID``, ``CF_IMAGE_REGION``,
+``CF_VIDEO_BUCKET`` (empty while the us-east-1 bucket is off), ``CF_VIDEO_WEST_BUCKET`` (Luma AI Ray2's us-west-2
+bucket, empty while ``stories_video_west_bucket`` is off, §45.37 G7) and ``CF_PROVIDER_KEYS_PREFIX`` (the workspaces'
+secret prefix, ``cf-prod/workspaces/``: the owner's keys for the keyed hosts are read per call under
+``{prefix}{workspaceId}/providers/{host}``, §45.37 G4); the image sets ``CF_STORIES_CONFIG_DIR``,
 ``CF_STORIES_SKILLS_DIR``, ``CF_STORIES_ENGINE_DIR`` and ``CF_WORK_DIR``. Nothing is called at import or at startup:
 the AWS clients are made on their first call. ``get()`` is the one shared instance (the chat, tasks and reference
-packages use the same ``models`` client and ``data``)."""
+packages use the same ``models`` client and ``data``). Which picture, video and sound model a job uses is read from
+the workspace for each job (§45.37 G1), never from the environment."""
 
 from __future__ import annotations
 
@@ -15,12 +19,14 @@ from pathlib import Path
 from typing import Any
 
 from . import config
+from . import hosts as keyed
 from .data import StoryData
 from .models import BedrockModels
 from .pipeline import Services
 from .store import Store
 
 NOT_CONFIGURED = "Lamo Stories' agent is missing its table or bucket setting."
+PROVIDER_KEYS_PREFIX = "cf-prod/workspaces/"  # when the runtime's environment does not say (Terraform does)
 _lock = threading.Lock()
 _held: dict[str, Services] = {}
 
@@ -55,7 +61,10 @@ def build(env: dict[str, str] | None = None) -> Services:
 
         return boto3.session.Session(region_name=region).resource("dynamodb").Table(table)
 
-    models = BedrockModels(table=table_factory, get_bytes=store.get_bytes_sync, region=region)
+    provider_keys = keyed.ProviderKeys(
+        env.get("CF_PROVIDER_KEYS_PREFIX") or PROVIDER_KEYS_PREFIX, lambda: _client("secretsmanager", region)
+    )
+    models = BedrockModels(table=table_factory, get_bytes=store.get_bytes_sync, region=region, keys=provider_keys)
     work = Path(env.get("CF_WORK_DIR") or "/tmp/ls-work")
     return Services(
         data=StoryData(store),
@@ -69,6 +78,13 @@ def build(env: dict[str, str] | None = None) -> Services:
         video_model_id=str(video.get("modelId") or ""),
         reel_client=lambda: _client("bedrock-runtime", video_region),
         us_s3=lambda: _client("s3", video_region),
+        bedrock_runtime=lambda r: _client("bedrock-runtime", r),
+        bedrock_control=lambda r: _client("bedrock", r),
+        s3_in=lambda r: _client("s3", r),
+        video_west_bucket=env.get("CF_VIDEO_WEST_BUCKET", ""),
+        provider_keys=provider_keys,
+        http=keyed.https,
+        polly=lambda r: _client("polly", r),
     )
 
 

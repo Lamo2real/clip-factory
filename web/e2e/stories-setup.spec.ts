@@ -53,7 +53,7 @@ test("round 4: step 4 says the built-in animator makes tall, square or wide vide
   await expect(builtin).not.toContainText("9:16");
   // The seed's X account is Lamo Clips' own: the step stays to do, and What is left says why in the server's words.
   const why = page.locator(".st-left__why");
-  await expect(why).toContainText("This is Lamo Clips' X account. Pick another in Social accounts, or tap Use it for both.");
+  await expect(why).toContainText("This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.");
   await page.setViewportSize({ width: 320, height: 700 });
   await page.waitForTimeout(250);
   const o = await findOverflow(page);

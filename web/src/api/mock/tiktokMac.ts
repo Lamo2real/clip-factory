@@ -10,6 +10,7 @@ import { tiktokState, videoFileName } from "../../lib/tiktokYourself.ts";
 import { ulid } from "./fixtures.ts";
 
 const AUTO_OFF = "Auto-posting is off, so this one waits.";
+const NO_HELPER = "Set up your Mac first. Then it can keep your TikTok login.";
 const conflict = (msg: string) => new ApiError(409, "conflict", msg);
 const bad = (msg: string) => new ApiError(400, "bad_request", msg);
 const notFound = () => new ApiError(404, "not_found", "We could not find that clip.");
@@ -39,6 +40,8 @@ export interface TikTokMacDeps {
 /** The Mac helper's knobs (window.__cfMock.mac). */
 export interface TikTokMacControls {
   ping(state?: MacHelper["state"], reason?: string, device?: string): { on: boolean };
+  /** §47.8: the Mac says whether it keeps a TikTok login; `done`: it did the owner's pending Change or Forget. */
+  login(login: "saved" | "none", done?: boolean): void;
   /** The helper was last seen at `at` (ISO), or never (null). */
   seen(at: string | null): void;
   claim(clipId: string, device?: string): MacJob;
@@ -66,6 +69,9 @@ export function presetChoices(settings: Settings): TikTokPostOptions {
 export function tiktokMacMock(deps: TikTokMacDeps) {
   // The helper item (MACHELPER): never seen until it pings.
   let helper: (MacHelper & { device: string }) | null = null;
+  // §47.8: what the Mac said about its TikTok login, and the owner's Change or Forget until the Mac did it.
+  let login: MacHelper["login"];
+  let loginRequest: MacHelper["loginRequest"];
   // Internal per-post fields: who claimed it and its heartbeat, and what a converted post was before.
   const claims = new Map<string, { device: string; beatAt: number }>();
   // How many claims each Mac post had (the API's macAttempt, MacJob.attempt).
@@ -157,10 +163,26 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     return claim;
   }
 
+  function publicHelper(): MacHelper | null {
+    if (!helper) return null;
+    return {
+      seenAt: helper.seenAt,
+      state: helper.state,
+      ...(helper.reason ? { reason: helper.reason } : {}),
+      ...(helper.version ? { version: helper.version } : {}),
+      ...(login ? { login } : {}),
+      ...(loginRequest ? { loginRequest } : {}),
+    };
+  }
+
   const controls: TikTokMacControls = {
     ping(state = "ok", reason, device = "mock-mac") {
       helper = { seenAt: iso(deps.now()), state, ...(reason ? { reason: reason.trim().slice(0, 200) } : {}), version: "1.0.0", device };
       return { on: macOn(deps.settings()) };
+    },
+    login(next, done) {
+      login = next;
+      if (done) loginRequest = undefined;
     },
     seen(at) {
       helper = at === null ? null : { seenAt: at, state: helper?.state ?? "ok", ...(helper?.reason ? { reason: helper.reason } : {}), device: helper?.device ?? "mock-mac" };
@@ -251,8 +273,14 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     controls,
     /** GET /v1/tiktok/mac. */
     status(): TikTokMacStatus {
-      const h = helper ? { seenAt: helper.seenAt, state: helper.state, ...(helper.reason ? { reason: helper.reason } : {}), ...(helper.version ? { version: helper.version } : {}) } : null;
-      return structuredClone({ on: macOn(deps.settings()), helper: h, queue: queue() });
+      return structuredClone({ on: macOn(deps.settings()), helper: publicHelper(), queue: queue() });
+    },
+    /** POST /v1/tiktok/mac/login (§47.8): the Mac does it the next time it checks in. */
+    loginRequest(action: unknown): MacHelper | null {
+      if (action !== "change" && action !== "forget") throw bad("Pick change or forget.");
+      if (!helper) throw conflict(NO_HELPER);
+      loginRequest = { action, at: iso(deps.now()) };
+      return structuredClone(publicHelper());
     },
     /** POST /v1/tiktok/mac/send: each clip once, in order; one TikTok post per clip, always. */
     send(clipIds: unknown): MacSendResult[] {
