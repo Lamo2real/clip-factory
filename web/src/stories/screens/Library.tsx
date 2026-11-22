@@ -62,6 +62,7 @@ export const KIND_LABEL: Record<AssetKind, string> = {
   audio: "Sound mix",
   captions: "Captions",
   design_ref: "Design picture",
+  video: "Video copy",
 };
 
 const KIND_ICON: Record<AssetKind, StIconName> = {
@@ -75,6 +76,7 @@ const KIND_ICON: Record<AssetKind, StIconName> = {
   audio: "music",
   captions: "comment",
   design_ref: "picture",
+  video: "film",
 };
 
 const IMAGE = (i: LibraryItem) => i.contentType.startsWith("image/");
@@ -114,7 +116,7 @@ function DownloadButton({ ws, item, stories }: { ws: string; item: LibraryItem; 
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const story = item.storyId ? stories?.find((s) => s.storyId === item.storyId) : undefined;
-  const named = item.kind === "final_video" && item.meta.current !== 0 && (story?.status === "approved" || story?.status === "published");
+  const named = (item.kind === "final_video" || item.kind === "video") && item.meta.current !== 0 && (story?.status === "approved" || story?.status === "published");
   // A video's extra copy (WebM, MOV) is asked for by its own name (§45.34).
   const format = item.meta.format === "webm" || item.meta.format === "mov" ? (item.meta.format as DownloadFormat) : null;
   return (
@@ -147,7 +149,7 @@ function Thumb({ item, pictures }: { item: LibraryItem; pictures: Map<string, st
   const still =
     IMAGE(item)
       ? item.url
-      : item.kind === "final_video" && item.storyId
+      : (item.kind === "final_video" || item.kind === "video") && item.storyId
         ? pictures.get(`cover:${item.storyId}`)
         : item.kind === "scene_clip" && item.storyId
           ? pictures.get(`still:${item.storyId}:${String(item.meta.sceneId ?? "")}`)
@@ -156,7 +158,7 @@ function Thumb({ item, pictures }: { item: LibraryItem; pictures: Map<string, st
     <span className={`st-file__thumb st-file__thumb--${item.kind}`}>
       {still ? <img src={still} alt="" loading="lazy" decoding="async" /> : null}
       <span className="st-file__badge" aria-hidden="true">
-        <StIcon name={item.kind === "final_video" || item.kind === "scene_clip" ? "play" : KIND_ICON[item.kind]} size={item.kind === "final_video" || item.kind === "scene_clip" ? 26 : 30} />
+        <StIcon name={item.kind === "final_video" || item.kind === "video" || item.kind === "scene_clip" ? "play" : KIND_ICON[item.kind]} size={item.kind === "final_video" || item.kind === "video" || item.kind === "scene_clip" ? 26 : 30} />
       </span>
     </span>
   );
@@ -445,7 +447,7 @@ function Details({ ws, story }: { ws: string; story: Story }) {
 }
 
 const GROUPS: { kinds: AssetKind[]; title: string }[] = [
-  { kinds: ["final_video", "cover"], title: "The video" },
+  { kinds: ["final_video", "video", "cover"], title: "The video" },
   { kinds: ["storyboard", "captions"], title: "Story and captions" },
   { kinds: ["scene_still", "scene_clip"], title: "Scenes" },
   { kinds: ["audio"], title: "Sound" },

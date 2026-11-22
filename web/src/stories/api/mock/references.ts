@@ -164,10 +164,24 @@ export function advance(store: MockStore, now = Date.now()): void {
       }
     });
     if (run.fail && elapsed >= per) {
+      // A failed analysis stops in its second step (Listen), however late it is read: the first is done, the rest
+      // never ran, and the job carries the reason.
       job.status = "failed";
       job.error = run.fail;
-      job.steps.forEach((st) => {
-        if (st.status === "running") st.status = "failed";
+      job.steps.forEach((st, i) => {
+        if (i === 0) {
+          st.status = "done";
+          st.finishedAt = st.finishedAt ?? iso(run.start + per);
+        } else if (i === 1) {
+          st.status = "failed";
+          st.startedAt = st.startedAt ?? iso(run.start + per);
+          st.finishedAt = iso(now);
+          delete st.message;
+        } else {
+          st.status = "pending";
+          delete st.startedAt;
+          delete st.finishedAt;
+        }
       });
       ref.status = s.analyses.has(ref.refId) ? "analyzed" : "failed";
       ref.currentJobId = null;

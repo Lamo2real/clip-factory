@@ -520,7 +520,9 @@ export type AssetKind =
   | "audio"
   | "captions"
   /** a picture for "Design with AI"; the Library hides it */
-  | "design_ref";
+  | "design_ref"
+  /** a video's extra copy (WebM or MOV, `meta.format`), made beside its MP4 (CONTRACTS §45.34 "Output formats") */
+  | "video";
 
 export interface LibraryItem {
   assetId: string;

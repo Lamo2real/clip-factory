@@ -170,11 +170,16 @@ type Confirm = { job: PublishingJob; account: ErrorAccount; message: string };
 
 const FORMAT_NAME: Record<DownloadFormat, string> = { mp4: "MP4", webm: "WebM", mov: "MOV" };
 
-/** The extra copies this video has now (its current final_video items with meta.format, CONTRACTS §45.34). */
+/**
+ * The extra copies this video has now (CONTRACTS §45.34: ASSET# items of kind `video` with meta.format, made beside the
+ * MP4; a `final_video` with meta.format counts too). The Library is asked for the story's newest files, where the
+ * copies of the last assembly are.
+ */
 async function copiesOf(ws: string, storyId: string): Promise<DownloadFormat[]> {
-  const { items } = await storiesApi().library(ws, { kind: "final_video", storyId, limit: 100 });
+  const { items } = await storiesApi().library(ws, { storyId, limit: 100 });
   const found = new Set<DownloadFormat>();
-  for (const i of items) if (i.meta.current !== 0 && (i.meta.format === "webm" || i.meta.format === "mov")) found.add(i.meta.format);
+  for (const i of items)
+    if ((i.kind === "video" || i.kind === "final_video") && i.meta.current !== 0 && (i.meta.format === "webm" || i.meta.format === "mov")) found.add(i.meta.format);
   return (["webm", "mov"] as DownloadFormat[]).filter((f) => found.has(f));
 }
 

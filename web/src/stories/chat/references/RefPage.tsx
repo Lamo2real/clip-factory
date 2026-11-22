@@ -36,6 +36,8 @@ type RefData = { reference: ReferenceVideo; analysis: ReferenceAnalysis | null; 
 export const ANALYSIS_FAILED = "The video analysis agent could not finish this one. Try again, or pick another model.";
 /** A re-run that ended with the last analysis kept. */
 export const RERUN_FAILED = "The new analysis did not finish, so this is still the last one. Try again, or pick another model.";
+/** A re-run that stopped with its own reason (the job in the answer, §45.34): the reason follows this. */
+const RERUN_LEAD = "The new analysis did not finish, so this is still the last one.";
 
 const same = (a: ReferenceAnalysis | null | undefined) => (a ? JSON.stringify(a) : null);
 
@@ -79,7 +81,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
       before.current = undefined;
       const ended = live && ["ready", "failed", "canceled", "needs_check"].includes(live.status) ? live : null;
       const bad = ended ? ended.status !== "ready" : status === "failed" || (status === "analyzed" && typeof old === "string" && old === same(r.analysis));
-      if (bad) setFailed(ended?.error || (status === "analyzed" ? RERUN_FAILED : ANALYSIS_FAILED));
+      if (bad) setFailed(ended?.error ? (status === "analyzed" ? `${RERUN_LEAD} ${ended.error}` : ended.error) : status === "analyzed" ? RERUN_FAILED : ANALYSIS_FAILED);
       else {
         // The moment it is done: a cheer.
         setFailed(null);
@@ -238,7 +240,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
       : REF_STEP_ORDER.map((key) => ({ key, label: REF_STEP_LABEL[key], status: ref.status === "analyzing" ? "running" : "pending" }));
   // The run that just stopped (followed here), else what the job in the answer says (after a reload too).
   const jobFailed = job && job.status === "failed" ? job.error || ANALYSIS_FAILED : null;
-  const rerunStopped = jobFailed ? (jobFailed === ANALYSIS_FAILED ? RERUN_FAILED : `The new analysis did not finish, so this is still the last one. ${jobFailed}`) : null;
+  const rerunStopped = jobFailed ? (jobFailed === ANALYSIS_FAILED ? RERUN_FAILED : `${RERUN_LEAD} ${jobFailed}`) : null;
   const failedLine = ref.status === "failed" ? failed || jobFailed || ANALYSIS_FAILED : ref.status === "analyzed" ? (failed ?? rerunStopped) : null;
   const stoppedSteps = !!job && job.status === "failed" && job.steps.length > 0;
   const keepValues = { model: ref.ai.model ?? DEFAULT, effort: ref.ai.effort ?? DEFAULT };

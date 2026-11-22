@@ -661,14 +661,14 @@ function addAsset(store: MockStore, story: Story, kind: LibraryItem["kind"], url
 
 const EMPTY_VIDEO = "data:video/mp4;base64,";
 
-/** The MP4, then each extra copy the workspace asks for (an ASSET# of kind final_video with meta.format, §45.34). */
+/** The MP4, then each extra copy the workspace asks for (an ASSET# of kind video with meta.format, as the agent writes it, §45.34). */
 function addVideos(store: MockStore, story: Story, sec: number): void {
   addAsset(store, story, "final_video", EMPTY_VIDEO, "video/mp4", Math.round(sec * 1_400_000));
+  for (const a of store.assets) if (a.storyId === story.storyId && a.kind === "video") a.meta = { ...a.meta, current: 0 };
   for (const f of extraFormats(store, story.workspaceId)) {
-    for (const a of store.assets) if (a.storyId === story.storyId && a.kind === "final_video" && a.meta.format === f) a.meta = { ...a.meta, current: 0 };
     store.assets.push({
       assetId: mockId(),
-      kind: "final_video",
+      kind: "video",
       storyId: story.storyId,
       characterId: null,
       title: story.title,
@@ -682,10 +682,10 @@ function addVideos(store: MockStore, story: Story, sec: number): void {
   }
 }
 
-/** The extra copies the video has now (its current version's final_video items with meta.format). */
+/** The extra copies the video has now (its current kind-video items with meta.format). */
 function copiesOf(store: MockStore, story: Story): DownloadFormat[] {
   return store.assets
-    .filter((a) => a.storyId === story.storyId && a.kind === "final_video" && a.meta.current !== 0 && (a.meta.format === "webm" || a.meta.format === "mov"))
+    .filter((a) => a.storyId === story.storyId && (a.kind === "video" || a.kind === "final_video") && a.meta.current !== 0 && (a.meta.format === "webm" || a.meta.format === "mov"))
     .map((a) => a.meta.format as DownloadFormat);
 }
 
@@ -1487,10 +1487,10 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const story = find(store, ws, storyId);
       if (story.status !== "approved" && story.status !== "published") fail(409, "conflict", "Approve the video first, then download it.");
       const format = body?.format ?? "mp4";
-      if (!(format in FORMAT_WORD)) fail(400, "bad_request", "Pick MP4, WebM or MOV.");
+      if (!(format in FORMAT_WORD)) fail(400, "bad_request", "format must be mp4, webm or mov.");
       if (format === "mp4") return { url: EMPTY_VIDEO, filename: `${slug(story.title)}.mp4` };
       if (!copiesOf(store, story).includes(format))
-        fail(409, "conflict", `This video has no ${FORMAT_WORD[format]} copy. Turn on ${FORMAT_WORD[format]} in Settings › Storage and production, then remake the video.`);
+        fail(404, "not_found", "That format was not made for this video.");
       return { url: `data:${FORMAT_TYPE[format]};base64,`, filename: `${slug(story.title)}.${format}` };
     },
   };
