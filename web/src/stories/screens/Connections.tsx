@@ -28,6 +28,7 @@ import { storiesAwayLater, storiesGoLater } from "../pane.tsx";
 import { storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
 import { SHARED_APP_PLATFORMS, type ClipsDestination, type KeyCheck, type Platform, type SocialAccount } from "../api/types.ts";
+import { ArcDial } from "../glass/index.ts";
 import {
   celebrate,
   centerOf,
@@ -41,7 +42,6 @@ import {
   StLoading,
   StPageHead,
   StPick,
-  StRing,
   StTech,
   plainFirst,
   useOnboarding,
@@ -754,12 +754,12 @@ export function PlatformCard({
   const otherReason = a.reason && a.connectionStatus !== "needs_reconnect" && a.reason !== "expires_soon" && a.reason !== "expired" && !a.warning ? reasonSentence(a.reason, p) : null;
 
   return (
-    <li className={`st-conn st-conn--${a.connectionStatus}`} data-platform={p}>
+    <li className={`st-conn st-conn--${a.connectionStatus} st-glass`} data-platform={p}>
       <header className="st-conn__head">
         <span className={`st-conn__mark st-conn__mark--${p}`}>
-          <PlatformMark platform={p} size={26} title={`${name} logo`} />
+          <PlatformMark platform={p} size={24} title={`${name} logo`} />
         </span>
-        <h2 className="st-conn__name">{name}</h2>
+        <h2 className="st-conn__name st-display">{name}</h2>
         <span className={`st-chip st-chip--${status.tone}`}>{status.label}</span>
       </header>
 
@@ -1022,8 +1022,10 @@ function SetupBack({ ws }: { ws: string }) {
   const { data } = useOnboarding(ws);
   if (!data || data.finishedAt) return null;
   return (
-    <aside className="st-setupback" aria-label="Setting up Lamo Stories">
-      <StRing done={data.done} total={data.total} size={52} />
+    <aside className="st-setupback st-glass" aria-label="Setting up Lamo Stories">
+      <ArcDial className="st-setupback__dial" value={data.done} max={data.total} label={`${data.done} of ${data.total} done`} valueText={`${data.done} of ${data.total} done`}>
+        <span className="st-setupback__num st-num">{data.done}</span>
+      </ArcDial>
       <p className="st-setupback__text">
         <strong>Setting up Lamo Stories:</strong> {data.done} of {data.total} done.
       </p>

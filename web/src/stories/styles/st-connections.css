@@ -1,20 +1,26 @@
-/* ---------- Connections ---------- */
+/* ---------- Social accounts (Connections.tsx) on the liquid glass (styles/GLASS-CONTRACT.md) ----------
+   Five glass account cards (.st-conn.st-glass), each with a round glass puck for the platform's mark, its name in
+   Playfair and its status chip; the boxes inside are glass rows a step deeper than the card with a soft top
+   highlight (rows that only show), wells deeper still (what is copied or typed), the notes are tinted with the measured veil (--st-veil-tinted, the colour cut to --st-tint-cut),
+   so every word keeps 4.5:1 over Ember, a picture, and a white or busy desktop. Tokens only; radii from --st-r-*;
+   light, never a border; no cursor; hover on every control. */
 
 .st-conns {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
-  gap: 16px;
+  gap: var(--st-space-4);
   align-items: start;
 }
 /* Social accounts' five cards flow by their own height (§45.36 E18): Connections.tsx deals each card a column (the
    shortest so far) and sets how many 1 px rows it spans, so a tall card (Instagram with its Meta box) never leaves a
-   hole beside a short one, and a card that grows only pushes the cards under it in its own column. */
+   hole beside a short one, and a card that grows only pushes the cards under it in its own column. The 16 px gap
+   (--st-space-4) is CARD_GAP there, and 340 px is CARD_MIN. */
 .st-conns[data-cols] {
   grid-template-columns: repeat(var(--st-cols, 2), minmax(0, 1fr));
   grid-auto-rows: 1px;
   grid-auto-flow: row dense;
   row-gap: 0;
-  column-gap: 16px;
+  column-gap: var(--st-space-4);
 }
 .st-conns[data-cols] > .st-conn {
   grid-column: var(--st-col, auto);
@@ -22,64 +28,69 @@
 }
 .st-conn {
   display: grid;
-  gap: 12px;
+  align-content: start;
+  gap: var(--st-space-3);
   min-width: 0;
-  padding: 18px;
-  border-radius: var(--r-xl);
-  background: var(--st-panel);
-  box-shadow: var(--st-shadow-soft);
-  animation: st-rise 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  padding: var(--st-inset);
+  animation: st-rise var(--st-dur-enter) var(--st-ease-out) both;
 }
-.st-conn--connected {
-  background: linear-gradient(160deg, rgba(71, 214, 160, 0.12), transparent 60%), var(--st-panel);
-}
+/* A card that needs the owner: a warm tint from the top left over the measured tinted veil. */
 .st-conn--needs_reconnect,
 .st-conn--same_as_clips {
-  background: linear-gradient(160deg, rgba(255, 111, 97, 0.14), transparent 60%), var(--st-panel);
+  background: linear-gradient(165deg, rgb(var(--st-coral-rgb) / var(--st-tint-cut)), rgb(var(--st-coral-rgb) / 0) 60%), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
 }
 .st-conn--choose_account {
-  background: linear-gradient(160deg, rgba(255, 201, 74, 0.14), transparent 60%), var(--st-panel);
+  background: linear-gradient(165deg, rgb(var(--st-amber-rgb) / var(--st-tint-cut)), rgb(var(--st-amber-rgb) / 0) 60%), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
 }
 .st-conn__head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--st-space-3);
+  min-width: 0;
 }
+/* The platform's mark in a round glass puck (round: it is the account's face, like an avatar). */
 .st-conn__mark {
   display: grid;
   place-items: center;
   flex: none;
-  width: 46px;
-  height: 46px;
-  border-radius: var(--r-md);
-  color: var(--st-ink);
-  background: var(--st-panel-strong);
+  width: var(--st-tap);
+  height: var(--st-tap);
+  border-radius: var(--st-r-round);
+  color: var(--st-text-strong);
+  background: rgb(var(--st-cream-rgb) / 0.1);
+  box-shadow: var(--st-sheen-control);
 }
-.st-conn__name {
+.st-conn .st-conn__name {
   flex: 1;
   min-width: 0;
-  font-size: 1.25rem;
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  overflow-wrap: anywhere;
 }
+/* The account: its picture, name and handle, a row that only shows (a step deeper than the card: never lighter, so
+   its words keep the card's contrast over every background). */
 .st-who {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.35);
+  gap: var(--st-space-3);
+  padding: var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: rgb(var(--st-well-rgb) / 0.24);
+  box-shadow: var(--st-sheen-control);
 }
 .st-who__avatar {
   display: grid;
   place-items: center;
   flex: none;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
+  width: var(--st-tap);
+  height: var(--st-tap);
+  border-radius: var(--st-r-round);
   object-fit: cover;
 }
 .st-who__avatar--none {
-  background: var(--st-panel-strong);
+  color: var(--st-text-soft);
+  background: var(--st-fill-well);
 }
 .st-who__text {
   display: grid;
@@ -87,81 +98,91 @@
   min-width: 0;
 }
 .st-who__name {
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
   overflow-wrap: anywhere;
 }
 .st-who__handle {
-  color: var(--st-ink-soft);
-  font-size: 0.9rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
 .st-who__id {
-  color: var(--st-ink-soft);
-  font-size: 0.85rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
   overflow-wrap: anywhere;
 }
 .st-who__id code {
-  color: var(--st-sky-ink);
+  color: var(--st-text-amber);
 }
+
+/* Notes: tinted with the measured veil (5.12:1 over a white desktop for the measured tile; more for these inks). */
 .st-note {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  font-size: 0.94rem;
+  gap: var(--st-space-2);
+  padding: var(--st-space-3) var(--st-space-4);
+  border-radius: var(--st-r-control);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
 .st-note .st-icon {
+  flex: none;
   margin-top: 2px;
 }
 .st-note--coral {
   color: var(--st-coral-ink);
-  background: rgba(255, 111, 97, 0.16);
+  background: linear-gradient(rgb(var(--st-coral-rgb) / var(--st-tint-cut)), rgb(var(--st-coral-rgb) / var(--st-tint-cut))), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
 }
 .st-note--sun {
-  color: var(--st-sun-ink);
-  background: rgba(255, 201, 74, 0.14);
+  color: var(--st-text-amber);
+  background: linear-gradient(rgb(var(--st-amber-rgb) / var(--st-tint-cut)), rgb(var(--st-amber-rgb) / var(--st-tint-cut))), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
 }
 .st-note--sky {
   color: var(--st-sky-ink);
-  background: rgba(98, 198, 255, 0.14);
+  background: linear-gradient(rgb(var(--st-sky-rgb) / var(--st-tint-cut)), rgb(var(--st-sky-rgb) / var(--st-tint-cut))), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
 }
 .st-note--wide {
   align-items: center;
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
 }
 
-/* "Technical details" (§45.36 E14): developer words and raw ids, folded under a plain first line. */
+/* "Technical details" (§45.36 E14): developer words and raw ids, folded under a plain first line, in a well (so it
+   stays readable inside the lighter rows it sits in, and in Settings). */
 .st-tech-fold {
   min-width: 0;
-  padding: 0 12px;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.22);
+  padding: 0 var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-well);
 }
 .st-tech-fold__sum {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 44px;
-  color: var(--st-ink-soft);
-  font-size: 0.9rem;
-  font-weight: 800;
+  min-height: var(--st-tap);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
   list-style: none;
-  border-radius: var(--r-sm);
-  transition: color 160ms ease;
+  border-radius: var(--st-r-inner);
+  transition: color var(--st-dur-hover) var(--st-ease-out);
 }
 .st-tech-fold__sum::-webkit-details-marker {
   display: none;
 }
 .st-tech-fold__sum:hover {
-  color: var(--st-sun);
+  color: var(--st-text-amber);
+}
+.st-tech-fold__sum:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
 }
 .st-tech-fold__mark {
   flex: none;
-  transition: transform 200ms ease;
+  transition: transform var(--st-dur-hover) var(--st-ease-out);
 }
 .st-tech-fold[open] > .st-tech-fold__sum {
-  color: var(--st-ink);
+  color: var(--st-text);
 }
 .st-tech-fold[open] > .st-tech-fold__sum .st-tech-fold__mark {
   transform: rotate(90deg);
@@ -169,83 +190,102 @@
 .st-tech-fold__body {
   display: grid;
   gap: 6px;
-  padding-bottom: 10px;
-  color: var(--st-ink-soft);
-  font-size: 0.9rem;
+  padding-bottom: var(--st-space-3);
+  color: var(--st-text-muted);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
 .st-tech-fold__body ul {
   display: grid;
-  gap: 4px;
+  gap: var(--st-space-1);
   margin: 0;
   padding-left: 18px;
+  list-style: disc;
+}
+.st-tech-fold__body li::marker {
+  color: var(--st-accent);
 }
 .st-tech-fold__body code {
-  color: var(--st-sky-ink);
+  color: var(--st-text-amber);
   overflow-wrap: anywhere;
 }
 .st-note__close {
   display: grid;
   place-items: center;
   flex: none;
-  width: 44px;
-  height: 44px;
-  margin: -8px -6px -8px auto;
-  border-radius: 50%;
-  transition: background-color 160ms ease;
+  width: var(--st-tap);
+  height: var(--st-tap);
+  margin: -8px -8px -8px auto;
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: inherit;
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
 }
 .st-note__close:hover {
-  background: var(--st-panel-strong);
+  background: var(--st-fill-control-hover);
+}
+.st-note__close:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
 }
 .st-conn__clips {
-  font-size: 0.92rem;
+  color: var(--st-text);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
 .st-conn__clips-label {
-  color: var(--st-ink-soft);
-  font-weight: 700;
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
 }
 .st-conn__before {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  color: var(--st-sun-ink);
-  font-size: 0.92rem;
+  gap: var(--st-space-2);
+  color: var(--st-text-amber);
+  font-size: var(--st-fs-small);
 }
 .st-conn__before .st-icon {
+  flex: none;
   margin-top: 2px;
 }
 .st-conn__actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 .st-conn__since {
-  color: var(--st-ink-soft);
-  font-size: 0.85rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
 }
+/* What the platform allows for a second account: a row that only shows, its dots sky. */
 .st-limits {
   display: grid;
   gap: 6px;
-  padding: 12px;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.3);
+  padding: var(--st-space-3) var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: rgb(var(--st-well-rgb) / 0.24);
+  box-shadow: var(--st-sheen-control);
 }
-.st-limits__title {
-  font-size: 0.92rem;
-  font-weight: 800;
+.st-conn .st-limits__title {
   color: var(--st-sky-ink);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
 }
 .st-limits__list {
   display: grid;
-  gap: 4px;
-  font-size: 0.9rem;
-  color: var(--st-ink-soft);
+  gap: var(--st-space-1);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+.st-limits__plain {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
 }
 .st-limits__list li {
   position: relative;
-  padding-left: 16px;
+  padding-left: var(--st-space-4);
 }
 .st-limits__list li::before {
   content: "";
@@ -254,15 +294,17 @@
   top: 0.6em;
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--st-r-round);
   background: var(--st-sky);
 }
+/* Pick the account Lamo Stories posts to: glass rows (controls) with the account's picture. */
 .st-choose {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 .st-choose__ask {
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
 }
 .st-choose__list {
   display: grid;
@@ -272,54 +314,76 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
+  gap: var(--st-space-2) var(--st-space-3);
   width: 100%;
   min-height: 56px;
-  padding: 8px 14px 8px 8px;
-  border-radius: var(--r-md);
-  background: var(--st-panel-strong);
+  padding: var(--st-space-2) var(--st-space-4) var(--st-space-2) var(--st-space-2);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text);
   text-align: left;
   transition:
-    background-color 180ms ease,
-    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 .st-choice:hover {
-  background: var(--st-panel-hover);
-  transform: translateX(2px);
+  background: var(--st-fill-control-hover);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
+}
+.st-choice:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
 }
 .st-choice img {
   flex: none;
-  border-radius: 50%;
+  border-radius: var(--st-r-round);
 }
 .st-choice__name {
   flex: 1 1 110px;
   min-width: 0;
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
   overflow-wrap: anywhere;
 }
 .st-choice__go {
-  color: var(--st-sun);
-  font-weight: 800;
+  color: var(--st-text-amber);
+  font-weight: var(--st-weight-ui);
 }
 .st-choice .st-chip {
   white-space: normal;
   line-height: 1.2;
-  padding-block: 4px;
+  padding-block: var(--st-space-1);
 }
 .st-choice:disabled {
-  opacity: 0.6;
+  opacity: 0.7;
 }
+/* "Are you sure?": an amber-tinted box with the measured tinted veil. */
 .st-sure {
   display: grid;
-  gap: 10px;
-  padding: 12px;
-  border-radius: var(--r-md);
-  background: rgba(255, 201, 74, 0.12);
-  animation: st-rise 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  gap: var(--st-space-3);
+  padding: var(--st-space-3) var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: linear-gradient(rgb(var(--st-amber-rgb) / var(--st-tint-cut)), rgb(var(--st-amber-rgb) / var(--st-tint-cut))), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
+  box-shadow: var(--st-sheen-control);
+  animation: st-rise 220ms var(--st-ease-out) both;
+}
+.st-sure__ask {
+  color: var(--st-text);
+}
+.st-sure__ask strong {
+  color: var(--st-text-strong);
 }
 .st-sure__buttons {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--st-space-2);
+}
+
+/* Phones: the fold's line is a 48 px target too. */
+@media (max-width: 767.98px) {
+  .st-tech-fold__sum {
+    min-height: var(--st-tap-phone);
+  }
 }
