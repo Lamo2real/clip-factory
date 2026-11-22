@@ -17,6 +17,10 @@
 #   - desktop.yml trusts only a push or run by hand of deploy in this repository, never a fork's pull request
 #     (which can also complete as "deploy" on a branch it calls main), in its concurrency group, resolve's `if`, the
 #     run-by-hand lookup and a second look at the run through the API.
+#   - nothing in desktop.yml gets past resolve: every other job needs it and runs only when it enabled the build
+#     (never always()), no secret is read outside a job, the hand-off counts only when it is the only one made since
+#     the deploy run's latest infra job started, and before it ended, and is downloaded by id, and the run-by-hand
+#     lookup asks GitHub for pushes and runs by hand only.
 #   - Lamo Stories (docs/CONTRACTS.md §45.15, §45.18): its agent image has its own tag (stories-agent- + a hash of
 #     stories/** and web/src/stories/engine/**), shown with Clip Factory's unchanged one in the summary; it is built
 #     before the plan and one that does not build keeps the live tag; the Clip Factory check
@@ -47,6 +51,25 @@ job() {
 # job_names <file>: the job names of one workflow.
 job_names() {
   awk '$0 == "jobs:" { on = 1; next } on && /^  [A-Za-z0-9_-]+:$/ { sub(/^  /, ""); sub(/:$/, ""); print }' "$1"
+}
+
+# job_needs: the needs of a job body on stdin (inline list, single name or block list), one per line.
+job_needs() {
+  awk '
+    /^    needs: *$/ { on = 1; next }
+    /^    needs: / { v = $0; sub(/^    needs: */, "", v); gsub(/[][ ]/, "", v); n = split(v, a, ","); for (i = 1; i <= n; i++) print a[i]; exit }
+    on && /^      - / { v = $0; sub(/^      - */, "", v); print v; next }
+    on { exit }
+  '
+}
+
+# job_if: the job-level if: of a job body on stdin (folded or not), on one line, without a ${{ }} around it.
+job_if() {
+  awk '
+    /^    if:/ { on = 1; v = $0; sub(/^    if: */, "", v); if (v !~ /^[>|][-+]?$/) printf "%s ", v; next }
+    on && /^      / { printf "%s ", $0; next }
+    on { exit }
+  ' | tr -s ' ' | sed -E 's/^ //; s/ $//; s/^\$\{\{ *(.*[^ ]) *\}\}$/\1/'
 }
 
 # all_jobs: "<file> <job>" for every job of deploy.yml and desktop.yml, so a rule holds wherever a job lives.
@@ -232,10 +255,11 @@ if [ -z "$deploy_desktop_jobs" ] \
   && grep -qF 'SHA: ${{ github.event.workflow_run.head_sha }}' <<<"$resolve" \
   && [ "$checkouts" -gt 0 ] && [ "$checkouts" = "$deployed_refs" ] \
   && job infra | grep -q 'name: desktop-handoff' \
-  && grep -q 'name: desktop-handoff' <<<"$resolve" && grep -qF 'run-id: ${{ steps.run.outputs.run_id }}' <<<"$resolve"; then
+  && grep -qF 'artifact-ids: ${{ steps.run.outputs.artifact_id }}' <<<"$resolve" && grep -qF 'merge-multiple: true' <<<"$resolve" \
+  && grep -qF 'run-id: ${{ steps.run.outputs.run_id }}' <<<"$resolve"; then
   ok "the desktop jobs run in desktop.yml after a successful deploy, on the deployed commit, from infra's hand-off"
 else
-  not_ok "desktop.yml must hold every desktop job (deploy.yml: ${deploy_desktop_jobs:-none}), run on deploy's success, check out workflow_run.head_sha in every job (${deployed_refs}/${checkouts}) and read infra's desktop-handoff"
+  not_ok "desktop.yml must hold every desktop job (deploy.yml: ${deploy_desktop_jobs:-none}), run on deploy's success, check out workflow_run.head_sha in every job (${deployed_refs}/${checkouts}) and download infra's desktop-handoff by the id resolve checked"
 fi
 
 # 13b. Only this repository's push or run-by-hand deploys get desktop.yml's secrets and the deploy role: a fork's pull
@@ -253,6 +277,102 @@ if grep -qF "$trusted_repo" <<<"$resolve" && grep -qF "$trusted_event" <<<"$reso
   ok "desktop.yml builds and signs only for this repository's push or run-by-hand deploys of main"
 else
   not_ok "desktop.yml must check workflow_run.event and head_repository in its concurrency group and resolve, filter the run-by-hand lookup the same way, and re-check the run and its commit through the API"
+fi
+
+# 13c. Nothing in desktop.yml gets past resolve. Every other job needs resolve, and its `if` requires
+#      needs.resolve.outputs.enabled == 'true' (one of its && parts, with no || to get around it, and no ${{ }} inside,
+#      which would make the `if` a string, always true); no job uses always(), which runs a job even when resolve
+#      failed or was skipped. No secret is read outside a job: the workflow's env, run-name and concurrency are worked
+#      out for every run, a fork's pull request's too. Every job key must be one these checks can read, so a job
+#      cannot hide from them.
+enabled="needs.resolve.outputs.enabled == 'true'"
+# shellcheck disable=SC2016  # the literal text ${{
+expr_open='${{'
+expr_close='}}'
+unguarded=()
+while IFS= read -r name; do
+  body="$(job "$name" "$desktop_wf")"
+  if grep -qF 'always()' <<<"$body"; then unguarded+=("${name} (always())"); continue; fi
+  [ "$name" = resolve ] && continue
+  cond="$(job_if <<<"$body")"
+  if ! job_needs <<<"$body" | grep -qx resolve; then
+    unguarded+=("${name} (does not need resolve)")
+  elif [[ "$cond" == *"||"* || "$cond" == *"$expr_open"* || "$cond" == *"$expr_close"* ]] \
+    || ! awk -F ' *&& *' '{ for (i = 1; i <= NF; i++) print $i }' <<<"$cond" | grep -qxF "$enabled"; then
+    unguarded+=("${name} (if: ${cond:-none})")
+  fi
+done < <(job_names "$desktop_wf")
+unreadable="$(awk '$0 == "jobs:" { on = 1; next } on && /^[^ #]/ { exit } on && /^  [^ #]/ && !/^  [A-Za-z0-9_-]+:$/' "$desktop_wf")"
+outside_secrets="$(awk '/^[^ #]/ { top = $1 } top != "jobs:" && !/^[[:space:]]*#/ { print NR ": " $0 }' "$desktop_wf" \
+  | grep -w 'secrets' || true)"
+if [ "$(job_names "$desktop_wf" | head -1)" = resolve ] && [ "${#unguarded[@]}" -eq 0 ] \
+  && [ -z "$unreadable" ] && [ -z "$outside_secrets" ]; then
+  ok "every desktop.yml job but resolve needs it and runs only when it enabled the build; no always(), no secret outside a job"
+else
+  not_ok "desktop.yml jobs must need resolve and require ${enabled}, without always(), || or an inner \${{ }}: ${unguarded[*]:-}${unreadable:+; unreadable job keys: ${unreadable}}${outside_secrets:+; secrets outside a job: ${outside_secrets}}"
+fi
+
+# 13d. The hand-off counts only when it is the only one made since the deploy run's latest successful infra job started,
+#      and before it ended (a minute's grace): code earlier in the same deploy, a bad npm dependency in its build job
+#      say, could otherwise upload a forged one first, and an earlier attempt's (each re-run keeps its own) is left
+#      out. The run-by-hand lookup asks GitHub for pushes and runs by hand by event, each page on its own (a failed gh
+#      fails the step), so a stream of fork runs on a branch called main can never crowd them off the page. Both jq
+#      programs are run on samples.
+# between_quotes: the text between the first and the last ' of stdin.
+between_quotes() { local s; s="$(cat)"; s="${s#*\'}"; printf '%s' "${s%\'*}"; }
+# shellcheck disable=SC2016  # literal workflow text
+verdict_prog="$(awk 'index($0, "why=\"$(jq -rn ") { on = 1 } on { print } on && index($0, "end'"'"')\" || why=") { exit }' <<<"$resolve" | between_quotes)"
+# shellcheck disable=SC2016
+lookup_prog="$(awk 'index($0, "| jq -rs --arg repo \"$REPO\" '"'"'") { on = 1 } on { print } on && index($0, "\\(.head_sha)\"'"'"'") { exit }' <<<"$resolve" | between_quotes)"
+infra_one='{"started_at":"2026-11-21T21:25:58Z","completed_at":"2026-11-21T21:30:10Z"}'
+infra_job="[${infra_one}]"
+in_build='{"id":10,"expired":false,"created_at":"2026-11-21T21:23:25Z"}'
+in_infra='{"id":20,"expired":false,"created_at":"2026-11-21T21:30:06Z"}'
+in_grace='{"id":30,"expired":false,"created_at":"2026-11-21T21:30:40Z"}'
+after_infra='{"id":40,"expired":false,"created_at":"2026-11-21T21:31:11Z"}'
+expired_in_infra='{"id":15,"expired":true,"created_at":"2026-11-21T21:29:00Z"}'
+verdict() { jq -rn --argjson h "$1" --argjson i "$2" "$verdict_prog" 2>/dev/null || echo unreadable; }
+untrusted() { [[ ! "$(verdict "$1" "$2")" =~ ^ok ]]; }
+lookup() { jq -rs --arg repo o/r "$lookup_prog" 2>/dev/null || echo unreadable; }
+pages='{"workflow_runs":[{"id":1,"run_number":7,"head_sha":"a","event":"push","head_repository":{"full_name":"o/r"}},
+  {"id":9,"run_number":99,"head_sha":"f","event":"pull_request","head_repository":{"full_name":"fork/r"}},
+  {"id":8,"run_number":98,"head_sha":"e","event":"push","head_repository":{"full_name":"fork/r"}}]}
+  {"workflow_runs":[{"id":2,"run_number":8,"head_sha":"b","event":"workflow_dispatch","head_repository":{"full_name":"o/r"}}]}'
+numeric='{"workflow_runs":[{"id":3,"run_number":10,"head_sha":"c","event":"push","head_repository":{"full_name":"o/r"}}]}
+  {"workflow_runs":[{"id":4,"run_number":9,"head_sha":"d","event":"workflow_dispatch","head_repository":{"full_name":"o/r"}}]}'
+# shellcheck disable=SC2016
+if [ -n "$verdict_prog" ] && [ -n "$lookup_prog" ] \
+  && [ "$(verdict "[${in_infra}]" "$infra_job")" = "ok 20" ] \
+  && [ "$(verdict "[${in_build},${in_infra}]" "$infra_job")" = "ok 20" ] \
+  && [ "$(verdict "[${expired_in_infra},${in_infra}]" "$infra_job")" = "ok 20" ] \
+  && [ "$(verdict "[${in_grace}]" "$infra_job")" = "ok 30" ] \
+  && untrusted "[${in_build}]" "$infra_job" \
+  && untrusted "[${after_infra}]" "$infra_job" \
+  && untrusted "[${in_build},${after_infra}]" "$infra_job" \
+  && untrusted "[${in_infra},${after_infra}]" "$infra_job" \
+  && untrusted "[${in_infra},${in_grace}]" "$infra_job" \
+  && untrusted "[${in_infra},${in_infra}]" "$infra_job" \
+  && untrusted "[${expired_in_infra}]" "$infra_job" \
+  && untrusted "[${in_infra}]" '[]' \
+  && untrusted "[${in_infra}]" "[${infra_one},${infra_one}]" \
+  && untrusted '[{"id":5,"expired":false,"created_at":null}]' "$infra_job" \
+  && untrusted "[${in_infra}]" '[{"started_at":"2026-11-21T21:25:58Z","completed_at":null}]' \
+  && untrusted "[${in_infra}]" '[{"started_at":null,"completed_at":"2026-11-21T21:30:10Z"}]' \
+  && grep -qF 'artifacts?name=desktop-handoff' <<<"$resolve" && grep -qF 'jobs?filter=latest' <<<"$resolve" \
+  && grep -qF '[.artifacts[] | {id, expired, created_at}]' <<<"$resolve" \
+  && grep -qF '[.jobs[] | select(.name == "infra" and .conclusion == "success") | {started_at, completed_at}]' <<<"$resolve" \
+  && grep -qF '[[ "$why" =~ ^ok\ ([0-9]+)$ ]] || {' <<<"$resolve" \
+  && grep -qF 'artifact_id="${BASH_REMATCH[1]}"' <<<"$resolve" && grep -qF 'echo "artifact_id=${artifact_id}"' <<<"$resolve" \
+  && [ "$(lookup <<<"$pages")" = "2 8 b" ] \
+  && [ "$(lookup <<<"$numeric")" = "3 10 c" ] \
+  && [ -z "$(lookup <<<'{"workflow_runs":[]}{"workflow_runs":[]}')" ] \
+  && grep -qF 'runs?branch=main&status=success&per_page=20"' <<<"$resolve" \
+  && grep -qF 'pushes="$(gh api "${runs}&event=push")"' <<<"$resolve" \
+  && grep -qF 'dispatches="$(gh api "${runs}&event=workflow_dispatch")"' <<<"$resolve" \
+  && ! grep -qF 'per_page=50' <<<"$resolve"; then
+  ok "resolve takes only the hand-off made since the deploy run's latest infra job started, and asks GitHub by event for the run by hand"
+else
+  not_ok "resolve must accept the one desktop-handoff made since its latest infra job's started_at (and by completed_at plus a minute), and look up the run by hand with event=push and event=workflow_dispatch, one gh call each (newest run_number)"
 fi
 
 # 14. The version stays 1.<deploy run number>.0 (desktop.yml's own number started again at 1, and the updater never
