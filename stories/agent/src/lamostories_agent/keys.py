@@ -1,7 +1,7 @@
 """Keys, S3 names, steps and plain sentences of Lamo Stories (docs/CONTRACTS.md §45.3, §45.4, §45.6, §45.9).
 
 The same key formats as the API's ``workspaces/types.py`` (written again here: this runtime imports nothing of Clip
-Factory, §45.24); nothing here ever builds a Lamo Clips key (``USER#{userId}`` alone) or a Lamo Clips S3 prefix."""
+Factory, §45.24); nothing here ever builds a Clip Factory key (``USER#{userId}`` alone) or a Clip Factory S3 prefix."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ IMAGES_OFF: Final = "AI pictures are off. Turn them on in Lamo Stories › Setti
 
 
 def ws_pk(user_id: str, workspace_id: str) -> str:
-    """The workspace's own partition. Never ``USER#{userId}``: that is Lamo Clips'."""
+    """The workspace's own partition. Never ``USER#{userId}``: that is Clip Factory's."""
     if workspace_id == CLIPS or not WORKSPACE_ID.match(workspace_id):
         raise ValueError("not a Lamo Stories workspace id")
     if not SAFE_ID.match(user_id):
