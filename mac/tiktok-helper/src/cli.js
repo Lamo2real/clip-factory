@@ -104,6 +104,12 @@ async function probe(clipId) {
     const result = await post(page, job, file, async (s) => { steps.push(s); await fr.step(`Check run: ${s}`); }, { dryRun: true });
     ok = true;
     await page.screenshot({ path: path.join(BASE, "probe.png"), fullPage: true }).catch(() => {});
+    // A second picture with the settings in view: who can see it, Comment, Reuse of content.
+    const heading = page.getByText(/^(Who can see this post|Who can watch this video)$/).first();
+    await heading.scrollIntoViewIfNeeded().catch(() => {});
+    await page.mouse.wheel(0, 200).catch(() => {});
+    await new Promise((r) => setTimeout(r, 600));
+    await page.screenshot({ path: path.join(BASE, "probe-settings.png") }).catch(() => {});
     console.log(JSON.stringify({ ok: true, steps, ...result, baseline: undefined }, null, 2));
   } catch (e) {
     await page.screenshot({ path: path.join(BASE, "probe.png"), fullPage: true }).catch(() => {});
