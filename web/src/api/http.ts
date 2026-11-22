@@ -3,6 +3,8 @@ import { ApiError, errorFromResponse, networkError } from "./errors.ts";
 import type {
   Account,
   Api,
+  AutoPostStatus,
+  AutoRun,
   Campaign,
   CampaignSummary,
   Captions,
@@ -117,6 +119,10 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
         ...(options && Object.keys(options).length ? { options } : {}),
       }),
     declineClip: async (clipId) => (await call<{ clip: Clip }>("POST", `/clips/${id(clipId)}/decline`)).clip,
+    holdClip: async (clipId) => (await call<{ clip: Clip }>("POST", `/clips/${id(clipId)}/hold`)).clip,
+    unholdClip: async (clipId) => {
+      await call<void>("DELETE", `/clips/${id(clipId)}/hold`);
+    },
     clipFile: (clipId) => call<ClipFile>("GET", `/clips/${id(clipId)}/file`),
     markTikTokPosted: (clipId, link, since) =>
       call<TikTokMarked>("POST", `/clips/${id(clipId)}/tiktok/posted`, { ...(link ? { link } : {}), ...(since ? { since } : {}) }),
@@ -248,5 +254,8 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     saveWhopKey: (clientId) => call("PUT", "/getpaid/whop/key", { clientId }),
     connectWhop: () => call("POST", "/getpaid/whop/connect"),
     stopWhop: () => call("DELETE", "/getpaid/connections/whop", undefined, true),
+    // §46.9: auto-posting's status, and the two test runs.
+    autoPostStatus: () => call<AutoPostStatus>("GET", "/autopost"),
+    autoPostRun: async (kind) => (await call<{ run: AutoRun }>("POST", "/autopost/run", { kind })).run,
   };
 }

@@ -202,6 +202,16 @@ def decode_cursor(cursor: str | None, expected_pk: str, sk_prefix: str) -> Item 
 # --- update requests ------------------------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class Condition:
+    """One extra condition for ``update_request`` (``also``), ANDed with the others: its own expression with its own
+    placeholders (which must not clash with the generated ``#s0``/``:s0``-style ones)."""
+
+    expression: str
+    names: Mapping[str, str]
+    values: Mapping[str, Any]
+
+
 def update_request(
     pk: str,
     sk: str,
@@ -211,9 +221,11 @@ def update_request(
     expect_in: Mapping[str, Iterable[Any]] | None = None,
     expect_absent: Iterable[str] = (),
     expect_present: Iterable[str] = (),
+    also: Condition | None = None,
 ) -> dict[str, Any]:
     """The UpdateItem parameters (also usable inside a transaction). The item must exist; ``expect_in``,
-    ``expect_absent`` and ``expect_present`` add conditions."""
+    ``expect_absent`` and ``expect_present`` add conditions, and so does ``also`` (one explicit expression, such as
+    auto-posting's "not held" check, docs/CONTRACTS.md §46.7)."""
     names: dict[str, str] = {}
     values: dict[str, Any] = {}
     sets = []
@@ -246,6 +258,12 @@ def update_request(
     for i, field in enumerate(expect_present):
         names[f"#p{i}"] = field
         conditions.append(f"attribute_exists(#p{i})")
+    if also is not None:
+        if set(also.names) & set(names) or set(also.values) & set(values):
+            raise ValueError("the extra condition's placeholders clash with the update's own")
+        names.update(also.names)
+        values.update({k: to_dynamo(v) for k, v in also.values.items()})
+        conditions.append(f"({also.expression})")
     kwargs: dict[str, Any] = {
         "Key": {"pk": pk, "sk": sk},
         "UpdateExpression": expression,
