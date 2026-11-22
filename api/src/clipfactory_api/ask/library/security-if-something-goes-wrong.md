@@ -16,6 +16,9 @@
   Content Rewards (it revokes the refresh token and deletes the token secret), then on Content Rewards open Settings ›
   **Connected apps** and press **Disconnect** next to Clip Factory. Nothing on any platform is deleted. Connect again
   on the Mac when you want it back.
+- **Content Rewards or Whop asks Clip Factory to stop reading its pages**: set `cr_finder_enabled` back to `false` in
+  `infra/envs/prod` the same day, in a one-line pull request, and let `deploy.yml` apply it (never a local AWS CLI);
+  every finder route then answers 503 and no look starts ([DEPLOYMENT.md](DEPLOYMENT.md#campaign-finder-contracts-41)).
 - **The help assistant says something wrong or unwanted**: set the kill switch (`HELP` / `SWITCH`, `enabled: false`, or
   `model: false` to keep answers from search only) with the command in
   [DEPLOYMENT.md](DEPLOYMENT.md#ask-clip-factory-kill-switch); it takes effect within 60 seconds, no deploy needed.
