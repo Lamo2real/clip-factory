@@ -1,5 +1,5 @@
 {
- "version": "bb0c83b88bc7",
+ "version": "96fc906e01ae",
  "parts": [
   {
    "id": "app-map",
@@ -129,7 +129,7 @@
    "id": "contracts-17",
    "title": "CONTRACTS: 17. Posting setup: a setup list per platform, real Connect, real posting (owner request, 2026-11-16)",
    "line": "The owner's words: \"Facebook, Instagram, YouTube, TikTok and X should each be a step to connect to in order for this",
-   "chars": 105393
+   "chars": 105697
   },
   {
    "id": "contracts-18",
