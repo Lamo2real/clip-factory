@@ -24,6 +24,7 @@ import { isSoundId } from "../../lib/soundCatalog.ts";
 import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../../lib/background.ts";
 import { currentClipModel, isClipModel } from "../../lib/models.ts";
 import { autoPostMock, NOTE_NO_PLACES, CR_BY_HAND, CR_CANT_TAKE, type AutoPostControls } from "./autopost.ts";
+import { AUTO_ALREADY_SENT } from "../../lib/autopost.ts";
 
 const STEP_MS = 3500;
 /** api settings.MAX_USD_PER_1000: the retired `earningsRates` (§21) are still validated, never read (§25.6). */
@@ -1171,6 +1172,24 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       publishClip(c);
       if (before) publishPost(p);
       return { clip: clone(c), posts: clone(left) };
+    },
+    // Throw away's tap (§46.13): auto-posting leaves the clip alone for a day (its Undo, and a decline that comes late);
+    // Undo lets it go again.
+    async holdClip(clipId) {
+      await delay();
+      const c = clip(clipId);
+      if (c.auto) throw conflict(AUTO_ALREADY_SENT);
+      if (c.status !== "review") throw conflict(ALREADY_DECIDED);
+      autopost.hold(clipId);
+      // The server writes the clip item (its holdUntil), so live news says it changed (§46.9).
+      publishClip(c);
+      return clone(c);
+    },
+    async unholdClip(clipId) {
+      await delay();
+      autopost.unhold(clipId);
+      const c = store.clips.find((x) => x.clipId === clipId);
+      if (c) publishClip(c);
     },
     async declineClip(clipId) {
       await delay();

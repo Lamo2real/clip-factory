@@ -1,7 +1,8 @@
 // Mock mode's auto-posting (docs/CONTRACTS.md §46.3–§46.9): the same rules as the API's autopost/*.py and
 // routes/autopost.py, with a fake clock the e2e tests can move (window.__cfMock.autopost). The hourly EventBridge
 // tick is a tick at every whole hour the fake clock passes; a status read catches up a tick the clock passed by
-// itself (one run, never two). Only bundled into mock builds.
+// itself (one run, never two). Throw away's tap holds a clip for a day (§46.9, §46.13), so a run inside its Undo,
+// or before a decline that comes late, leaves it alone. Only bundled into mock builds.
 import { ApiError } from "../errors.ts";
 import type { AutoPostSettings, AutoPostStatus, AutoRun, AutoRunClip, AutoRunKind, AutoRunMode, Clip, ClipPostOptions, Job, Platform, Post, Settings } from "../types.ts";
 import { autoPostOf, floorHour, nextFullHour, perDay } from "../../lib/autopost.ts";
@@ -11,6 +12,15 @@ import { tiktokState } from "../../lib/tiktokYourself.ts";
 
 const HOUR = 3_600_000;
 const MINUTE = 60_000;
+/**
+ * Throw away's hold (the server's `clips.HOLD_FOR`, §46.9): a day, so a decline that comes late (a phone locked during
+ * the 8 s Undo stops its timer) still finds the clip held; Undo lifts it at once.
+ */
+export const HOLD_MS = 24 * HOUR;
+/** §46.5 rule 5: a run still `planned` this long after it planned has its clips; an older one has stopped. */
+export const PLANNED_FRESH_MS = 15 * MINUTE;
+/** How long EventBridge keeps trying to deliver one hour's tick (its maximum event age, §46.11). */
+export const TICK_MAX_AGE_MS = 3300 * 1000;
 
 /** §46.5 rule 3: a failed check with one of these keys makes the clip wait for him. */
 export const IMPORTANT_CHECKS: readonly string[] = ["hear", "moving", "zero_context", "payoff", "campaign_rules", "logo", "disclosure"];
@@ -35,6 +45,18 @@ export const PICK_CLIPS = "Pick 1 to 5 clips.";
 
 const bad = (msg: string) => new ApiError(400, "bad_request", msg);
 const iso = (t: number) => new Date(t).toISOString();
+
+/**
+ * The next run as the owner sees it (§46.4), from `due` (nextRunAt's rule) and `seen` (the last hour whose tick came:
+ * max(lastRunAt, lastTickAt)): `due` while it is still ahead; once its hour is here or past, the current hour while
+ * that hour's tick has not come yet (EventBridge may still deliver it, up to its 3300 s), else the next full hour.
+ */
+export function shownNextRun(due: number, seen: number, now: number): number {
+  const cur = floorHour(now);
+  if (due > cur) return due;
+  if (seen < cur && now < cur + TICK_MAX_AGE_MS) return cur;
+  return nextFullHour(now);
+}
 /** A run id's slot: ISO UTC to the second (the API's `{slot}#{kind}`). */
 
 export interface AutoPostDeps {
@@ -56,8 +78,9 @@ interface Picked {
   waiting: { clip: Clip; reason: string }[];
 }
 
-/** A stored run: its posts are read from the clips' posts each time (§46.9). */
-type StoredRun = Omit<AutoRun, "clips"> & { clips: Omit<AutoRunClip, "posts">[] };
+/** A stored run: its posts are read from the clips' posts each time (§46.9). `plannedAt` (internal, never shown):
+ * when it planned, which rule 5 measures from (a late or resumed run's slot can be long before it). */
+type StoredRun = Omit<AutoRun, "clips"> & { clips: Omit<AutoRunClip, "posts">[]; plannedAt: number };
 
 /** The test knobs (window.__cfMock.autopost). */
 export interface AutoPostControls {
@@ -73,6 +96,8 @@ export interface AutoPostControls {
   tick(at?: string): Promise<string>;
   /** The clip's video goes missing (§46.5 rule 2; mock clips carry no videoKey). */
   loseVideo(clipId: string): void;
+  /** The clips Throw away holds right now (§46.13). */
+  held(): string[];
   /** Every run, newest first. */
   runs(): AutoRun[];
   /** Forget the runs, the schedule and the clock (tests). */
@@ -85,9 +110,22 @@ export function autoPostMock(deps: AutoPostDeps) {
   let lastNowAt: number | undefined;
   let runs: StoredRun[] = [];
   const lostVideo = new Set<string>();
+  // Throw away's holds: clip id → until when (on the fake clock).
+  const holds = new Map<string, number>();
   const clock = () => Date.now() + offset;
   // The last hour a tick ran for, so a status read only catches up a tick the clock passed by itself.
   let tickedSlot = floorHour(clock());
+  // The server's AUTOPOST.lastTickAt: the last hour whose tick came and was not due. Setting the clock owes no tick,
+  // so that hour counts as come too.
+  let lastTickAt = tickedSlot;
+
+  const isHeld = (clipId: string) => (holds.get(clipId) ?? 0) > clock();
+  /** §46.5 rule 5: the clips of runs still going (planned, and planned in the last 15 minutes). */
+  const busy = (): Set<string> => {
+    const out = new Set<string>();
+    for (const r of runs) if (r.state === "planned" && clock() - r.plannedAt <= PLANNED_FRESH_MS) for (const c of r.clips) out.add(c.clipId);
+    return out;
+  };
 
   const settingsNow = (): AutoPostSettings => autoPostOf(deps.settings().autoPost);
 
@@ -99,11 +137,11 @@ export function autoPostMock(deps: AutoPostDeps) {
     return lastRunAt === undefined ? first : Math.max(first, lastRunAt + s.everyHours * HOUR);
   }
 
-  /** As shown: nextRunAt, or the next full hour when that is already past. */
+  /** As shown (§46.4): nextRunAt; once past, this hour while its tick is still to come, else the next full hour. */
   function shownNext(s: AutoPostSettings): number | null {
     const next = nextRunAt(s);
     if (next === null) return null;
-    return next > clock() ? next : nextFullHour(clock());
+    return shownNextRun(next, Math.max(lastRunAt ?? lastTickAt, lastTickAt), clock());
   }
 
   /** A normal clip's places now (§46.6): every ready setup but TikTok, in STATS_ORDER. */
@@ -123,7 +161,10 @@ export function autoPostMock(deps: AutoPostDeps) {
     return null;
   }
 
-  /** §46.5: the clips in Review, oldest first by their job, then rank, then id; taken or waiting. */
+  /**
+   * §46.5: the clips in Review, oldest first by their job, then rank, then id; taken or waiting. A clip Throw away
+   * holds, or one a run still going has (rule 5), is left out silently: neither taken nor waiting.
+   */
   function pick(): Picked {
     const jobs = deps.jobs();
     const age = (c: Clip) => jobs.find((j) => j.jobId === c.jobId)?.createdAt ?? c.createdAt;
@@ -132,8 +173,10 @@ export function autoPostMock(deps: AutoPostDeps) {
       .filter((c) => c.status === "review")
       .sort((a, b) => age(a).localeCompare(age(b)) || a.rank - b.rank || a.clipId.localeCompare(b.clipId));
     const places = placesNow();
+    const taken = busy();
     const out: Picked = { candidates: candidates.length, taken: [], waiting: [] };
     for (const c of candidates) {
+      if (isHeld(c.clipId) || taken.has(c.clipId)) continue;
       const reason = waitReason(c, places);
       if (reason) out.waiting.push({ clip: c, reason });
       else out.taken.push(c);
@@ -179,6 +222,7 @@ export function autoPostMock(deps: AutoPostDeps) {
     const run: StoredRun = {
       runId,
       at: iso(slot),
+      plannedAt: clock(),
       kind,
       mode,
       state: "planned",
@@ -192,10 +236,10 @@ export function autoPostMock(deps: AutoPostDeps) {
         continue;
       }
       const c = deps.clips().find((x) => x.clipId === planned.clipId);
-      // Decided since the plan: thrown away or uploaded by hand (§46.13).
-      if (!c || c.status !== "review") {
+      // Decided since the plan: thrown away (or its Undo still counting: held) or uploaded by hand (§46.13).
+      if (!c || c.status !== "review" || isHeld(c.clipId)) {
         planned.outcome = "skipped";
-        planned.reason = !c || c.status === "declined" ? THREW_AWAY : UPLOADED_YOURSELF;
+        planned.reason = !c || c.status === "declined" || c.status === "review" ? THREW_AWAY : UPLOADED_YOURSELF;
         continue;
       }
       try {
@@ -210,7 +254,7 @@ export function autoPostMock(deps: AutoPostDeps) {
     return withPosts(run);
   }
 
-  function withPosts(run: StoredRun): AutoRun {
+  function withPosts({ plannedAt: _internal, ...run }: StoredRun): AutoRun {
     const posts = deps.posts();
     return structuredClone({
       ...run,
@@ -233,6 +277,8 @@ export function autoPostMock(deps: AutoPostDeps) {
     const slot = floorHour(at);
     tickedSlot = Math.max(tickedSlot, slot);
     const out = await runOnce("scheduled", slot);
+    // The hour's tick came and found nothing due: the shown next run moves on from this hour (§46.4).
+    if (out === "not_due") lastTickAt = Math.max(lastTickAt, slot);
     return typeof out === "string" ? out : out.runId;
   }
 
@@ -247,6 +293,7 @@ export function autoPostMock(deps: AutoPostDeps) {
     set(at) {
       offset = Date.parse(at) - Date.now();
       tickedSlot = floorHour(clock());
+      lastTickAt = tickedSlot;
     },
     skip(ms) {
       offset += ms;
@@ -262,6 +309,7 @@ export function autoPostMock(deps: AutoPostDeps) {
     loseVideo(clipId) {
       lostVideo.add(clipId);
     },
+    held: () => [...holds.keys()].filter(isHeld),
     runs: () => runs.map(withPosts),
     reset() {
       offset = 0;
@@ -269,13 +317,23 @@ export function autoPostMock(deps: AutoPostDeps) {
       lastNowAt = undefined;
       runs = [];
       lostVideo.clear();
+      holds.clear();
       tickedSlot = floorHour(clock());
+      lastTickAt = tickedSlot;
     },
   };
 
   return {
     controls,
     clock,
+    /** POST /v1/clips/{clipId}/hold on a clip in Review (the route checks it): runs leave it alone for a day. */
+    hold(clipId: string) {
+      holds.set(clipId, clock() + HOLD_MS);
+    },
+    /** DELETE /v1/clips/{clipId}/hold: Undo lets runs take it again. */
+    unhold(clipId: string) {
+      holds.delete(clipId);
+    },
     /**
      * PUT /v1/settings `autoPost` (§46.3): any of on, everyHours, perRun, practice, each merged over the stored value.
      * Switching on writes onAt; on while already on keeps it.
@@ -300,6 +358,10 @@ export function autoPostMock(deps: AutoPostDeps) {
       const next = shownNext(s);
       const picked = pick();
       const places = placesNow();
+      // §46.5: a row gets its time only when it has somewhere to go; practising, only the first perRun (practice
+      // runs send nothing, so they pick the same first clips each time).
+      const hasPlaces = (c: Clip) => (c.campaignId ? deps.campaign(c, places).places.length > 0 : places.length > 0);
+      const timed = (c: Clip, i: number) => next !== null && hasPlaces(c) && (!s.practice || i < s.perRun);
       const posts = deps.posts();
       const clips = deps.clips();
       const hookOf = (clipId: string) => clips.find((c) => c.clipId === clipId)?.hook ?? "";
@@ -314,7 +376,7 @@ export function autoPostMock(deps: AutoPostDeps) {
           jobId: c.jobId,
           hook: c.hook,
           ...(c.coverUrl ? { coverUrl: c.coverUrl } : {}),
-          ...(next !== null ? { runAt: iso(next + Math.floor(i / s.perRun) * s.everyHours * HOUR) } : {}),
+          ...(timed(c, i) ? { runAt: iso(next! + Math.floor(i / s.perRun) * s.everyHours * HOUR) } : {}),
         })),
         waiting: picked.waiting.slice(0, 20).map(({ clip: c, reason }) => ({ clipId: c.clipId, jobId: c.jobId, hook: c.hook, ...(c.coverUrl ? { coverUrl: c.coverUrl } : {}), reason })),
         runs: runs.slice(0, 10).map(withPosts),

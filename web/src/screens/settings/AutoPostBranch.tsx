@@ -20,6 +20,7 @@ import {
   EVERY_HOURS,
   hoursWords,
   leftOutLine,
+  NEXT_ALL_WAITING,
   NEXT_EMPTY,
   PER_RUN,
   placesLine,
@@ -163,7 +164,9 @@ export function AutoPostBranch() {
     focusNext.current = null;
     document.getElementById(target)?.focus();
   });
-  useEffect(() => onClipBack(() => void reload()), [reload]);
+  // Undo shows the row again at once (from the status already here); the status is read again only once its hold is let
+  // go, or the answer would still leave the clip out (a held clip is skipped silently, §46.13).
+  useEffect(() => onClipBack((_, released) => void released.then(reload)), [reload]);
   // Changed on another device: back on this one, the settings are read again too, so the switch shows what is saved.
   useEffect(() => {
     const again = () => void refresh().catch(() => undefined);
@@ -316,7 +319,7 @@ export function AutoPostBranch() {
                 ))}
               </ol>
             ) : (
-              <p className="autopost__line muted">{NEXT_EMPTY}</p>
+              <p className="autopost__line muted">{status.waiting.length ? NEXT_ALL_WAITING : NEXT_EMPTY}</p>
             )
           ) : (
             loading

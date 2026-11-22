@@ -35,7 +35,7 @@ import { useUnsaved } from "../../features/help/unsaved.ts";
 import { offerAfterUpload, TIKTOK_PUBLIC_HINT, tiktokAudited } from "../../lib/tiktokYourself.ts";
 import { PostYourself, PostYourselfButton } from "../library/PostYourself.tsx";
 import { useAutoPost } from "../settings/AutoPostBranch.tsx";
-import { autoPostOf, reviewLine } from "../../lib/autopost.ts";
+import { autoPostOf, reviewLede, reviewLine, sentFirstLine } from "../../lib/autopost.ts";
 
 /** Video and cover links are presigned for an hour (docs/CONTRACTS.md §5); fetch new ones a little before that. */
 export const MEDIA_FRESH_MS = 50 * 60 * 1000;
@@ -154,6 +154,7 @@ export function Review({ jobId }: { jobId: string | null }) {
           auto,
           autopost.status.nextUp.find((x) => x.clipId === clipId),
           autopost.status.waiting.find((x) => x.clipId === clipId),
+          autopost.status.places,
         )
       : null;
   // Clips uploaded on this visit: each gets a "See how it does" link once its card has left the list.
@@ -250,7 +251,7 @@ export function Review({ jobId }: { jobId: string | null }) {
         lede={
           jobId
             ? "These clips all come from one job. Tap Upload to post one, or Throw away if you do not like it. Tap Show every job to see the rest."
-            : "Watch each clip. Tap Upload to post it, or Throw away if you do not like it. Nothing posts until you tap Upload."
+            : reviewLede(auto)
         }
         actions={
           jobId ? (
@@ -729,6 +730,16 @@ function ReviewCard({
         chosen.length ? chosen : undefined,
         chosen.length ? optionsFor(chosen, opts) : undefined,
       );
+      // A Review card's own Upload never marks its clip `auto`: auto-posting sent it first (§46.13). It leaves Review
+      // with a calm note; no burst, no "Uploading to…", and these places are not remembered as his pick.
+      const sentFirst = out.kind === "uploading" ? sentFirstLine(out.clip) : null;
+      if (out.kind === "uploading" && sentFirst) {
+        setSheet(false);
+        toast.info(sentFirst);
+        onKept(out.clip, out.posts);
+        leave();
+        return;
+      }
       if (out.kind === "uploading") {
         if (chosen.length) saveUploadTo(chosen);
         setSheet(false);
