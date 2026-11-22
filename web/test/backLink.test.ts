@@ -29,6 +29,12 @@ describe("?back=", () => {
       expect(b).toEqual({ href: `/settings/posting/getpaid/${p}`, kind: "getpaid" });
       expect(backLabel(b)).toBe("Back to Get paid");
     }
+    // §40.5.5: Your bank's "Pick my country" comes back to the bank page (Settings › Posting › Get paid).
+    expect(parseBack("/settings/posting/getpaid/bank")).toEqual({ href: "/settings/posting/getpaid/bank", kind: "getpaid" });
+    // It says where it really goes: Your bank, not Get paid.
+    expect(backLabel(parseBack("/settings/posting/getpaid/bank")!)).toBe("Back to Your bank");
+    expect(backLink("?back=/settings/posting/getpaid/bank")?.href).toBe("/settings/posting/getpaid/bank");
+    expect(parseBack("/settings/posting/getpaid/bank?result=bank_connected")).toBeNull();
     expect(backLabel(parseBack("/settings/posting/setup/youtube")!)).toBe("Back to YouTube setup");
     expect(backLabel(parseBack("/settings/posting/setup/contentrewards")!)).toBe("Back to Content Rewards setup");
     expect(backNext(parseBack("/settings/posting/getpaid/youtube")!)).toBe("Next: back to Get paid.");

@@ -18,6 +18,7 @@ the generator with `--check` and fails when this table is out of date. Do not ed
 | campaign | `/campaigns/{campaignId}` |
 | clip | `/clips/{clipId}` |
 | cr_setup | `/settings/posting/setup/contentrewards` |
+| getpaid-bank | `/settings/posting/getpaid/bank` |
 | settings | `/settings` |
 | settings | `/settings/clip-making/clips` |
 | settings | `/settings/clip-making/skills` |

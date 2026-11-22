@@ -21,6 +21,7 @@ import { catalogOf, finderMockApi, type FinderMock } from "./finder.ts";
 import { clipFit, fitOne, remakeRefusal, sourceKept, uploadRefusal, type FitInputs } from "./fit.ts";
 import { everywhere, MONETARY_SCOPE } from "./moneyEverywhere.ts";
 import { getPaidMockApi } from "./getpaid.ts";
+import { bankMockApi } from "./bank.ts";
 import { adFirst, hasItem, liveFit } from "../../lib/crFit.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
 import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../../lib/background.ts";
@@ -661,11 +662,23 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     },
     publish: () => mockLive.publish({ type: "getpaid", op: "upsert", id: "getpaid", partial: true }),
   });
+  // Your bank (§40.5): the pretend Enable Banking and bank; the country is Money's, as on the server.
+  const bank = bankMockApi(() => delay(), {
+    country: () => {
+      try {
+        return (JSON.parse(sessionStorage.getItem("cf-mock-money") ?? "null") as { country?: string | null } | null)?.country ?? null;
+      } catch {
+        return null;
+      }
+    },
+    crOn: () => cr.moneyItems().on,
+    publish: () => mockLive.publish({ type: "bank", op: "upsert", id: "bank", partial: true }),
+  });
   const followers = followersApi(() => delay());
   if (typeof window !== "undefined") {
     // Merge, never replace: posting (above) and setup (mock/setup.ts) keep their knobs on the same object.
     const w = window as unknown as { __cfMock?: Record<string, unknown> & Partial<MockSkillControls> };
-    w.__cfMock = Object.assign(w.__cfMock ?? {}, skills.controls, { follows: follows.controls, money: money.controls, getpaid: getpaid.controls, followers: followers.controls });
+    w.__cfMock = Object.assign(w.__cfMock ?? {}, skills.controls, { follows: follows.controls, money: money.controls, getpaid: getpaid.controls, bank: bank.controls, followers: followers.controls });
   }
 
   /**
@@ -943,6 +956,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       });
     },
     ...getpaid.api,
+    ...bank.api,
     async health() {
       await delay();
       return { ok: true, version: "mock" };

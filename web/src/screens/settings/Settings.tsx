@@ -4,7 +4,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { AskMark } from "../../components/AskMark.tsx";
 import { Icon } from "../../components/Icon.tsx";
-import { A, ActGlyph, PageHeader } from "../../components/ui.tsx";
+import { A, ActGlyph, LinkButton, PageHeader } from "../../components/ui.tsx";
 import { useAction } from "../../lib/motion.ts";
 import { plural } from "../../lib/format.ts";
 import { prefersReducedMotion, setPrefs, usePrefs } from "../../lib/prefs.ts";
@@ -25,6 +25,9 @@ import type { GetPaidPlace, Platform } from "../../api/types.ts";
 import { placeName } from "../../getpaid/index.ts";
 import { GetPaidList } from "../getpaid/GetPaidList.tsx";
 import { GetPaidPage } from "../getpaid/GetPaidPage.tsx";
+import { BankPage } from "../getpaid/bank/BankPage.tsx";
+import { backLabel, backLink } from "../../lib/backLink.ts";
+import { BANK_PATH } from "../../getpaid/bank.ts";
 import { GUIDES } from "../../setup/index.ts";
 import {
   AccountBranch,
@@ -88,6 +91,7 @@ export function Settings({
   platform = null,
   contentRewards = false,
   getPaid = null,
+  bank = false,
 }: {
   tree?: string | null;
   branch?: string | null;
@@ -99,6 +103,8 @@ export function Settings({
   contentRewards?: boolean;
   /** Posting › Get paid › one place's page (§40.1 item 2). */
   getPaid?: GetPaidPlace | null;
+  /** Posting › Get paid › Your bank (§40.5.2). */
+  bank?: boolean;
 }) {
   const { installed } = useInstall();
   const trees = useMemo(() => visibleTrees(installed), [installed]);
@@ -116,6 +122,11 @@ export function Settings({
         <div className="settings-content">
           {skill && tree && branch ? (
             <SkillScreen tree={tree} branch={branch} mode={skill.mode} skillId={skill.skillId} />
+          ) : tree && branch && bank ? (
+            <>
+              <Trail tree={tree} branch={branch} extra={[{ name: "Your bank" }]} />
+              <BankPage />
+            </>
           ) : tree && branch && getPaid ? (
             <>
               <Trail tree={tree} branch={branch} extra={[{ name: placeName(getPaid) }]} />
@@ -372,6 +383,11 @@ const WAIT_FOR_MS = 10_000;
 
 function BranchPage({ tree, branch }: { tree: Tree; branch: Branch }) {
   const hash = useHash();
+  // Your bank's "Pick my country" (§40.5.5) comes here with ?back= the bank page: its way back stays in view (pinned at
+  // the bottom right) for as long as that ?back= is in the address. Read on every draw, so another branch reached in
+  // the same tab never keeps it.
+  const asked = typeof location === "undefined" ? null : backLink(location.search);
+  const back = asked?.href === BANK_PATH ? asked : null;
   const body = useRef<HTMLDivElement>(null);
   const render = BRANCHES[`${tree.slug}/${branch.slug}`];
 
@@ -438,6 +454,13 @@ function BranchPage({ tree, branch }: { tree: Tree; branch: Branch }) {
       <div className="branch-body" ref={body}>
         {render?.()}
       </div>
+      {back ? (
+        <div className="branch-back gp-pin" data-gp="back-pin">
+          <LinkButton href={back.href} variant="glass" size="lg" icon="chevronLeft" data-gp="back" data-help-clear="">
+            {backLabel(back)}
+          </LinkButton>
+        </div>
+      ) : null}
     </>
   );
 }

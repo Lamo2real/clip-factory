@@ -155,7 +155,10 @@ describe("old links", () => {
     expect(gp.name).toBe("Get paid");
     expect(gp.line).toBe("Set up how each app pays you. See if money can reach you.");
     expect(gp.icon).toBe("coin");
-    expect(gp.apples.map((a) => [a.id, a.name, a.leaf])).toEqual([["getpaid", "Get paid", "One card per place. Do the steps once so money can reach you."]]);
+    expect(gp.apples.map((a) => [a.id, a.name, a.leaf])).toEqual([
+      ["getpaid", "Get paid", "One card per place. Do the steps once so money can reach you."],
+      ["getpaid-bank", "Your bank", "See which app money reached your bank."],
+    ]);
     for (const w of ["get paid", "payout", "payouts", "bank", "bank account", "paypal", "stripe", "adsense", "whop", "tax", "money on hold", "withdraw", "cash out"]) expect(gp.apples[0]!.words).toContain(w);
     const payouts = findApple("money-payouts")!.apple;
     expect(payouts.leaf).toBe("Each app pays you itself. Get paid shows the steps for each one.");
@@ -163,6 +166,19 @@ describe("old links", () => {
     expect(searchSettings("cash out").map((h) => h.href)).toContain("/settings/posting/getpaid#getpaid");
     expect(match("/settings/posting/getpaid")).toEqual({ name: "settings", tree: "posting", branch: "getpaid" });
     expect(titleFor({ name: "settings", tree: "posting", branch: "getpaid" })).toBe("Get paid · Settings");
+  });
+
+  it("§40.5.12 change 10: Get paid's Your bank apple, its words, its page and its title", () => {
+    const apple = findApple("getpaid-bank")!.apple;
+    expect(apple.href).toBe("/settings/posting/getpaid/bank");
+    for (const w of ["bankid", "enable banking", "reached your bank", "reconnect bank", "bank link"]) expect(apple.words).toContain(w);
+    for (const q of ["bankid", "enable banking", "reconnect bank", "reached your bank"]) expect(searchSettings(q)[0]?.href, q).toBe("/settings/posting/getpaid/bank");
+    // Matched before the place pages: "bank" is not a place that pays him.
+    expect(match("/settings/posting/getpaid/bank")).toEqual({ name: "getpaid-bank" });
+    expect(match("/settings/posting/getpaid/bank/")).toEqual({ name: "getpaid-bank" });
+    expect(titleFor({ name: "getpaid-bank" })).toBe("Your bank · Get paid · Settings");
+    // /bank-done is no Settings page: App.tsx shows it before the sign-in gate.
+    expect(match("/bank-done")).toEqual({ name: "not_found" });
   });
 
   it("§40: route each Get paid place page, and nothing else under it", () => {

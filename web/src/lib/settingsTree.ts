@@ -224,6 +224,13 @@ export const TREES: Tree[] = [
             leaf: "One card per place. Do the steps once so money can reach you.",
             words: ["get paid", "payout", "payouts", "bank", "bank account", "paypal", "stripe", "adsense", "whop", "tax", "money on hold", "withdraw", "cash out"],
           },
+          {
+            id: "getpaid-bank",
+            name: "Your bank",
+            leaf: "See which app money reached your bank.",
+            words: ["bankid", "enable banking", "reached your bank", "reconnect bank", "bank link"],
+            href: "/settings/posting/getpaid/bank",
+          },
         ],
       },
       {

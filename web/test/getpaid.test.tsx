@@ -44,6 +44,7 @@ const { NotifyBranch } = await import("../src/screens/settings/NotifyBranch.tsx"
 const { ToastProvider } = await import("../src/components/Toasts.tsx");
 const gp = await import("../src/lib/getPaid.ts");
 const { resetCr } = await import("../src/lib/contentRewards.ts");
+const { resetBank } = await import("../src/lib/bank.ts");
 const { todoRows, todoCount } = await import("../src/lib/setupTodo.ts");
 const { allGetPaidSteps } = await import("../src/getpaid/index.ts");
 
@@ -119,6 +120,7 @@ beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
   gp.resetGetPaid();
+  resetBank();
   resetCr();
   accounts = [];
   country = "SE";
@@ -206,7 +208,7 @@ describe("the status pill (§40.2)", () => {
 // ---------- one vermilion per screen ----------
 
 describe("one vermilion per screen, per status (§40.1)", () => {
-  it("the list has none; each card is one tap to its page; Your bank says only D's words", async () => {
+  it("the list has none; each card is one tap to its page; Your bank, while it can't be read, says only today's words", async () => {
     start("owner");
     accounts = (["youtube", "instagram", "facebook", "x", "tiktok"] as Platform[]).map((platform) => ({ platform, status: "connected" }) as Account);
     await draw(<GetPaidList />);
@@ -223,6 +225,20 @@ describe("one vermilion per screen, per status (§40.1)", () => {
     expect(host.querySelector(".gp-bank button, .gp-bank a")).toBeNull();
     expect(host.querySelector(".gp-summary")!.textContent).toBe((await mock.api.getPaid()).summary);
     expect(host.querySelector("a.gp-card[data-place='x']")!.textContent).toContain("Your Clip Factory clips probably won't earn on X.");
+  });
+
+  it("Your bank on (§40.5.2 item 1): one big glass tap to the bank page, under the place cards; still no vermilion", async () => {
+    const { bankMockApi } = await import("../src/api/mock/bank.ts");
+    current = { ...current, ...bankMockApi(async () => undefined, { country: () => "SE", crOn: () => true, publish: () => undefined }).api };
+    await draw(<GetPaidList />);
+    expect(vermilion()).toHaveLength(0);
+    const bank = host.querySelector<HTMLAnchorElement>("a[data-help='getpaid-bank-card']")!;
+    expect(bank.getAttribute("href")).toBe("/settings/posting/getpaid/bank");
+    expect(bank.querySelector(".gp-pill")!.textContent).toBe("Not started");
+    const cards = [...host.querySelectorAll("a.gp-card")];
+    expect(cards).toHaveLength(6);
+    expect(cards.at(-1)!.compareDocumentPosition(bank) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(text()).not.toContain("Clip Factory can't see your bank.");
   });
 
   it("Content Rewards switched off: five cards", async () => {

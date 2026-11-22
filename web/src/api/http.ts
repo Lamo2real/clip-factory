@@ -1,10 +1,12 @@
 import { announceSignedOut, type AuthClient } from "../lib/auth.ts";
 import { ApiError, errorFromResponse, networkError } from "./errors.ts";
+import { bankError } from "../getpaid/bank.ts";
 import type {
   Account,
   Api,
   AutoPostStatus,
   AutoRun,
+  BankView,
   Campaign,
   CampaignSummary,
   Captions,
@@ -77,6 +79,27 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     const parsed: unknown = await res.json().catch(() => null);
     if (!res.ok) {
       const err = errorFromResponse(res.status, parsed);
+      if (err.status === 401) announceSignedOut();
+      throw err;
+    }
+    if (parsed === null) throw new ApiError(res.status, "internal", "The server sent an empty answer. Try again.");
+    return parsed as T;
+  }
+
+  /**
+   * Your bank's routes (§40.5.10): like `call`, but a refusal keeps the bank's own code (`no_country`,
+   * `country_not_linked`, `rate_limited`, …) and `retryAt`, which the screens need. A 202 answers with the view.
+   */
+  async function bankCall<T>(method: Method, path: string, body?: unknown, keep = false): Promise<T> {
+    let res = await send(method, path, await auth.accessToken(), body, keep);
+    if (res.status === 401) {
+      const fresh = await auth.accessToken(true);
+      if (fresh) res = await send(method, path, fresh, body, keep);
+    }
+    if (res.status === 204) return undefined as T;
+    const parsed: unknown = await res.json().catch(() => null);
+    if (!res.ok) {
+      const err = bankError(res.status, parsed);
       if (err.status === 401) announceSignedOut();
       throw err;
     }
@@ -257,6 +280,18 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     saveWhopKey: (clientId) => call("PUT", "/getpaid/whop/key", { clientId }),
     connectWhop: () => call("POST", "/getpaid/whop/connect"),
     stopWhop: () => call("DELETE", "/getpaid/connections/whop", undefined, true),
+    // §40.5: Your bank. The two deletes are sent with keepalive: Stop and Forget may run as the page closes.
+    getBank: () => bankCall("GET", "/getpaid/bank"),
+    bankMakeKey: (again) => bankCall<BankView>("POST", "/getpaid/bank/key", again ? { again: true } : {}),
+    bankSaveApp: (body) => bankCall("PUT", "/getpaid/bank/app", body),
+    bankCheckApp: () => bankCall("POST", "/getpaid/bank/app/check"),
+    bankStep: (step, done) => bankCall<BankView>("PATCH", "/getpaid/bank/steps", { step, done }),
+    bankBanks: () => bankCall("GET", "/getpaid/bank/banks"),
+    bankConnect: (body) => bankCall("POST", "/getpaid/bank/connect", body),
+    bankCheckNow: (first) => bankCall<BankView>("POST", "/getpaid/bank/check", first ? { first: true } : {}),
+    bankAnswer: (depositId, answer) => bankCall<BankView>("PATCH", `/getpaid/bank/deposits/${id(depositId)}`, answer),
+    bankStopLink: (linkId) => bankCall("DELETE", `/getpaid/bank/links/${id(linkId)}`, undefined, true),
+    bankForget: () => bankCall("DELETE", "/getpaid/bank", undefined, true),
     // §46.9: auto-posting's status, and the two test runs.
     autoPostStatus: () => call<AutoPostStatus>("GET", "/autopost"),
     autoPostRun: async (kind) => (await call<{ run: AutoRun }>("POST", "/autopost/run", { kind })).run,

@@ -1,14 +1,19 @@
 // "Sent to your bank" on a place page (docs/CONTRACTS.md §40.4): the place's sent line, then each payment Google or
-// Whop reported, newest first (at most 36). A payment is "sent to your bank", never "reached your bank": only a bank
-// can say that (§40.5, not built), so the bank line always says to look in the bank's app. Amounts are only formatted
-// (or shown as Google wrote them), never added, converted or guessed; a place that tells apps nothing says so, never $0.
-import type { GetPaidCard, PayoutRow, SentLine } from "../../api/types.ts";
+// Whop reported, newest first (at most 36). A payment is "sent to your bank", never "reached your bank": only his bank
+// can say that (§40.5). While Your bank is off, the bank line says to look in the bank's app; on, the place's own
+// "Reached your bank" line (§40.5.9) takes its place, and each sent payment the bank paired with says when it reached
+// the bank. Amounts are only formatted (or shown as Google wrote them), never added, converted or guessed; a place
+// that tells apps nothing says so, never $0.
+import type { GetPaidCard, GetPaidPlace, PayoutRow, SentLine } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
-import { LinkButton } from "../../components/ui.tsx";
+import { LinkButton, Skeleton } from "../../components/ui.tsx";
+import { isGetPaidPlace } from "../../getpaid/index.ts";
+import { bankView, useBank } from "../../lib/bank.ts";
 import { BANK_TEXT } from "../../lib/getPaid.ts";
 import { formatMoney } from "../../lib/money.ts";
 import { OpenButton } from "../campaigns/bits.tsx";
 import { Rich } from "../settings/setup/bits.tsx";
+import { PlaceReached, pairFor } from "./bank/BankMoney.tsx";
 
 /** "23 Oct 2026" (a plain date, no time zone). */
 export function payoutDate(date: string): string {
@@ -87,8 +92,20 @@ export function SentLineView({ sent, compact = false, here }: { sent: SentLine; 
 /** "Waiting to be paid" (YouTube only, §40.4): Google's own words for the balance it hasn't paid yet, never in a total. */
 export const waitingLine = (unpaid: NonNullable<GetPaidCard["unpaid"]>) => `Waiting to be paid: ${unpaid.text} (YouTube says).`;
 
+/** The place a page is for, from its own address ("/settings/posting/getpaid/youtube" → youtube). */
+export function placeOf(here: string | undefined): GetPaidPlace | undefined {
+  const p = here ? /^\/settings\/posting\/getpaid\/([a-z]+)$/.exec(here)?.[1] : undefined;
+  return p && isGetPaidPlace(p) ? p : undefined;
+}
+
 export function SentRows({ sent, rows, unpaid, here }: { sent: SentLine; rows: readonly PayoutRow[]; unpaid?: GetPaidCard["unpaid"]; here?: string }) {
   const shown = rows.slice(0, 36);
+  const place = placeOf(here);
+  const bankLoad = useBank();
+  const bank = bankView(bankLoad);
+  const line = bank && place ? bank.places[place] : undefined;
+  // Your bank not read yet: no bank line for a moment, rather than "can't see your bank" before it turns out it can.
+  const waiting = bankLoad.state === "loading" && !!place;
   return (
     <section className="gp-sent glass" data-help="getpaid-sent" aria-labelledby="gp-sent-title">
       <h2 className="gp-section__title" id="gp-sent-title">
@@ -111,14 +128,26 @@ export function SentRows({ sent, rows, unpaid, here }: { sent: SentLine; rows: r
               {i === 0 && r.state === "sent" && sent.arrive ? <span className="gp-sent__arrive">{sent.arrive}</span> : null}
               {/* Only a payout still on its way can arrive: a failed or returned one never says it is coming. */}
               {r.arriveBy && r.state === "on_its_way" ? <span className="gp-sent__arrive">Whop says it should arrive by {payoutDate(r.arriveBy)}.</span> : null}
+              {place && pairFor(bank, place, r) ? (
+                <span className="gp-sent__reached" data-pair="">
+                  <Icon name="checkCircle" size={16} />
+                  <span>{pairFor(bank, place, r)}</span>
+                </span>
+              ) : null}
             </li>
           ))}
         </ul>
       ) : null}
-      <p className="gp-bank-line">
-        <Icon name="info" size={18} />
-        <span>{BANK_TEXT}</span>
-      </p>
+      {line ? (
+        <PlaceReached line={line} />
+      ) : waiting ? (
+        <Skeleton className="line-skel" />
+      ) : (
+        <p className="gp-bank-line">
+          <Icon name="info" size={18} />
+          <span>{BANK_TEXT}</span>
+        </p>
+      )}
     </section>
   );
 }

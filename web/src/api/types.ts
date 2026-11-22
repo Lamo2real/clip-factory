@@ -1069,7 +1069,7 @@ export interface JobLive {
 }
 
 /** What the live connection pushes (docs/CONTRACTS.md §14.2). One message per changed item. */
-export type LiveItemType = "job" | "clip" | "post" | "learning" | "week" | "setup" | "follow" | "jobLive" | "contentrewards" | "getpaid";
+export type LiveItemType = "job" | "clip" | "post" | "learning" | "week" | "setup" | "follow" | "jobLive" | "contentrewards" | "getpaid" | "bank";
 export type LiveEvent =
   | { type: "job"; op: "upsert"; id: string; item: Job; partial?: undefined }
   | { type: "clip"; op: "upsert"; id: string; item: Clip; partial?: undefined }
@@ -1081,7 +1081,9 @@ export type LiveEvent =
   | { type: LiveItemType; op: "delete"; id: string; item?: undefined; partial?: undefined }
   | { type: LiveItemType; op: "upsert"; id: string; partial: true; item?: undefined }
   /** §40.7: a Get paid item changed (GETPAID, PAYCONN#, PAYSTATE#, PAYOUT#): refetch GET /v1/getpaid. */
-  | { type: "getpaid"; op: "upsert"; id: "getpaid"; partial: true; item?: undefined };
+  | { type: "getpaid"; op: "upsert"; id: "getpaid"; partial: true; item?: undefined }
+  /** §40.5.11: a Your bank item changed (BANKCONN, BANKLINK#, DEPOSIT#, BANKPAYERS): refetch GET /v1/getpaid/bank. */
+  | { type: "bank"; op: "upsert"; id: "bank"; partial: true; item?: undefined };
 
 export interface Me {
   user: { id: string; email: string };
@@ -2004,6 +2006,163 @@ export interface GetPaid {
   asOf: string;
 }
 
+// ---------- Your bank (docs/CONTRACTS.md §40.5.10; shared contract, made by the API's bank/view.py) ----------
+
+/** "meta": Instagram and Facebook together (Meta pays both at once). */
+export type BankPlace = GetPaidPlace | "meta";
+export type BankStatus = "not_started" | "setting_up" | "checking" | "can_see" | "ending_soon" | "cant_read" | "look_in_bank" | "ended" | "stopped_at_bank" | "stopped";
+export type BankStepId = "bank-ask" | "bank-account" | "bank-key" | "bank-app" | "bank-details" | "bank-appid" | "bank-link" | "bank-connect";
+export type BankAppCode = "ok" | "not_active" | "redirect_missing" | "sandbox" | "key_wrong" | "not_found" | "down";
+export type BankResult = "bank_connected" | "bank_denied" | "bank_no_accounts" | "bank_business_only" | "bank_expired" | "bank_key_wrong" | "bank_error";
+export type Tone = "success" | "neutral" | "warn" | "error";
+/** Never converted, never added across currencies. */
+export interface Amount {
+  currency: string;
+  amountMicros: number;
+}
+export interface BankAppCheck {
+  code: BankAppCode;
+  text: string;
+  at: string;
+}
+export interface BankNext {
+  stepId: BankStepId | null;
+  label: string;
+  text?: string;
+  linkId?: string;
+  vermilion: boolean;
+}
+export interface BankView {
+  /** false while BANK_READING is off: then only `on` is sent (BankOff), and screens keep BANK_TEXT. */
+  on: true;
+  status: BankStatus;
+  pill: string;
+  tone: Tone;
+  line: string;
+  next: BankNext | null;
+  steps: { id: BankStepId; done: boolean; by: "you" | "auto" | null; auto?: string }[];
+  ring: { done: number; total: 7 };
+  /** Only while all seven steps are done (§40.5.9). */
+  fold?: string;
+  key: {
+    made: boolean;
+    source?: "clipfactory" | "file";
+    publicKeyPem?: string;
+    certificatePem?: string;
+    appIdHint?: string;
+    check?: BankAppCheck;
+    /** "Now delete the .pem file" stays until he taps I deleted it. */
+    pemReminder?: boolean;
+  };
+  lastConnect?: { result: BankResult; text: string; at: string };
+  values: {
+    redirectUri: string;
+    appName: "Clip Factory";
+    description: string;
+    privacyUrl: string;
+    termsUrl: string;
+    ask: { to: string; subject: string; body: string };
+  };
+  /** Newest first, at most 4 not stopped. */
+  links: BankLink[];
+  /** needs_you, newest first, at most 20 (notSure ones last). */
+  asks: BankAsk[];
+  asksMore?: number;
+  reached: BankReached;
+  /** matched, newest first, at most 36. */
+  rows: BankRow[];
+  pairs: { place: GetPaidPlace; payoutDate: string; amountMicros: number; currency: string; reachedOn: string }[];
+  places: Partial<Record<GetPaidPlace, BankPlaceLine>>;
+  moneyLine?: string;
+  canAddBank: boolean;
+  checkedAt?: string;
+  nextCheckAllowedAt?: string;
+  country: string | null;
+  asOf: string;
+}
+/** GET /v1/getpaid/bank while BANK_READING is off. */
+export interface BankOff {
+  on: false;
+}
+export interface BankLink {
+  linkId: string;
+  bank: string;
+  status: Exclude<BankStatus, "not_started" | "setting_up">;
+  pill: string;
+  tone: Tone;
+  line: string;
+  lastError?: string;
+  accounts: number;
+  daysLeft?: number;
+  totalDays?: number;
+  consentUntil?: string;
+  checkedAt?: string;
+  historyFrom?: string;
+  limitUntil?: string;
+  failingSince?: string;
+  reconnect: boolean;
+  canStop: boolean;
+}
+export interface BankAsk {
+  depositId: string;
+  date: string;
+  amountMicros: number;
+  currency: string;
+  bank: string;
+  kind: "place" | "own_move";
+  suggested: BankPlace | null;
+  title: string;
+  line: string;
+  yesLabel?: string;
+  notSure: boolean;
+}
+export interface BankRow {
+  depositId: string;
+  date: string;
+  amountMicros: number;
+  currency: string;
+  bank: string;
+  place: BankPlace;
+  name: string;
+  how: "payout" | "payer" | "you";
+  howText: string;
+}
+export interface BankReached {
+  state: "none_yet" | "number" | "checking" | "no_link";
+  places: { place: BankPlace; name: string; amounts: Amount[]; note?: string }[];
+  totals: Amount[];
+  tag: string;
+  twoMonies?: string;
+  notYet?: string;
+  since?: string;
+  empty?: string;
+  needYou?: string;
+}
+export interface BankPlaceLine {
+  headline: string;
+  amounts: Amount[];
+  metaAmounts?: Amount[];
+  note?: string;
+  button?: { label: string; href: string };
+}
+export interface BankChoice {
+  name: string;
+  maxDays: number;
+  beta: boolean;
+}
+/** PATCH /v1/getpaid/bank/deposits/{depositId} (§40.5.8). */
+export type BankAnswer =
+  | { answer: "yes" }
+  | { answer: "place"; place: BankPlace }
+  | { answer: "own_move" }
+  | { answer: "not_sure" }
+  | { answer: "not_income" }
+  | { answer: "not_this" };
+/** PUT /v1/getpaid/bank/app: the app ID, or the .pem file with its name or the app ID. */
+export type BankAppBody = { appId: string } | { pem: string; fileName?: string; appId?: string };
+/** PATCH /v1/getpaid/bank/steps: the green answers, and "I deleted it" (pem-deleted). */
+export type BankTickId = "bank-ask" | "bank-account" | "bank-app" | "bank-details" | "pem-deleted";
+
 /** Everything the screens need from the backend. The HTTP client and the mock both implement it. */
 export interface Api {
   health(): Promise<{ ok: boolean; version: string }>;
@@ -2245,6 +2404,29 @@ export interface Api {
   connectWhop(): Promise<{ authorizeUrl: string; expiresAt: string }>;
   /** DELETE /v1/getpaid/connections/whop: "Stop reading Whop" (503 while off). */
   stopWhop(): Promise<void>;
+  // Your bank (§40.5.10). An API from before it answers 404; switched off, GET says { on: false } and the rest 503.
+  /** GET /v1/getpaid/bank. */
+  getBank(): Promise<BankView | BankOff>;
+  /** POST /v1/getpaid/bank/key `{}` or `{ again: true }`: Make my bank key. */
+  bankMakeKey(again?: boolean): Promise<BankView>;
+  /** PUT /v1/getpaid/bank/app: Save (the app ID, or the .pem file). */
+  bankSaveApp(body: BankAppBody): Promise<{ view: BankView; check: BankAppCheck }>;
+  /** POST /v1/getpaid/bank/app/check: Check again, and I linked them. */
+  bankCheckApp(): Promise<{ view: BankView; check: BankAppCheck }>;
+  /** PATCH /v1/getpaid/bank/steps `{ step, done }`. */
+  bankStep(step: BankTickId, done: boolean): Promise<BankView>;
+  /** GET /v1/getpaid/bank/banks; 409 `no_country` or `country_not_linked`. */
+  bankBanks(): Promise<{ country: string; banks: BankChoice[] }>;
+  /** POST /v1/getpaid/bank/connect `{ bank }` or, for a reconnect, `{ linkId }`. */
+  bankConnect(body: { bank: string } | { linkId: string }): Promise<{ authorizeUrl: string; expiresAt: string }>;
+  /** POST /v1/getpaid/bank/check `{}` or `{ first: true }` (202); 429 `rate_limited` with `retryAt`. */
+  bankCheckNow(first?: boolean): Promise<BankView>;
+  /** PATCH /v1/getpaid/bank/deposits/{depositId}: his tap on a question card. */
+  bankAnswer(depositId: string, answer: BankAnswer): Promise<BankView>;
+  /** DELETE /v1/getpaid/bank/links/{linkId}: Stop reading Swedbank (sent with keepalive). */
+  bankStopLink(linkId: string): Promise<void>;
+  /** DELETE /v1/getpaid/bank: Forget my bank (sent with keepalive); 409 while a read holds the lease. */
+  bankForget(): Promise<void>;
   // Auto-posting (§46.9). An api from before it answers 404.
   /** GET /v1/autopost: on or off, the next run, the line, what waits, what did not work, the recent runs. */
   autoPostStatus(): Promise<AutoPostStatus>;
