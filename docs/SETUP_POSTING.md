@@ -901,6 +901,12 @@ Clip Factory stops posting to X at **$10 a month**, and never puts links in X po
 **Clips you kept before a platform was connected** stay "Waiting for connection" for that platform. They are not
 posted by themselves after you connect. New clips you keep are posted.
 
+**Auto-posting.** Nothing is posted until you tap **Upload**, unless you turn on **Post my clips by themselves** in
+**Settings › Posting › Auto-posting** ([how it works](CONTRACTS.md#46-auto-posting-the-oldest-clips-in-review-go-up-by-themselves-every-x-hours-owner-request-2026-11-22)).
+Then the oldest clips in Review go up by themselves every few hours, with My settings, to every place that is ready
+here. TikTok is never one of them (TikTok's rule): each clip gets **Post it yourself**. Campaign clips wait for your
+**Upload**. A place you set up later gets only the clips of later runs.
+
 **If a clip did not post**, its page says why in one sentence and what to press, for example "Connect YouTube again
 in Settings › Posting › Set up posting, then press Try again."
 

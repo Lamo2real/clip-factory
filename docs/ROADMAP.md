@@ -86,6 +86,26 @@ able to understand how to navigate it"):
 - Switched off in prod until all six parts (api, posting, agent, web, desktop, docs) had merged; the one-line switch
   PR #88 turned it on (21 Nov 2026), and PR #93 turned on "Make a campaign copy" (§39).
 
+**Built by the auto-posting request** ([CONTRACTS.md §46](CONTRACTS.md#46-auto-posting-the-oldest-clips-in-review-go-up-by-themselves-every-x-hours-owner-request-2026-11-22),
+[ADR-81](DECISIONS.md#adr-81-auto-posting-an-hourly-eventbridge-rule-a-due-check-and-uploads-own-code); the owner's
+words: "On each scheduled run, take the next clips from the review list, oldest first, and post them", and "Yes, all
+your picks" to the seven questions asked before building):
+
+- **Auto-posting** in Settings › Posting › Auto-posting: **Post my clips by themselves**, **Post every** 1 to 24 hours
+  and **Clips each time** 1 to 5, with the clips a day in plain words and a warning over 5 a day. Off for everyone until
+  he turns it on.
+- **Oldest first, every ready place, his settings**: each run takes the oldest clips in Review to every place that is
+  set up (X once it is), with My settings; a failed place keeps Upload's retries and its own **Try again**.
+- **Never twice**: one EventBridge rule every hour on the hour, a due check, one claim per run and Upload's own code
+  for each clip (`cf-prod-autopost`).
+- **What waits**: TikTok is never part of a run (each clip keeps **Post it yourself**); campaign clips wait for his
+  Upload until Content Rewards can take clips from Clip Factory by itself; a clip with a failed important check waits.
+- **Testing with nothing public**: **Practice**, **Practice run now** and **Private test run**.
+
+Still open for auto-posting: campaign clips by themselves, once Content Rewards can take a clip from Clip Factory
+(CONTRACTS §46.5 rule 4), and the live checks of CONTRACTS §46.14 (a Facebook draft Reel stays hidden; the hourly rule
+fires within the first minute).
+
 Still open for Content Rewards: CR's sign-in pilot must grant `my_submissions:write` before Clip Factory can send by
 itself (until then: read only and reminders, or, if the sign-in is refused, checking and sending by hand); campaigns
 that need drafts first or the brand's own sound; TikTok campaign clips (after TikTok's audit); uploading proof of
@@ -111,7 +131,9 @@ Still open in phase 2:
 
 ## Later
 
-- **Scheduled posting**: choose when each clip goes out (best time per platform from the learnings).
+- **Scheduled posting**: choose when each clip goes out (best time per platform from the learnings). Auto-posting
+  every X hours, oldest first, is built ([CONTRACTS.md §46](CONTRACTS.md#46-auto-posting-the-oldest-clips-in-review-go-up-by-themselves-every-x-hours-owner-request-2026-11-22));
+  picking the best time per platform is not.
 - **Custom domain** for the app (Route 53 or another DNS, an ACM certificate in `us-east-1`, CloudFront alias).
 - **Push notifications** when a job is ready (Web Push for the PWA), for when the app is closed; while it is open,
   the WebSocket already updates the screen.
