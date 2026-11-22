@@ -216,10 +216,12 @@ EFFORT_REFUSED = (
     "Settings › AI."
 )
 # Bedrock refused the request's tools for this model (§45.36 E6): an added model's "It can use tools" switch (in the
-# form its row's Edit opens) is the fix; a bundled model has no switch, so another model is.
+# form its row's Edit opens) is the fix; a bundled model has no switch, so another model is. Saving that switch does
+# not clear the model's last status (the API clears it only for a new model id or Region, §45.35 D6), so the sentence
+# ends with the step that does: Check models, which then shows "Works".
 TOOLS_REFUSED = (
     "{label} does not accept tool use here (Amazon Bedrock refused it). Tap Edit on its row in Lamo Stories › "
-    'Settings › AI and turn off "It can use tools".'
+    'Settings › AI and turn off "It can use tools", then tap Check models.'
 )
 TOOLS_REFUSED_BUNDLED = (
     "{label} does not accept tool use here (Amazon Bedrock refused it). Pick another model in Lamo Stories › "
