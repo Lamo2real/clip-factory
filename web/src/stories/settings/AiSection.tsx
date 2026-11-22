@@ -640,7 +640,7 @@ export function AiSection({ ws }: { ws: string }) {
 
   return (
     <div className="st-stg-cards">
-      <div className="st-stg-bar">
+      <div className="st-stg-bar st-plate">
         <p className="st-stg-small">Lamo Stories' own models. Clip Factory's model setting is separate and stays as it is.</p>
         <SavedMark saved={saved} busy={ai.busy} />
       </div>

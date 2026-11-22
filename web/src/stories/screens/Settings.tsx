@@ -56,8 +56,9 @@ export function SettingsScreen({ ws, page }: StoriesScreenProps) {
   const here = SECTIONS.find((s) => s.section === section)!;
   return (
     <section className="st-page st-stg">
-      <header className="st-stg-head">
-        <h1 className="st-stg-head__title">Settings</h1>
+      {/* Words loose on the page sit on a plate: nothing over Ember, a glass plate in Picture and See-through. */}
+      <header className="st-stg-head st-plate">
+        <h1 className="st-stg-head__title st-display">Settings</h1>
         <p className="st-stg-head__lede">Lamo Stories' own settings. Nothing here changes Clip Factory.</p>
         <SetupAgain ws={ws} />
       </header>
@@ -78,8 +79,10 @@ export function SettingsScreen({ ws, page }: StoriesScreenProps) {
         </ul>
       </nav>
       <div className="st-stg-section">
-        <h2 className="st-stg-section__title">{section === "storage" ? "Storage and production" : here.label}</h2>
-        <p className="st-stg-section__lede">{here.lede}</p>
+        <div className="st-stg-section__head st-plate">
+          <h2 className="st-stg-section__title st-display">{section === "storage" ? "Storage and production" : here.label}</h2>
+          <p className="st-stg-section__lede">{here.lede}</p>
+        </div>
         <SettingsPageProvider value={PAGE_NAME[section]}>
           {section === "ai" ? <AiSection key={ws} ws={ws} /> : null}
           {section === "agents" ? <AgentsSection key={ws} ws={ws} /> : null}

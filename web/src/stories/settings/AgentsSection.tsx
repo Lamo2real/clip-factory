@@ -238,13 +238,13 @@ export function AgentsSection({ ws }: { ws: string }) {
 
   return (
     <div className="st-stg-cards">
-      <div className="st-stg-bar">
+      <div className="st-stg-bar st-plate">
         <p className="st-stg-small">Lamo Stories' own agents. Clip Factory's agent is separate and stays as it is.</p>
         <SavedMark saved={saved} busy={ai.busy} />
       </div>
       <SetPick
         label="Pick an agent"
-        className="st-stg-agentpick"
+        className="st-stg-agentpick st-glass"
         value={agent.agentId}
         onChange={(v) => setPicked(v)}
         options={agents.map((a) => ({

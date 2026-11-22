@@ -301,7 +301,7 @@ export function StorageSection({ ws }: { ws: string }) {
 
   return (
     <div className="st-stg-cards">
-      <div className="st-stg-bar">
+      <div className="st-stg-bar st-plate">
         <p className="st-stg-small">Lamo Stories keeps its files in its own folder, apart from Clip Factory's.</p>
         <SavedMark saved={saved} busy={busy} />
       </div>
@@ -374,15 +374,34 @@ export function StorageSection({ ws }: { ws: string }) {
         />
         {keep !== "all" ? (
           <div className="st-stg-stepper" role="group" aria-label="How many versions each video keeps">
-            <Btn label="Keep one fewer" off={keep <= 1 ? "One is the fewest" : undefined} onClick={() => save({ production: { ...prod, keepVersions: keep - 1 } })}>
+            {/* The white rounded-square steppers (.st-stepper__btn): never disabled, a tap at the end plays the deny sound. */}
+            <button
+              type="button"
+              className="st-stepper__btn"
+              aria-label="Keep one fewer"
+              aria-disabled={keep <= 1 || undefined}
+              title={keep <= 1 ? "One is the fewest" : undefined}
+              onClick={() => {
+                if (keep > 1) save({ production: { ...prod, keepVersions: keep - 1 } });
+              }}
+            >
               <span aria-hidden="true">−</span>
-            </Btn>
+            </button>
             <span className="st-stg-stepper__value" aria-live="polite">
               The last <strong>{keep}</strong> {keep === 1 ? "version" : "versions"}
             </span>
-            <Btn label="Keep one more" off={keep >= 10 ? "Ten is the most" : undefined} onClick={() => save({ production: { ...prod, keepVersions: keep + 1 } })}>
+            <button
+              type="button"
+              className="st-stepper__btn"
+              aria-label="Keep one more"
+              aria-disabled={keep >= 10 || undefined}
+              title={keep >= 10 ? "Ten is the most" : undefined}
+              onClick={() => {
+                if (keep < 10) save({ production: { ...prod, keepVersions: keep + 1 } });
+              }}
+            >
               <span aria-hidden="true">+</span>
-            </Btn>
+            </button>
           </div>
         ) : null}
         <p className="st-stg-small">{keep === "all" ? "Nothing is ever cleared away." : "When a new version is made, the files of older ones are deleted. The video's history stays."}</p>

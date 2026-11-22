@@ -49,19 +49,19 @@ export function SIcon({ name, size = 22 }: { name: SIconName; size?: number }) {
   );
 }
 
-// ---------- A card for one setting ----------
+// ---------- A card for one setting: a smoky glass pane (.st-glass, the liquid-glass contract) ----------
 
 export function SetCard({ title, icon, lede, actions, children, id, tone }: { title: string; icon: SIconName; lede?: ReactNode; actions?: ReactNode; children?: ReactNode; id?: string; tone?: Tone }) {
   const auto = useId();
   const head = `${id ?? auto}-h`;
   return (
-    <section className={`st-stg-card${tone ? ` st-stg-card--${tone}` : ""}`} aria-labelledby={head} id={id}>
+    <section className={`st-glass st-stg-card${tone ? ` st-stg-card--${tone}` : ""}`} aria-labelledby={head} id={id}>
       <div className="st-stg-card__head">
         <span className={`st-stg-card__mark st-stg-card__mark--${tone ?? "sun"}`} aria-hidden="true">
           <SIcon name={icon} size={22} />
         </span>
         <div className="st-stg-card__titles">
-          <h3 className="st-stg-card__title" id={head}>
+          <h3 className="st-stg-card__title st-display" id={head}>
             {title}
           </h3>
           {lede ? <p className="st-stg-card__lede">{lede}</p> : null}
@@ -344,7 +344,8 @@ export function Progress({ value, label }: { value: number | null; label: string
 
 // ---------- A success: a burst of stars and the cheer ----------
 
-const STAR_COLOURS = ["#FFC94A", "#FF6F61", "#47D6A0", "#62C6FF", "#FFF6E5"];
+/** The warm palette's (glass-tokens.css): the orange accent, amber, coral, mint, sky and cream. */
+const STAR_COLOURS = ["#FF8A3D", "#FFB766", "#FF7F6A", "#6FD9A4", "#7CC6E6", "#FFF3E4"];
 
 /** A short star burst from the element that was tapped (or the middle of the page), with the success cheer. */
 export function cheer(from?: Element | null): void {
@@ -401,25 +402,30 @@ export function cheer(from?: Element | null): void {
 // ---------- Empty states: a little character, never a blank box ----------
 
 export function Buddy({ mood = "wave", size = 96 }: { mood?: "wave" | "think" | "sleepy"; size?: number }) {
+  // Its colours come from settings.css (.st-stg-buddy__*), in the warm palette's tokens.
   return (
     <svg className={`st-stg-buddy st-stg-buddy--${mood}`} width={size} height={size} viewBox="0 0 120 120" aria-hidden="true" focusable="false">
-      <ellipse cx="60" cy="110" rx="28" ry="5" fill="#0D0B26" opacity="0.45" />
-      <path d="M60 20c19 0 30 17 30 42s-11 42-30 42-30-17-30-42 11-42 30-42z" fill="#62C6FF" />
+      <ellipse className="st-stg-buddy__shadow" cx="60" cy="110" rx="28" ry="5" opacity="0.45" />
+      <path className="st-stg-buddy__body" d="M60 20c19 0 30 17 30 42s-11 42-30 42-30-17-30-42 11-42 30-42z" />
       {mood === "sleepy" ? (
-        <path d="M45 56q5 4 10 0M65 56q5 4 10 0" stroke="#1C1842" strokeWidth="3.2" strokeLinecap="round" fill="none" />
+        <path className="st-stg-buddy__line" d="M45 56q5 4 10 0M65 56q5 4 10 0" strokeWidth="3.2" strokeLinecap="round" fill="none" />
       ) : (
         <>
-          <ellipse cx="50" cy="55" rx="5" ry="6.5" fill="#1C1842" />
-          <ellipse cx="70" cy="55" rx="5" ry="6.5" fill="#1C1842" />
-          <circle cx="52" cy="52.5" r="1.7" fill="#FFF6E5" />
-          <circle cx="72" cy="52.5" r="1.7" fill="#FFF6E5" />
+          <ellipse className="st-stg-buddy__eye" cx="50" cy="55" rx="5" ry="6.5" />
+          <ellipse className="st-stg-buddy__eye" cx="70" cy="55" rx="5" ry="6.5" />
+          <circle className="st-stg-buddy__shine" cx="52" cy="52.5" r="1.7" />
+          <circle className="st-stg-buddy__shine" cx="72" cy="52.5" r="1.7" />
         </>
       )}
-      <circle cx="42" cy="67" r="4.5" fill="#FF6F61" opacity="0.5" />
-      <circle cx="78" cy="67" r="4.5" fill="#FF6F61" opacity="0.5" />
-      {mood === "think" ? <path d="M53 73h14" stroke="#1C1842" strokeWidth="3.4" strokeLinecap="round" /> : <path d="M50 69q10 10 20 0" stroke="#1C1842" strokeWidth="3.4" strokeLinecap="round" fill="none" />}
-      <path className={mood === "wave" ? "st-stg-buddy__arm" : undefined} d="M88 66 102 50" stroke="#62C6FF" strokeWidth="9" strokeLinecap="round" />
-      <path d="M32 70 22 84" stroke="#62C6FF" strokeWidth="9" strokeLinecap="round" />
+      <circle className="st-stg-buddy__cheek" cx="42" cy="67" r="4.5" opacity="0.5" />
+      <circle className="st-stg-buddy__cheek" cx="78" cy="67" r="4.5" opacity="0.5" />
+      {mood === "think" ? (
+        <path className="st-stg-buddy__line" d="M53 73h14" strokeWidth="3.4" strokeLinecap="round" />
+      ) : (
+        <path className="st-stg-buddy__line" d="M50 69q10 10 20 0" strokeWidth="3.4" strokeLinecap="round" fill="none" />
+      )}
+      <path className={`st-stg-buddy__limb${mood === "wave" ? " st-stg-buddy__arm" : ""}`} d="M88 66 102 50" strokeWidth="9" strokeLinecap="round" />
+      <path className="st-stg-buddy__limb" d="M32 70 22 84" strokeWidth="9" strokeLinecap="round" />
     </svg>
   );
 }
