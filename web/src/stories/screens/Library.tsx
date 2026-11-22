@@ -4,8 +4,12 @@
 // shows its story or character and has Download (a video's MP4, or its WebM or MOV copy, by name). The address keeps
 // the tab (`?kind=`) and the project (`?story=`). Projects pages with the API's cursor (Show more, §45.34 "All
 // projects"), and a `?story=` that is not in the pages loaded so far is fetched by itself before "could not find".
+// Videos lists each video's MP4 and its WebM and MOV copies (kind `video`, §45.35 D10). How it was made names the
+// helpers and the safety advice in words, says where the files are in words, and keeps the exact folder, the seed, the
+// engine version and each step's exact model id behind "Technical details" (§45.35 D5, D21).
+import "../styles/studio.css";
 import { useMemo, useState } from "react";
-import { friendlyMessage } from "../../api/errors.ts";
+import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
 import { A } from "../../components/ui.tsx";
 import { Glide } from "../../components/Glide.tsx";
@@ -14,17 +18,19 @@ import { useLoad } from "../../lib/hooks.ts";
 import { navigate } from "../../lib/router.ts";
 import { storiesApi } from "../api/client.ts";
 import { STEP_LABEL, type AssetKind, type Character, type DownloadFormat, type LibraryItem, type ProductionJob, type StepKey, type Story } from "../api/types.ts";
-import { stoppedOn } from "../studio/ai.tsx";
+import { modelIdLine, modelUseWords, stoppedOn } from "../studio/ai.tsx";
 import { usePaged } from "../studio/hooks.ts";
+import { TechDetails } from "../studio/kit.tsx";
+import { HELPER_KIND, providerName, STORAGE_WORDS, topicTitle } from "../studio/words.ts";
 import { storiesHref } from "../routes.ts";
 import { STATUS_WORDS, StButton, StEmpty, StError, StIcon, StLinkButton, StLoading, StPageHead, type MascotMood, type StIconName, type StTone } from "../ui.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
 export type LibraryTab = "projects" | "videos" | "storyboards" | "characters" | "pictures" | "sounds" | "scenes";
 
-/** Which asset kinds each tab holds (§45.12: no item sits in two tabs). */
+/** Which asset kinds each tab holds (§45.12: no item sits in two tabs); a video's WebM and MOV copies are videos too. */
 export const TAB_KINDS: Record<Exclude<LibraryTab, "projects">, AssetKind[]> = {
-  videos: ["final_video"],
+  videos: ["final_video", "video"],
   storyboards: ["storyboard", "captions"],
   characters: ["character_ref"],
   pictures: ["cover", "portrait"],
@@ -194,6 +200,19 @@ function FileCard({ ws, item, pictures, stories }: { ws: string; item: LibraryIt
   );
 }
 
+/**
+ * One page of one kind. A video's extra copies (kind `video`, §45.35 D10) are asked for too; an API that does not know
+ * that kind yet answers 400, and then the tab simply has no copies (its MP4s still show), never a broken tab.
+ */
+async function kindPage(ws: string, q: { kind: AssetKind; storyId?: string; limit: number; cursor?: string }): Promise<{ items: LibraryItem[]; nextCursor: string | null }> {
+  try {
+    return await storiesApi().library(ws, q);
+  } catch (e) {
+    if (q.kind === "video" && e instanceof ApiError && e.status === 400) return { items: [], nextCursor: null };
+    throw e;
+  }
+}
+
 /** One tab's files: each of its kinds asked for separately and shown newest first, with Show more. */
 function useFiles(ws: string, kinds: AssetKind[], storyId: string | null) {
   const [extra, setExtra] = useState<{ items: LibraryItem[]; cursors: (string | null)[] } | null>(null);
@@ -201,7 +220,7 @@ function useFiles(ws: string, kinds: AssetKind[], storyId: string | null) {
   const loaded = useLoad(
     async () => {
       setExtra(null);
-      const pages = await Promise.all(kinds.map((kind) => storiesApi().library(ws, { kind, storyId: storyId ?? undefined, limit: 48 })));
+      const pages = await Promise.all(kinds.map((kind) => kindPage(ws, { kind, storyId: storyId ?? undefined, limit: 48 })));
       return { items: pages.flatMap((p) => p.items), cursors: pages.map((p) => p.nextCursor) };
     },
     key,
@@ -211,7 +230,7 @@ function useFiles(ws: string, kinds: AssetKind[], storyId: string | null) {
   const more = async () => {
     if (!data) return;
     const pages = await Promise.all(
-      kinds.map((kind, i) => (data.cursors[i] ? storiesApi().library(ws, { kind, storyId: storyId ?? undefined, limit: 48, cursor: data.cursors[i]! }) : Promise.resolve({ items: [], nextCursor: null }))),
+      kinds.map((kind, i) => (data.cursors[i] ? kindPage(ws, { kind, storyId: storyId ?? undefined, limit: 48, cursor: data.cursors[i]! }) : Promise.resolve({ items: [], nextCursor: null }))),
     );
     setExtra({ items: [...data.items, ...pages.flatMap((p) => p.items)], cursors: pages.map((p) => p.nextCursor) });
   };
@@ -327,15 +346,6 @@ const JOB_WORDS: Record<ProductionJob["status"], string> = {
   canceled: "Cancelled",
 };
 
-const PROVIDER_WORDS: Record<string, string> = {
-  "bedrock-claude": "Claude in Amazon Bedrock",
-  "builtin-rig": "Built-in characters",
-  "nova-canvas": "Amazon Nova Canvas",
-  "builtin-2d": "Built-in animation",
-  "nova-reel": "Amazon Nova Reel",
-  "builtin-synth": "Built-in sounds and music",
-};
-
 /** Lamo Stories' own model names (GET …/ai), by key; a key it does not know shows as it is. */
 function useModelNames(ws: string): (key: string) => string {
   const ai = useLoad(() => storiesApi().getAi(ws).catch(() => null), ws, "st-library-models");
@@ -347,9 +357,16 @@ const EFFORT_WORDS: Record<string, string> = { low: "Low", medium: "Medium", hig
 /** A job's per-step model line: the step's own label (a reference analysis or a portrait has its own words). */
 const STEP_WORDS: Record<string, string> = { ...STEP_LABEL, portrait: "Draw the picture", reference_analysis: "Study the video" };
 
+/** The checked advice topics, for their titles (never their ids); null while unknown. */
+function useTopics(ws: string) {
+  const g = useLoad(() => storiesApi().guidance(ws).catch(() => null), ws, "st-library-guidance");
+  return g.data?.topics ?? null;
+}
+
 function Details({ ws, story }: { ws: string; story: Story }) {
   const jobs = useLoad(() => storiesApi().storyJobs(ws, story.storyId), `${ws}|${story.storyId}`, "st-library-jobs");
   const modelName = useModelNames(ws);
+  const topics = useTopics(ws);
   return (
     <section className="st-details" aria-labelledby="st-details-title">
       <h2 className="st-details__title" id="st-details-title">
@@ -358,8 +375,8 @@ function Details({ ws, story }: { ws: string; story: Story }) {
       </h2>
       <dl className="st-facts">
         <div>
-          <dt>Saved at</dt>
-          <dd className="st-facts__code">{story.storageLocation}</dd>
+          <dt>Saved in</dt>
+          <dd>{STORAGE_WORDS}</dd>
         </div>
         <div>
           <dt>Length</dt>
@@ -370,6 +387,14 @@ function Details({ ws, story }: { ws: string; story: Story }) {
           <dd>Version {story.scriptVersion || 1}</dd>
         </div>
       </dl>
+      <TechDetails className="st-tech">
+        <dl className="st-facts st-facts--small">
+          <div>
+            <dt>Folder</dt>
+            <dd className="st-facts__code">{story.storageLocation}</dd>
+          </div>
+        </dl>
+      </TechDetails>
       {jobs.error && !jobs.data ? (
         <StError message={jobs.error} onRetry={() => void jobs.reload()} />
       ) : !jobs.data ? (
@@ -390,18 +415,6 @@ function Details({ ws, story }: { ws: string; story: Story }) {
                     <dd>{modelName(job.meta.writerModel)}</dd>
                   </div>
                 ) : null}
-                {job.meta.engineVersion !== null ? (
-                  <div>
-                    <dt>Animation engine</dt>
-                    <dd>Version {job.meta.engineVersion}</dd>
-                  </div>
-                ) : null}
-                {job.meta.seed !== null ? (
-                  <div>
-                    <dt>Seed</dt>
-                    <dd>{job.meta.seed}</dd>
-                  </div>
-                ) : null}
                 {job.meta.targetSec !== null ? (
                   <div>
                     <dt>Length</dt>
@@ -412,17 +425,17 @@ function Details({ ws, story }: { ws: string; story: Story }) {
                 ) : null}
                 <div>
                   <dt>Safety advice</dt>
-                  <dd>{job.meta.safetyTopicId ?? "None (only the nothing-dangerous check)"}</dd>
+                  <dd>{topicTitle(topics, job.meta.safetyTopicId) ?? "None (only the nothing-dangerous check)"}</dd>
                 </div>
                 {Object.entries(job.meta.providers).map(([kind, id]) => (
                   <div key={kind}>
-                    <dt>{kind === "writer" ? "Writing" : kind === "images" ? "Pictures" : kind === "animation" || kind === "video" ? "Animation" : kind === "audio" ? "Sound" : kind}</dt>
-                    <dd>{PROVIDER_WORDS[id] ?? id}</dd>
+                    <dt>{HELPER_KIND[kind] ?? "Helper"}</dt>
+                    <dd>{providerName(id)}</dd>
                   </div>
                 ))}
-                {(job.meta.models ?? []).map((m) => (
-                  <div key={`${m.step}|${m.agentId}`}>
-                    <dt>{STEP_WORDS[m.step] ?? m.step}</dt>
+                {(job.meta.models ?? []).map((m, i) => (
+                  <div key={`${m.step}|${m.task ?? ""}|${i}`}>
+                    <dt>{modelUseWords(m, STEP_WORDS)}</dt>
                     <dd>
                       {modelName(m.model)}
                       {m.effort ? ` · ${EFFORT_WORDS[m.effort] ?? m.effort}${stoppedOn(job, m) || m.effortApplied ? "" : " (not offered)"}` : ""}
@@ -431,6 +444,40 @@ function Details({ ws, story }: { ws: string; story: Story }) {
                   </div>
                 ))}
               </dl>
+              {job.meta.engineVersion !== null || job.meta.seed !== null || (job.meta.models ?? []).some((m) => modelIdLine(m)) ? (
+                <TechDetails className="st-tech">
+                  <dl className="st-facts st-facts--small">
+                    {job.meta.engineVersion !== null ? (
+                      <div>
+                        <dt>Animation engine</dt>
+                        <dd>Version {job.meta.engineVersion}</dd>
+                      </div>
+                    ) : null}
+                    {job.meta.seed !== null ? (
+                      <div>
+                        <dt>Seed</dt>
+                        <dd>{job.meta.seed}</dd>
+                      </div>
+                    ) : null}
+                    {(job.meta.models ?? []).some((m) => modelIdLine(m)) ? (
+                      <div>
+                        <dt>Exact models</dt>
+                        <dd>
+                          <ul className="st-tech__ids">
+                            {(job.meta.models ?? []).map((m, i) =>
+                              modelIdLine(m) ? (
+                                <li key={`id|${m.step}|${m.task ?? ""}|${i}`}>
+                                  {modelUseWords(m, STEP_WORDS)}: <span className="st-facts__code">{modelIdLine(m)}</span>
+                                </li>
+                              ) : null,
+                            )}
+                          </ul>
+                        </dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                </TechDetails>
+              ) : null}
               <ol className="st-run__steps">
                 {job.steps.map((s) => (
                   <li key={s.key} className={`st-run__step is-${s.status}`}>

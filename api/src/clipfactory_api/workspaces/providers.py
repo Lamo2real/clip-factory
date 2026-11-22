@@ -15,10 +15,13 @@ States, as §45.11.6's table gives them:
   character); its line says what is missing and that the owner picks Built-in animation or finishes its setup, never
   that something else makes the videos (§45.34).
 
-Nothing is shown as working because it was configured. **A provider that is not ready** (§45.34): while
-``configuration.providers.video`` or ``images`` names Nova Reel or Nova Canvas and its state is not ``on``, a story's
-create, produce and changes answer 409 with ``not_ready``'s sentence; nothing switches to another provider by itself
-(the agent's ``ProviderUnavailable`` is the second guard, with the same words).
+Nothing is shown as working because it was configured. **A provider that is not ready** (§45.34, §45.35 D3): while
+``configuration.providers.video`` names Nova Reel and its state is not ``on``, a story's create, produce and changes
+answer 409 with ``not_ready``'s sentence; nothing switches to another provider by itself (the agent's
+``ProviderUnavailable`` is the second guard, with the same words). Pictures never stop a video: the picture maker
+(Nova Canvas) makes portraits only, and its own state gates those alone. **Try it** (D2): ``POST
+…/providers/nova-reel/check`` starts a one-step ``provider_check`` job (one 6-second test shot), never behind that
+guard, so Nova Reel can become ready without making a video first.
 
 ``StoriesConfig.providers`` names the kinds ``images``, ``video`` and ``audio``; ``ProviderStatus.kind`` calls the
 video kind ``animation`` (the registry's name).
@@ -121,6 +124,34 @@ NOT_READY: Final = {
         "Settings › Video › Picture maker, or make one AI portrait to finish its setup."
     ),
 }
+
+
+# "Try it" (§45.35 D2): the makers that can be tried once from Settings › Video, by id → their registry kind.
+CHECKABLE: Final = {"nova-reel": "animation"}
+CHECK_JOB_TYPE: Final = "provider_check"
+CHECK_CONTENT_TYPE: Final = "provider"
+CHECK_STEP: Final = "check"
+CHECK_BUSY: Final = "Amazon Nova Reel is being tried. Wait until it is done."
+
+
+def check_job_of(jobs: Iterable[Mapping[str, Any]], provider_id: str) -> Mapping[str, Any] | None:
+    """The newest "Try it" job of this maker among ``jobs`` (newest first, as ``GET …/providers`` reads them)."""
+    for job in jobs:
+        if (
+            job.get("jobType") == CHECK_JOB_TYPE
+            and job.get("contentType") == CHECK_CONTENT_TYPE
+            and job.get("contentId") == provider_id
+        ):
+            return job
+    return None
+
+
+def check_lock_sk(provider_id: str) -> str:
+    """``CHECKLOCK#{providerId}``: names the maker's newest "Try it" job (``checkJobId``). Every new try replaces it
+    in one transaction with its job, on the condition that it still names the job that was read (or is absent), so
+    two taps at the same moment never start two billed shots (§45.35 D2, "one at a time"). Internal: never returned,
+    written only by the API, never read by the agent."""
+    return f"{ws.CHECKLOCK_SK}{provider_id}"
 
 
 def provider_sk(kind: str, provider_id: str) -> str:
@@ -231,14 +262,19 @@ def statuses(
     ]
 
 
+# The makers whose state stops a story's create, produce and changes (§45.35 D3: the video maker only; the picture
+# maker makes portraits, which never stop a video).
+GATES_VIDEOS: Final = ("animation",)
+
+
 def not_ready(config: Mapping[str, Any], records: Sequence[Mapping[str, Any]]) -> str | None:
-    """The sentence a story's create, produce or changes stops with (409) while ``configuration.providers.video`` or
-    ``images`` names a maker that is not ``on`` (Nova Reel and Nova Canvas: on only after a real call, §45.34);
-    None when it is ready. Nothing is switched to a built-in maker. A recorded failure is said in the agent's own
-    words."""
+    """The sentence a story's create, produce or changes stops with (409) while ``configuration.providers.video``
+    names a maker that is not ``on`` (Nova Reel: on only after a real call, §45.34); None when it is ready. Nothing is
+    switched to a built-in maker. A recorded failure is said in the agent's own words. The picture maker is never
+    looked at here (§45.35 D3)."""
     by_key = {str(r.get("sk")): r for r in records}
     chosen = config.get("providers") if isinstance(config.get("providers"), Mapping) else {}
-    for kind in ("animation", "images"):
+    for kind in GATES_VIDEOS:
         picked = (chosen or {}).get(CONFIG_KEY[kind])
         p = next((x for x in REGISTRY if x.kind == kind and x.id == picked), None)
         if p is None or p.builtin:

@@ -9,10 +9,10 @@ import { useState, type ReactNode } from "react";
 import { A } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad } from "../../lib/hooks.ts";
-import { navigate } from "../../lib/router.ts";
 import { storiesApi } from "../api/client.ts";
 import type { Character, CharacterInput, StoriesConfig } from "../api/types.ts";
 import { CATALOG } from "../engine/catalog.ts";
+import { storiesGoLater } from "../pane.tsx";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { storiesHref } from "../routes.ts";
 import { useAiInfo } from "../studio/ai.tsx";
@@ -20,7 +20,7 @@ import { CharacterEditor } from "../studio/CharacterEditor.tsx";
 import { DesignPanel, RedesignCompare } from "../studio/Design.tsx";
 import { useWorkspace } from "../studio/hooks.ts";
 import { Busy, celebrate, Notice, StSheet, Tag } from "../studio/kit.tsx";
-import { DEFAULT_LOOK, inputOf, MOVE_LINE, newCharacter } from "../studio/looks.ts";
+import { DEFAULT_LOOK, inputOf, MOVE_LINE, newCharacter, showFace } from "../studio/looks.ts";
 import { Portrait, References } from "../studio/References.tsx";
 import { count, isConflict, say } from "../studio/words.ts";
 import type { StoriesScreenProps } from "./types.ts";
@@ -76,7 +76,7 @@ function Gallery({ ws }: { ws: string }) {
           {list.data.map((c) => (
             <li key={c.characterId}>
               <A href={storiesHref({ name: "character", characterId: c.characterId })} className="st-s-cast__card">
-                <CharacterPreview look={c.look} movementStyle={c.movementStyle} action="idle" expression="happy" size={132} label={`${c.name}, moving`} />
+                <CharacterPreview look={c.look} movementStyle={c.movementStyle} action="idle" expression={showFace(c)} size={132} label={`${c.name}, moving`} />
                 <span className="st-s-cast__name">{c.name}</span>
                 <span className="st-s-cast__line">{c.personality || MOVE_LINE[c.movementStyle]}</span>
                 <span className="st-s-cast__tags">
@@ -108,7 +108,8 @@ function NewCharacter({ ws }: { ws: string }) {
       const made = await storiesApi().createCharacter(ws, c);
       celebrate(document.querySelector(".st-s-editor__preview"), 130);
       toast.success(`Say hi to ${made.name}!`);
-      navigate(storiesHref({ name: "character", characterId: made.characterId }), { replace: true });
+      // After the wait: never while Clip Factory is on screen (it happens once Lamo Stories is back, §45.35 D17).
+      storiesGoLater(storiesHref({ name: "character", characterId: made.characterId }), { replace: true });
     } catch (e) {
       setProblem(say(e));
       setSaving(false);
@@ -192,7 +193,7 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
     try {
       await storiesApi().deleteCharacter(ws, characterId);
       toast.success(`${c.name} is deleted.`);
-      navigate(storiesHref({ name: "characters" }), { replace: true });
+      storiesGoLater(storiesHref({ name: "characters" }), { replace: true });
     } catch (e) {
       setAsking(false);
       setProblem(say(e));

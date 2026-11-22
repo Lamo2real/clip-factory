@@ -1,13 +1,14 @@
-// The model and effort line ("Model: Claude Opus 5.5 · Effort: High", "From Amazon Bedrock") and its picker
+// The model and effort line ("Model: Claude Opus 5.5 · Effort: High", "Anthropic on Amazon Bedrock") and its picker
 // (docs/CONTRACTS.md §45.25, §45.27, §45.28, §45.34). The line always shows what the next request really uses (the
 // server's effective values, with a just-this-once override on top) and who provides the model. Tapping the model or
 // the effort opens the picker: in the chat it changes the conversation's own setting, or, with "Just for this
 // message", only the next message (never saved); on a reference video, "Keep with this video" saves the video's own
-// setting. Each model names its provider, shows what its last real call said, and only the efforts it offers.
+// setting. Each model names who makes it and who runs it (§45.35 D8: "{provider} on {host}"), shows what its last real
+// call said, and only the efforts it offers.
 import type { ReactNode } from "react";
 import { EFFORT_LABEL, type Effort, type ModelOverride } from "../api/types.ts";
 import { Btn, Chip, Pick, Sheet, type PickOption } from "./kit.tsx";
-import { EFFORT_LINE, effortLabel, effortProblem, fileModels, findModel, modelLabel, NO_EFFORT_LINE, statusWords, type ModelView } from "./models.ts";
+import { EFFORT_LINE, effortLabel, effortProblem, fileModels, findModel, modelLabel, NO_EFFORT_LINE, providerWords, statusWords, type ModelView } from "./models.ts";
 
 export const DEFAULT = "__default";
 
@@ -47,7 +48,7 @@ export function AiLine({
             type="button"
             className="st-chat-ai__part"
             onClick={() => onPick("model", once)}
-            aria-label={`Model: ${modelLabel(models, current.model)}${provider ? ` on ${provider}` : ""}. Change the model`}
+            aria-label={`Model: ${modelLabel(models, current.model)}${provider ? `, ${provider}` : ""}. Change the model`}
           >
             Model: <b>{modelLabel(models, current.model)}</b>
           </button>
@@ -58,7 +59,7 @@ export function AiLine({
             Effort: <b>{noEffort ? "Its own level" : effortLabel(current.effort)}</b>
           </button>
         </p>
-        {provider ? <span className="st-chat-ai__provider">From {provider}</span> : null}
+        {provider ? <span className="st-chat-ai__provider">{provider}</span> : null}
         <span className={`st-chat-ai__status st-chat-ai__status--${status.tone}`}>{status.text}</span>
         {once ? (
           <Btn quiet className="st-chat-ai__once" onClick={onClearOverride}>
@@ -77,10 +78,13 @@ export function AiLine({
   );
 }
 
-/** Who provides a model ("Amazon Bedrock"), from the server's list or Lamo Stories' own file; null when unknown. */
+/**
+ * Who makes a model and who runs it ("Anthropic on Amazon Bedrock", §45.35 D8), from the server's list or Lamo
+ * Stories' own file; null when unknown.
+ */
 export function providerOf(models: readonly ModelView[], key: string | null | undefined): string | null {
   const m = findModel(models, key) ?? (key ? fileModels().find((f) => f.key === key) : undefined);
-  return m?.provider || null;
+  return providerWords(m);
 }
 
 export function modelOptions(models: ModelView[], withDefault: string | null): PickOption<string>[] {
@@ -91,7 +95,7 @@ export function modelOptions(models: ModelView[], withDefault: string | null): P
     out.push({
       value: m.key,
       label: m.label,
-      line: [m.provider ? `${m.provider}.` : "", m.line, s.tone === "coral" ? s.line : ""].filter(Boolean).join(" "),
+      line: [providerWords(m) ? `${providerWords(m)}.` : "", m.line, s.tone === "coral" ? s.line : ""].filter(Boolean).join(" "),
       badge: <span className={`st-chat-ai__status st-chat-ai__status--${s.tone}`}>{s.text}</span>,
     });
   }

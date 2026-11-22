@@ -84,7 +84,8 @@ function Timeline({ duration, cues, onMove, label }: { duration: number; cues: S
           onPointerCancel={() => (dragging.current = null)}
           onKeyDown={(e) => key(e, c)}
         >
-          <span className="st-s-timeline__name">{cueLabel(c)}</span>
+          {/* The short name on the chip ("Wind"); "(whole scene)" is in its label and in the row below (§45.35 D21). */}
+          <span className="st-s-timeline__name">{sfxLabel(c.sfx)}</span>
         </button>
       ))}
     </div>

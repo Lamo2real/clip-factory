@@ -26,7 +26,7 @@ from ..log import log
 from . import agents as agents_mod
 from . import ai_config as cfg
 from . import ai_resolve as res
-from . import retention
+from . import retention, shapes
 from . import types as ws
 
 MAX_BYTES: Final = 2 * 1024 * 1024 * 1024
@@ -57,6 +57,11 @@ STOPPED: Final = "Studying the video stopped. Tap Try again."
 FILE_REMOVED: Final = "The video was removed to save space. Its study stays."
 
 
+def removed_sentence(item: Mapping[str, Any]) -> str:
+    """What a cleared reference says: its study stays only when it had one (§45.35 D9)."""
+    return FILE_REMOVED if retention.study_kept(item) else retention.REMOVED_NO_STUDY
+
+
 def ref_sk(ref_id: str) -> str:
     return f"{ws.REFVID_SK}{ref_id}"
 
@@ -85,7 +90,10 @@ def public(app: Any, item: Mapping[str, Any]) -> dict[str, Any]:
         if isinstance(duration, int | float) and not isinstance(duration, bool)
         else None,
         "bytes": 0 if removed else int(item.get("bytes") or 0),
-        "fileRemoved": removed,  # §45.34: "The video was removed to save space. Its study stays."
+        # §45.34, §45.35 D9: "The video was removed to save space." and, only when its study was kept, "Its study
+        # stays."
+        "fileRemoved": removed,
+        "studyKept": retention.study_kept(item),
         "currentJobId": item.get("currentJobId") or None,
         "ai": _ai(item),
         "analyzedWith": (
@@ -130,7 +138,7 @@ def public_job(item: Mapping[str, Any]) -> dict[str, Any]:
             "actualSec": (meta or {}).get("actualSec"),
             "safetyTopicId": (meta or {}).get("safetyTopicId"),
             "providers": dict((meta or {}).get("providers") or {}),
-            "models": [dict(m) for m in (meta or {}).get("models") or [] if isinstance(m, Mapping)],
+            "models": shapes.model_records((meta or {}).get("models")),  # the same records as a story job's (D5)
         },
         "createdAt": item.get("createdAt"),
         "updatedAt": item.get("updatedAt"),
@@ -294,7 +302,7 @@ def _analyze(
     if item.get("status") not in CAN_ANALYZE:
         raise conflict(NOT_READY)
     if retention.file_removed(item):  # a keep setting cleared the file (§45.34): there is nothing left to study
-        raise conflict(FILE_REMOVED)
+        raise conflict(removed_sentence(item))
     agent = agents_mod.read(store, user_id, workspace_id, AGENT)
     off = agents_mod.switched_off(agent)
     if off:
@@ -346,7 +354,7 @@ def _analyze(
         store.transact(puts=[job], updates=[ref_update])
     except db.ConditionFailed as e:
         now_item = cfg.get_owned(store, user_id, workspace_id, ref_sk(ref_id))
-        raise conflict(FILE_REMOVED if now_item and retention.file_removed(now_item) else BUSY) from e
+        raise conflict(removed_sentence(now_item) if now_item and retention.file_removed(now_item) else BUSY) from e
     runtime = cfg.runtime(app)
     problem = cfg.NOT_ON if runtime is None else None
     if runtime is not None:

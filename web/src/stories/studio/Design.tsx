@@ -14,7 +14,7 @@ import type { Expression } from "../engine/types.ts";
 import { cleanPick, merged, ModelMenu, TaskLine, useAiTask, usualFor, type AiInfo } from "./ai.tsx";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { celebrate, Notice, ProgressBar, Tag, TextField } from "./kit.tsx";
-import { DEFAULT_LOOK, DEFAULT_VOICE, newCharacter } from "./looks.ts";
+import { DEFAULT_LOOK, DEFAULT_VOICE, newCharacter, showFace } from "./looks.ts";
 import { fileProblem } from "./References.tsx";
 import { say } from "./words.ts";
 
@@ -110,7 +110,7 @@ export function RedesignCompare({ now, next, onUse, onDrop }: { now: CharacterIn
   const { changed, kept } = changedParts(now, next);
   const pair = (title: string, c: CharacterInput, extra?: ReactNode) => (
     <figure className="st-s-redesign__fig">
-      <CharacterPreview look={c.look} movementStyle={c.movementStyle} expression="happy" action="idle" size={120} label={`${title}: ${c.name}`} />
+      <CharacterPreview look={c.look} movementStyle={c.movementStyle} expression={showFace(c)} action="idle" size={120} label={`${title}: ${c.name}`} />
       <figcaption className="st-s-redesign__cap">
         {title}
         {extra}

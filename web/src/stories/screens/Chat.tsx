@@ -13,7 +13,7 @@ import { ConversationView } from "../chat/ConversationView.tsx";
 import { lastConversationId, rememberConversation } from "../chat/device.ts";
 import { Btn, Director, Empty, sentence, UndoBar, Waiting } from "../chat/kit.tsx";
 import { isPendingDelete, refusedDelete, scheduleDelete, undoDelete, usePendingDelete } from "../chat/undo.ts";
-import { useAppActive } from "../pane.tsx";
+import { storiesGoLater, useAppActive } from "../pane.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
 function newestFirst(list: Conversation[]): Conversation[] {
@@ -71,7 +71,8 @@ export function ChatScreen({ ws, page }: StoriesScreenProps) {
       const c = await storiesApi().createConversation(ws, {});
       setList((prev) => newestFirst([c, ...(prev ?? [])]));
       rememberConversation(c.convId);
-      navigate(storiesHref({ name: "chat_conv", convId: c.convId }));
+      // After the wait: never while Clip Factory is on screen (it happens once Lamo Stories is back, §45.35 D17).
+      storiesGoLater(storiesHref({ name: "chat_conv", convId: c.convId }));
     } catch (e) {
       setCreateProblem(sentence(e, "A new chat did not start. Try again."));
     } finally {

@@ -30,7 +30,7 @@ from ..log import log
 from . import agents as agents_mod
 from . import ai_config as cfg
 from . import ai_resolve as res
-from . import guard
+from . import guard, shapes
 from . import types as ws
 
 DEFAULT_TITLE: Final = "New chat"
@@ -110,9 +110,19 @@ def public_conversation(conv: Mapping[str, Any], eff: dict[str, Any]) -> dict[st
     }
 
 
+def public_requested(value: Any) -> dict[str, str] | None:
+    """An answer's one-time choice ("Just for this message", ``MSG#.requested``) as ``ModelOverride``, or None."""
+    if not isinstance(value, Mapping):
+        return None
+    out = {k: str(value[k]) for k in ("model", "effort") if isinstance(value.get(k), str) and value[k]}
+    return out or None
+
+
 def public_message(app: Any, item: Mapping[str, Any], pictures_before: datetime | None = None) -> dict[str, Any]:
-    """``Message`` (§45.6): pictures as presigned links; ``sessionId``, ``heartbeatAt``, ``requested`` and the keys
-    stay inside. ``pictures_before``: the chat pictures of a message older than that are gone under the workspace's
+    """``Message`` (§45.6): pictures as presigned links; ``sessionId``, ``heartbeatAt`` and the keys stay inside. An
+    assistant message returns its one-time choice as ``requested`` (§45.35 D4: Try again and the chat cards use it on
+    every device) and what its call really used (``modelId``, ``region``, ``task``, ``failed``, D5).
+    ``pictures_before``: the chat pictures of a message older than that are gone under the workspace's
     ``keepChatPictures`` (§45.34; the agent clears them after each job), so no link is made to a file that is gone."""
     prefix = ws.s3_prefix(str(item.get("userId")), str(item.get("workspaceId")))
     made = parse(item.get("createdAt"))
@@ -154,6 +164,9 @@ def public_message(app: Any, item: Mapping[str, Any], pictures_before: datetime 
         ],
         "createdAt": str(item.get("createdAt") or ""),
     }
+    if out["role"] == "assistant":
+        out["requested"] = public_requested(item.get("requested"))
+        out.update(shapes.call_record(item))
     if item.get("error"):
         out["error"] = str(item["error"])
     return out

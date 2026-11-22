@@ -505,3 +505,155 @@ test("round 3, Post to {name}?: the publish sheet and Posts' Try again ask about
     await ctx.close();
   }
 });
+
+test("round 4: the publish sheet's Not ready to post rows stay readable from 320 to 390 px", async ({ browser }) => {
+  test.setTimeout(90_000);
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [360, 740, true],
+    [390, 844, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    const page = await ctx.newPage();
+    await open(page, `/stories/review/${S.approved}`);
+    await page.getByRole("button", { name: "Post it", exact: true }).click();
+    const sheet = page.getByRole("dialog", { name: "Post it" });
+    await expect(sheet).toBeVisible();
+    await page.waitForFunction(() => !document.querySelector(".st-s-sheet .st-s-busy"));
+    const off = sheet.locator(".st-s-places--off .st-s-place--off");
+    expect(await off.count(), `${w}: the mock has accounts that are not ready`).toBeGreaterThan(0);
+    const o = await findOverflow(page);
+    expect(o.items.filter((i) => /st-/.test(i.selector)), `${w}: cut-off text`).toEqual([]);
+    for (const row of await off.all()) {
+      const words = await row.locator(".st-s-place__text").boundingBox();
+      const link = await row.locator(".st-btn").boundingBox();
+      const box = await row.boundingBox();
+      // One word per line was 4 px wide at 390 and 0 px at 320 (§45.35 D21): the words always get the room.
+      expect(words && words.width, `${w}: the words' width`).toBeGreaterThan(120);
+      expect(link && box && link.x + link.width, `${w}: the link inside its row`).toBeLessThanOrEqual((box?.x ?? 0) + (box?.width ?? 0) + 1);
+      // On phones the link has its own row under the words, at the right where the thumb is.
+      if (w < 560 && words && link && box) {
+        expect(link.y, `${w}: the link under the words`).toBeGreaterThanOrEqual(words.y + words.height - 1);
+        expect(link.x + link.width, `${w}: the link at the right`).toBeGreaterThan(box.x + box.width * 0.6);
+      }
+    }
+    await ctx.close();
+  }
+});
+
+/** Moves to a Library page inside the app and waits until its data is in (the Library is not a .st-studio page). */
+async function goLibrary(page: Page, path: string) {
+  await page.evaluate((to) => {
+    history.pushState({}, "", to);
+    dispatchEvent(new PopStateEvent("popstate"));
+  }, path);
+  await page.locator(".st-library").first().waitFor();
+  await page.waitForFunction(() => !document.querySelector(".st-library .st-loading"), undefined, { timeout: 20_000 });
+}
+
+/** The owner's measurable rules on a Library page: no cut-off text or sideways scroll, no edges, AA contrast. */
+async function libraryAudit(page: Page, label: string): Promise<string[]> {
+  const out: string[] = [];
+  const o = await findOverflow(page);
+  if (o.page > o.viewport) out.push(`${label}: the page scrolls sideways (${o.page} > ${o.viewport})`);
+  for (const i of o.items) if (/st-/.test(i.selector)) out.push(`${label}: ${i.selector} "${i.text}" ${i.scrollWidth} > ${i.clientWidth}`);
+  for (const e of await visibleEdges(page)) if (/\.st-/.test(e)) out.push(`${label}: edge ${e}`);
+  const axe = await new AxeBuilder({ page }).include(".st-library").withRules(["color-contrast"]).analyze();
+  for (const v of axe.violations) for (const n of v.nodes) out.push(`${label}: contrast ${n.target.join(" ")}: ${n.any.map((c) => c.message).join("; ")}`);
+  const cursors = await page.evaluate(() =>
+    Array.from(document.querySelectorAll<HTMLElement>(".st-library summary, .st-library button, .st-library a"))
+      .filter((e) => !["default", "auto"].includes(getComputedStyle(e).cursor))
+      .map((e) => (e.textContent ?? "").trim().slice(0, 40)),
+  );
+  for (const c of cursors) out.push(`${label}: "${c}" changes the cursor`);
+  return out;
+}
+
+test("round 4: Production and the Library say everything in words; the exact parts are behind Technical details", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const raw = /bedrock-claude|builtin-rig|builtin-2d|builtin-synth|nova-canvas|nova-reel|s3:\/\//;
+  /** The page's visible words outside the Technical details folds. */
+  const plain = (page: Page, root: string) =>
+    page.evaluate((sel) => {
+      const el = document.querySelector(sel)!.cloneNode(true) as Element;
+      for (const f of el.querySelectorAll(".st-s-tech")) f.remove();
+      return el.textContent ?? "";
+    }, root);
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    const page = await ctx.newPage();
+    await open(page, `/stories/production/${S.approved}`);
+    await page.locator(".st-s-details__sum", { hasText: "Production details" }).click();
+    const details = page.locator(".st-s-details").first();
+    await expect(details).toContainText("Helpers used");
+    await expect(details).toContainText("Claude on Amazon Bedrock");
+    await expect(details).toContainText("Lamo Stories' own folder in Clip Factory's media storage");
+    await expect(details.locator("dt, h3", { hasText: /^Made with$/ })).toHaveCount(1);
+    await expect(details.locator(".st-s-used__id").first()).toHaveText(/^Model ID \S+ in eu-north-1$/);
+    expect(await plain(page, ".st-s-details")).not.toMatch(raw);
+    const fold = details.locator(".st-s-tech");
+    await fold.locator("summary").click();
+    await expect(fold).toContainText("s3://");
+    await expect(fold).toContainText("Seed");
+    await settle(page);
+    expect(await audit(page, `Production details and Technical details ${w}`, touch && w < 768)).toEqual([]);
+
+    // The Library's project page.
+    await goLibrary(page, `/stories/library?story=${S.approved}`);
+    const made = page.locator(".st-details");
+    await expect(made).toContainText("Lamo Stories' own folder in Clip Factory's media storage");
+    await expect(made).toContainText("Claude on Amazon Bedrock");
+    expect(await plain(page, ".st-details")).not.toMatch(raw);
+    for (const f of await made.locator(".st-s-tech summary").all()) await f.click();
+    await expect(made.locator(".st-s-tech").first()).toContainText("s3://");
+    await expect(made.locator(".st-s-tech").nth(1)).toContainText(/Model ID \S+ in eu-north-1/);
+    await settle(page);
+    expect(await libraryAudit(page, `Library project, Technical details open ${w}`)).toEqual([]);
+
+    // The Videos tab lists a video's WebM and MOV copies (§45.35 D10).
+    await page.evaluate((storyId) => {
+      const store = (window as StoriesWindow).__cfStoriesMock?.store as unknown as { assets: Record<string, unknown>[]; stories: { storyId: string; title: string; scriptVersion: number }[] } | undefined;
+      const story = store?.stories.find((s) => s.storyId === storyId);
+      if (!store || !story) return;
+      for (const [f, type] of [
+        ["webm", "video/webm"],
+        ["mov", "video/quicktime"],
+      ])
+        store.assets.push({ assetId: `01JSTAS${f === "webm" ? "W" : "M"}000000000000000000`, kind: "video", storyId, characterId: null, title: story.title, url: `data:${type};base64,`, contentType: type, bytes: 12_000_000, version: story.scriptVersion, createdAt: new Date().toISOString(), meta: { current: 1, format: f } });
+    }, S.approved);
+    await goLibrary(page, "/stories/library?kind=videos");
+    await expect(page.locator(".st-file__kind", { hasText: "Video copy · WebM" })).toBeVisible();
+    await expect(page.locator(".st-file__kind", { hasText: "Video copy · MOV" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Download video copy \(WebM\) of / })).toBeVisible();
+    await settle(page);
+    expect(await libraryAudit(page, `Library videos with copies ${w}`)).toEqual([]);
+    await ctx.close();
+  }
+});
+
+test("round 4: the timeline chip shows the short name, and a one-line idea is never cut in the idea picker", async ({ browser }) => {
+  test.setTimeout(90_000);
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [1440, 900, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    const page = await ctx.newPage();
+    await open(page, `/stories/review/${S.review}`);
+    const names = page.locator(".st-s-timeline__name");
+    expect(await names.count()).toBeGreaterThan(0);
+    const cut = await names.evaluateAll((els) => els.filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.textContent));
+    expect(cut, `${w}: chips cut off`).toEqual([]);
+    await expect(page.locator(".st-s-timeline__mark.is-place .st-s-timeline__name").first()).not.toContainText("(whole scene)");
+    await go(page, "/stories/production/new");
+    const lines = page.locator(".st-s-ideapick .st-s-pick__line");
+    expect(await lines.count()).toBeGreaterThan(0);
+    const clamped = await lines.evaluateAll((els) => els.filter((e) => e.scrollHeight > e.clientHeight + 1).map((e) => e.textContent));
+    expect(clamped, `${w}: idea lines cut off`).toEqual([]);
+    await ctx.close();
+  }
+});

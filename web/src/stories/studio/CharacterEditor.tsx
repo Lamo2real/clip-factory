@@ -24,6 +24,7 @@ import {
   NOSE,
   OUTLINES,
   PATTERN,
+  showFace,
   SKIN,
   VOICE_STYLE,
 } from "./looks.ts";
@@ -70,7 +71,8 @@ export function CharacterEditor({
 }) {
   const [c, setC] = useState<CharacterInput>(initial);
   const [part, setPart] = useState<EditorPart>(startPart ?? "looks");
-  const [face, setFace] = useState<Expression>("happy");
+  // The preview opens on the character's own face (happy if it has it, else its first face that is not neutral).
+  const [face, setFace] = useState<Expression>(() => showFace(initial));
   const [move, setMove] = useState<ActionId>("idle");
   const [problem, setProblem] = useState<string | null>(null);
   const [trait, setTrait] = useState("");

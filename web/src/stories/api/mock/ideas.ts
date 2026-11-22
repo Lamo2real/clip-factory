@@ -10,8 +10,11 @@
 import guidanceFile from "../../../../../stories/config/guidance.json";
 import modelsFile from "../../../../../stories/config/models.json";
 import type { AgentId, AiTask, Effort, Idea, IdeaCategory, IdeaInput, ModelOverride, StoriesApi, TaskKind, VideoConcept } from "../types.ts";
+import { modelCall } from "./chat.ts";
 import { delay, type MockStore } from "./store.ts";
 import { clone, fail, guardWs, iso, mockId, SEED_IDS } from "./stories.ts";
+
+export { modelCall };
 
 export const KEYS = ["listIdeas", "createIdea", "patchIdea", "deleteIdea", "generateIdeas", "expandIdea", "ideaVariations", "getTask"] as const;
 
@@ -156,7 +159,7 @@ export function effectiveFor(
   store: MockStore,
   kind: TaskKind,
   o: { request?: Level; project?: Level } = {},
-): { model: string; effort: Effort | null; effortApplied: boolean; agentId: AgentId; problem: string | null; off: string | null } {
+): { model: string; effort: Effort | null; effortApplied: boolean; agentId: AgentId; problem: string | null; off: string | null; denied: boolean } {
   const agentId = TASK_AGENT[kind];
   const agent = store.agents.find((a) => a.agentId === agentId);
   const off = agent && !agent.active ? `${agent.name} is switched off. Switch it on in Lamo Stories › Settings › Agents.` : null;
@@ -170,9 +173,10 @@ export function effectiveFor(
   if (!m) problem = `We don't know the model "${model}". Pick another model in Lamo Stories › Settings › AI.`;
   else if (applied && !m.efforts.includes(effort)) problem = `${m.label} does not offer ${EFFORT_WORD[effort]}. Pick another level.`;
   const denied = Array.isArray(store.knobs.deniedModels) ? (store.knobs.deniedModels as string[]) : [];
-  if (!problem && denied.includes(model))
-    problem = `${modelLabel(model)} isn't available right now: Bedrock says this account can't use it yet. Pick another model in Lamo Stories › Settings › AI, or try again.`;
-  return { model, effort: applied ? effort : null, effortApplied: applied, agentId, problem, off };
+  // Bedrock refusing the call itself (`denied`): the call was made, so the job records what it asked (§45.34).
+  const refused = !problem && denied.includes(model);
+  if (refused) problem = `${modelLabel(model)} isn't available right now: Bedrock says this account can't use it yet. Pick another model in Lamo Stories › Settings › AI, or try again.`;
+  return { model, effort: applied ? effort : null, effortApplied: applied, agentId, problem, off, denied: refused };
 }
 
 interface TaskPlan {
@@ -220,7 +224,9 @@ export function startMockTask(store: MockStore, ws: string, kind: TaskKind | "ch
     fails = typeof knob === "string" ? knob : (TASK_FAILED[kind as TaskKind] ?? "The helper stopped. Tap Try again.");
     store.knobs.taskFail = null;
   }
-  const task: AiTask = { taskId: mockId(), kind, status: "queued", model: eff.model, effort: eff.effort, effortApplied: eff.effortApplied, result: null, createdAt: iso(now), updatedAt: iso(now) };
+  // TASK# keeps exactly what was called (§45.35 D5); Check models has no single model.
+  const call = kind === "check_models" ? null : modelCall(eff.model);
+  const task: AiTask = { taskId: mockId(), kind, status: "queued", model: eff.model, effort: eff.effort, effortApplied: eff.effortApplied, result: null, ...(call ?? {}), createdAt: iso(now), updatedAt: iso(now) };
   store.tasks.push(task);
   plansOf(store).set(task.taskId, { ws, runningAt: now + Math.min(400, total / 4), doneAt: now + total, fails, finish });
   // The agent finishes its work whether or not anyone is watching (an expanded idea gets its concept).

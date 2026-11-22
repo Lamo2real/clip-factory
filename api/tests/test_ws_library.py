@@ -96,6 +96,30 @@ def test_the_library_lists_assets_newest_first_with_titles_and_filters(
     assert call("GET", f"{BASE}/library", query={"limit": "101"})[0] == 400
 
 
+def test_the_videos_tab_lists_the_webm_and_mov_copies(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    """§45.35 D10: the agent keeps each extra format (``production.extraFormats``) as an ``ASSET#`` of kind
+    ``video``; the Library's Videos tab asks for ``final_video`` and ``video``, each with its own link."""
+    story = seed_story(store, s3_client)
+    sid = story["storyId"]
+    mp4 = seed_asset(store, s3_client, kind="final_video", storyId=sid, key=f"{prefix()}stories/{sid}/final/v1.mp4")
+    webm = seed_asset(store, s3_client, kind="video", storyId=sid, key=f"{prefix()}stories/{sid}/final/v1.webm",
+                      contentType="video/webm", meta={"current": 1, "format": "webm"})  # fmt: skip
+    mov = seed_asset(store, s3_client, kind="video", storyId=sid, key=f"{prefix()}stories/{sid}/final/v1.mov",
+                     contentType="video/quicktime", meta={"current": 1, "format": "mov"})  # fmt: skip
+    status, body = call("GET", f"{BASE}/library", query={"kind": "video"})
+    assert status == 200, body
+    copies = {i["assetId"]: i for i in body["items"]}
+    assert set(copies) == {webm["assetId"], mov["assetId"]}
+    assert {i["meta"]["format"] for i in copies.values()} == {"webm", "mov"}
+    assert {i["kind"] for i in copies.values()} == {"video"}
+    assert all(i["url"].startswith("https://") and i["title"] == story["title"] for i in copies.values())
+    finals = call("GET", f"{BASE}/library", query={"kind": "final_video"})[1]["items"]
+    assert mp4["assetId"] in {i["assetId"] for i in finals}
+    assert not {webm["assetId"], mov["assetId"]} & {i["assetId"] for i in finals}
+    everything = {i["assetId"] for i in call("GET", f"{BASE}/library")[1]["items"]}
+    assert {mp4["assetId"], webm["assetId"], mov["assetId"]} <= everything
+
+
 def test_the_library_pages_with_its_own_cursor(call: Call, store: db.Store, s3_client: FakeS3) -> None:
     for n in range(5):
         seed_asset(store, s3_client, assetId=_asset_id(n), key=f"{prefix()}stories/x/final/v{n}.mp4")

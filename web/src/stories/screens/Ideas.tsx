@@ -527,7 +527,8 @@ function IdeaCard({
     if (blocked || busy) return;
     setProblem(null);
     varying.reset();
-    const body: { durationSec: number; override?: ModelOverride } = { durationSec: Math.min(90, Math.max(15, length)) };
+    // "Write it again" keeps the full idea's own length (§45.35 D21); a first try starts from the workspace's length.
+    const body: { durationSec: number; override?: ModelOverride } = { durationSec: Math.min(90, Math.max(15, idea.concept?.durationSec ?? length)) };
     const override = cleanPick(expandPick);
     if (override) body.override = override;
     void expanding.start(() => storiesApi().expandIdea(ws, idea.ideaId, body));

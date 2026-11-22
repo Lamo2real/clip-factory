@@ -40,9 +40,25 @@ interface FileModel {
   label: string;
   efforts: string[];
   vision: boolean;
+  modelId?: string;
+  /** the inference profile the agent calls */
+  profile?: string;
 }
 
 export const MODELS = (modelsFile.models as FileModel[]).map((m) => ({ key: m.key, label: m.label, efforts: m.efforts as Effort[], vision: m.vision }));
+
+/** Where Lamo Stories' own agent runs (Stockholm): a bundled model is called there, through its inference profile. */
+export const AGENT_REGION = "eu-north-1";
+
+/**
+ * What a call really sends to Amazon Bedrock for a bundled model (§45.35 D5): its inference profile (else its model
+ * id) and the Region, as the agent records them in meta.models, TASK# and MSG#; null for a key the list does not know.
+ */
+export function modelCall(key: string): { modelId: string; region: string } | null {
+  const m = (modelsFile.models as FileModel[]).find((x) => x.key === key);
+  if (!m) return null;
+  return { modelId: m.profile || m.modelId || m.key, region: AGENT_REGION };
+}
 const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 const EFFORT_WORD: Record<Effort, string> = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Maximum" };
 
@@ -212,21 +228,25 @@ export function seed(store: MockStore): void {
   store.conversations.push(c1, c2);
   s.owner.set(c1.convId, "stories");
   s.owner.set(c2.convId, "stories");
-  const msg = (id: string, convId: string, role: Message["role"], text: string, at: number, extra: Partial<Message> = {}): Message => ({
-    msgId: id,
-    convId,
-    role,
-    text,
-    attachments: [],
-    status: "done",
-    model: role === "assistant" ? "opus-5-5" : null,
-    effort: role === "assistant" ? "high" : null,
-    effortApplied: role === "assistant" ? true : null,
-    usage: role === "assistant" ? { input: 1840, output: 212 } : null,
-    actions: [],
-    createdAt: iso(at),
-    ...extra,
-  });
+  const msg = (id: string, convId: string, role: Message["role"], text: string, at: number, extra: Partial<Message> = {}): Message => {
+    const m: Message = {
+      msgId: id,
+      convId,
+      role,
+      text,
+      attachments: [],
+      status: "done",
+      model: role === "assistant" ? "opus-5-5" : null,
+      effort: role === "assistant" ? "high" : null,
+      effortApplied: role === "assistant" ? true : null,
+      usage: role === "assistant" ? { input: 1840, output: 212 } : null,
+      actions: [],
+      createdAt: iso(at),
+      ...extra,
+    };
+    // An answer says exactly what it was asked with and what was called (§45.35 D4, D5).
+    return role === "assistant" && m.model ? { ...m, requested: null, ...(modelCall(m.model) ?? {}) } : m;
+  };
   store.messages.push(
     msg(SEED_IDS.messages.ask, c1.convId, "user", "Give me a winter idea for Pip. Something funny on ice, no words.", now - 2 * HOUR - 60_000),
     msg(
@@ -550,7 +570,9 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (pictures.length && !model.vision) throw bad(`${model.label} can't look at pictures. Pick another model, or take the pictures out.`, "attachments");
       const now = Date.now();
       const user: Message = { msgId: newId(now), convId, role: "user", text, attachments: pictures, status: "done", model: null, effort: null, effortApplied: null, usage: null, actions: [], createdAt: iso(now) };
-      const assistant: Message = { msgId: newId(now), convId, role: "assistant", text: "", attachments: [], status: "pending", model: eff.model, effort: eff.effort, effortApplied: eff.effortApplied, usage: null, actions: [], createdAt: iso(now) };
+      // The answer carries its one-time choice (`requested`, §45.35 D4) and exactly what is called (§45.35 D5).
+      const requested: ModelOverride | null = override && (override.model || override.effort) ? { ...(override.model ? { model: override.model } : {}), ...(override.effort ? { effort: override.effort } : {}) } : null;
+      const assistant: Message = { msgId: newId(now), convId, role: "assistant", text: "", attachments: [], status: "pending", model: eff.model, effort: eff.effort, effortApplied: eff.effortApplied, usage: null, actions: [], requested, ...(modelCall(eff.model) ?? {}), createdAt: iso(now) };
       for (const p of pictures) s.pictures.delete(p.assetId);
       store.messages.push(user, assistant);
       const denied = Array.isArray(store.knobs.chatDenied) ? (store.knobs.chatDenied as string[]) : [];

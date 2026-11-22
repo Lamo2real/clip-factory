@@ -532,6 +532,11 @@ def test_every_lamo_stories_route_stays_in_its_own_namespaces(
     # every runtime call went to Lamo Stories' own runtime
     assert runtime.calls
     assert all(str(c.get("session_id", "cfstory-")).startswith("cfstory-") for c in runtime.calls)
+    # Nova Reel's "Try it" (§45.35 D2) was swept too: a job in the workspace partition, Lamo Stories' own action
+    tried = [s for m, p, s, _ in call.responses if m == "POST" and p.endswith("/providers/nova-reel/check")]
+    assert 202 in tried
+    assert [c["provider_id"] for c in runtime.calls if c["action"] == "provider_check"] == ["nova-reel"]
+    assert [c for c in runtime.calls if c["action"] == "provider_check" and c["workspace_id"] != "stories"] == []
     # the AI flow itself: no server errors and nothing internal in any answer
     assert [(m, p, s) for m, p, s, _ in flow if s >= 500] == []
     # (the reference upload answer's ``upload.uploadId`` and the skill upload's ``key`` are the contract's own)
