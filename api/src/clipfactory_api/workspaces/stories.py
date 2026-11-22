@@ -46,6 +46,13 @@ STALE_POST: Final = ("safety",)
 STALE_FORMAT: Final = ("scenes", "animation", "captions", "assemble", "preview")
 
 NOT_YET = "Your changes aren't in the video yet. Tap Remake first."
+# Only the fact check is out of date (the post words changed: they are not in the video), so Check again (produce
+# from "safety") is all it needs, never a remake (round 5 E10).
+POST_WORDS = "Your new post words need a quick check. Tap Check again."
+# Nothing in the video is out of date, only the fact check: Check again fixes it, never Remake (a remake would have
+# nothing to make: UP_TO_DATE). OUTDATED_CHECK is the web's own sentence (Review.tsx) for a check on older words.
+OUTDATED_CHECK = "The facts were checked on an older version of the words. Tap Check again."
+CHECK_DUE = "The facts still need a check. Tap Check again."
 CHANGED = "This story changed meanwhile. Reload it and try again."
 BUSY = "A video is being made for this story. Wait until it is done."
 NO_SCRIPT = "This story has no storyboard yet. Tap Try again first."
@@ -274,19 +281,27 @@ def changes_input(
 # --- approve --------------------------------------------------------------------------------------------------
 
 
+def only_check_stale(story: Mapping[str, Any]) -> bool:
+    """Nothing but the fact check is out of date: the post words changed (``STALE_POST``), nothing in the video."""
+    return shapes.ordered_steps(story.get("stale") or []) == list(STALE_POST)
+
+
 def approve_problem(story: Mapping[str, Any]) -> str | None:
-    """None when §45.9's approve rule holds, else the sentence of the 409."""
+    """None when §45.9's approve rule holds, else the sentence of the 409. The rule is unchanged; only its sentences
+    say Check again whenever the fact check is all that is due (round 5 E10): the post words changed, or nothing is
+    out of date in the video but the check is older than the words or never passed. Remake only for video steps."""
     if story.get("status") != "review":
         if story.get("status") == "needs_check":
-            return _facts(story) or NOT_YET
+            return _facts(story) or _stale_problem(story) or _check_due(story)
         return "Only a video that is waiting for review can be approved."
-    if shapes.ordered_steps(story.get("stale") or []):
-        return NOT_YET
+    stale = _stale_problem(story)
+    if stale is not None:
+        return stale
     safety = story.get("safety")
     if safety is None:
         return None
     if not isinstance(safety, Mapping):
-        return NOT_YET
+        return CHECK_DUE
     if safety.get("status") == "ok" and safety.get("checkedScriptVersion") == story.get("scriptVersion"):
         return None
     if (
@@ -295,7 +310,28 @@ def approve_problem(story: Mapping[str, Any]) -> str | None:
         and not story.get("safetyTopicId")
     ):
         return None  # the quality agent is off ("Quality check is off", §45.33); never for driving content (§45.34)
-    return _facts(story) or NOT_YET
+    return _facts(story) or _check_due(story)
+
+
+def _stale_problem(story: Mapping[str, Any]) -> str | None:
+    """What the ``stale`` steps ask for: Check again when only the fact check is (the post words changed), Remake
+    when something in the video is out of date, None when nothing is."""
+    if only_check_stale(story):
+        return POST_WORDS
+    return NOT_YET if shapes.ordered_steps(story.get("stale") or []) else None
+
+
+def _check_due(story: Mapping[str, Any]) -> str:
+    """Nothing in the video is out of date, only the fact check (made on older words, still pending, failed, or
+    skipped where it may not be): Check again, which runs it on these words."""
+    safety = story.get("safety")
+    if (
+        isinstance(safety, Mapping)
+        and safety.get("status") == "ok"
+        and safety.get("checkedScriptVersion") != story.get("scriptVersion")
+    ):
+        return OUTDATED_CHECK
+    return CHECK_DUE
 
 
 def carried_check(story: Mapping[str, Any], new_version: int) -> dict[str, Any] | None:

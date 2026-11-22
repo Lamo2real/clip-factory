@@ -315,7 +315,7 @@ def test_approve_refuses_a_skipped_check_whenever_the_story_has_a_safety_topic(
     comedy = seed_story(store, s3_client, category="comedy", safetyTopicId="skid-recovery", safety=skipped)
     status, body = call("POST", f"{BASE}/stories/{comedy['storyId']}/approve", {"version": comedy["version"]})
     assert status == 409
-    assert body["error"]["message"] == "Your changes aren't in the video yet. Tap Remake first."
+    assert body["error"]["message"] == "The facts still need a check. Tap Check again."
     plain = seed_story(store, s3_client, category="comedy", safety={**skipped, "topicId": None})
     assert call("POST", f"{BASE}/stories/{plain['storyId']}/approve", {"version": plain["version"]})[0] == 200
 

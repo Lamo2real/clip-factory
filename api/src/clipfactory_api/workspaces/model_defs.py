@@ -86,6 +86,69 @@ NO_EFFORT_FIELD: Final = (
     "This model has no effort setting (effortField none), so leave its efforts empty. Only a model that takes "
     "output_config can list efforts."
 )
+# Cross-Region inference profile ids start with the area they run in (round 5 E4): a profile of one area is refused
+# for a Region of another (a US profile in eu-north-1, say). ``global.`` runs from any Region; a first part or a
+# Region outside these areas is not checked, so a Region AWS adds to an area later is never refused by mistake.
+PROFILE_AREAS: Final = {"us": "us", "us-gov": "us-gov", "eu": "eu", "apac": "ap", "jp": "ap", "au": "ap"}
+REGION_AREAS: Final = (("us-gov-", "us-gov"), ("us-", "us"), ("eu-", "eu"), ("ap-", "ap"))
+AREA_WORDS: Final = {  # each area in words, one of its Regions, and the first part of its own profile ids
+    "us": ("a US Region", "us-east-1", "us"),
+    "us-gov": ("an AWS GovCloud Region", "us-gov-west-1", "us-gov"),
+    "eu": ("a Europe Region", "eu-north-1", "eu"),
+    "ap": ("an Asia Pacific Region", "ap-southeast-2", "apac"),
+}
+_ARN_REGION: Final = re.compile(r"^arn:aws(?:-[a-z]+)*:bedrock:([a-z0-9-]+):")
+_ARN_PROFILE: Final = re.compile(r":inference-profile/([^/]+)$")
+
+
+def arn_region(model_id: str) -> str | None:
+    """The Region inside a Bedrock ARN, or None when ``model_id`` is not an ARN."""
+    found = _ARN_REGION.match(model_id)
+    return found.group(1) if found else None
+
+
+def profile_area(model_id: str) -> str | None:
+    """The first part of a cross-Region inference profile id (``us``, ``eu``, ``apac``, ``global``, …), also inside an
+    inference-profile ARN; None for a plain model id (``anthropic.claude-…``)."""
+    profile = model_id
+    if arn_region(model_id) is not None:
+        inside = _ARN_PROFILE.search(model_id)
+        if inside is None:
+            return None
+        profile = inside.group(1)
+    parts = profile.split(".")
+    if len(parts) < 3:  # a profile id is {area}.{maker}.{model}; a model id is {maker}.{model}
+        return None
+    return parts[0]
+
+
+def region_area(region: str) -> str | None:
+    return next((area for start, area in REGION_AREAS if region.startswith(start)), None)
+
+
+def region_problem(model_id: str, region: str) -> str | None:
+    """None when the Region fits the model id (round 5 E4), else the sentence naming both. Every call to an added
+    model goes to its own Region's endpoint, so an ARN from another Region, or a profile of another area, would fail
+    on every call with a sentence that never says the two differ."""
+    in_arn = arn_region(model_id)
+    if in_arn is not None and in_arn != region:
+        return f"This ARN is in {in_arn}, but the Region says {region}. Type {in_arn} as the Region."
+    first = profile_area(model_id)
+    wanted = PROFILE_AREAS.get(first or "")
+    here = region_area(region)
+    if wanted is None or here is None or wanted == here:
+        return None
+    words, example, _ = AREA_WORDS[wanted]
+    own = AREA_WORDS[here][2]
+    if in_arn is not None:
+        return (
+            f"This ARN's inference profile starts with {first}., so it runs in {words} (like {example}), not in "
+            f"{region}. Paste the ARN of the {own}. profile instead."
+        )
+    return (
+        f"This inference profile id starts with {first}., so it runs in {words} (like {example}), not in {region}. "
+        f"Type {words} as the Region, or paste the {own}. profile id instead."
+    )
 
 
 def model_sk(key: str) -> str:
@@ -255,6 +318,9 @@ def clean(body: Mapping[str, Any]) -> dict[str, Any]:
     provider = _text(body, "provider", PROVIDER_MAX, "Say who makes the model, like Anthropic or Amazon.")
     model_id = clean_model_id(body.get("modelId"))
     region = clean_region(body.get("region"))
+    mismatch = region_problem(model_id, region)
+    if mismatch is not None:
+        raise bad_request(mismatch, "region")
     how = clean_calling({**body, "provider": provider}, efforts)
     return {
         "label": label,

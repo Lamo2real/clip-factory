@@ -142,7 +142,7 @@ def test_x_is_charged_once_on_the_shared_monthly_limit_and_stops_at_it(
     assert job is not None
     assert (job["publishingStatus"], job["error"]) == (
         "needs_attention",
-        "Lamo Stories stopped X: this month's X limit is used up (it is shared with Lamo Clips).",
+        "Lamo Stories stopped X: this month's X limit is used up (it is shared with Clip Factory).",
     )
     assert http.calls == []
     assert store.get(db.user_pk(USER), "SETUP#x") is None  # Lamo Clips' setup gates are never written
@@ -219,7 +219,7 @@ def test_a_dead_token_on_upload_asks_for_lamo_stories_connections(
     assert job is not None
     assert job["publishingStatus"] == "needs_attention"
     assert job["error"] == (
-        "Lamo Stories' YouTube (Lamo Stories youtube) needs connecting again. Open Lamo Stories › Social accounts, "
+        "This YouTube account (Lamo Stories youtube) needs connecting again. Open Lamo Stories › Social accounts, "
         "then tap Try again."
     )
     social = table.raw(sup.PK, "SOCIAL#youtube")
@@ -360,7 +360,7 @@ def test_every_kind_has_a_lamo_stories_sentence() -> None:
             assert "Settings" not in text, (platform, kind)
             assert text.endswith("."), (platform, kind)
     assert story_sentence("youtube", "reconnect", "Lamo Stories Channel") == (
-        "Lamo Stories' YouTube (Lamo Stories Channel) needs connecting again. Open Lamo Stories › Social accounts, "
+        "This YouTube account (Lamo Stories Channel) needs connecting again. Open Lamo Stories › Social accounts, "
         "then tap Try again."
     )
     assert story_sentence("tiktok", "private") == (
