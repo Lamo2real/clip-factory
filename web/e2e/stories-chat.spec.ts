@@ -632,3 +632,51 @@ test("round 4: who makes the model and who runs it, and a cleared video that was
     await ctx.close();
   }
 });
+
+test("round 5: Use in a video right after an upload ticks it; a cleared upload never plays here; an answer's exact model is folded", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const ctx = await context(browser, 1280, 800, false);
+  const page = await ctx.newPage();
+  // §45.36 E8: a chat answer says its model in words; the exact model id and Region are behind Technical details.
+  await open(page, `/stories/chat/${CONV.winter}`);
+  const answer = page.locator(".st-chat-msg--assistant", { has: page.locator(".st-chat-msg__meta") }).first();
+  const fold = answer.locator(".st-chat-msg__tech");
+  await expect(fold).toHaveCount(1);
+  await expect(fold).not.toHaveAttribute("open", "");
+  await expect(answer.locator(".st-chat-msg__meta")).not.toContainText("Model ID");
+  await fold.locator("summary").click();
+  await expect(fold).toContainText(/Model ID \S+ in eu-north-1/);
+  await settle(page);
+  expect(await audit(page, "a chat answer with its exact model open", false)).toEqual([]);
+
+  // §45.36 E2: Production › New was opened before (its reference list is remembered), then a video is uploaded and studied.
+  await page.evaluate(() => {
+    history.pushState({}, "", "/stories/production/new");
+    dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await expect(page.locator(".st-s-reftile").first()).toBeVisible({ timeout: 20_000 });
+  await go(page, "/stories/references");
+  await knobs(page, { refSeconds: 1 });
+  await page.locator('.st-ref-drop input[type="file"]').setInputFiles({ name: "dog_chases_the_snowball.mp4", mimeType: "video/mp4", buffer: Buffer.alloc(400_000, 7) });
+  await expect(page).toHaveURL(/\/stories\/references\/[0-9A-Z]{26}$/, { timeout: 20_000 });
+  const refId = page.url().split("/").pop()!;
+  await page.getByRole("button", { name: "Analyze it" }).click();
+  await expect(page.getByRole("heading", { name: "What happens", exact: true })).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("button", { name: "Use in a video" }).click();
+  await expect(page).toHaveURL(new RegExp(`/stories/production/new\\?ref=${refId}$`));
+  const tile = page.locator(".st-s-reftile", { hasText: "dog chases the snowball" });
+  await expect(tile).toHaveAttribute("aria-pressed", "true", { timeout: 20_000 });
+  // Still ticked once every list has landed.
+  await page.waitForTimeout(1500);
+  await expect(tile).toHaveAttribute("aria-pressed", "true");
+
+  // §45.36 E18: the keep setting clears its file: the page never plays this device's copy, and says the D9 sentence.
+  await page.evaluate((id) => {
+    const store = (window as StoriesWindow).__cfStoriesMock?.store;
+    if (store) store.knobs.refFileRemoved = [id];
+  }, refId);
+  await go(page, `/stories/references/${refId}`);
+  await expect(page.locator(".st-ref-player__none")).toHaveText("The video was removed to save space. Its study stays.");
+  await expect(page.locator("video.st-ref-player__video")).toHaveCount(0);
+  await ctx.close();
+});

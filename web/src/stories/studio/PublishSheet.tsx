@@ -88,8 +88,11 @@ export function checkProblem(before: SocialAccount, after: SocialAccount): strin
             : "is not connected any more";
     return `Lamo Stories' ${place} ${state}. Fix it in Social accounts, or leave ${place} out.`;
   }
-  if (before.externalAccountId && after.externalAccountId !== before.externalAccountId)
-    return `Lamo Stories' ${place} is now ${after.accountName ?? "a different account"}${after.handle ? ` (${after.handle})` : ""}. Look at it below, then tap Upload again.`;
+  if (before.externalAccountId && after.externalAccountId !== before.externalAccountId) {
+    // By its place first, so it reads right when the account is itself called Lamo Stories (§45.36 E13).
+    const who = [after.accountName, after.handle].filter(Boolean).join(", ");
+    return `Lamo Stories' ${place} is now a different account: ${thisAccount(after.platform, who)}. Look at it below, then tap Upload again.`;
+  }
   return null;
 }
 

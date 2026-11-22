@@ -846,7 +846,8 @@ export function storyUsual(info: AiInfo, story: Pick<Story, "ai">, kind: TaskKin
  * the API sends it, the same sum from Lamo Stories' settings. "Next run: Claude Opus 5.5 · High".
  */
 export function nextRunLine(info: AiInfo, story: Pick<Story, "ai" | "effective">): string {
-  const e = story.effective;
+  // A model the studio knows cannot be used is skipped, as the remake menu does (§45.36 E12): the line names what runs.
+  const e = story.effective ? usableUsual(info, story.effective) : null;
   if (e) return `Next run: ${modelName(info, e.model)} · ${e.effortApplied === false || !e.effort ? "its own effort level" : EFFORT_LABEL[e.effort]}`;
   const p = merged(info, storyUsual(info, story), null);
   if (!p.modelKnown) return "Next run: your usual model and effort";

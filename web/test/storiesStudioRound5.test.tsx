@@ -56,7 +56,7 @@ HTMLCanvasElement.prototype.getContext = (() => null) as never;
 const { IdeasScreen } = await import("../src/stories/screens/Ideas.tsx");
 const { ProductionScreen } = await import("../src/stories/screens/Production.tsx");
 const { ReviewScreen, approveBlock, onlyPostWords, POST_WORDS_CHECK } = await import("../src/stories/screens/Review.tsx");
-const { LISTED_INFO, MODEL_STATUS_WORD, ModelMenu, sendPick, unusableAsk, usableUsual } = await import("../src/stories/studio/ai.tsx");
+const { LISTED_INFO, MODEL_STATUS_WORD, ModelMenu, nextRunLine, sendPick, unusableAsk, usableUsual } = await import("../src/stories/studio/ai.tsx");
 const { accountState, checkProblem, postToTitle, POST_YES, PublishSheet } = await import("../src/stories/studio/PublishSheet.tsx");
 const { PostRow } = await import("../src/stories/studio/PostsPanel.tsx");
 const { Filmstrip, frameShape } = await import("../src/stories/studio/Filmstrip.tsx");
@@ -518,6 +518,8 @@ describe("a model the studio knows cannot be used is never pre-picked (§45.36 E
     expect(unusableAsk(live(), usual, { model: "fable-5-1" })).toMatchObject({ bad: { key: "fable-5-1" }, instead: "opus-5-5" });
     expect(unusableAsk(live(), usual, { model: "sonnet-5-5" })).toBeNull();
     expect(MODEL_STATUS_WORD).toEqual({ ok: "Works", not_checked: "Not checked yet", denied: "No access", not_found: "Not found", error: "Problem" });
+    // Next run names what runs, never the refused model.
+    expect(nextRunLine(live(), { ai: { model: null, effort: null }, effective: usual })).toBe("Next run: Claude Opus 5.5 · High");
   });
 
   it("the menu shows the skipped model with its status line, and its chip says No access when picked", async () => {
@@ -602,6 +604,9 @@ describe("one name on screen: Clip Factory, and accounts by their place (§45.36
     expect(thisAccount("youtube", null)).toBe("this YouTube account");
     expect(postToTitle("tiktok", { externalAccountId: "ext", accountName: "Lamo Stories", handle: "@lamo.stories" })).toBe("Post to this TikTok account (Lamo Stories)?");
     expect(POST_YES).toBe("Yes, post to this account");
+    expect(checkProblem(account("tiktok", "connected", "Old"), account("tiktok", "connected", "Lamo Stories", { externalAccountId: "ext-other", handle: "@lamo.stories" }))).toBe(
+      "Lamo Stories' TikTok is now a different account: this TikTok account (Lamo Stories, @lamo.stories). Look at it below, then tap Upload again.",
+    );
   });
 
   it("the TikTok question reads right for an account called Lamo Stories, and its button matches", async () => {

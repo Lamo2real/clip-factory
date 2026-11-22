@@ -1108,7 +1108,8 @@ describe("Post it", () => {
     store.social.find((a) => a.platform === "tiktok")!.connectionStatus = "needs_reconnect";
     await click(control("Upload to 2 places", dialog()));
     expect(publish).not.toHaveBeenCalled();
-    expect(dialog().textContent).toContain("Lamo Stories' YouTube is now Someone Else (@someone). Look at it below, then tap Upload again.");
+    // By its place first, so it reads right when the account is itself called Lamo Stories (§45.36 E13).
+    expect(dialog().textContent).toContain("Lamo Stories' YouTube is now a different account: this YouTube account (Someone Else, @someone). Look at it below, then tap Upload again.");
     expect(dialog().textContent).toContain("Lamo Stories' TikTok needs connecting again. Fix it in Social accounts, or leave TikTok out.");
     expect(dialog().querySelector(".st-s-dest")?.textContent).toContain("Goes to Someone Else (@someone)");
     // TikTok left the list of chosen places; the owner has seen the new YouTube account, so the next tap sends.

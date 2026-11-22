@@ -3249,3 +3249,16 @@ button.st-s-place:hover {
 .st-s-used__idstep {
   font-weight: 800;
 }
+
+/* The chip of a model with no access wraps on a narrow screen: its status goes under the name, never off it. */
+.st-s-ai-btn.is-bad {
+  flex-wrap: wrap;
+  max-width: 100%;
+  padding-block: 6px;
+  row-gap: 4px;
+}
+
+.st-s-ai-btn.is-bad .st-s-ai-btn__status,
+.st-s-ai-btn.is-bad .st-s-ai-btn__set {
+  flex: 0 0 auto;
+}
