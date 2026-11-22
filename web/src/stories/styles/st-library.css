@@ -4,8 +4,9 @@
    a bar for how far a project has come, Download as the control). A project opens on a lit hero (its cover, title
    and state) beside "How it was made", whose production runs are wells inside the card. Nothing empty is ever a
    blank box: a character on lit glass and the one tap that fixes it.
-   Only the contract's tokens (styles/GLASS-CONTRACT.md); radii by kind and concentric: a media row's thumbnail sits
-   --st-gap-surface inside its surface (20 - 6 = 14), the runs hug "How it was made" at the same gap (control 14). */
+   Only the contract's tokens (styles/GLASS-CONTRACT.md); radii by kind and concentric: a media row keeps one even
+   inset, --st-bezel-pad, on every side, and its thumbnail hugs the row's corners at that gap (20 - 10 = 10); the runs
+   hug "How it was made" at the surface gap (20 - 6 = 14). */
 
 .st-library__panel {
   display: grid;
@@ -22,6 +23,28 @@
   flex-wrap: wrap;
   gap: var(--st-space-2);
   min-width: 0;
+}
+/* On a phone the seven pills are one row that scrolls sideways (they took three rows and pushed the projects under
+   the fold). The row keeps room around the pills for the focus ring and the glide's glow, inside the page's own
+   padding; the chosen pill is scrolled into view (Library.tsx). */
+@media (max-width: 767.98px) {
+  .st-library__kinds {
+    flex-wrap: nowrap;
+    margin: calc(-1 * var(--st-space-2));
+    padding: var(--st-space-2);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: var(--st-space-2);
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+  .st-library__kinds::-webkit-scrollbar {
+    display: none;
+  }
+  .st-library__kinds > .st-tabs__tab {
+    flex: none;
+    scroll-snap-align: start;
+  }
 }
 /* The shell's older tab rules (st-controls.css .st-tabs__tab, kept on these pills for their tests) step aside: each
    pill keeps the figure's own look (glass-figures.css .st-pill). */
@@ -65,6 +88,12 @@
 .stories-app .st-library__kinds:has(> .st-tabs__tab.is-on:hover) > .st-library__glide {
   background: var(--st-cream-hover);
 }
+/* The focus ring on every pill, the chosen one too (the rules above take its shadow away for the glide). */
+.st-library__kinds > .st-tabs__tab:focus-visible,
+.st-library__kinds.has-glide > .st-tabs__tab.is-on:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
 
 /* ---------- "Only files of …" with the pill that shows every video again ---------- */
 
@@ -102,12 +131,26 @@
 .st-files {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr));
 }
-/* Each row is a media row on its own glass: the thumbnail sits the row's own gap in from the side (20 - 6 = 14); the
-   words get a little more air around them (a file's name is a 44 px link, so its words are taller than the picture). */
+/* Each row is a media row on its own glass with one even inset on every side (--st-bezel-pad 10). The thumbnail fills
+   the row's height at that inset, so it hugs the row's corners (20 - 10 = 10, like the reference's media row); the
+   words get a little air of their own above and below. On a phone a file's Download keeps the same inset on both
+   sides and at the bottom. */
 .st-file.st-media,
 .st-project .st-media {
-  padding-block: var(--st-space-2);
-  padding-inline-end: var(--st-space-4);
+  padding: var(--st-bezel-pad);
+}
+.st-file > .st-media__thumb,
+.st-project .st-media__thumb {
+  align-self: stretch;
+  height: auto;
+  min-height: var(--st-thumb);
+  aspect-ratio: auto;
+  /* 20 - 10 = 10: the contract's bezel step */
+  border-radius: var(--st-r-inner);
+}
+.st-file > .st-media__text,
+.st-project .st-media__text {
+  padding-block: var(--st-space-1);
 }
 .st-file {
   min-width: 0;
@@ -145,19 +188,6 @@
   position: relative;
   display: grid;
   place-items: center;
-}
-/* Something that plays wears a small orange play badge (a shape: espresso glyph on the accent). */
-.st-file__badge--play {
-  width: 30px;
-  height: 30px;
-  padding-left: 2px;
-  border-radius: var(--st-r-round);
-  background: var(--st-accent);
-  color: var(--st-on-accent);
-  box-shadow: var(--st-glow-accent), var(--st-depth-1);
-}
-.st-file__thumb.has-picture .st-file__badge:not(.st-file__badge--play) {
-  display: none;
 }
 
 /* The words: the kind as a caps caption, the story it belongs to (a link), its version, size and date. */
@@ -213,11 +243,46 @@ a.st-file__title:hover {
   }
 }
 
-/* A project: the whole row is the link. Hover lights it like a hero (a deeper veil, a brighter edge, more glow), it
+/* A project: the whole row is the link, with a round glass arrow at its end (part of the link, at the right on every
+   width). Hover lights it like a hero (a deeper veil, a brighter edge, more glow) and turns the arrow cream; the row
    never moves and its filter never changes. */
 .st-project {
   display: grid;
   min-width: 0;
+}
+.st-project .st-media {
+  grid-template-columns: var(--st-thumb) minmax(0, 1fr) auto;
+  grid-template-areas: "thumb text controls";
+}
+.st-project .st-media__controls {
+  padding-inline-end: var(--st-space-1);
+}
+.st-project__go {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
+  color: var(--st-text);
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out);
+}
+.st-project__link:hover .st-project__go {
+  background: var(--st-cream);
+  color: var(--st-on-cream);
+}
+/* On the narrowest phones the words need the room more than the arrow does (the whole row is still the link). */
+@media (max-width: 399.98px) {
+  .st-project .st-media {
+    grid-template-columns: var(--st-thumb) minmax(0, 1fr);
+    grid-template-areas: "thumb text";
+  }
+  .st-project .st-media__controls {
+    display: none;
+  }
 }
 .st-project__link {
   display: grid;
@@ -230,6 +295,9 @@ a.st-file__title:hover {
 .st-project__link:hover {
   background: var(--st-tint-hero);
   box-shadow: var(--st-sheen-hero), var(--st-depth-2), var(--st-glow-behind);
+}
+.st-project__link.st-glass--hero:hover {
+  box-shadow: var(--st-sheen-hero), var(--st-depth-3), var(--st-glow-behind);
 }
 .st-project__link:hover::after {
   background: var(--st-edge-hero);
@@ -252,6 +320,59 @@ a.st-file__title:hover {
 .st-project__state {
   display: block;
   margin-top: var(--st-space-1);
+}
+/* How far it has come: the media row's hairline bar (orange, a shape) with the state's words beside it. The bar is
+   for the eyes only (Library.tsx): the words say the same. */
+.st-project__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-1) var(--st-space-3);
+  margin-top: var(--st-space-2);
+  min-width: 0;
+}
+.st-project__track {
+  position: relative;
+  flex: 1 1 6rem;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--st-r-round);
+  background: var(--st-track);
+}
+.st-project__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--st-accent);
+  transition: width var(--st-dur-progress) var(--st-ease-progress);
+}
+
+/* The newest project leads the list: a lit hero row across the whole grid, a bigger cover and a display title. */
+.st-project--featured {
+  grid-column: 1 / -1;
+}
+.st-project--featured .st-media {
+  grid-template-columns: clamp(72px, 14vw, 120px) minmax(0, 1fr) auto;
+  column-gap: var(--st-space-4);
+}
+@media (max-width: 399.98px) {
+  .st-project--featured .st-media {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+}
+.st-project--featured .st-media__thumb {
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 4 / 5;
+  align-self: start;
+}
+.st-project--featured .st-project__title {
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  line-height: var(--st-lh-head);
+}
+.st-project--featured .st-project__bar {
+  max-width: 32rem;
 }
 
 /* A story's state: its words in their own ink with a small dot of its colour (the colour is only a mark). */
@@ -278,11 +399,12 @@ a.st-file__title:hover {
 .st-state--sun {
   color: var(--st-text-amber);
 }
+/* On its way (starting, being made): warm words and a half-filled orange dot, full once it is ready to watch. */
 .st-state--sky {
-  color: var(--st-sky-ink);
+  color: var(--st-text-amber);
 }
 .st-state--sky .st-state__dot {
-  background: var(--st-sky);
+  background: linear-gradient(to right, var(--st-accent) 50%, rgb(var(--st-accent-rgb) / 0.3) 50%);
   box-shadow: none;
 }
 .st-state--mint {
@@ -349,6 +471,25 @@ a.st-file__title:hover {
   gap: var(--st-gap);
   min-width: 0;
 }
+/* From 1100 px "How it was made" stands beside the hero and the files, so the hero is as wide as the files under it
+   (it was a wide slab with its right half empty). Any height the card adds goes to the files, never to the hero. */
+@media (min-width: 1100px) {
+  .st-projectview {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-rows: auto 1fr;
+    grid-template-areas: "head details" "files details";
+  }
+  .st-projectview__head {
+    grid-area: head;
+  }
+  .st-projectview__files {
+    grid-area: files;
+  }
+  .st-projectview > .st-details {
+    grid-area: details;
+    align-self: start;
+  }
+}
 .st-projectview__head {
   display: grid;
   justify-items: start;
@@ -357,8 +498,44 @@ a.st-file__title:hover {
   /* Never thinner than the band a liquid rim may bend, so it never reaches the words. */
   padding: max(var(--st-inset), var(--st-lens-band) - var(--st-space-2)) max(var(--st-inset), var(--st-lens-band));
 }
-.st-projectview__head > .st-back {
-  margin-inline-start: calc(-1 * var(--st-space-2));
+/* The way back: a round glass button with "All projects" beside it, one link (44 px, 48 on a phone). Hover lights
+   the button; the words brighten. */
+.st-projectview__head > .st-projectview__back {
+  gap: var(--st-space-3);
+  min-height: var(--st-tap);
+  margin-inline-start: calc(-1 * var(--st-space-1));
+  padding: 0 var(--st-space-3) 0 0;
+  border-radius: var(--st-r-round);
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
+}
+.st-projectview__head > .st-projectview__back:hover {
+  background: transparent;
+  color: var(--st-text-strong);
+}
+.st-projectview__puck {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--st-tap);
+  height: var(--st-tap);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
+  color: var(--st-text);
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+}
+.st-projectview__back:hover .st-projectview__puck {
+  background: var(--st-fill-control-hover);
+}
+@media (max-width: 767.98px) {
+  .st-projectview__head > .st-projectview__back {
+    min-height: var(--st-tap-phone);
+  }
+  .st-projectview__puck {
+    width: var(--st-tap-phone);
+    height: var(--st-tap-phone);
+  }
 }
 .st-projectview__hero {
   display: grid;
@@ -400,7 +577,7 @@ a.st-file__title:hover {
   position: relative;
   display: block;
   width: 100%;
-  max-width: 24rem;
+  max-width: 32rem;
   height: 8px;
   overflow: hidden;
   border-radius: var(--st-r-round);
@@ -420,19 +597,9 @@ a.st-file__title:hover {
   }
 }
 
-.st-projectview__grid {
-  display: grid;
-  gap: var(--st-gap);
-  min-width: 0;
-}
-@media (min-width: 1100px) {
-  .st-projectview__grid {
-    grid-template-columns: minmax(0, 1fr) 340px;
-    align-items: start;
-  }
-}
 .st-projectview__files {
   display: grid;
+  align-content: start;
   gap: var(--st-space-6);
   min-width: 0;
 }
@@ -491,8 +658,10 @@ a.st-file__title:hover {
   gap: var(--st-space-3) var(--st-space-4);
   margin: 0;
 }
+/* A label stays with its answer: a pair sits at the top of its row, however tall its neighbour is. */
 .st-facts > div {
   display: grid;
+  align-content: start;
   gap: 2px;
   min-width: 0;
 }

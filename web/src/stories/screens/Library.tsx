@@ -8,7 +8,7 @@
 // helpers and the safety advice in words, says where the files are in words, and keeps the exact folder, the seed, the
 // engine version and each step's exact model id behind "Technical details" (§45.35 D5, D21).
 import "../styles/studio.css";
-import { useMemo, useState, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
 import { A } from "../../components/ui.tsx";
@@ -23,6 +23,7 @@ import { usePaged } from "../studio/hooks.ts";
 import { TechDetails } from "../studio/kit.tsx";
 import { HELPER_KIND, helperName, STORAGE_WORDS, topicTitle, type ModelLookup } from "../studio/words.ts";
 import { Glass, GlassPill, MediaRow, cx } from "../glass/index.ts";
+import { storiesReduceMotion } from "../prefs.ts";
 import { storiesHref } from "../routes.ts";
 import { STATUS_WORDS, StButton, StError, StIcon, StLinkButton, StLoading, StMascot, StPageHead, type MascotMood, type StIconName, type StTone } from "../ui.tsx";
 import type { StoriesScreenProps } from "./types.ts";
@@ -49,14 +50,15 @@ const TABS: { id: LibraryTab; label: string; icon: StIconName }[] = [
   { id: "scenes", label: "Scenes", icon: "scenes" },
 ];
 
+/** Every empty Library page shows the same warm character (the owner's warm palette of 22 Nov: no cool blues or greens). */
 const EMPTY: Record<LibraryTab, { title: string; text: string; mood: MascotMood; tone: StTone }> = {
   projects: { title: "No projects yet", text: "Every video you make is a project here, with all its files.", mood: "wave", tone: "sun" },
-  videos: { title: "No videos yet", text: "Finished videos land here, ready to download.", mood: "sleepy", tone: "sky" },
-  storyboards: { title: "No storyboards yet", text: "Each video's story plan and its captions are kept here.", mood: "think", tone: "sky" },
-  characters: { title: "No character pictures yet", text: "Pictures you add to a character show up here.", mood: "wave", tone: "mint" },
-  pictures: { title: "No pictures yet", text: "Video covers and character portraits show up here.", mood: "sleepy", tone: "coral" },
+  videos: { title: "No videos yet", text: "Finished videos land here, ready to download.", mood: "sleepy", tone: "sun" },
+  storyboards: { title: "No storyboards yet", text: "Each video's story plan and its captions are kept here.", mood: "think", tone: "sun" },
+  characters: { title: "No character pictures yet", text: "Pictures you add to a character show up here.", mood: "wave", tone: "sun" },
+  pictures: { title: "No pictures yet", text: "Video covers and character portraits show up here.", mood: "sleepy", tone: "sun" },
   sounds: { title: "No sounds yet", text: "Each video's sound effects and music are kept here.", mood: "think", tone: "sun" },
-  scenes: { title: "No scenes yet", text: "Every scene's picture and clip is kept here.", mood: "wave", tone: "sky" },
+  scenes: { title: "No scenes yet", text: "Every scene's picture and clip is kept here.", mood: "wave", tone: "sun" },
 };
 
 export const KIND_LABEL: Record<AssetKind, string> = {
@@ -164,15 +166,17 @@ function Thumb({ item, pictures }: { item: LibraryItem; pictures: Map<string, st
         : item.kind === "scene_clip" && item.storyId
           ? pictures.get(`still:${item.storyId}:${String(item.meta.sceneId ?? "")}`)
           : undefined;
-  const moving = item.kind === "final_video" || item.kind === "video" || item.kind === "scene_clip";
-  // The media row's thumbnail: the picture itself, a video's cover or a scene's still, or the kind's icon on the warm
-  // glow. Something that plays wears a small orange play badge (the reference's play control, decoration only).
+  // The media row's thumbnail: the picture itself (a video's cover, a scene's still), or the kind's icon on the warm
+  // glow. Nothing on it looks like a button, because it is not one: the caps caption beside it says what it is.
   return (
     <span className={cx("st-file__thumb", `st-file__thumb--${item.kind}`, still && "has-picture")}>
-      {still ? <img src={still} alt="" loading="lazy" decoding="async" /> : null}
-      <span className={cx("st-file__badge", moving && "st-file__badge--play")} aria-hidden="true">
-        <StIcon name={moving ? "play" : KIND_ICON[item.kind]} size={moving ? 16 : 26} />
-      </span>
+      {still ? (
+        <img src={still} alt="" loading="lazy" decoding="async" />
+      ) : (
+        <span className="st-file__badge" aria-hidden="true">
+          <StIcon name={KIND_ICON[item.kind]} size={26} />
+        </span>
+      )}
     </span>
   );
 }
@@ -366,31 +370,47 @@ function LibraryEmpty({ mood, tone, title, children, action }: { mood: MascotMoo
   );
 }
 
-/** A project as a media row on glass: its cover, title, who is in it, and a bar for how far it has come. The whole row opens it. */
-function ProjectCard({ story, cover, cast }: { story: Story; cover?: string; cast: Character[] | null }) {
-  const status = STATUS_WORDS[story.status];
+/**
+ * A project as a media row on glass: its cover, its title, who is in it, a bar for how far it has come with its state
+ * in words, and a round glass arrow. The whole row is the link (the arrow is part of it, so a tap on it opens the
+ * project too). The bar is for the eyes only: the state's words already say how far it has come, so the link's spoken
+ * name never gets a bare number. The newest project leads the list as a lit hero row (its rim may bend where the
+ * device allows).
+ */
+function ProjectCard({ story, cover, cast, featured = false }: { story: Story; cover?: string; cast: Character[] | null; featured?: boolean }) {
   const length = story.actualDurationSec ?? story.durationSec;
   const picture = cover ?? story.coverUrl;
   const progress = storyProgress(story.status);
   const chip = <StateLabel status={story.status} />;
   return (
-    <li className="st-project">
-      <A href={storiesHref({ name: "library", kind: null, storyId: story.storyId })} className="st-project__link st-glass">
+    <li className={cx("st-project", featured && "st-project--featured")}>
+      <A href={storiesHref({ name: "library", kind: null, storyId: story.storyId })} className={cx("st-project__link st-glass", featured && "st-glass--hero st-lens")}>
         <MediaRow
-          thumb={<span className="st-project__cover">{picture ? <img src={picture} alt="" loading="lazy" decoding="async" /> : <StIcon name="clapper" size={30} />}</span>}
-          title={<span className="st-project__title">{story.title}</span>}
+          thumb={<span className="st-project__cover">{picture ? <img src={picture} alt="" loading="lazy" decoding="async" /> : <StIcon name="clapper" size={featured ? 36 : 30} />}</span>}
+          title={<span className={cx("st-project__title", featured && "st-display")}>{story.title}</span>}
           meta={
             <>
               <span className="st-project__meta st-num">
                 {castNames(story, cast)} · {Math.round(length)} s · Script {story.scriptVersion || 1} · {shortDate(story.createdAt)}
               </span>
-              {/* Stopped or not used: no bar (it would look like it is still going), only the chip. */}
-              {progress === null ? <span className="st-project__state">{chip}</span> : null}
+              {/* Stopped or not used: no bar (it would look like it is still going), only the state. */}
+              {progress === null ? (
+                <span className="st-project__state">{chip}</span>
+              ) : (
+                <span className="st-project__bar">
+                  <span className="st-project__track" aria-hidden="true">
+                    <span className="st-project__fill" style={{ width: `${progress * 100}%` }} />
+                  </span>
+                  {chip}
+                </span>
+              )}
             </>
           }
-          progress={progress}
-          progressLabel={status.label}
-          progressText={chip}
+          controls={
+            <span className="st-project__go" aria-hidden="true">
+              <StIcon name="chevron" size={20} />
+            </span>
+          }
         />
       </A>
     </li>
@@ -603,12 +623,17 @@ function Project({ ws, story, cast, stories }: { ws: string; story: Story; cast:
   const status = STATUS_WORDS[story.status];
   const cover = pictures.get(`cover:${story.storyId}`) ?? story.coverUrl;
   const progress = storyProgress(story.status);
+  // The hero, its files by group, and "How it was made": from 1100 px the card stands beside the hero and the files,
+  // so the lit hero is as wide as the files under it.
   return (
     <div className="st-projectview">
-      {/* The project's hero: lit glass (its rim may bend where the device allows), the cover, the title, its state. */}
+      {/* The project's hero: lit glass (its rim may bend where the device allows), the cover, the title, its state. The
+          way back is a round glass button with its words beside it (one link: the button and the words). */}
       <Glass as="header" variant="hero" lens className="st-projectview__head">
-        <A href={storiesHref({ name: "library", kind: null, storyId: null })} className="st-back">
-          <StIcon name="chevron" size={18} className="st-back__icon" />
+        <A href={storiesHref({ name: "library", kind: null, storyId: null })} className="st-back st-projectview__back">
+          <span className="st-projectview__puck" aria-hidden="true">
+            <StIcon name="chevron" size={20} className="st-back__icon" />
+          </span>
           All projects
         </A>
         <div className="st-projectview__hero">
@@ -636,35 +661,33 @@ function Project({ ws, story, cast, stories }: { ws: string; story: Story; cast:
           </div>
         </div>
       </Glass>
-      <div className="st-projectview__grid">
-        <div className="st-projectview__files">
-          {files.error && !files.data ? (
-            <StError message={files.error} onRetry={() => void files.reload()} />
-          ) : !files.data ? (
-            <StLoading label="Opening the project…" />
-          ) : files.data.length === 0 ? (
-            <LibraryEmpty mood="sleepy" tone="sky" title="No files yet">
-              This video's files show up here as it is made.
-            </LibraryEmpty>
-          ) : (
-            GROUPS.map((g) => {
-              const items = files.data!.filter((f) => g.kinds.includes(f.kind));
-              if (!items.length) return null;
-              return (
-                <section key={g.title} className="st-group" aria-label={g.title}>
-                  <h3 className="st-group__title st-plate st-display">{g.title}</h3>
-                  <ul className="st-files">
-                    {items.map((item) => (
-                      <FileCard key={item.assetId} ws={ws} item={item} pictures={pictures} stories={stories} />
-                    ))}
-                  </ul>
-                </section>
-              );
-            })
-          )}
-        </div>
-        <Details ws={ws} story={story} />
+      <div className="st-projectview__files">
+        {files.error && !files.data ? (
+          <StError message={files.error} onRetry={() => void files.reload()} />
+        ) : !files.data ? (
+          <StLoading label="Opening the project…" />
+        ) : files.data.length === 0 ? (
+          <LibraryEmpty mood="sleepy" tone="sun" title="No files yet">
+            This video's files show up here as it is made.
+          </LibraryEmpty>
+        ) : (
+          GROUPS.map((g) => {
+            const items = files.data!.filter((f) => g.kinds.includes(f.kind));
+            if (!items.length) return null;
+            return (
+              <section key={g.title} className="st-group" aria-label={g.title}>
+                <h3 className="st-group__title st-plate st-display">{g.title}</h3>
+                <ul className="st-files">
+                  {items.map((item) => (
+                    <FileCard key={item.assetId} ws={ws} item={item} pictures={pictures} stories={stories} />
+                  ))}
+                </ul>
+              </section>
+            );
+          })
+        )}
       </div>
+      <Details ws={ws} story={story} />
     </div>
   );
 }
@@ -678,7 +701,7 @@ function ProjectById({ ws, storyId, cast, stories }: { ws: string; storyId: stri
   if (one.error && !one.missing) return <StError message={one.error} onRetry={() => void one.reload()} />;
   if (one.missing)
     return (
-      <LibraryEmpty mood="think" tone="sky" title="We could not find that project" action={<StLinkButton href="/stories/library" main>See every project</StLinkButton>}>
+      <LibraryEmpty mood="think" tone="sun" title="We could not find that project" action={<StLinkButton href="/stories/library" main>See every project</StLinkButton>}>
         It may have been deleted.
       </LibraryEmpty>
     );
@@ -703,8 +726,8 @@ function Projects({ ws, storyId, stories, cast }: { ws: string; storyId: string 
   return (
     <>
       <ul className="st-projects">
-        {stories.data.map((s) => (
-          <ProjectCard key={s.storyId} story={s} cover={covers.get(`cover:${s.storyId}`)} cast={cast} />
+        {stories.data.map((s, i) => (
+          <ProjectCard key={s.storyId} story={s} cover={covers.get(`cover:${s.storyId}`)} cast={cast} featured={i === 0} />
         ))}
       </ul>
       {stories.problem ? <StError message={stories.problem} onRetry={() => void stories.more()} /> : null}
@@ -740,12 +763,30 @@ export function LibraryScreen({ ws, page }: StoriesScreenProps) {
     const qs = q.toString();
     navigate(`/stories/library${qs ? `?${qs}` : ""}`, { replace: true });
   };
+  // On a phone the kinds are one row that scrolls sideways: the chosen pill is always brought into view (at once the
+  // first time, then with a short glide unless motion is calm).
+  const kinds = useRef<HTMLDivElement>(null);
+  const shown = useRef(false);
+  useLayoutEffect(() => {
+    const box = kinds.current;
+    const on = box?.querySelector<HTMLElement>(".st-tabs__tab.is-on");
+    const first = !shown.current;
+    shown.current = true;
+    if (!box || !on || box.scrollWidth <= box.clientWidth + 1) return;
+    const room = parseFloat(getComputedStyle(box).scrollPaddingInlineStart) || 0;
+    const start = on.offsetLeft - room;
+    const end = on.offsetLeft + on.offsetWidth + room - box.clientWidth;
+    const left = box.scrollLeft > start ? start : box.scrollLeft < end ? end : box.scrollLeft;
+    if (Math.abs(left - box.scrollLeft) < 1) return;
+    if (typeof box.scrollTo === "function") box.scrollTo({ left, behavior: first || storiesReduceMotion() ? "auto" : "smooth" });
+    else box.scrollLeft = left;
+  }, [tab]);
   return (
     <section className="st-page st-library">
       <StPageHead title="Library" lede="Every file Lamo Stories made or you added, kept safe. Only Lamo Stories' own: Clip Factory's Library stays separate." />
       {/* The kinds as pills (the reference's chips): the chosen one solid cream with espresso words, sliding on
-          <Glide>; the rest glass. Each keeps .st-tabs__tab and role="tab". */}
-      <div className="st-library__kinds" role="tablist" aria-label="Library">
+          <Glide>; the rest glass. Each keeps .st-tabs__tab and role="tab". One row on a phone, scrolling sideways. */}
+      <div className="st-library__kinds" role="tablist" aria-label="Library" ref={kinds}>
         <Glide active=".st-tabs__tab.is-on" className="st-library__glide" />
         {TABS.map((t) => (
           <GlassPill
