@@ -128,6 +128,16 @@
 .st-brand:hover {
   background-color: var(--st-fill-control);
 }
+/* The frame's rows and tabs always sit on its own glass (the rail, the top bar's plate, the tab bar, the More sheet),
+   which carries the measured veil over a picture or the desktop: their hover is a light glass there too, never a second
+   veil (that would be a dark hole). Their words over a white picture: 5.9:1 or more
+   (test/storiesShellGlass.test.tsx). */
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-brand, .st-rail__item:not(.is-active), .st-tabbar__item:not(.is-active):not(.is-open)):hover {
+  background-color: rgb(var(--st-cream-rgb) / 0.12);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-more__item:not(.is-active):hover {
+  background-color: rgb(var(--st-cream-rgb) / 0.16);
+}
 .st-brand__mark {
   flex: none;
   filter: drop-shadow(0 6px 10px rgb(var(--st-amber-rgb) / 0.3));
@@ -148,6 +158,11 @@
    (.st-plate: nothing over Ember; a glass plate in Picture and See-through). The plate grows outwards by the
    surface gap, so its content box, and the shell's switch in it, stay exactly where they always are. */
 .st-top {
+  /* Its own layer above the page (below the tab bar, the More sheet and the shell's dock): the shell's workspace menu
+     opens from the switch in it, and the plate's backdrop filter makes the bar a stacking context, so without this the
+     page's glass after it would paint over that menu. */
+  position: relative;
+  z-index: calc(var(--st-z-nav) - 1);
   display: flex;
   align-items: center;
   justify-content: space-between;

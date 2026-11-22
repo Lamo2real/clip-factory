@@ -584,13 +584,13 @@ export function NeedsYouBar({ ws, here }: { ws: string; here?: string }) {
       </p>
       <div className="st-needs__actions">
         {!onIt ? (
-          <StLinkButton href={first.href} main className="st-needs__go">
+          <StLinkButton href={first.href} className="st-needs__go st-btn--cream">
             Fix it
             <StIcon name="chevron" size={18} />
           </StLinkButton>
         ) : onSocial && first.platform ? (
           // Already on Social accounts: the card to fix comes into view, instead of the same page opening again.
-          <StButton main className="st-needs__go" onClick={show}>
+          <StButton className="st-needs__go st-btn--cream" onClick={show}>
             Show me
             <StIcon name="chevron" size={18} />
           </StButton>

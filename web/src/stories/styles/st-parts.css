@@ -43,6 +43,13 @@
   gap: 10px;
   margin-left: auto;
 }
+/* On a phone the actions wrap under the words: they line up with the title, not with the right edge. */
+@media (max-width: 767px) {
+  .st-head__actions {
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+}
 
 /* A card: the glass recipe (StCard adds .st-glass: the smoky veil, the inner top highlight, the thin light edge). */
 .st-card {
@@ -121,6 +128,29 @@
 .st-btn--coral:hover {
   background-color: color-mix(in srgb, var(--st-coral) 82%, var(--st-cream));
 }
+/* A solid cream button with espresso words: an action that stands out without being the screen's one orange main
+   action (the Needs you bar's Fix it and Show me, on every page). */
+.st-btn--cream {
+  color: var(--st-on-cream);
+  background-color: var(--st-cream);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1);
+}
+.st-btn--cream:hover {
+  background-color: var(--st-cream-hover);
+}
+.st-btn--cream:active {
+  background-color: var(--st-cream-2);
+}
+/* Inside a glass surface or a plate over a picture or the desktop: the surface already carries the measured veil, so a
+   glass control there keeps the light cream glass (a second veil would make it a dark hole). Over a white picture,
+   on the thinnest veil (a card's 0.74): its words 5.4:1 at rest and 4.9:1 on hover; not ready yet 5.4:1 and 4.7:1
+   (test/storiesShellGlass.test.tsx). A control loose on the page keeps a card's veil itself (above). */
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-glass, .st-plate) .st-btn:not(.st-btn--main, .st-btn--coral, .st-btn--cream, .st-cream .st-btn) {
+  background-color: rgb(var(--st-cream-rgb) / 0.12);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-glass, .st-plate) .st-btn:not(.st-btn--main, .st-btn--coral, .st-btn--cream, .st-cream .st-btn):hover {
+  background-color: rgb(var(--st-cream-rgb) / 0.16);
+}
 /* On the cream card: espresso words on a light copper wash (glass words would vanish on cream). */
 .st-cream .st-btn:not(.st-btn--main, .st-btn--coral) {
   color: var(--st-on-cream);
@@ -142,6 +172,12 @@
 .st-btn:disabled:hover,
 .st-btn[aria-disabled="true"]:hover {
   background-color: var(--st-fill-control-hover);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-glass, .st-plate) .st-btn:is(:disabled, [aria-disabled="true"]):not(.st-cream .st-btn) {
+  background-color: rgb(var(--st-cream-rgb) / 0.06);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-glass, .st-plate) .st-btn:is(:disabled, [aria-disabled="true"]):not(.st-cream .st-btn):hover {
+  background-color: rgb(var(--st-cream-rgb) / 0.12);
 }
 .st-btn:focus-visible {
   outline: none;
@@ -172,19 +208,19 @@
 }
 .st-chip--sun {
   color: var(--st-text-amber);
-  background: rgba(255, 168, 82, 0.2);
+  background: rgb(var(--st-amber-rgb) / 0.2);
 }
 .st-chip--coral {
   color: var(--st-coral-ink);
-  background: rgba(255, 127, 106, 0.22);
+  background: rgb(var(--st-coral-rgb) / 0.22);
 }
 .st-chip--mint {
   color: var(--st-mint-ink);
-  background: rgba(111, 217, 164, 0.2);
+  background: rgb(var(--st-mint-rgb) / 0.2);
 }
 .st-chip--sky {
   color: var(--st-sky-ink);
-  background: rgba(124, 198, 230, 0.2);
+  background: rgb(var(--st-sky-rgb) / 0.2);
 }
 /* Over a picture or the desktop: the tone is cut back over a deep well, so its words keep 4.5:1 over white too. */
 .stories-app:is([data-look="window"], [data-look="picture"]) .st-chip {
@@ -201,6 +237,29 @@
 }
 .stories-app:is([data-look="window"], [data-look="picture"]) .st-chip--sky {
   background: linear-gradient(rgb(var(--st-sky-rgb) / 0.12), rgb(var(--st-sky-rgb) / 0.12)), rgb(var(--st-well-rgb) / 0.42);
+}
+
+/* On the cream card (in every look): espresso words on a light wash of the tone (glass words would vanish on cream). */
+.st-cream .st-chip,
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-cream .st-chip {
+  color: var(--st-on-cream);
+  background: rgb(var(--st-copper-rgb) / 0.14);
+}
+.st-cream .st-chip--sun,
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-cream .st-chip--sun {
+  background: rgb(var(--st-amber-rgb) / 0.3);
+}
+.st-cream .st-chip--coral,
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-cream .st-chip--coral {
+  background: rgb(var(--st-coral-rgb) / 0.26);
+}
+.st-cream .st-chip--mint,
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-cream .st-chip--mint {
+  background: rgb(var(--st-mint-rgb) / 0.3);
+}
+.st-cream .st-chip--sky,
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-cream .st-chip--sky {
+  background: rgb(var(--st-sky-rgb) / 0.3);
 }
 
 .st-icon {
@@ -226,6 +285,13 @@
 }
 .st-textlink:hover {
   background-color: var(--st-fill-control);
+}
+/* On the cream card: the dark orange for words on cream (6.3:1), a copper wash on hover. */
+.st-cream .st-textlink {
+  color: var(--st-on-cream-orange);
+}
+.st-cream .st-textlink:hover {
+  background-color: rgb(var(--st-copper-rgb) / 0.14);
 }
 /* Back: a glass pill with a round glass puck for its arrow (the reference's round back button). */
 .st-back {
@@ -293,7 +359,8 @@
   gap: 10px;
   margin-top: 6px;
 }
-/* A short wait: loose words on the page, so on a backing plate (StLoading adds .st-plate). */
+/* A short wait: loose words on the page, so on a backing plate (StLoading adds .st-plate). Its room stays the same
+   in every look (the plate's own padding over a picture or the desktop would shrink it). */
 .st-loading {
   display: grid;
   justify-items: center;
@@ -301,10 +368,13 @@
   width: fit-content;
   max-width: 100%;
   margin-inline: auto;
-  padding: 36px 16px;
   color: var(--st-text-soft);
   font-weight: var(--st-weight-ui);
   text-align: center;
+}
+.st-loading,
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-loading.st-plate {
+  padding: 36px 16px;
 }
 /* Something did not load: a coral-tinted glass card (StError adds .st-glass.st-glass--tinted). */
 .st-error {
@@ -462,4 +532,12 @@
 }
 .st-needs__hide {
   flex: none;
+}
+/* Over a picture or the desktop the bar already carries its measured veil: the round close stays light glass there
+   too (the card's veil again would make it a dark hole). */
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-needs .st-needs__hide {
+  background: rgb(var(--st-cream-rgb) / 0.12);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-needs .st-needs__hide:hover {
+  background: rgb(var(--st-cream-rgb) / 0.16);
 }

@@ -51,6 +51,10 @@
   color: var(--st-text);
   background-color: var(--st-fill-control);
 }
+/* Over a picture or the desktop the track is already deep: the hover is a light glass over it, never darker still. */
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-pick__opt:not(.is-on):hover {
+  background-color: rgb(var(--st-cream-rgb) / 0.12);
+}
 .st-pick__opt:active,
 .st-tabs__tab:active {
   transform: scale(0.97);
@@ -95,6 +99,13 @@
 .st-tabs__tab:not(.is-on):hover {
   color: var(--st-text-strong);
   background-color: var(--st-fill-control-hover);
+}
+/* Inside a glass surface or a plate over a picture or the desktop: light glass pills (the surface carries the veil). */
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-glass, .st-plate) .st-tabs__tab:not(.is-on) {
+  background-color: rgb(var(--st-cream-rgb) / 0.12);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-glass, .st-plate) .st-tabs__tab:not(.is-on):hover {
+  background-color: rgb(var(--st-cream-rgb) / 0.16);
 }
 .st-tabs__tab.is-on {
   color: var(--st-on-cream);
@@ -144,11 +155,25 @@
   color: var(--st-text-soft);
   font-size: var(--st-fs-small);
 }
+/* On the cream card: espresso words (the glass words would vanish on cream). */
+.st-cream .st-toggle-row__desc {
+  color: var(--st-on-cream-soft);
+}
 /* Not now (aria-disabled, never disabled): the track and knob go quiet, a tap still plays the deny sound. */
 .st-switch[aria-disabled="true"] .st-toggle__track {
   background-color: var(--st-fill-well);
   box-shadow: none;
 }
+.st-switch[aria-disabled="true"]:hover .st-toggle__track {
+  background-color: var(--st-fill-well-hover);
+}
 .st-switch[aria-disabled="true"] .st-toggle__knob {
   background: var(--st-cream-2);
+}
+/* On the cream card: a light copper track (a dark well would be a hole in the cream). */
+.st-cream .st-switch[aria-disabled="true"] .st-toggle__track {
+  background-color: rgb(var(--st-copper-rgb) / 0.16);
+}
+.st-cream .st-switch[aria-disabled="true"]:hover .st-toggle__track {
+  background-color: rgb(var(--st-copper-rgb) / 0.26);
 }
