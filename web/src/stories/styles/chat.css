@@ -1,18 +1,28 @@
-/* Lamo Stories › Chat and References (docs/CONTRACTS.md §45.16.2, §45.27, §45.28), in the studio's own look: the
-   night-indigo stage, cream words, sunshine for every main action, frosted panels. Every selector is an st-chat- or
-   st-ref- class (or sits under .stories-app); the owner's rules hold here too and test/storiesStyles.test.ts checks
-   them over this folder: the cursor never changes, no borders or outlines (shadows and fills instead), radii from
-   the --r-* scale, no type under 0.78rem, light only. Targets are 44 px, 48 on phones. Builder H owns this file. */
+/* Clip Factory Stories › Chat and References (docs/CONTRACTS.md §45.16.2, §45.27, §45.28) in the warm liquid glass
+   (styles/GLASS-CONTRACT.md): smoky espresso glass over the amber and copper light, cream solids with espresso words,
+   the orange accent for shapes only. The director's answers are glass bubbles, the owner's are cream; icon buttons are
+   round glass (RoundGlassButton); the model and effort choices are pills (GlassPill), the chosen one cream; the
+   message box sits on bar glass; reference videos are media rows (MediaRow).
 
-/* ---------- Page head ---------- */
+   Every selector is an st-chat- or st-ref- class (or sits under .stories-app). The glass itself comes from the
+   contract's classes in the markup (.st-glass, .st-glass--hero, --bar, --float, --tinted, .st-cream, .st-plate): this
+   file places and sizes, and never sets a --st-* token (its one local value is --st-chat-dot, a chip's dot colour).
+   Words loose on the page sit in .st-plate (a glass plate over a picture or the desktop, nothing over the colours).
+
+   The owner's rules, checked by test/storiesStyles.test.ts and e2e/stories-chat.spec.ts: the cursor never changes,
+   hover on every control, no borders or outlines (the thin glass edge is light, focus is a soft ring), radii from the
+   --st-r-* scale (concentric: a child that hugs its parent's corner is the parent's radius less the gap), nothing
+   under the text floor (--st-fs-min), light only, no animated filter or backdrop-filter, a glass surface never moves
+   on hover. Targets are 44 px, 48 on phones. */
+
+/* ---------- Page head (words loose on the page: .st-plate in the markup) ---------- */
 
 .st-chat-head {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 12px 20px;
-  margin: 0 0 18px;
+  gap: var(--st-space-3) var(--st-space-5);
 }
 
 .st-chat-head__text {
@@ -22,20 +32,21 @@
 
 .st-chat-head__title {
   margin: 0;
-  font: 800 clamp(1.6rem, 1.2rem + 1.6vw, 2.2rem) / 1.1 var(--st-font);
-  letter-spacing: -0.01em;
-  color: var(--st-ink);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h1);
 }
 
-.st-chat-head__lede {
-  margin: 6px 0 0;
+/* (.stories-app first: the shell's base rule for every p, h1-h3 and list would win over one class.) */
+.stories-app .st-chat-head__lede {
+  margin: var(--st-space-2) 0 0;
   max-width: 60ch;
-  color: var(--st-ink-soft);
-  font-size: 1rem;
-  line-height: 1.45;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-body);
 }
 
-/* ---------- Buttons ---------- */
+/* ---------- Buttons: glass by default, the one main action in ember orange with espresso words ---------- */
 
 .st-chat-btn {
   appearance: none;
@@ -43,75 +54,79 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  min-width: 44px;
-  padding: 0 18px;
-  border-radius: var(--r-pill);
-  font: 700 1rem/1.1 var(--st-font);
-  color: var(--st-ink);
-  background: var(--st-panel-strong);
-  box-shadow: 0 4px 12px rgba(8, 6, 30, 0.25);
+  gap: var(--st-space-2);
+  min-height: var(--st-tap);
+  min-width: var(--st-tap);
+  padding: 0 var(--st-space-4);
+  border-radius: var(--st-r-control);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.15;
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
   text-align: center;
+  text-decoration: none;
   transition:
-    transform 160ms ease,
-    background-color 160ms ease,
-    box-shadow 160ms ease;
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out),
+    transform var(--st-dur-tap) var(--st-ease-out);
 }
 
 .st-chat-btn:hover {
-  background: rgba(255, 246, 229, 0.24);
-  transform: translateY(-1px);
+  background: var(--st-fill-control-hover);
 }
 
 .st-chat-btn:active {
-  transform: translateY(0) scale(0.97);
+  transform: scale(0.97);
 }
 
 .st-chat-btn--main {
-  color: var(--st-on-sun);
-  background: var(--st-sun);
-  box-shadow: 0 6px 18px rgba(255, 201, 74, 0.28);
+  color: var(--st-on-cream);
+  background: linear-gradient(180deg, var(--st-action-top), var(--st-action-bottom));
+  box-shadow: var(--st-sheen-control), var(--st-glow-action);
 }
 
 .st-chat-btn--main:hover {
-  background: #ffd56e;
-  box-shadow: 0 8px 22px rgba(255, 201, 74, 0.38);
+  background: var(--st-action-hover);
+  box-shadow: var(--st-sheen-control), var(--st-glow-action-hover);
 }
 
+.st-chat-btn--main:active {
+  background: var(--st-action-pressed);
+}
+
+/* A quieter glass: a light lift on the glass it sits on (always inside a card, a plate, the box or a sheet). */
 .st-chat-btn--quiet {
-  background: transparent;
+  background: rgb(var(--st-cream-rgb) / 0.07);
   box-shadow: none;
-  color: var(--st-ink);
+  color: var(--st-text);
 }
 
 .st-chat-btn--quiet:hover {
-  background: var(--st-panel-strong);
+  background: var(--st-fill-control-hover);
 }
 
+/* Delete: a coral tint over a glass control, so its words stay readable over a picture or the desktop too. */
 .st-chat-btn--danger {
-  background: rgba(255, 111, 97, 0.2);
-  color: var(--st-ink);
+  background: linear-gradient(rgb(var(--st-coral-rgb) / 0.18), rgb(var(--st-coral-rgb) / 0.18)), var(--st-fill-control);
+  color: var(--st-text);
 }
 
 .st-chat-btn--danger:hover {
-  background: rgba(255, 111, 97, 0.34);
+  background: linear-gradient(rgb(var(--st-coral-rgb) / 0.3), rgb(var(--st-coral-rgb) / 0.3)), var(--st-fill-control);
 }
 
-.st-chat-btn--icon {
-  padding: 0;
-  width: 44px;
-}
-
-.st-chat-btn[aria-disabled="true"] {
+.st-chat-btn[aria-disabled="true"],
+.st-chat-btn--icon[aria-disabled="true"] {
   opacity: 0.55;
   transform: none;
 }
 
 .st-chat-btn:focus-visible,
-.st-chat-ai__part:focus-visible,
 .st-chat-pick__opt:focus-visible,
-.st-chat-suggest:focus-visible,
 .st-chat-row__main:focus-visible,
 .st-chat-project__chip:focus-visible,
 .st-chat-link:focus-visible,
@@ -119,7 +134,7 @@
 .st-chat-back:focus-visible,
 .st-ref-card:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--st-sky);
+  box-shadow: var(--st-focus-ring);
 }
 
 .st-chat-icon {
@@ -133,86 +148,135 @@
   background: transparent;
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
-  padding: 0 6px;
-  border-radius: var(--r-xs);
-  color: var(--st-sun);
-  font: 700 1rem/1.2 var(--st-font);
+  min-height: var(--st-tap);
+  padding: 0 var(--st-space-2);
+  border-radius: var(--st-r-inner);
+  color: var(--st-text-amber);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.2;
   text-decoration: underline;
+  text-decoration-thickness: 1.5px;
   text-underline-offset: 3px;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-chat-link:hover,
 .st-chat-linkbtn:hover {
-  background: var(--st-panel);
-  color: #ffd56e;
+  background: var(--st-fill-control);
+  color: var(--st-text-strong);
 }
 
+/* "All chats", "All reference videos": a glass pill with the back arrow. */
 .st-chat-back {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 0 14px 0 8px;
-  margin: 0 0 6px;
-  border-radius: var(--r-pill);
-  color: var(--st-ink);
-  font: 700 1rem/1 var(--st-font);
+  justify-self: start;
+  gap: var(--st-space-2);
+  min-height: var(--st-tap);
+  padding: 0 var(--st-space-4) 0 var(--st-space-3);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
+  color: var(--st-text);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
+  line-height: 1;
   text-decoration: none;
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-chat-back:hover {
-  background: var(--st-panel-strong);
+  background: var(--st-fill-control-hover);
 }
 
-/* ---------- Chips, notes, fields ---------- */
+/* Controls loose on the page frost what is behind them over a picture or the desktop (nothing over the colours). */
+.st-chat-back,
+.st-ref-actions--more > .st-chat-btn:not(.st-chat-btn--main) {
+  -webkit-backdrop-filter: var(--st-filter-glass);
+  backdrop-filter: var(--st-filter-glass);
+}
+
+/* ---------- Chips: glass pills with a coloured dot; "sun" (a choice that is on) is cream ---------- */
 
 .st-chat-chip,
 .st-chat-ai__status {
+  --st-chat-dot: var(--st-sky);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 26px;
-  padding: 0 10px;
-  border-radius: var(--r-pill);
-  font: 800 0.8rem/1 var(--st-font);
-  color: var(--st-stage);
+  gap: 7px;
+  min-height: 28px;
+  padding: 0 var(--st-space-3) 0 10px;
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.1;
   white-space: nowrap;
+}
+
+.st-chat-chip::before,
+.st-chat-ai__status::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--st-r-round);
+  background: var(--st-chat-dot);
+  box-shadow: 0 0 8px -1px var(--st-chat-dot);
 }
 
 .st-chat-chip--sun,
 .st-chat-ai__status--sun {
-  background: var(--st-sun);
+  --st-chat-dot: var(--st-accent);
+  background: var(--st-cream);
+  color: var(--st-on-cream);
+  box-shadow: var(--st-depth-1);
 }
 
 .st-chat-chip--coral,
 .st-chat-ai__status--coral {
-  background: var(--st-coral);
+  --st-chat-dot: var(--st-coral);
 }
 
 .st-chat-chip--mint,
 .st-chat-ai__status--mint {
-  background: var(--st-mint);
+  --st-chat-dot: var(--st-mint);
 }
 
 .st-chat-chip--sky,
 .st-chat-ai__status--sky {
-  background: var(--st-sky);
+  --st-chat-dot: var(--st-sky);
 }
 
+/* On cream (the owner's bubble, the chosen option under the sliding highlight): espresso words on a faint shade. */
+:is(.st-cream, .st-chat-pick__opt.is-on) :is(.st-chat-chip, .st-chat-ai__status) {
+  background: rgb(var(--st-shadow-rgb) / 0.08);
+  color: var(--st-on-cream);
+  box-shadow: none;
+}
+
+/* ---------- Notes and fields ---------- */
+
 .st-chat-note {
-  margin: 8px 0 0;
-  color: var(--st-ink);
-  font-size: 0.95rem;
+  margin: var(--st-space-2) 0 0;
+  color: var(--st-text);
+  font-size: var(--st-fs-small);
   line-height: 1.45;
 }
 
 .st-chat-note--bad {
-  color: #ffb2a9;
+  color: var(--st-coral-ink);
 }
 
 .st-chat-note--good {
-  color: #b8f3dd;
+  color: var(--st-mint-ink);
 }
 
 .st-chat-note--row {
@@ -220,7 +284,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px 10px;
+  gap: var(--st-space-2) 10px;
 }
 
 .st-chat-note--row > span {
@@ -230,57 +294,70 @@
 
 .st-chat-field {
   display: grid;
-  gap: 6px;
+  gap: var(--st-space-2);
   min-width: 0;
 }
 
 .st-chat-field__label {
-  font: 700 0.9rem/1.2 var(--st-font);
-  color: var(--st-ink-soft);
+  color: var(--st-text-soft);
+  font-family: var(--st-font-caps);
+  font-size: var(--st-fs-caps);
+  font-weight: 500;
+  letter-spacing: var(--st-track-caps);
+  line-height: 1.3;
+  text-transform: uppercase;
 }
 
+/* Fields are wells: deeper than the glass they sit on, so their words only gain contrast. */
 .st-chat-input,
 .st-chat-box {
   appearance: none;
   border: 0;
   width: 100%;
-  min-height: 48px;
+  min-height: var(--st-tap-phone);
   padding: 12px 14px;
-  border-radius: var(--r-md);
-  font: 500 1rem/1.4 var(--st-font);
-  color: var(--st-ink);
-  background: rgba(255, 246, 229, 0.1);
-  transition: background-color 160ms ease, box-shadow 160ms ease;
+  border-radius: var(--st-r-control);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-body);
+  line-height: 1.4;
+  color: var(--st-text);
+  background: var(--st-fill-well);
+  box-shadow: inset 0 2px 10px -6px rgb(var(--st-shadow-rgb) / 0.7);
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-chat-input:hover,
 .st-chat-box:hover {
-  background: rgba(255, 246, 229, 0.14);
+  background: var(--st-fill-well-hover);
 }
 
-.st-chat-input:focus,
-.st-chat-box:focus {
+.st-chat-input:focus-visible,
+.st-chat-box:focus-visible {
   outline: none;
-  background: rgba(255, 246, 229, 0.14);
-  box-shadow: 0 0 0 3px var(--st-sun);
+  background: var(--st-fill-well-hover);
+  box-shadow: var(--st-focus-ring);
 }
 
 .st-chat-input::placeholder,
 .st-chat-box::placeholder {
-  color: rgba(255, 246, 229, 0.7);
+  color: var(--st-text-muted);
+  opacity: 1;
 }
 
-/* ---------- Pick one (on <Glide>) ---------- */
+/* ---------- Pick one (on <Glide>): a well of option cards, or a bar of pills; the chosen one cream ---------- */
 
 .st-chat-pick {
   position: relative;
   isolation: isolate;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: 4px;
-  border-radius: var(--r-lg);
-  background: var(--st-panel);
+  gap: var(--st-gap-control);
+  padding: var(--st-gap-control);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-well);
 }
 
 .st-chat-pick--stack {
@@ -289,18 +366,21 @@
 }
 
 .st-chat-pick--bar {
-  border-radius: var(--r-pill);
-  margin: 0 0 12px;
+  gap: var(--st-space-2);
+  margin: 0 0 var(--st-space-3);
+  padding: 0;
+  border-radius: var(--st-r-round);
+  background: none;
 }
 
 .stories-app .glide--st-chat {
-  background: var(--st-ink);
-  border-radius: var(--r-md);
-  box-shadow: 0 4px 14px rgba(8, 6, 30, 0.35);
+  background: var(--st-selected);
+  border-radius: var(--st-r-inner);
+  box-shadow: var(--st-depth-1);
 }
 
 .stories-app .st-chat-pick--bar > .glide--st-chat {
-  border-radius: var(--r-pill);
+  border-radius: var(--st-r-round);
 }
 
 .st-chat-pick__opt {
@@ -310,34 +390,51 @@
   z-index: 1;
   display: grid;
   gap: 2px;
-  min-height: 44px;
+  min-height: var(--st-tap);
   padding: 10px 14px;
-  border-radius: var(--r-md);
+  border-radius: var(--st-r-inner);
   background: transparent;
-  color: var(--st-ink);
-  font: 700 1rem/1.25 var(--st-font);
+  color: var(--st-text);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.25;
   text-align: left;
-  transition: color 300ms ease, background-color 160ms ease;
+  transition:
+    color var(--st-dur-glide) var(--st-ease-glide),
+    background-color var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-chat-pick__opt:hover {
+  background: var(--st-fill-control);
 }
 
 .st-chat-pick--bar .st-chat-pick__opt {
   flex: 1 1 auto;
+  align-content: center;
   justify-content: center;
+  padding: 0 var(--st-space-4);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  font-size: var(--st-fs-small);
   text-align: center;
-  border-radius: var(--r-pill);
 }
 
-.st-chat-pick__opt:hover {
-  background: var(--st-panel-strong);
+.st-chat-pick--bar .st-chat-pick__opt:hover {
+  background: var(--st-fill-control-hover);
 }
 
-.st-chat-pick__opt.is-on {
-  color: var(--st-stage);
-  background: var(--st-ink);
+.st-chat-pick__opt.is-on,
+.st-chat-pick--bar .st-chat-pick__opt.is-on {
+  color: var(--st-on-cream);
+  background: var(--st-selected);
 }
 
-.has-glide > .st-chat-pick__opt.is-on {
+.has-glide > .st-chat-pick__opt.is-on,
+.st-chat-pick--bar.has-glide > .st-chat-pick__opt.is-on {
   background: transparent;
+  box-shadow: none;
 }
 
 .st-chat-pick__label {
@@ -354,16 +451,18 @@
 }
 
 .st-chat-pick__line {
-  font: 500 0.9rem/1.35 var(--st-font);
-  color: var(--st-ink-soft);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-body);
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 .st-chat-pick__opt.is-on .st-chat-pick__line {
-  color: rgba(28, 24, 66, 0.8);
+  color: var(--st-on-cream-soft);
 }
 
-/* ---------- The sheet ---------- */
+/* ---------- The sheet: float glass; its head and Done stay, the middle scrolls ---------- */
 
 .st-chat-scrim {
   position: fixed;
@@ -373,21 +472,20 @@
   align-items: flex-end;
   justify-content: center;
   padding: 0;
-  background: rgba(13, 11, 38, 0.62);
-  backdrop-filter: blur(4px);
+  background: rgb(var(--st-shadow-rgb) / 0.58);
 }
 
 .st-chat-sheet {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-height: 88vh;
-  overflow: auto;
-  overscroll-behavior: contain;
-  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
-  border-radius: var(--r-xl) var(--r-xl) 0 0;
-  background: var(--st-stage-2);
-  color: var(--st-ink);
+  max-height: 88dvh;
+  overflow: hidden;
+  padding: var(--st-space-4) var(--st-space-4) 0;
+  border-radius: var(--st-r-surface) var(--st-r-surface) 0 0;
+  color: var(--st-text);
   font-family: var(--st-font);
-  box-shadow: 0 -10px 40px rgba(8, 6, 30, 0.5);
 }
 
 .st-chat-sheet:focus {
@@ -395,41 +493,62 @@
 }
 
 .st-chat-sheet__head {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin: 0 0 10px;
+  gap: var(--st-space-3);
+  margin: 0 0 var(--st-space-2);
 }
 
 .st-chat-sheet__title {
   margin: 0;
-  font: 800 1.3rem/1.2 var(--st-font);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  line-height: var(--st-lh-head);
 }
 
-.st-chat-sheet__sub {
-  margin: 16px 0 8px;
-  font: 800 1rem/1.2 var(--st-font);
-  color: var(--st-ink);
+.st-chat-sheet__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0 calc(-1 * var(--st-space-4));
+  padding: 6px var(--st-space-4) var(--st-space-3);
 }
 
-.st-chat-sheet__lede {
-  margin: 4px 0 0;
-  color: var(--st-ink-soft);
-  font-size: 0.95rem;
-  line-height: 1.4;
+.st-chat-sheet__body:last-child {
+  padding-bottom: calc(var(--st-space-4) + env(safe-area-inset-bottom));
+}
+
+.stories-app .st-chat-sheet__sub {
+  margin: var(--st-space-5) 0 var(--st-space-2);
+  color: var(--st-text-soft);
+  font-family: var(--st-font-caps);
+  font-size: var(--st-fs-caps);
+  font-weight: 500;
+  letter-spacing: var(--st-track-caps);
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.stories-app .st-chat-sheet__lede {
+  margin: var(--st-space-1) 0 0;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  line-height: 1.45;
 }
 
 .st-chat-sheet__actions {
-  position: sticky;
-  bottom: calc(-16px - env(safe-area-inset-bottom));
+  flex: none;
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin: 16px -16px calc(-16px - env(safe-area-inset-bottom));
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
-  background: var(--st-stage-2);
-  box-shadow: 0 -8px 18px rgba(8, 6, 30, 0.35);
+  margin: 0 calc(-1 * var(--st-space-4));
+  padding: var(--st-space-3) var(--st-space-4) calc(var(--st-space-3) + env(safe-area-inset-bottom));
+  box-shadow: 0 -16px 22px -20px rgb(var(--st-shadow-rgb) / 0.9);
 }
 
 /* ---------- Waiting, empty, undo, progress, burst ---------- */
@@ -438,30 +557,35 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 32px 12px;
-  color: var(--st-ink-soft);
-  font-weight: 700;
+  gap: var(--st-space-3);
+  padding: var(--st-space-7) var(--st-space-3);
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-chat-empty {
   display: grid;
   justify-items: center;
-  gap: 8px;
-  padding: 28px 16px;
+  gap: var(--st-space-2);
+  padding: var(--st-space-7) var(--st-space-4);
   text-align: center;
 }
 
-.st-chat-empty__title {
+.stories-app .st-chat-empty__title {
   margin: 6px 0 0;
-  font: 800 1.25rem/1.2 var(--st-font);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  line-height: var(--st-lh-head);
+  text-wrap: balance;
 }
 
 .st-chat-empty__text {
   margin: 0;
   max-width: 42ch;
-  color: var(--st-ink-soft);
-  line-height: 1.45;
+  color: var(--st-text-soft);
+  line-height: var(--st-lh-body);
 }
 
 .st-chat-empty__action {
@@ -469,13 +593,14 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
-  margin-top: 8px;
+  margin-top: var(--st-space-2);
 }
 
 .st-chat-director--think {
   animation: st-chat-bob 1.6s ease-in-out infinite;
 }
 
+/* "Deleted. Undo": a float-glass toast (surface radius; Undo inside is control radius, 6 px from its edge). */
 .st-chat-undo {
   position: fixed;
   z-index: 70;
@@ -484,16 +609,14 @@
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--st-space-3);
   width: max-content;
   max-width: calc(100vw - 24px);
-  padding: 8px 8px 8px 18px;
-  border-radius: var(--r-pill);
-  background: var(--st-stage-3);
-  color: var(--st-ink);
-  font-weight: 700;
-  box-shadow: var(--st-shadow);
-  animation: st-chat-rise 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  padding: var(--st-gap-surface) var(--st-gap-surface) var(--st-gap-surface) var(--st-space-5);
+  border-radius: var(--st-r-surface);
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
+  animation: st-chat-rise var(--st-dur-enter) var(--st-ease-out);
 }
 
 .st-chat-undo > span {
@@ -505,20 +628,20 @@
 
 .st-chat-progress {
   position: relative;
-  height: 10px;
+  height: 8px;
   width: 100%;
   overflow: hidden;
-  border-radius: var(--r-pill);
-  background: var(--st-panel-strong);
+  border-radius: var(--st-r-round);
+  background: var(--st-track);
 }
 
 .st-chat-progress__fill {
   position: absolute;
   inset: 0;
-  border-radius: var(--r-pill);
-  background: var(--st-sun);
+  border-radius: var(--st-r-round);
+  background: var(--st-accent);
   transform-origin: 0 50%;
-  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform var(--st-dur-progress) var(--st-ease-progress);
 }
 
 .st-chat-burst {
@@ -530,12 +653,12 @@
   pointer-events: none;
 }
 
-/* ---------- The chat page ---------- */
+/* ---------- The chat page: the list of chats on its own glass, one chat beside it ---------- */
 
 .st-chat-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 20px;
+  gap: var(--st-gap);
   align-items: start;
 }
 
@@ -547,12 +670,10 @@
   display: none;
 }
 
+/* Rows reach 6 px from the card's edge, so their 14 px corners are concentric with its 20. */
 .st-chat-side {
   min-width: 0;
-  padding: 8px;
-  border-radius: var(--r-lg);
-  background: var(--st-panel);
-  box-shadow: var(--st-shadow);
+  padding: var(--st-gap-surface);
 }
 
 .st-chat-main {
@@ -562,12 +683,10 @@
 .st-chat-pick-one {
   display: grid;
   justify-items: center;
-  gap: 10px;
-  padding: 48px 16px;
-  border-radius: var(--r-lg);
-  background: var(--st-panel);
-  color: var(--st-ink-soft);
-  font-weight: 700;
+  gap: var(--st-space-3);
+  padding: var(--st-space-8) var(--st-space-4);
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
   text-align: center;
 }
 
@@ -580,63 +699,77 @@
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 4px;
+  gap: var(--st-gap-control);
 }
 
 .st-chat-row {
   display: flex;
   align-items: center;
-  gap: 2px;
-  border-radius: var(--r-md);
-  transition: background-color 160ms ease;
-}
-
-.st-chat-row:hover {
-  background: var(--st-panel);
-}
-
-.st-chat-row.is-on {
-  background: var(--st-panel-strong);
+  gap: var(--st-gap-control);
+  border-radius: var(--st-r-control);
 }
 
 .st-chat-row.is-editing {
   display: grid;
-  gap: 8px;
-  padding: 10px;
-  background: var(--st-panel-strong);
+  gap: var(--st-space-2);
+  padding: var(--st-space-3);
+  background: var(--st-fill-well);
 }
 
 .st-chat-row__buttons {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 
 .st-chat-row__main {
   flex: 1 1 auto;
   min-width: 0;
   display: grid;
+  align-content: center;
   gap: 2px;
   min-height: 52px;
-  padding: 8px 10px;
-  border-radius: var(--r-md);
-  color: var(--st-ink);
+  padding: var(--st-space-2) var(--st-space-3);
+  border-radius: var(--st-r-control);
+  color: var(--st-text);
   text-decoration: none;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-chat-row__main:hover {
-  background: var(--st-panel);
+  background: var(--st-fill-control);
+}
+
+/* The open chat: a cream row with espresso words, like the chosen pill. */
+.st-chat-row.is-on .st-chat-row__main {
+  background: var(--st-selected);
+  color: var(--st-on-cream);
+  box-shadow: var(--st-depth-1);
+}
+
+.st-chat-row.is-on .st-chat-row__main:hover {
+  background: var(--st-cream-hover);
 }
 
 .st-chat-row__title {
-  font: 700 1rem/1.25 var(--st-font);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
 .st-chat-row__line {
-  font: 500 0.85rem/1.3 var(--st-font);
-  color: var(--st-ink-soft);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-body);
+  line-height: 1.3;
   overflow-wrap: anywhere;
+}
+
+.st-chat-row.is-on .st-chat-row__line {
+  color: var(--st-on-cream-soft);
 }
 
 /* ---------- One conversation ---------- */
@@ -644,62 +777,80 @@
 .st-chat-conv {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--st-space-4);
   min-width: 0;
 }
 
 .st-chat-conv__head {
   display: grid;
-  gap: 6px;
+  gap: var(--st-space-2);
   min-width: 0;
 }
 
 .st-chat-conv__title-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--st-space-2);
   min-width: 0;
 }
 
 .st-chat-conv__title {
   margin: 0;
   min-width: 0;
-  font: 800 1.35rem/1.2 var(--st-font);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h2);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  line-height: var(--st-lh-head);
+  letter-spacing: -0.01em;
   overflow-wrap: anywhere;
 }
 
 .st-chat-rename {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
   max-width: 520px;
 }
 
 .st-chat-rename__buttons {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 
 .st-chat-project {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
+  gap: var(--st-space-2);
   min-width: 0;
 }
 
+/* What the chat is about: a glass pill with its kind's icon in orange. */
 .st-chat-project__chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 44px;
+  gap: var(--st-space-2);
+  min-height: var(--st-tap);
   max-width: 100%;
-  padding: 0 14px;
-  border-radius: var(--r-pill);
-  background: var(--st-panel-strong);
-  color: var(--st-ink);
-  font: 600 0.95rem/1.2 var(--st-font);
+  padding: 0 var(--st-space-4) 0 var(--st-space-3);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-body);
+  line-height: 1.2;
   text-decoration: none;
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-chat-project__chip > .st-chat-icon {
+  color: var(--st-accent);
+}
+
+.st-chat-project__chip b {
+  font-weight: var(--st-weight-ui);
 }
 
 .st-chat-project__chip > span {
@@ -708,65 +859,63 @@
 }
 
 .st-chat-project__chip:hover {
-  background: rgba(255, 246, 229, 0.24);
+  background: var(--st-fill-control-hover);
 }
 
 .st-chat-project__none {
-  color: var(--st-ink-soft);
-  font-size: 0.95rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
 }
 
 .st-chat-start {
   display: grid;
   justify-items: center;
-  gap: 12px;
-  padding: 24px 8px;
+  gap: var(--st-space-3);
+  padding: var(--st-space-6) var(--st-space-4);
   text-align: center;
 }
 
 .st-chat-start__hello {
   margin: 0;
-  font: 800 1.2rem/1.3 var(--st-font);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  line-height: 1.25;
+  text-wrap: balance;
 }
 
 .st-chat-start__ideas {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
+  gap: var(--st-space-2);
   max-width: 640px;
 }
 
+/* An idea to start with: a glass pill (GlassPill) whose words may wrap. */
 .st-chat-suggest {
-  appearance: none;
-  border: 0;
-  min-height: 44px;
-  padding: 10px 16px;
-  border-radius: var(--r-pill);
-  background: var(--st-panel-strong);
-  color: var(--st-ink);
-  font: 600 0.95rem/1.25 var(--st-font);
+  max-width: 100%;
+  min-height: var(--st-tap);
+  padding: var(--st-space-2) var(--st-space-4);
+  font-size: var(--st-fs-small);
+  line-height: 1.3;
   text-align: center;
-  box-shadow: 0 4px 12px rgba(8, 6, 30, 0.25);
-  transition: transform 160ms ease, background-color 160ms ease;
+  white-space: normal;
 }
 
-.st-chat-suggest:hover {
-  background: rgba(255, 201, 74, 0.26);
-  transform: translateY(-1px);
-}
-
+/* The messages: the director's on glass beside its round face, the owner's in cream on the right. */
 .st-chat-msgs {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 14px;
+  gap: var(--st-space-4);
 }
 
 .st-chat-msg {
   display: flex;
-  gap: 10px;
+  gap: var(--st-space-3);
   min-width: 0;
 }
 
@@ -780,78 +929,99 @@
 
 .st-chat-msg--assistant > .st-chat-director {
   flex: none;
-  margin-top: 2px;
+  width: 48px;
+  height: 48px;
+  padding: 4px;
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
 }
 
 .st-chat-bubble {
   min-width: 0;
   max-width: min(680px, 100%);
-  padding: 12px 16px;
-  border-radius: var(--r-lg);
-  background: var(--st-panel);
-  box-shadow: 0 6px 18px rgba(8, 6, 30, 0.3);
+  padding: var(--st-space-3) var(--st-space-4);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-body);
   overflow-wrap: anywhere;
 }
 
 .st-chat-msg--user .st-chat-bubble {
   max-width: min(560px, 88%);
-  background: rgba(255, 201, 74, 0.2);
-  border-radius: var(--r-lg) var(--r-lg) var(--r-sm) var(--r-lg);
+  border-radius: var(--st-r-surface) var(--st-r-surface) var(--st-r-tiny) var(--st-r-surface);
 }
 
 .st-chat-msg--assistant .st-chat-bubble {
-  border-radius: var(--r-sm) var(--r-lg) var(--r-lg) var(--r-lg);
+  border-radius: var(--st-r-tiny) var(--st-r-surface) var(--st-r-surface) var(--st-r-surface);
 }
 
 .st-chat-msg.is-local .st-chat-bubble {
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
-.st-chat-text__p {
-  margin: 0 0 8px;
-  line-height: 1.5;
+.stories-app .st-chat-text__p {
+  margin: 0 0 var(--st-space-2);
+  line-height: var(--st-lh-body);
 }
 
-.st-chat-text__p:last-child {
+.stories-app .st-chat-text__p:last-child {
   margin-bottom: 0;
 }
 
-.st-chat-text__list {
-  margin: 0 0 8px;
+.stories-app .st-chat-text__list {
+  margin: 0 0 var(--st-space-2);
   padding-left: 1.4em;
-  line-height: 1.5;
+  line-height: var(--st-lh-body);
   list-style: disc;
 }
 
-ol.st-chat-text__list {
+.stories-app ol.st-chat-text__list {
   list-style: decimal;
 }
 
 .st-chat-text__list li + li {
-  margin-top: 4px;
+  margin-top: var(--st-space-1);
 }
 
-.st-chat-bubble > .st-chat-text__p:last-of-type,
-.st-chat-text > :last-child {
+.st-chat-text__list li::marker {
+  color: var(--st-accent);
+}
+
+.st-chat-bubble strong {
+  font-weight: var(--st-weight-ui);
+}
+
+.stories-app .st-chat-bubble > .st-chat-text__p:last-of-type,
+.stories-app .st-chat-text > :last-child {
   margin-bottom: 0;
 }
 
 .st-chat-msg__meta {
   display: block;
-  margin-top: 8px;
-  font: 600 0.8rem/1.3 var(--st-font);
-  color: var(--st-ink-soft);
+  margin-top: var(--st-space-2);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-min);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.3;
 }
 
 .st-chat-msg__meta--bad {
-  color: #ffb2a9;
+  color: var(--st-coral-ink);
+}
+
+.st-chat-msg--user .st-chat-msg__meta {
+  color: var(--st-on-cream-soft);
+}
+
+.st-chat-msg--user .st-chat-msg__meta--bad {
+  color: var(--st-on-cream-orange);
 }
 
 .st-chat-bubble__pics {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin: 0 0 8px;
+  gap: var(--st-space-2);
+  margin: 0 0 var(--st-space-2);
 }
 
 .st-chat-bubble__pic {
@@ -860,35 +1030,36 @@ ol.st-chat-text__list {
   max-width: 100%;
   height: 120px;
   object-fit: cover;
-  border-radius: var(--r-md);
+  border-radius: var(--st-r-inner);
 }
 
 .st-chat-bubble__pic--none {
   display: grid;
   place-items: center;
-  background: var(--st-panel-strong);
-  color: var(--st-ink-soft);
+  background: rgb(var(--st-shadow-rgb) / 0.08);
+  color: var(--st-on-cream-soft);
 }
 
 .st-chat-thinking {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--st-space-2);
   margin: 0;
-  font-weight: 700;
-  color: var(--st-ink-soft);
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-chat-dots {
   display: inline-flex;
-  gap: 4px;
+  gap: var(--st-space-1);
 }
 
 .st-chat-dots > span {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
-  background: var(--st-sun);
+  border-radius: var(--st-r-round);
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
   animation: st-chat-bob 1s ease-in-out infinite;
 }
 
@@ -906,14 +1077,14 @@ ol.st-chat-text__list {
   height: 1.05em;
   margin-left: 2px;
   vertical-align: text-bottom;
-  border-radius: 3px;
-  background: var(--st-sun);
+  border-radius: var(--st-r-tiny);
+  background: var(--st-accent);
   animation: st-chat-blink 1s steps(2, start) infinite;
 }
 
 .st-chat-failed p {
   margin: 0 0 10px;
-  color: #ffb2a9;
+  color: var(--st-coral-ink);
   line-height: 1.45;
 }
 
@@ -922,35 +1093,37 @@ ol.st-chat-text__list {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 
 .st-chat-actions {
-  margin-top: 12px;
+  margin-top: var(--st-space-3);
 }
 
+/* The director's buttons: a tile in the bubble, a well deeper than its glass. */
 .st-chat-action {
   display: grid;
   gap: 10px;
   justify-items: start;
   flex: 1 1 240px;
   min-width: 0;
-  padding: 12px;
-  border-radius: var(--r-md);
-  background: var(--st-panel-strong);
+  padding: var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-well);
+  box-shadow: inset 0 12px 18px -16px rgb(var(--st-cream-rgb) / 0.22);
 }
 
 .st-chat-action__show {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--st-space-3);
   min-width: 0;
 }
 
 .st-chat-action__show canvas {
   flex: none;
-  border-radius: var(--r-md);
-  background: rgba(98, 198, 255, 0.16);
+  border-radius: var(--st-r-inner);
+  background: rgb(var(--st-amber-rgb) / 0.14);
 }
 
 .st-chat-action__words {
@@ -960,40 +1133,57 @@ ol.st-chat-text__list {
   line-height: 1.35;
 }
 
+.st-chat-action__words > strong {
+  color: var(--st-text-strong);
+}
+
 .st-chat-action__words > span {
-  color: var(--st-ink-soft);
-  font-size: 0.92rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
 }
 
 .st-chat-action__done {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 8px;
+  gap: 6px var(--st-space-2);
   margin: 0;
-  color: #b8f3dd;
-  font-weight: 800;
+  color: var(--st-mint-ink);
+  font-weight: var(--st-weight-ui);
 }
 
-/* ---------- The box: pictures, the model line, Send ---------- */
+/* ---------- The box: bar glass (thumbnails scroll under it); pictures, the model line, Send ----------
+   Its sides and foot are 6 px, so the picture button and Send in its bottom corners are concentric (20 − 6 = 14). */
 
 .st-chat-compose {
   position: sticky;
   bottom: calc(var(--st-tab-h, 0px) + env(safe-area-inset-bottom) + 18px);
   z-index: 5;
   display: grid;
-  gap: 8px;
-  padding: 10px 12px 12px;
-  border-radius: var(--r-lg);
-  background: rgba(38, 32, 90, 0.94);
-  backdrop-filter: blur(14px) saturate(1.2);
-  box-shadow: 0 12px 34px rgba(8, 6, 30, 0.5);
+  gap: var(--st-space-2);
+  padding: var(--st-space-3) var(--st-gap-surface) var(--st-gap-surface);
+}
+
+.st-chat-compose > .st-chat-ai,
+.st-chat-compose > .st-chat-pics {
+  padding: 0 var(--st-gap-surface);
+}
+
+.st-chat-compose > .st-chat-note,
+.st-chat-compose > .st-chat-ai__note {
+  margin: 0;
+  padding: 0 var(--st-space-3);
 }
 
 .st-chat-compose__row {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
+  gap: var(--st-space-2);
+}
+
+.st-chat-compose__row > .st-round-btn {
+  width: var(--st-tap-phone);
+  height: var(--st-tap-phone);
 }
 
 .st-chat-compose__label {
@@ -1010,22 +1200,24 @@ ol.st-chat-text__list {
 
 .st-chat-send {
   flex: none;
+  min-height: var(--st-tap-phone);
 }
 
 .st-chat-end {
   height: 1px;
 }
 
+/* The model and effort line: two pills (cream while "Just for this message" is on), who runs it, how it is doing. */
 .st-chat-ai {
   display: grid;
-  gap: 2px;
+  gap: var(--st-space-1);
 }
 
 .st-chat-ai__row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px 6px;
+  gap: var(--st-space-2);
   min-width: 0;
 }
 
@@ -1033,62 +1225,59 @@ ol.st-chat-text__list {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: var(--st-space-2);
   margin: 0;
   min-width: 0;
-  color: var(--st-ink-soft);
-  font-size: 0.95rem;
+  max-width: 100%;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
 }
 
 .st-chat-ai__part {
-  appearance: none;
-  border: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 44px;
-  padding: 0 10px;
-  border-radius: var(--r-pill);
-  background: transparent;
-  color: var(--st-ink-soft);
-  font: 600 0.95rem/1.2 var(--st-font);
-  text-decoration: underline dotted rgba(255, 246, 229, 0.5);
-  text-underline-offset: 4px;
-  transition: background-color 160ms ease;
+  max-width: 100%;
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-body);
+  text-align: left;
+  white-space: normal;
 }
 
 .st-chat-ai__part b {
-  color: var(--st-ink);
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
 }
 
-.st-chat-ai__part:hover {
-  background: var(--st-panel-strong);
+.st-chat-ai__part.is-on b {
+  color: var(--st-on-cream);
 }
 
+/* The pills part the two choices themselves; the dot between them is for the words only. */
 .st-chat-ai__dot {
-  color: var(--st-ink-soft);
-}
-
-.st-chat-ai.is-once .st-chat-ai__part b {
-  color: var(--st-sun);
+  display: none;
 }
 
 .st-chat-ai__once {
-  min-height: 44px;
-  padding: 0 12px;
-  font-size: 0.92rem;
+  min-height: var(--st-tap);
+  padding: 0 var(--st-space-4);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  font-size: var(--st-fs-small);
+}
+
+.st-chat-ai__once:hover {
+  background: var(--st-fill-control-hover);
 }
 
 .st-chat-ai__note {
   margin: 0;
-  padding: 0 10px;
-  color: var(--st-ink-soft);
-  font-size: 0.85rem;
+  padding: 0 var(--st-space-2);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
   line-height: 1.4;
 }
 
 .st-chat-ai__note--bad {
-  color: #ffb2a9;
+  color: var(--st-coral-ink);
 }
 
 .st-chat-pics {
@@ -1097,66 +1286,82 @@ ol.st-chat-text__list {
   padding: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 
+/* A picture waiting to go: a well tile (14), its picture inside 4 px from its edge (10). */
 .st-chat-pic {
   position: relative;
   display: grid;
   place-items: center;
-  gap: 4px;
+  gap: var(--st-space-1);
   width: 96px;
   min-height: 96px;
-  padding: 4px;
-  border-radius: var(--r-md);
-  background: var(--st-panel-strong);
-  color: var(--st-ink-soft);
+  padding: var(--st-gap-control);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-well);
+  color: var(--st-text-soft);
 }
 
 .st-chat-pic__img {
   width: 88px;
   height: 64px;
   object-fit: cover;
-  border-radius: var(--r-sm);
+  border-radius: var(--st-r-inner);
 }
 
 .st-chat-pic.is-bad {
   width: 180px;
-  background: rgba(255, 111, 97, 0.22);
+  background: linear-gradient(rgb(var(--st-coral-rgb) / 0.18), rgb(var(--st-coral-rgb) / 0.18)), var(--st-fill-well);
 }
 
 .st-chat-pic__problem {
-  font-size: 0.8rem;
+  font-size: var(--st-fs-min);
   line-height: 1.3;
-  color: var(--st-ink);
+  color: var(--st-text);
   padding-right: 40px;
 }
 
-.st-chat-pic__remove {
+/* Take it out: a round button over the picture, on a smoky veil so its cross reads over any photo. */
+.st-chat-pic__remove,
+.st-chat-pic__remove:hover {
   position: absolute;
   top: 0;
   right: 0;
-  background: rgba(28, 24, 66, 0.72);
+  background: rgb(var(--st-veil-rgb) / 0.8);
+}
+
+.st-chat-pic__remove:hover {
+  background: rgb(var(--st-well-rgb) / 0.9);
 }
 
 /* ---------- References ---------- */
 
+/* The upload: hero glass, a cream puck with the film, the one main action. */
 .st-ref-drop {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 14px 18px;
-  padding: 18px;
-  margin: 0 0 18px;
-  border-radius: var(--r-lg);
-  background: linear-gradient(135deg, rgba(255, 201, 74, 0.16), rgba(98, 198, 255, 0.12));
-  box-shadow: var(--st-shadow);
-  color: var(--st-ink);
-  transition: box-shadow 160ms ease, background-color 160ms ease;
+  gap: var(--st-space-3) var(--st-space-5);
+  padding: var(--st-inset);
+  transition: box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-ref-drop.is-over {
-  box-shadow: 0 0 0 3px var(--st-sun), var(--st-shadow);
+  background: linear-gradient(rgb(var(--st-accent-rgb) / 0.16), rgb(var(--st-accent-rgb) / 0.16)), var(--st-tint-hero);
+  box-shadow: var(--st-sheen-hero), var(--st-glow-accent), var(--st-depth-2);
+}
+
+.st-ref-drop__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--st-r-round);
+  background: var(--st-tint-cream);
+  color: var(--st-on-cream);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1);
 }
 
 .st-ref-drop__text {
@@ -1166,137 +1371,109 @@ ol.st-chat-text__list {
 
 .st-ref-drop__title {
   margin: 0;
-  font: 800 1.1rem/1.25 var(--st-font);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  line-height: var(--st-lh-head);
 }
 
-.st-ref-drop__line {
-  margin: 4px 0 0;
-  color: var(--st-ink-soft);
-  font-size: 0.95rem;
-  line-height: 1.4;
+.stories-app .st-ref-drop__line {
+  margin: var(--st-space-1) 0 0;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  line-height: 1.45;
 }
 
 .st-ref-drop > .st-chat-btn {
   margin-left: auto;
 }
 
+/* Uploads on the way: glass media rows (a film thumbnail, the name, how far, a progress bar, Stop). */
 .st-ref-uploads {
   list-style: none;
-  margin: 0 0 18px;
+  margin: 0;
   padding: 0;
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 
 .st-ref-upload {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px 12px;
-  padding: 12px 14px;
-  border-radius: var(--r-md);
-  background: var(--st-panel);
-  box-shadow: 0 6px 18px rgba(8, 6, 30, 0.3);
-}
-
-.st-ref-upload > .st-chat-progress {
-  grid-column: 1 / -1;
-  grid-row: 2;
-}
-
-.st-ref-upload__text {
-  display: grid;
-  gap: 2px;
   min-width: 0;
 }
 
-.st-ref-upload__title {
-  font-weight: 800;
-  overflow-wrap: anywhere;
+.st-ref-upload__thumb,
+.st-ref-card__tile {
+  display: grid;
+  place-items: center;
+}
+
+.st-ref-upload__thumb {
+  color: var(--st-text-amber);
 }
 
 .st-ref-upload__line {
-  color: var(--st-ink-soft);
-  font-size: 0.9rem;
+  overflow-wrap: anywhere;
 }
 
 .st-ref-upload.is-failed .st-ref-upload__line {
-  color: #ffb2a9;
+  color: var(--st-coral-ink);
 }
 
-.st-ref-upload__buttons {
-  display: flex;
-  gap: 6px;
-}
-
+/* The reference videos: a glass media row each (a warm tile, the name, its length and size, its state). */
 .st-ref-grid {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+  gap: var(--st-space-3);
 }
 
 .st-ref-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
+  display: block;
   height: 100%;
-  min-height: 96px;
-  padding: 12px;
-  border-radius: var(--r-lg);
-  background: var(--st-panel);
-  box-shadow: 0 6px 18px rgba(8, 6, 30, 0.3);
-  color: var(--st-ink);
+  color: var(--st-text);
   text-decoration: none;
-  transition: transform 160ms ease, background-color 160ms ease;
+  transition: box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-ref-card:hover {
-  background: var(--st-panel-strong);
-  transform: translateY(-2px);
+  box-shadow: var(--st-sheen-hero), var(--st-depth-2), var(--st-glow-behind);
+}
+
+.st-ref-card:hover::after {
+  background: var(--st-edge-hero);
+}
+
+.st-ref-card > .st-media {
+  height: 100%;
+  grid-template-columns: var(--st-thumb) minmax(0, 1fr);
+  grid-template-areas: "thumb text" "thumb controls";
+}
+
+.st-ref-card .st-media__controls {
+  justify-content: flex-start;
 }
 
 .st-ref-card__tile {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 64px;
-  height: 72px;
-  border-radius: var(--r-md);
-  background: linear-gradient(160deg, var(--st-sun), var(--st-coral));
-  color: var(--st-stage);
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(160deg, var(--st-glow-amber), var(--st-glow-copper));
+  color: var(--st-on-cream);
 }
 
-.st-ref-card__text {
-  display: grid;
-  justify-items: start;
-  gap: 4px;
-  min-width: 0;
-}
-
-.st-ref-card__title {
-  font: 800 1.05rem/1.25 var(--st-font);
-  overflow-wrap: anywhere;
-}
-
-.st-ref-card__line {
-  color: var(--st-ink-soft);
-  font-size: 0.88rem;
-  line-height: 1.3;
-}
-
+/* One reference video */
 .st-ref__head {
   display: grid;
-  gap: 6px;
-  margin: 0 0 16px;
+  gap: var(--st-space-2);
 }
 
 .st-ref__title {
   margin: 0;
   min-width: 0;
-  font: 800 clamp(1.45rem, 1.1rem + 1.4vw, 2rem) / 1.15 var(--st-font);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h1);
   overflow-wrap: anywhere;
 }
 
@@ -1304,19 +1481,21 @@ ol.st-chat-text__list {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
+  gap: var(--st-space-2) var(--st-space-3);
   margin: 0;
-  color: var(--st-ink-soft);
-  font-weight: 600;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-ref-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 18px;
+  gap: var(--st-gap);
   align-items: start;
 }
 
+/* The player in its bezel: a hero surface 10 px round the video, whose corners are 20 − 10 = 10. */
 .st-ref-player {
   width: 100%;
   max-width: 340px;
@@ -1324,15 +1503,12 @@ ol.st-chat-text__list {
   aspect-ratio: 9 / 16;
   max-height: min(70vh, 604px);
   overflow: hidden;
-  border-radius: var(--r-lg);
-  background: #0d0b26;
-  box-shadow: var(--st-shadow);
+  padding: var(--st-bezel-pad);
 }
 
 .st-ref-player--empty {
   aspect-ratio: auto;
   min-height: 160px;
-  background: rgba(13, 11, 38, 0.6);
 }
 
 .st-ref-player__video {
@@ -1340,7 +1516,8 @@ ol.st-chat-text__list {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: #0d0b26;
+  border-radius: var(--st-r-inner);
+  background: var(--st-base-3);
 }
 
 .st-ref-player__none {
@@ -1349,170 +1526,180 @@ ol.st-chat-text__list {
   justify-items: center;
   gap: 10px;
   height: 100%;
-  padding: 16px;
-  color: var(--st-ink-soft);
-  font-weight: 700;
+  min-height: 140px;
+  padding: var(--st-space-4);
+  border-radius: var(--st-r-inner);
+  background: var(--st-fill-well);
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
   text-align: center;
 }
 
 .st-ref-side {
   display: grid;
-  gap: 12px;
+  gap: var(--st-space-3);
   min-width: 0;
 }
 
 .st-ref-card2 {
   display: grid;
-  gap: 10px;
-  padding: 16px;
-  border-radius: var(--r-lg);
-  background: var(--st-panel);
-  box-shadow: var(--st-shadow);
+  gap: var(--st-space-3);
+  padding: var(--st-inset);
 }
 
 .st-ref-card2 > p {
   margin: 0;
-  line-height: 1.45;
+  line-height: var(--st-lh-body);
 }
 
 .st-ref-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 
+/* The analysis' steps: round marks (orange while it works, mint when done, coral where it stopped). */
 .st-ref-track {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 
 .st-ref-track__step {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 10px;
-  color: var(--st-ink-soft);
-  font-weight: 700;
+  gap: var(--st-space-1) var(--st-space-3);
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-ref-track__mark {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: var(--st-panel-strong);
-  color: var(--st-ink);
-  font-size: 0.9rem;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text);
+  font-size: var(--st-fs-chip);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 .st-ref-track__step.is-running {
-  color: var(--st-ink);
+  color: var(--st-text-strong);
 }
 
 .st-ref-track__step.is-running .st-ref-track__mark {
-  background: var(--st-sun);
-  color: var(--st-stage);
+  background: var(--st-accent);
+  color: var(--st-on-accent);
   animation: st-ref-pulse 1.4s ease-in-out infinite;
 }
 
 .st-ref-track__step.is-done .st-ref-track__mark {
   background: var(--st-mint);
-  color: var(--st-stage);
+  color: var(--st-on-cream);
 }
 
 .st-ref-track__step.is-failed .st-ref-track__mark {
   background: var(--st-coral);
-  color: var(--st-stage);
+  color: var(--st-on-cream);
 }
 
 .st-ref-track__msg {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--st-ink-soft);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-body);
 }
 
 .st-ref-busybar {
-  height: 10px;
-  border-radius: var(--r-pill);
-  background: linear-gradient(90deg, var(--st-panel-strong) 0%, rgba(255, 201, 74, 0.7) 50%, var(--st-panel-strong) 100%);
+  height: 8px;
+  border-radius: var(--st-r-round);
+  background: linear-gradient(90deg, var(--st-track) 0%, rgb(var(--st-accent-rgb) / 0.75) 50%, var(--st-track) 100%);
   background-size: 200% 100%;
   animation: st-ref-shimmer 1.6s linear infinite;
 }
 
+.st-ref-withbox {
+  display: grid;
+  gap: var(--st-space-2);
+  min-width: 0;
+}
+
 .st-ref-with {
-  margin: 24px 0 10px;
-  color: var(--st-ink-soft);
-  font-weight: 700;
+  margin: 0;
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
+}
+
+.st-ref-withbox > .st-ref-tech {
+  margin-top: 0;
 }
 
 .st-ref-analysis {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
+  gap: var(--st-space-3);
 }
 
 .st-ref-block {
   min-width: 0;
-  padding: 16px;
-  border-radius: var(--r-lg);
-  background: var(--st-panel);
-  box-shadow: 0 6px 18px rgba(8, 6, 30, 0.3);
+  padding: var(--st-inset);
 }
 
 .st-ref-block > p {
   margin: 0 0 6px;
-  line-height: 1.5;
+  line-height: var(--st-lh-body);
 }
 
 .st-ref-block > p:last-child {
   margin-bottom: 0;
 }
 
-.st-ref-block__title {
-  margin: 0 0 8px;
-  font: 800 1.1rem/1.2 var(--st-font);
-  color: var(--st-ink);
+.stories-app .st-ref-block__title {
+  margin: 0 0 var(--st-space-2);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  line-height: var(--st-lh-head);
 }
 
-.st-ref-block--borrow {
-  background: rgba(71, 214, 160, 0.14);
-}
-
-.st-ref-block--avoid {
-  background: rgba(255, 111, 97, 0.14);
-}
-
+/* The hook's time and the pacing: big light figures in warm amber. */
 .st-ref-big {
-  font: 800 1.35rem/1.2 var(--st-font);
-  color: var(--st-sun);
+  color: var(--st-text-amber);
+  font-size: var(--st-fs-h2);
+  font-weight: var(--st-weight-num);
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
 }
 
 .st-ref-small {
-  color: var(--st-ink-soft);
-  font-size: 0.85rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
 }
 
 .st-ref-strip {
   display: flex;
   gap: 3px;
-  height: 18px;
-  margin: 0 0 12px;
+  height: 14px;
+  margin: 0 0 var(--st-space-3);
 }
 
 .st-ref-strip__shot {
   flex-basis: 0;
   min-width: 6px;
-  border-radius: var(--r-pill);
+  border-radius: var(--st-r-round);
 }
 
 .st-ref-strip__shot--sun,
 .st-ref-shot__num--sun {
-  background: var(--st-sun);
+  background: var(--st-accent);
 }
 
 .st-ref-strip__shot--sky,
@@ -1535,15 +1722,16 @@ ol.st-chat-text__list {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 10px;
+  gap: var(--st-space-2);
 }
 
+/* One shot: a well row inside its card. */
 .st-ref-shot {
   display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  background: var(--st-panel);
+  gap: var(--st-space-1);
+  padding: var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-well);
 }
 
 .st-ref-shot__head {
@@ -1558,18 +1746,22 @@ ol.st-chat-text__list {
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: 50%;
-  color: var(--st-stage);
-  font-weight: 800;
-  font-size: 0.9rem;
+  border-radius: var(--st-r-round);
+  color: var(--st-on-cream);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 .st-ref-shot__time {
-  font-weight: 800;
+  font-weight: var(--st-weight-ui);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 .st-ref-shot__seek {
   margin-left: auto;
+  border-radius: var(--st-r-round);
+  font-size: var(--st-fs-small);
 }
 
 .st-ref-shot__what,
@@ -1579,12 +1771,13 @@ ol.st-chat-text__list {
 }
 
 .st-ref-shot__line {
-  color: var(--st-ink-soft);
-  font-size: 0.93rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
 }
 
 .st-ref-shot__line b {
-  color: var(--st-ink);
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-ref-list {
@@ -1592,7 +1785,7 @@ ol.st-chat-text__list {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
   line-height: 1.45;
 }
 
@@ -1602,15 +1795,16 @@ ol.st-chat-text__list {
   width: 8px;
   height: 8px;
   margin: 0 10px 2px 2px;
-  border-radius: 50%;
-  background: var(--st-sun);
+  border-radius: var(--st-r-round);
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
 }
 
 .st-ref-list--yes li,
 .st-ref-list--no li {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 
 .st-ref-list--yes .st-chat-icon {
@@ -1627,7 +1821,6 @@ ol.st-chat-text__list {
 
 @media (max-width: 767px) {
   .st-chat-btn,
-  .st-chat-ai__part,
   .st-chat-ai__once,
   .st-chat-link,
   .st-chat-linkbtn,
@@ -1635,15 +1828,11 @@ ol.st-chat-text__list {
   .st-chat-suggest,
   .st-chat-project__chip,
   .st-chat-pick__opt {
-    min-height: 48px;
+    min-height: var(--st-tap-phone);
   }
 
   .st-chat-btn {
-    min-width: 48px;
-  }
-
-  .st-chat-btn--icon {
-    width: 48px;
+    min-width: var(--st-tap-phone);
   }
 
   .st-chat-row__main {
@@ -1660,24 +1849,25 @@ ol.st-chat-text__list {
     display: none;
   }
 
-  .st-chat-ai__line,
-  .st-chat-ai__part {
-    font-size: 0.9rem;
-  }
-
-  .st-chat-ai__part {
-    padding: 0 6px;
-  }
-
   .st-chat-head > .st-chat-btn {
     margin-left: auto;
+  }
+
+  .st-chat-bubble {
+    padding: var(--st-space-3);
+  }
+
+  .st-chat-msg--assistant > .st-chat-director {
+    width: 40px;
+    height: 40px;
+    padding: 3px;
   }
 }
 
 @media (max-width: 359px) {
   .st-chat-send {
     padding: 0;
-    width: 48px;
+    width: var(--st-tap-phone);
   }
 
   .st-chat-send__word {
@@ -1690,7 +1880,11 @@ ol.st-chat-text__list {
   }
 
   .st-chat-compose {
-    padding: 8px;
+    padding: var(--st-space-2) var(--st-gap-surface) var(--st-gap-surface);
+  }
+
+  .st-chat-msg {
+    gap: var(--st-space-2);
   }
 }
 
@@ -1701,23 +1895,37 @@ ol.st-chat-text__list {
 
   .st-chat-scrim {
     align-items: center;
-    padding: 24px;
+    padding: var(--st-space-6);
   }
 
   .st-chat-sheet {
     width: min(480px, 100%);
-    border-radius: var(--r-xl);
-    padding: 20px;
+    padding: var(--st-space-5) var(--st-space-5) 0;
+    border-radius: var(--st-r-surface);
   }
 
   .st-chat-sheet--wide {
     width: min(600px, 100%);
   }
 
+  .st-chat-sheet__body {
+    margin: 0 calc(-1 * var(--st-space-5));
+    padding: 6px var(--st-space-5) var(--st-space-3);
+  }
+
+  .st-chat-sheet__body:last-child {
+    padding-bottom: var(--st-space-5);
+  }
+
   .st-chat-sheet__actions {
-    bottom: -20px;
-    margin: 16px -20px -20px;
-    padding: 12px 20px 16px;
+    margin: 0 calc(-1 * var(--st-space-5));
+    padding: var(--st-space-3) var(--st-space-5) var(--st-space-4);
+  }
+
+  /* The toast stays over the page's own column, clear of the rail and the shell's switch at its foot. */
+  .st-chat-undo {
+    left: calc(50% + (var(--st-rail-w) + 14px) / 2);
+    max-width: calc(100vw - var(--st-rail-w) - 62px);
   }
 }
 
@@ -1749,11 +1957,20 @@ ol.st-chat-text__list {
     display: block;
   }
 
+  /* The list stays in view; a long one scrolls inside the card's own rounded shape (the light edge stays put). */
   .st-chat-side {
     position: sticky;
     top: 12px;
-    max-height: calc(100vh - 24px);
-    overflow: auto;
+  }
+
+  .st-chat-side > .st-chat-list {
+    max-height: calc(100vh - 36px);
+    margin: calc(-1 * var(--st-gap-surface));
+    padding: var(--st-gap-surface);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: var(--st-r-surface);
+    scrollbar-width: thin;
   }
 
   .st-chat-back:not(.st-chat-back--always) {
@@ -1761,7 +1978,7 @@ ol.st-chat-text__list {
   }
 }
 
-/* ---------- Motion ---------- */
+/* ---------- Motion (transforms, opacity and shadows only: never an animated filter) ---------- */
 
 @keyframes st-chat-bob {
   0%,
@@ -1793,10 +2010,10 @@ ol.st-chat-text__list {
 @keyframes st-ref-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(255, 201, 74, 0.5);
+    box-shadow: 0 0 6px 0 rgb(var(--st-accent-rgb) / 0.6);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(255, 201, 74, 0);
+    box-shadow: 0 0 18px 6px rgb(var(--st-accent-rgb) / 0);
   }
 }
 
@@ -1821,8 +2038,10 @@ ol.st-chat-text__list {
 
   .st-chat-progress__fill,
   .st-chat-btn,
+  .st-chat-pick__opt,
+  .st-chat-row__main,
   .st-ref-card,
-  .st-chat-suggest {
+  .st-ref-drop {
     transition: none;
   }
 }
@@ -1831,14 +2050,13 @@ ol.st-chat-text__list {
 .st-chat-earlier {
   display: grid;
   justify-items: center;
-  gap: 8px;
-  margin: 0 0 12px;
+  gap: var(--st-space-2);
 }
 
 .st-chat-ai__provider {
-  color: var(--st-ink-soft);
-  font-weight: 600;
-  font-size: 0.9rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-body);
   overflow-wrap: anywhere;
 }
 
@@ -1846,28 +2064,28 @@ ol.st-chat-text__list {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--st-space-2);
   min-width: 0;
   max-width: 100%;
 }
 
 .st-chat-action__ai {
   max-width: 100%;
-  font-size: 0.92rem;
+  font-size: var(--st-fs-small);
 }
 
 .st-ref-track__step.is-failed {
-  color: var(--st-ink);
+  color: var(--st-text);
 }
 
 .st-ref-track--stopped {
-  margin-bottom: 4px;
+  margin-bottom: var(--st-space-1);
 }
 
 /* ---------- Round 5 (§45.36 E8) ---------- */
 
 /* An answer's exact model id, folded away under its model line. */
 .st-chat-msg__tech {
-  margin-top: 4px;
-  font-size: 0.82rem;
+  margin-top: var(--st-space-1);
+  font-size: var(--st-fs-min);
 }

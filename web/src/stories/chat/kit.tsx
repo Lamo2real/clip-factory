@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { ApiError } from "../../api/errors.ts";
 import { Glide } from "../../components/Glide.tsx";
 import { trapTab } from "../../components/Sheet.tsx";
+import { cx, RoundGlassButton } from "../glass/index.ts";
 import { storiesBehind, storiesReduceMotion, storiesSound } from "../prefs.ts";
 
 /** The sentence for a failed call: the server's own when it sent one, else `fallback`. */
@@ -58,36 +59,39 @@ export function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
 export function Director({ size = 44, mood = "smile" }: { size?: number; mood?: "smile" | "think" | "oops" | "cheer" }) {
   return (
     <svg className={`st-chat-director st-chat-director--${mood}`} width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" focusable="false">
-      <circle cx="32" cy="36" r="22" fill="#62C6FF" />
-      <path d="M12 26c2-11 12-17 22-16 9 1 15 6 17 12-8-3-27-3-39 4z" fill="#FF6F61" />
-      <circle cx="40" cy="11" r="3" fill="#FF6F61" />
+      <circle cx="32" cy="36" r="22" fill="#FFD9A8" />
+      <path d="M12 26c2-11 12-17 22-16 9 1 15 6 17 12-8-3-27-3-39 4z" fill="#E0763A" />
+      <circle cx="40" cy="11" r="3" fill="#FF8A3D" />
       {mood === "think" ? (
-        <path d="M22 35h6M36 35h6" stroke="#1C1842" strokeWidth="3" strokeLinecap="round" />
+        <path d="M22 35h6M36 35h6" stroke="#2A160B" strokeWidth="3" strokeLinecap="round" />
       ) : (
         <>
-          <ellipse cx="25" cy="35" rx="3" ry={mood === "oops" ? 4.2 : 3.6} fill="#1C1842" />
-          <ellipse cx="39" cy="35" rx="3" ry={mood === "oops" ? 4.2 : 3.6} fill="#1C1842" />
-          <circle cx="26" cy="33.6" r="1" fill="#FFF6E5" />
-          <circle cx="40" cy="33.6" r="1" fill="#FFF6E5" />
+          <ellipse cx="25" cy="35" rx="3" ry={mood === "oops" ? 4.2 : 3.6} fill="#2A160B" />
+          <ellipse cx="39" cy="35" rx="3" ry={mood === "oops" ? 4.2 : 3.6} fill="#2A160B" />
+          <circle cx="26" cy="33.6" r="1" fill="#FFF6EA" />
+          <circle cx="40" cy="33.6" r="1" fill="#FFF6EA" />
         </>
       )}
-      <circle cx="19" cy="42" r="3" fill="#FF6F61" opacity="0.45" />
-      <circle cx="45" cy="42" r="3" fill="#FF6F61" opacity="0.45" />
+      <circle cx="19" cy="42" r="3" fill="#FF7F6A" opacity="0.5" />
+      <circle cx="45" cy="42" r="3" fill="#FF7F6A" opacity="0.5" />
       {mood === "oops" ? (
-        <ellipse cx="32" cy="46" rx="3.2" ry="3.8" fill="#1C1842" />
+        <ellipse cx="32" cy="46" rx="3.2" ry="3.8" fill="#2A160B" />
       ) : mood === "think" ? (
-        <path d="M27 46h10" stroke="#1C1842" strokeWidth="3" strokeLinecap="round" />
+        <path d="M27 46h10" stroke="#2A160B" strokeWidth="3" strokeLinecap="round" />
       ) : (
-        <path d={mood === "cheer" ? "M24 43q8 10 16 0z" : "M25 44q7 6 14 0"} stroke="#1C1842" strokeWidth="3" strokeLinecap="round" fill={mood === "cheer" ? "#1C1842" : "none"} />
+        <path d={mood === "cheer" ? "M24 43q8 10 16 0z" : "M25 44q7 6 14 0"} stroke="#2A160B" strokeWidth="3" strokeLinecap="round" fill={mood === "cheer" ? "#2A160B" : "none"} />
       )}
     </svg>
   );
 }
 
-/** An empty or broken state with the director in it: what is missing and the one tap that fixes it. */
-export function Empty({ mood = "smile", title, children, action }: { mood?: "smile" | "think" | "oops" | "cheer"; title: string; children?: ReactNode; action?: ReactNode }) {
+/**
+ * An empty or broken state with the director in it: what is missing and the one tap that fixes it. `card` draws it
+ * on its own glass (loose on the page); inside a glass surface it has none.
+ */
+export function Empty({ mood = "smile", title, children, action, card = false }: { mood?: "smile" | "think" | "oops" | "cheer"; title: string; children?: ReactNode; action?: ReactNode; card?: boolean }) {
   return (
-    <div className="st-chat-empty">
+    <div className={cx("st-chat-empty", card && "st-glass")}>
       <Director size={96} mood={mood} />
       <h2 className="st-chat-empty__title">{title}</h2>
       {children ? <p className="st-chat-empty__text">{children}</p> : null}
@@ -96,10 +100,13 @@ export function Empty({ mood = "smile", title, children, action }: { mood?: "smi
   );
 }
 
-/** A short wait: the director thinks while the page gets its words (never a bare spinner). */
-export function Waiting({ label = "Getting it ready…" }: { label?: string }) {
+/**
+ * A short wait: the director thinks while the page gets its words (never a bare spinner). `plate` backs its words
+ * when it stands loose on the page (a glass plate over a picture or the desktop, nothing over the colours).
+ */
+export function Waiting({ label = "Getting it ready…", plate = false }: { label?: string; plate?: boolean }) {
   return (
-    <div className="st-chat-wait" role="status">
+    <div className={cx("st-chat-wait", plate && "st-plate")} role="status">
       <Director size={56} mood="think" />
       <span>{label}</span>
     </div>
@@ -110,7 +117,8 @@ export function Waiting({ label = "Getting it ready…" }: { label?: string }) {
 
 /**
  * A button. `off` makes it aria-disabled (still focusable, a tap plays the deny sound and does nothing), with `why`
- * as its description so the owner hears why.
+ * as its description so the owner hears why. A button with an icon and no words is a round glass icon button (the
+ * contract's RoundGlassButton), named by `label`.
  */
 export function Btn({
   main = false,
@@ -135,19 +143,21 @@ export function Btn({
   /** aria-label, for an icon-only button */
   label?: string;
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onClick" | "disabled">) {
-  const cls = ["st-chat-btn", main && "st-chat-btn--main", quiet && "st-chat-btn--quiet", danger && "st-chat-btn--danger", !children && "st-chat-btn--icon", className].filter(Boolean).join(" ");
+  const tap = (e: MouseEvent<HTMLButtonElement>) => {
+    if (off) return;
+    onClick?.(e);
+  };
+  if (!children && icon && label) {
+    const { "aria-label": _named, ...button } = rest;
+    return (
+      <RoundGlassButton label={label} tone={main ? "accent" : "glass"} className={cx("st-chat-btn--icon", danger && "st-chat-btn--danger", className)} aria-disabled={off || undefined} onClick={tap} {...button}>
+        <Icon name={icon} size={20} />
+      </RoundGlassButton>
+    );
+  }
+  const cls = cx("st-chat-btn", main && "st-chat-btn--main", quiet && "st-chat-btn--quiet", danger && "st-chat-btn--danger", !children && "st-chat-btn--icon", className);
   return (
-    <button
-      type="button"
-      className={cls}
-      aria-disabled={off || undefined}
-      aria-label={label}
-      onClick={(e) => {
-        if (off) return;
-        onClick?.(e);
-      }}
-      {...rest}
-    >
+    <button type="button" className={cls} aria-disabled={off || undefined} aria-label={label} onClick={tap} {...rest}>
       {icon ? <Icon name={icon} size={20} /> : null}
       {children}
     </button>
@@ -240,7 +250,7 @@ export function Sheet({ title, onClose, children, actions, wide = false }: { tit
   const host = (typeof document !== "undefined" && document.querySelector(".stories-app")) || document.body;
   return createPortal(
     <div className="st-chat-scrim" onClick={(e) => e.target === e.currentTarget && close.current()}>
-      <div ref={box} className={`st-chat-sheet${wide ? " st-chat-sheet--wide" : ""}`} role="dialog" aria-modal="true" aria-labelledby={`${id}-t`} tabIndex={-1} onKeyDown={keys}>
+      <div ref={box} className={cx("st-chat-sheet st-glass st-glass--float", wide && "st-chat-sheet--wide")} role="dialog" aria-modal="true" aria-labelledby={`${id}-t`} tabIndex={-1} onKeyDown={keys}>
         <div className="st-chat-sheet__head">
           <h2 className="st-chat-sheet__title" id={`${id}-t`}>
             {title}
@@ -270,7 +280,7 @@ export function Progress({ value, label }: { value: number; label: string }) {
 /** "Deleted. Undo" for a few seconds at the bottom of the page. */
 export function UndoBar({ text, onUndo }: { text: string; onUndo: () => void }) {
   return (
-    <div className="st-chat-undo" role="status">
+    <div className="st-chat-undo st-glass st-glass--float" role="status">
       <span>{text}</span>
       <Btn main onClick={onUndo}>
         Undo
@@ -281,7 +291,7 @@ export function UndoBar({ text, onUndo }: { text: string; onUndo: () => void }) 
 
 // ---------- A success: stars and the cheer ----------
 
-const STAR_COLOURS = ["#FFC94A", "#FF6F61", "#47D6A0", "#62C6FF", "#FFF6E5"];
+const STAR_COLOURS = ["#FF9A45", "#FFD9A8", "#FF7F6A", "#6FD9A4", "#FFF6EA"];
 
 export function centerOf(el: Element | null | undefined): { x: number; y: number } | undefined {
   if (!el) return undefined;

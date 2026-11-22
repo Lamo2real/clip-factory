@@ -18,6 +18,7 @@ import { A } from "../../../components/ui.tsx";
 import { usePoll } from "../../../lib/hooks.ts";
 import { navigate } from "../../../lib/router.ts";
 import { storiesApi } from "../../api/client.ts";
+import { cx } from "../../glass/index.ts";
 import { storiesGoLater } from "../../pane.tsx";
 import { REF_STEP_LABEL, REF_STEP_ORDER, type AiSetting, type ModelOverride, type ProductionJob, type ReferenceAnalysis, type ReferenceVideo, type StoryStep } from "../../api/types.ts";
 import { storiesHref } from "../../routes.ts";
@@ -157,6 +158,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
         </A>
         <h1 className="sr-only">Reference video</h1>
         <Empty
+          card
           mood="oops"
           title={problem.missing ? "That video is gone" : "It did not load"}
           action={
@@ -175,7 +177,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
     return (
       <section className="st-page st-refs">
         <h1 className="sr-only">Reference video</h1>
-        <Waiting label="Opening the video…" />
+        <Waiting plate label="Opening the video…" />
       </section>
     );
 
@@ -340,10 +342,10 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
         <Icon name="back" size={20} />
         All reference videos
       </A>
-      <header className="st-ref__head">
+      <header className="st-ref__head st-plate">
         {renaming === null ? (
           <div className="st-chat-conv__title-row">
-            <h1 className="st-ref__title">{ref.title}</h1>
+            <h1 className="st-ref__title st-display">{ref.title}</h1>
             <Btn quiet icon="pencil" label={`Rename ${ref.title}`} onClick={() => setRenaming(ref.title)} />
           </div>
         ) : (
@@ -385,7 +387,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
       </header>
 
       <div className="st-ref-layout">
-        <div className={`st-ref-player${src ? "" : " st-ref-player--empty"}`}>
+        <div className={cx("st-ref-player st-glass st-glass--hero st-lens", !src && "st-ref-player--empty")}>
           {src ? (
             <video ref={player} className="st-ref-player__video" src={src} controls playsInline preload="metadata" aria-label={`Play ${ref.title}`} />
           ) : (
@@ -398,12 +400,12 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
 
         <div className="st-ref-side" ref={analyzeBtn}>
           {ref.status === "uploading" ? (
-            <div className="st-ref-card2">
+            <div className="st-ref-card2 st-glass">
               <h2 className="st-ref-block__title">Still uploading</h2>
               <p>This video did not finish uploading. If it was stopped, delete it and upload it again.</p>
             </div>
           ) : ref.status === "analyzing" ? (
-            <div className="st-ref-card2" aria-live="polite">
+            <div className="st-ref-card2 st-glass" aria-live="polite">
               <h2 className="st-ref-block__title">Analyzing…</h2>
               <p>The video analysis agent is looking at every shot. It takes a few minutes for a long video. You can look at other pages meanwhile.</p>
               <ol className="st-ref-track" aria-label="Steps">
@@ -430,7 +432,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
               ) : null}
             </div>
           ) : (
-            <div className="st-ref-card2">
+            <div className="st-ref-card2 st-glass">
               {failedLine ? (
                 <div className="st-chat-note st-chat-note--bad st-chat-note--row st-ref-failed" role="alert">
                   <span>{failedLine}</span>
@@ -491,12 +493,12 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
             </div>
           )}
           {whyNot ? (
-            <p className="st-chat-note" role="status">
+            <p className="st-chat-note st-plate" role="status">
               {whyNot}
             </p>
           ) : null}
           {actionProblem ? (
-            <div className="st-chat-note st-chat-note--bad st-chat-note--row" role="alert">
+            <div className="st-chat-note st-chat-note--bad st-chat-note--row st-plate" role="alert">
               <span>{actionProblem}</span>
               <FixIt text={actionProblem} onPickModel={openSheet} />
             </div>
@@ -527,13 +529,13 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
       {ref.status === "analyzed" && data.analysis ? (
         <>
           {ref.analyzedWith ? (
-            <>
+            <div className="st-ref-withbox st-plate">
               <p className="st-ref-with">
                 Analyzed with {modelLabel(models.models, ref.analyzedWith.model)}
                 {ref.analyzedWith.effort ? ` · ${effortLabel(ref.analyzedWith.effort)}` : ""}
               </p>
               <ModelIdFold record={(job ?? data.job ?? started)?.meta.models.find((m) => m.model === ref.analyzedWith!.model && !m.failed) ?? null} />
-            </>
+            </div>
           ) : null}
           <AnalysisView
             analysis={data.analysis}
