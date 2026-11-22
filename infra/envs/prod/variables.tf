@@ -89,8 +89,8 @@ variable "cr_finder_enabled" {
 
 variable "whop_connect_enabled" {
   type        = bool
-  default     = false
-  description = "\"Connect Whop\" on the Content Rewards Get paid page (docs/CONTRACTS.md §40.6, WHOP_CONNECT on cf-prod-api). Off until K, L and M of §40.8 have merged; then one switch PR sets it true. While off the card says \"Coming soon: your Whop payouts here.\" and the Whop routes answer 503."
+  default     = true
+  description = "\"Connect Whop\" on the Content Rewards Get paid page (docs/CONTRACTS.md §40.6, WHOP_CONNECT on cf-prod-api). On: K, L and M of §40.8 have merged. Set false to turn it off again: the card says \"Coming soon: your Whop payouts here.\", the Whop routes answer 503 and every saved key, token and payout stays."
 }
 
 variable "help_enabled" {

@@ -581,32 +581,52 @@ run "cr_finder_switch_off_plans" {
   }
 }
 
-# docs/CONTRACTS.md §40.6: "Connect Whop" (WHOP_CONNECT) defaults to off until K, L and M of §40.8 have merged; it only
-# changes cf-prod-api's environment, so the stack plans the same functions with it on.
-run "whop_connect_is_wired_and_off" {
+# docs/CONTRACTS.md §40.6: "Connect Whop" (WHOP_CONNECT) defaults to on now that K, L and M of §40.8 have merged; it
+# only changes cf-prod-api's environment (the api module's own test proves the one use, WHOP_CONNECT =
+# var.whop_connect_enabled ? "on" : "off"), so flipping it is an in-place env change and can never delete or replace
+# what holds the owner's data. The stack still plans with it off, the one-line way to stop it.
+run "whop_connect_is_wired_and_on" {
   command = plan
 
   assert {
-    condition     = var.whop_connect_enabled == false
-    error_message = "whop_connect_enabled defaults to false until K, L and M of §40.8 have merged (then one switch PR)."
+    condition     = var.whop_connect_enabled == true
+    error_message = "whop_connect_enabled defaults to true now that K, L and M of §40.8 have merged."
   }
 
   assert {
-    condition     = module.api.function_names == { api = "cf-prod-api" }
-    error_message = "cf-prod-api is planned with the switch off."
-  }
-}
-
-run "whop_connect_switch_on_plans" {
-  command = plan
-
-  variables {
-    whop_connect_enabled = true
+    condition = (module.api.function_names == { api = "cf-prod-api" } &&
+    strcontains(regex("(?s)\nmodule \"api\" \\{\n(.*?)\n\\}\n", file("main.tf"))[0], "\n  whop_connect_enabled = var.whop_connect_enabled\n"))
+    error_message = "whop_connect_enabled is passed to the api module (cf-prod-api)."
   }
 
   assert {
     condition     = module.api.function_names == { api = "cf-prod-api" } && module.money.function_names == { money = "cf-prod-money" } && module.notify.notify_function_name == "cf-prod-notify"
-    error_message = "With the switch on the stack still plans and cf-prod-api, cf-prod-money and cf-prod-notify are the same functions."
+    error_message = "With the switch on the stack plans the same cf-prod-api, cf-prod-money and cf-prod-notify."
+  }
+
+  assert {
+    condition = (output.table_name == "cf-prod-data" && output.media_bucket == "cf-prod-media-123456789012" &&
+    output.vector_bucket == "cf-prod-vectors-123456789012" && output.web_bucket == "cf-prod-web-123456789012")
+    error_message = "Switching Connect Whop on keeps the table and the buckets that hold the owner's data."
+  }
+}
+
+run "whop_connect_switch_off_plans" {
+  command = plan
+
+  variables {
+    whop_connect_enabled = false
+  }
+
+  assert {
+    condition     = module.api.function_names == { api = "cf-prod-api" } && module.money.function_names == { money = "cf-prod-money" } && module.notify.notify_function_name == "cf-prod-notify"
+    error_message = "With the switch off the stack still plans and cf-prod-api, cf-prod-money and cf-prod-notify are the same functions."
+  }
+
+  assert {
+    condition = (output.table_name == "cf-prod-data" && output.media_bucket == "cf-prod-media-123456789012" &&
+    output.vector_bucket == "cf-prod-vectors-123456789012" && output.web_bucket == "cf-prod-web-123456789012")
+    error_message = "Switching Connect Whop off keeps the table and the buckets that hold the owner's data: the saved keys, tokens and payouts stay."
   }
 }
 
