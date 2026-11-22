@@ -5,6 +5,7 @@ from __future__ import annotations
 from ..http import Route, route
 from . import (
     ask,
+    autopost,
     clips,
     contentrewards,
     finder,
@@ -44,6 +45,9 @@ ROUTES: list[Route] = [
     route("GET", "/v1/clips/{clipId}/similar", clips.similar),
     route("POST", "/v1/clips/{clipId}/confirm", clips.confirm),
     route("POST", "/v1/clips/{clipId}/decline", clips.decline),
+    # §46.2: Throw away holds the clip at the tap (no auto-posting run sends it); Undo lifts the hold.
+    route("POST", "/v1/clips/{clipId}/hold", clips.hold),
+    route("DELETE", "/v1/clips/{clipId}/hold", clips.hold_undo),
     route("GET", "/v1/clips/{clipId}/file", clips.clip_file),
     route("POST", "/v1/clips/{clipId}/tiktok/posted", clips.tiktok_posted),
     route("DELETE", "/v1/clips/{clipId}/tiktok/posted", clips.tiktok_posted_undo),
@@ -112,6 +116,9 @@ ROUTES: list[Route] = [
     route("GET", "/v1/getpaid/{place}", getpaid.get_place),
     route("GET", "/v1/weeks/{week}", weeks.get_week),
     route("PUT", "/v1/weeks/{week}/best", weeks.put_best),
+    # §46: Auto-posting. Its status, and a Practice or Private test run now (inline, at most one a minute).
+    route("GET", "/v1/autopost", autopost.status),
+    route("POST", "/v1/autopost/run", autopost.run_now),
     # Ask Clip Factory (§19.6): the help package loads only inside these handlers.
     route("GET", "/v1/help", help.status),
     route("POST", "/v1/help/answers", help.answer),

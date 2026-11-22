@@ -10,6 +10,7 @@ import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Pill, Segmented, Skeleton } from "../../components/ui.tsx";
 import { compact, postNumbersNote, postStatusLabel, STATUS_LABEL } from "../../lib/metrics.ts";
+import { autoPostLabel } from "../../lib/autopost.ts";
 import { WeekView } from "./WeekView.tsx";
 import { byPlatformOrder, count, MOMENT_LABEL, PLATFORM_LABEL, plural, relative } from "../../lib/format.ts";
 import { useHeld, useLoad } from "../../lib/hooks.ts";
@@ -319,9 +320,10 @@ function LibraryCard({
             : canPostNow(p)
               ? "Ready to post"
               : p.status === "failed" && p.error
-                ? `${postStatusLabel(p)}. ${postError(p.error)}`
-                : postStatusLabel(p)}
-          {p.by === "you" && !p.url ? "" : postNumbersNote(p, relative)}
+                ? `${autoPostLabel(p, postStatusLabel(p))}. ${postError(p.error)}`
+                : autoPostLabel(p, postStatusLabel(p))}
+          {/* A Private test post has no numbers (§46.8). */}
+          {(p.by === "you" && !p.url) || p.test ? "" : postNumbersNote(p, relative)}
         </span>
       </span>
       {/* TikTok only lets Clip Factory post Only me for now: the owner posts it there himself (§42). */}

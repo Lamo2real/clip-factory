@@ -3,7 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { seed } from "../src/api/mock/fixtures.ts";
 import { mockApi } from "../src/api/mock/index.ts";
-import type { Api, Platform, Settings } from "../src/api/types.ts";
+import type { Api, Platform, Settings, SettingsPut } from "../src/api/types.ts";
 import { withSkip } from "../src/lib/setupTodo.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -119,7 +119,7 @@ describe("saving settings", () => {
   it("an updater builds on the newest settings, saves still on their way included, so two list changes both land", async () => {
     // The setup list's skips (§17.13): the floating list and Settings each change the one shared list.
     const real = current;
-    const sent: Partial<Settings>[] = [];
+    const sent: SettingsPut[] = [];
     let release!: () => void;
     current = {
       ...real,
@@ -142,5 +142,39 @@ describe("saving settings", () => {
     });
     await flush(50);
     expect(session.me?.settings.setupSkipped).toEqual(["tiktok", "x"]);
+  });
+
+  it("auto-posting: the screen gets the whole setting, the server only the changed key, in the order of the taps", async () => {
+    // §46.3: the server merges each key, so a copy read before a change on another device never sends "on" back.
+    const real = current;
+    const sent: SettingsPut[] = [];
+    let release!: () => void;
+    current = {
+      ...real,
+      putSettings: async (patch) => {
+        sent.push(patch);
+        if (sent.length === 1) await new Promise<void>((r) => (release = r));
+        return real.putSettings(patch);
+      },
+    };
+    const whole = { on: false, everyHours: 5, perRun: 1, practice: false };
+    let first!: Promise<unknown>;
+    await act(async () => {
+      first = session.saveSettings({ autoPost: { ...whole, on: true } }, { send: { autoPost: { on: true } }, inOrder: true });
+    });
+    let second!: Promise<unknown>;
+    await act(async () => {
+      second = session.saveSettings({ autoPost: { ...whole, on: false } }, { send: { autoPost: { on: false } }, inOrder: true });
+    });
+    // On screen at once; the second save waits for the first to be answered.
+    expect(session.me?.settings.autoPost).toEqual(whole);
+    expect(sent).toEqual([{ autoPost: { on: true } }]);
+    await act(async () => {
+      release();
+      await Promise.all([first, second]);
+    });
+    expect(sent).toEqual([{ autoPost: { on: true } }, { autoPost: { on: false } }]);
+    expect((await real.getSettings()).autoPost).toMatchObject({ on: false });
+    expect(session.me?.settings.autoPost).toMatchObject({ on: false });
   });
 });

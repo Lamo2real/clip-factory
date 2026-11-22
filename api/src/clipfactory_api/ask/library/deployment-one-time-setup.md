@@ -300,6 +300,10 @@ Content Rewards, with the last step in the Mac app ([SETUP_POSTING.md](SETUP_POS
 switched on: it shipped off and the switch PR #88 turned it on once all its parts had merged
 ([Content Rewards](#content-rewards-contracts-38)).
 
+**Auto-posting** ([CONTRACTS.md §46](CONTRACTS.md#46-auto-posting-the-oldest-clips-in-review-go-up-by-themselves-every-x-hours-owner-request-2026-11-22))
+needs no step from the owner here: the deploy adds `cf-prod-autopost` and its hourly rule `cf-prod-autopost-hourly`
+(additive only, 0 to destroy), and it stays off until he turns it on in Settings › Posting › Auto-posting.
+
 What this deploy changes for posting: `cf-prod-hooks` runs up to **28 s** (the code exchange calls the platform),
 `cf-prod-clip-flow` has **1024 MB** (chunked uploads), and Secrets Manager holds at most about **22 secrets** in all
 (the state key, the push key, an app and a token secret per platform, Instagram's and Facebook's short-lived pending

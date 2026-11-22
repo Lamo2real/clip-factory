@@ -34,6 +34,8 @@ import { TikTokSheet } from "./TikTokSheet.tsx";
 import { useUnsaved } from "../../features/help/unsaved.ts";
 import { offerAfterUpload, TIKTOK_PUBLIC_HINT, tiktokAudited } from "../../lib/tiktokYourself.ts";
 import { PostYourself, PostYourselfButton } from "../library/PostYourself.tsx";
+import { useAutoPost } from "../settings/AutoPostBranch.tsx";
+import { autoPostOf, reviewLede, reviewLine, sentFirstLine } from "../../lib/autopost.ts";
 
 /** Video and cover links are presigned for an hour (docs/CONTRACTS.md §5); fetch new ones a little before that. */
 export const MEDIA_FRESH_MS = 50 * 60 * 1000;
@@ -143,6 +145,18 @@ export function Review({ jobId }: { jobId: string | null }) {
   // send a clip to places nobody picked.
   const ready: Platform[] | null = setup.data ? setup.data.platforms.filter((p) => p.ready).map((p) => p.platform) : null;
   const setupFailed = !setup.data && !!setup.error;
+  // Auto-posting (§46.2): while it is on, each card says when it goes up by itself, or why it waits.
+  const auto = autoPostOf(me?.settings.autoPost);
+  const autopost = useAutoPost(auto.on);
+  const autoLine = (clipId: string) =>
+    autopost.status
+      ? reviewLine(
+          auto,
+          autopost.status.nextUp.find((x) => x.clipId === clipId),
+          autopost.status.waiting.find((x) => x.clipId === clipId),
+          autopost.status.places,
+        )
+      : null;
   // Clips uploaded on this visit: each gets a "See how it does" link once its card has left the list.
   const [justKept, setJustKept] = useState<Clip[]>([]);
   // Uploaded without TikTok while TikTok keeps Clip Factory's uploads Only me: offer Post it yourself (§42.1).
@@ -237,7 +251,7 @@ export function Review({ jobId }: { jobId: string | null }) {
         lede={
           jobId
             ? "These clips all come from one job. Tap Upload to post one, or Throw away if you do not like it. Tap Show every job to see the rest."
-            : "Watch each clip. Tap Upload to post it, or Throw away if you do not like it. Nothing posts until you tap Upload."
+            : reviewLede(auto)
         }
         actions={
           jobId ? (
@@ -304,6 +318,7 @@ export function Review({ jobId }: { jobId: string | null }) {
                   onSettling={settle}
                   copyHere={visible.some((x) => x.remakeOf?.clipId === c.clipId)}
                   tiktokApproved={tiktokAudited(setup.data?.platforms)}
+                  autoLine={autoLine(c.clipId)}
                 />
               </li>
             ))}
@@ -353,8 +368,11 @@ function ReviewCard({
   onSettling,
   copyHere = false,
   tiktokApproved = true,
+  autoLine = null,
 }: {
   clip: Clip;
+  /** Auto-posting's one quiet line (§46.2), only while it is on. */
+  autoLine?: string | null;
   /** TikTok approved Clip Factory's own public uploads (§42); until then a ticked TikTok points to Post it yourself. */
   tiktokApproved?: boolean;
   /** A campaign copy of this clip waits right below it (§39.3). */
@@ -712,6 +730,16 @@ function ReviewCard({
         chosen.length ? chosen : undefined,
         chosen.length ? optionsFor(chosen, opts) : undefined,
       );
+      // A Review card's own Upload never marks its clip `auto`: auto-posting sent it first (§46.13). It leaves Review
+      // with a calm note; no burst, no "Uploading to…", and these places are not remembered as his pick.
+      const sentFirst = out.kind === "uploading" ? sentFirstLine(out.clip) : null;
+      if (out.kind === "uploading" && sentFirst) {
+        setSheet(false);
+        toast.info(sentFirst);
+        onKept(out.clip, out.posts);
+        leave();
+        return;
+      }
       if (out.kind === "uploading") {
         if (chosen.length) saveUploadTo(chosen);
         setSheet(false);
@@ -1091,6 +1119,12 @@ function ReviewCard({
         {placesReady && !keepFailed && !noneReady ? (
           <p className={`upload-going${chosen.length && !uploadWhy ? "" : " is-none"}`} id={`going-${clip.clipId}`} aria-live="polite">
             {uploadWhy ?? goingToLine(chosen)}
+          </p>
+        ) : null}
+        {/* Auto-posting's quiet line (§46.2), above the actions; TikTok's lines stay right above Upload (§17.8). */}
+        {autoLine && !keepFailed ? (
+          <p className="autopost-line" data-help="auto-post-line">
+            {autoLine}
           </p>
         ) : null}
         {/* Above TikTok's Music Usage line, which stays right above Upload (§17.8). */}

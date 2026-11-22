@@ -15,6 +15,11 @@ promotion on (``paidProductPlacementDetails``), X's ``paid_partnership``. When Y
 call is sent once more without it and the post is marked ``paidLabel: "not_set"``. Instagram and Facebook get nothing
 extra (Meta has no paid-partnership field for this app); TikTok's Branded content is the owner's own tap (§17.8). No
 publisher ever deletes, unpublishes or changes the privacy of a posted clip.
+
+A Private test run's post (auto-posting, §46.8: the internal ``postOptions.test == "private"``, which no request body
+can set) is seen only by the owner: YouTube uploads it as Only me without telling subscribers; Facebook finishes it as
+a draft on the Page; Instagram makes, uploads and checks the Reel but never publishes it. Each is marked posted with
+``privacy: "private"``, so it never joins the stats poller.
 """
 
 from __future__ import annotations
@@ -124,6 +129,11 @@ def _campaign(job: PublishJob) -> dict[str, Any] | None:
     """The post's internal ``postOptions.campaign`` (§38.14), or None for a post without a campaign."""
     found = job.options.get("campaign")
     return found if isinstance(found, dict) else None
+
+
+def private_test(job: PublishJob) -> bool:
+    """A Private test run's post (§46.8): only auto-posting's private run writes ``postOptions.test``."""
+    return job.options.get("test") == "private"
 
 
 def _paid(job: PublishJob) -> bool:
@@ -273,9 +283,12 @@ class YouTubePublisher:
         privacy = str(opts.get("privacy") or job.settings.get("youtubePrivacy") or "public")
         category = str(opts.get("category") or preset.get("category") or YOUTUBE_CATEGORY_GAMING)
         campaign = _campaign(job) is not None
+        if campaign or privacy not in {"public", "unlisted", "private"}:
+            privacy = "public"
         status: dict[str, Any] = {
-            # Campaign clips are always public and never made for kids, whatever any option says (§38.14).
-            "privacyStatus": "public" if campaign or privacy not in {"public", "unlisted", "private"} else privacy,
+            # Campaign clips are always public and never made for kids, whatever any option says (§38.14); a Private
+            # test run's post is always Only me (§46.8).
+            "privacyStatus": "private" if private_test(job) else privacy,
             # Only this clip's own switch can say made for kids; My settings never do (§36.2).
             "selfDeclaredMadeForKids": opts.get("madeForKids") is True and not campaign,
             "containsSyntheticMedia": False,
@@ -297,9 +310,10 @@ class YouTubePublisher:
 
     @staticmethod
     def upload_url(job: PublishJob, *, paid: bool | None = None) -> str:
-        """The resumable upload URL; ``notifySubscribers=false`` only when the owner turned the bell off (§36), and
-        the ``paidProductPlacementDetails`` part for a paid campaign post (§38.14)."""
-        off = _choice_of(job.options, _preset(job, "youtube"), "notifySubscribers") is False
+        """The resumable upload URL; ``notifySubscribers=false`` when the owner turned the bell off (§36) and for a
+        Private test run's post (§46.8), and the ``paidProductPlacementDetails`` part for a paid campaign post
+        (§38.14)."""
+        off = private_test(job) or _choice_of(job.options, _preset(job, "youtube"), "notifySubscribers") is False
         paid_part = _paid(job) if paid is None else paid
         return (
             YOUTUBE_UPLOAD
@@ -429,6 +443,8 @@ class YouTubePublisher:
             posted_at=_now(job),
             platform_post_id=video_id,
             stats_id=video_id,
+            # A Private test run's video is Only me: the owner can open it, the stats poller never reads it (§46.8).
+            **({"privacy": "private"} if private_test(job) else {}),
         )
 
 
@@ -689,6 +705,8 @@ class InstagramPublisher(_Graph):
         data = self._get(job, str(handle["container"]), {"fields": "status_code,status"}, "check")
         code = str(data.get("status_code") or "")
         if code == "FINISHED":
+            if private_test(job):  # §46.8: uploaded and checked; a Private test run never publishes it
+                return Progress("done", handle, published=self._checked(job, handle))
             return Progress("ready_to_finish", handle, 0)
         if code in {"ERROR", "EXPIRED"}:
             # ``status`` holds Meta's reason ("Error: ... 2207026"); it goes to the logs, never to the owner.
@@ -743,6 +761,8 @@ class InstagramPublisher(_Graph):
         return str(data.get("status_code") or "")
 
     def finish(self, job: PublishJob, handle: dict[str, Any]) -> Progress:
+        if private_test(job):  # never media_publish for a Private test run (§46.8)
+            return Progress("done", handle, published=self._checked(job, handle))
         if handle.get("mediaId"):
             return Progress("done", handle, published=self._published(job, handle))
         if handle.get("publishing"):
@@ -772,6 +792,14 @@ class InstagramPublisher(_Graph):
         handle = {**handle, "mediaId": media_id}
         job.save(handle)
         return Progress("done", handle, published=self._published(job, handle))
+
+    @staticmethod
+    def _checked(job: PublishJob, handle: dict[str, Any]) -> Published:
+        """A Private test run's Reel: made, uploaded and checked, not published (it expires by itself), so it has no
+        link and no stats id."""
+        return Published(
+            url="", posted_at=_now(job), platform_post_id=str(handle.get("container") or "") or None, privacy="private"
+        )
 
     def _published(self, job: PublishJob, handle: dict[str, Any]) -> Published:
         media_id = str(handle["mediaId"])
@@ -871,7 +899,10 @@ class FacebookPublisher(_Graph):
             if phases[0] in {"complete", "completed"} or video == "upload_complete":
                 return Progress("ready_to_finish", handle, 0)
             return Progress("processing", handle, self._every(job))
-        if phases[2] in {"complete", "completed"} and video in {"ready", "published", ""}:
+        done = phases[2] in {"complete", "completed"}
+        if private_test(job):  # a draft is never published: done once Meta has processed it (§46.8, §46.14)
+            done = done or phases[1] in {"complete", "completed"}
+        if done and video in {"ready", "published", ""}:
             return Progress("done", handle, published=self._published(job, handle))
         return Progress("processing", handle, self._every(job))
 
@@ -882,7 +913,8 @@ class FacebookPublisher(_Graph):
         params = {
             "upload_phase": "finish",
             "video_id": str(handle["videoId"]),
-            "video_state": "PUBLISHED",
+            # A Private test run's Reel stays a draft on the Page (§46.8).
+            "video_state": "DRAFT" if private_test(job) else "PUBLISHED",
             "description": caption(job, self.platform),
         }
         data = _ok(self.platform, self._post(job, f"{page}/video_reels", params, "finish"), "finish")
@@ -894,6 +926,8 @@ class FacebookPublisher(_Graph):
 
     def _published(self, job: PublishJob, handle: dict[str, Any]) -> Published:
         video_id = str(handle["videoId"])
+        if private_test(job):  # a draft has no public link and is never measured (§46.8)
+            return Published(url="", posted_at=_now(job), platform_post_id=video_id, privacy="private")
         url = ""
         try:
             url = str(self._get(job, video_id, {"fields": "permalink_url"}, "permalink").get("permalink_url") or "")

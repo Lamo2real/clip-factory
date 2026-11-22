@@ -51,7 +51,7 @@ run "whole_stack_plans" {
   assert {
     condition = toset(keys(module.monitoring.alarm_names)) == toset([
       "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks", "stats", "learn", "follow-tick", "money", "ask", "notify",
-      "campaigns", "story-flow", "stories-api",
+      "campaigns", "story-flow", "stories-api", "autopost",
     ])
     error_message = "Every function except the WebSocket authorizer is watched for errors."
   }
@@ -514,17 +514,18 @@ run "cr_remake_switch_off_plans" {
   }
 }
 
-# docs/CONTRACTS.md §41.6: the campaign finder. cr_finder_enabled defaults to false until P, Q, R, S and T have merged
-# (then one switch PR sets it true); it is wired to exactly the three functions that read CR_FINDER (cf-prod-api,
-# cf-prod-stats and cf-prod-campaigns) and nowhere else. Each module's own test proves the switch reaches only that
-# env var (one use, CR_FINDER = var.cr_finder_enabled ? "on" : "off"), so flipping it changes three env vars in place
-# and can never delete or replace what holds the owner's data (the deploy's delete gate stays quiet).
-run "cr_finder_is_wired_and_off" {
+# docs/CONTRACTS.md §41.6: the campaign finder. cr_finder_enabled defaults to true now that P, Q, R, S and T have
+# merged; it is wired to exactly the three functions that read CR_FINDER (cf-prod-api, cf-prod-stats and
+# cf-prod-campaigns) and nowhere else. Each module's own test proves the switch reaches only that env var (one use,
+# CR_FINDER = var.cr_finder_enabled ? "on" : "off"), so flipping it changes three env vars in place and can never
+# delete or replace what holds the owner's data (the deploy's delete gate stays quiet). The stack still plans with it
+# off, the one-line way to stop the finder the same day if Content Rewards or Whop asks.
+run "cr_finder_is_wired_and_on" {
   command = plan
 
   assert {
-    condition     = var.cr_finder_enabled == false
-    error_message = "cr_finder_enabled defaults to false until every builder's part of §41.6 has merged."
+    condition     = var.cr_finder_enabled == true
+    error_message = "cr_finder_enabled defaults to true now that P, Q, R, S and T of §41.6 have merged."
   }
 
   assert {
@@ -536,20 +537,12 @@ run "cr_finder_is_wired_and_off" {
     strcontains(regex("(?s)\nmodule \"contentrewards\" \\{\n(.*?)\n\\}\n", file("main.tf"))[0], "\n  cr_finder_enabled = var.cr_finder_enabled\n"))
     error_message = "cr_finder_enabled is passed to the api, stats and contentrewards modules, and to nothing else."
   }
-}
-
-run "cr_finder_switch_on_plans" {
-  command = plan
-
-  variables {
-    cr_finder_enabled = true
-  }
 
   assert {
     condition = (module.contentrewards.function_names == { campaigns = "cf-prod-campaigns" } &&
       module.api.function_names == { api = "cf-prod-api" } &&
     output.stats_function_name == "cf-prod-stats" && output.stats_rule_name == "cf-prod-stats")
-    error_message = "With the finder switched on the stack still plans: the same cf-prod-api, cf-prod-stats (and its tick) and cf-prod-campaigns."
+    error_message = "With the finder on the stack plans the same cf-prod-api, cf-prod-stats (and its tick) and cf-prod-campaigns."
   }
 
   assert {
@@ -561,9 +554,30 @@ run "cr_finder_switch_on_plans" {
   assert {
     condition = toset(keys(module.monitoring.alarm_names)) == toset([
       "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks", "stats", "learn", "follow-tick", "money", "ask", "notify",
-      "campaigns", "story-flow", "stories-api",
+      "campaigns", "story-flow", "stories-api", "autopost",
     ])
     error_message = "No new function: the finder runs in cf-prod-campaigns, started by the stats tick and the api."
+  }
+}
+
+run "cr_finder_switch_off_plans" {
+  command = plan
+
+  variables {
+    cr_finder_enabled = false
+  }
+
+  assert {
+    condition = (module.contentrewards.function_names == { campaigns = "cf-prod-campaigns" } &&
+      module.api.function_names == { api = "cf-prod-api" } &&
+    output.stats_function_name == "cf-prod-stats" && output.stats_rule_name == "cf-prod-stats")
+    error_message = "With the finder switched off the stack still plans: the same cf-prod-api, cf-prod-stats (and its tick) and cf-prod-campaigns."
+  }
+
+  assert {
+    condition = (output.table_name == "cf-prod-data" && output.media_bucket == "cf-prod-media-123456789012" &&
+    output.vector_bucket == "cf-prod-vectors-123456789012" && output.web_bucket == "cf-prod-web-123456789012")
+    error_message = "Switching the finder off keeps the table and the buckets that hold the owner's data: the stored items stay."
   }
 }
 
@@ -593,5 +607,62 @@ run "whop_connect_switch_on_plans" {
   assert {
     condition     = module.api.function_names == { api = "cf-prod-api" } && module.money.function_names == { money = "cf-prod-money" } && module.notify.notify_function_name == "cf-prod-notify"
     error_message = "With the switch on the stack still plans and cf-prod-api, cf-prod-money and cf-prod-notify are the same functions."
+  }
+}
+
+# docs/CONTRACTS.md §46.11 and ADR-81: auto-posting. cf-prod-autopost and its hourly rule are planned and watched (its
+# errors in monitoring, the rule's failed invocations by the module's own hourly alarm on the same topic: two new
+# alarms), it starts the clip flow on its live alias, gets SECRET_PREFIX but no secret grant (the campaign fit check
+# reads only the table), the Content Rewards switch and the boundary, and the switch off still plans it. The module's
+# own test (modules/autopost) proves the role, the cron, the retries and the alarm's hourly window.
+run "autopost_is_wired" {
+  command = plan
+
+  assert {
+    condition = (module.autopost.function_names == { autopost = "cf-prod-autopost" } &&
+      module.autopost.schedule_rule_names == { autopost = "cf-prod-autopost-hourly" } &&
+    module.autopost.function_name == "cf-prod-autopost")
+    error_message = "cf-prod-autopost and its rule cf-prod-autopost-hourly are planned."
+  }
+
+  assert {
+    condition = (module.monitoring.alarm_names["autopost"] == "cf-prod-autopost-errors" &&
+      module.autopost.schedule_alarm_names == { autopost = "cf-prod-autopost-hourly-failed-invocations" } &&
+    !contains(keys(module.monitoring.schedule_alarm_names), "autopost"))
+    error_message = "cf-prod-autopost is watched for errors and its hourly rule for failed invocations, by one alarm of that name (the module's hourly one, not monitoring's 15-minute one)."
+  }
+
+  assert {
+    condition = module.autopost.function_name == "cf-prod-autopost" && alltrue([
+      for line in [
+        "\n  clip_flow_alias_arn  = module.flows.clip_flow_alias_arn\n",
+        "\n  clip_flow_arn_prefix = module.flows.function_arns[\"clip-flow\"]\n",
+        "\n  secret_prefix = module.hooks.secret_prefix\n",
+        "\n  content_rewards_enabled = var.content_rewards_enabled\n",
+        "\n  cr_remake_enabled = var.cr_remake_enabled\n",
+        "\n  alarm_topic_arn = module.monitoring.alarm_topic_arn\n",
+        "\n  permissions_boundary_arn = var.role_permissions_boundary_arn\n",
+        "\n  table_arn       = module.data.table_arn\n",
+      ] : strcontains("\n${regex("(?s)\nmodule \"autopost\" \\{\n(.*?)\n\\}\n", file("main.tf"))[0]}\n", line)
+    ])
+    error_message = "module.autopost gets the clip flow's live alias and unqualified ARN, SECRET_PREFIX, the Content Rewards switch, the alarms topic, the table and the boundary."
+  }
+
+  assert {
+    condition     = module.autopost.function_name == "cf-prod-autopost" && !strcontains(regex("(?s)\nmodule \"autopost\" \\{\n(.*?)\n\\}\n", file("main.tf"))[0], "secrets_arn")
+    error_message = "module.autopost gets no secret ARN: the campaign fit check reads only the table, so the role reads and writes no secret."
+  }
+}
+
+run "autopost_with_content_rewards_off_plans" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = false
+  }
+
+  assert {
+    condition     = module.autopost.function_names == { autopost = "cf-prod-autopost" } && module.autopost.schedule_rule_names == { autopost = "cf-prod-autopost-hourly" }
+    error_message = "With Content Rewards off the stack still plans the same cf-prod-autopost and its rule (campaign clips then wait)."
   }
 }

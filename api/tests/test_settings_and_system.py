@@ -44,6 +44,8 @@ DEFAULTS = {
         "facebook": {},
         "x": {"replies": "everyone"},
     },
+    # §46.3 Auto-posting: off until the owner turns it on.
+    "autoPost": {"on": False, "everyHours": 5, "perRun": 1, "practice": False},
 }
 
 

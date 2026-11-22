@@ -4,6 +4,7 @@ import { friendlyMessage } from "../../api/errors.ts";
 import { putFile } from "../../api/upload.ts";
 import type { ClipTarget, NewJobSource } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
+import { homeHint } from "../../lib/autopost.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -766,7 +767,8 @@ function JobForm() {
             {forCampaign || notReady?.href !== CAMPAIGNS_PATH ? "Open the campaign" : "Your campaigns"}
           </LinkButton>
         ) : null}
-        <p className="newjob__hint">Nothing gets posted until you tap Upload.</p>
+        {/* While auto-posting is on (§46.2), the oldest clips go up by themselves; practice keeps this hint. */}
+        <p className="newjob__hint">{homeHint(me?.settings.autoPost)}</p>
       </div>
 
       <p className="sr-only" role="status">
