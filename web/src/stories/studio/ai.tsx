@@ -515,12 +515,15 @@ export function TaskLine({
 }
 
 /** The Lamo Stories setting a stop sentence sends the owner to (§45.25: "… in Lamo Stories › Settings › AI"). */
-export function settingsFor(sentence: string | null | undefined): "ai" | "agents" | null {
+export function settingsFor(sentence: string | null | undefined): "ai" | "agents" | "video" | null {
   if (!sentence) return null;
   if (/Settings\s*›\s*Agents/i.test(sentence)) return "agents";
   if (/Settings\s*›\s*AI\b/i.test(sentence)) return "ai";
+  if (/Settings\s*›\s*Video\b/i.test(sentence)) return "video";
   return null;
 }
+
+const FIX_WORDS: Record<"ai" | "agents" | "video", string> = { ai: "Open Settings › AI", agents: "Open Settings › Agents", video: "Open Settings › Video" };
 
 /** The button that opens the setting a stop sentence names (nothing when it names none). */
 export function SettingsFix({ sentence }: { sentence: string | null | undefined }) {
@@ -528,7 +531,7 @@ export function SettingsFix({ sentence }: { sentence: string | null | undefined 
   if (!section) return null;
   return (
     <A href={storiesHref({ name: "settings", section })} className="st-btn">
-      {section === "agents" ? "Open Settings › Agents" : "Open Settings › AI"}
+      {FIX_WORDS[section]}
     </A>
   );
 }
@@ -588,14 +591,32 @@ export function ModelsUsed({ info, job, jobs, title = "Made with" }: { info: AiI
   );
 }
 
-/** What the next run of this video uses when nothing else is picked: its own setting over the writer's usual. */
-export function storyUsual(info: AiInfo, story: Pick<Story, "ai">): Usual {
-  const base = usualFor(info, "storyboard");
+/** What the next run of this video uses when nothing else is picked: its own setting over the task's usual (the writer's). */
+export function storyUsual(info: AiInfo, story: Pick<Story, "ai">, kind: TaskKind = "storyboard"): Usual {
+  const base = usualFor(info, kind);
   if (!story.ai.model && !story.ai.effort) return base;
   const model = story.ai.model ?? base.model;
   const m = modelOf(info, model);
   const applied = m ? m.efforts.length > 0 : base.effortApplied;
   return { model, effort: applied ? (story.ai.effort ?? base.effort) : null, effortApplied: applied, from: "project", modelKnown: !!story.ai.model, effortKnown: !!story.ai.effort };
+}
+
+/**
+ * What the next run of this video uses (CONTRACTS §45.34 Story.effective, the API's own sum of §45.25's levels); before
+ * the API sends it, the same sum from Lamo Stories' settings. "Next run: Claude Opus 5.5 · High".
+ */
+export function nextRunLine(info: AiInfo, story: Pick<Story, "ai" | "effective">): string {
+  const e = story.effective;
+  if (e) return `Next run: ${modelName(info, e.model)} · ${e.effortApplied === false || !e.effort ? "its own effort level" : EFFORT_LABEL[e.effort]}`;
+  const p = merged(info, storyUsual(info, story), null);
+  if (!p.modelKnown) return "Next run: your usual model and effort";
+  if (!p.effortApplied) return `Next run: ${modelName(info, p.model)} · its own effort level`;
+  return `Next run: ${modelName(info, p.model)} · ${p.effortKnown && p.effort ? EFFORT_LABEL[p.effort] : "your usual effort"}`;
+}
+
+/** The "Next run: …" line of Review and Production (§45.34). */
+export function NextRun({ info, story }: { info: AiInfo; story: Pick<Story, "ai" | "effective"> }) {
+  return <p className="st-s-nextrun">{nextRunLine(info, story)}</p>;
 }
 
 /** The video's own model and effort, kept with it (§45.25 level 2): shown, and changed while it waits for review. */

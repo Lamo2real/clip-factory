@@ -1,12 +1,13 @@
-// The model and effort line ("Model: Claude Opus 5.5 · Effort: High") and its picker (docs/CONTRACTS.md §45.25,
-// §45.27, §45.28). The line always shows what the next request really uses (the server's effective values, with a
-// just-this-once override on top). Tapping the model or the effort opens the picker: in the chat it changes the
-// conversation's own setting, or, with "Just for this message", only the next message (never saved). Each model
-// shows what its last real call said, and only the efforts it offers.
+// The model and effort line ("Model: Claude Opus 5.5 · Effort: High", "From Amazon Bedrock") and its picker
+// (docs/CONTRACTS.md §45.25, §45.27, §45.28, §45.34). The line always shows what the next request really uses (the
+// server's effective values, with a just-this-once override on top) and who provides the model. Tapping the model or
+// the effort opens the picker: in the chat it changes the conversation's own setting, or, with "Just for this
+// message", only the next message (never saved); on a reference video, "Keep with this video" saves the video's own
+// setting. Each model names its provider, shows what its last real call said, and only the efforts it offers.
 import type { ReactNode } from "react";
 import { EFFORT_LABEL, type Effort, type ModelOverride } from "../api/types.ts";
 import { Btn, Chip, Pick, Sheet, type PickOption } from "./kit.tsx";
-import { EFFORT_LINE, effortLabel, effortProblem, findModel, modelLabel, NO_EFFORT_LINE, statusWords, type ModelView } from "./models.ts";
+import { EFFORT_LINE, effortLabel, effortProblem, fileModels, findModel, modelLabel, NO_EFFORT_LINE, statusWords, type ModelView } from "./models.ts";
 
 export const DEFAULT = "__default";
 
@@ -36,12 +37,18 @@ export function AiLine({
   const status = statusWords(model);
   const once = !!override && (override.model !== undefined || override.effort !== undefined);
   const noEffort = !!model && model.efforts.length === 0;
+  const provider = providerOf(models, current.model);
   return (
     <div className={`st-chat-ai${once ? " is-once" : ""}`}>
       <div className="st-chat-ai__row">
         {once ? <Chip tone="sun">{onceLabel}</Chip> : null}
         <p className="st-chat-ai__line">
-          <button type="button" className="st-chat-ai__part" onClick={() => onPick("model", once)} aria-label={`Model: ${modelLabel(models, current.model)}. Change the model`}>
+          <button
+            type="button"
+            className="st-chat-ai__part"
+            onClick={() => onPick("model", once)}
+            aria-label={`Model: ${modelLabel(models, current.model)}${provider ? ` on ${provider}` : ""}. Change the model`}
+          >
             Model: <b>{modelLabel(models, current.model)}</b>
           </button>
           <span className="st-chat-ai__dot" aria-hidden="true">
@@ -51,6 +58,7 @@ export function AiLine({
             Effort: <b>{noEffort ? "Its own level" : effortLabel(current.effort)}</b>
           </button>
         </p>
+        {provider ? <span className="st-chat-ai__provider">From {provider}</span> : null}
         <span className={`st-chat-ai__status st-chat-ai__status--${status.tone}`}>{status.text}</span>
         {once ? (
           <Btn quiet className="st-chat-ai__once" onClick={onClearOverride}>
@@ -69,6 +77,12 @@ export function AiLine({
   );
 }
 
+/** Who provides a model ("Amazon Bedrock"), from the server's list or Lamo Stories' own file; null when unknown. */
+export function providerOf(models: readonly ModelView[], key: string | null | undefined): string | null {
+  const m = findModel(models, key) ?? (key ? fileModels().find((f) => f.key === key) : undefined);
+  return m?.provider || null;
+}
+
 export function modelOptions(models: ModelView[], withDefault: string | null): PickOption<string>[] {
   const out: PickOption<string>[] = [];
   if (withDefault !== null) out.push({ value: DEFAULT, label: "Same as Settings", line: withDefault });
@@ -77,7 +91,7 @@ export function modelOptions(models: ModelView[], withDefault: string | null): P
     out.push({
       value: m.key,
       label: m.label,
-      line: [m.line, s.tone === "coral" ? s.line : ""].filter(Boolean).join(" "),
+      line: [m.provider ? `${m.provider}.` : "", m.line, s.tone === "coral" ? s.line : ""].filter(Boolean).join(" "),
       badge: <span className={`st-chat-ai__status st-chat-ai__status--${s.tone}`}>{s.text}</span>,
     });
   }
@@ -91,9 +105,13 @@ export function effortOptions(model: ModelView | null, withDefault: string | nul
   return out;
 }
 
+/** Where a choice in the picker goes: a conversation's own setting, the next request only, or a reference video's own. */
+export type AiScope = "chat" | "once" | "keep";
+
 /**
  * The picker. `scopes` are the places a choice can go ("chat": this conversation's saved setting; "once": the next
- * request only); `values` holds the choice shown for the current scope (DEFAULT for "Same as Settings").
+ * request only; "keep": a reference video's own setting, "Keep with this video"); `values` holds the choice shown for
+ * the current scope (DEFAULT for "Same as Settings").
  */
 export function AiSheet({
   title,
@@ -112,9 +130,9 @@ export function AiSheet({
 }: {
   title: string;
   models: ModelView[];
-  scope: "chat" | "once";
-  scopes: { value: "chat" | "once"; label: string }[];
-  onScope: (s: "chat" | "once") => void;
+  scope: AiScope;
+  scopes: { value: AiScope; label: string }[];
+  onScope: (s: AiScope) => void;
   values: { model: string; effort: string | null };
   onModel: (key: string) => void;
   onEffort: (e: string) => void;
@@ -125,7 +143,7 @@ export function AiSheet({
   saved: string | null;
   onClose: () => void;
 }) {
-  const withDefault = scope === "chat" ? "Uses the model and effort from Lamo Stories › Settings › AI." : null;
+  const withDefault = scope === "chat" || scope === "keep" ? "Uses the model and effort from Lamo Stories › Settings › AI." : null;
   const effortBad = values.effort && values.effort !== DEFAULT ? effortProblem(effortModel, values.effort as Effort) : null;
   return (
     <Sheet
@@ -140,7 +158,11 @@ export function AiSheet({
     >
       {scopes.length > 1 ? <Pick label="Where this choice goes" value={scope} options={scopes} onChange={onScope} className="st-chat-pick--bar" /> : null}
       <p className="st-chat-sheet__lede">
-        {scope === "chat" ? "Saved for this chat. Every new message uses it." : "Only for the next one. Your settings stay as they are."}
+        {scope === "chat"
+          ? "Saved for this chat. Every new message uses it."
+          : scope === "keep"
+            ? "Kept with this video. Every analysis of it uses it. Your other settings stay the same."
+            : "Only for the next one. Your settings stay as they are."}
       </p>
       <h3 className="st-chat-sheet__sub">Model</h3>
       <Pick label="Model" value={values.model} options={modelOptions(models, withDefault)} onChange={onModel} stack />

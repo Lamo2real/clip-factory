@@ -4,30 +4,31 @@
 // 5 seconds and writes a ReferenceAnalysis. The model and effort follow the API's rules (§45.25: per-run override >
 // the reference's own setting > the task > the agent > the default). Builder H owns it.
 //
-// GET …/references/{refId} answers exactly the contract's { reference, analysis } (§45.5): the last stored analysis,
-// whatever the status (as the API reads analysis.json), and no job. The knob refJobInGet adds the analysis job as
-// `job` (proposed in the builder's contract notes), for the step track's own tests. Like Lamo Stories' agent, a failed
-// re-run puts an analyzed video back to `analyzed` (the last analysis kept) and only the job says it failed.
+// GET …/references/{refId} answers the contract's { reference, analysis, job } (§45.34): the last stored analysis,
+// whatever the status (as the API reads analysis.json), and the analysis job of currentJobId, else the latest one (null
+// before the first analysis), so the page shows each step and the failure's own reason. Like Lamo Stories' agent, a
+// failed re-run puts an analyzed video back to `analyzed` (the last analysis kept) and only the job says it failed.
+// PATCH takes { title?, ai? } (ai: the video's own model and effort, "Keep with this video"), checked like the API.
 //
-// `deleteReference` is two calls in StoriesApi: (ws, refId) deletes a reference video; (ws, characterId, assetId)
-// deletes a character's reference picture, which belongs to the characters part, so it is passed on to it.
+// A reference video is deleted with deleteReferenceVideo (§45.34); deleteReference is a character's picture (the
+// characters part).
 //
 // Test knobs: refSeconds (how long an analysis takes, default 5), refFail (the next analysis fails with this sentence),
-// refJobInGet (GET …/references/{refId} also answers `job`).
+// refJobInGet (kept for older tests: the job is always in the answer now), refNoJob (the answer leaves `job` out, as
+// the API did before §45.34, for the page's own fallback).
 import { ApiError } from "../../../api/errors.ts";
-import type { Character, ModelOverride, ProductionJob, ReferenceAnalysis, ReferenceVideo, StoriesApi, StoryStep } from "../types.ts";
-import * as characters from "./characters.ts";
-import { checkWs, lowerLevels, newId, resolve } from "./chat.ts";
+import type { AiSetting, ModelOverride, ProductionJob, ReferenceAnalysis, ReferenceVideo, StoriesApi, StoryStep } from "../types.ts";
+import { checkWs, lowerLevels, MODELS, newId, resolve } from "./chat.ts";
 import { delay, type MockStore } from "./store.ts";
 
-export const KEYS = ["listReferences", "createReference", "completeReference", "analyzeReference", "getReference", "patchReference", "deleteReference"] as const;
+export const KEYS = ["listReferences", "createReference", "completeReference", "analyzeReference", "getReference", "patchReference", "deleteReferenceVideo"] as const;
 
 const PART = 100 * 1024 * 1024;
 const MAX = 2 * 1024 * 1024 * 1024;
 const iso = (ms = Date.now()) => new Date(ms).toISOString();
 const bad = (message: string, field?: string) => new ApiError(400, "bad_request", message, field);
 
-/** The analysis job's own steps (§45.28). Their keys are not StepKeys (see the builder's contract notes). */
+/** The analysis job's own steps (§45.28, §45.34: StoryStep.key look, listen, write). */
 export const REF_STEPS: { key: string; label: string }[] = [
   { key: "look", label: "Look at it" },
   { key: "listen", label: "Listen" },
@@ -127,12 +128,10 @@ function find(store: MockStore, ws: string, refId: string): ReferenceVideo {
   return r;
 }
 
-function jobOf(store: MockStore, refId: string): ProductionJob | null {
-  return (
-    store.jobs
-      .filter((j) => j.jobType === "reference_analysis" && j.contentId === refId)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null
-  );
+/** The analysis job of currentJobId, else the reference's latest one (§45.34). */
+function jobOf(store: MockStore, ref: ReferenceVideo): ProductionJob | null {
+  const mine = store.jobs.filter((j) => j.jobType === "reference_analysis" && j.contentId === ref.refId);
+  return mine.find((j) => j.jobId === ref.currentJobId) ?? mine.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
 }
 
 /** Moves every analysis on to where its time says it is (each read calls this). */
@@ -295,27 +294,45 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const ref = find(store, ws, refId);
       advance(store);
       const analysis = s.analyses.get(refId) ?? null;
-      const out = { reference: structuredClone(ref), analysis: analysis ? structuredClone(analysis) : null };
-      if (store.knobs.refJobInGet !== true) return out;
-      const job = jobOf(store, refId);
-      return { ...out, job: job ? structuredClone(job) : null };
+      const job = jobOf(store, ref);
+      const out = { reference: structuredClone(ref), analysis: analysis ? structuredClone(analysis) : null, job: job ? structuredClone(job) : null };
+      if (store.knobs.refNoJob === true && store.knobs.refJobInGet !== true) {
+        const { job: _left, ...older } = out;
+        return older as typeof out;
+      }
+      return out;
     },
 
-    async patchReference(ws: string, refId: string, title: string) {
+    async patchReference(ws: string, refId: string, patch: { title?: string; ai?: AiSetting }) {
       await delay(120);
       const ref = find(store, ws, refId);
-      const t = String(title ?? "").trim();
-      if (!t || t.length > 80) throw bad("Give the video a name of up to 80 letters.", "title");
-      ref.title = t;
+      for (const k of Object.keys(patch ?? {})) if (!["title", "ai"].includes(k)) throw bad("Something in that request was not right.", k);
+      if (patch.title === undefined && patch.ai === undefined) throw bad("Say what to change: the name or the model.", "title");
+      let title = ref.title;
+      if (patch.title !== undefined) {
+        title = String(patch.title ?? "").trim();
+        if (!title || title.length > 80) throw bad("Give the video a name of up to 80 letters.", "title");
+      }
+      let ai = ref.ai;
+      if (patch.ai !== undefined) {
+        if (!patch.ai || typeof patch.ai !== "object") throw bad("Pick a model and effort, or the usual.", "ai");
+        ai = { model: patch.ai.model ?? null, effort: patch.ai.effort ?? null };
+        // The same refusals as the API (§45.25): an unknown model, or an effort the model does not offer.
+        if (ai.model !== null && !MODELS.some((m) => m.key === ai.model)) throw bad("We don't know that model. Pick one from the list.", "ai");
+        const low = lowerLevels(store, "reference_analysis", "video_analysis");
+        const r = resolve({ project: ai, task: low.task, agent: low.agent, ai: low.ai });
+        if ("error" in r) throw bad(r.sentence, "ai");
+      }
+      if (ref.status === "analyzing" && patch.ai !== undefined) throw new ApiError(409, "conflict", "It is being analyzed right now. Change the model when it is done.");
+      ref.title = title;
+      ref.ai = ai;
       ref.updatedAt = iso();
       return structuredClone(ref);
     },
 
-    async deleteReference(ws: string, refOrCharacterId: string, assetId?: string): Promise<void | Character> {
-      if (typeof assetId === "string") return characters.api(store).deleteReference(ws, refOrCharacterId, assetId);
+    async deleteReferenceVideo(ws: string, refId: string): Promise<void> {
       await delay(120);
-      find(store, ws, refOrCharacterId);
-      const refId = refOrCharacterId;
+      find(store, ws, refId);
       store.references = store.references.filter((r) => r.refId !== refId);
       for (const j of store.jobs) if (j.contentId === refId && j.jobType === "reference_analysis") s.runs.delete(j.jobId);
       store.jobs = store.jobs.filter((j) => !(j.contentId === refId && j.jobType === "reference_analysis"));

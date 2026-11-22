@@ -1,8 +1,9 @@
 // Lamo Stories › Characters (docs/CONTRACTS.md §45.8, §45.16.5; spec §5.C). The cast gallery (each rig moving), New
 // character (the five-part stepper with a live preview, and Design with AI: the character agent's first try from the
 // owner's words and/or a picture, which the owner changes and saves), and each character's own page: edit with its
-// version (a 409 means it changed elsewhere: a friendly Reload), Design with AI from words or its own pictures, the
-// reference pictures, the AI picture when it is on, and Delete.
+// version (a 409 means it changed elsewhere: a friendly Reload), Design with AI from words or its own pictures (a
+// redesign of this character, §45.34: which parts change is shown before "Use this" puts it in the editor), the
+// reference pictures, the AI picture when it is on (else the way to Settings › Video › Picture maker), and Delete.
 import "../styles/studio.css";
 import { useState, type ReactNode } from "react";
 import { A } from "../../components/ui.tsx";
@@ -16,7 +17,7 @@ import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { storiesHref } from "../routes.ts";
 import { useAiInfo } from "../studio/ai.tsx";
 import { CharacterEditor } from "../studio/CharacterEditor.tsx";
-import { DesignPanel } from "../studio/Design.tsx";
+import { DesignPanel, RedesignCompare } from "../studio/Design.tsx";
 import { useWorkspace } from "../studio/hooks.ts";
 import { Busy, celebrate, Notice, StSheet, Tag } from "../studio/kit.tsx";
 import { DEFAULT_LOOK, inputOf, MOVE_LINE, newCharacter } from "../studio/looks.ts";
@@ -145,6 +146,8 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
   const workspace = useWorkspace(ws);
   const info = useAiInfo(ws);
   const [draft, setDraft] = useState<CharacterInput | null>(null);
+  /** A redesign the owner has not taken yet: shown beside the character as it is (§45.34). */
+  const [proposal, setProposal] = useState<CharacterInput | null>(null);
   const aiOn = ((workspace?.configuration ?? {}) as Partial<StoriesConfig>).providers?.images === "nova-canvas";
   const [saving, setSaving] = useState(false);
   const [stale, setStale] = useState(false);
@@ -233,13 +236,23 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
         ws={ws}
         info={info}
         name={c.name}
+        characterId={c.characterId}
         pictures={c.references.map((r) => ({ assetId: r.assetId, url: r.url }))}
-        onDraft={(input) => {
-          setDraft(input);
-          setRound((n) => n + 1);
-        }}
+        onDraft={(input) => setProposal(input)}
       />
-      {draft ? <Notice tone="info">This is the AI&apos;s new look for {c.name}. Nothing changes until you tap Save changes.</Notice> : null}
+      {proposal ? (
+        <RedesignCompare
+          now={draft ?? inputOf(c)}
+          next={proposal}
+          onDrop={() => setProposal(null)}
+          onUse={() => {
+            setDraft(proposal);
+            setProposal(null);
+            setRound((n) => n + 1);
+          }}
+        />
+      ) : null}
+      {draft ? <Notice tone="info">The new version of {c.name} is in the editor. Nothing changes until you tap Save changes.</Notice> : null}
       <CharacterEditor
         key={`${c.characterId}:${round}`}
         initial={draft ?? inputOf(c)}

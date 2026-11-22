@@ -12,6 +12,7 @@ import type {
   Character,
   ClipsDestination,
   Conversation,
+  ErrorAccount,
   GuidanceTopic,
   Idea,
   KeyCheck,
@@ -41,6 +42,32 @@ import type {
 } from "./types.ts";
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+/**
+ * Lamo Stories' ApiError: the shared one (web/src/api/errors.ts, unchanged) plus the account a publishing 409 names
+ * (`error.account`, CONTRACTS §45.34), so the publish sheet and Posts' Try again can ask "Post to {name}?".
+ */
+export class StoriesApiError extends ApiError {
+  readonly account: ErrorAccount;
+
+  constructor(base: ApiError, account: ErrorAccount) {
+    super(base.status, base.code, base.message, base.field, base.retryAfter);
+    this.name = "ApiError";
+    this.account = account;
+  }
+}
+
+const shortText = (v: unknown, max: number): string | null => (typeof v === "string" && v.trim() && v.length <= max ? v : null);
+
+/** The account an error envelope names (`error.account`), checked; null when there is none or it is not one. */
+export function errorAccount(body: unknown): ErrorAccount | null {
+  const raw = (body as { error?: { account?: unknown } } | null)?.error?.account;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const a = raw as Record<string, unknown>;
+  const externalAccountId = shortText(a.externalAccountId, 200);
+  if (!externalAccountId) return null;
+  return { externalAccountId, accountName: shortText(a.accountName, 200), handle: shortText(a.handle, 200) };
+}
 
 export interface StoriesHttpDeps {
   /** The API's base, without /v1 (config().apiUrl by default, read at the first call). */
@@ -83,9 +110,10 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     if (res.status === 204) return undefined as T;
     const parsed: unknown = await res.json().catch(() => null);
     if (!res.ok) {
-      const err = errorFromResponse(res.status, parsed);
-      if (err.status === 401) announceSignedOut();
-      throw err;
+      const base = errorFromResponse(res.status, parsed);
+      if (base.status === 401) announceSignedOut();
+      const account = errorAccount(parsed);
+      throw account ? new StoriesApiError(base, account) : base;
     }
     if (parsed === null || typeof parsed !== "object") throw new ApiError(res.status, "internal", "The server sent an empty answer. Try again.");
     return parsed as T;
@@ -99,14 +127,6 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
   };
   const id = encodeURIComponent;
   const w = (ws: string, rest = "") => `/workspaces/${id(ws)}${rest}`;
-
-  // One name, two routes (CONTRACTS §45.5): a character's reference picture (three ids) or a reference video (two).
-  function deleteReference(ws: string, characterId: string, assetId: string): Promise<Character>;
-  function deleteReference(ws: string, refId: string): Promise<void>;
-  async function deleteReference(ws: string, a: string, b?: string): Promise<Character | void> {
-    if (b === undefined) return call<void>("DELETE", w(ws, `/references/${id(a)}`));
-    return (await call<{ character: Character }>("DELETE", w(ws, `/characters/${id(a)}/references/${id(b)}`))).character;
-  }
 
   return {
     listWorkspaces: async () => (await call<{ workspaces: Workspace[] }>("GET", "/workspaces")).workspaces,
@@ -131,7 +151,9 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     referenceUpload: (ws, characterId, file) => call<Upload>("POST", w(ws, `/characters/${id(characterId)}/references`), file),
     referenceComplete: async (ws, characterId, assetId) =>
       (await call<{ character: Character }>("POST", w(ws, `/characters/${id(characterId)}/references/${id(assetId)}/complete`))).character,
-    deleteReference,
+    // A character's reference picture; a reference video is deleteReferenceVideo (the rename of CONTRACTS §45.34).
+    deleteReference: async (ws, characterId, assetId) =>
+      (await call<{ character: Character }>("DELETE", w(ws, `/characters/${id(characterId)}/references/${id(assetId)}`))).character,
     makePortrait: async (ws, characterId) => (await call<{ job: ProductionJob }>("POST", w(ws, `/characters/${id(characterId)}/portrait`))).job,
     designUpload: (ws, file) => call<Upload>("POST", w(ws, "/characters/design/uploads"), file),
     designCharacter: async (ws, body) => (await call<{ task: AiTask }>("POST", w(ws, "/characters/design"), body)).task,
@@ -160,7 +182,12 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     reject: async (ws, storyId, reason) =>
       (await call<{ story: Story }>("POST", w(ws, `/stories/${id(storyId)}/reject`), reason ? { reason } : {})).story,
     requestChanges: (ws, storyId, body) => call<{ story: Story; job: ProductionJob }>("POST", w(ws, `/stories/${id(storyId)}/changes`), body),
-    download: (ws, storyId) => call<{ url: string; filename: string }>("GET", w(ws, `/stories/${id(storyId)}/download`)),
+    writeCaptions: async (ws, storyId, body) => (await call<{ task: AiTask }>("POST", w(ws, `/stories/${id(storyId)}/captions`), body ?? {})).task,
+    // The MP4 keeps its GET route; an extra copy (WebM, MOV) is asked for by name (CONTRACTS §45.34).
+    download: (ws, storyId, body) =>
+      body?.format && body.format !== "mp4"
+        ? call<{ url: string; filename: string }>("POST", w(ws, `/stories/${id(storyId)}/download`), { format: body.format })
+        : call<{ url: string; filename: string }>("GET", w(ws, `/stories/${id(storyId)}/download`)),
 
     library: async (ws, query = {}) => {
       const r = await call<{ items: LibraryItem[]; nextCursor?: string | null }>(
@@ -206,7 +233,8 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
 
     listConversations: async (ws) => (await call<{ conversations: Conversation[] }>("GET", w(ws, "/chat"))).conversations,
     createConversation: async (ws, body) => (await call<{ conversation: Conversation }>("POST", w(ws, "/chat"), body)).conversation,
-    getConversation: (ws, convId, after) => call<{ conversation: Conversation; messages: Message[] }>("GET", w(ws, `/chat/${id(convId)}${q({ after })}`)),
+    getConversation: (ws, convId, page) =>
+      call<{ conversation: Conversation; messages: Message[] }>("GET", w(ws, `/chat/${id(convId)}${q({ after: page?.after, before: page?.before })}`)),
     patchConversation: async (ws, convId, patch) => (await call<{ conversation: Conversation }>("PATCH", w(ws, `/chat/${id(convId)}`), patch)).conversation,
     deleteConversation: (ws, convId) => call<void>("DELETE", w(ws, `/chat/${id(convId)}`)),
     sendMessage: (ws, convId, body) => call<{ user: Message; assistant: Message }>("POST", w(ws, `/chat/${id(convId)}/messages`), body),
@@ -225,10 +253,11 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     analyzeReference: (ws, refId, override) =>
       call<{ reference: ReferenceVideo; job: ProductionJob }>("POST", w(ws, `/references/${id(refId)}/analyze`), override ? { override } : {}),
     getReference: async (ws, refId) => {
-      const r = await call<{ reference: ReferenceVideo; analysis?: ReferenceAnalysis | null }>("GET", w(ws, `/references/${id(refId)}`));
-      return { reference: r.reference, analysis: r.analysis ?? null };
+      const r = await call<{ reference: ReferenceVideo; analysis?: ReferenceAnalysis | null; job?: ProductionJob | null }>("GET", w(ws, `/references/${id(refId)}`));
+      return { reference: r.reference, analysis: r.analysis ?? null, job: r.job ?? null };
     },
-    patchReference: async (ws, refId, title) => (await call<{ reference: ReferenceVideo }>("PATCH", w(ws, `/references/${id(refId)}`), { title })).reference,
+    patchReference: async (ws, refId, patch) => (await call<{ reference: ReferenceVideo }>("PATCH", w(ws, `/references/${id(refId)}`), patch)).reference,
+    deleteReferenceVideo: (ws, refId) => call<void>("DELETE", w(ws, `/references/${id(refId)}`)),
 
     getOnboarding: async (ws) => (await call<{ onboarding: Onboarding }>("GET", w(ws, "/onboarding"))).onboarding,
     patchOnboarding: async (ws, body) => (await call<{ onboarding: Onboarding }>("PATCH", w(ws, "/onboarding"), body)).onboarding,

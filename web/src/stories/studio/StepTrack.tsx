@@ -30,7 +30,7 @@ export function nowLine(job: ProductionJob | null, steps: StoryStep[]): string {
   if (job.status === "needs_check") return "Made, but some facts need checking.";
   const now = currentStep(steps);
   if (!now) return "Working…";
-  const word = now.key === "portrait" ? "Drawing the picture" : STEP_WORD[now.key];
+  const word = now.key === "portrait" ? "Drawing the picture" : (STEP_WORD[now.key as StepKey] ?? now.label);
   return now.n && now.n > 1 ? `${word}: scene ${Math.min(now.n, (now.i ?? 0) + 1)} of ${now.n}` : `${word}…`;
 }
 

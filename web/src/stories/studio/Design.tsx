@@ -3,14 +3,17 @@
 // lists, or one of the character's own pictures), or both; Lamo Stories' character agent suggests the whole rig, the
 // faces, the moves and the sounds as a draft. Nothing is saved: the draft opens in the editor, the owner changes what he
 // likes and taps Save. The task is read every second with a line that names the model and the effort, and the button
-// has its own "Model and effort for this one" menu.
-import { useEffect, useRef, useState } from "react";
+// has its own "Model and effort for this one" menu. On a saved character's page it redesigns that character
+// (`characterId`, §45.34): the agent keeps its name and changes only what the owner asks, and the page shows which
+// parts changed (RedesignCompare) before "Use this" puts the new version in the editor.
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { putFile } from "../../api/upload.ts";
 import { storiesApi } from "../api/client.ts";
 import type { AiTask, CharacterInput, ModelOverride } from "../api/types.ts";
 import type { Expression } from "../engine/types.ts";
 import { cleanPick, merged, ModelMenu, TaskLine, useAiTask, usualFor, type AiInfo } from "./ai.tsx";
-import { celebrate, Notice, ProgressBar, TextField } from "./kit.tsx";
+import { CharacterPreview } from "../preview/CharacterPreview.tsx";
+import { celebrate, Notice, ProgressBar, Tag, TextField } from "./kit.tsx";
 import { DEFAULT_LOOK, DEFAULT_VOICE, newCharacter } from "./looks.ts";
 import { fileProblem } from "./References.tsx";
 import { say } from "./words.ts";
@@ -52,6 +55,105 @@ export function designOf(task: AiTask): CharacterInput | null {
   };
 }
 
+/** One part of a character the owner can see change, in plain words. */
+export interface ChangedPart {
+  part: "looks" | "faces" | "moves" | "sounds" | "name" | "description" | "personality" | "traits";
+  label: string;
+  /** what in it changed ("clothes, hair") */
+  detail: string;
+}
+
+const PART_LABEL: Record<ChangedPart["part"], string> = {
+  looks: "Looks",
+  faces: "Faces",
+  moves: "Moves",
+  sounds: "Sounds",
+  name: "Name",
+  description: "Description",
+  personality: "Personality",
+  traits: "Traits",
+};
+
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/** Which parts of a character a redesign changes, and which stay the same (§45.34: shown before "Use this"). */
+export function changedParts(now: CharacterInput, next: CharacterInput): { changed: ChangedPart[]; kept: ChangedPart["part"][] } {
+  const looks: string[] = [];
+  const a = now.look;
+  const b = next.look;
+  if (a.body !== b.body || a.height !== b.height || a.width !== b.width) looks.push("body");
+  if (a.skin !== b.skin) looks.push("skin");
+  if (!same(a.hair, b.hair)) looks.push("hair");
+  if (!same(a.eyes, b.eyes) || a.brows !== b.brows || a.nose !== b.nose || a.mouth !== b.mouth) looks.push("face shape");
+  if (!same(a.outfit, b.outfit)) looks.push("clothes");
+  if (a.accessory !== b.accessory) looks.push("extra");
+  if (a.outline !== b.outline) looks.push("outline");
+  const faces = [...next.expressions.filter((e) => !now.expressions.includes(e)).map((e) => `+ ${e}`), ...now.expressions.filter((e) => !next.expressions.includes(e)).map((e) => `− ${e}`)];
+  const checks: [ChangedPart["part"], boolean, string][] = [
+    ["looks", looks.length > 0, looks.join(", ")],
+    ["faces", faces.length > 0, faces.join(", ")],
+    ["moves", now.movementStyle !== next.movementStyle, `${now.movementStyle} → ${next.movementStyle}`],
+    ["sounds", !same(now.voice, next.voice), [now.voice.style !== next.voice.style ? "voice" : "", !same(now.voice.noises, next.voice.noises) ? "noises" : "", !same(now.voice.sfx, next.voice.sfx) ? "effects" : "", now.voice.pitch !== next.voice.pitch ? "pitch" : ""].filter(Boolean).join(", ")],
+    ["name", now.name !== next.name, `${now.name} → ${next.name}`],
+    ["description", now.description !== next.description, ""],
+    ["personality", now.personality !== next.personality, ""],
+    ["traits", !same(now.traits, next.traits), next.traits.join(", ")],
+  ];
+  return {
+    changed: checks.filter(([, c]) => c).map(([part, , detail]) => ({ part, label: PART_LABEL[part], detail })),
+    kept: checks.filter(([, c]) => !c).map(([part]) => part),
+  };
+}
+
+/** A redesign side by side with the character as it is, the parts that change, and "Use this" (§45.34). */
+export function RedesignCompare({ now, next, onUse, onDrop }: { now: CharacterInput; next: CharacterInput; onUse: () => void; onDrop: () => void }) {
+  const { changed, kept } = changedParts(now, next);
+  const pair = (title: string, c: CharacterInput, extra?: ReactNode) => (
+    <figure className="st-s-redesign__fig">
+      <CharacterPreview look={c.look} movementStyle={c.movementStyle} expression="happy" action="idle" size={120} label={`${title}: ${c.name}`} />
+      <figcaption className="st-s-redesign__cap">
+        {title}
+        {extra}
+      </figcaption>
+    </figure>
+  );
+  return (
+    <section className="st-s-redesign" aria-labelledby="st-redesign-title">
+      <h2 className="st-s-design__title" id="st-redesign-title">
+        The new {now.name}
+      </h2>
+      <div className="st-s-redesign__pair">
+        {pair("Now", now)}
+        {pair("New", next)}
+      </div>
+      {changed.length ? (
+        <>
+          <p className="st-s-redesign__lede">What changes:</p>
+          <ul className="st-s-redesign__list">
+            {changed.map((c) => (
+              <li key={c.part} className="st-s-redesign__item">
+                <Tag tone="sun">{c.label}</Tag>
+                {c.detail ? <span className="st-s-redesign__detail">{c.detail}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="st-s-redesign__lede">Nothing changes. Say more about what should be different, then tap Design it again.</p>
+      )}
+      {kept.length ? <p className="st-s-field__hint">Stays the same: {kept.map((k) => PART_LABEL[k]).join(", ")}.</p> : null}
+      <div className="st-s-actionbar">
+        <button type="button" className="st-btn" onClick={onDrop}>
+          Keep {now.name} as now
+        </button>
+        <button type="button" className="st-btn st-btn--main" aria-disabled={!changed.length || undefined} onClick={() => changed.length && onUse()}>
+          Use this
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function DesignPanel({
   ws,
   info,
@@ -59,6 +161,7 @@ export function DesignPanel({
   startOpen = false,
   pictures = [],
   name,
+  characterId,
 }: {
   ws: string;
   info: AiInfo;
@@ -68,6 +171,8 @@ export function DesignPanel({
   pictures?: { assetId: string; url: string }[];
   /** an existing character keeps its name */
   name?: string;
+  /** a saved character to redesign (the agent starts from it, §45.34) */
+  characterId?: string;
 }) {
   const [open, setOpen] = useState(startOpen);
   const [words, setWords] = useState("");
@@ -128,9 +233,10 @@ export function DesignPanel({
     if (description.length > 600) return setProblem("Keep it to 600 letters.");
     setProblem(null);
     setMade(false);
-    const body: { description?: string; referenceAssetId?: string; override?: ModelOverride } = {};
+    const body: { description?: string; referenceAssetId?: string; characterId?: string; override?: ModelOverride } = {};
     if (description) body.description = description;
     if (picture) body.referenceAssetId = picture.assetId;
+    if (characterId) body.characterId = characterId;
     const override = cleanPick(pick);
     if (override) body.override = override;
     void run.start(() => storiesApi().designCharacter(ws, body));
@@ -207,7 +313,9 @@ export function DesignPanel({
       </div>
       {problem ? <Notice tone="bad">{problem}</Notice> : null}
       <TaskLine info={info} kind="character_design" run={run} expected={merged(info, usual, pick)} />
-      {made && run.phase === "done" ? <Notice tone="good">Here is a first try. Look at it, change anything you like, then tap Save.</Notice> : null}
+      {made && run.phase === "done" ? (
+        <Notice tone="good">{characterId ? `Here is the new ${name ?? "look"}. See what changes below, then tap Use this.` : "Here is a first try. Look at it, change anything you like, then tap Save."}</Notice>
+      ) : null}
       <div className="st-s-actionbar">
         <button type="button" className="st-btn" onClick={() => setOpen(false)}>
           Close

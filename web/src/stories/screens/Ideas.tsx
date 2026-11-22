@@ -4,18 +4,20 @@
 // Make it a full idea and More like this are tasks of Lamo Stories' creative director: each one is read every second
 // with a line that names the model and the effort, ends with the drafts or a plain sentence and Try again, and has its
 // own small "Model and effort for this one" menu (never saved). A driving-safety idea shows the checked advice it is
-// based on, or "Needs checked advice" and then cannot become a video.
+// based on, or "Needs checked advice" and then cannot become a video. Edit (§45.34) changes a saved idea's title, line
+// and kind, and the parts of its full idea (what it is about, the steps, the lesson, the ending, the feel, the length
+// and the words on screen), saved with PATCH …/ideas/{ideaId}.
 import "../styles/studio.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad } from "../../lib/hooks.ts";
 import { navigate } from "../../lib/router.ts";
 import { storiesApi } from "../api/client.ts";
-import type { AiTask, GuidanceTopic, Idea, IdeaCategory, IdeaInput, ModelOverride, StoriesConfig } from "../api/types.ts";
+import type { AiTask, GuidanceTopic, Idea, IdeaCategory, IdeaInput, ModelOverride, StoriesConfig, VideoConcept } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
 import { cleanPick, merged, ModelMenu, TaskLine, useAiInfo, useAiTask, usualFor, type AiInfo } from "../studio/ai.tsx";
 import { useWorkspace } from "../studio/hooks.ts";
-import { Busy, celebrate, Notice, Pick, Tag, TextField } from "../studio/kit.tsx";
+import { Busy, celebrate, Notice, Pick, Slider, Tag, TextField } from "../studio/kit.tsx";
 import { CATEGORIES, CATEGORY_LABEL, CATEGORY_LINE, NO_GUIDANCE, say, seconds, TONE_LABEL } from "../studio/words.ts";
 import type { StoriesScreenProps } from "./types.ts";
 
@@ -290,6 +292,141 @@ function NewIdeaForm({ onSave, onCancel }: { onSave: (i: IdeaInput) => Promise<v
   );
 }
 
+const TONES: VideoConcept["tone"][] = ["funny", "calm", "tense_then_relief", "wholesome"];
+
+/** Why this edit of an idea cannot be saved (the API's limits, §45.6 VideoConcept), or null. */
+export function ideaProblem(i: Pick<IdeaInput, "title" | "logline"> & { category: IdeaCategory | "" }, c: VideoConcept | null): string | null {
+  if (!i.title.trim()) return "Give the idea a title.";
+  if (i.title.trim().length > 80) return "Keep the title to 80 letters.";
+  if (!i.logline.trim()) return "Write one line about what happens.";
+  if (i.logline.trim().length > 280) return "Keep the line to 280 letters.";
+  if (!i.category) return "Pick what kind of video it is.";
+  if (!c) return null;
+  if (!c.premise.trim()) return "Say what the full idea is about.";
+  if (c.premise.trim().length > 600) return "Keep what it is about to 600 letters.";
+  const beats = c.beats.map((b) => b.trim()).filter(Boolean);
+  if (beats.length < 3 || beats.length > 8) return "A full idea needs 3 to 8 steps.";
+  const longBeat = c.beats.findIndex((b) => b.trim().length > 160);
+  if (longBeat >= 0) return `Step ${longBeat + 1} is too long: keep it to 160 letters.`;
+  if ((c.lesson ?? "").trim().length > 280) return "Keep the lesson to 280 letters.";
+  if (!c.ending.trim()) return "Say how it ends.";
+  if (c.ending.trim().length > 280) return "Keep the ending to 280 letters.";
+  const words = c.onScreenText.map((t) => t.trim()).filter(Boolean);
+  if (words.length > 6) return "Up to 6 words on screen.";
+  const longWords = c.onScreenText.findIndex((t) => t.trim().length > 60);
+  if (longWords >= 0) return `Words ${longWords + 1} are too long: keep them to 60 letters.`;
+  return null;
+}
+
+/** Only what the owner changed, ready for PATCH …/ideas/{ideaId} (a full idea goes whole). */
+export function ideaPatch(idea: Idea, next: { title: string; logline: string; category: IdeaCategory }, concept: VideoConcept | null): Partial<IdeaInput> {
+  const patch: Partial<IdeaInput> = {};
+  if (next.title.trim() !== idea.title) patch.title = next.title.trim();
+  if (next.logline.trim() !== idea.logline) patch.logline = next.logline.trim();
+  if (next.category !== idea.category) patch.category = next.category;
+  if (concept && idea.concept) {
+    const clean: VideoConcept = {
+      premise: concept.premise.trim(),
+      beats: concept.beats.map((b) => b.trim()).filter(Boolean),
+      lesson: (concept.lesson ?? "").trim() || null,
+      ending: concept.ending.trim(),
+      tone: concept.tone,
+      durationSec: concept.durationSec,
+      onScreenText: concept.onScreenText.map((t) => t.trim()).filter(Boolean),
+    };
+    if (JSON.stringify(clean) !== JSON.stringify(idea.concept)) patch.concept = clean;
+  }
+  return patch;
+}
+
+/** A list of short lines with Add and Remove (the full idea's steps, the words on screen). */
+function Lines({ label, item, lines, max, most, least = 0, onChange }: { label: string; item: string; lines: string[]; max: number; most: number; least?: number; onChange: (l: string[]) => void }) {
+  return (
+    <fieldset className="st-s-group st-s-lines">
+      <legend className="st-s-group__title">{label}</legend>
+      <ol className="st-s-lines__list">
+        {lines.map((line, i) => (
+          <li key={i} className="st-s-lines__row">
+            <TextField label={`${item} ${i + 1}`} value={line} max={max} onChange={(v) => onChange(lines.map((x, k) => (k === i ? v : x)))} />
+            <button type="button" className="st-btn st-s-small st-s-quiet" aria-disabled={lines.length <= least || undefined} onClick={() => lines.length > least && onChange(lines.filter((_, k) => k !== i))}>
+              Remove<span className="st-s-sr">{` ${item.toLowerCase()} ${i + 1}`}</span>
+            </button>
+          </li>
+        ))}
+      </ol>
+      <button type="button" className="st-btn st-s-small" aria-disabled={lines.length >= most || undefined} onClick={() => lines.length < most && onChange([...lines, ""])}>
+        {lines.length >= most ? `${most} is the most` : `Add ${item.toLowerCase()}`}
+      </button>
+    </fieldset>
+  );
+}
+
+/** Edit a saved idea (§45.34): its title, line and kind, and an expanded idea's parts. */
+function EditIdeaForm({ idea, onSave, onCancel }: { idea: Idea; onSave: (patch: Partial<IdeaInput>) => Promise<void>; onCancel: () => void }) {
+  const [title, setTitle] = useState(idea.title);
+  const [logline, setLogline] = useState(idea.logline);
+  const [category, setCategory] = useState<IdeaCategory | "">(idea.category);
+  const [concept, setConcept] = useState<VideoConcept | null>(() => (idea.concept ? structuredClone(idea.concept) : null));
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const setPart = (part: Partial<VideoConcept>) => {
+    setProblem(null);
+    setConcept((c) => (c ? { ...c, ...part } : c));
+  };
+
+  async function save() {
+    const why = ideaProblem({ title, logline, category }, concept);
+    if (why) return setProblem(why);
+    const patch = ideaPatch(idea, { title, logline, category: category as IdeaCategory }, concept);
+    if (!Object.keys(patch).length) return onCancel();
+    setBusy(true);
+    setProblem(null);
+    try {
+      await onSave(patch);
+    } catch (e) {
+      setProblem(say(e));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form
+      className="st-s-ideaedit"
+      aria-label={`Edit ${idea.title}`}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+    >
+      <TextField label="Title" value={title} onChange={setTitle} max={80} />
+      <TextField label="What happens, in one line" value={logline} onChange={setLogline} max={280} multiline rows={2} />
+      <Pick label="What kind of video?" big value={category} options={KIND_OPTIONS} onChange={setCategory} />
+      {category === "driving_safety" ? <p className="st-s-field__hint">Driving-safety videos only use checked advice from road authorities.</p> : null}
+      {concept ? (
+        <fieldset className="st-s-group">
+          <legend className="st-s-group__title">The full idea</legend>
+          <TextField label="What it is about" value={concept.premise} max={600} multiline rows={3} onChange={(premise) => setPart({ premise })} />
+          <Lines label="What happens, step by step" item="Step" lines={concept.beats} max={160} most={8} least={3} onChange={(beats) => setPart({ beats })} />
+          <TextField label="The lesson (you can leave this empty)" value={concept.lesson ?? ""} max={280} multiline rows={2} onChange={(lesson) => setPart({ lesson })} />
+          <TextField label="How it ends" value={concept.ending} max={280} multiline rows={2} onChange={(ending) => setPart({ ending })} />
+          <Pick label="How it feels" value={concept.tone} options={TONES.map((t) => ({ value: t, label: TONE_LABEL[t] }))} onChange={(tone) => setPart({ tone })} />
+          <Slider label="Length" min={15} max={90} step={5} value={concept.durationSec} words={seconds(concept.durationSec)} onChange={(durationSec) => setPart({ durationSec })} />
+          <Lines label="Words on screen" item="Words" lines={concept.onScreenText} max={60} most={6} onChange={(onScreenText) => setPart({ onScreenText })} />
+        </fieldset>
+      ) : null}
+      {problem ? <Notice tone="bad">{problem}</Notice> : null}
+      <div className="st-s-actionbar">
+        <button type="button" className="st-btn" onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="submit" className="st-btn st-btn--main" aria-disabled={busy || undefined}>
+          {busy ? "Saving…" : "Save changes"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function AskForIdeas({ ws, info, onDrafts, onCancel }: { ws: string; info: AiInfo; onDrafts: (d: IdeaInput[], from: string) => void; onCancel: () => void }) {
   const [topic, setTopic] = useState("");
   const [kind, setKind] = useState<Kind>("any");
@@ -362,8 +499,10 @@ function IdeaCard({
   onDelete: () => void;
   onDrafts: (d: IdeaInput[]) => void;
 }) {
+  const toast = useToast();
   const [problem, setProblem] = useState<string | null>(null);
   const [showConcept, setShowConcept] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [expandPick, setExpandPick] = useState<ModelOverride | null>(null);
   const [morePick, setMorePick] = useState<ModelOverride | null>(null);
   const advice = adviceLine(idea, topics);
@@ -405,8 +544,26 @@ function IdeaCard({
   }
 
   const c = idea.concept;
+  if (editing)
+    return (
+      <li className={`st-s-idea st-s-idea--${idea.category} is-editing`} data-idea={idea.ideaId}>
+        <h2 className="st-s-idea__title">Edit “{idea.title}”</h2>
+        <EditIdeaForm
+          idea={idea}
+          onCancel={() => setEditing(false)}
+          onSave={async (patch) => {
+            const next = await storiesApi().patchIdea(ws, idea.ideaId, patch);
+            onChange(next);
+            setEditing(false);
+            if (next.concept && patch.concept) setShowConcept(true);
+            celebrate(document.querySelector(`[data-idea="${idea.ideaId}"]`), 60);
+            toast.success(`Saved “${next.title}”.`);
+          }}
+        />
+      </li>
+    );
   return (
-    <li className={`st-s-idea st-s-idea--${idea.category}`}>
+    <li className={`st-s-idea st-s-idea--${idea.category}`} data-idea={idea.ideaId}>
       <span className="st-s-idea__tags">
         <Tag tone={CATEGORY_TONE[idea.category]}>{CATEGORY_LABEL[idea.category]}</Tag>
         {idea.status === "used" ? <Tag tone="mint">In {idea.storyIds.length === 1 ? "1 video" : `${idea.storyIds.length} videos`}</Tag> : <Tag>Saved</Tag>}
@@ -480,6 +637,9 @@ function IdeaCard({
           </button>
           <ModelMenu info={info} usual={moreUsual} value={morePick} onChange={setMorePick} compact />
         </span>
+        <button type="button" className="st-btn" aria-disabled={busy || undefined} onClick={() => !busy && setEditing(true)}>
+          Edit<span className="st-s-sr"> {idea.title}</span>
+        </button>
         <button type="button" className="st-btn st-s-quiet" onClick={onDelete}>
           Delete
         </button>

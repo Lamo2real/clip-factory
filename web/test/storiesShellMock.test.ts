@@ -410,10 +410,10 @@ describe("joining the parts", () => {
     expect(s.onboarding).toEqual({ stepsDone: [], skipped: [], finishedAt: null, providersPickedAt: null });
   });
 
-  it("deleteReference goes to a character's picture with three ids and to a reference video with two", async () => {
-    // Both parts are built (builder G characters, builder H reference videos): three ids reach the characters part
-    // (no such character here), two ids reach the references part (no such reference video here). Each says so.
+  it("deleteReference goes to a character's picture and deleteReferenceVideo to a reference video (the rename of §45.34)", async () => {
+    // Both parts are built (builder G characters, builder H reference videos): deleteReference reaches the characters
+    // part (no such character here), deleteReferenceVideo the references part (no such reference video here).
     await expect(api.deleteReference("stories", "c1", "a1")).rejects.toThrow("We could not find that character.");
-    await expect(api.deleteReference("stories", "r1")).rejects.toThrow("We could not find that reference video.");
+    await expect(api.deleteReferenceVideo("stories", "r1")).rejects.toThrow("We could not find that reference video.");
   });
 });

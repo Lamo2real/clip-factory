@@ -13,15 +13,21 @@
 //   save_idea         { idea: IdeaInput } (POST …/ideas), or { ideaId, patch: Partial<IdeaInput> } (PATCH …/ideas/{id})
 //   open              { href: "/stories/…" } or { kind: "idea" | "story" | "character" | "reference", id }
 //
-// Production › New reads only `?idea=` today (StoriesPage.production_new), so "Make the video" with a short concept
-// saves that concept as an idea on the tap (one the same as it is reused) and opens Production › New with it: the
-// idea, its cast and its words are then filled in there. The length and reference videos ride along in the address
-// (`sec`, `ref`, `cast`; see handoff.ts) for when Production › New reads them.
+// Production › New reads `?idea=`, `?ref=`, `?cast=` and `?sec=` (StoriesPage.production_new, §45.34), so "Make the
+// video" opens it with the idea, the reference videos, the cast and the length picked. A short concept is saved as an
+// idea on the tap (one the same as it is reused), so its words arrive through `idea`.
+//
+// "Remake these scenes" and "Analyze this reference video" carry the studio's model menu (§45.34): the usual for
+// scene_rewrite or reference_analysis (with the video's own setting), prefilled with the override the message itself
+// was sent with, and sent as that run's `override` (never saved).
+import "../styles/studio.css";
 import { useState, type MouseEvent } from "react";
 import { navigate } from "../../lib/router.ts";
+import { useLoad } from "../../lib/hooks.ts";
 import { A } from "../../components/ui.tsx";
 import { storiesApi } from "../api/client.ts";
-import type { CharacterInput, ChatAction, IdeaCategory, IdeaInput, ProjectRef } from "../api/types.ts";
+import type { AiSetting, CharacterInput, ChatAction, IdeaCategory, IdeaInput, ModelOverride, ProjectRef, TaskKind } from "../api/types.ts";
+import { cleanPick, LISTED_INFO, ModelMenu, storyUsual, type AiInfo } from "../studio/ai.tsx";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { isStoriesPath, matchStories } from "../routes.ts";
 import { CATEGORIES, productionNewHref, type ProductionPrefill } from "./handoff.ts";
@@ -37,7 +43,15 @@ export interface ActionResult {
   go?: boolean;
 }
 
-export type ActionPlan = { kind: "go"; href: string } | { kind: "call"; run: (ws: string) => Promise<ActionResult> } | { kind: "broken" };
+/** `override`: the model and effort picked on the card for this one run (remake_scene, analyze_reference; never saved). */
+export type ActionPlan = { kind: "go"; href: string } | { kind: "call"; run: (ws: string, override?: ModelOverride) => Promise<ActionResult> } | { kind: "broken" };
+
+/** The task a button's run asks a model for, when its card carries the model menu (§45.34). */
+export function taskOf(action: ChatAction): TaskKind | null {
+  if (action.kind === "remake_scene") return "scene_rewrite";
+  if (action.kind === "analyze_reference") return "reference_analysis";
+  return null;
+}
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const isId = (v: unknown): v is string => typeof v === "string" && ID.test(v);
@@ -121,8 +135,8 @@ export function planFor(action: ChatAction): ActionPlan {
       if (note) body.note = note;
       return {
         kind: "call",
-        run: async (ws) => {
-          await storiesApi().requestChanges(ws, storyId, body);
+        run: async (ws, override) => {
+          await storiesApi().requestChanges(ws, storyId, override ? { ...body, override } : body);
           return {
             text: !scenes.length ? "Making those changes now!" : scenes.length === 1 && !note ? "Remaking that scene now!" : "Remaking those scenes now!",
             href: projectHref({ kind: "story", id: storyId }),
@@ -136,8 +150,9 @@ export function planFor(action: ChatAction): ActionPlan {
       const refId = p.refId;
       return {
         kind: "call",
-        run: async (ws) => {
-          await storiesApi().analyzeReference(ws, refId);
+        run: async (ws, override) => {
+          if (override) await storiesApi().analyzeReference(ws, refId, override);
+          else await storiesApi().analyzeReference(ws, refId);
           return { text: "Looking at the video now!", href: projectHref({ kind: "reference", id: refId }), link: "Open the reference video" };
         },
       };
@@ -217,12 +232,37 @@ export function forgetActions(): void {
 
 type CardState = { kind: "idle" | "busy" } | ({ kind: "done" } & ActionResult) | { kind: "failed"; text: string };
 
-export function ActionCard({ ws, action, id }: { ws: string; action: ChatAction; id: string }) {
+/** The video's or the reference video's own setting (§45.25 level 2), which a run of it uses before the task's. */
+async function ownSetting(ws: string, action: ChatAction): Promise<AiSetting | null> {
+  const p = obj(action.payload) ?? {};
+  if (action.kind === "remake_scene" && isId(p.storyId)) return (await storiesApi().getStory(ws, p.storyId)).story.ai;
+  if (action.kind === "analyze_reference" && isId(p.refId)) return (await storiesApi().getReference(ws, p.refId)).reference.ai;
+  return null;
+}
+
+export function ActionCard({
+  ws,
+  action,
+  id,
+  info = LISTED_INFO,
+  once = null,
+}: {
+  ws: string;
+  action: ChatAction;
+  id: string;
+  /** Lamo Stories' models and tasks (the model menu on "Remake these scenes" and "Analyze this reference video") */
+  info?: AiInfo;
+  /** the "just this message" choice the message was sent with: the menu starts from it */
+  once?: ModelOverride | null;
+}) {
   const plan = planFor(action);
   const [state, setState] = useState<CardState>(() => {
     const was = done.get(id);
     return was ? { kind: "done", ...was } : { kind: "idle" };
   });
+  const task = plan.kind === "call" ? taskOf(action) : null;
+  const [pick, setPick] = useState<ModelOverride | null>(() => cleanPick(once) ?? null);
+  const own = useLoad(() => (task ? ownSetting(ws, action).catch(() => null) : Promise.resolve(null)), `${ws}|${id}|${task ?? ""}`);
   const payload = obj(action.payload) ?? {};
   // What the button saves, shown only when its details make sense (a name that is not words is never drawn).
   const character = action.kind === "save_character" && plan.kind !== "broken" ? (obj(payload.character) as CharacterInput | null) : null;
@@ -234,7 +274,7 @@ export function ActionCard({ ws, action, id }: { ws: string; action: ChatAction;
     const at = centerOf(e.currentTarget);
     setState({ kind: "busy" });
     try {
-      const result = await plan.run(ws);
+      const result = await plan.run(ws, task ? cleanPick(pick) : undefined);
       done.set(id, result);
       setState({ kind: "done", ...result });
       cheer(at);
@@ -270,9 +310,22 @@ export function ActionCard({ ws, action, id }: { ws: string; action: ChatAction;
           </A>
         </p>
       ) : (
-        <Btn main={action.kind !== "open"} icon={state.kind === "failed" ? "retry" : ICON[action.kind]} off={plan.kind === "broken" || state.kind === "busy"} onClick={tap}>
-          {state.kind === "busy" ? "Working on it…" : state.kind === "failed" ? "Try again" : typeof action.label === "string" && action.label.trim() ? action.label : (LABEL[action.kind] ?? "Open it")}
-        </Btn>
+        <div className="st-chat-action__row">
+          <Btn main={action.kind !== "open"} icon={state.kind === "failed" ? "retry" : ICON[action.kind]} off={plan.kind === "broken" || state.kind === "busy"} onClick={tap}>
+            {state.kind === "busy" ? "Working on it…" : state.kind === "failed" ? "Try again" : typeof action.label === "string" && action.label.trim() ? action.label : (LABEL[action.kind] ?? "Open it")}
+          </Btn>
+          {task ? (
+            <ModelMenu
+              info={info}
+              usual={storyUsual(info, { ai: own.data ?? { model: null, effort: null } }, task)}
+              value={pick}
+              onChange={setPick}
+              title={task === "scene_rewrite" ? "Model and effort for these scenes" : "Model and effort for this analysis"}
+              note="Just for this run. Your settings stay the same."
+              className="st-chat-action__ai"
+            />
+          ) : null}
+        </div>
       )}
       {plan.kind === "broken" ? <p className="st-chat-note st-chat-note--bad">{BROKEN}</p> : null}
       {state.kind === "failed" ? (

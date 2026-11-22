@@ -104,7 +104,7 @@ describe("chat", () => {
     expect(sent.user).toMatchObject({ role: "user", text: "Three funny ideas about snow", status: "done" });
     expect(sent.assistant).toMatchObject({ role: "assistant", status: "pending", text: "", model: "opus-5-5", effort: "high", effortApplied: true });
     chat.advance(store, Date.parse(sent.assistant.createdAt) + 1500);
-    const mid = (await api.getConversation("stories", conv.convId, sent.user.msgId)).messages;
+    const mid = (await api.getConversation("stories", conv.convId, { after: sent.user.msgId })).messages;
     expect(mid).toHaveLength(1);
     expect(mid[0]!.status).toBe("streaming");
     expect(mid[0]!.text.length).toBeGreaterThan(0);
@@ -234,12 +234,15 @@ describe("references", () => {
     expect(started.reference.status).toBe("analyzing");
     await expect(api.analyzeReference("stories", id)).rejects.toMatchObject({ status: 409 });
     references.advance(store, Date.parse(started.job.createdAt) + 2000);
-    // The contract's answer: { reference, analysis } and no job.
-    expect(Object.keys(await api.getReference("stories", id)).sort()).toEqual(["analysis", "reference"]);
-    store.knobs.refJobInGet = true;
-    const mid = (await api.getReference("stories", id)) as Awaited<ReturnType<StoriesApi["getReference"]>> & { job?: { steps: { status: string }[] } };
-    expect(mid.job?.steps.map((s) => s.status)).toEqual(["done", "running", "pending"]);
-    store.knobs.refJobInGet = false;
+    // The contract's answer (§45.34): { reference, analysis, job }, the job of currentJobId with each step's state.
+    expect(Object.keys(await api.getReference("stories", id)).sort()).toEqual(["analysis", "job", "reference"]);
+    const mid = await api.getReference("stories", id);
+    expect(mid.job?.jobId).toBe(started.job.jobId);
+    expect(mid.job?.steps.map((s) => [s.key, s.status])).toEqual([
+      ["look", "done"],
+      ["listen", "running"],
+      ["write", "pending"],
+    ]);
     finish();
     const r = await api.getReference("stories", id);
     expect(r.reference.status).toBe("analyzed");
@@ -278,11 +281,12 @@ describe("references", () => {
   });
 
   it("renames and deletes a reference video; a character's picture delete is not a video delete", async () => {
-    expect((await api.patchReference("stories", references.SEED_IDS.analyzed, "Penguin skates")).title).toBe("Penguin skates");
-    await expect(api.patchReference("stories", references.SEED_IDS.analyzed, " ")).rejects.toMatchObject({ status: 400 });
-    await expect(api.deleteReference("stories", "01JSTCH0000000000000000001", "01JSTAS0000000000000000001")).rejects.toBeTruthy();
+    expect((await api.patchReference("stories", references.SEED_IDS.analyzed, { title: "Penguin skates" })).title).toBe("Penguin skates");
+    await expect(api.patchReference("stories", references.SEED_IDS.analyzed, { title: " " })).rejects.toMatchObject({ status: 400 });
+    // A reference video is deleteReferenceVideo (§45.34); deleteReference (a character's picture) is not this part's.
+    expect("deleteReference" in api).toBe(false);
     expect(store.references).toHaveLength(2);
-    await api.deleteReference("stories", references.SEED_IDS.analyzed);
+    await api.deleteReferenceVideo("stories", references.SEED_IDS.analyzed);
     expect((await api.listReferences("stories")).map((r) => r.refId)).toEqual([references.SEED_IDS.ready]);
   });
 });

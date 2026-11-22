@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/api/errors.ts";
 import { onSignedOut } from "../src/lib/auth.ts";
-import { httpStoriesApi } from "../src/stories/api/http.ts";
+import { errorAccount, httpStoriesApi, StoriesApiError } from "../src/stories/api/http.ts";
 import type { StoriesApi } from "../src/stories/api/types.ts";
 
 interface Call {
@@ -68,6 +68,7 @@ const CASES: Case[] = [
   ["approve", (a) => a.approve("stories", "s1", 7), "POST", `${B}/stories/stories/s1/approve`, { version: 7 }, { story: 25 }, 25],
   ["reject", (a) => a.reject("stories", "s1", "no"), "POST", `${B}/stories/stories/s1/reject`, { reason: "no" }, { story: 26 }, 26],
   ["requestChanges", (a) => a.requestChanges("stories", "s1", { note: "more", sceneIds: ["a"] }), "POST", `${B}/stories/stories/s1/changes`, { note: "more", sceneIds: ["a"] }, { story: 1, job: 2 }, { story: 1, job: 2 }],
+  ["writeCaptions", (a) => a.writeCaptions("stories", "s1", { override: { model: "haiku-5-5" } }), "POST", `${B}/stories/stories/s1/captions`, { override: { model: "haiku-5-5" } }, { task: 182 }, 182],
   ["download", (a) => a.download("stories", "s1"), "GET", `${B}/stories/stories/s1/download`, undefined, { url: "u", filename: "f.mp4" }, { url: "u", filename: "f.mp4" }],
   ["library", (a) => a.library("stories", { kind: "cover", storyId: "s1", limit: 10 }), "GET", `${B}/stories/library?kind=cover&storyId=s1&limit=10`, undefined, { items: [27], nextCursor: "n" }, { items: [27], nextCursor: "n" }],
   ["providers", (a) => a.providers("stories"), "GET", `${B}/stories/providers`, undefined, { providers: [28] }, [28]],
@@ -101,7 +102,7 @@ const CASES: Case[] = [
 
   ["listConversations", (a) => a.listConversations("stories"), "GET", `${B}/stories/chat`, undefined, { conversations: [53] }, [53]],
   ["createConversation", (a) => a.createConversation("stories", { title: "Ice", model: null, effort: "high" }), "POST", `${B}/stories/chat`, { title: "Ice", model: null, effort: "high" }, { conversation: 54 }, 54],
-  ["getConversation", (a) => a.getConversation("stories", "v1", "m9"), "GET", `${B}/stories/chat/v1?after=m9`, undefined, { conversation: 55, messages: [] }, { conversation: 55, messages: [] }],
+  ["getConversation", (a) => a.getConversation("stories", "v1", { after: "m9" }), "GET", `${B}/stories/chat/v1?after=m9`, undefined, { conversation: 55, messages: [] }, { conversation: 55, messages: [] }],
   ["patchConversation", (a) => a.patchConversation("stories", "v1", { model: "fable-5-2" }), "PATCH", `${B}/stories/chat/v1`, { model: "fable-5-2" }, { conversation: 56 }, 56],
   ["deleteConversation", (a) => a.deleteConversation("stories", "v1"), "DELETE", `${B}/stories/chat/v1`, undefined, null, undefined],
   ["sendMessage", (a) => a.sendMessage("stories", "v1", { text: "hi", override: { model: "haiku-5-5" } }), "POST", `${B}/stories/chat/v1/messages`, { text: "hi", override: { model: "haiku-5-5" } }, { user: 1, assistant: 2 }, { user: 1, assistant: 2 }],
@@ -117,8 +118,9 @@ const CASES: Case[] = [
   ["createReference", (a) => a.createReference("stories", { filename: "r.mp4", contentType: "video/mp4", size: 5, title: "Ref" }), "POST", `${B}/stories/references`, { filename: "r.mp4", contentType: "video/mp4", size: 5, title: "Ref" }, { reference: 1, upload: 2 }, { reference: 1, upload: 2 }],
   ["completeReference", (a) => a.completeReference("stories", "r1", [{ partNumber: 1, etag: "e" }]), "POST", `${B}/stories/references/r1/complete`, { parts: [{ partNumber: 1, etag: "e" }] }, { reference: 62 }, 62],
   ["analyzeReference", (a) => a.analyzeReference("stories", "r1", { effort: "max" }), "POST", `${B}/stories/references/r1/analyze`, { override: { effort: "max" } }, { reference: 1, job: 2 }, { reference: 1, job: 2 }],
-  ["getReference", (a) => a.getReference("stories", "r1"), "GET", `${B}/stories/references/r1`, undefined, { reference: 63 }, { reference: 63, analysis: null }],
-  ["patchReference", (a) => a.patchReference("stories", "r1", "New"), "PATCH", `${B}/stories/references/r1`, { title: "New" }, { reference: 64 }, 64],
+  ["getReference", (a) => a.getReference("stories", "r1"), "GET", `${B}/stories/references/r1`, undefined, { reference: 63 }, { reference: 63, analysis: null, job: null }],
+  ["patchReference", (a) => a.patchReference("stories", "r1", { title: "New" }), "PATCH", `${B}/stories/references/r1`, { title: "New" }, { reference: 64 }, 64],
+  ["deleteReferenceVideo", (a) => a.deleteReferenceVideo("stories", "r1"), "DELETE", `${B}/stories/references/r1`, undefined, null, undefined],
 
   ["getOnboarding", (a) => a.getOnboarding("stories"), "GET", `${B}/stories/onboarding`, undefined, { onboarding: 65 }, 65],
   ["patchOnboarding", (a) => a.patchOnboarding("stories", { step: "tiktok", skipped: true }), "PATCH", `${B}/stories/onboarding`, { step: "tiktok", skipped: true }, { onboarding: 66 }, 66],
@@ -144,10 +146,10 @@ describe("every Lamo Stories route", () => {
       expect(calls[0]).toEqual({ method, url, body, auth: "Bearer old-token" });
     });
 
-  it("deleteReference: three ids are a character's picture, two a reference video (one name, two routes)", async () => {
+  it("deleteReference is a character's picture, deleteReferenceVideo a reference video (the rename of §45.34)", async () => {
     const { api, calls } = fake((c) => (c.method === "DELETE" && c.url.endsWith("/references/r1") ? { status: 204 } : { status: 200, body: { character: 17 } }));
     await expect(api.deleteReference("stories", "c1", "a1")).resolves.toBe(17);
-    await expect(api.deleteReference("stories", "r1")).resolves.toBeUndefined();
+    await expect(api.deleteReferenceVideo("stories", "r1")).resolves.toBeUndefined();
     expect(calls.map((c) => [c.method, c.url])).toEqual([
       ["DELETE", `${B}/stories/characters/c1/references/a1`],
       ["DELETE", `${B}/stories/references/r1`],
@@ -160,6 +162,41 @@ describe("every Lamo Stories route", () => {
     expect(calls[0]!.url).toBe(`${B}/stories/social/facebook/app`);
     expect(calls[0]!.url).not.toMatch(/s3cr3t/);
     expect(calls[0]!.body).toEqual({ choice: "own", clientId: "1234567890", clientSecret: "s3cr3t-value-0123456789abcdef01", configId: "9876543210" });
+  });
+
+  it("round 3 (§45.34): Write them again with no body, a redesign by id, an extra copy by name, the page of older messages", async () => {
+    const { api, calls } = fake((c) => ({ status: 200, body: c.url.endsWith("/captions") || c.url.endsWith("/design") ? { task: 1 } : c.url.includes("/chat/") ? { conversation: 2, messages: [] } : { url: "u", filename: "f.webm" } }));
+    await api.writeCaptions("stories", "s1");
+    await api.designCharacter("stories", { description: "a blue cap", characterId: "c1" });
+    await expect(api.download("stories", "s1", { format: "webm" })).resolves.toEqual({ url: "u", filename: "f.webm" });
+    await api.download("stories", "s1", { format: "mp4" });
+    await api.getConversation("stories", "v1", { before: "m1" });
+    await api.getConversation("stories", "v1");
+    expect(calls.map((c) => [c.method, c.url.replace(B, ""), c.body])).toEqual([
+      ["POST", "/stories/stories/s1/captions", {}],
+      ["POST", "/stories/characters/design", { description: "a blue cap", characterId: "c1" }],
+      ["POST", "/stories/stories/s1/download", { format: "webm" }],
+      ["GET", "/stories/stories/s1/download", undefined],
+      ["GET", "/stories/chat/v1?before=m1", undefined],
+      ["GET", "/stories/chat/v1", undefined],
+    ]);
+  });
+
+  it("getReference passes the analysis job through, and patchReference sends the video's own setting", async () => {
+    const job = { jobId: "j1", status: "failed", error: "Claude Fable 5.2 isn't available right now." };
+    const { api, calls } = fake((c) => ({ status: 200, body: c.method === "GET" ? { reference: 1, analysis: null, job } : { reference: 2 } }));
+    await expect(api.getReference("stories", "r1")).resolves.toEqual({ reference: 1, analysis: null, job });
+    await expect(api.patchReference("stories", "r1", { ai: { model: "sonnet-5-5", effort: null } })).resolves.toBe(2);
+    expect(calls[1]).toMatchObject({ method: "PATCH", body: { ai: { model: "sonnet-5-5", effort: null } } });
+  });
+
+  it("publish sends confirmAccount only on the target the owner said yes to", async () => {
+    const { api, calls } = fake(() => ({ status: 202, body: { publishingJobs: [] } }));
+    await api.publish("stories", "s1", [
+      { platform: "youtube", socialAccountId: "stories.youtube" },
+      { platform: "tiktok", socialAccountId: "stories.tiktok", confirmAccount: "-000open-id" },
+    ]);
+    expect(calls[0]!.body).toEqual({ targets: [{ platform: "youtube", socialAccountId: "stories.youtube" }, { platform: "tiktok", socialAccountId: "stories.tiktok", confirmAccount: "-000open-id" }] });
   });
 
   it("escapes ids in the path, so an id can never reach another route", async () => {
@@ -193,6 +230,21 @@ describe("sign-in and errors", () => {
     const e = await api.dashboard("clips").catch((x: unknown) => x);
     expect(e).toBeInstanceOf(ApiError);
     expect(e).toMatchObject({ status: 409, code: "conflict", message: "That is a Lamo Stories page. Switch to Lamo Stories first." });
+  });
+
+  it("keeps the account a publishing 409 names (error.account, §45.34) on its ApiError; a 409 without one has none", async () => {
+    const sentence = "Lamo Stories cannot tell if Lamo Stories is Lamo Clips' TikTok, because TikTok gives each app its own id. Tap Post to Lamo Stories if it is your Lamo Stories TikTok.";
+    const named = fake(() => ({ status: 409, body: { error: { code: "conflict", message: sentence, account: { externalAccountId: "-000open-id", accountName: "Lamo Stories", handle: "@lamo.stories" } } } }));
+    const e = await named.api.publish("stories", "s1", [{ platform: "tiktok", socialAccountId: "stories.tiktok" }]).catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(ApiError);
+    expect(e).toBeInstanceOf(StoriesApiError);
+    expect(e).toMatchObject({ status: 409, code: "conflict", message: sentence, account: { externalAccountId: "-000open-id", accountName: "Lamo Stories", handle: "@lamo.stories" } });
+    const plain = fake(() => ({ status: 409, body: { error: { code: "conflict", message: "That post is not stuck.", account: { accountName: "no id" } } } }));
+    const p = await plain.api.retryPublishing("stories", "p1").catch((x: unknown) => x);
+    expect(p).toBeInstanceOf(ApiError);
+    expect(p).not.toBeInstanceOf(StoriesApiError);
+    expect(errorAccount({ error: { account: { externalAccountId: "UC1", accountName: 7, handle: "@x" } } })).toEqual({ externalAccountId: "UC1", accountName: null, handle: "@x" });
+    expect(errorAccount(null)).toBeNull();
   });
 
   it("says the app cannot be reached when the network fails", async () => {
