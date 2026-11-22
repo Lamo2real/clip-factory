@@ -2,6 +2,7 @@
 // curves (bouncy overshoots, calm eases, clumsy wobbles, zippy is quick, heavy settles slowly). Beats layer: each
 // active beat is blended over the pose under it, so a walk and a wave can play at once.
 
+import { F } from "./frame.ts";
 import { TAU, clamp, clamp01, ease, lerp, noise, smoothstep, type Ease } from "./math.ts";
 import { FACES, NOISE_MOUTH, type FaceParams } from "./face.ts";
 import { blendPose, reach, REST, wheelGrips, type Geo, type Pose } from "./rig.ts";
@@ -443,7 +444,8 @@ export function actorPath(actor: ActorInput, beats: Beat[], style: Style, t: num
     if (b.dir) setFacing(b.dir === "left" ? -1 : 1);
     let to = b.to;
     if (!to && TRAVELLERS.has(b.do as ActionId) && !actor.inCar) {
-      const v = WALK_SPEED[b.do as "walk" | "run"] * style.sp;
+      // the same pace in every shape: a part of 1080 design px a second, as a part of this frame's width
+      const v = WALK_SPEED[b.do as "walk" | "run"] * style.sp * F.ux;
       to = { x: clamp(x + facing * v * b.dur, 0.08, 0.92), y };
     }
     if (!to || actor.inCar) continue;
@@ -455,7 +457,7 @@ export function actorPath(actor: ActorInput, beats: Beat[], style: Style, t: num
     if (p < 1) {
       const dk = (style.travel(Math.min(1, p + 0.02)) - style.travel(Math.max(0, p - 0.02))) / 0.04;
       speed = (Math.hypot(to.x - x, to.y - y) * dk) / Math.max(0.05, b.dur);
-      walked = Math.hypot(nx - x, (ny - y) * (16 / 9));
+      walked = Math.hypot(nx - x, (ny - y) * (F.h / F.w));
     } else speed = 0;
     x = nx;
     y = ny;
@@ -488,8 +490,10 @@ function restStateBefore(beats: Beat[], beat: Beat): RestState {
   return s;
 }
 
-/** Everything about one character at scene time t. `px` converts local units to output pixels (for walk phases). */
-export function actorState(actor: ActorInput, beats: Beat[], style: Style, g: Geo, seed: number, t: number, unitsPerFrameWidth: number, voice: "babble" | "hum" | "none" = "babble"): ActorState {
+/** Everything about one character at scene time t. `unitsPerFrameWidth` converts parts of the frame's width to rig
+ * units (for walk phases). `faces` is the character's own list (CONTRACTS §45.34): a face an action implies (a gasp's
+ * shock, a fall's dizziness) shows only when the character has it; otherwise its last face stays. */
+export function actorState(actor: ActorInput, beats: Beat[], style: Style, g: Geo, seed: number, t: number, unitsPerFrameWidth: number, voice: "babble" | "hum" | "none" = "babble", faces: readonly Expression[] | null = null): ActorState {
   const path = actorPath(actor, beats, style, t);
   const inCar = !!actor.inCar;
   const restNow = restStateAt(beats, t);
@@ -535,6 +539,7 @@ export function actorState(actor: ActorInput, beats: Beat[], style: Style, g: Ge
   }
   // after a fall, a character lying down looks dizzy unless the story says otherwise
   if (!implied && restNow === "lie" && expression === "neutral") implied = "dizzy";
+  if (implied && faces && !faces.includes(implied)) implied = null;
   const exprShown = implied ?? expression;
   let face: FaceParams = FACES[exprShown] ?? FACES.neutral;
   // talking: a noise moves the mouth while it plays; a humming voice keeps its lips closed and hums

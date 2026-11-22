@@ -25,6 +25,11 @@ export interface ViewBox {
 
 const FRAME: ViewBox = { x0: -60, y0: -60, x1: 1140, y1: 1980 };
 
+/** The output frame of a width × height video plus the 60 px margin (scaled with the video: 40 px at 720). */
+export function frameView(width: number, height: number, k = 1): ViewBox {
+  return { x0: -60 * k, y0: -60 * k, x1: width + 60 * k, y1: height + 60 * k };
+}
+
 export function multiply(m: Mat, n: Mat): Mat {
   return [
     m[0] * n[0] + m[2] * n[1],
@@ -42,9 +47,13 @@ export class Pen {
   alpha = 1;
   private stack: { m: Mat; alpha: number }[] = [];
   private view: ViewBox;
+  /** output px per drawing px (CONTRACTS §45.34): 1, or 2/3 for a 720 video, so it is the 1080 one scaled down */
+  private k: number;
 
-  constructor(view: ViewBox = FRAME) {
+  constructor(view: ViewBox = FRAME, k = 1) {
     this.view = view;
+    this.k = k;
+    if (k !== 1) this.m = [k, 0, 0, k, 0, 0];
   }
 
   save(): void {
@@ -59,8 +68,10 @@ export class Pen {
     }
   }
 
+  /** Sets the transform from drawing px (the output scale is applied on top). */
   setMatrix(m: Mat): void {
-    this.m = [...m];
+    const k = this.k;
+    this.m = k === 1 ? [...m] : [m[0] * k, m[1] * k, m[2] * k, m[3] * k, m[4] * k, m[5] * k];
   }
 
   translate(x: number, y: number): void {
@@ -114,7 +125,8 @@ export class Pen {
   }
 
   grad(x0: number, y0: number, x1: number, y1: number, stops: [number, string][]): void {
-    this.out.push({ k: "grad", x0: r1(x0), y0: r1(y0), x1: r1(x1), y1: r1(y1), stops: stops.map(([o, c]) => [r3(o), c]) });
+    const k = this.k;
+    this.out.push({ k: "grad", x0: r1(x0 * k), y0: r1(y0 * k), x1: r1(x1 * k), y1: r1(y1 * k), stops: stops.map(([o, c]) => [r3(o), c]) });
   }
 
   circle(x: number, y: number, r: number, color: string, a = 1): void {

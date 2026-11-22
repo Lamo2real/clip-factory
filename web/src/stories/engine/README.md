@@ -11,7 +11,8 @@ Both drawers must follow it exactly.
   Randomness comes from `prng(seed)` or the stateless `rand(seed, i)` in `math.ts`. `Deno` appears only in `cli.ts`,
   which hands its arguments, files and stdout to `commands.ts` (so `web/test/storiesEngineCli.test.ts` runs the very
   same commands). A bad argument or file is one sentence on stderr and exit code 2.
-  `web/test/storiesEngine.test.ts` scans the folder to keep it that way. Every output is 9:16, 1080 × 1920, 30 fps.
+  `web/test/storiesEngine.test.ts` scans the folder to keep it that way. Every output is 30 fps, in one of six sizes
+  (below).
 * Everything is pure and deterministic. The same script and frame number always give the same prims, in Node, in
   Deno and in every browser. Coordinates are rounded to 0.1 px and alphas to 0.001, so the lists are short and
   compare exactly.
@@ -20,13 +21,27 @@ Both drawers must follow it exactly.
 * Treat scripts as immutable. `prepare()` caches per-script layout (bubble positions, rig geometry) in a `WeakMap`.
   It checks a cheap signature (scene ids, lengths, beat counts, cameras, seeds) and works it out again when that
   changes. A changed object is always safe.
-* Bump `ENGINE_VERSION` (in `engine.ts`) whenever what a frame draws changes.
+* Bump `ENGINE_VERSION` (in `engine.ts`) whenever what a frame draws changes, and write the shape goldens again
+  (`STORIES_GOLDENS=write npx vitest run test/storiesEngineShapes.test.ts`): that test fails when the drawing changed
+  without a bump.
 
 ## Output space
 
-* Frames are **1080 × 1920** output pixels, origin top-left, x to the right, y down. 30 fps.
+* Frames are **the script's `width` × `height`** in output pixels, origin top-left, x to the right, y down. 30 fps.
+  The six sizes (CONTRACTS §45.34; `FORMATS` and `sizeFor(aspect, resolution?)` in `frame.ts`, `formats` in
+  `cli.ts catalog`): 9:16 **1080 × 1920** (the default; Shorts, Reels and TikTok want it) or 720 × 1280, 1:1 1080 × 1080
+  or 720 × 720, 16:9 1920 × 1080 or 1280 × 720. `validateScript` refuses any other pair, and a script written for an
+  engine before 5 must be 1080 × 1920 (its writer laid it out for the tall frame).
+* Inside, the engine lays a frame out in design pixels whose short side is 1080 (1080 × 1920, 1080 × 1080 or
+  1920 × 1080). A character, a car, a line width, a radius and a letter are the same size against the short side in
+  every shape, and the pen scales the whole list to the script's size: a 720 video is exactly the 1080 one scaled to
+  two thirds. A 1080 × 1920 frame draws exactly what engine 4 drew (a cast with its own faces aside, below).
+* Each place is laid out for the tall frame and kept in the same parts of any other frame: the horizon, the road, a
+  window or a desk stay at the same height and across the same part of the width, things keep their size, and rows of
+  trees, lamps and buildings repeat across a wider frame. A walk without `to` keeps its pace in pixels (so it crosses
+  less of a wide frame per second).
 * Prims can reach outside the frame (backgrounds are drawn wider for camera pans). Clip to the frame. Prims wholly
-  outside the frame (plus a 60 px margin) are already dropped.
+  outside the frame (plus a 60 px margin, 40 px at 720) are already dropped.
 
 ## Prims (`types.ts`)
 
@@ -68,9 +83,14 @@ Text is not part of the prims. Captions and bubble symbols are drawn on top of t
 * `caption` and `endcard` need contrast on any background. Draw each line with a dark outline (`#1c1842`,
   about `size × 0.09`) or put a rounded panel behind the block (`#1c1842` at 72 %). The browser draws the panel.
   `bubble` text sits inside a balloon the frames already drew, so it has no outline and no panel.
-* Where things go: captions at y 1400 (above the platforms' bottom bar, x 520 keeps clear of the right-hand
-  buttons). Scene teaching text at y 330 (under the top tabs) in sunshine yellow. The safety end card at y 420 for the
-  last 2.5 s of the last scene (never reaching into the scene before). A bubble's symbol sits at its balloon's centre.
+* Where things go (`TEXT_BOXES` in `text.ts`, design px; the track itself is in output px of the script's size).
+  9:16: captions at y 1400 (above the platforms' bottom bar, x 520 keeps clear of the right-hand buttons), scene
+  teaching text at y 330 (under the top tabs) in sunshine yellow, the safety end card at y 420. 1:1 and 16:9 use
+  centred bands: captions at y 925, teaching text at y 145 and the end card at y 195, centred across the frame, with
+  wider lines in 16:9. The end card shows for the last 2.5 s of the last scene (never reaching into the scene before).
+  Every block, its panel included, stays inside its format's `safe` area (`cli.ts catalog` `formats`). In 1:1 and
+  16:9 the last shot eases down over the 0.4 s before the end card, so every head (its hair too) is below the card. A
+  bubble's symbol sits at its balloon's centre.
 * The end card reads "Based on {who} advice. Check your local road rules.", the second sentence on its own last line.
   `{who}` is the cited publishers in short (the part after a dash, an acronym in brackets such as RoSPA, "Department
   of Motor Vehicles" as DMV): one or two names, or "{first}, {second} and other road safety" for three or more, or
@@ -79,9 +99,10 @@ Text is not part of the prims. Captions and bubble symbols are drawn on top of t
 ## Sound (`audioTrack`)
 
 `AudioEvent.at` is in seconds from the start of the video. `pan` runs from -1 (left) to 1 (right), worked out from
-where the sound's maker stands. `pitch` (noises) is the character's voice pitch, and `voice` (noises, an additive
-field: `VoicedAudioEvent` in `tracks.ts`) is the character's voice style, `"babble"` (an open voice) or `"hum"` (a
-closed-mouth hum; the character's lips stay closed in the frames too). A character whose voice is `none` makes no
+where the sound's maker stands. `pitch` (noises) is the character's voice pitch, and `voice` (noises,
+`AudioEvent.voice`; `VoicedAudioEvent` in `tracks.ts` is the same type, kept for older imports) is the character's
+voice style, `"babble"` (an open voice) or `"hum"` (a closed-mouth hum; the character's lips stay closed in the frames
+too). A character whose voice is `none` makes no
 noises. `dur` is set on looping sounds (`engine`, `wind`, `rain`, until the end of their scene) and on repeating ones
 (`footsteps`, `heartbeat`, `tick`, `snow_crunch`) when a beat gives them a length. Music is not in the track: the mixer
 reads `script.music`.
@@ -96,7 +117,7 @@ An ambient engine hum pans with the scene's first car; the other ambient sounds 
 
 ## Coordinates in a script
 
-* Actors' and props' `x, y` are 0..1 of the frame. For an actor, or a prop that stands (cars, signs, trees, cones,
+* Actors' and props' `x, y` are 0..1 of the frame, whatever its shape. For an actor, or a prop that stands (cars, signs, trees, cones,
   deer), that point is where it touches the ground. For a flat or floating prop (ice, puddles, arrows, ticks), it is
   the centre. In side views the ground actors stand on runs from about y 0.62 to 0.85 (the road is 0.64–0.80). Things
   lower down look nearer and a little bigger.
@@ -122,9 +143,15 @@ An ambient engine hum pans with the scene's first car; the other ambient sounds 
   was when the bubble started (never over the face), clear of the other bubbles. In a safety story's end-card seconds
   they show below the card; one that cannot ends when the card starts, or is left out.
 
+* Each character keeps its own faces and noises: a cast member with `expressions` (copied from the saved character)
+  may use only those faces on its beats, and only the noises of its `voice.noises`. A face an action implies (a gasp's
+  shock, a fall's dizziness) shows only when the character has it; otherwise its last face stays. A cast without
+  `expressions` (scripts made before) takes any face and noise of the catalog.
+
 `cli.ts catalog` gives these rules to the writer and the fact checker as `rules` (one plain sentence each: `skid_dir`,
-`spin_dir`, `side_dir`, `top_rot`, `steering`, `coordinates`, `arrow_rot`, `prop_state`, `sounds`; `rules.ts`) and the
-state words as `propStates`, next to `catalog` and `limits`.
+`spin_dir`, `side_dir`, `top_rot`, `steering`, `coordinates`, `arrow_rot`, `prop_state`, `sounds`, `own_faces`,
+`frame_shape`; `rules.ts`), the state words as `propStates` and the six sizes as `formats`, next to `catalog` and
+`limits`.
 
 ## Limits (`validateScript`, also in `cli.ts catalog` as `limits`)
 
@@ -134,6 +161,16 @@ script's `durationSec` is their sum (within 0.05 s), so `frameCount` = round(dur
 must stay under about 480 shapes (`sceneShapes`): about 60 for the set (80 on a snowy or rainy road), 70 per
 character, 45 per car, 36 per truck, 30 per deer, 36 to 42 for snow or rain (once), 15 for ice, trees and sparkles,
 12 for any other prop. A writer who goes over gets a sentence that says which things to use fewer of.
+
+## Own faces and noises (`validateScript`, `repairScript`, `cli.ts repair`)
+
+`validateScript` refuses a beat whose `face` is not among its character's `expressions`, or whose `noise` is not in
+its `voice.noises`, with a sentence the writer can act on ("Lamo (c1) does not make the face "angry"; Lamo's own
+faces are neutral, happy and surprised. Use one of those, or leave face out."). A cast member's `expressions`, when
+there, are different known faces with `neutral` among them. After the writer's last try, `cli.ts repair <script>`
+(`repairScript`) makes every such face `neutral` and leaves every such noise out, changes nothing else, and prints
+`{ script, changes: ScriptRepair[], ok, errors? }`: each change says the scene, the beat (from 0), the cast id, the
+field, what it was and is now, and a sentence for the job's log; `ok` is the check of the repaired script.
 
 ## Characters (`validateCharacter`, `cli.ts character`)
 

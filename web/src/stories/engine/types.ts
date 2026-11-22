@@ -167,6 +167,42 @@ export interface CastMember {
   look: CharacterLook;
   movementStyle: MovementStyle;
   voice: CharacterVoice;
+  /** The character's own faces, copied from it (CONTRACTS §45.34). When it is there, its beats may use only these
+   * faces and only the noises of `voice.noises`; a cast copied before it existed (old scripts) has none. */
+  expressions?: Expression[];
+}
+
+/** The shape of a video (CONTRACTS §45.34). 9:16 is the default: Shorts, Reels and TikTok want it. */
+export type VideoAspect = "9:16" | "1:1" | "16:9";
+/** The six sizes, width × height; each belongs to one shape. */
+export type VideoResolution = "1080x1920" | "720x1280" | "1080x1080" | "720x720" | "1920x1080" | "1280x720";
+export type FrameWidth = 1080 | 720 | 1920 | 1280;
+export type FrameHeight = 1920 | 1280 | 1080 | 720;
+
+/** One size a video can have (`cli.ts catalog` lists them as `formats`). */
+export interface VideoFormat {
+  aspect: VideoAspect;
+  resolution: VideoResolution;
+  width: FrameWidth;
+  height: FrameHeight;
+  /** plain words for the owner */
+  label: string;
+  /** where on-screen text stays (captions, teaching text, the end card), output pixels: clear of the platforms'
+   * buttons and tabs in 9:16, a centred band in 1:1 and 16:9 */
+  safe: { left: number; top: number; right: number; bottom: number };
+}
+
+/** One face or noise `repairScript` changed (CONTRACTS §45.34): what it was, what it is now (null: left out). */
+export interface ScriptRepair {
+  sceneId: string;
+  /** the beat's place in its scene's beats, from 0 */
+  beat: number;
+  castId: string;
+  field: "face" | "noise";
+  was: string;
+  now: string | null;
+  /** one plain sentence for the job's log */
+  text: string;
 }
 
 export interface SceneActor {
@@ -260,8 +296,9 @@ export interface Citation {
 export interface StoryScript {
   engine: number;
   fps: 30;
-  width: 1080;
-  height: 1920;
+  /** one of the six sizes (VideoFormat; CONTRACTS §45.34): 1080 × 1920 unless the story picked another shape */
+  width: FrameWidth;
+  height: FrameHeight;
   durationSec: number;
   title: string;
   seed: number;
@@ -273,7 +310,8 @@ export interface StoryScript {
   safety: { topicId: string; citations: Citation[] } | null;
 }
 
-/** One draw instruction in output pixels (0..1080 × 0..1920), painter's order, source-over blending. */
+/** One draw instruction in output pixels (0..width × 0..height of the script, 1080 × 1920 by default), painter's
+ * order, source-over blending. */
 export type Prim =
   | { k: "fill"; color: Hex }
   | { k: "grad"; x0: number; y0: number; x1: number; y1: number; stops: [number, Hex][] }

@@ -1,6 +1,7 @@
 // Draws the engine's output on a 2D canvas (docs/CONTRACTS.md §45.10): the browser half of "one engine, two places".
-// The agent's numpy rasterizer (agent/src/clipfactory_agent/stories/raster.py) follows the same rules, written down in
-// engine/README.md: painter's order, source-over blending, round caps and joins, non-zero fill, output pixels.
+// Lamo Stories' agent's numpy rasterizer (stories/agent/src/lamostories_agent/raster.py) follows the same rules,
+// written down in engine/README.md: painter's order, source-over blending, round caps and joins, non-zero fill, output
+// pixels of the script's own size (any of the six, CONTRACTS §45.34); `scale` is canvas pixels per output pixel.
 // Owned by builder D (engine).
 import type { Prim, TextEvent } from "../engine/types.ts";
 

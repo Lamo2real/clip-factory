@@ -1,20 +1,21 @@
 // Lamo Stories engine: one frame of one scene. Works out where every character and prop is, what the camera sees,
-// then draws the place, the props and characters in depth order, the weather and the bubbles.
+// then draws the place, the props and characters in depth order, the weather and the bubbles. It works in the
+// frame's design px (frame.ts: the short side is 1080, positions 0..1 of the frame); the pen scales the result to
+// the script's own size.
 
 import { BUBBLE_R, bubbleSpan, drawBubble, type Bubble } from "./bubbles.ts";
 import { cameraAt, layerMatrix, toScreen, visibleBox, type Box, type Cam, type Focus } from "./camera.ts";
+import { F, inFrame } from "./frame.ts";
 import { DEG, TAU, clamp, clamp01, ease, hash, rand } from "./math.ts";
 import { actorState, DRIVING, STYLES, type ActorState, type Style } from "./motion.ts";
-import { Pen } from "./pen.ts";
-import { endCardFrom, endCardLayout } from "./text.ts";
+import { frameView, Pen } from "./pen.ts";
+import { endCardFrom, endCardLayout, textBoxes } from "./text.ts";
 import { CARS, DECALS, drawProp, OVERLAYS, propBaseScale, propState, steerArrow, WEATHER, type DriverInput, type PropState } from "./props.ts";
 import { drawCharacter, geometry, headTop, type Geo } from "./rig.ts";
 import { drawSetBack, drawSetFront, drawSetWeatherBack, setInfo, type SetEnv } from "./sets.ts";
-import type { ActionId, Beat, CastMember, Prim, PropAction, Scene, SceneActor, StoryScript } from "./types.ts";
+import type { ActionId, Beat, CastMember, Prim, PropAction, Scene, SceneActor, StoryScript, VideoAspect } from "./types.ts";
 
-export const W = 1080;
-export const H = 1920;
-/** output pixels per rig unit for a character standing at y = 0.72 (about 450 px tall) */
+/** design pixels per rig unit for a character standing at y = 0.72 (about 450 px tall, 5/12 of the short side) */
 export const CHAR_PX = 5;
 
 // ---- per-script preparation (cached per script object, checked against its contents) --------------------
@@ -25,13 +26,16 @@ export interface Prepared {
   geos: Map<string, Geo>;
   impacts: number[][];
   bubbles: Bubble[];
+  /** a safety story in a square or wide frame: how far down the end card's panel reaches (design px), so the last
+   * shot can keep the heads below it */
+  cardBottom: number | null;
 }
 
 const CACHE = new WeakMap<StoryScript, { sig: string; prep: Prepared }>();
 
 /** Everything the cached layout depends on, so a script edited in place is laid out again. */
 function signature(s: StoryScript): string {
-  return JSON.stringify([s.seed, s.cast, s.safety?.citations?.map((c) => c.publisher) ?? null, s.scenes.map((sc) => [sc.sceneId, sc.durationSec, sc.seed, sc.view, sc.camera, sc.actors, sc.props, sc.beats, sc.sfx])]);
+  return JSON.stringify([s.width, s.height, s.seed, s.cast, s.safety?.citations?.map((c) => c.publisher) ?? null, s.scenes.map((sc) => [sc.sceneId, sc.durationSec, sc.seed, sc.view, sc.camera, sc.actors, sc.props, sc.beats, sc.sfx])]);
 }
 
 export function sceneStarts(s: StoryScript): number[] {
@@ -48,6 +52,10 @@ export function prepare(s: StoryScript): Prepared {
   const sig = signature(s);
   const hit = CACHE.get(s);
   if (hit && hit.sig === sig) return hit.prep;
+  return inFrame(s, () => prepareNow(s, sig));
+}
+
+function prepareNow(s: StoryScript, sig: string): Prepared {
   const starts = sceneStarts(s);
   const geos = new Map<string, Geo>();
   for (const [id, m] of Object.entries(s.cast)) geos.set(id, geometry(m.look));
@@ -57,7 +65,12 @@ export function prepare(s: StoryScript): Prepared {
     geos,
     impacts: s.scenes.map(impactsOf),
     bubbles: [],
+    cardBottom: null,
   };
+  if (s.safety && F.aspect !== "9:16") {
+    const card = endCardLayout((s.safety.citations ?? []).map((c) => c.publisher), textBoxes().endcard);
+    prep.cardBottom = card.bottom + card.size * 0.28 + 24;
+  }
   prep.bubbles = layoutBubbles(s, prep);
   CACHE.set(s, { sig, prep });
   return prep;
@@ -185,10 +198,10 @@ export function sceneRuntime(s: StoryScript, prep: Prepared, index: number, t: n
     }
     props.push(st);
   }
-  const unitsPerWidth = W / CHAR_PX;
+  const unitsPerWidth = F.w / CHAR_PX;
   const actors: ActorRT[] = [];
   for (const p of pending) {
-    const st = actorState(p.actor, p.beats, p.style, p.geo, p.seed, t, unitsPerWidth, p.member.voice?.style ?? "babble");
+    const st = actorState(p.actor, p.beats, p.style, p.geo, p.seed, t, unitsPerWidth, p.member.voice?.style ?? "babble", ownFaces(p.member));
     const rt: ActorRT = { actor: p.actor, member: p.member, geo: p.geo, style: p.style, seed: p.seed, st };
     if (p.actor.inCar) {
       const car = props.find((c) => c.prop.propId === p.actor.inCar);
@@ -204,7 +217,50 @@ export function sceneRuntime(s: StoryScript, prep: Prepared, index: number, t: n
   }
   const focus = focusOf(actors, props, view);
   const cam = cameraAt(scene.camera, t, scene.durationSec, focus, seed, prep.impacts[index] ?? []);
+  if (prep.cardBottom !== null && index === s.scenes.length - 1) clearEndCard(cam, actors, view, focus, prep.cardBottom, t, scene.durationSec);
   return { scene, view, t, seed, actors, props, occupants, steering, cam, scroll: scroll * scrollSign };
+}
+
+/** In a square or wide frame the end card's band at the top reaches down to where heads are. Over the 0.4 s before
+ * the card shows, the last shot eases down until every head (its hair too) is below the card: never so far that a
+ * face leaves the frame, and no further than the feet allow when that is enough. */
+function clearEndCard(cam: Cam, actors: ActorRT[], view: "side" | "top", focus: Focus, cardBottom: number, t: number, dur: number): void {
+  const from = endCardFrom(dur) - 0.4;
+  if (t <= from) return;
+  let top = Infinity;
+  let chin = -Infinity;
+  let feet = -Infinity;
+  for (const a of actors) {
+    if (a.actor.inCar) continue;
+    const px = actorScale(a.st.y, view);
+    const y = a.st.y * F.h;
+    // HAIR: how far spiky hair, a bun or a cap reach above the head's top (rig units)
+    top = Math.min(top, y + (a.geo.top + Math.min(0, a.st.pose.dy) - HAIR) * px);
+    chin = Math.max(chin, y + (a.geo.headY + a.st.pose.dy + a.geo.headRY) * px);
+    feet = Math.max(feet, y);
+  }
+  if (!Number.isFinite(top)) {
+    // only people in cars (or no one): the shot's own box
+    if (!focus.box) return;
+    top = focus.box.y0;
+    feet = focus.box.y1;
+    chin = focus.face ? focus.face.y + focus.face.r : feet;
+  }
+  const onScreen = (y: number) => F.h / 2 + (y - cam.cy) * cam.zoom;
+  const need = cardBottom - onScreen(top);
+  if (need <= 0) return;
+  const keepFeet = F.h - 16 - onScreen(feet);
+  const keepFace = F.h - 16 - onScreen(chin);
+  const shift = Math.min(need, Math.max(0, keepFeet, keepFace));
+  cam.cy -= (shift * ease.inOutSine(clamp01((t - from) / 0.4))) / cam.zoom;
+}
+
+/** How far the tallest hair styles reach above a character's head top (rig units, measured on every look). */
+const HAIR = 12;
+
+/** The faces a cast member keeps to (CONTRACTS §45.34), or null for a cast copied before characters carried them. */
+function ownFaces(m: CastMember): CastMember["expressions"] | null {
+  return Array.isArray(m.expressions) && m.expressions.length ? m.expressions : null;
 }
 
 function actorScale(y: number, view: "side" | "top"): number {
@@ -212,6 +268,8 @@ function actorScale(y: number, view: "side" | "top"): number {
 }
 
 function focusOf(actors: ActorRT[], props: PropState[], view: "side" | "top"): Focus {
+  const W = F.w;
+  const H = F.h;
   let box: Box | null = null;
   let face: { x: number; y: number; r: number } | null = null;
   const add = (x0: number, y0: number, x1: number, y1: number) => {
@@ -253,8 +311,8 @@ function focusOf(actors: ActorRT[], props: PropState[], view: "side" | "top"): F
 function drawActor(pen: Pen, a: ActorRT, view: "side" | "top", t: number, dark: boolean): void {
   const st = a.st;
   const px = actorScale(st.y, view);
-  const x = st.x * W;
-  const y = st.y * H;
+  const x = st.x * F.w;
+  const y = st.y * F.h;
   if (dark) {
     // a soft light behind the head keeps dark hair readable at night and on the stage
     const hy = y + (a.geo.headY + st.pose.dy) * px;
@@ -334,11 +392,15 @@ function drawOccupantsSide(pen: Pen, riders: ActorRT[], t: number, seats: { x: n
   });
 }
 
-/** Draws frame-time `t` of scene `index`. */
+/** Draws frame-time `t` of scene `index`, in output pixels of the script's size. */
 export function drawSceneFrame(s: StoryScript, index: number, t: number): Prim[] {
+  return inFrame(s, () => drawSceneNow(s, index, t));
+}
+
+function drawSceneNow(s: StoryScript, index: number, t: number): Prim[] {
   const prep = prepare(s);
   const rt = sceneRuntime(s, prep, index, t);
-  const pen = new Pen();
+  const pen = new Pen(frameView(F.w * F.k, F.h * F.k, F.k), F.k);
   const scene = rt.scene;
   const env: SetEnv = {
     pen,
@@ -401,33 +463,39 @@ export function drawSceneFrame(s: StoryScript, index: number, t: number): Prim[]
 function headOnScreen(rt: SceneRT, castId: string): [number, number, number] | null {
   const a = rt.actors.find((x) => x.actor.castId === castId);
   if (!a) return null;
-  let wx = a.st.x * W;
+  let wx = a.st.x * F.w;
   let wy: number;
   let wr: number;
   if (a.actor.inCar) {
     const car = rt.props.find((c) => c.prop.propId === a.actor.inCar);
     const k = car ? propBaseScale(car, rt.view) : 1;
     if (rt.view === "top") {
-      wy = a.st.y * H;
+      wy = a.st.y * F.h;
       wr = 40 * k;
     } else {
       const seat = (rt.occupants.get(a.actor.inCar) ?? []).indexOf(a);
       wx += (car?.facing ?? 1) * (seat <= 0 ? 52 : -112) * k;
-      wy = a.st.y * H - 225 * k;
+      wy = a.st.y * F.h - 225 * k;
       wr = 44 * k;
     }
   } else {
     const px = actorScale(a.st.y, rt.view);
-    wy = a.st.y * H + (a.geo.headY + a.st.pose.dy) * px;
+    wy = a.st.y * F.h + (a.geo.headY + a.st.pose.dy) * px;
     wr = Math.max(a.geo.headRX, a.geo.headRY) * px;
   }
   const [x, y] = toScreen(rt.cam, wx, wy);
   return [x, y, wr * rt.cam.zoom];
 }
 
-/** The lowest a bubble's centre may sit (above the captions), and the highest (under the platforms' top tabs). */
-const BUBBLE_LOW = 1240;
-const BUBBLE_HIGH = 330;
+/** Per shape (design px): the highest a bubble's centre may sit (under the platforms' top tabs in 9:16), the lowest
+ * (above the captions), and the lowest it starts looking from. */
+const BUBBLE_AT: Record<VideoAspect, { high: number; low: number; start: number }> = {
+  "9:16": { high: 330, low: 1240, start: 1180 },
+  "1:1": { high: 160, low: 765, start: 705 },
+  "16:9": { high: 160, low: 765, start: 705 },
+};
+/** A bubble's centre keeps this far in from the frame's left and right edges. */
+const BUBBLE_SIDE = 190;
 /** Half the widest balloon (the wide ones are 1.3 radii across), plus its outline. */
 const BALLOON = BUBBLE_R * 1.3 + 8;
 
@@ -436,8 +504,10 @@ const BALLOON = BUBBLE_R * 1.3 + 8;
  * ends when the card starts, or is left out (the card's sources line matters more than a symbol). */
 function layoutBubbles(s: StoryScript, prep: Prepared): Bubble[] {
   const out: Bubble[] = [];
+  const W = F.w;
+  const { high: BUBBLE_HIGH, low: BUBBLE_LOW, start: START } = BUBBLE_AT[F.aspect];
   // a safety story's end card covers the top of the last scene's last seconds
-  const below = s.safety ? endCardLayout((s.safety.citations ?? []).map((c) => c.publisher)).bottom + BALLOON + 24 : 0;
+  const below = s.safety ? endCardLayout((s.safety.citations ?? []).map((c) => c.publisher), textBoxes().endcard).bottom + BALLOON + 24 : 0;
   const last = s.scenes.length - 1;
   s.scenes.forEach((scene, i) => {
     const start = prep.starts[i]!;
@@ -450,14 +520,14 @@ function layoutBubbles(s: StoryScript, prep: Prepared): Bubble[] {
       const [hx, hy, hr] = head;
       const pref = hx > W / 2 ? -1 : 1;
       const place = (top: number, span: number): { x: number; y: number } | null => {
-        const y0 = clamp(hy - 280, top, 1180);
+        const y0 = clamp(hy - 280, top, START);
         const others = out.filter((o) => o.scene === i && o.at < b.at + span && o.at + o.span > b.at);
         for (const y of [y0, y0 + BUBBLE_R * 2.4, y0 + BUBBLE_R * 4.8]) {
           if (y > BUBBLE_LOW) break;
           for (const side of [pref, -pref]) {
             // far enough to the side that the balloon never covers the face
             const need = Math.sqrt(Math.max(0, (hr + BALLOON + 12) ** 2 - (y - hy) ** 2));
-            const x = clamp(hx + side * Math.max(190, need), 190, W - 190);
+            const x = clamp(hx + side * Math.max(BUBBLE_SIDE, need), BUBBLE_SIDE, W - BUBBLE_SIDE);
             if (Math.hypot(x - hx, y - hy) < hr + BALLOON + 12) continue;
             if (others.some((o) => Math.hypot(o.x - x, o.y - y) < BUBBLE_R * 2.3)) continue;
             return { x, y };
@@ -473,8 +543,8 @@ function layoutBubbles(s: StoryScript, prep: Prepared): Bubble[] {
       }
       if (!spot && !(b.at + span > cardFrom)) {
         // a crowded moment: beside the head, even if it touches another bubble
-        const x = clamp(hx + pref * Math.max(190, hr + BALLOON + 12), 190, W - 190);
-        spot = { x, y: clamp(hy - 280, BUBBLE_HIGH, 1180) };
+        const x = clamp(hx + pref * Math.max(BUBBLE_SIDE, hr + BALLOON + 12), BUBBLE_SIDE, W - BUBBLE_SIDE);
+        spot = { x, y: clamp(hy - 280, BUBBLE_HIGH, START) };
       }
       if (!spot) continue;
       out.push({ kind: b.bubble, start: start + b.at, end: start + b.at + span, scene: i, at: b.at, span, x: spot.x, y: spot.y, hx, hy });
