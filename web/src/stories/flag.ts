@@ -1,17 +1,22 @@
-// Lamo Stories stays hidden until every piece has merged and the final check passed (docs/CONTRACTS.md §45.1).
-// The last Lamo Stories pull request turns STORIES_ON to true. Until then the switcher is not shown and the
-// /stories pages say "not found" like any unknown page, so Lamo Clips looks exactly as it does today.
+// Lamo Stories is switched on for everyone (docs/CONTRACTS.md §45.1, §45.36): the switch PR turned STORIES_ON to true
+// after every piece had merged and the final check passed (every acceptance criterion met or waiting only on the
+// owner's own accounts; Clip Factory pixel-identical outside the switcher's own box).
 //
-// Tests and a preview on this device can turn it on with localStorage "cf.storiesPreview" = "1".
-export const STORIES_ON: boolean = false;
+// Tests (and a preview on one device) can still choose: localStorage "cf.storiesPreview" = "0" shows Clip Factory
+// exactly as it was before Lamo Stories (no switcher, /stories is "not found"); "1" shows Lamo Stories.
+export const STORIES_ON: boolean = true;
 
 const PREVIEW_KEY = "cf.storiesPreview";
 
 export function storiesEnabled(): boolean {
-  if (STORIES_ON) return true;
   try {
-    return typeof localStorage !== "undefined" && localStorage.getItem(PREVIEW_KEY) === "1";
+    if (typeof localStorage !== "undefined") {
+      const v = localStorage.getItem(PREVIEW_KEY);
+      if (v === "0") return false;
+      if (v === "1") return true;
+    }
   } catch {
-    return false;
+    // no storage (private mode): the build's own setting
   }
+  return STORIES_ON;
 }

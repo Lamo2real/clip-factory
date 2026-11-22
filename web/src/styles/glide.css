@@ -236,6 +236,16 @@
 .ws-round:active {
   transform: scale(0.94);
 }
+/* The window look and the picture look (glass.css): nothing that holds words is weaker than the panel tint, so the
+   round switch wears the control fill there, like a glass button (its name sits straight on the window otherwise). */
+html:where(.see-through, [data-backdrop]) .ws-round {
+  background: var(--fill-control);
+}
+html:where(.see-through, [data-backdrop]) .ws-round:hover {
+  background:
+    linear-gradient(rgb(var(--bone-rgb) / 0.08), rgb(var(--bone-rgb) / 0.08)),
+    rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + 0.22));
+}
 .ws-round--phone {
   width: 48px;
   height: 48px;

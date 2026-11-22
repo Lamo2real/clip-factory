@@ -110,6 +110,7 @@ describe("the Settings card's writer (one file with the readers, builder W3c's e
 
 describe("the page's calm-motion class", () => {
   it("is Clip Factory's on its pages (and always while Lamo Stories is off), Lamo Stories' own on its pages", () => {
+    localStorage.setItem("cf.storiesPreview", "0");
     setStoriesPref("motion.reduce", true);
     history.replaceState(null, "", "/stories/ideas");
     expect(calmPage(false)).toBe(false); // switched off: /stories is not Lamo Stories
@@ -134,6 +135,10 @@ describe("the page's calm-motion class", () => {
 });
 
 describe("sounds", () => {
+  // These were written with Lamo Stories switched off by default (no page of it behind Clip Factory to keep quiet);
+  // since the switch (STORIES_ON true) that state is chosen explicitly. The on-screen cases set "1" themselves.
+  beforeEach(() => localStorage.setItem("cf.storiesPreview", "0"));
+
   it("unset: Clip Factory's sound engine plays, exactly as before", () => {
     const play = vi.spyOn(sounds, "play");
     storiesSound("success");

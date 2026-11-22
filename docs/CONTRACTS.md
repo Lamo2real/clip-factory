@@ -12993,10 +12993,11 @@ met; §45.23 and §45.32 list the evidence for each acceptance criterion.
   `module.agent.terraform_data.image` (only if Clip Factory's agent image changes, which Lamo Stories never causes) and
   `module.stories_agent.terraform_data.image` (whenever Lamo Stories' agent image changes); they hold no data (it was
   so before Lamo Stories, for example in PR #84). Everything else is add or update in place (§45.18).
-* Lamo Stories stays hidden behind one web switch, `STORIES_ON` in `web/src/stories/flag.ts` (default `false`),
-  until every piece has merged and the final check passed; the last pull request turns it on (§45.21). Server
-  routes may go live before that: no Lamo Clips screen calls them. While it is off, the update bar labels Lamo Stories
-  folders "Behind the scenes" (`web/areas.json`); the switch pull request renames them "Lamo Stories".
+* Lamo Stories was hidden behind one web switch, `STORIES_ON` in `web/src/stories/flag.ts`, until every piece had
+  merged and the final check passed; the switch pull request (2026-11-22, §45.36) turned it on for everyone and renamed
+  the update bar's Lamo Stories folders from "Behind the scenes" to "Lamo Stories" (`web/areas.json`). A device can
+  still choose with `localStorage` `cf.storiesPreview`: `"0"` shows Clip Factory exactly as before Lamo Stories, `"1"`
+  shows Lamo Stories (the tests use both).
 
 ### 45.2 Words
 
@@ -14862,6 +14863,50 @@ and 43 minor, none blocking. Round 4 closes them as follows.
   `sound.enabled`, `sound.click`, `motion.reduce` in `cf.stories.prefs`); page changes after a request go through
   `storiesGoLater` (`stories/pane.tsx`), which waits while Clip Factory is on screen. Plain toasts stay global
   (§45.16.2); cheers and confetti never show over the other app.
+
+### 45.36 Switched on, and the round-5 polish (2026-11-22)
+
+**Switched on.** The final check on main `696e8b3b` (before the switch) found every acceptance criterion of both
+requests met (request 1: 12 of 14 met, 2 built and waiting only on the owner's own accounts; request 2: 15 of 21 met,
+6 waiting only on his accounts; none partial or missing) and Clip Factory pixel-identical (`web/scripts/clips-unchanged.sh`:
+66 of 66 shots equal with Lamo Stories off against main without Lamo Stories' hooks; 66 of 66 equal outside the
+switcher's own box with it on; the shots that differ from the commit before Lamo Stories began are other sessions'
+Clip Factory work). The switch pull request sets `STORIES_ON = true`; `cf.storiesPreview` `"0"` / `"1"` still choose
+on one device (tests). What waits on the owner: his own Meta developer app for Instagram and Facebook, picking the
+Lamo Stories YouTube channel, signing in to the Lamo Stories TikTok and X accounts (TikTok posting through the API
+still waits on TikTok's app approval), confirming each shown account, Bedrock model access for the models he uses,
+and, for Amazon Nova Reel, `stories_video_us_bucket = true` plus model access in us-east-1 (DEPLOYMENT.md).
+
+**Round 4's notes, written down.** `CHECKLOCK#{providerId}` (type `ws_checklock`; `userId`, `workspaceId`,
+`providerId`, `checkJobId`, `updatedAt`; only the API writes it, in the same transaction as a `provider_check` job,
+so only one Try it runs at a time; never returned). `ProviderStatus.check` is the newest Try it job. A Try it's
+failure sentence is on its one `check` step. Nova Reel is `on` only after a test shot came back; a refusal records
+`needs_setup` with Bedrock's words; every Try it error says "Tap Try it again". `ModelInfo` carries an added model's
+`effortField`, `tools` and `cache`. One step can make more than one model call, each its own `meta.models` record with
+its own `task`. The dashboard checks app keys only while its request has time (it never passes 29 s).
+
+**Round 5** (the final check's last fixes and the owner's UX rules; built after the switch as follow-up pull requests):
+
+* **E1.** Coming back to Clip Factory restores its scroll on phones too: the scroll restore runs from whichever switcher is mounted (the phone top bar included) or from AppPanes when the Clip Factory pane becomes active; e2e at 390x844 (Library scrolled, round trip, same scrollY).
+* **E2.** "Use in a video" right after an upload ticks that reference: Production › New filters ?ref= ids only against a fresh reference list (never a remembered one from an earlier visit), and the reference list cache is refreshed after an upload or analysis; e2e: upload, analyze, Use in a video, the reference is ticked.
+* **E3.** Setup's Connect steps use the same settled status as Social accounts (onboarding reads social.accounts_shown with the workspace secrets, inside the request's time budget), so changed app keys show the step to do.
+* **E4.** An added model's Region must match the Region in its ARN or inference-profile id (and a us./eu./apac./global. profile prefix must fit the Region); a mismatch is refused with a sentence naming both; the form fills the Region from a pasted ARN.
+* **E5.** The idea, expand and chat briefs follow the video's shape: the workspace's default shape (or the story's) is sent, and the house brief says vertical, square or wide; never a fixed "vertical 9:16".
+* **E6.** Check models sends the same shape a real call would (D1): for a model saved with tools on, its check includes one tiny tool with auto choice, so a model that refuses tool use shows Bedrock's sentence as its status ("{Model} does not accept tool use here … turn off Tools in Settings › AI › its row"), and a chat or task that hits that refusal says the same sentence, never "The answer stopped".
+* **E7.** Helpers used never names the wrong writer: meta.providers.writer records the real writer ("bedrock-claude" only for an Anthropic model; "bedrock-model:{key}" for others) and the screens name it from the model's label and maker ("Meta Llama … on Amazon Bedrock").
+* **E8.** Every model record has its details: chat answers and AI tasks show the same "Model ID … in {Region}" details line production jobs show (behind the same fold).
+* **E9.** An account problem always has a way to fix it: the Posts panel and the Post it sheet show "Open Social accounts" (a link) next to Try again whenever the post stopped on an account problem; the mock's Needs you Fix it goes to Social accounts like the API.
+* **E10.** Post words only need a fact check, not a remake: when only the post captions changed, Review says "Your new post words need a quick check. Tap Check again." with that button (produce from "safety"), and Approve says the same; never "Tap Remake". The captions box stays on the tab the owner was on after Use these or Save (keep the tab outside the keyed editor).
+* **E11.** Celebrate a post: the Post it sheet's "Posted!" gets Lamo Stories' star burst and success sound (the same as Approve).
+* **E12.** A model the studio already knows is unusable (status denied, not_found or error) is never pre-picked: the pickers and chips show it with its status line, the usual choice skips it, and Make the video with it selected asks first ("{Model} has no access right now. Use {usual} instead?").
+* **E13.** One name on screen: Lamo Stories' screens and the API's Lamo Stories sentences call the other app "Clip Factory" everywhere (never "Lamo Clips"); sentences never read oddly when an account is itself named "Lamo Stories" (say "this {Platform} account ({name})").
+* **E14.** Kid-proof first lines: developer-app terms (Valid OAuth Redirect URIs, Login configuration, App Review, Sandbox, inference profile, ARN) and raw ids (account ids, model ids, channel ids) sit behind a "Technical details" fold, with a plain first line ("Copy this address into your app's settings"); the facts stay one tap away.
+* **E15.** After Finish with skipped steps, the dashboard keeps a small "Finish setting up: {n} left" card listing them, and Settings always has "Open setup again".
+* **E16.** Lamo Stories' own switcher is always in view: in short desktop windows the rail's switcher is pinned (sticky at the bottom of the rail, or in the rail's top when the foot would scroll off); at 320 px Clip Factory's top-bar switch is at least 44 px in both directions (shrink or drop the brand text before the switch shrinks), with the flag-off app unchanged.
+* **E17.** Settings polish: Add a model starts with the maker's usual effort levels ticked when effort levels are on (Anthropic: all five, default its usual); the Added by you and status chips have the normal gap and the status sits at the right edge like other rows; status words are one set everywhere ("Works", "Not checked yet", "No access", "Not found", "Problem"); "More effort thinks longer" is hidden for a model with no effort setting; a sentence never tells the owner to go to the page he is on (say "Pick Built-in animation above").
+* **E18.** Small studio fixes: a cleared reference never plays a local copy (the page shows the D9 sentence); the mock's canned study fits the uploaded video's length; the play badge on square and wide scene thumbnails sits where it does not cover the caption; Social accounts' grid does not leave big empty areas at 1440 (cards flow by their own height); after reconnecting, the mock clears the old warning like the API.
+
+Not in round 5 (they would change Clip Factory's own code): Clip Factory's toast component (Lamo Stories uses it: 36 px close button, one glass for all toasts) and Clip Factory page changes after a request while Lamo Stories is on screen (NewJobForm addCampaign, CampaignPaste, SkillPages). The lead reports them as known limits.
 
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 

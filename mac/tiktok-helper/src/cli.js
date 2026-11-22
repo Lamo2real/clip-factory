@@ -6,13 +6,21 @@
 //   node src/cli.js status        what the helper sees
 //   node src/cli.js off | on      pause or resume on this Mac (the switch in Clip Factory is the main one)
 //   node src/cli.js trial <n|none>  posts before the trial pause (none = no limit)
+//   node src/cli.js probe <clipId>  a check run in the hidden Chrome: fills in TikTok Studio for that clip exactly as
+//                                 for a post, reads every setting back, then stops before Post (nothing is posted,
+//                                 nothing is claimed). Saves a picture of the filled-in page as probe.png.
 import { client } from "./api.js";
 import { accessToken, appConfig, readRefreshToken, saveRefreshToken } from "./auth.js";
 import * as chrome from "./chrome.js";
 import { event, log } from "./notify.js";
 import { APP_URL, BASE } from "./paths.js";
 import { loadSettings, loadState, saveSettings } from "./store.js";
-import { loggedIn } from "./tiktok.js";
+import fs from "node:fs";
+import path from "node:path";
+
+import { freeName } from "./match.js";
+import { DOWNLOADS } from "./paths.js";
+import { loggedIn, post } from "./tiktok.js";
 import { tick } from "./run.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -65,6 +73,39 @@ async function setup() {
   return tiktok && signedIn;
 }
 
+async function probe(clipId) {
+  const config = await appConfig();
+  const api = client(config.apiUrl, await accessToken(config));
+  const clip = (await api.clip(clipId)).clip;
+  const job = {
+    clipId,
+    hook: clip.hook || "",
+    caption: clip.captions?.tiktok || "",
+    privacy: "PUBLIC_TO_EVERYONE",
+    comment: true,
+    duet: true,
+    stitch: true,
+  };
+  const { url, filename } = await api.file(clipId);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`The video did not download (${res.status}).`);
+  const file = path.join(DOWNLOADS, freeName(filename, (n) => fs.existsSync(path.join(DOWNLOADS, n))));
+  fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+  const { browser, page } = await chrome.open();
+  try {
+    const steps = [];
+    const result = await post(page, job, file, async (s) => steps.push(s), { dryRun: true });
+    await page.screenshot({ path: path.join(BASE, "probe.png"), fullPage: true }).catch(() => {});
+    console.log(JSON.stringify({ ok: true, steps, ...result, baseline: undefined }, null, 2));
+  } catch (e) {
+    await page.screenshot({ path: path.join(BASE, "probe.png"), fullPage: true }).catch(() => {});
+    console.log(JSON.stringify({ ok: false, stop: e.reason || String(e.message || e), url: page.url() }, null, 2));
+  } finally {
+    await chrome.quit(browser);
+    fs.rmSync(file, { force: true });
+  }
+}
+
 async function status() {
   const settings = loadSettings();
   const state = loadState();
@@ -100,13 +141,16 @@ try {
   } else if (cmd === "off" || cmd === "on") {
     saveSettings({ paused: cmd === "off" });
     console.log(cmd === "off" ? "Paused on this Mac." : "Running on this Mac.");
+  } else if (cmd === "probe") {
+    if (!arg) throw new Error("probe takes a clip id");
+    await probe(arg);
   } else if (cmd === "trial") {
     const n = arg === "none" ? null : Number(arg);
     if (n !== null && !(Number.isInteger(n) && n >= 0)) throw new Error("trial takes a whole number or none");
     saveSettings({ trialLimit: n });
     console.log(`Trial limit: ${n === null ? "none" : n}.`);
   } else {
-    console.log("Commands: run, setup, status, off, on, trial <n|none>");
+    console.log("Commands: run, setup, status, off, on, trial <n|none>, probe <clipId>");
     process.exitCode = 2;
   }
 } catch (e) {

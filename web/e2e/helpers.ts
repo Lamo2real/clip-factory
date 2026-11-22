@@ -513,13 +513,20 @@ export async function scanText(page: Page, skip = ""): Promise<TextScan> {
           }
           return;
         }
+        // A wrapper with display: contents draws no box, so its opacity hides nothing (Lamo Stories' app panes are
+        // such wrappers around Clip Factory's shell): hide what it holds instead.
+        const hide = (el: HTMLElement) => {
+          if (el.hasAttribute(marked)) return;
+          if (getComputedStyle(el).display === "contents") {
+            for (const kid of Array.from(el.children)) if (kid instanceof HTMLElement) hide(kid);
+            return;
+          }
+          el.setAttribute(marked, JSON.stringify([el.style.getPropertyValue("opacity"), el.style.getPropertyValue("transition"), getComputedStyle(el).opacity]));
+          el.style.setProperty("transition", "none", "important");
+          el.style.setProperty("opacity", "0", "important");
+        };
         for (let a: Element | null = document.querySelector(".backdrop"); a && a !== document.documentElement; a = a.parentElement)
-          for (const sib of Array.from(a.parentElement?.children ?? []))
-            if (sib !== a && sib instanceof HTMLElement && !sib.hasAttribute(marked)) {
-              sib.setAttribute(marked, JSON.stringify([sib.style.getPropertyValue("opacity"), sib.style.getPropertyValue("transition"), getComputedStyle(sib).opacity]));
-              sib.style.setProperty("transition", "none", "important");
-              sib.style.setProperty("opacity", "0", "important");
-            }
+          for (const sib of Array.from(a.parentElement?.children ?? [])) if (sib !== a && sib instanceof HTMLElement) hide(sib);
       }, on);
     await solo(true);
     png = (await page.screenshot({ scale: "css" })).toString("base64");

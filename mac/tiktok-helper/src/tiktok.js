@@ -265,7 +265,7 @@ async function setToggle(page, name, on) {
  * (on disk and on the server) before it returns for that step, because pressing is the point of no return.
  * @returns {Promise<{link: string|null, sure: boolean}>} ``sure`` = TikTok said it posted or the new row was found.
  */
-export async function post(page, job, file, onStep) {
+export async function post(page, job, file, onStep, { dryRun = false } = {}) {
   await onStep("opening");
   const before = await listPosts(page);
   const existing = findExisting(before, job.caption);
@@ -294,6 +294,10 @@ export async function post(page, job, file, onStep) {
   if (dialog) throw new Stop(REASONS.popup(dialog));
   const button = postButton(page);
   if (!(await button.isEnabled().catch(() => false))) throw new Stop(REASONS.noPost);
+  if (dryRun) {
+    // A check run: everything up to Post, then nothing. Quitting Chrome afterwards throws the upload away.
+    return { dryRun: true, link: null, sure: false, posts: before.length, baseline };
+  }
 
   await onStep("pressing", { baseline }); // the point of no return: recorded before the click
   await button.click();
