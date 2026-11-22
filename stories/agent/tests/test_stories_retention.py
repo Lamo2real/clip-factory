@@ -67,9 +67,10 @@ def test_study_only_clears_a_studied_reference_s_video_and_frames_and_keeps_its_
     assert sorted(store.deleted) == [f"{REFS}R1/frames/f0001.jpg", f"{REFS}R1/source.mp4"]
     assert f"{REFS}R1/analysis.json" in store.objects  # the study stays
     r1 = table.item("REFVID#R1")
-    assert r1 is not None and r1["status"] == "analyzed" and r1["sourceRemovedAt"]
+    assert r1 is not None and r1["status"] == "analyzed" and r1["fileRemovedAt"]  # the name the API reads
+    assert "sourceRemovedAt" not in r1
     assert r1["note"] == "The video was removed to save space. Its study stays."
-    assert table.item("REFVID#R2").get("sourceRemovedAt") is None  # type: ignore[union-attr]
+    assert table.item("REFVID#R2").get("fileRemovedAt") is None  # type: ignore[union-attr]
     assert all(p.startswith(f"ws/{USER}/{WS}/") for p in store.listed)
     assert '"stories.retention"' in capsys.readouterr().out
     assert apply(d, fence, keepReferences="study_only") == {"references": {"files": 0, "bytes": 0}}  # done once
@@ -85,18 +86,57 @@ def test_days_clears_references_by_age_only() -> None:
     assert table.item("REFVID#OLD9")["note"] == "The video was removed to save space."  # type: ignore[index]
 
 
-def test_chat_pictures_go_by_age_and_nothing_outside_the_workspace_is_touched() -> None:
-    d, store, _table, fence = world()
-    old, new = f"{CHAT}C1/P1.png", f"{CHAT}C1/P2.png"
-    other = f"ws/{USER}/01JD0000000000000000000000/chat/C1/P3.png"
+def test_a_reference_the_api_already_cleared_is_left_alone() -> None:
+    d, store, table, fence = world()
+    ref(table, store, "R1", fileRemovedAt="2026-11-20T10:00:00.000Z")
+    ref(table, store, "R2", sourceRemovedAt="2026-11-20T10:00:00.000Z")  # an earlier build's name: still read
+    assert apply(d, fence, keepReferences="study_only") == {"references": {"files": 0, "bytes": 0}}
+    assert store.deleted == [] and table.item("REFVID#R1").get("note") is None  # type: ignore[union-attr]
+
+
+def msg(table: FakeTable, store: FakeStore, conv: str, msg_id: str, age_days: int, *names: str,
+        owner: str = USER, now: datetime = NOW) -> list[str]:  # fmt: skip
+    """A chat message with its pictures (as the API writes them: ``attachments`` with key and bytes)."""
+    keys_ = [f"{CHAT}{conv}/{n}" for n in names]
+    for k in keys_:
+        store.objects[k] = (b"p" * 5, "image/png")
+    table.seed({"pk": PK, "sk": f"MSG#{conv}#{msg_id}", "type": "ws_msg", "userId": owner, "workspaceId": WS,
+                "convId": conv, "msgId": msg_id, "role": "user", "text": "Look at this", "status": "done",
+                "attachments": [{"assetId": f"A{i}", "key": k, "contentType": "image/png", "bytes": 5}
+                                for i, k in enumerate(keys_)],
+                "createdAt": (now - timedelta(days=age_days)).isoformat().replace("+00:00", "Z")})  # fmt: skip
+    return keys_
+
+
+def test_chat_pictures_go_with_their_old_message_which_keeps_its_words() -> None:
+    """keepChatPictures days_N, per message as the API's cleanup: the files of a message that old go, the message
+    keeps its words with no attachments left (so the chat never shows a picture that is gone) and
+    ``picturesRemovedAt``; newer messages and anything outside the workspace are never touched."""
+    d, store, table, fence = world()
+    old = msg(table, store, "C1", "M1", 100, "P1.png", "P2.png")
+    new = msg(table, store, "C1", "M2", 10, "P3.png")
+    other = f"ws/{USER}/01JD0000000000000000000000/chat/C1/P9.png"
     clips = "uploads/clip.png"
-    for key in (old, new, other, clips):
+    for key in (other, clips):
         store.objects[key] = (b"p" * 5, "image/png")
-        store.modified[key] = NOW - timedelta(days=100)
-    store.modified[new] = NOW - timedelta(days=10)
+    table.seed({"pk": PK, "sk": "MSG#C1#M3", "userId": USER, "workspaceId": WS, "convId": "C1", "msgId": "M3",
+                "attachments": [{"assetId": "X", "key": other, "bytes": 5}, {"assetId": "Y", "key": clips}],
+                "createdAt": "2026-01-01T00:00:00.000Z"})  # fmt: skip  # keys outside this conversation's folder
     got = apply(d, fence, keepChatPictures="days_90")
-    assert got == {"chatPictures": {"files": 1, "bytes": 5}}
-    assert store.deleted == [old] and store.listed == [CHAT]
+    assert got == {"chatPictures": {"files": 2, "bytes": 10}}
+    assert sorted(store.deleted) == sorted(old)
+    m1 = table.item("MSG#C1#M1")
+    assert m1 is not None and m1["attachments"] == [] and m1["picturesRemovedAt"] and m1["text"] == "Look at this"
+    assert [a["key"] for a in table.item("MSG#C1#M2")["attachments"]] == new  # type: ignore[index]
+    assert other in store.objects and clips in store.objects and new[0] in store.objects
+    assert apply(d, fence, keepChatPictures="days_90") == {"chatPictures": {"files": 0, "bytes": 0}}  # done once
+
+
+def test_a_message_of_another_owner_in_the_partition_is_never_cleared() -> None:
+    d, store, table, fence = world()
+    keys_ = msg(table, store, "C1", "M1", 100, "P1.png", owner="someone-else")
+    assert apply(d, fence, keepChatPictures="days_30") == {"chatPictures": {"files": 0, "bytes": 0}}
+    assert store.deleted == [] and keys_[0] in store.objects
 
 
 def test_a_failure_while_clearing_never_changes_the_job(tmp_path: Path) -> None:
@@ -118,11 +158,10 @@ def test_a_story_job_clears_files_after_its_end(tmp_path: Path) -> None:
     svc, store, _table, _ = story_world(
         tmp_path, job=job_item("J1", "S1", run=["storyboard"]), config={"production": {"keepChatPictures": "days_30"}}
     )
-    key = f"{CHAT}C1/P1.png"
-    store.objects[key] = (b"p", "image/png")
-    store.modified[key] = datetime.now(UTC) - timedelta(days=40)
+    (key,) = msg(_table, store, "C1", "M1", 40, "P1.png", now=datetime.now(UTC))
     assert run_job(svc) == "ready"
     assert store.deleted == [key]
+    assert _table.item("MSG#C1#M1")["attachments"] == []  # type: ignore[index]
 
 
 # --- provider usage -------------------------------------------------------------------------------------------------

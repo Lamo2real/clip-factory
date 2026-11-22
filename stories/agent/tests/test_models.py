@@ -527,3 +527,68 @@ def test_the_protocol_lists_allow_inactive_and_on_text_s_meaning() -> None:
     params = inspect.signature(models.ModelClient.complete).parameters
     assert "allow_inactive" in params and params["allow_inactive"].default is False
     assert "whole text so far" in (models.ModelClient.complete.__doc__ or "")
+
+
+# --- round 3 review: Regions, cache points and what a failed call was sent with -----------------------------------
+
+
+def test_a_model_the_owner_added_in_another_region_is_called_there_even_after_a_bundled_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """As in production (``services.py``: a Region and no client given), a bundled call first makes this Region's
+    client; the owner's model in us-west-2 still gets a us-west-2 client, never the runtime's own (§45.34)."""
+    import boto3
+
+    made: dict[str, FakeRuntime] = {}
+
+    def fake_client(service: str, region_name: str | None = None, config: Any = None) -> FakeRuntime:
+        assert service == "bedrock-runtime" and region_name not in made
+        made[str(region_name)] = FakeRuntime([converse_reply("Hi")])
+        return made[str(region_name)]
+
+    monkeypatch.setattr(boto3, "client", fake_client)
+    table = FakeTable()
+    table.seed(modeldef("custom-llama"))
+    store = FakeStore(table)
+    m = BedrockModels(table=table, get_bytes=store.get_bytes_sync, region="eu-north-1", sleep=lambda _: None)
+    assert m.complete(CTX, task="chat", messages=HELLO).model == "opus-5-5"  # a bundled model, this Region
+    reply = m.complete(CTX, task="chat", messages=HELLO, override={"model": "custom-llama", "effort": "low"})
+    assert reply.model == "custom-llama" and list(made) == ["eu-north-1", "us-west-2"]
+    assert [b["modelId"] for b in made["eu-north-1"].requests] == [OPUS]
+    assert [b["modelId"] for b in made["us-west-2"].requests] == [modeldef("x")["modelId"]]
+    m.complete(CTX, task="chat", messages=HELLO, override={"model": "custom-llama", "effort": "low"})
+    assert len(made["us-west-2"].requests) == 2 and list(made) == ["eu-north-1", "us-west-2"]  # made once
+
+
+def test_a_custom_model_that_refuses_a_cache_point_leaves_caching_on_for_the_bundled_models() -> None:
+    refused = client_error("ValidationException", "cachePoint is not supported for this model")
+    m, runtime, _, _ = client(
+        [refused, converse_reply("ok"), converse_reply("ok"), converse_reply("ok")], modeldef("custom-llama")
+    )
+    custom = {"model": "custom-llama", "effort": "low"}
+    assert m.complete(CTX, task="chat", messages=HELLO, override=custom).text == "ok"
+    m.complete(CTX, task="chat", messages=HELLO, override=custom)
+    m.complete(CTX, task="chat", messages=HELLO)  # a bundled model: still cached
+
+    def cached(body: dict[str, Any]) -> bool:
+        return {"cachePoint": {"type": "default"}} in body["system"]
+
+    first, again, later, bundled = runtime.requests
+    assert cached(first) and not cached(again) and not cached(later)  # this model only, for good
+    assert bundled["modelId"] == OPUS and cached(bundled)
+
+
+def test_any_other_bedrock_error_keeps_its_type_and_says_the_model_and_effort_it_was_sent_with() -> None:
+    from botocore.exceptions import ClientError
+
+    from lamostories_agent.tasks.work import asked_of
+
+    m, runtime, table, _ = client([client_error("ModelErrorException", "The model had an internal error")])
+    with pytest.raises(ClientError) as e:
+        m.complete(CTX, task="chat", messages=HELLO)
+    assert len(runtime.requests) == models.CALL_ATTEMPTS  # retried as before, never another model
+    assert {b["modelId"] for b in runtime.requests} == {OPUS}
+    assert (getattr(e.value, "model", None), getattr(e.value, "effort", None)) == ("opus-5-5", "high")
+    assert asked_of(e.value) == ("opus-5-5", "high")
+    status = table.item(keys.modelstatus_sk("opus-5-5"))
+    assert status is not None and status["status"] == "error"

@@ -244,6 +244,14 @@ class AnswerInvalid(Exception):
         self.effort = effort
 
 
+def _asked(e: BaseException, choice: Choice) -> None:
+    """Puts the model and effort a call was sent with on an error that does not carry them (§45.34)."""
+    for name, value in (("model", choice.model), ("effort", choice.effort)):
+        if getattr(e, name, None) is None:
+            with contextlib.suppress(AttributeError, TypeError):
+                setattr(e, name, value)
+
+
 def _code(e: BaseException) -> str:
     response = getattr(e, "response", None)
     return str(((response or {}).get("Error") or {}).get("Code") or "") if isinstance(response, dict) else ""
@@ -378,13 +386,16 @@ class BedrockModels:
         self._table = table
         self._get_bytes = get_bytes
         self._client = client
+        self._injected = client is not None  # a test's client; the one made in ``client`` is this Region's only
         self._region = region
         self._sleep = sleep
         self._factory = client_factory
         self._clients: dict[str, Any] = {}
         self._local = threading.local()
         self._lock = threading.Lock()
-        self.cache_points = True
+        # The model ids (with their Region) Bedrock refused a cache point for. Kept per model: one owner's model that
+        # cannot cache never switches caching off for the bundled models or another workspace (§45.34).
+        self._no_cache: set[tuple[str, str]] = set()
 
     # --- plumbing ------------------------------------------------------------------------------------------------
 
@@ -403,7 +414,7 @@ class BedrockModels:
         """The client of the Region a model is called in: this runtime's own for the bundled models, the model's own
         for one the owner added with another Region (§45.34). A client given to the constructor (a test's) answers
         for every Region unless a ``client_factory`` is given too."""
-        if not region or region == self._region or (self._client is not None and self._factory is None):
+        if not region or region == self._region or (self._injected and self._factory is None):
             return self.client
         with self._lock:
             found = self._clients.get(region)
@@ -540,10 +551,11 @@ class BedrockModels:
         """The Converse request body (a test records it): the model's profile, the system blocks, the effort exactly
         when the model offers efforts, never ``thinking``, tools with automatic choice only."""
         blocks: list[dict[str, Any]] = [{"text": b} for b in system if b.strip()]
-        if self.cache_points and blocks:
+        model_id = str(info.get("profile") or info.get("modelId"))
+        if blocks and self.caches(info):
             blocks.append({"cachePoint": {"type": "default"}})
         body: dict[str, Any] = {
-            "modelId": str(info.get("profile") or info.get("modelId")),
+            "modelId": model_id,
             "system": blocks,
             "messages": messages,
             "inferenceConfig": {"maxTokens": int(max_tokens)},
@@ -553,6 +565,15 @@ class BedrockModels:
         if tools:
             body["toolConfig"] = {"tools": tools, "toolChoice": {"auto": {}}}
         return body
+
+    @staticmethod
+    def _cache_key(info: dict[str, Any]) -> tuple[str, str]:
+        region = str(info.get("region") or "") if info.get("custom") else ""
+        return region, str(info.get("profile") or info.get("modelId"))
+
+    def caches(self, info: dict[str, Any]) -> bool:
+        """Whether a call to this model carries a cache point (every model, until Bedrock refused one for it)."""
+        return self._cache_key(info) not in self._no_cache
 
     def _send(
         self,
@@ -588,9 +609,11 @@ class BedrockModels:
                 )
             except Exception as e:
                 msg = _message(e).lower()
-                if self.cache_points and _code(e) == "ValidationException" and "cache" in msg:
+                cached = any("cachePoint" in b for b in body.get("system") or [])
+                if cached and _code(e) == "ValidationException" and "cache" in msg:
                     log("info", "stories.cache_points_off", model=choice.model)
-                    self.cache_points = False
+                    with self._lock:
+                        self._no_cache.add(self._cache_key(info))
                     continue
                 log("warn", "stories.model_failed", model=choice.model, task=task, code=_code(e), detail=msg[:300])
                 if choice.effort_applied and choice.effort and effort_refused(e):
@@ -613,6 +636,9 @@ class BedrockModels:
                         effort=choice.effort,
                         status=found[0],
                     ) from e
+                # Any other failure (a timeout, a model error, throttling after the retries) keeps its own type and
+                # also says what was asked, so a failed job step or task still shows its model and effort (§45.34).
+                _asked(e, choice)
                 raise
             if record:
                 self._model_status(ctx, choice.model, "ok", STATUS_LINES["ok"])

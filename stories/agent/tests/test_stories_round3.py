@@ -20,7 +20,7 @@ from lamostories_agent import keys, media, writer
 from lamostories_agent.data import JobFence
 from lamostories_agent.models import ModelUnavailable
 from lamostories_agent.pipeline import StoryJob
-from lamostories_agent.providers import REEL_NO_BUCKET
+from lamostories_agent.providers import REEL_NO_BUCKET, REEL_NOT_READY, REEL_SETUP
 from ls_fakes import PK, USER, WS, ffmpeg_has, needs_deno, needs_ffmpeg, needs_libass
 from test_stories_pipeline import (
     POST,
@@ -90,7 +90,28 @@ def test_the_writer_and_the_fact_checker_get_the_engines_rules_and_the_videos_sh
     check = next(c for c in fake.calls if c["task"] == "fact_check")
     body = request_of(check)
     assert any(r["id"] == "skid_dir" for r in body["rules"]) and body["propStates"] and body["limits"]
+    assert {"actions", "expressions", "sets"} <= set(body["catalog"])  # the catalog too (§45.34 item 1)
+    assert body["catalog"]["actions"] == write["catalog"]["actions"]
     assert "steer_left or steer_right must match the skid's dir" in check["messages"][0]["content"][0]["text"]
+
+
+def test_the_fact_checker_sees_each_skid_s_side_and_time_so_a_wrong_steer_can_be_reported() -> None:
+    """A skid of the rear to the right answered with steer_left: the checker gets both, with their side and time,
+    so the engine's skid_dir rule has something to apply to."""
+    from lamostories_agent import safety
+
+    script = {"cast": {"c1": {"name": "Ana"}}, "scenes": [{"sceneId": "s1", "title": "Ice", "set": "icy_road",
+              "props": [{"propId": "car1", "kind": "car"}],
+              "beats": [{"at": 1.0, "dur": 1.5, "who": "car1", "do": "skid", "dir": "right"},
+                        {"at": 1.2, "dur": 1.0, "who": "c1", "do": "steer_left", "face": "scared"}]}]}  # fmt: skip
+    body = safety.request(script, None, None)
+    skid, steer = body["items"]
+    assert skid == {"ref": "beat:s1:0", "action": "the car does skid to the right", "set": "icy_road", "who": "car1",
+                    "do": "skid", "dir": "right", "at": 1.0, "dur": 1.5}  # fmt: skip
+    assert steer["action"] == "Ana does steer left with a scared face"
+    assert (steer["do"], steer["at"], steer["dur"]) == ("steer_left", 1.2, 1.0)
+    assert "dir" not in steer  # no side of its own: left out, never null
+    assert '"dir"' in safety.CHECK_SYSTEM and '"at"' in safety.CHECK_SYSTEM
 
 
 # --- (3) a remade scene's seed comes after normalizing ----------------------------------------------------------
@@ -250,6 +271,23 @@ def test_a_step_that_failed_on_its_model_still_shows_what_was_asked(tmp_path: Pa
     ]  # fmt: skip
 
 
+@needs_deno
+def test_a_step_that_failed_on_bedrock_s_own_error_still_shows_what_was_asked(tmp_path: Path) -> None:
+    """Not a refusal: a model error after the retries (``models._send`` puts the model and effort on it)."""
+    from lamostories_agent.models import Choice, _asked
+    from ls_fakes import client_error
+
+    raw = client_error("ModelTimeoutException", "The model took too long")
+    _asked(raw, Choice(model="opus-5-5", effort="high", effort_applied=True, source="agent"))
+    svc, _store, table, _ = world(tmp_path, answers(storyboard=raw), job=job_item("J1", "S1", run=WRITE_RUN))
+    assert run_job(svc) == "failed"
+    job = table.item("PJOB#J1")
+    assert job is not None and job["meta"]["models"] == [
+        {"step": "storyboard", "agentId": "storyboard", "task": "storyboard", "model": "opus-5-5", "effort": "high",
+         "effortApplied": False, "failed": True}
+    ]  # fmt: skip
+
+
 # --- (9) captions off, (17) extra formats, (19) provider usage ------------------------------------------------
 
 
@@ -321,6 +359,44 @@ def test_extra_formats_are_made_after_the_mp4_and_the_built_in_renderer_s_second
     assert usage["units"] > 0 and usage["units"] == pytest.approx(usage["renderSec"], abs=0.01)
 
 
+def test_built_in_render_seconds_never_count_the_wait_for_nova_reel(tmp_path: Path) -> None:
+    """builtin-rig's units are the built-in renderer's own seconds: a Nova Reel cut-away rendered in the same story
+    (about 90 s a shot in real life) is never added to them (§45.34 Provider usage)."""
+    from lamostories_agent.providers import SceneClip
+
+    svc, _store, _table, _ = world(tmp_path)
+    job = StoryJob(svc, JobFence(USER, WS, "J1", "S1"), STORY)
+    job.story = story_item()
+    job.config = {"production": {"scenesAtOnce": 1}}
+    waits = {"builtin-2d": 0.02, "nova-reel": 0.5}
+
+    class Fake:
+        def __init__(self, pid: str) -> None:
+            self.pid = pid
+
+        async def render_scene(self, script: dict[str, Any], sid: str, assets: Any, out: Path) -> SceneClip:
+            await asyncio.sleep(waits[self.pid])
+            return SceneClip(path=out, still=None, duration_sec=3.0)
+
+    async def nothing(*_a: Any, **_k: Any) -> int:
+        return 1
+
+    usage: list[dict[str, Any]] = []
+
+    async def record(pid: str, model_id: str, **kw: Any) -> None:
+        usage.append({"pid": pid, **kw})
+
+    job._scene_provider = lambda scene: "nova-reel" if scene["sceneId"] == "s2" else "builtin-2d"  # type: ignore[method-assign]
+    job._provider = lambda kind, ctx, pid=None: Fake(str(pid))  # type: ignore[method-assign,assignment]
+    job._save = job._drawing = job.prove = nothing  # type: ignore[method-assign,assignment]
+    job.provider_usage = record  # type: ignore[method-assign,assignment]
+    scenes = [{"sceneId": f"s{i}", "durationSec": 3} for i in (1, 2, 3)]
+    asyncio.run(job._render({"scenes": scenes}, scenes))
+    rig = next(u for u in usage if u["provider"] == "builtin-rig")
+    assert 0.03 <= rig["units"] < 0.4 and rig["renderSec"] == rig["units"] and rig["videoSec"] == 6.0
+    assert next(u for u in usage if u["provider"] == "nova-reel")["units"] == 6  # one 6 s shot
+
+
 def _asset(asset_id: str, kind: str, version: int, current: int, key: str, **meta: Any) -> dict[str, Any]:
     return {"pk": PK, "sk": f"ASSET#{asset_id}", "type": "ws_asset", "userId": USER, "workspaceId": WS,
             "assetId": asset_id, "kind": kind, "storyId": STORY, "key": key, "version": version,
@@ -363,8 +439,14 @@ def test_nova_reel_not_ready_fails_the_job_with_its_own_sentence_and_switches_no
     assert run_job(svc) == "failed"
     job = table.item("PJOB#J1")
     assert job is not None and job["error"] == REEL_NO_BUCKET
-    assert REEL_NO_BUCKET.startswith("Amazon Nova Reel is not ready yet: ")
-    assert REEL_NO_BUCKET.endswith("Pick Built-in animation in Settings › Video, or finish its setup.")
+    assert REEL_NO_BUCKET == (  # word for word the API's 409 (§45.34: "the same sentence")
+        "Amazon Nova Reel is not ready yet: it needs a storage bucket in the United States (N. Virginia), which is "
+        "switched off, and Amazon Nova Reel turned on for your account. Pick Built-in animation in Settings › Video, "
+        "or finish its setup."
+    )
+    for line in (REEL_SETUP, REEL_NOT_READY.format(missing="x")):  # no client, or Bedrock says it is not turned on
+        assert line.startswith("Amazon Nova Reel is not ready yet: ")
+        assert line.endswith(". Pick Built-in animation in Settings › Video, or finish its setup.")
     assert next(s for s in job["steps"] if s["key"] == "animation")["status"] == "failed"
     assert not [a for a in table.prefix("ASSET#") if a["kind"] == "scene_clip"]  # nothing made by another animator
 

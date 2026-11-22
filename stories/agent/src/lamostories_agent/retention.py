@@ -6,8 +6,11 @@ The workspace's ``production`` settings say what stays:
 * ``keepReferences``: ``all`` (the default), ``study_only`` (a reference video's file and frames go once its study is
   written; ``analysis.json`` and the ``REFVID#`` item stay, with a note), ``days_30`` or ``days_90`` (the same, once
   the reference is that old);
-* ``keepChatPictures``: ``all`` (the default), ``days_30`` or ``days_90`` (pictures sent in the chat go once they are
-  that old).
+* ``keepChatPictures``: ``all`` (the default), ``days_30`` or ``days_90`` (the pictures of chat messages that old
+  go; the message keeps its words, its ``attachments`` empty and ``picturesRemovedAt`` set, as the API's cleanup).
+
+A cleared reference gets ``fileRemovedAt`` (internal, the name the API reads: it stops offering the file, shows the
+note and refuses Analyze; the agent also reads the older ``sourceRemovedAt``).
 
 Only files under the workspace's own ``ws/{userId}/{workspaceId}/`` prefix are ever listed or deleted, a reference
 that is uploading or being analyzed is never touched, and every run is logged with what it removed (files and
@@ -30,6 +33,13 @@ REMOVED_NOTE = "The video was removed to save space. Its study stays."
 REMOVED_NO_STUDY = "The video was removed to save space."
 KEEP_FILES = ("analysis.json",)  # a reference's study always stays
 BUSY = ("uploading", "analyzing")
+FILE_REMOVED = "fileRemovedAt"  # the API's name (§45.34 internal attributes)
+OLD_FILE_REMOVED = "sourceRemovedAt"  # what an earlier round-3 build wrote; still read
+
+
+def file_removed(ref: Mapping[str, Any]) -> bool:
+    """Whether keepReferences (the agent's or the API's cleanup) already cleared this reference's video."""
+    return bool(ref.get(FILE_REMOVED) or ref.get(OLD_FILE_REMOVED))
 
 
 @dataclass
@@ -99,7 +109,7 @@ async def _references(data: StoryData, fence: JobFence, rule: str, now: datetime
     limit = days(rule)
     rows = await data.query_prefix(fence.pk, "REFVID#", consistent=True)
     for ref in rows:
-        if data._owned(ref, fence.user_id, fence.workspace_id) is None or ref.get("sourceRemovedAt"):
+        if data._owned(ref, fence.user_id, fence.workspace_id) is None or file_removed(ref):
             continue
         ref_id = str(ref.get("refId") or str(ref.get("sk") or "").removeprefix("REFVID#"))
         status = str(ref.get("status") or "")
@@ -125,7 +135,7 @@ async def _references(data: StoryData, fence: JobFence, rule: str, now: datetime
         note = REMOVED_NOTE if studied else REMOVED_NO_STUDY
         await data.write(
             fence,
-            other_set=(keys.refvid_sk(ref_id), {"sourceRemovedAt": now_iso(), "note": note}, {"status": status}),
+            other_set=(keys.refvid_sk(ref_id), {FILE_REMOVED: now_iso(), "note": note}, {"status": status}),
         )
         await data.delete_files(fence, [str(f["key"]) for f in files])
         removed.add(files)
@@ -133,16 +143,43 @@ async def _references(data: StoryData, fence: JobFence, rule: str, now: datetime
 
 
 async def _chat_pictures(data: StoryData, fence: JobFence, limit: int, now: datetime) -> Removed:
+    """The pictures of this workspace's chat messages older than ``limit`` days, per ``MSG#`` (as the API's cleanup):
+    first the message (``attachments`` empty, ``picturesRemovedAt``, only while it is still this workspace's), then
+    its files under ``chat/{convId}/``. A message that changed meanwhile keeps its pictures until the next run."""
     removed = Removed()
     if limit <= 0:
         return removed
     cutoff = now - timedelta(days=limit)
-    old = [
-        f
-        for f in await data.list_files(fence, keys.chat_prefix(fence.user_id, fence.workspace_id))
-        if (made := parse_time(f.get("modified"))) is not None and made < cutoff
-    ]
-    if old:
-        await data.delete_files(fence, [str(f["key"]) for f in old])
-        removed.add(old)
+    chat = keys.chat_prefix(fence.user_id, fence.workspace_id)
+    rows = await data.query_prefix(fence.pk, "MSG#", consistent=True)
+    for msg in rows:
+        if data._owned(msg, fence.user_id, fence.workspace_id) is None or msg.get("picturesRemovedAt"):
+            continue
+        pictures = [a for a in msg.get("attachments") or [] if isinstance(a, Mapping)]
+        made = parse_time(msg.get("createdAt"))
+        conv_id = str(msg.get("convId") or "")
+        if not pictures or made is None or made >= cutoff or not keys.SAFE_ID.match(conv_id):
+            continue
+        folder = f"{chat}{conv_id}/"
+        gone = [a for a in pictures if str(a.get("key") or "").startswith(folder) and ".." not in str(a["key"])]
+        try:
+            await data.write(
+                fence,
+                other_set=(
+                    str(msg["sk"]),
+                    {"attachments": [], "picturesRemovedAt": now_iso()},
+                    {"userId": fence.user_id, "workspaceId": fence.workspace_id},
+                ),
+            )
+        except JobSuperseded:
+            log("info", "stories.chat_pictures_raced", sk=msg.get("sk"))
+            continue
+        if gone:
+            await data.delete_files(fence, [str(a["key"]) for a in gone])
+            removed.files += len(gone)
+            removed.bytes += sum(_bytes(a.get("bytes")) for a in gone)
     return removed
+
+
+def _bytes(value: Any) -> int:
+    return int(value) if isinstance(value, int | float) and not isinstance(value, bool) and value > 0 else 0

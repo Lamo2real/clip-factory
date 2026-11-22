@@ -488,7 +488,7 @@ class Job:
         loop = asyncio.get_running_loop()
         try:
             reply: Reply = await loop.run_in_executor(self.svc.model_pool, call)
-        except (ModelUnavailable, EffortUnavailable, ModelRefused, AnswerInvalid) as e:
+        except Exception as e:  # a refusal, a bad answer or Bedrock's own error: each carries what was asked
             self._note_failed_call(step, agent_id, task, e)
             raise
         entry = {
@@ -1350,7 +1350,8 @@ class StoryJob(Job):
         if not self.budget.take("checker"):
             return safety.Check(found or [{"ref": "", "problem": "The facts could not be checked again this time."}])
         body = safety.request(script, post, topic, unchecked_advice=guarded and topic is None)
-        _catalog, rules = await self._engine_catalog()
+        catalog, rules = await self._engine_catalog()
+        body["catalog"] = self._lists(catalog)
         body.update({k: v for k, v in rules.items() if k in ("rules", "propStates", "limits")})
         reply = await self._fact_call(body, guarded=guarded)
         refs = [it["ref"] for it in safety.items(script, post)]
@@ -1594,7 +1595,7 @@ class StoryJob(Job):
         ctx = self._ctx()
         used: dict[str, float] = {}
         shots: dict[str, int] = {}
-        started = time.monotonic()
+        spent: dict[str, float] = {}  # each provider's own render seconds (never another one's wait, §45.34)
 
         async def one(scene: dict[str, Any]) -> None:
             sid = str(scene["sceneId"])
@@ -1607,12 +1608,14 @@ class StoryJob(Job):
                 pid = self._scene_provider(scene)
                 provider = self._provider("animation", dataclasses.replace(ctx, on_progress=frames), pid)
                 out = self.work / "clips" / f"{sid}.mp4"
+                began = time.monotonic()
                 try:
                     clip = await provider.render_scene(script, sid, {}, out)
                 except ProviderFailed as e:
                     if e.state:
                         await self.prove("animation", pid, e.state, e.last_error)
                     raise
+                spent[pid] = spent.get(pid, 0.0) + (time.monotonic() - began)
                 used[pid] = used.get(pid, 0.0) + clip.duration_sec
                 shots[pid] = shots.get(pid, 0) + 1
                 key = self._key(keys.scene_clip_key, sid, self.version)
@@ -1624,9 +1627,9 @@ class StoryJob(Job):
         for pid, seconds in used.items():
             await self.prove("animation", pid)
             if pid == "builtin-2d":  # the built-in renderer's own seconds count as builtin-rig (§45.34)
-                spent = time.monotonic() - started
-                await self.provider_usage(pid, "", provider="builtin-rig", units=spent, unit="second", videoSec=seconds,
-                                          renderSec=spent)  # fmt: skip
+                rendered = round(spent.get(pid, 0.0), 3)
+                await self.provider_usage(pid, "", provider="builtin-rig", units=rendered, unit="second",
+                                          videoSec=seconds, renderSec=rendered)  # fmt: skip
             elif pid == "nova-reel":  # billed per generated 6 s shot, however long the scene it fills
                 await self.provider_usage(pid, self.svc.video_model_id, provider=pid, units=shots[pid] * REEL_SHOT,
                                           unit="second", videoSec=shots[pid] * REEL_SHOT, shots=shots[pid],

@@ -50,13 +50,15 @@ CANVAS_SETUP = (
     "then tap Try again."
 )
 CANVAS_REFUSED = "Nova Canvas would not draw this character. Change the description a little, then tap Try again."
-REEL_NOT_READY = "Amazon Nova Reel is not ready yet: {missing}. Pick Built-in animation in Settings › Video, or finish its setup."  # §45.34: the agent's second guard, the API's own line
-REEL_NO_BUCKET = REEL_NOT_READY.format(missing="its storage in the USA (N. Virginia) is switched off")
-REEL_NOT_ENABLED = "Bedrock says Nova Reel is not enabled for this account in US East (N. Virginia)."
-REEL_SETUP = (
-    "AI video is not set up yet. Turn on Amazon Nova Reel in the Bedrock console, Region US East (N. Virginia), or pick "
-    "the built-in animator in Lamo Stories › Settings › Video, then tap Try again."
+REEL_NOT_READY = (  # §45.34: the agent's second guard says the API's own line
+    "Amazon Nova Reel is not ready yet: {missing}. Pick Built-in animation in Settings › Video, or finish its setup."
 )
+REEL_NO_BUCKET = REEL_NOT_READY.format(  # word for word the API's NOT_READY["nova-reel"]
+    missing="it needs a storage bucket in the United States (N. Virginia), which is switched off, and Amazon Nova "
+    "Reel turned on for your account"
+)
+REEL_NOT_ENABLED = "Bedrock says Nova Reel is not enabled for this account in US East (N. Virginia)."
+REEL_SETUP = REEL_NOT_READY.format(missing="it needs Amazon Nova Reel turned on for your account")
 REEL_FAILED = "Nova Reel could not make this shot. Tap Try again, or pick the built-in animator in Settings."
 SCENE_SECONDS = 30 * 60
 REEL_SECONDS = 20 * 60  # Nova Reel takes about 90 s for a 6 s shot; give it room
