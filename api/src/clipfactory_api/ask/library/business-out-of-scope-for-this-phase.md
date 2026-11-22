@@ -12,6 +12,9 @@
   and the bank (its tools list no withdrawals); they say "not available" with where to look (BR-27).
 - Turning a normal clip into a campaign clip in place (a copy is made instead, BR-28 AC5), and campaigns that want
   their own picture on top of the video (a hard stop "Pick another campaign").
+- Auto-posting to TikTok (TikTok's rules want the creator's own pick for each post; he posts it himself with **Post
+  it yourself**), and auto-posting campaign clips while Content Rewards can't take clips from Clip Factory by itself
+  (they wait for his Upload, BR-29 AC4 and AC5).
 - More than one user.
 - A custom domain.
 - Signed and notarized desktop builds, and a store listing for phones (NFR-11 AC5, [ROADMAP.md](ROADMAP.md#later)).

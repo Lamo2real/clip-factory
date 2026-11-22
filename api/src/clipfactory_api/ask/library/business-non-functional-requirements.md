@@ -7,7 +7,8 @@
 ### NFR-02 Serverless architecture
 - AC1: No EC2 instances, no always-on containers, no VPC, no servers to patch: CloudFront, S3 (web, media),
   S3 Vectors, Cognito, API Gateway (HTTP, WebSocket and REST APIs), Lambda (plain and durable functions), DynamoDB
-  with Streams, SSM Parameter Store, one EventBridge rule (the stats tick, BR-20), AgentCore Runtime, Bedrock,
+  with Streams, SSM Parameter Store, one EventBridge rule (the stats tick, BR-20) and, since BR-29, the hourly
+  auto-posting rule `cf-prod-autopost-hourly`, AgentCore Runtime, Bedrock,
   Transcribe, CloudWatch and SNS.
 - AC2: Idle cost is close to zero (pay per request and per stored byte). Services with a standing minimum charge are
   not deployed (OpenSearch Serverless, [ADR-25](DECISIONS.md#adr-25-s3-vectors-for-the-learning-memory-opensearch-not-deployed)).

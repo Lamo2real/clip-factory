@@ -64,5 +64,9 @@ flowchart LR
   lapi -- "13 the CR token" --> sm
   clf -- "13 cr-send: create_my_submission within 25 minutes" --> crmcp
   st -- "13 tick: membership, reviews, views, money" --> crmcp
+  eva[EventBridge rule cf-prod-autopost-hourly, every hour at :00 UTC] -- "14 tick" --> ap[Lambda cf-prod-autopost]
+  ap -- "14 due check, claim the run, Upload's transaction" --> ddb
+  ap -- "14 async invoke, alias live" --> clf
+  lapi -- "14 run-now tests: the same run, inline" --> clf
   classDef off stroke-dasharray: 5 5
 ```

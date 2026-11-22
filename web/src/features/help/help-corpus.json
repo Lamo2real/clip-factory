@@ -1,5 +1,5 @@
 {
-  "version": "1f2c713a0e25",
+  "version": "7f0669977604",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -45,6 +45,7 @@
     "src/screens/review/TikTokPrivacy.tsx",
     "src/screens/review/TikTokSheet.tsx",
     "src/screens/review/UploadTo.tsx",
+    "src/screens/settings/AutoPostBranch.tsx",
     "src/screens/settings/FollowBranch.tsx",
     "src/screens/settings/MoneyBranch.tsx",
     "src/screens/settings/NotifyBranch.tsx",
@@ -74,6 +75,7 @@
     "/settings/posting/setup",
     "/settings/posting/where",
     "/settings/posting/my-settings",
+    "/settings/posting/auto",
     "/settings/posting/money",
     "/settings/look-and-feel/sounds",
     "/settings/look-and-feel/motion",
@@ -481,7 +483,7 @@
         "post to many",
         "post everywhere"
       ],
-      "answer": "**Upload** says yes to a clip. It goes up to every place you picked under **Upload to**, each with its own caption. Nothing is posted until you tap **Upload**.",
+      "answer": "**Upload** says yes to a clip. It goes up to every place you picked under **Upload to**, each with its own caption. Nothing is posted until you tap **Upload**, unless you turn on **Auto-posting** in Settings.",
       "steps": [
         "Tap **Review**.",
         "Under **Upload to**, turn on each place you want.",
@@ -655,6 +657,99 @@
       ]
     },
     {
+      "id": "autopost-turn-on",
+      "kind": "guide",
+      "route": "/settings/posting/auto",
+      "where": "Settings › Posting › Auto-posting",
+      "title": "Turn on auto-posting",
+      "keywords": [
+        "auto-posting",
+        "auto posting",
+        "autopost",
+        "auto post",
+        "turn on auto-posting",
+        "turn off auto-posting",
+        "post my clips by themselves",
+        "post by itself",
+        "post by themselves",
+        "clips post by themselves",
+        "post automatically",
+        "schedule posts",
+        "post on a schedule",
+        "post every",
+        "every few hours",
+        "clips each time",
+        "clips a day",
+        "clips a day per platform",
+        "how often",
+        "next up",
+        "stop a clip going up",
+        "went up without me",
+        "go up without me",
+        "practice",
+        "practice run now",
+        "private test run",
+        "test it first",
+        "auto-posting tiktok",
+        "auto-posting campaign clips"
+      ],
+      "answer": "**Auto-posting** posts your oldest clips in **Review** by themselves, every few hours, to each place that is set up. TikTok: you post it yourself (TikTok's rule). Each clip gets **Post it yourself**. Campaign clips wait for your **Upload**: Content Rewards can't take clips from Clip Factory by itself yet. Test it first with **Practice**: it picks the clips, but sends nothing.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Auto-posting**.",
+        "Pick **Post every** and **Clips each time**. The line under them says how many clips a day that is.",
+        "Open **Test it first**. Tap **Practice run now** (nothing is sent), or **Private test run**: only you can see that clip, and it leaves **Review**.",
+        "Turn on **Post my clips by themselves**. It saves at once and says when the next one goes.",
+        "Don't want a clip to go up? Tap **Throw away** on it at least 8 seconds before its turn (that is how long **Undo** stays)."
+      ],
+      "actions": [
+        {
+          "id": "autopost-turn-on:open",
+          "label": "Open Auto-posting",
+          "to": "/settings/posting/auto"
+        }
+      ]
+    },
+    {
+      "id": "autopost-waits-failed",
+      "kind": "guide",
+      "route": "/settings/posting/auto",
+      "where": "Settings › Posting › Auto-posting",
+      "title": "When auto-posting skips or fails a clip",
+      "keywords": [
+        "auto-posting failed",
+        "auto-post failed",
+        "failed to auto-post",
+        "didn't work",
+        "auto-posting didn't work",
+        "try again auto-posting",
+        "retry auto-posting",
+        "auto-posting skipped",
+        "auto-posting skips",
+        "why did auto-posting skip",
+        "skipped a clip",
+        "waits for you",
+        "open in review",
+        "recent runs",
+        "last runs"
+      ],
+      "answer": "**Waits for you** lists the clips auto-posting skips, each with why: tap **Open in Review** and **Upload** it yourself. **Didn't work** lists each post that did not go up, with what went wrong: tap **Try again** on it. The other places of that clip still post. **Recent** shows the last runs, with **Open** on each post.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Auto-posting**.",
+        "Under **Waits for you**, tap **Open in Review** on a clip, then **Upload** it yourself.",
+        "Under **Didn't work**, tap **Try again** on a post.",
+        "Under **Recent**, tap **Open** to see a post."
+      ],
+      "actions": [
+        {
+          "id": "autopost-waits-failed:open",
+          "label": "Open Auto-posting",
+          "to": "/settings/posting/auto"
+        }
+      ]
+    },
+    {
       "id": "review-throw-away",
       "kind": "guide",
       "route": "/review",
@@ -778,7 +873,7 @@
         "new clips",
         "review count"
       ],
-      "answer": "New clips wait in **Review** until you **Upload** or **Throw away** each one.",
+      "answer": "New clips wait in **Review** until you **Upload** or **Throw away** each one. With **Auto-posting** on, the oldest ones go up by themselves.",
       "steps": [
         "Tap **Review** to check them one by one."
       ],
@@ -4536,9 +4631,10 @@
         "Set up posting",
         "Where clips go",
         "My settings",
+        "Auto-posting",
         "Money"
       ],
-      "answer": "Where your clips go. It has Set up posting, Where clips go, My settings, Money.",
+      "answer": "Where your clips go. It has Set up posting, Where clips go, My settings, Auto-posting, Money.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**."
@@ -5098,6 +5194,353 @@
       ],
       "highlight": [
         "my-settings-x"
+      ]
+    },
+    {
+      "id": "settings-posting-auto",
+      "kind": "page",
+      "route": "/settings/posting/auto",
+      "where": "Settings › Posting › Auto-posting",
+      "title": "Auto-posting",
+      "keywords": [
+        "Post my clips by themselves",
+        "How often",
+        "Where they go",
+        "Next up",
+        "Waits for you",
+        "Didn't work",
+        "Post these on TikTok yourself",
+        "Recent",
+        "Test it first"
+      ],
+      "answer": "The oldest clips in Review go up by themselves, every few hours.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Auto-posting**."
+      ],
+      "actions": [
+        {
+          "id": "settings-posting-auto:open",
+          "label": "Open Auto-posting",
+          "to": "/settings/posting/auto"
+        }
+      ]
+    },
+    {
+      "id": "apple-auto-post-on",
+      "kind": "apple",
+      "route": "/settings/posting/auto",
+      "hash": "auto-post-on",
+      "where": "Settings › Posting › Auto-posting",
+      "title": "Post my clips by themselves",
+      "keywords": [
+        "auto",
+        "autopost",
+        "auto-post",
+        "automatic",
+        "schedule",
+        "by itself",
+        "without approval",
+        "on",
+        "off"
+      ],
+      "answer": "Clips in Review go up without your tap. Throw one away to stop it.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Auto-posting**.",
+        "Find **Post my clips by themselves**."
+      ],
+      "actions": [
+        {
+          "id": "apple-auto-post-on:open",
+          "label": "Open Auto-posting",
+          "to": "/settings/posting/auto#auto-post-on",
+          "highlight": [
+            "auto-post-on"
+          ]
+        }
+      ],
+      "highlight": [
+        "auto-post-on"
+      ]
+    },
+    {
+      "id": "apple-auto-post-every",
+      "kind": "apple",
+      "route": "/settings/posting/auto",
+      "hash": "auto-post-every",
+      "where": "Settings › Posting › Auto-posting",
+      "title": "How often",
+      "keywords": [
+        "hours",
+        "every",
+        "how many",
+        "clips each time",
+        "per day",
+        "a day",
+        "interval",
+        "frequency",
+        "timer"
+      ],
+      "answer": "Post every few hours, a few clips each time. Even gaps, also across midnight.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Auto-posting**.",
+        "Find **How often**."
+      ],
+      "actions": [
+        {
+          "id": "apple-auto-post-every:open",
+          "label": "Open Auto-posting",
+          "to": "/settings/posting/auto#auto-post-every",
+          "highlight": [
+            "auto-post-every"
+          ]
+        }
+      ],
+      "highlight": [
+        "auto-post-every"
+      ]
+    },
+    {
+      "id": "apple-auto-post-where",
+      "kind": "apple",
+      "route": "/settings/posting/auto",
+      "hash": "auto-post-where",
+      "where": "Settings › Posting › Auto-posting",
+      "title": "Where they go",
+      "keywords": [
+        "platforms",
+        "YouTube",
+        "Instagram",
+        "Facebook",
+        "TikTok",
+        "places",
+        "my settings"
+      ],
+      "answer": "Every place that is set up, with My settings. TikTok waits for your own tap.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Auto-posting**.",
+        "Find **Where they go**."
+      ],
+      "actions": [
+        {
+          "id": "apple-auto-post-where:open",
+          "label": "Open Auto-posting",
+          "to": "/settings/posting/auto#auto-post-where",
+          "highlight": [
+            "auto-post-where"
+          ]
+        }
+      ],
+      "highlight": [
+        "auto-post-where"
+      ]
+    },
+    {
+      "id": "apple-auto-post-next",
+      "kind": "apple",
+      "route": "/settings/posting/auto",
+      "hash": "auto-post-next",
+      "where": "Settings › Posting › Auto-posting",
+      "title": "Next up",
+      "keywords": [
+        "queue",
+        "line",
+        "order",
+        "oldest",
+        "next",
+        "throw away",
+        "decline"
+      ],
+      "answer": "The oldest clips in Review go first.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Auto-posting**.",
+        "Find **Next up**."
+      ],
+      "actions": [
+        {
+          "id": "apple-auto-post-next:open",
+          "label": "Open Auto-posting",
+          "to": "/settings/posting/auto#auto-post-next",
+          "highlight": [
+            "auto-post-next"
+          ]
+        }
+      ],
+      "highlight": [
+        "auto-post-next"
+      ]
+    },
+    {
+      "id": "apple-auto-post-waiting",
+      "kind": "apple",
+      "route": "/settings/posting/auto",
+      "hash": "auto-post-waiting",
+      "where": "Settings › Posting › Auto-posting",
+      "title": "Waits for you",
+      "keywords": [
+        "skipped",
+        "campaign",
+        "check",
+        "waiting",
+        "missing"
+      ],
+      "answer": "Clips auto-posting skips, and why. Upload them yourself.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Auto-posting**.",
+        "Find **Waits for you**."
+      ],
+      "actions": [
+        {
+          "id": "apple-auto-post-waiting:open",
+          "label": "Open Auto-posting",
+          "to": "/settings/posting/auto#auto-post-waiting",
+          "highlight": [
+            "auto-post-waiting"
+          ]
+        }
+      ],
+      "highlight": [
+        "auto-post-waiting"
+      ]
+    },
+    {
+      "id": "apple-auto-post-failed",
+      "kind": "apple",
+      "route": "/settings/posting/auto",
+      "hash": "auto-post-failed",
+      "where": "Settings › Posting › Auto-posting",
+      "title": "Didn't work",
+      "keywords": [
+        "failed",
+        "error",
+        "try again",
+        "retry"
+      ],
+      "answer": "Posts that did not go up, with what went wrong.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Auto-posting**.",
+        "Find **Didn't work**."
+      ],
+      "actions": [
+        {
+          "id": "apple-auto-post-failed:open",
+          "label": "Open Auto-posting",
+          "to": "/settings/posting/auto#auto-post-failed",
+          "highlight": [
+            "auto-post-failed"
+          ]
+        }
+      ],
+      "highlight": [
+        "auto-post-failed"
+      ]
+    },
+    {
+      "id": "apple-auto-post-tiktok",
+      "kind": "apple",
+      "route": "/settings/posting/auto",
+      "hash": "auto-post-tiktok",
+      "where": "Settings › Posting › Auto-posting",
+      "title": "Post these on TikTok yourself",
+      "keywords": [
+        "TikTok",
+        "post it yourself",
+        "yourself"
+      ],
+      "answer": "TikTok wants your own tap on each clip.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Auto-posting**.",
+        "Find **Post these on TikTok yourself**."
+      ],
+      "actions": [
+        {
+          "id": "apple-auto-post-tiktok:open",
+          "label": "Open Auto-posting",
+          "to": "/settings/posting/auto#auto-post-tiktok",
+          "highlight": [
+            "auto-post-tiktok"
+          ]
+        }
+      ],
+      "highlight": [
+        "auto-post-tiktok"
+      ]
+    },
+    {
+      "id": "apple-auto-post-recent",
+      "kind": "apple",
+      "route": "/settings/posting/auto",
+      "hash": "auto-post-recent",
+      "where": "Settings › Posting › Auto-posting",
+      "title": "Recent",
+      "keywords": [
+        "history",
+        "runs",
+        "log",
+        "posted",
+        "open"
+      ],
+      "answer": "The last runs, newest first.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Auto-posting**.",
+        "Find **Recent**."
+      ],
+      "actions": [
+        {
+          "id": "apple-auto-post-recent:open",
+          "label": "Open Auto-posting",
+          "to": "/settings/posting/auto#auto-post-recent",
+          "highlight": [
+            "auto-post-recent"
+          ]
+        }
+      ],
+      "highlight": [
+        "auto-post-recent"
+      ]
+    },
+    {
+      "id": "apple-auto-post-test",
+      "kind": "apple",
+      "route": "/settings/posting/auto",
+      "hash": "auto-post-test",
+      "where": "Settings › Posting › Auto-posting",
+      "title": "Test it first",
+      "keywords": [
+        "practice",
+        "test",
+        "private",
+        "try",
+        "dry run",
+        "only me",
+        "draft"
+      ],
+      "answer": "Practice, or a private test run. Nothing public.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Auto-posting**.",
+        "Find **Test it first**."
+      ],
+      "actions": [
+        {
+          "id": "apple-auto-post-test:open",
+          "label": "Open Auto-posting",
+          "to": "/settings/posting/auto#auto-post-test",
+          "highlight": [
+            "auto-post-test"
+          ]
+        }
+      ],
+      "highlight": [
+        "auto-post-test"
       ]
     },
     {

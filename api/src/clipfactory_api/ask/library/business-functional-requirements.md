@@ -72,6 +72,10 @@ structure." ([CONTRACTS.md §18](CONTRACTS.md#18-skills-full-create-read-update-
 ### BR-08 Confirm each clip before anything is posted
 "If I click confirm on each video, then you will upload each video to those social media accounts."
 - AC1: Nothing is ever posted without the owner pressing **Confirm** on that clip.
+  The one exception is auto-posting, and only once the owner turns it on himself (BR-29, 2026-11-22): then the oldest
+  clips in Review go up by themselves every X hours, without his approval, and **Throw away** at least 8 seconds
+  before a clip's turn (its Undo time, AC3) keeps it from ever posting. While it is off (the default for everyone),
+  this AC holds exactly as written.
 - AC2: Confirm creates one post per enabled platform and queues it for publishing.
 - AC3: **Decline** removes the clip and deletes its video files. It is offered with an 8-second Undo first (UX-13 AC7);
   the request is sent only when the Undo window passes.
@@ -397,10 +401,13 @@ using eaither the content rewards way of videos or normal way we have done so fa
 [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md#the-two-ways))
 - AC1: **The normal way is frozen.** Home at `/` keeps exactly the form it had before Content Rewards (Paste a link or
   Pick a video, the link box with Paste and Clear, How many clips, Notes, "Make clips", "Nothing gets posted until you
-  tap Upload."), with no campaign field, bar, chip, line or warning, whatever campaigns exist. From a link to an
+  tap Upload."), with no campaign field, bar, chip, line or warning, whatever campaigns exist. (The one change since:
+  while auto-posting is on, that hint reads "Auto-posting is on: your clips go up by themselves every {h} hour(s),
+  oldest first." instead, BR-29 AC10; with it off, or in Practice, the hint is unchanged.) From a link to an
   upload is **5 taps** (Paste, "Make clips", "Go to Review", "Use my settings", "Upload to N"). The Review card of a
   clip with no campaign keeps its controls; the only addition is the optional "could earn" line of BR-28 AC5, which
-  never blocks and never adds a needed tap. A click-count test fails if the normal way gains a tap, a field or a
+  never blocks and never adds a needed tap (and, only while auto-posting is on, BR-29's one quiet line above the
+  actions, which adds no control). A click-count test fails if the normal way gains a tap, a field or a
   warning.
 - AC2: **The campaign way always starts from a campaign**: the chip "Make campaign clips" in Home's "Your campaigns"
   row (one tap to Home at `/?campaign=`), the campaign card's "Make clips for this campaign", a campaign video's "Make
@@ -477,5 +484,69 @@ as well". ([CONTRACTS.md §39.3](CONTRACTS.md#393-does-this-clip-fit-the-campaig
 - AC7: Length, source video, language, banned content, the deadline and another campaign are never "fixed" on the
   clip: the button is "Make new clips for this campaign" (with the same link only when the video itself is fine) or
   "Find another campaign".
+
+### BR-29 Auto-posting: the oldest clips in Review go up by themselves, every X hours
+"On each scheduled run, take the next clips from the review list, oldest first, and post them." "Each clip goes to
+all my connected accounts on every platform in the same run." "Clips in review post automatically, without my
+approval. I can still decline a clip before its turn, which removes it." "If there are no clips in review, the run
+does nothing." "A clip is never posted twice, even if a run is retried or two runs overlap." "If posting fails on one
+platform, retry once, record the error, and still post to the other platforms." "Save the live link of every post
+next to its clip and campaign." Asked seven questions before building, he answered "Yes, all your picks"
+(2026-11-22); those answers are the rules below (I-50 to I-55).
+([CONTRACTS.md §46](CONTRACTS.md#46-auto-posting-the-oldest-clips-in-review-go-up-by-themselves-every-x-hours-owner-request-2026-11-22),
+[ADR-81](DECISIONS.md#adr-81-auto-posting-an-hourly-eventbridge-rule-a-due-check-and-uploads-own-code))
+Built by §46 (its four parts, §46.16). It ships off for everyone: nothing posts by itself until the owner turns it on.
+- AC1: **One page, one switch.** Settings › Posting › **Auto-posting** (after My settings) has the switch **Post my
+  clips by themselves**: "While it is off, nothing posts" ("Off. Nothing posts by itself."). On, it says when the next
+  run is ("On. Next: Sun 15:00.", in his local time). Every control saves the moment it changes ("Saved."). "Changes
+  take effect immediately when I save, without a redeploy": a save counts from the next full hour.
+- AC2: **How often and how many.** **Post every** 1 to 24 hours (default 5) and **Clips each time** 1 to 5 (default
+  1). Under them, always, the result in plain words: "1 clip every 5 hours = about 5 clips a day per platform." Over 5
+  a day it warns "That's more than 5 clips a day on each platform." (and over 100 a day also that YouTube takes at
+  most 100 uploads a day).
+- AC3: **Oldest first, even gaps.** Each run takes the next clips in Review, oldest first (the order their jobs were
+  made, then best first), and only clips of finished jobs. Clips already in Review when he turns it on count
+  (answer 5). Runs fall exactly X hours apart on whole hours, "even gaps between runs, including across midnight"; a
+  run with nothing in Review does nothing but still counts, so the gaps stay even.
+- AC4: **Every place, his settings, never TikTok.** Each clip goes, in the same run, to every place that is set up and
+  ready (YouTube, Instagram and Facebook; X once it is set up, never for clips posted before), with **My settings**:
+  public, most reach, never made for kids (answer 1). TikTok is never part of a run (answer 2): TikTok's rules want
+  his own pick of who can see each post, so each auto-posted clip keeps **Post it yourself**, and the page lists them
+  under **Post these on TikTok yourself**.
+- AC5: **What waits for him.** Campaign clips wait for his **Upload** while Content Rewards can't take clips from Clip
+  Factory by itself; once it can, they go too, the campaign way (answer 3). A clip with a failed important check
+  waits too (answer 4), and so does a clip still being made or with its video missing. Each is listed under **Waits
+  for you** with its reason and **Open in Review**, and its Review card says "Auto-posting skips this one: {reason}
+  Upload it yourself."
+- AC6: **Decline before its turn.** **Throw away** on Review or in **Next up** removes the clip and it is never
+  posted, once its 8-second Undo has passed before the clip's turn (the request is sent only then, BR-08 AC3); tapped
+  later, the run may post it first and Throw away says "This clip was already uploaded or thrown away somewhere else,
+  so there is nothing more to do.". A run that had just planned it says "You threw it away first.". **Upload** by hand
+  still works at any time, and one of the two wins, never both.
+- AC7: **Never twice.** A clip is never posted twice, even if a run is retried or two runs overlap: a run claims its
+  hour and lists its clips in one write, a retry resumes that same list, and each clip goes up through Upload's own
+  code (one conditional write, one flow start), so it can be confirmed and started only once.
+- AC8: **When a place fails.** Retries stay Upload's (answer 6, which replaces "retry once"): up to 3 tries when a
+  platform does not answer, and no blind retry where one would fail the same way or could post twice. Every error is
+  saved in plain words, the other places still post, and **Didn't work** lists each failed post with **Try again**.
+- AC9: **Live links.** Every post's live link is saved on the post, next to its clip and campaign, as for Upload
+  (Library, the clip page, and **Open** in **Recent**); an auto-posted post's row adds "· by auto-posting" after its
+  state.
+- AC10: **What he sees.** "Whether auto-posting is on, when the next run is, and which clips post next": the page
+  shows the switch's line, **Next up** (up to 10, each with its time), **Waits for you**, **Didn't work**, **Post these
+  on TikTok yourself** and **Recent** (the last 10 runs, each place with ✓ or ✗). While it is on, a Review card says
+  "Goes up by itself {Sun 15:00}. Throw it away to stop it." and Home says "Auto-posting is on: your clips go up by
+  themselves every {h} hour(s), oldest first."
+- AC11: **Test it with nothing public.** In the fold **Test it first**: **Practice** (runs pick the clips on time but
+  send nothing, and the clips stay in Review), **Practice run now**, and **Private test run** (the next clip, so only
+  he can see it: YouTube as Only me, Facebook as a draft on his Page, Instagram uploaded and checked but not
+  published; that clip leaves Review). The two run-now buttons work while auto-posting is off too, and never move the
+  schedule.
+- AC12: **Serverless and additive.** One EventBridge rule every hour on the hour (`cf-prod-autopost-hourly`, answer 7)
+  and one small Lambda (`cf-prod-autopost`) with its own least-privilege role
+  ([SECURITY.md](SECURITY.md#auto-posting-contracts-46)). No table, index, secret,
+  bucket, Cognito or `cf-prod-api` infrastructure change; existing settings, clips and posts read exactly as before;
+  the deploy needs no step from the owner. Upload, Use my settings, TikTok's rules, Post it yourself and the campaign
+  rules are unchanged.
 
 ---
