@@ -402,10 +402,12 @@ describe("Post to {name}? (error.account, §45.34)", () => {
     expect(publish).toHaveBeenCalledTimes(1);
     expect(publish.mock.calls[0]![2][0]).not.toHaveProperty("confirmAccount");
     const ask = lastDialog();
-    expect(ask.textContent).toContain("Post to Lamo Stories TikTok?");
-    expect(ask.textContent).toContain("Lamo Stories' TikTok sends to Lamo Stories TikTok (@tiktok.stories)");
-    expect(ask.textContent).toContain("Account id ext-tiktok");
-    await click(control("Yes, post to Lamo Stories TikTok", ask));
+    // Named by its place first, so it reads right when the account is itself called Lamo Stories (§45.36 E13).
+    expect(ask.textContent).toContain("Post to this TikTok account (Lamo Stories TikTok)?");
+    expect(ask.textContent).toContain("Goes to this TikTok account: Lamo Stories TikTok (@tiktok.stories)");
+    // Its id, behind Technical details (§45.36 E14).
+    expect(ask.querySelector(".st-s-dest .st-s-tech")?.textContent).toContain("Account id ext-tiktok");
+    await click(control("Yes, post to this account", ask));
     expect(publish).toHaveBeenCalledTimes(2);
     expect(publish.mock.calls[1]![2][0]).toMatchObject({ platform: "tiktok", confirmAccount: "ext-tiktok" });
     expect(text()).toContain("Sending your video");
@@ -420,13 +422,13 @@ describe("Post to {name}? (error.account, §45.34)", () => {
     await show(<ReviewScreen {...page({ name: "review_story", storyId: S.published })} />);
     const row = Array.from(document.querySelectorAll<HTMLElement>(".st-s-post")).find((r) => r.textContent?.includes("TikTok"))!;
     // Each post names its exact account.
-    expect(row.textContent).toContain("Account id ext-tiktok");
+    expect(row.querySelector(".st-s-tech")?.textContent).toContain("Account id ext-tiktok");
     await click(control("Try again", row));
     expect(retry).toHaveBeenLastCalledWith("stories", job.publishingJobId, undefined);
     const ask = lastDialog();
-    expect(ask.textContent).toContain("Post to New TikTok?");
+    expect(ask.textContent).toContain("Post to this TikTok account (New TikTok)?");
     expect(ask.textContent).toContain("New TikTok (@new.tiktok)");
-    await click(control("Yes, post to New TikTok", ask));
+    await click(control("Yes, post to this account", ask));
     expect(retry).toHaveBeenLastCalledWith("stories", job.publishingJobId, { confirmAccount: "ext-new" });
     expect(store.publishing.find((j) => j.publishingJobId === job.publishingJobId)).toMatchObject({ publishingStatus: "queued", externalAccountId: "ext-new", accountName: "New TikTok" });
   });

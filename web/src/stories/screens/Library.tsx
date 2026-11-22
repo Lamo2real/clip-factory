@@ -21,7 +21,7 @@ import { STEP_LABEL, type AssetKind, type Character, type DownloadFormat, type L
 import { modelIdLine, modelUseWords, stoppedOn } from "../studio/ai.tsx";
 import { usePaged } from "../studio/hooks.ts";
 import { TechDetails } from "../studio/kit.tsx";
-import { HELPER_KIND, providerName, STORAGE_WORDS, topicTitle } from "../studio/words.ts";
+import { HELPER_KIND, helperName, STORAGE_WORDS, topicTitle, type ModelLookup } from "../studio/words.ts";
 import { storiesHref } from "../routes.ts";
 import { STATUS_WORDS, StButton, StEmpty, StError, StIcon, StLinkButton, StLoading, StPageHead, type MascotMood, type StIconName, type StTone } from "../ui.tsx";
 import type { StoriesScreenProps } from "./types.ts";
@@ -347,9 +347,14 @@ const JOB_WORDS: Record<ProductionJob["status"], string> = {
 };
 
 /** Lamo Stories' own model names (GET …/ai), by key; a key it does not know shows as it is. */
-function useModelNames(ws: string): (key: string) => string {
+/**
+ * The models by key: a model's name, and its label, maker and host, so a helper is named after the model that did
+ * the work (§45.36 E7).
+ */
+function useModelNames(ws: string): { modelName: (key: string) => string; lookup: ModelLookup } {
   const ai = useLoad(() => storiesApi().getAi(ws).catch(() => null), ws, "st-library-models");
-  return (key) => ai.data?.models.find((m) => m.key === key)?.label ?? key;
+  const lookup: ModelLookup = (key) => ai.data?.models.find((m) => m.key === key) ?? null;
+  return { modelName: (key) => lookup(key)?.label ?? key, lookup };
 }
 
 const EFFORT_WORDS: Record<string, string> = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Maximum" };
@@ -365,7 +370,7 @@ function useTopics(ws: string) {
 
 function Details({ ws, story }: { ws: string; story: Story }) {
   const jobs = useLoad(() => storiesApi().storyJobs(ws, story.storyId), `${ws}|${story.storyId}`, "st-library-jobs");
-  const modelName = useModelNames(ws);
+  const { modelName, lookup } = useModelNames(ws);
   const topics = useTopics(ws);
   return (
     <section className="st-details" aria-labelledby="st-details-title">
@@ -430,7 +435,7 @@ function Details({ ws, story }: { ws: string; story: Story }) {
                 {Object.entries(job.meta.providers).map(([kind, id]) => (
                   <div key={kind}>
                     <dt>{HELPER_KIND[kind] ?? "Helper"}</dt>
-                    <dd>{providerName(id)}</dd>
+                    <dd>{helperName(kind, id, job.meta.writerModel, lookup)}</dd>
                   </div>
                 ))}
                 {(job.meta.models ?? []).map((m, i) => (
@@ -656,7 +661,7 @@ export function LibraryScreen({ ws, page }: StoriesScreenProps) {
   };
   return (
     <section className="st-page st-library">
-      <StPageHead title="Library" lede="Every file Lamo Stories made or you added, kept safe. Only Lamo Stories' own: Lamo Clips' Library stays separate." />
+      <StPageHead title="Library" lede="Every file Lamo Stories made or you added, kept safe. Only Lamo Stories' own: Clip Factory's Library stays separate." />
       <div className="st-tabs" role="tablist" aria-label="Library">
         <Glide active=".st-tabs__tab.is-on" className="glide--st" />
         {TABS.map((t) => (

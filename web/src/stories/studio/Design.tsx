@@ -11,7 +11,7 @@ import { putFile } from "../../api/upload.ts";
 import { storiesApi } from "../api/client.ts";
 import type { AiTask, CharacterInput, ModelOverride } from "../api/types.ts";
 import type { Expression } from "../engine/types.ts";
-import { cleanPick, merged, ModelMenu, TaskLine, useAiTask, usualFor, type AiInfo } from "./ai.tsx";
+import { merged, ModelMenu, sendPick, TaskLine, useAiTask, usualFor, type AiInfo } from "./ai.tsx";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { celebrate, Notice, ProgressBar, Tag, TextField } from "./kit.tsx";
 import { DEFAULT_LOOK, DEFAULT_VOICE, newCharacter, showFace } from "./looks.ts";
@@ -237,7 +237,7 @@ export function DesignPanel({
     if (description) body.description = description;
     if (picture) body.referenceAssetId = picture.assetId;
     if (characterId) body.characterId = characterId;
-    const override = cleanPick(pick);
+    const override = sendPick(info, usual, pick);
     if (override) body.override = override;
     void run.start(() => storiesApi().designCharacter(ws, body));
   }

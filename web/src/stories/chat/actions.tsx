@@ -28,7 +28,7 @@ import { A } from "../../components/ui.tsx";
 import { storiesApi } from "../api/client.ts";
 import { storiesGoLater } from "../pane.tsx";
 import type { AiSetting, CharacterInput, ChatAction, IdeaCategory, IdeaInput, ModelOverride, ProjectRef, TaskKind } from "../api/types.ts";
-import { cleanPick, LISTED_INFO, ModelMenu, storyUsual, type AiInfo } from "../studio/ai.tsx";
+import { cleanPick, LISTED_INFO, ModelMenu, modelOf, sendPick, storyUsual, unusableModel, usableUsual, type AiInfo, type Usual } from "../studio/ai.tsx";
 import { showFace } from "../studio/looks.ts";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { isStoriesPath, matchStories } from "../routes.ts";
@@ -242,6 +242,17 @@ async function ownSetting(ws: string, action: ChatAction): Promise<AiSetting | n
   return null;
 }
 
+/**
+ * The "just this message" choice a card starts from, without a model the studio knows cannot be used (§45.36 E12: it is
+ * never pre-picked, the usual choice skips it): its effort stays only when the model the card then shows offers it.
+ */
+export function startPick(info: AiInfo, usual: Usual, once: ModelOverride | null | undefined): ModelOverride | null {
+  const p = cleanPick(once);
+  if (!p?.model || !unusableModel(info, p.model)) return p ?? null;
+  const shown = modelOf(info, usableUsual(info, usual).model);
+  return p.effort && shown?.efforts.includes(p.effort) ? { effort: p.effort } : null;
+}
+
 export function ActionCard({
   ws,
   action,
@@ -263,8 +274,12 @@ export function ActionCard({
     return was ? { kind: "done", ...was } : { kind: "idle" };
   });
   const task = plan.kind === "call" ? taskOf(action) : null;
-  const [pick, setPick] = useState<ModelOverride | null>(() => cleanPick(once) ?? null);
+  // undefined until the owner changes the menu: the card starts from the message's choice.
+  const [chosen, setPick] = useState<ModelOverride | null | undefined>(undefined);
   const own = useLoad(() => (task ? ownSetting(ws, action).catch(() => null) : Promise.resolve(null)), `${ws}|${id}|${task ?? ""}`);
+  const usual: Usual | null = task ? { ...storyUsual(info, { ai: own.data ?? { model: null, effort: null } }, task), ...(own.data ? {} : { modelKept: true }) } : null;
+  // Worked out at each render, so a model found unusable after the card opened (the models are read later) is left out too.
+  const pick = chosen !== undefined ? chosen : usual ? startPick(info, usual, once) : (cleanPick(once) ?? null);
   const payload = obj(action.payload) ?? {};
   // What the button saves, shown only when its details make sense (a name that is not words is never drawn).
   const character = action.kind === "save_character" && plan.kind !== "broken" ? (obj(payload.character) as CharacterInput | null) : null;
@@ -276,7 +291,10 @@ export function ActionCard({
     const at = centerOf(e.currentTarget);
     setState({ kind: "busy" });
     try {
-      const result = await plan.run(ws, task ? cleanPick(pick) : undefined);
+      // The pick, or the usual's stand-in for a model the studio knows cannot be used (§45.36 E12): only once the video's
+      // (or reference's) own setting is read, so a stand-in never overrides a model kept with it. Until then, or when
+      // it could not be read, exactly the pick (the server uses the kept setting itself).
+      const result = await plan.run(ws, task ? (own.data ? sendPick(info, storyUsual(info, { ai: own.data }, task), pick) : cleanPick(pick)) : undefined);
       done.set(id, result);
       setState({ kind: "done", ...result });
       cheer(at);
@@ -317,10 +335,10 @@ export function ActionCard({
           <Btn main={action.kind !== "open"} icon={state.kind === "failed" ? "retry" : ICON[action.kind]} off={plan.kind === "broken" || state.kind === "busy"} onClick={tap}>
             {state.kind === "busy" ? "Working on it…" : state.kind === "failed" ? "Try again" : typeof action.label === "string" && action.label.trim() ? action.label : (LABEL[action.kind] ?? "Open it")}
           </Btn>
-          {task ? (
+          {task && usual ? (
             <ModelMenu
               info={info}
-              usual={storyUsual(info, { ai: own.data ?? { model: null, effort: null } }, task)}
+              usual={usual}
               value={pick}
               onChange={setPick}
               title={task === "scene_rewrite" ? "Model and effort for these scenes" : "Model and effort for this analysis"}

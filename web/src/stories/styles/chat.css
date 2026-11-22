@@ -1863,3 +1863,11 @@ ol.st-chat-text__list {
 .st-ref-track--stopped {
   margin-bottom: 4px;
 }
+
+/* ---------- Round 5 (§45.36 E8) ---------- */
+
+/* An answer's exact model id, folded away under its model line. */
+.st-chat-msg__tech {
+  margin-top: 4px;
+  font-size: 0.82rem;
+}

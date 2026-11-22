@@ -15,19 +15,19 @@ import { useLoad, usePoll } from "../../lib/hooks.ts";
 import { storiesSound } from "../prefs.ts";
 import { starBurst } from "../ui.tsx";
 import { storiesApi } from "../api/client.ts";
-import type { DownloadFormat, ErrorAccount, ModelOverride, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus } from "../api/types.ts";
+import type { DownloadFormat, ErrorAccount, ModelOverride, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus, TaskKind } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
-import { cleanPick, madeWith, ModelMenu, ModelsUsed, NextRun, SettingsFix, StoryAi, storyUsual, useAiInfo } from "../studio/ai.tsx";
-import { CaptionEditor } from "../studio/CaptionEditor.tsx";
+import { cleanPick, insteadPick, madeWith, ModelMenu, ModelsUsed, NextRun, runTask, sendPick, SettingsFix, StoryAi, storyUsual, UnusableSheet, unusableAsk, useAiInfo } from "../studio/ai.tsx";
+import { CaptionEditor, type CaptionTab } from "../studio/CaptionEditor.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
 import { usePaged, useSameScript, useWidth, useWorkspace } from "../studio/hooks.ts";
 import { Busy, celebrate, Chip, Notice, ShowMore, StSheet, Tag, TextField } from "../studio/kit.tsx";
 import { Player } from "../studio/Player.tsx";
 import { PostsPanel } from "../studio/PostsPanel.tsx";
-import { AccountCard, PublishSheet } from "../studio/PublishSheet.tsx";
+import { AccountCard, claimPostCheer, postToTitle, postYes, PublishSheet } from "../studio/PublishSheet.tsx";
 import { SfxEditor } from "../studio/SfxEditor.tsx";
 import { StepTrack } from "../studio/StepTrack.tsx";
-import { accountOf, CATEGORY_LABEL, isConflict, PLATFORM_LABEL, say, seconds, STATUS_LABEL, STATUS_TONE } from "../studio/words.ts";
+import { accountOf, CATEGORY_LABEL, isConflict, PLATFORM_LABEL, say, seconds, STATUS_LABEL, STATUS_TONE, thisAccount } from "../studio/words.ts";
 import type { StoriesScreenProps } from "./types.ts";
 
 export function ReviewScreen({ ws, page }: StoriesScreenProps) {
@@ -54,12 +54,26 @@ export function checkOutdated(story: Story): boolean {
 
 export const OUTDATED_CHECK = "The facts were checked on an older version of the words. Tap Check again.";
 
+/** Only the words posted with the video changed: they are not in the video, so only the fact check is out of date. */
+export const POST_WORDS_CHECK = "Your new post words need a quick check. Tap Check again.";
+
+/**
+ * True when the only thing out of date is the fact check because the post words changed (§45.36 E10: the API marks
+ * only "safety" for a postCaptions edit, STALE_POST), while the video waits for review or for its check (the API's
+ * only_check_stale). Check again is the fix: a produce with no `from`, which runs exactly the stale steps, so only the
+ * fact check (a `from: "safety"` would make every step after it again). Never a remake.
+ */
+export function onlyPostWords(story: Pick<Story, "stale" | "status">): boolean {
+  return (story.status === "review" || story.status === "needs_check") && story.stale.length === 1 && story.stale[0] === "safety";
+}
+
 /**
  * Why Approve cannot be tapped yet, or null when it can (the approve rule, §45.9): the video waits for review, every
  * change is in it, and the facts were checked on this very storyboard.
  */
 export function approveBlock(story: Story): string | null {
   if (story.safety?.status === "problems") return "Fix the facts first, then tap Check again.";
+  if (onlyPostWords(story)) return POST_WORDS_CHECK;
   if (story.status === "needs_check") return "Check the facts first.";
   if (story.status !== "review") return null;
   if (story.stale.length) return "Your changes aren't in the video yet. Tap Remake first.";
@@ -69,7 +83,7 @@ export function approveBlock(story: Story): string | null {
 
 /**
  * True when a publishing 409 is about the account (it now sends to another one, or Lamo Stories cannot tell it from
- * Lamo Clips' own): the server's sentence names the account, so the owner is asked before it is sent there. Every
+ * Clip Factory's own): the server's sentence names the account, so the owner is asked before it is sent there. Every
  * other 409 (already retried, not stuck, the story changed) is only shown.
  */
 export function accountQuestion(sentence: string, account: SocialAccount): boolean {
@@ -203,6 +217,10 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const [retrying, setRetrying] = useState<string | null>(null);
   /** The model and effort for the next remake only (never saved). */
   const [pick, setPick] = useState<ModelOverride | null>(null);
+  /** The question before a remake with a model the studio knows cannot be used (§45.36 E12), and the remake it holds. */
+  const [unusable, setUnusable] = useState<{ ask: NonNullable<ReturnType<typeof unusableAsk>>; name: string; run: (extra: { override?: ModelOverride }) => Promise<void> } | null>(null);
+  /** The captions box's tab, kept here so it stays where the owner was after Use these or Save (§45.36 E10). */
+  const [captionTab, setCaptionTab] = useState<CaptionTab>("video");
   const info = useAiInfo(ws);
   const [col, colWidth] = useWidth<HTMLDivElement>(300);
   const seen = useRef<Map<string, PublishingJob["publishingStatus"]> | null>(null);
@@ -250,8 +268,12 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     if (!before) return;
     const up = list.filter((j) => j.publishingStatus === "posted" && before.get(j.publishingJobId) !== "posted");
     if (!up.length) return;
-    starBurst(undefined, 140);
-    storiesSound("success", { onNextTap: true });
+    // One star burst and one cheer per post (§45.36 E11): the Post it sheet celebrates the places it sent itself, and
+    // this page every other one (one that went up while the sheet was still on its form, or after it closed).
+    if (up.filter((j) => claimPostCheer(j.publishingJobId)).length) {
+      starBurst(undefined, 140);
+      storiesSound("success", { onNextTap: true });
+    }
     toast.success(`Posted to ${up.map((j) => PLATFORM_LABEL[j.platform]).join(" and ")}!`);
     void loaded.reload();
     // Reacts to new publishing results only.
@@ -279,15 +301,26 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     setPick(null);
   };
 
-  /** This remake's own model and effort, when the owner picked one. */
-  const once = (): { override?: ModelOverride } => {
-    const o = cleanPick(pick);
-    return o ? { override: o } : {};
-  };
+  /**
+   * Runs a remake (`name` is its busy name). Its own model and effort: the owner's pick, or, when the usual of the run's
+   * first model step (`task`) cannot be used, the model the menu shows instead (§45.36 E12). A model picked on purpose,
+   * or kept with this video, that the studio knows cannot be used is asked about first, never swapped by itself.
+   */
+  function remake(name: string, task: TaskKind, run: (extra: { override?: ModelOverride }) => Promise<void>) {
+    if (!story || busy) return;
+    const usual = storyUsual(info, story, task);
+    const ask = unusableAsk(info, usual, pick);
+    if (ask) {
+      setAsking("none");
+      return setUnusable({ ask, name, run });
+    }
+    const o = sendPick(info, usual, pick);
+    void act(name, () => run(o ? { override: o } : {}));
+  }
 
   /** A produce call that carries a body only when there is something in it. */
-  const produceNow = (body?: { from: StepKey }) => {
-    const b = { ...body, ...once() };
+  const produceNow = (body: { from?: StepKey }, extra: { override?: ModelOverride }) => {
+    const b = { ...body, ...extra };
     return Object.keys(b).length ? storiesApi().produce(ws, storyId, b) : storiesApi().produce(ws, storyId);
   };
 
@@ -308,7 +341,15 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     try {
       const r = await storiesApi().patchStory(ws, storyId, { version: story.version, ...edit });
       loaded.setData((d) => (d ? { ...d, story: r.story, script: r.script } : d));
-      toast.success("Saved. Tap Remake to put it in the video.");
+      // New post words are not in the video: they only need the quick fact check (§45.36 E10), never a remake. A video
+      // waiting for its check says the page's own button, Check again.
+      toast.success(
+        onlyPostWords(r.story)
+          ? `Saved. ${POST_WORDS_CHECK}`
+          : r.story.status === "needs_check"
+            ? "Saved. Tap Check again to check the facts and update the video."
+            : "Saved. Tap Remake to put it in the video.",
+      );
     } catch (e) {
       if (isConflict(e) && /changed|reload/i.test(say(e))) setStale(true);
       else setProblem(say(e));
@@ -386,9 +427,16 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const citations = story.safety?.citations ?? [];
   const checkAgain = story.status === "needs_check";
   const outdated = !live && checkOutdated(story);
+  const postWords = !live && onlyPostWords(story);
   const stopped = story.status === "failed" ? (job?.status === "failed" && job.error ? job.error : "Making this video stopped.") : null;
   const used = live ? (job?.meta.models ?? []) : madeWith([job, ...(runs.data ?? [])]);
-  const remakeMenu = <ModelMenu info={info} usual={storyUsual(info, story)} value={pick} onChange={setPick} note="Just for the next remake. This video's own setting and yours stay the same." />;
+  // Each menu shows the usual of the run its button starts, so what it shows is what is sent (§45.36 E12): the page's
+  // next remake starts at the first out-of-date step (the fact check after new post words or an outdated check), the
+  // whole-video remake and Ask for changes at the storyboard.
+  const nextTask = story.stale.length ? runTask(null, { stale: story.stale }) : outdated ? "fact_check" : "storyboard";
+  const menuFor = (task: TaskKind) => <ModelMenu info={info} usual={storyUsual(info, story, task)} value={pick} onChange={setPick} note="Just for the next remake. This video's own setting and yours stay the same." />;
+  const remakeMenu = menuFor(nextTask);
+  const changesTask = runTask("storyboard", { sceneIds: !note.trim() && picked.length > 0 });
   // Phones get a smaller player, so the decision is close below it.
   const width = colWidth < 500 ? Math.max(180, Math.min(250, colWidth - 40)) : Math.max(200, Math.min(340, colWidth));
 
@@ -446,7 +494,23 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           ) : null}
 
 
-          {!live && story.stale.length && story.status !== "draft" ? (
+          {postWords ? (
+            <Notice
+              tone="info"
+              action={
+                <button
+                  type="button"
+                  className="st-btn st-btn--main"
+                  aria-disabled={busy !== null || undefined}
+                  onClick={() => remake("check", "fact_check", async (x) => startRun(await produceNow({}, x)))}
+                >
+                  {busy === "check" ? "Starting…" : "Check again"}
+                </button>
+              }
+            >
+              {POST_WORDS_CHECK}
+            </Notice>
+          ) : !live && story.stale.length && story.status !== "draft" ? (
             <Notice
               tone={stopped ? "bad" : "info"}
               action={
@@ -456,7 +520,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                     type="button"
                     className="st-btn st-btn--main"
                     aria-disabled={busy !== null || undefined}
-                    onClick={() => void act("remake", async () => startRun(await produceNow()))}
+                    onClick={() => remake("remake", runTask(null, { stale: story.stale }), async (x) => startRun(await produceNow({}, x)))}
                   >
                     {busy === "remake" ? "Starting…" : checkAgain ? "Check again" : stopped ? "Try again" : "Remake"}
                   </button>
@@ -475,7 +539,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   type="button"
                   className="st-btn st-btn--main"
                   aria-disabled={busy !== null || undefined}
-                  onClick={() => void act("check", async () => startRun(await produceNow({ from: "safety" })))}
+                  onClick={() => remake("check", "fact_check", async (x) => startRun(await produceNow({ from: "safety" }, x)))}
                 >
                   {busy === "check" ? "Starting…" : "Check again"}
                 </button>
@@ -538,8 +602,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   onSubmit={(e) => {
                     e.preventDefault();
                     if (!note.trim() && !picked.length) return setProblem("Say what to change, or pick a scene.");
-                    void act("changes", async () => {
-                      const body: { note?: string; sceneIds?: string[]; override?: ModelOverride } = { ...once() };
+                    remake("changes", changesTask, async (x) => {
+                      const body: { note?: string; sceneIds?: string[]; override?: ModelOverride } = { ...x };
                       if (note.trim()) body.note = note.trim();
                       if (picked.length) body.sceneIds = picked;
                       startRun(await storiesApi().requestChanges(ws, storyId, body));
@@ -560,6 +624,12 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                       ))}
                     </div>
                   </div>
+                  {changesTask !== nextTask ? (
+                    <div className="st-s-decide__ai st-s-changes__ai">
+                      <span className="st-s-field__hint">These changes use</span>
+                      {menuFor(changesTask)}
+                    </div>
+                  ) : null}
                   <div className="st-s-actionbar">
                     <button type="submit" className="st-btn st-btn--main" aria-disabled={busy !== null || (!note.trim() && !picked.length) || undefined}>
                       {busy === "changes" ? "Sending…" : "Send the changes"}
@@ -651,8 +721,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                       className="st-btn st-s-small"
                       aria-disabled={busy !== null || undefined}
                       onClick={() =>
-                        void act(`scene:${sceneId}`, async () => {
-                          startRun(await storiesApi().requestChanges(ws, storyId, { sceneIds: [sceneId], ...once() }));
+                        remake(`scene:${sceneId}`, "scene_rewrite", async (x) => {
+                          startRun(await storiesApi().requestChanges(ws, storyId, { sceneIds: [sceneId], ...x }));
                           toast.success("Making a new take of that scene.");
                         })
                       }
@@ -678,7 +748,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
             <h2 className="st-s-panel__title" id="st-captions-title">
               Captions
             </h2>
-            <CaptionEditor key={`c:${story.scriptVersion}:${story.version}`} ws={ws} info={info} story={story} script={script} saving={saving} onSave={(e) => void save(e)} />
+            <CaptionEditor key={`c:${story.scriptVersion}:${story.version}`} ws={ws} info={info} story={story} script={script} saving={saving} onSave={(e) => void save(e)} tab={captionTab} onTab={setCaptionTab} />
           </section>
           <section className="st-s-panel" aria-labelledby="st-sfx-title">
             <h2 className="st-s-panel__title" id="st-sfx-title">
@@ -691,6 +761,25 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
         <p className="st-s-field__hint">An approved video can&apos;t be changed. Its captions and sounds stay as they are.</p>
       ) : null}
 
+      {unusable ? (
+        <UnusableSheet
+          info={info}
+          ask={unusable.ask}
+          onClose={() => setUnusable(null)}
+          onKeep={() => {
+            // Exactly the pick (nothing for a model kept with this video): the run tries it.
+            const u = unusable;
+            const o = cleanPick(pick);
+            setUnusable(null);
+            void act(u.name, () => u.run(o ? { override: o } : {}));
+          }}
+          onUse={() => {
+            const u = unusable;
+            setUnusable(null);
+            void act(u.name, () => u.run({ override: insteadPick(info, u.ask, pick) }));
+          }}
+        />
+      ) : null}
       {asking === "whole" ? (
         <StSheet
           title="Remake the whole video?"
@@ -705,8 +794,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 className="st-btn st-btn--main"
                 aria-disabled={busy !== null || undefined}
                 onClick={() =>
-                  void act("whole", async () => {
-                    startRun(await produceNow({ from: "storyboard" }));
+                  remake("whole", "storyboard", async (x) => {
+                    startRun(await produceNow({ from: "storyboard" }, x));
                     setAsking("none");
                     toast.success("Making the whole video again.");
                   })
@@ -720,7 +809,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           <p>Lamo Stories writes a new storyboard with your characters as they look now, then makes every step again. This one is kept in the Library.</p>
           <div className="st-s-decide__ai">
             <span className="st-s-field__hint">This remake uses</span>
-            {remakeMenu}
+            {menuFor("storyboard")}
           </div>
         </StSheet>
       ) : null}
@@ -742,7 +831,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
 
       {confirm ? (
         <StSheet
-          title={`Post to ${confirm.account.accountName || confirm.account.handle || "this account"}?`}
+          title={postToTitle(confirm.job.platform, confirm.account)}
           onClose={() => setConfirm(null)}
           actions={
             <>
@@ -755,14 +844,14 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 aria-disabled={retrying !== null || undefined}
                 onClick={() => retrying === null && void retry(confirm.job, confirm.account.externalAccountId)}
               >
-                {retrying ? "Trying…" : `Yes, post to ${confirm.account.accountName || confirm.account.handle || "it"}`}
+                {retrying ? "Trying…" : postYes(confirm.message)}
               </button>
             </>
           }
         >
           <p>{confirm.message}</p>
           <AccountCard platform={confirm.job.platform} account={confirm.account} />
-          {confirm.job.accountName && confirm.job.accountName !== confirm.account.accountName ? <p className="st-s-field__hint">It was {confirm.job.accountName} when you tapped Post it.</p> : null}
+          {confirm.job.accountName && confirm.job.accountName !== confirm.account.accountName ? <p className="st-s-field__hint">It was {thisAccount(confirm.job.platform, confirm.job.accountName)} when you tapped Post it.</p> : null}
         </StSheet>
       ) : null}
     </section>

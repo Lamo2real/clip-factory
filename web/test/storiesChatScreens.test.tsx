@@ -153,7 +153,7 @@ describe("the chat", () => {
   it("shows the effective model and effort above the box, with what the last call said", async () => {
     await openChat(CONV.winter);
     expect(line()).toBe("Model: Claude Opus 5.5 · Effort: High");
-    expect($(".st-chat-ai .st-chat-ai__status")?.textContent).toBe("Working");
+    expect($(".st-chat-ai .st-chat-ai__status")?.textContent).toBe("Works");
     expect(JSON.parse(localStorage.getItem("cf.workspace")!).lastConversationId).toBe(CONV.winter);
   });
 
@@ -161,7 +161,7 @@ describe("the chat", () => {
     models = models.map((m) => (m.key === "sonnet-5-5" ? { ...m, status: "denied", statusLine: "Bedrock says this account can't use it yet." } : m));
     await openChat(CONV.hooks);
     expect(line()).toBe("Model: Claude Sonnet 5.5 · Effort: Medium");
-    expect($(".st-chat-ai .st-chat-ai__status")?.textContent).toBe("Not available");
+    expect($(".st-chat-ai .st-chat-ai__status")?.textContent).toBe("No access");
     expect($(".st-chat-ai__note--bad")?.textContent).toBe("Bedrock says this account can't use it yet.");
   });
 

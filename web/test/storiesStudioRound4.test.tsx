@@ -201,9 +201,14 @@ describe("each step's exact model id is in a details line (§45.35 D5)", () => {
     const items = Array.from(document.querySelectorAll(".st-s-used__item"));
     expect(items).toHaveLength(2);
     expect(items[0]!.querySelector(".st-s-used__row")?.textContent).toBe("Write the storyClaude Opus 5.5 · High effortStoryboard");
-    expect(items[0]!.querySelector(".st-s-used__id")?.textContent).toBe("Model ID global.anthropic.claude-opus-5-5 in eu-north-1");
+    // The exact ids sit behind Technical details (§45.36 E14), one line a record that says its id.
+    const fold = document.querySelector<HTMLDetailsElement>(".st-s-used .st-s-tech")!;
+    expect(fold.open).toBe(false);
+    expect(Array.from(fold.querySelectorAll(".st-s-used__id")).map((e) => e.textContent)).toEqual(["Model ID global.anthropic.claude-opus-5-5 in eu-north-1"]);
+    expect(fold.querySelector("li")?.textContent).toBe("Write the story: Model ID global.anthropic.claude-opus-5-5 in eu-north-1");
+    expect(items.some((i) => i.textContent?.includes("Model ID"))).toBe(false);
     // An older record says nothing about the id: nothing is guessed from today's settings.
-    expect(items[1]!.querySelector(".st-s-used__id")).toBeNull();
+    expect(fold.textContent).not.toContain("Check the facts");
     expect(modelIdLine({ modelId: "arn:aws:bedrock:eu-west-1:123456789012:provisioned-model/abc" })).toBe("Model ID arn:aws:bedrock:eu-west-1:123456789012:provisioned-model/abc");
     expect(modelIdLine({ modelId: " " })).toBeNull();
   });

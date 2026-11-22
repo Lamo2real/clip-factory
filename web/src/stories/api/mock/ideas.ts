@@ -10,7 +10,8 @@
 import guidanceFile from "../../../../../stories/config/guidance.json";
 import modelsFile from "../../../../../stories/config/models.json";
 import type { AgentId, AiTask, Effort, Idea, IdeaCategory, IdeaInput, ModelOverride, StoriesApi, TaskKind, VideoConcept } from "../types.ts";
-import { modelCall } from "./chat.ts";
+import { allModels } from "./ai.ts";
+import { AGENT_REGION, modelCall } from "./chat.ts";
 import { delay, type MockStore } from "./store.ts";
 import { clone, fail, guardWs, iso, mockId, SEED_IDS } from "./stories.ts";
 
@@ -112,9 +113,43 @@ interface ListedModel {
   label: string;
   efforts: string[];
   defaultEffort: string | null;
+  /** who makes it (Anthropic, Amazon, Meta …) */
+  provider?: string;
 }
 
 const MODELS = (modelsFile as unknown as { models: ListedModel[] }).models;
+
+/**
+ * The models a call may use: Lamo Stories' file, and with the store also the practice app's own list as GET …/ai shows
+ * it (its bundled Amazon Nova Pro and the models the owner added), so picking any listed model works as in the app.
+ */
+function knownModels(store?: MockStore): ListedModel[] {
+  if (!store) return MODELS;
+  const more = allModels(store).filter((m) => !MODELS.some((f) => f.key === m.key));
+  return [...MODELS, ...more.map((m) => ({ key: m.key, label: m.label, efforts: [...m.efforts], defaultEffort: m.defaultEffort, provider: m.provider }))];
+}
+
+/**
+ * What a call to a model records (§45.35 D5): the file's inference profile in Stockholm, else the model's own id in
+ * its own Region (one the owner added); null for a model nobody knows.
+ */
+export function callOf(store: MockStore, key: string): { modelId: string; region: string } | null {
+  const file = modelCall(key);
+  if (file) return file;
+  const m = allModels(store).find((x) => x.key === key);
+  return m ? { modelId: m.modelId, region: m.custom?.region ?? AGENT_REGION } : null;
+}
+
+/**
+ * Who wrote a storyboard, as meta.providers.writer records it (§45.36 E7): "bedrock-claude" only for an Anthropic
+ * model, else "bedrock-model:{key}".
+ */
+export function writerOf(store: MockStore, key: string): string {
+  const m = knownModels(store).find((x) => x.key === key);
+  const maker = m?.provider ?? (MODELS.some((f) => f.key === key) ? "Anthropic" : "");
+  return maker === "Anthropic" ? "bedrock-claude" : `bedrock-model:${key}`;
+}
+
 const DEFAULT_MODEL = (modelsFile as unknown as { defaultModel: string }).defaultModel;
 const DEFAULT_EFFORT = (modelsFile as unknown as { defaultEffort: Effort }).defaultEffort;
 const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
@@ -140,11 +175,12 @@ export function modelLabel(key: string): string {
 }
 
 /** A per-request pick the API refuses (unknown model, an effort the model does not offer) answers 400 with its sentence. */
-export function checkOverride(o: ModelOverride | { model?: string | null; effort?: Effort | null } | undefined | null): void {
+export function checkOverride(o: ModelOverride | { model?: string | null; effort?: Effort | null } | undefined | null, store?: MockStore): void {
   if (!o) return;
-  if (o.model && !MODELS.some((m) => m.key === o.model)) fail(400, "bad_request", "We don't know that model. Pick one from the list.");
+  const models = knownModels(store);
+  if (o.model && !models.some((m) => m.key === o.model)) fail(400, "bad_request", "We don't know that model. Pick one from the list.");
   if (o.effort && !EFFORTS.includes(o.effort)) fail(400, "bad_request", "Pick Low, Medium, High, Extra high or Maximum.");
-  const m = o.model ? MODELS.find((x) => x.key === o.model) : undefined;
+  const m = o.model ? models.find((x) => x.key === o.model) : undefined;
   if (m && o.effort && m.efforts.length && !m.efforts.includes(o.effort)) fail(400, "bad_request", `${m.label} does not offer ${EFFORT_WORD[o.effort]}. Pick another level.`);
 }
 
@@ -167,7 +203,7 @@ export function effectiveFor(
   const levels: Level[] = [o.request, o.project, ai?.tasks?.[kind], agent ? { model: agent.model, effort: agent.effort } : null, { model: ai?.defaultModel ?? DEFAULT_MODEL, effort: ai?.defaultEffort ?? DEFAULT_EFFORT }];
   const model = levels.find((l) => l?.model)?.model ?? DEFAULT_MODEL;
   const effort = levels.find((l) => l?.effort)?.effort ?? DEFAULT_EFFORT;
-  const m = MODELS.find((x) => x.key === model);
+  const m = knownModels(store).find((x) => x.key === model);
   const applied = !!m && m.efforts.length > 0;
   let problem: string | null = null;
   if (!m) problem = `We don't know the model "${model}". Pick another model in Lamo Stories › Settings › AI.`;
@@ -175,7 +211,7 @@ export function effectiveFor(
   const denied = Array.isArray(store.knobs.deniedModels) ? (store.knobs.deniedModels as string[]) : [];
   // Bedrock refusing the call itself (`denied`): the call was made, so the job records what it asked (§45.34).
   const refused = !problem && denied.includes(model);
-  if (refused) problem = `${modelLabel(model)} isn't available right now: Bedrock says this account can't use it yet. Pick another model in Lamo Stories › Settings › AI, or try again.`;
+  if (refused) problem = `${m?.label ?? modelLabel(model)} isn't available right now: Bedrock says this account can't use it yet. Pick another model in Lamo Stories › Settings › AI, or try again.`;
   return { model, effort: applied ? effort : null, effortApplied: applied, agentId, problem, off, denied: refused };
 }
 
@@ -213,7 +249,7 @@ const TASK_FAILED: Partial<Record<TaskKind, string>> = {
  * start their own tasks with it, and GET …/tasks/{id} (getTask) reads every task in the store.
  */
 export function startMockTask(store: MockStore, ws: string, kind: TaskKind | "check_models", override: ModelOverride | undefined, finish: () => Record<string, unknown>, project?: Level): AiTask {
-  checkOverride(override);
+  checkOverride(override, store);
   const eff = effectiveFor(store, kind === "check_models" ? "chat" : kind, { request: override, project });
   const now = Date.now();
   const secs = Number(store.knobs.taskSeconds);
@@ -225,7 +261,7 @@ export function startMockTask(store: MockStore, ws: string, kind: TaskKind | "ch
     store.knobs.taskFail = null;
   }
   // TASK# keeps exactly what was called (§45.35 D5); Check models has no single model.
-  const call = kind === "check_models" ? null : modelCall(eff.model);
+  const call = kind === "check_models" ? null : callOf(store, eff.model);
   const task: AiTask = { taskId: mockId(), kind, status: "queued", model: eff.model, effort: eff.effort, effortApplied: eff.effortApplied, result: null, ...(call ?? {}), createdAt: iso(now), updatedAt: iso(now) };
   store.tasks.push(task);
   plansOf(store).set(task.taskId, { ws, runningAt: now + Math.min(400, total / 4), doneAt: now + total, fails, finish });
@@ -472,7 +508,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (!Number.isInteger(count) || count < 1 || count > 6) fail(400, "bad_request", "Ask for 1 to 6 ideas.");
       if ((body.topic ?? "").length > 200) fail(400, "bad_request", "Keep the topic to 200 letters.");
       if (body.category && !CATEGORIES.includes(body.category)) fail(400, "bad_request", "Pick a kind of video.");
-      checkOverride(body.override);
+      checkOverride(body.override, store);
       await delay(160);
       const topic = body.topic ?? "";
       const category = body.category;
@@ -486,7 +522,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (durationSec < 15 || durationSec > 90) fail(400, "bad_request", "Pick a length from 15 to 90 seconds.");
       if (idea.needsGuidance)
         fail(409, "conflict", "Lamo Stories only makes driving-safety videos from checked advice, and this one isn't in the list yet.");
-      checkOverride(body?.override);
+      checkOverride(body?.override, store);
       await delay(160);
       // The finished task writes `concept` on the idea (keeping its title) and returns the idea.
       return startMockTask(store, ws, "expand_idea", body?.override, () => {
@@ -502,7 +538,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const idea = find(store, ws, ideaId);
       const count = body?.count ?? 3;
       if (!Number.isInteger(count) || count < 1 || count > 4) fail(400, "bad_request", "Ask for 1 to 4 more ideas.");
-      checkOverride(body?.override);
+      checkOverride(body?.override, store);
       await delay(160);
       // Never "faster" or "riskier" for driving: nothing dangerous for fun (§45.7).
       const twists =

@@ -3,9 +3,12 @@
 // published. Publish and Try again check the destination like validate_destination: only this workspace's connected
 // account, never a default; anything else stops the job with needs_attention and a plain sentence. Each job carries
 // the exact account (accountName, handle, externalAccountId). As in the API (§45.34), a TikTok Lamo Stories cannot tell
-// from Lamo Clips' own (reason clips_unknown, or the knob tiktokUnsure) answers 409 naming the account until the owner
+// from Clip Factory's own (reason clips_unknown, or the knob tiktokUnsure) answers 409 naming the account until the owner
 // sends confirmAccount for it (asked once per identity), and Try again on a post whose account changed answers 409
 // naming the new account until confirmAccount matches it. The 409 carries `account` on its ApiError, like the client.
+// The sentences call the other app "Clip Factory" and name an account by its place first ("this TikTok account (Lamo
+// Stories)"), so they read right when the account is itself called Lamo Stories; a question says "Tap Yes", as its
+// button does (§45.36 E13).
 import { ApiError } from "../../../api/errors.ts";
 import { STORIES_PLATFORMS, type ErrorAccount, type Platform, type PublishingJob, type PublishTarget, type SocialAccount, type StoriesApi, type Story } from "../types.ts";
 import { PLATFORM_NAME } from "./social.ts";
@@ -61,7 +64,7 @@ export function afterSeed(store: MockStore): void {
       job(published, "tiktok", "needs_attention", 57, {
         ...at("tiktok"),
         accountName: name("tiktok"),
-        error: "Lamo Stories' TikTok (Lamo Stories) needs connecting again. Open Lamo Stories › Social accounts, then tap Try again.",
+        error: "This TikTok account (Lamo Stories) needs connecting again. Open Lamo Stories › Social accounts, then tap Try again.",
       }),
       job(published, "facebook", "failed", 57, { accountName: "Lamo Stories", error: "Facebook did not answer. Tap Try again in a few minutes." }),
     );
@@ -74,21 +77,27 @@ export function afterSeed(store: MockStore): void {
       job(approved, "x", "needs_attention", 0.1, {
         ...at("x"),
         accountName: name("x"),
-        error: "This X account is the one Lamo Clips posts to. Pick another in Lamo Stories › Social accounts, then tap Try again.",
+        error: "This X account is the one Clip Factory posts to. Pick another in Lamo Stories › Social accounts, then tap Try again.",
       }),
     );
   }
 }
 
-/** The check at the tap (§45.14): the account must be this workspace's own, connected, and not Lamo Clips' own. */
+/** "This TikTok account (Lamo Stories)": an account by its place first (§45.36 E13). */
+function thisAccount(platform: Platform, name: string | null | undefined): string {
+  return `this ${PLATFORM_NAME[platform]} account${name ? ` (${name})` : ""}`;
+}
+
+const upper = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
+/** The check at the tap (§45.14): the account must be this workspace's own, connected, and not Clip Factory's own. */
 function stopReason(store: MockStore, ws: string, platform: Platform): string | null {
   const a = store.social.find((s) => s.workspaceId === ws && s.platform === platform);
   const name = PLATFORM_NAME[platform];
   if (!a || a.connectionStatus === "not_connected") return `Lamo Stories' ${name} is not connected. Connect it in Lamo Stories › Social accounts, then tap Try again.`;
-  if (a.connectionStatus === "needs_reconnect")
-    return `Lamo Stories' ${name}${a.accountName ? ` (${a.accountName})` : ""} needs connecting again. Open Lamo Stories › Social accounts, then tap Try again.`;
+  if (a.connectionStatus === "needs_reconnect") return `${upper(thisAccount(platform, a.accountName))} needs connecting again. Open Lamo Stories › Social accounts, then tap Try again.`;
   if (a.connectionStatus === "choose_account") return `Pick which ${name} account Lamo Stories posts to in Lamo Stories › Social accounts, then tap Try again.`;
-  if (a.connectionStatus === "same_as_clips") return `This ${name} account is the one Lamo Clips posts to. Pick another in Lamo Stories › Social accounts, then tap Try again.`;
+  if (a.connectionStatus === "same_as_clips") return `${upper(thisAccount(platform, a.accountName))} is the one Clip Factory posts to. Pick another in Lamo Stories › Social accounts, then tap Try again.`;
   return null;
 }
 
@@ -150,7 +159,7 @@ function accountConflict(message: string, a: SocialAccount): ApiError {
   return Object.assign(new ApiError(409, "conflict", message), { account });
 }
 
-/** Rule 5's TikTok case: Lamo Stories cannot tell this account from Lamo Clips' own until the owner says it once. */
+/** Rule 5's TikTok case: Lamo Stories cannot tell this account from Clip Factory's own until the owner says it once. */
 function unsure(store: MockStore, a: SocialAccount | undefined, confirm: string | undefined): ApiError | null {
   if (!a || a.platform !== "tiktok" || a.connectionStatus !== "connected" || !a.externalAccountId) return null;
   if (a.reason !== "clips_unknown" && store.knobs.tiktokUnsure !== true) return null;
@@ -159,13 +168,15 @@ function unsure(store: MockStore, a: SocialAccount | undefined, confirm: string 
     confirmedOf(store).add(a.externalAccountId);
     return null;
   }
-  const name = a.accountName ?? a.handle ?? a.externalAccountId;
-  return accountConflict(`Lamo Stories cannot tell if ${name} is Lamo Clips' TikTok, because TikTok gives each app its own id. Tap Post to ${name} if it is your Lamo Stories TikTok.`, a);
+  // A raw open_id never goes in the sentence (§45.36 E14): "this TikTok account" when it has no name or handle.
+  const name = a.accountName ?? a.handle ?? null;
+  return accountConflict(`Lamo Stories cannot tell if ${thisAccount("tiktok", name)} is the one Clip Factory posts to. Tap Yes if it is your Lamo Stories TikTok.`, a);
 }
 
 function changed(a: SocialAccount): ApiError {
-  const name = a.accountName ?? a.externalAccountId ?? "another account";
-  return accountConflict(`Lamo Stories' ${PLATFORM_NAME[a.platform]} is a different account now: ${name}. Tap Post to ${name} if that is right.`, a);
+  // Its name or handle, never a raw channel id (§45.36 E14), as the API's _changed_account.
+  const name = a.accountName ?? a.handle ?? null;
+  return accountConflict(`Lamo Stories' ${PLATFORM_NAME[a.platform]} is a different account now: ${thisAccount(a.platform, name)}. Tap Yes if that is right.`, a);
 }
 
 /** The exact account a job goes to (§45.34). */

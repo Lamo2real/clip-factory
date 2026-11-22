@@ -290,7 +290,8 @@ describe("the chat says who makes a model and who runs it (§45.35 D8)", () => {
     );
     expect($(".st-chat-ai__provider")?.textContent).toBe("Anthropic on Amazon Bedrock");
     await click(byLabel("button", /^Model and effort for this one/));
-    expect(byText(".st-s-sheet .st-s-pick__line", /^Anthropic on Amazon Bedrock\. Ready\.$/)).not.toBeNull();
+    // One status word set everywhere (§45.36 E17).
+    expect(byText(".st-s-sheet .st-s-pick__line", /^Anthropic on Amazon Bedrock\. Works\.$/)).not.toBeNull();
   });
 });
 
