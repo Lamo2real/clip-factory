@@ -227,6 +227,21 @@ describe("settings tree and config", () => {
     for (const id of ["money-country", "money-youtube", "money-tiktok", "money-instagram", "money-facebook", "money-x", "money-payouts"]) {
       expect(findApple(id)?.branch.slug).toBe("money");
     }
+    // §40.8 change 4: Getting your money out points to Get paid.
+    expect(findApple("money-payouts")?.apple.href).toBe("/settings/posting/getpaid");
+    expect(findApple("money-payouts")?.apple.leaf).toBe("Each app pays you itself. Get paid shows the steps for each one.");
+  });
+
+  it("§40.8 change 4: X pays through Stripe in Creator Studio; the mock's cards follow the config fixes", () => {
+    const x = money.PAYOUTS.find((p) => p.platform === "x")!;
+    expect(x).toEqual({ platform: "x", where: "X › Creator Studio", how: "Connect Stripe in X › Creator Studio. X pays through Stripe." });
+    const view = buildMoneyView({ scenario: "start", country: "SE", seen: [] });
+    const card = (p: string) => view.platforms.find((c) => c.platform === p)!;
+    expect(card("x").programme).toBe("Original Content Rewards");
+    expect(card("x").statusWhere).toEqual({ label: "X › Creator Studio" });
+    expect(card("x").paidWhere).toEqual({ label: "X › Creator Studio (paid through Stripe)", url: "https://x.com/i/jf/creators/studio" });
+    expect(card("tiktok").statusWhere).toEqual({ label: "TikTok Studio › Monetization" });
+    expect(JSON.stringify(view)).not.toContain("x.com/settings/monetization");
   });
 
   it("every goal in config/monetization.json names an official source (no third-party numbers)", () => {

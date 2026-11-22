@@ -213,6 +213,20 @@ export const TREES: Tree[] = [
         ],
       },
       {
+        slug: "getpaid",
+        name: "Get paid",
+        line: "Set up how each app pays you. See if money can reach you.",
+        icon: "coin",
+        apples: [
+          {
+            id: "getpaid",
+            name: "Get paid",
+            leaf: "One card per place. Do the steps once so money can reach you.",
+            words: ["get paid", "payout", "payouts", "bank", "bank account", "paypal", "stripe", "adsense", "whop", "tax", "money on hold", "withdraw", "cash out"],
+          },
+        ],
+      },
+      {
         slug: "where",
         name: "Where clips go",
         line: "Pick the places your clips go.",
@@ -323,7 +337,8 @@ export const TREES: Tree[] = [
           {
             id: "money-payouts",
             name: "Getting your money out",
-            leaf: "Each app pays you itself. Add your bank or PayPal inside each app.",
+            leaf: "Each app pays you itself. Get paid shows the steps for each one.",
+            href: "/settings/posting/getpaid",
             words: ["bank", "bank account", "paypal", "payout", "payouts", "withdraw", "cash out", "get paid", "stripe", "adsense", "balance", "payment", "card"],
           },
         ],
@@ -478,6 +493,12 @@ export const TREES: Tree[] = [
             name: "Content Rewards news",
             leaf: "You're in, send-now reminders, approvals, proof, money and new campaigns.",
             words: ["content rewards", "campaign", "brand", "approved", "send now", "proof", "whop"],
+          },
+          {
+            id: "notify-getpaid",
+            name: "Money on hold or sent to your bank",
+            leaf: "When Google or Whop holds your money, or sends it to your bank.",
+            words: ["get paid", "payout", "bank", "on hold", "money sent", "adsense", "whop"],
           },
           {
             id: "notify-badge",

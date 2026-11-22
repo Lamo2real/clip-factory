@@ -26,18 +26,18 @@ export default defineConfig({
       testIgnore: /screenshots\.spec\.ts/,
     },
     // WebKit too: the Mac app (WKWebView) and the iPhone PWA (Safari) are WebKit. Pictures in Ask (§26), the
-    // assistant's files and markup editor (§28), the motion, stillness and top-line checks (§20.13, §20.16, §11.1), and
-    // Home's boxes fitting what is in them at every size (home-fit).
+    // assistant's files and markup editor (§28), the motion, stillness and top-line checks (§20.13, §20.16, §11.1),
+    // Home's boxes fitting what is in them at every size (home-fit), and Get paid (§40.8).
     // CI runs this project in its own job (ci.yml).
     {
       name: "webkit",
       use: { ...devices["Desktop Safari"] },
-      testMatch: /(help-pictures|ask-assistant|ask-markup|nav-smooth|page-still|top-line|job-head|drop-video|home-fit)\.spec\.ts/,
+      testMatch: /(help-pictures|ask-assistant|ask-markup|nav-smooth|page-still|top-line|job-head|drop-video|home-fit|getpaid)\.spec\.ts/,
     },
     {
       name: "webkit-phone",
       use: { ...devices["iPhone 15"] },
-      testMatch: /(help-pictures|ask-assistant|ask-markup)\.spec\.ts/,
+      testMatch: /(help-pictures|ask-assistant|ask-markup|getpaid)\.spec\.ts/,
       // Desktop sizes run in the webkit project: a phone at 3x pixels and a 1920 px wide page made Linux WebKit's
       // screenshots and clicks time out in CI.
       grepInvert: /desktop/,

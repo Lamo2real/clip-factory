@@ -2,11 +2,13 @@
 // top of the page, with one total per currency. Only money a platform or Content Rewards reported, never calculated,
 // guessed, converted or typed in: every sum is the server's (GET /v1/money/everywhere), the web only formats it. A
 // place that tells apps nothing says "Not available from TikTok" and where to look, never $0. No vermilion here: at
-// most one glass button at each row's right end. An API from before §39 (404) shows nothing.
+// most one glass button at each row's right end. An API from before §39 (404) shows nothing. §40.4: under each row one
+// small grey line says what that place sent toward the bank ("Sent to your bank by Google", or where to look), and
+// under the total the block "Sent to your bank, so far" (one line per currency, never added to the 30-day total).
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { api, friendlyMessage } from "../../api/index.ts";
 import { ApiError } from "../../api/errors.ts";
-import type { MoneyEverywhere, MoneyPlace } from "../../api/types.ts";
+import type { MoneyEverywhere, MoneyPlace, SentLine } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { Button, LinkButton } from "../../components/ui.tsx";
@@ -20,6 +22,16 @@ export const ALL_MONEY_TITLE = "All your money";
 export const NOTHING_TO_ADD = "Nothing to add up yet.";
 export const TWO_MONIES = "Different money, like dollars and euros, is never added together.";
 export const PAID_OUT = "Paid out to your bank: not available from Content Rewards. Look on Whop: **Balances**.";
+/** The block under the total (§40.4). */
+export const SENT_TITLE = "Sent to your bank, so far";
+export const SENT_TWO_MONIES = "Different money, like dollars and kronor, is never added together.";
+/** Said before a row's sent line that doesn't say so itself, so it never reads as the row's earnings. */
+export const SENT_LABEL = "Sent to your bank:";
+/**
+ * A sent line's own button (Allow payment reading, Connect Whop, See them, Open Stripe) is on that place's Get paid page:
+ * a row keeps at most one button, at its right end (§39.2), so the line says where to find it.
+ */
+export const MORE_IN_GETPAID = "More in Get paid below.";
 /** The Monthly card's line while Content Rewards is on All your money (§39.2). */
 export const APPS_ONLY = "Apps only. Content Rewards is in All your money.";
 
@@ -44,7 +56,7 @@ export function useMoneyEverywhere(): EverywhereLoad & { reload: () => void } {
     reload();
     let t: ReturnType<typeof setTimeout> | null = null;
     const off = onLiveSignal((s) => {
-      if (s.kind !== "resync" && s.event.type !== "contentrewards" && s.event.type !== "setup") return;
+      if (s.kind !== "resync" && s.event.type !== "contentrewards" && s.event.type !== "setup" && s.event.type !== "getpaid") return;
       if (t) clearTimeout(t);
       t = setTimeout(reload, 800);
     });
@@ -64,8 +76,26 @@ export function clockTime(iso: string | undefined): string {
   return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(d).replace(/\s?([AP])M$/i, (_m, x: string) => ` ${x.toLowerCase()}m`);
 }
 
-/** The Content Rewards row's small lines, in money's time order; each number only when Content Rewards reported it. */
-export function crLines(cr: NonNullable<MoneyPlace["cr"]>): string[] {
+/**
+ * A row's one small grey sent line (§40.4): "Sent to your bank by Google: kr 2 468,00 so far · YouTube says", or the
+ * place's not-available line. Amounts are only formatted, one per currency, never added across.
+ */
+export function sentText(sent: SentLine): string {
+  // The server's headlines and tags have no full stop: one goes in before the next sentence.
+  const dot = (s: string) => (/[.!?…]$/.test(s) ? s : `${s}.`);
+  const more = (text: string) => (sent.button || sent.where?.button ? `${dot(text)} ${MORE_IN_GETPAID}` : text);
+  if (sent.state === "number") {
+    const amounts = sent.amounts.map((a) => formatMoney(a.amountMicros, a.currency)).join(" · ");
+    return more([`${sent.headline}${amounts ? `: ${amounts} so far` : ""}`, sent.tag, amounts ? null : sent.notAdded].filter(Boolean).join(" · "));
+  }
+  const where = sent.where?.text;
+  const label = /sent to your bank/i.test(sent.headline) ? "" : `${SENT_LABEL} `;
+  return more(`${label}${where ? `${dot(sent.headline)} ${where}` : sent.headline}`);
+}
+
+/** The Content Rewards row's small lines, in money's time order; each number only when Content Rewards reported it.
+ * With the row's own sent line (§40.4), "Paid out to your bank" is left out: the sent line says it. */
+export function crLines(cr: NonNullable<MoneyPlace["cr"]>, withSent = false): string[] {
   const now = [
     cr.stillEarningCents !== null ? `Still earning ${usd(cr.stillEarningCents)}` : null,
     cr.readyToMoveCents !== null ? `Ready to move to Whop ${usd(cr.readyToMoveCents)}` : null,
@@ -75,7 +105,7 @@ export function crLines(cr: NonNullable<MoneyPlace["cr"]>): string[] {
   return [
     ...(now.length ? [`Right now (Content Rewards says${at ? `, ${at}` : ""}): ${now.join(" · ")}`] : []),
     `Earned so far, since you started: ${cr.paidSoFarCents == null ? "Checking…" : usd(cr.paidSoFarCents)}`,
-    PAID_OUT,
+    ...(withSent ? [] : [PAID_OUT]),
   ];
 }
 
@@ -129,12 +159,17 @@ function Row({ p }: { p: MoneyPlace }) {
         {p.where ? <p className="cr-all__where">{p.where.text}</p> : null}
         {p.cr && p.state !== "not_set_up" ? (
           <ul className="cr-all__cr">
-            {crLines(p.cr).map((l) => (
+            {crLines(p.cr, !!p.sent).map((l) => (
               <li key={l}>
                 <Rich text={l} />
               </li>
             ))}
           </ul>
+        ) : null}
+        {p.sent ? (
+          <p className="cr-all__sent" data-sent={p.sent.state}>
+            <Rich text={sentText(p.sent)} />
+          </p>
         ) : null}
       </div>
       <div className="cr-all__button">
@@ -206,7 +241,37 @@ export function AllMoney({ load }: { load: EverywhereLoad & { reload: () => void
         {m.totals.length > 1 ? <p className="cr-all__why">{TWO_MONIES}</p> : null}
         {m.notCountedText ? <p className="cr-all__why">{m.notCountedText}</p> : null}
       </div>
+      {m.sent ? <SentSoFar sent={m.sent} /> : null}
     </section>
+  );
+}
+
+/**
+ * "Sent to your bank, so far" (§40.4): one line per currency in the places' order, each naming who sent it, with how
+ * it is known; never added to the 30-day total, never across currencies; "Nothing sent to your bank yet." only with no
+ * sent rows at all. What reached the bank only the bank can say: the bank line says so.
+ */
+export function SentSoFar({ sent }: { sent: NonNullable<MoneyEverywhere["sent"]> }) {
+  return (
+    <div className="cr-all__sentsofar" data-help="money-sent" data-sent-total={sent.totals.length ? "yes" : "none"}>
+      <h3 className="cr-all__sent-title">{SENT_TITLE}</h3>
+      {sent.empty && !sent.totals.length && !sent.notAdded ? <p className="cr-all__nothing">{sent.empty}</p> : null}
+      {sent.totals.length ? (
+        <ul className="cr-all__sent-lines" aria-label={SENT_TITLE}>
+          {sent.totals.map((t) => (
+            <li key={t.currency} data-currency={t.currency}>
+              <span className="cr-all__sent-num">{formatMoney(t.amountMicros, t.currency)}</span>
+              <span className="cr-all__sent-names"> · {t.names}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {sent.totals.length ? <p className="cr-all__tag money-tag">{sent.tag}</p> : null}
+      {sent.totals.length ? <p className="cr-all__why">{SENT_TWO_MONIES}</p> : null}
+      {sent.notAdded ? <p className="cr-all__why">{sent.notAdded}</p> : null}
+      {sent.notCountedText ? <p className="cr-all__why">{sent.notCountedText}</p> : null}
+      <p className="cr-all__why cr-all__bank">{sent.bankText}</p>
+    </div>
   );
 }
 

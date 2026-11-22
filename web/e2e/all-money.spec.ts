@@ -62,7 +62,9 @@ test.describe("All your money", () => {
     await expect(row(page, "tiktok").locator(".cr-all__amount")).toHaveCount(0);
     await expect(row(page, "x").getByRole("link", { name: /Open X/ })).toHaveAttribute("href", "https://x.com/i/jf/creators/studio");
     await expect(row(page, "contentrewards")).toContainText("Content Rewards says");
-    await expect(row(page, "contentrewards")).toContainText("Paid out to your bank: not available from Content Rewards. Look on Whop: Balances.");
+    // §40.8 change 5: "Paid out to your bank" becomes the row's sent line, "Sent to your bank".
+    await expect(row(page, "contentrewards")).toContainText("Sent to your bank: not available from Content Rewards. Look on Whop: Balances.");
+    await expect(row(page, "contentrewards")).not.toContainText("Paid out to your bank");
     await expect(row(page, "contentrewards").getByRole("link", { name: "See it all" })).toHaveAttribute("href", "/money#content-rewards");
     const sum = page.locator(".cr-all__sum");
     await expect(sum).toHaveCount(1);
@@ -100,6 +102,45 @@ test.describe("All your money", () => {
     await expect(card(page)).toContainText("Nothing to add up yet.");
     await expect(page.locator(".cr-all__sum")).toHaveCount(0);
     await expect(card(page)).not.toContainText("$0");
+  });
+
+  test("§40.4: each row's sent line, and Sent to your bank, so far: per currency, never in the 30-day total", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() => !!(window as Window & { __cfMock?: { getpaid?: unknown } }).__cfMock?.getpaid);
+    await page.evaluate(() => (window as unknown as { __cfMock: { getpaid: { scenario(n: string): void } } }).__cfMock.getpaid.scenario("owner"));
+    await open(page);
+    const sent = (place: string) => row(page, place).locator(".cr-all__sent");
+    await expect(sent("youtube")).toHaveText(/^Sent to your bank by Google: SEK\s2,468\.00 so far · YouTube says$/);
+    await expect(sent("tiktok")).toHaveText("Sent to your bank: Not available from TikTok. Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal.");
+    await expect(sent("instagram")).toHaveText("Sent to your bank: Not available from Instagram. Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month.");
+    await expect(sent("facebook")).toHaveText("Sent to your bank: Not available from Meta. Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month.");
+    // Its Open Stripe is on X's Get paid page (a row keeps one button, at its right end).
+    await expect(sent("x")).toHaveText("Sent to your bank: Not available from X. Look in Stripe: Payouts. More in Get paid below.");
+    await expect(sent("contentrewards")).toHaveText("Sent to your bank: not available from Content Rewards. Look on Whop: Balances.");
+    for (const p of ["tiktok", "instagram", "facebook", "x"]) await expect(sent(p)).not.toContainText("$0");
+    const block = page.locator(".cr-all__sentsofar");
+    await expect(block.locator("h3")).toHaveText("Sent to your bank, so far");
+    await expect(block.locator("li")).toHaveCount(1);
+    await expect(block.locator("li")).toHaveText(/^SEK\s2,468\.00 · YouTube$/);
+    // The server's words (getpaid/sent.py): only Google sent money here, and Whop is not connected.
+    await expect(block).toContainText("Google says it sent it.");
+    await expect(block).toContainText("Different money, like dollars and kronor, is never added together.");
+    await expect(block).toContainText("Not in this: TikTok, Instagram, Facebook, X and Content Rewards (not available).");
+    await expect(block).toContainText("Clip Factory can't see your bank. Look in your bank's app to see what arrived.");
+    await expect(block).not.toContainText("Nothing sent to your bank yet.");
+    // It comes after the 30-day total and is never added to it.
+    expect(await page.evaluate(() => document.querySelector(".cr-all__total")!.compareDocumentPosition(document.querySelector(".cr-all__sentsofar")!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
+    await expect(page.locator(".cr-all__sum")).not.toContainText("SEK");
+    await expect(card(page).locator(".btn--primary")).toHaveCount(0);
+  });
+
+  test("§40.4: nothing sent yet says so, with no total", async ({ page }) => {
+    await open(page);
+    const block = page.locator(".cr-all__sentsofar");
+    await expect(block).toContainText("Nothing sent to your bank yet.");
+    await expect(block.locator("li")).toHaveCount(0);
+    // Allow payment reading is on YouTube's Get paid page, right below; the row's own button stays Allow money reading.
+    await expect(row(page, "youtube").locator(".cr-all__sent")).toHaveText("Sent to your bank: Clip Factory can't see YouTube payments yet. More in Get paid below.");
   });
 
   test("Content Rewards signed out: Sign in again, its own button and no See it all", async ({ page }) => {
