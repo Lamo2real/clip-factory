@@ -469,6 +469,24 @@ def test_retry_asks_before_sending_to_a_new_account(
     assert call("POST", path, {})[0] == 409  # queued: nothing stuck to try again
 
 
+def test_the_new_account_question_names_this_account_and_the_yes_button(
+    call: Call, store: db.Store, secrets_client: FakeSecretsManager, starter: sup.FakeStarter
+) -> None:
+    """Round 5 E13: Lamo Stories' YouTube was reconnected to a channel itself named "Lamo Stories": the question
+    says "this YouTube account (Lamo Stories)" and the sheet's own button (Yes), never "Tap Post to Lamo Stories"."""
+    store.update(sup.PK, STORY_SK, {"run": 1})
+    job = sup.pubjob(store, "youtube", publishingStatus="failed", error="YouTube did not answer.")
+    store.update(sup.PK, "SOCIAL#youtube", {"externalAccountId": "UC-NEW", "accountName": "Lamo Stories"})
+    _token(channelId="UC-NEW")(store, secrets_client, job)
+    status, body = call("POST", f"/v1/workspaces/stories/publishing/{job['publishingJobId']}/retry", {})
+    assert status == 409, body
+    assert body["error"]["message"] == (
+        "Lamo Stories' YouTube is a different account now: this YouTube account (Lamo Stories). Tap Yes if that is "
+        "right."
+    )
+    assert starter.started == []
+
+
 def test_retry_to_the_same_account_needs_no_confirmation(call: Call, store: db.Store, starter: sup.FakeStarter) -> None:
     job = sup.pubjob(store, "x", publishingStatus="needs_attention", error="X has no credits left.")
     status, body = call("POST", f"/v1/workspaces/stories/publishing/{job['publishingJobId']}/retry", {})

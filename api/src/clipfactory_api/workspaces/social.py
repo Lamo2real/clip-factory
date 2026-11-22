@@ -68,7 +68,7 @@ LIST_TOO_OLD: Final = "That list is too old. Tap Connect again."
 X_CREDITS: Final = "X has no credits left. Buy more in console.x.com › Billing › Credits."
 # TikTok gives every developer app its own open_id for the same person (§45.13.4, ``clips_unknown``).
 TIKTOK_UNSURE: Final = (
-    "Lamo Stories cannot tell if this is Lamo Clips' TikTok, because TikTok gives each app its own id. Before the "
+    "Lamo Stories cannot tell if this is Clip Factory's TikTok, because TikTok gives each app its own id. Before the "
     "first post, Lamo Stories shows you the account to check."
 )
 # The only attributes of Clip Factory's ACCOUNT# items Lamo Stories may read (§45.15: an attribute-limited GetItem).
@@ -122,7 +122,7 @@ _X = (
     "the account that is signed in.",
 )
 _META = (
-    "Lamo Stories uses its own Meta app, so Lamo Clips' Facebook connection is never touched.",
+    "Lamo Stories uses its own Meta app, so Clip Factory's Facebook connection is never touched.",
     "Facebook will ask which Pages this app may use. Tick only your Lamo Stories Page.",
     "A new Meta app in Development mode lets you, its admin, connect your own Pages. Going Live needs Meta's "
     "App Review.",
@@ -147,7 +147,7 @@ _LIMITS: Final[dict[str, dict[str | None, tuple[str, ...]]]] = {
             "A new TikTok app needs TikTok's review, which can take days to weeks. Until then only Sandbox target "
             "users can connect, the account must be private and posts stay Only me.",
             *_TIKTOK,
-            "TikTok gives each app its own id, so Lamo Stories cannot tell if it is Lamo Clips' TikTok. Before the "
+            "TikTok gives each app its own id, so Lamo Stories cannot tell if it is Clip Factory's TikTok. Before the "
             "first post, check the account Lamo Stories shows you.",
         ),
         None: (*_TIKTOK, "First pick which app Lamo Stories uses: your own, or Clip Factory's (quicker)."),
@@ -167,7 +167,7 @@ _LIMITS: Final[dict[str, dict[str | None, tuple[str, ...]]]] = {
         None: ("Use a separate Facebook Page managed by the same Facebook login.", *_META),
     },
     "x": {
-        CLIPS: (*_X, "Posts use Clip Factory's X app credits and your one monthly X limit, shared with Lamo Clips."),
+        CLIPS: (*_X, "Posts use Clip Factory's X app credits and your one monthly X limit, shared with Clip Factory."),
         OWN: (*_X, "Your own X app needs its own credits. Lamo Stories' own monthly X limit applies."),
         None: (*_X, "First pick which app Lamo Stories uses: your own, or Clip Factory's (quicker)."),
     },

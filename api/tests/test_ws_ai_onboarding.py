@@ -80,7 +80,7 @@ def test_done_states_come_from_the_real_state(wcall: WsCall, store: db.Store) ->
     assert got["onboarding"]["done"] == 3
     tiktok = next(s for s in got["onboarding"]["steps"] if s["step"] == "tiktok")
     assert tiktok["line"] == (
-        "This is Lamo Clips' TikTok account. Pick another in Social accounts, or tap Use it for both."
+        "This is Clip Factory's TikTok account. Pick another in Social accounts, or tap Use it for both."
     )
     assert "line" not in next(s for s in got["onboarding"]["steps"] if s["step"] == "youtube")
     # a step that ticks itself cannot be ticked by hand
@@ -176,7 +176,7 @@ def test_a_connected_account_that_lamo_clips_has_too_is_not_a_done_step(
     steps = {s["step"]: s for s in got["onboarding"]["steps"]}
     assert steps["youtube"]["state"] == "todo"
     assert steps["youtube"]["line"] == (
-        "This is Lamo Clips' YouTube account. Pick another in Social accounts, or tap Use it for both."
+        "This is Clip Factory's YouTube account. Pick another in Social accounts, or tap Use it for both."
     )
     assert (steps["x"]["state"], "line" in steps["x"]) == ("done", False)  # another X account: Lamo Stories' own
     # "Use it for both" for this very channel makes it a Lamo Stories connection again
@@ -206,7 +206,7 @@ def test_an_account_lamo_clips_let_go_of_is_a_done_step(wcall: WsCall, store: db
     _, got = wcall("GET", f"{BASE}/onboarding")
     steps = {s["step"]: s for s in got["onboarding"]["steps"]}
     assert steps["youtube"]["state"] == "todo"
-    assert steps["youtube"]["line"].startswith("This is Lamo Clips' YouTube account.")
+    assert steps["youtube"]["line"].startswith("This is Clip Factory's YouTube account.")
 
 
 def test_a_model_status_never_returns_who_wrote_it(wcall: WsCall, store: db.Store) -> None:

@@ -46,6 +46,9 @@ STALE_POST: Final = ("safety",)
 STALE_FORMAT: Final = ("scenes", "animation", "captions", "assemble", "preview")
 
 NOT_YET = "Your changes aren't in the video yet. Tap Remake first."
+# Only the fact check is out of date (the post words changed: they are not in the video), so Check again (produce
+# from "safety") is all it needs, never a remake (round 5 E10).
+POST_WORDS = "Your new post words need a quick check. Tap Check again."
 CHANGED = "This story changed meanwhile. Reload it and try again."
 BUSY = "A video is being made for this story. Wait until it is done."
 NO_SCRIPT = "This story has no storyboard yet. Tap Try again first."
@@ -274,12 +277,20 @@ def changes_input(
 # --- approve --------------------------------------------------------------------------------------------------
 
 
+def only_check_stale(story: Mapping[str, Any]) -> bool:
+    """Nothing but the fact check is out of date: the post words changed (``STALE_POST``), nothing in the video."""
+    return shapes.ordered_steps(story.get("stale") or []) == list(STALE_POST)
+
+
 def approve_problem(story: Mapping[str, Any]) -> str | None:
-    """None when §45.9's approve rule holds, else the sentence of the 409."""
+    """None when §45.9's approve rule holds, else the sentence of the 409. The rule is unchanged; only its sentence
+    says Check again when the post words are all that changed (round 5 E10)."""
     if story.get("status") != "review":
         if story.get("status") == "needs_check":
-            return _facts(story) or NOT_YET
+            return _facts(story) or (POST_WORDS if only_check_stale(story) else NOT_YET)
         return "Only a video that is waiting for review can be approved."
+    if only_check_stale(story):
+        return POST_WORDS
     if shapes.ordered_steps(story.get("stale") or []):
         return NOT_YET
     safety = story.get("safety")

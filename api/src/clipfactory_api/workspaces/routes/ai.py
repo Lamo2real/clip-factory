@@ -21,6 +21,8 @@ from .. import agents as agents_mod
 from .. import ai_config as cfg
 from .. import ai_resolve as res
 from .. import chat, guard, memory, model_defs, onboarding, provider_keys, references, retention, skills, storage, usage
+from .. import deps as ws_deps
+from .. import secrets as ws_secrets
 
 BASE = "/v1/workspaces/{ws}"
 
@@ -270,14 +272,31 @@ def delete_reference(app: App, req: Request) -> Response:
 # --- onboarding, provider keys, storage -----------------------------------------------------------------------
 
 
+def _workspace_secrets(app: App) -> ws_secrets.WorkspaceSecrets | None:
+    """The workspace secrets wrapper the Social accounts routes use (tests install fakes), or None while posting is
+    not switched on (``WS_SECRET_PREFIX`` unset)."""
+    deps = ws_deps.of(app)
+    if deps.secrets is None:
+        deps.secrets = ws_secrets.from_env()
+    found: ws_secrets.WorkspaceSecrets | None = deps.secrets
+    return found
+
+
 def get_onboarding(app: App, req: Request) -> Response:
-    user_id, ws_id, workspace, _ = _open(app, req)
-    return ok({"onboarding": onboarding.state(app.store, user_id, ws_id, workspace)})
+    user_id, ws_id, workspace, now = _open(app, req)
+    # the Connect steps read each account as Social accounts shows it, the app keys too (round 5 E3)
+    found = onboarding.state(
+        app.store, user_id, ws_id, workspace, now=now, secrets=_workspace_secrets(app), started=req.started
+    )
+    return ok({"onboarding": found})
 
 
 def patch_onboarding(app: App, req: Request) -> Response:
     user_id, ws_id, workspace, now = _open(app, req)
-    return ok({"onboarding": onboarding.patch(app.store, user_id, ws_id, workspace, req.json(), now=now)})
+    found = onboarding.patch(
+        app.store, user_id, ws_id, workspace, req.json(), now=now, secrets=_workspace_secrets(app), started=req.started
+    )
+    return ok({"onboarding": found})
 
 
 def put_provider_key(app: App, req: Request) -> Response:

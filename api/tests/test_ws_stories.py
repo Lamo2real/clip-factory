@@ -374,6 +374,43 @@ def test_effects_music_and_post_captions_make_their_own_steps_stale(
     assert same["version"] == 3
 
 
+def test_new_post_words_need_a_check_again_never_a_remake(
+    call: Call, store: db.Store, s3_client: FakeS3, agentcore: FakeAgentCore
+) -> None:
+    """Round 5 E10: post words are not in the video, so changing only them leaves just the fact check out of date.
+    Approve keeps its rule (refused until the check ran on them) but says Check again, never Remake; Check again
+    (produce from "safety") checks them, and then the video can be approved."""
+    checked = {"topicId": None, "status": "ok", "problems": [], "checkedScriptVersion": 1, "citations": []}
+    story = seed_story(store, s3_client, safety=checked)
+    out = _patch(call, story, postCaptions={"youtubeTitle": "Ice, explained"})[1]["story"]
+    assert out["stale"] == ["safety"]
+    status, body = call("POST", f"{BASE}/stories/{story['storyId']}/approve", {"version": out["version"]})
+    assert (status, body["error"]["message"]) == (409, "Your new post words need a quick check. Tap Check again.")
+    assert "Remake" not in body["error"]["message"]
+    status, body = call("POST", f"{BASE}/stories/{story['storyId']}/produce", {"from": "safety"})
+    assert status == 202, body
+    run = body["job"]["configuration"]["run"]
+    assert (run[0], "storyboard" in run) == ("safety", False)  # the check first; a run from it is content-based
+    job_id = body["job"]["jobId"]
+    agent_step(store, story["storyId"], job_id, "safety", safety=checked)
+    agent_end(store, story["storyId"], job_id)
+    done = call("GET", f"{BASE}/stories/{story['storyId']}")[1]["story"]
+    assert (done["status"], done["stale"]) == ("review", [])
+    assert call("POST", f"{BASE}/stories/{story['storyId']}/approve", {"version": done["version"]})[0] == 200
+
+
+def test_a_change_in_the_video_with_new_post_words_still_says_remake(
+    call: Call, store: db.Store, s3_client: FakeS3
+) -> None:
+    """Post words changed together with something in the video: the video needs remaking, so Remake it is."""
+    story = seed_story(store, s3_client)
+    out = _patch(call, story, postCaptions={"youtubeTitle": "Ice, explained"})[1]["story"]
+    out = _patch(call, out, musicMood="calm")[1]["story"]
+    assert out["stale"] == ["safety", "sound", "assemble", "preview"]
+    status, body = call("POST", f"{BASE}/stories/{story['storyId']}/approve", {"version": out["version"]})
+    assert (status, body["error"]["message"]) == (409, "Your changes aren't in the video yet. Tap Remake first.")
+
+
 def _remake_and_finish(call: Call, store: db.Store, story_id: str, body: dict[str, Any] | None = None) -> Any:
     status, out = call("POST", f"{BASE}/stories/{story_id}/produce", body or {})
     assert status == 202, out
