@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-import { client } from "./api.js";
+import { ApiError, client } from "./api.js";
 import { SignInNeeded, accessToken, appConfig } from "./auth.js";
 import * as chrome from "./chrome.js";
 import { freeName } from "./match.js";
@@ -64,7 +64,7 @@ function stayAwake() {
 async function stopped(api, state, job, reason, needsYou) {
   const pressed = state.ledger[job.clipId]?.step === "pressing" || state.ledger[job.clipId]?.step === "finding";
   try {
-    await api.stopped(job.clipId, state.device, reason, needsYou);
+    await api.stopped(job.clipId, state.device, reason, needsYou, job.attempt);
   } catch (e) {
     log("stopped.call_failed", { clipId: job.clipId, error: String(e.message || e) });
   }
@@ -74,7 +74,7 @@ async function stopped(api, state, job, reason, needsYou) {
 }
 
 async function finished(api, state, job, link, { counted }) {
-  const answer = await api.done(job.clipId, state.device, link || undefined);
+  const answer = await api.done(job.clipId, state.device, link || undefined, job.attempt);
   remember(state, job.clipId, { step: "done", link: link || null });
   if (counted) {
     state.posted.push({ clipId: job.clipId, hook: job.hook, link: link || null, at: new Date().toISOString() });
@@ -84,15 +84,16 @@ async function finished(api, state, job, link, { counted }) {
   await notify("On TikTok ✓", job.hook ? `“${job.hook}” is on TikTok for everyone.` : "Your clip is on TikTok for everyone.");
 }
 
-async function doPost(api, state, job) {
+async function doPost(api, state, job, { fresh = false } = {}) {
   const mine = state.ledger[job.clipId] || {};
-  const tries = (mine.tries || 0) + 1;
+  // A fresh claim starts counting again; a resumed try counts on.
+  const tries = (fresh ? 0 : mine.tries || 0) + 1;
   remember(state, job.clipId, { device: state.device, step: "claimed", tries });
   let file = null;
   let browser = null;
   const awake = stayAwake();
   try {
-    await api.step(job.clipId, state.device, "video");
+    await api.step(job.clipId, state.device, "video", job.attempt);
     file = await download(api, job);
     const opened = await chrome.open();
     browser = opened.browser;
@@ -105,7 +106,7 @@ async function doPost(api, state, job) {
       } else {
         remember(state, job.clipId, { step });
       }
-      await api.step(job.clipId, state.device, step);
+      await api.step(job.clipId, state.device, step, job.attempt);
     };
     const result = await post(opened.page, job, file, onStep);
     if (result.link || result.sure) {
@@ -120,6 +121,11 @@ async function doPost(api, state, job) {
     const pressed = state.ledger[job.clipId]?.step === "pressing" || state.ledger[job.clipId]?.step === "finding";
     if (e instanceof Stop) {
       await stopped(api, state, job, e.reason, e.needsYou);
+    } else if (!pressed && e instanceof ApiError && e.status === 409) {
+      // Clip Factory said wait (its switch or auto-posting went off, or another try has it): nothing was pressed, so
+      // stop quietly; the clip waits on the server and is not counted as a failed try.
+      remember(state, job.clipId, { step: "waiting", tries: tries - 1 });
+      log("post.refused", { clipId: job.clipId, error: String(e.message || e) });
     } else if (pressed) {
       // After the press: only look for it from now on (doFind), never press again.
       remember(state, job.clipId, { step: "finding" });
@@ -193,13 +199,15 @@ export async function tick() {
     });
     log("tick", { action: action.action, clipId: action.job?.clipId, waiting: queue.length, reason: action.reason });
     if (action.action === "post") {
+      let job = action.job;
       try {
-        await api.claim(action.job.clipId, state.device);
+        const claimed = await api.claim(action.job.clipId, state.device);
+        job = { ...action.job, ...(claimed?.job || {}) }; // its new attempt number
       } catch (e) {
         log("claim.refused", { clipId: action.job.clipId, error: String(e.message || e) });
         return { action: "claim_refused" };
       }
-      await doPost(api, state, action.job);
+      await doPost(api, state, job, { fresh: true });
     } else if (action.action === "resume") {
       await doPost(api, state, action.job);
     } else if (action.action === "find") {

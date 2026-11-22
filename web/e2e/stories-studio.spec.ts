@@ -310,7 +310,9 @@ test("the whole flow: idea, character, production, review, approve and the publi
   await expect(places.first()).toHaveAttribute("aria-pressed", "true");
   // The exact account it goes to, checked live before Upload.
   const dest = sheet.locator(".st-s-dest").first();
-  await expect(dest).toContainText(`Goes to ${connected[0] ?? "the connected account"}`);
+  // By its place first, so it reads right when the account is itself called Lamo Stories (§45.36 E13).
+  await expect(dest).toContainText(connected[0] ? `account: ${connected[0]}` : "Goes to the connected");
+  await expect(dest).toContainText("Goes to ");
   await dest.getByRole("button", { name: "Check now" }).click();
   await expect(dest).toContainText("Checked just now");
   await sheet.getByRole("button", { name: "Use my settings" }).click();
@@ -398,7 +400,8 @@ test("round 3, Review: Next run, Write them again beside the saved words, the pl
     await settle(page);
     expect(await audit(page, `Review with new post words ${w}`, touch && w < 768)).toEqual([]);
     await draft.getByRole("button", { name: "Use these" }).click();
-    await expect(page.getByText("Saved. Tap Remake to put it in the video.")).toBeVisible();
+    // New post words are not in the video: only the quick fact check is needed (§45.36 E10).
+    await expect(page.getByText("Saved. Your new post words need a quick check. Tap Check again.")).toBeVisible();
     await expect(page.locator(".st-s-draftcaps")).toHaveCount(0);
     // An approved video with a WebM copy offers it by name.
     await go(page, `/stories/review/${S.approved}`);
@@ -479,9 +482,12 @@ test("round 3, Post to {name}?: the publish sheet and Posts' Try again ask about
     await page.getByRole("option", { name: "Only me" }).click();
     await expect(sheet.locator(".st-s-sheet__actions .st-btn--main")).not.toHaveAttribute("aria-disabled", "true", { timeout: 10_000 });
     await sheet.locator(".st-s-sheet__actions .st-btn--main").click();
-    const ask = await sheetRules(page, w, /^Post to Lamo Stories\?$/);
+    // Named by its place first, so it reads right when the account is itself called Lamo Stories (§45.36 E13).
+    const ask = await sheetRules(page, w, /^Post to this TikTok account( \(.+\))?\?$/);
     await expect(ask).toContainText("Lamo Stories cannot tell if");
-    await expect(ask.locator(".st-s-dest--ask")).toContainText("Account id");
+    await expect(ask).not.toContainText("Lamo Clips");
+    // The account id is behind Technical details (§45.36 E14).
+    await expect(ask.locator(".st-s-dest--ask .st-s-tech")).toContainText("Account id");
     await ask.getByRole("button", { name: /^Yes, post to / }).click();
     await expect(page.getByRole("dialog", { name: /Sending your video|Posted!/ })).toBeVisible();
     await page.getByRole("dialog", { name: /Sending your video|Posted!/ }).locator(".st-s-sheet__actions .st-btn--main").click();
@@ -497,7 +503,7 @@ test("round 3, Post to {name}?: the publish sheet and Posts' Try again ask about
     });
     const row = page.locator(".st-s-post", { hasText: "TikTok" });
     await row.getByRole("button", { name: "Try again" }).click();
-    const again = await sheetRules(page, w, /^Post to Lamo Stories\?$/);
+    const again = await sheetRules(page, w, /^Post to this TikTok account( \(.+\))?\?$/);
     await expect(again).toContainText("a different account now");
     await again.getByRole("button", { name: /^Yes, post to / }).click();
     await expect(row).toContainText(/Waiting|Sending|Posted/);
@@ -656,4 +662,214 @@ test("round 4: the timeline chip shows the short name, and a one-line idea is ne
     expect(clamped, `${w}: idea lines cut off`).toEqual([]);
     await ctx.close();
   }
+});
+
+// ---------- Round 5 (§45.36) ----------
+
+type R5Window = Window & {
+  __cfStoriesMock?: { store?: { knobs: Record<string, unknown>; scripts: Record<string, { width: number; height: number }> } };
+  __cfSoundLog?: { kind: string }[];
+  __bursts?: number;
+};
+
+/** The words inside a root, without its Technical details folds. */
+const plainOf = (page: Page, root: string) =>
+  page.evaluate((sel) => {
+    const el = document.querySelector(sel)!.cloneNode(true) as Element;
+    for (const f of el.querySelectorAll(".st-s-tech")) f.remove();
+    return el.textContent ?? "";
+  }, root);
+
+test("round 5, Review: new post words need only Check again and the tab stays; account problems open Social accounts; ids are folded", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const words = "Your new post words need a quick check. Tap Check again.";
+  for (const [w, h, touch] of [
+    [390, 844, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    const page = await ctx.newPage();
+    await open(page, `/stories/review/${S.review}`);
+    // §45.36 E10: only the post words change.
+    await page.locator("#st-captions-title").scrollIntoViewIfNeeded();
+    await page.locator(".st-s-pick__opt", { hasText: "With the post" }).click();
+    await page.getByLabel("X", { exact: true }).fill("Pip keeps calm on the ice!");
+    await page.getByRole("button", { name: "Save post words" }).click();
+    await expect(page.getByText(`Saved. ${words}`)).toBeVisible();
+    // The box started again with the new version, on the tab the owner was on.
+    await expect(page.locator(".st-s-pick__opt", { hasText: "With the post" })).toHaveClass(/is-on/);
+    await expect(page.locator(".st-s-pick__opt", { hasText: "On the video" })).not.toHaveClass(/is-on/);
+    await expect(page.locator("#st-approve-why")).toHaveText(words);
+    const notice = page.locator(".st-s-notice", { hasText: words });
+    await expect(notice.getByRole("button", { name: "Check again" })).toBeVisible();
+    await expect(page.locator(".st-studio")).not.toContainText("Tap Remake");
+    await settle(page);
+    expect(await audit(page, `Review, new post words ${w}`, touch && w < 768)).toEqual([]);
+    await notice.getByRole("button", { name: "Check again" }).click();
+    await expect(page.locator(".st-s-review__side .st-s-steps, .st-s-review__side [aria-label='Being made again']").first()).toBeVisible({ timeout: 10_000 });
+    // Only the fact check runs: every other step stays done (never a remake of the video).
+    const track = page.locator(".st-s-review__side [aria-label='Being made again'] .st-s-track__step");
+    await expect(track.first()).toBeVisible();
+    expect(await track.evaluateAll((li) => li.filter((x) => !x.classList.contains("is-done") && !x.textContent?.includes("Check the facts")).length)).toBe(0);
+    // Then the video can be approved.
+    await expect(page.locator("[aria-label='Being made again']")).toHaveCount(0, { timeout: 20_000 });
+    await expect(page.locator("#st-approve-why")).toHaveCount(0);
+
+    // §45.36 E9 and E14: the posted video's Posts panel.
+    await go(page, `/stories/review/${S.published}`);
+    const tiktok = page.locator(".st-s-post", { hasText: "TikTok" });
+    await expect(tiktok.getByRole("link", { name: "Open Social accounts" })).toHaveAttribute("href", "/stories/connections");
+    await expect(tiktok.getByRole("button", { name: "Try again" })).toBeVisible();
+    await expect(page.locator(".st-s-post", { hasText: "Facebook" }).getByRole("link", { name: "Open Social accounts" })).toHaveCount(0);
+    expect(await plainOf(page, ".st-s-postspanel")).not.toMatch(/Account id|ext-|open-id/);
+    expect(await plainOf(page, ".st-studio")).not.toContain("Lamo Clips");
+    await settle(page);
+    expect(await audit(page, `Posts with an account problem ${w}`, touch && w < 768)).toEqual([]);
+    await tiktok.getByRole("link", { name: "Open Social accounts" }).click();
+    await expect(page).toHaveURL(/\/stories\/connections$/);
+    await ctx.close();
+  }
+});
+
+test("round 5: Posted! in the Post it sheet gets the star burst and the cheer", async ({ browser }) => {
+  test.setTimeout(90_000);
+  // Motion on: the star burst draws (a calm-motion device gets the cheer alone).
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await ctx.addInitScript(() => {
+    localStorage.setItem("cf.storiesPreview", "1");
+    (window as unknown as { __cfStoriesMock?: unknown }).__cfStoriesMock = { knobs: { publishMs: 300 } };
+    new MutationObserver((list) => {
+      for (const m of list) for (const n of m.addedNodes) if (n instanceof HTMLCanvasElement && n.classList.contains("st-burst")) (window as R5Window).__bursts = ((window as R5Window).__bursts ?? 0) + 1;
+    }).observe(document, { childList: true, subtree: true });
+  });
+  const page = await ctx.newPage();
+  await open(page, `/stories/review/${S.approved}`);
+  await page.getByRole("button", { name: "Post it", exact: true }).click();
+  const sheet = page.getByRole("dialog", { name: "Post it" });
+  await sheet.locator("button.st-s-place", { hasText: "YouTube" }).click();
+  await page.evaluate(() => {
+    (window as R5Window).__cfSoundLog = [];
+    (window as R5Window).__bursts = 0;
+  });
+  await sheet.locator(".st-s-sheet__actions .st-btn--main").click();
+  await expect(page.getByRole("dialog", { name: "Posted!" })).toBeVisible({ timeout: 30_000 });
+  await expect.poll(() => page.evaluate(() => (window as R5Window).__bursts ?? 0)).toBe(1);
+  await expect.poll(() => page.evaluate(() => ((window as R5Window).__cfSoundLog ?? []).filter((e) => e.kind === "success").length)).toBe(1);
+  await ctx.close();
+});
+
+test("round 5: a model with no access is never pre-picked, and Make the video asks first", async ({ browser }) => {
+  test.setTimeout(90_000);
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    const page = await ctx.newPage();
+    // The storyboard agent's own model is Claude Fable 5.1, which this account has no access to (the mock's seed).
+    await open(page, `/stories/production/new?idea=${I.sandwich}`);
+    const chip = page.locator(".st-s-newvideo .st-s-ai-btn");
+    await expect(chip).toContainText("Opus 5.5");
+    await expect(chip).not.toContainText("Fable 5.1");
+    await chip.click();
+    const menu = await sheetRules(page, w, "Model and effort for this video");
+    await expect(menu.locator(".st-s-pick__opt").first()).toContainText("Claude Fable 5.1 has no access right now, so the usual is this one.");
+    await expect(menu.locator(".st-s-pick__opt", { hasText: "Claude Fable 5.1" }).last()).toContainText("No access:");
+    await menu.locator(".st-s-pick__opt", { hasText: /^Claude Fable 5\.1/ }).click();
+    await menu.getByRole("button", { name: "Done" }).click();
+    await expect(chip.locator(".st-s-ai-btn__status")).toHaveText("No access");
+    await settle(page);
+    expect(await audit(page, `New video with a model that has no access ${w}`, touch && w < 768)).toEqual([]);
+    await page.getByRole("button", { name: "Make the video" }).click();
+    const ask = await sheetRules(page, w, "Claude Fable 5.1 has no access right now. Use Claude Opus 5.5 instead?");
+    await expect(ask.getByRole("button", { name: "Try Claude Fable 5.1 anyway" })).toBeVisible();
+    await ask.getByRole("button", { name: "Use Claude Opus 5.5" }).click();
+    await expect(page).toHaveURL(/\/stories\/production\/[0-9A-Z]{26}$/, { timeout: 20_000 });
+    await ctx.close();
+  }
+});
+
+test("round 5: the play badge leaves a square video's caption clear; a full idea says what made it; Fix it opens Social accounts", async ({ browser }) => {
+  test.setTimeout(90_000);
+  const ctx = await context(browser, 1280, 800, false);
+  const page = await ctx.newPage();
+  // §45.36 E18: a square video's scenes.
+  await open(page, "/stories/ideas");
+  await page.evaluate((id) => {
+    const script = (window as R5Window).__cfStoriesMock?.store?.scripts[id];
+    if (script) Object.assign(script, { width: 1080, height: 1080 });
+  }, S.review);
+  await go(page, `/stories/review/${S.review}`);
+  await expect(page.locator(".st-s-film.st-s-film--square")).toHaveCount(1);
+  const frame = await page.locator(".st-s-film__frame").first().boundingBox();
+  const badge = await page.locator(".st-s-film__play").first().boundingBox();
+  expect(frame && badge).toBeTruthy();
+  // In the top part of the frame, never in the band at the bottom where square captions sit.
+  expect(badge!.y + badge!.height).toBeLessThan(frame!.y + frame!.height * 0.5);
+
+  // §45.36 E8: a finished full idea says its model in words; the exact model id is behind Technical details.
+  await go(page, "/stories/ideas");
+  const card = page.locator(`[data-idea="${I.sandwich}"]`);
+  if (await card.getByRole("button", { name: "See the full idea" }).isVisible()) await card.getByRole("button", { name: "See the full idea" }).click();
+  await card.getByRole("button", { name: /^(Make it a full idea|Write it again)$/ }).click();
+  const made = card.locator(".st-s-taskmade");
+  await expect(made).toContainText(/^Made with Claude .+/, { timeout: 20_000 });
+  expect(await plainOf(page, `[data-idea="${I.sandwich}"]`)).not.toContain("Model ID");
+  await made.locator(".st-s-tech summary").click();
+  await expect(made.locator(".st-s-tech")).toContainText(/Model ID \S+ in eu-north-1/);
+  await settle(page);
+  expect(await audit(page, "A full idea with its exact model open", false)).toEqual([]);
+  // A failed one still says what it was tried with, the exact model behind the same fold.
+  await page.evaluate(() => {
+    const st = (window as R5Window).__cfStoriesMock?.store;
+    if (st) st.knobs.taskFail = true;
+  });
+  await card.getByRole("button", { name: /^(Make it a full idea|Write it again)$/ }).click();
+  const tried = card.locator(".st-s-taskmade--failed");
+  await expect(tried).toContainText(/^Tried with Claude .+/, { timeout: 20_000 });
+  await expect(card).toContainText("The idea helper could not finish. Tap Try again.");
+  expect(await plainOf(page, `[data-idea="${I.sandwich}"]`)).not.toContain("Model ID");
+  await tried.locator(".st-s-tech summary").click();
+  await expect(tried.locator(".st-s-tech")).toContainText(/Model ID \S+ in eu-north-1/);
+
+  // §45.36 E9: the dashboard's Fix it for a post that stopped on an account problem opens Social accounts.
+  await page.evaluate(() => {
+    history.pushState({}, "", "/stories");
+    dispatchEvent(new PopStateEvent("popstate"));
+  });
+  const item = page.locator(".st-needs-list__item", { hasText: "needs connecting again. Open Lamo Stories › Social accounts" }).first();
+  await expect(item).toBeVisible({ timeout: 20_000 });
+  await expect(item.locator("a").last()).toHaveAttribute("href", "/stories/connections");
+  await ctx.close();
+});
+
+test("round 5: a stand-in is never kept with the video, and a video made with Amazon Nova Pro names it as its writer", async ({ browser }) => {
+  test.setTimeout(90_000);
+  const ctx = await context(browser, 1280, 800, false);
+  const page = await ctx.newPage();
+  // §45.36 E12: nothing picked, and the storyboard agent's own model has no access (the mock's seed): the first job
+  // uses the stand-in, and the video keeps nothing of its own.
+  await open(page, `/stories/production/new?idea=${I.sandwich}`);
+  await expect(page.locator(".st-s-newvideo .st-s-ai-btn")).toContainText("Opus 5.5");
+  await page.getByRole("button", { name: "Make the video" }).click();
+  await expect(page).toHaveURL(/\/stories\/production\/[0-9A-Z]{26}$/, { timeout: 20_000 });
+  await expect(page.locator(".st-studio")).toContainText("Your usual settings");
+  await expect(page.locator(".st-studio")).not.toContainText("kept with this video");
+
+  // §45.36 E7: Amazon Nova Pro (not Anthropic's) kept with a new video writes it, and Helpers used says so.
+  await go(page, `/stories/production/new?idea=${I.sandwich}`);
+  const chip = page.locator(".st-s-newvideo .st-s-ai-btn");
+  await chip.click();
+  const menu = await sheetRules(page, 1280, "Model and effort for this video");
+  await menu.locator(".st-s-pick__opt", { hasText: /^Amazon Nova Pro/ }).click();
+  await menu.getByRole("button", { name: "Done" }).click();
+  await expect(chip).toContainText("Amazon Nova Pro");
+  await page.getByRole("button", { name: "Make the video" }).click();
+  await expect(page).toHaveURL(/\/stories\/production\/[0-9A-Z]{26}$/, { timeout: 20_000 });
+  await page.locator(".st-s-details__sum", { hasText: "Production details" }).click();
+  await expect(page.locator(".st-s-details")).toContainText("Amazon Nova Pro on Amazon Bedrock", { timeout: 20_000 });
+  await expect(page.locator(".st-s-details")).not.toContainText("Claude on Amazon Bedrock");
+  await settle(page);
+  expect(await audit(page, "Production details of a video written by Amazon Nova Pro", false)).toEqual([]);
+  await ctx.close();
 });

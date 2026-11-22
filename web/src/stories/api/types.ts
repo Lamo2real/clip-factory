@@ -469,6 +469,8 @@ export interface StoryInput {
   ai?: AiSetting;
   /** this video's own shape (CONTRACTS §45.34): the workspace's video default when left out */
   format?: StoryFormat;
+  /** the first job's model and effort only, never kept (§45.5 POST /stories; the stand-in for a usual model the studio knows cannot be used, §45.36 E12) */
+  override?: ModelOverride;
 }
 
 /** A video's shape and size (CONTRACTS §45.34 "Video size and shape"); the size matches the aspect. */

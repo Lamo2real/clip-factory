@@ -33,9 +33,11 @@ MAX_CAST = 3
 MAX_PROMPT_CHARACTERS = 20
 
 # The house brief's first rule is the video's own shape (§45.36 E5): the workspace's default from Settings › Video, or
-# the story's own format when the chat is about a story. Never a fixed "vertical 9:16".
+# the story's own format when the chat is about a story. Never a fixed "vertical 9:16". The shape wins over any other
+# shape named elsewhere: an agent's instructions the owner edited from an earlier default, a skill or a memory may
+# still say "vertical 9:16", and this video's shape is the one the owner picked.
 HOUSE_BRIEF_TEMPLATE = """Lamo Stories house brief (the studio's rules for every video):
-1. A SHAPE ASPECT cartoon, 30 to 60 seconds long (15 to 90 allowed). Plan every moment for that frame.
+1. A SHAPE ASPECT cartoon, 30 to 60 seconds long (15 to 90 allowed). Plan every moment for that frame. This shape wins over any other shape named in your instructions, skills or notes.
 2. No voice-over and no spoken words. Everything is told through the characters' movement, faces and body language, sound effects, short non-verbal noises (a gasp, a laugh, a sigh, a happy "yay"), background music and, when it helps, a few short on-screen captions. Speech bubbles hold symbols only.
 3. Recurring characters: use the owner's saved characters from CHARACTERS by name, acting like their personality says, so they feel the same in every video.
 4. Made for a general audience of teens and adults. Never made for children, never aimed at kids.

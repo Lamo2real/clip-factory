@@ -66,6 +66,9 @@ TIKTOK_API = "https://open.tiktokapis.com"
 TIKTOK_SINGLE_MAX = 64 * MB
 TIKTOK_CHUNK = 10 * MB
 RUPLOAD = "https://rupload.facebook.com"
+# rupload answers that start a new container from the media bucket's link (Instagram), besides every 5xx: a bad
+# request or a timeout on Meta's side. 401/403 (the token) and 429 (slow down) keep their own handling.
+RUPLOAD_FALLBACK = frozenset({400, 408})
 X_API = "https://api.x.com/2"
 X_MAX_CHARS = 280
 CAPTION_MAX = 2200
@@ -664,10 +667,12 @@ class InstagramPublisher(_Graph):
         }
         url = f"{RUPLOAD}/ig-api-upload/{job.graph_api_version}/{quote(container, safe='')}"
         resp = _send(job, self.platform, HttpRequest("POST", url, headers, job.video.read(0, size)))
-        if resp.status >= 500:
-            # rupload.facebook.com sometimes answers 5xx for a good file (seen in prod, 21 Nov 2026). Instagram can
-            # fetch the same file itself: start a new container from the media bucket's link instead.
-            log("warning", "publish.instagram_upload_fallback", status=resp.status)
+        if resp.status >= 500 or resp.status in RUPLOAD_FALLBACK:
+            # rupload.facebook.com sometimes answers 5xx (seen in prod, 21 Nov 2026) or 400 ProcessingFailedError (an
+            # auto-posting run, 22 Nov 2026) for a file Instagram took minutes earlier. Instagram can fetch the same
+            # file itself: start a new container from the media bucket's link instead. A file Instagram really can't
+            # use then fails at the container's check with its own reason ("did not like this video file").
+            log("warning", "publish.instagram_upload_fallback", status=resp.status, **errors.rupload_detail(resp.body))
             handle = {"container": self._container(job, ig, "video_url"), "containerAt": _now(job), "uploaded": True}
             job.save(handle)
             return Progress("processing", handle, self._every(job))

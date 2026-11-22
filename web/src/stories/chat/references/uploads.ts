@@ -4,7 +4,9 @@
 // when the owner looks at another page meanwhile. Stop deletes the half-made reference.
 import { useSyncExternalStore } from "react";
 import { storiesApi } from "../../api/client.ts";
-import type { ReferenceVideo } from "../../api/types.ts";
+import type { MockVideoSeconds } from "../../api/mock/references.ts";
+import type { ReferenceVideo, StoriesApi } from "../../api/types.ts";
+import { referencesChanged } from "../../studio/hooks.ts";
 import { sentence } from "../kit.tsx";
 import { putParts, titleFromName, UploadStopped, VIDEO_MAX_SEC, videoProblem, videoSeconds, videoType, type MultipartTarget } from "../upload.ts";
 
@@ -76,11 +78,15 @@ async function run(job: Running, onDone?: (ref: ReferenceVideo) => void): Promis
   try {
     const made = await storiesApi().createReference(ws, { filename: file.name, contentType: videoType(file)!, size: file.size, title: job.title });
     refId = made.reference.refId;
+    // Mock mode only: its pretend study fits this video's own length (§45.36 E18); the real agent reads the file.
+    if (sec !== null) (storiesApi() as StoriesApi & MockVideoSeconds).mockVideoSeconds?.(ws, refId, sec);
     if (typeof URL.createObjectURL === "function") localVideos.set(refId, URL.createObjectURL(file));
     update(key, { status: "uploading", refId, reference: made.reference, parts: made.upload.parts.length });
     const parts = await putParts(made.upload as MultipartTarget, file, (p) => update(key, { fraction: p.fraction, partsDone: p.partsDone, parts: p.parts }), controller.signal);
     update(key, { status: "finishing", fraction: 1 });
     const reference = await storiesApi().completeReference(ws, refId, parts);
+    // Production's remembered reference list no longer holds every video (§45.36 E2).
+    referencesChanged();
     update(key, { status: "done", reference });
     onDone?.(reference);
     setTimeout(() => dismissUpload(key), 4000);

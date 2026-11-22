@@ -20,6 +20,10 @@
 // the API says). clearReferenceFile does that; clearByKeepSetting applies the workspace's
 // keepReferences the way the API's storage cleanup does (index.ts runs it with POST …/storage/cleanup).
 //
+// The pretend study fits the uploaded video's own length (§45.36 E18), as the real agent reads it from the file: the
+// web tells the mock the length it read on this device (mockVideoSeconds, a mock-only hook the HTTP client does not
+// have), else the knob refUploadSeconds, else 42 seconds.
+//
 // Test knobs: refSeconds (how long an analysis takes, default 5), refFail (the next analysis fails with this sentence),
 // refJobInGet (kept for older tests: the job is always in the answer now), refNoJob (the answer leaves `job` out, as
 // the API did before §45.34, for the page's own fallback), refFileRemoved (refIds whose file was cleared).
@@ -29,6 +33,11 @@ import { checkWs, lowerLevels, modelCall, MODELS, newId, resolve } from "./chat.
 import { delay, type MockStore } from "./store.ts";
 
 export const KEYS = ["listReferences", "createReference", "completeReference", "analyzeReference", "getReference", "patchReference", "deleteReferenceVideo"] as const;
+
+/** The mock-only hook the upload uses to say how long the video it sent is (the HTTP client has none). */
+export interface MockVideoSeconds {
+  mockVideoSeconds?: (ws: string, refId: string, seconds: number) => void;
+}
 
 const PART = 100 * 1024 * 1024;
 const MAX = 2 * 1024 * 1024 * 1024;
@@ -49,13 +58,15 @@ interface RefState {
   runs: Map<string, { start: number; fail: string | null }>;
   /** References whose file was cleared to save space (their study stays). */
   cleared: Set<string>;
+  /** The length of each uploaded video as the device read it (the agent reads it from the file). */
+  seconds: Map<string, number>;
 }
 
 const states = new WeakMap<MockStore, RefState>();
 function state(store: MockStore): RefState {
   let s = states.get(store);
   if (!s) {
-    s = { owner: new Map(), analyses: new Map(), uploads: new Map(), runs: new Map(), cleared: new Set() };
+    s = { owner: new Map(), analyses: new Map(), uploads: new Map(), runs: new Map(), cleared: new Set(), seconds: new Map() };
     states.set(store, s);
   }
   return s;
@@ -262,7 +273,9 @@ export function advance(store: MockStore, now = Date.now()): void {
         st.status = "done";
         delete st.message;
       }
-      const sec = ref.durationSec ?? 42;
+      // The video's own length: as the device read it, else the knob, else a believable one (§45.36 E18).
+      const knob = Number(store.knobs.refUploadSeconds);
+      const sec = ref.durationSec ?? s.seconds.get(ref.refId) ?? (Number.isFinite(knob) && knob > 0 ? knob : 42);
       ref.durationSec = sec;
       ref.status = "analyzed";
       ref.currentJobId = null;
@@ -410,6 +423,13 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       return pub(store, ref);
     },
 
+    /** Mock only: the length the device read from the file it is uploading (the agent reads it from the file). */
+    mockVideoSeconds(ws: string, refId: string, seconds: number): void {
+      if (!Number.isFinite(seconds) || seconds <= 0) return;
+      if ((s.owner.get(refId) ?? "stories") !== ws) return;
+      s.seconds.set(refId, Math.round(seconds * 10) / 10);
+    },
+
     async deleteReferenceVideo(ws: string, refId: string): Promise<void> {
       await delay(120);
       find(store, ws, refId);
@@ -420,6 +440,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       s.uploads.delete(refId);
       s.owner.delete(refId);
       s.cleared.delete(refId);
+      s.seconds.delete(refId);
     },
   };
   return out as unknown as Pick<StoriesApi, (typeof KEYS)[number]>;
