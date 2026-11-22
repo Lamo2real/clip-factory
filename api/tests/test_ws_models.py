@@ -296,6 +296,9 @@ def test_an_added_model_in_the_chat_a_video_and_a_reference(wcall: WsCall, store
     seed(store, f"REFVID#{ref_id}", ws.TYPE_REFVID, refId=ref_id, title="Skid", status="analyzed", bytes=1)
     status, got = wcall("PATCH", f"{BASE}/references/{ref_id}", {"ai": {"model": "custom-nova", "effort": "low"}})
     assert (status, got["reference"]["ai"]) == (200, {"model": "custom-nova", "effort": "low"})
+    model_defs.bind(
+        store, USER, "stories"
+    )  # outside a request: the workspace is bound by hand (a request binds its own)
     assert overrides.ai_setting({"model": "custom-nova", "effort": "low"}) == {"model": "custom-nova", "effort": "low"}
     assert overrides.model_override({"model": "custom-nova"}) == {"model": "custom-nova"}
 
@@ -359,6 +362,36 @@ def test_without_a_workspace_only_the_bundled_models_count(wcall: WsCall, store:
     assert ai_resolve.model("custom-llama") is not None
     model_defs.bind(store, OTHER, "stories")
     assert ai_resolve.model("custom-llama") is None
+
+
+def test_a_request_never_carries_its_scope_into_the_next_one(app: App, wcall: WsCall, store: db.Store) -> None:
+    """A warm Lambda serves one call after another on the same thread: every Lamo Stories route (the OAuth callback
+    too) starts and ends with no workspace's added models bound, so a route that names no workspace (the workspace
+    list, the callback) only ever sees the bundled models, never the last caller's."""
+    from clipfactory_api.http import Request, Response, dispatch, ok, route
+    from clipfactory_api.workspaces.routes import ROUTES
+    from clipfactory_api.workspaces.routes.scope import scoped
+    from clipfactory_api.workspaces.routes.social import CALLBACK_ROUTES
+    from conftest import make_event
+
+    _add(wcall)
+    assert ai_resolve.bound_to() is None  # the call that bound the owner's workspace cleared it when it ended
+    assert all(r.handler.__qualname__ == "scoped.<locals>.run" for r in [*ROUTES, *CALLBACK_ROUTES])
+    model_defs.bind(store, USER, "stories")  # as if caller A's scope were still bound
+    seen: list[Any] = []
+
+    def peek(_app: App, _req: Request) -> Response:
+        seen.append((ai_resolve.bound_to(), ai_resolve.custom_models()))
+        return ok({})
+
+    out = dispatch(make_event("GET", "/v1/workspaces", sub=OTHER), app, [scoped(route("GET", "/v1/workspaces", peek))])
+    assert out["statusCode"] == 200
+    assert seen == [(None, [])]
+    assert ai_resolve.bound_to() is None
+    # the real workspace list, as another caller, after the owner's call
+    _ai(wcall)
+    assert wcall("GET", "/v1/workspaces", sub=OTHER)[0] == 200
+    assert ai_resolve.bound_to() is None
 
 
 def test_the_clips_workspace_binds_no_models(wcall: WsCall) -> None:
@@ -437,6 +470,52 @@ def test_changing_a_model_in_use_keeps_every_task_usable(wcall: WsCall) -> None:
     assert status == 400
     assert body["error"]["message"].endswith("Amazon Nova Premier does not offer Low. Pick another level.")
     assert next(m for m in _ai(wcall)["models"] if m["key"] == "custom-nova")["efforts"] == ["low", "medium", "high"]
+
+
+def test_changing_an_added_models_efforts_names_every_saved_setting_that_still_has_one(
+    wcall: WsCall, store: db.Store
+) -> None:
+    """A model that takes no efforts any more never leaves a saved {model, effort} behind that would block the next
+    save of Settings › AI or the next run of a video, a reference or a chat."""
+    _add(wcall, "custom-nova", NOVA)
+    no_efforts = {**NOVA, "efforts": [], "defaultEffort": None}
+    sentence = "Amazon Nova Premier has no effort setting; it runs at its own level."
+
+    def refused() -> str:
+        status, body = wcall("PUT", f"{BASE}/ai/models/custom-nova", no_efforts)
+        assert status == 400, body
+        return str(body["error"]["message"])
+
+    saved = {"defaultModel": "opus-5-5", "defaultEffort": "high", "version": 0,
+             "tasks": {"storyboard": {"model": "custom-nova", "effort": "high"}}}  # fmt: skip
+    assert wcall("PUT", f"{BASE}/ai", saved)[0] == 200
+    assert refused() == f"The task “Write the story” in Settings › AI: {sentence}"
+    assert (
+        wcall("PUT", f"{BASE}/ai", {**saved, "version": 1, "tasks": {"storyboard": {"model": "custom-nova"}}})[0] == 200
+    )
+    _, agent = wcall("GET", f"{BASE}/agents/storyboard")
+    patched = wcall("PATCH", f"{BASE}/agents/storyboard", {"version": agent["agent"]["version"],
+                                                           "model": "custom-nova", "effort": "low"})  # fmt: skip
+    assert patched[0] == 200, patched[1]
+    assert refused() == f"Storyboard in Settings › Agents: {sentence}"
+    version = patched[1]["agent"]["version"]
+    assert wcall("PATCH", f"{BASE}/agents/storyboard", {"version": version, "model": None, "effort": None})[0] == 200
+    conv = wcall("POST", f"{BASE}/chat", {"title": "Ice talk", "model": "custom-nova", "effort": "low"})[1]
+    assert refused() == f"The chat “Ice talk”: {sentence}"
+    wcall("DELETE", f"{BASE}/chat/{conv['conversation']['convId']}")
+    seed(store, "STORY#01JD00000000000000000000S1", ws.TYPE_STORY, storyId="01JD00000000000000000000S1",
+         title="Black ice", ai={"model": "custom-nova", "effort": "medium"})  # fmt: skip
+    assert refused() == f"The video “Black ice”: {sentence}"
+    store.delete(pk(), "STORY#01JD00000000000000000000S1")
+    seed(store, "REFVID#01JD00000000000000000000R1", ws.TYPE_REFVID, refId="01JD00000000000000000000R1",
+         title="A skid", ai={"model": "custom-nova", "effort": "high"})  # fmt: skip
+    assert refused() == f"The reference video “A skid”: {sentence}"
+    store.delete(pk(), "REFVID#01JD00000000000000000000R1")
+    # nothing saves an effort with it any more: the change is taken, and Settings › AI saves as it was read
+    assert wcall("PUT", f"{BASE}/ai/models/custom-nova", no_efforts)[0] == 200
+    got = _ai(wcall)["ai"]
+    assert wcall("PUT", f"{BASE}/ai", {k: got[k] for k in ("defaultModel", "defaultEffort", "tasks", "prices",
+                                                           "version")})[0] == 200  # fmt: skip
 
 
 # --- model status read by its ``model`` attribute (§45.34 "Check models is tiny") ------------------------------

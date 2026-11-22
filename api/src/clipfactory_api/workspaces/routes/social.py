@@ -27,6 +27,7 @@ from ...workspaces import flow as ws_flow
 from ...workspaces import guard, publish, social, social_callback
 from ...workspaces import secrets as ws_secrets
 from ...workspaces import types as ws
+from .scope import scoped
 
 WS = "/v1/workspaces/{ws}"
 CALLBACK_PATH = "/v1/stories-oauth/{platform}/callback"
@@ -230,4 +231,4 @@ ROUTES = [
 ]
 
 # Public (no JWT). Not in ROUTES: see the module docstring.
-CALLBACK_ROUTES = [route("GET", CALLBACK_PATH, oauth_callback, public=True)]
+CALLBACK_ROUTES = [scoped(route("GET", CALLBACK_PATH, oauth_callback, public=True))]

@@ -7,8 +7,8 @@ settings at once (Lamo Stories' agent applies them after each job too):
 * ``production.keepReferences``: ``all`` keeps everything; ``study_only`` deletes a reference video's file and its
   frames once its study is written and keeps the study; ``days_30`` / ``days_90`` delete the file and frames of a
   reference older than that (its study, if any, stays). The ``REFVID#`` keeps its name and study and gets
-  ``fileRemovedAt`` (internal): the page says "The video was removed to save space. Its study stays." and Analyze
-  is refused.
+  ``sourceRemovedAt`` and ``note`` (internal; the agent writes the same): the reference answers ``fileRemoved: true``
+  (the page says "The video was removed to save space. Its study stays.") and Analyze is refused.
 * ``production.keepChatPictures``: ``days_30`` / ``days_90`` delete the pictures of chat messages older than that;
   the message keeps its words (its ``attachments`` empty, ``picturesRemovedAt`` internal).
 * ``production.keepVersions``: a number keeps the files of each story's last N versions, as the agent's own pruning
@@ -17,12 +17,13 @@ settings at once (Lamo Stories' agent applies them after each job too):
 
 Every S3 delete is a key under the workspace's own ``ws/{userId}/{workspaceId}/`` (checked again here), only after the
 item that names it was read from this workspace's partition. A story with a job running and a reference being studied
-are left alone. One call deletes at most ``MAX_FILES`` files (the rest on the next call); a second call finds nothing
-already cleared, so calling twice is safe.
+are left alone. One call deletes at most about ``MAX_FILES`` files and rows (the rest on the next call, also inside one
+story); a second call finds nothing already cleared, so calling twice is safe.
 """
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -36,19 +37,28 @@ from . import shapes
 from . import types as ws
 from .expr import Update
 
-MAX_FILES: Final = 200
+MAX_FILES: Final = 200  # S3 deletes and ASSET# row deletes per call: well inside the API's 29 s
 DAYS: Final = {"days_30": 30, "days_90": 90}
 STORY_KINDS: Final = ("storyboard", "scene_still", "scene_clip", "audio", "captions", "final_video", "cover", "video")
 CLEARABLE_REFS: Final = ("ready", "analyzed", "failed")
+# A reference video whose file was cleared (§45.34). Lamo Stories' agent writes ``sourceRemovedAt`` and ``note`` after
+# each job; this module writes the same. ``fileRemovedAt`` (an earlier name) is still read.
+REMOVED_MARKS: Final = ("sourceRemovedAt", "fileRemovedAt")
+REMOVED_NOTE: Final = "The video was removed to save space. Its study stays."
+REMOVED_NO_STUDY: Final = "The video was removed to save space."
 
 
 @dataclass
 class Removed:
     files: int = 0
     bytes: int = 0
+    spent: int = 0  # S3 objects and rows deleted in this call (the bound)
 
     def full(self) -> bool:
-        return self.files >= MAX_FILES
+        return self.spent >= MAX_FILES
+
+    def left(self) -> int:
+        return max(MAX_FILES - self.spent, 0)
 
 
 def _bytes(value: Any) -> int:
@@ -60,9 +70,22 @@ def inside(user_id: str, workspace_id: str, key: Any) -> bool:
     return isinstance(key, str) and key.startswith(ws.s3_prefix(user_id, workspace_id)) and ".." not in key
 
 
+def file_removed(item: Mapping[str, Any]) -> bool:
+    """Whether a reference video's file was cleared by a keep setting (by this API or by Lamo Stories' agent)."""
+    return any(item.get(mark) for mark in REMOVED_MARKS)
+
+
 def _older(item: Mapping[str, Any], cutoff: datetime) -> bool:
     made = parse(item.get("createdAt"))
     return made is not None and made < cutoff
+
+
+def pictures_cutoff(workspace: Mapping[str, Any], now: datetime) -> datetime | None:
+    """Chat pictures of messages older than this are gone under ``keepChatPictures`` (the agent clears them after each
+    job by the files' age, this API on cleanup), so they are not shown; None while every picture is kept."""
+    production = shapes.stories_config(workspace).get("production") or {}
+    keep = str(production.get("keepChatPictures") or "all")
+    return now - timedelta(days=DAYS[keep]) if keep in DAYS else None
 
 
 def cleanup(app: Any, user_id: str, workspace_id: str, workspace: Mapping[str, Any], now: datetime) -> dict[str, int]:
@@ -82,7 +105,7 @@ def cleanup(app: Any, user_id: str, workspace_id: str, workspace: Mapping[str, A
 
 
 def _ref_due(item: Mapping[str, Any], keep: str, now: datetime) -> bool:
-    if item.get("fileRemovedAt") or item.get("currentJobId") or item.get("status") not in CLEARABLE_REFS:
+    if file_removed(item) or item.get("currentJobId") or item.get("status") not in CLEARABLE_REFS:
         return False
     if keep == "study_only":
         return item.get("status") == "analyzed" and bool(item.get("analysisKey"))
@@ -92,6 +115,8 @@ def _ref_due(item: Mapping[str, Any], keep: str, now: datetime) -> bool:
 
 
 def references(app: Any, user_id: str, workspace_id: str, *, keep: str, now: datetime, out: Removed) -> None:
+    """First the mark (only while the reference is as it was read and nothing studies it), then the files: Analyze
+    refuses a marked reference, so a study never starts on a file that is about to go."""
     removed = out
     if keep == "all":
         return
@@ -105,24 +130,48 @@ def references(app: Any, user_id: str, workspace_id: str, *, keep: str, now: dat
         key = item.get("key")
         if not inside(user_id, workspace_id, key) or not str(key).startswith(ref_prefix):
             continue
-        app.media.delete(str(key))
-        frames = app.media.delete_prefix(f"{ref_prefix}frames/")
-        update = Update(str(item["pk"]), str(item["sk"]), sets={"fileRemovedAt": iso(now), "updatedAt": iso(now)})
-        update.equals("userId", user_id).equals("workspaceId", workspace_id)
-        update.equals("status", item.get("status")).absent_or_null("currentJobId")
+        studied = item.get("status") == "analyzed" and bool(item.get("analysisKey"))
+        at = iso(now)
+        mark = Update(
+            str(item["pk"]),
+            str(item["sk"]),
+            sets={"sourceRemovedAt": at, "note": REMOVED_NOTE if studied else REMOVED_NO_STUDY, "updatedAt": at},
+        )
+        mark.equals("userId", user_id).equals("workspaceId", workspace_id)
+        mark.equals("status", item.get("status")).absent_or_null("currentJobId")
+        for name in REMOVED_MARKS:
+            mark.absent_or_null(name)
         try:
-            update.run(store)
+            mark.run(store)
         except db.ConditionFailed:
             log("info", "ws.reference_clear_raced", refId=item.get("refId"))
-            continue  # studied again meanwhile: the next cleanup looks again
+            continue  # studied (or cleared) meanwhile: the next cleanup looks again
+        try:
+            app.media.delete(str(key))
+            frames = app.media.delete_prefix(f"{ref_prefix}frames/")
+        except Exception:
+            _unmark(store, item, at)  # the file is still there: the next cleanup tries again
+            raise
         removed.files += 1 + frames
+        removed.spent += 1 + frames
         removed.bytes += _bytes(item.get("bytes"))
+
+
+def _unmark(store: db.Store, item: Mapping[str, Any], at: str) -> None:
+    undo = Update(str(item["pk"]), str(item["sk"]), removes=["sourceRemovedAt", "note"])
+    try:
+        undo.equals("sourceRemovedAt", at).run(store)
+    except db.ConditionFailed:
+        log("info", "ws.reference_unmark_skipped", refId=item.get("refId"))
 
 
 # --- chat pictures ---------------------------------------------------------------------------------------------
 
 
 def chat_pictures(app: Any, user_id: str, workspace_id: str, *, keep: str, now: datetime, out: Removed) -> None:
+    """The pictures of messages older than the days kept. Only a picture under the conversation's own ``chat/``
+    folder is deleted, and only one still there is counted (the agent may have cleared it already); first the
+    files, then the message's ``attachments`` (a cut-off call leaves the message for the next one)."""
     removed = out
     if keep not in DAYS:
         return
@@ -135,17 +184,25 @@ def chat_pictures(app: Any, user_id: str, workspace_id: str, *, keep: str, now: 
         if not pictures or not _older(item, cutoff):
             continue
         chat_prefix = f"{ws.s3_prefix(user_id, workspace_id)}chat/{item.get('convId')}/"
-        gone = [a for a in pictures if inside(user_id, workspace_id, a.get("key"))]
-        for picture in gone:
-            if str(picture["key"]).startswith(chat_prefix):
-                app.media.delete(str(picture["key"]))
-        update = Update(str(item["pk"]), str(item["sk"]), sets={"attachments": [], "picturesRemovedAt": iso(now)})
-        try:
-            update.equals("userId", user_id).equals("workspaceId", workspace_id).run(store)
-        except db.ConditionFailed:
+        ours = [a for a in pictures if inside(user_id, workspace_id, a.get("key")) and a["key"].startswith(chat_prefix)]
+        if not ours:
             continue
-        removed.files += len(gone)
-        removed.bytes += sum(_bytes(a.get("bytes")) for a in gone)
+        files, size = 0, 0
+        for picture in ours:
+            there = app.media.head(str(picture["key"]))
+            if there is None:
+                continue  # already cleared (by the agent after a job): not counted again
+            app.media.delete(str(picture["key"]))
+            files += 1
+            size += _bytes(picture.get("bytes")) or _bytes(there.get("ContentLength"))
+        kept = [a for a in pictures if a not in ours]
+        update = Update(str(item["pk"]), str(item["sk"]), sets={"attachments": kept, "picturesRemovedAt": iso(now)})
+        # the files are gone either way; a refused update leaves the links for the next cleanup (not counted again)
+        with contextlib.suppress(db.ConditionFailed):
+            update.equals("userId", user_id).equals("workspaceId", workspace_id).run(store)
+        removed.files += files
+        removed.bytes += size
+        removed.spent += max(files, 1)
 
 
 # --- old story versions ----------------------------------------------------------------------------------------
@@ -185,7 +242,9 @@ def _prune_story(
     keep: int,
     out: Removed,
 ) -> None:
-    """The agent's ``_prune_versions`` rule for one story (§45.29): versions older than the last ``keep`` go."""
+    """The agent's ``_prune_versions`` rule for one story (§45.29): versions older than the last ``keep`` go, oldest
+    first and only as many as this call has left (the rest on the next call). Each file goes with every row that
+    names it; first the files, then the rows, so a call cut off leaves rows the next call finds again."""
     removed = out
     version = int(story.get("scriptVersion") or 0)
     if version <= keep:
@@ -206,18 +265,35 @@ def _prune_story(
     ]
     if not old:
         return
-    gone_ids = {a["assetId"] for a in old}
-    used = {str(a.get("key")) for a in assets if a.get("assetId") not in gone_ids}
+    old_ids = {a["assetId"] for a in old}
+    used = {str(a.get("key")) for a in assets if a.get("assetId") not in old_ids}
     used |= {str(story.get(k)) for k in ("scriptKey", "videoKey", "coverKey") if story.get(k)}
     stills = story.get("stillKeys") if isinstance(story.get("stillKeys"), Mapping) else {}
     used |= {str(v) for v in (stills or {}).values()}
-    files = [k for k in dict.fromkeys(str(a["key"]) for a in old) if k not in used]
-    sidecars = [k.removesuffix(".json") + ".writer.json" for k in files if k.endswith(".json")]
-    for asset in old:
-        app.store.delete_if(str(asset["pk"]), str(asset["sk"]), {"userId": [user_id], "workspaceId": [workspace_id]})
-    for key in [*files, *sidecars]:
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for asset in sorted(old, key=lambda a: (int(a["version"]), str(a.get("key")))):
+        groups.setdefault(str(asset["key"]), []).append(asset)
+    rows: list[dict[str, Any]] = []
+    files: list[str] = []
+    deletes: list[str] = []
+    for key, named_by in groups.items():
+        gone = key not in used  # a file another row or the story still names is kept (its rows still go)
+        objects = (
+            ([key, key.removesuffix(".json") + ".writer.json"] if key.endswith(".json") else [key]) if gone else []
+        )
+        cost = len(objects) + len(named_by)
+        if cost > removed.left() - len(deletes) - len(rows) and (rows or removed.spent):
+            break  # this call has done enough: the next one goes on from here
+        rows += named_by
+        if gone:
+            files.append(key)
+            deletes += objects
+    for key in deletes:
         if inside(user_id, workspace_id, key) and key.startswith(story_prefix):
             app.media.delete(key)
+    for asset in rows:
+        app.store.delete_if(str(asset["pk"]), str(asset["sk"]), {"userId": [user_id], "workspaceId": [workspace_id]})
     removed.files += len(files)
+    removed.spent += len(deletes) + len(rows)
     sizes = {str(a["key"]): _bytes(a.get("bytes")) for a in old}
-    removed.bytes += sum(sizes.get(k, 0) for k in files)  # a file another row still names is kept, not counted
+    removed.bytes += sum(sizes.get(k, 0) for k in files)

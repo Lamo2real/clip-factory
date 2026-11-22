@@ -245,6 +245,8 @@ def _flow(call: Call, app: App, store: db.Store, s3_client: FakeS3) -> list[Any]
     s3_client.objects[f"{prefix()}characters/{cid}/refs/{up['assetId']}.jpg"] = b"jpg"
     go("POST", f"{BASE}/characters/{cid}/references/{up['assetId']}/complete")
     go("POST", f"{BASE}/characters/{cid}/portrait")
+    # the agent made the portrait: Nova Canvas is on (a picked maker that is not on stops a video, §45.34)
+    seed_item(store, "PROVIDER#images#nova-canvas", "ws_provider", state="on", checkedAt="2026-11-15T10:00:00.000Z")
     idea = go(
         "POST",
         f"{BASE}/ideas",

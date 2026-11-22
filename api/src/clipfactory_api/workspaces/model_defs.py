@@ -196,19 +196,37 @@ def clean(body: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _check_settings_still_work(store: db.Store, user_id: str, workspace_id: str, found: dict[str, Any]) -> None:
-    """Changing a model that is picked somewhere must leave every task usable (the same rule as saving the AI
-    settings): an effort it no longer takes is refused now, not at the next call."""
+    """Changing a model that is picked somewhere must leave every saved setting usable (the same rules as saving
+    it): an effort saved with it that it no longer takes, in a task, an agent, a chat, a video or a reference video,
+    is refused now with that setting's name, not at the next save or the next call."""
     from . import agents as agents_mod
 
+    key = str(found["key"])
     ai = cfg.current(store, user_id, workspace_id)
     agents = agents_mod.read_all(store, user_id, workspace_id)
     with res.overlay([found]):
+        if ai.get("defaultModel") == key:
+            try:
+                res.check_effort_for(key, ai.get("defaultEffort"))
+            except res.ResolveError as e:
+                raise bad_request(_still_saved(e.message, USED_DEFAULT), "efforts") from e
+        for place, setting in _settings(store, user_id, workspace_id, ai=ai, agents=agents):
+            if setting.get("model") != key or not setting.get("effort"):
+                continue
+            try:
+                res.check_pair(key, str(setting["effort"]))
+            except res.ResolveError as e:
+                raise bad_request(_still_saved(e.message, place), "efforts") from e
         for kind in res.TASK_KINDS:
             agent_id = res.agent_for_task(kind) or ""
             try:
                 res.resolve(task=kind, agent=agents.get(agent_id), ai=ai)
             except res.ResolveError as e:
                 raise bad_request(f"{res.TASK_LABEL[kind]}: {e.message}", "efforts") from e
+
+
+def _still_saved(sentence: str, place: str) -> str:
+    return f"{place[:1].upper()}{place[1:]}: {sentence}"
 
 
 def put(
@@ -252,29 +270,43 @@ def put(
     return cfg.model_info(found, status, ai)
 
 
+USED_DEFAULT: Final = "the default model in Settings › AI"
+
+
+def _settings(
+    store: db.Store,
+    user_id: str,
+    workspace_id: str,
+    *,
+    ai: Mapping[str, Any],
+    agents: Mapping[str, Mapping[str, Any]],
+) -> list[tuple[str, Mapping[str, Any]]]:
+    """Every saved ``{model, effort}`` setting other than the default, in plain words: the tasks, the agents, the
+    chats, the videos and the reference videos."""
+    out: list[tuple[str, Mapping[str, Any]]] = []
+    for kind, setting in (ai.get("tasks") or {}).items():
+        if isinstance(setting, Mapping):
+            out.append((f"the task “{res.TASK_LABEL.get(kind, kind)}” in Settings › AI", setting))
+    for agent in agents.values():
+        out.append((f"{agent.get('name') or agent.get('agentId')} in Settings › Agents", agent))
+    for conv in cfg.query_owned(store, user_id, workspace_id, ws.CONV_SK):
+        out.append((f"the chat “{conv.get('title') or ''}”", conv))
+    for prefix, what in ((ws.STORY_SK, "the video"), (ws.REFVID_SK, "the reference video")):
+        for found in cfg.query_owned(store, user_id, workspace_id, prefix):
+            own = found.get("ai") if isinstance(found.get("ai"), Mapping) else {}
+            out.append((f"{what} “{found.get('title') or ''}”", own or {}))
+    return out
+
+
 def _uses(store: db.Store, user_id: str, workspace_id: str, key: str) -> list[str]:
     """Every saved setting that picks ``key``, in plain words."""
     from . import agents as agents_mod
 
-    out: list[str] = []
     ai = cfg.current(store, user_id, workspace_id)
-    if ai.get("defaultModel") == key:
-        out.append("the default model in Settings › AI")
-    for kind, setting in (ai.get("tasks") or {}).items():
-        if isinstance(setting, Mapping) and setting.get("model") == key:
-            out.append(f"the task “{res.TASK_LABEL.get(kind, kind)}” in Settings › AI")
-    for agent in agents_mod.read_all(store, user_id, workspace_id).values():
-        if agent.get("model") == key:
-            out.append(f"{agent.get('name') or agent.get('agentId')} in Settings › Agents")
-    for conv in cfg.query_owned(store, user_id, workspace_id, ws.CONV_SK):
-        if conv.get("model") == key:
-            out.append(f"the chat “{conv.get('title') or ''}”")
-    for prefix, what in ((ws.STORY_SK, "the video"), (ws.REFVID_SK, "the reference video")):
-        for found in cfg.query_owned(store, user_id, workspace_id, prefix):
-            own = found.get("ai") if isinstance(found.get("ai"), Mapping) else {}
-            if (own or {}).get("model") == key:
-                out.append(f"{what} “{found.get('title') or ''}”")
-    return out
+    agents = agents_mod.read_all(store, user_id, workspace_id)
+    out = [USED_DEFAULT] if ai.get("defaultModel") == key else []
+    saved = _settings(store, user_id, workspace_id, ai=ai, agents=agents)
+    return out + [place for place, setting in saved if setting.get("model") == key]
 
 
 def delete(store: db.Store, user_id: str, workspace_id: str, key: str, *, now: datetime) -> None:

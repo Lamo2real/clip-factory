@@ -19,6 +19,7 @@ import ws_social_support as sup
 from clipfactory_api import db
 from clipfactory_api.app import App
 from clipfactory_api.oauth import OAuthEnv, providers, state
+from clipfactory_api.oauth import setup as clips_setup
 from clipfactory_api.oauth.providers import AppKeys
 from clipfactory_api.workspaces import apps, social
 from clipfactory_api.workspaces.secrets import WorkspaceSecrets
@@ -914,6 +915,39 @@ def test_lamo_clips_connecting_the_same_account_later_shows_same_as_clips(
     assert status == 200, body
     assert (body["account"]["connectionStatus"], body["account"]["sharedWithClips"]) == ("connected", True)
     assert accounts(call)[platform]["connectionStatus"] == "connected"
+
+
+@pytest.mark.parametrize("platform", ["youtube", "tiktok", "instagram", "facebook", "x"])
+def test_same_as_clips_goes_back_to_connected_once_lamo_clips_lets_go_of_the_account(
+    call: Call, store: db.Store, secrets_client: FakeSecretsManager, platform: str
+) -> None:
+    sup.social(store, secrets_client, platform, identity="shared-1")
+    sup.clips_account(store, None, platform, accountId="shared-1")
+    assert accounts(call)[platform]["connectionStatus"] == "same_as_clips"
+    # Lamo Clips moves to another account: Lamo Stories' is its own again, and onboarding ticks it
+    sup.clips_account(store, None, platform, accountId="another-1")
+    assert accounts(call)[platform]["connectionStatus"] == "connected"
+    assert store.get(sup.PK, f"SOCIAL#{platform}")["connectionStatus"] == "connected"
+    steps = {s["step"]: s for s in call("GET", "/v1/workspaces/stories/onboarding")[1]["onboarding"]["steps"]}
+    assert steps[platform]["state"] == "done"
+    # Lamo Clips connects it again, then disconnects: the same
+    sup.clips_account(store, None, platform, accountId="shared-1")
+    assert accounts(call)[platform]["connectionStatus"] == "same_as_clips"
+    clips_setup.put_account(store, USER, platform, "not_connected", now=NOW, fields={"accountId": "shared-1"})
+    assert accounts(call)[platform]["connectionStatus"] == "connected"
+    assert store.get(sup.PK, f"SOCIAL#{platform}")["connectionStatus"] == "connected"
+
+
+def test_check_it_brings_same_as_clips_back_to_connected(
+    call: Call, store: db.Store, secrets_client: FakeSecretsManager, http: FakeHttp
+) -> None:
+    sup.social(store, secrets_client, "youtube", status="same_as_clips")  # stored before Lamo Clips moved on
+    sup.clips_account(store, None, "youtube", accountId="UC-SOMEONE-ELSE")
+    http.answers.append((200, {"items": [{"id": sup.IDENTITY["youtube"]}]}))
+    status, body = call("POST", f"{ROOT}/youtube/check")
+    assert status == 200, body
+    assert body["account"]["connectionStatus"] == "connected"
+    assert store.get(sup.PK, "SOCIAL#youtube")["connectionStatus"] == "connected"
 
 
 def test_a_different_lamo_clips_account_leaves_the_connection_as_it_is(

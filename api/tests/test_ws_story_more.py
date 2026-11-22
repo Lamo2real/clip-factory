@@ -6,6 +6,7 @@ finished, copied to each job for the agent), extra output formats on download, a
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -145,7 +146,8 @@ def test_the_shape_can_change_until_the_first_run_finished(call: Call, store: db
     assert body["story"]["format"] == square
     produced = call("POST", f"{BASE}/stories/{unmade['storyId']}/produce", {})[1]
     assert store.get(pk(), f"PJOB#{produced['job']['jobId']}")["configuration"]["format"] == square
-    # a storyboard but no video yet: every picture is redone in the new shape, the storyboard stays
+    # a storyboard but no video yet: the storyboard is written again in the new size (positions are shares of the
+    # frame) and every picture is redone, so the next Remake makes the video in that size
     written = seed_story(store, s3_client, status="failed", stale=["animation", "sound", "captions", "assemble",
                                                                     "preview"])  # fmt: skip
     store.update(pk(), written["sk"], {}, remove=["videoKey"])
@@ -154,7 +156,19 @@ def test_the_shape_can_change_until_the_first_run_finished(call: Call, store: db
     )
     assert status == 200, body
     assert body["story"]["stale"] == ["scenes", "animation", "sound", "captions", "assemble", "preview"]
-    assert body["story"]["scriptVersion"] == written["scriptVersion"]  # no new storyboard version
+    assert body["story"]["scriptVersion"] == written["scriptVersion"] + 1
+    assert (body["script"]["width"], body["script"]["height"]) == (720, 720)
+    saved = store.get(pk(), written["sk"])
+    assert saved is not None
+    assert saved["scriptKey"].endswith(f"script/v{written['scriptVersion'] + 1}.json")
+    on_s3 = json.loads(s3_client.objects[saved["scriptKey"]])
+    assert (on_s3["width"], on_s3["height"], on_s3["scenes"]) == (720, 720, body["script"]["scenes"])
+    remake = call("POST", f"{BASE}/stories/{written['storyId']}/produce", {})
+    assert remake[0] == 202, remake[1]
+    job = store.get(pk(), f"PJOB#{remake[1]['job']['jobId']}")
+    assert job is not None
+    assert job["configuration"]["format"] == square
+    assert job["configuration"]["run"][0] == "scenes"
     # once a video was made the size is set
     made = seed_story(store, s3_client)
     status, body = call("PATCH", f"{BASE}/stories/{made['storyId']}", {"version": made["version"], "format": square})
@@ -228,6 +242,11 @@ def test_a_video_maker_that_is_not_ready_stops_create_produce_and_changes(
     assert shown["nova-reel"]["line"] == REEL_NOT_READY
     assert "makes your videos" not in shown["nova-reel"]["line"]
     assert "scenes with no characters" in providers.REGISTRY[4].line_on
+    # the built-in animator names no fixed size: a story may be 9:16, 1:1 or 16:9 (§45.34 "Video size and shape")
+    assert shown["builtin-2d"]["line"] == (
+        "Built in: animates every scene at the video's size, 30 frames a second. Nothing to set up."
+    )
+    assert "1080" not in shown["builtin-2d"]["line"]
     # a failure the agent recorded is said in its own words
     seed_item(store, "PROVIDER#animation#nova-reel", ws.TYPE_PROVIDER, state="needs_setup",
               lastError="Bedrock says Nova Reel is not enabled for this account in US East (N. Virginia).",
@@ -251,10 +270,34 @@ def test_another_owners_provider_record_does_not_make_it_ready(
     assert _create(call, hero)[0] == 409
 
 
-def test_ai_portraits_not_checked_yet_never_stop_a_video(call: Call, hero: dict[str, Any]) -> None:
-    """Nova Canvas draws portraits for the app and the Library only (§45.11.6): its first portrait is the real call
-    that turns it on, so videos (drawn by the built-in rig) are never held for it."""
+CANVAS_NOT_READY = (
+    "Amazon Nova Canvas is not ready yet: it has not made a picture for you yet. Pick Built-in characters in "
+    "Settings › Video › Picture maker, or make one AI portrait to finish its setup."
+)
+
+
+def test_a_picked_picture_maker_that_is_not_ready_stops_create_produce_and_changes(
+    call: Call, store: db.Store, s3_client: FakeS3, hero: dict[str, Any], agentcore: FakeAgentCore
+) -> None:
+    """§45.34: ``configuration.providers.video`` *or* ``images``. Nova Canvas is on only after a real call (its first
+    portrait); until then a video waits with its own sentence and nothing switches to the built-in characters."""
+    made = seed_story(store, s3_client)
     _configure(call, providers={"images": "nova-canvas"})
+    status, body = _create(call, hero)
+    assert (status, body["error"]["message"]) == (409, CANVAS_NOT_READY)
+    status, body = call("POST", f"{BASE}/stories/{made['storyId']}/produce", {"from": "animation"})
+    assert (status, body["error"]["message"]) == (409, CANVAS_NOT_READY)
+    status, body = call("POST", f"{BASE}/stories/{made['storyId']}/changes", {"note": "Funnier"})
+    assert (status, body["error"]["message"]) == (409, CANVAS_NOT_READY)
+    assert agentcore.calls == []
+    # a portrait is still allowed (it is the real call that turns it on)
+    assert call("POST", f"{BASE}/characters/{hero['characterId']}/portrait")[0] == 202
+    # once a portrait worked it is on, and videos are made again
+    seed_item(store, "PROVIDER#images#nova-canvas", ws.TYPE_PROVIDER, state="on", checkedAt="2026-11-15T11:30:00.000Z")
+    assert _create(call, hero)[0] == 201
+    # the built-in characters never wait
+    _configure(call, providers={"images": "builtin-rig"})
+    store.delete(pk(), "PROVIDER#images#nova-canvas")
     assert _create(call, hero)[0] == 201
 
 

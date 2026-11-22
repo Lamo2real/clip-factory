@@ -242,6 +242,7 @@ INTERNAL = (
     "checkStatus",
     "lastLook",
     "fileRemovedAt",
+    "sourceRemovedAt",
     "picturesRemovedAt",
 )
 

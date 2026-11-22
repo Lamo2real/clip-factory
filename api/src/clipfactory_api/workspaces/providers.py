@@ -79,7 +79,7 @@ REGISTRY: Final[tuple[Provider, ...]] = (
         "builtin-2d",
         "Built-in animation",
         True,
-        "Built in: animates every scene at 1080 by 1920, 30 frames a second. Nothing to set up.",
+        "Built in: animates every scene at the video's size, 30 frames a second. Nothing to set up.",
         "",
     ),
     Provider(
@@ -231,22 +231,14 @@ def statuses(
     ]
 
 
-# The picture makers whose pictures go into a video. None today: the characters in a video are always drawn by the
-# built-in rig, and Nova Canvas makes portraits for the app and the Library only (§45.11.6); its first portrait is
-# the real call that turns it on, so a Nova Canvas not checked yet never stops a video. A maker added here (one that
-# draws scenes) is checked like Nova Reel.
-IMAGES_IN_VIDEOS: Final[tuple[str, ...]] = ()
-
-
 def not_ready(config: Mapping[str, Any], records: Sequence[Mapping[str, Any]]) -> str | None:
-    """The sentence a story's create, produce or changes stops with (409) while ``configuration.providers.video``
-    (or an ``images`` maker that draws in videos) names a maker that is not ``on`` (Nova Reel: on only after a real
-    call); None when it is ready. A recorded failure is said in the agent's own words."""
+    """The sentence a story's create, produce or changes stops with (409) while ``configuration.providers.video`` or
+    ``images`` names a maker that is not ``on`` (Nova Reel and Nova Canvas: on only after a real call, §45.34);
+    None when it is ready. Nothing is switched to a built-in maker. A recorded failure is said in the agent's own
+    words."""
     by_key = {str(r.get("sk")): r for r in records}
     chosen = config.get("providers") if isinstance(config.get("providers"), Mapping) else {}
     for kind in ("animation", "images"):
-        if kind == "images" and (chosen or {}).get("images") not in IMAGES_IN_VIDEOS:
-            continue
         picked = (chosen or {}).get(CONFIG_KEY[kind])
         p = next((x for x in REGISTRY if x.kind == kind and x.id == picked), None)
         if p is None or p.builtin:

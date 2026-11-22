@@ -539,6 +539,7 @@ INTERNAL = (
     "notClipsConfirmed",
     "rev",
     "fileRemovedAt",
+    "sourceRemovedAt",
     "picturesRemovedAt",
 )
 

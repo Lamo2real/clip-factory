@@ -15,6 +15,7 @@ from typing import Any, Final
 from .. import db
 from ..app import region
 from . import ai_config as cfg
+from . import retention
 from . import types as ws
 
 VIDEOS: Final = ("final_video", "cover", "video")
@@ -44,7 +45,7 @@ def summary(store: db.Store, user_id: str, workspace_id: str, *, bucket: str = "
         out[bucket_name] += _bytes(asset.get("bytes"))
         files += 1
     for ref in cfg.query_owned(store, user_id, workspace_id, ws.REFVID_SK):
-        if ref.get("status") in STORED_REFS and not ref.get("fileRemovedAt"):
+        if ref.get("status") in STORED_REFS and not retention.file_removed(ref):
             out["references"] += _bytes(ref.get("bytes"))
             files += 1
     for skill in cfg.query_owned(store, user_id, workspace_id, ws.SKILL_SK):

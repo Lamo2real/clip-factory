@@ -491,6 +491,8 @@ def public_account(
             status, reason = "not_connected", "expired"
     if status == "connected" and clips and same_as_clips(item, clips):
         status = "same_as_clips"  # Lamo Clips connected this very account later, and nobody shared it (§45.34)
+    elif status == "same_as_clips" and clips is not None and not same_as_clips(item, clips):
+        status = "connected"  # Lamo Clips let go of this account (or moved to another): it is Lamo Stories' own now
     identity = status not in ("not_connected", "choose_account")
     app = public_app(platform, item)
     warning = _text(item.get("warning"))
@@ -551,7 +553,7 @@ def public_of(scope: Scope, platform: str, now: datetime) -> Item:
         chosen = apps.app_keys(scope.store, scope.secrets, scope.user_id, scope.workspace_id, platform, account=item)
         client_id = chosen.client_id if chosen is not None else None
     clips = None
-    if item is not None and item.get("connectionStatus") == "connected":  # every platform (§45.34)
+    if item is not None and item.get("connectionStatus") in ("connected", "same_as_clips"):  # every platform (§45.34)
         clips = clips_identity(scope.store, scope.user_id, platform)
     shown = public_account(item, scope.workspace_id, platform, app_client_id=client_id, now=now, clips=clips)
     if item is not None:
@@ -571,8 +573,8 @@ def settle(
 ) -> None:
     """Stores the three statuses a read works out on its own: the chosen app's keys changed → ``needs_reconnect``
     (``keys_changed``), a list of Pages older than 30 minutes → ``not_connected`` (``expired``, the choices
-    removed), and a connected account that Lamo Clips connected too, later, with nobody sharing it →
-    ``same_as_clips`` (§45.34). Conditional on the very item read (status and ``updatedAt``), so a connect that
+    removed), a connected account that Lamo Clips connected too, later, with nobody sharing it →
+    ``same_as_clips`` (§45.34), and back to ``connected`` once Lamo Clips no longer has it. Conditional on the very item read (status and ``updatedAt``), so a connect that
     landed meanwhile is never undone; best effort (the response is right either way)."""
     stored = item.get("connectionStatus")
     status, reason = shown.get("connectionStatus"), shown.get("reason")
@@ -584,7 +586,7 @@ def settle(
         pass
     elif (status, reason) == ("not_connected", "expired") and stored == "choose_account":
         remove = ["choices", "choicesExpireAt"]
-    elif status == "same_as_clips" and stored == "connected":
+    elif (status, stored) in (("same_as_clips", "connected"), ("connected", "same_as_clips")):
         pass
     else:
         return
@@ -866,6 +868,8 @@ def check(scope: Scope, env: OAuthEnv, platform: str, now: datetime) -> Item:
         remove.append("reason")
     elif stored == "connected" and same_as_clips(item, clips):
         fields["connectionStatus"] = "same_as_clips"  # Lamo Clips connected this account later (§45.34)
+    elif stored == "same_as_clips" and not same_as_clips(item, clips):
+        fields["connectionStatus"] = "connected"  # Lamo Clips no longer has this account
     if verdict == "credits_empty":
         fields["warning"] = X_CREDITS
     elif item.get("warning"):

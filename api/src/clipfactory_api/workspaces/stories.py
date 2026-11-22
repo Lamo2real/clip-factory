@@ -440,6 +440,16 @@ def touches_script(patch: Mapping[str, Any]) -> bool:
     return any(k in patch for k in SCRIPT_FIELDS)
 
 
+def resizes(story: Mapping[str, Any], patch: Mapping[str, Any]) -> bool:
+    """A new size for a story that has a storyboard: the storyboard is written again in that size (§45.34)."""
+    changed = "format" in patch and patch["format"] != stored_format(story)
+    return changed and has_script(story) and not story.get("videoKey")  # a made video's size is set (FORMAT_SET)
+
+
+def needs_script(story: Mapping[str, Any], patch: Mapping[str, Any]) -> bool:
+    return touches_script(patch) or resizes(story, patch)
+
+
 def _remap(t: float, old: list[tuple[float, float]], new: list[tuple[float, float]]) -> float:
     """A whole-video time after scene lengths changed: same scene, same share of it."""
     for (o_start, o_len), (n_start, n_len) in zip(old, new, strict=True):
@@ -481,8 +491,8 @@ def _story_fields(edit: _Edit, story: Mapping[str, Any], patch: Mapping[str, Any
         if story.get("videoKey"):  # the first run finished: the size is set (§45.34)
             raise conflict(FORMAT_SET)
         edit.sets["format"] = patch["format"]
-        if has_script(story):  # positions are shares of the frame: the storyboard stays, every picture is redone
-            edit.format_stale.update(STALE_FORMAT)
+        if has_script(story):  # positions are shares of the frame: a new storyboard version in the new size, and
+            edit.format_stale.update(STALE_FORMAT)  # every picture is redone (§45.34: the script's size is it)
     if "postCaptions" in patch:
         merged = captions.merged(story.get("postCaptions"), patch["postCaptions"])
         if merged != captions.merged(story.get("postCaptions"), {}):
@@ -570,11 +580,14 @@ def apply_patch(
     whose animation is stale, the owner's edited text ids)."""
     edit = _Edit()
     _story_fields(edit, story, patch)
-    if not touches_script(patch):
+    resize = "format" in edit.sets and has_script(story)
+    if not touches_script(patch) and not resize:
         return None, edit.sets, edit.stale | edit.format_stale, edit.stale_scenes, edit.owner
     if script is None:
         raise conflict(NO_SCRIPT)
     new = copy.deepcopy(dict(script))
+    if resize:  # the agent sizes every picture, the captions and the video from the script (StoryScript.width)
+        new["width"], new["height"] = edit.sets["format"]["width"], edit.sets["format"]["height"]
     _switches(edit, new, patch)
     scenes = [dict(s) for s in new.get("scenes") or [] if isinstance(s, Mapping)]
     by_id = {str(s.get("sceneId")): s for s in scenes}
@@ -593,13 +606,18 @@ def apply_patch(
     new["scenes"] = scenes
     if "captions" in patch:
         _captions(edit, new, patch["captions"], total)
-    if not edit.stale - set(STALE_POST) and not set(edit.sets) - {
-        "title",
-        "postCaptions",
-        "ai",
-        "referenceIds",
-        "format",
-    }:
+    if (
+        not resize
+        and not edit.stale - set(STALE_POST)
+        and not set(edit.sets)
+        - {
+            "title",
+            "postCaptions",
+            "ai",
+            "referenceIds",
+            "format",
+        }
+    ):
         return None, edit.sets, edit.stale | edit.format_stale, edit.stale_scenes, edit.owner
     edit.sets["scenes"] = [
         {"sceneId": str(s.get("sceneId")), "title": str(s.get("title") or ""), "durationSec": s.get("durationSec")}

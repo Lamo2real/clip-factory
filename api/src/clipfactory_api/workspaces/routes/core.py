@@ -1349,7 +1349,7 @@ def patch_story(app: App, req: Request) -> Response:
         raise conflict(stories.CHANGED)
     if story.get("status") not in stories.EDIT_STATUSES:
         raise conflict("You can change a video once it is made and before it is approved.")
-    script = _read_script(ctx, story, required=True) if stories.touches_script(patch) else None
+    script = _read_script(ctx, story, required=True) if stories.needs_script(story, patch) else None
     new_script, sets, stale_add, stale_scenes, owner = stories.apply_patch(story, script, patch)
     if not sets and new_script is None:
         return ok({"story": _public_story(ctx, story), "script": script or _read_script(ctx, story)})

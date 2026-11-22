@@ -26,6 +26,7 @@ from ..log import log
 from . import agents as agents_mod
 from . import ai_config as cfg
 from . import ai_resolve as res
+from . import retention
 from . import types as ws
 
 MAX_BYTES: Final = 2 * 1024 * 1024 * 1024
@@ -75,6 +76,7 @@ def public(app: Any, item: Mapping[str, Any]) -> dict[str, Any]:
     created = str(item.get("createdAt") or "")
     with_ = item.get("analyzedWith") if isinstance(item.get("analyzedWith"), Mapping) else None
     duration = item.get("durationSec")
+    removed = retention.file_removed(item)
     out: dict[str, Any] = {
         "refId": str(item.get("refId")),
         "title": str(item.get("title") or ""),
@@ -82,7 +84,8 @@ def public(app: Any, item: Mapping[str, Any]) -> dict[str, Any]:
         "durationSec": float(duration)
         if isinstance(duration, int | float) and not isinstance(duration, bool)
         else None,
-        "bytes": int(item.get("bytes") or 0),
+        "bytes": 0 if removed else int(item.get("bytes") or 0),
+        "fileRemoved": removed,  # §45.34: "The video was removed to save space. Its study stays."
         "currentJobId": item.get("currentJobId") or None,
         "ai": _ai(item),
         "analyzedWith": (
@@ -93,7 +96,7 @@ def public(app: Any, item: Mapping[str, Any]) -> dict[str, Any]:
     }
     key = str(item.get("key") or "")
     prefix = ws.s3_prefix(str(item.get("userId")), str(item.get("workspaceId")))
-    if status != "uploading" and key.startswith(prefix) and not item.get("fileRemovedAt"):
+    if status != "uploading" and key.startswith(prefix) and not removed:
         out["url"] = app.media.presign_get(key, GET_SECONDS)
     return out
 
@@ -290,7 +293,7 @@ def _analyze(
         raise conflict(BUSY)
     if item.get("status") not in CAN_ANALYZE:
         raise conflict(NOT_READY)
-    if item.get("fileRemovedAt"):  # the keep setting cleared the file (§45.34): there is nothing left to study
+    if retention.file_removed(item):  # a keep setting cleared the file (§45.34): there is nothing left to study
         raise conflict(FILE_REMOVED)
     agent = agents_mod.read(store, user_id, workspace_id, AGENT)
     off = agents_mod.switched_off(agent)
@@ -335,12 +338,15 @@ def _analyze(
         str(item["sk"]),
         {"status": "analyzing", "currentJobId": job_id, "updatedAt": at},
         # Two taps at once: the first moves the status on, so the second's condition fails (a 409, nothing started).
+        # A cleanup that marked the file as cleared meanwhile wins too: nothing is studied from a file that is gone.
         expect_in={"status": [before], "userId": [user_id], "workspaceId": [workspace_id]},
+        expect_absent=retention.REMOVED_MARKS,
     )
     try:
         store.transact(puts=[job], updates=[ref_update])
     except db.ConditionFailed as e:
-        raise conflict(BUSY) from e
+        now_item = cfg.get_owned(store, user_id, workspace_id, ref_sk(ref_id))
+        raise conflict(FILE_REMOVED if now_item and retention.file_removed(now_item) else BUSY) from e
     runtime = cfg.runtime(app)
     problem = cfg.NOT_ON if runtime is None else None
     if runtime is not None:

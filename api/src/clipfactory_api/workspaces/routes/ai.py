@@ -169,9 +169,12 @@ def create_chat(app: App, req: Request) -> Response:
 
 
 def get_chat(app: App, req: Request) -> Response:
-    user_id, ws_id, _, now = _open(app, req)
+    user_id, ws_id, workspace, now = _open(app, req)
     after, before = req.query.get("after") or None, req.query.get("before") or None
-    return ok(chat.get(app, user_id, ws_id, req.params["convId"], after, now=now, before=before))
+    cutoff = retention.pictures_cutoff(workspace, now)
+    return ok(
+        chat.get(app, user_id, ws_id, req.params["convId"], after, now=now, before=before, pictures_before=cutoff)
+    )
 
 
 def patch_chat(app: App, req: Request) -> Response:
