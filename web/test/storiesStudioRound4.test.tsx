@@ -37,6 +37,7 @@ const { inputOf, showFace } = await import("../src/stories/studio/looks.ts");
 const { sfxLabel } = await import("../src/stories/studio/SfxEditor.tsx");
 const { helpersLine, providerName, STORAGE_WORDS, topicTitle } = await import("../src/stories/studio/words.ts");
 const { takeParkedStoriesGo } = await import("../src/stories/pane.tsx");
+const { ActionCard } = await import("../src/stories/chat/actions.tsx");
 
 const S = stories.SEED_IDS.stories;
 const C = stories.SEED_IDS.characters;
@@ -346,6 +347,10 @@ describe("previews show each character's own face (§45.35 D21)", () => {
     await act(async () => root.render(<RedesignCompare now={now} next={{ ...now, expressions: ["neutral", "angry", "sad"] }} onUse={() => undefined} onDrop={() => undefined} />));
     const pair = Array.from(document.querySelectorAll(".st-s-redesign__fig [role='img']")).map((e) => e.getAttribute("data-face"));
     expect(pair).toEqual(["surprised", "angry"]);
+    // The chat's "Save this character" card shows the character the director made with one of its own faces.
+    const made = { ...now, name: "Frost", expressions: ["neutral", "proud", "sad"] };
+    await act(async () => root.render(<ActionCard ws="stories" id="m4:0" action={{ kind: "save_character", label: "Save this character", payload: { character: made } }} />));
+    expect(document.querySelector('[aria-label="How Frost looks"]')?.getAttribute("data-face")).toBe("proud");
   });
 });
 

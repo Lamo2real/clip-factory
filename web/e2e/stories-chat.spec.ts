@@ -443,7 +443,8 @@ test("round 3: the provider beside the line, Show earlier messages, and a failed
     await ctx.addInitScript(() => ((window as StoriesWindow).__cfStoriesMock = { knobs: { longChat: 530 } } as never));
     const page = await ctx.newPage();
     await open(page, `/stories/chat/${CONV.long}`);
-    await expect(page.locator(".st-chat-ai__provider")).toHaveText("From Amazon Bedrock");
+    // §45.35 D8: "{provider} on {host}" (a bundled list from before D8 names only the host).
+    await expect(page.locator(".st-chat-ai__provider")).toHaveText(/^(Anthropic on )?Amazon Bedrock$/);
     await expect(page.locator(".st-chat-msg")).toHaveCount(500);
     const earlier = page.getByRole("button", { name: "Show earlier messages" });
     await expect(earlier).toBeVisible();
@@ -586,4 +587,32 @@ test("round 3: a reference video whose file was cleared says so and keeps its st
   await sheet.getByRole("button", { name: "Done" }).click();
   await expect(page.locator(".st-chat-ai__line")).toHaveText("Model: Claude Sonnet 5.5 · Effort: Low");
   await ctx.close();
+});
+
+test("round 4: who makes the model and who runs it, and a cleared video that was never studied", async ({ browser }) => {
+  test.setTimeout(90_000);
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    await ctx.addInitScript((id) => ((window as StoriesWindow).__cfStoriesMock = { knobs: { refFileRemoved: [id] } } as never), REF.ready);
+    const page = await ctx.newPage();
+    await open(page, `/stories/chat/${CONV.winter}`);
+    // §45.35 D8: the maker and the host, in the line and on each model in the picker.
+    await expect(page.locator(".st-chat-ai__provider")).toHaveText(/^(Anthropic on )?Amazon Bedrock$/);
+    await expect(page.locator(".st-chat-ai__provider")).not.toHaveText(/^From /);
+    await page.getByRole("button", { name: /^Model: / }).click();
+    const sheet = page.getByRole("dialog");
+    await expect(sheet).toContainText(/(Anthropic on )?Amazon Bedrock\. /);
+    await sheet.getByRole("button", { name: "Done" }).click();
+    // §45.35 D9: a video cleared before it was ever studied says only that it was removed.
+    await go(page, `/stories/references/${REF.ready}`);
+    await expect(page.locator(".st-ref-player__none")).toHaveText("The video was removed to save space.");
+    await expect(page.locator(".st-refs")).not.toContainText("Its study stays.");
+    await expect(page.locator(".st-ref-removed")).toHaveText("The video file is gone, so it cannot be analyzed.");
+    await settle(page);
+    expect(await audit(page, `a cleared video never studied ${w}`, touch && w < 768)).toEqual([]);
+    await ctx.close();
+  }
 });

@@ -29,6 +29,7 @@ import { storiesApi } from "../api/client.ts";
 import { storiesGoLater } from "../pane.tsx";
 import type { AiSetting, CharacterInput, ChatAction, IdeaCategory, IdeaInput, ModelOverride, ProjectRef, TaskKind } from "../api/types.ts";
 import { cleanPick, LISTED_INFO, ModelMenu, storyUsual, type AiInfo } from "../studio/ai.tsx";
+import { showFace } from "../studio/looks.ts";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { isStoriesPath, matchStories } from "../routes.ts";
 import { CATEGORIES, productionNewHref, type ProductionPrefill } from "./handoff.ts";
@@ -290,7 +291,7 @@ export function ActionCard({
     <div className={`st-chat-action st-chat-action--${action.kind}`}>
       {character && typeof character.name === "string" && obj(character.look) ? (
         <div className="st-chat-action__show">
-          <CharacterPreview look={character.look} movementStyle={character.movementStyle ?? "bouncy"} size={88} label={`How ${character.name} looks`} />
+          <CharacterPreview look={character.look} movementStyle={character.movementStyle ?? "bouncy"} expression={showFace(character)} size={88} label={`How ${character.name} looks`} />
           <div className="st-chat-action__words">
             <strong>{character.name}</strong>
             {typeof character.description === "string" && character.description ? <span>{character.description}</span> : null}

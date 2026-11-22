@@ -162,8 +162,6 @@ export interface ModelInfo {
   /** a custom model's own Region and output limit, so Edit starts from them (contractIssues) */
   region?: string;
   maxOutputTokens?: number;
-  /** who runs it, e.g. "Amazon Bedrock" (§45.35 D8); `provider` is who makes it. Missing from an older API: Amazon Bedrock */
-  host?: string;
 }
 
 export type AgentId = "creative_director" | "video_analysis" | "storyboard" | "character" | "quality_assurance";

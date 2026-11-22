@@ -45,10 +45,11 @@ let root: Root;
 let host: HTMLElement;
 const spies = { sendMessage: vi.fn(), analyzeReference: vi.fn() };
 
-/** A model as Settings › AI lists it after D8: who makes it and who runs it. */
-function info(key: string, who: { provider: string; host?: string } = { provider: "Anthropic", host: "Amazon Bedrock" }): ModelInfo {
+/** A model as Settings › AI lists it after D8 (ModelInfo.host, §45.35): who makes it and who runs it. */
+type HostedModel = ModelInfo & { host?: string };
+function info(key: string, who: { provider: string; host?: string } = { provider: "Anthropic", host: "Amazon Bedrock" }): HostedModel {
   const { line: _line, ...rest } = fileModels().find((x) => x.key === key)!;
-  const out: ModelInfo = { ...rest, provider: who.provider, status: "ok", statusLine: "Answered the last call.", checkedAt: "2026-11-22T08:00:00.000Z" };
+  const out: HostedModel = { ...rest, provider: who.provider, status: "ok", statusLine: "Answered the last call.", checkedAt: "2026-11-22T08:00:00.000Z" };
   delete out.host;
   if (who.host) out.host = who.host;
   return out;
@@ -401,6 +402,33 @@ describe("a page change after a wait waits for Lamo Stories to be on screen (§4
     await until(() => made.mock.calls.length === 1 && !!$(".st-chat-action__done"));
     expect(location.pathname).toBe("/library");
     expect(takeParkedStoriesGo()).toBe("/stories/production/new?idea=01JSTDE0000000000000000099");
+  });
+
+  it("a reference video upload that finishes while Clip Factory is on screen opens its page once Lamo Stories is back", async () => {
+    history.replaceState({}, "", "/stories/references");
+    const both = (on: "clips" | "stories") => <AppPanes on={on} clips={<p>Clip Factory's Library</p>} stories={<ReferencesScreen ws="stories" page={page({ name: "references" })} />} />;
+    await render(both("stories"));
+    await until(() => $$(".st-ref-card").length === 2);
+    const input = $('.st-ref-drop input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, "files", { value: [new File([new Uint8Array(2048)], "frosty_path.mp4", { type: "video/mp4" })], configurable: true });
+    const g = gate();
+    const finish = api.completeReference.bind(api);
+    api.completeReference = async (...a) => {
+      await g.wait;
+      return finish(...a);
+    };
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await until(() => store.references.some((r) => r.title === "frosty path"));
+    clipFactoryOnScreen();
+    await render(both("clips"));
+    g.open();
+    const made = store.references.find((r) => r.title === "frosty path")!;
+    await until(() => made.status === "ready", 8000);
+    await act(async () => undefined);
+    expect(location.pathname).toBe("/library");
+    expect(takeParkedStoriesGo()).toBe(`/stories/references/${made.refId}`);
   });
 
   it("with Lamo Stories on screen the same tap opens the page at once", async () => {

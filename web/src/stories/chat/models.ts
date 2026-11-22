@@ -22,6 +22,8 @@ export const EFFORT_LINE: Record<Effort, string> = {
 export interface ModelView extends ModelInfo {
   /** One plain line about the model, from stories/config/models.json. */
   line: string;
+  /** who runs it, e.g. "Amazon Bedrock" (§45.35 D8: ModelInfo.host); `provider` is who makes it */
+  host?: string;
 }
 
 interface FileModel {

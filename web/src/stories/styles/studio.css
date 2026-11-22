@@ -3118,6 +3118,46 @@ button.st-s-place:hover {
   overflow-wrap: anywhere;
 }
 
+/* The Library's exact models of a run, one step a line. */
+.st-tech__ids {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+/* The fold's own list of names and values (apart from the page's .st-s-facts, which stays one list). */
+.st-s-techfacts {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.st-s-techfacts dt {
+  max-width: 15em;
+  font-weight: 800;
+}
+
+.st-s-techfacts dd {
+  margin: 0;
+  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .st-s-techfacts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .st-s-techfacts dd {
+    margin-bottom: 8px;
+  }
+}
+
 @media (max-width: 767px), (pointer: coarse) {
   .st-s-tech__sum {
     min-height: 48px;

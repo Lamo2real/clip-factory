@@ -446,14 +446,22 @@ function Details({ ws, story }: { ws: string; story: Story }) {
                         <dd>{job.meta.seed}</dd>
                       </div>
                     ) : null}
-                    {(job.meta.models ?? []).map((m) =>
-                      modelIdLine(m) ? (
-                        <div key={`id|${m.step}|${m.agentId}`} className="st-tech__model">
-                          <dt>{STEP_WORDS[m.step] ?? m.step}</dt>
-                          <dd className="st-facts__code">{modelIdLine(m)}</dd>
-                        </div>
-                      ) : null,
-                    )}
+                    {(job.meta.models ?? []).some((m) => modelIdLine(m)) ? (
+                      <div>
+                        <dt>Exact models</dt>
+                        <dd>
+                          <ul className="st-tech__ids">
+                            {(job.meta.models ?? []).map((m) =>
+                              modelIdLine(m) ? (
+                                <li key={`id|${m.step}|${m.agentId}`}>
+                                  {STEP_WORDS[m.step] ?? m.step}: <span className="st-facts__code">{modelIdLine(m)}</span>
+                                </li>
+                              ) : null,
+                            )}
+                          </ul>
+                        </dd>
+                      </div>
+                    ) : null}
                   </dl>
                 </TechDetails>
               ) : null}

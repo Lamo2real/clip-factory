@@ -791,7 +791,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
         </dl>
         <ModelsUsed info={info} job={job} jobs={jobs.data} title={live ? "Models working on it" : "Made with"} />
         <TechDetails>
-          <dl className="st-s-facts">
+          <dl className="st-s-techfacts">
             <dt>Folder</dt>
             <dd className="st-s-facts__mono">{story.storageLocation}</dd>
             {job?.meta.engineVersion ? (
