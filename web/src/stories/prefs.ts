@@ -6,21 +6,27 @@
 //   sound.click    1..30     which click sound (the error sound stays Clip Factory's choice)
 //   motion.reduce  boolean   calm motion
 //
-// Lamo Stories' Settings › Storage and production › "Sounds and motion" writes them with setStoriesPref(key, value)
-// (null forgets one). Each falls back to Clip Factory's own device preference only while it is unset; once set,
-// Clip Factory's choice never changes it. Every Lamo Stories sound goes through storiesSound() and every
-// reduced-motion check through storiesReduceMotion(). Clip Factory's lib/sounds.ts and lib/prefs.ts are not changed:
-// while Lamo Stories' own sound setting is set and a Lamo Stories page is on screen, a click there plays Lamo
-// Stories' sound (followStoriesClicks) and the app's own click handler stays quiet for that one click.
+// Lamo Stories' Settings › Storage and production › "Sounds and motion" (builder W3c) writes them with
+// setStoriesDevicePref(key, value) (null forgets one; the part at the end of this file). Each falls back to Clip
+// Factory's own device preference only while it is unset; once set, Clip Factory's choice never changes it. Every
+// Lamo Stories sound goes through storiesSound() and every reduced-motion check through storiesReduceMotion() (its
+// sliding highlights too: StoriesApp gives Glide this check). Clip Factory's lib/sounds.ts and lib/prefs.ts are not
+// changed: while Lamo Stories' own sound setting is set and a Lamo Stories page is on screen, a click there plays
+// Lamo Stories' sound (followStoriesClicks) and the app's own click handler stays quiet for that one click. While
+// Clip Factory is on screen (Lamo Stories kept behind it), Lamo Stories makes no sound at all.
 //
 // Lamo Clips' main bundle imports this file (App.tsx: the error toast's sound, the page's calm-motion class): it has
 // no Lamo Stories screen or style code.
+import { useSyncExternalStore } from "react";
 import { getPrefs, prefersReducedMotion } from "../lib/prefs.ts";
 import { classifyClick, SoundEngine, type PlayKind } from "../lib/sound.ts";
 import { isSoundId } from "../lib/soundCatalog.ts";
 import { sounds } from "../lib/sounds.ts";
-import { storiesOnScreen } from "./pane.tsx";
-import { onStoriesPrefs, storiesPrefs } from "./workspace.ts";
+import { storiesBehind, storiesOnScreen } from "./pane.tsx";
+import { onStoriesPrefs, setStoriesPref, storiesPrefs } from "./workspace.ts";
+
+/** Clip Factory is on screen and Lamo Stories kept behind it: no Lamo Stories sound or confetti then (stories/pane.tsx). */
+export { storiesBehind };
 
 /** The keys in cf.stories.prefs (`more`), agreed with Lamo Stories' Settings card. */
 export const STORIES_PREF_KEYS = { sound: "sound.enabled", click: "sound.click", motion: "motion.reduce" } as const;
@@ -66,9 +72,12 @@ const engineNow = () => (ownSound() ? storiesEngine() : sounds);
 /**
  * Plays a Lamo Stories sound ("tap", "deny" or the "success" cheer) by Lamo Stories' own setting, now or, with
  * `onNextTap`, on the owner's next tap (a page that just loaded cannot play audio yet). `recipe` plays one of the 30
- * sounds of that kind (a sound picker's preview). Returns a cancel function.
+ * sounds of that kind (a sound picker's preview). Quiet while Clip Factory is on screen: a page kept behind it never
+ * cheers over Clip Factory, and a cheer waiting for a tap that comes in Clip Factory is dropped. Returns a cancel
+ * function.
  */
 export function storiesSound(kind: PlayKind, opts: { target?: EventTarget | null; onNextTap?: boolean; recipe?: number } = {}): () => void {
+  if (storiesBehind()) return () => undefined;
   if (!opts.onNextTap) {
     if (opts.recipe !== undefined) engineNow().play(kind, opts.target ?? null, opts.recipe);
     else if (opts.target === undefined) engineNow().play(kind);
@@ -78,7 +87,7 @@ export function storiesSound(kind: PlayKind, opts: { target?: EventTarget | null
   if (typeof document === "undefined") return () => undefined;
   const onClick = (e: MouseEvent) => {
     document.removeEventListener("click", onClick, { capture: true });
-    engineNow().play(kind, e.target);
+    if (!storiesBehind()) engineNow().play(kind, e.target);
   };
   document.addEventListener("click", onClick, { capture: true });
   return () => document.removeEventListener("click", onClick, { capture: true });
@@ -151,4 +160,45 @@ export function followStoriesClicks(): () => void {
     window.removeEventListener("keydown", onPress, { capture: true });
     giveBack();
   };
+}
+
+// ---------- Settings › Storage and production › Sounds and motion writes them (builder W3c) ----------
+
+/** One of the three keys. */
+export type StoriesDeviceKey = (typeof STORIES_PREF_KEYS)[keyof typeof STORIES_PREF_KEYS];
+
+/** Which of the three this device has set for Lamo Stories itself; an unset one follows Clip Factory's. */
+export interface StoriesDeviceOwn {
+  sound: boolean | undefined;
+  click: number | undefined;
+  motion: boolean | undefined;
+}
+
+/**
+ * Keeps one of Lamo Stories' own choices on this device: sounds on or off and calm motion as true or false, the click
+ * sound as its number (1..30), exactly the shapes the readers above take. null forgets it, so Clip Factory's choice
+ * applies again; any other value is not kept.
+ */
+export function setStoriesDevicePref(key: "sound.enabled" | "motion.reduce", value: boolean | null): void;
+export function setStoriesDevicePref(key: "sound.click", value: number | null): void;
+export function setStoriesDevicePref(key: StoriesDeviceKey, value: boolean | number | null): void {
+  const known = (Object.values(STORIES_PREF_KEYS) as string[]).includes(key);
+  const fits = value === null || (key === STORIES_PREF_KEYS.click ? isSoundId(value) : isBool(value));
+  if (known && fits) setStoriesPref(key, value);
+}
+
+/** This device's own choices for Lamo Stories (an unset one is undefined). */
+export function storiesDeviceOwn(): StoriesDeviceOwn {
+  return { sound: own(STORIES_PREF_KEYS.sound, isBool), click: own(STORIES_PREF_KEYS.click, isSoundId), motion: own(STORIES_PREF_KEYS.motion, isBool) };
+}
+
+const NO_PREFS: Record<string, unknown> = {};
+
+/** Re-renders when Lamo Stories' own device preferences change (here or on another screen); read them with the readers above. */
+export function useStoriesDevicePrefs(): Record<string, unknown> {
+  return useSyncExternalStore(
+    (fn) => onStoriesPrefs(fn),
+    () => storiesPrefs().more,
+    () => NO_PREFS,
+  );
 }

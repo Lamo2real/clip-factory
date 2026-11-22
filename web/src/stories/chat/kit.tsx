@@ -8,7 +8,7 @@ import { createPortal } from "react-dom";
 import { ApiError } from "../../api/errors.ts";
 import { Glide } from "../../components/Glide.tsx";
 import { trapTab } from "../../components/Sheet.tsx";
-import { storiesReduceMotion, storiesSound } from "../prefs.ts";
+import { storiesBehind, storiesReduceMotion, storiesSound } from "../prefs.ts";
 
 /** The sentence for a failed call: the server's own when it sent one, else `fallback`. */
 export function sentence(e: unknown, fallback = "That did not work. Try again."): string {
@@ -292,7 +292,7 @@ export function centerOf(el: Element | null | undefined): { x: number; y: number
 /** A short burst of stars from a point, and the success sound. Only the sound when motion is reduced. */
 export function cheer(origin?: { x: number; y: number }): void {
   storiesSound("success");
-  if (storiesReduceMotion() || typeof document === "undefined") return;
+  if (storiesBehind() || storiesReduceMotion() || typeof document === "undefined") return;
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
   if (!ctx) return;

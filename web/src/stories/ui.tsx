@@ -10,7 +10,7 @@ import { A } from "../components/ui.tsx";
 import { Glide } from "../components/Glide.tsx";
 import { usePoll } from "../lib/hooks.ts";
 import { storiesApi } from "./api/client.ts";
-import { useAppActive } from "./pane.tsx";
+import { storiesBehind, useAppActive } from "./pane.tsx";
 import { storiesReduceMotion, storiesSound } from "./prefs.ts";
 import type { Onboarding, Platform, StoriesDashboard, StoryStatus } from "./api/types.ts";
 
@@ -342,7 +342,16 @@ const STAR_COLOURS = ["#FFC94A", "#FF6F61", "#47D6A0", "#62C6FF", "#FFF6E5"];
 /** A short star burst from a point (a Connect that worked, a saved setting), with the success cheer on a tap. */
 export function celebrate(origin?: { x: number; y: number }, cheer = true): void {
   if (cheer) storiesSound("success");
-  if (storiesReduceMotion() || typeof document === "undefined") return;
+  starBurst(origin);
+}
+
+/**
+ * Lamo Stories' confetti: `amount` stars from a point (the middle of the page's top third without one). It follows
+ * Lamo Stories' own calm-motion switch (never Clip Factory's once it has its own), and draws nothing while Clip
+ * Factory is on screen (a page kept behind it never celebrates over Clip Factory).
+ */
+export function starBurst(origin?: { x: number; y: number }, amount = 46): void {
+  if (storiesBehind() || storiesReduceMotion() || typeof document === "undefined") return;
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -357,8 +366,9 @@ export function celebrate(origin?: { x: number; y: number }, cheer = true): void
   ctx.scale(dpr, dpr);
   const ox = origin?.x ?? W / 2;
   const oy = origin?.y ?? H / 3;
-  const stars = Array.from({ length: 46 }, (_, i) => {
-    const angle = (i / 46) * Math.PI * 2 + Math.random() * 0.3;
+  const count = Math.max(1, Math.round(amount));
+  const stars = Array.from({ length: count }, (_, i) => {
+    const angle = (i / count) * Math.PI * 2 + Math.random() * 0.3;
     const speed = 3 + Math.random() * 6;
     return { x: ox, y: oy, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 2, r: 4 + Math.random() * 5, spin: Math.random() * Math.PI, color: STAR_COLOURS[i % STAR_COLOURS.length]! };
   });

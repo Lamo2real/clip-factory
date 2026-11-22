@@ -12,6 +12,8 @@ import { sounds } from "../src/lib/sounds.ts";
 import {
   calmPage,
   deniedSound,
+  setStoriesDevicePref,
+  storiesDeviceOwn,
   followStoriesClicks,
   followStoriesMotion,
   STORIES_PREF_KEYS,
@@ -84,6 +86,25 @@ describe("the keys and their fallbacks", () => {
     expect(storiesReduceMotion()).toBe(false);
     setStoriesPref("motion.reduce", true);
     expect(storiesReduceMotion()).toBe(true);
+  });
+});
+
+describe("the Settings card's writer (one file with the readers, builder W3c's exports)", () => {
+  it("keeps only the right shape per key, null forgets, and the readers see it at once", () => {
+    expect(storiesDeviceOwn()).toEqual({ sound: undefined, click: undefined, motion: undefined });
+    setStoriesDevicePref("sound.enabled", false);
+    setStoriesDevicePref("sound.click", 12);
+    setStoriesDevicePref("motion.reduce", true);
+    expect(storiesDeviceOwn()).toEqual({ sound: false, click: 12, motion: true });
+    expect([storiesSoundOn(), storiesClickSound(), storiesReduceMotion()]).toEqual([false, 12, true]);
+    (setStoriesDevicePref as (k: string, v: unknown) => void)("sound.click", 99);
+    (setStoriesDevicePref as (k: string, v: unknown) => void)("motion.reduce", "yes");
+    (setStoriesDevicePref as (k: string, v: unknown) => void)("chat.enterSends", true);
+    expect(storiesDeviceOwn()).toEqual({ sound: false, click: 12, motion: true });
+    expect(JSON.parse(localStorage.getItem(STORIES_PREFS_KEY)!).more).toEqual({ "sound.enabled": false, "sound.click": 12, "motion.reduce": true });
+    setStoriesDevicePref("motion.reduce", null);
+    expect(storiesDeviceOwn().motion).toBeUndefined();
+    expect(storiesReduceMotion()).toBe(false);
   });
 });
 
@@ -236,6 +257,7 @@ describe("every Lamo Stories sound and calm-motion check goes through stories/pr
         ["Clip Factory's sound engine", /lib\/sounds\.ts/],
         ["cheerOnNextTap (use storiesSound(kind, { onNextTap: true }))", /\bcheerOnNextTap\b/],
         ["prefersReducedMotion (use storiesReduceMotion())", /\bprefersReducedMotion\b/],
+        ["Clip Factory's confetti, stilled by Clip Factory's calm setting (use ui.tsx starBurst)", /lib\/confetti\.ts/],
         ["the system's reduced-motion query (use storiesReduceMotion())", /prefers-reduced-motion/],
       ] as const)
         if (re.test(text)) bad.push(`${f.slice(ROOT.length + 1)}: ${what}`);

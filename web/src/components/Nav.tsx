@@ -13,6 +13,7 @@ import {
   rememberClipsPath,
   restoreScroll,
   saveClipsScroll,
+  saveStoriesScroll,
   setKnownWorkspaces,
   settleSwitch,
   switcherName,
@@ -309,9 +310,11 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
   }, [inClips]);
 
   // Every Lamo Clips page the owner opens is where switching back lands (one tracker: the sidebar's, always mounted).
+  // The query counts too: Home at /?campaign=… and Home at / are two ways of the same page.
+  const search = typeof location === "undefined" ? "" : location.search;
   useEffect(() => {
     if (place === "sidebar" && route.name !== "stories") rememberClipsPath(here());
-  }, [place, page, hash, route.name]);
+  }, [place, page, search, hash, route.name]);
 
   // A held switch: the owner chose Leave (the page is the switch's target now), or went somewhere else.
   useEffect(() => {
@@ -385,8 +388,10 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
     setMenu(false);
     if (w.workspaceId === current) return;
     const from = here();
-    // Leaving Clip Factory: its page's scroll position is kept for the way back (this tab only).
+    // Leaving Clip Factory: its page's scroll position is kept for the way back (this tab only). Leaving Lamo Stories:
+    // its own, which StoriesApp puts back when it is on screen again.
     if (inClips) saveClipsScroll(from, window.scrollY);
+    else saveStoriesScroll(from, window.scrollY);
     const to = switchTarget(w);
     navigate(to);
     // The choice is recorded only once the page really changed: a page with unsaved typing may be asking "Leave

@@ -21,8 +21,9 @@ import { A } from "../components/ui.tsx";
 import { AppBadge } from "../lib/badge.ts";
 import { navigate, useHash } from "../lib/router.ts";
 import { loadStoriesApi, setStoriesApi } from "./api/client.ts";
-import { useAppPane } from "./pane.tsx";
-import { followStoriesClicks } from "./prefs.ts";
+import { GlideCalm } from "../components/Glide.tsx";
+import { takeParkedStoriesGo, useAppPane } from "./pane.tsx";
+import { followStoriesClicks, storiesReduceMotion } from "./prefs.ts";
 import type { StoriesApi, Workspace } from "./api/types.ts";
 import { storiesHref, type StoriesPage } from "./routes.ts";
 import { CharactersScreen } from "./screens/Characters.tsx";
@@ -38,7 +39,18 @@ import { SettingsScreen } from "./screens/Settings.tsx";
 import { SetupScreen } from "./screens/Setup.tsx";
 import type { StoriesScreenProps } from "./screens/types.ts";
 import { NeedsYouBar, refreshOnboarding, StBoundary, StEmpty, StError, StIcon, StLinkButton, StLoading, useDashboard, type StIconName } from "./ui.tsx";
-import { onChoiceChange, rememberStoriesPath, serverWorkspaces, setKnownWorkspaces, setStoriesPrefs, storiesPrefs, storiesTitle, wantedStoriesWorkspace } from "./workspace.ts";
+import {
+  onChoiceChange,
+  rememberStoriesPath,
+  restoreScroll,
+  serverWorkspaces,
+  setKnownWorkspaces,
+  setStoriesPrefs,
+  storiesPrefs,
+  storiesTitle,
+  takeStoriesScroll,
+  wantedStoriesWorkspace,
+} from "./workspace.ts";
 
 interface NavItem {
   label: string;
@@ -274,6 +286,15 @@ function quickWorkspace(fromAddress: string | null): string | null {
 }
 
 export function StoriesApp({ page }: { page: StoriesPage }) {
+  // Its sliding highlights follow Lamo Stories' own calm-motion switch, never Clip Factory's once it has its own.
+  return (
+    <GlideCalm.Provider value={storiesReduceMotion}>
+      <StoriesShell page={page} />
+    </GlideCalm.Provider>
+  );
+}
+
+function StoriesShell({ page }: { page: StoriesPage }) {
   // On screen (Clip Factory's shell may stay mounted behind it, and this one behind Clip Factory: stories/pane.tsx).
   const { active, clipsMounted } = useAppPane();
   const fromAddress = page.name === "connections" ? page.ws : null;
@@ -410,6 +431,21 @@ export function StoriesApp({ page }: { page: StoriesPage }) {
 
   // Clicks follow Lamo Stories' own sound setting while it is on screen.
   useEffect(() => (active ? followStoriesClicks() : undefined), [active]);
+
+  // Back on screen: a page change that waited while Clip Factory was shown happens now (stories/pane.tsx
+  // storiesGoLater), else the page opens where the window was when the owner switched away.
+  useEffect(() => {
+    if (!active) return;
+    const at = location.pathname + location.search + location.hash;
+    const to = takeParkedStoriesGo();
+    if (to) {
+      takeStoriesScroll(at);
+      navigate(to, { replace: true });
+      return;
+    }
+    const y = takeStoriesScroll(at);
+    return y === null ? undefined : restoreScroll(y);
+  }, [active]);
 
   const on = (item: NavItem) => item.match.includes(page.name);
   const moreOn = MORE.some(on);

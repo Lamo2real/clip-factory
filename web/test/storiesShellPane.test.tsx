@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/stories/StoriesApp.tsx", () => ({ StoriesApp: () => null, marker: "the StoriesApp chunk" }));
 
-const { AppPanes, prefetchStoriesApp, resetStoriesChunk, storiesModule, storiesOnScreen, useAppActive, useAppPane } = await import("../src/stories/pane.tsx");
+const { AppPanes, prefetchStoriesApp, resetStoriesChunk, storiesBehind, storiesGoLater, storiesModule, storiesOnScreen, takeParkedStoriesGo, useAppActive, useAppPane } = await import("../src/stories/pane.tsx");
 
 /** A page with its own state (a counter) that says whether its app is on screen. */
 function Page({ name }: { name: string }) {
@@ -127,6 +127,19 @@ describe("the two panes", () => {
     expect(host.querySelector('[data-page="clips"] button')!.textContent).toBe("clips 0");
   });
 
+  it("an app named fresh never draws behind the other, not even for the switch itself (it reads the live address)", () => {
+    const seen: boolean[] = [];
+    function Watch() {
+      seen.push(useAppActive());
+      return <p data-page="clips" />;
+    }
+    show("clips", { fresh: "clips", clips: <Watch /> });
+    show("stories", { fresh: "clips", clips: <Watch /> });
+    expect(pane("clips")).toBeNull();
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every(Boolean), "Clip Factory rendered hidden").toBe(true);
+  });
+
   it("while Clip Factory is hidden its window key handlers hear nothing; React's own handlers and capture listeners do", () => {
     const heard: string[] = [];
     const onWindow = (e: KeyboardEvent) => heard.push(`window ${e.key}`);
@@ -163,6 +176,7 @@ describe("where the owner is, and StoriesApp's chunk", () => {
     localStorage.clear();
     history.replaceState(null, "", "/");
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it("a Lamo Stories page is on screen only at /stories… and only while Lamo Stories is switched on", () => {
@@ -174,6 +188,31 @@ describe("where the owner is, and StoriesApp's chunk", () => {
     expect(storiesOnScreen()).toBe(false);
     history.replaceState(null, "", "/storiesque");
     expect(storiesOnScreen()).toBe(false);
+  });
+
+  it("Lamo Stories is behind Clip Factory only while it is switched on and a Clip Factory page is on screen", () => {
+    history.replaceState(null, "", "/jobs");
+    expect(storiesBehind()).toBe(false);
+    localStorage.setItem("cf.storiesPreview", "1");
+    expect(storiesBehind()).toBe(true);
+    history.replaceState(null, "", "/stories/review");
+    expect(storiesBehind()).toBe(false);
+  });
+
+  it("a page change after a wait never moves the owner out of Clip Factory: it waits until Lamo Stories is back", () => {
+    vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+    localStorage.setItem("cf.storiesPreview", "1");
+    history.replaceState(null, "", "/stories/setup");
+    storiesGoLater("/stories");
+    expect(location.pathname).toBe("/stories");
+    expect(takeParkedStoriesGo()).toBeNull();
+    history.replaceState(null, "", "/library");
+    const before = history.length;
+    storiesGoLater("/stories/production/S1", { replace: true });
+    expect(location.pathname).toBe("/library");
+    expect(history.length).toBe(before);
+    expect(takeParkedStoriesGo()).toBe("/stories/production/S1");
+    expect(takeParkedStoriesGo()).toBeNull();
   });
 
   it("fetches the chunk once while idle, and never while Lamo Stories is switched off", async () => {

@@ -20,6 +20,7 @@ import { GetAppPanel } from "../components/GetApp.tsx";
 import { LiveDot } from "../components/LiveDot.tsx";
 import { A, Button, Empty, LinkButton } from "../components/ui.tsx";
 import { Home } from "../screens/home/Home.tsx";
+import { campaignStart } from "../screens/home/NewJobForm.tsx";
 import { JobDetail } from "../screens/jobs/JobDetail.tsx";
 import { Jobs } from "../screens/jobs/Jobs.tsx";
 import { Library } from "../screens/library/Library.tsx";
@@ -185,8 +186,10 @@ export function App() {
 /**
  * Lamo Stories switched on (docs/CONTRACTS.md §45.16.2, §45.34): Clip Factory's Shell for every Lamo Clips route and
  * Lamo Stories' own shell for /stories. Each, once shown, stays mounted while the other is on screen (hidden and
- * inert), so coming back shows it exactly as it was left. Clip Factory's skill editor (the page that asks "Leave
- * without saving?") opens fresh instead: its unsaved typing is never carried across a switch.
+ * inert), so coming back shows it exactly as it was left. Two Clip Factory pages open fresh instead: the skill editor
+ * (it asks "Leave without saving?", and unsaved typing is never carried across a switch) and Home opened for a
+ * campaign (`/?campaign=…`: Home picks its way from the live address, which is Lamo Stories' while it is hidden, so it
+ * could not be kept as it was; it is let go, as before this shell, never half kept).
  */
 function BothApps() {
   const route = useRoute();
@@ -194,9 +197,13 @@ function BothApps() {
   const lastStories = useRef<StoriesPage>(inStories ? route.page : { name: "dashboard" });
   if (route.name === "stories") lastStories.current = route.page;
   const lastClips = useRef<Route>(route);
-  if (!inStories) lastClips.current = route;
+  const lastClipsSearch = useRef(typeof location === "undefined" ? "" : location.search);
+  if (!inStories) {
+    lastClips.current = route;
+    lastClipsSearch.current = typeof location === "undefined" ? "" : location.search;
+  }
   const held = lastClips.current;
-  const fresh = held.name === "skill" && held.mode !== "read" ? "clips" : null;
+  const fresh = (held.name === "skill" && held.mode !== "read") || (held.name === "home" && campaignStart(lastClipsSearch.current).campaignId) ? "clips" : null;
   // The calm-motion class follows the app on screen (Lamo Stories' own switch, Clip Factory's otherwise).
   useLayoutEffect(() => followStoriesMotion(), [inStories]);
   return <AppPanes on={inStories ? "stories" : "clips"} fresh={fresh} clips={<Shell />} stories={<StoriesHost page={lastStories.current} />} />;

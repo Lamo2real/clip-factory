@@ -6,7 +6,7 @@
 // sound), never `disabled` (that would swallow the click and its sound).
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { Glide } from "../../components/Glide.tsx";
-import { storiesReduceMotion, storiesSound } from "../prefs.ts";
+import { storiesBehind, storiesReduceMotion, storiesSound } from "../prefs.ts";
 import type { Effort, ModelInfo, ProviderStatus } from "../api/types.ts";
 import { EFFORT_LABEL } from "../api/types.ts";
 
@@ -349,7 +349,7 @@ const STAR_COLOURS = ["#FFC94A", "#FF6F61", "#47D6A0", "#62C6FF", "#FFF6E5"];
 /** A short star burst from the element that was tapped (or the middle of the page), with the success cheer. */
 export function cheer(from?: Element | null): void {
   storiesSound("success");
-  if (storiesReduceMotion() || typeof document === "undefined") return;
+  if (storiesBehind() || storiesReduceMotion() || typeof document === "undefined") return;
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext?.("2d");
   if (!ctx) return;

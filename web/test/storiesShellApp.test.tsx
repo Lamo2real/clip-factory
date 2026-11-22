@@ -11,18 +11,20 @@ import { ToastProvider } from "../src/components/Toasts.tsx";
 import { setStoriesApi } from "../src/stories/api/client.ts";
 import type { Character, Idea, ReferenceVideo, StoriesApi, StoriesDashboard, Story, Workspace } from "../src/stories/api/types.ts";
 import type { Onboarding } from "../src/stories/api/types.ts";
-import { AppPanes } from "../src/stories/pane.tsx";
+import { AppPanes, storiesGoLater } from "../src/stories/pane.tsx";
 import { forgetDashboards, forgetOnboarding } from "../src/stories/ui.tsx";
-import { currentChoice, rememberStoriesPath, resetWorkspaceMemory, setKnownWorkspaces } from "../src/stories/workspace.ts";
+import { currentChoice, rememberStoriesPath, resetWorkspaceMemory, saveStoriesScroll, setKnownWorkspaces, takeStoriesScroll } from "../src/stories/workspace.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("../src/components/CrSendNow.tsx", () => ({ CrSendNow: () => null }));
 vi.mock("../src/lib/badge.ts", () => ({ AppBadge: () => <i data-host="badge" /> }));
 vi.mock("../src/app/MacFetchHost.tsx", () => ({ MacFetchHost: () => <i data-host="mac" /> }));
+/** Every page change StoriesApp asked for (the router itself is not run here). */
+const navigated: { to: string; replace: boolean }[] = [];
 vi.mock("../src/lib/router.ts", async (orig) => {
   const real = await orig<typeof import("../src/lib/router.ts")>();
-  return { ...real, navigate: () => undefined };
+  return { ...real, navigate: (to: string, o: { replace?: boolean } = {}) => void navigated.push({ to, replace: !!o.replace }) };
 });
 
 const { StoriesApp } = await import("../src/stories/StoriesApp.tsx");
@@ -161,6 +163,58 @@ describe("kept behind Clip Factory", () => {
       expect(vi.mocked(fake.dashboard!).mock.calls.length).toBeGreaterThan(dashboards);
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it("a page change that waited while Clip Factory was on screen happens the moment Lamo Stories is back", async () => {
+    history.replaceState(null, "", "/stories/ideas");
+    await inPanes("stories", { name: "ideas" });
+    await flush();
+    history.replaceState(null, "", "/jobs");
+    await inPanes("clips", { name: "ideas" });
+    navigated.length = 0;
+    storiesGoLater("/stories/production/S1");
+    await flush();
+    expect(navigated, "the owner stays in Clip Factory").toEqual([]);
+    history.replaceState(null, "", "/stories/ideas");
+    await inPanes("stories", { name: "ideas" });
+    await flush();
+    expect(navigated).toContainEqual({ to: "/stories/production/S1", replace: true });
+    history.replaceState(null, "", "/");
+  });
+
+  it("comes back where its window was scrolled to (the switch scrolled the window to the top)", async () => {
+    const to: number[] = [];
+    vi.spyOn(document.documentElement, "scrollHeight", "get").mockReturnValue(5000);
+    vi.spyOn(window, "scrollTo").mockImplementation(((o: ScrollToOptions) => {
+      to.push(o.top ?? 0);
+      Object.defineProperty(window, "scrollY", { value: o.top ?? 0, configurable: true });
+    }) as typeof window.scrollTo);
+    vi.stubGlobal("requestAnimationFrame", (fn: FrameRequestCallback) => {
+      fn(0);
+      return 0;
+    });
+    try {
+      history.replaceState(null, "", "/stories/library");
+      await inPanes("stories", { name: "library", kind: null, storyId: null });
+      await flush();
+      expect(to).toEqual([]);
+      // The owner leaves from far down the Library (the switcher keeps where the window was).
+      saveStoriesScroll("/stories/library", 1400);
+      history.replaceState(null, "", "/jobs");
+      await inPanes("clips", { name: "library", kind: null, storyId: null });
+      await flush();
+      expect(to, "nothing moves while Clip Factory is on screen").toEqual([]);
+      history.replaceState(null, "", "/stories/library");
+      await inPanes("stories", { name: "library", kind: null, storyId: null });
+      await flush();
+      expect(to).toEqual([1400]);
+      expect(takeStoriesScroll("/stories/library"), "read once").toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+      Object.defineProperty(window, "scrollY", { value: 0, configurable: true });
+      history.replaceState(null, "", "/");
     }
   });
 

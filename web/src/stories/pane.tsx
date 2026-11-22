@@ -11,6 +11,7 @@
 // engine code. StoriesApp itself loads in its own chunk (loadStoriesApp), fetched while the browser is idle once the
 // switcher is on screen (prefetchStoriesApp), so the first switch does not wait for it either.
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { navigate } from "../lib/router.ts";
 import { storiesEnabled } from "./flag.ts";
 import { isStoriesPath } from "./routes.ts";
 
@@ -38,6 +39,33 @@ export function useAppActive(): boolean {
 /** A Lamo Stories page is on screen (never while Lamo Stories is switched off). */
 export function storiesOnScreen(): boolean {
   return typeof location !== "undefined" && isStoriesPath(location.pathname) && storiesEnabled();
+}
+
+/**
+ * Lamo Stories is switched on and Clip Factory is on screen. Lamo Stories' pages kept behind it stay quiet then: no
+ * sound, no confetti, no page change of their own (never false alarms while Lamo Stories is switched off).
+ */
+export function storiesBehind(): boolean {
+  return storiesEnabled() && typeof location !== "undefined" && !isStoriesPath(location.pathname);
+}
+
+let parked: string | null = null;
+
+/**
+ * A Lamo Stories page change that comes after a wait (a save that answered, a timer), not with the owner's own tap.
+ * While Clip Factory is on screen it waits and happens the moment Lamo Stories is back (StoriesApp), so the owner is
+ * never moved out of Clip Factory and Clip Factory's history entry stays his.
+ */
+export function storiesGoLater(to: string, opts: { replace?: boolean } = {}): void {
+  if (storiesBehind()) parked = to;
+  else navigate(to, opts);
+}
+
+/** The page change that waited while Clip Factory was on screen (once: it is forgotten as it is read), else null. */
+export function takeParkedStoriesGo(): string | null {
+  const to = parked;
+  parked = null;
+  return to;
 }
 
 // ---------- StoriesApp's own chunk ----------
@@ -104,18 +132,19 @@ function dialogOpenOutside(shown: HTMLElement | null): boolean {
 export function AppPanes({ on, clips, stories, fresh = null }: { on: AppName; clips: ReactNode; stories: ReactNode; fresh?: AppName | null }) {
   const [shown, setShown] = useState<Record<AppName, boolean>>(() => ({ clips: on === "clips", stories: on === "stories" }));
   if (!shown[on]) setShown((s) => ({ ...s, [on]: true }));
+  // An app that starts fresh is let go the moment it is hidden: it never draws behind the other one, even once.
+  if (fresh !== null && fresh !== on && shown[fresh]) setShown((s) => ({ ...s, [fresh]: false }));
   const clipsBox = useRef<HTMLDivElement>(null);
   const storiesBox = useRef<HTMLDivElement>(null);
   const was = useRef(on);
-  const freshRef = useRef(fresh);
-  freshRef.current = fresh;
 
-  // Just switched: the app now hidden is kept, unless it was left with a dialog open or on a page that starts fresh.
+  // Just switched: the app now hidden is kept, unless it was left with a dialog open (a page that starts fresh is
+  // already let go above).
   useLayoutEffect(() => {
     const hidden = was.current;
     was.current = on;
     if (hidden === on) return;
-    if (freshRef.current === hidden || dialogOpenOutside((on === "clips" ? clipsBox : storiesBox).current)) setShown((s) => ({ ...s, [hidden]: false }));
+    if (dialogOpenOutside((on === "clips" ? clipsBox : storiesBox).current)) setShown((s) => ({ ...s, [hidden]: false }));
   }, [on]);
 
   // Clip Factory hidden: a key press stops at the document, so Clip Factory's window key handlers (Jobs' Escape, which

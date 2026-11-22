@@ -395,6 +395,178 @@ test.describe("each app stays exactly as it was left (§45.34)", () => {
   });
 });
 
+type StoriesMockWindow = Window & { __cfStoriesMock?: { store?: { knobs: Record<string, unknown> } } };
+
+/** Records, from now on, every confetti and toast that appears anywhere on the page. */
+const watchShows = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { __shows?: string[] };
+    w.__shows = [];
+    new MutationObserver((records) => {
+      for (const r of records)
+        for (const n of Array.from(r.addedNodes)) {
+          if (!(n instanceof HTMLElement)) continue;
+          if (n.matches("canvas.confetti")) w.__shows!.push("confetti");
+          for (const t of [n, ...Array.from(n.querySelectorAll(".toast__text"))]) if (t.matches(".toast__text, .toast")) w.__shows!.push(`toast: ${t.textContent?.trim()}`);
+        }
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+const shows = (page: Page) => page.evaluate(() => (window as unknown as { __shows?: string[] }).__shows ?? []);
+
+test.describe("Lamo Stories kept behind Clip Factory stays quiet (§45.34)", () => {
+  test("Lamo Stories comes back where its window was scrolled to", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 1280, height: 520 });
+    await page.goto("/stories/connections");
+    await storiesReady(page);
+    const room = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+    expect(room, "Social accounts is taller than the window").toBeGreaterThan(200);
+    await page.evaluate((to) => window.scrollTo(0, to), Math.round(room * 0.7));
+    await page.waitForTimeout(200);
+    const kept = await page.evaluate(() => Math.round(scrollY));
+    expect(kept).toBeGreaterThan(100);
+
+    await toClips(page);
+    await settle(page);
+    await expect.poll(() => page.evaluate(() => Math.round(scrollY))).toBeLessThan(kept);
+    await toStories(page);
+    await expect(page).toHaveURL(/\/stories\/connections$/);
+    await expect.poll(() => page.evaluate(() => Math.round(scrollY)), { timeout: 6000 }).toBe(kept);
+  });
+
+  test("a video that finishes while Clip Factory is on screen celebrates only once Lamo Stories is back", async ({ page }) => {
+    test.setTimeout(90_000);
+    await on(page);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/stories/production/01JSTST0000000000000000006");
+    await storiesReady(page);
+    await expect(page.getByRole("link", { name: "Watch it in Review" })).toHaveCount(0);
+    // The seed run ends 9 s after the page opened.
+    await page.evaluate(() => {
+      const store = (window as StoriesMockWindow).__cfStoriesMock?.store;
+      if (store) store.knobs.jobSeconds = 9;
+    });
+    await toClips(page);
+    await settle(page);
+    await watchShows(page);
+    await page.waitForTimeout(11_000);
+    expect(await shows(page), "nothing of Lamo Stories over Clip Factory").toEqual([]);
+    await expect(page.locator('[data-app-pane="clips"]')).toBeVisible();
+
+    // Back: the finished run is noticed at once, and celebrated here.
+    await toStories(page);
+    await expect(page.getByRole("link", { name: "Watch it in Review" })).toBeVisible({ timeout: 8000 });
+    await expect(page.locator(".toast__text", { hasText: "Your video is ready to watch!" })).toBeVisible();
+    expect(await shows(page)).toContain("confetti");
+  });
+
+  test("a chat's Undo that ends behind Clip Factory never moves the owner out of it", async ({ page }) => {
+    test.setTimeout(60_000);
+    await on(page);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    // The chat open last is "What makes a good hook"; the list is asked for itself.
+    await page.goto("/stories/chat/01JSTCV0000000000000000002");
+    await storiesReady(page);
+    await page.goto("/stories/chat?all=1");
+    await storiesReady(page);
+    await page.locator(".st-chat-row", { hasText: "Winter ideas for Pip" }).getByRole("button", { name: /^Delete/ }).click();
+    await expect(page.locator(".st-chat-row", { hasText: "Winter ideas for Pip" })).toHaveCount(0);
+
+    await toClips(page);
+    await settle(page);
+    const at = page.url();
+    // The Undo window (6 s) ends behind Clip Factory and the chat list loads again there.
+    await page.waitForTimeout(9000);
+    expect(page.url()).toBe(at);
+    await expect(page.locator('[data-app-pane="clips"]')).toBeVisible();
+    await expect(page.locator('[data-app-pane="stories"]')).toBeHidden();
+    // Back is Clip Factory's own history still: the Lamo Stories list, as the owner left it.
+    await toStories(page);
+    await expect(page).toHaveURL(/\/stories\/chat\?all=1$/);
+    await expect(page.locator(".st-chat-row", { hasText: "Winter ideas for Pip" })).toHaveCount(0);
+    await expect(page.locator(".st-chat-row", { hasText: "What makes a good hook" })).toBeVisible();
+  });
+
+  test("Clip Factory's Home opened for a campaign opens fresh after a round trip (never half kept), on the way the owner was on", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const FAZE = "200ea21b-be80-4db8-b552-8e32b148604e";
+    await page.goto(`/?campaign=${FAZE}`);
+    await settle(page);
+    const link = page.getByLabel("YouTube, Twitch or Kick link");
+    await link.fill("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    const campaignForm = page.getByRole("form", { name: "Make campaign clips" });
+    await expect(campaignForm).toBeVisible();
+    await watchShows(page);
+
+    await toStories(page);
+    await storiesReady(page);
+    // Let go at once: it never draws behind Lamo Stories on Lamo Stories' address.
+    await expect(page.locator('[data-app-pane="clips"]')).toHaveCount(0);
+    await toClips(page);
+    await settle(page);
+    await expect(page).toHaveURL(new RegExp(`/\\?campaign=${FAZE}$`));
+    await expect(campaignForm).toBeVisible();
+    await expect(link).toHaveValue("");
+    expect((await shows(page)).filter((t) => t.startsWith("toast")), "no upload or form was stopped behind Lamo Stories").toEqual([]);
+
+    // The normal way of Home is where switching back lands once the owner went there.
+    await page.getByRole("link", { name: "Make normal clips instead" }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await settle(page);
+    await page.getByLabel("YouTube, Twitch or Kick link").fill("https://www.youtube.com/watch?v=aqz-KE-bpKQ");
+    await toStories(page);
+    await storiesReady(page);
+    await expect(page.locator('[data-app-pane="clips"]')).toHaveAttribute("inert", "");
+    await toClips(page);
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByLabel("YouTube, Twitch or Kick link")).toHaveValue("https://www.youtube.com/watch?v=aqz-KE-bpKQ");
+  });
+
+  test("Clip Factory calm, Lamo Stories' own motion on: Lamo Stories' highlights slide and its confetti shows; Clip Factory's stay calm", async ({ page }) => {
+    // Lamo Stories' own device choice: motion on (what its Settings card writes).
+    await on(page, () => localStorage.setItem("cf.stories.prefs", JSON.stringify({ setupShown: ["stories"], more: { "motion.reduce": false } })));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    // Clip Factory's own: calm motion, from its Settings.
+    await page.goto("/settings/look-and-feel/motion");
+    await settle(page);
+    await page.getByRole("switch", { name: "Reduce motion" }).click();
+    await expect(page.locator("html")).toHaveClass(/(^|\s)reduce-motion(\s|$)/);
+    const slid = () => page.evaluate(() => document.getAnimations().some((a) => (a as Animation & { id: string }).id === "glide-slide"));
+
+    await toStories(page);
+    await storiesReady(page);
+    await expect(page.locator("html")).not.toHaveClass(/(^|\s)reduce-motion(\s|$)/);
+    await page.locator(".st-rail").getByRole("link", { name: "Library", exact: true }).click();
+    await storiesReady(page);
+    await page.getByRole("tab", { name: "Videos" }).click();
+    await expect.poll(slid, { timeout: 2000 }).toBe(true);
+
+    // Its studio confetti too (saving an idea), which Clip Factory's calm setting used to still.
+    await page.locator(".st-rail").getByRole("link", { name: "Ideas", exact: true }).click();
+    await storiesReady(page);
+    await watchShows(page);
+    await page.getByRole("button", { name: "New idea" }).click();
+    const form = page.getByRole("form", { name: "New idea" });
+    await form.getByLabel("Title").fill("Pip and the icy hill");
+    await form.getByLabel("What happens, in one line").fill("Pip slides down an icy hill and stops just in time.");
+    await form.locator(".st-s-pick__opt").first().click();
+    await form.getByRole("button", { name: "Save idea" }).click();
+    await expect.poll(() => shows(page)).toContain("confetti");
+
+    // Clip Factory keeps its own calm: its highlights jump, as before.
+    await toClips(page);
+    await settle(page);
+    await expect(page.locator("html")).toHaveClass(/(^|\s)reduce-motion(\s|$)/);
+    await page.locator(".sidebar__item[href='/library']").click();
+    await settle(page);
+    await page.waitForTimeout(300);
+    await page.getByRole("radio", { name: "Not posted yet", exact: true }).check({ force: true });
+    await page.waitForTimeout(150);
+    expect(await slid()).toBe(false);
+  });
+});
+
 test.describe("Lamo Stories' own sounds and motion (cf.stories.prefs, §45.34)", () => {
   type Log = { kind: string; sound: number; muted: boolean }[];
   const log = (page: Page) => page.evaluate(() => (window as unknown as { __cfSoundLog?: Log }).__cfSoundLog ?? []);

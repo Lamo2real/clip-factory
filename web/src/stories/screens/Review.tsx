@@ -8,9 +8,10 @@ import "../styles/studio.css";
 import { useEffect, useRef, useState } from "react";
 import { A } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { burst } from "../../lib/confetti.ts";
+import { useAppActive } from "../pane.tsx";
 import { useLoad, usePoll } from "../../lib/hooks.ts";
-import { storiesReduceMotion, storiesSound } from "../prefs.ts";
+import { storiesSound } from "../prefs.ts";
+import { starBurst } from "../ui.tsx";
 import { storiesApi } from "../api/client.ts";
 import type { ModelOverride, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
@@ -182,8 +183,11 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const live = (!!job && (job.status === "queued" || job.status === "running")) || story?.status === "producing";
   const inFlight = (pubs.data ?? []).some((j) => j.publishingStatus === "queued" || j.publishingStatus === "publishing");
 
-  usePoll(() => loaded.reload(), live, 2000);
-  usePoll(() => pubs.reload(), inFlight, 10_000);
+  // Not while Clip Factory is on screen: a remake or a post that finished meanwhile is noticed, and celebrated, once
+  // this page is back on screen (never confetti, a toast or the cheer over Clip Factory).
+  const active = useAppActive();
+  usePoll(() => loaded.reload(), live && active, 2000);
+  usePoll(() => pubs.reload(), inFlight && active, 10_000);
 
   // A remake that finishes while the owner watches.
   useEffect(() => {
@@ -209,7 +213,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     if (!before) return;
     const up = list.filter((j) => j.publishingStatus === "posted" && before.get(j.publishingJobId) !== "posted");
     if (!up.length) return;
-    if (!storiesReduceMotion()) burst(undefined, 140);
+    starBurst(undefined, 140);
     storiesSound("success", { onNextTap: true });
     toast.success(`Posted to ${up.map((j) => PLATFORM_LABEL[j.platform]).join(" and ")}!`);
     void loaded.reload();
