@@ -28,6 +28,8 @@ import {
   EFFORT_LABEL,
   HOST_LABEL,
   hostIdOf,
+  keySavedFor,
+  makerModelsIn,
   MAX_CUSTOM_MODELS,
   REASONING_EFFORTS,
   type Effort,
@@ -37,6 +39,7 @@ import {
   type ModelHost,
   type ModelInfo,
   type Price,
+  type ProviderStatus,
 } from "../api/types.ts";
 import { baseUrlProblem } from "./MakerModels.tsx";
 import { Btn, cheer, Chip, hostName, MODEL_STATUS, Note, SetCard, SetPick, SetSelect, SetSwitch, SIcon, whenText } from "./bits.tsx";
@@ -515,7 +518,23 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
   );
 }
 
-function OwnRow({ ws, m, stale = false, onChanged, onEdit }: { ws: string; m: ModelInfo; /** its model ID or Region changed since its last check */ stale?: boolean; onChanged: () => Promise<void>; onEdit: () => void }) {
+function OwnRow({
+  ws,
+  m,
+  stale = false,
+  keySaved,
+  onChanged,
+  onEdit,
+}: {
+  ws: string;
+  m: ModelInfo;
+  /** its model ID or Region changed since its last check */
+  stale?: boolean;
+  /** on a keyed host: whether its key is saved (from GET …/providers, §45.37 G4) */
+  keySaved?: boolean | undefined;
+  onChanged: () => Promise<void>;
+  onEdit: () => void;
+}) {
   const toast = useToast();
   const [sure, setSure] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -550,7 +569,7 @@ function OwnRow({ ws, m, stale = false, onChanged, onEdit }: { ws: string; m: Mo
         Made by {m.provider} · on {hostName(m.host ?? "Amazon Bedrock", m.baseUrl, m.hostId)}
         {m.region && hostIdOf(m.hostId ?? m.host) === "bedrock" ? ` in ${m.region}` : ""} · <code className="st-stg-code">{m.modelId}</code>
       </p>
-      {m.keySaved === false ? (
+      {keySaved === false ? (
         <Note tone="sun" icon="key">
           Paste your {HOST_LABEL[hostIdOf(m.hostId ?? m.host)]} key in Provider keys below, then tap Check models.
         </Note>
@@ -630,8 +649,22 @@ export function movedUnchecked(saved: Saved | null, m: Pick<ModelInfo, "status" 
  * The "Add a model" card: the owner's own Bedrock models, the form, and after a save the suggestion to check it
  * (`check` is the section's Check models for just that model).
  */
-export function OwnModels({ ws, models, onChanged, check }: { ws: string; models: ModelInfo[]; onChanged: () => Promise<void>; check: (key: string) => ReactNode }) {
+export function OwnModels({
+  ws,
+  models,
+  providers = null,
+  onChanged,
+  check,
+}: {
+  ws: string;
+  models: ModelInfo[];
+  /** GET …/providers: each keyed host's key state, and the picture, video and sound models' keys (one name across both kinds) */
+  providers?: readonly ProviderStatus[] | null;
+  onChanged: () => Promise<void>;
+  check: (key: string) => ReactNode;
+}) {
   const [open, setOpen] = useState<"new" | string | null>(null);
+  const taken = [...models.map((m) => m.key), ...makerModelsIn(providers).map((m) => m.key)];
   const [added, setAdded] = useState<Saved | null>(null);
   const own = models.filter((m) => m.custom);
   const full = own.length >= MAX_CUSTOM_MODELS;
@@ -668,7 +701,7 @@ export function OwnModels({ ws, models, onChanged, check }: { ws: string; models
           ws={ws}
           start={null}
           editing={false}
-          taken={models.map((m) => m.key)}
+          taken={taken}
           onCancel={() => setOpen(null)}
           onSaved={(m) => {
             setOpen(null);
@@ -686,7 +719,7 @@ export function OwnModels({ ws, models, onChanged, check }: { ws: string; models
                   ws={ws}
                   start={m}
                   editing
-                  taken={models.map((x) => x.key)}
+                  taken={taken}
                   onCancel={() => setOpen(null)}
                   onSaved={(saved) => {
                     setOpen(null);
@@ -702,7 +735,7 @@ export function OwnModels({ ws, models, onChanged, check }: { ws: string; models
                 />
               </li>
             ) : (
-              <OwnRow key={m.key} ws={ws} m={m} stale={stale && m.key === just?.key} onChanged={onChanged} onEdit={() => setOpen(m.key)} />
+              <OwnRow key={m.key} ws={ws} m={m} stale={stale && m.key === just?.key} keySaved={keySavedFor(providers, m.hostId ?? m.host)} onChanged={onChanged} onEdit={() => setOpen(m.key)} />
             ),
           )}
         </ul>

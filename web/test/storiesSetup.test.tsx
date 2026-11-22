@@ -198,13 +198,15 @@ describe("steps 2 and 3: the default model and effort", () => {
 });
 
 describe("step 4 and the connect steps", () => {
-  it("Nova Reel's note says videos stop until it is ready, never that the built-in animation takes over", async () => {
+  it("Luma AI Ray2's note (Nova Reel's before Amazon ended it) says videos stop until it is ready, never that the built-in animation takes over", async () => {
     await start({ fresh: true });
     await click(button("Pick how videos are made"));
-    await click($$("[role=radio]").find((r) => r.textContent?.includes("Amazon Nova Reel"))!);
+    // §45.37 G7: Amazon ended Nova Reel, so step 4 never offers it; Luma AI Ray2 makes the AI cut-aways.
+    expect($$("[role=radio]").some((r) => r.textContent?.includes("Amazon Nova Reel"))).toBe(false);
+    await click($$("[role=radio]").find((r) => r.textContent?.includes("Luma AI Ray2"))!);
     // Every create, remake and change stops while it is not ready (§45.34 "A provider that is not ready"), whatever the scenes.
     expect(document.body.textContent).toContain("Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in animation by itself.");
-    expect(document.body.textContent).toContain("Pick Built-in animation to keep making videos.");
+    expect(document.body.textContent).toContain("Pick Built-in animation above to keep making videos.");
     expect(document.body.textContent).not.toMatch(/a scene without characters stops/);
     expect(document.body.textContent).not.toMatch(/keep using the built-in animation/);
   });
@@ -215,5 +217,34 @@ describe("step 4 and the connect steps", () => {
     expect(stepTitle()).toBe("Connect X");
     expect(document.body.textContent).toContain("This is Clip Factory's own account, so this step stays to do.");
     expect(stepState("Connect X")).not.toContain("is-done");
+  });
+
+  it("the connect step of Clip Factory's own account never offers sharing it (§45.37 G8 (c), (d))", async () => {
+    await start({});
+    await click(button("Connect X"));
+    // A different account made for Clip Factory Stories; nothing to share it with.
+    expect(document.body.textContent).toContain("Tap Pick another account below and sign in with a different one made for Clip Factory Stories.");
+    expect(document.body.textContent).toContain("This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.");
+    expect(document.body.textContent).not.toMatch(/for both|both apps/i);
+    for (const b of $$("button, [role=radio]")) expect(b.textContent ?? "").not.toMatch(/for both|share it/i);
+  });
+
+  it("step 4 of a workspace whose older pick is Amazon Nova Reel says it ended, with a one-tap replacement, and never saves it (§45.37 G7)", async () => {
+    await start({ fresh: true }, async () => {
+      const w = store.workspaces.find((x) => x.workspaceId === "stories")!;
+      (w.configuration as { providers: Record<string, unknown> }).providers.video = "nova-reel";
+    });
+    await click(button(/^\d*Pick how videos are made/));
+    expect(document.body.textContent).toContain("Amazon Nova Reel: Ended by Amazon on 30 Sep 2026.");
+    expect(document.body.textContent).not.toContain("To make it ready");
+    // "Use this" on the ended pick sends nothing.
+    await click(button("Use this"));
+    expect(calls.some((c) => c.name === "patchWorkspace")).toBe(false);
+    // One tap picks Luma AI Ray2; then Use this saves only the video maker and its model.
+    await click(button("Use Luma AI Ray2"));
+    expect($$("[role=radio]").find((r) => r.textContent?.includes("Luma AI Ray2"))?.getAttribute("aria-checked")).toBe("true");
+    await click(button("Use this"));
+    const body = calls.filter((c) => c.name === "patchWorkspace").at(-1)?.args[1] as { configuration: { providers: Record<string, unknown> } };
+    expect(body.configuration.providers).toEqual({ video: "luma-ray", videoModel: null });
   });
 });

@@ -15,6 +15,7 @@ import { storiesReduceMotion } from "../prefs.ts";
 import {
   IMAGE_MAKERS,
   MAKER_FIELD_OF,
+  makerModelsIn,
   OWN_MAKER,
   RESOLUTIONS,
   SOUND_MAKERS,
@@ -24,12 +25,13 @@ import {
   type MakerPrice,
   type ProviderStatus,
   type StoriesConfig,
+  type StoriesConfigPatch,
   type VideoAspect,
   type VideoResolution,
 } from "../api/types.ts";
 import { Btn, Chip, Failed, Loading, makerWho, MODEL_STATUS, money, Note, PROVIDER_STATE, SavedMark, SetCard, SetPick, SetSwitch, useSaved, whenText, type SIconName } from "./bits.tsx";
 import { useAi, useWorkspaceConfig } from "./data.ts";
-import { endedWords, fileMakerModels, regionWords } from "./makerFile.ts";
+import { bundledMakerModels, endedWords, regionWords } from "./makerFile.ts";
 import { MakerModels } from "./MakerModels.tsx";
 import { keepName, ProviderKeys } from "./ProviderKeys.tsx";
 import { MakerPrices } from "./ProviderPrices.tsx";
@@ -96,9 +98,15 @@ export function priceWords(p: MakerPrice | null | undefined): string | null {
   return `${money(p.perUnit, p.currency)} ${per}`;
 }
 
-/** The maker models from the file while the API's list loads (or when it fails): every one "Not checked yet". */
+/** The maker models from the file while GET …/providers loads (or when it fails): every one "Not checked yet". */
 export function fallbackMakerModels(): MakerModelInfo[] {
-  return fileMakerModels().map((m) => ({ ...m, custom: false, status: "not_checked", statusLine: "Not checked yet. Tap Check models.", checkedAt: null }));
+  return bundledMakerModels().map((m) => ({ ...m, custom: false, status: "not_checked", statusLine: "Not checked yet. Tap Check models to see if it works.", checkedAt: null }));
+}
+
+/** The maker models to show: from the maker rows of GET …/providers (§45.37: no route of their own), else the file's. */
+export function shownMakerModels(providers: readonly ProviderStatus[] | null | undefined): MakerModelInfo[] {
+  const listed = makerModelsIn(providers);
+  return providers && providers.some((p) => p.models) ? listed : fallbackMakerModels();
 }
 
 const QUALITY: { value: StoriesConfig["video"]["quality"]; label: string; line: string }[] = [
@@ -227,7 +235,7 @@ function MakerCard({
   c: StoriesConfig;
   providers: ProviderStatus[] | null;
   models: MakerModelInfo[];
-  save: (patch: Partial<StoriesConfig>) => void;
+  save: (patch: StoriesConfigPatch) => void;
   children?: ReactNode;
 }) {
   const card = MAKER_CARDS[kind];
@@ -237,10 +245,13 @@ function MakerCard({
   const own = models.filter((m) => m.custom && m.kind === kind).length;
   const p = stateOf(providers, maker);
   const ended = p?.state === "ended" || maker === "nova-canvas" || maker === "nova-reel";
-  const replacement = p?.replacedBy ?? (maker === "nova-canvas" ? "stability" : maker === "nova-reel" ? "luma-ray" : null);
+  const replacement = p?.replacement ?? (maker === "nova-canvas" ? "stability" : maker === "nova-reel" ? "luma-ray" : null);
   const mine = modelsOfMaker(models, kind, maker);
-  const used = usedModel(models, kind, maker, picked);
-  const pickMaker = (v: string) => save({ providers: { ...c.providers, [makerKey]: v, [modelKey]: null } as StoriesConfig["providers"] });
+  // The pick on screen first (it shows at once), else the model the API says the maker uses (`model`), else the same
+  // rule here while it loads.
+  const used = mine.find((m) => m.key === picked) ?? (p?.model ? mine.find((m) => m.key === p.model) : undefined) ?? usedModel(models, kind, maker, picked);
+  // Only this card's two fields are sent: the API checks only what the body names (§45.37 G1).
+  const pickMaker = (v: string) => save({ providers: { [makerKey]: v, [modelKey]: null } });
   // ElevenLabs makes the effects and the music bed, each with its own model: both are used, so there is no pick.
   const usesAll = kind === "audio" && maker === "elevenlabs" && mine.length > 1;
   return (
@@ -279,7 +290,7 @@ function MakerCard({
             stack
             value={used?.key ?? null}
             options={mine.map(modelOption)}
-            onChange={(v) => save({ providers: { ...c.providers, [modelKey]: v } as StoriesConfig["providers"] })}
+            onChange={(v) => save({ providers: { [modelKey]: v } })}
           />
           {used ? <ModelDetails m={used} /> : null}
         </>
@@ -360,13 +371,11 @@ export function LengthPicker({ value, onChange }: { value: number; onChange: (v:
 export function VideoSection({ ws }: { ws: string }) {
   const { workspace, config: c, save, saved: savedCount, busy } = useWorkspaceConfig(ws);
   const providers = useLoad(() => storiesApi().providers(ws), ws, "st-settings-providers");
-  const makerModels = useLoad(() => storiesApi().makerModels(ws), ws, "st-settings-maker-models");
   const usage = useLoad(() => storiesApi().usage(ws, 30), ws, "st-settings-usage");
   const ai = useAi(ws);
   const { saved, flash } = useSaved();
   const [priceOpen, setPriceOpen] = useState<string | null>(null);
   const reloadProviders = providers.reload;
-  const reloadModels = makerModels.reload;
   // A saved change shows "Saved" and asks the makers again (a newly picked one may need a check).
   useEffect(() => {
     if (!savedCount) return;
@@ -376,9 +385,10 @@ export function VideoSection({ ws }: { ws: string }) {
 
   if (!workspace.data) return workspace.error ? <Failed message={workspace.error} onRetry={() => void workspace.reload()} /> : <Loading label="Opening the video settings…" />;
   const p = providers.data;
-  const models = makerModels.data ?? fallbackMakerModels();
+  // The maker models are on the maker rows (§45.37 G1, G2), so one load brings the makers, their models and the keys.
+  const models = shownMakerModels(p);
   const reloadAll = async () => {
-    await Promise.all([reloadModels(), reloadProviders()]);
+    await reloadProviders();
   };
 
   return (
@@ -394,9 +404,8 @@ export function VideoSection({ ws }: { ws: string }) {
       <MakerCard kind="image" c={c} providers={p} models={models} save={save} />
       <MakerCard kind="audio" c={c} providers={p} models={models} save={save} />
       {providers.error && !p ? <Note tone="sun">{providers.error}</Note> : null}
-      {makerModels.error && !makerModels.data ? <Note tone="sun">{makerModels.error}</Note> : null}
 
-      <MakerModels ws={ws} models={models} onChanged={reloadAll} />
+      <MakerModels ws={ws} models={models} providers={p} aiKeys={ai.data?.models.map((m) => m.key) ?? []} onChanged={reloadAll} />
 
       <SetCard title="Shape and size" icon="ruler" id="shape" lede="New videos start with this shape. Shorts, Reels and TikTok want 9:16. You can change it for one video in Production › New.">
         <p className="st-stg-label">Shape</p>
@@ -467,9 +476,8 @@ export function VideoSection({ ws }: { ws: string }) {
             kinds={["images", "animation", "audio"]}
             also={["openai_compatible"]}
             onChange={(x) => {
+              // The key's row (and so every model on that host) shows the new key state; nothing else changes.
               providers.setData((l) => (l ? l.map((y) => (y.id === x.id ? keepName(y, x) : y)) : l));
-              // A model on that host can be checked now.
-              void reloadModels();
             }}
           />
         ) : null}

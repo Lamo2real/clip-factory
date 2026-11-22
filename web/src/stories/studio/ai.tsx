@@ -104,16 +104,22 @@ const STEP_WORDS: Record<string, string> = {
  * A step can make more than one call (the storyboard step writes the story, or a new take of some scenes, and then
  * the post captions), each its own record with its own `task` (§45.35 D5): those calls have their own words.
  */
-const TASK_WORDS: Record<string, string> = { scene_rewrite: "Write a new take", captions: "Post captions" };
+const TASK_WORDS: Record<string, string> = {
+  scene_rewrite: "Write a new take",
+  captions: "Post captions",
+  // §45.37 G5: the writer's re-staging pass (High), and a short chat edit (Low).
+  animation_plan: "Plan the animation",
+  text_edit: "Small word changes",
+};
 
 /** The words for one model record: its own task's when the step makes more than one call, else its step's. */
 export function modelUseWords(u: Pick<ModelUse, "step" | "task">, steps: Record<string, string> = STEP_WORDS): string {
   return (u.task ? TASK_WORDS[u.task] : undefined) ?? steps[u.step] ?? STEP_WORDS[u.step] ?? u.step;
 }
 
-/** Captions come after the call that wrote the story (the order the agent makes them). */
+/** The re-staging pass comes after the call that wrote the story, and the captions last (the order the agent makes them). */
 function taskRank(u: Pick<ModelUse, "task">): number {
-  return u.task === "captions" ? 1 : 0;
+  return u.task === "animation_plan" ? 1 : u.task === "captions" ? 2 : 0;
 }
 
 const AGENT_WORDS: Record<string, string> = {

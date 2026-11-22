@@ -149,22 +149,29 @@ describe("the makers' models in stories/config/models.json (§45.37 G1)", () => 
   it("the API lists the lead's bundled keys with AWS's own model ids, prices unknown, the built-ins staying the default", async () => {
     start();
     const models = await api.makerModels("stories");
-    const bundled = models.filter((m) => !m.custom);
+    // In the file's order (the maker rows list them maker by maker, so they are put back in the file's order here).
+    const order = ["nova-canvas", "stable-image-core", "stable-image-ultra", "sd3-5-large", "nova-reel", "luma-ray2", "polly-neural", "elevenlabs-effects", "elevenlabs-music"];
+    const bundled = models.filter((m) => !m.custom).sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+    expect(bundled.map((m) => m.key).sort()).toEqual([...order].sort());
+    // Who runs each, as the API names it: a keyed host by its label.
+    expect(bundled.filter((m) => m.maker === "elevenlabs").map((m) => [m.host, m.hostId])).toEqual([["ElevenLabs", "elevenlabs"], ["ElevenLabs", "elevenlabs"]]);
     expect(bundled.map((m) => [m.key, m.kind, m.maker, m.modelId, m.region, m.ended ?? null])).toEqual([
+      ["nova-canvas", "image", "nova-canvas", "amazon.nova-canvas-v1:0", "eu-west-1", "2026-09-30"],
       ["stable-image-core", "image", "stability", "stability.stable-image-core-v1:1", "us-west-2", null],
       ["stable-image-ultra", "image", "stability", "stability.stable-image-ultra-v1:1", "us-west-2", null],
       ["sd3-5-large", "image", "stability", "stability.sd3-5-large-v1:0", "us-west-2", null],
-      ["nova-canvas", "image", "nova-canvas", "amazon.nova-canvas-v1:0", "eu-west-1", "2026-09-30"],
-      ["luma-ray2", "video", "luma-ray", "luma.ray-v2:0", "us-west-2", null],
       ["nova-reel", "video", "nova-reel", "amazon.nova-reel-v1:1", "us-east-1", "2026-09-30"],
+      ["luma-ray2", "video", "luma-ray", "luma.ray-v2:0", "us-west-2", null],
       ["polly-neural", "audio", "polly", "neural", "eu-west-1", null],
-      ["elevenlabs-effects", "audio", "elevenlabs", "eleven_text_to_sound_v2", "", null],
-      ["elevenlabs-music", "audio", "elevenlabs", "music_v1", "", null],
+      ["elevenlabs-effects", "audio", "elevenlabs", "eleven_text_to_sound_v2", null, null],
+      ["elevenlabs-music", "audio", "elevenlabs", "music_v1", null, null],
     ]);
     expect(bundled.every((m) => m.price === null)).toBe(true);
     // Nothing is shown as working because it is listed.
     expect(bundled.filter((m) => !m.ended).every((m) => m.status === "not_checked")).toBe(true);
-    expect(models.find((m) => m.key === "nova-canvas")?.statusLine).toBe("Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Lamo Stories › Settings › Video.");
+    // An ended model is never checked (the API's makers.model_info): its end day, in words.
+    expect(models.find((m) => m.key === "nova-canvas")).toMatchObject({ status: "not_checked", endedLine: "Ended by Amazon on 30 Sep 2026", checkedAt: null });
+    expect(models.find((m) => m.key === "luma-ray2")?.regionLine).toBe("Runs in the US (Oregon)");
     const w = await api.getWorkspace("stories");
     expect((w.configuration as StoriesConfig).providers).toMatchObject({ images: "builtin-rig", video: "builtin-2d", audio: "builtin-synth" });
   });
@@ -202,25 +209,39 @@ describe("the owner's own picture, video and sound models (§45.37 G2)", () => {
       await expect(put("custom-x", { kind: "image", host: "openai_compatible", modelId: "my-picture-model", baseUrl }), baseUrl).rejects.toMatchObject({ status: 400, field: "baseUrl" });
     await expect(put("custom-x", { baseUrl: "https://api.example.com/v1" })).rejects.toMatchObject({ status: 400, field: "baseUrl" });
     const picture = await put("custom-paint", { label: "Paint", provider: "Acme", kind: "image", host: "openai_compatible", modelId: "paint-2", baseUrl: "https://api.example.com/v1/" });
-    expect(picture).toMatchObject({ key: "custom-paint", kind: "image", hostId: "openai_compatible", host: "api.example.com", baseUrl: "https://api.example.com/v1", region: "", custom: true, maker: "own-images", status: "not_checked", keySaved: false });
+    // The API's MakerModelInfo: no key state on the model (GET …/providers' `key` says it, §45.37 G4).
+    expect(picture).toMatchObject({ key: "custom-paint", kind: "image", hostId: "openai_compatible", host: "api.example.com", baseUrl: "https://api.example.com/v1", region: null, custom: true, maker: "own-images", status: "not_checked" });
+    expect(picture).not.toHaveProperty("keySaved");
     const video = await put("custom-ray", { label: "My Ray", provider: "Luma AI", kind: "video", host: "bedrock", modelId: "luma.ray-v2:0", region: "us-west-2" });
     expect(video).toMatchObject({ hostId: "bedrock", host: "Amazon Bedrock", region: "us-west-2", maker: "own-video" });
-    expect(video).not.toHaveProperty("keySaved");
     const sound = await put("custom-rain", {});
-    expect(sound).toMatchObject({ hostId: "elevenlabs", maker: "own-sound", keySaved: false, statusLine: "Not checked yet. Save your ElevenLabs key in Settings › AI › Provider keys, then tap Check models." });
+    expect(sound).toMatchObject({ hostId: "elevenlabs", maker: "own-sound", statusLine: "Not checked yet. Tap Check models to see if it works." });
+    // Where the screens read the models and the key from: the maker rows of GET …/providers.
+    const rows = await api.providers("stories");
+    expect(rows.find((r) => r.id === "own-sound")?.models?.map((m) => m.key)).toEqual(["custom-rain"]);
+    expect(rows.find((r) => r.id === "own-images")?.models?.map((m) => m.key)).toEqual(["custom-paint"]);
+    expect(rows.find((r) => r.id === "builtin-synth")).not.toHaveProperty("models");
+    expect(rows.find((r) => r.id === "elevenlabs")?.key?.saved).toBe(false);
+    expect(rows.find((r) => r.id === "openai_compatible")?.key?.saved).toBe(false);
   });
 
   it("at most 20 of each kind; Remove is refused while Settings › Video picks it, and a bundled one is never removed", async () => {
     start();
     for (let i = 0; i < 20; i++) await api.putMakerModel("stories", `custom-s${i}`, { ...rain, label: `Sound ${i}` });
-    await expect(api.putMakerModel("stories", "custom-s20", { ...rain, label: "Sound 20" })).rejects.toMatchObject({ status: 400, message: "You can add up to 20 sound models. Remove one first." });
+    await expect(api.putMakerModel("stories", "custom-s20", { ...rain, label: "Sound 20" })).rejects.toMatchObject({ status: 409, message: "You can add at most 20 sound models. Remove one first." });
     // Another kind still has room.
     await api.putMakerModel("stories", "custom-v0", { label: "V0", provider: "Luma AI", kind: "video", host: "bedrock", modelId: "luma.ray-v2:0", region: "us-west-2", price: null, note: "" });
     await patch(pick("builtin-rig", { audio: "own-sound", audioModel: "custom-s3" }));
-    await expect(api.deleteMakerModel("stories", "custom-s3")).rejects.toMatchObject({ status: 409, message: "Sound 3 is still used by the Sound maker in Settings › Video. Pick another model there first." });
-    await expect(api.putMakerModel("stories", "custom-s3", { ...rain, label: "Sound 3", kind: "image", host: "openai_compatible", baseUrl: "https://api.example.com/v1" })).rejects.toMatchObject({ status: 409 });
+    await expect(api.deleteMakerModel("stories", "custom-s3")).rejects.toMatchObject({ status: 409, message: "Sound 3 is picked as the sound model in Settings › Video. Pick another model there first, then remove it." });
+    // An added model keeps what it makes, picked or not (the API's KIND_FIXED).
+    const fixed = "A model you added keeps what it makes. Remove it and add it again as another kind.";
+    await expect(api.putMakerModel("stories", "custom-s3", { ...rain, label: "Sound 3", kind: "image", host: "openai_compatible", baseUrl: "https://api.example.com/v1" })).rejects.toMatchObject({ status: 400, message: fixed, field: "kind" });
+    await expect(api.putMakerModel("stories", "custom-s5", { ...rain, label: "Sound 5", kind: "image", host: "openai_compatible", baseUrl: "https://api.example.com/v1" })).rejects.toMatchObject({ status: 400, message: fixed, field: "kind" });
     await expect(api.deleteMakerModel("stories", "stable-image-core")).rejects.toMatchObject({ status: 409 });
     await expect(api.deleteMakerModel("stories", "custom-s4")).resolves.toBeUndefined();
+    // Two models may share a name, as in the API (the key tells them apart).
+    await expect(api.putMakerModel("stories", "custom-s4b", { ...rain, label: "Sound 5" })).resolves.toMatchObject({ key: "custom-s4b", label: "Sound 5" });
+    await expect(api.deleteMakerModel("stories", "custom-s4b")).resolves.toBeUndefined();
     await patch(pick("builtin-rig", { audio: "builtin-synth" }));
     await expect(api.deleteMakerModel("stories", "custom-s3")).resolves.toBeUndefined();
     expect((await api.makerModels("stories")).filter((m) => m.custom && m.kind === "audio")).toHaveLength(18);
@@ -290,7 +311,7 @@ describe("the owner's own picture, video and sound models (§45.37 G2)", () => {
     await click(byText("button", /^Remove/, byText(".st-stg-own", /Rain sounds/, box())));
     await click(byText("button", "Yes, remove it", byText(".st-stg-own", /Rain sounds/, box())));
     await settle(6);
-    expect(byText(".st-stg-own", /Rain sounds/, box()).textContent).toContain("Rain sounds is still used by the Sound maker in Settings › Video. Pick another model there first.");
+    expect(byText(".st-stg-own", /Rain sounds/, box()).textContent).toContain("Rain sounds is picked as the sound model in Settings › Video. Pick another model there first, then remove it.");
     // Check models: an access check that costs nothing, in the provider's own words.
     await click(byText("button", /Check models/, box()));
     await act(async () => await new Promise((r) => setTimeout(r, 1300)));

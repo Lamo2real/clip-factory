@@ -63,12 +63,12 @@ function makers(): ProviderStatus[] {
     { kind: "writer", id: "bedrock-claude", label: "Claude in Amazon Bedrock", state: "on", line: "Writes the stories." },
     { kind: "animation", id: "builtin-2d", label: "Built-in animation", state: "on", line: "Animates every scene." },
     { kind: "animation", id: "luma-ray", label: "Luma AI Ray2 (AI video)", state: c.providers.video === "luma-ray" ? "needs_setup" : "off", line: LUMA_NOT_READY },
-    { kind: "animation", id: "nova-reel", label: "Amazon Nova Reel", state: "ended", line: "Amazon Nova Reel was ended by Amazon on 30 Sep 2026.", replacedBy: "luma-ray" },
+    { kind: "animation", id: "nova-reel", label: "Amazon Nova Reel", state: "ended", line: "Ended by Amazon on 30 Sep 2026.", endedAt: "2026-09-30", replacement: "luma-ray" },
     { kind: "images", id: "builtin-rig", label: "Built-in characters", state: "on", line: "Draws every character." },
     c.providers.images === "stability"
       ? { kind: "images", id: "stability", label: "Stability AI pictures", state: "needs_setup", line: "Make one portrait to check it works." }
       : { kind: "images", id: "stability", label: "Stability AI pictures", state: "off", line: "Off." },
-    { kind: "images", id: "nova-canvas", label: "Amazon Nova Canvas", state: "ended", line: "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026.", replacedBy: "stability" },
+    { kind: "images", id: "nova-canvas", label: "Amazon Nova Canvas", state: "ended", line: "Ended by Amazon on 30 Sep 2026.", endedAt: "2026-09-30", replacement: "stability" },
     { kind: "audio", id: "builtin-synth", label: "Built-in sounds", state: "on", line: "Makes every sound." },
     ...(noKeyedMakers
       ? []
@@ -89,7 +89,13 @@ function fakeApi(): StoriesApi {
     getWorkspace: async () => structuredClone(workspace),
     patchWorkspace: async (_ws, patch) => {
       if (patch.version !== workspace.version) throw Object.assign(new Error("stale"), { code: "conflict" });
-      workspace = { ...workspace, configuration: { ...(workspace.configuration as StoriesConfig), ...patch.configuration }, version: workspace.version + 1 };
+      // As the API: each part merged onto the stored one; a new maker without its model in the body starts from its first.
+      const before = workspace.configuration as StoriesConfig;
+      const body = patch.configuration ?? {};
+      const providers = { ...before.providers, ...(body.providers ?? {}) };
+      for (const [maker, model] of [["images", "imageModel"], ["video", "videoModel"], ["audio", "audioModel"]] as const)
+        if (body.providers?.[maker] !== undefined && body.providers[maker] !== before.providers[maker] && !(model in body.providers)) providers[model] = null;
+      workspace = { ...workspace, configuration: { ...before, ...body, providers } as StoriesConfig, version: workspace.version + 1 };
       return structuredClone(workspace);
     },
     providers: async () => structuredClone([...makers(), ...providers]),
@@ -576,7 +582,8 @@ describe("Video", () => {
     expect(luma.textContent).toContain("Runs in the US (Oregon)");
     await click(luma);
     await settle();
-    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { providers: { images: "builtin-rig", video: "luma-ray", videoModel: null, audio: "builtin-synth" } }, version: 3 });
+    // Only this card's two fields (§45.37 G1): the API checks only what the body names.
+    expect(called("patchWorkspace").at(-1)?.args[1]).toEqual({ configuration: { providers: { video: "luma-ray", videoModel: null } }, version: 3 });
     expect(byText("[role=radio]", /Luma AI Ray2/, group("Video maker")).textContent).toContain("Not ready yet");
     // Its one model, with who makes it, where it runs and that no price is known; and the API's not-ready sentence once.
     const details = $<HTMLElement>('[data-maker-model="luma-ray2"]', card("Video maker"))!;
@@ -592,7 +599,7 @@ describe("Video", () => {
     expect(byText("[role=radio]", /Nova Canvas/, group("Picture maker")).getAttribute("aria-disabled")).toBe("true");
     await click(byText("[role=radio]", /Stability AI/, group("Picture maker")));
     await settle();
-    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { providers: { images: "stability", imageModel: null, video: "builtin-2d" } }, version: 5 });
+    expect(called("patchWorkspace").at(-1)?.args[1]).toEqual({ configuration: { providers: { images: "stability", imageModel: null } }, version: 5 });
     // Stability AI has three models: the first is used until the owner picks another, each with its price line and status.
     const models = $$("[role=radio]", group("Picture maker's model"));
     expect(models.map((r) => r.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["Stable Image Core", "Stable Image Ultra", "Stable Diffusion 3.5 Large"]);
@@ -601,7 +608,8 @@ describe("Video", () => {
     expect(models[1]!.textContent).toContain("Not checked yet");
     await click(models[1]!);
     await settle();
-    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { providers: { images: "stability", imageModel: "stable-image-ultra" } }, version: 6 });
+    expect(called("patchWorkspace").at(-1)?.args[1]).toEqual({ configuration: { providers: { imageModel: "stable-image-ultra" } }, version: 6 });
+    expect((workspace.configuration as StoriesConfig).providers).toMatchObject({ images: "stability", imageModel: "stable-image-ultra", video: "builtin-2d", audio: "builtin-synth" });
     expect($('[data-maker-model="stable-image-ultra"]', card("Picture maker"))?.textContent).toContain("Stable Image Ultra");
     expect(card("Picture maker").textContent).toContain("Make one portrait to check it works.");
   });
@@ -636,6 +644,8 @@ describe("Video", () => {
     await settle();
     expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { providers: { audio: "builtin-synth" } } });
     expect(sound().textContent).not.toContain("spoken voice. To make");
+    // A sound maker's change never re-sends the picture or video picks (an older stored pick never blocks it).
+    for (const c of called("patchWorkspace")) expect(Object.keys((c.args[1] as { configuration: { providers: object } }).configuration.providers).sort()).toEqual(["audio", "audioModel"]);
   });
 
   it("an older pick of an ended maker says so, with a one-tap replacement; nothing swaps by itself (§45.37)", async () => {

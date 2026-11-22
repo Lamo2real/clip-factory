@@ -41,6 +41,7 @@ import type {
   UsageSummary,
   Workspace,
 } from "./types.ts";
+import { makerModelsIn } from "./types.ts";
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -222,7 +223,8 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     checkModels: async (ws, models, makers) => (await call<{ task: AiTask }>("POST", w(ws, "/ai/check-models"), { ...(models ? { models } : {}), ...(makers ? { makers } : {}) })).task,
     setModelPrice: async (ws, modelKey, price) => (await call<{ model: ModelInfo }>("PUT", w(ws, `/ai/prices/${id(modelKey)}`), price ?? {})).model,
     // The makers' models (§45.37 G1, G2): bundled and added, each with its access check's status.
-    makerModels: async (ws) => (await call<{ models: MakerModelInfo[] }>("GET", w(ws, "/makers/models"))).models,
+    // The maker models come on the maker rows of GET …/providers (§45.37 G1, G2): there is no route of their own.
+    makerModels: async (ws) => makerModelsIn((await call<{ providers: ProviderStatus[] }>("GET", w(ws, "/providers"))).providers),
     putMakerModel: async (ws, key, def) => (await call<{ model: MakerModelInfo }>("PUT", w(ws, `/makers/models/${id(key)}`), def)).model,
     deleteMakerModel: (ws, key) => call<void>("DELETE", w(ws, `/makers/models/${id(key)}`)),
     usage: async (ws, days) => (await call<{ usage: UsageSummary }>("GET", w(ws, `/usage${q({ days })}`))).usage,

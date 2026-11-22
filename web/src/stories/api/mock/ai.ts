@@ -43,7 +43,6 @@ import type {
   UsageSummary,
 } from "../types.ts";
 import {
-  AMAZON_ENDED_ON,
   callingFor,
   CUSTOM_MODEL_KEY,
   EFFORT_LABEL,
@@ -58,7 +57,7 @@ import {
   OWN_MAKER,
   type ModelCalling,
 } from "../types.ts";
-import { fileMakerModels, hasMakerLists, type FileMakerModel } from "../../settings/makerFile.ts";
+import { bundledMakerModels, type FileMakerModel } from "../../settings/makerFile.ts";
 import { delay, type MockStore } from "./store.ts";
 
 export const KEYS = [
@@ -68,7 +67,6 @@ export const KEYS = [
   "deleteAiModel",
   "checkModels",
   "setModelPrice",
-  "makerModels",
   "putMakerModel",
   "deleteMakerModel",
   "usage",
@@ -408,15 +406,11 @@ export function allModels(store: MockStore): ModelEntry[] {
   return [...MOCK_MODELS, ...own];
 }
 
-/** "Not checked yet. Save your Anthropic API key in Settings › AI › Provider keys, then tap Check models." (the API's needs_key_line) */
-export const needsKeyLine = (host: ModelHost) => `Not checked yet. Save your ${HOST_LABEL[host]} key in Settings › AI › Provider keys, then tap Check models.`;
-
 function modelInfo(store: MockStore, m: ModelEntry): ModelInfo {
   const st = state(store).status[m.key] ?? { status: "not_checked" as const, line: "Not checked yet. Tap Check models.", checkedAt: null };
   const owner = config(store).prices[m.key];
   const hostId: ModelHost = m.custom?.hostId ?? "bedrock";
-  const keyed = KEYED_HOSTS.includes(hostId);
-  const keySaved = keyed ? hostHasKey(store, hostId) : undefined;
+  // As the API's ModelInfo: no key state here (the screens read it from GET …/providers' `key`, §45.37 G4).
   return {
     key: m.key,
     label: m.label,
@@ -426,13 +420,12 @@ function modelInfo(store: MockStore, m: ModelEntry): ModelInfo {
     defaultEffort: m.defaultEffort,
     vision: m.vision,
     status: st.status,
-    statusLine: keyed && !keySaved && st.status === "not_checked" ? needsKeyLine(hostId) : st.line,
+    statusLine: st.line,
     checkedAt: st.checkedAt,
     price: owner ? { ...owner } : m.pricing ? { ...m.pricing } : null,
     custom: !!m.custom,
     host: m.host ?? MODEL_HOST,
     hostId,
-    ...(keyed ? { keySaved } : {}),
     ...(m.custom
       ? {
           region: m.custom.region,
@@ -704,27 +697,69 @@ function cleanHost(host: unknown, baseUrl: unknown, allowed: readonly ModelHost[
 }
 const KNOWN_HOSTS: ModelHost[] = ["bedrock", "anthropic", "openai_compatible", "elevenlabs"];
 
-/** Addresses that never reach the public internet (the API's hosts.private_host, in short). */
-const PRIVATE_HOST = /^(localhost|metadata|instance-data)$|\.(localhost|local|localdomain|internal|intranet|lan|home|corp|private|test|invalid|example|onion|arpa)$|^(10|127|0)\.|^169\.254\.|^192\.168\.|^172\.(1[6-9]|2\d|3[01])\.|^\[|^\d+$/;
+/** Names that never reach the public internet (the API's hosts.LOCAL_NAMES and LOCAL_SUFFIXES). */
+const LOCAL_NAMES = ["localhost", "instance-data", "metadata", "metadata.google.internal"];
+const LOCAL_SUFFIXES = [".localhost", ".local", ".localdomain", ".internal", ".intranet", ".lan", ".home", ".home.arpa", ".corp", ".private", ".test", ".invalid", ".example", ".onion", ".arpa"];
+const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/** The IPv4 ranges that are not global, multicast or reserved (what the API's ipaddress checks refuse). */
+const NOT_GLOBAL_V4: [number, number][] = [
+  [0x00000000, 8], // 0/8 "this network"
+  [0x0a000000, 8], // 10/8
+  [0x64400000, 10], // 100.64/10 shared (CGNAT)
+  [0x7f000000, 8], // 127/8 loopback
+  [0xa9fe0000, 16], // 169.254/16 link-local (the metadata address)
+  [0xac100000, 12], // 172.16/12
+  [0xc0000000, 24], // 192.0.0/24
+  [0xc0000200, 24], // 192.0.2/24 documentation
+  [0xc0a80000, 16], // 192.168/16
+  [0xc6120000, 15], // 198.18/15 benchmarking
+  [0xc6336400, 24], // 198.51.100/24 documentation
+  [0xcb007100, 24], // 203.0.113/24 documentation
+  [0xe0000000, 4], // 224/4 multicast
+  [0xf0000000, 4], // 240/4 reserved, and 255.255.255.255
+];
+
+/** True for anything that is not a public internet name or address (the API's hosts.private_host). */
+export function privateHost(host: string): boolean {
+  const name = host.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.+$/, "");
+  if (!name) return true;
+  // Any IPv6 literal: the mock does not tell its global ones apart, so none is called (the API allows global ones).
+  if (name.includes(":")) return true;
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(name);
+  if (v4) {
+    const n = v4.slice(1).reduce((a, x) => a * 256 + Number(x), 0);
+    return NOT_GLOBAL_V4.some(([net, bits]) => Math.floor(n / 2 ** (32 - bits)) === Math.floor(net / 2 ** (32 - bits)));
+  }
+  if (LOCAL_NAMES.includes(name) || LOCAL_SUFFIXES.some((x) => name.endsWith(x))) return true;
+  const labels = name.split(".");
+  // A single-label name resolves inside a network, never on the internet; an all-numbers name is an odd IPv4 spelling.
+  if (labels.length < 2 || !labels.every((l) => DNS_LABEL.test(l))) return true;
+  return labels.every((l) => /^(0x[0-9a-f]*|[0-9]+)$/.test(l)) || /^\d+$/.test(labels.at(-1)!);
+}
 
 /** An https base URL with no name or password, no query and no fragment, on a public address; at most 300 characters. */
 export function cleanBaseUrl(value: unknown): string {
   const raw = typeof value === "string" ? value.trim() : "";
   if (!raw) throw bad("Paste the address of the OpenAI-compatible API, like https://api.example.com/v1 (the part before /chat/completions).", "baseUrl");
-  if (raw.length > 300) throw bad("That is not a web address. Paste one like https://api.example.com/v1.", "baseUrl");
+  const notAddress = () => bad("That is not a web address. Paste one like https://api.example.com/v1.", "baseUrl");
+  if (raw.length > 300 || [...raw].some((c) => c.charCodeAt(0) <= 32 || c.charCodeAt(0) >= 127 || c === "\\")) throw notAddress();
   let u: URL;
   try {
     u = new URL(raw);
   } catch {
-    throw bad("That is not a web address. Paste one like https://api.example.com/v1.", "baseUrl");
+    throw notAddress();
   }
   if (u.protocol !== "https:") throw bad("The address must start with https:// so the key travels safely.", "baseUrl");
-  if (u.username || u.password) throw bad("Leave the name and password out of the address. Save the key in Settings › AI › Provider keys.", "baseUrl");
+  if (u.username || u.password || /^https:\/\/[^/]*@/i.test(raw)) throw bad("Leave the name and password out of the address. Save the key in Provider keys instead.", "baseUrl");
   if (u.search || u.hash || raw.includes("?") || raw.includes("#")) throw bad("Leave out anything after ? or # in the address.", "baseUrl");
-  const name = u.hostname.toLowerCase();
-  if (!name.includes(".") || PRIVATE_HOST.test(name))
+  const name = u.hostname.toLowerCase().replace(/\.+$/, "");
+  if (privateHost(name))
     throw bad("That address is not on the public internet (a private, local or internal address). Lamo Stories can only call a public https address.", "baseUrl");
-  return `https://${u.host}${u.pathname.replace(/\/+$/, "")}`;
+  // The path as typed (the browser's URL would fold "/v1/../x" into "/x"): never "." or ".." parts, never a % escape.
+  const typedPath = raw.replace(/^https:\/\/[^/]*/i, "").replace(/\/+$/, "");
+  if (typedPath.split("/").some((part) => part === "." || part === "..") || typedPath.includes("%")) throw notAddress();
+  return `https://${name}${u.port && u.port !== "443" ? `:${u.port}` : ""}${u.pathname.replace(/\/+$/, "")}`;
 }
 
 function cleanModelId(value: unknown, host: ModelHost): string {
@@ -779,29 +814,6 @@ interface MakerEntry extends FileMakerModel {
   baseUrl: string | null;
 }
 
-/**
- * The bundled maker models, as the lead's one set names them (stories/config/models.json imageModels, videoModels and
- * audioModels): used while the file in this branch still has only the old imageModel and videoModel. Model ids from
- * AWS's own model cards (docs.aws.amazon.com/bedrock/latest/userguide/model-card-*.html); Stability and Luma run in
- * us-west-2 only; Nova Canvas and Nova Reel were ended by Amazon on 30 Sep 2026. Prices null: none documented here.
- */
-export const MOCK_MAKER_MODELS: FileMakerModel[] = [
-  { key: "stable-image-core", label: "Stable Image Core", provider: "Stability AI", host: "Amazon Bedrock", modelId: "stability.stable-image-core-v1:1", region: "us-west-2", kind: "image", price: null, note: "Fast and low-cost pictures.", maker: "stability" },
-  { key: "stable-image-ultra", label: "Stable Image Ultra", provider: "Stability AI", host: "Amazon Bedrock", modelId: "stability.stable-image-ultra-v1:1", region: "us-west-2", kind: "image", price: null, note: "The most detailed pictures.", maker: "stability" },
-  { key: "sd3-5-large", label: "Stable Diffusion 3.5 Large", provider: "Stability AI", host: "Amazon Bedrock", modelId: "stability.sd3-5-large-v1:0", region: "us-west-2", kind: "image", price: null, note: "Good pictures from words or from a picture.", maker: "stability" },
-  { key: "nova-canvas", label: "Amazon Nova Canvas", provider: "Amazon", host: "Amazon Bedrock", modelId: "amazon.nova-canvas-v1:0", region: "eu-west-1", kind: "image", price: null, note: "", maker: "nova-canvas", ended: AMAZON_ENDED_ON },
-  { key: "luma-ray2", label: "Luma AI Ray2", provider: "Luma AI", host: "Amazon Bedrock", modelId: "luma.ray-v2:0", region: "us-west-2", kind: "video", price: null, note: "AI video shots for scenes with no character (cut-aways).", maker: "luma-ray" },
-  { key: "nova-reel", label: "Amazon Nova Reel 1.1", provider: "Amazon", host: "Amazon Bedrock", modelId: "amazon.nova-reel-v1:1", region: "us-east-1", kind: "video", price: null, note: "", maker: "nova-reel", ended: AMAZON_ENDED_ON },
-  { key: "polly-neural", label: "Amazon Polly neural voices", provider: "Amazon", host: "Amazon Polly", modelId: "neural", region: "eu-west-1", kind: "audio", price: null, note: "Words spoken aloud.", maker: "polly" },
-  { key: "elevenlabs-effects", label: "ElevenLabs sound effects", provider: "ElevenLabs", host: "ElevenLabs", modelId: "eleven_text_to_sound_v2", region: "", kind: "audio", price: null, note: "Sound effects from a few words.", maker: "elevenlabs" },
-  { key: "elevenlabs-music", label: "ElevenLabs music", provider: "ElevenLabs", host: "ElevenLabs", modelId: "music_v1", region: "", kind: "audio", price: null, note: "A music bed with no singing.", maker: "elevenlabs" },
-];
-
-/** The bundled maker models: the file's lists once it has them, else the lead's set above. */
-export function bundledMakerModels(): FileMakerModel[] {
-  return hasMakerLists() ? fileMakerModels() : MOCK_MAKER_MODELS;
-}
-
 /** Each kind's words: which card picks it, and its config keys (StoriesConfig.providers). */
 export const MAKER_KIND: Record<MakerKind, { card: string; noun: string; config: "imageModel" | "videoModel" | "audioModel"; makerKey: "images" | "video" | "audio" }> = {
   image: { card: "Picture maker", noun: "picture", config: "imageModel", makerKey: "images" },
@@ -828,17 +840,25 @@ export function allMakerModels(store: MockStore): MakerEntry[] {
       baseUrl: d.baseUrl ?? null,
     }),
   );
-  return [...bundledMakerModels().map((m) => ({ ...m, custom: false, hostId: hostIdOf(m.host), baseUrl: null })), ...own];
+  // As the API's makers._entry: a keyed host's file entry is named by its label ("elevenlabs" → ElevenLabs).
+  const bundled = bundledMakerModels().map((m): MakerEntry => {
+    const hostId = hostIdOf(m.host);
+    return { ...m, host: hostId !== "bedrock" ? HOST_LABEL[hostId] : m.host, custom: false, hostId, baseUrl: null };
+  });
+  return [...bundled, ...own];
 }
 
-function makerInfo(store: MockStore, m: MakerEntry): MakerModelInfo {
-  const keyedHost = KEYED_HOSTS.includes(m.hostId);
-  const keySaved = keyedHost ? hostHasKey(store, m.hostId) : undefined;
-  const st = state(store).makerStatus[m.key] ?? {
-    status: "not_checked" as const,
-    line: keyedHost && !keySaved ? needsKeyLine(m.hostId) : "Not checked yet. Tap Check models.",
-    checkedAt: null,
-  };
+/** The API's not-checked words for a maker model (makers.STATUS_LINE). */
+export const MAKER_NOT_CHECKED = "Not checked yet. Tap Check models to see if it works.";
+
+/**
+ * A maker model as the API's makers.model_info sends it (§45.37 G1, G2): who makes it, who runs it, its Region (null
+ * on a keyed host) in words, its price, its end day and its last access check. No key state: the screens read that
+ * from GET …/providers' `key` (G4). An ended model is never checked: "Not checked yet", with its end day.
+ */
+export function makerInfo(store: MockStore, m: MakerEntry): MakerModelInfo {
+  const st = state(store).makerStatus[m.key] ?? { status: "not_checked" as const, line: MAKER_NOT_CHECKED, checkedAt: null };
+  const region = m.region || null;
   return {
     key: m.key,
     label: m.label,
@@ -846,20 +866,35 @@ function makerInfo(store: MockStore, m: MakerEntry): MakerModelInfo {
     host: m.host,
     hostId: m.hostId,
     modelId: m.modelId,
-    region: m.region,
+    region,
+    regionLine: region ? (REGION_WORDS[region] ?? `Runs in ${region}`) : null,
     kind: m.kind,
     price: m.price ? { ...m.price } : null,
     note: m.note,
-    status: st.status,
-    // Not checked yet on a keyed host with no key: what to do first (as the AI models' rows, the API's needs_key_line).
-    statusLine: m.ended ? endedSentence(m) : keyedHost && !keySaved && st.status === "not_checked" ? needsKeyLine(m.hostId) : st.line,
-    checkedAt: st.checkedAt,
+    status: m.ended ? "not_checked" : st.status,
+    statusLine: m.ended ? MAKER_NOT_CHECKED : st.line,
+    checkedAt: m.ended ? null : st.checkedAt,
     custom: m.custom,
     ...(m.maker ? { maker: m.maker } : {}),
-    ...(m.ended ? { ended: m.ended } : {}),
+    ended: m.ended ?? null,
+    endedLine: m.ended ? "Ended by Amazon on 30 Sep 2026" : null,
     ...(m.hostId === "openai_compatible" ? { baseUrl: m.baseUrl } : {}),
-    ...(keyedHost ? { keySaved } : {}),
   };
+}
+
+/** The API's words for the Regions its makers run in (makers.REGION_WORDS). */
+const REGION_WORDS: Record<string, string> = {
+  "us-west-2": "Runs in the US (Oregon)",
+  "us-east-1": "Runs in the US (N. Virginia)",
+  "eu-west-1": "Runs in Europe (Ireland)",
+  "eu-north-1": "Runs in Europe (Stockholm)",
+};
+
+/** The models a maker row of GET …/providers lists (the API's makers.models_of), each with its access check. */
+export function makerRowModels(store: MockStore, maker: string): MakerModelInfo[] {
+  return allMakerModels(store)
+    .filter((m) => (m.maker ?? (m.custom ? OWN_MAKER[m.kind] : m.key)) === maker)
+    .map((m) => makerInfo(store, m));
 }
 
 /** "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Lamo Stories › Settings › Video." */
@@ -897,12 +932,12 @@ export function usedMakerModel(store: MockStore, p: Partial<StoriesConfig["provi
   return (mine.find((m) => m.key === picked) ?? mine.find((m) => !m.ended))?.key ?? null;
 }
 
-/** Where a maker model is used, in words, or null (DELETE answers 409 naming it): picked, or its maker's first. */
-function makerUsedBy(store: MockStore, key: string): string | null {
+/** The kind whose pick uses a maker model, or null (DELETE answers 409 naming it): picked, or its picked maker's model. */
+function makerUsedBy(store: MockStore, key: string): MakerKind | null {
   for (const w of store.workspaces) {
     const p = (w.configuration as Partial<StoriesConfig>).providers;
     if (!p) continue;
-    for (const kind of MAKER_KINDS) if (p[MAKER_KIND[kind].config] === key || usedMakerModel(store, p, kind) === key) return `the ${MAKER_KIND[kind].card} in Settings › Video`;
+    for (const kind of MAKER_KINDS) if (p[MAKER_KIND[kind].config] === key || usedMakerModel(store, p, kind) === key) return kind;
   }
   return null;
 }
@@ -925,7 +960,6 @@ function cleanMakerDef(store: MockStore, key: string, value: unknown): MakerMode
   const kind = v.kind as MakerKind;
   const label = typeof v.label === "string" ? v.label.trim() : "";
   if (!label || label.length > 60) throw bad("Give it a name of 1 to 60 letters.", "label");
-  if (allMakerModels(store).some((m) => m.key !== key && m.label.toLowerCase() === label.toLowerCase())) throw bad(`There is already a model called ${label}. Pick another name.`, "label");
   const provider = typeof v.provider === "string" ? v.provider.trim() : "";
   if (!provider || provider.length > 40) throw bad("Say who makes it, for example Stability AI or ElevenLabs.", "provider");
   const refused = kind === "video" ? "Video models run on Amazon Bedrock only." : kind === "image" ? "Picture models run on Amazon Bedrock or an OpenAI-compatible API." : "Sound models run on ElevenLabs or Amazon Bedrock.";
@@ -1118,27 +1152,21 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       return clone(task);
     },
 
-    async makerModels(ws) {
-      await delay();
-      guardStories(store, ws);
-      return allMakerModels(store).map((m) => makerInfo(store, m));
-    },
-
     async putMakerModel(ws, key, def) {
       await delay();
       guardStories(store, ws);
       const s = state(store);
       const clean = cleanMakerDef(store, key, def);
       const before = s.makerCustom[key];
+      // An added model keeps what it makes, picked or not (the API's makers.clean, KIND_FIXED).
+      if (before && before.kind !== clean.kind) throw bad("A model you added keeps what it makes. Remove it and add it again as another kind.", "kind");
       if (!before && Object.values(s.makerCustom).filter((d) => d.kind === clean.kind).length >= MAX_CUSTOM_MAKER_MODELS)
-        throw bad(`You can add up to ${MAX_CUSTOM_MAKER_MODELS} ${clean.kind === "image" ? "picture" : clean.kind === "video" ? "video" : "sound"} models. Remove one first.`, "key");
-      // A model a setting picks keeps what it makes: the setting would point at the wrong kind.
-      if (before && before.kind !== clean.kind && makerUsedBy(store, key)) throw new ApiError(409, "conflict", `${before.label} is still used by ${makerUsedBy(store, key)}. Pick another model there first.`);
+        throw new ApiError(409, "conflict", `You can add at most ${MAX_CUSTOM_MAKER_MODELS} ${MAKER_KIND[clean.kind].noun} models. Remove one first.`);
       const at = iso(Date.now());
       s.makerCustom[key] = { ...clean, createdAt: before?.createdAt ?? at, updatedAt: at };
       // New, or now another model (its ID, Region or host changed): not checked yet.
       const moved = !!before && (before.modelId !== clean.modelId || (before.region ?? "") !== (clean.region ?? "") || before.host !== clean.host || (before.baseUrl ?? null) !== (clean.baseUrl ?? null));
-      if (!before || moved) s.makerStatus[key] = { status: "not_checked", line: "Not checked yet. Tap Check models.", checkedAt: null };
+      if (!before || moved) s.makerStatus[key] = { status: "not_checked", line: MAKER_NOT_CHECKED, checkedAt: null };
       return makerInfo(store, allMakerModels(store).find((m) => m.key === key)!);
     },
 
@@ -1149,8 +1177,9 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (bundledMakerModels().some((m) => m.key === key)) throw new ApiError(409, "conflict", "That model comes with Lamo Stories, so it can't be removed.");
       const def = s.makerCustom[key];
       if (!def) throw new ApiError(404, "not_found", "We could not find that model.");
-      const where = makerUsedBy(store, key);
-      if (where) throw new ApiError(409, "conflict", `${def.label} is still used by ${where}. Pick another model there first.`);
+      // The API's sentence (makers.delete): picked, or the model its picked maker uses.
+      const kind = makerUsedBy(store, key);
+      if (kind) throw new ApiError(409, "conflict", `${def.label} is picked as the ${MAKER_KIND[kind].noun} model in Settings › Video. Pick another model there first, then remove it.`);
       delete s.makerCustom[key];
       delete s.makerStatus[key];
     },

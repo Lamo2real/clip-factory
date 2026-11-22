@@ -23,6 +23,13 @@ export type WorkspaceType = "clips" | "stories";
 export const CLIPS_WORKSPACE_ID = "clips";
 export const FIRST_STORIES_WORKSPACE_ID = "stories";
 
+/**
+ * A PATCH of the workspace's configuration: each part may be partial; the API merges it onto the stored one. The makers
+ * (`providers`) send only what changed: the API checks only the picks the body names (§45.37 G1), so an older stored
+ * pick never blocks another change.
+ */
+export type StoriesConfigPatch = Omit<Partial<StoriesConfig>, "providers"> & { providers?: Partial<StoriesConfig["providers"]> };
+
 export interface StoriesConfig {
   /** 15..90, default 45; 30..60 suggested */
   defaultDurationSec: number;
@@ -223,8 +230,10 @@ export interface MakerModelInfo {
   /** the host's id (§45.37 G4); missing from an older answer: read `host` */
   hostId?: ModelHost;
   modelId: string;
-  /** its AWS Region on Amazon Bedrock ("" on a keyed host) */
-  region: string;
+  /** its AWS Region on Amazon Bedrock (null, or "" from an older answer, on a keyed host) */
+  region: string | null;
+  /** "Runs in the US (Oregon)" (the API's words for the Region), null on a keyed host */
+  regionLine?: string | null;
   kind: MakerKind;
   price: MakerPrice | null;
   /** one plain line about it ("" when there is none) */
@@ -240,8 +249,8 @@ export interface MakerModelInfo {
   maker?: string;
   /** Amazon ended it (ISO day, "2026-09-30", models.json `ended`): shown "Ended by Amazon on 30 Sep 2026", never picked again */
   ended?: string | null;
-  /** on a keyed host: whether the owner saved its key (Provider keys) */
-  keySaved?: boolean;
+  /** "Ended by Amazon on 30 Sep 2026" for an ended model, else null */
+  endedLine?: string | null;
 }
 /**
  * A maker model the owner adds or changes (PUT …/makers/models/{key}); the key is `custom-…`, at most 20 per kind,
@@ -345,8 +354,6 @@ export interface ModelInfo {
   hostId?: ModelHost;
   /** an added model's API address, only on an openai_compatible host (§45.37 G4) */
   baseUrl?: string | null;
-  /** on a keyed host: whether the owner saved its key (Provider keys) */
-  keySaved?: boolean;
   /** an added model's own way of being called (D1), so Edit starts from it; missing: its maker's defaults */
   effortField?: EffortField;
   tools?: boolean;
@@ -850,8 +857,45 @@ export interface ProviderStatus {
   key?: { saved: boolean; hint: string | null; savedAt: string | null } | null;
   /** a maker that can be tried (Luma Ray2 since §45.37; Nova Reel before, §45.35 D2): its newest "Try it" job (jobType provider_check), null before the first */
   check?: ProductionJob | null;
-  /** an ended maker's replacement (a provider id, §45.37), for the one tap "Use {replacement}" */
-  replacedBy?: string | null;
+  /** an ended maker's replacement (a provider id, §45.37: nova-canvas → stability, nova-reel → luma-ray), for the one tap "Use {replacement}" */
+  replacement?: string | null;
+  /** an ended maker: the day its maker ended it (ISO day, "2026-09-30") */
+  endedAt?: string | null;
+  /**
+   * §45.37 G1, G2: a picture, video or sound maker's row (not a built-in one) lists its models, bundled and added
+   * (MAKERDEF#, on own-images, own-video and own-sound), each with its access check. GET …/providers is where the
+   * maker models come from: there is no route of their own.
+   */
+  models?: MakerModelInfo[];
+  /** a maker row: whether the workspace picks this maker */
+  picked?: boolean;
+  /** a maker row: the key of the model it uses (the pick, else its first that has not ended); null for a built-in or ended one */
+  model?: string | null;
+}
+
+/** Every maker model the maker rows of GET …/providers list (§45.37 G1, G2), each once, in the API's order. */
+export function makerModelsIn(providers: readonly ProviderStatus[] | null | undefined): MakerModelInfo[] {
+  const seen = new Set<string>();
+  const out: MakerModelInfo[] = [];
+  for (const p of providers ?? [])
+    for (const m of p.models ?? []) {
+      if (seen.has(m.key)) continue;
+      seen.add(m.key);
+      out.push(m);
+    }
+  return out;
+}
+
+/**
+ * Whether the owner saved the key a keyed host needs (§45.37 G4), from GET …/providers: the host's own row (anthropic,
+ * openai_compatible) or the ElevenLabs maker row, each with `key`. Undefined for Amazon Bedrock (no key) or while the
+ * providers are not known. The key itself never comes back.
+ */
+export function keySavedFor(providers: readonly ProviderStatus[] | null | undefined, host: string | null | undefined): boolean | undefined {
+  const id = hostIdOf(host);
+  if (!providers || !KEYED_HOSTS.includes(id)) return undefined;
+  const row = providers.find((p) => p.id === id && p.key);
+  return row ? !!row.key?.saved : undefined;
 }
 
 export interface GuidanceTopic {
@@ -905,7 +949,7 @@ export type SocialReason =
    * did (any stable identity matches: the channel, Page or user id, or the username or handle), so it is blocked from
    * posting. Without it, same_as_clips is the account the owner just signed in with.
    */
-  | "clips_later";
+  | "clips_now";
 
 export interface ClipsDestination {
   platform: Platform;
@@ -969,10 +1013,11 @@ export interface PublishingJob {
   error?: string;
   /**
    * §45.37 G6: on Clip Factory's shared app, Clip Factory's posts go first; with no room left the post waits (status
-   * queued) until the window resets (`waitUntil`, ISO) and then goes out by itself. Missing or null while not waiting.
+   * queued or publishing) until the window resets (`waitingUntil`, ISO) and then goes out by itself. `waiting` is the
+   * API's own line ("Waiting: Clip Factory's posts go first. Posts at 23 Nov 08:00 UTC."). Both null while not waiting.
    */
-  waitUntil?: string | null;
-  waitReason?: "clips_first" | null;
+  waitingUntil?: string | null;
+  waiting?: string | null;
   metrics?: { views: number | null; likes: number | null; comments: number | null; shares: number | null; checkedAt: string };
   createdAt: string;
   updatedAt: string;
@@ -1018,7 +1063,7 @@ export interface Upload {
 export interface StoriesApi {
   listWorkspaces(): Promise<Workspace[]>;
   getWorkspace(ws: string): Promise<Workspace>;
-  patchWorkspace(ws: string, patch: { workspaceName?: string; configuration?: Partial<StoriesConfig>; version: number }): Promise<Workspace>;
+  patchWorkspace(ws: string, patch: { workspaceName?: string; configuration?: StoriesConfigPatch; version: number }): Promise<Workspace>;
   dashboard(ws: string): Promise<StoriesDashboard>;
 
   listIdeas(ws: string, status?: "saved" | "used" | "all"): Promise<Idea[]>;
@@ -1096,7 +1141,10 @@ export interface StoriesApi {
    * nothing; with only `makers`, only those are checked
    */
   checkModels(ws: string, models?: string[], makers?: string[]): Promise<AiTask>;
-  /** the picture, video and sound makers' models, bundled and added, each with its status (§45.37 G1, G2) */
+  /**
+   * the picture, video and sound makers' models, bundled and added, each with its status (§45.37 G1, G2): the models
+   * of the maker rows of GET …/providers, each once (there is no route of their own)
+   */
   makerModels(ws: string): Promise<MakerModelInfo[]>;
   /** add or change a maker model the owner added (MAKERDEF#{key}) */
   putMakerModel(ws: string, key: string, def: MakerModelDef): Promise<MakerModelInfo>;

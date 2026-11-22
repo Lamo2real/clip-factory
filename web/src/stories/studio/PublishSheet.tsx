@@ -68,7 +68,7 @@ export function accountState(a: SocialAccount): string {
     case "choose_account":
       return "Pick which account to use first.";
     case "same_as_clips":
-      return "This is Clip Factory's account. Decide in Social accounts.";
+      return "This is Clip Factory's own account. Connect a different account made for Clip Factory Stories in Social accounts.";
     default:
       return "Not connected yet.";
   }

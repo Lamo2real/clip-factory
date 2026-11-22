@@ -643,7 +643,7 @@ export function AiSection({ ws }: { ws: string }) {
       </div>
       <DefaultModel data={data} pending={pending} onPick={pickModel} ws={ws} reload={ai.reload} />
       <DefaultEffort data={data} pending={pending} onPick={pickEffort} />
-      <OwnModels ws={ws} models={data.models} onChanged={ai.reload} check={(key) => <CheckModels ws={ws} count={1} only={[key]} onDone={ai.reload} />} />
+      <OwnModels ws={ws} models={data.models} providers={providers.data} onChanged={ai.reload} check={(key) => <CheckModels ws={ws} count={1} only={[key]} onDone={ai.reload} />} />
       <Assignments
         data={data}
         saveAi={async (next) => {

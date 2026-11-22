@@ -80,12 +80,15 @@ export const SHARED_APP_LINE = "Clip Factory's posts always go first. Stories us
 export const SHARED_APP_ACCOUNT_LINE = "Even with Clip Factory's app, sign in with a different account made for Clip Factory Stories.";
 /** The account just signed in with is Clip Factory's own (§45.37 G8 (c)). */
 export const SAME_AS_CLIPS_LINE = "This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.";
-/** Clip Factory connected this very account later: it is blocked from posting (§45.37 G8 (a)). */
+/** Clip Factory connected this very account later (the API's reason clips_now): it is blocked from posting (§45.37 G8 (a)). */
 export const CLIPS_LATER_LINE = "This is Clip Factory's account now. Connect a different account made for Clip Factory Stories.";
 
-/** Why an account that is Clip Factory's own is stopped, for the code the API sends (§45.37 G8). */
-export function sameAsClipsLine(a: Pick<SocialAccount, "reason">): string {
-  return a.reason === "clips_later" ? CLIPS_LATER_LINE : SAME_AS_CLIPS_LINE;
+/**
+ * Why an account that is Clip Factory's own is stopped (§45.37 G8): the API's own warning when it sends one (it always
+ * does for same_as_clips), else the line for its code (clips_now: Clip Factory connected it later). Said once.
+ */
+export function sameAsClipsLine(a: Pick<SocialAccount, "reason"> & { warning?: string | null }): string {
+  return a.warning?.trim() || (a.reason === "clips_now" ? CLIPS_LATER_LINE : SAME_AS_CLIPS_LINE);
 }
 
 /** After a Disconnect with Clip Factory's app (shared on purpose): removing that app would touch Lamo Clips too. */
@@ -171,7 +174,7 @@ export function reasonSentence(code: string | null, p: Platform): string {
       return `That took too long. Tap Connect ${name} again.`;
     case "clips_unknown":
       return `Lamo Stories cannot tell this ${name} account apart from Lamo Clips' own. Check which account is signed in.`;
-    case "clips_later":
+    case "clips_now":
       return CLIPS_LATER_LINE;
     default:
       return `Lamo Stories' ${name} needs connecting again.`;
@@ -787,8 +790,9 @@ export function PlatformCard({
           {reasonSentence("expired", p)}
         </p>
       ) : null}
-      {/* The server's warning is text only; when it says what the reason already said, it is said once. */}
-      {a.warning && a.warning.trim() !== reasonText ? (
+      {/* The server's warning is text only; when it says what the reason already said, it is said once (for Clip
+          Factory's own account it is the line above). */}
+      {a.warning && a.connectionStatus !== "same_as_clips" && a.warning.trim() !== reasonText ? (
         <p className="st-note st-note--coral" role="note">
           <StIcon name="alert" size={18} />
           {a.warning}

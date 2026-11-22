@@ -77,8 +77,9 @@ describe("Luma AI Ray2's line (the AI video maker since Amazon ended Nova Reel, 
 
   it("Nova Reel and Nova Canvas read ended, are never picked again, and name their replacement", async () => {
     const list = await api.providers("stories");
-    expect(list.find((p) => p.id === "nova-reel")).toMatchObject({ state: "ended", replacedBy: "luma-ray" });
-    expect(list.find((p) => p.id === "nova-canvas")).toMatchObject({ state: "ended", replacedBy: "stability" });
+    // The API's providers.status: the end day and the one-tap replacement (`replacement`), never a model in use.
+    expect(list.find((p) => p.id === "nova-reel")).toMatchObject({ state: "ended", line: "Ended by Amazon on 30 Sep 2026.", endedAt: "2026-09-30", replacement: "luma-ray", model: null });
+    expect(list.find((p) => p.id === "nova-canvas")).toMatchObject({ state: "ended", line: "Ended by Amazon on 30 Sep 2026.", endedAt: "2026-09-30", replacement: "stability", model: null });
     await expect(patch({ providers: { images: "builtin-rig", video: "nova-reel", audio: "builtin-synth" } })).rejects.toMatchObject({
       status: 400,
       message: "Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Lamo Stories › Settings › Video.",

@@ -153,7 +153,7 @@ describe("Lamo Clips' account found later (§45.35 D11)", () => {
     // §45.37 G8: never "use it for both"; a separate account.
     expect(sameAsClipsLine("x")).toBe("This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.");
     const fresh = await api.social("stories");
-    expect(fresh.accounts.find((a) => a.platform === "x")).toMatchObject({ connectionStatus: "same_as_clips", reason: "clips_later" });
+    expect(fresh.accounts.find((a) => a.platform === "x")).toMatchObject({ connectionStatus: "same_as_clips", reason: "clips_now", warning: "This is Clip Factory's account now. Connect a different account made for Clip Factory Stories." });
     // A separate account made for Clip Factory Stories: connected, and the step ticks.
     await api.connectSocial("stories", "x");
     const after = await api.getOnboarding("stories");

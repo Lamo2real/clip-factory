@@ -32,10 +32,15 @@ export function waitTime(iso: string, now: Date = new Date()): string {
   return d.getTime() - now.getTime() < 6 * 86_400_000 ? `${DAYS[d.getDay()]} ${time}` : `${d.getDate()} ${MONTHS[d.getMonth()]} ${time}`;
 }
 
-/** The line of a post waiting on Clip Factory's shared app (§45.37 G6), or null when it is not waiting. */
-export function waitingLine(job: Pick<PublishingJob, "publishingStatus" | "waitUntil">, now?: Date): string | null {
-  if (job.publishingStatus !== "queued" || !job.waitUntil) return null;
-  return `Waiting: Clip Factory's posts go first. Posts at ${waitTime(job.waitUntil, now)}.`;
+/**
+ * The line of a post waiting on Clip Factory's shared app (§45.37 G6), or null when it is not waiting. The API keeps a
+ * waiting post queued or publishing, with `waitingUntil` (shown here in the owner's own time) and its own line
+ * `waiting` (in UTC), used when the time is missing.
+ */
+export function waitingLine(job: Pick<PublishingJob, "publishingStatus" | "waitingUntil" | "waiting">, now?: Date): string | null {
+  if (job.publishingStatus !== "queued" && job.publishingStatus !== "publishing") return null;
+  if (job.waitingUntil) return `Waiting: Clip Factory's posts go first. Posts at ${waitTime(job.waitingUntil, now)}.`;
+  return job.waiting?.trim() || null;
 }
 
 export function PostRow({ job, onRetry, busy = false }: { job: PublishingJob; onRetry: (j: PublishingJob) => void; busy?: boolean }) {

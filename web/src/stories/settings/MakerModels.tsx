@@ -11,7 +11,7 @@ import { useId, useState, type ReactNode } from "react";
 import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
 import { storiesApi } from "../api/client.ts";
-import { CUSTOM_MODEL_KEY, HOST_LABEL, MAKER_HOSTS, MAX_CUSTOM_MAKER_MODELS, type MakerHost, type MakerKind, type MakerModelDef, type MakerModelInfo } from "../api/types.ts";
+import { CUSTOM_MODEL_KEY, HOST_LABEL, keySavedFor, MAKER_HOSTS, MAX_CUSTOM_MAKER_MODELS, type MakerHost, type MakerKind, type MakerModelDef, type MakerModelInfo, type ProviderStatus } from "../api/types.ts";
 import { CheckModels } from "./AiSection.tsx";
 import { Btn, cheer, Chip, makerWho, MODEL_STATUS, money, Note, SetCard, SetPick, SetSelect, SetSwitch, SIcon, whenText } from "./bits.tsx";
 import { regionWords } from "./makerFile.ts";
@@ -217,18 +217,25 @@ function MakerForm({ ws, start, kind, taken, onSaved, onCancel }: { ws: string; 
     >
       <span className="st-stg-field">
         <span className="st-stg-label">What it makes</span>
-        <SetPick<MakerKind>
-          label="What it makes"
-          value={d.kind}
-          options={KINDS}
-          onChange={(v) =>
-            setD((x) => {
-              // Each kind starts where its models usually run (sound: ElevenLabs, Amazon Bedrock has no sound model yet).
-              const host = x.hostPicked && MAKER_HOSTS[v].includes(x.host) ? x.host : MAKER_HOSTS[v][0]!;
-              return { ...x, kind: v, host, provider: x.provider.trim() && x.provider !== usualMaker(x.kind, x.host) ? x.provider : usualMaker(v, host) };
-            })
-          }
-        />
+        {editing ? (
+          // An added model keeps what it makes (the API refuses a change): another kind is another model.
+          <span className="st-stg-small" data-kind-fixed={d.kind}>
+            <strong>{KINDS.find((k) => k.value === d.kind)?.label}</strong>: {KINDS.find((k) => k.value === d.kind)?.line}. To make something else, add it again as a new model.
+          </span>
+        ) : (
+          <SetPick<MakerKind>
+            label="What it makes"
+            value={d.kind}
+            options={KINDS}
+            onChange={(v) =>
+              setD((x) => {
+                // Each kind starts where its models usually run (sound: ElevenLabs, Amazon Bedrock has no sound model yet).
+                const host = x.hostPicked && MAKER_HOSTS[v].includes(x.host) ? x.host : MAKER_HOSTS[v][0]!;
+                return { ...x, kind: v, host, provider: x.provider.trim() && x.provider !== usualMaker(x.kind, x.host) ? x.provider : usualMaker(v, host) };
+              })
+            }
+          />
+        )}
       </span>
       {d.kind === "audio" ? <Note tone="sky">Sound models make sound effects and music only. Lamo Stories never asks them for a voice.</Note> : null}
       <span className="st-stg-field">
@@ -299,7 +306,7 @@ function MakerForm({ ws, start, kind, taken, onSaved, onCancel }: { ws: string; 
 
 const KIND_WORD: Record<MakerKind, string> = { image: "Pictures", video: "Video", audio: "Sound" };
 
-function MakerRow({ ws, m, onChanged, onEdit }: { ws: string; m: MakerModelInfo; onChanged: () => Promise<void>; onEdit: () => void }) {
+function MakerRow({ ws, m, keySaved, onChanged, onEdit }: { ws: string; m: MakerModelInfo; keySaved: boolean | undefined; onChanged: () => Promise<void>; onEdit: () => void }) {
   const toast = useToast();
   const [sure, setSure] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -340,7 +347,7 @@ function MakerRow({ ws, m, onChanged, onEdit }: { ws: string; m: MakerModelInfo;
           Price: {money(m.price.perUnit, m.price.currency)} for {UNIT_OF[m.kind].per}.
         </p>
       ) : null}
-      {keyed && m.keySaved === false ? (
+      {keyed && keySaved === false ? (
         <Note tone="sun" icon="key">
           Paste your {HOST_LABEL[m.hostId as MakerHost] ?? m.host} key under Prices and keys below, then tap Check models above.
         </Note>
@@ -396,8 +403,23 @@ function MakerRow({ ws, m, onChanged, onEdit }: { ws: string; m: MakerModelInfo;
  * The "Add a picture, video or sound model" card: the owner's own maker models, the form, Check models for every maker
  * model that has not ended (a free access check), and after a save the suggestion to check the new one.
  */
-export function MakerModels({ ws, models, onChanged }: { ws: string; models: MakerModelInfo[]; onChanged: () => Promise<void> }) {
+export function MakerModels({
+  ws,
+  models,
+  providers = null,
+  aiKeys = [],
+  onChanged,
+}: {
+  ws: string;
+  models: MakerModelInfo[];
+  /** GET …/providers: whether each keyed host's key is saved (§45.37 G4) */
+  providers?: readonly ProviderStatus[] | null;
+  /** the AI models' keys (Settings › AI): one name across both kinds of added model, so a new key avoids them too */
+  aiKeys?: readonly string[];
+  onChanged: () => Promise<void>;
+}) {
   const [open, setOpen] = useState<"new" | string | null>(null);
+  const taken = [...models.map((m) => m.key), ...aiKeys];
   const [added, setAdded] = useState<string | null>(null);
   const own = models.filter((m) => m.custom);
   const checkable = models.filter((m) => !m.ended).map((m) => m.key);
@@ -435,7 +457,7 @@ export function MakerModels({ ws, models, onChanged }: { ws: string; models: Mak
           ws={ws}
           start={null}
           kind="image"
-          taken={models.map((m) => m.key)}
+          taken={taken}
           onCancel={() => setOpen(null)}
           onSaved={(m) => {
             setOpen(null);
@@ -453,7 +475,7 @@ export function MakerModels({ ws, models, onChanged }: { ws: string; models: Mak
                   ws={ws}
                   start={m}
                   kind={m.kind}
-                  taken={models.map((x) => x.key)}
+                  taken={taken}
                   onCancel={() => setOpen(null)}
                   onSaved={(saved) => {
                     setOpen(null);
@@ -463,7 +485,7 @@ export function MakerModels({ ws, models, onChanged }: { ws: string; models: Mak
                 />
               </li>
             ) : (
-              <MakerRow key={m.key} ws={ws} m={m} onChanged={onChanged} onEdit={() => setOpen(m.key)} />
+              <MakerRow key={m.key} ws={ws} m={m} keySaved={keySavedFor(providers, m.hostId ?? m.host)} onChanged={onChanged} onEdit={() => setOpen(m.key)} />
             ),
           )}
         </ul>

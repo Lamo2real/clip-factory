@@ -129,6 +129,9 @@ describe("no route or screen offers sharing an account (§45.37 G8 (d))", () => 
     // The seed's X is Clip Factory's own: it says why, offers a different account, and nothing to share it.
     expect(store.social.find((a) => a.platform === "x")?.connectionStatus).toBe("same_as_clips");
     expect(card("x").textContent).toContain(SAME_AS_CLIPS_LINE);
+    // The API sends that sentence as the account's warning too (public_of): the card says it once.
+    expect((await api.social("stories")).accounts.find((a) => a.platform === "x")?.warning).toBe(SAME_AS_CLIPS_LINE);
+    expect(card("x").textContent!.split(SAME_AS_CLIPS_LINE)).toHaveLength(2);
     expect(buttons(card("x")).map((b) => b.textContent?.trim())).toContain("Pick another account");
     for (const b of buttons()) expect(b.textContent ?? "").not.toMatch(/for both/i);
     expect(host.textContent).not.toMatch(/use it for both|Are you sure\?.*both post/i);
@@ -207,7 +210,8 @@ describe("the same account as Clip Factory's, by any identity, is refused (§45.
       await until(() => jobOf(job.publishingJobId).publishingStatus !== "queued");
       expect(jobOf(job.publishingJobId)).toMatchObject({ publishingStatus: "needs_attention" });
       expect(jobOf(job.publishingJobId).url).toBeUndefined();
-      expect(await status(p)).toMatchObject({ connectionStatus: "same_as_clips", reason: "clips_later" });
+      // The API's code and warning (public_of): Clip Factory has it now.
+      expect(await status(p)).toMatchObject({ connectionStatus: "same_as_clips", reason: "clips_now", warning: CLIPS_LATER_LINE });
       // A new post is stopped at the tap too.
       expect((await postTo(p)).publishingStatus).toBe("needs_attention");
       // The page says it is Clip Factory's account now, with a way to a different one.
@@ -222,6 +226,9 @@ describe("the same account as Clip Factory's, by any identity, is refused (§45.
       await settle(6);
       expect(card(p).textContent).toContain(CLIPS_LATER_LINE);
       expect(card(p).textContent).toContain("Clip Factory's own");
+      // Said once: the server's warning is the card's line, never a second, different explanation.
+      expect(card(p).textContent!.split(CLIPS_LATER_LINE)).toHaveLength(2);
+      expect(card(p).textContent).not.toContain(SAME_AS_CLIPS_LINE);
       for (const b of buttons(card(p))) expect(b.textContent ?? "").not.toMatch(/for both/i);
     });
   }
@@ -259,13 +266,15 @@ describe("Clip Factory's shared app: its posts always go first (§45.37 G6 (c))"
   it("a post with no room left waits with its time, never fails, and goes out by itself after the reset", async () => {
     start({ publishMs: 15, clipsFirst: ["youtube"], clipsFirstUntil: new Date(Date.now() + 250).toISOString() });
     const job = await postTo("youtube");
-    await until(() => !!jobOf(job.publishingJobId).waitUntil);
-    expect(jobOf(job.publishingJobId)).toMatchObject({ publishingStatus: "queued", waitReason: "clips_first" });
+    await until(() => !!jobOf(job.publishingJobId).waitingUntil);
+    // The API's public job shape (publish.public_job): waitingUntil and its own line, waiting.
+    expect(jobOf(job.publishingJobId)).toMatchObject({ publishingStatus: "queued", waiting: expect.stringMatching(/^Waiting: Clip Factory's posts go first\. Posts at \d{1,2} [A-Z][a-z]{2} \d\d:\d\d UTC\.$/) });
     expect(waitingLine(jobOf(job.publishingJobId))).toMatch(/^Waiting: Clip Factory's posts go first\. Posts at (Sun|Mon|Tue|Wed|Thu|Fri|Sat) \d\d:\d\d\.$/);
-    expect((await api.listPublishing("stories", approved().storyId)).find((j) => j.publishingJobId === job.publishingJobId)?.waitUntil).toBeTruthy();
+    expect((await api.listPublishing("stories", approved().storyId)).find((j) => j.publishingJobId === job.publishingJobId)?.waitingUntil).toBeTruthy();
     // After the reset it goes out with no tap.
     await until(() => jobOf(job.publishingJobId).publishingStatus === "posted", 3000);
-    expect(jobOf(job.publishingJobId).waitUntil).toBeUndefined();
+    expect(jobOf(job.publishingJobId).waitingUntil ?? null).toBeNull();
+    expect(jobOf(job.publishingJobId).waiting ?? null).toBeNull();
     expect(jobOf(job.publishingJobId).url).toBeTruthy();
   });
 
@@ -275,7 +284,7 @@ describe("Clip Factory's shared app: its posts always go first (§45.37 G6 (c))"
     store.social = store.social.map((a) => (a.platform === "youtube" ? { ...a, connectionStatus: "connected", externalAccountId: STORIES.youtube.id, accountName: "Lamo Stories", handle: "@lamostories" } : a));
     const job = await postTo("youtube");
     await until(() => jobOf(job.publishingJobId).publishingStatus === "posted", 3000);
-    expect(jobOf(job.publishingJobId).waitUntil).toBeUndefined();
+    expect(jobOf(job.publishingJobId).waitingUntil ?? null).toBeNull();
   });
 
   it("each window resets when Clip Factory's share comes back: YouTube's day, TikTok's day, X's month", () => {
@@ -299,8 +308,8 @@ describe("Clip Factory's shared app: its posts always go first (§45.37 G6 (c))"
       publishingStatus: "queued",
       accountName: "Lamo Stories",
       handle: "@lamostories",
-      waitUntil: new Date(Date.now() + 3 * 3_600_000).toISOString(),
-      waitReason: "clips_first",
+      waitingUntil: new Date(Date.now() + 3 * 3_600_000).toISOString(),
+      waiting: "Waiting: Clip Factory's posts go first. Posts at 23 Nov 08:00 UTC.",
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     };
@@ -310,7 +319,20 @@ describe("Clip Factory's shared app: its posts always go first (§45.37 G6 (c))"
     expect(line?.textContent).toBe(waitingLine(job));
     expect(line?.textContent).toMatch(/^Waiting: Clip Factory's posts go first\. Posts at /);
     // Not waiting: no line; a stopped post never says it waits.
-    expect(waitingLine({ ...job, waitUntil: null })).toBeNull();
+    expect(waitingLine({ ...job, waitingUntil: null, waiting: null })).toBeNull();
     expect(waitingLine({ ...job, publishingStatus: "failed" })).toBeNull();
+  });
+
+  it("reads the API's own shape: a waiting post is queued or publishing, its time in the owner's time, else the API's line", () => {
+    const now = new Date(2026, 10, 22, 19, 30);
+    const until = new Date(2026, 10, 23, 8, 0).toISOString();
+    // As publish.public_job sends it: waitingUntil and waiting, never waitUntil.
+    const api = { publishingStatus: "publishing" as const, waitingUntil: until, waiting: "Waiting: Clip Factory's posts go first. Posts at 23 Nov 07:00 UTC." };
+    expect(waitingLine(api, now)).toBe("Waiting: Clip Factory's posts go first. Posts at Mon 08:00.");
+    expect(waitingLine({ ...api, publishingStatus: "queued" }, now)).toBe("Waiting: Clip Factory's posts go first. Posts at Mon 08:00.");
+    // No time: the API's line as it is.
+    expect(waitingLine({ ...api, waitingUntil: null }, now)).toBe(api.waiting);
+    expect(waitingLine({ publishingStatus: "posted", waitingUntil: until, waiting: api.waiting }, now)).toBeNull();
+    expect(waitingLine({ publishingStatus: "publishing", waitingUntil: null, waiting: null }, now)).toBeNull();
   });
 });

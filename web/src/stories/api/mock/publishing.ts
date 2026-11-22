@@ -9,8 +9,8 @@
 // The sentences call the other app "Clip Factory" and name an account by its place first ("this TikTok account (Lamo
 // Stories)"), so they read right when the account is itself called Lamo Stories; a question says "Tap Yes", as its
 // button does (§45.36 E13). On Clip Factory's shared developer app, Clip Factory's posts always go first (§45.37 G6):
-// with no room left (knob `clipsFirst`) a post waits in its queue with `waitUntil` (the window's reset) and goes out by
-// itself after it. Clip Factory's own account is refused before every post, also when Clip Factory connected it later.
+// with no room left (knob `clipsFirst`) a post waits in its queue with `waitingUntil` (the window's reset) and the API's
+// line `waiting` (publish.public_job), and goes out by itself after it. Clip Factory's own account is refused before every post, also when Clip Factory connected it later.
 import { ApiError } from "../../../api/errors.ts";
 import { STORIES_PLATFORMS, type ErrorAccount, type Platform, type PublishingJob, type PublishTarget, type SocialAccount, type StoriesApi, type Story } from "../types.ts";
 import { PLATFORM_NAME, sameAsClips } from "./social.ts";
@@ -130,8 +130,17 @@ function waitFor(store: MockStore, j: PublishingJob): string | null {
   const full = store.knobs.clipsFirst;
   if (!(full === true || (Array.isArray(full) && full.includes(j.platform)))) return null;
   // Its window reset: there is room again.
-  if (j.waitUntil && Date.parse(j.waitUntil) <= Date.now()) return null;
-  return j.waitUntil ?? (typeof store.knobs.clipsFirstUntil === "string" ? store.knobs.clipsFirstUntil : nextReset(j.platform));
+  if (j.waitingUntil && Date.parse(j.waitingUntil) <= Date.now()) return null;
+  return j.waitingUntil ?? (typeof store.knobs.clipsFirstUntil === "string" ? store.knobs.clipsFirstUntil : nextReset(j.platform));
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** The API's waiting line (shared_room.waiting_line): "Waiting: Clip Factory's posts go first. Posts at 23 Nov 08:00 UTC." */
+export function waitingWords(until: string): string {
+  const d = new Date(until);
+  const two = (n: number) => String(n).padStart(2, "0");
+  const at = Number.isNaN(d.getTime()) ? until : `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${two(d.getUTCHours())}:${two(d.getUTCMinutes())} UTC`;
+  return `Waiting: Clip Factory's posts go first. Posts at ${at}.`;
 }
 
 /** A started job walks queued → publishing → posted (or stops), a few seconds a step, like the story flow. */
@@ -153,17 +162,17 @@ function run(store: MockStore, id: string): void {
       if (stop) {
         j.publishingStatus = "needs_attention";
         j.error = stop;
-        delete j.waitUntil;
-        delete j.waitReason;
+        j.waitingUntil = null;
+        j.waiting = null;
       } else if (waits) {
         // Waiting in its queue, saying until when; never failed, never taking Clip Factory's share.
         j.publishingStatus = "queued";
-        j.waitUntil = waits;
-        j.waitReason = "clips_first";
+        j.waitingUntil = waits;
+        j.waiting = waitingWords(waits);
       } else {
         j.publishingStatus = "publishing";
-        delete j.waitUntil;
-        delete j.waitReason;
+        j.waitingUntil = null;
+        j.waiting = null;
       }
     },
     fast,

@@ -93,8 +93,17 @@ const CASES: Case[] = [
   ["deleteAiModel", (a) => a.deleteAiModel("stories", "custom-nova-premier"), "DELETE", `${B}/stories/ai/models/custom-nova-premier`, undefined, null, undefined],
   ["checkModels", (a) => a.checkModels("stories", ["opus-5-5"]), "POST", `${B}/stories/ai/check-models`, { models: ["opus-5-5"] }, { task: 44 }, 44],
   ["setModelPrice", (a) => a.setModelPrice("stories", "opus-5-5", null), "PUT", `${B}/stories/ai/prices/opus-5-5`, {}, { model: 45 }, 45],
-  // §45.37 G1, G2: the picture, video and sound makers' models, and the owner's own.
-  ["makerModels", (a) => a.makerModels("stories"), "GET", `${B}/stories/makers/models`, undefined, { models: [451] }, [451]],
+  // §45.37 G1, G2: the picture, video and sound makers' models, and the owner's own, come on the maker rows of
+  // GET …/providers (there is no route of their own), each once.
+  [
+    "makerModels",
+    (a) => a.makerModels("stories"),
+    "GET",
+    `${B}/stories/providers`,
+    undefined,
+    { providers: [{ id: "builtin-rig" }, { id: "stability", models: [{ key: "stable-image-core" }] }, { id: "own-images", models: [{ key: "custom-paint" }, { key: "stable-image-core" }] }, { id: "anthropic", key: { saved: true } }] },
+    [{ key: "stable-image-core" }, { key: "custom-paint" }],
+  ],
   [
     "putMakerModel",
     (a) => a.putMakerModel("stories", "custom-rain", { label: "Rain", provider: "ElevenLabs", kind: "audio", host: "elevenlabs", modelId: "eleven_text_to_sound_v2", price: null, note: "" }),

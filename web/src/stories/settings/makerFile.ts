@@ -2,8 +2,8 @@
 // §45.37 G1): the lists imageModels, videoModels and audioModels, each entry carrying the maker it belongs to
 // (`maker`) and, for a model Amazon ended, the day (`ended`). A file from before the lists has one imageModel and one
 // videoModel; each reads as a one-item list (keyed nova-canvas and nova-reel, their makers' ids), so nothing breaks
-// whichever shape the file has. The server's list (GET …/makers/models, with each model's status and the owner's own
-// models) is the one that counts; this file only names the bundled models while that list loads.
+// whichever shape the file has. The server's list (the maker rows of GET …/providers, with each model's status and the
+// owner's own models) is the one that counts; this file only names the bundled models while that list loads.
 import modelsFile from "../../../../stories/config/models.json";
 import { AMAZON_ENDED_ON, MAKER_KINDS, type MakerKind, type MakerPrice } from "../api/types.ts";
 
@@ -73,6 +73,30 @@ export function fileMakerModels(kind?: MakerKind, file: unknown = modelsFile): F
     const old = !lists && OLD_FIELD[k] ? f[OLD_FIELD[k]!] : undefined;
     return old && typeof old === "object" ? [entry(old as Raw, k, OLD_SHAPE_KEY[k]!, true)] : [];
   });
+}
+
+/**
+ * The bundled maker models as the lead's one set names them (§45.37 G7; stories/config/models.json's imageModels,
+ * videoModels and audioModels, in that file's order): used while a file has only the old imageModel and videoModel.
+ * Model ids from AWS's own model cards (docs.aws.amazon.com/bedrock/latest/userguide/model-card-*.html); Stability AI
+ * and Luma AI run in us-west-2 only; Amazon ended Nova Canvas and Nova Reel on 30 Sep 2026. Prices null: none
+ * documented.
+ */
+export const LEAD_MAKER_MODELS: FileMakerModel[] = [
+  { key: "nova-canvas", label: "Amazon Nova Canvas", provider: "Amazon", host: "Amazon Bedrock", modelId: "amazon.nova-canvas-v1:0", region: "eu-west-1", kind: "image", price: null, note: "Ended by Amazon on 30 Sep 2026.", maker: "nova-canvas", ended: AMAZON_ENDED_ON },
+  { key: "stable-image-core", label: "Stable Image Core", provider: "Stability AI", host: "Amazon Bedrock", modelId: "stability.stable-image-core-v1:1", region: "us-west-2", kind: "image", price: null, note: "Runs in the US (Oregon). Quick pictures for portraits.", maker: "stability" },
+  { key: "stable-image-ultra", label: "Stable Image Ultra", provider: "Stability AI", host: "Amazon Bedrock", modelId: "stability.stable-image-ultra-v1:1", region: "us-west-2", kind: "image", price: null, note: "Runs in the US (Oregon). The most detailed pictures.", maker: "stability" },
+  { key: "sd3-5-large", label: "Stable Diffusion 3.5 Large", provider: "Stability AI", host: "Amazon Bedrock", modelId: "stability.sd3-5-large-v1:0", region: "us-west-2", kind: "image", price: null, note: "Runs in the US (Oregon). Detailed pictures in many styles.", maker: "stability" },
+  { key: "nova-reel", label: "Amazon Nova Reel 1.1", provider: "Amazon", host: "Amazon Bedrock", modelId: "amazon.nova-reel-v1:1", region: "us-east-1", kind: "video", price: null, note: "Ended by Amazon on 30 Sep 2026.", maker: "nova-reel", ended: AMAZON_ENDED_ON },
+  { key: "luma-ray2", label: "Luma AI Ray2", provider: "Luma AI", host: "Amazon Bedrock", modelId: "luma.ray-v2:0", region: "us-west-2", kind: "video", price: null, note: "Runs in the US (Oregon). Makes 5-second AI shots for scenes with no characters (cut-aways).", maker: "luma-ray" },
+  { key: "polly-neural", label: "Amazon Polly neural voices", provider: "Amazon", host: "Amazon Polly", modelId: "neural", region: "eu-west-1", kind: "audio", price: null, note: "Adds words spoken aloud. Your videos are made without a voice unless you pick this.", maker: "polly" },
+  { key: "elevenlabs-effects", label: "ElevenLabs sound effects", provider: "ElevenLabs", host: "elevenlabs", modelId: "eleven_text_to_sound_v2", region: "", kind: "audio", price: null, note: "Sound effects from your ElevenLabs account. Never a voice.", maker: "elevenlabs" },
+  { key: "elevenlabs-music", label: "ElevenLabs music (instrumental)", provider: "ElevenLabs", host: "elevenlabs", modelId: "music_v1", region: "", kind: "audio", price: null, note: "An instrumental music bed from your ElevenLabs account. Never a voice.", maker: "elevenlabs" },
+];
+
+/** The bundled maker models: the file's lists once it has them, else the lead's set above. */
+export function bundledMakerModels(): FileMakerModel[] {
+  return hasMakerLists() ? fileMakerModels() : LEAD_MAKER_MODELS;
 }
 
 /** The month words of "30 Sep 2026" (fixed: some browsers' short September is "Sept"). */

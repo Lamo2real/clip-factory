@@ -150,8 +150,18 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
   /** A redesign the owner has not taken yet: shown beside the character as it is (§45.34). */
   const [proposal, setProposal] = useState<CharacterInput | null>(null);
   // The picked AI picture maker makes the portraits (§45.37: Stability AI or the owner's own; Amazon ended Nova Canvas).
-  const pictures = ((workspace?.configuration ?? {}) as Partial<StoriesConfig>).providers?.images;
+  const [switched, setSwitched] = useState<string | null>(null);
+  const pictures = switched ?? ((workspace?.configuration ?? {}) as Partial<StoriesConfig>).providers?.images;
   const aiOn = pictures === "stability" || pictures === "own-images";
+  // An older pick of Amazon Nova Canvas reads ended, with one tap to Stability AI's pictures (§45.37 G7).
+  const pictureEnded = pictures === "nova-canvas";
+  const useStability = async () => {
+    const w = await storiesApi().getWorkspace(ws);
+    // Only the picture maker and its model: the API checks only what the body names.
+    await storiesApi().patchWorkspace(ws, { configuration: { providers: { images: "stability", imageModel: null } }, version: w.version });
+    setSwitched("stability");
+    toast.success("Portraits now use Stability AI pictures.");
+  };
   const [saving, setSaving] = useState(false);
   const [stale, setStale] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -281,7 +291,7 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
         aside={
           <>
             <References ws={ws} character={c} onChange={replace} />
-            <Portrait ws={ws} character={c} aiOn={aiOn} onChange={replace} />
+            <Portrait ws={ws} character={c} aiOn={aiOn} ended={pictureEnded} onReplace={useStability} onChange={replace} />
           </>
         }
       />

@@ -7,7 +7,8 @@
 // §45.37 G8 (the owner's hard rule): an account is never shared with Clip Factory. It is Clip Factory's own when any
 // stable identity matches Clip Factory's account there (YouTube the channel id, Facebook the Page id, Instagram the
 // user id or username, TikTok the username or handle, X the user id or handle), at connect and before every post, also
-// when Clip Factory connects it later (then same_as_clips with reason clips_later). There is no share route.
+// when Clip Factory connects it later (then same_as_clips with reason clips_now). There is no share route. Every
+// same_as_clips account carries the API's warning (public_of): the at-connect sentence, or the "now" one.
 import { ApiError } from "../../../api/errors.ts";
 import type { KeyName } from "../../../api/types.ts";
 import { cleanKey, extractConfigId, keyNames, keyProblem } from "../../../lib/keyFormats.ts";
@@ -130,15 +131,23 @@ export function sameAsClips(a: Pick<SocialAccount, "platform" | "connectionStatu
   return a.connectionStatus === "connected" && matchesClips(a.platform, a, store);
 }
 
+/** The API's same_as_clips sentences (social.SAME_AT_CONNECT and SAME_LATER), word for word. */
+export const SAME_AT_CONNECT = "This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.";
+export const SAME_LATER = "This is Clip Factory's account now. Connect a different account made for Clip Factory Stories.";
+
 /**
- * The account as Social accounts shows it: one Clip Factory connected later reads same_as_clips with reason
- * clips_later, blocked from posting (the API's public_of); one no longer Clip Factory's is connected again.
+ * The account as Social accounts shows it (the API's public_of): one Clip Factory connected later reads same_as_clips
+ * with reason clips_now, blocked from posting; one no longer Clip Factory's is connected again. A same_as_clips
+ * account carries the API's warning (SAME_LATER for clips_now, else SAME_AT_CONNECT); no other account keeps one.
  */
 function settled(a: SocialAccount, store: MockStore): SocialAccount {
   const { sharedWithClips: _gone, ...plain } = a;
-  if (plain.connectionStatus === "connected" && sameAsClips(plain, store)) return { ...plain, connectionStatus: "same_as_clips", reason: "clips_later" };
-  if (plain.connectionStatus === "same_as_clips" && plain.reason === "clips_later" && !matchesClips(plain.platform, plain, store)) return { ...plain, connectionStatus: "connected", reason: null };
-  return plain;
+  let out: SocialAccount = plain;
+  if (plain.connectionStatus === "connected" && sameAsClips(plain, store)) out = { ...plain, connectionStatus: "same_as_clips", reason: "clips_now" };
+  else if (plain.connectionStatus === "same_as_clips" && plain.reason === "clips_now" && !matchesClips(plain.platform, plain, store)) out = { ...plain, connectionStatus: "connected", reason: null };
+  const sameWarning = out.warning === SAME_AT_CONNECT || out.warning === SAME_LATER;
+  if (out.connectionStatus === "same_as_clips") return { ...out, warning: out.reason === "clips_now" ? SAME_LATER : SAME_AT_CONNECT };
+  return sameWarning ? { ...out, warning: null } : out;
 }
 
 /** What a connect in the pretend app finds for each platform: the Lamo Stories account the owner picked. */

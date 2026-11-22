@@ -11,8 +11,10 @@ import defaultsFile from "../../../../../stories/config/workspace-defaults.json"
 import guidanceFile from "../../../../../stories/config/guidance.json";
 import { ApiError } from "../../../api/errors.ts";
 import {
+  AMAZON_ENDED_ON,
   IMAGE_MAKERS,
   MAKER_FIELD_OF,
+  makerModelsIn,
   RESOLUTIONS,
   SOUND_MAKERS,
   VIDEO_MAKERS,
@@ -22,13 +24,14 @@ import {
   type ProviderStatus,
   type StoriesApi,
   type StoriesConfig,
+  type StoriesConfigPatch,
   type VideoAspect,
   type Workspace,
 } from "../types.ts";
 import { CLIPS_WORKSPACE_ID, delay, DAY, FIRST_STORIES_WORKSPACE_ID, ago, mockId, type MockStore } from "./store.ts";
-import { allMakerModels, checkMakerPick, ENDED_MAKER_LABEL, endedSentence, hostHasKey, keyedHostStatus, MAKER_KIND } from "./ai.ts";
+import { allMakerModels, checkMakerPick, ENDED_MAKER_LABEL, endedSentence, hostHasKey, keyedHostStatus, MAKER_KIND, makerRowModels, usedMakerModel } from "./ai.ts";
 
-export const KEYS = ["listWorkspaces", "getWorkspace", "patchWorkspace", "providers", "tryNovaReel", "tryMaker", "guidance"] as const;
+export const KEYS = ["listWorkspaces", "getWorkspace", "patchWorkspace", "providers", "makerModels", "tryNovaReel", "tryMaker", "guidance"] as const;
 
 /** StoriesConfig's defaults, from the one file (its "$comment" left out). */
 export const DEFAULT_CONFIG: StoriesConfig = (() => {
@@ -103,7 +106,7 @@ export function nextProviders(before: StoriesConfig["providers"], patch: Partial
   return next;
 }
 
-function checkConfig(store: MockStore, c: Partial<StoriesConfig>, before: StoriesConfig): void {
+function checkConfig(store: MockStore, c: StoriesConfigPatch, before: StoriesConfig): void {
   const bad = (field: string, message: string) => new ApiError(400, "bad_request", message, field);
   if (c.defaultDurationSec !== undefined && (!Number.isInteger(c.defaultDurationSec) || c.defaultDurationSec < 15 || c.defaultDurationSec > 90))
     throw bad("defaultDurationSec", "Pick a length from 15 to 90 seconds.");
@@ -117,10 +120,13 @@ function checkConfig(store: MockStore, c: Partial<StoriesConfig>, before: Storie
     for (const kind of ["image", "video", "audio"] as const) {
       const { maker: makerKey, model: modelKey } = MAKER_FIELD_OF[kind];
       const maker = next[makerKey];
+      const changed = c.providers[makerKey] !== undefined && maker !== before.providers[makerKey];
+      // As the API's makers.clean_providers: a stored pick is not looked at again, only what the body changes.
+      if (!changed && !(modelKey in c.providers)) continue;
       // An ended maker stays readable as an older pick, but is never picked again (§45.37).
-      if (maker !== before.providers[makerKey] && ENDED_MAKER_LABEL[maker]) throw bad("providers", endedSentence(ENDED_MAKER_LABEL[maker]!));
+      if (changed && ENDED_MAKER_LABEL[maker]) throw bad("providers", endedSentence(ENDED_MAKER_LABEL[maker]!));
       // The owner's own maker needs one of his models of that kind first.
-      if (maker !== before.providers[makerKey] && OWN[maker] && !allMakerModels(store).some((m) => m.custom && m.kind === OWN[maker]))
+      if (changed && OWN[maker] && !allMakerModels(store).some((m) => m.custom && m.kind === OWN[maker]))
         throw bad("providers", `Add your own ${MAKER_KIND[kind].noun} model in Settings › Video first.`);
       // Each maker's model is one of that maker's (§45.37 G1).
       checkMakerPick(store, kind, maker, next[modelKey]);
@@ -179,9 +185,26 @@ function tryJob(store: MockStore, providerId: string): ProductionJob | null {
 /** A maker that is not picked yet: off, with what it does. */
 const off = (kind: ProviderStatus["kind"], id: string, label: string, line: string): ProviderStatus => ({ kind, id, label, state: "off", line });
 
-/** An ended maker's row (§45.37): its line names the one-tap replacement. */
-function ended(kind: ProviderStatus["kind"], id: "nova-canvas" | "nova-reel", label: string, replacedBy: string, instead: string): ProviderStatus {
-  return { kind, id, label, state: "ended", line: `${label} was ended by Amazon on 30 Sep 2026. Use ${instead} instead.`, replacedBy };
+/** An ended maker's row (§45.37, the API's providers.status): the day it ended and its one-tap replacement. */
+function ended(kind: ProviderStatus["kind"], id: "nova-canvas" | "nova-reel", label: string, replacement: string): ProviderStatus {
+  return { kind, id, label, state: "ended", line: "Ended by Amazon on 30 Sep 2026.", endedAt: AMAZON_ENDED_ON, replacement };
+}
+
+const ROW_KIND: Partial<Record<ProviderStatus["kind"], MakerKind>> = { images: "image", animation: "video", audio: "audio" };
+const BUILTIN_MAKERS = ["builtin-rig", "builtin-2d", "builtin-synth"];
+
+/**
+ * A maker row as the API's providers.statuses sends it (§45.37 G1, G2): `picked`, the model it uses (`model`, null for
+ * a built-in or ended maker) and, on every maker that is not built in, its models with their access checks.
+ */
+function withModels(store: MockStore, config: StoriesConfig, row: ProviderStatus): ProviderStatus {
+  const kind = ROW_KIND[row.kind];
+  if (!kind) return row;
+  const { maker, model } = MAKER_FIELD_OF[kind];
+  const picked = config.providers[maker] === row.id;
+  const builtin = BUILTIN_MAKERS.includes(row.id);
+  const used = builtin || row.state === "ended" ? null : usedMakerModel(store, { ...config.providers, [maker]: row.id, [model]: picked ? config.providers[model] : null }, kind);
+  return { ...row, picked, model: used, ...(builtin ? {} : { models: makerRowModels(store, row.id) }) };
 }
 
 /** The owner's own maker of a kind: off until picked; then not ready until its first real work (§45.11.6). */
@@ -201,7 +224,7 @@ function providersFor(store: MockStore, config: StoriesConfig): ProviderStatus[]
   const luma = (store.knobs.lumaRay ?? null) as TryRecord | null;
   const p = config.providers;
   const eleven = keyedHostStatus(store, "elevenlabs");
-  return [
+  const rows: ProviderStatus[] = [
     { kind: "writer", id: "bedrock-claude", label: "Claude on Amazon Bedrock", state: "on", line: "Writes the stories. It is already set up." },
     { kind: "images", id: "builtin-rig", label: "Built-in characters", state: "on", line: "Draws every character the same way in every video." },
     p.images !== "stability"
@@ -217,7 +240,7 @@ function providersFor(store: MockStore, config: StoriesConfig): ProviderStatus[]
             ...(picture ? { checkedAt: picture.checkedAt, lastError: picture.lastError } : {}),
           },
     own(store, config, "image", "images", "own-images", "Your own picture model", "picture"),
-    ended("images", "nova-canvas", "Amazon Nova Canvas", "stability", "Stability AI pictures"),
+    ended("images", "nova-canvas", "Amazon Nova Canvas (AI pictures)", "stability"),
     { kind: "animation", id: "builtin-2d", label: "Built-in animation", state: "on", line: "Animates every scene. It is built in." },
     {
       kind: "animation",
@@ -231,7 +254,7 @@ function providersFor(store: MockStore, config: StoriesConfig): ProviderStatus[]
       check: check ? structuredClone(check) : null,
     },
     own(store, config, "video", "animation", "own-video", "Your own video model", "video"),
-    ended("animation", "nova-reel", "Amazon Nova Reel", "luma-ray", "Luma AI Ray2"),
+    ended("animation", "nova-reel", "Amazon Nova Reel 1.1 (AI video)", "luma-ray"),
     { kind: "audio", id: "builtin-synth", label: "Built-in sounds and music", state: "on", line: "Makes every sound effect, noise and tune. It is built in." },
     {
       ...eleven,
@@ -248,6 +271,7 @@ function providersFor(store: MockStore, config: StoriesConfig): ProviderStatus[]
     keyedHostStatus(store, "anthropic"),
     keyedHostStatus(store, "openai_compatible"),
   ];
+  return rows.map((r) => withModels(store, config, r));
 }
 
 interface FileStep {
@@ -340,6 +364,11 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
     async providers(ws) {
       await delay(120);
       return providersFor(store, storiesWorkspace(store, ws).configuration);
+    },
+    // As the client does it (http.ts): the models of the maker rows of GET …/providers, each once (no route of their own).
+    async makerModels(ws) {
+      await delay(120);
+      return makerModelsIn(providersFor(store, storiesWorkspace(store, ws).configuration));
     },
     async tryNovaReel(ws) {
       await delay(200);
