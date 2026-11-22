@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import { Glide } from "../../components/Glide.tsx";
 import { trapTab } from "../../components/Sheet.tsx";
 import { burst, centerOf } from "../../lib/confetti.ts";
-import { sounds } from "../../lib/sounds.ts";
+import { storiesReduceMotion, storiesSound } from "../prefs.ts";
 
 export interface PickOption<T extends string> {
   value: T;
@@ -419,6 +419,6 @@ export function StSheet({
 
 /** A celebration: confetti from the button and the success cheer (it answers the owner's own tap). */
 export function celebrate(from?: Element | null, amount = 110): void {
-  burst(centerOf(from ?? null), amount);
-  sounds.play("success");
+  if (!storiesReduceMotion()) burst(centerOf(from ?? null), amount);
+  storiesSound("success");
 }

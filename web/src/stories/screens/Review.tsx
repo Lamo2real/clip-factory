@@ -10,8 +10,7 @@ import { A } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { burst } from "../../lib/confetti.ts";
 import { useLoad, usePoll } from "../../lib/hooks.ts";
-import { cheerOnNextTap } from "../../lib/sound.ts";
-import { sounds } from "../../lib/sounds.ts";
+import { storiesReduceMotion, storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
 import type { ModelOverride, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
@@ -210,8 +209,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     if (!before) return;
     const up = list.filter((j) => j.publishingStatus === "posted" && before.get(j.publishingJobId) !== "posted");
     if (!up.length) return;
-    burst(undefined, 140);
-    cheerOnNextTap(sounds);
+    if (!storiesReduceMotion()) burst(undefined, 140);
+    storiesSound("success", { onNextTap: true });
     toast.success(`Posted to ${up.map((j) => PLATFORM_LABEL[j.platform]).join(" and ")}!`);
     void loaded.reload();
     // Reacts to new publishing results only.

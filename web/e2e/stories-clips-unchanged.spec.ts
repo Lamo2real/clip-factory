@@ -138,6 +138,24 @@ test.describe("with Lamo Stories switched off", () => {
       await page.context().close();
     });
 
+  test("the page tree is as before: the shell right under #root, no pane, and Lamo Stories' code is never fetched", async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    const fetched: string[] = [];
+    page.on("request", (r) => {
+      if (/\/assets\/StoriesApp-[^/]+\.(js|css)$/.test(r.url())) fetched.push(r.url());
+    });
+    await page.goto("/library");
+    await settle(page);
+    await expect(page.locator("#root > .app")).toHaveCount(1);
+    await expect(page.locator("[data-app-pane]")).toHaveCount(0);
+    await expect(page.locator("main#main")).toHaveCount(1);
+    // Idle for a while (the switched-on app fetches the studio's code then): nothing of Lamo Stories comes.
+    await page.waitForTimeout(2500);
+    expect(fetched).toEqual([]);
+    await ctx.close();
+  });
+
   test("opening / never jumps to Lamo Stories, whatever was stored", async ({ browser }) => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     await ctx.addInitScript(() =>
@@ -211,6 +229,16 @@ test.describe("with Lamo Stories switched on", () => {
       if (phone && size.w < 340) expect(here.mode, `phone at ${size.w}`).toBe("slim");
       await on.context().close();
     });
+
+  test("Clip Factory's shell sits in a pane that takes no box of its own; Lamo Stories mounts only once it is opened", async ({ browser }) => {
+    const page = await open(browser, { w: 1440, h: 900 }, true, "/library");
+    await expect(page.locator('#root > [data-app-pane="clips"] > .app')).toHaveCount(1);
+    expect(await page.locator('[data-app-pane="clips"]').evaluate((el) => getComputedStyle(el).display)).toBe("contents");
+    await expect(page.locator('[data-app-pane="clips"]')).not.toHaveAttribute("inert");
+    await expect(page.locator('[data-app-pane="stories"], .stories-app')).toHaveCount(0);
+    await expect(page.locator("main#main")).toHaveCount(1);
+    await page.context().close();
+  });
 
   test("the switcher is a pick bar on the sliding highlight, never a menu item and never a new tab", async ({ browser }) => {
     const page = await open(browser, { w: 1440, h: 900 }, true);

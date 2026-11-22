@@ -14,7 +14,7 @@ import { Glide } from "../../components/Glide.tsx";
 import { burst } from "../../lib/confetti.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { navigate } from "../../lib/router.ts";
-import { sounds } from "../../lib/sounds.ts";
+import { storiesReduceMotion, storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
 import { EFFORT_LABEL, type Effort, type ModelInfo, type Onboarding, type OnboardStep, type Platform, type StoriesAiConfig, type StoriesConfig } from "../api/types.ts";
 import {
@@ -566,8 +566,8 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
             setBusy(true);
             try {
               await patch({ finish: true });
-              burst(centerOf(el), 140);
-              sounds.play("success");
+              if (!storiesReduceMotion()) burst(centerOf(el), 140);
+              storiesSound("success");
               toast.success("Lamo Stories is set up!");
               void refreshDashboard(ws).catch(() => undefined);
               setTimeout(() => navigate("/stories"), 1400);

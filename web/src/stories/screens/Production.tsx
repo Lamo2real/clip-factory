@@ -12,6 +12,7 @@ import { burst } from "../../lib/confetti.ts";
 import { useLoad, usePoll } from "../../lib/hooks.ts";
 import { navigate } from "../../lib/router.ts";
 import { storiesApi } from "../api/client.ts";
+import { storiesReduceMotion } from "../prefs.ts";
 import {
   STEP_LABEL,
   STEP_ORDER,
@@ -559,7 +560,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
     wasLive.current = false;
     void jobs.reload();
     if (story.status === "review") {
-      burst(undefined, 120);
+      if (!storiesReduceMotion()) burst(undefined, 120);
       toast.success("Your video is ready to watch!");
     } else if (story.status === "needs_check") toast.info("Your video is made. Some facts need checking in Review.");
     else if (story.status === "failed") toast.error(job?.status === "failed" && job.error ? job.error : "Making the video stopped. Tap Try again.");

@@ -20,8 +20,7 @@ import { relative, shortDate } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { KEY_LABEL, keyNames, keyProblem, normaliseKey } from "../../lib/keyFormats.ts";
 import { navigate } from "../../lib/router.ts";
-import { cheerOnNextTap } from "../../lib/sound.ts";
-import { sounds } from "../../lib/sounds.ts";
+import { storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
 import { SHARED_APP_PLATFORMS, type ClipsDestination, type KeyCheck, type Platform, type SocialAccount } from "../api/types.ts";
 import {
@@ -890,7 +889,7 @@ export function ConnectionsScreen({ ws, page }: StoriesScreenProps) {
     if (good) {
       toast.success(text);
       celebrate(undefined, false);
-      cheerOnNextTap(sounds);
+      storiesSound("success", { onNextTap: true });
     } else toast.error(text);
     void reload();
     void refreshDashboard(ws).catch(() => undefined);

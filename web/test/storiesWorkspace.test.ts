@@ -32,6 +32,7 @@ import {
   settleSwitch,
   wantedStoriesWorkspace,
   setKnownWorkspaces,
+  serverWorkspaces,
   startPath,
   storiesTitle,
   switchTarget,
@@ -290,6 +291,18 @@ describe("the workspace list", () => {
   it("then every workspace the server lists, Lamo Clips first, never two Lamo Clips", () => {
     setKnownWorkspaces([STORIES, CLIPS, CARS, ws("clips2", "clips")]);
     expect(knownWorkspaces().map((w) => w.workspaceId)).toEqual(["clips", "stories", CARS.workspaceId]);
+  });
+
+  it("keeps the server's own list for StoriesApp to open from at once (§45.34), none before it answered", () => {
+    expect(serverWorkspaces()).toBeNull();
+    // Even a list with no Lamo Stories workspace stays the server's own (the switcher still shows a default one).
+    setKnownWorkspaces([CLIPS]);
+    expect(serverWorkspaces()).toEqual([CLIPS]);
+    expect(knownWorkspaces().map((w) => w.workspaceId)).toEqual(["clips", "stories"]);
+    setKnownWorkspaces([CLIPS, CARS]);
+    expect(serverWorkspaces()).toEqual([CLIPS, CARS]);
+    resetWorkspaceMemory();
+    expect(serverWorkspaces()).toBeNull();
   });
 });
 
