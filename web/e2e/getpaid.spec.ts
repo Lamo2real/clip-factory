@@ -404,17 +404,21 @@ async function ctxFor(browser: Browser, w: number, h: number, touch: boolean, sc
   return browser.newContext({ viewport: { width: w, height: h }, hasTouch: touch, isMobile: touch, userAgent: touch ? IPHONE : undefined, reducedMotion: "reduce", colorScheme: scheme });
 }
 
+// One test per scheme and scenario (and per width and scenario below), so the workers share them: all of them in one
+// test ran past its timeout in Linux WebKit, where a 1440 or 1920 px page paints in software. Desktop sizes get
+// Playwright's slow allowance there too.
 for (const [w, h, touch] of [
   [375, 812, true],
   [1440, 900, false],
 ] as const)
-  test(`axe AA contrast, light and dark: ${touch ? "phone" : "desktop"} ${w}x${h}`, async ({ browser }) => {
-    test.setTimeout(180_000);
-    const fails: string[] = [];
-    for (const scheme of ["light", "dark"] as const) {
-      const ctx = await ctxFor(browser, w, h, touch, scheme);
-      const page = await ctx.newPage();
-      for (const scenario of ["owner", "hold"]) {
+  for (const scheme of ["light", "dark"] as const)
+    for (const scenario of ["owner", "hold"])
+      test(`axe AA contrast, ${scheme}, ${scenario}: ${touch ? "phone" : "desktop"} ${w}x${h}`, async ({ browser, browserName }) => {
+        test.setTimeout(120_000);
+        test.slow(browserName === "webkit" && !touch, "large WebKit pages paint in software in CI");
+        const fails: string[] = [];
+        const ctx = await ctxFor(browser, w, h, touch, scheme);
+        const page = await ctx.newPage();
         await start(page, "/", scenario, [], [["whop", [true]]]);
         for (const path of [...PAGES, "/money"]) {
           await page.goto(path);
@@ -422,20 +426,19 @@ for (const [w, h, touch] of [
           const axe = await new AxeBuilder({ page }).withRules(["color-contrast"]).include("main").analyze();
           fails.push(...axe.violations.flatMap((v) => v.nodes.map((n) => `${scheme} ${scenario} ${path}: ${n.target.join(" ")}: ${n.any.map((c) => c.message).join("; ")}`)));
         }
-      }
-      await ctx.close();
-    }
-    expect(fails, fails.join("\n")).toEqual([]);
-  });
+        await ctx.close();
+        expect(fails, fails.join("\n")).toEqual([]);
+      });
 
 for (const w of [320, 390, 768, 1024, 1920] as const)
-  test(`no sideways scroll at ${w} px on every Get paid screen (owner and hold)${w >= 1024 ? " desktop" : ""}`, async ({ browser }) => {
-    test.setTimeout(120_000);
-    const touch = w < 768;
-    const ctx = await ctxFor(browser, w, touch ? 700 : 900, touch, "light");
-    const page = await ctx.newPage();
-    const fails: string[] = [];
-    for (const scenario of ["owner", "hold", "unread"]) {
+  for (const scenario of ["owner", "hold", "unread"])
+    test(`no sideways scroll at ${w} px on every Get paid screen (${scenario})${w >= 1024 ? " desktop" : ""}`, async ({ browser, browserName }) => {
+      test.setTimeout(120_000);
+      test.slow(browserName === "webkit" && w >= 768, "large WebKit pages paint in software in CI");
+      const touch = w < 768;
+      const ctx = await ctxFor(browser, w, touch ? 700 : 900, touch, "light");
+      const page = await ctx.newPage();
+      const fails: string[] = [];
       await start(page, "/", scenario, [], [["whop", [true]]]);
       for (const path of [...PAGES, "/money"]) {
         await page.goto(path);
@@ -443,10 +446,9 @@ for (const w of [320, 390, 768, 1024, 1920] as const)
         const o = await findOverflow(page);
         if (o.page > o.viewport) fails.push(`${scenario} ${path}: ${o.page} > ${o.viewport} ${JSON.stringify(o.items.slice(0, 3))}`);
       }
-    }
-    await ctx.close();
-    expect(fails, fails.join("\n")).toEqual([]);
-  });
+      await ctx.close();
+      expect(fails, fails.join("\n")).toEqual([]);
+    });
 
 test("reduced motion: nothing on a Get paid page keeps moving", async ({ browser }) => {
   const ctx = await ctxFor(browser, 375, 812, true, "light");
