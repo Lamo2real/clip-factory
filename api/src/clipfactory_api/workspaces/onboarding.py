@@ -1,13 +1,19 @@
 """Lamo Stories' first-time setup (docs/CONTRACTS.md §45.3 ``ONBOARD``, §45.5, §45.6 ``Onboarding``, §45.29,
-§45.33).
+§45.33, §45.34).
 
 Eleven steps; any can be skipped and done later, and making videos never waits for them. Done states come from the
-real state and cannot be ticked by hand: a saved AI configuration (steps 1–3: ``AICONFIG.configSavedAt``, set only
-by PUT ``…/ai``, never by a price alone), a provider picked (4), each platform's own Lamo Stories connection (6–10).
-Only 5 and 11 are ticked by hand. Step 4 counts a picture or video maker other than the built-in default, or the
-workspace's ``providersPickedAt`` (the time a ``PATCH …/workspaces/{ws}`` saved ``configuration.providers``, even
-unchanged: keeping the built-in animator is a pick too); until builder A's route writes that, keeping the default can
-only be skipped (contractIssues). The ``ONBOARD`` item keeps only the hand ticks, the skips and ``finishedAt``.
+real state and cannot be ticked by hand (§45.34 "Setup steps 1–3", "Onboarding step 4"):
+
+* step 1 (Set up the AI) when Check models ran (any ``MODELSTATUS#``) or the owner tapped "These look right"
+  (``AICONFIG.pickedAt.environment``); step 2 when the default model was picked (``pickedAt.model``); step 3 when
+  the default effort was picked (``pickedAt.effort``). A configuration saved before ``pickedAt`` existed keeps
+  ticking all three from ``configSavedAt``, so nothing goes backwards;
+* step 4 when ``PATCH …/workspaces/{ws}`` saved ``configuration.providers`` (``providersPickedAt``, even unchanged:
+  keeping the built-in animator is a pick too) or a maker other than the built-in default is picked;
+* steps 6–10 when that platform's own Lamo Stories account is ``connected`` (Lamo Clips' own account,
+  ``same_as_clips``, is not: nothing can be posted there, so the step stays to do with a line saying why).
+
+Only 5 and 11 are ticked by hand. The ``ONBOARD`` item keeps only the hand ticks, the skips and ``finishedAt``.
 """
 
 from __future__ import annotations
@@ -40,7 +46,7 @@ STEP_KEYS: Final = tuple(k for k, _ in STEPS)
 BY_HAND: Final = ("agents", "done")
 FROM_AI: Final = ("ai", "model", "effort")
 PLATFORM_STEPS: Final = ("instagram", "tiktok", "youtube", "facebook", "x")
-CONNECTED: Final = ("connected", "same_as_clips")
+CONNECTED: Final = ("connected",)
 PLATFORM_LABEL: Final = {
     "instagram": "Instagram",
     "tiktok": "TikTok",
@@ -49,10 +55,38 @@ PLATFORM_LABEL: Final = {
     "x": "X",
 }
 TICKS_ITSELF: Final = {
-    **dict.fromkeys(FROM_AI, "This step ticks itself when you save your AI settings."),
+    "ai": "This step ticks itself when you run Check models or tap These look right.",
+    "model": "This step ticks itself when you pick your default model.",
+    "effort": "This step ticks itself when you pick your default effort.",
     "video": "This step ticks itself when you pick how videos are made.",
     **{p: f"This step ticks itself when {PLATFORM_LABEL[p]} is connected." for p in PLATFORM_STEPS},
 }
+
+
+def same_as_clips_line(platform: str) -> str:
+    """Why a platform's step is not done while its account is Lamo Clips' own (§45.34)."""
+    return (
+        f"This is Lamo Clips' {PLATFORM_LABEL.get(platform, platform)} account. Pick another in Social accounts, "
+        "or tap Use it for both."
+    )
+
+
+def ai_steps(store: db.Store, user_id: str, workspace_id: str) -> dict[str, bool]:
+    """Steps 1–3 from the real state (§45.34)."""
+    item = cfg.read(store, user_id, workspace_id)
+    picked = cfg.picked_at(item)
+    if picked is None:  # saved before the picks were recorded (or never saved): as it was then
+        legacy = bool((item or {}).get("configSavedAt"))
+        done = dict.fromkeys(FROM_AI, legacy)
+    else:
+        done = {
+            "ai": bool(picked.get("environment")),
+            "model": bool(picked.get("model")),
+            "effort": bool(picked.get("effort")),
+        }
+    if not done["ai"]:
+        done["ai"] = bool(cfg.query_owned(store, user_id, workspace_id, ws.MODELSTATUS_SK))
+    return done
 
 
 def _item(store: db.Store, user_id: str, workspace_id: str) -> dict[str, Any] | None:
@@ -74,7 +108,7 @@ def state(store: db.Store, user_id: str, workspace_id: str, workspace: Mapping[s
     item = _item(store, user_id, workspace_id) or {}
     hand = {str(s) for s in item.get("stepsDone") or []}
     skipped = {str(s) for s in item.get("skipped") or []}
-    ai_saved = cfg.saved(store, user_id, workspace_id)
+    from_ai = ai_steps(store, user_id, workspace_id)
     social = {
         str(i.get("platform") or str(i["sk"])[len(ws.SOCIAL_SK) :]): i
         for i in cfg.query_owned(store, user_id, workspace_id, ws.SOCIAL_SK)
@@ -82,7 +116,7 @@ def state(store: db.Store, user_id: str, workspace_id: str, workspace: Mapping[s
     done: dict[str, bool] = {}
     for key in STEP_KEYS:
         if key in FROM_AI:
-            done[key] = ai_saved
+            done[key] = from_ai[key]
         elif key in PLATFORM_STEPS:
             done[key] = (social.get(key) or {}).get("connectionStatus") in CONNECTED
         elif key == "video":
@@ -91,10 +125,16 @@ def state(store: db.Store, user_id: str, workspace_id: str, workspace: Mapping[s
             done[key] = key in hand or bool(item.get("finishedAt"))
         else:
             done[key] = key in hand
-    steps = [
+    steps: list[dict[str, Any]] = [
         {"step": key, "label": label, "state": "done" if done[key] else ("skipped" if key in skipped else "todo")}
         for key, label in STEPS
     ]
+    for step in steps:
+        if (
+            step["step"] in PLATFORM_STEPS
+            and (social.get(step["step"]) or {}).get("connectionStatus") == "same_as_clips"
+        ):
+            step["line"] = same_as_clips_line(str(step["step"]))
     return {
         "steps": steps,
         "done": sum(1 for s in steps if s["state"] == "done"),

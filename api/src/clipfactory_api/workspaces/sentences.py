@@ -2,7 +2,7 @@
 
 The platform publishers and the token helpers were written for Lamo Clips: their sentences send the owner to Lamo
 Clips' Settings. The story flow never stores one of those. Every ``Problem.kind`` (and the few kinds only the story
-flow has) maps to a sentence here that names Lamo Stories' own Connections page and the account it is about.
+flow has) maps to a sentence here that names Lamo Stories' own Social accounts page and the account it is about.
 
 Pure: no I/O.
 """
@@ -42,7 +42,7 @@ KINDS: Final = (
     "not_started",
     "ai_label",
 )
-# The kinds the owner has to fix in Lamo Stories › Connections (or on the platform) before Try again can work: the
+# The kinds the owner has to fix in Lamo Stories › Social accounts (or on the platform) before Try again can work: the
 # job is ``needs_attention``; every other kind is ``failed``.
 NEEDS_YOU: Final = frozenset(
     {
@@ -62,7 +62,7 @@ NEEDS_YOU: Final = frozenset(
         "ai_label",
     }
 )
-CONNECTIONS: Final = "Lamo Stories › Connections"
+CONNECTIONS: Final = "Lamo Stories › Social accounts"  # the page's name (§45.34: never "Connections")
 
 
 def label(platform: str) -> str:

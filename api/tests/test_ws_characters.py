@@ -178,7 +178,10 @@ def test_portrait_needs_ai_pictures_on(call: Call, agentcore: FakeAgentCore, tab
     cid = call("POST", f"{BASE}/characters", character_body())[1]["character"]["characterId"]
     status, body = call("POST", f"{BASE}/characters/{cid}/portrait")
     assert status == 409
-    assert body["error"]["message"] == "AI pictures are off. Turn them on in Lamo Stories › Settings."
+    assert (
+        body["error"]["message"]
+        == "AI pictures are off. Turn them on in Lamo Stories › Settings › Video › Picture maker."
+    )
     _turn_on_pictures(call)
     status, body = call("POST", f"{BASE}/characters/{cid}/portrait")
     assert status == 202

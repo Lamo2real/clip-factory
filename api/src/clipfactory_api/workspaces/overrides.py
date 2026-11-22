@@ -27,9 +27,14 @@ RESOLVER_MODULES: Final = ("ai_resolve", "ai_config", "agents")
 
 
 def _model(value: Any, field: str) -> dict[str, Any]:
+    """A key of ``stories/config/models.json``, or of a model the owner added to this workspace (§45.34)."""
     if not isinstance(value, str) or not value:
         raise bad_request(f"{field} must be a model key.", field)
     found = config.model(value)
+    if found is None:
+        from .ai_resolve import custom_models
+
+        found = next((m for m in custom_models() if m.get("key") == value), None)
     if found is None:
         raise bad_request("We don't know that model. Pick one in Lamo Stories › Settings › AI.", field)
     return found

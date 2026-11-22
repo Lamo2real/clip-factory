@@ -13,11 +13,13 @@ from clipfactory_api.workspaces import ai_resolve as res
 from clipfactory_api.workspaces import types as ws
 from fakes import FakeTable
 from test_ws_ai_support import (
+    AT,
     BASE,
     FakeRuntime,
     WsCall,
     dynamodb_rules,  # noqa: F401 (the DynamoDB expression rules, after each test)
     install,
+    prefix,
     seed,
     seed_asset,
     seed_usage,
@@ -102,11 +104,81 @@ def test_provider_usage_is_priced_only_when_its_price_is_known(wcall: WsCall, st
     )
     seed(store, "USAGE#2026-11-15#p4", usage, kind="provider", providerId="builtin-2d", renderSec=60, cost=None)
     _, body = wcall("GET", f"{BASE}/usage")
-    today = body["usage"]["days"][-1]["byModel"]
-    # a provider with a known cost has its own row (no tokens); one without a price adds no "0 tokens" line
-    assert today == [{"model": "nova-reel", "input": 0, "output": 0, "cost": 0.48, "currency": "USD"}]
-    assert body["usage"]["totals"] == [{"model": "nova-reel", "input": 0, "output": 0, "cost": 0.96, "currency": "USD"}]
+    day = body["usage"]["days"][-1]
+    # model rows never carry a provider id (§45.34): providers have their own rows, in units
+    assert day["byModel"] == []
+    assert body["usage"]["totals"] == []
+    assert day["byProvider"] == [
+        {"provider": "nova-canvas", "units": 2, "unit": "image", "cost": None, "currency": None},  # "No price yet"
+        {"provider": "nova-reel", "units": 6, "unit": "second", "cost": 0.48, "currency": "USD"},  # the agent's cost
+        {"provider": "builtin-rig", "units": 60, "unit": "second", "cost": 0.0, "currency": None},  # free, built in
+    ]
+    assert day["renderMinutes"] == 1.0
+    assert body["usage"]["days"][-2]["renderMinutes"] == 0.0
+    totals = {t["provider"]: t for t in body["usage"]["totalsByProvider"]}
+    assert totals["nova-reel"] == {
+        "provider": "nova-reel",
+        "units": 12,
+        "unit": "second",
+        "cost": 0.96,
+        "currency": "USD",
+    }
+    assert totals["builtin-rig"]["cost"] == 0.0
     assert body["usage"]["renderMinutes"] == 1.0
+
+
+def test_provider_usage_in_units_priced_by_the_owners_per_unit_price(wcall: WsCall, store: db.Store) -> None:
+    """The agent's ``USAGE#`` items of kind ``provider`` carry ``provider``, ``units`` and ``unit`` (§45.34); the
+    owner's per-picture or per-second price prices them; built-in render seconds are the day's render minutes."""
+    usage = ws.TYPE_USAGE
+    seed(store, "USAGE#2026-11-15#a", usage, kind="provider", provider="nova-canvas", units=3, unit="image")
+    seed(store, "USAGE#2026-11-15#b", usage, kind="provider", provider="nova-reel", units=12, unit="second")
+    seed(store, "USAGE#2026-11-15#c", usage, kind="provider", provider="builtin-rig", units=90, unit="second")
+    seed(store, "USAGE#2026-11-14#d", usage, kind="provider", provider="builtin-2d", units=30, unit="second")
+    seed(store, "USAGE#2026-11-14#e", usage, kind="provider", provider="nova-reel", units=6, unit="second")
+    seed_usage(store, "2026-11-15", "opus-5-5", input=10, output=10)
+    prices = {
+        "nova-canvas": {"inputPer1M": 0, "outputPer1M": 0, "perUnit": 0.04, "currency": "USD"},
+        "nova-reel": {"inputPer1M": 0, "outputPer1M": 0, "perUnit": 0.08, "currency": "USD"},
+    }
+    assert wcall("PUT", f"{BASE}/ai", {"defaultModel": "opus-5-5", "defaultEffort": "high", "prices": prices,
+                                       "version": 0})[0] == 200  # fmt: skip
+    _, body = wcall("GET", f"{BASE}/usage")
+    today, yesterday = body["usage"]["days"][-1], body["usage"]["days"][-2]
+    assert [r["model"] for r in today["byModel"]] == ["opus-5-5"]
+    rows = {r["provider"]: r for r in today["byProvider"]}
+    assert rows["nova-canvas"] == {
+        "provider": "nova-canvas",
+        "units": 3,
+        "unit": "image",
+        "cost": 0.12,
+        "currency": "USD",
+    }
+    assert rows["nova-reel"]["cost"] == 0.96
+    assert rows["builtin-rig"] == {
+        "provider": "builtin-rig",
+        "units": 90,
+        "unit": "second",
+        "cost": 0.0,
+        "currency": None,
+    }
+    assert (today["renderMinutes"], yesterday["renderMinutes"]) == (1.5, 0.5)
+    assert body["usage"]["renderMinutes"] == 2.0
+    totals = {t["provider"]: t for t in body["usage"]["totalsByProvider"]}
+    assert (totals["nova-reel"]["units"], totals["nova-reel"]["cost"]) == (18, 1.44)
+    assert totals["builtin-rig"]["units"] == 120
+    # every day is listed with its own render minutes and provider rows
+    assert all(set(d) == {"day", "byModel", "renderMinutes", "byProvider"} for d in body["usage"]["days"])
+
+
+def test_a_day_without_a_known_price_leaves_the_total_unpriced(wcall: WsCall, store: db.Store) -> None:
+    usage = ws.TYPE_USAGE
+    seed(store, "USAGE#2026-11-15#a", usage, kind="provider", provider="nova-reel", units=6, unit="second",
+         cost=0.5, currency="USD")  # fmt: skip
+    seed(store, "USAGE#2026-11-14#b", usage, kind="provider", provider="nova-reel", units=6, unit="second")
+    _, body = wcall("GET", f"{BASE}/usage")
+    (total,) = body["usage"]["totalsByProvider"]
+    assert (total["units"], total["cost"], total["currency"]) == (12, None, None)
 
 
 def test_a_long_context_call_uses_the_long_context_price(wcall: WsCall, store: db.Store) -> None:
@@ -118,7 +190,10 @@ def test_a_long_context_call_uses_the_long_context_price(wcall: WsCall, store: d
     assert row["cost"] == round(0.1 + 0.025 + 0.005 + 0.005, 4)
 
 
-def test_storage_from_the_items_not_a_listing(wcall: WsCall, store: db.Store, table: FakeTable) -> None:
+def test_storage_from_the_items_not_a_listing(
+    wcall: WsCall, store: db.Store, table: FakeTable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AWS_REGION", "eu-north-1")  # the media bucket's Region (§45.34 ``location``)
     seed_asset(store, "final_video", 1000)
     seed_asset(store, "cover", 10)
     seed_asset(store, "scene_clip", 200)
@@ -140,7 +215,19 @@ def test_storage_from_the_items_not_a_listing(wcall: WsCall, store: db.Store, ta
     seed(store, "ASSET#theirs", ws.TYPE_ASSET, user="someone-else", kind="final_video", bytes=10**9)
     status, body = wcall("GET", f"{BASE}/storage")
     assert status == 200
+    # storyboards and captions count under scenes ("Scenes and storyboards", §45.34)
     assert body["storage"] == {
-        "bytes": {"videos": 1010, "scenes": 220, "audio": 30, "references": 5000, "skills": 7, "other": 12},
+        "bytes": {"videos": 1010, "scenes": 225, "audio": 30, "references": 5000, "skills": 7, "other": 7},
         "files": 10,
+        "location": {"region": "eu-north-1", "folder": f"s3://cf-prod-media-123/{prefix()}"},
     }
+
+
+def test_captions_count_as_scenes_and_a_cleared_reference_holds_nothing(wcall: WsCall, store: db.Store) -> None:
+    seed_asset(store, "captions", 40)
+    seed_asset(store, "storyboard", 2)
+    seed(store, "REFVID#r1", ws.TYPE_REFVID, refId="r1", status="analyzed", bytes=5000, fileRemovedAt=AT)
+    _, body = wcall("GET", f"{BASE}/storage")
+    assert body["storage"]["bytes"]["scenes"] == 42
+    assert body["storage"]["bytes"]["references"] == 0
+    assert body["storage"]["files"] == 2

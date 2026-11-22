@@ -53,6 +53,7 @@ BUSY: Final = "This video is being studied already. Wait until it is done."
 NOT_READY: Final = "Wait until the video has finished uploading."
 DID_NOT_START: Final = "Studying the video did not start. Tap Try again."
 STOPPED: Final = "Studying the video stopped. Tap Try again."
+FILE_REMOVED: Final = "The video was removed to save space. Its study stays."
 
 
 def ref_sk(ref_id: str) -> str:
@@ -92,7 +93,7 @@ def public(app: Any, item: Mapping[str, Any]) -> dict[str, Any]:
     }
     key = str(item.get("key") or "")
     prefix = ws.s3_prefix(str(item.get("userId")), str(item.get("workspaceId")))
-    if status != "uploading" and key.startswith(prefix):
+    if status != "uploading" and key.startswith(prefix) and not item.get("fileRemovedAt"):
         out["url"] = app.media.presign_get(key, GET_SECONDS)
     return out
 
@@ -289,6 +290,8 @@ def _analyze(
         raise conflict(BUSY)
     if item.get("status") not in CAN_ANALYZE:
         raise conflict(NOT_READY)
+    if item.get("fileRemovedAt"):  # the keep setting cleared the file (§45.34): there is nothing left to study
+        raise conflict(FILE_REMOVED)
     agent = agents_mod.read(store, user_id, workspace_id, AGENT)
     off = agents_mod.switched_off(agent)
     if off:
@@ -500,9 +503,31 @@ def _public_analysis(data: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def analysis_job(app: Any, item: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The reference's analysis job (§45.34): the one of ``currentJobId``, else its newest one; None when it never
+    had one. The page shows each step and the failure's own sentence from it."""
+    user_id, workspace_id, ref_id = str(item["userId"]), str(item["workspaceId"]), str(item["refId"])
+    current = item.get("currentJobId")
+    if isinstance(current, str) and current:
+        job = cfg.get_owned(app.store, user_id, workspace_id, _job_sk(current))
+        if job is not None and job.get("contentType") == "reference" and job.get("contentId") == ref_id:
+            return job
+    found = [
+        j
+        for j in cfg.query_owned(app.store, user_id, workspace_id, ws.PJOB_SK)
+        if j.get("contentType") == "reference" and j.get("contentId") == ref_id
+    ]
+    return max(found, key=lambda j: (str(j.get("createdAt") or ""), str(j.get("jobId") or "")), default=None)
+
+
 def get(app: Any, user_id: str, workspace_id: str, ref_id: str, now: datetime) -> dict[str, Any]:
     item = settle(app, _owned(app.store, user_id, workspace_id, ref_id), now)
-    return {"reference": public(app, item), "analysis": analysis(app, item)}
+    job = analysis_job(app, item)
+    return {
+        "reference": public(app, item),
+        "analysis": analysis(app, item),
+        "job": public_job(job) if job is not None else None,
+    }
 
 
 def patch(

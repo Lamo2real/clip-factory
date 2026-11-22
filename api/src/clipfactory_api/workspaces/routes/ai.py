@@ -20,7 +20,7 @@ from ...http import Request, Response, Route, no_content, ok, route
 from .. import agents as agents_mod
 from .. import ai_config as cfg
 from .. import ai_resolve as res
-from .. import chat, guard, memory, onboarding, provider_keys, references, skills, storage, usage
+from .. import chat, guard, memory, model_defs, onboarding, provider_keys, references, retention, skills, storage, usage
 
 BASE = "/v1/workspaces/{ws}"
 
@@ -76,6 +76,19 @@ def put_price(app: App, req: Request) -> Response:
     ai = cfg.set_price(app.store, user_id, ws_id, key, price, now=now)
     status = cfg.model_status_items(app.store, user_id, ws_id).get(key)
     return ok({"model": cfg.model_info(found, status, ai)})
+
+
+def put_model(app: App, req: Request) -> Response:
+    """Settings › AI › "Add a model" (§45.34): adds or changes one model the owner hosts on Amazon Bedrock."""
+    user_id, ws_id, _, now = _open(app, req)
+    model = model_defs.put(app.store, user_id, ws_id, req.params["modelKey"], req.json(), now=now)
+    return ok({"model": model})
+
+
+def delete_model(app: App, req: Request) -> Response:
+    user_id, ws_id, _, now = _open(app, req)
+    model_defs.delete(app.store, user_id, ws_id, req.params["modelKey"], now=now)
+    return no_content()
 
 
 def get_usage(app: App, req: Request) -> Response:
@@ -278,7 +291,14 @@ def delete_provider_key(app: App, req: Request) -> Response:
 
 def get_storage(app: App, req: Request) -> Response:
     user_id, ws_id, _, _ = _open(app, req)
-    return ok({"storage": storage.summary(app.store, user_id, ws_id)})
+    return ok({"storage": storage.summary(app.store, user_id, ws_id, bucket=app.media.bucket)})
+
+
+def storage_cleanup(app: App, req: Request) -> Response:
+    """Settings › Storage and production › "Clear old files now" (§45.34): applies the workspace's keep settings."""
+    user_id, ws_id, workspace, now = _open(app, req)
+    validate.only_keys(req.json(), ())
+    return ok({"removed": retention.cleanup(app, user_id, ws_id, workspace, now)})
 
 
 ROUTES: list[Route] = [
@@ -286,6 +306,8 @@ ROUTES: list[Route] = [
     route("PUT", f"{BASE}/ai", put_ai),
     route("POST", f"{BASE}/ai/check-models", check_models),
     route("PUT", f"{BASE}/ai/prices/{{modelKey}}", put_price),
+    route("PUT", f"{BASE}/ai/models/{{modelKey}}", put_model),
+    route("DELETE", f"{BASE}/ai/models/{{modelKey}}", delete_model),
     route("GET", f"{BASE}/usage", get_usage),
     route("GET", f"{BASE}/agents/{{agentId}}", get_agent),
     route("PATCH", f"{BASE}/agents/{{agentId}}", patch_agent),
@@ -320,4 +342,5 @@ ROUTES: list[Route] = [
     route("PUT", f"{BASE}/providers/{{providerId}}/key", put_provider_key),
     route("DELETE", f"{BASE}/providers/{{providerId}}/key", delete_provider_key),
     route("GET", f"{BASE}/storage", get_storage),
+    route("POST", f"{BASE}/storage/cleanup", storage_cleanup),
 ]

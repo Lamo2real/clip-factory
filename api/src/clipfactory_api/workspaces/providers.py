@@ -11,9 +11,14 @@ States, as §45.11.6's table gives them:
 * Amazon Nova Canvas is ``off`` until the owner picks it, then ``needs_setup`` until the agent's real call answers
   (``PROVIDER#{kind}#{id}`` with ``state = on`` and ``checkedAt``);
 * Amazon Nova Reel is built but ``needs_setup`` (its United States bucket is switched off), picked or not, until a
-  ``PROVIDER#`` record says ``on``: picking it never makes it look ready.
+  ``PROVIDER#`` record says ``on``: picking it never makes it look ready. It makes cut-aways (scenes with no
+  character); its line says what is missing and that the owner picks Built-in animation or finishes its setup, never
+  that something else makes the videos (§45.34).
 
-Nothing is shown as working because it was configured.
+Nothing is shown as working because it was configured. **A provider that is not ready** (§45.34): while
+``configuration.providers.video`` or ``images`` names Nova Reel or Nova Canvas and its state is not ``on``, a story's
+create, produce and changes answer 409 with ``not_ready``'s sentence; nothing switches to another provider by itself
+(the agent's ``ProviderUnavailable`` is the second guard, with the same words).
 
 ``StoriesConfig.providers`` names the kinds ``images``, ``video`` and ``audio``; ``ProviderStatus.kind`` calls the
 video kind ``animation`` (the registry's name).
@@ -82,9 +87,11 @@ REGISTRY: Final[tuple[Provider, ...]] = (
         "nova-reel",
         "Amazon Nova Reel 1.1 (AI video)",
         False,
-        "Makes 6-second AI shots for backgrounds. Videos that use them are posted with the platforms' AI labels.",
-        "Needs a storage bucket in the United States (N. Virginia), which is switched off, and Amazon Nova Reel "
-        "enabled for your account. Until then the built-in animation makes your videos.",
+        "Makes 6-second AI shots for scenes with no characters (cut-aways). Videos that use them are posted with the "
+        "platforms' AI labels.",
+        "Amazon Nova Reel is not ready yet: it needs a storage bucket in the United States (N. Virginia), which is "
+        "switched off, and Amazon Nova Reel turned on for your account. Pick Built-in animation in Settings › Video, "
+        "or finish its setup.",
     ),
     Provider(
         "audio",
@@ -95,11 +102,25 @@ REGISTRY: Final[tuple[Provider, ...]] = (
         "",
     ),
 )
-OFF_LINE: Final = "Off. Pick it in Lamo Stories › Settings to use it."
+OFF_LINE: Final = "Off. Pick it in Lamo Stories › Settings › Video › Picture maker to use it."
 WRITER_FAILED: Final = "No model has answered yet. Tap Check models in Lamo Stories › Settings › AI to see why."
 PROOF_STEP: Final = {"writer": "storyboard", "images": "scenes", "animation": "animation", "audio": "sound"}
 NOTHING_MADE: Final = "Nothing changed"  # the agent's message for a step that had nothing to (re)make
 JOBS_READ: Final = 200  # the newest story jobs looked at for proof
+
+
+# What a story's create, produce and changes say while the picked maker is not ready (§45.34).
+NOT_READY: Final = {
+    "nova-reel": (
+        "Amazon Nova Reel is not ready yet: it needs a storage bucket in the United States (N. Virginia), which is "
+        "switched off, and Amazon Nova Reel turned on for your account. Pick Built-in animation in Settings › Video, "
+        "or finish its setup."
+    ),
+    "nova-canvas": (
+        "Amazon Nova Canvas is not ready yet: it has not made a picture for you yet. Pick Built-in characters in "
+        "Settings › Video › Picture maker, or make one AI portrait to finish its setup."
+    ),
+}
 
 
 def provider_sk(kind: str, provider_id: str) -> str:
@@ -208,3 +229,32 @@ def statuses(
         )
         for p in REGISTRY
     ]
+
+
+# The picture makers whose pictures go into a video. None today: the characters in a video are always drawn by the
+# built-in rig, and Nova Canvas makes portraits for the app and the Library only (§45.11.6); its first portrait is
+# the real call that turns it on, so a Nova Canvas not checked yet never stops a video. A maker added here (one that
+# draws scenes) is checked like Nova Reel.
+IMAGES_IN_VIDEOS: Final[tuple[str, ...]] = ()
+
+
+def not_ready(config: Mapping[str, Any], records: Sequence[Mapping[str, Any]]) -> str | None:
+    """The sentence a story's create, produce or changes stops with (409) while ``configuration.providers.video``
+    (or an ``images`` maker that draws in videos) names a maker that is not ``on`` (Nova Reel: on only after a real
+    call); None when it is ready. A recorded failure is said in the agent's own words."""
+    by_key = {str(r.get("sk")): r for r in records}
+    chosen = config.get("providers") if isinstance(config.get("providers"), Mapping) else {}
+    for kind in ("animation", "images"):
+        if kind == "images" and (chosen or {}).get("images") not in IMAGES_IN_VIDEOS:
+            continue
+        picked = (chosen or {}).get(CONFIG_KEY[kind])
+        p = next((x for x in REGISTRY if x.kind == kind and x.id == picked), None)
+        if p is None or p.builtin:
+            continue
+        record = by_key.get(provider_sk(p.kind, p.id))
+        shown = status(p, config, record)
+        if shown["state"] == "on":
+            continue
+        error = (record or {}).get("lastError")
+        return str(error) if isinstance(error, str) and error.strip() else NOT_READY.get(p.id, shown["line"])
+    return None

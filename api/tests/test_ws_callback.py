@@ -360,7 +360,7 @@ def test_a_list_of_pages_over_an_old_token_keeps_it_until_the_choice(
     assert str(secrets_client.json(token_name)[identity]) == choice  # the choice overwrote the old token
 
 
-# --- every way a workspace state can fail still lands on Lamo Stories' Connections -------------------------------
+# --- every way a workspace state can fail still lands on Lamo Stories' Social accounts ---------------------------
 
 
 def test_expired_replayed_forged_and_mismatched_states(

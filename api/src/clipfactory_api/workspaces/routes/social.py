@@ -198,7 +198,7 @@ def retry_publishing(app: App, req: Request) -> Response:
 
 def oauth_callback(app: App, req: Request) -> Response:
     """Public: the signed single-use ``w1.`` state is the only authorization. Always ``302`` to Lamo Stories'
-    Connections page with a listed code; nothing from the request is reflected."""
+    Social accounts page with a listed code; nothing from the request is reflected."""
     platform = str(req.params.get("platform") or "")
     env = app.oauth
     result, workspace_id = "error", None

@@ -39,7 +39,7 @@ def _account_sentence(account: Mapping[str, Any]) -> str | None:
     name = PLATFORM_NAMES.get(str(account.get("platform")), "an account")
     if account.get("connectionStatus") == "needs_reconnect":
         who = f" ({account['accountName']})" if account.get("accountName") else ""
-        return f"Lamo Stories' {name}{who} needs connecting again. Open Connections and tap Connect."
+        return f"Lamo Stories' {name}{who} needs connecting again. Open Social accounts and tap Connect."
     warning = account.get("warning")
     if isinstance(warning, str) and warning.strip():
         return warning.strip()

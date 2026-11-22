@@ -363,6 +363,7 @@ def _title(value: Any) -> str:
 def _check_setting(store: db.Store, user_id: str, workspace_id: str, model: str | None, effort: str | None) -> None:
     ai, agent = _context(store, user_id, workspace_id)
     try:
+        res.check_pair(model, effort)  # the conversation's own model and effort together (§45.34)
         res.resolve(task="chat", agent=agent, ai=ai, conversation={"model": model, "effort": effort})
     except res.ResolveError as e:
         raise bad_request(e.message, "effort" if e.kind == "effort" else "model") from e

@@ -426,7 +426,7 @@ def test_creator_info_uses_the_workspace_token_and_writes_no_setup_gate(
     status, body = call("GET", f"{ROOT}/tiktok/creator-info")
     assert status == 409
     assert body["error"]["message"] == (
-        "Lamo Stories' TikTok is not connected. Connect it in Lamo Stories › Connections."
+        "Lamo Stories' TikTok is not connected. Connect it in Lamo Stories › Social accounts."
     )
     sup.clips_account(store, secrets_client, "tiktok")
     sup.social(store, secrets_client, "tiktok", choice=choice)
@@ -889,3 +889,76 @@ def test_the_api_never_loads_the_durable_sdk_or_the_stats_refresh() -> None:
     )
     out = subprocess.run([sys.executable, "-c", code], check=True, capture_output=True, text=True).stdout
     assert out.strip() == "False False False"
+
+
+# --- §45.34 "Lamo Clips' account found later": same_as_clips on every platform ------------------------------------
+
+
+@pytest.mark.parametrize("platform", ["youtube", "tiktok", "instagram", "facebook", "x"])
+def test_lamo_clips_connecting_the_same_account_later_shows_same_as_clips(
+    call: Call, store: db.Store, secrets_client: FakeSecretsManager, platform: str
+) -> None:
+    sup.social(store, secrets_client, platform, identity="shared-1")
+    assert accounts(call)[platform]["connectionStatus"] == "connected"
+    sup.clips_account(store, None, platform, accountId="shared-1")  # Lamo Clips connects that very account later
+    shown = accounts(call)[platform]
+    assert shown["connectionStatus"] == "same_as_clips"  # so the card offers Pick another and Use it for both
+    assert shown["sharedWithClips"] is False
+    stored = store.get(sup.PK, f"SOCIAL#{platform}")
+    assert stored is not None
+    assert stored["connectionStatus"] == "same_as_clips"  # settled, so every reader (the dashboard too) sees it
+    assert "notClipsConfirmed" not in json.dumps(shown)
+    assert "sharedExternalAccountId" not in json.dumps(shown)
+    # Use it for both, on purpose: connected and shared, and it stays so
+    status, body = call("POST", f"{ROOT}/{platform}/share", {"confirm": True})
+    assert status == 200, body
+    assert (body["account"]["connectionStatus"], body["account"]["sharedWithClips"]) == ("connected", True)
+    assert accounts(call)[platform]["connectionStatus"] == "connected"
+
+
+def test_a_different_lamo_clips_account_leaves_the_connection_as_it_is(
+    call: Call, store: db.Store, secrets_client: FakeSecretsManager
+) -> None:
+    sup.social(store, secrets_client, "youtube")
+    sup.clips_account(store, None, "youtube")
+    assert accounts(call)["youtube"]["connectionStatus"] == "connected"
+    assert store.get(sup.PK, "SOCIAL#youtube")["connectionStatus"] == "connected"
+
+
+def test_check_it_finds_lamo_clips_account_too(
+    call: Call, store: db.Store, secrets_client: FakeSecretsManager, http: FakeHttp
+) -> None:
+    sup.social(store, secrets_client, "youtube")
+    sup.clips_account(store, None, "youtube", accountId="UC-STORIES")
+    http.answers.append((200, {"items": [{"id": "UC-STORIES"}]}))
+    status, body = call("POST", f"{ROOT}/youtube/check")
+    assert status == 200, body
+    assert body["account"]["connectionStatus"] == "same_as_clips"
+    assert store.get(sup.PK, "SOCIAL#youtube")["connectionStatus"] == "same_as_clips"
+
+
+def test_onboarding_ticks_a_platform_only_when_it_is_lamo_stories_own(
+    call: Call, store: db.Store, secrets_client: FakeSecretsManager
+) -> None:
+    sup.social(store, secrets_client, "x", identity="42")
+    steps = {s["step"]: s for s in call("GET", "/v1/workspaces/stories/onboarding")[1]["onboarding"]["steps"]}
+    assert steps["x"]["state"] == "done"
+    sup.clips_account(store, None, "x")  # Lamo Clips' X is that same account
+    accounts(call)
+    steps = {s["step"]: s for s in call("GET", "/v1/workspaces/stories/onboarding")[1]["onboarding"]["steps"]}
+    assert steps["x"]["state"] == "todo"
+    assert (
+        steps["x"]["line"] == "This is Lamo Clips' X account. Pick another in Social accounts, or tap Use it for both."
+    )
+
+
+def test_no_sentence_names_the_old_connections_page() -> None:
+    """§45.34 "Social accounts wording": the page is "Social accounts", never "Connections"."""
+    from clipfactory_api.workspaces import dashboard, sentences
+
+    for platform in ("youtube", "tiktok", "instagram", "facebook", "x"):
+        for kind in sentences.KINDS:
+            assert "Connections" not in sentences.story_sentence(platform, kind, "Lamo"), (platform, kind)
+    assert "Connections" not in social.TIKTOK_NOT_CONNECTED
+    line = dashboard._account_sentence({"platform": "youtube", "connectionStatus": "needs_reconnect"})
+    assert line == "Lamo Stories' YouTube needs connecting again. Open Social accounts and tap Connect."

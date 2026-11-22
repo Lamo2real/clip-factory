@@ -266,6 +266,7 @@ def _flow(call: Call, app: App, store: db.Store, s3_client: FakeS3) -> list[Any]
     )
     s3_client.objects[f"{prefix()}design/{picture['assetId']}.png"] = b"png"
     go("POST", f"{BASE}/characters/design", {"description": "A tall cat", "referenceAssetId": picture["assetId"]})
+    go("POST", f"{BASE}/characters/design", {"description": "Give Lamo a hat", "characterId": cid})  # §45.34
     reference = seed_refvid(store)
     created = go(
         "POST",
@@ -276,6 +277,7 @@ def _flow(call: Call, app: App, store: db.Store, s3_client: FakeS3) -> list[Any]
             "referenceIds": [reference["refId"]],
             "ai": {"model": "fable-5-2", "effort": None},
             "override": {"effort": "max"},
+            "format": {"aspect": "1:1", "width": 1080, "height": 1080},  # §45.34: one video's own shape
         },
     )
     sid, job_id = created["story"]["storyId"], created["job"]["jobId"]
@@ -352,6 +354,10 @@ def _flow(call: Call, app: App, store: db.Store, s3_client: FakeS3) -> list[Any]
     story = go("GET", f"{BASE}/stories/{sid}")["story"]
     go("POST", f"{BASE}/stories/{sid}/approve", {"version": story["version"]})
     go("GET", f"{BASE}/stories/{sid}/download")
+    seed_asset(
+        store, s3_client, storyId=sid, key=story_key(sid, "final/v1.webm"), meta={"current": 1, "format": "webm"}
+    )
+    go("POST", f"{BASE}/stories/{sid}/download", {"format": "webm"})  # §45.34: an extra format
     go("GET", f"{BASE}/stories/{sid}/jobs")
     go("GET", f"{BASE}/stories")
     go("GET", f"{BASE}/library")
