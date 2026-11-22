@@ -392,6 +392,12 @@ html:is(.see-through, [data-backdrop]) .gp-summary {
 .gp-pin .btn {
   box-shadow: 0 14px 30px -14px rgb(var(--shadow-rgb) / 0.9);
 }
+/* While the main action is pinned, focus and scrolls stop above its lane (WCAG 2.4.11), as on Find campaigns: the tab
+   bar's band, the home bar, the pin's 22 px over it, the button (56 px, 60 if its label wraps) and 12 px. A control he
+   tabs to or a page brings into view, such as Allow payment reading or a Copy, is never under the pin or the tab bar. */
+html:has(.gp-page.has-pin) {
+  scroll-padding-bottom: calc(var(--tabbar-h, 66px) + env(safe-area-inset-bottom) + 22px + 60px + 12px);
+}
 
 /* ---------- Money › Get paid ---------- */
 .gp-money {

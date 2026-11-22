@@ -23,7 +23,9 @@ type MockWin = Window & { __cfMock?: { getpaid?: Knobs; setup?: Knobs; cr?: Knob
 /** The pretend owner's start: a Get paid scenario, setups finished, and more knobs, then the page. */
 const watched = new WeakSet<object>();
 async function start(page: Page, path: string, scenario = "fresh", finish: string[] = [], knobs: [string, unknown[]][] = []) {
-  // The platforms' own pages never load here: they open in a new tab, which closes at once (axe's own blank page stays).
+  // The platforms' own pages never load here: they open in a new tab, which closes at once (axe's own blank page, with
+  // no opener, stays). The blocked load leaves the tab on about:blank, so waiting for an https address never closed it:
+  // a YouTube walk left 8 tabs open behind the page.
   const ctx = page.context();
   if (!watched.has(ctx)) {
     watched.add(ctx);
@@ -31,9 +33,8 @@ async function start(page: Page, path: string, scenario = "fresh", finish: strin
     ctx.on("page", (p) => {
       if (p === page) return;
       void p
-        .waitForLoadState("domcontentloaded")
-        .catch(() => undefined)
-        .then(() => (/^https:\/\//.test(p.url()) ? p.close() : undefined))
+        .opener()
+        .then((o) => (o ? p.close() : undefined))
         .catch(() => undefined);
     });
   }
@@ -102,6 +103,11 @@ for (const [name, use] of [
   const phone = name === "phone";
   test.describe(`${name}`, () => {
     test.use(use);
+    // WebKit on Linux paints without a GPU: hold the living backdrop still so frames stay cheap (helpers.ts,
+    // stillBackdrop). Every tap waits for frames, and YouTube's 15 crawled past 120 s on the CI runner's iPhone.
+    test.beforeEach(async ({ page, browserName }) => {
+      if (browserName === "webkit") await stillBackdrop(page);
+    });
 
     test("the ways in: 4 taps from Settings, 2 from Money, 1 from a setup page", async ({ page }) => {
       await start(page, "/", "owner");
@@ -145,8 +151,11 @@ for (const [name, use] of [
       await expect(page.locator("[data-cr='getpaid']")).toHaveAttribute("href", "/settings/posting/getpaid/contentrewards");
     });
 
-    test("YouTube: Clip Factory's taps are 15 (Partner Program, the reading step, five payout steps)", async ({ page }) => {
+    test("YouTube: Clip Factory's taps are 15 (Partner Program, the reading step, five payout steps)", async ({ page, browserName }) => {
       test.setTimeout(120_000);
+      // The longest walk in this file, 15 taps and a trip to Google and back in one test (the count spans all of it):
+      // 1.2 min on CI's WebKit iPhone with the backdrop still, and a slow runner there takes half as long again.
+      test.slow(browserName === "webkit", "the 15-tap walk paints in software in CI");
       await start(page, "/settings/posting/getpaid/youtube", "fresh", ["youtube"]);
       const t = tap(15);
       await expect(tomato(page)).toHaveCount(1);
@@ -407,6 +416,16 @@ for (const [name, use] of [
         const after = await tomato(page).boundingBox();
         expect(after!.y + after!.height).toBeLessThanOrEqual(812);
         expect(after!.y).toBeGreaterThanOrEqual(0.5 * 812);
+        // Focus and scrolls stop above the pin's lane (WCAG 2.4.11): a step brought into view from above lands clear of
+        // the pinned button, so it is never under the pin or the tab bar.
+        const brought = await page.evaluate(() => {
+          window.scrollTo({ top: 0, behavior: "instant" });
+          const head = document.querySelector<HTMLElement>("#step-yt-pin .gstep__head")!;
+          head.scrollIntoView({ block: "nearest", behavior: "instant" });
+          return { y: scrollY, head: head.getBoundingClientRect().bottom, pin: document.querySelector<HTMLElement>("main .btn--primary")!.getBoundingClientRect().top };
+        });
+        expect(brought.y, "step 6 was below the screen").toBeGreaterThan(0);
+        expect(brought.head, "brought into view above the pinned button").toBeLessThanOrEqual(brought.pin);
       });
   });
 }
