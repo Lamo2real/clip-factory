@@ -1776,7 +1776,8 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
   campaign's rules the same step takes his pasted rules; once signed in, a listed campaign he opened from the finder in
   the last 48 hours is added by itself (never one he removed) and its "You're in!" comes as for any campaign. Every
   match keeps its "Open on Content Rewards" button; only the open one is vermilion. It ships behind `cr_finder_enabled`
-  (default off) and is turned on by one line once every part has merged.
+  (default off) and is turned on by one line once every part has merged (done: its switch PR #136 turned it on on
+  22 Nov 2026).
 - **Consequences.** From the Find page to making clips: 2 taps of his own once signed in (open it, then "Make clips for
   this campaign" after the rules are read by themselves) plus CR's **Join Campaign**; 4 today, before CR's pilot yes
   (open it, paste the rules he copied on CR, "I joined: add it", "Make clips for this campaign") plus **Join Campaign**
