@@ -264,6 +264,8 @@ class FakeStore:
         self.objects: dict[str, tuple[bytes, str]] = {}
         self.reads: list[str] = []
         self.deleted: list[str] = []
+        self.modified: dict[str, Any] = {}  # key -> LastModified (an aware datetime); now when not set
+        self.listed: list[str] = []
 
     async def upload(self, path: Path, key: str, content_type: str) -> None:
         self.objects[key] = (path.read_bytes(), content_type)
@@ -291,6 +293,16 @@ class FakeStore:
     def get_bytes_sync(self, key: str) -> bytes:
         self.reads.append(key)
         return self.objects[key][0]
+
+    async def list_keys(self, prefix: str) -> list[dict[str, Any]]:
+        from datetime import UTC, datetime
+
+        self.listed.append(prefix)
+        return [
+            {"key": k, "size": len(v[0]), "modified": self.modified.get(k) or datetime.now(UTC)}
+            for k, v in sorted(self.objects.items())
+            if k.startswith(prefix)
+        ]
 
 
 class FakeModels:

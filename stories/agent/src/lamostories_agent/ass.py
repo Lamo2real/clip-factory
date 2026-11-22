@@ -2,12 +2,14 @@
 
 ``textTrack`` gives every caption, bubble symbol and the safety end card with its time, centre, size and colour in
 output pixels. Here each becomes one ``Dialogue`` line in Inter, kept inside the platforms' safe area (their buttons
-and captions cover the right edge, the top and the bottom of a 9:16 video), long captions wrapped on word breaks.
-Nothing a model wrote can reach libass as an override: braces and backslashes are replaced."""
+and captions cover the right edge, the top and the bottom of a 9:16 video; a square or wide video has narrower
+margins), long captions wrapped on word breaks. The file is laid out for the script's own size (any of the engine's
+six, §45.34). Nothing a model wrote can reach libass as an override: braces and backslashes are replaced."""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 
 WIDTH = 1080
@@ -22,6 +24,37 @@ MAX_LINE = 22  # characters per caption line before a wrap
 DEFAULT_COLOR = "#fff6e5"
 OUTLINE = "&H00421C1C"  # the stage's night indigo (#1C1842), as ASS's &HAABBGGRR
 KINDS = ("caption", "bubble", "endcard")
+
+
+@dataclass(frozen=True)
+class Frame:
+    """One video shape's text layout in its own pixels: the safe area, how much a 1080-wide layout is scaled, and how
+    many characters fit on one caption line."""
+
+    width: int
+    height: int
+    left: int
+    right: int
+    top: int
+    bottom: int
+    scale: float
+    line: int
+
+
+def frame(width: int = WIDTH, height: int = HEIGHT) -> Frame:
+    """The safe area of a ``width`` × ``height`` video: 9:16 keeps clear of TikTok's, Reels' and Shorts' buttons and
+    texts (the right column, the top tabs, the bottom bar); 1:1 and 16:9 have only thin margins with a little more at
+    the bottom (the players' bars)."""
+    w, h = max(1, int(width)), max(1, int(height))
+    ratio = w / h
+    if ratio < 0.8:  # 9:16
+        left, right, top, bottom, line = 80 / 1080 * w, 170 / 1080 * w, 260 / 1920 * h, 480 / 1920 * h, MAX_LINE
+    elif ratio < 1.3:  # 1:1
+        left, right, top, bottom, line = 0.06 * w, 0.06 * w, 0.06 * h, 0.12 * h, 26
+    else:  # 16:9
+        left, right, top, bottom, line = 0.05 * w, 0.05 * w, 0.07 * h, 0.14 * h, 40
+    return Frame(w, h, round(left), w - round(right), round(top), h - round(bottom), min(w, h) / 1080, line)
+
 
 HEADER = """[Script Info]
 ; Lamo Stories captions (docs/CONTRACTS.md §45.11.3)
@@ -86,7 +119,8 @@ def _clamp(v: float, lo: float, hi: float) -> float:
     return min(hi, max(lo, v))
 
 
-def dialogue(e: dict[str, Any]) -> str | None:
+def dialogue(e: dict[str, Any], f: Frame | None = None) -> str | None:
+    f = f or frame()
     kind = str(e.get("kind") or "caption")
     if kind not in KINDS:
         return None
@@ -97,11 +131,12 @@ def dialogue(e: dict[str, Any]) -> str | None:
     start, end = float(e.get("start") or 0), float(e.get("end") or 0)
     if end <= start:
         return None
-    size = round(_clamp(float(e.get("size") or 64), 28, 140))
-    x, y = float(e.get("x") or WIDTH / 2), float(e.get("y") or HEIGHT * 0.78)
+    size = round(_clamp(float(e.get("size") or 64 * f.scale), 28 * f.scale, 140 * f.scale))
+    x, y = float(e.get("x") or f.width / 2), float(e.get("y") or f.height * 0.78)
     if kind == "bubble":
         style = "Bubble"
-        x, y = _clamp(x, 40, WIDTH - 40), _clamp(y, 40, HEIGHT - 40)
+        edge = 40 * f.scale
+        x, y = _clamp(x, edge, f.width - edge), _clamp(y, edge, f.height - edge)
         body = text
     else:
         style = "Caption" if kind == "caption" else "EndCard"
@@ -109,10 +144,11 @@ def dialogue(e: dict[str, Any]) -> str | None:
         # breaks are kept as they are, so the video shows what the preview shows; unbroken text is wrapped here.
         given = [clean(part) for part in raw.split("\n")]
         given = [part for part in given if part]
-        lines = given if len(given) > 1 else wrap(text, MAX_LINE if kind == "caption" else 28)
+        lines = given if len(given) > 1 else wrap(text, f.line if kind == "caption" else f.line + 6)
         half_h = size * 0.62 * len(lines)
-        x = _clamp(x, SAFE_LEFT + 200, SAFE_RIGHT - 200)
-        y = _clamp(y, SAFE_TOP + half_h, SAFE_BOTTOM - half_h)
+        inset = min(200 * f.scale, (f.right - f.left) / 2)
+        x = _clamp(x, f.left + inset, f.right - inset)
+        y = _clamp(y, f.top + half_h, f.bottom - half_h)
         body = "\\N".join(lines)
     color = ass_color(str(e.get("color") or DEFAULT_COLOR))
     tags = f"{{\\an5\\pos({round(x)},{round(y)})\\fs{size}\\1c{color}\\fad(120,120)}}"
@@ -132,13 +168,15 @@ def needs_file(events: Sequence[dict[str, Any]], captions_on: bool) -> bool:
 def build(
     events: Sequence[dict[str, Any]], *, captions_on: bool = True, width: int = WIDTH, height: int = HEIGHT
 ) -> str:
-    """The whole ASS file; captions are left out when the story's captions are off (bubbles and the end card stay)."""
-    head = HEADER.format(w=width, h=height, font=FONT, outline=OUTLINE, ml=SAFE_LEFT, mr=width - SAFE_RIGHT)
+    """The whole ASS file for a ``width`` × ``height`` video; captions are left out when the story's captions are off
+    (bubbles and the end card stay)."""
+    f = frame(width, height)
+    head = HEADER.format(w=f.width, h=f.height, font=FONT, outline=OUTLINE, ml=f.left, mr=f.width - f.right)
     lines = []
     for e in sorted(events, key=lambda e: (float(e.get("start") or 0), str(e.get("kind")))):
         if e.get("kind") == "caption" and not captions_on:
             continue
-        line = dialogue(e)
+        line = dialogue(e, f)
         if line:
             lines.append(line)
     return head + "\n".join(lines) + ("\n" if lines else "")

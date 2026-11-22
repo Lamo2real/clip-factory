@@ -16,8 +16,8 @@ from lamostories_agent.tasks.store import Store
 
 TEXT_MAX = 300
 PROMPT_LIMIT = 50
-CHAT_LIMIT = 200  # the most memories the chat may keep; beyond it, the owner tidies Settings › Memory
-FULL = "Memory is full. Delete some in Lamo Stories › Settings › Memory first."
+CHAT_LIMIT = 50  # the API's limit (workspaces/memory.py SHOWN): every note stays visible in Settings › Memory
+FULL = f"Memory is full ({CHAT_LIMIT} notes). Delete one first."  # the API's own sentence (§45.34)
 TYPE = "ws_mem"
 
 

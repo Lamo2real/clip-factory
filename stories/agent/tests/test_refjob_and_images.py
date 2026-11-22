@@ -145,3 +145,44 @@ def test_every_picture_for_a_model_is_a_small_jpeg_without_its_metadata(tmp_path
     with pytest.raises(UserFacingError) as e:
         images.to_model_image(bad)
     assert str(e.value) == "I can't open that picture. Try a screenshot or a photo."
+
+
+@needs_ffmpeg
+def test_study_only_clears_the_video_once_its_study_is_written_and_a_new_study_says_why_it_cannot(
+    tmp_path: Path,
+) -> None:
+    """§45.34 keepReferences "study_only": after the job writes the study, the video file goes; analysis.json and the
+    REFVID# item stay, with the note the reference's page shows."""
+    from lamostories_agent import refjob
+
+    svc, store, table, _ = ref_world(tmp_path)
+    table.seed({"pk": f"USER#{USER}#WSREG", "sk": f"WS#{WS}", "userId": USER, "workspaceId": WS,
+                "workspaceType": "stories", "configuration": {"production": {"keepReferences": "study_only"}}})  # fmt: skip
+    job = ReferenceJob(svc, JobFence(USER, WS, "J1", "S1"), "R1")
+    job.analyze = fake_analyze
+    assert asyncio.run(job.run()) == "ready"
+    assert FOLDER + "source.mp4" not in store.objects and FOLDER + "source.mp4" in store.deleted
+    assert json.loads(store.objects[FOLDER + "analysis.json"][0]) == ANALYSIS
+    ref = table.item("REFVID#R1")
+    assert ref is not None and ref["status"] == "analyzed" and ref["fileRemovedAt"]  # the API's name (§45.34)
+    assert ref["note"] == "The video was removed to save space. Its study stays."
+
+    # Analyze again: the job says plainly that the video is gone, and its study stays
+    table.seed({**table.items[(PK, "REFVID#R1")], "status": "analyzing", "currentJobId": "J2"})
+    table.seed({**table.items[(PK, "PJOB#J1")], "sk": "PJOB#J2", "jobId": "J2", "status": "queued", "sessionId": "S2"})
+    again = ReferenceJob(svc, JobFence(USER, WS, "J2", "S2"), "R1")
+    again.analyze = fake_analyze
+    assert asyncio.run(again.run()) == "failed"
+    assert table.item("PJOB#J2")["error"] == refjob.REMOVED  # type: ignore[index]
+    assert FOLDER + "analysis.json" in store.objects
+    kept = table.item("REFVID#R1")
+    assert kept is not None and kept["status"] == "analyzed" and "currentJobId" not in kept  # its study still works
+
+    # One the API's cleanup cleared (fileRemovedAt, no note) is caught by the agent's second guard too
+    by_api = {k: v for k, v in kept.items() if k not in ("note", "fileRemovedAt")}
+    table.seed({**by_api, "status": "analyzing", "currentJobId": "J3", "fileRemovedAt": "2026-11-20T10:00:00.000Z"})
+    table.seed({**table.items[(PK, "PJOB#J1")], "sk": "PJOB#J3", "jobId": "J3", "status": "queued", "sessionId": "S3"})
+    third = ReferenceJob(svc, JobFence(USER, WS, "J3", "S3"), "R1")
+    third.analyze = fake_analyze
+    assert asyncio.run(third.run()) == "failed"
+    assert table.item("PJOB#J3")["error"] == refjob.REMOVED  # type: ignore[index]

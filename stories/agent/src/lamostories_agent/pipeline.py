@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
 
-from . import ass, images, keys, media, safety, writer
+from . import ass, images, keys, media, retention, safety, writer
 from .data import AssetPut, JobFence, StoryData
 from .engine import Engine, find_engine_dir, frame_count, write_json
 from .guidance import Guidance, Topic, load
@@ -79,7 +79,7 @@ QUALITY_OFF = "Quality check is off"
 LAST_LOOK = "Last look: "
 REALISTIC = frozenset({"nova-reel"})  # generators whose footage looks real: the post must carry the AI labels (§45.14)
 META_KEYS = ("writerModel", "engineVersion", "seed", "scriptVersion", "targetSec", "actualSec", "safetyTopicId")
-STORY_KINDS = ("storyboard", "scene_still", "scene_clip", "audio", "captions", "final_video", "cover")
+STORY_KINDS = ("storyboard", "scene_still", "scene_clip", "audio", "captions", "final_video", "cover", "video")
 MODEL_POOL = ThreadPoolExecutor(8, thread_name_prefix="ls-model")  # model calls never wait behind the heartbeat
 
 
@@ -149,7 +149,11 @@ def scene_hash(script: dict[str, Any], scene: dict[str, Any], engine: int | None
     """What a scene's pictures depend on: the scene itself, its cast's looks and styles, the engine that draws it (the
     running one, ``engine``; the script's own when not given) and the frame."""
     names = {a.get("castId") for a in scene.get("actors") or []} | {b.get("who") for b in scene.get("beats") or []}
-    cast = {k: v for k, v in (script.get("cast") or {}).items() if k in names}
+    cast = {  # a cast member's list of faces is what it may do, not how it looks: it never changes a picture
+        k: {f: x for f, x in v.items() if f != "expressions"} if isinstance(v, dict) else v
+        for k, v in (script.get("cast") or {}).items()
+        if k in names
+    }
     body = {
         "engine": script.get("engine") if engine is None else engine,
         "size": [script.get("width"), script.get("height"), script.get("fps")],
@@ -271,6 +275,7 @@ class Job:
         self._job_lock = asyncio.Lock()
         self._closed = False
         self._proven: set[tuple[str, str]] = set()
+        self._prices: dict[str, Any] | None = None
 
     # --- the run ------------------------------------------------------------------------------------------------
 
@@ -306,7 +311,10 @@ class Job:
         main = asyncio.current_task()
         ticker = asyncio.create_task(self._heartbeat(main), name=f"story-beat-{self.fence.job_id}")
         try:
-            return await self._run()
+            status = await self._run()
+            if status in ("ready", "needs_check", "failed"):
+                await self._after()
+            return status
         except JobSuperseded:
             log("info", "stories.run_fenced", job=self.fence.job_id)
             return "superseded"
@@ -321,6 +329,19 @@ class Job:
             ticker.cancel()
             with contextlib.suppress(BaseException):
                 await ticker
+
+    async def _after(self) -> None:
+        """After the job's last write: the workspace's ``keepReferences`` and ``keepChatPictures`` (§45.34). It never
+        changes how the job ended."""
+        config = self.config
+        if not config:
+            try:
+                ws = await self.data.workspace(self.fence.user_id, self.fence.workspace_id)
+            except Exception as e:
+                log("warn", "stories.retention_no_settings", job=self.fence.job_id, error=type(e).__name__)
+                return
+            config = dict((ws or {}).get("configuration") or {})
+        await retention.after_job(self.data, self.fence, config)
 
     def order(self, job: dict[str, Any]) -> tuple[str, ...]:
         """The job's step keys in order (a story's eight, a portrait's one; a reference job takes the API's)."""
@@ -465,7 +486,11 @@ class Job:
         if allow_inactive:
             call = functools.partial(call, allow_inactive=True)
         loop = asyncio.get_running_loop()
-        reply: Reply = await loop.run_in_executor(self.svc.model_pool, call)
+        try:
+            reply: Reply = await loop.run_in_executor(self.svc.model_pool, call)
+        except Exception as e:  # a refusal, a bad answer or Bedrock's own error: each carries what was asked
+            self._note_failed_call(step, agent_id, task, e)
+            raise
         entry = {
             "step": step,
             "agentId": agent_id,
@@ -480,6 +505,22 @@ class Job:
             self._dirty = True
         return reply
 
+    def _note_failed_call(self, step: str, agent_id: str, task: str, e: BaseException) -> None:
+        """A step that failed on its model still shows what was asked (§45.34): ``meta.models`` gets the model and
+        effort the call was sent with, marked ``failed`` (no effort was applied: no answer came). The job's failure
+        writes it with the rest of ``meta``."""
+        model = getattr(e, "model", None)
+        if not isinstance(model, str) or not model:
+            return
+        effort = getattr(e, "effort", None)
+        entry = {"step": step, "agentId": agent_id, "task": task, "model": model,
+                 "effort": effort if isinstance(effort, str) and effort else None, "effortApplied": False,
+                 "failed": True}  # fmt: skip
+        used = self.meta.setdefault("models", [])
+        if entry not in used:
+            used.append(entry)
+            self._dirty = True
+
     async def prove(self, kind: str, provider_id: str, state: str = "on", last_error: str | None = None) -> None:
         """``PROVIDER#{kind}#{id}`` after a real call (§45.11.6): once per job and provider."""
         if (kind, provider_id) in self._proven and state == "on":
@@ -491,9 +532,45 @@ class Job:
         if state == "on":
             self._proven.add((kind, provider_id))
 
-    async def provider_usage(self, provider_id: str, model_id: str, **amounts: float | int) -> None:
-        """A ``USAGE#`` item of kind ``provider`` (render seconds, Nova Reel seconds, Nova Canvas pictures, §45.33);
-        priced only when a price is known (none is, today)."""
+    async def _owner_prices(self) -> dict[str, Any]:
+        """The owner's prices (``AICONFIG.prices``, Settings › AI and › Video), read once per job."""
+        if self._prices is None:
+            try:
+                got = await self.data.get(self.fence.pk, keys.AICONFIG_SK)
+            except Exception as e:  # a price never stops a job
+                log("warn", "stories.prices_unreadable", job=self.fence.job_id, error=type(e).__name__)
+                got = None
+            prices = (got or {}).get("prices")
+            self._prices = dict(prices) if isinstance(prices, dict) else {}
+        return self._prices
+
+    async def provider_usage(
+        self, provider_id: str, model_id: str, *, provider: str, units: float, unit: str, **amounts: float | int
+    ) -> None:
+        """A ``USAGE#`` item of kind ``provider`` (§45.33, §45.34): ``provider`` (``nova-canvas``, ``nova-reel``, or
+        ``builtin-rig`` for the built-in renderer's seconds), ``units`` and ``unit`` (``image`` | ``second``), plus
+        the detail amounts. Priced when the owner saved a per-unit price for that provider (``perUnit`` with the same
+        ``unit``); the built-in renderer is free (``cost`` 0, no currency); otherwise ``cost`` stays null."""
+        cost: float | None = None
+        currency: str | None = None
+        if provider.startswith("builtin-"):
+            cost = 0.0
+        else:
+            price = (await self._owner_prices()).get(provider)
+            if isinstance(price, dict):
+                per = price.get("perUnit")
+                if (
+                    isinstance(per, int | float)
+                    and not isinstance(per, bool)
+                    and per >= 0
+                    and price.get("unit")
+                    in (
+                        None,
+                        unit,
+                    )
+                ):
+                    cost = round(float(per) * float(units), 6)
+                    currency = str(price.get("currency") or "USD")
         at = now_iso()
         item: dict[str, Any] = {
             "pk": self.fence.pk,
@@ -505,10 +582,13 @@ class Job:
             "day": at[:10],
             "at": at,
             "providerId": provider_id,
+            "provider": provider,
+            "units": round(float(units), 3),
+            "unit": unit,
             "modelId": model_id,
             "jobId": self.fence.job_id,
-            "cost": None,
-            "currency": None,
+            "cost": cost,
+            "currency": currency,
             "ttl": int(time.time()) + keys.USAGE_DAYS * 86400,
             **{k: round(float(v), 3) for k, v in amounts.items()},
         }
@@ -605,6 +685,13 @@ class StoryJob(Job):
     @property
     def burn_captions(self) -> bool:
         return (self.config.get("production") or {}).get("burnCaptions") is not False
+
+    @property
+    def extra_formats(self) -> list[str]:
+        """``production.extraFormats``: the other files made next to the MP4 (``webm``, ``mov``; none by default)."""
+        raw = (self.config.get("production") or {}).get("extraFormats")
+        wanted = [str(f) for f in raw] if isinstance(raw, list) else []
+        return [f for f in keys.EXTRA_FORMATS if f in wanted]
 
     @property
     def keep_versions(self) -> int | None:
@@ -758,7 +845,9 @@ class StoryJob(Job):
         ]
         return max(rows, key=lambda a: str(a.get("createdAt") or ""), default=None)
 
-    def _retire(self, kind: str, scene_id: str | None = None) -> list[str]:
+    def _retire(self, kind: str, scene_id: str | None = None, same: dict[str, Any] | None = None) -> list[str]:
+        """The current rows of ``kind`` (and scene) a new file replaces; ``same``: only those whose ``meta`` has these
+        values too (one extra format does not retire another, §45.34)."""
         ids = []
         for a in self.assets:
             m = a.get("meta") or {}
@@ -766,6 +855,7 @@ class StoryJob(Job):
                 a.get("kind") == kind
                 and int(m.get("current", 1) or 0) == 1
                 and (scene_id is None or m.get("sceneId") == scene_id)
+                and all(m.get(k) == v for k, v in (same or {}).items())
             ):
                 ids.append(str(a["assetId"]))
         return ids
@@ -797,6 +887,7 @@ class StoryJob(Job):
         scene_id: str | None = None,
         meta: dict[str, str | int | float] | None = None,
         story_set: dict[str, Any] | None = None,
+        same: dict[str, Any] | None = None,
     ) -> AssetPut:
         size = await self.data.upload(self.fence, path, key, content_type)
         put = AssetPut(
@@ -811,7 +902,7 @@ class StoryJob(Job):
         # The same file made again (a re-render within one script version) replaces the old one in S3, so the rows
         # that named it go; the other current file of this kind (and scene) is kept as an older one.
         replaced = [str(a["assetId"]) for a in self.assets if a.get("key") == key]
-        retired = [i for i in self._retire(kind, scene_id) if i not in replaced]
+        retired = [i for i in self._retire(kind, scene_id, same) if i not in replaced]
         await self.data.write(
             self.fence,
             story_id=self.story_id if story_set else None,
@@ -866,20 +957,45 @@ class StoryJob(Job):
         self._dirty = True
         return version
 
-    async def _prepare(self, script: dict[str, Any], *, fit_to: float | None) -> tuple[dict[str, Any], list[str]]:
-        """validate → normalize → fit (when asked) → validate: the engine's checks. Returns the script and the
-        engine's problems (empty when it is good)."""
+    async def _prepare(
+        self, script: dict[str, Any], *, fit_to: float | None, reseed: dict[str, int] | None = None
+    ) -> tuple[dict[str, Any], list[str]]:
+        """validate → normalize → fit (when asked) → the remade scenes' new seeds (``reseed``: set on the normalized
+        script, so a remade scene is new to ``normalizeScript`` and gets the place's sounds, §45.34) → validate: the
+        engine's checks, plus each character's own faces and noises (``writer.cast_problems``). Returns the script and
+        the problems (empty when it is good)."""
         path = write_json(self.work / "check" / f"{ulid()}.json", script)
         errors = await self.engine.validate(path)
         if errors:
-            return script, errors
+            return script, [*errors, *writer.cast_problems(script)]
         script = await self.engine.normalize(path)
         if fit_to is not None:
             path = write_json(path, script)
             script = await self.engine.fit(path, fit_to)
+        for scene in script.get("scenes") or []:
+            if reseed and scene.get("sceneId") in reseed:
+                scene["seed"] = int(reseed[str(scene["sceneId"])])
         path = write_json(path, script)
         errors = await self.engine.validate(path)
-        return script, errors
+        return script, [*errors, *writer.cast_problems(script)]
+
+    async def _repair_cast(
+        self, script: dict[str, Any], *, fit_to: float | None, reseed: dict[str, int] | None = None
+    ) -> tuple[dict[str, Any], list[str]]:
+        """The last resort after the writer was asked once more (§45.34): each stray face becomes ``neutral`` and each
+        stray noise is dropped, by the engine's own repair (``cli.ts repair``) where this engine has it, else by the
+        same rule here; logged as ``stories.cast_repaired``. Then the script is checked again."""
+        path = write_json(self.work / "check" / f"{ulid()}-repair.json", script)
+        got = await self.engine.repair(path)
+        by = "engine"
+        if got is None:
+            by = "agent"
+            got = writer.repair_cast(script)
+        repaired, changes = got
+        repaired, rest = writer.repair_cast(repaired)  # whatever the engine's helper left, by the same rule
+        log("info", "stories.cast_repaired", job=self.fence.job_id, by=by, changes=[*changes, *rest][:30],
+            count=len(changes) + len(rest))  # fmt: skip
+        return await self._prepare(repaired, fit_to=fit_to, reseed=reseed)
 
     # --- storyboard ---------------------------------------------------------------------------------------------
 
@@ -896,6 +1012,9 @@ class StoryJob(Job):
                 "movementStyle": ch.get("movementStyle") or "calm",
                 "voice": ch.get("voice") or {"style": "none", "pitch": 1, "noises": [], "sfx": []},
             }
+            faces = ch.get("expressions")
+            if isinstance(faces, list) and faces:  # each character keeps its own faces (§45.34)
+                cast[f"c{i + 1}"]["expressions"] = [str(f) for f in faces]
         return cast
 
     async def _load_characters(self) -> None:
@@ -937,8 +1056,8 @@ class StoryJob(Job):
         return out
 
     def _music(self, answer: dict[str, Any]) -> dict[str, Any] | None:
-        if self.config.get("musicOn") is False:
-            return None
+        """Only the story's own ``musicMood`` decides (``none``: no music); the workspace's music default was applied
+        once, when the story was made (§45.34)."""
         mood = self.story.get("musicMood")
         volume = 0.4
         raw = answer.get("music")
@@ -954,7 +1073,7 @@ class StoryJob(Job):
     ) -> dict[str, Any]:
         if not self.budget.take("writer"):
             raise StoryFailed(keys.WRITER_FAILED)
-        catalog = (await self.engine.catalog()).get("catalog") or {}
+        catalog, _rules = await self._engine_catalog()
         provider = self._provider("writer", self._ctx())
         brief = {
             "mode": mode,
@@ -968,6 +1087,23 @@ class StoryJob(Job):
         answer: dict[str, Any] = await provider.write(brief)
         await self.prove("writer", "bedrock-claude")
         return answer
+
+    async def _engine_catalog(self) -> tuple[dict[str, Any], dict[str, Any]]:
+        """``cli.ts catalog``: the vocabulary (the writer's schema) and everything else it prints (``rules``,
+        ``propStates``, ``limits``, ``formats``, …) for the writer and the fact checker (§45.34)."""
+        got = await self.engine.catalog()
+        catalog = got.get("catalog") or {}
+        extra = {k: v for k, v in got.items() if k not in ("engine", "catalog") and v is not None}
+        return (catalog if isinstance(catalog, dict) else {}), extra
+
+    @staticmethod
+    def _lists(catalog: dict[str, Any]) -> dict[str, Any]:
+        """The catalog's id lists as the writer reads them (id and label)."""
+        return {
+            k: [{"id": e.get("id"), "label": e.get("label")} for e in v if isinstance(e, dict)]
+            for k, v in catalog.items()
+            if isinstance(v, list)
+        }
 
     async def storyboard(self) -> str | None:
         topic = self._require_topic()
@@ -986,13 +1122,16 @@ class StoryJob(Job):
         cast = dict(old.get("cast") or {}) if keep_cast and old else self._cast_now()
         if not cast:
             raise StoryFailed("This story's characters are gone. Pick a character, then tap Try again.")
-        catalog = (await self.engine.catalog()).get("catalog") or {}
+        catalog, rules = await self._engine_catalog()
         target = float(self.story.get("durationSec") or 45)
+        keep_size = old is not None and (mode == "scenes" or not isinstance(self.story.get("format"), dict))
+        size = (int(old.get("width") or 1080), int(old.get("height") or 1920)) if keep_size and old else self._size()
         request: dict[str, Any] = {
             "story": await self._concept(),
             "cast": writer.cast_brief(cast, self.characters),
-            "catalog": {k: [{"id": e.get("id"), "label": e.get("label")} for e in v] for k, v in catalog.items()
-                        if isinstance(v, list)},
+            "catalog": self._lists(catalog),
+            **rules,
+            "format": writer.format_of(size),
             "targetSec": target,
             "captionsOn": bool(self.story.get("captionsOn", self.config.get("captionsOn", True))),
             "musicMood": self.story.get("musicMood"),
@@ -1015,17 +1154,31 @@ class StoryJob(Job):
         engine_version = await self._engine()
         self.meta.update({"engineVersion": engine_version, "seed": seed})
         args: dict[str, Any] = {"old": old, "cast": cast, "seed": seed, "engine": engine_version, "topic": topic,
-                "scene_ids": scene_ids, "new_take": mode == "scenes" and not note}  # fmt: skip
+                "scene_ids": scene_ids, "new_take": mode == "scenes" and not note, "size": size}  # fmt: skip
+        # A remade scene gets its new seed after normalizing (§45.34), so it is new to normalizeScript.
+        reseed = (
+            {sid: keys.seed_for(self.fence.job_id, "scene", sid) for sid in scene_ids} if mode == "scenes" else None
+        )
         answer = await self._write(mode, request, note=note, scene_ids=scene_ids)
-        script, teaches = self._script_from(mode, answer, **args)
+        script, teaches, missing = self._script_from(mode, answer, **args)
         fit = None if mode == "scenes" and self._fits(script, target) else target
-        script, errors = await self._prepare(script, fit_to=fit)
+        if missing:  # the answer must name exactly the asked scenes: asked once more, naming them
+            log("info", "stories.writer_missed_scenes", job=self.fence.job_id, missing=missing)
+            errors = [writer.missing_sentence(missing, scene_ids)]
+        else:
+            script, errors = await self._prepare(script, fit_to=fit, reseed=reseed)
         if errors:
             log("info", "stories.writer_retry", job=self.fence.job_id, errors=errors[:5])
             request["problems"] = errors[:20]
             answer = await self._write(mode, request, note=note, scene_ids=scene_ids)
-            script, teaches = self._script_from(mode, answer, **args)
-            script, errors = await self._prepare(script, fit_to=fit)
+            script, teaches, missing = self._script_from(mode, answer, **args)
+            if missing:  # never "ready" with nothing changed
+                log("warn", "stories.writer_missed_scenes", job=self.fence.job_id, missing=missing, final=True)
+                raise StoryFailed(keys.WRITER_FAILED)
+            fit = None if mode == "scenes" and self._fits(script, target) else target
+            script, errors = await self._prepare(script, fit_to=fit, reseed=reseed)
+            if errors and writer.only_cast_problems(errors):
+                script, errors = await self._repair_cast(script, fit_to=fit, reseed=reseed)
             if errors:
                 log("warn", "stories.writer_invalid", job=self.fence.job_id, errors=errors[:5])
                 raise StoryFailed(keys.WRITER_FAILED)
@@ -1090,15 +1243,16 @@ class StoryJob(Job):
         topic: Topic | None,
         scene_ids: Sequence[str],
         new_take: bool,
-    ) -> tuple[dict[str, Any], bool]:
+        size: tuple[int, int] = writer.DEFAULT_SIZE,
+    ) -> tuple[dict[str, Any], bool, list[str]]:
+        """The script from the writer's answer, whether it teaches driving safety, and the asked scene ids the answer
+        left out (a remake must name exactly those, §45.34)."""
         captions_on = bool(self.story.get("captionsOn", self.config.get("captionsOn", True)))
         if mode == "scenes" and old is not None:
-            seeds = {sid: keys.seed_for(self.fence.job_id, "scene", sid) for sid in scene_ids}
-            script, missing = writer.merge_scenes(old, answer, scene_ids, new_take=new_take, seeds=seeds)
-            if missing:
-                log("warn", "stories.writer_missed_scenes", job=self.fence.job_id, missing=missing)
+            # the remade scenes have no seed yet: _prepare gives them theirs after normalizing (reseed)
+            script, missing = writer.merge_scenes(old, answer, scene_ids, new_take=new_take)
             script["engine"] = engine
-            return script, bool(answer.get("teachesSafety"))
+            return script, bool(answer.get("teachesSafety")), missing
         script = writer.script_from(
             answer,
             title=str(self.story.get("title") or answer.get("title") or "Lamo Stories"),
@@ -1108,13 +1262,19 @@ class StoryJob(Job):
             captions_on=captions_on,
             music=self._music(answer),
             topic=topic,
+            size=size,
         )
         if old is not None:  # the same scene ids keep their seeds, so an unchanged scene is not drawn again
             seeds_old = {str(s.get("sceneId")): s.get("seed") for s in old.get("scenes") or []}
             for s in script["scenes"]:
                 if seeds_old.get(s["sceneId"]) is not None and s.get("seed") is None:
                     s["seed"] = seeds_old[s["sceneId"]]
-        return script, bool(answer.get("teachesSafety"))
+        return script, bool(answer.get("teachesSafety")), []
+
+    def _size(self) -> tuple[int, int]:
+        """The story's own size (``story.format``), else the workspace default, else 1080 × 1920 (§45.34). A story made
+        before it had a format keeps its storyboard's size (storyboard())."""
+        return writer.size_of(self.story, self.config)
 
     async def _save_script(
         self, script: dict[str, Any], post: dict[str, str], *, story_set: dict[str, Any] | None = None, by: str
@@ -1190,6 +1350,9 @@ class StoryJob(Job):
         if not self.budget.take("checker"):
             return safety.Check(found or [{"ref": "", "problem": "The facts could not be checked again this time."}])
         body = safety.request(script, post, topic, unchecked_advice=guarded and topic is None)
+        catalog, rules = await self._engine_catalog()
+        body["catalog"] = self._lists(catalog)
+        body.update({k: v for k, v in rules.items() if k in ("rules", "propStates", "limits")})
         reply = await self._fact_call(body, guarded=guarded)
         refs = [it["ref"] for it in safety.items(script, post)]
         got = safety.parse(reply.data or {}, refs)
@@ -1298,13 +1461,15 @@ class StoryJob(Job):
     ) -> tuple[dict[str, Any], dict[str, str]] | None:
         """One rewrite of the writer's own texts; the owner's texts and anything this job does not remake stay."""
         await self._load_characters()
-        catalog = (await self.engine.catalog()).get("catalog") or {}
+        catalog, rules = await self._engine_catalog()
         cast = dict(script.get("cast") or {})
+        size = (int(script.get("width") or 1080), int(script.get("height") or 1920))
         request = {
             "story": await self._concept(),
             "cast": writer.cast_brief(cast, self.characters),
-            "catalog": {k: [{"id": e.get("id"), "label": e.get("label")} for e in v] for k, v in catalog.items()
-                        if isinstance(v, list)},
+            "catalog": self._lists(catalog),
+            **rules,
+            "format": writer.format_of(size),
             "targetSec": float(script.get("durationSec") or 45),
             "captionsOn": bool(script.get("captionsOn")),
             "guidance": topic.brief() if topic else None,
@@ -1327,6 +1492,7 @@ class StoryJob(Job):
             captions_on=bool(script.get("captionsOn")),
             music=script.get("music"),
             topic=topic,
+            size=size,
         )
         old_scenes = {str(s.get("sceneId")): s for s in script.get("scenes") or []}
         new_ids = [str(s.get("sceneId")) for s in new.get("scenes") or []]
@@ -1349,6 +1515,8 @@ class StoryJob(Job):
         writer.restore(new, new_post, script, post, owner)
         new["durationSec"] = script.get("durationSec")
         new, errors = await self._prepare(new, fit_to=None)
+        if errors and writer.only_cast_problems(errors):
+            new, errors = await self._repair_cast(new, fit_to=None)
         if errors:
             log("warn", "stories.rewrite_invalid", job=self.fence.job_id, errors=errors[:5])
             return None
@@ -1427,7 +1595,7 @@ class StoryJob(Job):
         ctx = self._ctx()
         used: dict[str, float] = {}
         shots: dict[str, int] = {}
-        started = time.monotonic()
+        spent: dict[str, float] = {}  # each provider's own render seconds (never another one's wait, §45.34)
 
         async def one(scene: dict[str, Any]) -> None:
             sid = str(scene["sceneId"])
@@ -1440,12 +1608,14 @@ class StoryJob(Job):
                 pid = self._scene_provider(scene)
                 provider = self._provider("animation", dataclasses.replace(ctx, on_progress=frames), pid)
                 out = self.work / "clips" / f"{sid}.mp4"
+                began = time.monotonic()
                 try:
                     clip = await provider.render_scene(script, sid, {}, out)
                 except ProviderFailed as e:
                     if e.state:
                         await self.prove("animation", pid, e.state, e.last_error)
                     raise
+                spent[pid] = spent.get(pid, 0.0) + (time.monotonic() - began)
                 used[pid] = used.get(pid, 0.0) + clip.duration_sec
                 shots[pid] = shots.get(pid, 0) + 1
                 key = self._key(keys.scene_clip_key, sid, self.version)
@@ -1456,13 +1626,17 @@ class StoryJob(Job):
         await side_by_side(one(s) for s in scenes)
         for pid, seconds in used.items():
             await self.prove("animation", pid)
-            if pid == "builtin-2d":
-                await self.provider_usage(pid, "", videoSec=seconds, renderSec=time.monotonic() - started)
+            if pid == "builtin-2d":  # the built-in renderer's own seconds count as builtin-rig (§45.34)
+                rendered = round(spent.get(pid, 0.0), 3)
+                await self.provider_usage(pid, "", provider="builtin-rig", units=rendered, unit="second",
+                                          videoSec=seconds, renderSec=rendered)  # fmt: skip
             elif pid == "nova-reel":  # billed per generated 6 s shot, however long the scene it fills
-                await self.provider_usage(pid, self.svc.video_model_id, videoSec=shots[pid] * REEL_SHOT,
-                                          shots=shots[pid], sceneSec=seconds)  # fmt: skip
+                await self.provider_usage(pid, self.svc.video_model_id, provider=pid, units=shots[pid] * REEL_SHOT,
+                                          unit="second", videoSec=shots[pid] * REEL_SHOT, shots=shots[pid],
+                                          sceneSec=seconds)  # fmt: skip
             else:
-                await self.provider_usage(pid, self.svc.video_model_id, videoSec=seconds)
+                await self.provider_usage(pid, self.svc.video_model_id, provider=pid, units=seconds, unit="second",
+                                          videoSec=seconds)  # fmt: skip
         self._note_providers()
 
     async def animate(self) -> str | None:
@@ -1503,7 +1677,10 @@ class StoryJob(Job):
                 if a.get("assetId") in retired:
                     a["meta"] = {**(a.get("meta") or {}), "current": 0}
             return Done("No captions", skipped=True)
-        text = ass.build(events, captions_on=captions_on)
+        text = ass.build(
+            events, captions_on=captions_on, width=int(script.get("width") or 1080),
+            height=int(script.get("height") or 1920),
+        )  # fmt: skip
         out = self.work / "captions" / "captions.ass"
         out.write_text(text, "utf-8")
         meta: dict[str, str | int | float] = {"burned": 1 if self.burn_captions else 0}
@@ -1511,6 +1688,21 @@ class StoryJob(Job):
         await self.data.write(self.fence, story_id=self.story_id, story_set={"stale": self._without("captions")})
         lines = sum(1 for line in text.splitlines() if line.startswith("Dialogue:"))
         return f"{lines} on screen" if self.burn_captions else f"{lines} kept as a separate file"
+
+    async def _symbols_file(self, script: dict[str, Any], work: Path) -> Path | None:
+        """With ``burnCaptions`` off, what is still burned into the picture: the speech bubbles' symbols and the
+        driving-safety end card, never the caption words (§45.34; the captions stay in their sidecar file)."""
+        path = write_json(work / "symbols-script.json", script)
+        events = await self.engine.text(path)
+        if not ass.needs_file(events, False):
+            return None
+        out = work / "symbols.ass"
+        out.write_text(
+            ass.build(events, captions_on=False, width=int(script.get("width") or 1080),
+                      height=int(script.get("height") or 1920)),
+            "utf-8",
+        )  # fmt: skip
+        return out
 
     async def assemble(self) -> str | None:
         script = await self._load_script()
@@ -1541,6 +1733,8 @@ class StoryJob(Job):
         )
         cap = self._current("captions") if self.burn_captions else None
         caption_path = await self.data.download(self.fence, str(cap["key"]), work / "captions.ass") if cap else None
+        if not self.burn_captions:  # the bubbles' symbols and the end card are always in the picture
+            caption_path = await self._symbols_file(script, work)
         final = work / "final.mp4"
         await media.assemble(clips, audio_path, caption_path, final, seconds, work, crf=self.crf)
         info = await media.probe(final)
@@ -1551,6 +1745,24 @@ class StoryJob(Job):
         cover_key = self._key(keys.cover_key, self.version)
         await self._save(final, video_key, "final_video", "video/mp4", meta={"durationSec": actual})
         await self._save(cover, cover_key, "cover", "image/jpeg")
+        dropped = [  # a format no longer asked for belongs to an older video: an older file now (pruned like it)
+            str(a["assetId"])
+            for a in self.assets
+            if a.get("kind") == "video"
+            and int((a.get("meta") or {}).get("current", 1) or 0) == 1
+            and (a.get("meta") or {}).get("format") not in self.extra_formats
+        ]
+        if dropped:
+            await self.data.write(self.fence, retire=dropped)
+            for a in self.assets:
+                if a.get("assetId") in dropped:
+                    a["meta"] = {**(a.get("meta") or {}), "current": 0}
+        for fmt in self.extra_formats:  # production.extraFormats: the same video as WebM and/or MOV (§45.34)
+            other = work / f"final.{fmt}"
+            await media.convert(final, other, fmt)
+            await self._save(other, self._key(keys.final_extra_key, self.version, fmt), "video",
+                             media.FORMAT_TYPES[fmt], meta={"format": fmt, "durationSec": actual},
+                             same={"format": fmt})  # fmt: skip
         self.meta["actualSec"] = actual
         self._note_providers()  # what the finished video is made of
         await self.data.write(
@@ -1560,7 +1772,8 @@ class StoryJob(Job):
                        "stale": self._without("assemble")},
         )  # fmt: skip
         self.story.update({"videoKey": video_key, "coverKey": cover_key, "actualDurationSec": actual})
-        return f"{actual:g} s"
+        made = ", ".join(["MP4", *(f.upper() for f in self.extra_formats)])
+        return f"{actual:g} s" if not self.extra_formats else f"{actual:g} s · {made}"
 
     # --- preview ------------------------------------------------------------------------------------------------
 

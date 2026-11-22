@@ -164,3 +164,33 @@ def test_repeating_effects_last_as_long_as_their_beat() -> None:
         long = audio.effect_sound(sid, audio.rng_for("t", sid), 4.0)
         assert len(long) >= audio.SR * 3.9 > len(short), sid
         assert float(np.max(np.abs(long[-audio.SR :]))) > 0.01, sid  # still sounding at the end
+
+
+def _spectrum(x: np.ndarray) -> tuple[float, float]:
+    """(spectral centroid in Hz, share of the energy above 1 kHz)."""
+    spec = np.abs(np.fft.rfft(x.astype(np.float64)))
+    f = np.fft.rfftfreq(len(x), 1 / audio.SR)
+    return float((spec * f).sum() / spec.sum()), float((spec[f > 1000] ** 2).sum() / (spec**2).sum())
+
+
+@pytest.mark.parametrize("noise", audio.NOISES)
+def test_a_humming_character_makes_a_closed_mouth_hum_not_an_open_voice(noise: str) -> None:
+    """§45.34: a noise event with ``voice: "hum"`` is hummed with the mouth closed: its sound sits in the low nasal
+    murmur (no open-vowel formants above it), unlike the same noise babbled."""
+    hum = audio.hum_sound(noise, 1.0, audio.rng_for("hum", noise))
+    open_ = audio.noise_sound(noise, 1.0, audio.rng_for("hum", noise))
+    hum_c, hum_hi = _spectrum(hum)
+    open_c, _ = _spectrum(open_)
+    assert hum_c < 400 and hum_hi < 0.001
+    assert hum_c < 0.75 * open_c
+    assert np.isfinite(hum).all() and 0.5 < float(np.max(np.abs(hum))) <= audio.PEAK + 1e-6
+    assert hum.size > audio.SR * 0.2  # long enough to hear
+
+
+def test_the_mix_hums_the_noises_of_a_humming_character() -> None:
+    event = {"at": 0.1, "kind": "noise", "id": "yay", "volume": 0.9, "pitch": 1.0, "pan": 0.0}
+    hummed = audio.mix([{**event, "voice": "hum"}], 1.0, mood=None, music_volume=0.0, seed=3)
+    babbled = audio.mix([{**event, "voice": "babble"}], 1.0, mood=None, music_volume=0.0, seed=3)
+    plain = audio.mix([event], 1.0, mood=None, music_volume=0.0, seed=3)
+    assert np.array_equal(babbled, plain)  # babble is the open voice, as before
+    assert _spectrum(hummed[0])[0] < 0.75 * _spectrum(babbled[0])[0]

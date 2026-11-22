@@ -44,13 +44,18 @@ CHECK_SYSTEM = """You are the fact checker of Lamo Stories, a channel of short a
 
 You get one video's texts and driving actions, each with a ref, and, for a driving-safety video, the checked advice it
 must follow: the steps and donts that may be shown, the caveats, and the steps that are NOT checked (they must never
-appear, in words or in action).
+appear, in words or in action). Each driving action item names who does it ("who"), the action ("do"), its side
+("dir", when it has one) and when it happens in its scene ("at" and "dur", in seconds), so a skid and the steering
+that answers it can be matched by time. The engine's "catalog" and "propStates" say what each id means.
 
 Report a problem for an item when:
 - it gives driving advice that is not in the checked steps or donts, contradicts them or their caveats, or shows a
   step that is not checked;
 - a caption's guidanceRef does not match what the caption says;
-- anything shows a dangerous act as fun or as something to copy (for every video, safety topic or not).
+- anything shows a dangerous act as fun or as something to copy (for every video, safety topic or not);
+- a beat's action does not match what it means in the engine's "rules" (given with the video): for example the
+  driver's steer_left or steer_right must match the skid's dir (a skid's dir is the side the car's rear slides to,
+  and steering into the skid is that same side).
 A mistake that the story clearly shows as a mistake, followed by the safe way, is fine. Jokes and feelings are fine.
 
 Each problem is one plain sentence a beginner understands, with the item's ref. Set ok to true only when there is no
@@ -115,9 +120,12 @@ def items(script: dict[str, Any], post: dict[str, Any] | None) -> list[dict[str,
                 continue
             name = cast.get(who) or f"the {props.get(who, {}).get('kind', 'prop')}"
             words = f"{name} does {action.replace('_', ' ')}"
+            if b.get("dir") in ("left", "right"):
+                words += f" to the {b['dir']}"  # a skid's dir: the side the rear slides to (the engine's rules)
             if b.get("face"):
                 words += f" with a {b['face']} face"
-            out.append({"ref": f"beat:{sid}:{i}", "where": f"Scene “{title}”", "action": words, "set": s.get("set")})
+            out.append({"ref": f"beat:{sid}:{i}", "where": f"Scene “{title}”", "action": words, "set": s.get("set"),
+                        "who": who, "do": action, "dir": b.get("dir"), "at": b.get("at"), "dur": b.get("dur")})  # fmt: skip
     for f in POST_FIELDS:
         if post and post.get(f):
             out.append({"ref": f"post:{f}", "where": f"Post caption ({f})", "text": post[f]})

@@ -180,6 +180,21 @@ def final_key(user_id: str, workspace_id: str, story_id: str, n: int) -> str:
     return f"{story_prefix(user_id, workspace_id, story_id)}final/v{n}.mp4"
 
 
+EXTRA_FORMATS: Final = ("webm", "mov")  # StoriesConfig.production.extraFormats (§45.34); MP4 is always made
+
+
+def final_extra_key(user_id: str, workspace_id: str, story_id: str, n: int, fmt: str) -> str:
+    """``final/v{n}.webm`` (VP9, Opus) or ``final/v{n}.mov`` (ProRes 422 Proxy, PCM), next to the MP4 (§45.34)."""
+    if fmt not in EXTRA_FORMATS:
+        raise ValueError("bad video format")
+    return f"{story_prefix(user_id, workspace_id, story_id)}final/v{n}.{fmt}"
+
+
+def chat_prefix(user_id: str, workspace_id: str) -> str:
+    """Every conversation's pictures (``chat/{convId}/``, written by the API, §45.27)."""
+    return f"{ws_prefix(user_id, workspace_id)}chat/"
+
+
 def cover_key(user_id: str, workspace_id: str, story_id: str, n: int) -> str:
     return f"{story_prefix(user_id, workspace_id, story_id)}final/cover-v{n}.jpg"
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 from lamostories_agent.tasks import design
@@ -173,3 +174,60 @@ def test_nothing_to_go_on(tmp_path: Path) -> None:
     db.seed(task_item("T1", "character_design", input={}))
     assert run(svc) == "failed"
     assert db.get(PK, "TASK#T1")["error"] == design.NEEDS_SOMETHING
+
+
+def test_a_redesign_starts_from_the_saved_character_and_keeps_its_name(tmp_path: Path) -> None:
+    """§45.34: with characterId the agent gets that character as CURRENT, its name is not TAKEN (so keeping it is
+    fine) and it is asked to change only what the owner described."""
+    saved = character_item("C1", "Pip", description="A tiny courier.", look=good_character()["look"])
+    redesigned = good_character("Pip")
+    model = FakeModel(reply(data=redesigned))
+    svc, db, _ = services(tmp_path, model)
+    db.seed(saved)
+    db.seed(character_item("C2", "Bo"))
+    db.seed(task_item("T1", "character_design", input={"description": "give Pip a red scarf", "characterId": "C1"}))
+    assert run(svc) == "done"
+    assert len(model.calls) == 1  # no second paid call for "already used by another character"
+    assert db.get(PK, "TASK#T1")["result"]["character"]["name"] == "Pip"
+    text = model.texts(0)
+    assert "This is a redesign of the saved character in CURRENT" in text and "Keep its name exactly" in text
+    data = json.loads(text.split("DATA as JSON:\n", 1)[1])
+    assert data["taken"] == ["Bo"]  # its own name is left out
+    assert data["current"]["name"] == "Pip" and data["current"]["description"] == "A tiny courier."
+    assert data["current"]["expressions"] == ["neutral", "happy", "surprised"]
+    assert data["current"]["look"] == saved["look"] and data["description"] == "give Pip a red scarf"
+
+
+def test_a_redesign_of_a_character_that_is_gone_says_so(tmp_path: Path) -> None:
+    model = FakeModel()
+    svc, db, _ = services(tmp_path, model)
+    db.seed({**character_item("C9", "Other"), "workspaceId": "someone-else"})
+    db.seed(task_item("T1", "character_design", input={"description": "x", "characterId": "C9"}))
+    assert run(svc) == "failed"
+    assert db.get(PK, "TASK#T1")["error"] == design.GONE and model.calls == []
+
+
+def test_a_new_design_still_keeps_every_saved_name_taken(tmp_path: Path) -> None:
+    model = FakeModel(reply(data=good_character()))
+    svc, db, _ = services(tmp_path, model)
+    db.seed(character_item("C1", "Bo"))
+    db.seed(task_item("T1", "character_design", input={"description": "someone new"}))
+    assert run(svc) == "done"
+    data = json.loads(model.texts(0).split("DATA as JSON:\n", 1)[1])
+    assert data["taken"] == ["Bo"] and "current" not in data
+    assert "redesign" not in model.texts(0)
+
+
+def test_a_picture_for_a_model_the_owner_added_without_vision_is_refused_by_its_own_name(tmp_path: Path) -> None:
+    model = FakeModel()
+    svc, db, s3 = services(tmp_path, model)
+    s3.objects[KEY] = b"png"
+    db.seed({"pk": PK, "sk": "ASSET#A1", "userId": USER, "workspaceId": WS, "assetId": "A1", "kind": "design_ref",
+             "key": KEY})  # fmt: skip
+    db.seed({"pk": PK, "sk": "MODELDEF#custom-text", "userId": USER, "workspaceId": WS, "key": "custom-text",
+             "label": "Text Only (mine)", "provider": "Mistral", "modelId": "mistral.text-only", "region": None,
+             "efforts": [], "defaultEffort": None, "vision": False, "maxOutputTokens": 4096, "price": None})  # fmt: skip
+    db.seed(task_item("T1", "character_design", input={"referenceAssetId": "A1"}, override={"model": "custom-text"}))
+    assert run(svc) == "failed"
+    assert db.get(PK, "TASK#T1")["error"] == design.NO_VISION.format(label="Text Only (mine)")
+    assert model.calls == []

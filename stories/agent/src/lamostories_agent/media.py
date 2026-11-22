@@ -77,6 +77,29 @@ async def assemble(
     await proc.run(args, time_limit=30 * 60, cwd=workdir)
 
 
+FORMAT_TYPES = {"webm": "video/webm", "mov": "video/quicktime"}
+
+
+def format_args(fmt: str) -> list[str]:
+    """ffmpeg's codecs for one extra output format (§45.34): WebM is VP9 with Opus, MOV is ProRes 422 Proxy with
+    16-bit PCM (an editing copy)."""
+    if fmt == "webm":
+        return ["-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "33", "-row-mt", "1", "-deadline", "good", "-cpu-used", "4",
+                "-pix_fmt", "yuv420p", "-c:a", "libopus", "-b:a", "128k", "-ar", "48000", "-ac", "2"]  # fmt: skip
+    if fmt == "mov":
+        return ["-c:v", "prores_ks", "-profile:v", "0", "-vendor", "apl0", "-pix_fmt", "yuv422p10le",
+                "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2"]  # fmt: skip
+    raise ValueError(f"unknown video format {fmt}")
+
+
+async def convert(src: Path, out: Path, fmt: str) -> None:
+    """The finished MP4 again as ``fmt`` (``webm`` or ``mov``), the same picture and sound."""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    args = ["ffmpeg", "-v", "error", "-y", "-i", str(src.resolve()), "-map", "0:v:0", "-map", "0:a:0?"]
+    args += [*format_args(fmt), str(out.resolve())]
+    await proc.run(args, time_limit=30 * 60)
+
+
 async def cover(video: Path, at: float, out: Path) -> None:
     """One frame of the finished video (captions and all) as the cover JPEG."""
     await proc.run(

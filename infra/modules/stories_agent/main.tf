@@ -47,6 +47,18 @@ locals {
   ])))
   model_invoke_arns = concat(local.model_profile_arns, local.model_foundation_arns)
 
+  # What StoryModels grants (docs/CONTRACTS.md §45.34 "Adding models without a release"): Converse and ConverseStream on
+  # every foundation model in any Region and every inference profile and application inference profile of this
+  # account, so a model the owner adds in Lamo Stories › Settings › AI (a Bedrock model id, inference profile id or
+  # ARN) works after Check models with no deploy. It covers every model of stories/config/models.json
+  # (model_invoke_arns, still the plan's record of the bundled list); Nova Reel jobs still need StartAsyncInvoke,
+  # granted only with the bucket switch.
+  story_model_arns = [
+    "arn:aws:bedrock:*::foundation-model/*",
+    "arn:aws:bedrock:*:${var.account_id}:inference-profile/*",
+    "arn:aws:bedrock:*:${var.account_id}:application-inference-profile/*",
+  ]
+
   # Amazon Nova Canvas (character portraits, §45.11.6) in its own Region, never through a profile.
   image_model_id     = local.models.imageModel.modelId
   image_model_region = local.models.imageModel.region
@@ -197,8 +209,8 @@ resource "aws_iam_role_policy" "agent" {
         Resource  = [var.media_bucket_arn]
         Condition = { StringLike = { "s3:prefix" = ["ws/*"] } }
       },
-      # The models of stories/config/models.json (the owner's pick per workspace, agent, task and request, §45.25).
-      { Sid = "StoryModels", Action = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"], Resource = local.model_invoke_arns },
+      # The reasoning models: the bundled ones of stories/config/models.json and any the owner adds (§45.25, §45.34).
+      { Sid = "StoryModels", Action = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"], Resource = local.story_model_arns },
       # Amazon Nova Canvas in eu-west-1 (character portraits, off until the owner picks it, §45.11.6).
       { Sid = "ImageModel", Action = ["bedrock:InvokeModel"], Resource = [local.image_model_arn] },
       # Provider keys the owner pastes in Lamo Stories › Settings (§45.31): read only, never a social token or app key.

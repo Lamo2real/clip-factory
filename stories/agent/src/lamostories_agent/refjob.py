@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
-from . import images, keys, media
+from . import images, keys, media, retention
 from .models import Reply
 from .pipeline import Job, StoryFailed
 from .util import JobSuperseded, UserFacingError, log, now_iso
@@ -32,6 +32,7 @@ NOT_BUILT = "Studying reference videos is not in this version of Lamo Stories ye
 FAILED = "Studying the video did not finish. Tap Try again."
 GONE = "This reference video no longer exists."
 UNREADABLE = "This file can't be played as a video. Upload an MP4 or MOV file."
+REMOVED = "The video was removed to save space. Its study stays. Upload it again to study it again."
 
 
 @dataclass
@@ -148,6 +149,8 @@ class ReferenceJob(Job):
         return got if got != keys.FAILED.get(key, "This step did not finish. Tap Try again.") else FAILED
 
     async def _source(self, ref: dict[str, Any]) -> tuple[Path, float]:
+        if retention.file_removed(ref):  # cleared by keepReferences, the agent's or the API's (§45.34)
+            raise StoryFailed(REMOVED)
         key = str(ref.get("key") or "")
         folder = keys.reference_prefix(self.fence.user_id, self.fence.workspace_id, self.content_id)
         if not key.startswith(folder):
@@ -197,7 +200,10 @@ class ReferenceJob(Job):
         ref = await self.data.reference(self.fence.user_id, self.fence.workspace_id, self.content_id)
         other = None
         if ref is not None and ref.get("currentJobId") == self.fence.job_id:
-            other = (keys.refvid_sk(self.content_id), {"status": "failed"}, {"currentJobId": self.fence.job_id})
+            # A reference whose video was cleared keeps its study usable: it goes back to analyzed, never failed.
+            kept = retention.file_removed(ref) and bool(ref.get("analysisKey"))
+            status = "analyzed" if kept else "failed"
+            other = (keys.refvid_sk(self.content_id), {"status": status}, {"currentJobId": self.fence.job_id})
         await self._last_write(
             other_set=other,
             other_remove=["currentJobId"] if other else (),

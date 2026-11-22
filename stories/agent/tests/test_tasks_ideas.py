@@ -445,3 +445,16 @@ def test_a_heartbeat_that_fails_for_another_reason_does_not_stop_the_beat(tmp_pa
         return out
 
     assert asyncio.run(go()) == "done"
+
+
+def test_a_task_that_failed_on_bedrock_s_own_error_keeps_the_model_and_effort_it_was_sent_with(tmp_path: Path) -> None:
+    """§45.34: not only a refusal; any failed send (``models._send`` puts what was asked on Bedrock's own error)."""
+    from ls_fakes import client_error
+
+    raw = client_error("ModelTimeoutException", "The model took too long")
+    models._asked(raw, models.Choice(model="fable-5-2", effort="medium", effort_applied=True, source="request"))
+    svc, db, _ = services(tmp_path, FakeModel(raw))
+    db.seed(task_item("T1", "brainstorm", override={"model": "fable-5-2", "effort": "medium"}))
+    assert run(svc) == "failed"
+    task = db.get(PK, "TASK#T1")
+    assert (task["model"], task["effort"], task["effortApplied"]) == ("fable-5-2", "medium", False)

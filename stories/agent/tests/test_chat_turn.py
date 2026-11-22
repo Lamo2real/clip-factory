@@ -383,3 +383,23 @@ def test_a_question_that_sorts_after_its_answer_is_still_answered(tmp_path: Path
     seed(db, ask=msg("01JD0000000000000000000009", "user", "same millisecond question"))
     assert run(svc) == "done"
     assert model.calls[0]["messages"][-1]["content"][-1] == {"text": "same millisecond question"}
+
+
+def test_an_answer_that_failed_before_any_reply_keeps_the_model_and_effort_it_was_sent_with(tmp_path: Path) -> None:
+    """§45.34: the API wrote the effective model and effort on the pending answer; a failure before any reply keeps
+    them (a refusal names them itself), so the failed message still shows what was asked."""
+    sentence = "Claude Fable 5.2 does not accept Maximum effort here (Amazon Bedrock refused it). Pick another level in Lamo Stories › Settings › AI."
+    model = FakeModel(models.EffortUnavailable(sentence, model="fable-5-2", effort="max", sent=True, status="error"))
+    svc, db, _ = services(tmp_path, model)
+    seed(db, answer=pending(model="fable-5-2", effort="max", effortApplied=True))
+    assert run(svc) == "failed"
+    answer = db.get(PK, MSG_SK)
+    assert (answer["model"], answer["effort"], answer["effortApplied"]) == ("fable-5-2", "max", False)
+    assert answer["error"] == sentence
+
+    # a failure that names no model leaves what the API wrote as it is
+    svc, db, _ = services(tmp_path, FakeModel(RuntimeError("socket closed")))
+    seed(db, answer=pending(model="sonnet-5-5", effort="low", effortApplied=True))
+    assert run(svc) == "failed"
+    answer = db.get(PK, MSG_SK)
+    assert (answer["model"], answer["effort"]) == ("sonnet-5-5", "low")

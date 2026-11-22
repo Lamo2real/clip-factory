@@ -2,7 +2,7 @@
 
 * every effect of the catalog (``SfxId``) is built from noise, sweeps and envelopes;
 * every character noise (``NoiseId``) is a short formant "voice" in the character's pitch (no words: Lamo Stories has
-  no voice-over);
+  no voice-over); a character whose voice style is "hum" hums it with the mouth closed (``hum_sound``);
 * the music is a seeded loop per mood (chords, bass, light drums), the same loop for the same seed;
 * the mix is 48 kHz stereo, the music ducked under the effects and noises, then made -14 LUFS with a true peak at or
   under -1 dBTP by ffmpeg's two-pass ``loudnorm`` (as clips are) and written as AAC in an m4a.
@@ -492,6 +492,43 @@ def noise_sound(noise_id: str, pitch: float, rng: np.random.Generator) -> np.nda
 
 
 NOISES = ("gasp", "whoa", "hmm", "yay", "oops", "laugh", "giggle", "sigh", "yelp", "phew", "babble")
+HUM_TOP = 900.0  # Hz: a closed mouth lets little through above the nasal murmur
+
+# A hummed noise keeps the noise's own tune (its length and pitch contour) on a closed-mouth "mm": (seconds, contour)
+# per part; several parts are hummed one after the other (a "hm-hm-hm" laugh), a babble is a short hummed melody.
+HUMS: dict[str, tuple[tuple[float, tuple[float, ...]], ...]] = {
+    "gasp": ((0.3, (1.0, 1.25)),),
+    "whoa": ((0.6, (1.2, 1.1, 0.8)),),
+    "hmm": ((0.6, (0.95, 1.05, 0.95)),),
+    "yay": ((0.45, (1.0, 1.4)),),
+    "oops": ((0.2, (1.2, 1.0)), (0.26, (1.05, 0.8))),
+    "laugh": tuple((0.11, (1.1 - 0.04 * i, 0.95 - 0.04 * i)) for i in range(5)),
+    "giggle": tuple((0.08, (1.45, 1.3)) for _ in range(5)),
+    "sigh": ((0.8, (1.0, 0.72)),),
+    "yelp": ((0.22, (1.2, 1.7, 1.3)),),
+    "phew": ((0.5, (1.05, 0.8)),),
+}
+
+
+def hum_sound(noise_id: str, pitch: float, rng: np.random.Generator) -> np.ndarray:
+    """One character noise hummed with the mouth closed (a character whose voice style is "hum", §45.34): the
+    noise's own tune on a nasal "mm" (one low murmur formant, nothing open above it), never an open vowel."""
+    if noise_id not in NOISES:
+        raise KeyError(noise_id)
+    p = min(2.0, max(0.5, float(pitch or 1.0)))
+    if noise_id == "babble":  # a short hummed melody, sung legato
+        parts = []
+        for _ in range(5):
+            up = 0.9 + 0.3 * float(rng.random())
+            parts.append((0.14 + 0.06 * float(rng.random()), (up, up * 0.97)))
+        shape: tuple[tuple[float, tuple[float, ...]], ...] = tuple(parts)
+        gap = 0.0
+    else:
+        shape = HUMS[noise_id]
+        gap = 0.05 if len(shape) > 1 else 0.0
+    hummed = [_voice(rng, sec, p, list(contour), ["m", "m"], breath=0.005) for sec, contour in shape]
+    x = _band(_syllables(hummed, gap), None, HUM_TOP)
+    return _norm(_fade(x, attack=0.02, release=0.06))
 
 
 def effect_sound(sfx_id: str, rng: np.random.Generator, dur: float | None = None) -> np.ndarray:
@@ -710,7 +747,8 @@ def mix(
         rng = rng_for("event", seed, i, kind, sid)
         try:
             if kind == "noise":
-                x = noise_sound(sid, float(e.get("pitch") or default_pitch), rng)
+                voice = hum_sound if e.get("voice") == "hum" else noise_sound  # a hum keeps the mouth closed
+                x = voice(sid, float(e.get("pitch") or default_pitch), rng)
             elif kind == "sfx":
                 x = effect_sound(sid, rng, e.get("dur"))
             else:

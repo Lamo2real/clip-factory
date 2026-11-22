@@ -92,6 +92,19 @@ class Store:
                 "s3.delete", self.s3.delete_objects, Bucket=self.bucket, Delete={"Objects": batch[i : i + 1000]}
             )
 
+    async def list_keys(self, prefix: str) -> list[dict[str, Any]]:
+        """Every object under ``prefix``: ``{key, size, modified}`` (``modified`` an aware datetime)."""
+
+        def walk() -> list[dict[str, Any]]:
+            out: list[dict[str, Any]] = []
+            for page in self.s3.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix):
+                for o in page.get("Contents") or []:
+                    out.append({"key": o["Key"], "size": int(o.get("Size") or 0), "modified": o.get("LastModified")})
+            return out
+
+        found: list[dict[str, Any]] = await retry(lambda: asyncio.to_thread(walk), what="s3.list")
+        return found
+
     # --- for the model client (already in a worker thread) -----------------------------------------------------
 
     def get_bytes_sync(self, key: str) -> bytes:

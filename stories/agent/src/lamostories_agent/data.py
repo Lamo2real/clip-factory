@@ -221,12 +221,14 @@ class StoryData:
         item = r.get("Item")
         return from_ddb(item) if item else None
 
-    async def query_prefix(self, pk: str, prefix: str) -> list[dict[str, Any]]:
+    async def query_prefix(self, pk: str, prefix: str, *, consistent: bool = False) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
         kwargs: dict[str, Any] = {
             "KeyConditionExpression": "pk = :pk AND begins_with(sk, :sk)",
             "ExpressionAttributeValues": {":pk": pk, ":sk": prefix},
         }
+        if consistent:
+            kwargs["ConsistentRead"] = True
         while True:
             r = await self._call("ddb.ws_query", self.table.query, **kwargs)
             items += [from_ddb(i) for i in r.get("Items") or []]
@@ -398,6 +400,12 @@ class StoryData:
         self._check_key(fence, key)
         await self.store.download(key, path)
         return path
+
+    async def list_files(self, fence: JobFence, prefix: str) -> list[dict[str, Any]]:
+        """The files under ``prefix`` (only ever under the workspace's own ``ws/`` prefix): ``{key, size, modified}``."""
+        self._check_key(fence, prefix)
+        found = await self.store.list_keys(prefix)
+        return [f for f in found if str(f.get("key") or "").startswith(prefix)]
 
     async def delete_files(self, fence: JobFence, keys_: Sequence[str]) -> None:
         for key in keys_:

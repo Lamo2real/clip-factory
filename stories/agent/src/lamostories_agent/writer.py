@@ -2,9 +2,11 @@
 engine's catalog, and the code that turns an answer into a ``StoryScript``.
 
 The writer only picks from the catalog and names characters by cast id; it never describes or changes how they look.
-Code adds what is not the writer's to decide: the engine version, 1080 × 1920 at 30 fps, the seeds, the cast with
-its looks, the captions switch, the music the owner picked and the safety sources. Every answer then goes through
-the engine's ``validate``, ``normalize`` and ``fit`` (pipeline.py)."""
+Code adds what is not the writer's to decide: the engine version, the story's own size (``story.format``, one of the
+engine's six, 1080 × 1920 by default) at 30 fps, the seeds, the cast with its looks, faces and noises, the captions
+switch, the music the owner picked and the safety sources. Every answer then goes through the engine's ``validate``,
+``normalize`` and ``fit`` (pipeline.py); a character only makes the faces and noises in its own lists
+(``cast_problems``, ``repair_cast``)."""
 
 from __future__ import annotations
 
@@ -27,6 +29,15 @@ POST_LIMITS = {
 }
 MAX_SCENES = 12
 MAX_SECONDS = 89.5
+SIZES = {  # the engine's six sizes (§45.34 "Video size and shape"): resolution -> aspect
+    (1080, 1920): "9:16",
+    (720, 1280): "9:16",
+    (1080, 1080): "1:1",
+    (720, 720): "1:1",
+    (1920, 1080): "16:9",
+    (1280, 720): "16:9",
+}
+DEFAULT_SIZE = (1080, 1920)
 DRIVING_ACTIONS = frozenset({"drive", "steer_left", "steer_right", "brake", "brace"})
 VEHICLE_ACTIONS = frozenset({"move", "skid", "spin", "stop", "bump", "tyre_burst"})
 VEHICLES = frozenset({"car", "truck"})
@@ -36,8 +47,11 @@ SYSTEM = """You write the storyboard of one short animated video for Lamo Storie
 House rules (always):
 - No voice-over and no spoken words. The story is told through movement, faces, body language, sound effects, the
   characters' non-verbal noises and music. Speech bubbles hold symbols only.
-- Vertical 9:16 video. Scenes last 2 to 15 seconds; the whole video lands close to the target length.
+- The video's shape is the request's "format" (9:16 is vertical, 1:1 square, 16:9 wide); stage every scene for that
+  frame. Scenes last 2 to 15 seconds; the whole video lands close to the target length.
 - Recurring characters: use only the cast you are given, by cast id. Never describe or change how a character looks.
+- A character only makes the faces in its faces list and only the noises in its noises list (a beat's "face" and
+  "noise"). Use "neutral" when none of its faces fits.
 - Use only ids from the catalog for sets, views, cameras, actions, prop kinds, prop actions, faces, bubbles, noises,
   effects and music moods. A beat's "who" is a cast id or a prop id of the same scene; characters do actions, props do
   prop actions.
@@ -50,6 +64,8 @@ House rules (always):
   guidance step or dont and names its id in "guidanceRef". Never add advice of your own, never use a step that is not
   in the list, and do not show braking or gear changes unless the guidance gives them. If a story of another kind
   starts to teach driving safety, set teachesSafety to true and pick the closest topic id, or set it to null.
+- The engine's "rules" in the request say exactly what dir, rot, steering and a prop's state mean: follow them (a
+  skid's dir is the side the car's rear slides to, and steering into it is the same side).
 - Positions are 0..1 of the frame (x left to right, y top to bottom). A prop's "state" is free text; these mean
   something to the animator: cars and trucks "parked", "driving", "lights", "brakes", "flat"; an arrow "curve_left"
   or "curve_right"; a tree "pine" or "snow"; a phone "ring" or "on". An arrow points up at rot 0; a car seen from
@@ -85,7 +101,10 @@ def _num(lo: float, hi: float) -> dict[str, Any]:
     return {"type": "number", "minimum": lo, "maximum": hi}
 
 
-def scene_schema(catalog: dict[str, Any], cast_ids: Sequence[str]) -> dict[str, Any]:
+def scene_schema(
+    catalog: dict[str, Any], cast_ids: Sequence[str], scene_ids: Sequence[str] | None = None
+) -> dict[str, Any]:
+    """One scene; with ``scene_ids`` (a remake of named scenes) its ``sceneId`` is one of exactly those."""
     actions = catalog_ids(catalog, "actions") + catalog_ids(catalog, "propActions")
     point = {
         "type": ["object", "null"],
@@ -142,7 +161,11 @@ def scene_schema(catalog: dict[str, Any], cast_ids: Sequence[str]) -> dict[str, 
         "additionalProperties": False,
         "required": ["sceneId", "title", "durationSec", "set", "view", "camera", "actors", "props", "beats", "caption"],
         "properties": {
-            "sceneId": {"type": "string", "maxLength": 24, "description": "Short and unique: s1, s2, ..."},
+            "sceneId": (
+                {**_enum(list(scene_ids)), "description": "One of the scenes you were asked to remake."}
+                if scene_ids
+                else {"type": "string", "maxLength": 24, "description": "Short and unique: s1, s2, ..."}
+            ),
             "title": {"type": "string", "maxLength": 40},
             "durationSec": _num(2, 15),
             "set": _enum(catalog_ids(catalog, "sets")),
@@ -179,15 +202,22 @@ POST_SCHEMA: dict[str, Any] = {
 
 
 def storyboard_schema(
-    catalog: dict[str, Any], cast_ids: Sequence[str], topic_ids: Sequence[str], *, mode: str
+    catalog: dict[str, Any],
+    cast_ids: Sequence[str],
+    topic_ids: Sequence[str],
+    *,
+    mode: str,
+    scene_ids: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """The ``write_storyboard`` tool's input schema. ``full``: the whole story; ``scenes``: only the named scenes
-    (and, if they change, the whole captions list); ``fix``: the whole story again with the facts fixed."""
-    scenes = {
+    (``scene_ids``: each answer scene's id is one of them, and there are exactly as many scenes as asked, §45.34) and,
+    if they change, the whole captions list; ``fix``: the whole story again with the facts fixed."""
+    asked = list(dict.fromkeys(str(s) for s in scene_ids or [])) if mode == "scenes" else []
+    scenes: dict[str, Any] = {
         "type": "array",
-        "minItems": 1,
-        "maxItems": MAX_SCENES,
-        "items": scene_schema(catalog, cast_ids),
+        "minItems": len(asked) or 1,
+        "maxItems": len(asked) or MAX_SCENES,
+        "items": scene_schema(catalog, cast_ids, asked or None),
     }
     captions = {"type": "array", "maxItems": 24, "items": CAPTION_SCHEMA}
     if mode == "scenes":
@@ -248,11 +278,13 @@ def captions_request(
 
 
 def cast_brief(cast: dict[str, dict[str, Any]], characters: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
-    """What the writer may know of each cast member: never the look."""
+    """What the writer may know of each cast member: never the look. Its faces and noises are the ones the script's
+    cast carries (the character's own lists), the only ones it may make."""
     out = []
     for cid, member in cast.items():
         ch = characters.get(str(member.get("characterId"))) or {}
         voice = member.get("voice") or {}
+        faces = member.get("expressions") if isinstance(member.get("expressions"), list) else ch.get("expressions")
         out.append(
             {
                 "castId": cid,
@@ -261,7 +293,7 @@ def cast_brief(cast: dict[str, dict[str, Any]], characters: dict[str, dict[str, 
                 "description": ch.get("description") or "",
                 "traits": ch.get("traits") or [],
                 "movementStyle": member.get("movementStyle"),
-                "faces": ch.get("expressions") or [],
+                "faces": list(faces or []),
                 "noises": voice.get("noises") or [],
                 "favouriteEffects": voice.get("sfx") or [],
             }
@@ -380,15 +412,17 @@ def script_from(
     captions_on: bool,
     music: dict[str, Any] | None,
     topic: Topic | None,
+    size: tuple[int, int] = DEFAULT_SIZE,
 ) -> dict[str, Any]:
-    """A whole ``StoryScript`` from a ``full`` (or ``fix``) answer."""
+    """A whole ``StoryScript`` from a ``full`` (or ``fix``) answer, at the story's own size."""
     used: set[str] = set()
     scenes = [clean_scene(s, used, i) for i, s in enumerate(answer.get("scenes") or [])]
+    width, height = size if size in SIZES else DEFAULT_SIZE
     return {
         "engine": engine_version,
         "fps": 30,
-        "width": 1080,
-        "height": 1920,
+        "width": width,
+        "height": height,
         "durationSec": round(sum(float(s.get("durationSec") or 0) for s in scenes), 3),
         "title": title[:80],
         "seed": seed,
@@ -417,10 +451,13 @@ def merge_scenes(
     scene_ids: Sequence[str],
     *,
     new_take: bool,
-    seeds: dict[str, int],
+    seeds: dict[str, int] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """The old script with only ``scene_ids`` replaced by the answer's scenes (same ids and places). A new take keeps
-    each scene's length and gets a new seed. Returns the script and what is missing from the answer."""
+    each scene's length. A remade scene has no seed here, so ``normalizeScript`` treats it as new (it gets the place's
+    ambient sounds); the pipeline gives it its new seed after normalizing (``reseed``, §45.34). ``seeds`` sets them
+    now instead (only for a script that is not normalized again). Returns the script and what is missing from the
+    answer."""
     got = {str(s.get("sceneId")): s for s in answer.get("scenes") or [] if isinstance(s, dict)}
     missing = [sid for sid in scene_ids if sid not in got]
     scenes = []
@@ -431,7 +468,9 @@ def merge_scenes(
             fresh["sceneId"] = sid
             if new_take:
                 fresh["durationSec"] = s.get("durationSec")
-            fresh["seed"] = seeds[sid]
+            fresh.pop("seed", None)
+            if seeds and sid in seeds:
+                fresh["seed"] = seeds[sid]
             scenes.append(fresh)
         else:
             scenes.append(s)
@@ -484,3 +523,99 @@ def restore(
         elif kind == "post" and ident in POST_FIELDS:
             post[ident] = str(base_post.get(ident) or "")
     script["captions"] = sorted(script.get("captions") or [], key=lambda c: float(c.get("at") or 0))
+
+
+def missing_sentence(missing: Sequence[str], asked: Sequence[str]) -> str:
+    """What the writer is told when its remake left out asked scenes (it is asked once more, §45.34)."""
+    return (
+        f"Your answer left out these scenes: {', '.join(missing)}. Answer with exactly these scenes, each with its "
+        f"own id: {', '.join(asked)}."
+    )
+
+
+def size_of(story: dict[str, Any], config: dict[str, Any] | None = None) -> tuple[int, int]:
+    """The story's own size (``story.format``, set from the workspace default at create), else the workspace's
+    ``video.resolution``, else 1080 × 1920. Only the engine's six sizes are used."""
+    fmt = story.get("format")
+    if isinstance(fmt, dict):
+        try:
+            got = (int(fmt.get("width") or 0), int(fmt.get("height") or 0))
+        except (TypeError, ValueError):
+            got = (0, 0)
+        if got in SIZES:
+            return got
+    raw = str(((config or {}).get("video") or {}).get("resolution") or "")
+    w, _, h = raw.partition("x")
+    if w.isdigit() and h.isdigit() and (int(w), int(h)) in SIZES:
+        return int(w), int(h)
+    return DEFAULT_SIZE
+
+
+def format_of(size: tuple[int, int]) -> dict[str, Any]:
+    width, height = size
+    return {"aspect": SIZES.get(size, "9:16"), "width": width, "height": height}
+
+
+def _own_lists(member: dict[str, Any]) -> tuple[set[str] | None, set[str] | None]:
+    """A cast member's faces and noises, or None for a list it does not carry (a script saved before cast members
+    carried their expressions: nothing is limited there)."""
+    faces = member.get("expressions")
+    if not isinstance(faces, list):
+        return None, None
+    voice = member.get("voice") if isinstance(member.get("voice"), dict) else {}
+    noises = voice.get("noises") if isinstance(voice, dict) else None
+    return {str(f) for f in faces}, ({str(n) for n in noises} if isinstance(noises, list) else None)
+
+
+def cast_problems(script: dict[str, Any]) -> list[str]:
+    """Each beat whose face is not one of its character's faces, or whose noise is not one of its noises (§45.34),
+    as one sentence the writer can fix."""
+    cast = script.get("cast") or {}
+    out: list[str] = []
+    for scene in script.get("scenes") or []:
+        for i, beat in enumerate(scene.get("beats") or []):
+            member = cast.get(beat.get("who"))
+            if not isinstance(member, dict):
+                continue
+            faces, noises = _own_lists(member)
+            name = str(member.get("name") or beat.get("who"))
+            where = f"scene {scene.get('sceneId')} beat {i + 1} ({beat.get('who')})"
+            face, noise = beat.get("face"), beat.get("noise")
+            if faces is not None and face is not None and face not in faces:
+                out.append(
+                    f"{where}: face {face!r} is not one of {name}'s faces; use one of {', '.join(sorted(faces))}."
+                )
+            if noises is not None and noise is not None and noise not in noises:
+                allowed = ", ".join(sorted(noises)) or "none"
+                out.append(f"{where}: noise {noise!r} is not one of {name}'s noises; use one of {allowed}.")
+    return out
+
+
+_CAST_WORDS = re.compile(r"\b(face|faces|noise|noises)\b", re.I)
+
+
+def only_cast_problems(errors: Sequence[str]) -> bool:
+    """Whether every problem left is about a character's faces or noises (what ``repair_cast`` can mend)."""
+    return bool(errors) and all(_CAST_WORDS.search(str(e)) for e in errors)
+
+
+def repair_cast(script: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """The script with each stray face swapped for ``neutral`` and each stray noise dropped (the last resort after the
+    writer was asked once more, §45.34). Returns the script and what was changed."""
+    out = json.loads(json.dumps(script))
+    cast = out.get("cast") or {}
+    changed: list[str] = []
+    for scene in out.get("scenes") or []:
+        for i, beat in enumerate(scene.get("beats") or []):
+            member = cast.get(beat.get("who"))
+            if not isinstance(member, dict):
+                continue
+            faces, noises = _own_lists(member)
+            where = f"{scene.get('sceneId')}.{i + 1}"
+            if faces is not None and beat.get("face") is not None and beat["face"] not in faces:
+                changed.append(f"{where} face {beat['face']} -> neutral")
+                beat["face"] = "neutral"
+            if noises is not None and beat.get("noise") is not None and beat["noise"] not in noises:
+                changed.append(f"{where} noise {beat['noise']} dropped")
+                del beat["noise"]
+    return out, changed

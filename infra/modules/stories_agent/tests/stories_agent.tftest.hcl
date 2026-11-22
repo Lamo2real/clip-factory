@@ -291,19 +291,55 @@ run "role_matches_the_contract" {
   }
 }
 
-# The Bedrock grants are built from stories/config/models.json (profiles and foundation models, as the clip agent's
-# are built from config/models.json), plus Nova Canvas in eu-west-1; nothing else, and never Clip Factory's file.
+# The Bedrock grants: every reasoning model the owner may pick or add (§45.34: any foundation model, any inference
+# profile and application inference profile of this account, Converse and ConverseStream only), which covers each
+# model of stories/config/models.json (model_invoke_arns, built from that file as the clip agent's are built from
+# config/models.json), plus Nova Canvas in eu-west-1; never Clip Factory's file.
 run "models_come_from_the_stories_file" {
   command = plan
 
   assert {
-    condition = toset(flatten([
-      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : s.Resource if s.Sid == "StoryModels"
-      ])) == toset(concat(
-      [for m in jsondecode(file("../../../stories/config/models.json")).models : "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/${m.profile}"],
-      flatten([for m in jsondecode(file("../../../stories/config/models.json")).models : contains(m.regions, "*") ? ["arn:aws:bedrock:*::foundation-model/${m.modelId}"] : [for r in m.regions : "arn:aws:bedrock:${r}::foundation-model/${m.modelId}"]]),
-    ))
-    error_message = "StoryModels grants exactly each model's profile in this Region and its foundation model where the profile routes (stories/config/models.json)."
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement :
+      s.Sid == "StoryModels" && s.Action == ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"] && toset(s.Resource) == toset([
+        "arn:aws:bedrock:*::foundation-model/*",
+        "arn:aws:bedrock:*:123456789012:inference-profile/*",
+        "arn:aws:bedrock:*:123456789012:application-inference-profile/*",
+      ])
+    ])
+    error_message = "StoryModels grants Converse and ConverseStream on every foundation model and on this account's inference profiles and application inference profiles, nothing more (§45.34)."
+  }
+
+  assert {
+    condition = alltrue([
+      for arn in concat(output.model_invoke_arns, [
+        "arn:aws:bedrock:eu-west-1:123456789012:inference-profile/eu.meta.llama-custom-v1:0",
+        "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc123",
+        "arn:aws:bedrock:us-west-2::foundation-model/mistral.mistral-large-custom",
+        "arn:aws:bedrock:::foundation-model/anthropic.claude-fable-5-2",
+        ]) : anytrue([
+        for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : anytrue([
+          for r in s.Resource : can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", arn))
+        ]) if s.Sid == "StoryModels"
+      ])
+    ])
+    error_message = "Every bundled model (its profile and foundation models) and a model the owner adds (any Region, profile or application profile of this account) is covered by StoryModels."
+  }
+
+  assert {
+    condition = !anytrue([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : anytrue([
+        for r in s.Resource : can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", "arn:aws:bedrock:eu-north-1:999999999999:inference-profile/global.anthropic.claude-opus-5-5"))
+      ]) if s.Sid == "StoryModels"
+    ])
+    error_message = "Inference profiles of another account are never granted."
+  }
+
+  assert {
+    condition = !anytrue(flatten([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : [for a in flatten([s.Action]) : a == "bedrock:StartAsyncInvoke" || a == "bedrock:*"]
+    ]))
+    error_message = "With the bucket switch off nothing can start a Nova Reel job (the wide model grant is Converse and ConverseStream only)."
   }
 
   assert {

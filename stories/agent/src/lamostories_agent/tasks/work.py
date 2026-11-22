@@ -8,8 +8,8 @@ status, so a task the API's fence already failed, or that a newer run owns, is n
 makes to other items (an idea's concept) go in the same transaction as its end.
 
 The task's inputs are read from the item's ``input`` map (``topic``, ``category``, ``count``, ``ideaId``,
-``durationSec``, ``description``, ``referenceAssetId``, ``storyId``, ``models``), and, for any of these names it does not
-carry, from the item's top level.
+``durationSec``, ``description``, ``referenceAssetId``, ``storyId``, ``models``, ``characterId``), and, for any of these
+names it does not carry, from the item's top level.
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ INPUT_KEYS = (
     "referenceAssetId",
     "storyId",
     "models",
+    "characterId",
 )
 KIND_AGENT = {
     "brainstorm": "creative_director",
@@ -196,7 +197,7 @@ async def run_task(svc: Services, payload: dict[str, Any], *, kinds: tuple[str, 
                 cause=type(cause).__name__ if cause else None,
                 detail=str(cause or e),
             )
-        return await _fail(fence, sentence)
+        return await _fail(fence, sentence, e)
     log("info", "stories.task_done", task=task_id, kind=kind)
     return "done"
 
@@ -223,9 +224,28 @@ def _finish(fence: Fence, outcome: Outcome) -> None:
         raise TaskFailed(outcome.refused or GONE) from e
 
 
-async def _fail(fence: Fence, sentence: str) -> str:
+def asked_of(error: BaseException | None) -> tuple[str, str | None] | None:
+    """The model and effort a failed model call was sent with (``ModelUnavailable`` / ``EffortUnavailable`` carry
+    them, §45.34), anywhere in the error's chain."""
+    seen: set[int] = set()
+    cur = error
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        model = getattr(cur, "model", None)
+        if isinstance(model, str) and model:
+            effort = getattr(cur, "effort", None)
+            return model, effort if isinstance(effort, str) and effort else None
+        cur = cur.__cause__ or cur.__context__
+    return None
+
+
+async def _fail(fence: Fence, sentence: str, error: BaseException | None = None) -> str:
+    """Ends the task ``failed`` with the sentence; a task that failed on its model also keeps the model and effort it
+    was sent with on ``TASK#`` (``effortApplied`` false: no answer came), so the owner sees what was asked."""
     at = now_iso()
-    ok = await asyncio.to_thread(
-        fence.try_write, {"status": "failed", "error": sentence, "updatedAt": at, "heartbeatAt": at}
-    )
+    fields: dict[str, Any] = {"status": "failed", "error": sentence, "updatedAt": at, "heartbeatAt": at}
+    asked = asked_of(error)
+    if asked is not None:
+        fields.update({"model": asked[0], "effort": asked[1], "effortApplied": False})
+    ok = await asyncio.to_thread(fence.try_write, fields)
     return "failed" if ok else "superseded"

@@ -34,7 +34,7 @@ from lamostories_agent.tasks.common import Refused, Superseded, TaskFailed, clip
 from lamostories_agent.tasks.fence import MSG_LIVE, Fence, run_with_heartbeat
 from lamostories_agent.tasks.services import Services
 from lamostories_agent.tasks.store import Expr
-from lamostories_agent.tasks.work import agent_off, merge_override
+from lamostories_agent.tasks.work import agent_off, asked_of, merge_override
 
 from . import history, tools
 
@@ -51,6 +51,7 @@ STOPS_THE_TURN = frozenset({"ModelUnavailable", "EffortUnavailable", "AgentOff"}
 CHAT_BRIEF = """Lamo Stories studio notes for the creative chat (from the app, not the owner):
 - You can look things up and draft with your tools: ideas, characters, stories and their storyboards, reference video analyses. You may create or update ideas and remember short facts the owner wants kept.
 - Anything that makes or remakes a video, analyzes a reference video or saves a character is a button for the owner: use the offer_ and propose_ tools. Never say you made, remade, saved or posted something the owner still has to tap.
+- Make the video (offer_make_video) can carry up to 3 analyzed reference videos (referenceIds): the writer then follows their study of structure and timing. A reference that is not analyzed yet needs the Analyze button first.
 - Answer in short, friendly, plain words that a child could follow. No em or en dashes.
 - The owner reads your answer in the app while it is written."""
 
@@ -284,22 +285,27 @@ class Turn:
             }
         )
 
-    def fail(self, sentence: str, *, pick_model: bool) -> bool:
+    def fail(self, sentence: str, *, pick_model: bool, error: BaseException | None = None) -> bool:
+        """Ends the answer ``failed``. With no reply yet, the model and effort it was sent with stay on the message
+        (the API wrote them on the pending answer; a model or effort refusal names them too), so a failed answer still
+        shows what was asked (§45.34)."""
         actions = [*self.toolbox.actions, PICK_MODEL] if pick_model else list(self.toolbox.actions)
         reply = self.reply
-        return self.fence.try_write(
-            {
-                "text": self.stream.text.strip()[:MAX_TEXT],
-                "status": "failed",
-                "error": clip(sentence, 500),
-                "actions": actions,
-                "model": reply.model if reply else None,
-                "effort": reply.effort if reply else None,
-                "effortApplied": reply.effort_applied if reply else None,
-                "usage": dict(self.usage),
-                "heartbeatAt": now_iso(),
-            }
-        )
+        fields: dict[str, Any] = {
+            "text": self.stream.text.strip()[:MAX_TEXT],
+            "status": "failed",
+            "error": clip(sentence, 500),
+            "actions": actions,
+            "usage": dict(self.usage),
+            "heartbeatAt": now_iso(),
+        }
+        if reply is not None:
+            fields.update({"model": reply.model, "effort": reply.effort, "effortApplied": reply.effort_applied})
+        else:
+            asked = asked_of(error)
+            if asked is not None:
+                fields.update({"model": asked[0], "effort": asked[1], "effortApplied": False})
+        return self.fence.try_write(fields)
 
 
 async def run_turn(svc: Services, payload: dict[str, Any]) -> str:
@@ -345,6 +351,6 @@ async def run_turn(svc: Services, payload: dict[str, Any]) -> str:
         model_problem = is_model_problem(e)
         if sentence is None:
             log("error", "stories.turn_crashed", msg=msg_id, error=type(e).__name__, detail=str(e))
-        ok = await asyncio.to_thread(turn.fail, sentence or FAILED, pick_model=model_problem)
+        ok = await asyncio.to_thread(turn.fail, sentence or FAILED, pick_model=model_problem, error=e)
         return "failed" if ok else "superseded"
     return "done"

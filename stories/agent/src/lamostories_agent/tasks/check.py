@@ -3,9 +3,11 @@
 
 ``ok`` on any answer, ``denied`` or ``not_found`` on the matching Bedrock refusal, ``error`` otherwise, each with one
 plain line and ``checkedAt``. Each call names its model explicitly (a per-request override), so nothing is ever
-checked on another model; the lowest effort the model offers and 512 output tokens keep the call small. The check
-runs whichever agents are switched on (the client's ``allow_inactive`` when it has one), and a failure that sent
-nothing to the model never changes a status.
+checked on another model; the lowest effort the model offers and 512 output tokens keep the call small. The client
+sends it bare (``task="check_models"``: no agent instructions, skills or memory) and writes no MODELSTATUS# of its
+own: this check writes exactly one item per model, with the key attribute ``model`` (§45.34). The models the owner
+added (``MODELDEF#``) are checked like the bundled ones. The check runs whichever agents are switched on (the
+client's ``allow_inactive`` when it has one), and a failure that sent nothing to the model never changes a status.
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
-from lamostories_agent import config
+from lamostories_agent import config, models
 
 from .ask import named, owner_sentence, usage_of, user
 from .common import Superseded, TaskFailed, clip, log, now_iso
@@ -46,7 +48,9 @@ def _bedrock_code(x: BaseException) -> str:
 def model_answered(e: BaseException) -> bool:
     """True when the failure is what a real call to the model did: Bedrock's own error (or the client's sentence
     made from one), or the call's connection. False when nothing was sent (an agent switched off, a setting, a bug):
-    then the model's status is left as it is."""
+    then the model's status is left as it is. An effort Bedrock itself refused (``sent``) is a real call."""
+    if any(getattr(x, "sent", False) is True for x in _chain(e)):
+        return True
     if named(e, NOT_A_CALL):
         return False
     for x in _chain(e):
@@ -101,7 +105,7 @@ def write_status(env: TaskEnv, key: str, status: str, line: str, at: str) -> Non
                 "type": "ws_modelstatus",
                 "userId": env.user_id,
                 "workspaceId": env.workspace_id,
-                "modelKey": key,
+                "model": key,
                 "status": status,
                 "line": line,
                 "checkedAt": at,
@@ -110,8 +114,19 @@ def write_status(env: TaskEnv, key: str, status: str, line: str, at: str) -> Non
     )
 
 
-def wanted(value: Any) -> list[str]:
-    known = [str(m["key"]) for m in config.models()["models"]]
+def catalog_of(env: TaskEnv) -> dict[str, Any]:
+    """The bundled models and the workspace's own (``MODELDEF#``), read for this check only (the same items, owned
+    the same way, as the model client's ``Workspace.models()``)."""
+    defs = [
+        d
+        for d in env.svc.store.query(env.pk, config.MODELDEF_PREFIX)
+        if d.get("userId") in (None, env.user_id) and d.get("workspaceId") in (None, env.workspace_id)
+    ]
+    return config.merged_models(defs)
+
+
+def wanted(value: Any, catalog: dict[str, Any] | None = None) -> list[str]:
+    known = [str(m["key"]) for m in (catalog or config.models())["models"]]
     if isinstance(value, list) and value:
         return [k for k in dict.fromkeys(str(v) for v in value) if k in known]
     return known
@@ -123,10 +138,11 @@ def check_models(env: TaskEnv) -> Outcome:
     client = env.svc.model
     extra: dict[str, Any] = {"allow_inactive": True} if accepts(client, "allow_inactive") else {}
     results: list[dict[str, Any]] = []
-    for key in wanted(env.input.get("models")):
+    catalog = catalog_of(env)
+    for key in wanted(env.input.get("models"), catalog):
         if env.fence.lost.is_set():
             raise Superseded(env.fence.sk)
-        info = config.model(key) or {}
+        info = config.model(key, catalog) or {}
         label = str(info.get("label") or key)
         efforts = list(info.get("efforts") or [])
         override: dict[str, Any] = {"model": key}
@@ -134,7 +150,7 @@ def check_models(env: TaskEnv) -> Outcome:
             override["effort"] = "low" if "low" in efforts else efforts[0]
         try:
             reply = client.complete(
-                env.ctx, task="check_models", messages=[user(PROMPT)], override=override, max_tokens=512, **extra
+                env.ctx, task=models.CHECK_TASK, messages=[user(PROMPT)], override=override, max_tokens=512, **extra
             )
             status, line = "ok", OK_LINE
             usage = usage_of(reply)
