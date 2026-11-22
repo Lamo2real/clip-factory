@@ -216,3 +216,75 @@ def test_write_them_again_uses_the_videos_own_setting_under_the_request(tmp_path
     assert run(svc) == "done"
     assert model.calls[0]["override"] == {"model": "fable-5-1", "effort": "high"}
     assert "Based on advice" not in db.get(PK, "TASK#T1")["result"]["postCaptions"]["instagram"]
+
+
+MODELDEF = {
+    "pk": PK,
+    "sk": "MODELDEF#custom-mistral-large",
+    "type": "ws_modeldef",
+    "userId": USER,
+    "workspaceId": WS,
+    "key": "custom-mistral-large",
+    "label": "Mistral Large (mine)",
+    "provider": "Mistral",
+    "modelId": "mistral.mistral-large-2407-v1:0",
+    "region": "us-west-2",
+    "efforts": [],
+    "defaultEffort": None,
+    "vision": False,
+    "maxOutputTokens": 8192,
+    "price": None,
+}
+
+
+def test_one_status_item_per_model_with_the_model_attribute_and_the_owner_s_models_checked_too(
+    tmp_path: Path,
+) -> None:
+    """§45.34: MODELSTATUS# is written once per model by the check, keyed by ``model`` (never ``modelKey``); a model
+    the owner added (MODELDEF#) is checked like any other, with no effort when it lists none."""
+    bundled = [m["key"] for m in config.models()["models"]]
+    model = FakeModel(*[reply("ok", model=k, effort="low") for k in bundled], reply("ok", effort=None, applied=False))
+    svc, db, _ = services(tmp_path, model)
+    db.seed(MODELDEF)
+    db.seed(task_item("T1", "check_models"))
+    assert run(svc) == "done"
+    asked = [c["override"] for c in model.calls]
+    assert [o["model"] for o in asked] == [*bundled, "custom-mistral-large"]
+    assert asked[-1] == {"model": "custom-mistral-large"}  # its efforts list is empty: no effort is sent
+    assert all(c["task"] == models.CHECK_TASK for c in model.calls)
+    for key in [*bundled, "custom-mistral-large"]:
+        st = db.get(PK, f"MODELSTATUS#{key}")
+        assert st["model"] == key and "modelKey" not in st and st["status"] == "ok"
+    writes = [sk for _, _, sk in db.writes if sk.startswith("MODELSTATUS#")]
+    assert len(writes) == len(set(writes)) == len(bundled) + 1  # one item per model
+    result = db.get(PK, "TASK#T1")["result"]["models"]
+    assert result[-1]["label"] == "Mistral Large (mine)"
+
+
+def test_an_effort_bedrock_refused_is_a_real_answer_of_the_check(tmp_path: Path) -> None:
+    refused = models.EffortUnavailable(
+        "Claude Fable 5.2 does not accept Low effort here (Amazon Bedrock refused it). Pick another level in Lamo "
+        "Stories › Settings › AI.",
+        model="fable-5-2",
+        effort="low",
+        sent=True,
+        status="error",
+    )
+    model = FakeModel(refused)
+    svc, db, _ = services(tmp_path, model)
+    db.seed(task_item("T1", "check_models", input={"models": ["fable-5-2"]}))
+    assert run(svc) == "done"
+    st = db.get(PK, "MODELSTATUS#fable-5-2")
+    assert st["status"] == "error" and st["line"] == str(refused) and st["model"] == "fable-5-2"
+
+
+def test_a_task_that_failed_on_its_model_keeps_the_model_and_effort_it_was_sent_with(tmp_path: Path) -> None:
+    """§45.34: TASK# records what was asked even when no answer came (effortApplied false)."""
+    sentence = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Lamo Stories › Settings › AI, or try again."
+    model = FakeModel(models.ModelUnavailable(sentence, model="fable-5-2", effort="max", status="denied"))
+    svc, db, _ = services(tmp_path, model)
+    db.seed(task_item("T1", "brainstorm", input={"topic": "ice"}, override={"model": "fable-5-2", "effort": "max"}))
+    assert run(svc) == "failed"
+    task = db.get(PK, "TASK#T1")
+    assert task["error"] == sentence
+    assert (task["model"], task["effort"], task["effortApplied"]) == ("fable-5-2", "max", False)

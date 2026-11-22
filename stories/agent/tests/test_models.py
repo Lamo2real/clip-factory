@@ -419,3 +419,111 @@ def test_an_unknown_model_is_refused_before_any_call() -> None:
     with pytest.raises(ModelUnavailable):
         m.complete(CTX, task="chat", messages=HELLO)
     assert runtime.requests == []
+
+
+# --- round 3 (§45.34) ---------------------------------------------------------------------------------------------
+
+
+def modeldef(key: str, **over: Any) -> dict[str, Any]:
+    fields: dict[str, Any] = {
+        "type": "ws_modeldef",
+        "key": key,
+        "label": "Llama Custom",
+        "provider": "Meta",
+        "modelId": "arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/abc123",
+        "region": "us-west-2",
+        "efforts": ["low", "medium"],
+        "defaultEffort": "medium",
+        "vision": False,
+        "maxOutputTokens": 4096,
+        "price": {"inputPer1M": 1.0, "outputPer1M": 2.0, "cacheReadPer1M": None, "cacheWritePer1M": None,
+                  "longContext": None, "currency": "USD", "source": "owner"},
+    }  # fmt: skip
+    return item(f"MODELDEF#{key}", **{**fields, **over})
+
+
+def test_a_model_the_owner_added_runs_with_its_own_id_region_and_efforts_with_no_release() -> None:
+    """Request 2 §3 "adding new models … without rebuilding": a MODELDEF# of the workspace is merged over the bundled
+    list for each call. It is called by its own model id in its own Region, the effort is sent only from its own
+    list, its output limit holds, and its own price is used for the usage item."""
+    regions: list[str] = []
+    runtime = FakeRuntime([converse_reply("Hi")])
+
+    def factory(region: str) -> FakeRuntime:
+        regions.append(region)
+        return runtime
+
+    table = FakeTable()
+    table.seed(modeldef("custom-llama"))
+    table.seed(item(keys.AICONFIG_SK, defaultModel="custom-llama", defaultEffort="high"))
+    store = FakeStore(table)
+    m = BedrockModels(table=table, get_bytes=store.get_bytes_sync, region="eu-north-1", client=FakeRuntime([]),
+                      client_factory=factory, sleep=lambda _: None)  # fmt: skip
+    with pytest.raises(EffortUnavailable):  # High is not in its own list: refused, never swapped
+        m.complete(CTX, task="chat", messages=HELLO)
+    reply = m.complete(CTX, task="chat", messages=HELLO, override={"effort": "low"}, max_tokens=16000)
+    (body,) = runtime.requests
+    assert regions == ["us-west-2"]
+    assert body["modelId"] == "arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/abc123"
+    assert body["additionalModelRequestFields"] == {"output_config": {"effort": "low"}}
+    assert body["inferenceConfig"]["maxTokens"] == 4096
+    assert (reply.model, reply.effort, reply.effort_applied) == ("custom-llama", "low", True)
+    (usage,) = table.prefix("USAGE#")
+    assert usage["model"] == "custom-llama" and usage["cost"] == pytest.approx((100 * 1.0 + 20 * 2.0) / 1e6)
+    assert usage["priceSource"] == "owner"
+
+
+def test_a_model_the_owner_added_with_no_efforts_runs_with_none_sent() -> None:
+    m, runtime, _, _ = client(
+        [converse_reply("Hi")],
+        modeldef("custom-plain", efforts=[], defaultEffort=None, region=None),
+        item(keys.AICONFIG_SK, defaultModel="custom-plain", defaultEffort="max"),
+    )
+    reply = m.complete(CTX, task="chat", messages=HELLO)
+    (body,) = runtime.requests
+    assert "additionalModelRequestFields" not in body and reply.effort is None and reply.effort_applied is False
+
+
+def test_the_owner_s_models_are_never_shared_with_another_workspace_or_shadow_a_bundled_one() -> None:
+    other = CallContext(
+        user_id=USER, workspace_id="01JD0000000000000000000000", agent_id="creative_director", session_id="S1"
+    )
+    m, runtime, table, _ = client([converse_reply("Hi")], modeldef("custom-llama"))
+    table.seed({"pk": f"USER#{USER}#WS#01JD0000000000000000000000", "sk": keys.AICONFIG_SK, "userId": USER, "workspaceId": "01JD0000000000000000000000",
+                "defaultModel": "custom-llama"})  # fmt: skip
+    with pytest.raises(ModelUnavailable) as e:  # the other workspace has no such model
+        m.complete(other, task="chat", messages=HELLO)
+    assert "is not in Lamo Stories' list" in str(e.value) and runtime.requests == []
+    shadow = config.merged_models([modeldef("opus-5-5", modelId="x"), modeldef("custom-ok"), modeldef("bad key")])
+    assert [x["key"] for x in shadow["models"]][-1] == "custom-ok"
+    assert next(x for x in shadow["models"] if x["key"] == "opus-5-5") == config.model("opus-5-5")
+    assert config.models() is config.models()  # the bundled file stays cached; the workspace's are read per call
+
+
+def test_check_models_is_one_bare_request_with_no_instructions_skills_or_memory(
+    caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """§45.34: Check models sends a tiny request (no agent instructions, skills or memory), logs no task-agent
+    mismatch, runs while the agent is off, and leaves MODELSTATUS# to the check (one item per model)."""
+    m, runtime, table, _ = client(
+        [converse_reply("ok")],
+        item(keys.agent_sk("creative_director"), active=False),
+        item("MEM#M1", text="Lamo likes slapstick endings", createdAt="2026-11-21T10:00:00.000Z"),
+    )
+    reply = m.complete(CTX, task=models.CHECK_TASK, messages=HELLO, override={"model": "haiku-5-5", "effort": "low"},
+                       max_tokens=512)  # fmt: skip
+    (body,) = runtime.requests
+    assert body["system"] == [] and "slapstick" not in body_text(body)
+    assert body["modelId"] == config.model("haiku-5-5")["profile"]  # type: ignore[index]
+    assert reply.model == "haiku-5-5" and reply.effort == "low"
+    assert "task_agent_mismatch" not in capsys.readouterr().out + caplog.text
+    assert table.item(keys.modelstatus_sk("haiku-5-5")) is None  # the check writes it, once
+    assert len(table.prefix("USAGE#")) == 1  # its tokens are still counted
+
+
+def test_the_protocol_lists_allow_inactive_and_on_text_s_meaning() -> None:
+    import inspect
+
+    params = inspect.signature(models.ModelClient.complete).parameters
+    assert "allow_inactive" in params and params["allow_inactive"].default is False
+    assert "whole text so far" in (models.ModelClient.complete.__doc__ or "")

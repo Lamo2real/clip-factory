@@ -365,3 +365,48 @@ def test_buttons_are_not_repeated_and_capped(box: Any) -> None:
 def test_an_unknown_tool_is_an_error_result(box: Any) -> None:
     assert "no tool named" in error(box, "publish_now")
     assert "no tool named" in error(box, "_get")
+
+
+def ref_item(ref_id: str, status: str = "analyzed", **extra: Any) -> dict[str, Any]:
+    key = f"ws/{USER}/{WS}/references/{ref_id}/analysis.json"
+    return {"pk": PK, "sk": f"REFVID#{ref_id}", "userId": USER, "workspaceId": WS, "refId": ref_id, "status": status,
+            **({"analysisKey": key} if status == "analyzed" else {}), **extra}  # fmt: skip
+
+
+def test_offer_make_video_carries_up_to_three_analyzed_references(box: Any) -> None:
+    """§45.34: Make the video from the chat can take the references the owner and the director talked about."""
+    box.db.seed(character_item("C1", "Bo"))
+    box.db.seed(idea_item("I1"))
+    for ref_id in ("R1", "R2", "R3", "R4"):
+        box.db.seed(ref_item(ref_id))
+    box.db.seed(ref_item("R5", status="ready"))
+    box.db.seed({**ref_item("R6"), "workspaceId": "someone-else"})
+    call(box, "offer_make_video", ideaId="I1", characterIds=["C1"], referenceIds=["R1", "R2", "R1"])
+    assert box.actions[-1]["payload"] == {
+        "story": {"characterIds": ["C1"], "referenceIds": ["R1", "R2"], "ideaId": "I1"}
+    }
+    assert "up to 3" in error(box, "offer_make_video", ideaId="I1", characterIds=["C1"],
+                              referenceIds=["R1", "R2", "R3", "R4"])  # fmt: skip
+    assert "not been analyzed" in error(box, "offer_make_video", ideaId="I1", characterIds=["C1"], referenceIds=["R5"])
+    assert "not reference videos here" in error(
+        box, "offer_make_video", ideaId="I1", characterIds=["C1"], referenceIds=["R6"]
+    )
+    spec = next(s for s in tools.specs() if s["toolSpec"]["name"] == "offer_make_video")
+    assert spec["toolSpec"]["inputSchema"]["json"]["properties"]["referenceIds"]["maxItems"] == 3
+
+
+def test_the_chat_brief_says_make_the_video_can_carry_references() -> None:
+    from lamostories_agent.chat import turn
+
+    assert "referenceIds" in turn.CHAT_BRIEF and "offer_make_video" in turn.CHAT_BRIEF
+
+
+def test_the_chat_keeps_at_most_the_api_s_fifty_notes(box: Any) -> None:
+    """§45.34: one limit for the chat and the owner, the API's 50, with the API's sentence."""
+    from lamostories_agent import memory
+
+    assert memory.CHAT_LIMIT == 50 and memory.FULL == "Memory is full (50 notes). Delete one first."
+    for n in range(50):
+        box.db.seed({"pk": PK, "sk": f"MEM#{n:04d}", "userId": USER, "workspaceId": WS, "memId": f"{n:04d}",
+                     "text": f"fact {n}", "createdAt": f"2026-11-21T10:00:{n:02d}.000Z"})  # fmt: skip
+    assert error(box, "remember", text="one more") == "Memory is full (50 notes). Delete one first."
