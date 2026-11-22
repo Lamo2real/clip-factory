@@ -47,6 +47,37 @@ export const UNDO_MS = 8000;
 
 const Ctx = createContext<Toaster | null>(null);
 
+type SayTone = "success" | "error" | "info";
+
+/** A toast an app raised while it was not on screen, kept until it is (ToastScope, useToastWhen). */
+interface Held {
+  tone: SayTone;
+  text: string;
+  options: ToastOptions | undefined;
+  /** When it was put aside (its own time on screen counts from here). */
+  at: number;
+  /** Its app is on screen now. */
+  onScreen: () => boolean;
+  /** Its app's own error sound when it shows (none: the provider's, or none at all when `quiet`). */
+  onError?: () => void;
+  /** Told the toast's id once it shows (its scope then takes it along if the app goes behind again). */
+  shown?: (id: number, at: number) => void;
+}
+
+/** The provider's own handle for the apps' scopes: a toast's id, whether it is still up, and the toasts put aside. */
+interface ToastHost {
+  push(tone: SayTone, text: string, options?: ToastOptions): number;
+  alive(id: number): boolean;
+  dismiss(id: number): void;
+  hold(h: Held): void;
+  /** Shows every toast put aside whose app is on screen now, unless it waited longer than its own time on screen. */
+  drain(): void;
+}
+
+const HostCtx = createContext<ToastHost | null>(null);
+
+const lifeOf = (tone: ToastTone, options?: ToastOptions) => options?.ms ?? (tone === "error" ? 7000 : 4200);
+
 /** A screen's pinned main button (phones, §38.1): the toasts never sit on it. */
 export const PINNED_MAIN = ".cr-pin";
 
@@ -179,6 +210,35 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
     [push, commit, drop],
   );
 
+  // The toasts on screen now, for a scope asking whether one of its own is still up (an effect, after the render).
+  const up = useRef<ToastItem[]>(items);
+  useLayoutEffect(() => {
+    up.current = items;
+  }, [items]);
+  const held = useRef<Held[]>([]);
+  const host = useMemo<ToastHost>(
+    () => ({
+      push: (tone, text, o) => push(tone, text, o?.ms, o?.group, undefined, o?.quiet),
+      alive: (id) => up.current.some((t) => t.id === id),
+      dismiss,
+      hold: (h) => void held.current.push(h),
+      drain: () => {
+        const now = Date.now();
+        const wait: Held[] = [];
+        for (const h of held.current.splice(0)) {
+          if (!h.onScreen()) wait.push(h);
+          else if (now - h.at < lifeOf(h.tone, h.options)) {
+            const id = push(h.tone, h.text, h.options?.ms, h.options?.group, undefined, h.options?.quiet || !!h.onError);
+            h.shown?.(id, now);
+            if (h.tone === "error" && !h.options?.quiet) h.onError?.();
+          }
+        }
+        held.current.push(...wait);
+      },
+    }),
+    [push, dismiss],
+  );
+
   // Phones: a toast never covers the screen's pinned main button ("You're in!" over Make clips for this campaign):
   // while toasts show, they rise just above it whenever they would touch it, and come back down when it moves away.
   const box = useRef<HTMLDivElement>(null);
@@ -242,7 +302,7 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
 
   return (
     <Ctx.Provider value={api}>
-      {children}
+      <HostCtx.Provider value={host}>{children}</HostCtx.Provider>
       <div className="toasts" ref={box}>
         <div aria-live="polite" className="toasts__group">
           {render((t) => t.tone !== "error")}
@@ -255,41 +315,94 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
   );
 }
 
-type Said = { tone: "success" | "error" | "info"; text: string; options: ToastOptions | undefined; at: number };
+function useHost(): ToastHost {
+  const h = useContext(HostCtx);
+  if (!h) throw new Error("useToast outside ToastProvider");
+  return h;
+}
 
 /**
  * One app's toasts while the shell hosts two (Clip Factory and Lamo Stories, docs/CONTRACTS.md §45.37): a toast its
  * app raises while it is hidden (a request that finished behind the other app) waits until that app is on screen
  * again, and is dropped when it is older by then than its own time on screen; the app's own error sound plays instead
- * of the shell's. Undo toasts go through at once: they come from the owner's own tap and hold a decision. Toasts the
- * shell itself raises (outside both apps) stay with the ToastProvider, global.
+ * of the shell's. A toast of its own still up when the app goes behind the other one leaves the screen with it, and
+ * comes back for the rest of its time if the app is back by then. Undo toasts go through at once and stay: they come
+ * from the owner's own tap and hold a decision. Toasts the shell itself raises (outside both apps) stay with the
+ * ToastProvider, global.
  */
 export function ToastScope({ active, onScreen, onError, children }: { active: boolean; onScreen: () => boolean; onError: () => void; children: ReactNode }) {
   const parent = useToast();
-  const held = useRef<Said[]>([]);
+  const host = useHost();
   const live = useRef({ onScreen, onError });
   live.current = { onScreen, onError };
+  /** Its own toasts it put up, by id: when, and what (to put one aside if the app goes behind while it is up). */
+  const mine = useRef(new Map<number, { at: number; tone: SayTone; text: string; options: ToastOptions | undefined }>());
   const api = useMemo<Toaster>(() => {
+    const shown = () => live.current.onScreen();
+    const sound = () => live.current.onError();
+    /** One of its own is up now: remembered (and the ones whose time is over forgotten). */
+    const keep = (tone: SayTone, text: string, options: ToastOptions | undefined) => (id: number, at: number) => {
+      for (const [old, t] of mine.current) if (at - t.at >= lifeOf(t.tone, t.options)) mine.current.delete(old);
+      mine.current.set(id, { at, tone, text, options });
+    };
     const say =
-      (tone: Said["tone"]) =>
+      (tone: SayTone) =>
       (text: string, options?: ToastOptions): void => {
-        if (!live.current.onScreen()) {
-          held.current.push({ tone, text, options, at: Date.now() });
+        if (!shown()) {
+          host.hold({ tone, text, options, at: Date.now(), onScreen: shown, onError: sound, shown: keep(tone, text, options) });
           return;
         }
-        parent[tone](text, { ...options, quiet: true });
-        if (tone === "error") live.current.onError();
+        keep(tone, text, options)(host.push(tone, text, { ...options, quiet: true }), Date.now());
+        if (tone === "error" && !options?.quiet) sound();
       };
     return { success: say("success"), error: say("error"), info: say("info"), undo: (text, options) => parent.undo(text, options) };
-  }, [parent]);
-  // Back on screen: what waited shows now, unless it would already have gone.
+  }, [parent, host]);
   useEffect(() => {
-    if (!active) return;
-    const now = Date.now();
-    for (const h of held.current.splice(0)) {
-      const life = h.options?.ms ?? (h.tone === "error" ? 7000 : 4200);
-      if (now - h.at < life) api[h.tone](h.text, h.options);
+    // Back on screen: what waited shows now, unless it would already have gone.
+    if (active) {
+      host.drain();
+      return;
     }
-  }, [active, api]);
+    // Gone behind the other app: its toasts still up go with it (their sound has played: they come back quiet).
+    const now = Date.now();
+    for (const [id, t] of mine.current) {
+      if (!host.alive(id)) continue;
+      host.dismiss(id);
+      const left = lifeOf(t.tone, t.options) - (now - t.at);
+      if (left <= 0) continue;
+      const options = { ...t.options, ms: left, quiet: true };
+      host.hold({
+        tone: t.tone,
+        text: t.text,
+        options,
+        at: now,
+        onScreen: () => live.current.onScreen(),
+        shown: (back, at) => mine.current.set(back, { at, tone: t.tone, text: t.text, options }),
+      });
+    }
+    mine.current.clear();
+  }, [active, host]);
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
+}
+
+/**
+ * A toaster for an app's code that sits outside its pane (Clip Factory's session, above both apps): while
+ * `onScreen()` is false its toasts wait, as a ToastScope's do, and show once that app's scope is on screen again.
+ * While `onScreen()` is true (always, while Lamo Stories is switched off) it is exactly useToast().
+ */
+export function useToastWhen(onScreen: () => boolean): Toaster {
+  const root = useToast();
+  const host = useHost();
+  const live = useRef(onScreen);
+  live.current = onScreen;
+  return useMemo<Toaster>(() => {
+    const shown = () => live.current();
+    const say =
+      (tone: SayTone) =>
+      (text: string, options?: ToastOptions): void => {
+        if (shown()) root[tone](text, options);
+        else host.hold({ tone, text, options, at: Date.now(), onScreen: shown });
+      };
+    return { success: say("success"), error: say("error"), info: say("info"), undo: (text, options) => root.undo(text, options) };
+  }, [root, host]);
 }

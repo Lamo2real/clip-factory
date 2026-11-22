@@ -10,7 +10,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clipsGoLater, clipsHidden, takeParkedClipsGo } from "../src/app/shell.ts";
 import { barHeight, dockLayout, SIDEBAR, type DockInput } from "../src/app/WorkspaceDock.tsx";
-import { ToastProvider, ToastScope, useToast, type Toaster } from "../src/components/Toasts.tsx";
+import { ToastProvider, ToastScope, useToast, useToastWhen, type Toaster } from "../src/components/Toasts.tsx";
 import { balancedColumns, emptyUnder, pickColumns, shortestColumns } from "../src/stories/screens/Connections.tsx";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -180,6 +180,83 @@ describe("A2: each app's toasts are its own (ToastScope)", () => {
     on = true;
     await draw(true, () => on, vi.fn());
     expect(texts()).toEqual([]);
+  });
+
+  it("a toast of its own still up when its app goes behind the other one leaves with it, and is back for the rest of its time", async () => {
+    let on = true;
+    await draw(true, () => on, vi.fn());
+    act(() => toaster!.success("Started! Your clips show up in Review when they are ready."));
+    expect(texts()).toEqual(["Started! Your clips show up in Review when they are ready."]);
+    on = false;
+    await draw(false, () => on, vi.fn());
+    expect(texts()).toEqual([]);
+    on = true;
+    await draw(true, () => on, vi.fn());
+    expect(texts()).toEqual(["Started! Your clips show up in Review when they are ready."]);
+    // And again: the one that came back leaves with its app too.
+    on = false;
+    await draw(false, () => on, vi.fn());
+    expect(texts()).toEqual([]);
+    on = true;
+    await draw(true, () => on, vi.fn());
+    expect(texts()).toEqual(["Started! Your clips show up in Review when they are ready."]);
+  });
+
+  it("one the owner closed, or one whose time ran out while its app was behind, does not come back; nor does its sound play twice", async () => {
+    vi.useFakeTimers();
+    let on = true;
+    const mine = vi.fn();
+    await draw(true, () => on, mine);
+    act(() => toaster!.error("That did not save."));
+    act(() => toaster!.info("Saved."));
+    expect(mine).toHaveBeenCalledTimes(1);
+    act(() => (host.querySelector(".toast--info .toast__close") as HTMLButtonElement).click());
+    expect(texts()).toEqual(["That did not save."]);
+    on = false;
+    await draw(false, () => on, mine);
+    on = true;
+    await draw(true, () => on, mine);
+    // The error is back (its time was not up), quietly; the closed one is not.
+    expect(texts()).toEqual(["That did not save."]);
+    expect(mine).toHaveBeenCalledTimes(1);
+    on = false;
+    await draw(false, () => on, mine);
+    act(() => vi.advanceTimersByTime(8000));
+    on = true;
+    await draw(true, () => on, mine);
+    expect(texts()).toEqual([]);
+  });
+
+  it("an app's code outside its pane (Clip Factory's session) waits too, and shows once that app's pane is on screen", async () => {
+    let clips = false;
+    let session: Toaster | null = null;
+    function Session() {
+      session = useToastWhen(() => clips);
+      return null;
+    }
+    const shell = vi.fn();
+    const paint = () =>
+      act(() =>
+        root.render(
+          <ToastProvider onError={shell}>
+            <Session />
+            <ToastScope active={clips} onScreen={() => clips} onError={vi.fn()}>
+              <Grab />
+            </ToastScope>
+          </ToastProvider>,
+        ),
+      );
+    await paint();
+    act(() => session!.error("You seem to be offline."));
+    expect(texts()).toEqual([]);
+    expect(shell).not.toHaveBeenCalled();
+    clips = true;
+    await paint();
+    expect(texts()).toEqual(["You seem to be offline."]);
+    expect(shell).toHaveBeenCalledTimes(1);
+    // On screen, it is the plain toaster.
+    act(() => session!.info("Saved."));
+    expect(texts()).toContain("Saved.");
   });
 
   it("shows at once while its app is on screen; Undo always goes through (it holds the owner's own decision)", async () => {
