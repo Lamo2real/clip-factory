@@ -216,3 +216,18 @@ def test_a_new_design_still_keeps_every_saved_name_taken(tmp_path: Path) -> None
     data = json.loads(model.texts(0).split("DATA as JSON:\n", 1)[1])
     assert data["taken"] == ["Bo"] and "current" not in data
     assert "redesign" not in model.texts(0)
+
+
+def test_a_picture_for_a_model_the_owner_added_without_vision_is_refused_by_its_own_name(tmp_path: Path) -> None:
+    model = FakeModel()
+    svc, db, s3 = services(tmp_path, model)
+    s3.objects[KEY] = b"png"
+    db.seed({"pk": PK, "sk": "ASSET#A1", "userId": USER, "workspaceId": WS, "assetId": "A1", "kind": "design_ref",
+             "key": KEY})  # fmt: skip
+    db.seed({"pk": PK, "sk": "MODELDEF#custom-text", "userId": USER, "workspaceId": WS, "key": "custom-text",
+             "label": "Text Only (mine)", "provider": "Mistral", "modelId": "mistral.text-only", "region": None,
+             "efforts": [], "defaultEffort": None, "vision": False, "maxOutputTokens": 4096, "price": None})  # fmt: skip
+    db.seed(task_item("T1", "character_design", input={"referenceAssetId": "A1"}, override={"model": "custom-text"}))
+    assert run(svc) == "failed"
+    assert db.get(PK, "TASK#T1")["error"] == design.NO_VISION.format(label="Text Only (mine)")
+    assert model.calls == []

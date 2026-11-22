@@ -476,3 +476,23 @@ def test_the_ass_file_is_laid_out_for_each_shape() -> None:
     assert "PlayResX: 1920" in out and "PlayResY: 1080" in out
     x, y = (int(v) for v in out.split("\\pos(")[1].split(")")[0].split(","))
     assert wide.left < x < wide.right and wide.top < y < wide.bottom
+
+
+@needs_deno
+def test_the_writer_is_told_the_storys_own_shape_and_an_older_story_keeps_its_storyboards(tmp_path: Path) -> None:
+    """A story's ``format`` (set at create from the workspace default) is the shape the writer stages for; a story
+    made before it had one keeps the size of its storyboard, whatever the workspace default is now."""
+    square = {"video": {"resolution": "1080x1080", "aspect": "1:1", "quality": "high", "fps": 30}}
+    old = normalized_sample(tmp_path)
+    svc, store, table, fake = world(tmp_path, job=job_item("J2", "S2", run=WRITE_RUN), config=square)
+    seed_version_one(table, store, old, "J2")
+    assert run_job(svc, "J2", "S2") == "ready"
+    assert request_of(fake.calls[0])["format"] == {"aspect": "9:16", "width": 1080, "height": 1920}
+    script = saved_script(table, store)
+    assert (script["width"], script["height"]) == (1080, 1920)
+
+    svc, store, table, fake = world(tmp_path / "b", job=job_item("J1", "S1", run=WRITE_RUN), config=square)
+    fake.answers["storyboard"] = RuntimeError("stop after the request")  # this engine draws 9:16 only (D3: six)
+    table.seed(story_item(format={"aspect": "1:1", "width": 1080, "height": 1080}))
+    assert run_job(svc) == "failed"
+    assert request_of(fake.calls[0])["format"] == {"aspect": "1:1", "width": 1080, "height": 1080}

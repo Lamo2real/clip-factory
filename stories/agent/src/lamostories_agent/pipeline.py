@@ -1124,7 +1124,8 @@ class StoryJob(Job):
             raise StoryFailed("This story's characters are gone. Pick a character, then tap Try again.")
         catalog, rules = await self._engine_catalog()
         target = float(self.story.get("durationSec") or 45)
-        size = (int(old["width"]), int(old["height"])) if mode == "scenes" and old else self._size()
+        keep_size = old is not None and (mode == "scenes" or not isinstance(self.story.get("format"), dict))
+        size = (int(old.get("width") or 1080), int(old.get("height") or 1920)) if keep_size and old else self._size()
         request: dict[str, Any] = {
             "story": await self._concept(),
             "cast": writer.cast_brief(cast, self.characters),
@@ -1271,7 +1272,8 @@ class StoryJob(Job):
         return script, bool(answer.get("teachesSafety")), []
 
     def _size(self) -> tuple[int, int]:
-        """The story's own size (``story.format``), else the workspace default, else 1080 × 1920 (§45.34)."""
+        """The story's own size (``story.format``), else the workspace default, else 1080 × 1920 (§45.34). A story made
+        before it had a format keeps its storyboard's size (storyboard())."""
         return writer.size_of(self.story, self.config)
 
     async def _save_script(

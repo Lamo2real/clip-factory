@@ -59,10 +59,16 @@ def _vision_ok(env: TaskEnv) -> str | None:
     try:
         ai = env.svc.store.get(env.pk, "AICONFIG") or {}
         agent = env.svc.store.get(env.pk, "AGENT#character") or {}
-        choice = models.resolve(task="character_design", agent=agent, ai=ai, override=env.override)
+        defs = [
+            d
+            for d in env.svc.store.query(env.pk, config.MODELDEF_PREFIX)
+            if d.get("userId") in (None, env.user_id) and d.get("workspaceId") in (None, env.workspace_id)
+        ]
+        catalog = config.merged_models(defs)  # the owner's own models too (§45.34)
+        choice = models.resolve(task="character_design", agent=agent, ai=ai, override=env.override, catalog=catalog)
     except Exception:
         return None  # the client resolves again and says what is wrong
-    info = config.model(choice.model) or {}
+    info = config.model(choice.model, catalog) or {}
     if info and info.get("vision") is False:
         return NO_VISION.format(label=info.get("label") or choice.model)
     return None
