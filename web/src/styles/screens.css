@@ -145,6 +145,16 @@
   .cover-stack__item[data-dealt] {
     animation: none;
   }
+  /* Less motion (the system's or the app's own setting): no spring at all, the fan lands at once (the shared 1 ms
+     would still wait for a drawn frame). */
+  .reduce-motion .cover-stack__item {
+    transition: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cover-stack__item {
+      transition: none;
+    }
+  }
   .cover-stack__item:nth-child(2) {
     z-index: 1;
   }

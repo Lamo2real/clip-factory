@@ -14,8 +14,10 @@ test.beforeEach(async ({ page, browserName }) => {
 });
 
 /** Opens Home and waits until every cover is dealt (its entrance animation ended and was dropped). */
-async function dealtHome(page: Page) {
-  await page.goto("/");
+async function dealtHome(page: Page, { inApp = false } = {}) {
+  // In the app (its Home link) keeps what was just set on this page; a reload starts the pretend account afresh.
+  if (inApp) await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Home", exact: true }).click();
+  else await page.goto("/");
   await settle(page);
   const items = page.locator(".cover-stack__item");
   await expect(items).toHaveCount(3);
@@ -101,29 +103,32 @@ test("Chromium runs the hover's spring on the compositor", async ({ page, browse
   expect(failed).toEqual([]);
 });
 
-test("with reduced motion the covers still deal in and fan out at once", async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  const items = await dealtHome(page);
-  await expect(items.nth(2)).toHaveCSS("opacity", "1");
-  await expect(items.nth(2)).toHaveCSS("transition-duration", "0.001s");
-  await pointerAway(page);
-  await page.waitForTimeout(200);
-  expect(await turn(page)).toBeCloseTo(7, 1);
-  await hover(page);
-  // Read after two drawn frames: an engine starts a transition on the frame after the hover and its clock moves only
-  // when it draws, so even a 1 ms one shows its first pose until then. Linux WebKit in CI draws without a GPU and can
-  // take over a second a frame here.
-  const afterTwoFrames = () =>
-    page.evaluate(
-      () =>
-        new Promise<number>((done) =>
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() => {
-              const m = new DOMMatrix(getComputedStyle(document.querySelectorAll(".cover-stack__item")[2]!).transform);
-              done((Math.atan2(m.b, m.a) * 180) / Math.PI);
-            }),
-          ),
-        ),
-    );
-  await expect.poll(afterTwoFrames, { timeout: 5000 }).toBeCloseTo(10, 1);
-});
+// Less motion, from the system or from the app's own Calm motion setting: the covers still deal in, and the fan lands
+// at once with no spring at all: no transition starts, so it is there on the very next read, without a drawn frame.
+for (const way of ["system", "app"] as const) {
+  test(`with less motion (${way}) the covers still deal in and fan out at once`, async ({ page }) => {
+    if (way === "system") await page.emulateMedia({ reducedMotion: "reduce" });
+    else {
+      // Clip Factory's own switch, as the owner turns it on (Settings › Look & feel › Motion).
+      await page.goto("/settings/look-and-feel/motion");
+      await settle(page);
+      await page.getByRole("switch", { name: "Reduce motion" }).click();
+      await expect(page.locator("html")).toHaveClass(/(^|\s)reduce-motion(\s|$)/);
+    }
+    const items = await dealtHome(page, { inApp: way === "app" });
+    if (way === "app") await expect(page.locator("html")).toHaveClass(/(^|\s)reduce-motion(\s|$)/);
+    await expect(items.nth(2)).toHaveCSS("opacity", "1");
+    await pointerAway(page);
+    await page.waitForTimeout(200);
+    expect(await turn(page)).toBeCloseTo(7, 1);
+    await hover(page);
+    await expect.poll(() => page.locator(".cover-stack:hover").count(), { timeout: 2000 }).toBe(1);
+    const now = await page.evaluate(() => {
+      const el = document.querySelectorAll(".cover-stack__item")[2]!;
+      const m = new DOMMatrix(getComputedStyle(el).transform);
+      return { deg: (Math.atan2(m.b, m.a) * 180) / Math.PI, transitions: el.getAnimations().filter((a) => a instanceof CSSTransition).length };
+    });
+    expect(now.transitions, "no spring starts").toBe(0);
+    expect(now.deg, "fanned at once").toBeCloseTo(10, 1);
+  });
+}
