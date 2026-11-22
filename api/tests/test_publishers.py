@@ -407,6 +407,43 @@ def test_instagram_upload_5xx_falls_back_to_video_url() -> None:
     assert saved[-1] == {"container": "17900000000000002", "containerAt": "2026-11-15T12:00:00.000Z", "uploaded": True}
 
 
+def test_instagram_upload_400_falls_back_to_video_url(capsys: pytest.CaptureFixture[str]) -> None:
+    # Seen in prod on 22 Nov 2026 15:02 UTC (an auto-posting run): rupload answered 400 for a good file while the same
+    # day's other Instagram uploads went through. Instagram fetches it instead, and the reason type is logged.
+    http = FakeHttp(
+        (200, "publish/instagram_limit"),
+        (200, "publish/instagram_container"),
+        (400, {"debug_info": {"type": "ProcessingFailedError", "message": "Request processing failed"}}),
+        (200, {"id": "17900000000000003"}),
+    )
+    job, saved, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    progress = InstagramPublisher().start(job)
+    assert progress.state == "processing"
+    retry = form(http.calls[3])
+    assert http.calls[3].url == "https://graph.facebook.com/v27.0/1784/media"
+    assert retry["video_url"][0].startswith("https://cf-prod-media-123.s3.")
+    assert "upload_type" not in retry
+    assert saved[-1] == {"container": "17900000000000003", "containerAt": "2026-11-15T12:00:00.000Z", "uploaded": True}
+    logged = capsys.readouterr().out
+    assert "publish.instagram_upload_fallback" in logged
+    assert "ProcessingFailedError" in logged
+    assert "Request processing failed" not in logged  # the type only, never Meta's message
+
+
+@pytest.mark.parametrize("status", [401, 403, 429])
+def test_instagram_upload_token_and_rate_answers_do_not_fall_back(status: int) -> None:
+    # A dead token (Connect again) and "slow down" keep their own answers: a second container would not help.
+    http = FakeHttp(
+        (200, "publish/instagram_limit"),
+        (200, "publish/instagram_container"),
+        (status, {"error": {"message": "no", "code": 190 if status != 429 else 4}}),
+    )
+    job, _, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    with pytest.raises(PublishError):
+        InstagramPublisher().start(job)
+    assert len(http.calls) == 3  # no new container
+
+
 def test_instagram_daily_limit() -> None:
     http = FakeHttp((200, {"data": [{"config": {"quota_total": 50}, "quota_usage": 50}]}))
     job, _, _ = make_job("instagram", http, data={"igUserId": "1784"})
@@ -525,13 +562,20 @@ def test_instagram_failed_publish_that_did_not_post_keeps_its_error() -> None:
 
 
 def test_instagram_upload_failure_with_debug_info() -> None:
+    # rupload's real answer (#78): 400 ProcessingFailedError. Since 22 Nov 2026 it falls back to Instagram fetching
+    # the file (the same answer came as a 500 for a good file, #77); when that new container fails too, the owner gets
+    # the plain sentence, and the first container stays saved for a replay.
     http = FakeHttp(
-        (200, "publish/instagram_limit"), (200, "publish/instagram_container"), (400, "publish/instagram_upload_failed")
+        (200, "publish/instagram_limit"),
+        (200, "publish/instagram_container"),
+        (400, "publish/instagram_upload_failed"),
+        (400, {"error": {"message": "Invalid parameter", "code": 100, "error_subcode": 33}}),
     )
     job, saved, _ = make_job("instagram", http, data={"igUserId": "1784"})
     with pytest.raises(PublishError, match="Posting to Instagram did not work"):
         InstagramPublisher().start(job)
     assert saved == [{"container": "17889455560051444", "containerAt": "2026-11-15T12:00:00.000Z"}]  # kept for a replay
+    assert "video_url" in form(http.calls[3])  # the fallback was tried
 
 
 @pytest.mark.parametrize(

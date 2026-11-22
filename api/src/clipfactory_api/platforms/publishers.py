@@ -115,6 +115,20 @@ def _ok(platform: str, resp: HttpResponse, step: str) -> dict[str, Any]:
     return data
 
 
+def _upload_server_refused(status: int) -> bool:
+    """rupload.facebook.com answered with a server error or a refusal that Instagram's own fetch can get round. Not a
+    401/403 (the token: Connect again, from ``_ok``) and not a 429 (slow down, from ``_ok``)."""
+    return status >= 500 or (400 <= status < 500 and status not in {401, 403, 429})
+
+
+def _rupload_reason(resp: HttpResponse) -> str:
+    """The type rupload gives for a refusal (``{"debug_info": {"type": "ProcessingFailedError", ...}}``), for the log
+    only; never its message (it may echo request details)."""
+    info = _json(resp).get("debug_info")
+    found = info.get("type") if isinstance(info, dict) else None
+    return found[:60] if isinstance(found, str) and found.isidentifier() else ""
+
+
 def _bearer(token: str, extra: dict[str, str] | None = None) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}", "Accept": "application/json", **(extra or {})}
 
@@ -664,10 +678,13 @@ class InstagramPublisher(_Graph):
         }
         url = f"{RUPLOAD}/ig-api-upload/{job.graph_api_version}/{quote(container, safe='')}"
         resp = _send(job, self.platform, HttpRequest("POST", url, headers, job.video.read(0, size)))
-        if resp.status >= 500:
-            # rupload.facebook.com sometimes answers 5xx for a good file (seen in prod, 21 Nov 2026). Instagram can
-            # fetch the same file itself: start a new container from the media bucket's link instead.
-            log("warning", "publish.instagram_upload_fallback", status=resp.status)
+        if _upload_server_refused(resp.status):
+            # rupload.facebook.com sometimes refuses a good file: 5xx (seen in prod, 21 Nov 2026) and 400 (an
+            # auto-posting run, 22 Nov 2026 15:02 UTC, while the same day's other uploads went through). Instagram
+            # can fetch the same file itself: start a new container from the media bucket's link instead. Nothing was
+            # published yet, so this can never post twice; a file Instagram really can't use still fails at the
+            # container check with "Instagram did not like this video file."
+            log("warning", "publish.instagram_upload_fallback", status=resp.status, type=_rupload_reason(resp))
             handle = {"container": self._container(job, ig, "video_url"), "containerAt": _now(job), "uploaded": True}
             job.save(handle)
             return Progress("processing", handle, self._every(job))
