@@ -322,19 +322,15 @@
   overflow-wrap: anywhere;
 }
 
-/* Edit an idea. */
-.st-s-idea.is-editing:hover {
-  transform: none;
-}
-
+/* Edit an idea (Ideas): the form inside the hero card. */
 .st-s-ideaedit {
   display: grid;
-  gap: 14px;
+  gap: var(--st-space-4);
 }
 
 .st-s-lines__list {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -344,7 +340,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 
 .st-s-lines > .st-btn {
