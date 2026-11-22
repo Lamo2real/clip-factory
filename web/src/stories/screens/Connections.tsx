@@ -648,6 +648,8 @@ export function PlatformCard({
   const toast = useToast();
   const [busy, setBusy] = useState<Busy>(null);
   const [ask, setAsk] = useState<Ask>(null);
+  // Connected by picking from the list: the same "Is this your Lamo Stories {place}?" as after a sign-in (§45.34).
+  const [picked, setPicked] = useState(false);
   const p = a.platform;
   const name = PLATFORM_NAME[p];
   const status = STATUS[a.connectionStatus];
@@ -796,6 +798,8 @@ export function PlatformCard({
                     void run("choose", () => storiesApi().chooseSocial(ws, p, c.id), {
                       text: c.usedByClips ? `${c.name} is Clip Factory's own. Check the card below.` : `Lamo Stories posts to ${c.name} now.`,
                       cheer: c.usedByClips ? undefined : el,
+                    }).then((ok) => {
+                      if (ok && !c.usedByClips) setPicked(true);
                     });
                   }}
                 >
@@ -822,16 +826,18 @@ export function PlatformCard({
         </p>
       ) : null}
 
-      {askIntended && connected && !ask ? (
+      {(askIntended || picked) && connected && !ask ? (
         <IntendedAsk
           a={a}
           busy={busy !== null}
           onYes={(el) => {
             celebrate(centerOf(el));
             toast.success(`Great! Lamo Stories posts to ${a.accountName ?? a.handle ?? name} on ${name}.`);
+            setPicked(false);
             onAnswered?.();
           }}
           onAnother={() => {
+            setPicked(false);
             onAnswered?.();
             void connect();
           }}
@@ -997,20 +1003,23 @@ export function ConnectionsScreen({ ws, page }: StoriesScreenProps) {
       celebrate(undefined, false);
       cheerOnNextTap(sounds);
     };
-    if (result === "connected") {
+    if (result === "connected" || result === "clips_meta_check") {
+      // Both are a connect (clips_meta_check also warns about Lamo Clips' own Meta connection): the card asks.
+      const said = () => (good ? toast.success(text) : toast.error(text));
       void storiesApi()
         .social(ws)
         .then((fresh) => {
           setData(() => fresh);
           const a = fresh.accounts.find((x) => x.platform === platform);
           if (a && a.connectionStatus === "connected" && (a.accountName || a.handle)) {
-            toast.success(`${connectedAsSentence(a)}.`);
+            if (good) toast.success(`${connectedAsSentence(a)}.`);
+            else said();
             setAsking(platform);
-          } else toast.success(text);
-          cheerUp();
+          } else said();
+          if (good) cheerUp();
         })
         .catch(() => {
-          toast.success(text);
+          said();
           void reload();
         });
     } else {

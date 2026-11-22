@@ -64,6 +64,24 @@ test("after a connect: Connected as {name} ({handle}), and the card asks whether
   await expect(page.locator("canvas.confetti").first()).toBeAttached();
 });
 
+test("a connect finished by picking the Instagram account from the list asks whether it is the Lamo Stories account", async ({ page }) => {
+  await on(page);
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto("/stories/connections");
+  await ready(page);
+  const ig = cardOf(page, "Instagram");
+  await ig.locator(".st-choose").getByRole("button", { name: /lamo\.stories/ }).click();
+  const ask = ig.getByRole("group", { name: "Is this your Lamo Stories account?" });
+  await expect(ask).toBeVisible();
+  await expect(ask).toContainText("Connected as lamo.stories.");
+  const o = await findOverflow(page);
+  expect(o.page, "@320: the page scrolls sideways").toBeLessThanOrEqual(o.viewport);
+  expect(o.items, "@320").toEqual([]);
+  await ask.getByRole("button", { name: "Yes, that's it" }).click();
+  await expect(page.locator(".toast").filter({ hasText: "Great! Lamo Stories posts to lamo.stories on Instagram." })).toBeVisible();
+  await expect(ig.locator(".st-intended")).toHaveCount(0);
+});
+
 test("after Disconnect, an own Meta app gets the Lamo Stories line, Clip Factory's app keeps its own", async ({ page }) => {
   await on(page);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -74,6 +92,8 @@ test("after Disconnect, an own Meta app gets the Lamo Stories line, Clip Factory
   await expect(page).toHaveURL(/\/stories\/connections$/);
   await fb.getByRole("button", { name: /^Lamo Stories/ }).click();
   await expect(fb.locator(".st-chip").first()).toHaveText("Connected");
+  // Picked from the list: the card asks first whether this is the Lamo Stories Page (§45.34).
+  await fb.getByRole("group", { name: "Is this your Lamo Stories Page?" }).getByRole("button", { name: "Yes, that's it" }).click();
   await fb.getByRole("button", { name: "Disconnect" }).click();
   await fb.getByRole("button", { name: "Yes, disconnect" }).click();
   await expect(page.getByText("To remove Lamo Stories completely, remove your Lamo Stories app in the account's own settings. Lamo Clips is not affected.")).toBeVisible();

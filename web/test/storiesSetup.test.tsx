@@ -128,6 +128,24 @@ describe("step 1: set up the AI", () => {
     expect(putAis()).toHaveLength(0);
     expect(ring()).toBe("1 of 11 done");
   });
+
+  it("after Check models, step 2 starts from the fresh states, and a model you added is marked", async () => {
+    await start({ fresh: true }, async (api) => {
+      await api.putAiModel("stories", "custom-quick", { label: "Quick One", provider: "Amazon", modelId: "eu.amazon.nova-lite-v1:0", region: "eu-north-1", efforts: [], defaultEffort: null, vision: false, maxOutputTokens: 4096, price: null });
+    });
+    const line = (name: string) => $$("[role=radio]").find((r) => r.textContent?.includes(name))?.textContent ?? "";
+    await click(button("Check models"));
+    await act(async () => await new Promise((r) => setTimeout(r, 1200)));
+    await settle(10);
+    expect($$(".st-setup__model").find((m) => m.textContent?.includes("Sonnet 5.5"))?.textContent).toContain("Works");
+    await click(button("Next"));
+    expect(stepTitle()).toBe("Pick your default model");
+    // Not the states from before the check: Sonnet answered, and nothing was loaded again by hand.
+    expect(line("Claude Sonnet 5.5")).toContain("Works: it answered.");
+    expect(line("Claude Sonnet 5.5")).not.toContain("Not checked yet");
+    expect(line("Quick One")).toContain("Amazon · Added by you · ");
+    expect(line("Claude Opus 5.5")).not.toContain("Added by you");
+  });
 });
 
 describe("steps 2 and 3: the default model and effort", () => {
@@ -183,7 +201,10 @@ describe("step 4 and the connect steps", () => {
     await start({ fresh: true });
     await click(button("Pick how videos are made"));
     await click($$("[role=radio]").find((r) => r.textContent?.includes("Amazon Nova Reel"))!);
-    expect(document.body.textContent).toContain("Until it is, a video with a scene without characters stops and tells you: nothing switches to the built-in animation by itself.");
+    // Every create, remake and change stops while it is not ready (§45.34 "A provider that is not ready"), whatever the scenes.
+    expect(document.body.textContent).toContain("Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in animation by itself.");
+    expect(document.body.textContent).toContain("Pick Built-in animation to keep making videos.");
+    expect(document.body.textContent).not.toMatch(/a scene without characters stops/);
     expect(document.body.textContent).not.toMatch(/keep using the built-in animation/);
   });
 

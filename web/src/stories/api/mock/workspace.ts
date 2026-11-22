@@ -98,7 +98,8 @@ function providersFor(store: MockStore, config: StoriesConfig): ProviderStatus[]
     {
       kind: "animation",
       id: "nova-reel",
-      label: "Amazon Nova Reel",
+      // The API's label (providers.py), while its sentence names the maker's short name.
+      label: "Amazon Nova Reel 1.1 (AI video)",
       state: config.providers.video === "nova-reel" ? "needs_setup" : "off",
       // The API's own sentence (§45.34): nothing switches to the built-in animation by itself.
       line: "Amazon Nova Reel is not ready yet: its storage place in the USA (N. Virginia) is not switched on. Pick Built-in animation in Settings › Video, or finish its setup.",

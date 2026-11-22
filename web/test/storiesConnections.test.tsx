@@ -220,6 +220,40 @@ describe("round 3 on the Social accounts page (§45.34)", () => {
     expect(calls).toContain("connectSocial");
   });
 
+  it("a connect finished by picking from the list asks too; Clip Factory's own pick does not", async () => {
+    await render({ platform: null, result: null });
+    const list = () => card("instagram").querySelector<HTMLElement>(".st-choose")!;
+    expect(card("instagram").querySelector(".st-intended")).toBeNull();
+    await click(button(list(), /lamo\.stories/));
+    expect(calls).toContain("chooseSocial");
+    const ask = card("instagram").querySelector<HTMLElement>(".st-intended")!;
+    expect(ask.getAttribute("aria-label")).toBe("Is this your Lamo Stories account?");
+    expect(ask.textContent).toContain("Connected as lamo.stories.");
+    expect(button(ask, "Pick another account")).toBeTruthy();
+    expect(card("facebook").querySelector(".st-intended")).toBeNull();
+    await click(button(ask, "Yes, that's it"));
+    expect(card("instagram").querySelector(".st-intended")).toBeNull();
+    expect(document.body.textContent).toContain("Great! Lamo Stories posts to lamo.stories on Instagram.");
+  });
+
+  it("Clip Factory's own account picked from the list is not asked about: its card says it is Clip Factory's", async () => {
+    await render({ platform: null, result: null });
+    await click(button(card("instagram").querySelector<HTMLElement>(".st-choose")!, /Clip Factory uses this/));
+    expect(card("instagram").querySelector(".st-intended")).toBeNull();
+    expect(card("instagram").textContent).toContain("Same as Clip Factory");
+  });
+
+  it("a connect that also warns about Lamo Clips' Meta connection (clips_meta_check) asks too", async () => {
+    await render({ platform: "facebook", result: "clips_meta_check" }, (s) => {
+      const fb = s.social.find((a) => a.platform === "facebook")!;
+      Object.assign(fb, { connectionStatus: "connected", externalAccountId: "109876543210987", accountName: "Lamo Stories", handle: "Lamo Stories" });
+    });
+    expect(document.body.textContent).toContain("But Lamo Clips may have lost Facebook");
+    const ask = card("facebook").querySelector<HTMLElement>(".st-intended")!;
+    expect(ask.getAttribute("aria-label")).toBe("Is this your Lamo Stories Page?");
+    expect(ask.textContent).toContain("Connected as Lamo Stories.");
+  });
+
   it("after Disconnect, the line follows the app the account used: its own app, or Clip Factory's", async () => {
     await render({ platform: null, result: null }, (s) => {
       const fb = s.social.find((a) => a.platform === "facebook")!;

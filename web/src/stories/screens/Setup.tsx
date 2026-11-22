@@ -96,13 +96,14 @@ function Foot({ step, busy, onBack, onSkip, children }: { step: OnboardStep; bus
 type Ai = { ai: StoriesAiConfig; models: ModelInfo[] };
 
 function modelLine(m: ModelInfo): string {
-  if (m.status === "ok") return `${m.provider} · Works: it answered.`;
-  if (m.status === "not_checked") return `${m.provider} · Not checked yet.`;
-  return `${m.provider} · ${m.statusLine}`;
+  const who = `${m.provider}${m.custom ? " · Added by you" : ""}`;
+  if (m.status === "ok") return `${who} · Works: it answered.`;
+  if (m.status === "not_checked") return `${who} · Not checked yet.`;
+  return `${who} · ${m.statusLine}`;
 }
 
 /** Check models from the setup: one tiny real call per model, followed until it finishes; then the fresh models. */
-function useCheckModels(ws: string, start: ModelInfo[], onChecked?: () => void) {
+function useCheckModels(ws: string, start: ModelInfo[], onChecked?: (models: ModelInfo[]) => void) {
   const toast = useToast();
   const [checking, setChecking] = useState(false);
   const [models, setModels] = useState(start);
@@ -119,7 +120,7 @@ function useCheckModels(ws: string, start: ModelInfo[], onChecked?: () => void) 
       setModels(fresh.models);
       const ok = fresh.models.filter((m) => m.status === "ok").length;
       toast.success(`${ok} of ${fresh.models.length} models answered.`);
-      onChecked?.();
+      onChecked?.(fresh.models);
     } catch (e) {
       toast.error(friendlyMessage(e));
     } finally {
@@ -150,7 +151,7 @@ const STATE_CHIP: Record<ModelInfo["status"], { label: string; tone: string }> =
 };
 
 /** Step 1: what Lamo Stories uses, the models and their state, Check models, and "These look right" (§45.34). */
-function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy }: { ws: string; ai: Ai; onSaved: (next: StoriesAiConfig) => void; onChecked: () => void; busy: boolean; setBusy: (b: boolean) => void }) {
+function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy }: { ws: string; ai: Ai; onSaved: (next: StoriesAiConfig) => void; onChecked: (models: ModelInfo[]) => void; busy: boolean; setBusy: (b: boolean) => void }) {
   const toast = useToast();
   const { checking, models, check } = useCheckModels(ws, ai.models, onChecked);
   return (
@@ -219,7 +220,7 @@ function ModelStep({
   onSaved: (next: StoriesAiConfig) => void;
   /** the model does not offer the current effort: it waits for the owner's own pick in step 3 */
   onHold: (key: string) => void;
-  onChecked: () => void;
+  onChecked: (models: ModelInfo[]) => void;
   busy: boolean;
   setBusy: (b: boolean) => void;
 }) {
@@ -405,8 +406,8 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
       {value === "nova-reel" && reel?.state !== "on" ? (
         <p className="st-note st-note--sun" role="note">
           <StIcon name="alert" size={18} />
-          Nova Reel is not ready yet. Until it is, a video with a scene without characters stops and tells you: nothing switches to the built-in
-          animation by itself. Posts made with Nova Reel get the platforms' AI labels.
+          Nova Reel is not ready yet. Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in
+          animation by itself. Pick Built-in animation to keep making videos. Posts made with Nova Reel get the platforms' AI labels.
         </p>
       ) : null}
       <SaveBar
@@ -573,8 +574,10 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
     ai.setData((prev) => (prev ? { ...prev, ai: next } : prev));
     void afterSave();
   };
-  // Check models ticks step 1 (§45.34): the ring follows.
-  const afterCheck = () => {
+  // Check models ticks step 1 (§45.34): the ring follows, and the next steps start from the models' fresh states (a
+  // model Bedrock just refused says so in step 2).
+  const afterCheck = (models: ModelInfo[]) => {
+    ai.setData((prev) => (prev ? { ...prev, models } : prev));
     void ob.reload();
     void refreshDashboard(ws).catch(() => undefined);
   };

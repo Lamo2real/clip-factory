@@ -7,9 +7,8 @@
 // provider keys.
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useLoad } from "../../lib/hooks.ts";
-import { prefersReducedMotion } from "../../lib/prefs.ts";
 import { storiesApi } from "../api/client.ts";
-import { storiesDevicePref } from "../prefs.ts";
+import { storiesReduceMotion } from "../prefs.ts";
 import { RESOLUTIONS, type ProviderStatus, type StoriesConfig, type VideoAspect, type VideoResolution } from "../api/types.ts";
 import modelsFile from "../../../../stories/config/models.json";
 import { Chip, Failed, Loading, Note, PROVIDER_STATE, SavedMark, SetCard, SetPick, SetSwitch, useSaved } from "./bits.tsx";
@@ -70,6 +69,11 @@ function makerOption<T extends string>(providers: ProviderStatus[] | null, id: T
   };
 }
 
+/** What a maker that is not working yet still needs, saying "is not ready yet" once (the API's line often says it). */
+export function notReadyLine(p: Pick<ProviderStatus, "label" | "line">): string {
+  return /\bis not ready yet\b/.test(p.line) ? p.line : `${p.label} is not ready yet. ${p.line}`;
+}
+
 function ModelLine({ providers, id }: { providers: ProviderStatus[] | null; id: string }) {
   const p = stateOf(providers, id);
   return (
@@ -82,8 +86,8 @@ function ModelLine({ providers, id }: { providers: ProviderStatus[] | null; id: 
       {/* The picked maker is not working yet: what it needs, in the API's own words (§45.11.6: on only after a real call). */}
       {p && (p.state === "needs_setup" || p.state === "unavailable") ? (
         <Note tone="sun" role="status">
-          {/* The API's line may already say it is not ready (§45.34's sentence): then it is said once. */}
-          {p.line.startsWith(`${p.label} is not ready yet`) ? p.line : `${p.label} is not ready yet. ${p.line}`}
+          {/* The API's line may already say it is not ready (§45.34's sentence, with the maker's short name): then it is said once. */}
+          {notReadyLine(p)}
           {p.lastError && p.lastError !== p.line ? ` Last problem: ${p.lastError}` : ""}
         </Note>
       ) : null}
@@ -230,7 +234,7 @@ export function VideoSection({ ws }: { ws: string }) {
         providers={p}
         onAddPrice={(id) => {
           setPriceOpen(id);
-          requestAnimationFrame(() => document.getElementById(`price-${id}`)?.scrollIntoView?.({ block: "center", behavior: (storiesDevicePref("motion.reduce") ?? prefersReducedMotion()) ? "auto" : "smooth" }));
+          requestAnimationFrame(() => document.getElementById(`price-${id}`)?.scrollIntoView?.({ block: "center", behavior: storiesReduceMotion() ? "auto" : "smooth" }));
         }}
       />
 

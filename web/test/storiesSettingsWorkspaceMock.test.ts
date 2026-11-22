@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { mockStoriesApi } from "../src/stories/api/mock/index.ts";
 import { setMockLatency } from "../src/stories/api/mock/store.ts";
 import type { StoriesApi, StoriesConfig } from "../src/stories/api/types.ts";
+import { notReadyLine } from "../src/stories/settings/VideoSection.tsx";
 
 let api: StoriesApi;
 
@@ -60,5 +61,15 @@ describe("Nova Reel's line", () => {
     expect(reel.state).toBe("needs_setup");
     expect(reel.line).toMatch(/^Amazon Nova Reel is not ready yet: .+\. Pick Built-in animation in Settings › Video, or finish its setup\.$/);
     expect(reel.line).not.toMatch(/built-in animation makes|videos use the built-in animation/i);
+  });
+
+  it("is said once on the Video page with the API's label (Amazon Nova Reel 1.1 (AI video)), which differs from the name in its line", async () => {
+    await patch({ providers: { images: "builtin-rig", video: "nova-reel", audio: "builtin-synth" } });
+    const reel = (await api.providers("stories")).find((p) => p.id === "nova-reel")!;
+    expect(reel.label).toBe("Amazon Nova Reel 1.1 (AI video)");
+    expect(notReadyLine(reel)).toBe(reel.line);
+    expect(notReadyLine(reel).match(/is not ready yet/g)).toHaveLength(1);
+    // A line that does not say it yet gets the sentence once, in front.
+    expect(notReadyLine({ label: "Amazon Nova Canvas (AI pictures)", line: "Make one portrait to check it." })).toBe("Amazon Nova Canvas (AI pictures) is not ready yet. Make one portrait to check it.");
   });
 });

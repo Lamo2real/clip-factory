@@ -1675,3 +1675,25 @@
 .st-stg-chart--render .st-stg-chart__part {
   min-height: 2px;
 }
+
+/* Sounds and motion: the click sound picker and its "Hear it" button, side by side, the button under it on a phone. */
+.st-stg-hear {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+.st-stg-hear > .st-stg-selectbox {
+  flex: 1 1 220px;
+}
+.st-stg-hear > .st-stg-btn {
+  margin-left: auto;
+}
+
+/* Add a model: "Another Region" types the code beside the list. */
+.st-stg-region {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}

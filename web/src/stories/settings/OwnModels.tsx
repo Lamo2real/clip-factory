@@ -19,22 +19,47 @@ const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 const MAKERS = ["Anthropic", "Amazon", "Meta", "Mistral"] as const;
 const SOMEONE_ELSE = "other";
 
-/** Amazon Bedrock Regions, with the place first so the owner knows which one he means. Lamo Stories runs in Stockholm. */
+/**
+ * Amazon Bedrock Regions, with the place first so the owner knows which one he means. Lamo Stories runs in Stockholm.
+ * Any other Region (a new one included) is typed under "Another Region": the API takes every Region code.
+ */
 export const REGIONS: { value: string; label: string }[] = [
   { value: "eu-north-1", label: "Europe (Stockholm) · eu-north-1" },
   { value: "eu-west-1", label: "Europe (Ireland) · eu-west-1" },
-  { value: "eu-central-1", label: "Europe (Frankfurt) · eu-central-1" },
+  { value: "eu-west-2", label: "Europe (London) · eu-west-2" },
   { value: "eu-west-3", label: "Europe (Paris) · eu-west-3" },
+  { value: "eu-central-1", label: "Europe (Frankfurt) · eu-central-1" },
+  { value: "eu-central-2", label: "Europe (Zurich) · eu-central-2" },
   { value: "eu-south-1", label: "Europe (Milan) · eu-south-1" },
+  { value: "eu-south-2", label: "Europe (Spain) · eu-south-2" },
   { value: "us-east-1", label: "US East (N. Virginia) · us-east-1" },
   { value: "us-east-2", label: "US East (Ohio) · us-east-2" },
+  { value: "us-west-1", label: "US West (N. California) · us-west-1" },
   { value: "us-west-2", label: "US West (Oregon) · us-west-2" },
-  { value: "ap-northeast-1", label: "Asia Pacific (Tokyo) · ap-northeast-1" },
+  { value: "us-gov-west-1", label: "AWS GovCloud (US-West) · us-gov-west-1" },
+  { value: "us-gov-east-1", label: "AWS GovCloud (US-East) · us-gov-east-1" },
+  { value: "ca-central-1", label: "Canada (Central) · ca-central-1" },
+  { value: "sa-east-1", label: "South America (São Paulo) · sa-east-1" },
+  { value: "ap-south-1", label: "Asia Pacific (Mumbai) · ap-south-1" },
+  { value: "ap-south-2", label: "Asia Pacific (Hyderabad) · ap-south-2" },
+  { value: "ap-southeast-1", label: "Asia Pacific (Singapore) · ap-southeast-1" },
   { value: "ap-southeast-2", label: "Asia Pacific (Sydney) · ap-southeast-2" },
+  { value: "ap-northeast-1", label: "Asia Pacific (Tokyo) · ap-northeast-1" },
+  { value: "ap-northeast-2", label: "Asia Pacific (Seoul) · ap-northeast-2" },
+  { value: "ap-northeast-3", label: "Asia Pacific (Osaka) · ap-northeast-3" },
 ];
 export const DEFAULT_REGION = "eu-north-1";
 export const DEFAULT_MAX_TOKENS = 16_000;
-const MAX_TOKENS = 200_000;
+/** The most the API takes for maxOutputTokens (model_defs.MAX_OUTPUT). */
+export const MAX_TOKENS = 500_000;
+/** An AWS Region code, as the API checks it (model_defs.REGION). */
+export const REGION_CODE = /^[a-z]{2}(-gov)?-[a-z]+-[0-9]{1,2}$/;
+const ANOTHER_REGION = "another";
+
+/** A Region code the owner typed, or what to fix, in plain words. */
+export function regionProblem(code: string): string | null {
+  return REGION_CODE.test(code.trim()) ? null : "Type the AWS Region code where the model runs, like eu-west-2 or ap-south-1.";
+}
 
 /** The key for a new model's name: `custom-` and its name in small letters, never one already taken. */
 export function keyFor(label: string, taken: readonly string[]): string {
@@ -64,7 +89,9 @@ interface Draft {
   maker: string;
   otherMaker: string;
   modelId: string;
+  /** a listed Region, or ANOTHER_REGION with the code in otherRegion */
   region: string;
+  otherRegion: string;
   efforts: Effort[];
   defaultEffort: Effort | null;
   vision: boolean;
@@ -83,7 +110,8 @@ function draftOf(m: ModelInfo | null): Draft {
     maker: m ? (known ? m.provider : SOMEONE_ELSE) : "Anthropic",
     otherMaker: m && !known ? m.provider : "",
     modelId: m?.modelId ?? "",
-    region: m?.region ?? DEFAULT_REGION,
+    region: m?.region && !REGIONS.some((r) => r.value === m.region) ? ANOTHER_REGION : (m?.region ?? DEFAULT_REGION),
+    otherRegion: m?.region && !REGIONS.some((r) => r.value === m.region) ? m.region : "",
     efforts: m ? [...m.efforts] : [],
     defaultEffort: m?.defaultEffort ?? null,
     vision: m?.vision ?? false,
@@ -107,6 +135,9 @@ export function defOf(d: Draft): ModelDef | { problem: string } {
   if (provider.length > 40) return { problem: "Keep who makes it to 40 letters or fewer." };
   const idProblem = modelIdProblem(d.modelId);
   if (idProblem) return { problem: idProblem };
+  const region = d.region === ANOTHER_REGION ? d.otherRegion.trim() : d.region;
+  const badRegion = regionProblem(region);
+  if (badRegion) return { problem: badRegion };
   if (d.efforts.length && (!d.defaultEffort || !d.efforts.includes(d.defaultEffort))) return { problem: "Pick its own level, the one it uses when nothing else is set." };
   const tokens = num(d.maxTokens);
   if (!Number.isInteger(tokens) || tokens < 1 || tokens > MAX_TOKENS) return { problem: `Type how many tokens it may write, a whole number from 1 to ${MAX_TOKENS.toLocaleString("en-GB")}.` };
@@ -121,7 +152,7 @@ export function defOf(d: Draft): ModelDef | { problem: string } {
     label,
     provider,
     modelId: d.modelId.trim(),
-    region: d.region,
+    region,
     efforts: EFFORTS.filter((e) => d.efforts.includes(e)),
     defaultEffort: d.efforts.length ? d.defaultEffort : null,
     vision: d.vision,
@@ -220,7 +251,23 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
       >
         <input id={`${id}-mid`} className="st-stg-input st-stg-input--code" value={d.modelId} spellCheck={false} autoComplete="off" maxLength={200} placeholder="eu.amazon.nova-premier-v1:0" onChange={(e) => set({ modelId: e.target.value })} />
       </Field>
-      <SetSelect label="AWS Region" value={d.region} options={REGIONS} onChange={(v) => set({ region: v })} />
+      <span className="st-stg-region">
+        <SetSelect label="AWS Region" value={d.region} options={[...REGIONS, { value: ANOTHER_REGION, label: "Another Region: type its code" }]} onChange={(v) => set({ region: v })} />
+        {d.region === ANOTHER_REGION ? (
+          <Field id={`${id}-region`} label="Its Region code" hint="The Bedrock console shows it at the top right, like eu-west-2.">
+            <input
+              id={`${id}-region`}
+              className="st-stg-input st-stg-input--code"
+              value={d.otherRegion}
+              spellCheck={false}
+              autoComplete="off"
+              maxLength={20}
+              placeholder="eu-west-2"
+              onChange={(e) => set({ otherRegion: e.target.value })}
+            />
+          </Field>
+        ) : null}
+      </span>
 
       <span className="st-stg-field">
         <span className="st-stg-label" id={`${id}-eff`}>
@@ -278,7 +325,7 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
   );
 }
 
-function OwnRow({ ws, m, onChanged, onEdit }: { ws: string; m: ModelInfo; onChanged: () => Promise<void>; onEdit: () => void }) {
+function OwnRow({ ws, m, stale = false, onChanged, onEdit }: { ws: string; m: ModelInfo; /** changed since its last check */ stale?: boolean; onChanged: () => Promise<void>; onEdit: () => void }) {
   const toast = useToast();
   const [sure, setSure] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -306,7 +353,7 @@ function OwnRow({ ws, m, onChanged, onEdit }: { ws: string; m: ModelInfo; onChan
       <div className="st-stg-own__head">
         <span className="st-stg-own__name">{m.label}</span>
         <Chip tone="sky">Added by you</Chip>
-        <Chip tone={s.tone}>{s.label}</Chip>
+        {stale ? <Chip tone="sun">Check it again</Chip> : <Chip tone={s.tone}>{s.label}</Chip>}
       </div>
       <p className="st-stg-small">
         Made by {m.provider} · on Amazon Bedrock{m.region ? ` in ${m.region}` : ""} · <code className="st-stg-code">{m.modelId}</code>
@@ -316,8 +363,8 @@ function OwnRow({ ws, m, onChanged, onEdit }: { ws: string; m: ModelInfo; onChan
         {m.vision ? " Looks at pictures." : " Words only."}
       </p>
       <p className="st-stg-small">
-        {m.statusLine}
-        {m.checkedAt ? ` (${whenText(m.checkedAt)})` : ""}
+        {stale ? "Changed since its last check. Tap Check models above to see if it answers now." : m.statusLine}
+        {!stale && m.checkedAt ? ` (${whenText(m.checkedAt)})` : ""}
       </p>
       {refused ? (
         <Note tone="coral" role="alert">
@@ -362,16 +409,25 @@ function OwnRow({ ws, m, onChanged, onEdit }: { ws: string; m: ModelInfo; onChan
   );
 }
 
+/** The model just saved: suggest checking it while it is new, or its model ID or Region changed since `checkedAt`. */
+interface Saved {
+  key: string;
+  moved: boolean;
+  checkedAt: string | null;
+}
+
 /**
  * The "Add a model" card: the owner's own Bedrock models, the form, and after a save the suggestion to check it
  * (`check` is the section's Check models for just that model).
  */
 export function OwnModels({ ws, models, onChanged, check }: { ws: string; models: ModelInfo[]; onChanged: () => Promise<void>; check: (key: string) => ReactNode }) {
   const [open, setOpen] = useState<"new" | string | null>(null);
-  const [added, setAdded] = useState<string | null>(null);
+  const [added, setAdded] = useState<Saved | null>(null);
   const own = models.filter((m) => m.custom);
   const full = own.length >= MAX_CUSTOM_MODELS;
-  const just = added ? models.find((m) => m.key === added) : undefined;
+  const just = added ? models.find((m) => m.key === added.key) : undefined;
+  // A changed model ID or Region: its last check was of the old one (the API keeps it), until a new check is stamped.
+  const stale = !!just && !!added?.moved && just.status !== "not_checked" && (just.checkedAt ?? null) === added.checkedAt;
   return (
     <SetCard
       title="Add a model"
@@ -387,10 +443,12 @@ export function OwnModels({ ws, models, onChanged, check }: { ws: string; models
         ) : undefined
       }
     >
-      {just && just.status === "not_checked" ? (
+      {just && (just.status === "not_checked" || stale) ? (
         <div className="st-stg-suggest" role="status">
           <Note tone="sun" icon="retry">
-            {just.label} is listed, but it has not answered yet. Check it now: Amazon Bedrock says whether this account may use it.
+            {stale
+              ? `${just.label} is changed, so its last check no longer counts. Check it again: Amazon Bedrock says whether this account may use it.`
+              : `${just.label} is listed, but it has not answered yet. Check it now: Amazon Bedrock says whether this account may use it.`}
           </Note>
           {check(just.key)}
         </div>
@@ -404,7 +462,7 @@ export function OwnModels({ ws, models, onChanged, check }: { ws: string; models
           onCancel={() => setOpen(null)}
           onSaved={(m) => {
             setOpen(null);
-            setAdded(m.key);
+            setAdded({ key: m.key, moved: true, checkedAt: m.checkedAt ?? null });
             void onChanged();
           }}
         />
@@ -422,13 +480,13 @@ export function OwnModels({ ws, models, onChanged, check }: { ws: string; models
                   onCancel={() => setOpen(null)}
                   onSaved={(saved) => {
                     setOpen(null);
-                    setAdded(saved.key);
+                    setAdded({ key: saved.key, moved: saved.modelId !== m.modelId || saved.region !== m.region, checkedAt: saved.checkedAt ?? null });
                     void onChanged();
                   }}
                 />
               </li>
             ) : (
-              <OwnRow key={m.key} ws={ws} m={m} onChanged={onChanged} onEdit={() => setOpen(m.key)} />
+              <OwnRow key={m.key} ws={ws} m={m} stale={stale && m.key === just?.key} onChanged={onChanged} onEdit={() => setOpen(m.key)} />
             ),
           )}
         </ul>

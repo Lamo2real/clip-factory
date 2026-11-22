@@ -482,10 +482,10 @@ function cleanPrice(value: unknown, field: string, provider?: string): Price {
 
 // ---------- The models the owner adds (MODELDEF#, §45.34) ----------
 
-const REGION = /^[a-z]{2}(-gov)?-[a-z]+-\d$/;
+const REGION = /^[a-z]{2}(-gov)?-[a-z]+-\d{1,2}$/;
 /** A Bedrock model id (maker.name-version[:n]), an inference profile id (eu., us., apac., global. first) or an ARN. */
 const MODEL_ID = /^(arn:aws:bedrock:[a-z0-9-]+:\d{12}:(foundation-model|inference-profile|application-inference-profile)\/[A-Za-z0-9.:/_-]+|[a-z0-9-]+(\.[a-z0-9-]+)+(-v\d+(:\d+)?|:\d+)?[A-Za-z0-9.:_-]*)$/;
-export const MAX_OUTPUT_TOKENS = 200_000;
+export const MAX_OUTPUT_TOKENS = 500_000;
 
 /** A ModelDef checked as the API does (unknown keys and bad values are a 400 with the field). */
 function cleanDef(store: MockStore, key: string, value: unknown): ModelDef {
@@ -629,8 +629,9 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (!before && Object.keys(s.custom).length >= MAX_CUSTOM_MODELS) throw bad(`You can add up to ${MAX_CUSTOM_MODELS} models. Remove one first.`, "key");
       const at = iso(Date.now());
       s.custom[key] = { ...clean, createdAt: before?.createdAt ?? at, updatedAt: at };
-      // A changed id, Region or levels has to be checked again: nothing is shown as working because it is listed.
-      if (!before || before.modelId !== clean.modelId || before.region !== clean.region) s.status[key] = { status: "not_checked", line: "Not checked yet. Tap Check models.", checkedAt: null };
+      // A new model is not checked yet: nothing is shown as working because it is listed. A changed one keeps its last
+      // check, as the API does (model_defs.put); the card asks for a new check when its ID or Region changed.
+      if (!before) s.status[key] = { status: "not_checked", line: "Not checked yet. Tap Check models.", checkedAt: null };
       return modelInfo(store, allModels(store).find((m) => m.key === key)!);
     },
 

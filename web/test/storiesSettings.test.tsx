@@ -804,6 +804,57 @@ describe("AI: models the owner adds (§45.34)", () => {
     expect(document.body.textContent).toContain("Mistral Large 2 is removed from Lamo Stories.");
   });
 
+  it("an Edit that moves a model asks for a new check even after Works; Another Region takes any code; up to 500,000 tokens; every select marks it", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const api = aiPart.api(store);
+    await api.putAiModel("stories", "custom-mistral", { label: "Mistral Large", provider: "Mistral", modelId: "mistral.mistral-large-2407-v1:0", region: "eu-west-3", efforts: [], defaultEffort: null, vision: false, maxOutputTokens: 8192, price: null });
+    await api.checkModels("stories", ["custom-mistral"]);
+    await act(async () => await new Promise((r) => setTimeout(r, 80)));
+    await open("ai");
+    expect(byText(".st-stg-own", /Mistral Large/).textContent).toContain("Works");
+    // Every agent and task select marks the models the owner added.
+    const options = () => Array.from($$(".st-stg-assign__row").find((r) => r.textContent?.includes("Creative director"))!.querySelector("select")!.options);
+    expect(options().find((o) => o.value === "custom-mistral")?.textContent).toBe("Mistral Large · added by you");
+    expect(options().find((o) => o.value === "opus-5-5")?.textContent).not.toContain("added by you");
+    // A new name only: its check still counts, nothing to suggest.
+    await click(byText("button", "Edit", byText(".st-stg-own", /Mistral Large/)));
+    let form = $<HTMLElement>('form[aria-label="Change Mistral Large"]')!;
+    fill(form, "Name", "Mistral Large 2");
+    await submit(form);
+    expect(card("Add a model").querySelector(".st-stg-suggest")).toBeNull();
+    // Another Region: any Region code, checked as the API checks it.
+    await click(byText("button", "Edit", byText(".st-stg-own", /Mistral Large 2/)));
+    form = $<HTMLElement>('form[aria-label="Change Mistral Large 2"]')!;
+    fill(form, "AWS Region", "another");
+    fill(form, "Its Region code", "London");
+    await submit(form);
+    expect(form.querySelector("[role=alert]")?.textContent).toBe("Type the AWS Region code where the model runs, like eu-west-2 or ap-south-1.");
+    fill(form, "Its Region code", "ap-southeast-5");
+    fill(form, "Most tokens it may write in one answer", "300000");
+    await submit(form);
+    expect(called("putAiModel").at(-1)?.args[2]).toMatchObject({ region: "ap-southeast-5", maxOutputTokens: 300000 });
+    // Its last check (Works) was of the old Region and is kept by the API: the card says so and suggests Check models.
+    const row = byText(".st-stg-own", /Mistral Large 2/);
+    expect(row.textContent).toContain("Check it again");
+    expect(row.textContent).toContain("Changed since its last check.");
+    expect(row.textContent).not.toContain("Works");
+    const suggest = card("Add a model").querySelector<HTMLElement>(".st-stg-suggest")!;
+    expect(suggest.textContent).toContain("Mistral Large 2 is changed, so its last check no longer counts.");
+    await click(byText("button", "Check models", suggest));
+    expect(called("checkModels").at(-1)?.args).toEqual(["stories", ["custom-mistral"]]);
+    await act(async () => await new Promise((r) => setTimeout(r, 1300)));
+    await settle(10);
+    expect(card("Add a model").querySelector(".st-stg-suggest")).toBeNull();
+    expect(byText(".st-stg-own", /Mistral Large 2/).textContent).toContain("Works");
+    expect(byText(".st-stg-own", /Mistral Large 2/).textContent).toContain("in ap-southeast-5");
+    // A Region not in the list opens as Another Region with its code, never as a listed one.
+    await click(byText("button", "Edit", byText(".st-stg-own", /Mistral Large 2/)));
+    form = $<HTMLElement>('form[aria-label="Change Mistral Large 2"]')!;
+    expect(Array.from(form.querySelectorAll("select")).map((x) => x.value)).toContain("another");
+    const code = Array.from(form.querySelectorAll("label")).find((l) => l.textContent === "Its Region code")!;
+    expect(form.querySelector<HTMLInputElement>(`#${CSS.escape(code.htmlFor)}`)!.value).toBe("ap-southeast-5");
+  });
+
   it("the default model and effort cards say what was picked (picked), and a held model is saved with the level picked for it", async () => {
     await aiPart.api(store).putAiModel("stories", "custom-quick", { label: "Quick One", provider: "Amazon", modelId: "eu.amazon.nova-lite-v1:0", region: "eu-north-1", efforts: ["low", "medium"], defaultEffort: "medium", vision: false, maxOutputTokens: 4096, price: null });
     await open("ai");
@@ -862,6 +913,11 @@ describe("Storage and production (§45.34)", () => {
     expect(card("Space used").textContent).toContain("Lamo Stories' own folder in Clip Factory's media storage in Europe (Stockholm): ws/{you}/stories/");
     const refs = group("Keep reference videos");
     expect($$("[role=radio]", refs).map((r) => r.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["Keep them all", "Keep only the study", "30 days", "90 days"]);
+    // By age only the video goes: its study stays, as the API and the agent keep it (retention.py, fileRemovedAt).
+    for (const days of [/30 days/, /90 days/]) {
+      expect(byText("[role=radio]", days, refs).textContent).toContain("Then the video goes; its study stays");
+      expect(byText("[role=radio]", days, refs).textContent).not.toContain("its study go");
+    }
     expect(byText("[role=radio]", /Keep them all/, refs).getAttribute("aria-checked")).toBe("true");
     await click(byText("[role=radio]", /Keep only the study/, refs));
     expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { production: { keepReferences: "study_only", burnCaptions: true, scenesAtOnce: 2, keepVersions: "all" } } });
@@ -911,18 +967,39 @@ describe("Storage and production (§45.34)", () => {
     await open("storage");
     const sm = card("Sounds and motion");
     expect(sm.textContent).toContain("Follows Clip Factory's setting until you change it.");
+    expect(sm.textContent).toContain("Clip Factory's click sound until you pick one.");
     const sw = (label: RegExp) => byText(".st-stg-switchrow", label, sm).querySelector<HTMLElement>("[role=switch]")!;
-    await click(sw(/^Click sounds/));
-    await click(sw(/^Less motion/));
+    const picker = () => byText(".st-stg-selectbox", /^Click sound/, sm).querySelector<HTMLSelectElement>("select")!;
     const kept = () => (JSON.parse(localStorage.getItem("cf.stories.prefs") ?? "{}") as { more?: Record<string, unknown> }).more ?? {};
-    expect(kept()).toMatchObject({ "sound.click": false, "motion.reduce": true });
+    const { getPrefs } = await import("../src/lib/prefs.ts");
+    // Unset, the card shows what Lamo Stories really uses: Clip Factory's choices.
+    expect(sw(/^Sounds/).getAttribute("aria-checked")).toBe(String(getPrefs().soundEnabled));
+    expect(picker().value).toBe(String(getPrefs().clickSound));
+    expect(picker().options).toHaveLength(30);
+    expect(picker().options[2]?.textContent).toBe("Bubble: rises a little");
+    // The click sound is kept as its number (the shape Lamo Stories' sounds read), and it plays once picked.
+    const log = () => (window as unknown as { __cfSoundLog?: { kind: string; sound: number }[] }).__cfSoundLog ?? [];
+    if (sw(/^Sounds/).getAttribute("aria-checked") === "false") await click(sw(/^Sounds/));
+    setValue(picker(), "3");
+    await settle();
+    expect(kept()["sound.click"]).toBe(3);
+    expect(log().at(-1)).toMatchObject({ kind: "tap", sound: 3 });
+    expect(card("Sounds and motion").textContent).toContain("Lamo Stories' own click sound.");
+    await click(byText("button", "Hear it", sm));
+    expect(log().at(-1)).toMatchObject({ kind: "tap", sound: 3 });
+    await click(sw(/^Less motion/));
+    expect(kept()).toMatchObject({ "sound.click": 3, "motion.reduce": true });
+    // Sounds off turns every click sound off; the picker and Hear it wait until it is on again.
     await click(sw(/^Sounds/));
     expect(kept()["sound.enabled"]).toBe(false);
-    // With all sounds off, click sounds cannot be changed (the deny sound plays, nothing changes).
-    expect(sw(/^Click sounds/).getAttribute("aria-disabled")).toBe("true");
+    expect(picker().getAttribute("aria-disabled")).toBe("true");
+    expect(byText("button", "Hear it", sm).getAttribute("aria-disabled")).toBe("true");
+    setValue(picker(), "9");
+    expect(kept()["sound.click"]).toBe(3);
     expect(localStorage.getItem("cf.prefs")).toBe(clipsBefore);
     await click(byText("button", "Use Clip Factory's settings again", sm));
     expect(kept()).not.toHaveProperty("sound.enabled");
+    expect(kept()).not.toHaveProperty("sound.click");
     expect(kept()).not.toHaveProperty("motion.reduce");
     expect(card("Sounds and motion").textContent).toContain("Follows Clip Factory's setting until you change it.");
   });

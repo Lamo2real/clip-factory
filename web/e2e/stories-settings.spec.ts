@@ -229,6 +229,18 @@ test.describe("AI: add a model (§45.34)", () => {
     await add.locator(".st-stg-suggest").getByRole("button", { name: "Check models" }).click();
     await expect(page.locator(".toast").filter({ hasText: "Checked it: it works!" })).toBeVisible({ timeout: 10_000 });
     await expect(row).toContainText("Works");
+    // Moved to a Region that is not in the list: its last check was of the old one, so a new check is asked for.
+    await row.getByRole("button", { name: "Edit Nova Premier" }).click();
+    const moved = page.getByRole("form", { name: "Change Nova Premier" });
+    await moved.getByLabel("AWS Region").selectOption("another");
+    await moved.getByLabel("Its Region code").fill("mx-central-1");
+    await moved.getByRole("button", { name: "Save the changes" }).click();
+    await expect(row).toContainText("Check it again");
+    await expect(row).toContainText("in mx-central-1");
+    await expect(add.locator(".st-stg-suggest")).toContainText("Nova Premier is changed, so its last check no longer counts.");
+    await add.locator(".st-stg-suggest").getByRole("button", { name: "Check models" }).click();
+    await expect(row).toContainText("Works", { timeout: 10_000 });
+    await expect(add.locator(".st-stg-suggest")).toHaveCount(0);
     // Change it, then remove it.
     await row.getByRole("button", { name: "Edit Nova Premier" }).click();
     await page.getByRole("form", { name: "Change Nova Premier" }).getByLabel("Name").fill("Nova Premier EU");
@@ -257,6 +269,8 @@ test.describe("AI: the Add a model form keeps the owner's rules", () => {
       await form.getByRole("button", { name: "High", exact: true }).click();
       await form.getByRole("switch", { name: "I know its price" }).click();
       await form.getByRole("radiogroup", { name: "Who makes it" }).getByRole("radio", { name: "Someone else" }).click();
+      await form.getByLabel("AWS Region").selectOption("another");
+      await expect(form.getByLabel("Its Region code")).toBeVisible();
       await page.waitForTimeout(300);
       const o = await findOverflow(page);
       expect(o.page).toBeLessThanOrEqual(o.viewport);
@@ -372,6 +386,9 @@ test.describe("Video and storage", () => {
     // The API's own sentence (§45.34): it says what to do, and nothing switches to the built-in animation by itself.
     await expect(card(page, "Video maker").getByRole("status")).toContainText("Amazon Nova Reel is not ready yet: ");
     await expect(card(page, "Video maker").getByRole("status")).toContainText("Pick Built-in animation in Settings › Video, or finish its setup.");
+    // Said once, though the API's label (Amazon Nova Reel 1.1 (AI video)) is not the name its sentence uses.
+    await expect(card(page, "Video maker").getByRole("status")).toHaveText(/^Amazon Nova Reel is not ready yet: /);
+    await expect(card(page, "Video maker").getByRole("status")).not.toContainText("(AI video) is not ready yet");
     await expect(reel).toContainText("Not ready yet");
     await maker.getByRole("radio", { name: /Built-in animator/ }).click();
     await expect(card(page, "Video maker").getByRole("status")).toHaveCount(0);
@@ -459,12 +476,24 @@ test.describe("Video and storage", () => {
     const sm = card(page, "Sounds and motion");
     await sm.getByRole("switch", { name: "Less motion" }).click();
     await expect(sm.getByRole("switch", { name: "Less motion" })).toHaveAttribute("aria-checked", "true");
-    await sm.getByRole("switch", { name: "Click sounds" }).click();
+    // The click sound is picked by name and kept as its number, the shape Lamo Stories' sounds read.
+    await sm.getByLabel("Click sound").selectOption({ label: "Bubble: rises a little" });
     const kept = await page.evaluate(() => (JSON.parse(localStorage.getItem("cf.stories.prefs") ?? "{}") as { more?: Record<string, unknown> }).more);
-    expect(kept).toMatchObject({ "motion.reduce": true, "sound.click": false });
+    expect(kept).toMatchObject({ "motion.reduce": true, "sound.click": 3 });
+    await expect(sm).toContainText("Lamo Stories' own click sound.");
+    // Hear it plays the pick once, never the usual click sound on top of it.
+    // (The log keeps the last 200 sounds: it starts empty here, so only this click's sounds are in it. A tap within
+    // 60 ms of the last one is one sound, so the pick's own sound is let go first.)
+    await page.waitForTimeout(150);
+    await page.evaluate(() => ((window as unknown as { __cfSoundLog?: unknown[] }).__cfSoundLog = []));
+    await sm.getByRole("button", { name: "Hear it" }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __cfSoundLog?: { kind: string; sound: number }[] }).__cfSoundLog ?? [])).toEqual([expect.objectContaining({ kind: "tap", sound: 3 })]);
     expect(await page.evaluate(() => localStorage.getItem("cf.prefs"))).toBe(before);
     await page.reload();
     await ready(page);
     await expect(card(page, "Sounds and motion").getByRole("switch", { name: "Less motion" })).toHaveAttribute("aria-checked", "true");
+    await expect(card(page, "Sounds and motion").getByLabel("Click sound")).toHaveValue("3");
+    // By age only the video goes; its study stays.
+    await expect(card(page, "Keeping other files").getByRole("radiogroup", { name: "Keep reference videos" }).getByRole("radio", { name: /30 days/ })).toContainText("Then the video goes; its study stays");
   });
 });

@@ -237,7 +237,7 @@ interface RowDraft {
 }
 
 function modelOptions(models: ModelInfo[], inherit: string) {
-  return [{ value: "", label: inherit }, ...models.map((m) => ({ value: m.key, label: `${m.label}${statusSuffix(m)}` }))];
+  return [{ value: "", label: inherit }, ...models.map((m) => ({ value: m.key, label: `${m.label}${m.custom ? " · added by you" : ""}${statusSuffix(m)}` }))];
 }
 
 function effortOptions(m: ModelInfo | undefined, inherit: string) {
