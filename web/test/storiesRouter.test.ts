@@ -21,12 +21,18 @@ const CLIPS_PATHS = [
 afterEach(() => localStorage.removeItem("cf.storiesPreview"));
 
 describe("the stories route", () => {
+  it("is on for everyone now (STORIES_ON, CONTRACTS §45.36)", () => {
+    expect(match("/stories")).toEqual({ name: "stories", page: { name: "dashboard" } });
+  });
+
   it("is not found while Lamo Stories is off", () => {
+    localStorage.setItem("cf.storiesPreview", "0");
     expect(match("/stories").name).toBe("not_found");
     expect(match("/stories/ideas").name).toBe("not_found");
   });
 
   it("parses every /stories page once switched on, and Lamo Clips paths never change", () => {
+    localStorage.setItem("cf.storiesPreview", "0");
     const before = CLIPS_PATHS.map((p) => match(p));
     localStorage.setItem("cf.storiesPreview", "1");
     expect(match("/stories")).toEqual({ name: "stories", page: { name: "dashboard" } });

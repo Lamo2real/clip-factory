@@ -52,7 +52,7 @@ async function open(browser: Browser, size: (typeof SIZES)[number], on: boolean,
   const ctx = await browser.newContext({ viewport: { width: size.w, height: size.h }, reducedMotion: "reduce" });
   await ctx.addInitScript(
     ([flag, folded]) => {
-      if (flag) localStorage.setItem("cf.storiesPreview", "1");
+      localStorage.setItem("cf.storiesPreview", flag ? "1" : "0");
       if (folded) localStorage.setItem("cf.prefs", JSON.stringify({ sidebarCollapsed: true }));
     },
     [on, !!size.folded] as const,

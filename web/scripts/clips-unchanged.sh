@@ -119,7 +119,7 @@ async function shot(browser, base, path, [w, h], folded, on) {
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
       };
       localStorage.clear();
-      if (flagOn) localStorage.setItem("cf.storiesPreview", "1");
+      localStorage.setItem("cf.storiesPreview", flagOn ? "1" : "0");
       if (fold) localStorage.setItem("cf.prefs", JSON.stringify({ sidebarCollapsed: true }));
       const add = () => {
         const style = document.createElement("style");

@@ -176,6 +176,7 @@ describe("the hidden app is quiet (§45.35 D17)", () => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => new Proxy({}, { get: () => () => undefined }) as never);
     const bursts = () => document.querySelectorAll("canvas.confetti").length;
     // Lamo Stories switched off: /stories is just an address Clip Factory does not know, and the burst draws.
+    localStorage.setItem("cf.storiesPreview", "0");
     history.replaceState(null, "", "/stories");
     burst();
     expect(bursts()).toBe(1);
