@@ -4,7 +4,9 @@
 # both, and screenshots Clip Factory's main pages (/, /jobs, /review, /library, /money, /settings) at 390×844,
 # 1000×560, 1000×600, 1000×650, 1000×720 and 1440×900 (sidebar open and folded) with a fixed clock, fixed mock data
 # and no motion. Twice: with Lamo Stories switched off every pixel must match; switched on (cf.storiesPreview = 1)
-# every pixel outside the workspace switcher's own box must match. The lead runs it on the switch PR and in the final
+# every pixel outside the workspace switcher's own box must match. Since §45.37 the switch and the Live chip under it
+# are one element of the shell, drawn over the sidebar (the chip's glass then sees the sidebar under it, which moves a
+# few pixels of its 8 px light): the chip's own box is the switcher's too, and is left out with it. The lead runs it on the switch PR and in the final
 # check. Pixels are compared as pixelmatch does with includeAA false and threshold 0.1 (§45.35 D20): only the
 # antialiased edge pixels of text and curves (which differ between two renders of the same page) are left out; any
 # change of layout or colour still fails. CF_EXACT=1 compares every pixel exactly, as before.
@@ -139,7 +141,7 @@ async function shot(browser, base, path, [w, h], folded, on) {
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(900);
   const mask = await page.evaluate(() =>
-    Array.from(document.querySelectorAll(".ws-switch-host"))
+    Array.from(document.querySelectorAll(".ws-switch-host, .ws-dock .live-dot"))
       .map((el) => el.getBoundingClientRect())
       .filter((r) => r.width > 0 && r.height > 0)
       .map((r) => ({ x: Math.floor(r.left), y: Math.floor(r.top), w: Math.ceil(r.width) + 1, h: Math.ceil(r.height) + 1 })),
