@@ -56,3 +56,7 @@
   bank" stays unknown until the owner picks a bank source. Additive only: new sort keys `GETPAID`, `PAYCONN#`,
   `PAYSTATE#`, `PAYOUT#`, new attributes, two stream filters updated in place, one api env var; nothing that holds his
   connections or saved data changes.
+- **Amended by [ADR-82](#adr-82-your-bank-enable-banking-restricted-mode-read-once-a-day-keep-only-matched-app-money)
+  (2026-11-22).** The owner chose the bank source: Enable Banking, restricted mode (option A). The bank part is no
+  longer "defined but not built"; the placeholder's payer name, account `{bank, last4}` and plain-hash id are replaced
+  by keyed hashes and minor units (CONTRACTS §40.5).

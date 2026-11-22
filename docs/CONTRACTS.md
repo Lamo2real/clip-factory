@@ -9622,8 +9622,8 @@ then I wanna know a total of my exact number that I've gotten into my bank accou
 of those platforms meaning content rewards meaning U2 TikTok, Instagram, Facebook and X, all of them"*. Decision
 record: ADR-64.
 
-**The honest answer to his question** (checked 21 Nov 2026 for an owner in Sweden; the owner's choice of bank source,
-§40.5, is still open):
+**The honest answer to his question** (checked 21 Nov 2026 for an owner in Sweden; his bank part, §40.5, is option A,
+Enable Banking, which he chose on 22 Nov 2026):
 
 | Place | What he earned (§40.3) | Can money reach him? (§40.2) | Sent to his bank (§40.4) |
 |---|---|---|---|
@@ -9634,8 +9634,12 @@ record: ADR-64.
 | X | Not available from X | his ticks, plus X's Premium and verified-follower signals | Not available from X |
 | Content Rewards | Content Rewards' numbers, as today (§39.2) | "Whop says" once Connect Whop works (ID check, payout method), plus his ticks | Whop's completed payouts once Connect Whop works (all his Whop money, Content Rewards too), else not available |
 
-"Reached your bank" (money his bank booked) can only come from his bank. That part waits for his choice (§40.5); until
-then every screen says "Clip Factory can't see your bank. Look in your bank's app to see what arrived."
+"Reached your bank" (money his bank booked) can only come from his bank. That part is §40.5 (Enable Banking, his
+choice A, ADR-82), behind the switch `BANK_READING`; while it is off, every screen says "Clip Factory can't see your
+bank. Look in your bank's app to see what arrived." Once it is on, every place can show what reached his bank, per currency
+and in total: YouTube's and Content Rewards' deposits are matched to Google's and Whop's own payment records, and the
+others once he taps to confirm who paid (once per payer; Stripe, PayPal and Payoneer each time, because they carry
+money from more than one place).
 
 **What this section adds, and what it leaves alone.** A **Get paid** area: one card per place (YouTube, TikTok,
 Instagram, Facebook, X in `STATS_ORDER`, then Content Rewards while `CONTENT_REWARDS=on`), each with numbered step
@@ -9646,7 +9650,7 @@ platform reports it; and the shape of the bank part. It is **not** part of Set u
 tick is written to `SETUP#`. §25's rule stays: Clip Factory shows only money a platform, Content Rewards or Whop
 reported (later: his bank), never calculated, guessed, converted or typed in; "Not available from X" instead of $0.
 Clip Factory never asks for or stores bank details, card numbers or tax numbers: every payout is set up on the
-platform's own pages (the bank part of §40.5, once chosen, reads only booked credits). §38.7's Content Rewards money steps keep their words (plus two hints, §40.8 change 14) and their ticks (`CRCONN.stepsDone`); the
+platform's own pages (the bank part of §40.5 reads only booked credits, through BankID on his bank's own page). §38.7's Content Rewards money steps keep their words (plus two hints, §40.8 change 14) and their ticks (`CRCONN.stepsDone`); the
 Content Rewards Get paid page shows them. The §38.1 screen rules apply to every new screen: kid-proof words (§12.4,
 a 6–8-year-old), one vermilion button per screen, no `cursor:` rule, no edges, `<Glide>` for pick-one bars, reduced
 motion, WCAG AA, phone controls at the bottom right. Data is additive only (§40.7); new tokens live in Secrets Manager
@@ -9677,7 +9681,7 @@ one wins; each change to earlier words is listed in §40.8 as "§x: old → new"
 | He can earn, and his payout steps aren't ticked | "Not set up yet" (warn tone, not red) with the line "You can earn here. Do the payout steps so money can reach you." |
 | The place isn't connected and nothing is ticked | "Clip Factory can't check" |
 | Platform money Google or Whop sent | "Sent to your bank by Google" / "Sent to your bank by Whop" |
-| Money his bank booked (§40.5 only) | "Reached your bank" |
+| Money his bank booked (§40.5) | "Reached your bank" |
 | Clip Factory reading YouTube payments | "Allow payment reading" (button) / "Stop payment reading"; the chip "Clip Factory can see payments: on" / "off" |
 | Clip Factory reading Whop payouts | "Connect Whop" (button) / "Stop reading Whop"; the paste box "Whop key" |
 | His answer on a step Clip Factory can't see | "I did this", or the step's own words ("I'm in", "I turned it on", "I joined", "X said yes", "I have Premium") |
@@ -9700,8 +9704,8 @@ reading" and "the AdSense website" are the exceptions). Platform labels stay bol
    "Get paid", the server's `summary` line, then six big glass cards (fewer while Content Rewards is off): mark, name,
    a progress ring over that place's numbered `earn` and `payout` steps (§40.2 `ring`), the status pill (§40.2) and
    one line; X's card adds its `warning`. No vermilion button on the list: each card is one big tap to its page.
-   Under the cards, the glass card **Your bank** with the words of §40.5 D ("Clip Factory can't see your bank. Look in
-   your bank's app to see what arrived.") and no button until the owner chooses a bank source.
+   Under the cards, the glass card **Your bank**: while `BANK_READING` is off, the words "Clip Factory can't see your
+   bank. Look in your bank's app to see what arrived." and no button; on, one big tap to the bank page (§40.5.2).
 2. **A place page** `/settings/posting/getpaid/{place}` (route `{ name: "getpaid", place }`, matched like the setup
    pages; `place` is `youtube`, `tiktok`, `instagram`, `facebook`, `x` or `contentrewards`, the last only while Content
    Rewards answers; anything else is `not_found`). Top to bottom (`screens/getpaid/GetPaidPage.tsx`,
@@ -10036,7 +10040,7 @@ Example: "YouTube says it can pay you. You said TikTok is done. Instagram needs 
   (→ `https://x.com/i/jf/creators/studio`).
 * **Content Rewards**: Content Rewards' numbers, as today.
 * **No typed-in money**, for any place, ever: ADR-64 keeps §25's rule. Instagram, TikTok, X and Facebook show "Not
-  available" with where to look; what really reached his bank comes from the bank part (§40.5) once he chooses.
+  available" with where to look; what really reached his bank comes from the bank part (§40.5).
 
 **Config facts fixed** (K, `config/monetization.json`, `asOf` → `2026-11-21`; the goals keep their ids, so stored
 celebrations stay):
@@ -10131,95 +10135,1133 @@ arrive by {estimated_arrival}." (or "within 5 workdays" without one).
 All sums are on the server, per currency, never across currencies, never converted; the web only formats (`noGuesses`,
 §27.9).
 
-### 40.5 Your bank (waits for the owner's choice)
+### 40.5 Your bank: what really reached it, read through Enable Banking (owner's choice A, 2026-11-22)
 
-**NOT TO BUILD until the owner chooses.** The owner picks one of: **A** Enable Banking (restricted mode) · **B** upload
-his bank's CSV/xlsx file · **C** payout emails from Gmail · **D** nothing new. Until then the only bank words anywhere
-are D's: "Clip Factory can't see your bank. Look in your bank's app to see what arrived." (the Get paid list's **Your
-bank** card and the "Sent to your bank, so far" block). No builder of §40.8 writes bank code, items, routes, secrets or
-infra. This sub-section fixes the shape so A or B plugs in later through one new section (§41) and one ADR, without
-changing §40.1–§40.4.
+The owner chose **A** on 22 Nov 2026 ("A: bank connection") from the four options this sub-section used to list (A
+Enable Banking, B his bank's file, C payout emails, D nothing new). Decision record: ADR-82. It answers the last part of
+his ask: *"a total of my exact number that I've gotten into my bank account or accounts, but in total for each of
+those platforms"*. Everything here sits behind the api switch `BANK_READING` (Terraform `bank_reading_enabled`,
+**default `false`**). While it is off, every screen keeps today's words, "Clip Factory can't see your bank. Look in
+your bank's app to see what arrived." (`BANK_TEXT`), and nothing below runs. A deposit keeps its `source`, so a bank
+file (B) could later fill the same rows with no change to matching, totals or screens.
 
-**The deposit** (one per booked bank credit Clip Factory keeps; the same shape whichever source A or B fills it):
+**Rulings.** The old placeholder and the owner's least-data rule disagreed in seven places. His rule wins, and these
+replace the placeholder's words:
+1. No payer name is ever stored, not even on a matched row. A row keeps `hint` (Clip Factory's own word for the
+   platform named in the bank's text, from a fixed list), `hintFrom` (whether that word was in the payer's name or
+   only in the message) and, while it can still teach Clip Factory something, `payerKey` (a keyed hash of the
+   payer's name). `BANKPAYERS` maps keyed hashes to places, never names.
+2. No account number is stored, not even its last 4. A row keeps `linkId` (Clip Factory's own id for one bank link).
+   Screens name the bank by Enable Banking's name for it ("Swedbank").
+3. Stored amounts are in minor units: `amountMinor` with its `exponent` (kr 1 234,56 is `123456`, exponent 2).
+   Every public shape keeps `amountMicros` like §40.4 (`amountMinor × 10^(6 − exponent)`). That is a change of unit,
+   never a conversion.
+4. `depositId` is a keyed HMAC (§40.5.7), not a plain sha256 of the fields: a plain hash of a date and an amount can
+   be guessed back.
+5. The setup lives in one `BANKCONN` item, and each bank gets its own `BANKLINK#{linkId}`: each bank is its own BankID
+   link with its own end date. There is no single `BANKCONN` with an `accounts` list.
+6. The placeholder's "one new section (§41)" no longer applies (§41 is the campaign finder). The bank part lives here.
+7. "Forget my bank" stays. It is only ever his own tap, with the 8 s Undo.
+
+#### 40.5.1 Enable Banking's terms: three conditions and one risk
+
+Checked on 22 Nov 2026 against Enable Banking's docs, API spec, Control Panel text, Terms of Service (last updated
+2026-01-09) and end-user Privacy Notice (2025-03-07). `docs/SETUP_POSTING.md` "## Your bank" lists every source.
+* **Restricted mode is free.** "Use of the API in the Production Environment is limited to Linked Accounts and is
+  available solely for evaluation purposes or for the personal use of private individuals." There is no contract
+  and no billing. Three conditions come with it, and Clip Factory's design keeps all three:
+  1. **The Control Panel account and the app are his own.** He signs up himself. Clip Factory never makes or shares
+     one, no step uses the Control Panel's **Share**, and step 6 says "Don't tap it" next to it.
+  2. **Only his own personal accounts.** He links them with **Usage type** **personal**, and every `POST /auth` sends
+     `psu_type: "personal"`. The callback drops any account Enable Banking marks `usage: "ORGA"` (a business account)
+     before it is ever read. Payoneer (business only in Sweden) and enskild firma accounts stay out ("If you see"
+     hints).
+  3. **Nobody else is ever offered it.** Clip Factory has one owner (§19). The first signed-in user who makes a bank
+     key is written to `BANKOWNER`, and any other user gets 403 `forbidden` "Your bank is only for the owner of this
+     Clip Factory." The steps tell him never to press **Request activation** or **Request unrestriction** (the paid
+     path for companies).
+* **The risk.** The Terms also say "These Terms do not grant any right or license to use the API for any business or
+  professional purpose, including … using the API for any commercial purpose whatsoever"; the docs say "individual
+  non-commercial use"; and the Terms forbid access "through the use of bots … or other automated devices or
+  mechanisms" and automating "in an abusive manner". Creator income on a personal account, read by a daily job, is a
+  grey area. A breach "shall result in termination of access", and the user's liability for it is not capped. So:
+  * the bank page starts with an **optional** step, **Ask Enable Banking first**, holding a ready email (Copy and
+    Open email) that asks exactly this question, daily read included. Sending it is his call, and nothing waits for
+    the answer;
+  * Clip Factory reads as little as it can: one read a day per bank plus his own Check now (§40.5.6), never more than
+    three reads in any 24 hours without him, and a 6-hour pause when a bank says it has had too many. Money's own
+    Check now never reads the bank;
+  * if Enable Banking says no, or sends written notice that the app will be deactivated, one line,
+    `bank_reading_enabled = false`, puts every screen back to `BANK_TEXT` at once. Stored deposits, learned payers and
+    links stay (they are his records), until he taps "Forget my bank".
+* **What Enable Banking keeps** (its Privacy Notice): account data "a maximum of 60 seconds", session data "up to 180
+  days", IP address and user agent 30 days, all in the EEA (Google Cloud Dublin, AWS Luxembourg). It is a registered
+  AISP supervised by the FIN-FSA. BankID happens on Enable Banking's page and his bank's own page. **Clip Factory
+  never asks for, sees or stores a bank login.**
+
+#### 40.5.2 What he sees
+
+**Words** (added to §40.1's list; tests read them):
+
+| Thing | Words |
+|---|---|
+| The card, the page, the Money block's area name | "Your bank" |
+| Money his bank booked, matched to an app | "Reached your bank" (never "received", "paid", "earned" or "income") |
+| Who says so | "Your bank says" (a row: "Your bank says · Swedbank · …"; a PayPal row: "PayPal says · …") |
+| Clip Factory's own buttons | "Open your Enable Banking apps", "Make my bank key", "Save", "Check again", "Connect your bank", "Connect another bank", "Reconnect Swedbank", "Check now" |
+| Stopping one bank (the Disconnect) | "Stop reading Swedbank" (toast "Stopping Swedbank… Undo"). Never "Disconnect", "Not connected" or "disconnected" (§40.1) |
+| Removing everything Clip Factory kept | "Forget my bank" (toast "Forgetting your bank… Undo") |
+| His question cards | "Is this money from YouTube?" / "Where is this money from?" / "Did you move this from your PayPal?" |
+| Enable Banking | always "Enable Banking"; its own labels bold and word for word (**Activate by linking accounts**) |
+| The key | "bank key" ("Other bank key" for the second Copy chip). Never "certificate", "RSA", "JWT" or "PEM", except the file's own ".pem" ending and Enable Banking's bold labels **Public certificate in PEM format** and **Generate outside the browser and import public certificate** |
+| The app's ID | "app ID" |
+
+Never on these screens: an account number or IBAN (Clip Factory never has one); "consent" (say "bank link");
+"session"; "ASPSP", except inside Enable Banking's bold label **ASPSP**; "API", except inside Enable Banking's bold
+label **API applications**; "PSD2", "AISP", "token".
+
+**Where.**
+1. **Settings › Posting › Get paid**: the **Your bank** card under the place cards (`data-help="getpaid-bank-card"`).
+   Off: today's card (`BANK_TEXT`, no tap). On: one big glass tap to the bank page, with the mark (Icon `card`), "Your
+   bank", the pill and line (§40.5.9) and a ring. While he is setting up, the ring shows the setup steps; once a bank
+   is connected, it shows the days left of the link that ends first, out of that link's `totalDays` (its bank's
+   length, 90 to 180 days). Once something matched, the card adds
+   "Reached your bank: kr 4 102,10 so far" (one line per currency, at most 2), and "2 payments need you" when there
+   are questions.
+2. **The bank page** `/settings/posting/getpaid/bank` (route `{ name: "getpaid-bank" }`, matched before
+   `getpaid/{place}`; `screens/getpaid/bank/BankPage.tsx`, `data-help="getpaid-bank"`). Top to bottom:
+   * the header: Icon `card`, "Your bank", ring, "About 25 minutes · Free", "Steps checked on 22 Nov 2026";
+   * the **status block** (`data-help="bank-status"`): pill, line, `next.text`, and the "Reconnect Swedbank" button
+     when `next` is a reconnect (§40.5.9);
+   * the **connect card**, when there is a `lastConnect` to show (§40.5.5): its sentence, plus a glass "Open your
+     Enable Banking apps" for `bank_no_accounts`;
+   * the **step cards** (`data-help="bank-steps"`). Only while all seven numbered steps are done do they fold to one
+     green row, whose words come from the current check: "Set up ✓ (Enable Banking knows your app)" when it is `ok`,
+     else "Set up ✓". Any step that stops being done (say the check turns `key_wrong`) unfolds them again;
+   * **Your banks** (`data-help="bank-links"`), once a `BANKLINK#` exists;
+   * **Is this from an app?** (`id="bank-asks"`, `data-help="bank-asks"`), only when there are questions;
+   * **Reached your bank** (`data-help="bank-reached"`);
+   * **What Clip Factory keeps** (`data-help="bank-keeps"`);
+   * **When it's done**, only once a `BANKLINK#` exists: glass "Check now" (it reads every bank), glass "Connect
+     another bank" (while there are fewer than 4 banks), quiet "Forget my bank", and with `?back=` the back button.
+3. **Each place page** (§40.1 item 2): under **Sent to your bank**, one "Reached your bank" line for that place
+   (§40.5.9). Each "Sent to your bank by Google/Whop" row that a deposit paired with also says "Reached your bank on 28
+   Oct (Your bank says)".
+4. **Money** `/money`: in All your money, under "Sent to your bank, so far", the block **Reached your bank, so far**
+   (`data-help="money-reached"`, §40.5.9). While that block shows, `BankView.moneyLine` ("What reached your bank is
+   below.") replaces the bank line (`BANK_TEXT`) under "Sent to your bank, so far".
+5. Never in Set up posting's ring or to-do list, and never a row on Money's status-only Get paid card (unchanged).
+
+**The page's only vermilion is `next`** (§40.5.9), with §40.1 item 2's rules: a step's main action (its Open, or Clip
+Factory's own button), pinned bottom right on phones from the moment the page opens. Once every step is done,
+"Reconnect Swedbank" **in the status block** is the vermilion when a link ended, was stopped outside Clip Factory,
+can't be read for 3 days, or ends within 14 days, and on phones it is pinned bottom right the same way. The link card's own "Reconnect Swedbank" is
+always glass. Otherwise the page has none, and "Check now" is glass. The green answers ("I'm in", "I did this", "Yes,
+it's YouTube") stay green, never vermilion (§17.1). Tapping one is the normal way a step gets done, and `next` moves
+on at once.
+
+**Step cards** are the §40.1 cards: a number in a circle, an Icon, a title of 6 words or fewer, 1–4 lines of 26 words
+or fewer, then Opens, Copy chips, paste and upload boxes, "If you see" hints and the green answer. Bold means Enable
+Banking's own label as its Control Panel showed it on 22 Nov 2026. Nobody saw the sign-in page's button (FirebaseUI
+draws it) or the banks' pages, so those steps add "Enable Banking may show this a little differently. Look for the
+same words." Data file: `web/src/getpaid/bank.ts` (`BANK_GUIDE`). It uses §40.1's `GetPaidStep` shape inside its own
+`BankGuide` type, plus `paste`, `upload` and the actions `make_bank_key`, `save_app_id`, `check_app` and
+`connect_bank`. The server's `bank/__init__.py` `STEPS` has the same ids, roles and autos.
+
+| # | id | title | essentials |
+|---|---|---|---|
+| Optional | `bank-ask` | Ask Enable Banking first | `doneLabel` "I asked". `lead` "Enable Banking is free for your own private use. Ask them if your app money counts. It's your choice." Open "Open email" → a `mailto:` address built from `values.ask` (to, subject, body, percent-encoded; the one Open that isn't https). Copy chips "Their email" (`support.api@enablebanking.com`) and "The email" (the body), for webmail. If you see: they say yes → "Great. Do step 1."; they say no → "Don't do the next steps. Your bank's app still shows what arrived. If you did them already, tap Forget my bank at the bottom."; no answer → "It's your choice. You can wait, or go on." Never counts in the ring, and is never `next` |
+| 1 | `bank-account` | Make an Enable Banking account | `doneLabel` "I'm in": the normal way this step gets done (it also ticks itself once the app ID works). Open "Open Enable Banking" → `https://enablebanking.com/sign-in/`. "Type your email. Tap the button under it." "Open the email from Enable Banking. Tap its link." "Then come back here and tap I'm in." "Enable Banking may show this a little differently. Look for the same words." If you see: **Sign up →** or **Get started** → "Tap it. It's the same page."; **Authenticator app** → "You can skip it. Once it's on, it can never be turned off." |
+| 2 | `bank-key` | Make your bank key | `manual: false`, `action: make_bank_key` (the button "Make my bank key"); ticks itself ("Clip Factory made your bank key"). "Tap Make my bank key." "Clip Factory makes a secret key and keeps it locked away. Only Clip Factory can use it." "It isn't your bank login." "You copy its public part in the next step. That part is safe to share." |
+| 3 | `bank-app` | Add Clip Factory on Enable Banking | `doneLabel` "I did this": the normal way this step gets done (it also ticks itself once the app ID works). Open "Open your Enable Banking apps" → `https://enablebanking.com/cp/applications`. "It opens **API applications**." "Under **Add a new application**, tap **Production**." "Pick **Generate outside the browser and import public certificate**." "Paste your bank key in **Public certificate in PEM format**:" Copy chip "Bank key" (`key.publicKeyPem`: the chip shows the first line and "…", and copies the whole key). If you see: **Sandbox** still picked → "Tap **Production**. A Sandbox app can't read real banks, and it can't be changed later."; **Generate in the browser (using SubtleCrypto) and export private key** was picked and your computer saved a .pem file → "Better: make a new app and pick **Generate outside the browser and import public certificate**. Or add that file in step 5, then delete it."; Enable Banking says no to the bank key → "Copy this one instead:" Copy chip "Other bank key" (`key.certificatePem`) |
+| 4 | `bank-details` | Fill in the app's details | `doneLabel` "I did this": the normal way this step gets done (it also ticks itself once the app ID works). "Paste each one in its box:" Copy chips **Application name** "Clip Factory", **Allowed redirect URLs (one per line)** `values.redirectUri`, **Application description** `values.description`, **Privacy URL of the application** `values.privacyUrl`, **Terms URL of the application** `values.termsUrl`. "Type your own email in **Email for data protection matters**." "Tap **Register**." If you see: **New application … has been added.** → "Done. The long code in it is your app ID. Pick the whole message and copy it. Clip Factory finds the app ID in it."; that message went away → "Your app's ID is on **API applications**, on your new app."; a link that looks wrong → "Enable Banking doesn't check them for your own use. Go on." No Open (the page is already open), so `next.vermilion` is `false` here |
+| 5 | `bank-appid` | Give Clip Factory the app ID | `manual: false`; ticks itself when the check knows the app ("Enable Banking knows your app"). Paste box "App ID": the web keeps the first `8-4-4-4-12` hex match found anywhere in the pasted text (`[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}`), shows it, and sends only that; with no match, the friendly line "Clip Factory can't find an app ID in that. Copy the whole **New application … has been added.** message again." Buttons "Save" (`action: save_app_id`) and, whenever `key.appIdHint` exists, "Check again" (`action: check_app`, `POST /v1/getpaid/bank/app/check`). "Save" is the step's main action until an app ID is saved; after that "Check again" is, and "Save" is glass. Folded under it, "Have a .pem file instead?": first "Better: make a new app with **Generate outside the browser and import public certificate** (steps 3 and 4)."; then the upload box "Add the .pem file" (drop or pick, like the TikTok file box of §17.4) and, under "Can't pick the file?", the paste box "What's inside the .pem file" (`autoComplete="off"`, `spellCheck={false}`, emptied after the send and when the page closes) with the App ID box. After a .pem is saved, a line that stays until he taps "I deleted it": "Saved. Clip Factory keeps it locked away. Now delete the .pem file from Downloads." The check's sentence (§40.5.4) shows on this card. If you see: "Enable Banking doesn't know this key" → "Do steps 3 and 4 again to make a new app. Then paste its app ID here." |
+| 6 | `bank-link` | Link your bank accounts | `manual: false`. Its green answer "I linked them" runs the check (`action: check_app`), and the step ticks itself when Enable Banking says the app is active ("Enable Banking says your app is active"), or once any bank was connected. Open "Open your Enable Banking apps". "It opens **API applications**. On your new app, tap **Activate by linking accounts**." "Pick {country} in **Country**. Pick your bank in **ASPSP**. Pick **personal** in **Usage type**. Tap **Link**." ({country}: the English name of `MONEYPREFS.country`, else "your country") "Use BankID at your bank. Link every account your app money lands in." "Use PayPal too? Tap **Link accounts** and add it the same way. PayPal asks for its own password there." If you see: **Request activation** or **Request unrestriction** → "Don't tap it. That one is for companies, and it costs money."; **Share** → "Don't tap it. Your app is only for you."; **Unable to link accounts** or **Unable to start accounts linking** → "Tap **Activate by linking accounts** again. Pick **personal**."; your account only shows as business → "Skip it. Enable Banking's free use is for private accounts only."; Payoneer → "Payoneer can't be linked for private use. Clip Factory can't see it."; no Avanza or Nordnet → "Enable Banking doesn't have them. Pick another account." |
+| 7 | `bank-connect` | Connect your bank | `manual: false`, `action: connect_bank` ("Connect your bank"); ticks itself once a bank is connected ("Clip Factory can see Swedbank"). "Tap Connect your bank. Pick a bank you linked in step 6." "Use BankID again. Yes, again: this time it lets Clip Factory read it." "Then go back to Clip Factory." "Clip Factory never sees your bank login." If you see: Enable Banking's own page first → "Read it and go on. It's Enable Banking's page, not your bank's."; Enable Banking asks for your personal number → "That's for BankID. Clip Factory never sees it."; a QR code on a computer → "Open the BankID app on your phone. Scan the code."; "Enable Banking didn't share an account" → "Link that account in step 6 first. Then tap Connect your bank again." |
+
+Each time (unnumbered, never in the ring): "Clip Factory looks at your bank once a day by itself. When a payment may
+be from an app, it asks you here." · before any link: "Your bank asks for BankID again every 3 to 6 months. Clip
+Factory tells you 7 days before."; once a link exists: "Every {n} days your bank asks for BankID again. Clip Factory
+tells you 7 days before." (n = the smallest `totalDays` of the links that aren't stopped).
+
+**Connect your bank** (the flow):
+1. He taps "Connect your bank" (or "Connect another bank"). The sheet **Pick your bank** opens
+   (`data-help="bank-picker"`, filled from `GET /v1/getpaid/bank/banks`). It starts with "Pick a bank you linked on
+   Enable Banking." and, once a `BANKLINK#` exists, "New bank? Link it on Enable Banking first: tap **Link accounts**,
+   then come back." with a glass "Open your Enable Banking apps". Then a search box "Find your bank" (typing only
+   filters), then one big row per bank. The banks most used in Sweden come first (Swedbank, Handelsbanken, SEB,
+   Nordea, Danske Bank, Länsförsäkringar Bank, ICA Banken, SBAB Bank, Skandiabanken, Revolut, PayPal, Wise), then A to
+   Z. A bank he already has says "Already here: tap to reconnect".
+2. A row's tap sends `POST /v1/getpaid/bank/connect {bank}` and opens Enable Banking's page in this tab. In the Mac
+   app it opens in the system browser, and this page waits the way Connect does (§17.1 `useConnecting`); the page
+   remembers when it sent the connect (`connectSentAt`, memory only).
+3. Enable Banking's page, then his bank's page, then BankID.
+4. **Back.** The callback always sends him to the public page **`/bank-done?result={code}`**
+   (`screens/getpaid/bank/BankDone.tsx`). App.tsx shows it for that path before the sign-in gate: it needs no
+   sign-in, makes no API call and shows no data, so BankID's return can never land on a sign-in page. Once the boot
+   has finished:
+   * signed in on this browser → `location.replace("/settings/posting/getpaid/bank?result={code}")`;
+   * not signed in (the Mac app's system browser, or BankID brought him back in another browser) → a small page in the
+     app's colours with no button and no link: `bank_connected` "Done! Go back to Clip Factory. You can close this
+     tab."; any other or unknown result "Your bank didn't connect. Go back to Clip Factory to see what to do.".
+5. **On the bank page**, the result shows in the connect card in two ways:
+   * with `?result=…` (removed at once with `history.replaceState`): `view.lastConnect.text` when its `result` is the
+     same and it is under 15 minutes old, else that result's sentence with "your bank" and "Connect your bank" (the
+     state was unreadable, so nothing was written);
+   * with no query (the Mac app, or another browser): when the window gets focus again or a live `bank` event
+     arrives while `connectSentAt` is set, the page reads the view again and shows `lastConnect` once its `at` is
+     later than `connectSentAt`.
+
+   `bank_connected` gives confetti (none with reduced motion), the success sound, the sentence, then "Checking your
+   bank… This can take a few minutes." while the first read runs (§40.5.5). Any other result gives the error sound
+   and a calm card with its sentence; `bank_no_accounts` adds a glass "Open your Enable Banking apps".
+
+**Your banks**: one glass card per `BankLink`, newest first. Each has Icon `card`, the bank's name, "2 accounts", the
+pill and line (§40.5.9), "Checked {how long ago, from `checkedAt`}" and a small ring of `daysLeft` out of `totalDays`
+("143 days left" inside; warn tone at 14 days or less, red once ended). Then its buttons:
+* glass "Reconnect Swedbank", when `reconnect` is true. It is always glass here: when it is `next`, the vermilion
+  copy is the one in the status block;
+* quiet "Stop reading Swedbank": the 8 s toast "Stopping Swedbank… Undo". `DELETE /v1/getpaid/bank/links/{linkId}` is
+  sent when the toast ends, or at once (`fetch` with `keepalive: true`) on `pagehide`, on `visibilitychange` to
+  hidden, or on a route change. Undo works only while the page stays open.
+
+There is no "Check now" on a link card: the one in **When it's done** reads every bank. A stopped link stays as a
+quiet row, "You stopped reading Swedbank on 3 Dec. The money it found stays here.", with a glass "Connect Swedbank
+again".
+
+**Is this from an app?**: one glass card per `BankAsk`, newest first, at most 20, then "and 3 more". Each shows the
+amount large (formatted by the web), the day and bank ("28 Oct · Swedbank") and the server's `title` and `line`. Then:
+* with a suggested place: green `yesLabel` ("Yes, it's YouTube"), glass "No, another app", and quiet "Not money from
+  an app". "No, another app" opens the sheet **Where is it from?**: big rows YouTube, TikTok, Instagram, Facebook,
+  "Instagram and Facebook together", X, "Content Rewards (Whop)" (only while Content Rewards is on) and "Not sure";
+* with no suggestion (PayPal, Payoneer): the sheet's rows right on the card, then quiet "Not money from an app";
+* `own_move`: green "Yes, I moved it", and glass "No, it's new money" (opens the sheet).
+
+Each answer is one PATCH (§40.5.10), then a toast: "Saved for YouTube. Undo" ("Saved for Instagram and Facebook.
+Undo" for `meta`; Undo sends `not_this`), or "Saved. Undo" for the other answers. "Not sure" folds the card into "Not
+sure yet (2)" at the bottom (tap to open), and it is never counted. **He never types an amount.** Every answer is a
+tap, and no answer changes an amount.
+
+**Reached your bank** (`reached` and `rows`, §40.5.9): each place's amounts per currency, "In total" per currency, the
+tag, then the rows, newest first (at most 36). A row shows amount, day, place, bank and `howText`, plus a quiet "Not
+from YouTube?" that sends `not_this` and brings the question back, with its own toast "Moved to Is this from an
+app?" (no Undo). Before anything matched: "Nothing from an app reached your bank yet." with `since`.
+
+**What Clip Factory keeps** (fixed words, no buttons): "Only money from apps: the day, the amount and which app." ·
+"Payments it asks you about stay until you answer, at most 180 days." · "Never your account number, your name or any
+other payment." · "Your bank and PayPal logins stay with them. Clip Factory never sees them." · "Enable Banking
+forgets your bank's answer within a minute." · "Forget my bank removes every payment and bank link Clip Factory
+kept."
+
+#### 40.5.3 Taps
+
+Counted like §40.1: a typed field is not a tap, "about" means a page that can vary, CF means Clip Factory's own taps,
+and every switch between Clip Factory and another page or app ("back", "to Enable Banking") is a tap. The green
+answers ("I'm in", "I did this") are counted: tapping them is how those steps get done.
+
+| Step | Taps | Total (CF) |
+|---|---|---|
+| Optional: Ask Enable Banking first | Open email · Send · back · "I asked" | 4 (CF 2) |
+| 1 Make an Enable Banking account | Open Enable Banking · (type the email) · the button · open the email · its link · back · "I'm in" | 6 (CF 2) |
+| 2 Make your bank key | "Make my bank key" | 1 (CF 1) |
+| 3 Add Clip Factory on Enable Banking | Open your Enable Banking apps · **Production** · **Generate outside the browser and import public certificate** · back · Copy chip "Bank key" · to Enable Banking · paste · back · "I did this" | 9 (CF 3) |
+| 4 Fill in the app's details | Copy chip · to Enable Banking · paste · 4 × (back · Copy chip · to Enable Banking · paste) · (type the email) · **Register** · copy the app ID (about 2) · back · "I did this" | 24 (CF 6) |
+| 5 Give Clip Factory the app ID | Paste · "Save" | 2 (CF 2) |
+| 6 Link your bank accounts | Open your Enable Banking apps · **Activate by linking accounts** · **Country** · Sweden · **ASPSP** · his bank · **Usage type** · **personal** · **Link** · go on at Enable Banking · BankID (about 3) · back · "I linked them" | 15 (CF 2) |
+| 7 Connect your bank | "Connect your bank" · his bank in the list · go on at Enable Banking · BankID (about 3) · back (about 1: on the web the tab comes back by itself) | 7 (CF 2) |
+
+**One bank: 68 taps (CF 20)** with the optional email, **64 (CF 18)** without it, over one sitting of about 25
+minutes. PayPal too: step 6 +10, in the same visit (**Link accounts** · **Country** · Sweden · **ASPSP** · PayPal ·
+**Usage type** · **personal** · **Link** · PayPal sign-in (about 2)), and step 7 +6 ("Connect another bank" · PayPal ·
+go on · PayPal sign-in (about 2) · back), so 84 (CF 22) with the email and 80 (CF 20) without it. The .pem path (he
+left Enable Banking's default) is about 3 taps fewer (CF 1 fewer): step 3 is only Open · **Production** · back · "I
+did this", step 4 needs no copy of the app ID (the file's name holds it), and step 5 is the upload box · the file ·
+open · delete the file in Downloads (about 2) · "I deleted it" instead of Paste · "Save". The main path stays the
+server-made key anyway, because then the private key never passes through his browser or his Downloads folder.
+BankID happens twice at setup, as Enable Banking requires: linking an account in its Control Panel "won't handle
+authorization on behalf of the app" (step 6, then step 7).
+
+Afterwards: a question card is 1 tap ("Yes, it's YouTube") or 2 ("No, another app" · the place). A payer named in the
+payer's name is asked about once, then learned; Stripe, PayPal and Payoneer, and a platform named only in the
+message, are asked about every time. "Check now" is 1. A reconnect every 90 to 180 days, as his bank sets, is 6 (CF 1:
+"Reconnect Swedbank" · go on · BankID (about 3) · back (about 1)). "Stop reading Swedbank" is 1.
+
+Ways in: Settings › Posting › Get paid › Your bank, 4 taps; Money › "Answer them" in Reached your bank, 2; Ask "how
+much reached my bank?" with its page action, 2.
+
+#### 40.5.4 The key, the app ID and the check (`bank/keys.py`, `bank/eb.py`; builder BA)
+
+* **Make my bank key** (`POST /v1/getpaid/bank/key`):
+  * First it claims `BANKOWNER` with a conditional put (another user → 403, §40.5.1).
+  * It makes an RSA-4096 key pair (`cryptography`, public exponent 65537), a self-signed X.509 certificate for it (CN
+    "Clip Factory", 10 years, SHA-256) and, only the first time, a 32-byte `hashKey` (`secrets.token_bytes`).
+  * It creates the secret `cf-prod/platforms/bank/app` (tags `app=cf-prod`, `platform=bank`): `{privateKeyPem
+    (PKCS#8), publicKeyPem (SPKI, "-----BEGIN PUBLIC KEY-----"), certificatePem, hashKey (base64), appId: null,
+    source: "clipfactory", keyMadeAt}`, and one UpdateItem on `BANKCONN`: `app.status "key_made"`, `app.source`,
+    `app.keyMadeAt`.
+  * With a key already there it changes nothing. `{"again": true}` makes a new pair, keeps `hashKey` (so `depositId`s
+    never change), clears `appId` and sets `app.status "key_made"`. While any `BANKLINK#` still has a session (its
+    `status` isn't `stopped`, or it has `closePending`), `again` gets 409 "Stop reading every bank first.": sessions
+    belong to the old app, so a new key would break every link and leave no way to close them.
+  * The private key and `hashKey` never leave Secrets Manager and the memory of `cf-prod-api`, `cf-prod-hooks` and
+    `cf-prod-money`. `BankView.key` carries only the public key and the certificate.
+* **Save** (`PUT /v1/getpaid/bank/app`):
+  * `{"appId"}`: a UUID, stored lower-cased; anything else gets 400 "Your app ID has 36 letters and numbers with
+    dashes."; with no key yet, 409 "Tap Make my bank key first." (The web sends only the UUID it found in his paste,
+    §40.5.2 step 5.)
+  * **While any `BANKLINK#` still has a session** (as for `again`): an `appId` different from the stored one, or any
+    `pem`, gets 409 "Stop reading every bank first."; the same `appId` only runs the check again.
+  * `{"pem", "fileName"}` (the .pem path): `fileName` matching `^([0-9a-fA-F-]{36})(?: \(\d+\))?\.pem$` gives the app
+    ID; otherwise the body must also carry `appId` (400 "Paste the app ID too."). `pem` must be at most 8 KB, a PKCS#8
+    private key (its first line is the words BEGIN PRIVATE KEY between five dashes on each side; else 400 "That isn't
+    Enable Banking's key file. It ends in .pem and starts with BEGIN PRIVATE KEY.") and an RSA key of 2048 bits or
+    more. It replaces Clip Factory's key (`source: "file"`, a new
+    `publicKeyPem` and `certificatePem` made from it); `hashKey` stays, or is made. The key is never logged, never
+    echoed and never stored outside the secret.
+  * Then the check runs (below), and the answer is `{view, check}`; `BANKCONN.app` gets `status "saved"`, `savedAt`,
+    `appIdHint` (the first 8 characters and "…").
+* **The check** (`POST /v1/getpaid/bank/app/check`; Save, step 5's "Check again" and the green "I linked them" run
+  it too): sign a JWT, call `GET https://api.enablebanking.com/application`, and write `BANKCONN.app.check {code, at}`,
+  `app.active` and `app.environment`. A `down` answer is returned and shown, but never replaces the stored
+  `app.check` (it sets only `app.downAt`), so a passing outage never un-ticks a step. The codes and their exact
+  sentences (the web shows them on step 5 or 6; BW's tests check them):
+
+| `code` | When | Sentence |
+|---|---|---|
+| `ok` | 200, `environment` `PRODUCTION`, `active` true, and `redirect_urls` holds `values.redirectUri` exactly | "Enable Banking knows Clip Factory, and your app is active." |
+| `not_active` | the same, but `active` false | "Saved. Next: link your bank accounts (step 6)." |
+| `redirect_missing` | `redirect_urls` doesn't hold it | "Paste the return address in **Allowed redirect URLs (one per line)**. On your app tap ⋮, then **Edit**, then **Save**." |
+| `sandbox` | `environment` `SANDBOX` | "That's a Sandbox app. Do steps 3 and 4 again, and tap **Production** first. Then paste the new app ID here." |
+| `key_wrong` | 401, or `UNAUTHORIZED_ACCESS` | "Enable Banking doesn't know this key. Do steps 3 and 4 again to make a new app. Then paste its app ID here." |
+| `not_found` | 403 or 404, or an error that names the app | "Enable Banking doesn't know that app ID. Copy it again." |
+| `down` | 5xx, 429, network | "Enable Banking didn't answer. Try again in a few minutes." |
+
+* **The JWT** (a shared contract: BA in `bank/eb.py`, BR in `bankread/client.py`). Header `{"typ": "JWT", "alg":
+  "RS256", "kid": appId}`; body `{"iss": "enablebanking.com", "aud": "api.enablebanking.com", "iat": now, "exp": now +
+  3600}`; base64url without padding (never the quick-start's `.replace('=', '')`); signed RSASSA-PKCS1-v1_5 with
+  SHA-256 (`cryptography`). A new token for each route call or run, never kept, never logged, never sent anywhere but
+  `https://api.enablebanking.com` (the deprecated `api.tilisy.com` is never used). Every call sends `Authorization:
+  Bearer …` and `Accept: application/json`.
+* **Deadlines.** Each request has a monotonic deadline under its Lambda's limit: 25 s for an api route (API Gateway
+  waits 29 s) and for the callback (`cf-prod-hooks` stops at 28 s). Each Enable Banking call gets `min(10 s,
+  remaining − 3 s)` (the callback's `POST /sessions` `min(15 s, remaining − 3 s)`), and a best-effort call is skipped
+  when that is under 1 s. A route that runs out answers with the `down` sentence or `bank_error`; it never hangs.
+* **Secrets are read fresh.** Every read of `cf-prod/platforms/bank/app` and `…/bank/token_{linkId}` uses
+  `Secrets.read(name, fresh=True)` (a few reads a day), never `oauth/secrets.py`'s 5-minute cache, so a new key, a
+  reconnect or a Stop is seen at once by every container.
+* **Errors stay typed.** Bank code raises only its own error types, which carry Enable Banking's `error` code and the
+  HTTP status, never the answer's body; `http.py`'s `http.internal` log line (`detail=str(e)`) therefore never holds
+  an IBAN, a name or a text.
+
+#### 40.5.5 Connect and the callback (`bank/grants.py`, `hooks.py`, `oauth/callback.py`; builder BA)
+
+* `GET /v1/getpaid/bank/banks`: calls `GET /aspsps?country={c}&psu_type=personal&service=AIS`. The country `c`
+  comes from `MONEYPREFS.country` and `GET /application`'s `countries`, in this order:
+  1. `MONEYPREFS.country`, when `countries` holds it, or when `countries` is empty (not verified for restricted apps,
+     §40.5.14);
+  2. else the one country in `countries`, when it holds exactly one;
+  3. else, when `MONEYPREFS.country` is set: 409 `country_not_linked` "Enable Banking's app has no account from Sweden
+     yet. Link one in step 6 first." (his country's English name, never a code), and the sheet shows a glass "Open your
+     Enable Banking apps";
+  4. else: 409 `no_country` "Pick your country in Money settings first.", and the sheet shows a glass "Pick my
+     country" (→ `/settings/posting/money?back=/settings/posting/getpaid/bank#money-country`, so its back button
+     returns to the bank page).
+
+  The list is cached per country in the container's memory for one hour. Answer: `{country, banks: [{name, maxDays
+  (maximum_consent_validity ÷ 86400, rounded down), beta}]}`, only banks whose `psu_types` hold `personal`. Enable
+  Banking has no bank id, only the name and country, and names can change. So `POST /connect` looks the name up in a
+  list at most one hour old, and reads the list again when the name isn't in it.
+* `POST /v1/getpaid/bank/connect`, with `{bank}` or, for a reconnect, `{linkId}` (that link's bank and country). It
+  has the 25 s deadline of §40.5.4: at most three Enable Banking calls (the check when needed, the list when needed,
+  `POST /auth`), each with its share.
+  * Refusals: without a saved app ID, 409 "Do the steps above first."; when the last check isn't `ok`, it runs the
+    check again and answers 409 with the check's sentence unless the new code is `ok`; for a fifth bank, 409 "You can
+    add up to 4 banks."; for a name not in the list, 400 "Pick a bank from the list."; for a reconnect whose bank
+    name is no longer in the list, 409 "Swedbank isn't in Enable Banking's list now. Tap Connect your bank and pick it
+    again."
+  * The state is §17.4's (`OAUTH#{nonce}` / `STATE`, `platform: "bank"`, signed with `oauth/state.py`,
+    `STATE_SECONDS`). It carries `linkId` (12 random hex for a new link; the link's own for a reconnect),
+    `reconnect` (bool), `bank`, `country`, `maxDays`, `psuHeaders` (the bank's `required_psu_headers`, names only,
+    lower-cased) and `history` (true for a new link, or when the link's `readThrough` is more than 80 days old).
+  * `POST https://api.enablebanking.com/auth` with `{access: {valid_until: now + min(maxDays, 180) days − 10 min
+    (RFC 3339 with offset), balances: false, transactions_extended_history: history}, aspsp: {name, country}, state,
+    redirect_url: values.redirectUri, psu_type: "personal"}`. It never sends `credentials` or `auth_method`. Its
+    errors: `REDIRECT_URI_NOT_ALLOWED` → 409 with the `redirect_missing` sentence (and `app.check` becomes
+    `redirect_missing`); `WRONG_ASPSP_PROVIDED` → 400 "Pick a bank from the list."; the key errors → 409 with the
+    `key_wrong` sentence; anything else → 503 `unavailable` with the `down` sentence.
+  * The answer is `{authorizeUrl: url, expiresAt}`. The web opens only an `https://` address.
+* **The return address** is `{HOOKS_URL}/oauth/bank/callback` (= `{oauthCallbackBase}/bank/callback`): the same REST
+  route as §14.3, whose access logs never carry the query (they do record the caller's IP address, as for every
+  callback, so BD's privacy words say only that the IP address of a Check now is never stored). `bank` joins
+  `CALLBACK_ONLY`, so `/hooks/bank` stays 404. The callback never depends on a cookie, because BankID can bring him
+  back in another browser. Only the server-side state counts.
+* `GET /oauth/bank/callback?code&state` (or `?error&error_description&state`) → `bank.grants.save_bank_grant()`, with
+  the 25 s deadline of §40.5.4 and one time `at` for the whole call:
+  1. Verify and consume the state (§17.5 step 1). A bad, old or reused state → `bank_expired`, and nothing is
+     written (the owner isn't known).
+  2. `error=access_denied` → `bank_denied`; any other `error` → `bank_error`.
+  3. Read `cf-prod/platforms/bank/app` (fresh), sign, and call `POST /sessions {code}` (`min(15 s, remaining − 3
+     s)`): `EXPIRED_AUTHORIZATION_CODE`, `WRONG_AUTHORIZATION_CODE` or `ALREADY_AUTHORIZED` → `bank_expired`; 401 or
+     `UNAUTHORIZED_ACCESS` → `bank_key_wrong`; `NO_ACCOUNTS_ADDED` → `bank_no_accounts`; 5xx, a timeout, network or
+     an unknown code → `bank_error`.
+  4. **In memory only**: from `accounts[]`, keep the `uid` and `identification_hash` of each account whose `usage`
+     isn't `ORGA`, and drop everything else at once (holder name, `account_id` and IBAN, `all_account_ids`, address,
+     product, details). If nothing is kept: `DELETE /sessions/{id}` (best effort, within the deadline; a failure is
+     logged as the count `bank.close_failed`), then `bank_business_only` when any account was `ORGA`, else
+     `bank_no_accounts`. No secret and no `BANKLINK#` is written.
+  5. Create or put the secret `cf-prod/platforms/bank/token_{linkId}` (tags `app=cf-prod`, `platform=bank`):
+     `{sessionId, accounts: [{uid, idHash}], validUntil (access.valid_until), bank, country, connectedAt (= at),
+     closeLater}`. For a reconnect, the old secret is read first (fresh): its `sessionId`, when it differs, and its
+     own `closeLater` go into the new `closeLater` (at most 3 ids). The callback never closes the old session itself;
+     the next `GET /v1/getpaid/bank` does (below), so a slow Enable Banking can't push the callback past its deadline.
+  6. One UpdateItem on `BANKLINK#{linkId}`: SET `type "banklink"`, `linkId`, `bank`, `country`, `status
+     "connected"`, `consentUntil` (= `validUntil`), `connectedAt` (= at), `firstConnectedAt` (`if_not_exists`),
+     `accountCount`, `psuHeaders`, `historyWanted` (= `history`), `firstReadDone` (`if_not_exists`, false),
+     `closePending` (true only when `closeLater` isn't empty), `updatedAt`; REMOVE `reason`, `lastError`, `endedAt`,
+     `stoppedAt`, `warnedFor`, `limitUntil`, `resume`, `firstReadStartedAt`, `failingSince` (and `closePending` when
+     `closeLater` is empty).
+  7. One UpdateItem on `BANKCONN`: SET `lastConnect {result, linkId, bank, reconnect, at}`. This one is written for
+     every result once the state was read (`bank_denied`, `bank_no_accounts` and `bank_error` too), so the waiting
+     bank page always learns what happened.
+  8. Always `302 {APP_URL}/bank-done?result={code}` (§40.5.2), with `Cache-Control: no-store` and `Referrer-Policy:
+     no-referrer`, even when the deadline ran out (then `bank_error`). Never logged: the code, the state, the session
+     id, uids, hashes, the query.
+
+  The result sentences (exact; `BankView.lastConnect.text` carries them filled in, BW's tests check them). `{bank}`
+  is the link's bank; `{button}` is "Reconnect Swedbank" for a reconnect, else "Connect your bank":
+
+  | `result` | Sentence |
+  |---|---|
+  | `bank_connected` | "Clip Factory can see money coming into {bank} now. It looks once a day." |
+  | `bank_denied` | "You stopped at the bank. Tap {button} to try again." |
+  | `bank_no_accounts` | "Enable Banking didn't share an account. Link it on Enable Banking first (step 6). Then tap {button} again." |
+  | `bank_business_only` | "That bank only shared a business account. Clip Factory reads private accounts only. Pick your private account at your bank, then tap {button} again." |
+  | `bank_expired` | "That took too long. Tap {button} again." |
+  | `bank_key_wrong` | "Enable Banking didn't know your bank key. Tap Check again in step 5." |
+  | `bank_error` | "Something went wrong. Tap {button} again in a few minutes." |
+
+  With no `lastConnect` (an unreadable state), the web uses the same sentences with {bank} "your bank" and {button}
+  "Connect your bank".
+* **The first read starts at once.** The bank page sends `POST /v1/getpaid/bank/check {"first": true}` once, when it
+  shows `bank_connected` (from `?result` or `lastConnect`), or when it gets the live `bank` event for a link with
+  `firstReadDone` false and `connectedAt` under an hour ago. The API lets only one through per link (a conditional
+  `firstReadStartedAt`). If no screen sends it, the next daily run reads the link instead, unattended, with
+  `strategy=default` from today − 89 days (§40.5.6).
+* **Closing old sessions** (`GET /v1/getpaid/bank`, and Stop and Forget): when any `BANKLINK#` has `closePending`, the
+  route first spends at most 5 s on `DELETE /sessions/{id}` for that link's `closeLater` ids (and, for a stopped link,
+  its `sessionId`). When all of them worked, it puts the secret back without `closeLater` (a connected link) or
+  deletes it (a stopped link), and REMOVEs `closePending`. A failure changes nothing, and the view is answered anyway.
+* **Stop reading Swedbank** (`DELETE /v1/getpaid/bank/links/{linkId}`): `DELETE /sessions/{id}` and every
+  `closeLater` id at Enable Banking (best effort, within the deadline; it closes "the bank consent … if possible").
+  When they worked: delete `cf-prod/platforms/bank/token_{linkId}`. When one failed or was skipped: keep the secret
+  and SET `closePending: true`, so a later GET, Stop or Forget closes it. Either way the `BANKLINK#` gets `status
+  "stopped"` and `stoppedAt` at once, and no read touches it again. Every `DEPOSIT#` stays. An unknown link gets 404.
+* **Forget my bank** (`DELETE /v1/getpaid/bank`): it first claims `BANKCONN.readLease` (§40.5.6); while a read holds
+  it, 409 "Clip Factory is reading your bank. Try again in a minute." Then it stops every link as above, deletes every
+  `DEPOSIT#` and `BANKPAYERS` item and every `BANKLINK#` without `closePending` (one with it keeps only `linkId`,
+  `bank`, `status "stopped"`, `stoppedAt` and `closePending` until its close works), sets `BANKCONN.forgottenAt`, and
+  releases the lease. The app key, the app ID and `BANKCONN.app` stay, so "Connect your bank" works again without the
+  Enable Banking steps. He can remove the Enable Banking app itself on its own page.
+
+#### 40.5.6 Reading (`bankread/`, run by `cf-prod-money`; builder BR)
+
+**When.**
+* **Once a day**, in `cf-prod-money`'s 06:00 UTC run, and only there: `money/handler.handle`'s `aws.events` branch
+  calls `run_user(deps, user_id, bank=True)`. `run_user` gains the keyword `bank: bool = False`; only when it is true
+  does it call `bankread.collect.run(deps, user_id, now, psu=None, mine=False, remaining=…)`, at the end, after the
+  payout reads (so the day's new `PAYOUT#` rows are there to match), in its own try, and skipped when less than 20 s
+  of the time budget is left. **Money's own Check now** (`{"action": "refresh"}`, up to once an hour) never reads the
+  bank: each tap there would spend one of the bank's unattended reads.
+* **Check now** (`POST /v1/getpaid/bank/check`):
+  * with no `BANKLINK#` in `status "connected"`: 409 "Connect your bank first.";
+  * at most once every 15 minutes and 12 times a UTC day per owner (conditional on `BANKCONN.lastManualAt` and
+    `manual {day, n}`). Over that: 429 `rate_limited` "Clip Factory checked a moment ago." with `retryAt`, which the
+    web shows as "Try again at 14:15.". `{"first": true}` for a link whose first read hasn't started passes anyway;
+  * the API calls `AsyncInvoker.bank_check(user_id, first, psu, at)` (new in `async_invoke.py`), which invokes
+    `cf-prod-money` asynchronously (a permission it already has) with `{"action": "bank", "userId", "first": bool,
+    "psu": {"ip": requestContext.http.sourceIp, "ua": the User-Agent header (at most 512 characters), "lang": the
+    Accept-Language header (at most 100)}, "at": now}`, and answers 202 with the view;
+  * the money handler's `bank` action runs only `bankread.collect.run(…, psu=…, mine=True)` for that owner (240 s
+    budget). An async event can wait in Lambda's queue for up to an hour (`maximum_event_age_in_seconds` 3600), so
+    when `at` is more than 120 s old the handler drops `psu` and sets `mine=False`: he has left, so the read is
+    unattended;
+  * the IP address, user agent and language go to Enable Banking for that one read only. They are **never stored,
+    never logged**, and never in a response.
+* **The 4-a-day rule** (PSD2 RTS Art. 36(5)(b): "no more than four times in a 24-hour period" when he isn't there):
+  * a read is **attended** when `psu` is given, the bank's `psuHeaders` list isn't empty, and every header on it can
+    be filled. Names are compared without regard to case (Enable Banking writes "Psu-Ip-Address"). Clip Factory can
+    fill `psu-ip-address` ← ip, `psu-user-agent` ← ua, `psu-referer` ← `{APP_URL}/settings/posting/getpaid/bank` and
+    `psu-accept-language` ← lang; a bank that needs any other header gets none. It is all of them or none: a partial
+    set gets 422 `PSU_HEADER_NOT_PROVIDED`. Every other read is **unattended**;
+  * the limit is a **rolling 24 hours**, never a calendar day: `BANKLINK#.reads {unattendedAt (ISO times, newest
+    last, at most 4), lastAttendedAt}`. An unattended read is made only while fewer than 3 of `unattendedAt` fall in
+    the past 24 hours, so one is always left over. An unattended `strategy=longest` pass (below) adds two times,
+    because it "may use extra ASPSP calls". Past the limit the link is skipped this run, with `lastError` "Clip
+    Factory looked at Swedbank 3 times in a day. It looks again later.";
+  * `ASPSP_RATE_LIMIT_EXCEEDED` (429): `limitUntil = now + 6 h`, Enable Banking's own advice, with no read before
+    then. Enable Banking's own 429: `limitUntil = now + max(Retry-After, 1 h)`.
+* **One read at a time.** `cf-prod-money` has no reserved concurrency, so the daily run and a Check now could meet.
+  Before reading, the run claims `BANKCONN.readLease {until: now + 300 s}` with a conditional update (absent or
+  expired). If another read holds it, this run skips the bank (the count `bank.read_busy`). It releases the lease at
+  the end (a conditional REMOVE on its own `until`). Before each batch of `DEPOSIT#` writes it reads
+  `BANKCONN.forgottenAt` again, and stops at once, writing nothing more, when that is later than the read's start.
+
+**What.** For each `BANKLINK#` with `status "connected"` and no `limitUntil` still ahead:
+* read `cf-prod/platforms/bank/token_{linkId}` and `…/bank/app` (both fresh, §40.5.4). The secret's `connectedAt`
+  must equal the link's `connectedAt`. If it doesn't, read the secret once more; if it still doesn't, skip the link
+  this run (the count `bank.stale_secret`) and change nothing. A link's status is only ever changed from the session
+  of the secret whose `connectedAt` matches, so a reconnect can never be ended by its old session;
+* `GET /sessions/{sessionId}`. A `status` other than `AUTHORIZED` ends the link (table below);
+* for each account in both the session's `accounts` and the secret's list: `GET
+  /accounts/{uid}/transactions?transaction_status=BOOK&date_from=…&strategy=…[&continuation_key=…]`. Every page uses
+  the same parameters, until `continuation_key` is null (an empty page with a key still goes on):
+  * **his** first read (`mine`, `firstReadDone` false), or his read of a reconnect with `historyWanted` within an hour
+    of `connectedAt`: `strategy=longest`, with `date_from` = today − 400 days (first read) or `readThrough` − 10 days
+    (reconnect). Full history is often there only in the first hour after BankID; after that many banks give 90
+    days. Afterwards, or once that hour has passed, REMOVE `historyWanted`;
+  * a first read that isn't his (the daily run, or an event older than 120 s): `strategy=default` from today − 89
+    days, never `longest`;
+  * every other read: `strategy=default`, `date_from` = the later of `readThrough` − 10 days and today − 89 days,
+    `date_to` = today (UTC). The 10-day overlap catches bookings with an earlier date, and `depositId` makes them
+    count once;
+  * when less than 20 s is left, the read stops after a whole page and keeps `resume {account index, strategy,
+    dateFrom, continuationKey}` on the link (internal, never returned) for the next run. `WRONG_CONTINUATION_KEY` on
+    a resume restarts that account with `strategy=default` from today − 89 days, and `historyFrom` says so;
+  * `historyFrom` (first read only) is the oldest booking date the bank returned on that link, over any row (read in
+    memory, and only this one date is kept), or `date_from` when nothing came back. Screens say "Counted from 3 Aug
+    2026, as far back as your bank shows."
+* then update the `BANKLINK#`: `lastReadAt`, `readThrough` (today), `firstReadDone`, `historyFrom`, `reads`. When the
+  read finished, REMOVE `reason`, `resume` and `failingSince`, and SET or REMOVE `lastError` from this run's rows.
+
+**Ends and errors**, decided by Enable Banking's `error` code, never by the HTTP status alone:
+
+| Answer | Then |
+|---|---|
+| session `EXPIRED`, or `EXPIRED_SESSION` | `status "ended"`, `endedAt`, `reason` `consent_over` (within a day of `consentUntil`) or `ended_early` |
+| session `REVOKED`, or `REVOKED_SESSION` | `status "stopped_at_bank"`, `endedAt` |
+| session `CLOSED`, `CANCELLED` or `INVALID`; `CLOSED_SESSION`, `SESSION_DOES_NOT_EXIST`, `ACCESS_DENIED`, `WRONG_SESSION_STATUS` | `status "ended"`, `endedAt`, `reason "ended_early"` |
+| `ASPSP_PSU_ACTION_REQUIRED` | stays connected, `reason "psu_action"` (the line in §40.5.9) |
+| `ASPSP_RATE_LIMIT_EXCEEDED` | `limitUntil` + 6 h; `lastError` "Swedbank asked Clip Factory to wait. It looks again later." |
+| `PSU_HEADER_NOT_PROVIDED`, `PSU_HEADER_INVALID` | one more try unattended, when the rolling 3 aren't used up; else `lastError` "Swedbank didn't answer. Clip Factory tries again tomorrow." and `failingSince` |
+| `ACCOUNT_DOES_NOT_EXIST`, `ASPSP_ACCOUNT_NOT_ACCESSIBLE`, `INVALID_ACCOUNT_ID` | that account is skipped this run; `lastError` "Swedbank didn't share one of your accounts today." |
+| `WRONG_TRANSACTIONS_PERIOD`, `DATE_FROM_IN_FUTURE`, `WRONG_DATE_INTERVAL` | one more try with `strategy=default` from today − 89 days |
+| `UNAUTHORIZED_ACCESS`, `AUTHORIZATION_NOT_PROVIDED` (the key) | `BANKCONN.app.check` becomes `key_wrong`; links keep their status; `lastError` "Enable Banking didn't know your bank key. Tap Check again in step 5."; `failingSince` |
+| `ASPSP_ERROR`, `ASPSP_TIMEOUT`, 5xx, network, `UNAUTHORIZED_IP` | `lastError` "Swedbank didn't answer. Clip Factory tries again tomorrow."; `failingSince` |
+| **any other code** (`WRONG_REQUEST_PARAMETERS` included) or an answer that can't be read | the same as the row above |
+
+`failingSince` is SET with `if_not_exists` (the first failed read) and REMOVEd by the next finished read. Once it is
+more than 26 hours old the link shows `cant_read` (§40.5.9), so a link that fails every day never keeps saying
+"Clip Factory can see it".
+
+Every write a read makes to a `BANKLINK#` is conditional on `status = "connected"` and on the `connectedAt` it started
+with, so a Stop or a reconnect during a read wins. A read never deletes anything (`cf-prod-money` has no DeleteItem).
+
+**Expiry.** On each run, every connected link with 7 days or less to `consentUntil` and `warnedFor` ≠ `consentUntil`
+goes into the run's notice (§40.5.11) and gets SET `warnedFor = consentUntil`. A link that ended in this run (either
+kind) goes into the notice too. An end never deletes a deposit.
+
+#### 40.5.7 Least data (BR filters; BA and BR store)
+
+**In memory, per transaction** (`bankread/filter.py`, pure). Only `credit_debit_indicator`, `status`,
+`transaction_amount {amount, currency}`, `booking_date` (else `value_date`, else `transaction_date`),
+`entry_reference`, `debtor.name` and `remittance_information[]` are looked at; no other field is read. A transaction
+goes on only when **all** of these hold:
+* `credit_debit_indicator` is `CRDT` and `status` is `BOOK` (checked again here: filtering on the bank's side doesn't
+  always work);
+* the amount matches `^\d{1,15}(\.\d{1,6})?$` and is above 0 (a negative "credit" is dropped);
+* the currency is 3 capital letters and not a fund or metal code (`XAU`, `XAG`, `XPT`, `XPD`, `XDR`, `XTS`, `XXX`,
+  `XBA`–`XBD`, `XSU`, `XUA`);
+* the amount fits the currency's minor unit, read with `Decimal`, never a float: exponent 0 for BIF, CLP, DJF, GNF,
+  ISK, JPY, KMF, KRW, PYG, RWF, UGX, VND, VUV, XAF, XOF, XPF; 3 for BHD, IQD, JOD, KWD, LYD, OMR, TND; 2 for every
+  other. So `"1234.567"` SEK is dropped;
+* the booking date is a real `YYYY-MM-DD`, no later than tomorrow.
+
+Then, still in memory:
+* `text` = `norm(debtor.name) + " " + norm(remittance lines)`, where `norm` is: NFKD, accents dropped, capitals, every
+  character that isn't A–Z or 0–9 → a space, spaces collapsed. `remit` = `norm(remittance lines)` alone;
+* `hint` = the first of these whole-word matches in `text`, in this order (specific first): `whop` (WHOP, CONTENT
+  REWARDS), `tiktok` (TIKTOK, BYTEDANCE), `instagram` (INSTAGRAM), `facebook` (FACEBOOK), `meta` (META), `youtube`
+  (GOOGLE, ADSENSE, YOUTUBE), `x` (X CORP, TWITTER, X COM), `stripe` (STRIPE), `payoneer` (PAYONEER), `paypal`
+  (PAYPAL). `shared` is true when `text` holds STRIPE, PAYPAL or PAYONEER (money that can come from more than one
+  place);
+* `hintFrom` = `"payer"` when the hint's word is in `norm(debtor.name)`, else `"text"`. Anyone who sends him a
+  transfer can write "YOUTUBE" in the message, but not in the bank's payer name, so only `"payer"` hints are ever
+  learned (§40.5.8);
+* `payerKey` = the first 32 hex of HMAC-SHA256(`hashKey`, `"payer|" +` the letters of `norm(debtor.name)`), only when
+  that name has at least 3 letters; else `null`, and nothing about that row is ever learned. Letters only, so a
+  payment number in the name never splits one payer in two;
+* `depositId` = the first 32 hex of HMAC-SHA256(`hashKey`, input), where input is:
+  * with an `entry_reference`: `"dep|" + entry_reference + "|" + date + "|" + amountMinor + "|" + currency`. Some
+    banks repeat a reference on another row; the date and amount keep those apart, and a true repeat gets the same id;
+  * without one: `"dep|" + date + "|" + amountMinor + "|" + currency + "|" +` the letters of `text` `+ "|" + n`, where
+    n = 1, 2, … among identical rows (same date, amount, currency and letters) of that account on that booking date,
+    in the bank's order.
+
+  Neither input holds the account's hash or uid, so a reconnect that brings new uids, or another
+  `identification_hash`, gives the same ids. A booking date is always read whole (`date_from` is a whole day), so n
+  never depends on a read's window, and the 10-day overlap of two reads gives the same id twice, never a new one.
+  Two accounts with an identical row on the same day make one id: that money counts once, never twice.
+
+The rest of the row, and every row matching drops (§40.5.8), is gone once the page is done: never stored, logged,
+cached or sent. Logs carry counts only (`bank.read`: link, pages, seen, kept, asked, matched, dropped) and Enable
+Banking's error code. They never carry an amount, a name, a text, an IBAN, a uid, a session id, a hash, the IP or the
+user agent.
+
+**Stored** (every attribute there is; nothing else):
+
+| What | Where | Kept |
+|---|---|---|
+| A payment matched to an app | `DEPOSIT#`, `state "matched"`: `depositId`, `date`, `amountMinor`, `exponent`, `currency`, `place`, `how`, `payoutRef` and `payoutDate` (payout matches), `payerKey`, `hintFrom` and `shared` (`payer` and `you` matches, so he can undo one), `notPayout`, `linkId`, `source "enable_banking"`, `fetchedAt`, `confirmedAt`, `quiet` | until Forget my bank (his records) |
+| A payment waiting for his answer | `DEPOSIT#`, `state "needs_you"`: the same without `place` and `how`, plus `suggested`, `kind`, `hint`, `hintFrom`, `shared`, `notSure`, `ttl` | until he answers; `ttl` = the later of the booking date and the `fetchedAt` day, + 180 days (a first read that goes back 400 days would otherwise write rows already past their `ttl`). The view hides a row whose `ttl` has passed, because DynamoDB can return it for days before it deletes it |
+| "Not money from an app" | `DEPOSIT#`, `state "not_income"`: only `depositId`, `date`, `linkId`, `why` (`you`, `own_move`), `ttl`. The amount and every other field are removed | `ttl` = booking date + 400 days, so a later read never asks again |
+| Payers he confirmed | `BANKPAYERS`: `rules {payerKey: {place, learnedAt}}` (at most 50), `notIncome` (a string set of payerKeys, at most 100) | until Forget my bank |
+| Each bank link | `BANKLINK#` (§40.5.11) | until Forget my bank |
+| The key, the app ID, `hashKey` | the secret `cf-prod/platforms/bank/app` | the key and app ID until he makes a new key; `hashKey` for good (so ids never change) |
+| A bank link's session | the secret `cf-prod/platforms/bank/token_{linkId}`: `sessionId`, `accounts [{uid, idHash}]`, `validUntil`, `bank`, `country`, `connectedAt`, `closeLater` (old session ids still to close, at most 3) | until Stop reading (once Enable Banking closed it), Forget my bank, or the next reconnect replaces it |
+| Everything else the bank sends | the Lambda's memory | that page only |
+| His IP address, browser name and language | the request, the money event, the call to Enable Banking | that one read only |
+
+#### 40.5.8 Matching (`bankread/match.py`, pure; builder BR)
+
+**Inputs**: the in-memory candidates of one read, oldest first; the owner's `PAYOUT#youtube#…` rows (`state "sent"`,
+amount and currency from `getpaid.sent.parse_amount(amountText)`; unread ones never match by amount) and
+`PAYOUT#contentrewards#…` rows (`state "sent"`: `amountMicros`, `currency`, `traceCode`); the `payoutRef`s already
+paired; `BANKPAYERS`; and whether a PayPal link is connected (a link whose `bank` is "PayPal"). The rules run in this
+order, and the first one that applies wins. The payout rules come before "He said it isn't app money", so a payer he
+once called "not app money" (a Google refund, say) still counts when Google's own payout record matches it:
+
+1. **Kept already.** A `DEPOSIT#` with this `depositId` exists → nothing (a `needs_you` row is looked at again in
+   rule 9).
+2. **A payout record** (`how "payout"`). Same currency and exactly the same amount (`amountMinor × 10^(6 −
+   exponent)` equals the payout's micros) as a `PAYOUT#` row that isn't paired yet and isn't in this row's
+   `notPayout`, booked from the payout's date to 10 workdays (Monday to Friday) after it → `matched`, with `place`
+   the payout's, `payoutRef` its sort key and `payoutDate` its date. With several candidates for one payout: first a
+   candidate whose `hint` fits the payout's place (`youtube` for YouTube, `whop` for Content Rewards), then the
+   earliest booking, then the smaller `depositId`. So a stranger's transfer of the same amount, with no hint, loses
+   to the real deposit. A payout pairs with one deposit only.
+3. **Whop's trace code** (`how "payout"`). Only when the candidate's `hint` is `whop` or there is none: a Content
+   Rewards payout's `traceCode` with at least 10 letters and digits, found as whole words in the candidate's
+   `remit` (`" " + norm(traceCode) + " "` inside `" " + remit + " "`; a dash inside the code becomes a space on both
+   sides), booked from the payout's date to 15 workdays after it, with any amount or currency (Whop or the bank may
+   have changed the money) → `matched`, `contentrewards`. A short code inside a longer payment number never matches.
+4. **Google's tiny test payment.** `hint` is `youtube` (no payout record matched it in rule 2), and the amount is at
+   most its currency's test ceiling (SEK 20.00, NOK 20.00, DKK 15.00, EUR 2.00, USD 2.00, GBP 2.00, CHF 2.00; other
+   currencies have none, so they are asked about) → dropped: never stored, never asked. Google's test deposits are
+   0.15–1.10 EUR in the local money, while a real YouTube payment is at least kr 700 (kr 70 when an account closes).
+   The ceilings are Clip Factory's own number for each currency, never a conversion.
+5. **He said it isn't app money.** `payerKey` is in `notIncome`, and the row isn't `shared` → dropped.
+6. **A payer he confirmed** (`how "payer"`). Not `shared`, `hintFrom` is `"payer"`, and `payerKey` is in
+   `BANKPAYERS.rules` → `matched`, with that place.
+7. **Money moved from his own PayPal.** `hint` is `paypal`, a PayPal link is connected, and the candidate is in
+   another link → `needs_you`, `kind "own_move"`.
+8. **Ask him.** Any `hint` → `needs_you`, `kind "place"`, with `suggested` from the hint: `youtube` → YouTube,
+   `instagram` → Instagram, `facebook` → Facebook, `meta` → `meta` ("Instagram and Facebook together"), `tiktok` →
+   TikTok, `x` and `stripe` → X, `whop` → Content Rewards (only while Content Rewards is on; else none), `paypal` and
+   `payoneer` → none. A `shared` row, or one whose `hintFrom` is `"text"`, is asked about every time.
+9. **Again each run.** Every stored `needs_you` row (`notSure` or not) is matched again with rules 2 and 6 (`remit`
+   is gone by then). A match updates it to `matched`, on the condition `state = "needs_you"`, so an answer he gave
+   meanwhile wins.
+10. **Everything else** (no hint: his salary, a Swish, a refund) → dropped in memory.
+
+Rows written during a link's first read, and rows matched later from them, carry `quiet: true`: no notification for
+old money.
+
+**His answers** (`bank/answers.py`, builder BA; `PATCH /v1/getpaid/bank/deposits/{depositId}`):
+
+| `answer` | On | Then |
+|---|---|---|
+| `yes` | `needs_you` with `suggested` | `matched`, `how "you"`, `place` = `suggested`, `confirmedAt`. Only when `payerKey` is set, the row isn't `shared` and its `hintFrom` is `"payer"`, it learns `payerKey → place`, and every other `needs_you` row with the same `payerKey` and `hintFrom "payer"` becomes `matched`, `how "payer"`, at once. Otherwise it learns nothing, so a stranger who wrote "YOUTUBE" in a message is never learned as YouTube |
+| `place`, with `place` | `needs_you` | as `yes`, with that place (`meta` = "Instagram and Facebook together") |
+| `own_move` | `needs_you`, `kind "own_move"` | `not_income`, `why "own_move"`; learns nothing |
+| `not_sure` | `needs_you` | `notSure: true`; never counted |
+| `not_income` | `needs_you` | `not_income`, `why "you"`; `payerKey` joins `notIncome` when it is set and the row isn't `shared`. Other `needs_you` rows with that `payerKey` stay (he answers each one) |
+| `not_this` | `matched` | back to `needs_you` (`suggested` null, `kind "place"`). A payout match adds its `payoutRef` to `notPayout` and frees the payout; a `payer` or `you` match removes that `payerKey` from `rules` (rows it matched before stay) |
+
+Refusals: 400 "That answer isn't known." or "Pick a place from the list." (`contentrewards` while Content Rewards is
+off too); 404 for an unknown id; 409 "That one is answered already." when the row's state doesn't fit. An answer never
+changes `amountMinor`, `currency` or `date`.
+
+#### 40.5.9 The numbers and words on screen (`bank/view.py`; builder BA; pure parts golden)
+
+**Reached your bank** is, for each place, the sum of its `matched` rows per currency. `totals` is per currency over
+every place. Nothing is added across currencies or converted, and a place with nothing is never shown as $0: it is
+named in `notYet` instead. Places come in this order: YouTube, TikTok, Instagram, Facebook, `meta` ("Instagram and
+Facebook (Meta pays them together)"), X, "Content Rewards (Whop)". `needs_you`, `notSure` and `not_income` rows are
+never counted.
+
+**Status** (`BankView.status`, `pill`, `tone`, `line`; server-made, exact). Setup comes first; after it, the worst
+link wins: ended › stopped outside › look in your bank › can't read › ends soon › checking › can see; when every
+link is stopped, stopped.
+
+| `status` | Pill (tone) | Line |
+|---|---|---|
+| `not_started` | "Not started" (neutral) | "See which app money reached your bank. Set it up once with BankID." |
+| `setting_up` | "Not set up yet" (warn) | `next.text` ("Next: step 5, Give Clip Factory the app ID."), or the check's sentence when it isn't `ok` or `not_active` |
+| `checking` | "Checking…" (neutral) | "Clip Factory is reading Swedbank for the first time. This can take a few minutes." After 26 hours with no first read: "Clip Factory couldn't read Swedbank yet. It tries again tomorrow." |
+| `can_see` | "Clip Factory can see it (Your bank says)" (success) | "Clip Factory looks at Swedbank once a day. The link ends in 143 days." (two banks: "Clip Factory looks at Swedbank and PayPal once a day. The first link ends in 98 days.") |
+| `ending_soon` | "Link ends in 9 days" (warn) | "Your Swedbank link ends on Fri 20 May. Tap Reconnect Swedbank and use BankID." |
+| `cant_read` | "Can't read Swedbank" (warn) | "Clip Factory couldn't read Swedbank since 3 Dec. Tap Check now. If it stays, tap Reconnect Swedbank." (once `failingSince` is more than 26 hours old) |
+| `look_in_bank` | "Look in your Swedbank app" (warn) | "Swedbank wants you to do something in its app or website first. Then tap Check now." (`reason "psu_action"`) |
+| `ended` | "Link ended" (error) | `consent_over`: "Your Swedbank link ended on 20 May. Clip Factory can't see new money until you reconnect." · `ended_early`: "Swedbank ended the link early. Banks sometimes do. Tap Reconnect Swedbank and use BankID." |
+| `stopped_at_bank` | "Stopped outside Clip Factory" (error) | "The Swedbank link was stopped at Enable Banking or at your bank. Tap Reconnect Swedbank to start it again." |
+| `stopped` | "Stopped" (neutral) | "You stopped reading Swedbank on 3 Dec. The money it found stays here." |
+
+Each `BankLink` gets the same pill and line for itself. `daysLeft` is the number of whole days to `consentUntil`,
+rounded up; `totalDays` is the whole days from `connectedAt` to `consentUntil`, rounded (90 to 180, as his bank
+sets), and the rings draw `daysLeft` out of it. `reconnect` is true when the link is `ended`, `stopped_at_bank` or
+`ending_soon` (14 days or less), or has been `cant_read` for 3 days (`failingSince` more than 3 days old). A link's
+`lastError` shows under its line.
+
+**`next`** (the page's one vermilion):
+* the first numbered step not done. Its `label`: step 1 "Open Enable Banking", 2 "Make my bank key", 3 "Open your
+  Enable Banking apps", 4 none (`vermilion: false`), 5 "Save" while no app ID is saved, else "Check again", 6 "Open
+  your Enable Banking apps", 7 "Connect your bank". Its `text`: "Next: step 4, Fill in the app's details.";
+* with every step done: the first link whose `reconnect` is true (ended first, then stopped outside, then can't
+  read, then the soonest end) → `{stepId: null, label: "Reconnect Swedbank", linkId, vermilion: true}`, drawn in the
+  status block and pinned bottom right on phones;
+* otherwise `null`.
+
+**Steps and autos** (from stored items only, never a secret):
+* `bank-account`, `bank-app` and `bank-details` are done when he tapped their green answer (`BANKCONN.stepsDone`,
+  `by: "you"`), which is the normal way; they also tick themselves ("Enable Banking knows your app", `by: "auto"`)
+  once the stored check is `ok` or `not_active`, or once any link exists;
+* `bank-key` is done when `BANKCONN.app.status` is `key_made` or `saved`;
+* `bank-appid` is done when the stored check is `ok` or `not_active` (a `down` answer never replaces it, §40.5.4);
+* `bank-link` is done when the stored check is `ok`, or once any link exists;
+* `bank-connect` is done once any link exists;
+* `bank-ask` shows "Optional" and never counts. The ring counts the seven numbered steps;
+* `fold`: only while all seven are done, "Set up ✓ (Enable Banking knows your app)" when the stored check is `ok`,
+  else "Set up ✓"; absent otherwise, and then the step cards show.
+
+**`howText`**: `payout` "matches Google's payment of 21 Oct" / "matches Whop's payout of 21 Oct"; `payer` "from a payer
+you said is YouTube"; `you` "you said it's from TikTok".
+
+**`BankAsk`** `title` / `line` / `yesLabel`:
+* a suggested place: "Is this money from YouTube?" / "Your bank's text looks like Google." / "Yes, it's YouTube".
+  `meta`: "Is this money from Instagram and Facebook?" / "Your bank's text looks like Meta." / "Yes, Instagram and
+  Facebook".
+  `stripe` → X: "Is this money from X?" / "Your bank's text says Stripe. X pays through Stripe, but others can too." /
+  "Yes, it's X";
+* no suggestion: "Where is this money from?" / "Your bank's text mentions PayPal." (or Payoneer);
+* `own_move`: "Did you move this from your PayPal?" / "Clip Factory reads your PayPal too, so this money may already
+  be counted there." / "Yes, I moved it".
+
+The hint words are Google, Meta, Instagram, Facebook, TikTok, X, Stripe, Whop, PayPal and Payoneer: Clip Factory's own
+names, never the bank's text.
+
+**`reached`**:
+* `tag` "Your bank says. Clip Factory matched each one to an app.";
+* `twoMonies` (more than one currency) "Different money, like dollars and kronor, is never added together.";
+* `notYet` "No money from TikTok or X reached your bank yet." (places with no matched row, joined with ", " and a
+  last " or "; Instagram and Facebook count as in when `meta` has rows);
+* `since` "Counted from 3 Aug 2026, as far back as your bank shows." (the oldest `historyFrom`);
+* `empty` (no matched rows) "Nothing from an app reached your bank yet.";
+* `needYou` "2 bank payments need you.";
+* each place's `note`: Content Rewards "Whop sends all your Whop money, Content Rewards too."; `meta` "Meta pays
+  Instagram and Facebook in one payment, so Clip Factory can't split it."
+
+**`places[place]`** (each place page's line):
+* with rows: headline "Reached your bank", `amounts`, `note` "Your bank says. Last on 28 Oct.". Instagram's and
+  Facebook's lines also carry `meta`'s amounts in `metaAmounts`, under "And from Meta, for Instagram and Facebook
+  together:";
+* none yet: headline "Nothing from YouTube reached your bank yet.", `note` "Your bank says. Clip Factory looked on 3
+  Dec.";
+* no link yet: headline "Clip Factory can't see your bank yet.", `button` {label "Set up Your bank", href
+  `/settings/posting/getpaid/bank`}.
+
+**`pairs`**: each `matched` row with `how "payout"` → `{place, payoutDate, amountMicros, currency, reachedOn}`. The
+place page puts "Reached your bank on 28 Oct (Your bank says)" under the `PayoutRow` with the same place, date, amount
+and currency.
+
+**`moneyLine`**: "What reached your bank is below.", once any link was ever connected. Before that it is absent, and
+`BANK_TEXT` stays.
+
+**`lastConnect`**: `{result, text, at}` from `BANKCONN.lastConnect`, with `text` the result sentence of §40.5.5
+filled in (`{bank}`, `{button}`); absent when it is more than a day old.
+
+**`asks`** leaves out every `needs_you` row whose `ttl` has passed (§40.5.7).
+
+**The Money block** (builder BW): the title "Reached your bank, so far"; one line per place (its name, then its amounts
+per currency joined with " · "); "In total:" with one line per currency; then `tag`, `twoMonies`, `notYet`, `since`,
+and `needYou` with a glass "Answer them" (→ `/settings/posting/getpaid/bank#bank-asks`). With no matched rows: `empty`.
+It is never added to the 30-day total or to "Sent to your bank, so far", which is a different thing (what a platform
+sent, not what the bank booked).
+
+#### 40.5.10 API routes and shapes (`routes/bank.py`; builder BA)
+
+All JWT, §5 errors, registered before `GET /v1/getpaid/{place}`. While `BANK_READING` is off, `GET
+/v1/getpaid/bank` answers `{"on": false}` and every other route 503 `unavailable` "Coming soon.". Without §17.4's
+OAuth env they answer 503 "Posting setup is not switched on for this app yet.". A user who isn't `BANKOWNER` gets 403
+(§40.5.1).
+
+| Method & path | Body | 2xx response |
+|---|---|---|
+| GET `/v1/getpaid/bank` | – | `BankView` (also registers the owner in `MONEYOWNERS`, like `GET /v1/getpaid`, and first closes pending sessions, at most 5 s, §40.5.5) |
+| POST `/v1/getpaid/bank/key` | `{}` or `{"again": true}` | `BankView` |
+| PUT `/v1/getpaid/bank/app` | `{"appId"}`, `{"pem", "fileName"}` or `{"pem", "appId"}` | `{ "view": BankView, "check": BankAppCheck }`; 409 "Stop reading every bank first." for a new app ID or any `pem` while a link has a session |
+| POST `/v1/getpaid/bank/app/check` | – | `{ "view", "check" }` |
+| PATCH `/v1/getpaid/bank/steps` | `{"step", "done"}` (`bank-ask`, `bank-account`, `bank-app`, `bank-details`, and `pem-deleted` for "I deleted it"; others 400 "Clip Factory ticks that one itself.") | `BankView` |
+| GET `/v1/getpaid/bank/banks` | – | `{ "country", "banks": BankChoice[] }`; 409 `no_country` or `country_not_linked` (§40.5.5) |
+| POST `/v1/getpaid/bank/connect` | `{"bank"}` or `{"linkId"}` | `{ "authorizeUrl", "expiresAt" }` |
+| POST `/v1/getpaid/bank/check` | `{}` or `{"first": true}` | `202 BankView`; 409 "Connect your bank first." with no connected link; 429 `rate_limited` with `retryAt` |
+| PATCH `/v1/getpaid/bank/deposits/{depositId}` | `{"answer", "place"?}` (§40.5.8) | `BankView` |
+| DELETE `/v1/getpaid/bank/links/{linkId}` | – | `204` |
+| DELETE `/v1/getpaid/bank` | – | `204` (Forget my bank); 409 "Clip Factory is reading your bank. Try again in a minute." while a read holds the lease |
+
+Only these routes reach outside stored items: key (makes a key, no network), app and app/check (`GET /application`),
+banks (`GET /aspsps`, cached), connect (`POST /auth`), the two deletes and a GET with `closePending` (`DELETE
+/sessions`) and check (the async invoke).
+No answer ever carries a private key, `hashKey`, a session id, a uid, an `identification_hash`, a `payerKey`, the bank's
+own text, an IP address, a user agent or a JWT.
 
 ```ts
-interface BankDeposit {
-  depositId: string;        // sha256(source | accountKey | the bank's transaction id or entry reference | date | amount | currency), 32 hex
-  date: string;             // the booking date, as the bank booked it (YYYY-MM-DD)
-  amountMicros: number;     // the credit as the bank booked it (a unit change only)
-  currency: string;         // the account's currency, as the bank says it ("SEK")
-  place: GetPaidPlace | null;              // the place it came from, once matched
-  match: "payout" | "payer" | "you" | "none";   // how it was matched (below)
-  payoutRef?: string;       // the PAYOUT# sort key it pairs with (match "payout")
-  payer?: string;           // the payer name as the bank showed it, ≤ 60 characters, kept only on a matched row
-  state: "matched" | "needs_you" | "not_income";
-  source: "enable_banking" | "bank_file";
-  account: { bank: string; last4: string };     // never the full account number or IBAN
-  confirmedAt?: string; fetchedAt: string;
+// web/src/api/types.ts (builder BW adds these; BA's routes answer exactly them)
+type BankPlace = GetPaidPlace | "meta";          // "meta": Instagram and Facebook together (Meta pays both at once)
+type BankStatus = "not_started" | "setting_up" | "checking" | "can_see" | "ending_soon" | "cant_read"
+  | "look_in_bank" | "ended" | "stopped_at_bank" | "stopped";
+type BankStepId = "bank-ask" | "bank-account" | "bank-key" | "bank-app" | "bank-details" | "bank-appid" | "bank-link"
+  | "bank-connect";
+type BankAppCode = "ok" | "not_active" | "redirect_missing" | "sandbox" | "key_wrong" | "not_found" | "down";
+type BankResult = "bank_connected" | "bank_denied" | "bank_no_accounts" | "bank_business_only" | "bank_expired"
+  | "bank_key_wrong" | "bank_error";
+type Tone = "success" | "neutral" | "warn" | "error";
+interface Amount { currency: string; amountMicros: number }   // never converted, never added across currencies
+interface BankAppCheck { code: BankAppCode; text: string; at: string }
+interface BankView {
+  on: boolean;                     // false while BANK_READING is off: then only `on` is sent, and screens keep BANK_TEXT
+  status: BankStatus; pill: string; tone: Tone; line: string;
+  next: { stepId: BankStepId | null; label: string; text?: string; linkId?: string; vermilion: boolean } | null;
+  steps: { id: BankStepId; done: boolean; by: "you" | "auto" | null; auto?: string }[];
+  ring: { done: number; total: 7 };
+  fold?: string;                   // only while all seven steps are done (§40.5.9)
+  key: { made: boolean; source?: "clipfactory" | "file"; publicKeyPem?: string; certificatePem?: string;
+         appIdHint?: string; check?: BankAppCheck; pemReminder?: boolean };   // pemReminder: "Now delete the .pem file"
+  lastConnect?: { result: BankResult; text: string; at: string };
+  values: { redirectUri: string; appName: "Clip Factory"; description: string; privacyUrl: string; termsUrl: string;
+            ask: { to: string; subject: string; body: string } };
+  links: BankLink[];               // newest first, at most 4 not stopped
+  asks: BankAsk[];                 // needs_you, newest first, at most 20 (notSure ones last)
+  asksMore?: number;
+  reached: BankReached;
+  rows: BankRow[];                 // matched, newest first, at most 36
+  pairs: { place: GetPaidPlace; payoutDate: string; amountMicros: number; currency: string; reachedOn: string }[];
+  places: Partial<Record<GetPaidPlace, BankPlaceLine>>;
+  moneyLine?: string;
+  canAddBank: boolean; checkedAt?: string; nextCheckAllowedAt?: string; country: string | null; asOf: string;
 }
+interface BankLink { linkId: string; bank: string; status: Exclude<BankStatus, "not_started" | "setting_up">;
+  pill: string; tone: Tone; line: string; lastError?: string; accounts: number; daysLeft?: number;
+  totalDays?: number; consentUntil?: string; checkedAt?: string; historyFrom?: string; limitUntil?: string;
+  failingSince?: string; reconnect: boolean; canStop: boolean }
+interface BankAsk { depositId: string; date: string; amountMicros: number; currency: string; bank: string;
+  kind: "place" | "own_move"; suggested: BankPlace | null; title: string; line: string; yesLabel?: string;
+  notSure: boolean }
+interface BankRow { depositId: string; date: string; amountMicros: number; currency: string; bank: string;
+  place: BankPlace; name: string; how: "payout" | "payer" | "you"; howText: string }
+interface BankReached { state: "none_yet" | "number" | "checking" | "no_link";
+  places: { place: BankPlace; name: string; amounts: Amount[]; note?: string }[];
+  totals: Amount[]; tag: string; twoMonies?: string; notYet?: string; since?: string; empty?: string;
+  needYou?: string }
+interface BankPlaceLine { headline: string; amounts: Amount[]; metaAmounts?: Amount[]; note?: string;
+  button?: { label: string; href: string } }
+interface BankChoice { name: string; maxDays: number; beta: boolean }
+// LiveEvent gains { type: "bank", op: "upsert", id: "bank", partial: true }
 ```
 
-Item `DEPOSIT#{yyyy-mm-dd}#{depositId}` (new sort key, permanent); learned payer names `BANKPAYERS` (`names`: map of a
-normalized payer name → place, each with `learnedAt`; written only by his taps); the connection `BANKCONN` (below).
-The public shape drops `payer` from rows that are `not_income`.
+`values.description` is "Shows me which of my app payouts reached my own bank account.". `values.ask` is `{to:
+"support.api@enablebanking.com", subject: "Personal use: my own creator income on my own account", body}` with this
+body (no name or detail of his; he signs it himself):
 
-**Matching** (one pure function, from stored items only; the owner never types a number, only taps):
-1. Only booked credits are candidates (Enable Banking: credit indicator `CRDT` and status `BOOK`; a file: a row with a
-   positive amount). Debits, pending rows and balances are never read into storage.
-2. **A payout record** (`match: "payout"`): a credit in the same currency with exactly the amount of a `PAYOUT#` row,
-   booked from that row's date to 10 workdays after it (YouTube: Google's payment; Content Rewards: a `completed`
-   Whop payout's `destination_amount` and `destination_currency`, or its `traceCode` in the payment text). The first
-   match by date wins; a row pairs with one deposit only.
-3. **A learned payer** (`match: "payer"`): a credit whose normalized payer name is in `BANKPAYERS` (for Meta and
-   TikTok, which have no payout record). PAYPAL, PAYONEER and STRIPE carry money from more than one place, so they are
-   never learned: such a credit is asked about every time (rule 4).
-4. **Ask him** (`state: "needs_you"`): a credit whose payer name holds a platform hint (GOOGLE, META, FACEBOOK,
-   INSTAGRAM, TIKTOK, STRIPE, X CORP, WHOP, PAYPAL, PAYONEER) and matched nothing above. A card: "Is this money from
-   YouTube? kr 1 234,56 on 28 Oct from GOOGLE IRELAND LTD" (the guessed place from the hint), green "Yes, it's YouTube",
-   a pick-one `<Glide>` "It's from: YouTube · TikTok · Instagram · Facebook · X · Content Rewards · Not sure" and
-   quiet "Not money from an app". "Yes" or a pick sets `match: "you"`, `confirmedAt`, and learns the payer name for
-   that place (never for PAYPAL, PAYONEER or STRIPE); "Not sure" keeps `needs_you` and is never counted; "Not money
-   from an app" sets `not_income` and learns nothing. A tap never changes an amount.
-5. **A small Google credit**: a Google credit with no YouTube payout record and an amount below the account currency's
-   YouTube payment threshold (SEK kr 700, EUR €70, USD $100: YouTube's own published table, so nothing is converted)
-   is never set aside by itself, because it can be the test payment or the last payment when an AdSense for YouTube
-   closes (the kr 70 closing level, Y14). It is `needs_you` with the card "Is this Google's tiny test payment?",
-   green "Yes, a test" (`not_income`) and glass "No, it's YouTube money" (`match: "you"`, place `youtube`).
-6. Everything else is dropped in memory: never stored, never logged, never sent to the web.
+> Hello,
+>
+> I'm a private person in Sweden. I made a restricted Production application in your Control Panel, linked only to my
+> own personal accounts.
+>
+> I post short videos. YouTube, TikTok, Meta, X and Whop sometimes pay small amounts into my personal bank account or
+> PayPal. I want my own app to read my booked incoming payments once a day, keep only the ones from those platforms,
+> and show me the totals. Nobody else uses it, and I don't share, sell or offer it to anyone.
+>
+> Does this count as personal use of private individuals under your Terms? Is one automatic read a day, plus a read
+> when I tap a button, fine?
+>
+> Thank you!
 
-**"Reached your bank"** = the sum of `matched` deposits per currency per place, in its own block under "Sent to your
-bank, so far". Each row is tagged by how it matched: "Your bank says · matches Google's payment of 21 Oct"
-(`payout`), "Your bank says · from a payer you confirmed before" (`payer`), "Your bank says · you said it's from
-TikTok" (`you`). Each "Sent to your bank by Google" row shows "Reached your bank on 28 Oct" once a deposit pairs with
-it. Never converted, never added across currencies, never $0 for a place with nothing.
+`bank/view.py` `view(items, now, *, cr_on, values) -> BankView` is pure (golden cases); `bank/view.py` `load(store,
+user_id, now, …)` reads `BANKCONN`, `BANKLINK#`, `DEPOSIT#` and `MONEYPREFS` only. Dates in server sentences are UTC
+days written "28 Oct" or "Fri 20 May"; times are formatted by the web.
 
-**Least data**: the deposit fields above only; no balance, no debits, no other people's names, no payment text (only a
-matched payer name), no full account numbers; the source's raw answer is never stored; a file (B) is deleted right
-after it is read. Tokens, keys and session ids only in Secrets Manager (`cf-prod/platforms/bank/…`, created at
-runtime). "Forget my bank" deletes `DEPOSIT#`, `BANKPAYERS` and `BANKCONN` (his own explicit tap, with the 8 s Undo).
+#### 40.5.11 Data, secrets, live, notifications, infra, the switch and mock mode
 
-**Connection states** (`BANKCONN.status`): `not_chosen` · `connecting` · `connected` (`consentUntil`, `accounts [{bank,
-last4}]`, `lastReadAt`) · `expiring` (14 days or less to `consentUntil`: the calm card "Your bank link ends on Fri 20
-May. Tap Reconnect and use BankID.") · `expired` (also when the bank ends it early: the bank may ask again before 180
-days, RTS Art. 10a(3)) · `revoked` (he stopped it, or the bank did) · `error`. Expiry never deletes a deposit.
+**Data** (additive only: new sort keys and one new registry partition; every write an UpdateItem or a conditional
+PutItem; no table, index, bucket, Lambda, role or Terraform-made secret):
 
-**A. Enable Banking, restricted mode** (NOT TO BUILD until chosen). Free; its terms allow production use on linked
-accounts "for the personal use of private individuals"; Swedish banks (Swedbank, SEB, Handelsbanken, Nordea, Danske,
-Länsförsäkringar, ICA Banken, Revolut, Wise, PayPal…) with 180-day consent through BankID. The owner makes his own
-Enable Banking app and links his own accounts (its key pair: the private key in `cf-prod/platforms/bank/app`). Flow:
-"Connect your bank" → his bank's BankID → back to Clip Factory; a daily read of new booked credits in
-`cf-prod-money` (first read with the "longest" history strategy; older history may need B once). Stop: Enable
-Banking's `DELETE /sessions/{id}` closes the consent. Before building: the owner emails Enable Banking to ask whether
-tracking creator income on a personal account is "personal use" (its docs say "individual non-commercial use"), and
-says which bank and whether any creator money lands in a business account (business accounts are excluded).
+| Item | Attributes | Written by |
+|---|---|---|
+| `BANKOWNER` (pk and sk `BANKOWNER`) | `type "bankowner"`, `userId`, `claimedAt` | api (the first key, conditional) |
+| `BANKCONN` | `type "bankconn"`, `stepsDone` (string set, at most 10), `app {status ("key_made", "saved"), source, keyMadeAt, savedAt, appIdHint, active, environment, check {code, at}, downAt}`, `lastManualAt`, `manual {day, n}`, `forgottenAt`, `updatedAt`; `lastConnect {result, linkId, bank, reconnect, at}`; `readLease {until}`; and `lastNotice`, `lastRunAt` | api; hooks (`lastConnect` only); money (`readLease`, `lastNotice`, `lastRunAt` only) |
+| `BANKLINK#{linkId}` | `type "banklink"`, `linkId`, `bank` (Enable Banking's name, at most 60 characters), `country`, `status` (`connected`, `ended`, `stopped_at_bank`, `stopped`), `reason` (`consent_over`, `ended_early`, `psu_action`), `consentUntil`, `connectedAt`, `firstConnectedAt`, `accountCount`, `psuHeaders` (names only, lower-cased), `historyWanted`, `firstReadDone`, `firstReadStartedAt`, `historyFrom`, `readThrough`, `lastReadAt`, `lastError`, `failingSince`, `limitUntil`, `reads {unattendedAt (at most 4 ISO times), lastAttendedAt}`, `resume` (internal), `warnedFor`, `endedAt`, `stoppedAt`, `closePending`, `updatedAt` | hooks (connect), api (stop, forget, closing, the first-read claim), money (read state, ends) |
+| `DEPOSIT#{yyyy-mm-dd}#{depositId}` | the table of §40.5.7, plus `type "deposit"` | money (new rows, matches again), api (answers, forget) |
+| `BANKPAYERS` | `type "bankpayers"`, `rules`, `notIncome`, `updatedAt` | api (his answers only) |
+| api env | `BANK_READING` from `bank_reading_enabled` (default `false`): an in-place env change | Terraform |
 
-**B. Upload the bank's file** (NOT TO BUILD until chosen). Monthly, by hand: "Add your bank's file" → pick the CSV or
-xlsx his internet bank exports (≤ 5 MB) → the API reads it once (the first time he taps which column is the date, the
-amount and the payer: taps, no typing), keeps only matched or "needs you" credits, and deletes the file. No third
-party and no expiry; also fills in older history.
+**Secrets** (Secrets Manager only, made at runtime with tags `app=cf-prod`, `platform=bank`; never in DynamoDB, logs,
+responses, URLs or the browser; never in Terraform, so a deploy can't touch them):
 
-**C** (only labels deposits from X/Stripe and Meta, never proof of arrival; needs Google Personal mode from the
-Gmail account that gets the emails) and **D** (today's words) need no shape of their own.
+| Secret | Written by | Read by | Today's IAM |
+|---|---|---|---|
+| `cf-prod/platforms/bank/app` | `cf-prod-api` (key, .pem) | `cf-prod-api`, `cf-prod-hooks` (callback), `cf-prod-money` (reads) | api `…/platforms/*`; hooks Get `…/platforms/*/app*`; money Get `…/platforms/*` |
+| `cf-prod/platforms/bank/token_{linkId}` | `cf-prod-hooks` (callback: create or put); `cf-prod-api` (put back without `closeLater`, delete) | `cf-prod-money`, `cf-prod-api` (stop, forget, closing) | hooks `…/platforms/*/token*`; money Get `…/platforms/*`; api `…/platforms/*` |
+
+The session secret's name has an underscore, `token_{linkId}`, never a dash. It still fits hooks' create grant
+(`*/token*`) and the api's and money's `…/platforms/*`, but **not** the `*/token-*` PutSecretValue grant that
+`cf-prod-money`, `cf-prod-clip-flow` and `cf-prod-stats` hold for rotated platform tokens, so none of those can
+overwrite a bank session. `cf-prod-clip-flow` and `cf-prod-stats` can still read `…/platforms/*`, so BR adds one
+in-place statement to each of their role policies: `{Sid = "NoBankSecrets", Effect = "Deny", Action =
+["secretsmanager:GetSecretValue"], Resource = ["${trimsuffix(var.platform_secrets_arn, "*")}bank/*"]}` (in
+`infra/modules/flows/main.tf`, `clip-flow` only, and `infra/modules/stats/main.tf`, `stats` only; their modules
+already `merge({ Effect = "Allow" }, p)`, so an explicit `Effect` wins). No new Allow anywhere. `docs/SECURITY.md`
+lists both secrets and the Deny (builder BD).
+
+**Live**: `cf-prod-broadcast`'s `TYPES` gain `BANKCONN`, `BANKLINK#`, `DEPOSIT#` and `BANKPAYERS`, each → `{type: "bank",
+op: "upsert", id: "bank", partial: true}` (no item rides along). Today `_one_getpaid` folds only kind `getpaid`; BR
+makes it fold each of `getpaid` and `bank` to one message per owner and kind, so a run's many `DEPOSIT#` records send
+one `bank` event. The realtime stream filter gains the four prefixes, in place. The web's `lib/bank.ts` reads `GET
+/v1/getpaid/bank` again (debounced 1 s) on `bank` events, on the window coming back into focus while a connect is
+waiting, and after each of his own changes.
+
+**Notifications** (§32; `cf-prod-notify`; under `notify.getPaid`, default on, so Settings gets no new switch). At the
+end of a run that found something to tell, the reader sets `BANKCONN.lastNotice` = `{key (the run's time), reached:
+[{depositId, place, amountMinor, exponent, currency}] (at most 3, only rows that aren't `quiet`), reachedMore (n), asks
+(n new `needs_you` rows that aren't `quiet`), expiring: [{linkId, bank, days, consentUntil}], ended: [{linkId, bank,
+endedAt}]}`. The notify stream filter gains `BANKCONN` (MODIFY only, in place); `push/notify.py` sends each event below
+once, when `lastNotice.key` changed (a conditional put on `NOTIFIED#getpaid#bank:{key}`, 30-day `ttl`). Title "Clip
+Factory". Never a link, a secret, an account number or the bank's text in a message; amounts are written by
+`money_words`, like Whop's ("412.00 SEK").
+
+| Event key | When | Body | `url` |
+|---|---|---|---|
+| `reached:{depositId}` | `reached` has one row | "Money reached your bank from YouTube: 1,234.56 SEK." (`meta`: "from Meta (Instagram and Facebook)") | `/money` |
+| `reached:{first depositId}` | more than one | "Money reached your bank from YouTube and X. Tap to see how much." | `/money` |
+| `ask:{yyyy-mm-dd}` | `asks` > 0 (once a day at most) | "Your bank got money that may be from an app. Tap to say where it's from." | `/settings/posting/getpaid/bank` |
+| `expiring:{linkId}:{consentUntil}` | each `expiring` | "Your bank link ends in 7 days. Tap here to reconnect it with BankID." ("in 1 day" when 1) | `/settings/posting/getpaid/bank` |
+| `ended:{linkId}:{endedAt}` | each `ended` | "Your bank link ended. Tap here to reconnect with BankID." | `/settings/posting/getpaid/bank` |
+
+**Infra** (builder BR; additive, in place): `infra/modules/realtime/main.tf` (+4 prefixes), `infra/modules/notify/main.tf`
+(+`BANKCONN`), the two `NoBankSecrets` Deny statements (`infra/modules/flows/main.tf`, `infra/modules/stats/main.tf`),
+and `bank_reading_enabled` (bool, default `false`) through `infra/modules/api` and `infra/envs/prod` to `BANK_READING
+= "on" | "off"` on `cf-prod-api`. No new Lambda, table, index, bucket, route, role, Allow statement or Terraform
+secret. The prod plan: 0 to destroy, 0 to replace (role policies, stream filters and one env var update in place).
+
+**The switch.** `bank_reading_enabled` stays `false` until BA, BR, BW and BD have all merged. Then one PR, "Get paid:
+switch on Your bank" (`feature/bank-switch-on`), sets its default to `true` in `infra/envs/prod/variables.tf` (with
+its description) and updates `infra/envs/prod/tests/wiring.tftest.hcl`. Turning it off again is the same one line, and
+every stored item and secret stays.
+
+**Mock mode** (`VITE_MOCK=1`, `web/src/api/mock/bank.ts`, builder BW): `on: true`, nothing set up. "Make my bank key"
+gives a short fake public key (`-----BEGIN PUBLIC KEY-----` / `MOCK…`). Any UUID saves with `not_active`; "I linked
+them" gives `ok`. The bank list has 12 Swedish bank names. A connect goes to a pretend page ("This is a pretend bank
+page. Tap Allow.") and back through `/bank-done?result=bank_connected`. The first read then gives one link (Swedbank,
+143 of 180 days) and four rows: a YouTube payout match (kr 1 234,56 on 28 Oct, matching 21 Oct), a `needs_you` Google
+kr 85,00, a `needs_you` Stripe kr 321,70 suggesting X, and a Meta payer match kr 912,40. `?mockBank=ending` (9 days),
+`?mockBank=ended`, `?mockBank=stopped_at_bank`, `?mockBank=cant_read`, `?mockBank=days90` (a 90-day bank),
+`?mockBank=none_yet` and `?mockBank=off` set the other states; `?mockBankDone=signedout` shows the bank-done page as
+a browser that isn't signed in. Answers change the mock in memory.
+
+#### 40.5.12 Changes to earlier sections, and who builds what
+
+**Changes to earlier sections** (each "old → new"; the builder named carries it out):
+1. §40 and §40.1 words (this PR): "the owner's choice of bank source, §40.5, is still open" and "That part waits for
+   his choice (§40.5)" → the bank part is §40.5 (option A), behind `BANK_READING`; the names list's "Money his bank
+   booked (§40.5 only)" → "(§40.5)"; the Your bank card's "no button until the owner chooses a bank source" → "no
+   button while `BANK_READING` is off; on, one big tap to the bank page (§40.5.2)".
+2. §40.1 item 1 (BW): the Your bank card's states (§40.5.2 item 1).
+3. §40.1 item 2 and §40.4 (BW): the place page's "Reached your bank" line and the pairs on `PayoutRow`s.
+4. §40.4 "Where it shows" (BW): under "Sent to your bank, so far", `moneyLine` replaces `BANK_TEXT` while the Reached
+   your bank block shows. The server's `sent.bankText` keeps `BANK_TEXT` (§40.7's golden files don't change).
+5. §14.2 / §40.7 Live (BR): + the `bank` event and its four prefixes; `_one_getpaid` folds `getpaid` and `bank`
+   each once per owner.
+6. §17.5 (BA): the callback also serves `bank` (`CALLBACK_ONLY`), to the public page `/bank-done`.
+7. §25.6 (BR): `cf-prod-money` gains the event `{"action": "bank", …}`, and only the daily run's `run_user(…,
+   bank=True)` reads the bank, after the payouts; `{"action": "refresh"}` never does.
+8. §32 / §40.7 notifications (BR): + the bank events under `notify.getPaid`; the notify filter + `BANKCONN`.
+9. §17.6 secrets (BR): `cf-prod-clip-flow` and `cf-prod-stats` get the in-place `NoBankSecrets` Deny.
+10. §15 Settings search (BW): the Get paid branch gains the apple `getpaid-bank` "Your bank", leaf "See which app money
+   reached your bank.", words "bankid", "enable banking", "reached your bank", "reconnect bank", "bank link".
+11. §40.8 "Not verified live", Bank (this PR) → §40.5.14.
+
+| Builder | Branch | Owns |
+|---|---|---|
+| **BA** api | `feature/bank-api` | `api/src/clipfactory_api/bank/{__init__.py (sort keys, STEPS, words, places), keys.py, eb.py, grants.py, view.py, answers.py}` (new), `routes/bank.py` (new), `routes/__init__.py` (its rows, before `/v1/getpaid/{place}`), `hooks.py` (`bank` in `CALLBACK_ONLY`), `oauth/callback.py` (the `bank` hand-off), `app.py` (`BANK_READING` → `App.bank_reading`), `async_invoke.py` (`AsyncInvoker.bank_check(user_id, first, psu, at)`: `_invoke` is private, and `refresh_money` sends `action: refresh`); tests `api/tests/{test_bank_keys.py, test_bank_eb.py, test_bank_grants.py, test_bank_view.py, test_bank_answers.py, test_bank_routes.py}` (new), `api/tests/bank_cases.py` writing `api/tests/fixtures/{bank_view_cases.json, bank_items.json, bank_steps.json}` (new), and its updates to `test_hooks.py` and `test_oauth_callback.py` |
+| **BR** reader, live, notify, infra | `feature/bank-read` | `api/src/clipfactory_api/bankread/{__init__.py (the item keys and shapes of §40.5.11, written from this contract and checked against `bank_items.json` when present), client.py, filter.py, match.py, collect.py}` (new), `money/collect.py` (`run_user(…, bank=False)` and one call at its end only when `bank` is true, in its own try), `money/handler.py` (`bank=True` from the daily loop only; the `bank` action, dropping `psu` when `at` is over 120 s old), `realtime/broadcast.py` (the four prefixes, and `_one_getpaid` folding `getpaid` and `bank`), `push/notify.py` (the `BANKCONN.lastNotice` events); `infra/modules/realtime/{main.tf, tests/websocket.tftest.hcl}`, `infra/modules/notify/{main.tf, tests/notify.tftest.hcl}`, `infra/modules/flows/{main.tf, tests/durable.tftest.hcl}` and `infra/modules/stats/{main.tf, tests/stats.tftest.hcl}` (the `NoBankSecrets` Deny and a `run` that asserts it), `infra/modules/api/{main.tf, variables.tf, tests/api.tftest.hcl}`, `infra/envs/prod/{main.tf, variables.tf, tests/wiring.tftest.hcl}` (`bank_reading_enabled` only); tests `api/tests/{test_bankread_filter.py, test_bankread_match.py, test_bankread_client.py, test_bankread_collect.py, test_notify_bank.py}` (new), `api/tests/bankread_cases.py` writing `api/tests/fixtures/bank_match_cases.json` (new), and its updates to `test_realtime.py` and `test_money.py` (the `bank` handler action, the call in `run_user`); and, last of all, the switch PR |
+| **BW** web and help | `feature/bank-web` | `web/src/getpaid/bank.ts` (new), `web/src/screens/getpaid/bank/{BankPage.tsx, BankSteps.tsx, BankKeyBox.tsx, BankPicker.tsx, BankLinks.tsx, BankAsks.tsx, BankMoney.tsx, BankDone.tsx}` (new), `screens/getpaid/{GetPaidList.tsx (the Your bank card), SentRows.tsx (the place line and pairs)}`, `screens/money/AllMoney.tsx` (the block and `moneyLine`), `screens/settings/Settings.tsx` (the bank page in the Get paid branch), `app/App.tsx` (the route and title, and `/bank-done` before the sign-in gate), `lib/{router.ts, backLink.ts ("Back to Get paid"), settingsTree.ts (the apple), bank.ts (new: the store, live refetch, the first-read call)}`, `api/{types.ts (every shape of §40.5.10), http.ts (the calls)}`, `api/mock/{bank.ts (new), index.ts}`, `styles/bank.css` (new); help `web/src/features/help/{helpKb.json, helpEvals.json}`: guides `bank-setup` "How do I see what reached my bank?", `bank-reached` "How much reached my bank?", `bank-ask` "Is this money from an app?", `bank-reconnect` "Why does my bank link end?", `bank-keeps` "What does Clip Factory keep from my bank?", `bank-enablebanking` "Is Enable Banking free for me?", one eval question each, highlighting only its own anchors (`getpaid-bank-card`, `getpaid-bank`, `bank-status`, `bank-steps`, `bank-links`, `bank-asks`, `bank-reached`, `bank-keeps`, `bank-picker`, `money-reached`); tests `web/test/{bank.test.tsx, bankGuide.test.ts}` (new) and updates to `getpaid.test.tsx`, `allMoney.test.tsx` (the drawing cases only), `backLink.test.ts`, `noGuesses.test.ts`, `settingsTree.test.ts`; `web/e2e/bank.spec.ts` (new) and updates to `screenshots.spec.ts` (`getpaid-bank`, `getpaid-bank-connected`, `getpaid-bank-asks`, `money-reached` at 375 and 1440); the generated files |
+| **BD** docs | `docs/bank-docs` | `docs/SECURITY.md` (the two secrets, the `token_` name and the `NoBankSecrets` Deny, fresh reads, least data, the PSU headers, the terms conditions, the .pem exception), `docs/SETUP_POSTING.md` (a "## Your bank" section: the steps in words and every source of 22 Nov 2026), `docs/ARCHITECTURE.md` (the connect and read flow), `docs/TESTING.md` (the bank tests and golden files), `docs/BUSINESS_REQUIREMENTS.md` (his ask and his choice of A), `web/public/legal/privacy.html` (what Clip Factory keeps from his bank, and that Enable Banking reads it; it says a Check now's IP address is never stored, never that no IP is logged, because the callback's access log records the caller's IP like every callback); the generated files |
+
+* **Shared contracts nobody changes alone**: this sub-section's words and sentences; the step ids, roles and autos;
+  the statuses, pills, tones and `next`; the check codes and result codes; the JWT claims; the secret names and JSON
+  shapes (`connectedAt` equal in the secret and the `BANKLINK#`); the `BANKCONN.readLease` (BR's reads, BA's Forget);
+  the `bank` event payload (BA sends, BR reads); the items and their attributes; the `depositId`, `payerKey` and
+  `hintFrom` inputs; the hint list; the test ceilings; the matching rules and their order; the answers; the routes
+  and `BankView`; the live event; the notice and the notification words; `BANK_READING`; the anchors (BW adds them);
+  the golden files (BA writes `bank_view_cases.json`, `bank_items.json` and `bank_steps.json`; BR writes
+  `bank_match_cases.json`; each reads the other's when present).
+* **Merge order: BA, BR, BW and BD in any order, then the switch.** All four start at once from this contract, and
+  each PR passes CI alone on top of main:
+  * **BA without BR**: links are made, but nothing reads them. They stay `checking`, with "Clip Factory couldn't read
+    Swedbank yet. It tries again tomorrow." after 26 hours, never a number. Prod never gets there, because the switch
+    is off.
+  * **BR without BA**: the reader finds no `BANKLINK#` and does nothing. The broadcast mapping and notify events wait
+    for items nobody writes yet; the api env var is read by nobody. The two Deny statements match no secret yet.
+  * **BA without BR**, Check now: the money handler doesn't know `bank` yet and logs `money.bad_event`; nothing breaks.
+  * BA and BR meet only through items, secrets and the golden files, never through each other's code. That is why
+    the Enable Banking calls are split by side (`bank/eb.py` for setup and connect, `bankread/client.py` for reading),
+    each signing the JWT of §40.5.4, as §40's K and L each called Whop.
+  * **BW without BA**: the prod API answers 404, and every screen keeps today's words (`BANK_TEXT`); CI runs against
+    the mock. BW owns the web types, so nothing waits for BA.
+  * **BD** touches words only.
+  * Generated files: BW and BD run `node scripts/help-corpus.mjs --write-docs` and `node scripts/ask-knowledge.mjs`
+    from `web/`. On a conflict, take main's copy and run both again.
+* Commits end with the paragraph "Area: Get paid".
+
+#### 40.5.13 Tests (offline, fakes only: no AWS, no Enable Banking, no bank, no network)
+
+* **api (BA)**, pytest:
+  * keys: the key pair, the certificate, the 10-year expiry, `hashKey` made once and kept on `again`, `again`
+    refused while a link has a session (`closePending` included), `PUT /app` with a new app ID or a `pem` refused
+    then and the same app ID only re-checked, the .pem file name and content rules, a 1024-bit key refused,
+    `BANKOWNER` and the 403;
+  * eb: the JWT's header and body, base64url, and a signature that verifies with the public key; the
+    `api.enablebanking.com` host only; every check code; `down` never replacing the stored check; secrets read with
+    `fresh=True`; the deadline shares (a slow fake never pushes a route past 25 s); bank errors typed, so a fake
+    error body full of IBANs and names leaves nothing in any log line, `http.internal` included;
+  * grants: the state carries `platform "bank"` and `reconnect`; `POST /auth` holds `psu_type "personal"`, `balances:
+    false`, the capped `valid_until`, `transactions_extended_history` from `history`, and no `credentials` or
+    `auth_method`; its errors mapped (`REDIRECT_URI_NOT_ALLOWED`, `WRONG_ASPSP_PROVIDED`); a reused state writes
+    nothing; every result code, each with `lastConnect` written and the 302 to `/bank-done`; the result sentences
+    with "Reconnect Swedbank" for a reconnect; **ORGA accounts dropped**; names, IBANs and addresses in the fake's
+    answer appear in no item, secret, log line or redirect; one `at` for the secret's and the link's `connectedAt`; a
+    reconnect puts the old session id into `closeLater` and never closes it in the callback; a fake that is slow on
+    `POST /sessions` and on DELETE still gives a 302 inside 25 s; `/hooks/bank` is 404;
+  * banks: the five country cases (in the list, an empty list, exactly one, not linked, none) and the 1-hour cache;
+    a reconnect whose bank name left the list;
+  * `bank_view_cases.json`: totals per place per currency, never across; `meta` shown on its own and counted in
+    Instagram's and Facebook's `metaAmounts`; `needs_you`, `notSure` and `not_income` never counted; a `needs_you` row
+    past its `ttl` hidden; `notYet`, `since`, `empty`, `needYou`; never $0; every status, pill and line (`cant_read`
+    at 26 hours, `reconnect` at 3 days; `look_in_bank`); the worst-link order; `daysLeft`, `totalDays` (a 90-day
+    bank) and `ending_soon` at 14 days; `next` for every step (step 4's `vermilion: false`; step 5 "Save", then
+    "Check again") and for a reconnect; the autos and the green answers; `fold` only with all seven done, and gone
+    again on `key_wrong`; the ring of 7; `pairs`; `places` in all three states; `lastConnect`;
+  * answers: every row of §40.5.8's answers table, learning only from `hintFrom "payer"` rows with a `payerKey`, the
+    shared and text-only hints never learned, the same `payerKey` matched at once, `not_this` freeing the payout into
+    `notPayout`, the 409s, no amount ever changed;
+  * routes: the 503s while off and `{on: false}`; the 403; Check now with no connected link (409), its limits (15
+    minutes, 12 a day, the `first` pass once per link); `bank_check`'s payload with `psu` and `at`, never stored or
+    logged; Stop with Enable Banking up (the secret deleted) and down (`closePending`, the secret kept, closed by the
+    next GET); Forget (deposits, links and payers gone, a `closePending` link kept bare, the app key kept, the 409
+    while a read holds the lease); no secret, session id, uid, hash, `payerKey` or IP in any answer.
+* **api (BR)**, pytest:
+  * client: the JWT; the PSU headers all or none, names matched without regard to case, referer and language filled;
+    a bank with no `psuHeaders` counted unattended; the rolling 24 hours (two late Check nows on day 1 and two early
+    on day 2 make at most 3 unattended reads in any 24 hours); an unattended `longest` counted twice; the 6-hour
+    `limitUntil`; every error row of §40.5.6, the catch-all, and `failingSince` set and removed;
+  * filter: CRDT/BOOK only, re-checked; negative and zero amounts, bad currencies, too many decimals and floats
+    refused; `norm`, `remit`, the hints and their order, `shared`, `hintFrom`, `payerKey` with digits ignored and
+    `null` without a payer name; `depositId` with and without `entry_reference`, a repeated reference with another
+    date or amount, **the overlap-window repeat** (a row seen by a read of 1–20 Oct and again by a read of 11–30 Oct
+    gets the same id), and **the same ids after a reconnect** with new uids and another `identification_hash`;
+  * **`bank_match_cases.json`** (golden): a YouTube SEK payout matched within 10 workdays, and the same amount on day
+    11 asked about; the Google test deposit (SEK 4.12) dropped and not stored; a Google SEK 85.00 with no record asked
+    about; Whop USD 40.00 → SEK 412.30 with WHOP asked about; a Whop trace code (10 or more characters) matched at
+    any amount, and a 6-character code inside a longer payment number not matched; a learned Meta payer matched;
+    STRIPE asked about every time, suggesting X; "YOUTUBE" only in a stranger's message asked about every time and
+    never learned on `yes`; PayPal in the bank with a PayPal link → `own_move`; a debit, a PDNG, a negative CRDT and a
+    salary dropped; one payout, two candidates (the one whose hint fits wins over a stranger's earlier transfer of the
+    same amount; then the first by date); `notPayout` respected; a `notIncome` payer dropped, and **a `notIncome`
+    Google payer with a matching AdSense payout `matched`**; `XXX` and `1234.567` dropped; a stored `needs_you`
+    matched on a later run once its payout appears; his answer during a run wins; the first read is `quiet`;
+  * collect: `longest` from today − 400 days only on his first read; an unattended first read (the daily run, or an
+    event over 120 s old) uses `default` from today − 89 days; `default` with the 10-day overlap afterwards; a
+    reconnect after a gap uses `longest` within the hour when it is his read; continuation pages with the same
+    parameters; an empty page with a key; the time budget's `resume` and `WRONG_CONTINUATION_KEY`; every end
+    (`ended`, `stopped_at_bank`, `consent_over` and `ended_early`); writes conditional on `connected`; **a warm
+    secrets cache across a reconnect never ends the new link** (the `connectedAt` check); the lease (a second run
+    skips; Forget during a read stops its writes); `ttl` from the later of the booking and fetch days; nothing ever
+    deleted; the 7-day `warnedFor`; `lastNotice` built only from rows that aren't quiet; **a leak test**: a fake page
+    full of names, IBANs, texts and other people's payments leaves only §40.5.7's attributes in every item, and
+    nothing of it in any log line; `bankread.collect.run` raising never stops `run_user`; **`{"action": "refresh"}`
+    never calls the bank reader**, and the daily loop does; the `bank` handler action; no `BANKLINK#` → no call at
+    all;
+  * notify: each event once, none for quiet rows, none with `getPaid` off, the exact bodies; realtime: the four
+    prefixes → `bank`, partial, and many `DEPOSIT#` records plus a `PAYOUT#` folded to one `bank` and one `getpaid`
+    message;
+  * `terraform test`: the filters change in place; `NoBankSecrets` on `clip-flow` and `stats` only, with `Effect =
+    "Deny"`; `bank_reading_enabled` defaults to `false` → `BANK_READING = "off"`, and `true` → `"on"`; nothing
+    replaced.
+* **web (BW)**, Vitest:
+  * the guide's ids, roles and autos equal `bank_steps.json` (when present); every title 6 words or fewer, every line
+    26 words or fewer, at most 4 lines a card; https Opens (the one `mailto:` aside); bold only for Enable Banking's
+    labels; no "API" outside **API applications**;
+  * every pill's words, tone and icon (never colour alone); none says "Live", "Connected", "Not connected" or
+    "disconnected";
+  * **one vermilion per screen**: step 4 has none; tapping "I'm in" or "I did this" moves `next` on; a reconnect's is
+    in the status block and pinned bottom right on phones, and the link card's Reconnect is glass; question cards'
+    answers are green or glass; the list card and Money's block have none;
+  * the key box: the App ID found inside a pasted message and only it sent, the .pem upload and paste
+    (`autoComplete="off"`, `spellCheck={false}`, nothing kept in state after a send or on unmount), the "Now delete
+    the .pem file" line until "I deleted it"; "Check again" once an app ID is saved; the check's sentences and the
+    result sentences word for word;
+  * the picker's order and search, its two lead lines; the `no_country` link with `?back=` and the
+    `country_not_linked` sentence; Stop with the 8 s Undo sending nothing until the toast ends, and sending at once
+    (`keepalive`) on `pagehide`, hidden or a route change; Forget the same; no Check now on a link card; When it's
+    done only with a link;
+  * `BankDone`: before the sign-in gate, no API call, the forward when signed in, both sentences when not, an
+    unknown result read as an error; the bank page's `lastConnect` shown on focus or a `bank` event after
+    `connectSentAt`;
+  * question cards: suggested, none and `own_move` layouts, the place sheet, "Not sure yet", Undo sending `not_this`,
+    the `meta` labels; "Not from YouTube?" with its own toast and no Undo;
+  * the Money block: per place, per currency, totals, `notYet`, `empty`, never $0, never added to the 30-day total,
+    "Answer them", `moneyLine` replacing `BANK_TEXT` only with a link; the place lines and pairs;
+  * `on: false` and a 404 both keep today's words exactly; `lib/bank.ts` refetches on `bank` events; the first-read
+    call is sent once; `noGuesses` over the new files (amounts only formatted); `backLink`; the settings apple.
+* **web (BW)**, Playwright (mock mode, 375×812 and 1440×900, the `tap()` counter of `web/e2e/flows.ts`): Clip
+  Factory's own taps per step equal §40.5.3's CF counts (18 without the email, 20 with it); the ways in (4 from
+  Settings, 2 from Money); Connect through `/bank-done` (signed in and `?mockBankDone=signedout`) and every result;
+  reconnect at 9 days; a question answered with 1 tap and with 2. Every new screen: no sideways scroll at 320–1920,
+  no edges, targets of 44 px or more (48 on phones), the arrow cursor only, axe contrast in light and dark, reduced
+  motion, phone controls bottom right, Ask never over the main button.
+* **docs (BD)**: `help-corpus.mjs --check` and `ask-knowledge.mjs --check`.
+
+#### 40.5.14 Not verified live (each is checked at his first connect; a failure becomes a plain sentence, never a number)
+
+* Whether Enable Banking calls creator income on a personal account "personal use", and whether it minds a daily
+  automated read (the optional email asks).
+* Which bank and accounts get his payouts; whether PayPal is one; whether any of them is a business account (it would
+  be dropped).
+* Redirect address rules (exact match, query strings): the check compares the exact string, and `redirect_missing`
+  says what to fix.
+* Whether **Public certificate in PEM format** takes the bare public key (Enable Banking's own browser path uploads
+  one) or wants the certificate (the "Other bank key" chip); whether an expired certificate stops tokens working (Clip
+  Factory's lasts 10 years).
+* Where the app ID shows on **API applications** after the **New application … has been added.** message is gone
+  (step 4's hint says "on your new app").
+* What `GET /application`'s `countries` holds for a restricted app (the linked accounts' countries, or nothing); the
+  banks route falls back to his Money country when it is empty.
+* Whether a bank with no `required_psu_headers` counts a read with Clip Factory's PSU headers as attended (Clip
+  Factory counts it as unattended, the safe side).
+* Which errors a wrong app ID and a wrong key give (`not_found` vs `key_wrong`).
+* Whether Control Panel links ever expire, or need linking again after an account number changes; the real limit of
+  linked accounts per app.
+* The payer names and texts his bank shows for AdSense for YouTube, Meta, TikTok (or PayPal), Stripe (X) and Whop
+  payouts: the hint list is a first guess, and a payout whose text names no platform is never seen. If that happens,
+  the place line keeps "Nothing from Instagram reached your bank yet.", and the fix is a new hint word in a later PR.
+  Enable Banking's Data Insights (his login) shows how often each field is filled.
+* What PayPal gives through Enable Banking: the payer's name, a currency per row, `XXX` for its account currency.
+* How Google writes a SEK `Payment.amount` (§40.4), on which the exact payout match depends; whether Google's payment
+  date is the day it sends.
+* Whether Whop's `traceCode` shows in the bank's text.
+* The authorization code's lifetime; whether his bank allows more than one session per person (another app reading
+  the same bank could end Clip Factory's link early).
+* Whether `transactions_extended_history: true` adds a second BankID on a new link at his bank.
+* The sign-in page's button words and Enable Banking's own page before the bank (never seen, so no bold).
 
 ### 40.6 New permissions and connections
 
@@ -10648,8 +11690,7 @@ check", never a number):
   page address; the VAT/GST pause for a clipper; whether a Developer Dashboard app can do the public-client exchange
   with no secret; the units of `destination_amount` / `net_amount` (taken as decimal dollars, not cents); the values
   of `bank_verification_state` beyond `pending` and `failed`; that `Api-Version-Date: 2026-11-20` is accepted.
-* Bank (§40.5, not built): Enable Banking's view of creator income on a personal account; which payer names Swedish
-  banks show for Google, Meta, TikTok, Stripe/X and Whop.
+* Bank: see §40.5.14.
 
 ## 41. Campaign finder: campaigns that match what you want (owner request, 2026-11-21)
 
