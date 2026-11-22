@@ -16,7 +16,7 @@ import { CLICK_SOUNDS, ERROR_SOUNDS } from "../../lib/soundCatalog.ts";
 import { storiesApi } from "../api/client.ts";
 import type { ExtraFormat, KeepChatPictures, KeepReferences, StorageSummary, StoriesConfig } from "../api/types.ts";
 import { setStoriesDevicePref, storiesClickSound, storiesDeviceOwn, storiesErrorSound, storiesMotionSetting, storiesReduceMotion, storiesSoundOn, useStoriesDevicePrefs } from "../prefs.ts";
-import { Btn, cheer, Empty, Failed, Loading, Note, SavedMark, SetCard, SetPick, SetSelect, SetSwitch, SIcon, sizeText, useSaved } from "./bits.tsx";
+import { Btn, cheer, Empty, Failed, Loading, Note, SavedMark, SectionBar, SetCard, SetPick, SetSelect, SetSwitch, SIcon, sizeText, useSaved } from "./bits.tsx";
 import { useWorkspaceConfig } from "./data.ts";
 import { StTech } from "../ui.tsx";
 import { sizeWords } from "./VideoSection.tsx";
@@ -301,10 +301,10 @@ export function StorageSection({ ws }: { ws: string }) {
 
   return (
     <div className="st-stg-cards">
-      <div className="st-stg-bar st-plate">
+      <SectionBar>
         <p className="st-stg-small">Lamo Stories keeps its files in its own folder, apart from Clip Factory's.</p>
         <SavedMark saved={saved} busy={busy} />
-      </div>
+      </SectionBar>
       <SetCard title="Space used" icon="box" lede="Everything Lamo Stories has made and kept.">
         <Where storage={storage.data} />
         {storage.data ? <Used storage={storage.data} /> : storage.error ? <Failed message={storage.error} onRetry={() => void storage.reload()} /> : <Loading label="Adding it up…" />}

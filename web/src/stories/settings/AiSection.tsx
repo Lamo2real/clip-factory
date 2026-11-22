@@ -14,7 +14,7 @@ import { useLoad, usePoll } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
 import type { Agent, AgentId, AiPicked, AiTask, Effort, ModelInfo, Price, ProviderStatus, StoriesAiConfig, TaskInfo, TaskKind } from "../api/types.ts";
 import { EFFORT_LABEL } from "../api/types.ts";
-import { Btn, cheer, Chip, effortWord, Failed, Loading, madeBy, MODEL_STATUS, money, Note, Progress, refusedLine, SavedMark, SetCard, SetPick, SetSelect, SIcon, statusSuffix, useOnThisPage, useSaved, whenText } from "./bits.tsx";
+import { Btn, cheer, Chip, effortWord, Failed, Loading, madeBy, MODEL_STATUS, money, Note, Progress, refusedLine, SavedMark, SectionBar, SetCard, SetPick, SetSelect, SIcon, statusSuffix, useOnThisPage, useSaved, whenText } from "./bits.tsx";
 import { useAi, type AiData } from "./data.ts";
 import { OwnModels } from "./OwnModels.tsx";
 import { keepName, ProviderKeys, ProviderRow } from "./ProviderKeys.tsx";
@@ -640,10 +640,10 @@ export function AiSection({ ws }: { ws: string }) {
 
   return (
     <div className="st-stg-cards">
-      <div className="st-stg-bar st-plate">
+      <SectionBar>
         <p className="st-stg-small">Lamo Stories' own models. Clip Factory's model setting is separate and stays as it is.</p>
         <SavedMark saved={saved} busy={ai.busy} />
-      </div>
+      </SectionBar>
       <DefaultModel data={data} pending={pending} onPick={pickModel} ws={ws} reload={ai.reload} />
       <DefaultEffort data={data} pending={pending} onPick={pickEffort} />
       <OwnModels ws={ws} models={data.models} onChanged={ai.reload} check={(key) => <CheckModels ws={ws} count={1} only={[key]} onDone={ai.reload} />} />

@@ -8,7 +8,7 @@ import { storiesApi } from "../api/client.ts";
 import type { Agent, AgentId, Effort, ModelInfo, Skill } from "../api/types.ts";
 import { EFFORT_LABEL } from "../api/types.ts";
 import { modelOf, notOffered, offers, pairText } from "./AiSection.tsx";
-import { Btn, cheer, Chip, Empty, Failed, Loading, Note, refusedLine, SavedMark, SetCard, SetPick, SetSelect, SetSwitch, SIcon, statusSuffix, useSaved } from "./bits.tsx";
+import { Btn, cheer, Chip, Empty, Failed, Loading, Note, refusedLine, SavedMark, SectionBar, SetCard, SetPick, SetSelect, SetSwitch, SIcon, statusSuffix, useSaved } from "./bits.tsx";
 import { useAi, type AiData } from "./data.ts";
 
 /** What each agent is for, in plain words (the API's agents carry their task list; these are the page's own lines). */
@@ -238,10 +238,10 @@ export function AgentsSection({ ws }: { ws: string }) {
 
   return (
     <div className="st-stg-cards">
-      <div className="st-stg-bar st-plate">
+      <SectionBar>
         <p className="st-stg-small">Lamo Stories' own agents. Clip Factory's agent is separate and stays as it is.</p>
         <SavedMark saved={saved} busy={ai.busy} />
-      </div>
+      </SectionBar>
       <SetPick
         label="Pick an agent"
         className="st-stg-agentpick st-glass"

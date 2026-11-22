@@ -3,15 +3,18 @@
 // (web/src/stories/styles/GLASS-CONTRACT.md): the cursor never changes, no visible borders or outlines, radii from
 // Stories' own --st-r-* scale only, no type under the 13 px floor, no dark-scheme rules, every selector under
 // .stories-app or an st- class (nothing reaches Clip Factory), keyframes named st-…, the tones and the bright orange
-// only ever fills and marks (never the colour of words), every control with a hover state, phone targets of 48 px, and
-// every word at 4.5:1 over all three backgrounds: the colours (each preset, at the brightest spot its lights make), a
-// white desktop or photo (See-through in the app, Picture: the measured veils) and Frosted.
+// only ever fills and marks (never the colour of words), every control with a hover state, phone targets of 48 px, no
+// veil of their own (the glass classes carry the veils), and every word at 4.5:1 over all three backgrounds: the
+// colours (each preset, at the brightest spot its lights make), a white desktop or photo (See-through in the app,
+// Picture: the measured veils) and Frosted, on a card, on the lighter step of a row inside a card, on the hero, and
+// loose on the page.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { FROSTED, MEASURED, PRESETS, SATURATIONS, VEIL, WHITE, contrast, hexToRgb, luminance, meshSpots, mix, veilsFor, type Rgb, type Veils } from "../src/stories/look.ts";
 
 const STYLES = join(import.meta.dirname, "..", "src", "stories", "styles");
+const SCREEN = readFileSync(join(import.meta.dirname, "..", "src", "stories", "screens", "Settings.tsx"), "utf8");
 const strip = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, "");
 const read = (f: string) => strip(readFileSync(join(STYLES, f), "utf8"));
 /** Settings' own files (the ownership map in GLASS-CONTRACT.md). */
@@ -119,6 +122,8 @@ interface Place {
   where: string;
   /** what a glass card's words sit on */
   card: Rgb;
+  /** what the hero's words sit on (the page head and the section pills): the lighter end of its veil */
+  hero: Rgb;
   /** what words loose on the page sit on (the stage with its page veil, or the plate over a desktop or picture) */
   loose: Rgb;
   /** what a glass control loose on the page sits on before its own fill (the stage, or the bare desktop) */
@@ -129,17 +134,54 @@ const PLACES: Place[] = [
   ...PRESETS.map((p): Place => {
     const v = veilsFor({ mode: "colours", strength: "clear", colours: [...p.colours], picture: null }, "none");
     const stage = mix(VEIL, lightest(meshSpots(p.colours)), v.page);
-    return { where: `the ${p.name} colours`, card: mix(VEIL, mix(VEIL, lightest(meshSpots(p.colours, SATURATIONS)), v.page), v.card), loose: stage, bare: stage, tokens: lookTokens("colours", v) };
+    const under = mix(VEIL, lightest(meshSpots(p.colours, SATURATIONS)), v.page);
+    return { where: `the ${p.name} colours`, card: mix(VEIL, under, v.card), hero: mix(VEIL, under, v.hero), loose: stage, bare: stage, tokens: lookTokens("colours", v) };
   }),
-  { where: "a white desktop or photo", card: mix(VEIL, WHITE, MEASURED.card), loose: mix(VEIL, WHITE, MEASURED.plate), bare: WHITE, tokens: lookTokens("desktop", MEASURED) },
-  { where: "a white desktop, Frosted", card: mix(VEIL, frost, FROSTED.card), loose: mix(VEIL, frost, FROSTED.plate), bare: frost, tokens: lookTokens("desktop", FROSTED) },
+  { where: "a white desktop or photo", card: mix(VEIL, WHITE, MEASURED.card), hero: mix(VEIL, WHITE, MEASURED.hero), loose: mix(VEIL, WHITE, MEASURED.plate), bare: WHITE, tokens: lookTokens("desktop", MEASURED) },
+  { where: "a white desktop, Frosted", card: mix(VEIL, frost, FROSTED.card), hero: mix(VEIL, frost, FROSTED.hero), loose: mix(VEIL, frost, FROSTED.plate), bare: frost, tokens: lookTokens("desktop", FROSTED) },
 ];
+
+/** What is read inside a card sits one glass step up: these rows' fills, laid on the card. */
+const ROWS = [
+  ".st-stg-active",
+  ".st-stg-assign__row",
+  ".st-stg-usage__row",
+  ".st-stg-chart",
+  ".st-stg-days__day",
+  ".st-stg-price,\n.st-stg-provider,\n.st-stg-keyrow",
+  ".st-stg-skilllist__row",
+  ".st-stg-skill",
+  ".st-stg-versions__row",
+  ".st-stg-mem",
+  ".st-stg-facts > div",
+  ".st-stg-modelform",
+  ".st-stg-own",
+  ".st-stg-tech",
+  ".st-stg-try",
+] as const;
+const rowFill = (sel: string): string => {
+  const rule = allRules().find((r) => r.selector === sel);
+  if (!rule) throw new Error(`no rule ${sel}`);
+  const fill = Object.fromEntries(decls(rule.body)).background;
+  if (!fill) throw new Error(`${sel} has no fill`);
+  return fill;
+};
+/** The lightest thing a word inside a card can sit on in this look: the card, or a row on it. */
+function base({ card, tokens }: Place): Rgb {
+  const under = ROWS.map((sel) => {
+    const out = laid(rowFill(sel), card, tokens);
+    if (!out) throw new Error(`${sel}: its fill is not flat`);
+    return out;
+  });
+  return lightest([card, ...under]);
+}
 
 /** Light words (on glass and loose on the page) and the dark words that only ever sit on cream or the action. */
 const LIGHT_WORDS = /^var\(--st-(text-strong|text|text-soft|text-amber|coral-ink|mint-ink|sky-ink)\)$/;
 const DARK_WORDS = /^var\(--st-(on-cream|on-cream-soft|on-cream-orange|on-accent)\)$/;
-/** Words loose on the page: the page head, the section head, the bar under it and its Saved mark. */
-const LOOSE_SELECTOR = /\.st-stg-(head(?!__setup-go)|section__|bar|saved)/;
+/** Words loose on the page or on the hero: the page head, the section head, the bar in it (its note is .st-stg-small)
+ *  and its Saved mark. */
+const LOOSE_SELECTOR = /\.st-stg-(head(?!__setup-go)|section__|bar|saved|small)/;
 
 describe("Settings' styles keep the owner's rules", () => {
   it("never change the cursor", () => {
@@ -194,6 +236,12 @@ describe("Settings' styles keep the owner's rules", () => {
       for (const m of text.matchAll(/@keyframes\s+([a-z0-9-]+)/g)) expect(m[1], f).toMatch(/^st-/);
     }
     expect(outside).toEqual([]);
+  });
+
+  it("build no veil of their own: the glass classes and tints carry the veils look.ts sets (contract rule 7)", () => {
+    const own: string[] = [];
+    for (const r of allRules()) for (const [k, v] of decls(r.body)) if (/var\(--st-veil-/.test(v)) own.push(`${r.file}: ${r.selector} { ${k}: ${v} }`);
+    expect(own).toEqual([]);
   });
 
   it("set no --st-* design token (glass-tokens.css is the only place); their one local value is --st-stg-…", () => {
@@ -258,19 +306,22 @@ describe("every word in Settings reaches 4.5:1 over all three backgrounds", () =
     expect(PLACES.at(-2)!.tokens.get("--st-fill-control")).toBe("rgb(var(--st-veil-rgb) / var(--st-veil-card))");
   });
 
-  it("every light word colour on a glass card, over the rule's own fill (rows, wells, tints) where it has one", () => {
+  it("every light word colour on a glass card and on a row in it, over the rule's own fill (wells, tints) where it has one", () => {
     const low: string[] = [];
     for (const r of allRules()) {
       const d = Object.fromEntries(decls(r.body));
       if (!d.color || !LIGHT_WORDS.test(d.color)) continue;
       const own = d.background ?? d["background-color"];
-      for (const { where, card, tokens } of PLACES) {
+      for (const place of PLACES) {
+        const { where, tokens } = place;
+        const card = base(place);
         const word = paint(d.color, tokens)!;
-        const bg = (own ? laid(own, card, tokens) : null) ?? card;
+        const bg = own ? laid(own, card, tokens) : card;
+        if (!bg) throw new Error(`${r.selector}: its background is not flat`);
         const ratio = contrast(mix(word.rgb, bg, word.a), bg);
         // A card's mark is an icon (3:1, WCAG 1.4.11); everything else here is words (4.5:1).
         const need = /__mark/.test(r.selector) ? 3 : 4.5;
-        if (ratio < need) low.push(`${r.file}: ${r.selector} (${d.color}) on a card over ${where}: ${ratio.toFixed(2)}`);
+        if (ratio < need) low.push(`${r.file}: ${r.selector} (${d.color}) on a card or row over ${where}: ${ratio.toFixed(2)}`);
       }
     }
     expect(low).toEqual([]);
@@ -281,23 +332,24 @@ describe("every word in Settings reaches 4.5:1 over all three backgrounds", () =
       for (const [k, v] of decls(r.body)) {
         if (!/--st-text-muted/.test(v)) continue;
         expect(`${k} in ${r.selector}`).toMatch(/^color in [^{]*::placeholder$/);
-        for (const { where, card, tokens } of PLACES) expect(contrast(paint(v, tokens)!.rgb, laid("var(--st-fill-well)", card, tokens)!), where).toBeGreaterThanOrEqual(4.5);
+        for (const place of PLACES) expect(contrast(paint(v, place.tokens)!.rgb, laid("var(--st-fill-well)", base(place), place.tokens)!), place.where).toBeGreaterThanOrEqual(4.5);
       }
   });
 
-  it("words loose on the page (the page head, the section head, the bar and its Saved mark) over the stage and the plates", () => {
+  it("words loose on the page and on the hero (the page head, the section head, the bar in it and its Saved mark) over the stage, the plates and the hero", () => {
     const low: string[] = [];
     for (const r of allRules()) {
       if (!LOOSE_SELECTOR.test(r.selector)) continue;
       const d = Object.fromEntries(decls(r.body));
       if (!d.color || !LIGHT_WORDS.test(d.color)) continue;
-      for (const { where, loose, tokens } of PLACES) {
-        const word = paint(d.color, tokens)!;
-        const under = d.background ? laid(d.background, loose, tokens) : loose;
-        if (!under) throw new Error(`${r.selector}: its background is not flat`);
-        const ratio = contrast(mix(word.rgb, under, word.a), under);
-        if (ratio < 4.5) low.push(`${r.selector} on ${where}: ${ratio.toFixed(2)}`);
-      }
+      for (const { where, loose, hero, tokens } of PLACES)
+        for (const [on, bare] of [["loose", loose], ["the hero", hero]] as const) {
+          const word = paint(d.color, tokens)!;
+          const under = d.background ? laid(d.background, bare, tokens) : bare;
+          if (!under) throw new Error(`${r.selector}: its background is not flat`);
+          const ratio = contrast(mix(word.rgb, under, word.a), under);
+          if (ratio < 4.5) low.push(`${r.selector} ${on} on ${where}: ${ratio.toFixed(2)}`);
+        }
     }
     expect(low).toEqual([]);
     // The Saved mark's mint sits over a well, so it reads over the brightest stage too.
@@ -306,22 +358,47 @@ describe("every word in Settings reaches 4.5:1 over all three backgrounds", () =
     for (const { where, loose, tokens } of PLACES) expect(contrast(paint("var(--st-mint-ink)", tokens)!.rgb, laid(fill, loose, tokens)!), `Saved on ${where}`).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("glass controls loose on the page (the section pills, Open setup again) carry a card's veil, so their words read, hovered too", () => {
-    const low: string[] = [];
-    for (const sel of [".st-stg-tab", ".st-stg-head__setup-go.st-btn", ".st-stg-tab:not(.is-on):hover", ".st-stg-head__setup-go.st-btn:hover"]) {
-      const rule = rules(CSS).find((r) => r.selector === sel);
-      expect(rule, sel).toBeDefined();
-      const d = Object.fromEntries(decls(rule!.body));
-      expect(d.background, sel).toMatch(/^var\(--st-stg-loose(-hover)?\)$/);
-      for (const { where, bare, tokens } of PLACES) {
-        const bg = laid(d.background!, bare, tokens);
-        expect(bg, `${sel} is flat`).not.toBeNull();
-        for (const w of ["var(--st-text-soft)", "var(--st-text)", "var(--st-text-amber)"]) {
-          const ratio = contrast(paint(w, tokens)!.rgb, bg!);
-          if (ratio < 4.5) low.push(`${sel} ${w} over ${where}: ${ratio.toFixed(2)}`);
-        }
+  it("the section pills and Open setup again are the shared .st-pill on the hero, and their words read there in every look, hovered and chosen too", () => {
+    // The markup: both are .st-pill on the page's one hero (.st-glass--hero), never loose on the page.
+    expect(SCREEN).toMatch(/className="st-stg-top st-glass st-glass--hero st-lens"/);
+    expect(SCREEN).toMatch(/className=\{`st-pill st-stg-tab\$\{/);
+    expect(SCREEN).toMatch(/className="st-pill st-stg-head__setup-go"/);
+    expect(SCREEN.indexOf("st-stg-top st-glass")).toBeLessThan(SCREEN.indexOf("st-stg-tabs"));
+    expect(SCREEN.indexOf("st-stg-tabs")).toBeLessThan(SCREEN.indexOf('<div className="st-stg-section">'));
+    // Settings places and sizes them but never repaints the pill: no fill or word colour of its own, but for the
+    // chosen one going clear while the glide's cream sits under it.
+    for (const r of allRules()) {
+      if (!/\.st-stg-(tab|head__setup-go)(?![a-z_-])/.test(r.selector)) continue;
+      for (const [k, v] of decls(r.body)) {
+        if (!/^(background(-color)?|color)$/.test(k)) continue;
+        // Its icon may change (amber, the strong cream under the mouse); the pill's own fill and words never do.
+        if (k === "color" && /\.st-icon|\.st-stg-icon/.test(r.selector)) continue;
+        if (r.selector === ".has-glide .st-stg-tab.is-on" && k === "background" && v === "transparent") continue;
+        throw new Error(`${r.file}: ${r.selector} { ${k}: ${v} } repaints the shared pill`);
       }
     }
+    // The figure's own fills and words (glass-figures.css), laid on the hero over every look's worst case.
+    const FIG = rules(read("glass-figures.css"));
+    const fig = (sel: string) => Object.fromEntries(FIG.filter((r) => r.selector === sel).flatMap((r) => decls(r.body)));
+    const pill = fig(".st-pill");
+    const states: [string, string, string][] = [
+      ["glass", pill.background!, pill.color!],
+      ["hovered", fig("button.st-pill:hover,\na.st-pill:hover").background!, pill.color!],
+      ["chosen", fig(".st-pill.is-on").background!, fig(".st-pill.is-on").color!],
+      ["chosen, hovered", fig("button.st-pill.is-on:hover,\na.st-pill.is-on:hover").background!, fig(".st-pill.is-on").color!],
+    ];
+    const low: string[] = [];
+    for (const { where, hero, tokens } of PLACES)
+      for (const [state, fill, words] of states) {
+        const bg = laid(fill, hero, tokens);
+        if (!bg) throw new Error(`.st-pill ${state}: its fill is not flat`);
+        // Its words, and on the glass ones the amber and strong cream icons (held to the words' 4.5:1 here).
+        const inks = state.startsWith("chosen") ? [words] : [words, "var(--st-text-amber)", "var(--st-text-strong)"];
+        for (const w of inks) {
+          const ratio = contrast(paint(w, tokens)!.rgb, bg);
+          if (ratio < 4.5) low.push(`.st-pill ${state} ${w} on the hero over ${where}: ${ratio.toFixed(2)}`);
+        }
+      }
     expect(low).toEqual([]);
   });
 
@@ -333,12 +410,13 @@ describe("every word in Settings reaches 4.5:1 over all three backgrounds", () =
       seen++;
       const d = Object.fromEntries(decls(r.body));
       if (!d.color || !d.background) throw new Error(`${r.selector} has no colour or fill`);
-      for (const { where, card, tokens } of PLACES) {
+      for (const place of PLACES) {
+        const { where, tokens } = place;
         const fg = paint(d.color, tokens);
-        const fill = laid(d.background, card, tokens);
+        const fill = laid(d.background, base(place), tokens);
         if (!fg || !fill) throw new Error(`${r.selector}: its colour or fill is not flat`);
         const ratio = contrast(mix(fg.rgb, fill, fg.a), fill);
-        if (ratio < 4.5) low.push(`${r.selector} on a card over ${where}: ${ratio.toFixed(2)}`);
+        if (ratio < 4.5) low.push(`${r.selector} on a card or row over ${where}: ${ratio.toFixed(2)}`);
       }
     }
     expect(seen).toBeGreaterThanOrEqual(8);

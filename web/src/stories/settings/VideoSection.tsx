@@ -11,7 +11,7 @@ import { storiesApi } from "../api/client.ts";
 import { storiesReduceMotion } from "../prefs.ts";
 import { RESOLUTIONS, type ProviderStatus, type StoriesConfig, type VideoAspect, type VideoResolution } from "../api/types.ts";
 import modelsFile from "../../../../stories/config/models.json";
-import { Chip, Failed, Loading, Note, PROVIDER_STATE, SavedMark, SetCard, SetPick, SetSwitch, useOnThisPage, useSaved } from "./bits.tsx";
+import { Chip, Failed, Loading, Note, PROVIDER_STATE, SavedMark, SectionBar, SetCard, SetPick, SetSwitch, useOnThisPage, useSaved } from "./bits.tsx";
 import { useAi, useWorkspaceConfig } from "./data.ts";
 import { keepName, ProviderKeys } from "./ProviderKeys.tsx";
 import { MakerPrices } from "./ProviderPrices.tsx";
@@ -198,10 +198,10 @@ export function VideoSection({ ws }: { ws: string }) {
 
   return (
     <div className="st-stg-cards">
-      <div className="st-stg-bar st-plate">
+      <SectionBar>
         <p className="st-stg-small">These make the pictures, video and sound. The AI models that write the stories are in Settings › AI.</p>
         <SavedMark saved={saved} busy={busy} />
-      </div>
+      </SectionBar>
       <SetCard title="Video maker" icon="film" lede="What turns each story into moving pictures.">
         <SetPick<VideoMaker> label="Video maker" stack value={c.providers.video} options={[makerOption(p, "builtin-2d", inVideo), makerOption(p, "nova-reel", inVideo)]} onChange={(v) => save({ providers: { ...c.providers, video: v } })} />
         <ModelLine providers={p} id={c.providers.video} />

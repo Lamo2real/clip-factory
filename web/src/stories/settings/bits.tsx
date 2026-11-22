@@ -5,6 +5,7 @@
 // global click handler (web/src/lib/sound.ts): a control that cannot be used is aria-disabled (it plays the deny
 // sound), never `disabled` (that would swallow the click and its sound).
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Glide } from "../../components/Glide.tsx";
 import { storiesBehind, storiesReduceMotion, storiesSound } from "../prefs.ts";
 import type { Effort, ModelInfo, ProviderStatus } from "../api/types.ts";
@@ -230,10 +231,12 @@ export function SetSwitch({ checked, onChange, label, description, off, name }: 
           </span>
         ) : null}
       </div>
+      {/* The shared orange toggle (.st-toggle from the figures: a 48 × 28 track, the white knob), with its On or Off
+          word beside it inside the same target. */}
       <button
         type="button"
         role="switch"
-        className="st-stg-switch"
+        className="st-toggle st-stg-switch"
         aria-checked={checked}
         aria-label={name}
         aria-labelledby={name ? undefined : `${id}-l`}
@@ -244,9 +247,11 @@ export function SetSwitch({ checked, onChange, label, description, off, name }: 
           if (!off) onChange(!checked);
         }}
       >
-        <span className="st-stg-switch__thumb" />
         <span className="st-stg-switch__word" aria-hidden="true">
           {checked ? "On" : "Off"}
+        </span>
+        <span className="st-toggle__track" aria-hidden="true">
+          <span className="st-toggle__knob" />
         </span>
       </button>
     </div>
@@ -303,6 +308,18 @@ export function SetSelect({
       </select>
     </span>
   );
+}
+
+// ---------- The bar under a section's head: its one-line note and the Saved mark ----------
+
+/** Where the bar is drawn: inside the section head's plate (screens/Settings.tsx), so the words above the first card
+ *  are one plate. Without one (a section on its own) the bar keeps its own plate where it stands. */
+const SectionBarAt = createContext<HTMLElement | null>(null);
+export const SectionBarSlot = SectionBarAt.Provider;
+
+export function SectionBar({ children }: { children: ReactNode }) {
+  const slot = useContext(SectionBarAt);
+  return slot ? createPortal(<div className="st-stg-bar">{children}</div>, slot) : <div className="st-stg-bar st-plate">{children}</div>;
 }
 
 // ---------- A short "Saved" mark ----------

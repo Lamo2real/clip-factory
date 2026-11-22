@@ -1,38 +1,48 @@
 /* Clip Factory Stories › Settings (docs/CONTRACTS.md §45.29), builder F2, on the liquid-glass contract
-   (styles/GLASS-CONTRACT.md): the owner's warm reference of 22 Nov. Every card is a smoky glass pane (.st-glass), the
-   chosen option is solid cream with espresso words and the others glass, switches are orange with a white knob, numbers
-   are set with white rounded-square − and + steppers, fields are deep wells on the glass, and the usage and price
-   tables are rows on a deeper fill so their words only gain contrast. Words loose on the page (the page head, the
-   section head, the bar under it) sit in .st-plate, which turns into a glass plate in Picture and See-through.
+   (styles/GLASS-CONTRACT.md): the owner's warm reference of 22 Nov. The page head and the section pills sit on the
+   page's one hero surface (.st-glass--hero with .st-lens: the brighter edge and sheen, a rim that may bend), the
+   pills being the shared .st-pill (glass, the chosen one solid cream with espresso words, the glide sliding the cream
+   between them). Every card is a smoky glass pane (.st-glass); what is read inside a card (rows, facts, the active
+   line, usage, the chart, the Try row) sits one lighter glass step up (--st-fill-control), and the deep well is kept
+   for what is typed in or tracked (fields, the pick-one tracks, the progress and length tracks). Switches are the
+   shared orange toggle, numbers are set with the white rounded-square − and + steppers. Words loose on the page (the
+   section head with its note and Saved mark) sit in one .st-plate, which turns into a glass plate in Picture and
+   See-through.
 
-   Every number comes from glass-tokens.css (this file sets no --st-* design token; its one local value is
-   --st-stg-lilac, the sixth series colour of the charts, set on .st-stg). Every selector starts st-stg (or sits under
-   .stories-app), so nothing reaches a Clip Factory screen. The owner's rules hold: the cursor never changes, every
-   control has a hover state, no visible borders (fills, light and soft shadows instead), radii from the --st-r-* scale
-   only (one scale by kind, concentric), no type under the 13 px floor, every word at 4.5:1 over all three backgrounds
-   (a white or busy desktop or photo too), nothing overflows from 320 px, targets 48 px on phones and 44 px from
-   768 px, never `disabled`, no filter that animates or changes on hover, and calm motion makes nothing travel.
-   Tones are fills and marks only; their words use the tone inks. The bright orange is for shapes only. */
+   Every number comes from glass-tokens.css (this file sets no --st-* design token and no veil; its one local value
+   is --st-stg-lilac, the sixth series colour of the charts, set on .st-stg). Every selector starts st-stg (or sits
+   under .stories-app), so nothing reaches a Clip Factory screen. The owner's rules hold: the cursor never changes,
+   every control has a hover state, no visible borders (fills, light and soft shadows instead), radii from the
+   --st-r-* scale only (one scale by kind, concentric), no type under the 13 px floor, every word at 4.5:1 over all
+   three backgrounds (a white or busy desktop or photo too), nothing overflows from 320 px, targets 48 px on phones
+   and 44 px from 768 px, never `disabled`, no filter that animates or changes on hover, and calm motion makes
+   nothing travel (presses only scale). Tones are fills and marks only; their words use the tone inks. The bright
+   orange is for shapes only. */
 
 /* ---------- The page ---------- */
 
 .st-stg {
   --st-stg-lilac: #b9a8ff; /* the sixth series colour of the usage charts and the storage meter */
-  /* Glass controls loose on the page (the section pills, Open setup again) carry a card's veil in every look: a
-     cream lift over the brightest spot of the Ember stage would leave their words under 4.5:1. Hover adds light on
-     top of the veil, so the words keep their contrast. */
-  --st-stg-loose: rgb(var(--st-veil-rgb) / var(--st-veil-card));
-  --st-stg-loose-hover: linear-gradient(rgb(var(--st-cream-rgb) / 0.08), rgb(var(--st-cream-rgb) / 0.08)), rgb(var(--st-veil-rgb) / var(--st-veil-card));
   display: grid;
   gap: var(--st-gap);
   min-width: 0;
 }
+/* The hero: the page head over the section pills. Its padding keeps words clear of the rim that may bend. */
+.st-stg-top {
+  display: grid;
+  gap: var(--st-space-5);
+  min-width: 0;
+  padding: var(--st-inset);
+}
+@media (min-width: 768px) {
+  .st-stg-top {
+    padding: max(var(--st-inset), var(--st-lens-band));
+  }
+}
 .st-stg-head {
   display: grid;
-  justify-self: start;
   gap: var(--st-space-2);
-  max-width: 100%;
-  padding-top: 6px;
+  min-width: 0;
 }
 .st-stg-head__title {
   margin: 0;
@@ -47,7 +57,7 @@
   font-size: var(--st-fs-body);
   line-height: var(--st-lh-body);
 }
-/* The first-time setup, always one tap away (§45.36 E15): a glass control with the rocket in amber. */
+/* The first-time setup, always one tap away (§45.36 E15): the shared glass pill with the rocket in amber. */
 .st-stg-head__setup {
   display: flex;
   flex-wrap: wrap;
@@ -55,18 +65,15 @@
   gap: var(--st-space-2) var(--st-space-3);
   margin: var(--st-space-1) 0 0;
 }
-.st-stg-head__setup-go.st-btn {
-  border-radius: var(--st-r-control);
-  background: var(--st-stg-loose);
-  box-shadow: var(--st-sheen-control), var(--st-depth-1);
-  color: var(--st-text);
-  font-weight: var(--st-weight-ui);
-}
-.st-stg-head__setup-go.st-btn:hover {
-  background: var(--st-stg-loose-hover);
+.st-stg-head__setup-go {
+  text-decoration: none;
 }
 .st-stg-head__setup-go .st-icon {
   color: var(--st-text-amber);
+  transition: color var(--st-dur-hover) var(--st-ease-out);
+}
+.st-stg-head__setup-go:hover .st-icon {
+  color: var(--st-text-strong);
 }
 .st-stg-head__setup-left {
   color: var(--st-text-amber);
@@ -74,30 +81,41 @@
   font-weight: var(--st-weight-ui);
 }
 
-/* The section bar: links on <Glide>. Glass pills, the chosen one solid cream with espresso words (the glide slides a
-   cream pill between them); two or three to a row on phones, with the icon over the name, one row from 768 px. */
+/* The section bar: links on <Glide>, each the shared .st-pill (glass, the chosen one solid cream with espresso words;
+   the glide slides a cream pill between them). On a phone they are one row that scrolls sideways (the chosen one is
+   kept in view), running out to the hero's edges; from 768 px they wrap. */
 .st-stg-nav {
   min-width: 0;
 }
 .st-stg-tabs {
   position: relative;
   isolation: isolate;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--st-space-2);
   margin: 0;
   padding: 0;
   list-style: none;
 }
-@media (min-width: 360px) {
-  .st-stg-tabs {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+@media (max-width: 767px) {
+  /* (.st-stg-nav > so it outranks the shell's .stories-app ul reset) */
+  .st-stg-nav > .st-stg-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: var(--st-inset);
+    scrollbar-width: none;
+    /* Out to the hero's edges, with room for the focus ring and the chosen pill's shadow inside the scroller. */
+    margin: calc(-1 * var(--st-space-2)) calc(-1 * var(--st-inset));
+    padding: var(--st-space-2) var(--st-inset);
   }
 }
-@media (min-width: 768px) {
+/* A mouse on a narrow window: a thin scrollbar, so the last pills can be reached without a touch screen. */
+@media (max-width: 767px) and (hover: hover) and (pointer: fine) {
   .st-stg-tabs {
-    display: flex;
-    flex-wrap: wrap;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--st-cream-rgb) / 0.32) transparent;
   }
 }
 .st-stg-tabs > .glide {
@@ -109,57 +127,21 @@
   position: relative;
   z-index: 1;
   display: flex;
+  flex: none;
   min-width: 0;
+  scroll-snap-align: start;
 }
 .st-stg-tab {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: center;
-  gap: var(--st-space-2);
-  min-width: 0;
   min-height: 48px;
-  padding: 6px var(--st-space-3);
-  border-radius: var(--st-r-round);
-  background: var(--st-stg-loose);
-  box-shadow: var(--st-sheen-control);
-  color: var(--st-text-soft);
-  font-size: var(--st-fs-small);
-  font-weight: var(--st-weight-ui);
-  line-height: 1.15;
-  text-align: center;
   text-decoration: none;
-  transition:
-    color var(--st-dur-glide) var(--st-ease-out),
-    background-color var(--st-dur-hover) var(--st-ease-out),
-    transform var(--st-dur-tap) var(--st-ease-out);
-}
-@media (max-width: 767px) {
-  .st-stg-tab {
-    flex-direction: column;
-    gap: 2px;
-    min-height: 56px;
-    padding: 6px var(--st-space-2);
-    font-size: var(--st-fs-chip);
-  }
 }
 @media (min-width: 768px) {
   .st-stg-tab {
     min-height: 44px;
-    padding: 6px var(--st-space-4);
   }
-}
-.st-stg-tab:not(.is-on):hover {
-  color: var(--st-text);
-  background: var(--st-stg-loose-hover);
 }
 .st-stg-tab:active {
   transform: scale(0.97);
-}
-.st-stg-tab.is-on {
-  color: var(--st-on-cream);
-  background: var(--st-selected);
-  box-shadow: var(--st-depth-1);
 }
 .has-glide .st-stg-tab.is-on {
   background: transparent;
@@ -167,9 +149,13 @@
 }
 .st-stg-tab .st-stg-icon {
   flex: none;
+  transition: color var(--st-dur-hover) var(--st-ease-out);
 }
 .st-stg-tab:not(.is-on) .st-stg-icon {
   color: var(--st-text-amber);
+}
+.st-stg-tab:not(.is-on):hover .st-stg-icon {
+  color: var(--st-text-strong);
 }
 
 .st-stg-section {
@@ -177,11 +163,30 @@
   gap: var(--st-space-4);
   min-width: 0;
 }
+/* The section head: one plate with the title, the lede, and the section's bar (its note and the Saved mark), the bar's
+   two parts laid straight on the head's grid: the Saved mark beside the title (its place kept, so the title never
+   reflows when it shows), the note under the lede at the full width. */
 .st-stg-section__head {
   display: grid;
-  justify-self: start;
-  gap: var(--st-space-1);
-  max-width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--st-space-1) var(--st-space-3);
+  min-width: 0;
+}
+.st-stg-section__head > :not(.st-stg-section__title, .st-stg-section__bar) {
+  grid-column: 1 / -1;
+}
+.st-stg-section__bar,
+.st-stg-section__bar > .st-stg-bar {
+  display: contents;
+}
+.st-stg-section__bar .st-stg-small {
+  grid-column: 1 / -1;
+  margin-top: var(--st-space-2);
+}
+.st-stg-section__bar .st-stg-saved {
+  grid-row: 1;
+  grid-column: 2;
 }
 .st-stg-section__title {
   margin: 0;
@@ -200,13 +205,18 @@
   gap: var(--st-gap);
   min-width: 0;
 }
+/* A section's bar on its own (no head to sit in): the note and the Saved mark side by side. The mark keeps its place
+   (empty until a save), so nothing jumps when "Saved" shows. */
 .st-stg-bar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: var(--st-space-2) var(--st-space-4);
   min-height: 32px;
+}
+.st-stg-bar > .st-stg-saved {
+  justify-content: center;
+  min-width: 6em;
 }
 
 /* ---------- Cards: a smoky glass pane each (.st-glass draws the veil, the edge, the sheen and the glow) ---------- */
@@ -614,7 +624,8 @@
   border-radius: var(--st-r-control);
 }
 
-/* ---------- Switches: orange with a white knob when on, a deep well when off; the word stays beside the knob ---------- */
+/* ---------- Switches: the shared orange toggle (.st-toggle: a 48 × 28 track, the white knob; a deep well when off),
+   with its On or Off word beside the track inside the same target ---------- */
 
 .st-stg-switchrow {
   display: flex;
@@ -640,68 +651,38 @@
   overflow-wrap: anywhere;
 }
 .st-stg-switch {
-  position: relative;
   flex: none;
-  width: 76px;
-  height: 48px;
-  padding: 0;
+  gap: var(--st-space-2);
+  width: auto;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0 2px 0 var(--st-space-1);
   border-radius: var(--st-r-round);
-  background: var(--st-fill-well);
-  box-shadow: inset 0 2px 6px -2px rgb(var(--st-shadow-rgb) / 0.6);
-  transition:
-    background-color var(--st-dur-hover) var(--st-ease-out),
-    box-shadow var(--st-dur-hover) var(--st-ease-out);
+  color: var(--st-text-soft);
+  transition: color var(--st-dur-hover) var(--st-ease-out);
 }
 @media (min-width: 768px) {
   .st-stg-switch {
-    width: 72px;
-    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
   }
-}
-.st-stg-switch:hover {
-  background: var(--st-fill-well-hover);
 }
 .st-stg-switch[aria-checked="true"] {
-  background: var(--st-accent);
-  box-shadow: var(--st-glow-accent);
+  color: var(--st-text);
 }
-.st-stg-switch[aria-checked="true"]:hover {
-  background: var(--st-accent-hover);
+.st-stg-switch:hover {
+  color: var(--st-text-strong);
 }
-.st-stg-switch__thumb {
-  position: absolute;
-  top: 5px;
-  left: 5px;
-  width: 38px;
-  height: 38px;
-  border-radius: var(--st-r-round);
-  background: var(--st-knob);
-  box-shadow: var(--st-depth-1);
-  transition: transform var(--st-dur-glide) var(--st-ease-glide);
-}
-@media (min-width: 768px) {
-  .st-stg-switch__thumb {
-    width: 34px;
-    height: 34px;
-  }
-}
-.st-stg-switch[aria-checked="true"] .st-stg-switch__thumb {
-  transform: translateX(28px);
+.st-stg-switch .st-toggle__track {
+  flex: none;
+  width: var(--st-toggle-w);
 }
 .st-stg-switch__word {
-  position: absolute;
-  top: 50%;
-  right: 10px;
-  transform: translateY(-50%);
-  color: var(--st-text);
+  min-width: 3ch;
   font-size: var(--st-fs-caps);
   font-weight: var(--st-weight-ui);
   line-height: 1;
-}
-.st-stg-switch[aria-checked="true"] .st-stg-switch__word {
-  right: auto;
-  left: 10px;
-  color: var(--st-on-accent);
+  text-align: right;
 }
 
 /* ---------- Fields: deep wells on the glass ---------- */
@@ -804,7 +785,8 @@
   margin: 0;
   padding: 10px 14px;
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.32);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
   color: var(--st-text);
   overflow-wrap: anywhere;
 }
@@ -832,7 +814,7 @@
     opacity var(--st-dur-hover) var(--st-ease-out),
     transform var(--st-dur-enter) var(--st-ease-spring);
 }
-/* It sits loose in the bar under the section head: the mint over a well, so it reads over the brightest stage. */
+/* It sits in the section head's plate (loose over Ember): the mint over a well, so it reads over the brightest stage. */
 .st-stg-saved.is-on,
 .st-stg-saved.is-busy {
   opacity: 1;
@@ -841,7 +823,7 @@
 }
 .st-stg-saved.is-busy {
   color: var(--st-text-soft);
-  background: var(--st-stg-loose);
+  background: var(--st-fill-well);
 }
 .st-stg-progress {
   position: relative;
@@ -880,7 +862,7 @@
   width: 100%;
 }
 
-/* ---------- Each agent and task: rows on a deeper fill, a table from 1100 px ---------- */
+/* ---------- Each agent and task: rows one glass step up, a table from 1100 px ---------- */
 
 .st-stg-assign {
   display: grid;
@@ -898,11 +880,13 @@
   min-width: 0;
   padding: var(--st-space-3);
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.28);
-  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  transition: box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
+/* A row is read, not pressed: under the mouse it only gains the soft lift (its fill, and so its words, stay). */
 .st-stg-assign__row:hover {
-  background: rgb(var(--st-well-rgb) / 0.4);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
 }
 @media (min-width: 1100px) {
   .st-stg-assign__cols {
@@ -970,7 +954,7 @@
   font-size: var(--st-fs-small);
 }
 
-/* ---------- Usage, prices and providers: rows on a deeper fill, big light numerals for the totals ---------- */
+/* ---------- Usage, prices and providers: rows one glass step up, big light numerals for the totals ---------- */
 
 .st-stg-total {
   display: flex;
@@ -1010,7 +994,7 @@
   gap: var(--st-space-1) 10px;
   padding: 10px var(--st-space-3);
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.26);
+  background: var(--st-fill-control);
 }
 .st-stg-usage__name {
   color: var(--st-text);
@@ -1081,8 +1065,8 @@
   height: 130px;
   padding: 10px var(--st-space-2) 0;
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.3);
-  box-shadow: inset 0 2px 8px -4px rgb(var(--st-shadow-rgb) / 0.5);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
 }
 .st-stg-chart__day {
   display: flex;
@@ -1131,7 +1115,7 @@
   gap: 2px;
   padding: var(--st-space-2) var(--st-space-3);
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.24);
+  background: var(--st-fill-control);
 }
 .st-stg-days__date {
   color: var(--st-text);
@@ -1162,7 +1146,7 @@
   min-width: 0;
   padding: var(--st-space-3);
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.28);
+  background: var(--st-fill-control);
 }
 .st-stg-price__head,
 .st-stg-provider__head,
@@ -1261,11 +1245,12 @@
   gap: var(--st-space-2) var(--st-space-3);
   padding: 10px var(--st-space-3);
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.28);
-  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  transition: box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 .st-stg-skilllist__row:hover {
-  background: rgb(var(--st-well-rgb) / 0.4);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
 }
 .st-stg-skilllist__n {
   display: grid;
@@ -1336,14 +1321,13 @@
   min-width: 0;
   padding: 14px;
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.28);
-  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  transition: box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
-.st-stg-skill:hover {
-  background: rgb(var(--st-well-rgb) / 0.38);
-}
+.st-stg-skill:hover,
 .st-stg-skill.is-open {
-  background: rgb(var(--st-well-rgb) / 0.42);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
 }
 .st-stg-skill__foot {
   display: flex;
@@ -1415,18 +1399,22 @@
   padding: 0;
   list-style: none;
 }
+/* Each version: a row (control 14) whose "Bring back" button hugs its right end 4 px in, so it is inner 10. */
 .st-stg-versions__row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 6px 10px;
-  padding: 6px 6px 6px var(--st-space-3);
+  gap: var(--st-gap-control) 10px;
+  padding: var(--st-gap-control) var(--st-gap-control) var(--st-gap-control) var(--st-space-3);
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.24);
+  background: var(--st-fill-control);
   color: var(--st-text);
   font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
+}
+.st-stg-versions__row .st-stg-btn {
+  border-radius: var(--st-r-inner);
 }
 
 /* ---------- Memory ---------- */
@@ -1455,11 +1443,12 @@
   min-width: 0;
   padding: var(--st-space-3) 14px;
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.28);
-  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  transition: box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 .st-stg-mem:hover {
-  background: rgb(var(--st-well-rgb) / 0.38);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
 }
 .st-stg-mem__text {
   margin: 0;
@@ -1496,7 +1485,7 @@
   gap: 2px;
   padding: var(--st-space-2) var(--st-space-3);
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.26);
+  background: var(--st-fill-control);
 }
 .st-stg-facts dt {
   color: var(--st-text-amber);
@@ -1542,7 +1531,8 @@
   align-items: center;
   gap: var(--st-space-3);
 }
-/* − and +: the white rounded-square steppers (.st-stepper__btn from the figures); a small press here. */
+/* − and +: the white rounded-square steppers (.st-stepper__btn from the figures, whose hover is the brighter cream
+   and a deeper shadow); a press only scales, so nothing travels with calm motion. */
 .st-stg-round {
   flex: none;
   transition:
@@ -1551,10 +1541,10 @@
     transform var(--st-dur-tap) var(--st-ease-out);
 }
 .st-stg-round:hover {
-  transform: translateY(-1px);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-2);
 }
 .st-stg-round:active {
-  transform: translateY(1px) scale(0.96);
+  transform: scale(0.96);
 }
 .st-stg-round[aria-disabled="true"],
 .st-stg-round[aria-disabled="true"]:hover {
@@ -1820,7 +1810,7 @@
 .st-stg-modelform {
   padding: 14px;
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.26);
+  background: var(--st-fill-control);
 }
 .st-stg-owns {
   display: grid;
@@ -1835,7 +1825,7 @@
   min-width: 0;
   padding: var(--st-space-3);
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.28);
+  background: var(--st-fill-control);
 }
 .st-stg-own .st-stg-modelform {
   padding: 0;
@@ -1862,8 +1852,26 @@
   gap: 6px;
   margin-left: auto;
 }
+/* "Technical details" (the shared StTech fold): on Stories' radius scale and the glass step of a row. On a card it is
+   a row of its own (control 14); inside a row (a fact, a model's row, the add-a-model form) it adds no fill and
+   lines up with the row's words. Its summary lights to the strong cream under the mouse (never orange words). */
 .st-stg-tech {
   margin-top: 2px;
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+}
+:is(.st-stg-facts > div, .st-stg-own, .st-stg-modelform) .st-stg-tech {
+  padding: 0;
+  border-radius: var(--st-r-inner);
+  background: transparent;
+}
+.st-stg-tech > .st-tech-fold__sum {
+  border-radius: var(--st-r-inner);
+  color: var(--st-text-soft);
+}
+.st-stg-tech > .st-tech-fold__sum:hover,
+.st-stg-tech[open] > .st-tech-fold__sum {
+  color: var(--st-text-strong);
 }
 .st-stg-code {
   color: var(--st-sky-ink);

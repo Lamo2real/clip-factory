@@ -1,5 +1,5 @@
 /* ---------- Round 4 (CONTRACTS §45.35 D2): Settings › Video › Nova Reel's own row, with Try it ----------
-   A row on a deeper fill inside its glass card (control 14), on the liquid-glass contract's tokens. */
+   A row one glass step up inside its glass card (control 14), on the liquid-glass contract's tokens. */
 .st-stg-try {
   display: grid;
   gap: var(--st-space-2);
@@ -7,7 +7,7 @@
   margin-top: var(--st-space-1);
   padding: var(--st-space-3);
   border-radius: var(--st-r-control);
-  background: rgb(var(--st-well-rgb) / 0.28);
+  background: var(--st-fill-control);
 }
 .st-stg-try__head {
   display: flex;
