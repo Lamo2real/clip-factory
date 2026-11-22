@@ -120,6 +120,10 @@ export function MoneyBranch() {
       <Panel>
         <Apple id="money-payouts" wide>
           <Payouts />
+          {/* §40.8 change 4: the steps for each app are in Get paid. */}
+          <LinkButton href="/settings/posting/getpaid" icon="coin" iconAfter="chevronRight" data-money="getpaid">
+            Open Get paid
+          </LinkButton>
         </Apple>
       </Panel>
     </>

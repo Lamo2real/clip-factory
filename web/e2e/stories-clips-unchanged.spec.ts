@@ -58,10 +58,16 @@ async function open(browser: Browser, size: (typeof SIZES)[number], on: boolean,
   return page;
 }
 
-/** Waits for the late arrivals that change the shell (the live dot, the jobs line) so both runs compare the same page. */
+/** Waits for the late arrivals that change the shell (the live dot, the jobs line) so both runs compare the same page,
+ * then stops every animation and transition: the live dot pulses (a scale), and a box read in the middle of a pulse
+ * would differ between two otherwise identical pages. Only this test's page is frozen; the app is not changed. */
 async function steady(page: Page, phone: boolean) {
   await page.locator(phone ? ".topbar .live-dot" : ".sidebar__live .live-dot").waitFor({ timeout: 10_000 }).catch(() => undefined);
   await page.waitForTimeout(400);
+  await page.addStyleTag({
+    content: "*, *::before, *::after { animation: none !important; transition: none !important; }",
+  });
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(null)))));
 }
 
 async function layout(page: Page): Promise<Layout> {

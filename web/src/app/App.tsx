@@ -9,6 +9,7 @@ import { navigate, useHash, useRoute, type Route } from "../lib/router.ts";
 import { findBranch, findTree, legacySettingsRedirect } from "../lib/settingsTree.ts";
 import { forgetLoaded } from "../lib/hooks.ts";
 import { resetCr } from "../lib/contentRewards.ts";
+import { resetGetPaid } from "../lib/getPaid.ts";
 import { resetFinder } from "../lib/finder.ts";
 import { sounds } from "../lib/sounds.ts";
 import { Backdrop, GlassFilter } from "../components/Backdrop.tsx";
@@ -74,6 +75,7 @@ const TITLES: Record<Route["name"], string> = {
   mock_oauth: "Pretend sign-in",
   mock_cr_consent: "Pretend Content Rewards",
   cr_setup: "Content Rewards setup · Settings",
+  getpaid: "Get paid · Settings",
   campaigns: "Your campaigns",
   campaigns_find: "Find campaigns",
   campaign: "Campaign",
@@ -85,6 +87,7 @@ const TITLES: Record<Route["name"], string> = {
 /** The tab title: deeper Settings pages name where you are ("Sounds · Settings"). */
 export function titleFor(route: Route): string {
   if (route.name === "settings" && route.platform) return `${GUIDES[route.platform].name} setup · Settings`;
+  if (route.name === "getpaid") return `${route.place === "contentrewards" ? "Content Rewards" : GUIDES[route.place].name} · Get paid · Settings`;
   if (route.name === "settings" && route.tree) {
     const tree = findTree(route.tree);
     const branch = tree && route.branch ? findBranch(tree, route.branch) : undefined;
@@ -121,6 +124,7 @@ export function App() {
       onSignedOut(() => {
         forgetLoaded();
         resetCr();
+        resetGetPaid();
         resetFinder();
         setBoot({ state: "signed_out", note: "Your sign-in on this device has ended. Please sign in again." });
       }),
@@ -136,6 +140,7 @@ export function App() {
     await auth().signOut();
     forgetLoaded();
     resetCr();
+    resetGetPaid();
     resetFinder();
     setBoot({ state: "signed_out", note: null });
   }, []);
@@ -266,6 +271,8 @@ function Screen({ route }: { route: Route }) {
       return <Settings tree={route.tree} branch={route.branch} platform={route.platform ?? null} />;
     case "cr_setup":
       return <Settings tree="posting" branch="setup" contentRewards />;
+    case "getpaid":
+      return <Settings tree="posting" branch="getpaid" getPaid={route.place} />;
     case "campaigns":
       return <CampaignsPage />;
     case "campaigns_find":

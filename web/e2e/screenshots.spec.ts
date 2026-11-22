@@ -758,3 +758,44 @@ for (const size of [
     });
   });
 }
+
+// Get paid (docs/CONTRACTS.md §40.8): the list, YouTube's and Content Rewards' pages, and the Get paid card on Money,
+// at 375 and 1440 px, for the pretend owner (YouTube paid twice, Instagram's Gifts on, Content Rewards linked).
+for (const size of [
+  { name: "phone", width: 375, height: 812, scale: 2, touch: true },
+  { name: "desktop", width: 1440, height: 900, scale: 1, touch: false },
+]) {
+  test.describe(`get paid ${size.name} ${size.width}x${size.height}`, () => {
+    test.use({
+      viewport: { width: size.width, height: size.height },
+      deviceScaleFactor: size.scale,
+      hasTouch: size.touch,
+      isMobile: size.touch,
+      ...(size.touch ? { userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1" } : {}),
+    });
+    const suffix = `-${size.width}x${size.height}`;
+    test("screenshot get paid", async ({ page }) => {
+      await page.goto("/");
+      await settle(page);
+      await page.waitForFunction(() => !!(window as unknown as { __cfMock?: { getpaid?: unknown } }).__cfMock?.getpaid);
+      await page.evaluate(() => {
+        const m = (window as unknown as { __cfMock: { getpaid: { scenario(n: string): void; whop(on: boolean): void } } }).__cfMock;
+        m.getpaid.scenario("owner");
+        m.getpaid.whop(true);
+        sessionStorage.setItem("cf-mock-money", JSON.stringify({ scenario: "dash_many", country: "SE", seen: [] }));
+      });
+      for (const [name, path] of [
+        ["getpaid-list", "/settings/posting/getpaid"],
+        ["getpaid-youtube", "/settings/posting/getpaid/youtube"],
+        ["getpaid-contentrewards", "/settings/posting/getpaid/contentrewards"],
+        ["money-getpaid", "/money"],
+      ] as const) {
+        await page.goto(path);
+        await settle(page);
+        if (name === "money-getpaid") await page.locator(".gp-money").evaluate((el) => el.scrollIntoView({ block: "start" }));
+        await page.waitForTimeout(500);
+        await page.screenshot({ path: join(dir, `${name}${suffix}.png`) });
+      }
+    });
+  });
+}

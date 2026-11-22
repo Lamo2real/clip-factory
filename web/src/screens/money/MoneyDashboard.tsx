@@ -8,6 +8,7 @@
 // floats over a clip's money or the sort bar).
 import { CrMoneyPart } from "./CrMoneyPart.tsx";
 import { AllMoney, APPS_ONLY, crRowOf, useMoneyEverywhere } from "./AllMoney.tsx";
+import { GetPaidCard } from "./GetPaidCard.tsx";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { api, friendlyMessage } from "../../api/index.ts";
 import type { MoneyChange, MoneyCurrencySummary, MoneyExcluded, MoneySummary, MoneyView, Platform } from "../../api/types.ts";
@@ -531,6 +532,8 @@ export function MoneyDashboard() {
 
       {/* All your money comes first (§39.2): the apps and days below change only the cards under them. */}
       <AllMoney load={everywhereLoad} />
+      {/* Get paid (§40.1 item 3): can money reach you from each place? Status only; before the Apps band. */}
+      <GetPaidCard />
 
       {/* Everything the apps and days change, with their controls first. Its own box only on phones beside All your
           money (the dock's sticky box: it can never leave the cards); elsewhere it draws no box at all. */}

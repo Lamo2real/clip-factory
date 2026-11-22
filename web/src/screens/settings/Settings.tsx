@@ -21,7 +21,10 @@ import {
   type SearchHit,
   type Tree,
 } from "../../lib/settingsTree.ts";
-import type { Platform } from "../../api/types.ts";
+import type { GetPaidPlace, Platform } from "../../api/types.ts";
+import { placeName } from "../../getpaid/index.ts";
+import { GetPaidList } from "../getpaid/GetPaidList.tsx";
+import { GetPaidPage } from "../getpaid/GetPaidPage.tsx";
 import { GUIDES } from "../../setup/index.ts";
 import {
   AccountBranch,
@@ -57,6 +60,7 @@ const BRANCHES: Record<string, () => ReactNode> = {
   "clip-making/streamers": () => <FollowBranch />,
   "clip-making/youtube": () => <YoutubeBranch />,
   "posting/setup": () => <SetupList />,
+  "posting/getpaid": () => <GetPaidList />,
   "posting/where": () => <WhereBranch />,
   "posting/my-settings": () => <MySettingsBranch />,
   "posting/money": () => <MoneyBranch />,
@@ -79,6 +83,7 @@ export function Settings({
   skill = null,
   platform = null,
   contentRewards = false,
+  getPaid = null,
 }: {
   tree?: string | null;
   branch?: string | null;
@@ -88,6 +93,8 @@ export function Settings({
   platform?: Platform | null;
   /** Posting › Set up posting › Content Rewards (§38.3): its own page, not a sixth platform. */
   contentRewards?: boolean;
+  /** Posting › Get paid › one place's page (§40.1 item 2). */
+  getPaid?: GetPaidPlace | null;
 }) {
   const { installed } = useInstall();
   const trees = useMemo(() => visibleTrees(installed), [installed]);
@@ -105,6 +112,11 @@ export function Settings({
         <div className="settings-content">
           {skill && tree && branch ? (
             <SkillScreen tree={tree} branch={branch} mode={skill.mode} skillId={skill.skillId} />
+          ) : tree && branch && getPaid ? (
+            <>
+              <Trail tree={tree} branch={branch} extra={[{ name: placeName(getPaid) }]} />
+              <GetPaidPage key={getPaid} place={getPaid} />
+            </>
           ) : tree && branch && contentRewards ? (
             <>
               <Trail tree={tree} branch={branch} extra={[{ name: "Content Rewards" }]} />

@@ -13,11 +13,11 @@ import { BRANCH_ROUTES } from "../src/screens/settings/Settings.tsx";
 import { titleFor } from "../src/app/App.tsx";
 
 describe("the settings tree", () => {
-  it("has the four trees and seventeen branches of §15.1, §16.12, §21, §24, §28, §32 and §36, in order", () => {
+  it("has the four trees and eighteen branches of §15.1, §16.12, §21, §24, §28, §32, §36 and §40, in order", () => {
     expect(TREES.map((t) => t.slug)).toEqual(["clip-making", "posting", "look-and-feel", "app"]);
     expect(TREES.map((t) => t.branches.map((b) => b.slug))).toEqual([
       ["clips", "skills", "learned", "streamers", "youtube"],
-      ["setup", "where", "my-settings", "money"],
+      ["setup", "getpaid", "where", "my-settings", "money"],
       ["sounds", "motion", "background"],
       ["get-the-app", "notifications", "updates", "ask", "account"],
     ]);
@@ -32,6 +32,7 @@ describe("the settings tree", () => {
       "notify-resumed",
       "notify-steps",
       "notify-contentrewards",
+      "notify-getpaid",
       "notify-badge",
       "notify-lock-screen",
       "notify-test",
@@ -146,6 +147,33 @@ describe("old links", () => {
     const tiktok = searchSettings("tiktok").map((h) => h.href);
     expect(tiktok).toContain("/settings/posting/money#money-tiktok");
     expect(tiktok).toContain("/settings/posting/setup#setup-posting");
+  });
+
+  it("§40: Posting › Get paid has its apple, and Money's payouts apple links there", () => {
+    const posting = TREES.find((t) => t.slug === "posting")!;
+    const gp = posting.branches.find((b) => b.slug === "getpaid")!;
+    expect(gp.name).toBe("Get paid");
+    expect(gp.line).toBe("Set up how each app pays you. See if money can reach you.");
+    expect(gp.icon).toBe("coin");
+    expect(gp.apples.map((a) => [a.id, a.name, a.leaf])).toEqual([["getpaid", "Get paid", "One card per place. Do the steps once so money can reach you."]]);
+    for (const w of ["get paid", "payout", "payouts", "bank", "bank account", "paypal", "stripe", "adsense", "whop", "tax", "money on hold", "withdraw", "cash out"]) expect(gp.apples[0]!.words).toContain(w);
+    const payouts = findApple("money-payouts")!.apple;
+    expect(payouts.leaf).toBe("Each app pays you itself. Get paid shows the steps for each one.");
+    expect(payouts.href).toBe("/settings/posting/getpaid");
+    expect(searchSettings("cash out").map((h) => h.href)).toContain("/settings/posting/getpaid#getpaid");
+    expect(match("/settings/posting/getpaid")).toEqual({ name: "settings", tree: "posting", branch: "getpaid" });
+    expect(titleFor({ name: "settings", tree: "posting", branch: "getpaid" })).toBe("Get paid · Settings");
+  });
+
+  it("§40: route each Get paid place page, and nothing else under it", () => {
+    for (const place of ["youtube", "tiktok", "instagram", "facebook", "x", "contentrewards"] as const) {
+      expect(match(`/settings/posting/getpaid/${place}`)).toEqual({ name: "getpaid", place });
+      expect(match(`/settings/posting/getpaid/${place}/`)).toEqual({ name: "getpaid", place });
+    }
+    expect(match("/settings/posting/getpaid/myspace")).toEqual({ name: "not_found" });
+    expect(match("/settings/posting/getpaid/youtube/x")).toEqual({ name: "not_found" });
+    expect(titleFor({ name: "getpaid", place: "youtube" })).toBe("YouTube · Get paid · Settings");
+    expect(titleFor({ name: "getpaid", place: "contentrewards" })).toBe("Content Rewards · Get paid · Settings");
   });
 
   it("route each platform's setup page, and nothing else under it", () => {

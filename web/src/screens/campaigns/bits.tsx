@@ -181,6 +181,7 @@ export function CrStepCard({
   children,
   copies,
   lead,
+  who,
 }: {
   step: CrStep;
   /** null: an unnumbered card ("Content Rewards said no?"). */
@@ -200,6 +201,8 @@ export function CrStepCard({
   copies?: { label: string; value: string | null }[];
   /** The `lead` with live words ("Already added YouTube and Instagram there? Tap I added them."). */
   lead?: string;
+  /** A done step's "who said so" line on its folded row (Get paid, §40.1: "You said it's done"). */
+  who?: string;
 }) {
   const bodyId = `step-${step.id}-body`;
   const manual = step.manual !== false;
@@ -298,7 +301,7 @@ export function CrStepCard({
         <span className="gstep__title">
           {number !== null ? <span className="sr-only">Step {number}: </span> : null}
           <Rich text={step.title} />
-          {done ? <span className="sr-only"> (done)</span> : null}
+          {done && who ? <span className="gp-step__who">{who}</span> : done ? <span className="sr-only"> (done)</span> : null}
         </span>
         <Icon name="chevronRight" size={20} className="icon gstep__chev act-turn" />
       </button>
