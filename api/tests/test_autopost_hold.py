@@ -191,7 +191,16 @@ def test_a_hold_after_the_run_planned_skips_the_clip(
     crashed_run(app, monkeypatch)
     assert hold(call, clip["clipId"])[0] == 200  # Throw away between the plan and the send
     clock.now = SLOT + timedelta(seconds=7)
+    real = posts.create_for_clip
+    writes: list[str] = []
+
+    def counted(*args: Any, **kwargs: Any) -> Any:
+        writes.append("x")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(posts, "create_for_clip", counted)
     assert tick(app).result == "ran"  # the retry resumes the plan
+    assert writes == []  # it sees the hold and never even tries
     assert outcomes(store) == [(clip["clipId"], "skipped", THROWN_AWAY)]
     assert (clip_of(store, clip["clipId"])["status"], post_count(table, clip["clipId"])) == ("review", 0)
     assert "autoRun" not in clip_of(store, clip["clipId"])
