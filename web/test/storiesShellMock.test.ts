@@ -276,13 +276,17 @@ describe("the onboarding (§45.29)", () => {
   it("the AI stand-ins refuse an effort a model does not offer, and Check models really runs as a task", async () => {
     const { ai, models } = await api.getAi("stories");
     expect(models.map((m) => m.key)).toContain("opus-5-5");
-    expect(models.every((m) => m.status === "not_checked")).toBe(true);
+    // Builder F2's seed keeps each model's last call (§45.25), so some start checked; the rest are not checked yet.
+    const unchecked = models.filter((m) => m.status === "not_checked").map((m) => m.key);
+    expect(unchecked.length).toBeGreaterThan(0);
     await expect(api.putAi("stories", { ...ai, defaultModel: "gpt-9" })).rejects.toMatchObject({ field: "defaultModel" });
     await expect(api.putAi("stories", { ...ai, version: ai.version + 5 })).rejects.toMatchObject({ code: "conflict" });
     store.knobs.modelDenied = "fable-5-1";
     const task = await api.checkModels("stories");
     await vi.waitFor(async () => expect((await api.getTask("stories", task.taskId)).status).toBe("done"), { timeout: 3000 });
     const checked = (await api.getAi("stories")).models;
+    expect(checked.filter((m) => m.status === "not_checked")).toEqual([]);
+    for (const k of unchecked) expect(checked.find((m) => m.key === k)?.status).toBe(k === "fable-5-1" ? "denied" : "ok");
     expect(checked.find((m) => m.key === "fable-5-1")?.status).toBe("denied");
     expect(checked.find((m) => m.key === "opus-5-5")?.status).toBe("ok");
   });
