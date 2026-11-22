@@ -12,7 +12,8 @@ The diagram is [architecture/aws-architecture.drawio](architecture/aws-architect
 [§18](CONTRACTS.md#18-skills-full-create-read-update-delete-every-ai-call-uses-every-skill-owner-request-2026-11-16) (skills, and every AI call using every skill)
 and [§19](CONTRACTS.md#19-ask-clip-factory-grounded-in-app-help-assistant-owner-request-2026-11-16) (Ask Clip Factory, the help assistant),
 and [§38](CONTRACTS.md#38-content-rewards-campaigns-owner-request-2026-11-21) (Content Rewards campaigns)
-with [§39](CONTRACTS.md#39-content-rewards-the-two-ways-all-your-money-and-does-this-clip-fit-owner-request-2026-11-21) (the two ways, all your money and the fit check);
+with [§39](CONTRACTS.md#39-content-rewards-the-two-ways-all-your-money-and-does-this-clip-fit-owner-request-2026-11-21) (the two ways, all your money and the fit check)
+and [§41](CONTRACTS.md#41-campaign-finder-campaigns-that-match-what-you-want-owner-request-2026-11-21) (the campaign finder);
 this document explains how the pieces work together and why.
 
 ![Clip Factory Cloud on AWS](architecture/aws-architecture.png)
@@ -76,13 +77,15 @@ flowchart LR
   lapi -- "13 register, exchange the code, refresh, revoke" --> crid
   lapi -- "13 Connect, Check now, Try sending again" --> crmcp["mcp.contentrewards.com/mcp: MCP, never an Origin header"]
   lapi -- "13 public campaign JSON, only when the owner acts" --> crpub["contentrewards.com public campaign JSON"]
-  lapi -- "13 read the rules, fetch the logo: async" --> camp["Lambda cf-prod-campaigns: no secrets, no CR call"]
+  lapi -- "13 read the rules, fetch the logo: async" --> camp["Lambda cf-prod-campaigns: no secrets, never CR's API"]
   camp -- "13 rules from the brief" --> bedrock
   camp -- "13 CAMPAIGN# rules, logo state" --> ddb
   camp -- "13 campaigns/*" --> media
   lapi -- "13 the CR token" --> sm
   clf -- "13 cr-send: create_my_submission within 25 minutes" --> crmcp
   st -- "13 tick: membership, reviews, views, money" --> crmcp
+  st -- "13 finder look every 6 hours: async" --> camp
+  camp -- "13 finder: robots.txt, sitemap.xml, campaign pages, 40 a look" --> crpages["contentrewards.com public campaign pages, anonymous"]
   classDef off stroke-dasharray: 5 5
 ```
 
@@ -101,10 +104,10 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 | Amazon API Gateway, HTTP API | `/v1` routes | The app's API. Cheapest type, with a built-in JWT authorizer. CORS for the app and `localhost:5173`; a public `OPTIONS /v1/{proxy+}` route lets CORS answer the browser's preflight before the JWT authorizer. |
 | Amazon API Gateway, WebSocket API | `cf-prod-ws`, stage `live` | Pushes job, clip, post and learning changes to open apps, so screens update without waiting for a poll. See [ADR-23](DECISIONS.md#adr-23-live-updates-over-a-websocket-api-polling-only-as-the-fallback). |
 | Amazon API Gateway, REST API | `cf-prod-hooks`, stage `v1` | The one public, unauthenticated surface: platform webhooks and the OAuth callback that finishes Connect, with per-method throttling, a usage plan, request validation and X-Ray. See [ADR-24](DECISIONS.md#adr-24-a-separate-rest-api-for-public-platform-webhooks). |
-| AWS Lambda | `cf-prod-api` | Every `/v1` route: validation, DynamoDB, presigned URLs, skills (write, upload, read, change, delete), starting the two durable flows, cancel, Keep and Throw away, similar clips, a clip's performance, Refresh numbers (claims the posts, then invokes `cf-prod-stats`), the weeks and their picks (invokes `cf-prod-learn`), the posting setup (keys to Secrets Manager, Check it, Connect start, choose, disconnect, TikTok's verification file to the web bucket), and Ask Clip Factory ([flow 17](#17-ask-clip-factory-the-help-assistant): search, compose, the optional Haiku rewrite; the help code loads only on its two routes), and Content Rewards under `/v1/contentrewards` ([flow 19](#19-content-rewards-campaigns-contracts-38-adr-62): register, Connect finish, Check it, campaigns and their Check now, the logo, Try sending again, money refresh; [flow 20](#20-content-rewards-the-fit-check-the-copy-and-all-your-money-contracts-39-adr-63): the fit check, its captions fix and the campaign copy), and All your money (`GET /v1/money/everywhere`). |
-| AWS Lambda | `cf-prod-stats` | The numbers poller ([flow 13](#13-clip-numbers-the-poller-and-refresh-numbers)): every tick it reads the posts that are due from the sparse `gsi2`, reserves each platform's budget, reads the numbers in batches and writes them to the posts and `STAT#` snapshots. The Refresh button runs the same code at once. After the platform poll, the same tick checks Content Rewards when it is switched on (membership, reviews, views, proof reminders and money, [flow 19](#19-content-rewards-campaigns-contracts-38-adr-62)); `{"action": "contentrewards"}` runs that for one owner. Reads `cf-prod/platforms/*`, writes only a refreshed token (`cf-prod/platforms/*/token-*`). See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
+| AWS Lambda | `cf-prod-api` | Every `/v1` route: validation, DynamoDB, presigned URLs, skills (write, upload, read, change, delete), starting the two durable flows, cancel, Keep and Throw away, similar clips, a clip's performance, Refresh numbers (claims the posts, then invokes `cf-prod-stats`), the weeks and their picks (invokes `cf-prod-learn`), the posting setup (keys to Secrets Manager, Check it, Connect start, choose, disconnect, TikTok's verification file to the web bucket), and Ask Clip Factory ([flow 17](#17-ask-clip-factory-the-help-assistant): search, compose, the optional Haiku rewrite; the help code loads only on its two routes), and Content Rewards under `/v1/contentrewards` ([flow 19](#19-content-rewards-campaigns-contracts-38-adr-62): register, Connect finish, Check it, campaigns and their Check now, the logo, Try sending again, money refresh; [flow 20](#20-content-rewards-the-fit-check-the-copy-and-all-your-money-contracts-39-adr-63): the fit check, its captions fix and the campaign copy; [flow 22](#22-campaign-finder-contracts-41-adr-65): the campaign finder's seven routes under `/v1/contentrewards/finder`, which read only stored items and start a look), and All your money (`GET /v1/money/everywhere`). |
+| AWS Lambda | `cf-prod-stats` | The numbers poller ([flow 13](#13-clip-numbers-the-poller-and-refresh-numbers)): every tick it reads the posts that are due from the sparse `gsi2`, reserves each platform's budget, reads the numbers in batches and writes them to the posts and `STAT#` snapshots. The Refresh button runs the same code at once. After the platform poll, the same tick checks Content Rewards when it is switched on (membership, reviews, views, proof reminders and money, [flow 19](#19-content-rewards-campaigns-contracts-38-adr-62)); `{"action": "contentrewards"}` runs that for one owner. While the campaign finder is on, the same tick starts its look in `cf-prod-campaigns` every 6 hours ([flow 22](#22-campaign-finder-contracts-41-adr-65)). Reads `cf-prod/platforms/*`, writes only a refreshed token (`cf-prod/platforms/*/token-*`). See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
 | AWS Lambda | `cf-prod-learn` | The weekly best ([flow 14](#14-best-of-the-week)): marks the starred clips' vectors `best`, asks Claude Fable 5.1 (with the skills block) for one "Best of week" learning. See [ADR-31](DECISIONS.md#adr-31-the-weekly-best-is-an-explicit-owner-signal). |
-| AWS Lambda | `cf-prod-campaigns` | Content Rewards ([flow 19](#19-content-rewards-campaigns-contracts-38-adr-62), [CONTRACTS.md §38.10](CONTRACTS.md#3810-reading-a-campaign)): reads a campaign's rules from the brand's brief with Claude (one Bedrock Converse call per read, checked field by field in code), fetches the campaign logo from a Google Drive or Dropbox link and copies the brand's picture into the media bucket (`campaigns/*`). Started only by `cf-prod-api` and `cf-prod-stats` (async). It reads untrusted brand text and outside links, so it has **no Secrets Manager access at all** and never calls Content Rewards; the brief is already on the `CAMPAIGN#` item. See [ADR-62](DECISIONS.md#adr-62-content-rewards-the-official-sign-in-through-the-desktop-apps-loopback-door-sending-from-the-cloud-a-reminder-when-it-cant). |
+| AWS Lambda | `cf-prod-campaigns` | Content Rewards ([flow 19](#19-content-rewards-campaigns-contracts-38-adr-62), [CONTRACTS.md §38.10](CONTRACTS.md#3810-reading-a-campaign)): reads a campaign's rules from the brand's brief with Claude (one Bedrock Converse call per read, checked field by field in code), fetches the campaign logo from a Google Drive or Dropbox link and copies the brand's picture into the media bucket (`campaigns/*`). For the campaign finder ([flow 22](#22-campaign-finder-contracts-41-adr-65)) it also reads Content Rewards' **public** campaign pages that robots.txt allows (`/robots.txt`, `/sitemap.xml`, `/c/campaigns/{uuid}`), anonymously and politely, into a shared cache, and matches each owner's wants. Started only by `cf-prod-api` and `cf-prod-stats` (async). It reads untrusted brand text and outside pages, so it has **no Secrets Manager access at all** and **never calls Content Rewards' API** (no MCP call and no `/api/…` path); the brief is already on the `CAMPAIGN#` item. See [ADR-62](DECISIONS.md#adr-62-content-rewards-the-official-sign-in-through-the-desktop-apps-loopback-door-sending-from-the-cloud-a-reminder-when-it-cant) and [ADR-65](DECISIONS.md#adr-65-campaign-finder-content-rewards-public-pages-read-politely-joining-stays-the-owners-own-tap). |
 | AWS Lambda | `cf-prod-money` | Real earnings ([CONTRACTS.md §25](CONTRACTS.md#25-real-earnings-paid-programme-progress-and-platform-reported-money-owner-request-2026-11-18)): once a day reads each connected platform's account numbers and the money the platform itself reports (YouTube Analytics `estimatedRevenue` with the monetary scope; Facebook only after its live check), through the shared token manager and rate budgets, and writes `ACCTSTAT#`, `REVENUE#` and `MONEYSTATE#` items. No DeleteItem. See [ADR-47](DECISIONS.md#adr-47-only-platform-reported-money-the-estimates-are-removed). |
 | Amazon EventBridge | rule `cf-prod-stats`, `rate(15 minutes)` | The only schedule in the system: one tick for the stats poller, its rate taken from the smallest interval in `config/platforms.json`. A few thousand invocations a month. See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
 | AWS Lambda, durable function | `cf-prod-job-flow` (alias `live`) | Starts the agent for a job and waits (no compute) for its callback; fails the job if heartbeats stop. Replaces the watchdog. See [ADR-22](DECISIONS.md#adr-22-lambda-durable-functions-for-the-job-and-clip-workflows). |
@@ -113,7 +116,7 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 | AWS Lambda | `cf-prod-ws` | `$connect` stores the connection, `$disconnect` removes it, `$default` answers `ping`. |
 | AWS Lambda | `cf-prod-broadcast` | Reads the DynamoDB stream and sends each change to the owner's open connections. |
 | AWS Lambda | `cf-prod-hooks` | Answers webhook verification challenges, stores webhook events, and finishes Connect: checks the signed state, exchanges the code, stores the token in Secrets Manager, redirects to the setup page with a result code ([flow 16](#16-set-up-posting-connect-and-real-posting)). |
-| Amazon DynamoDB | `cf-prod-data` + stream | Single table for all entities including WebSocket connections, webhook events, stats snapshots (`STAT#`, 90-day TTL), the weekly picks (`WEEK#`), the per-platform rate budgets (`RATE#`) and the Content Rewards items (`CRCONN`, `CRSTATE#`, `CAMPAIGN#`, `CRSUB#`, `CRMONEY`, `CROWNERS`); a sparse `gsi2` holds only the posts due for a stats poll. On-demand, point-in-time recovery, TTL, stream `NEW_AND_OLD_IMAGES` feeding `cf-prod-broadcast`. See [ADR-05](DECISIONS.md#adr-05-one-dynamodb-table-single-table-design). |
+| Amazon DynamoDB | `cf-prod-data` + stream | Single table for all entities including WebSocket connections, webhook events, stats snapshots (`STAT#`, 90-day TTL), the weekly picks (`WEEK#`), the per-platform rate budgets (`RATE#`) and the Content Rewards items (`CRCONN`, `CRSTATE#`, `CAMPAIGN#`, `CRSUB#`, `CRMONEY`, `CROWNERS`, the finder's `CRFIND` and the shared public-page cache under pk `CRPUBLIC`, with TTL); a sparse `gsi2` holds only the posts due for a stats poll. On-demand, point-in-time recovery, TTL, stream `NEW_AND_OLD_IMAGES` feeding `cf-prod-broadcast`. See [ADR-05](DECISIONS.md#adr-05-one-dynamodb-table-single-table-design). |
 | AWS Systems Manager Parameter Store | `/cf-prod/hooks/verify-token` (SecureString) | The Meta webhook verify token. Generated by Terraform as a write-only value, so it never enters the Terraform state. |
 | AWS Secrets Manager | `cf-prod/oauth/state-key` (Terraform, write-only value), `cf-prod/platforms/{platform}/{app,token,pending}` and `cf-prod/platforms/contentrewards/{app,token}` (all created at runtime) | The only place for the owner's platform app keys and account tokens, and the key that signs the Connect `state` ([flow 16](#16-set-up-posting-connect-and-real-posting), [ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager)). `cf-prod-api` writes all of them; `cf-prod-hooks` reads the app keys and writes tokens and pending choices; `cf-prod-clip-flow`, `cf-prod-stats` and `cf-prod-money` read `cf-prod/platforms/*` and write only the token secrets `cf-prod/platforms/*/token-*` (Terraform output `platform_token_secrets_arn` of the hooks module). With the push key, the badge keys, Ask's search key and the optional YouTube proxy, at most about 22 secrets in all ([ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager)). |
 | Amazon Bedrock AgentCore Runtime | `cf_prod_clip_agent` | Runs the agent container for as long as a job needs, one isolated session per job. See [ADR-03](DECISIONS.md#adr-03-amazon-bedrock-agentcore-runtime--claude-agent-sdk-for-the-agent). |
@@ -126,7 +129,7 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 | Amazon SNS | `cf-prod-alarms` | Emails `alarm_email` when an alarm fires (optional). |
 | AWS IAM | GitHub OIDC deploy role, one role per function, the API Gateway logging role | No long-lived keys anywhere; each function can touch only what it needs. |
 | Amazon OpenSearch Serverless | not deployed | Shown dashed in the diagram as an option for keyword or hybrid search later ([ADR-25](DECISIONS.md#adr-25-s3-vectors-for-the-learning-memory-opensearch-not-deployed)). |
-| Content Rewards (not AWS) | `id.contentrewards.com` (sign-in), `mcp.contentrewards.com/mcp` (MCP, alpha, API version `2026-10-01`), the public campaign JSON on `contentrewards.com` | Paid clipping campaigns ([flow 19](#19-content-rewards-campaigns-contracts-38-adr-62)). Only `cf-prod-api`, `cf-prod-clip-flow` and `cf-prod-stats` call it; never the browser or the Mac. |
+| Content Rewards (not AWS) | `id.contentrewards.com` (sign-in), `mcp.contentrewards.com/mcp` (MCP, alpha, API version `2026-10-01`), the public campaign JSON on `contentrewards.com`, and its public campaign pages (`/robots.txt`, `/sitemap.xml`, `/c/campaigns/{uuid}`) | Paid clipping campaigns ([flow 19](#19-content-rewards-campaigns-contracts-38-adr-62)). Only `cf-prod-api`, `cf-prod-clip-flow` and `cf-prod-stats` call its sign-in, MCP and JSON; only `cf-prod-campaigns` reads its public campaign pages, for the finder ([flow 22](#22-campaign-finder-contracts-41-adr-65)); never the browser or the Mac. |
 | GitHub Actions (not AWS) | CI, deploy, desktop runners | Tests and deploys through OIDC; builds the desktop app on `macos-latest` and `windows-latest` ([§12.3](CONTRACTS.md#123-desktop-wrapper-desktop-tauri-v2)). |
 
 ### Lambda functions
@@ -146,7 +149,7 @@ All of them, `cf-prod-campaigns` too, share one zip (`api/dist/lambda.zip`), Pyt
 | `cf-prod-stats` | EventBridge rule `cf-prod-stats` (every 15 min) and `cf-prod-api` (async: Refresh numbers; `{"action": "contentrewards"}` on Connect finish and money refresh) | 256 MB / 300 s; stops starting requests after 240 s; async retries 0, event age 15 min | no |
 | `cf-prod-learn` | `cf-prod-api`, async invoke on `PUT /v1/weeks/{week}/best`; EventBridge `cf-prod-learn-daily` at 05:00 UTC | 512 MB / 900 s; async retries 1, event age 1 h | no |
 | `cf-prod-money` | EventBridge `cf-prod-money-daily` at 06:00 UTC and `cf-prod-api` (async, Check now, once an hour) | 256 MB / 300 s; stops starting work after 240 s; async retries 0, event age 1 h | no |
-| `cf-prod-campaigns` | `cf-prod-api` and `cf-prod-stats`, async only (`{"action": "read" \| "logo" \| "brand_picture", "userId", "campaignId"}`) | 512 MB / 120 s; async retries 0 | no |
+| `cf-prod-campaigns` | `cf-prod-api` and `cf-prod-stats`, async only (`{"action": "read" \| "logo" \| "brand_picture", "userId", "campaignId"}`, and the finder's `{"action": "find", "userId"?, "why"}`) | 512 MB / 120 s (a finder look stops reading at 100 s); async retries 0 | no |
 
 ### What was removed
 
@@ -1042,13 +1045,16 @@ default back to `false` turns it off the same way ([DEPLOYMENT.md](DEPLOYMENT.md
 **Who talks to Content Rewards.** Only `cf-prod-api`, `cf-prod-clip-flow` and `cf-prod-stats`, server to server.
 Never the browser (CR answers 403 to any MCP request that carries an `Origin` header, and the token lives only in
 Secrets Manager), never the Mac (it only carries a one-time code) and never `cf-prod-campaigns` (it reads untrusted
-brand text and outside links, and has no secret access).
+brand text and outside links, and has no secret access). Since §41, `cf-prod-campaigns` reads CR's **public**
+campaign pages for the campaign finder ([flow 22](#22-campaign-finder-contracts-41-adr-65)): anonymous, only what
+robots.txt allows, never CR's API.
 
 | Host | Used for | By |
 |---|---|---|
 | `id.contentrewards.com` | OAuth: `/oauth2/register` (RFC 7591, once per install, `client_name` "Clip Factory", five loopback redirects, no secret), `/oauth2/authorize` (in the owner's system browser), `/oauth2/token`, `/oauth2/revoke` | `cf-prod-api` (register, code exchange, revoke); the three Lambdas (refresh, under the lease) |
 | `mcp.contentrewards.com/mcp` | MCP JSON-RPC: `get_me`, `list_my_campaigns`, `create_my_submission`, `list_my_submissions`, `get_my_submission`, `get_my_balance`, `list_my_payouts`, `send_feedback`; headers `Api-Version: 2026-10-01`, `MCP-Protocol-Version: 2025-11-25`, `Mcp-Name`, never `Origin`; at most 2 calls a second per container | `cf-prod-api`, `cf-prod-clip-flow`, `cf-prod-stats` |
 | `contentrewards.com/api/campaign/campaigns/{uuid}` | the public campaign JSON (undocumented): a preview for the card, read only when the owner acts (add, Check now, a card older than 10 minutes, a job's start), at most 6 a minute, cached on the item, never on a schedule and never to submit | `cf-prod-api` |
+| `contentrewards.com/robots.txt`, `/sitemap.xml`, `/c/campaigns/{uuid}` | the campaign finder's public pages ([flow 22](#22-campaign-finder-contracts-41-adr-65)): robots.txt at most once a day, the sitemap once a look, at most 40 campaign pages a look, one at a time and at least 1 s apart, `User-Agent: ClipFactory/1`, no cookie, never an `/api/…` path | `cf-prod-campaigns` |
 | `crusercontent.com`, `docs.google.com`, Google Drive, Dropbox | the brand's picture (copied once, only `https://crusercontent.com/…`, ≤ 1 MB), the Google Docs a brief links to, logo links; the Google Docs and logo links go through the `ask/fetch.py` SSRF guard on every hop | `cf-prod-campaigns` |
 
 **Sign-in: the desktop app's one-shot door.** CR's sign-in only returns to `http://127.0.0.1` (no https), so the
@@ -1335,6 +1341,189 @@ social accounts, run as **its own application** inside the Clip Factory shell
 * **Posting.** `cf-prod-story-flow` checks the destination inside every platform step, including the identity inside
   the token secret, and reuses the platform publisher library unchanged.
 
+### 22. Campaign finder (CONTRACTS §41, ADR-65)
+
+The owner asked whether he can find campaigns and join them by requirements he sets
+([CONTRACTS.md §41](CONTRACTS.md#41-campaign-finder-campaigns-that-match-what-you-want-owner-request-2026-11-21),
+[ADR-65](DECISIONS.md#adr-65-campaign-finder-content-rewards-public-pages-read-politely-joining-stays-the-owners-own-tap)).
+Content Rewards' official MCP server (23 tools, API version `2026-10-01`) has no tool to browse Discover and none to
+join or apply, so joining stays his own tap on **Join Campaign** (it also accepts the brand's terms, his call, and a
+robot driving CR's site would break Whop's no-bots terms). The finder does the rest: he says once what he wants, Clip
+Factory reads CR's **public** campaign pages a few times a day, matches them in pure code, tells him "3 new campaigns
+match what you want." and gives every match an "Open on Content Rewards" button; after he joins, "I joined: add it"
+adds the campaign with the link it already knows, and once CR's sign-in pilot says yes the campaign is added by
+itself. It is part of **13** in the diagram.
+
+No new Lambda, schedule, table, index, bucket, secret or grant: one page (`/campaigns/find`), seven routes under
+`/v1/contentrewards/finder`, one owner item (`CRFIND`), a shared cache under pk `CRPUBLIC` (with TTL), one new action
+(`find`) of `cf-prod-campaigns`, started by the existing `cf-prod-stats` tick and by the api on the owner's taps. The
+normal way of making clips at `/` is untouched (§39.5's 5-tap click counts still hold), and the floating setup to-do
+list keeps its five rows. The whole finder ships behind its own switch, `cr_finder_enabled` (default `false`), see
+**The switch** below.
+
+**A look.** `finder.run.run(deps, user_id, why, now)` in `cf-prod-campaigns`, `why` one of `schedule` (the tick,
+every 6 hours: "I look 4 times a day"), `start` (his first "Find campaigns for me"), `check_now` ("Look again now")
+and `want` (a change to What you want: match only, nothing read):
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant T as cf-prod-stats (15-minute tick)
+  participant C as cf-prod-campaigns (find)
+  participant DB as DynamoDB
+  participant CR as contentrewards.com (public pages)
+  participant N as cf-prod-notify
+  participant O as Owner (Find campaigns page)
+  T->>DB: CRPUBLIC/STATE: nextRunAt past, runningUntil past?
+  T-)C: async {"action": "find", "why": "schedule"}
+  C->>DB: one conditional UpdateItem before any request: runningUntil = now + 150 s, lastReadAt, readsToday + 1, nextRunAt = now + 6 h
+  C->>CR: GET /robots.txt (only when the stored copy is over 24 h old)
+  C->>CR: GET /sitemap.xml (the /c/campaigns/{uuid} entries)
+  C->>CR: GET /c/campaigns/{uuid}, at most 40, one at a time, 1 s apart, until 100 s
+  C->>DB: CRPUBLIC CAMP#{uuid} (the card) and PUB#{uuid} (the public copy)
+  C->>DB: per CROWNERS owner with want.on: setups and CAMPAIGN# uuids, match.find, one UpdateItem of CRFIND
+  C->>DB: STATE: lastLookAt, entriesGz, sourceState, the lease cleared
+  DB-->>N: MODIFY of CRFIND with a new notice key (scheduled looks only, at most one a day)
+  N-->>O: "3 new campaigns match what you want." (opens /campaigns/find)
+  DB-->>O: live event contentrewards, id finder: the page refetches GET /v1/contentrewards/finder
+```
+
+One look reads once for every owner (the cache is shared, so nothing about any owner is ever sent to CR) and then
+matches each owner from the cache. A look that can't take the lease only matches its own owner. The lease update
+counts the look **before** the first request, so a look that times out or crashes still counts and the next tick
+can't start another reading look.
+
+**What is read, and how politely** (`finder/source.py`, `robots.py`, `sitemap.py`; nothing else, ever):
+
+| URL | When | Cap | Kept |
+|---|---|---|---|
+| `https://contentrewards.com/robots.txt` | at most once a day | 64 KB, 8 s | the text (≤ 8 KB) and its read time on `CRPUBLIC/STATE` |
+| `https://contentrewards.com/sitemap.xml` (and at most 5 child sitemaps on the same host) | once per reading look | 4 MB, 10 s | every exact `/c/campaigns/{uuid}` entry with its `lastmod`, at most 5,000, gzipped on `STATE.entriesGz` |
+| `https://contentrewards.com/c/campaigns/{uuid}` | the plan below, at most 40 a look | 2 MB, 8 s | the campaign's card (`FinderCard`, ≤ 6 KB) and the §38.10 stripped public copy (≤ 16 KB) |
+
+Every request is a `GET`, one at a time, at least 1 s between starts, with `User-Agent: ClipFactory/1`, no cookie,
+no `Authorization` and no `Referer`, through §38.10's `fetch.get` SSRF guard (https, public addresses only) allowed
+only for host `contentrewards.com`, port 443 **and a path the stored robots.txt allows** (RFC 9309: the
+`clipfactory` group, else `*`; longest match wins, `Allow` on a tie); at most 3 redirects, each hop checked the same
+way. It never reads an `/api/…` path (not the Discover listing, not the campaign JSON, not even on Check now), the
+Discover page, `?group=1` pages, invite links, anything on Whop, signed-in pages, images or reference files; the
+parts of a page about other creators (`topClips`, `topEarners`, `chartPoints`, usernames) are dropped while parsing
+and never stored or logged. Only this Lambda reads these pages, from AWS: never the owner's Mac, the desktop app or
+his browser, so no read can be linked to his CR or Whop account.
+
+Limits: at most 6 reading looks a UTC day, at least 30 minutes apart; "Look again now" at most once per 30 minutes
+and 4 times a day per owner (it only re-matches when the reading rules say no); a change to What you want never
+reads. Backoff is written the moment the answer arrives, by its own UpdateItem: 429 or 503 → stop, wait
+`max(Retry-After, 1 h)`, doubled per look in a row, at most 24 h; 403 or a bot wall → stop, 24 h, `blocked` after 3
+looks in a row (tried once a day); a 5xx or timeout skips that page (3 in one look → stop, 1 h); 5 unreadable pages in a
+row → `unreadable` with a 6-hour wait (logged `finder.format_changed` at error); robots.txt forbidding the sitemap or
+`/c/campaigns/` → `not_allowed`, nothing read until a daily read allows it again; no readable robots.txt and no
+stored copy at most 7 days old → nothing read (`down`).
+
+**Reading a page** (`finder/rsc.py`, `normalize.py`, pure). A campaign page is server-rendered; its data sits in the
+`self.__next_f.push` stream as react-query's dehydrated state. Two queries matter: `["campaigns","detail",uuid]`
+(the same object §38.10 reads as JSON) and `["campaigns","discover-card",uuid]` (the Discover card). A removed
+campaign answers 200 with a soft-404 page (`noindex`, no detail query) and is **gone**; a page with no stream data and
+no `noindex` is a **challenge** (handled like a 403); a page with stream data but no detail query is **unreadable**
+(a format change, never a wrong match). `normalize.card` turns the pair into a `FinderCard`: pay and places through
+§38's `campaigns.pay_from_public` (geo rates kept), the money left through `budget_from_public`, CR's own toggles
+(drafts first, its own sound, logo, face on camera), open or apply, the kind of pay, up to 6 categories, the content
+types, the number of rules an open campaign hides until you join, `onDiscover`, and four signals (an overlay or sound
+it needs, `needed` or `maybe`; a viewer-country rule; the languages named in the name; a guess of the page's
+language) read from the name and description (and an application campaign's brief); the card keeps only the signals,
+never that text (the `PUB#` copy below keeps §38.10's stripped public JSON for the add).
+
+**The plan** (`source.plan`, pure). A sitemap `lastmod` is the date a campaign was first listed and never moves, so
+freshness comes from reading pages again. In order, up to 40 a look: current matches of any owner read more than 12
+hours ago (at most 10), pages never read (newest listing first), then group siblings missing from the sitemap, live
+campaigns read more than 2 days ago, the rest more than 14 days ago, and a gone page only when its `lastmod` changes.
+That is about 155 pages a day within 160 for 4 looks; the first fill of all 766 campaign pages takes 3 to 5 days,
+newest first, and the page says how many it has looked at so far.
+
+**Matching** (`finder/match.py`, `words.py`, pure, golden cases in `api/tests/fixtures/finder/`). For each cached card
+on Discover, in order, the first refusal is its reason: already his, Not for me, not on Discover, something Clip Factory
+can't make (drafts first, its own sound, its own overlay, only slideshows or face videos), almost no money left (95 %
+used), no paid place among his ready places (TikTok only after its audit), another kind of pay (unless he asked for it),
+apply first (unless he asked for it), under his pay per 1,000 views, under his money left, another topic (only when he
+picked one), another language (only when he picked one). A card can be refused only by a fact on the public page; what
+the page can't tell never refuses it: the match is kept with a line "I can't tell…" and ranks after the clean ones.
+Heads-ups (its own sound maybe, its own picture on top maybe, face on camera, viewers from some countries only) and
+notes (cheaper in some countries, rules hidden until you join, also pays on TikTok once TikTok checks Clip Factory) ride
+with the match. Ranking: clean matches first, per-view pay before other kinds, the highest rate, the most money left,
+the newest launch. At most 20 matches. The defaults are chosen for him: at least $1.00 per 1,000 views, the places he
+set up, at least a quarter of the money left, open to join. Every rate and amount is CR's own number, formatted only and
+tagged "Content Rewards' numbers"; nothing estimates what a clip would earn. The web never decides a match: it shows the
+server's words.
+
+**From a match to making clips.**
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant O as Owner (Find campaigns)
+  participant A as cf-prod-api
+  participant DB as DynamoDB
+  participant CR as Content Rewards
+  O->>A: PATCH …/finder/matches/{id} {"said": "opened"} (not awaited, the new tab opens at once)
+  O->>CR: on CR: Join Campaign (or Apply, Submit application), his own tap
+  alt Not signed in (today: CR's pilot yes is pending)
+    O->>A: POST …/finder/matches/{id}/add (I joined: add it)
+    A->>CR: §38.8 campaigns.add with the link it knows (one §38.10 public read: his own action)
+    A->>DB: CAMPAIGN#{uuid} (addedBy finder), his answer through apply_said, CRFIND.added
+    O->>A: POST …/campaigns/{id}/read {"pastedRules"} when he pasted the rules
+  else Signed in (connected or read_only)
+    O->>A: back on the page (visibilitychange or focus): POST …/finder/joined
+    A->>CR: list_my_campaigns (cached 2 minutes)
+    A->>DB: adopt: PutItem CAMPAIGN#{uuid} membership unknown, then the membership check: a MODIFY to in
+    DB-->>O: You're in! (notification and confetti, as for any campaign), then the rules read
+  end
+```
+
+The add accepts only a stored match, an opened one or a hidden one. When CR's public JSON is down it builds the
+campaign from the cached `PUB#` copy if that is at most 24 hours old, with the card's "as of" set to when that copy
+was read. Adopting takes only campaigns he opened from the finder in the last 48 hours, never a stored match he
+didn't open and never one he added and then removed (`CRFIND.added` remembers it, as §38.8's delete never brings a
+campaign back); the match to CR's list uses §38's `ids.match_campaign` (TypeID, else name; never `ambiguous`), at
+most 5 adds a call. The tick adopts the same way within 15 minutes when the page is closed (`contentrewards/poll.py`
+step 3 reads `list_my_campaigns` when there is a candidate, inside its 25 calls). Open campaigns hide their rules
+until he joins, so a match can still meet a §38.4 stop later; the rules are read right after the join and the fit
+check (flow 20) guards every upload.
+
+**Ask Content Rewards.** While signed in, one glass tap sends CR one fixed feature request through MCP
+`send_feedback` (`kind: "idea"`, `about_tool: "list_my_campaigns"`, the literal `finderapi.ASK_MESSAGE`: no personal
+data, URL or token) from `cf-prod-api`, at most once per 30 days. It asks for official tools to search Discover and to
+join or start an application with the creator's consent.
+
+**Live and notifications.** The broadcast maps `CRFIND` to `{type: "contentrewards", op: "upsert", id: "finder",
+partial: true}` (no new live type); the web's finder store refetches its route on that event (1 s debounce).
+`cf-prod-notify` sends "3 new campaigns match what you want." (tag `crfind`, TTL 24 h) on a `MODIFY` of `CRFIND`
+whose `notice.key` changed, under the existing "Content Rewards news" choice, deduped by `NOTIFIED#cr#finder:{key}`.
+The look sets a notice only on a scheduled look, never on a start, Check now or a change, never more than once a
+day, and only for matches first shown after his last notice and his last visit. `GET /v1/contentrewards` gains
+`finder: {on, started, newCount, matches}` whenever the finder is switched on, so Home's chips and the Campaigns
+entry card need no extra call.
+
+**Data** (additive only, [CONTRACTS.md §41.5](CONTRACTS.md#415-api-data-the-job-live-and-mock-mode)):
+
+| Item | Holds |
+|---|---|
+| `USER#{id}` / `CRFIND` | his finder: the api writes `want`, `seenAt`, `hidden`, `opened`, `added`, `lookingSince`, `checkNow`, `askedAt`; the look writes only `matches`, `matchedAt`, `matchedWant`, `shown`, `notice`, `skipped`, `looked`, `categories`, `sourceState`, by UpdateItem with `attribute_exists(pk)` (a look never creates the item) |
+| `CRPUBLIC` / `CAMP#{uuid}` | one public campaign page's card, its state (`ok`, `gone`, `unreadable`), `lastmod`, `readAt`, `fails`; TTL 60 days after the read |
+| `CRPUBLIC` / `PUB#{uuid}` | the §38.10 public copy of an `ok` campaign, so adding or adopting a match needs no scheduled read of CR's JSON |
+| `CRPUBLIC` / `STATE` | the reader: robots.txt, the sitemap entries, the lease, the next look, the backoff and the day's reads |
+| `USER#{id}` / `CAMPAIGN#{uuid}` | + `addedBy: "finder"` (internal) |
+
+`CRPUBLIC` items hold no owner data and never travel (the broadcast takes only `USER#` keys). Nothing that holds the
+owner's data is replaced or destroyed.
+
+**The switch.** Every finder route answers 503 `unavailable`, the tick never starts a
+look and `cf-prod-campaigns` answers `off`, unless `CR_FINDER=on` on `cf-prod-api`, `cf-prod-stats` and
+`cf-prod-campaigns`, set by Terraform `cr_finder_enabled` (default `false`). The web hides the Campaigns entry card,
+Home's chips and the "Find another campaign" mapping on 404 or 503, and the page says "Find campaigns is coming soon
+to Clip Factory." After the five parts of §41.6 have merged, one switch PR turns it on; setting it back to `false`
+turns the whole finder off again (the stored items stay), and is done the same day if Content Rewards or Whop asks
+Clip Factory to stop reading ([DEPLOYMENT.md](DEPLOYMENT.md#campaign-finder-contracts-41)).
+
 ## Failure handling
 
 | What can fail | What happens |
@@ -1412,6 +1601,15 @@ social accounts, run as **its own application** inside the Clip Factory shell
 | The copy is tapped twice, or two copies start at once | The conditional reservation on the original clip makes one job; the other call answers 200 with it. A failed, canceled or deleted copy job (or a declined copy) frees it for a new try; a job that can't be made removes its reservation at once. |
 | The original's video is gone (past 14 days) | A link job fetches the link again; a video file answers 409 "This video is gone from Clip Factory. Make new clips for this campaign." |
 | Content Rewards' paid money by day isn't read yet (an owner from before §39) | Its row of All your money says "Checking Content Rewards…" until the day scan ends; the paid total and the campaign money never change. |
+| The campaign finder is switched off, or the api is older than §41 | Every `/v1/contentrewards/finder…` route answers 503 `unavailable` (an old api: 404); the web hides the Campaigns entry card, Home's finder chips and the "Find another campaign" mapping, and `/campaigns/find` says "Find campaigns is coming soon to Clip Factory."; the tick starts no look and `cf-prod-campaigns` answers `off`. |
+| Content Rewards' pages answer 429 or 503 during a look | The look stops reading at once; `backoffUntil` is written right then (at least 1 hour or `Retry-After`, doubled for each look in a row, at most 24 hours); matching uses the cache. |
+| Content Rewards answers 403 or a bot wall | The look stops; 24 hours' wait; after 3 looks in a row `sourceState: blocked` (tried once a day) and the page says "Content Rewards isn't letting Clip Factory look right now. Tap Look on Content Rewards yourself."; the stored matches stay, "as of" their read. |
+| Content Rewards' robots.txt stops allowing the sitemap or campaign pages | `sourceState: not_allowed`: nothing is read until a daily read of robots.txt allows it again; the page says "Content Rewards asked apps not to read its campaign pages." |
+| Content Rewards changes its page format | Five unreadable pages in a row: `sourceState: unreadable`, a 6-hour wait, `finder.format_changed` logged at error; never a wrong match. |
+| One campaign page fails (5xx, timeout) | It is skipped (`fails + 1`) and read again on a later look; three in one look stop the look for 1 hour. |
+| A finder look times out or crashes | The lease update counted it before the first request, so the next tick 15 minutes later reads nothing (the 30-minute gap and the 6 a day still hold); one owner's matching failure is logged and the next owner goes on. |
+| "I joined: add it" while Content Rewards' public JSON is down | The campaign is made from the cached public copy when it is at most 24 hours old ("as of" that read); else the add answers `platform_down` and the match keeps its button. |
+| A joined campaign isn't listed by `list_my_campaigns` yet | The campaign card says "Checking that you joined… This can take a few minutes." for 15 minutes, with "I joined, but it still says not joined" at once; then §38.4's own checks. |
 
 ## Cost notes
 
@@ -1439,6 +1637,7 @@ Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything
 | OpenSearch Serverless | not deployed (would have a standing minimum of OCUs) | $0 |
 | GitHub Actions | macOS and Windows runners for the desktop app | free (public repository) |
 | Content Rewards | `cf-prod-campaigns` (one small Lambda), one Bedrock call per campaign rules read (about $0.02), a few CR calls a tick (free), two more secrets | about $1 a month plus $0.02 a campaign read |
+| Campaign finder | at most 6 looks a day of `cf-prod-campaigns` (512 MB, at most about 100 s each, about 9,000 GB-seconds a month), about 155 public pages a day (about 40 MB in, free), a few hundred small DynamoDB writes a day, no model call | cents a month |
 
 `maxSourceHours` (default 6) is the main cost lever: it limits how much audio is transcribed and read by Claude, and
 how much picture the two models watch. There is no cost ceiling on a job (the owner's decision of 2026-11-17); the
@@ -1513,6 +1712,15 @@ only switch is `CF_DEEP=off` (Terraform `deep_analysis_enabled = false`), which 
 - **Content Rewards Connect needs the Mac app** (CR only returns to `127.0.0.1`; the door is macOS only), and a sign-in
   again at least every 90 days. Joining or applying stays in the CR app (no tool for it), and the campaigns' reference
   files (logos, footage) are not in the API, so the owner adds the logo.
+- **The campaign finder reads public pages, not an official API.** Content Rewards has no tool for apps to search
+  Discover or to join, so the finder reads the public campaign pages its robots.txt allows, a few times a day, and
+  depends on their format (a change shows "I can't read Content Rewards' campaign pages right now") and on Content
+  Rewards keeping them open to crawlers (a robots.txt change or a block stops it by itself; "Look on Content Rewards
+  yourself" always works). Open campaigns hide their rules until he joins, so the finder matches on pay, places, money
+  left, category, open or apply and what the public page shows; the full rules are read right after the join. The first
+  full look takes 3 to 5 days, and money left on a match is usually under a day old (re-read once it is 12 hours old, at
+  the next look; "as of" shown). Joining stays his own tap on Content Rewards. What is still unverified is in
+  [CONTRACTS.md §41.6](CONTRACTS.md#416-who-builds-what-the-switch-tests-not-verified-live).
 - **30 minutes to send.** CR takes a post only in its first 30 minutes live; Clip Factory stops trying at 25 and the
   reminder covers the rest. TikTok campaign clips wait for TikTok's audit (private posts can't earn); Instagram and
   Facebook carry the disclosure only in the caption and on the video; campaigns that want drafts first or the brand's

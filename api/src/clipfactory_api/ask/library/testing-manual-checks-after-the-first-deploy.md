@@ -115,3 +115,26 @@
      Whether X's media revenue answers for the owner (then X could move from "not available" to a number later).
      Whether Meta's earnings metrics still answer
      ([CONTRACTS §25.8](CONTRACTS.md#258-not-verified-live-each-failure-becomes-a-not-available-label-never-a-number)).
+17. **Campaign finder** ([CONTRACTS §41.6](CONTRACTS.md#416-who-builds-what-the-switch-tests-not-verified-live)): not
+   checked live when built. Do them after the finder's switch PR has merged
+   ([DEPLOYMENT.md](DEPLOYMENT.md#campaign-finder-contracts-41)).
+   - In the deploy log of the switch PR, the plan changes only `CR_FINDER` on `cf-prod-api`, `cf-prod-stats` and
+     `cf-prod-campaigns` in place, and the delete gate passes.
+   - Open Your campaigns › **Find campaigns**, keep the defaults and tap **Find campaigns for me**. In CloudWatch Logs,
+     `/aws/lambda/cf-prod-campaigns` shows `finder.read` lines: note whether Content Rewards serves `robots.txt`, the
+     sitemap and campaign pages to AWS addresses (a 403 or a bot wall means `blocked`, and the page says so), and
+     whether any 429 comes back at 40 pages a look, 1 s apart.
+   - Over the first days, the page's "I've looked at … campaigns so far" grows by about 40 a look; note whether the
+     sitemap still lists every public campaign page, and whether a page reads as `unreadable` (Content Rewards' page
+     format changed).
+   - Open three matches on Content Rewards and compare: the pay per 1,000 views (and "Up to" for geo-priced ones),
+     the money left, open or apply, and whether **Join Campaign** shows for open campaigns and **Apply** for
+     application ones when signed in. Note any match whose rules, once joined, meet a stop (its own sound, its own
+     picture on top, drafts first) that the overlay and sound sentence rules missed, and any page-language guess
+     that was wrong.
+   - Join one: tap **Join Campaign**, come back, tap **I joined: add it**. Note whether `list_my_campaigns` lists it
+     right after the join once Content Rewards' sign-in yes has arrived (else "Checking that you joined…" covers it),
+     and whether the TypeID match was used.
+   - Signed in, tap **Ask Content Rewards** once and note whether Content Rewards' team answers the feature request.
+   - Check once a week that Content Rewards' robots.txt still allows `/sitemap.xml` and `/c/campaigns/` (the finder
+     checks it every day and stops by itself when it doesn't).
