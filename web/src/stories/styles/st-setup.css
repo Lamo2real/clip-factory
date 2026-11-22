@@ -1,4 +1,13 @@
-/* ---------- The progress ring ---------- */
+/* Clip Factory Stories › the setup (Setup.tsx) on the liquid glass (styles/GLASS-CONTRACT.md): a hero glass head with
+   the ArcDial (an orange arc with its white knob and a big light numeral), the step list on glass with a cream
+   highlight that slides, the step itself on a glass panel, and What is left as glass pills. Tokens only (glass-tokens.css
+   defines them); radii from the one --st-r-* scale, concentric; light, never a border; no cursor; hover on every
+   control; nothing under the 13 px floor.
+   Words: --st-text* and the tone inks on glass, --st-text-muted only in a well, --st-on-cream* on the cream highlight;
+   the bright --st-accent is only a shape here (the dial, the current step's dot, icons). The layout follows the
+   setup's own width (a container), so the shell's rail and the page's width never squeeze it. */
+
+/* ---------- The progress ring (ui.tsx StRing: the dashboard's setup card; the setup's own ring is the ArcDial) ---------- */
 
 .st-ring {
   position: relative;
@@ -10,11 +19,11 @@
   display: block;
 }
 .st-ring__track {
-  stroke: rgba(255, 246, 229, 0.14);
+  stroke: rgb(var(--st-cream-rgb) / 0.18);
 }
 .st-ring__arc {
-  stroke: var(--st-sun);
-  transition: stroke-dashoffset 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  stroke: var(--st-accent);
+  transition: stroke-dashoffset var(--st-dur-progress) var(--st-ease-progress);
 }
 .st-ring.is-full .st-ring__arc {
   stroke: var(--st-mint);
@@ -28,50 +37,103 @@
   line-height: 1.05;
 }
 .st-ring__text strong {
+  color: var(--st-text-strong);
   font-size: 1.5em;
-  font-weight: 900;
+  font-weight: var(--st-weight-num);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 .st-ring__text span {
-  color: var(--st-ink-soft);
-  font-size: 0.78rem;
-  font-weight: 700;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-min);
+  font-weight: var(--st-weight-ui);
 }
 
 /* ---------- The setup (onboarding) ---------- */
 
 .st-setup {
+  container: st-setup / inline-size;
   display: grid;
-  gap: 18px;
+  gap: var(--st-gap);
 }
+
+/* The hero: the dial, the title, what it means, Do this later. On a phone the dial sits beside the title. */
 .st-setup__head {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "dial title"
+    "lede lede"
+    "later later";
   align-items: center;
-  gap: 14px 18px;
+  gap: var(--st-space-3) var(--st-space-4);
+  /* Never thinner than the liquid rim's band, so a bending rim never reaches the dial or the words. */
+  padding: max(var(--st-inset), var(--st-lens-band));
 }
-.st-setup__intro {
-  flex: 1 1 240px;
+.st-setup__dial.st-dial {
+  grid-area: dial;
+  width: 96px;
+}
+.st-setup__dial-num {
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: 2rem;
+  font-weight: var(--st-weight-num);
+  font-variation-settings: "opsz" var(--st-opsz-num);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.st-setup__dial-of {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-min);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.st-setup .st-setup__heading {
+  grid-area: title;
   min-width: 0;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h2);
+  font-weight: var(--st-weight-display);
+  line-height: var(--st-lh-head);
+  overflow-wrap: anywhere;
+}
+.st-setup .st-setup__intro {
+  grid-area: lede;
+  max-width: 62ch;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-body);
 }
 .st-setup__later {
-  margin-left: auto;
+  grid-area: later;
+  justify-self: end;
 }
+
+/* The step list, the step and What is left. A phone: the step first, the list of steps under it, then what is left. */
 .st-setup__grid {
   display: grid;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "panel"
+    "steps"
+    "left";
+  gap: var(--st-gap);
   align-items: start;
 }
+
+/* The step list: one glass surface (padding 6), rows of control 14 (20 − 6), the cream highlight sliding between them. */
 .st-steps {
+  grid-area: steps;
   min-width: 0;
 }
-.st-steps__list {
+/* Two classes, so the shell's list reset (.stories-app ol: padding 0) never takes the 6 px gap away: the rows and the
+   cream highlight sit 6 px inside the 20 px glass, so their 14 px corners nest in it and its light edge shows. */
+.st-setup .st-steps__list {
   position: relative;
   isolation: isolate;
   display: grid;
   gap: 2px;
-  padding: 6px;
-  border-radius: var(--r-lg);
-  background: rgba(13, 11, 38, 0.35);
+  padding: var(--st-gap-surface);
 }
 .st-steps__list > li:not(.glide) {
   position: relative;
@@ -80,50 +142,80 @@
 .st-steps__item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--st-space-3);
   width: 100%;
-  min-height: 48px;
-  padding: 6px 12px 6px 6px;
-  border-radius: var(--r-md);
-  color: var(--st-ink-soft);
-  font-weight: 700;
+  min-height: var(--st-tap-main);
+  padding: var(--st-space-1) var(--st-space-3) var(--st-space-1) var(--st-space-2);
+  border-radius: var(--st-r-control);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.25;
   text-align: left;
   transition:
-    background-color 180ms ease,
-    color 180ms ease;
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out);
 }
 .st-steps__item:hover {
-  color: var(--st-ink);
-  background: var(--st-panel-strong);
+  color: var(--st-text-strong);
+  background: var(--st-fill-control-hover);
 }
+.st-steps__item.is-done {
+  color: var(--st-text);
+}
+/* The current step: solid cream with espresso words (before the glide has measured, and where there is none). */
 .st-steps__item.is-on {
-  color: var(--st-on-sun);
-  background: var(--st-sun);
+  color: var(--st-on-cream);
+  background: var(--st-selected);
+  box-shadow: var(--st-depth-1);
+}
+.st-steps__item.is-on:hover {
+  color: var(--st-on-cream);
+  background: var(--st-cream-hover);
 }
 .has-glide > li > .st-steps__item.is-on {
   background: transparent;
+  box-shadow: none;
 }
-.st-steps__item.is-done {
-  color: var(--st-ink);
+.has-glide > li > .st-steps__item.is-on:hover {
+  background: rgb(var(--st-copper-rgb) / 0.1);
 }
+.stories-app .glide--st-steps {
+  border-radius: var(--st-r-control);
+  background: var(--st-selected);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1);
+}
+.st-steps__item:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+/* The step's dot: its number in a well, a mint tick when done, the orange dot on the current one. */
 .st-steps__mark {
   display: grid;
   place-items: center;
   flex: none;
   width: 32px;
   height: 32px;
-  border-radius: 50%;
-  background: var(--st-panel-strong);
-  font-size: 0.9rem;
-  font-weight: 800;
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-well);
+  color: var(--st-text);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 .st-steps__item.is-done .st-steps__mark {
   background: var(--st-mint);
-  color: var(--st-on-sun);
+  color: var(--st-on-cream);
 }
 .st-steps__item.is-on .st-steps__mark {
-  background: rgba(28, 24, 66, 0.16);
-  color: var(--st-on-sun);
+  background: var(--st-accent);
+  color: var(--st-on-accent);
+  box-shadow: var(--st-glow-accent);
+}
+.st-steps__item.is-on.is-done .st-steps__mark {
+  background: var(--st-mint);
+  color: var(--st-on-cream);
+  box-shadow: none;
 }
 .st-steps__label {
   flex: 1;
@@ -132,91 +224,106 @@
 }
 .st-steps__skipped {
   flex: none;
-  padding: 2px 8px;
-  border-radius: var(--r-pill);
-  background: rgba(255, 201, 74, 0.18);
-  color: var(--st-sun-ink);
-  font-size: 0.78rem;
-  font-weight: 800;
+  padding: 2px var(--st-space-2);
+  border-radius: var(--st-r-round);
+  background: linear-gradient(rgb(var(--st-amber-rgb) / 0.14), rgb(var(--st-amber-rgb) / 0.14)), rgb(var(--st-well-rgb) / 0.42);
+  color: var(--st-text-amber);
+  font-size: var(--st-fs-min);
+  font-weight: var(--st-weight-ui);
 }
 .st-steps__item.is-on .st-steps__skipped {
-  background: rgba(28, 24, 66, 0.14);
-  color: var(--st-on-sun);
+  background: rgb(var(--st-copper-rgb) / 0.14);
+  color: var(--st-on-cream-orange);
 }
-.stories-app .glide--st-steps {
-  border-radius: var(--r-md);
-  background: var(--st-sun);
-  box-shadow: 0 8px 18px -10px rgba(255, 201, 74, 0.7);
-}
+
+/* The step: a glass panel. */
 .st-setup__panel {
+  grid-area: panel;
   display: grid;
-  gap: 12px;
+  align-content: start;
+  gap: var(--st-space-3);
   min-width: 0;
-  padding: 20px;
-  border-radius: var(--r-xl);
-  background: var(--st-panel);
-  box-shadow: var(--st-shadow-soft);
+  padding: var(--st-inset);
 }
 .st-setup__panel:focus-visible {
   outline: none;
-  box-shadow: var(--focus), var(--st-shadow-soft);
+  box-shadow: var(--st-focus-ring), var(--st-sheen), var(--st-depth-1);
 }
 .st-setup__count {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  color: var(--st-ink-soft);
-  font-size: 0.88rem;
-  font-weight: 700;
+  gap: var(--st-space-2);
+  color: var(--st-text-amber);
 }
-.st-setup__title {
+.st-setup .st-setup__title {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 1.5rem;
-  font-weight: 900;
+  gap: var(--st-space-3);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h2);
+  font-weight: var(--st-weight-display);
+  line-height: var(--st-lh-head);
 }
-.st-setup__title .st-icon {
-  color: var(--st-sun);
+.st-setup__title > .st-display {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* The step's icon in a round glass puck, its glyph the orange accent (a shape). */
+.st-setup__title-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--st-tap);
+  height: var(--st-tap);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-accent);
 }
 .st-setup__lede {
-  color: var(--st-ink-soft);
+  color: var(--st-text-soft);
 }
 .st-setup__body {
   display: grid;
-  gap: 12px;
+  gap: var(--st-space-3);
   min-width: 0;
 }
 .st-setup__text {
   max-width: 62ch;
+  color: var(--st-text);
 }
 .st-setup__facts {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
+/* Rows that only show something: warm translucent tiles with a soft top highlight. --st-fill-control follows the look:
+   over the colours a light cream lift (over Ember's lightest pixel every word keeps 4.5:1 or more), over a picture or
+   the desktop a card's veil, so there they are a step deeper than the panel. Nothing in them is a control. */
 .st-setup__facts li {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.3);
+  gap: var(--st-space-3);
+  padding: var(--st-space-3) var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text);
 }
 .st-setup__facts .st-icon {
   flex: none;
   margin-top: 2px;
-  color: var(--st-sun);
+  color: var(--st-text-amber);
 }
 .st-setup__row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
+  gap: var(--st-space-2) var(--st-space-3);
 }
 .st-setup__hint {
-  color: var(--st-ink-soft);
-  font-size: 0.88rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
 }
 .st-setup__save {
   display: flex;
@@ -226,29 +333,30 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
-  padding-top: 4px;
+  gap: var(--st-space-2);
+  padding-top: var(--st-space-1);
 }
 .st-setup__done {
   display: grid;
   justify-items: center;
-  gap: 10px;
+  gap: var(--st-space-3);
   text-align: center;
 }
 .st-agents {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 .st-agent {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 12px 8px 8px;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.3);
+  gap: var(--st-space-3);
+  padding: var(--st-space-2) var(--st-space-3) var(--st-space-2) var(--st-space-2);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
 }
 .st-agent.is-off {
-  opacity: 0.75;
+  opacity: 0.8;
 }
 .st-agent__face {
   flex: none;
@@ -258,88 +366,143 @@
   gap: 2px;
   min-width: 0;
 }
+.st-agent__text strong {
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
+}
 .st-agent__text span {
-  color: var(--st-ink-soft);
-  font-size: 0.88rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
+
+/* What is left: a glass surface with glass pills (GlassPill), one tap back to each step. None is cream: the step list
+   beside it already shows the open step, and one choice gets one cream marker. */
 .st-left {
+  grid-area: left;
   display: grid;
-  gap: 8px;
+  align-content: start;
+  gap: var(--st-space-3);
+  min-width: 0;
+  padding: var(--st-inset);
 }
-.st-left__title {
-  font-size: 1.1rem;
-  font-weight: 800;
+.st-setup .st-left__title {
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
 }
 .st-left__list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
-.st-left__item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 14px;
-  border-radius: var(--r-pill);
-  background: var(--st-panel-strong);
-  font-weight: 700;
-  transition:
-    background-color 180ms ease,
-    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+.st-left__list > li {
+  min-width: 0;
+  max-width: 100%;
 }
-.st-left__item:hover {
-  background: var(--st-panel-hover);
-  transform: translateY(-1px);
+/* A long step name wraps inside its pill rather than pushing past the panel at 320 px. */
+.st-left__item.st-pill {
+  max-width: 100%;
+  padding-block: var(--st-space-1);
+  white-space: normal;
+  text-align: left;
+}
+.st-left__label {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .st-left__tag {
-  color: var(--st-sun-ink);
-  font-size: 0.8rem;
+  color: var(--st-text-amber);
+  font-size: var(--st-fs-min);
 }
-/* A platform held because its account is Lamo Clips' own: why, under the list (§45.35 D11). */
+/* A platform held because its account is Clip Factory's own: why, under the list (§45.35 D11). */
 .st-left__why {
   display: grid;
-  gap: 8px;
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
+  gap: var(--st-space-2);
 }
-@media (min-width: 900px) {
-  .st-setup__grid {
-    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+
+/* Wider: the steps, and what is left under them, beside the step, from a setup 560 px wide (about a 885 px window with
+   the rail, as before the glass: 900 px windows and up keep the steps in view beside the step). The step stays the
+   widest column at every width. */
+@container st-setup (min-width: 640px) {
+  .st-setup__head {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "dial title later"
+      "dial lede later";
+    row-gap: var(--st-space-2);
+  }
+  .st-setup__dial.st-dial {
+    width: 132px;
+  }
+  .st-setup__dial-num {
+    font-size: 2.75rem;
+  }
+  .st-setup .st-setup__heading {
+    align-self: end;
+    font-size: var(--st-fs-h1);
+  }
+  .st-setup .st-setup__intro {
+    align-self: start;
   }
 }
-/* Phones and narrow windows: the step itself first (its buttons at the bottom right), the list of steps under it. */
-@media (max-width: 899px) {
-  .st-setup__panel {
-    order: -1;
+@container st-setup (min-width: 560px) {
+  .st-setup__grid {
+    grid-template-columns: minmax(220px, 0.42fr) minmax(0, 1fr);
+    grid-template-areas:
+      "steps panel"
+      "left panel";
+    grid-template-rows: auto 1fr;
+  }
+}
+@container st-setup (min-width: 900px) {
+  .st-setup__grid {
+    grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+  }
+}
+@container st-setup (min-width: 1100px) {
+  .st-setup__dial.st-dial {
+    width: 152px;
+  }
+  .st-setup__dial-num {
+    font-size: 3.25rem;
   }
 }
 
-/* The dashboard's setup card, until the setup is finished. */
+/* The platform's card inside a connect step (PlatformCard inStep): flat on the step's own glass, no second veil, edge,
+   glow or corner of its own; its rows nest in the panel. */
+.st-setup .st-conn--in-step {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+/* ---------- The dashboard's setup card and Continue (Dashboard.tsx markup; their rules came here with the file split.
+   If the dashboard branch restyles these same selectors in st-dashboard.css, which loads before this file, delete
+   this block at the merge so its rules win.) ---------- */
 .st-setupcard {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 14px 18px;
-  margin-bottom: 18px;
-  padding: 16px 18px;
-  border-radius: var(--r-xl);
-  background: linear-gradient(120deg, rgba(255, 201, 74, 0.16), rgba(98, 198, 255, 0.08) 70%), var(--st-panel);
-  box-shadow: var(--st-shadow-soft);
-  animation: st-rise 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  gap: var(--st-space-3) var(--st-space-5);
+  margin-bottom: var(--st-space-4);
+  padding: var(--st-space-4) var(--st-inset);
+  border-radius: var(--st-r-surface);
+  background: linear-gradient(120deg, rgb(var(--st-amber-rgb) / var(--st-tint-cut)), rgb(var(--st-amber-rgb) / 0) 70%), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
+  box-shadow: var(--st-sheen), var(--st-depth-1), var(--st-glow-behind);
+  animation: st-rise var(--st-dur-enter) var(--st-ease-out) both;
 }
 .st-setupcard__text {
   flex: 1 1 220px;
   min-width: 0;
 }
 .st-setupcard__title {
-  font-size: 1.15rem;
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
 }
 .st-setupcard__left {
-  color: var(--st-ink-soft);
+  color: var(--st-text-soft);
   overflow-wrap: anywhere;
 }
 .st-setupcard__go {
@@ -347,21 +510,22 @@
 }
 /* After Finish with steps skipped: a smaller card listing them (§45.36 E15). */
 .st-setupcard--left {
-  padding: 12px 16px;
-  background: var(--st-panel);
+  padding: var(--st-space-3) var(--st-space-4);
+  background: rgb(var(--st-veil-rgb) / var(--st-veil-card));
 }
 .st-setupcard__mark {
   display: grid;
   flex: none;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  color: var(--st-on-sun, #1c1842);
-  background: var(--st-sun);
+  width: var(--st-tap);
+  height: var(--st-tap);
+  border-radius: var(--st-r-round);
+  color: var(--st-on-accent);
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
 }
 .st-setupcard--left .st-setupcard__title {
-  font-size: 1.02rem;
+  font-size: var(--st-fs-body);
 }
 .st-setupcard__list {
   display: flex;
@@ -373,12 +537,12 @@
 }
 .st-setupcard__list > li {
   min-width: 0;
-  padding: 4px 10px;
-  border-radius: var(--r-pill);
-  color: var(--st-ink);
-  font-size: 0.88rem;
-  font-weight: 700;
-  background: var(--st-panel-strong);
+  padding: var(--st-space-1) var(--st-space-3);
+  border-radius: var(--st-r-round);
+  color: var(--st-text);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  background: var(--st-fill-control);
   overflow-wrap: anywhere;
 }
 
@@ -386,32 +550,32 @@
 .st-continue {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--st-space-4);
   min-height: 64px;
-  padding: 12px 16px;
-  border-radius: var(--r-xl);
-  background: linear-gradient(120deg, rgba(71, 214, 160, 0.16), rgba(98, 198, 255, 0.08) 70%), var(--st-panel);
-  box-shadow: var(--st-shadow-soft);
-  color: var(--st-ink);
+  padding: var(--st-space-3) var(--st-space-4);
+  border-radius: var(--st-r-surface);
+  background: linear-gradient(120deg, rgb(var(--st-mint-rgb) / var(--st-tint-cut)), rgb(var(--st-mint-rgb) / 0) 70%), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
+  box-shadow: var(--st-sheen), var(--st-depth-1);
+  color: var(--st-text);
   text-decoration: none;
   transition:
-    background-color 160ms ease,
-    transform 160ms ease;
-  animation: st-rise 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    transform var(--st-dur-hover) var(--st-ease-out);
+  animation: st-rise var(--st-dur-enter) var(--st-ease-out) both;
 }
 .st-continue:hover {
-  background-color: var(--st-panel-hover);
+  background-color: rgb(var(--st-well-rgb) / calc(var(--st-veil-tinted) + 0.1));
   transform: translateY(-2px);
 }
 .st-continue__icon {
   display: grid;
   flex: none;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--r-md);
+  width: var(--st-tap);
+  height: var(--st-tap);
+  border-radius: var(--st-r-control);
   background: var(--st-mint);
-  color: var(--st-on-sun);
+  color: var(--st-on-cream);
 }
 .st-continue__text {
   display: flex;
@@ -420,12 +584,13 @@
   min-width: 0;
 }
 .st-continue__kind {
-  color: var(--st-ink-soft);
-  font-size: 0.9rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
 }
 .st-continue__name {
-  font-size: 1.1rem;
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
   overflow-wrap: anywhere;
 }
 .st-continue__go {
@@ -434,9 +599,9 @@
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: var(--r-pill);
-  background: var(--st-sun);
-  color: var(--st-on-sun);
+  border-radius: var(--st-r-round);
+  background: var(--st-action);
+  color: var(--st-on-cream);
 }
 
 /* The setup the first time: on its own, without the navigation (the brand stays on top). On a computer its page

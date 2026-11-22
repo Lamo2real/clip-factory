@@ -1,77 +1,81 @@
-/* Lamo Stories › Social accounts and the setup's own parts added in round 3 (docs/CONTRACTS.md §45.34), builder W3c:
-   both Meta redirect URIs, "Is this your Lamo Stories {place}?" after a connect, and the setup's first step listing
-   the models and their state. Every selector is an st- class; the owner's rules hold (no cursor change, no borders,
-   radii from --r-*, no type under 0.78rem, AA words on the fills). */
+/* Clip Factory Stories › Social accounts and the setup's own parts added in round 3 (docs/CONTRACTS.md §45.34): both
+   Meta redirect URIs, "Is this your Lamo Stories {place}?" after a connect, and the setup's first step listing the
+   models and their state. On the liquid glass (styles/GLASS-CONTRACT.md): tokens only, radii from --st-r-*, light
+   never a border, no cursor, nothing under the 13 px floor, every word at 4.5:1 over all three backgrounds. */
 
 .st-redirects {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 .st-app__uris {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 .st-app__uris-note {
-  color: var(--st-ink-soft);
-  font-size: 0.9rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
 
+/* "Is this your Lamo Stories {place}?": a mint-tinted box (the measured tinted veil, the colour cut to --st-tint-cut). */
 .st-intended {
   display: grid;
-  gap: 10px;
-  padding: 12px;
-  border-radius: var(--r-md);
-  background: rgba(71, 214, 160, 0.14);
-  animation: st-rise 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  gap: var(--st-space-3);
+  padding: var(--st-space-3) var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: linear-gradient(rgb(var(--st-mint-rgb) / var(--st-tint-cut)), rgb(var(--st-mint-rgb) / var(--st-tint-cut))), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
+  box-shadow: var(--st-sheen-control);
+  animation: st-rise 220ms var(--st-ease-out) both;
 }
 .st-intended__said {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--st-space-2);
   color: var(--st-mint-ink);
-  font-weight: 800;
+  font-weight: var(--st-weight-ui);
   overflow-wrap: anywhere;
 }
 .st-intended__said .st-icon {
   flex: none;
 }
 .st-intended__ask {
-  color: var(--st-ink);
+  color: var(--st-text);
   overflow-wrap: anywhere;
 }
+.st-intended__ask strong {
+  color: var(--st-text-strong);
+}
 
-.st-setup__sub {
-  margin: 4px 0 0;
-  color: var(--st-ink);
-  font-size: 1rem;
-  font-weight: 800;
+/* The setup's first step: the models and their state, tiles that only show (the look-aware control fill). */
+.st-setup .st-setup__sub {
+  margin-top: var(--st-space-1);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
 }
 .st-setup__models {
   display: grid;
   gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 .st-setup__model {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 2px 10px;
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.3);
+  gap: 2px var(--st-space-3);
+  padding: var(--st-space-3) var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
 }
 .st-setup__model-name {
   min-width: 0;
-  color: var(--st-ink);
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
   overflow-wrap: anywhere;
 }
 .st-setup__model-line {
   grid-column: 1 / -1;
-  color: var(--st-ink-soft);
-  font-size: 0.88rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
