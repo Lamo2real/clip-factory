@@ -874,13 +874,16 @@ default back to `false` turns it off the same way ([DEPLOYMENT.md](DEPLOYMENT.md
 **Who talks to Content Rewards.** Only `cf-prod-api`, `cf-prod-clip-flow` and `cf-prod-stats`, server to server.
 Never the browser (CR answers 403 to any MCP request that carries an `Origin` header, and the token lives only in
 Secrets Manager), never the Mac (it only carries a one-time code) and never `cf-prod-campaigns` (it reads untrusted
-brand text and outside links, and has no secret access).
+brand text and outside links, and has no secret access). Since §41, `cf-prod-campaigns` reads CR's **public**
+campaign pages for the campaign finder ([flow 22](#22-campaign-finder-contracts-41-adr-65)): anonymous, only what
+robots.txt allows, never CR's API.
 
 | Host | Used for | By |
 |---|---|---|
 | `id.contentrewards.com` | OAuth: `/oauth2/register` (RFC 7591, once per install, `client_name` "Clip Factory", five loopback redirects, no secret), `/oauth2/authorize` (in the owner's system browser), `/oauth2/token`, `/oauth2/revoke` | `cf-prod-api` (register, code exchange, revoke); the three Lambdas (refresh, under the lease) |
 | `mcp.contentrewards.com/mcp` | MCP JSON-RPC: `get_me`, `list_my_campaigns`, `create_my_submission`, `list_my_submissions`, `get_my_submission`, `get_my_balance`, `list_my_payouts`, `send_feedback`; headers `Api-Version: 2026-10-01`, `MCP-Protocol-Version: 2025-11-25`, `Mcp-Name`, never `Origin`; at most 2 calls a second per container | `cf-prod-api`, `cf-prod-clip-flow`, `cf-prod-stats` |
 | `contentrewards.com/api/campaign/campaigns/{uuid}` | the public campaign JSON (undocumented): a preview for the card, read only when the owner acts (add, Check now, a card older than 10 minutes, a job's start), at most 6 a minute, cached on the item, never on a schedule and never to submit | `cf-prod-api` |
+| `contentrewards.com/robots.txt`, `/sitemap.xml`, `/c/campaigns/{uuid}` | the campaign finder's public pages ([flow 22](#22-campaign-finder-contracts-41-adr-65)): robots.txt at most once a day, the sitemap once a look, at most 40 campaign pages a look, one at a time and at least 1 s apart, `User-Agent: ClipFactory/1`, no cookie, never an `/api/…` path | `cf-prod-campaigns` |
 | `crusercontent.com`, `docs.google.com`, Google Drive, Dropbox | the brand's picture (copied once, only `https://crusercontent.com/…`, ≤ 1 MB), the Google Docs a brief links to, logo links; the Google Docs and logo links go through the `ask/fetch.py` SSRF guard on every hop | `cf-prod-campaigns` |
 
 **Sign-in: the desktop app's one-shot door.** CR's sign-in only returns to `http://127.0.0.1` (no https), so the
@@ -1167,7 +1170,190 @@ social accounts, run as **its own application** inside the Clip Factory shell
 * **Posting.** `cf-prod-story-flow` checks the destination inside every platform step, including the identity inside
   the token secret, and reuses the platform publisher library unchanged.
 
-### 22. Get paid: payout steps, honest statuses and money sent to the bank (CONTRACTS §40, ADR-64)
+### 22. Campaign finder (CONTRACTS §41, ADR-65)
+
+The owner asked whether he can find campaigns and join them by requirements he sets
+([CONTRACTS.md §41](CONTRACTS.md#41-campaign-finder-campaigns-that-match-what-you-want-owner-request-2026-11-21),
+[ADR-65](DECISIONS.md#adr-65-campaign-finder-content-rewards-public-pages-read-politely-joining-stays-the-owners-own-tap)).
+Content Rewards' official MCP server (23 tools, API version `2026-10-01`) has no tool to browse Discover and none to
+join or apply, so joining stays his own tap on **Join Campaign** (it also accepts the brand's terms, his call, and a
+robot driving CR's site would break Whop's no-bots terms). The finder does the rest: he says once what he wants, Clip
+Factory reads CR's **public** campaign pages a few times a day, matches them in pure code, tells him "3 new campaigns
+match what you want." and gives every match an "Open on Content Rewards" button; after he joins, "I joined: add it"
+adds the campaign with the link it already knows, and once CR's sign-in pilot says yes the campaign is added by
+itself. It is part of **13** in the diagram.
+
+No new Lambda, schedule, table, index, bucket, secret or grant: one page (`/campaigns/find`), seven routes under
+`/v1/contentrewards/finder`, one owner item (`CRFIND`), a shared cache under pk `CRPUBLIC` (with TTL), one new action
+(`find`) of `cf-prod-campaigns`, started by the existing `cf-prod-stats` tick and by the api on the owner's taps. The
+normal way of making clips at `/` is untouched (§39.5's 5-tap click counts still hold), and the floating setup to-do
+list keeps its five rows. The whole finder ships behind its own switch, `cr_finder_enabled` (default `false`), see
+**The switch** below.
+
+**A look.** `finder.run.run(deps, user_id, why, now)` in `cf-prod-campaigns`, `why` one of `schedule` (the tick,
+every 6 hours: "I look 4 times a day"), `start` (his first "Find campaigns for me"), `check_now` ("Look again now")
+and `want` (a change to What you want: match only, nothing read):
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant T as cf-prod-stats (15-minute tick)
+  participant C as cf-prod-campaigns (find)
+  participant DB as DynamoDB
+  participant CR as contentrewards.com (public pages)
+  participant N as cf-prod-notify
+  participant O as Owner (Find campaigns page)
+  T->>DB: CRPUBLIC/STATE: nextRunAt past, runningUntil past?
+  T-)C: async {"action": "find", "why": "schedule"}
+  C->>DB: one conditional UpdateItem before any request: runningUntil = now + 150 s, lastReadAt, readsToday + 1, nextRunAt = now + 6 h
+  C->>CR: GET /robots.txt (only when the stored copy is over 24 h old)
+  C->>CR: GET /sitemap.xml (the /c/campaigns/{uuid} entries)
+  C->>CR: GET /c/campaigns/{uuid}, at most 40, one at a time, 1 s apart, until 100 s
+  C->>DB: CRPUBLIC CAMP#{uuid} (the card) and PUB#{uuid} (the public copy)
+  C->>DB: per CROWNERS owner with want.on: setups and CAMPAIGN# uuids, match.find, one UpdateItem of CRFIND
+  C->>DB: STATE: lastLookAt, entriesGz, sourceState, the lease cleared
+  DB-->>N: MODIFY of CRFIND with a new notice key (scheduled looks only, at most one a day)
+  N-->>O: "3 new campaigns match what you want." (opens /campaigns/find)
+  DB-->>O: live event contentrewards, id finder: the page refetches GET /v1/contentrewards/finder
+```
+
+One look reads once for every owner (the cache is shared, so nothing about any owner is ever sent to CR) and then
+matches each owner from the cache. A look that can't take the lease only matches its own owner. The lease update
+counts the look **before** the first request, so a look that times out or crashes still counts and the next tick
+can't start another reading look.
+
+**What is read, and how politely** (`finder/source.py`, `robots.py`, `sitemap.py`; nothing else, ever):
+
+| URL | When | Cap | Kept |
+|---|---|---|---|
+| `https://contentrewards.com/robots.txt` | at most once a day | 64 KB, 8 s | the text (≤ 8 KB) and its read time on `CRPUBLIC/STATE` |
+| `https://contentrewards.com/sitemap.xml` (and at most 5 child sitemaps on the same host) | once per reading look | 4 MB, 10 s | every exact `/c/campaigns/{uuid}` entry with its `lastmod`, at most 5,000, gzipped on `STATE.entriesGz` |
+| `https://contentrewards.com/c/campaigns/{uuid}` | the plan below, at most 40 a look | 2 MB, 8 s | the campaign's card (`FinderCard`, ≤ 6 KB) and the §38.10 stripped public copy (≤ 16 KB) |
+
+Every request is a `GET`, one at a time, at least 1 s between starts, with `User-Agent: ClipFactory/1`, no cookie,
+no `Authorization` and no `Referer`, through §38.10's `fetch.get` SSRF guard (https, public addresses only) allowed
+only for host `contentrewards.com`, port 443 **and a path the stored robots.txt allows** (RFC 9309: the
+`clipfactory` group, else `*`; longest match wins, `Allow` on a tie); at most 3 redirects, each hop checked the same
+way. It never reads an `/api/…` path (not the Discover listing, not the campaign JSON, not even on Check now), the
+Discover page, `?group=1` pages, invite links, anything on Whop, signed-in pages, images or reference files; the
+parts of a page about other creators (`topClips`, `topEarners`, `chartPoints`, usernames) are dropped while parsing
+and never stored or logged. Only this Lambda reads these pages, from AWS: never the owner's Mac, the desktop app or
+his browser, so no read can be linked to his CR or Whop account.
+
+Limits: at most 6 reading looks a UTC day, at least 30 minutes apart; "Look again now" at most once per 30 minutes
+and 4 times a day per owner (it only re-matches when the reading rules say no); a change to What you want never
+reads. Backoff is written the moment the answer arrives, by its own UpdateItem: 429 or 503 → stop, wait
+`max(Retry-After, 1 h)`, doubled per look in a row, at most 24 h; 403 or a bot wall → stop, 24 h, `blocked` after 3
+looks in a row (tried once a day); a 5xx or timeout skips that page (3 in one look → stop, 1 h); 5 unreadable pages in a
+row → `unreadable` with a 6-hour wait (logged `finder.format_changed` at error); robots.txt forbidding the sitemap or
+`/c/campaigns/` → `not_allowed`, nothing read until a daily read allows it again; no readable robots.txt and no
+stored copy at most 7 days old → nothing read (`down`).
+
+**Reading a page** (`finder/rsc.py`, `normalize.py`, pure). A campaign page is server-rendered; its data sits in the
+`self.__next_f.push` stream as react-query's dehydrated state. Two queries matter: `["campaigns","detail",uuid]`
+(the same object §38.10 reads as JSON) and `["campaigns","discover-card",uuid]` (the Discover card). A removed
+campaign answers 200 with a soft-404 page (`noindex`, no detail query) and is **gone**; a page with no stream data and
+no `noindex` is a **challenge** (handled like a 403); a page with stream data but no detail query is **unreadable**
+(a format change, never a wrong match). `normalize.card` turns the pair into a `FinderCard`: pay and places through
+§38's `campaigns.pay_from_public` (geo rates kept), the money left through `budget_from_public`, CR's own toggles
+(drafts first, its own sound, logo, face on camera), open or apply, the kind of pay, up to 6 categories, the content
+types, the number of rules an open campaign hides until you join, `onDiscover`, and four signals (an overlay or sound
+it needs, `needed` or `maybe`; a viewer-country rule; the languages named in the name; a guess of the page's
+language) read from the name and description (and an application campaign's brief); the card keeps only the signals,
+never that text (the `PUB#` copy below keeps §38.10's stripped public JSON for the add).
+
+**The plan** (`source.plan`, pure). A sitemap `lastmod` is the date a campaign was first listed and never moves, so
+freshness comes from reading pages again. In order, up to 40 a look: current matches of any owner read more than 12
+hours ago (at most 10), pages never read (newest listing first), then group siblings missing from the sitemap, live
+campaigns read more than 2 days ago, the rest more than 14 days ago, and a gone page only when its `lastmod` changes.
+That is about 155 pages a day within 160 for 4 looks; the first fill of all 766 campaign pages takes 3 to 5 days,
+newest first, and the page says how many it has looked at so far.
+
+**Matching** (`finder/match.py`, `words.py`, pure, golden cases in `api/tests/fixtures/finder/`). For each cached card
+on Discover, in order, the first refusal is its reason: already his, Not for me, not on Discover, something Clip Factory
+can't make (drafts first, its own sound, its own overlay, only slideshows or face videos), almost no money left (95 %
+used), no paid place among his ready places (TikTok only after its audit), another kind of pay (unless he asked for it),
+apply first (unless he asked for it), under his pay per 1,000 views, under his money left, another topic (only when he
+picked one), another language (only when he picked one). A card can be refused only by a fact on the public page; what
+the page can't tell never refuses it: the match is kept with a line "I can't tell…" and ranks after the clean ones.
+Heads-ups (its own sound maybe, its own picture on top maybe, face on camera, viewers from some countries only) and
+notes (cheaper in some countries, rules hidden until you join, also pays on TikTok once TikTok checks Clip Factory) ride
+with the match. Ranking: clean matches first, per-view pay before other kinds, the highest rate, the most money left,
+the newest launch. At most 20 matches. The defaults are chosen for him: at least $1.00 per 1,000 views, the places he
+set up, at least a quarter of the money left, open to join. Every rate and amount is CR's own number, formatted only and
+tagged "Content Rewards' numbers"; nothing estimates what a clip would earn. The web never decides a match: it shows the
+server's words.
+
+**From a match to making clips.**
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant O as Owner (Find campaigns)
+  participant A as cf-prod-api
+  participant DB as DynamoDB
+  participant CR as Content Rewards
+  O->>A: PATCH …/finder/matches/{id} {"said": "opened"} (not awaited, the new tab opens at once)
+  O->>CR: on CR: Join Campaign (or Apply, Submit application), his own tap
+  alt Not signed in (today: CR's pilot yes is pending)
+    O->>A: POST …/finder/matches/{id}/add (I joined: add it)
+    A->>CR: §38.8 campaigns.add with the link it knows (one §38.10 public read: his own action)
+    A->>DB: CAMPAIGN#{uuid} (addedBy finder), his answer through apply_said, CRFIND.added
+    O->>A: POST …/campaigns/{id}/read {"pastedRules"} when he pasted the rules
+  else Signed in (connected or read_only)
+    O->>A: back on the page (visibilitychange or focus): POST …/finder/joined
+    A->>CR: list_my_campaigns (cached 2 minutes)
+    A->>DB: adopt: PutItem CAMPAIGN#{uuid} membership unknown, then the membership check: a MODIFY to in
+    DB-->>O: You're in! (notification and confetti, as for any campaign), then the rules read
+  end
+```
+
+The add accepts only a stored match, an opened one or a hidden one. When CR's public JSON is down it builds the
+campaign from the cached `PUB#` copy if that is at most 24 hours old, with the card's "as of" set to when that copy
+was read. Adopting takes only campaigns he opened from the finder in the last 48 hours, never a stored match he
+didn't open and never one he added and then removed (`CRFIND.added` remembers it, as §38.8's delete never brings a
+campaign back); the match to CR's list uses §38's `ids.match_campaign` (TypeID, else name; never `ambiguous`), at
+most 5 adds a call. The tick adopts the same way within 15 minutes when the page is closed (`contentrewards/poll.py`
+step 3 reads `list_my_campaigns` when there is a candidate, inside its 25 calls). Open campaigns hide their rules
+until he joins, so a match can still meet a §38.4 stop later; the rules are read right after the join and the fit
+check (flow 20) guards every upload.
+
+**Ask Content Rewards.** While signed in, one glass tap sends CR one fixed feature request through MCP
+`send_feedback` (`kind: "idea"`, `about_tool: "list_my_campaigns"`, the literal `finderapi.ASK_MESSAGE`: no personal
+data, URL or token) from `cf-prod-api`, at most once per 30 days. It asks for official tools to search Discover and to
+join or start an application with the creator's consent.
+
+**Live and notifications.** The broadcast maps `CRFIND` to `{type: "contentrewards", op: "upsert", id: "finder",
+partial: true}` (no new live type); the web's finder store refetches its route on that event (1 s debounce).
+`cf-prod-notify` sends "3 new campaigns match what you want." (tag `crfind`, TTL 24 h) on a `MODIFY` of `CRFIND`
+whose `notice.key` changed, under the existing "Content Rewards news" choice, deduped by `NOTIFIED#cr#finder:{key}`.
+The look sets a notice only on a scheduled look, never on a start, Check now or a change, never more than once a
+day, and only for matches first shown after his last notice and his last visit. `GET /v1/contentrewards` gains
+`finder: {on, started, newCount, matches}` whenever the finder is switched on, so Home's chips and the Campaigns
+entry card need no extra call.
+
+**Data** (additive only, [CONTRACTS.md §41.5](CONTRACTS.md#415-api-data-the-job-live-and-mock-mode)):
+
+| Item | Holds |
+|---|---|
+| `USER#{id}` / `CRFIND` | his finder: the api writes `want`, `seenAt`, `hidden`, `opened`, `added`, `lookingSince`, `checkNow`, `askedAt`; the look writes only `matches`, `matchedAt`, `matchedWant`, `shown`, `notice`, `skipped`, `looked`, `categories`, `sourceState`, by UpdateItem with `attribute_exists(pk)` (a look never creates the item) |
+| `CRPUBLIC` / `CAMP#{uuid}` | one public campaign page's card, its state (`ok`, `gone`, `unreadable`), `lastmod`, `readAt`, `fails`; TTL 60 days after the read |
+| `CRPUBLIC` / `PUB#{uuid}` | the §38.10 public copy of an `ok` campaign, so adding or adopting a match needs no scheduled read of CR's JSON |
+| `CRPUBLIC` / `STATE` | the reader: robots.txt, the sitemap entries, the lease, the next look, the backoff and the day's reads |
+| `USER#{id}` / `CAMPAIGN#{uuid}` | + `addedBy: "finder"` (internal) |
+
+`CRPUBLIC` items hold no owner data and never travel (the broadcast takes only `USER#` keys). Nothing that holds the
+owner's data is replaced or destroyed.
+
+**The switch.** Every finder route answers 503 `unavailable`, the tick never starts a
+look and `cf-prod-campaigns` answers `off`, unless `CR_FINDER=on` on `cf-prod-api`, `cf-prod-stats` and
+`cf-prod-campaigns`, set by Terraform `cr_finder_enabled` (default `false`). The web hides the Campaigns entry card,
+Home's chips and the "Find another campaign" mapping on 404 or 503, and the page says "Find campaigns is coming soon
+to Clip Factory." After the five parts of §41.6 have merged, one switch PR turns it on; setting it back to `false`
+turns the whole finder off again (the stored items stay), and is done the same day if Content Rewards or Whop asks
+Clip Factory to stop reading ([DEPLOYMENT.md](DEPLOYMENT.md#campaign-finder-contracts-41)).
+
+### 23. Get paid: payout steps, honest statuses and money sent to the bank (CONTRACTS §40, ADR-64)
 
 The owner asked for a step-by-step payout setup per place, "the same system" as Set up posting, a status that tells
 him money can reach him (or that it can't although he may earn), what he earned per place, and what reached his bank

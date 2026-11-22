@@ -36,4 +36,4 @@
   page together and keep the step id; never add a typed-in amount anywhere. Why it is built this way:
   [ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner).
   How its two read-only connections are kept: [SECURITY.md](SECURITY.md#get-paid-contracts-40). How the statuses and
-  the payout reads run: [ARCHITECTURE.md flow 22](ARCHITECTURE.md#22-get-paid-payout-steps-honest-statuses-and-money-sent-to-the-bank-contracts-40-adr-64).
+  the payout reads run: [ARCHITECTURE.md flow 23](ARCHITECTURE.md#23-get-paid-payout-steps-honest-statuses-and-money-sent-to-the-bank-contracts-40-adr-64).

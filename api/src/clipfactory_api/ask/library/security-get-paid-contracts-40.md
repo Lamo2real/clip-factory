@@ -3,7 +3,7 @@
 Get paid shows the owner each place's payout steps, whether money can reach him, and what Google and Whop say they
 sent to his bank ([CONTRACTS.md §40](CONTRACTS.md#40-get-paid-set-up-payouts-see-if-you-can-get-paid-and-what-reached-your-bank-owner-request-2026-11-21),
 [ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner),
-[ARCHITECTURE.md flow 22](ARCHITECTURE.md#22-get-paid-payout-steps-honest-statuses-and-money-sent-to-the-bank-contracts-40-adr-64)).
+[ARCHITECTURE.md flow 23](ARCHITECTURE.md#23-get-paid-payout-steps-honest-statuses-and-money-sent-to-the-bank-contracts-40-adr-64)).
 It adds two optional, read-only connections and no IAM, table, Lambda or Terraform-made secret.
 
 | What | How it is protected |

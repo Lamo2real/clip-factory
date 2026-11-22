@@ -1188,7 +1188,9 @@ understand how to navigate it", from setup to joining, to "Am I in?", to getting
   **Content Rewards** (coin icon, a ring over 3 steps, one state line) that opens its own page. The campaigns are on
   `/campaigns` (a paste box on top, then one card per campaign) and `/campaigns/{uuid}`, and Home gets a "Campaigns"
   row of chips like the streamers row. The money is a part at the end of the Money page (`#content-rewards`), and
-  its 30 days are a row of [All your money](#all-your-money) at the top.
+  its 30 days are a row of [All your money](#all-your-money) at the top. The [campaign finder](#campaign-finder) is
+  `/campaigns/find`, reached from a card at the top of `/campaigns`, a chip on Home's campaigns row and its
+  notification.
 - **Words.** Short sentences, one action each, at most 26 words a line, words a child knows. **Bold** is always the
   other site's exact label, word for word (Content Rewards', Whop's, YouTube Studio's, Instagram's, Facebook's); a bold
   word is something to tap or type into only when the sentence says "tap" or "type in", and a heading there is
@@ -1240,8 +1242,9 @@ understand how to navigate it", from setup to joining, to "Am I in?", to getting
   | Screen | The vermilion button |
   |---|---|
   | Content Rewards setup | the first open step's action ("Open Content Rewards", "Open Content Rewards settings", "Connect Content Rewards"; the answers "Yes", "I have an account" and "I added them" are green); while "Content Rewards said no?" is open, "Open email" (Connect turns glass), and after "I sent it" Connect again; when done, the way back when the page has `?back=`, "Connect again" only for a dead sign-in or in the sign-in-again week, "Add a campaign" when nothing else is left; in a desktop browser (or a Mac app that can't update itself) "Get the app" |
-  | Campaigns, empty | while Content Rewards is not connected, "Set up Content Rewards" (the part "Then join a campaign" and its Open are glass); once connected, "Open Content Rewards" while the box is empty; "Add campaign" once a campaign link is in it |
-  | A campaign card | its next step's one button: "Connect Content Rewards" (with the card's `?back=`; on a phone "Set up Content Rewards"), "Open campaign", "Yes, I applied", "I'm in. Read these rules", "Read these rules", "Add the logo", "Make clips anyway", "Make clips from this", "Make clips for this campaign" or "Find another campaign" (the brand said no); none while it waits or is paused ("Find another campaign" is glass on the other hard stops) |
+  | Campaigns, empty | while Content Rewards is not connected, "Set up Content Rewards" (the part "Then join a campaign" and its Open are glass); once connected, "Open Content Rewards" while the box is empty, or, while the finder is on, the finder card's "Find campaigns" (then "Open Content Rewards" is glass); "Add campaign" once a campaign link is in it |
+  | A campaign card | its next step's one button: "Connect Content Rewards" (with the card's `?back=`; on a phone "Set up Content Rewards"), "Open campaign", "Yes, I applied", "I'm in. Read these rules", "Read these rules", "Add the logo", "Make clips anyway", "Make clips from this", "Make clips for this campaign" or "Find another campaign" (the brand said no); none while it waits or is paused ("Find another campaign" is glass on the other hard stops); none while a campaign added from the finder says "Checking that you joined…" (its first 15 minutes) or "Waiting for the brand" (an application added while Clip Factory can't look), with a glass "Open campaign" |
+  | Find campaigns | never started, "Find campaigns for me" (with no place set up, "Set up YouTube"); with matches, the open match's "Open on Content Rewards", or "I joined: add it" / "I applied: add it" after he opened it; the newest "You're in!" row's "Make clips for this campaign" when there is one; stopped, "Find campaigns again"; none while it looks |
   | Home at `/` | "Add campaign" when a campaign link is pasted, else "Make clips" (the normal way, as before) |
   | Home at `/?campaign=` | "Make campaign clips"; while the campaign has a hard stop, the button shows the stop's short text and can't be tapped |
   | Review, a campaign clip | by the fit's verdict ([the fit block](#the-fit-block)): Upload, or "Make a FaZe Clips copy", or the first `todo` item's button, or "Make new clips for this campaign" / "Find another campaign" |
@@ -1284,7 +1287,9 @@ understand how to navigate it", from setup to joining, to "Am I in?", to getting
   switched off (503 `unavailable`) the setup card says "Coming soon" with no button, and the Campaigns page and Money
   part say "Content Rewards is coming soon to Clip Factory." The fit block, the "could earn" line and All your money
   stay hidden while their routes answer 404 (the old campaign strip stays), and the copy has its own switch. Both
-  switches are on in prod (PR #88 and PR #93); these states show only if one is turned off again.
+  switches are on in prod (PR #88 and PR #93); these states show only if one is turned off again. The campaign
+  finder has its own switch too, off until all its parts have merged: on 404 or 503 its card, chips and the "Find
+  another campaign" mapping are hidden and `/campaigns/find` says "Find campaigns is coming soon to Clip Factory."
 
 ### The two ways
 
@@ -1379,6 +1384,96 @@ Contract: [CONTRACTS.md §39.2](CONTRACTS.md#392-all-your-money-in-one-place),
   to see what arrived."; only with no sent rows: "Nothing sent to your bank yet." It is never added to the total
   above (a different thing over a different time), and it is never on the Get paid card.
 - **Numbers.** Amounts are only formatted (`tabular-nums`); all adding is on the server.
+
+### Campaign finder
+
+Contract: [CONTRACTS.md §41.1](CONTRACTS.md#411-what-the-owner-sees),
+[I-50](BUSINESS_REQUIREMENTS.md#interpretations-and-open-questions),
+[ADR-65](DECISIONS.md#adr-65-campaign-finder-content-rewards-public-pages-read-politely-joining-stays-the-owners-own-tap).
+He says once what he wants; Clip Factory shows the campaigns on Content Rewards that match, best first, and he joins
+each one himself on Content Rewards. The server decides every match and writes every line; the page only shows them.
+
+- **Where.** The page `/campaigns/find` (`data-help="cr-finder"`), no new tab or sidebar item. A glass card at the top
+  of `/campaigns`, above the paste box (`data-help="cr-finder-entry"`): "Find campaigns", one line ("Tell me what you
+  want. I'll find campaigns that pay for it.", "3 new campaigns match what you want." with a small "New" chip, "4
+  campaigns match what you want.", "None match right now. I look 4 times a day.", "You stopped finding campaigns.")
+  and a glass "Find campaigns". On Home's campaigns row (under the form, never inside it), a first chip "3 new
+  campaigns match" with new matches, else a last chip "Find campaigns" when the row shows anyway. The notification
+  "3 new campaigns match what you want." opens the page. Settings › Posting › Set up posting has the apple "Find
+  campaigns". Every "Find another campaign" that went to Discover opens `/campaigns/find` while the finder is on.
+- **The page, top to bottom.** The header "Find campaigns", "Campaigns on Content Rewards that pay what you want. I
+  look 4 times a day." and, once it has run, "Looked at 2:10 pm" with a glass "Look again now" (while limited: "You
+  can look again at 2:40 pm."); **What you want**; the matches (10, then "Show more", at most 20); the quiet lines "You
+  join each campaign yourself on Content Rewards." and how the rules are read after joining; the fold "Why not more?"
+  ("I looked at 154 campaigns. 6 match." and one line per reason with a count, most first, plus a quiet "Bring them
+  back"); a glass "Look on Content Rewards yourself"; while signed in, the quiet card "Clip Factory can't join for
+  you" with a glass "Ask Content Rewards" (`data-help="cr-finder-ask"`); the quiet "Stop finding campaigns".
+- **What you want** (`data-help="cr-finder-want"`, anchor `#want`): open the first time and on "Change", else folded to
+  one summary line ("At least $1 per 1,000 views · YouTube, Instagram · At least a quarter of the money left · Open to
+  join") with a glass "Change". Every change saves at once (no Save button) and the matches update by themselves; a
+  glass "Done" folds it. Never started, its vermilion "Find campaigns for me" is the screen's only one.
+
+  | Control | Kind | Choices | Picked for him |
+  |---|---|---|---|
+  | "Pays at least", "for every 1,000 views" | `Glide` | $0.50 · $1 · $2 · $3 | $1 |
+  | "Where you post" | chips, many | YouTube, Instagram, Facebook, X, TikTok | the places he set up ("The places you set up.") |
+  | "Money left" | `Glide` | Any · A quarter · Half · Most | A quarter |
+  | "Who can join" | `Glide` | Open to join · Also ones I apply to | Open to join |
+  | "What it's about" | chips, many | Anything + up to 12 of Content Rewards' categories | Anything |
+  | "Language" | chips, many | Any + English, Spanish, Portuguese, French, German, Italian | Any |
+  | "Other kinds of pay" | switch | "Also show campaigns that pay per post or share a prize." | off |
+  | "Tell me about new ones" | switch | "At most once a day." | on |
+
+  Under them, fixed: "I skip campaigns Clip Factory can't make clips for, like ones that need their own sound or
+  picture on the video." Chips are toggle buttons (`aria-pressed`), soft-filled when on, at least 44 px (48 on
+  phones). TikTok, until TikTok's audit, and a place not set up are shown off and can't be tapped (`aria-disabled`),
+  with their one line ("TikTok: not yet. …", "Set it up first."), and a quiet "Set up another place" under the chips.
+- **The match card** (`FinderMatchCard`, `data-help="cr-finder-match"`), one open at a time (the first on load;
+  tapping another's head opens it and folds the rest; after "Not for me" the next one opens). Top to bottom:
+  1. **Head**: a round letter of the brand (never an outside picture), the campaign name (two lines at most), the
+     brand, a "New" chip when it is new to him, and the access chip "Open to join" or "You apply first".
+  2. **Pay**: one row per place he posts to that the campaign pays for, with the place's mark and the server's line
+     ("$1.50 per 1,000 views · up to $250 a clip", "Up to $2.00 per 1,000 views", "$5.00 for each approved post",
+     "Shares the prize money", "Pays picked creators each month").
+  3. **Money left**: "$2,410.10 left of $2,500" over the soft bar with its chip ("Plenty left", "Half used"), then the
+     grey "Content Rewards' numbers, 2:10 pm". Amounts are only formatted (`tabular-nums`), never a guess of what a
+     clip would earn.
+  4. **Why it matched**, one line: "Pays $1.50 per 1,000 views on YouTube and Instagram. 96% of the money left. Open
+     to join."
+  5. Up to three quiet **notes** ("It has 2 rules you see once you join."), up to three **heads-ups** with a warning
+     `Icon` ("It may need its own sound. Clip Factory can't add one.") and up to three **can't tell** lines with a
+     question mark ("I can't tell how much money is left."). Never colour alone: each has its mark and words.
+  6. **Buttons**: before he opened it, the vermilion "Open on Content Rewards" (a new tab or the system browser) and a
+     quiet "Not for me" (8 s toast "Hidden. Undo"). After he opened it, the numbered steps (Content Rewards' own
+     labels in bold: **Join Campaign**, **Submit clip**, **Apply**, **Submit application**, **Brief**, **Content
+     requirements**), the "If you see" fold, the rules box when Clip Factory can't read the rules yet, and the
+     vermilion "I joined: add it" ("I applied: add it" for an application), with "Open on Content Rewards" glass. Two
+     hours later with no add, the vermilion goes back to "Open on Content Rewards".
+
+  A folded match shows its head and a glass "Open on Content Rewards", so **every match has "Open on Content
+  Rewards"** and only the open match's is vermilion. A "You're in! FaZe Clips is in your campaigns." row above the
+  matches (the page added it by itself when he came back) takes the vermilion: "Make clips for this campaign", or,
+  while the rules are read, "Reading the rules… (about 30 seconds)" on a button that can't be tapped yet.
+- **States** each say what to do next and name the button: never started (the want card, open); no place set up ("Set
+  up a place to post first. Then I can find campaigns that pay for it." with the vermilion "Set up YouTube");
+  looking ("Looking at Content Rewards' campaigns… This takes a minute or two.", or "Updating your matches…" with the
+  old ones dimmed below; no vermilion); the first look still going ("No match yet. I've looked at 120 campaigns so
+  far. I'll look at more later today."); no match ("No campaign matches right now. I look again 4 times a day." with
+  a glass "Change what you want"); Content Rewards didn't answer, stopped Clip Factory, asked apps not to read, or
+  changed its pages (one sentence each, ending "Tap Look on Content Rewards yourself." where it helps, with the
+  matches already stored under "As of Fri 21 Nov, 2:10 pm"); stopped ("You stopped finding campaigns." and the
+  vermilion "Find campaigns again"); a failed load (the shared `ErrorPanel`, "Try again").
+- **Words.** The §38.1 rules: words a 6 to 8-year-old knows, at most 26 words a line, one action each, "Content
+  Rewards" never "CR", **bold** only for Content Rewards' own labels word for word. Never on a screen: "CPM",
+  "budget", "API", "MCP", "scrape", "sitemap", "robots"; say "per 1,000 views", "money", "Content Rewards' pages".
+  Brand text (names, brands, Content Rewards' category names) is plain escaped text, at most 300 characters, never a
+  link Clip Factory didn't make. Under "Ask Content Rewards" › **Show more** › "What it says", the message to Content
+  Rewards' team is the one exception to the plain words (the line "This is what Clip Factory sends to Content Rewards'
+  team." sits above it).
+- **Glass, motion, phones.** Glass or soft fills only, no edges, the arrow cursor only; pick-one bars slide with
+  `Glide`; reduced motion skips the slides and the confetti; WCAG AA in light and dark. On phones and touch tablets
+  the screen's vermilion is pinned bottom right and Ask keeps clear of it. "New" chips stay for the whole visit, even
+  after the page tells the server he has seen them.
 
 ## Get paid
 
