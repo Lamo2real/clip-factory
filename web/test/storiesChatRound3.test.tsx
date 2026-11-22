@@ -7,6 +7,7 @@
 // chat and references parts, a stand-in for Settings › AI; nothing leaves the machine.
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import bundled from "../../stories/config/models.json";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setStoriesApi } from "../src/stories/api/client.ts";
 import * as chat from "../src/stories/api/mock/chat.ts";
@@ -172,15 +173,25 @@ async function justThisMessage(model: RegExp, effort?: RegExp) {
   await click(byText(".st-chat-sheet button", "Done"));
 }
 
+/**
+ * The exact words for a bundled model, built from stories/config/models.json's own fields (§45.35 D8): "{provider} on
+ * {host}" ("Anthropic on Amazon Bedrock"); a list from before D8 names only the host as its provider ("Amazon
+ * Bedrock"). So these checks follow the file and still fail when the screen drops the maker or the host.
+ */
+function bundledWords(key: string): string {
+  const m = (bundled.models as { key: string; provider: string; host?: string }[]).find((x) => x.key === key)!;
+  return m.host && m.host !== m.provider ? `${m.provider} on ${m.host}` : m.provider;
+}
+
 describe("the chat names the provider (§45.34)", () => {
   it("beside the model line and on every model in the picker", async () => {
     await openChat(CONV.winter);
-    expect($(".st-chat-ai__provider")?.textContent).toBe("From Amazon Bedrock");
-    expect(byLabel(".st-chat-ai__part", /^Model: Claude Opus 5\.5 on Amazon Bedrock/)).not.toBeNull();
+    expect($(".st-chat-ai__provider")?.textContent).toBe(bundledWords("opus-5-5"));
+    expect(byLabel(".st-chat-ai__part", new RegExp(`^Model: Claude Opus 5\\.5, ${bundledWords("opus-5-5")}\\.`))).not.toBeNull();
     await click($(".st-chat-ai__part"));
-    expect($(".st-chat-sheet")?.textContent).toContain("Amazon Bedrock. Good and fast.");
-    expect(modelOptions(withLines(models), null).every((o) => o.line?.startsWith("Amazon Bedrock."))).toBe(true);
-    expect(providerOf(fileModels(), "haiku-5-5")).toBe("Amazon Bedrock");
+    expect($(".st-chat-sheet")?.textContent).toContain(`${bundledWords("sonnet-5-5")}. Good and fast.`);
+    expect(modelOptions(withLines(models), null).every((o) => o.line?.startsWith(`${bundledWords(o.value)}.`))).toBe(true);
+    expect(providerOf(fileModels(), "haiku-5-5")).toBe(bundledWords("haiku-5-5"));
     expect(providerOf([], "not-a-model")).toBeNull();
   });
 });
@@ -419,7 +430,10 @@ describe("a reference video's page (§45.34)", () => {
     expect(references.clearReferenceFile(store, REF.ready)).toBe(false);
     expect((await api.getReference("stories", REF.ready)).reference.url).toBeUndefined();
     expect((await api.listReferences("stories")).find((r) => r.refId === REF.ready)?.url).toBeUndefined();
-    await expect(api.analyzeReference("stories", REF.ready)).rejects.toMatchObject({ status: 409, message: references.FILE_REMOVED });
+    // §45.35 D9: a video cleared before it was ever studied keeps no study, so the API's sentence stops at "removed".
+    await expect(api.analyzeReference("stories", REF.ready)).rejects.toMatchObject({ status: 409, message: references.REMOVED_NO_STUDY });
+    expect(references.clearReferenceFile(store, REF.analyzed)).toBe(true);
+    await expect(api.analyzeReference("stories", REF.analyzed)).rejects.toMatchObject({ status: 409, message: references.FILE_REMOVED });
     const made = await api.createReference("stories", { filename: "a.mp4", contentType: "video/mp4", size: 1000, title: "New one" });
     expect(made.reference.url).toBeUndefined();
   });

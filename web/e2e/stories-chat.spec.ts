@@ -6,6 +6,8 @@
 // the director's buttons (only on a tap), failures with Try again; a reference video uploaded in parts with its
 // progress, analyzed with a per-run model, the step track, the analysis, Use in a video, rename, delete with Undo.
 // Needs the Lamo Stories shell and the mock's workspace part (builder F); the chat and references parts are H's.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { visibleEdges } from "./edges.ts";
@@ -14,6 +16,20 @@ import { findOverflow } from "./helpers.ts";
 /** The mock's seeded ids (SEED_IDS in src/stories/api/mock/chat.ts and references.ts). */
 const CONV = { winter: "01JSTCV0000000000000000001", hooks: "01JSTCV0000000000000000002", long: "01JSTCV0000000000000000003" };
 const REF = { analyzed: "01JSTRF0000000000000000001", ready: "01JSTRF0000000000000000002" };
+
+/**
+ * Who makes a bundled model and who runs it, in the exact words built from stories/config/models.json's own fields
+ * (§45.35 D8 "{provider} on {host}", "Anthropic on Amazon Bedrock"; a list from before D8 names only the host as its
+ * provider). The line must be one of these exactly, so it still fails when the screen drops the maker or the host.
+ */
+const BUNDLED_WORDS = (() => {
+  const file = JSON.parse(readFileSync(join(import.meta.dirname, "../../stories/config/models.json"), "utf8")) as { models: { provider: string; host?: string }[] };
+  const words = new Set(file.models.map((m) => (m.host && m.host !== m.provider ? `${m.provider} on ${m.host}` : m.provider)));
+  const escaped = [...words].map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const any = escaped.join("|");
+  // The line beside "Model: …", and a model's own line in the picker ("Amazon Bedrock. Good and fast. Costs less.").
+  return { line: new RegExp(`^(${any})$`), sonnet: new RegExp(`^(${any})\\. Good and fast\\.`) };
+})();
 
 const PAGES: [string, string][] = [
   ["Chat list", "/stories/chat?all=1"],
@@ -443,7 +459,8 @@ test("round 3: the provider beside the line, Show earlier messages, and a failed
     await ctx.addInitScript(() => ((window as StoriesWindow).__cfStoriesMock = { knobs: { longChat: 530 } } as never));
     const page = await ctx.newPage();
     await open(page, `/stories/chat/${CONV.long}`);
-    await expect(page.locator(".st-chat-ai__provider")).toHaveText("From Amazon Bedrock");
+    // §45.35 D8: "{provider} on {host}" (a bundled list from before D8 names only the host).
+    await expect(page.locator(".st-chat-ai__provider")).toHaveText(BUNDLED_WORDS.line);
     await expect(page.locator(".st-chat-msg")).toHaveCount(500);
     const earlier = page.getByRole("button", { name: "Show earlier messages" });
     await expect(earlier).toBeVisible();
@@ -586,4 +603,32 @@ test("round 3: a reference video whose file was cleared says so and keeps its st
   await sheet.getByRole("button", { name: "Done" }).click();
   await expect(page.locator(".st-chat-ai__line")).toHaveText("Model: Claude Sonnet 5.5 · Effort: Low");
   await ctx.close();
+});
+
+test("round 4: who makes the model and who runs it, and a cleared video that was never studied", async ({ browser }) => {
+  test.setTimeout(90_000);
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    await ctx.addInitScript((id) => ((window as StoriesWindow).__cfStoriesMock = { knobs: { refFileRemoved: [id] } } as never), REF.ready);
+    const page = await ctx.newPage();
+    await open(page, `/stories/chat/${CONV.winter}`);
+    // §45.35 D8: the maker and the host, in the line and on each model in the picker.
+    await expect(page.locator(".st-chat-ai__provider")).toHaveText(BUNDLED_WORDS.line);
+    await expect(page.locator(".st-chat-ai__provider")).not.toHaveText(/^From /);
+    await page.getByRole("button", { name: /^Model: / }).click();
+    const sheet = page.getByRole("dialog");
+    await expect(sheet.locator(".st-chat-pick__line", { hasText: "Good and fast." })).toHaveText(BUNDLED_WORDS.sonnet);
+    await sheet.getByRole("button", { name: "Done" }).click();
+    // §45.35 D9: a video cleared before it was ever studied says only that it was removed.
+    await go(page, `/stories/references/${REF.ready}`);
+    await expect(page.locator(".st-ref-player__none")).toHaveText("The video was removed to save space.");
+    await expect(page.locator(".st-refs")).not.toContainText("Its study stays.");
+    await expect(page.locator(".st-ref-removed")).toHaveText("The video file is gone, so it cannot be analyzed.");
+    await settle(page);
+    expect(await audit(page, `a cleared video never studied ${w}`, touch && w < 768)).toEqual([]);
+    await ctx.close();
+  }
 });

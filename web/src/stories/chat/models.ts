@@ -22,12 +22,16 @@ export const EFFORT_LINE: Record<Effort, string> = {
 export interface ModelView extends ModelInfo {
   /** One plain line about the model, from stories/config/models.json. */
   line: string;
+  /** who runs it, e.g. "Amazon Bedrock" (§45.35 D8: ModelInfo.host); `provider` is who makes it */
+  host?: string;
 }
 
 interface FileModel {
   key: string;
   label: string;
   provider: string;
+  /** who runs it (§45.35 D8); a file older than that leaves it out */
+  host?: string;
   modelId: string;
   efforts: string[];
   defaultEffort: string | null;
@@ -53,6 +57,7 @@ export function fileModels(): ModelView[] {
     key: m.key,
     label: m.label,
     provider: m.provider,
+    ...(m.host ? { host: m.host } : {}),
     modelId: m.modelId,
     efforts: [...m.efforts],
     defaultEffort: m.defaultEffort,
@@ -68,6 +73,22 @@ export function fileModels(): ModelView[] {
 /** The server's list with each model's plain line added from the file. */
 export function withLines(models: ModelInfo[]): ModelView[] {
   return models.map((m) => ({ ...m, line: FILE_MODELS.find((f) => f.key === m.key)?.line ?? "" }));
+}
+
+/** Where every Lamo Stories model runs today (§45.35 D8): a model with no `host` of its own runs there. */
+export const DEFAULT_HOST = "Amazon Bedrock";
+
+/**
+ * Who makes a model and who runs it, in words (§45.35 D8): "Anthropic on Amazon Bedrock", "Meta on Amazon Bedrock".
+ * An older list that names only the host as its provider ("Amazon Bedrock") says just that, never "Amazon Bedrock on
+ * Amazon Bedrock"; null when neither is known.
+ */
+export function providerWords(m: { provider?: string | null; host?: string | null } | null | undefined): string | null {
+  if (!m) return null;
+  const maker = (m.provider ?? "").trim();
+  const host = (m.host ?? "").trim() || DEFAULT_HOST;
+  if (!maker) return m.host?.trim() ? host : null;
+  return maker === host ? host : `${maker} on ${host}`;
 }
 
 export function findModel(models: readonly ModelView[], key: string | null | undefined): ModelView | null {

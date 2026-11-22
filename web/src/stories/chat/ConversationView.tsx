@@ -20,7 +20,7 @@ import { Btn, Chip, Director, Empty, Icon, Progress, sentence, Waiting } from ".
 import { afterId, askedBefore, inFlight, LOCAL, mergeMessages } from "./messages.ts";
 import { effortLabel, effortProblem, findModel, modelLabel, useModels, withOverride } from "./models.ts";
 import { ProjectChip } from "./ProjectChip.tsx";
-import { forgetSentWithVisit, rememberSentWith, sentWith } from "./sentWith.ts";
+import { askedWith, forgetSentWithVisit, rememberSentWith } from "./sentWith.ts";
 import { ChatText } from "./text.tsx";
 import { pictureProblem, PICTURES_PER_MESSAGE, putPicture } from "./upload.ts";
 
@@ -299,7 +299,8 @@ export function ConversationView({
    */
   async function askAgain(asked: Message, failedId: string) {
     if (!conv || sending || writing) return;
-    const once = override && (override.model || override.effort) ? override : sentWith(ws, failedId);
+    const failed = messages.find((m) => m.msgId === failedId);
+    const once = override && (override.model || override.effort) ? override : askedWith(ws, failed ?? { msgId: failedId });
     const ids = asked.attachments.map((a) => a.assetId);
     if (!ids.length) return send(asked.text, [], once);
     const files = ids.map((id) => localFiles.get(id) ?? null);
@@ -556,7 +557,7 @@ export function ConversationView({
                 m={m}
                 models={models.models}
                 info={aiInfo}
-                once={m.role === "assistant" ? sentWith(ws, m.msgId) : null}
+                once={m.role === "assistant" ? askedWith(ws, m) : null}
                 failedSend={failedSend?.localId === m.msgId}
                 onRetry={() => {
                   const asked = askedBefore(messages, m.msgId);

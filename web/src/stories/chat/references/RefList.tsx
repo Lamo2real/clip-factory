@@ -2,8 +2,8 @@
 // uploaded as files (links to other people's videos are not downloaded), each opening its own page.
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { A } from "../../../components/ui.tsx";
-import { navigate } from "../../../lib/router.ts";
 import { storiesApi } from "../../api/client.ts";
+import { storiesGoLater } from "../../pane.tsx";
 import type { ReferenceVideo } from "../../api/types.ts";
 import { storiesHref } from "../../routes.ts";
 import { Btn, cheer, Chip, clock, Empty, Icon, Progress, sentence, size, UndoBar, Waiting } from "../kit.tsx";
@@ -56,7 +56,8 @@ export function RefList({ ws }: { ws: string }) {
       const ref = u.reference;
       setList((prev) => [ref, ...(prev ?? []).filter((r) => r.refId !== ref.refId)]);
       cheer(undefined);
-      navigate(storiesHref({ name: "reference", refId: ref.refId }));
+      // After the wait (the upload): never while Clip Factory is on screen; it opens once Lamo Stories is back (§45.35 D17).
+      storiesGoLater(storiesHref({ name: "reference", refId: ref.refId }));
       return;
     }
   }, [uploads]);

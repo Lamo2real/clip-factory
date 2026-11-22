@@ -12,7 +12,8 @@ import { Icon } from "../../components/Icon.tsx";
 import { useLoad, usePoll } from "../../lib/hooks.ts";
 import modelsFile from "../../../../stories/config/models.json";
 import { storiesApi } from "../api/client.ts";
-import { EFFORT_LABEL, STEP_ORDER, type AiSetting, type AiTask, type Effective, type Effort, type ModelInfo, type ModelOverride, type ProductionJob, type Story, type TaskInfo, type TaskKind } from "../api/types.ts";
+import { EFFORT_LABEL, STEP_ORDER, type AiSetting, type AiTask, type Effective, type Effort, type ModelInfo, type ModelOverride, type ModelUse, type ProductionJob, type Story, type TaskInfo, type TaskKind } from "../api/types.ts";
+import { providerWords } from "../chat/models.ts";
 import { storiesHref } from "../routes.ts";
 import { Busy, Notice, Pick, StSheet, Tag } from "./kit.tsx";
 import { say } from "./words.ts";
@@ -21,6 +22,8 @@ interface ModelEntry {
   key: string;
   label: string;
   provider: string;
+  /** who runs it (§45.35 D8); missing from an older file */
+  host?: string;
   modelId: string;
   efforts: string[];
   defaultEffort: string | null;
@@ -34,6 +37,7 @@ export const LISTED_MODELS: ModelInfo[] = FILE.models.map((m) => ({
   key: m.key,
   label: m.label,
   provider: m.provider,
+  ...(m.host ? { host: m.host } : {}),
   modelId: m.modelId,
   efforts: m.efforts as Effort[],
   defaultEffort: (m.defaultEffort as Effort | null) ?? null,
@@ -85,6 +89,22 @@ const STEP_WORDS: Record<string, string> = {
   captions: "Post captions",
   portrait: "Draw the picture",
 };
+
+/**
+ * A step can make more than one call (the storyboard step writes the story, or a new take of some scenes, and then
+ * the post captions), each its own record with its own `task` (§45.35 D5): those calls have their own words.
+ */
+const TASK_WORDS: Record<string, string> = { scene_rewrite: "Write a new take", captions: "Post captions" };
+
+/** The words for one model record: its own task's when the step makes more than one call, else its step's. */
+export function modelUseWords(u: Pick<ModelUse, "step" | "task">, steps: Record<string, string> = STEP_WORDS): string {
+  return (u.task ? TASK_WORDS[u.task] : undefined) ?? steps[u.step] ?? STEP_WORDS[u.step] ?? u.step;
+}
+
+/** Captions come after the call that wrote the story (the order the agent makes them). */
+function taskRank(u: Pick<ModelUse, "task">): number {
+  return u.task === "captions" ? 1 : 0;
+}
 
 const AGENT_WORDS: Record<string, string> = {
   creative_director: "Creative director",
@@ -353,7 +373,8 @@ function spoken(info: AiInfo, p: Planned): string {
 }
 
 function modelStatusWords(m: ModelInfo, live: boolean): string {
-  const by = m.provider ? `${m.provider}. ` : "";
+  const who = providerWords(m);
+  const by = who ? `${who}. ` : "";
   if (!live) return `${by}Not checked yet.`;
   if (m.status === "ok") return `${by}Ready.`;
   if (m.status === "not_checked") return `${by}Not checked yet.`;
@@ -536,7 +557,16 @@ export function SettingsFix({ sentence }: { sentence: string | null | undefined 
   );
 }
 
-type ModelUse = ProductionJob["meta"]["models"][number];
+/**
+ * The exact model a step called (§45.35 D5): "Model ID global.anthropic.claude-opus-5-5 in eu-north-1", from the job's
+ * own record; null for a record that does not say (an older run), so nothing is guessed from today's settings.
+ */
+export function modelIdLine(u: Pick<ModelUse, "modelId" | "region">): string | null {
+  const id = typeof u.modelId === "string" ? u.modelId.trim() : "";
+  if (!id) return null;
+  const region = typeof u.region === "string" ? u.region.trim() : "";
+  return `Model ID ${id}${region ? ` in ${region}` : ""}`;
+}
 
 /**
  * Whether this step stopped on its model (§45.34 "A failed model call still shows what was asked"): the record says
@@ -550,7 +580,8 @@ export function stoppedOn(job: Pick<ProductionJob, "steps">, m: ModelUse): boole
 
 /**
  * Which model and effort made each step of the video as it is now: for each step, the newest run that finished it
- * (a later run of only some steps keeps the earlier runs' writer and checks), in the order of the steps.
+ * (a later run of only some steps keeps the earlier runs' writer and checks), in the order of the steps. A step that
+ * made more than one call keeps each of that run's calls once (the story and its post captions, §45.35 D5).
  */
 export function madeWith(list: (ProductionJob | null | undefined)[]): ModelUse[] {
   const ids = new Set<string>();
@@ -561,19 +592,25 @@ export function madeWith(list: (ProductionJob | null | undefined)[]): ModelUse[]
     jobs.push(j);
   }
   jobs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const out = new Map<string, ModelUse>();
+  const from = new Map<string, string>(); // step -> the run that made it
+  const out: ModelUse[] = [];
   for (const j of jobs)
     for (const u of j.meta.models) {
-      if (out.has(u.step)) continue;
-      const step = j.steps.find((s) => s.key === u.step);
-      if (step && step.status !== "done") continue; // it did not finish in that run, so an older run's is in the video
-      out.set(u.step, u);
+      const made = from.get(u.step);
+      if (made !== undefined && made !== j.jobId) continue;
+      if (made === undefined) {
+        const step = j.steps.find((s) => s.key === u.step);
+        if (step && step.status !== "done") continue; // it did not finish in that run, so an older run's is in the video
+        from.set(u.step, j.jobId);
+      }
+      if (out.some((o) => o.step === u.step && (o.task ?? null) === (u.task ?? null))) continue;
+      out.push(u);
     }
   const rank = (step: string) => {
     const i = (STEP_ORDER as readonly string[]).indexOf(step);
     return i < 0 ? STEP_ORDER.length : i;
   };
-  return [...out.values()].sort((a, b) => rank(a.step) - rank(b.step));
+  return out.sort((a, b) => rank(a.step) - rank(b.step) || taskRank(a) - taskRank(b));
 }
 
 /**
@@ -592,11 +629,14 @@ export function ModelsUsed({ info, job, jobs, title = "Made with" }: { info: AiI
       <h3 className="st-s-details__title">{title}</h3>
       <ul className="st-s-used__list">
         {used.map((u, i) => (
-          <li key={`${u.step}:${i}`} className="st-s-used__row">
-            <span className="st-s-used__step">{STEP_WORDS[u.step] ?? u.step}</span>
-            <span className="st-s-used__model">{stopped(u) ? modelLine(info, u.model, u.effort, null) : modelLine(info, u.model, u.effort, u.effortApplied)}</span>
-            <Tag>{AGENT_WORDS[u.agentId] ?? u.agentId}</Tag>
-            {stopped(u) ? <span className="st-s-used__note">This step stopped on this model. This is what it was asked with.</span> : !u.effortApplied ? <span className="st-s-used__note">This model has no effort setting; it ran at its own level.</span> : null}
+          <li key={`${u.step}:${i}`} className="st-s-used__item">
+            <div className="st-s-used__row">
+              <span className="st-s-used__step">{modelUseWords(u)}</span>
+              <span className="st-s-used__model">{stopped(u) ? modelLine(info, u.model, u.effort, null) : modelLine(info, u.model, u.effort, u.effortApplied)}</span>
+              <Tag>{AGENT_WORDS[u.agentId] ?? u.agentId}</Tag>
+              {stopped(u) ? <span className="st-s-used__note">This step stopped on this model. This is what it was asked with.</span> : !u.effortApplied ? <span className="st-s-used__note">This model has no effort setting; it ran at its own level.</span> : null}
+            </div>
+            {modelIdLine(u) ? <span className="st-s-used__id">{modelIdLine(u)}</span> : null}
           </li>
         ))}
       </ul>

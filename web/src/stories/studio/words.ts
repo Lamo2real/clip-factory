@@ -167,3 +167,38 @@ export function ago(iso: string | null | undefined, now = Date.now()): string {
   if (days === 1) return "yesterday";
   return `${days} days ago`;
 }
+
+// ---------- Helpers and the storage place in words (§45.35 D21: never a raw id or an s3:// path) ----------
+
+/** Each helper a video is made with, by its provider id, in the words Settings › Video uses. */
+export const PROVIDER_WORDS: Record<string, string> = {
+  "bedrock-claude": "Claude on Amazon Bedrock",
+  "builtin-rig": "Built-in drawing",
+  "builtin-2d": "Built-in animator",
+  "builtin-synth": "Built-in sounds",
+  "nova-canvas": "Amazon Nova Canvas",
+  "nova-reel": "Amazon Nova Reel",
+};
+
+/** A helper's name; an id this list does not know yet is never shown as it is. */
+export function providerName(id: string | null | undefined): string {
+  return (id && PROVIDER_WORDS[id]) || "Another helper";
+}
+
+/** What each kind of helper does, for its row ("Writing: Claude on Amazon Bedrock"). */
+export const HELPER_KIND: Record<string, string> = { writer: "Writing", images: "Pictures", animation: "Animation", video: "Animation", audio: "Sound" };
+
+/** The helpers of a run in one line: "Claude on Amazon Bedrock, Built-in drawing, …" (each named once). */
+export function helpersLine(providers: Record<string, string> | null | undefined): string {
+  const names = Object.values(providers ?? {}).map(providerName);
+  return [...new Set(names)].join(", ");
+}
+
+/** Where a video's files are kept, in words (the exact folder is behind "Technical details"). */
+export const STORAGE_WORDS = "Lamo Stories' own folder in Clip Factory's media storage";
+
+/** A checked advice topic's own title ("Skid recovery on ice"); its id is never shown. */
+export function topicTitle(topics: readonly { id: string; title: string }[] | null | undefined, id: string | null | undefined): string | null {
+  if (!id) return null;
+  return topics?.find((t) => t.id === id)?.title ?? "Checked road advice";
+}

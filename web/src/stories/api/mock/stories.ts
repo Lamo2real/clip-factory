@@ -35,7 +35,7 @@ import {
   type StoryStatus,
   type TaskKind,
 } from "../types.ts";
-import { checkOverride, citationsFor, effectiveFor, shownSteps, startMockTask, topicFor } from "./ideas.ts";
+import { checkOverride, citationsFor, effectiveFor, modelCall, shownSteps, startMockTask, topicFor } from "./ideas.ts";
 import { delay, type MockStore } from "./store.ts";
 
 export const KEYS = ["listStories", "createStory", "getStory", "storyJobs", "patchStory", "deleteStory", "produce", "cancelStory", "approve", "reject", "requestChanges", "writeCaptions", "download"] as const;
@@ -620,9 +620,24 @@ function startModelStep(store: MockStore, job: ProductionJob, story: Story, key:
   const mustCheck = kind === "fact_check" && story.category === "driving_safety";
   if (e.off && kind !== "fact_check" && kind !== "final_review") return e.off;
   if (e.off && !mustCheck) return null;
-  if (e.problem) return e.problem;
-  job.meta.models = [...job.meta.models.filter((m) => m.step !== key), { step: key, agentId: e.agentId, model: e.model, effort: e.effort, effortApplied: e.effortApplied }];
-  if (key === "storyboard") job.meta.writerModel = e.model;
+  // Each record says exactly what was called (§45.35 D5): the task, the Bedrock model id or profile and the Region.
+  const call = modelCall(e.model) ?? {};
+  if (e.problem) {
+    // Bedrock refused the call: the step stops on its model and keeps what it was asked with (§45.34), as the agent does.
+    if (e.denied) job.meta.models = [...job.meta.models.filter((m) => m.step !== key), { step: key, agentId: e.agentId, task: kind, model: e.model, ...call, effort: e.effort, effortApplied: false, failed: true }];
+    return e.problem;
+  }
+  job.meta.models = [...job.meta.models.filter((m) => m.step !== key), { step: key, agentId: e.agentId, task: kind, model: e.model, ...call, effort: e.effort, effortApplied: e.effortApplied }];
+  if (key !== "storyboard") return null;
+  job.meta.writerModel = e.model;
+  // The storyboard step then writes the six post captions: the agent's second call in that step, its own record.
+  const c = effectiveFor(store, "captions", { request: run.override, project: story.ai });
+  const asked = { step: key, agentId: c.agentId, task: "captions", model: c.model, ...(modelCall(c.model) ?? {}), effort: c.effort };
+  if (c.problem) {
+    if (c.denied) job.meta.models = [...job.meta.models, { ...asked, effortApplied: false, failed: true }];
+    return c.problem;
+  }
+  job.meta.models = [...job.meta.models, { ...asked, effortApplied: c.effortApplied }];
   return null;
 }
 

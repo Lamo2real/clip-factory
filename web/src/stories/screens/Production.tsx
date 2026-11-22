@@ -39,9 +39,10 @@ import { cleanPick, effortName, madeWith, ModelMenu, modelName, ModelsUsed, Next
 import { Filmstrip } from "../studio/Filmstrip.tsx";
 import { usePaged, useSameScript, useWorkspace } from "../studio/hooks.ts";
 import { formatOf, formatWords, sameFormat, ShapePicker } from "../studio/shape.tsx";
-import { Busy, celebrate, Notice, Pick, ShowMore, Slider, Switch, Tag, TextField } from "../studio/kit.tsx";
+import { Busy, celebrate, Notice, Pick, ShowMore, Slider, Switch, Tag, TechDetails, TextField } from "../studio/kit.tsx";
+import { showFace } from "../studio/looks.ts";
 import { StepTrack } from "../studio/StepTrack.tsx";
-import { ago, CATEGORY_LABEL, isConflict, NO_GUIDANCE, say, seconds, STATUS_LABEL, STATUS_TONE } from "../studio/words.ts";
+import { ago, CATEGORY_LABEL, helpersLine, isConflict, NO_GUIDANCE, say, seconds, STATUS_LABEL, STATUS_TONE, STORAGE_WORDS } from "../studio/words.ts";
 import { KIND_OPTIONS } from "./Ideas.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
@@ -570,7 +571,7 @@ function CastTile({ c, on, full, onToggle }: { c: Character; on: boolean; full: 
         title={off ? "Pick up to 3 characters." : undefined}
         onClick={() => !off && onToggle()}
       >
-        <CharacterPreview look={c.look} movementStyle={c.movementStyle} expression={on ? "happy" : "neutral"} action={on ? "wave" : "idle"} size={88} playing={on} label={c.name} />
+        <CharacterPreview look={c.look} movementStyle={c.movementStyle} expression={on ? showFace(c) : "neutral"} action={on ? "wave" : "idle"} size={88} playing={on} label={c.name} />
         <span className="st-s-casttile__name">{c.name}</span>
         <span className="st-s-casttile__tick" aria-hidden="true">
           {on ? "✓" : "+"}
@@ -688,7 +689,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
   const canTryAgain = !live && ["draft", "failed", "review", "needs_check"].includes(story.status) && story.stale.length > 0;
   const watch = ["review", "needs_check", "approved", "published"].includes(story.status);
   // The writer of the storyboard in the video now: the latest run's, else the newest run that wrote it.
-  const wrote = job?.meta.writerModel ?? (live ? null : (madeWith([job, ...(jobs.data ?? [])]).find((u) => u.step === "storyboard")?.model ?? null));
+  const wrote = job?.meta.writerModel ?? (live ? null : (madeWith([job, ...(jobs.data ?? [])]).find((u) => u.step === "storyboard" && u.task !== "captions")?.model ?? null));
   const writer = wrote ? modelName(info, wrote) : null;
   const editable = !live && ["review", "needs_check", "failed"].includes(story.status);
   const usual = storyUsual(info, story);
@@ -761,18 +762,6 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
           ) : null}
           <dt>Storyboard version</dt>
           <dd>{story.scriptVersion || "Not written yet"}</dd>
-          {job?.meta.engineVersion ? (
-            <>
-              <dt>Drawing engine</dt>
-              <dd>Version {job.meta.engineVersion}</dd>
-            </>
-          ) : null}
-          {script ? (
-            <>
-              <dt>Seed</dt>
-              <dd>{script.seed}</dd>
-            </>
-          ) : null}
           <dt>Length</dt>
           <dd>
             Aim {seconds(story.durationSec)}
@@ -782,8 +771,8 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
           <dd>{formatWords(story.format)}, 30 frames a second</dd>
           {job ? (
             <>
-              <dt>Made with</dt>
-              <dd>{Object.values(job.meta.providers).join(", ") || "Built-in"}</dd>
+              <dt>Helpers used</dt>
+              <dd>{helpersLine(job.meta.providers) || "Lamo Stories' own built-in helpers"}</dd>
             </>
           ) : null}
           <dt>Model and effort for this video</dt>
@@ -798,9 +787,27 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
             </>
           ) : null}
           <dt>Saved in</dt>
-          <dd className="st-s-facts__mono">{story.storageLocation}</dd>
+          <dd>{STORAGE_WORDS}</dd>
         </dl>
         <ModelsUsed info={info} job={job} jobs={jobs.data} title={live ? "Models working on it" : "Made with"} />
+        <TechDetails>
+          <dl className="st-s-techfacts">
+            <dt>Folder</dt>
+            <dd className="st-s-facts__mono">{story.storageLocation}</dd>
+            {job?.meta.engineVersion ? (
+              <>
+                <dt>Drawing engine</dt>
+                <dd>Version {job.meta.engineVersion}</dd>
+              </>
+            ) : null}
+            {script ? (
+              <>
+                <dt>Seed</dt>
+                <dd>{script.seed}</dd>
+              </>
+            ) : null}
+          </dl>
+        </TechDetails>
         {jobs.data?.length ? (
           <>
             <h3 className="st-s-details__title">Every run</h3>
@@ -825,10 +832,12 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
 /** One run's models in a line: "Write: Opus 5.5 · High"; a step that stopped on its model: "Write: Opus 5.5 · High (stopped)". */
 export function runModels(info: AiInfo, j: ProductionJob): string {
   const word: Record<string, string> = { storyboard: "Write", safety: "Check", preview: "Last look" };
+  // A step's other calls have their own words (the storyboard step's post captions, §45.35 D5).
+  const task: Record<string, string> = { scene_rewrite: "New take", captions: "Captions" };
   return j.meta.models
     .map((m) => {
       const stopped = stoppedOn(j, m);
-      return `${word[m.step] ?? m.step}: ${shortName(modelName(info, m.model))}${(m.effortApplied || stopped) && m.effort ? ` · ${effortName(m.effort)}` : ""}${stopped ? " (stopped)" : ""}`;
+      return `${(m.task ? task[m.task] : undefined) ?? word[m.step] ?? m.step}: ${shortName(modelName(info, m.model))}${(m.effortApplied || stopped) && m.effort ? ` · ${effortName(m.effort)}` : ""}${stopped ? " (stopped)" : ""}`;
     })
     .join(" · ");
 }
