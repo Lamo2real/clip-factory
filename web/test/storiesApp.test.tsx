@@ -232,7 +232,7 @@ describe("the shell", () => {
 
   it("gives the page title and the theme colour back to Lamo Clips when it leaves", async () => {
     await mount();
-    expect(meta.content.toLowerCase()).toBe("#1c1842");
+    expect(meta.content.toLowerCase()).toBe("#1c130e");
     document.title = "Dashboard · Lamo Stories · Clip Factory";
     act(() => root.render(<ToastProvider>{null}</ToastProvider>));
     expect(meta.content).toBe("#0F372B");

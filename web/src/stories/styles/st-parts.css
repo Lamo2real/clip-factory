@@ -1,10 +1,17 @@
+/* Clip Factory Stories · the shared page parts (the shell builder's file): page heads, cards, buttons, chips, links,
+   the empty, waiting and broken states with their character, and the Needs you bar. On the glass recipe
+   (styles/GLASS-CONTRACT.md): glass surfaces at the surface radius, controls at the control radius, cream solids with
+   espresso words, orange only for shapes. Words loose on the page sit on a backing plate (.st-plate) in Picture and
+   See-through. */
+
 /* ---------- Page parts ---------- */
 
 .st-page {
   display: grid;
   gap: clamp(18px, 2.4vw, 26px);
-  padding: 0 0 48px;
+  padding: 0 0 var(--st-space-8);
 }
+/* The heading row is a backing plate (.st-plate): nothing over Ember, a glass plate in Picture and See-through. */
 .st-head {
   display: flex;
   flex-wrap: wrap;
@@ -15,18 +22,19 @@
 }
 .st-head__text {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
   flex: 1 1 380px;
   min-width: 0;
 }
 .st-head__title {
-  font-size: clamp(1.9rem, 1.4rem + 2vw, 2.8rem);
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h1);
+  overflow-wrap: anywhere;
 }
 .st-head__lede {
   max-width: 62ch;
-  color: var(--st-ink-soft);
-  font-size: 1.02rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-body);
 }
 .st-head__actions {
   display: flex;
@@ -36,75 +44,119 @@
   margin-left: auto;
 }
 
+/* A card: the glass recipe (StCard adds .st-glass: the smoky veil, the inner top highlight, the thin light edge). */
 .st-card {
-  background: var(--st-panel);
-  border-radius: var(--r-lg);
-  box-shadow: var(--st-shadow);
-  padding: 20px;
+  padding: var(--st-inset);
 }
+
+/* ---------- Buttons: glass controls at the control radius; the one main action is the warm orange ---------- */
 
 .st-btn {
   appearance: none;
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--st-space-2);
   border: 0;
-  border-radius: var(--r-pill);
-  min-height: 44px;
-  padding: 0 20px;
-  font: 700 1rem/1.1 var(--st-font);
-  color: var(--st-ink);
-  background: var(--st-panel-strong);
+  border-radius: var(--st-r-control);
+  min-height: var(--st-tap);
+  padding: 0 var(--st-space-5);
+  font: var(--st-weight-ui) 1rem/1.1 var(--st-font);
+  color: var(--st-text);
+  background-color: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
   text-decoration: none;
   text-align: center;
   transition:
-    transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    background-color 160ms ease,
-    box-shadow 200ms ease;
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out),
+    transform var(--st-dur-tap) var(--st-ease-spring);
 }
 .st-btn:hover {
-  background: var(--st-panel-hover);
-  transform: translateY(-1px);
+  background-color: var(--st-fill-control-hover);
 }
 .st-btn:active {
-  transform: translateY(1px) scale(0.97);
+  transform: scale(0.96);
 }
 .st-btn--main {
-  color: var(--st-on-sun);
-  background: var(--st-sun);
-  box-shadow: 0 10px 22px -12px rgba(255, 201, 74, 0.75);
+  min-height: var(--st-tap-main);
+  padding: 0 var(--st-space-6);
+  color: var(--st-on-cream);
+  background-color: var(--st-action);
+  /* A soft light across its top (over the fill, so the hover colour shows through). */
+  background-image: linear-gradient(180deg, rgb(var(--st-cream-rgb) / 0.26), rgb(var(--st-cream-rgb) / 0) 58%);
+  box-shadow: var(--st-sheen-control), var(--st-glow-action);
 }
 .st-btn--main:hover {
-  background: var(--st-sun-hover);
-  box-shadow: 0 14px 26px -12px rgba(255, 201, 74, 0.85);
+  background-color: var(--st-action-hover);
+  box-shadow: var(--st-sheen-control), var(--st-glow-action-hover);
+}
+.st-btn--main:active {
+  background-color: var(--st-action-pressed);
 }
 .st-btn--quiet {
-  background: transparent;
-  color: var(--st-ink-soft);
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--st-text-soft);
 }
 .st-btn--quiet:hover {
-  color: var(--st-ink);
-  background: var(--st-panel);
+  color: var(--st-text);
+  background-color: var(--st-fill-control);
+}
+/* Over a picture or the desktop a quiet button can sit straight on anything: it carries a card's veil there. */
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-btn--quiet {
+  background-color: var(--st-fill-control);
+  color: var(--st-text);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-btn--quiet:hover {
+  background-color: var(--st-fill-control-hover);
 }
 .st-btn--coral {
-  color: var(--st-on-sun);
-  background: var(--st-coral);
-  box-shadow: 0 10px 22px -12px rgba(255, 111, 97, 0.75);
+  color: var(--st-on-cream);
+  background-color: var(--st-coral);
+  box-shadow: var(--st-sheen-control), 0 14px 30px -14px rgb(var(--st-coral-rgb) / 0.6);
 }
 .st-btn--coral:hover {
-  background: #ff8a7e;
+  background-color: color-mix(in srgb, var(--st-coral) 82%, var(--st-cream));
 }
+/* On the cream card: espresso words on a light copper wash (glass words would vanish on cream). */
+.st-cream .st-btn:not(.st-btn--main, .st-btn--coral) {
+  color: var(--st-on-cream);
+  background-color: rgb(var(--st-copper-rgb) / 0.14);
+  box-shadow: none;
+}
+.st-cream .st-btn:not(.st-btn--main, .st-btn--coral):hover {
+  background-color: rgb(var(--st-copper-rgb) / 0.24);
+}
+/* Not ready yet (aria-disabled, never disabled: a tap plays the deny sound): quiet, still easy to read. */
 .st-btn:disabled,
 .st-btn[aria-disabled="true"] {
-  opacity: 0.55;
   transform: none;
+  color: var(--st-text-soft);
+  background-color: var(--st-fill-control);
+  background-image: none;
+  box-shadow: none;
+}
+.st-btn:disabled:hover,
+.st-btn[aria-disabled="true"]:hover {
+  background-color: var(--st-fill-control-hover);
+}
+.st-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
 }
 @media (max-width: 767px) {
   .st-btn {
-    min-height: 48px;
+    min-height: var(--st-tap-phone);
+  }
+  .st-btn--main {
+    min-height: var(--st-tap-main);
   }
 }
+
+/* ---------- Chips: round, a tone word on its tone (always words, never colour alone) ---------- */
 
 .st-chip {
   display: inline-flex;
@@ -112,27 +164,43 @@
   gap: 6px;
   min-height: 28px;
   padding: 0 12px;
-  border-radius: var(--r-pill);
-  font: 700 0.85rem/1 var(--st-font);
-  color: var(--st-ink);
-  background: var(--st-panel-strong);
+  border-radius: var(--st-r-round);
+  font: var(--st-weight-ui) var(--st-fs-chip)/1 var(--st-font);
+  color: var(--st-text);
+  background: var(--st-fill-control);
   white-space: nowrap;
 }
 .st-chip--sun {
-  color: var(--st-sun-ink);
-  background: rgba(255, 201, 74, 0.2);
+  color: var(--st-text-amber);
+  background: rgba(255, 168, 82, 0.2);
 }
 .st-chip--coral {
   color: var(--st-coral-ink);
-  background: rgba(255, 111, 97, 0.22);
+  background: rgba(255, 127, 106, 0.22);
 }
 .st-chip--mint {
   color: var(--st-mint-ink);
-  background: rgba(71, 214, 160, 0.2);
+  background: rgba(111, 217, 164, 0.2);
 }
 .st-chip--sky {
   color: var(--st-sky-ink);
-  background: rgba(98, 198, 255, 0.2);
+  background: rgba(124, 198, 230, 0.2);
+}
+/* Over a picture or the desktop: the tone is cut back over a deep well, so its words keep 4.5:1 over white too. */
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-chip {
+  background: rgb(var(--st-well-rgb) / 0.42);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-chip--sun {
+  background: linear-gradient(rgb(var(--st-amber-rgb) / 0.12), rgb(var(--st-amber-rgb) / 0.12)), rgb(var(--st-well-rgb) / 0.42);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-chip--coral {
+  background: linear-gradient(rgb(var(--st-coral-rgb) / 0.12), rgb(var(--st-coral-rgb) / 0.12)), rgb(var(--st-well-rgb) / 0.42);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-chip--mint {
+  background: linear-gradient(rgb(var(--st-mint-rgb) / 0.12), rgb(var(--st-mint-rgb) / 0.12)), rgb(var(--st-well-rgb) / 0.42);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-chip--sky {
+  background: linear-gradient(rgb(var(--st-sky-rgb) / 0.12), rgb(var(--st-sky-rgb) / 0.12)), rgb(var(--st-well-rgb) / 0.42);
 }
 
 .st-icon {
@@ -140,64 +208,83 @@
   flex: none;
 }
 
+/* ---------- Links ---------- */
+
 .st-textlink {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
-  min-width: 44px;
+  min-height: var(--st-tap);
+  min-width: var(--st-tap);
   padding: 0 6px;
-  border-radius: var(--r-sm);
-  color: var(--st-sky-ink);
-  font-weight: 700;
+  border-radius: var(--st-r-inner);
+  color: var(--st-text-amber);
+  font-weight: var(--st-weight-ui);
   text-decoration: underline;
   text-underline-offset: 3px;
-  transition: background-color 160ms ease;
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
 }
 .st-textlink:hover {
-  background: var(--st-panel);
+  background-color: var(--st-fill-control);
 }
+/* Back: a glass pill with a round glass puck for its arrow (the reference's round back button). */
 .st-back {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 0 12px 0 6px;
-  border-radius: var(--r-pill);
-  color: var(--st-ink-soft);
-  font-weight: 700;
+  gap: var(--st-space-2);
+  min-height: var(--st-tap);
+  padding: 0 var(--st-space-4) 0 5px;
+  border-radius: var(--st-r-round);
+  background-color: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
   text-decoration: none;
   transition:
-    background-color 160ms ease,
-    color 160ms ease;
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out);
 }
 .st-back:hover {
-  color: var(--st-ink);
-  background: var(--st-panel);
+  color: var(--st-text-strong);
+  background-color: var(--st-fill-control-hover);
 }
 .st-back__icon {
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  padding: 8px;
+  border-radius: var(--st-r-round);
+  background: rgb(var(--st-cream-rgb) / 0.14);
+  box-shadow: var(--st-sheen-control);
   transform: rotate(180deg);
+}
+:is(.st-textlink, .st-back):focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
 }
 
 /* ---------- Empty, waiting and broken: always a character, never a blank box ---------- */
 
+/* A glass card (StEmpty adds .st-glass) with a soft warm light behind the character. */
 .st-empty {
   display: grid;
   justify-items: center;
   gap: 10px;
-  padding: clamp(24px, 4vw, 40px) 20px;
-  border-radius: var(--r-xl);
-  background: radial-gradient(120% 90% at 50% 0%, rgba(255, 201, 74, 0.12), transparent 70%), var(--st-panel);
-  box-shadow: var(--st-shadow-soft);
+  padding: clamp(24px, 4vw, 40px) var(--st-inset);
+  background: radial-gradient(120% 70% at 50% 0%, rgb(var(--st-amber-rgb) / 0.14), transparent 62%), var(--st-tint-card);
   text-align: center;
 }
+/* Over a picture or the desktop the light is left out: only the measured veil sits under the words. */
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-empty {
+  background: var(--st-tint-card);
+}
 .st-empty__title {
-  font-size: 1.4rem;
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
 }
 .st-empty__text {
   max-width: 46ch;
-  color: var(--st-ink-soft);
+  color: var(--st-text-soft);
 }
 .st-empty__action {
   display: flex;
@@ -206,33 +293,39 @@
   gap: 10px;
   margin-top: 6px;
 }
+/* A short wait: loose words on the page, so on a backing plate (StLoading adds .st-plate). */
 .st-loading {
   display: grid;
   justify-items: center;
   gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  margin-inline: auto;
   padding: 36px 16px;
-  color: var(--st-ink-soft);
-  font-weight: 700;
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
+  text-align: center;
 }
+/* Something did not load: a coral-tinted glass card (StError adds .st-glass.st-glass--tinted). */
 .st-error {
+  --st-tone-rgb: var(--st-coral-rgb);
   display: grid;
   justify-items: center;
   gap: 12px;
-  padding: 28px 20px;
-  border-radius: var(--r-xl);
-  background: rgba(255, 111, 97, 0.12);
+  padding: 28px var(--st-inset);
+  color: var(--st-text);
   text-align: center;
 }
 .st-stale {
-  color: var(--st-ink-soft);
-  font-size: 0.875rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
 }
 .st-calm {
   display: flex;
   align-items: center;
   gap: 14px;
-  color: var(--st-ink-soft);
-  font-weight: 700;
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-mascot {
@@ -321,37 +414,45 @@
   }
 }
 
-/* ---------- Needs you (every page) ---------- */
+/* ---------- Needs you (every page): a coral-tinted glass bar (.st-glass.st-glass--tinted) ----------
+   It hugs its round mark, its main action and its round close the surface gap from its sides, so they sit concentric
+   in its corners (20 - 6 = 14 for the button). */
 
 .st-needs {
+  --st-tone-rgb: var(--st-coral-rgb);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 14px;
+  gap: 8px 12px;
   margin-bottom: 18px;
-  padding: 12px 12px 12px 14px;
-  border-radius: var(--r-lg);
-  background: linear-gradient(100deg, rgba(255, 111, 97, 0.26), rgba(255, 201, 74, 0.14)), var(--st-stage-2);
-  box-shadow: var(--st-shadow-soft);
-  animation: st-rise 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  padding: var(--st-gap-surface);
+  animation: st-rise var(--st-dur-enter) var(--st-ease-out) both;
 }
 .st-needs__mark {
   display: grid;
   place-items: center;
   flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  margin: 4px 0 4px 4px;
+  border-radius: var(--st-r-round);
   background: var(--st-coral);
-  color: var(--st-on-sun);
+  color: var(--st-on-cream);
+  box-shadow: var(--st-sheen-control), 0 8px 18px -10px rgb(var(--st-coral-rgb) / 0.8);
 }
 .st-needs__text {
-  flex: 1 1 220px;
+  flex: 1 1 180px;
   min-width: 0;
+  padding-block: 6px;
+  color: var(--st-text);
   overflow-wrap: anywhere;
 }
+.st-needs__text strong {
+  color: var(--st-coral-ink);
+  font-weight: var(--st-weight-ui);
+}
 .st-needs__more {
-  color: var(--st-ink-soft);
+  color: var(--st-text-soft);
 }
 .st-needs__actions {
   display: flex;
@@ -360,21 +461,5 @@
   margin-left: auto;
 }
 .st-needs__hide {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  color: var(--st-ink-soft);
-  transition: background-color 160ms ease;
-}
-.st-needs__hide:hover {
-  color: var(--st-ink);
-  background: var(--st-panel-strong);
-}
-@media (max-width: 767px) {
-  .st-needs__hide {
-    width: 48px;
-    height: 48px;
-  }
+  flex: none;
 }
