@@ -1084,8 +1084,12 @@ highlights must be real anchors).
   vermilion and `join-find`'s Open is glass; unavailable, Open is the vermilion as before); `two-ways.spec.ts` still
   counts **5 taps** for the normal way; on every new screen no sideways scroll at 320–1920, no edges, targets ≥ 44 px
   (48 on phones), the arrow cursor only, axe contrast light and dark, reduced motion, the phone vermilion bottom
-  right, Ask never over the main button. `screenshots.spec.ts` adds `finder` and `finder-want` at 375 and 1440. Run it
-  on a port of its own: `CF_E2E_PORT=4745 npx playwright test e2e/finder.spec.ts`.
+  right, Ask never over the main button. The pin check (§41.1 "Pinned."), at 320×568, 375×812 and 430×932 (never
+  started, before Open, after Open by hand with the rules pasted, and signed in) and at 1280×720 and 1024×768 (never
+  started, before Open): every line of the card clears the pinned bar at some point of the scroll, a control he focuses
+  is never under it, and on phones the page ends with room for it. It reads the page without waiting a frame per step,
+  so it takes seconds. `screenshots.spec.ts` adds `finder` and `finder-want` at 375 and 1440. Run it on a port of its
+  own: `CF_E2E_PORT=4745 npx playwright test e2e/finder.spec.ts`.
 - **Help and docs**: the guides `cr-find`, `cr-find-join`, `cr-find-why-not` and `cr-find-missing` each have one
   question in `helpEvals.json` that both retrievers rank first (`web/test/helpRetrieve.test.ts`,
   `api/tests/test_help_evals.py`), and the owner's own words ("Can I find campaigns and join them based on
