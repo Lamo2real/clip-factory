@@ -5,9 +5,11 @@
 # 1000×560, 1000×600, 1000×650, 1000×720 and 1440×900 (sidebar open and folded) with a fixed clock, fixed mock data
 # and no motion. Twice: with Lamo Stories switched off every pixel must match; switched on (cf.storiesPreview = 1)
 # every pixel outside the workspace switcher's own box must match. Since §45.37 the switch and the Live chip under it
-# are one element of the shell, drawn over the sidebar (the chip's glass then sees the sidebar under it, which moves a
-# few pixels of its 8 px light): the chip's own box is the switcher's too, and is left out with it. The lead runs it on the switch PR and in the final
-# check. Pixels are compared as pixelmatch does with includeAA false and threshold 0.1 (§45.35 D20): only the
+# are one element of the shell, drawn over the sidebar; only the switch's box is left out: the Live chip is compared
+# like every other pixel, at exactly its old place, but for its 8 px light: drawn by the shell instead of inside the
+# sidebar, Chromium sometimes rounds that little dot 1 px up, so within 2 px of the light up to the light's own 64 px
+# may differ (CF_LIGHT_PX), and nothing else of the chip. The lead runs it on the switch PR and in the final check.
+# Pixels are compared as pixelmatch does with includeAA false and threshold 0.1 (§45.35 D20): only the
 # antialiased edge pixels of text and curves (which differ between two renders of the same page) are left out; any
 # change of layout or colour still fails. CF_EXACT=1 compares every pixel exactly, as before.
 #
@@ -34,7 +36,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --out) out="$2"; shift 2 ;;
     --sizes) sizes="$2"; shift 2 ;;
-    -h|--help) sed -n '2,23p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,27p' "$0"; exit 0 ;;
     *) base="$1"; shift ;;
   esac
 done
@@ -104,6 +106,8 @@ const THRESHOLD = EXACT ? 0 : Number(process.env.CF_THRESHOLD || 0.1);
 /** A fixed moment, so every "2 h ago" and every chart reads the same in both runs. */
 const CLOCK = new Date("2026-11-21T12:00:00.000Z");
 const TRIES = Number(process.env.CF_TRIES || 6);
+/** How many pixels near the shell's Live light may differ (its 8 × 8 px dot, rounded 1 px up or down). */
+const LIGHT_PX = Number(process.env.CF_LIGHT_PX ?? 64);
 const STILL = "*, *::before, *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }";
 
 if (out) mkdirSync(out, { recursive: true });
@@ -141,10 +145,17 @@ async function shot(browser, base, path, [w, h], folded, on) {
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(900);
   const mask = await page.evaluate(() =>
-    Array.from(document.querySelectorAll(".ws-switch-host, .ws-dock .live-dot"))
+    Array.from(document.querySelectorAll(".ws-switch-host"))
       .map((el) => el.getBoundingClientRect())
       .filter((r) => r.width > 0 && r.height > 0)
       .map((r) => ({ x: Math.floor(r.left), y: Math.floor(r.top), w: Math.ceil(r.width) + 1, h: Math.ceil(r.height) + 1 })),
+  );
+  // The shell's Live light, and 2 px round it: up to LIGHT_PX of its pixels may differ (see the top of this file).
+  const light = await page.evaluate(() =>
+    Array.from(document.querySelectorAll(".ws-dock .live-dot__light"))
+      .map((el) => el.getBoundingClientRect())
+      .filter((r) => r.width > 0 && r.height > 0)
+      .map((r) => ({ x: Math.floor(r.left) - 2, y: Math.floor(r.top) - 2, w: Math.ceil(r.width) + 5, h: Math.ceil(r.height) + 5 })),
   );
   // The page has settled when two shots in a row are the same (a late label or a check that finishes).
   let png = await page.screenshot({ type: "png" });
@@ -155,7 +166,8 @@ async function shot(browser, base, path, [w, h], folded, on) {
     png = again;
   }
   await ctx.close();
-  return { png, mask };
+  // The light's boxes ride along with the mask, marked: compare() tells them apart.
+  return { png, mask: [...mask, ...light.map((m) => ({ ...m, light: true }))] };
 }
 
 /**
@@ -167,7 +179,10 @@ async function compare(page, a, b, mask) {
   // The same bytes are the same pixels (one encoder): nothing to decode.
   if (a.equals(b)) return { diff: 0, aa: 0, size: "", png: null };
   return page.evaluate(
-    async ({ a, b, mask, threshold, exact }) => {
+    async ({ a, b, mask: boxes, lightPx, threshold, exact }) => {
+      // The boxes left out (the switcher), and the Live light's, where a few pixels may differ.
+      const mask = boxes.filter((m) => !m.light);
+      const light = boxes.filter((m) => m.light);
       const load = async (b64) => createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
       const [ia, ib] = await Promise.all([load(a), load(b)]);
       if (ia.width !== ib.width || ia.height !== ib.height) return { diff: -1, aa: 0, size: `${ia.width}×${ia.height} vs ${ib.width}×${ib.height}`, png: null };
@@ -181,7 +196,14 @@ async function compare(page, a, b, mask) {
       const H = ia.height;
       const da = read(ia).data;
       const db = read(ib).data;
-      const { diff, aa, kinds } = window.cfPixelDiff(da, db, W, H, { threshold, exact, mask });
+      const all = window.cfPixelDiff(da, db, W, H, { threshold, exact, mask });
+      const { aa, kinds } = all;
+      // The differing pixels near the shell's Live light: let pass when they are no more than the light's own.
+      let near = 0;
+      for (const m of light)
+        for (let y = Math.max(0, m.y); y < Math.min(H, m.y + m.h); y++)
+          for (let x = Math.max(0, m.x); x < Math.min(W, m.x + m.w); x++) if (kinds[y * W + x] === 2) near++;
+      const diff = near <= lightPx ? all.diff - near : all.diff;
       let png = null;
       if (diff > 0) {
         const outImg = new ImageData(W, H);
@@ -201,9 +223,9 @@ async function compare(page, a, b, mask) {
         for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
         png = btoa(s);
       }
-      return { diff, aa, size: `${W}×${H}`, png };
+      return { diff, aa, size: `${W}×${H}`, png, light: near <= lightPx ? near : 0 };
     },
-    { a: a.toString("base64"), b: b.toString("base64"), mask, threshold: THRESHOLD, exact: EXACT },
+    { a: a.toString("base64"), b: b.toString("base64"), mask, lightPx: LIGHT_PX, threshold: THRESHOLD, exact: EXACT },
   );
 }
 
@@ -252,7 +274,7 @@ for (const size of SIZES)
       const name = `${path === "/" ? "home" : path.slice(1)}-${size[0]}x${size[1]}${folded ? "-folded" : ""}`;
       if (r.diff !== 0) failed++;
       rows.push(
-        `${r.diff === 0 ? "same" : "DIFF"}  ${name.padEnd(28)} ${r.diff < 0 ? `size ${r.size}` : `${r.diff} px differ`}${r.aa ? `, ${r.aa} antialiased edge px left out` : ""}${as.length > 1 ? ` (${as.length} shots of each)` : ""}${storiesOn && b.mask.length ? ` (switcher box left out: ${b.mask.map((m) => `${m.w}×${m.h} at ${m.x},${m.y}`).join(", ")})` : ""}`,
+        `${r.diff === 0 ? "same" : "DIFF"}  ${name.padEnd(28)} ${r.diff < 0 ? `size ${r.size}` : `${r.diff} px differ`}${r.aa ? `, ${r.aa} antialiased edge px left out` : ""}${r.light ? `, ${r.light} px of the Live light let pass` : ""}${as.length > 1 ? ` (${as.length} shots of each)` : ""}${storiesOn && b.mask.some((m) => !m.light) ? ` (switcher box left out: ${b.mask.filter((m) => !m.light).map((m) => `${m.w}×${m.h} at ${m.x},${m.y}`).join(", ")})` : ""}`,
       );
       console.log(rows.at(-1));
       if (out && r.diff !== 0) {

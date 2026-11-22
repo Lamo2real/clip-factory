@@ -529,7 +529,8 @@ function StoriesShell({ page }: { page: StoriesPage }) {
       {solo ? null : (
         <nav className="st-rail" aria-label="Lamo Stories">
           <Brand />
-          <ul className="st-rail__list">
+          {/* For the keyboard the shell's switch comes right after this list, where it is drawn (data-ws-tab-after). */}
+          <ul className="st-rail__list" data-ws-tab-after="">
             <Glide active=".st-rail__item.is-active" className="glide--st-rail" as="li" />
             {NAV.map((item) => (
               <li key={item.label}>

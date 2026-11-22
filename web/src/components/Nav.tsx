@@ -96,7 +96,7 @@ export function Sidebar() {
           </span>
         </A>
       </div>
-      <ul className="sidebar__list" id="sidebar-list">
+      <ul className="sidebar__list" id="sidebar-list" data-ws-tab-after={hosted ? "" : undefined}>
         <Glide active=".sidebar__item.is-active" className="glide--menu" as="li" />
         {ITEMS.map((item) => (
           <li key={item.key}>
@@ -187,10 +187,11 @@ export function TabBar() {
  * The rows the sidebar foot shows under the Live chip: Get the app (until the app is installed) and the jobs line
  * (while jobs are working), from the same state the sidebar draws them from. Next to Lamo Stories the shell's
  * workspace switch and Live chip sit right above them in both apps (app/WorkspaceDock.tsx, §45.37), so it reads them
- * here.
+ * here. `known`: the session's first answer is in (until then the counts are not the owner's yet).
  */
-export function useFootRows(): { getApp: boolean; jobs: boolean } {
+export function useFootRows(): { getApp: boolean; jobs: boolean; known: boolean } {
   const { running } = useNavState();
   const { installed } = useInstall();
-  return { getApp: !installed, jobs: running > 0 };
+  const { me } = useSession();
+  return { getApp: !installed, jobs: running > 0, known: me !== null };
 }
