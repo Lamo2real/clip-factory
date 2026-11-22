@@ -15,6 +15,7 @@ import type {
   Job,
   JobDeleted,
   KeyCheck,
+  Finder,
   Follow,
   Lesson,
   MacUploadParts,
@@ -127,6 +128,7 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     createSkillUpload: (filename, skillId) =>
       call("POST", "/skills/uploads", skillId ? { filename, skillId } : { filename }),
     createSkill: async (body) => (await call<{ skill: Skill }>("POST", "/skills", body)).skill,
+    skillSection: (skillId, body) => call("POST", `/skills/${id(skillId)}/sections`, body),
     deleteSkill: (skillId) => call("DELETE", `/skills/${id(skillId)}`),
     getSettings: async () => (await call<{ settings: Settings }>("GET", "/settings")).settings,
     putSettings: async (patch) => (await call<{ settings: Settings }>("PUT", "/settings", patch)).settings,
@@ -229,6 +231,14 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     crFits: async (clipIds) => (await call<{ clips: ClipFit[] }>("GET", `/contentrewards/fit${q({ clipIds: clipIds.join(",") })}`)).clips,
     crFitCaptions: async (body) => (await call<{ captions: Captions }>("POST", "/contentrewards/fit/captions", body)).captions,
     crRemake: async (campaignId, body) => (await call<{ job: Job }>("POST", `/contentrewards/campaigns/${id(campaignId)}/remake`, body)).job,
+    // §41: the campaign finder.
+    crFinder: () => call<Finder>("GET", "/contentrewards/finder"),
+    crPatchFinder: async (body) => (await call<{ finder: Finder }>("PATCH", "/contentrewards/finder", body)).finder,
+    crFinderCheck: () => call("POST", "/contentrewards/finder/check"),
+    crFinderSaid: async (campaignId, said) => (await call<{ finder: Finder }>("PATCH", `/contentrewards/finder/matches/${id(campaignId)}`, { said })).finder,
+    crFinderAdd: async (campaignId) => (await call<{ campaign: Campaign }>("POST", `/contentrewards/finder/matches/${id(campaignId)}/add`)).campaign,
+    crFinderJoined: async () => (await call<{ added: CampaignSummary[] }>("POST", "/contentrewards/finder/joined")).added,
+    crFinderAsk: () => call("POST", "/contentrewards/finder/ask"),
     getMoneyEverywhere: () => call("GET", "/money/everywhere"),
     // §40: Get paid.
     getPaid: () => call("GET", "/getpaid"),

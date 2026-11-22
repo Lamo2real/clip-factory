@@ -47,6 +47,15 @@ describe("?back=", () => {
       expect(parseBack(bad), bad).toBeNull();
   });
 
+  it("§41.6 change 7: /campaigns/find leads back to Find campaigns", () => {
+    expect(parseBack("/campaigns/find")).toEqual({ href: "/campaigns/find", kind: "find" });
+    expect(backLabel(parseBack("/campaigns/find")!)).toBe("Back to Find campaigns");
+    expect(backNext(parseBack("/campaigns/find")!)).toBe("Next: back to Find campaigns.");
+    expect(withBack("/settings/posting/setup/youtube", "/campaigns/find")).toBe("/settings/posting/setup/youtube?back=/campaigns/find");
+    expect(backLink("?back=/campaigns/find")?.kind).toBe("find");
+    for (const bad of ["/campaigns/find?x=1", "/campaigns/find/", "/campaigns/finder", "/campaigns/FIND"]) expect(parseBack(bad), bad).toBeNull();
+  });
+
   it("reads the page's query, raw or encoded, and only one back", () => {
     expect(backLink(`?back=/campaigns/${UUID}`)?.kind).toBe("campaign");
     expect(backLink(`?back=${encodeURIComponent(`/review?job=${ULID}`)}`)?.href).toBe(`/review?job=${ULID}`);

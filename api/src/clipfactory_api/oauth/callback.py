@@ -128,6 +128,9 @@ def handle_callback(
             raise
         log("error", "oauth.payments_failed", error=type(e).__name__)
         return failed
+    if saved is not None and saved.get("workspaceId"):  # §45.13.3: a Lamo Stories item never runs this path
+        log("warning", "oauth.workspace_item_refused", platform=platform)
+        return "error"
     if saved is None or saved.get("platform") != platform or not saved.get("userId"):
         return failed
     if payments and saved.get("grant") != PAYMENTS_GRANT:

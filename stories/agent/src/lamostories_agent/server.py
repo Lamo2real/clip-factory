@@ -1,17 +1,19 @@
 """The Lamo Stories runtime's HTTP server: ``GET /ping`` and ``POST /invocations`` (docs/CONTRACTS.md §45.11.1).
 
-SCAFFOLD (Phase 1): a working server with an empty action table. Builder E implements the ``Runner`` and registers
-``process_story``, ``process_portrait``, ``process_reference`` and ``cancel``; builder E2 fills ``register`` in its own
-packages (``chat``, ``tasks``, ``reference``), which ``build_app`` already calls, for ``run_task``, ``chat_turn`` and
-``check_models``. Each action handler takes the payload and returns the immediate answer; the work runs in the
-background and ``busy()`` says whether anything still runs.
+Builder E's ``runner.JobRunner`` is the ``Runner`` and ``runner.register`` adds ``process_story``,
+``process_portrait``, ``process_reference`` and ``cancel``; builder E2 fills ``register`` in its own packages (``chat``,
+``tasks``, ``reference``), which ``build_app`` already calls, for ``run_task``, ``chat_turn`` and ``check_models``. Each
+action handler takes the payload and returns the immediate answer; the work runs in the background and ``busy()``
+says whether anything still runs. The payload's ``sessionId`` is AgentCore's session header
+(``X-Amzn-Bedrock-AgentCore-Runtime-Session-Id``) when the body has none: every write of the work is fenced on it.
+The lifespan's shutdown cancels running work cleanly.
 """
 
 from __future__ import annotations
 
 import json
 import os
-from collections.abc import Callable, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine
 from typing import Any, Protocol
 
 from starlette.applications import Starlette
@@ -20,6 +22,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 MAX_BODY = 64 * 1024
+SESSION_HEADER = "x-amzn-bedrock-agentcore-runtime-session-id"
 Action = Callable[[dict[str, Any]], dict[str, Any]]
 
 
@@ -66,6 +69,9 @@ def create_app(actions: Actions) -> Starlette:
             return bad("The request is not JSON.")
         if not isinstance(inv, dict):
             return bad("The request must be a JSON object.")
+        header = request.headers.get(SESSION_HEADER)
+        if header and not inv.get("sessionId"):
+            inv["sessionId"] = header
         action = inv.get("action")
         if action == "health":
             return JSONResponse({"ok": True})
@@ -81,17 +87,34 @@ def create_app(actions: Actions) -> Starlette:
 
 def register_all(actions: Actions, runner: Runner | None) -> None:
     """Every package's actions, from a fixed list (builder E adds its own here; E2's packages are already listed)."""
-    from . import chat, reference, tasks
+    from . import chat, reference, services, tasks
+    from . import runner as jobs
 
+    if runner is not None:
+        jobs.register(actions, runner, services.get)
     for package in (chat, tasks, reference):
         package.register(actions, runner)
 
 
 def build_app() -> Starlette:
-    """The app uvicorn serves (``--factory``)."""
+    """The app uvicorn serves (``--factory``). Nothing here calls AWS or starts a process: the clients are made on
+    the first job."""
+    from contextlib import asynccontextmanager
+
+    from .runner import JobRunner
+
     actions = Actions()
-    register_all(actions, None)
-    return create_app(actions)
+    runner = JobRunner()
+    register_all(actions, runner)
+    app = create_app(actions)
+
+    @asynccontextmanager
+    async def lifespan(_: Starlette) -> AsyncIterator[None]:
+        yield
+        await runner.shutdown()
+
+    app.router.lifespan_context = lifespan
+    return app
 
 
 def main() -> None:

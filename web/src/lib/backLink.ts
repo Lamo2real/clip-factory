@@ -8,7 +8,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ULID = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/i;
 const isId = (v: string) => ULID.test(v) || UUID.test(v);
 
-export type BackKind = "campaign" | "campaigns" | "clip" | "money" | "getpaid" | "setup";
+export type BackKind = "campaign" | "campaigns" | "find" | "clip" | "money" | "getpaid" | "setup";
 
 /** Get paid's places (§40.1) and the setup pages' places (§17.1, §38.3), for the back shapes. */
 const GETPAID_PLACES = ["youtube", "tiktok", "instagram", "facebook", "x", "contentrewards"];
@@ -32,7 +32,7 @@ export function backLink(search: string | URLSearchParams): BackLink | null {
   return parseBack(all[0]!);
 }
 
-/** One `back` value against the shapes (the six of §39.1, Get paid's two of §40.1 and a setup page). */
+/** One `back` value against the shapes (the six of §39.1, `/campaigns/find` from §41.6 change 7, Get paid's two of §40.1 and a setup page). */
 export function parseBack(raw: string): BackLink | null {
   if (typeof raw !== "string" || raw.length > 200 || !raw.startsWith("/") || raw.startsWith("//") || /[\\\s#]/.test(raw)) return null;
   const at = raw.indexOf("?");
@@ -48,6 +48,7 @@ export function parseBack(raw: string): BackLink | null {
   }
   if (query !== null) return null;
   if (path === "/campaigns") return { href: "/campaigns", kind: "campaigns" };
+  if (path === "/campaigns/find") return { href: "/campaigns/find", kind: "find" };
   if (path === "/money") return { href: "/money", kind: "money" };
   if (path === "/settings/posting/getpaid") return { href: path, kind: "getpaid" };
   const getpaid = /^\/settings\/posting\/getpaid\/([a-z]+)$/.exec(path);
@@ -71,6 +72,8 @@ export function backLabel(back: BackLink, campaignName?: string | null): string 
       return campaignName ? `Back to ${campaignName}` : "Back to your campaign";
     case "campaigns":
       return "Back to your campaigns";
+    case "find":
+      return "Back to Find campaigns";
     case "clip":
       return "Back to your clip";
     case "money":

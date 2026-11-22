@@ -1,6 +1,7 @@
 // A campaign card's one next step (docs/CONTRACTS.md §38.4): the chip, one sentence, and the screen's only vermilion
 // button (pinned at the bottom right on phones while the card is on screen). Quiet green asks change only Clip
-// Factory, each with an 8 s Undo. The rules box sits here when the owner has to copy the rules himself.
+// Factory, each with an 8 s Undo. The rules box sits here when the owner has to copy the rules himself. With the
+// campaign finder on, "Find another campaign" opens the Find page in the same tab (§41.6 change 2).
 import { useId, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../api/index.ts";
@@ -11,6 +12,7 @@ import { useToast } from "../../components/Toasts.tsx";
 import { Button, LinkButton } from "../../components/ui.tsx";
 import { CR_SETUP_PATH, MEMBERSHIP_TEXT, SOFT_STOPS, crSetupFor, forDevice, refused, reloadCr, signedIn, useCr, vermilionOf } from "../../lib/contentRewards.ts";
 import { withBack } from "../../lib/backLink.ts";
+import { FIND_PATH, finderHref, useFinderSummary } from "../../lib/finder.ts";
 import { isTouchDevice } from "../../lib/crConnect.ts";
 import { Rich } from "../settings/setup/bits.tsx";
 import { GreenButton, OpenButton } from "./bits.tsx";
@@ -23,9 +25,26 @@ const SAID_SAVED: Record<SaidAnswer, string> = {
   joined_by_hand: "Saved: you're in.",
 };
 
-/** The rules box (≤ 8,000 characters): "Copy everything under Brief and Content requirements. Paste it here." */
+/**
+ * The rules box (≤ 8,000 characters): "Copy everything under Brief and Content requirements. Paste it here." A glass
+ * "Paste" puts in what he copied in one tap (a phone's own paste is tap, hold, Paste).
+ */
 export function RulesBox({ value, onChange, label = "The campaign's rules" }: { value: string; onChange: (v: string) => void; label?: string }) {
   const id = useId();
+  const toast = useToast();
+  async function paste() {
+    try {
+      const got = await navigator.clipboard.readText();
+      if (!got.trim()) {
+        toast.info("Nothing is copied yet. Copy everything under Brief and Content requirements first.");
+        return;
+      }
+      onChange(got.slice(0, RULES_MAX));
+    } catch {
+      document.getElementById(`${id}-rules`)?.focus();
+      toast.info("Press and hold in the box, then choose Paste.");
+    }
+  }
   return (
     <div className="field cr-rules-box">
       <label className="field__label" htmlFor={`${id}-rules`}>
@@ -40,11 +59,26 @@ export function RulesBox({ value, onChange, label = "The campaign's rules" }: { 
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
-      <span className="counter">
-        {value.length} / {RULES_MAX.toLocaleString("en-US")}
-      </span>
+      <div className="cr-rules-box__foot">
+        <Button variant="glass" size="sm" icon="paste" act="paste" onClick={() => void paste()}>
+          Paste
+        </Button>
+        <span className="counter">
+          {value.length} / {RULES_MAX.toLocaleString("en-US")}
+        </span>
+      </div>
     </div>
   );
+}
+
+/**
+ * Every soft stop "Make clips anyway" accepts for this campaign: the ones he accepted before and the ones it shows now.
+ * The API keeps exactly the list it gets (PATCH replaces `anyway`), so the old ones go with the new: else each tap
+ * would un-accept the one before. `not_connected` is a note only and is never accepted.
+ */
+export function anywayCodes(campaign: Pick<Campaign, "stops" | "anyway">): StopCode[] {
+  const now = campaign.stops.filter((s) => !s.hard && SOFT_STOPS.includes(s.code) && s.code !== "not_connected").map((s) => s.code);
+  return [...new Set([...campaign.anyway.filter((c) => SOFT_STOPS.includes(c) && c !== "not_connected"), ...now])];
 }
 
 /** "Check it yourself" and "paste the rules" as two short numbered lines (one action each, §38.1). */
@@ -87,7 +121,15 @@ export function NextStepPanel({
   const withWayBack: typeof served = served.button?.href?.startsWith(CR_SETUP_PATH)
     ? { ...served, button: { ...served.button, href: withBack(served.button.href, `/campaigns/${campaign.campaignId}`) } }
     : served;
-  const step = forDevice(withWayBack, isTouchDevice());
+  // §41.6 change 2: while the overview has `finder`, Discover becomes the Find page (the server's words stay).
+  const finderOn = !!useFinderSummary();
+  const toFinder = <T extends { href?: string; external: boolean }>(b: T): T => {
+    if (!b.href) return b;
+    const to = finderHref(b.href, finderOn);
+    return to.href === b.href ? b : { ...b, href: to.href, external: to.external };
+  };
+  const device = forDevice(withWayBack, isTouchDevice());
+  const step = finderOn ? { ...device, ...(device.button ? { button: toFinder(device.button) } : {}), ...(device.glass ? { glass: device.glass.map(toFinder) } : {}) } : device;
   const [box, setBox] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   // "It says Submit clip" while the rules can't be read: the box opens at once (saying you're in and giving the
@@ -177,10 +219,7 @@ export function NextStepPanel({
         </Button>
       );
     else if (b.action === "anyway") {
-      // The API keeps exactly the list it gets (PATCH replaces `anyway`), so every soft stop he ever accepted goes
-      // with the new one: else each tap would un-accept the one before.
-      const now = campaign.stops.filter((s) => !s.hard && SOFT_STOPS.includes(s.code) && s.code !== "not_connected").map((s) => s.code);
-      const codes = [...new Set([...campaign.anyway.filter((c) => SOFT_STOPS.includes(c) && c !== "not_connected"), ...now])];
+      const codes = anywayCodes(campaign);
       mainEl = (
         <Button variant={v} size="lg" icon="scissors" loading={busy === "anyway"} data-help-clear={clear} onClick={() => patch({ anyway: codes }, "anyway")}>
           {b.label}
@@ -189,7 +228,7 @@ export function NextStepPanel({
     } else if (b.href && b.external) mainEl = <OpenButton label={b.label} href={b.href} primary={!quiet} size="lg" />;
     else if (b.href)
       mainEl = (
-        <LinkButton href={b.href} variant={v} size="lg" icon={b.href.startsWith("/?campaign=") ? "scissors" : "link"} data-help-clear={clear} data-help={b.href.startsWith("/?campaign=") ? "cr-make-clips" : undefined}>
+        <LinkButton href={b.href} variant={v} size="lg" icon={b.href.startsWith("/?campaign=") ? "scissors" : b.href === FIND_PATH ? "search" : "link"} data-help-clear={clear} data-help={b.href.startsWith("/?campaign=") ? "cr-make-clips" : undefined}>
           {b.label}
         </LinkButton>
       );
@@ -272,7 +311,15 @@ export function NextStepPanel({
       {mainWrap && pinSlot ? createPortal(mainWrap, pinSlot) : mainWrap}
       {!connectFold && step.glass?.length ? (
         <div className="cr-next__glass">
-          {step.glass.map((g) => (g.external ? <OpenButton key={g.label} label={g.label} href={g.href} /> : <LinkButton key={g.label} href={g.href} variant="glass">{g.label}</LinkButton>))}
+          {step.glass.map((g) =>
+            g.external ? (
+              <OpenButton key={g.label} label={g.label} href={g.href} />
+            ) : (
+              <LinkButton key={g.label} href={g.href} variant="glass" icon={g.href === FIND_PATH ? "search" : undefined}>
+                {g.label}
+              </LinkButton>
+            ),
+          )}
         </div>
       ) : null}
       {connectFold ? (

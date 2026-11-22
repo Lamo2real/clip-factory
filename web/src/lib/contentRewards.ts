@@ -30,6 +30,8 @@ import { onLiveSignal } from "./live.ts";
 
 export const CR_SETUP_PATH = "/settings/posting/setup/contentrewards";
 export const CAMPAIGNS_PATH = "/campaigns";
+/** The campaign finder's page (§41.1). */
+export const FIND_PATH = "/campaigns/find";
 export const campaignPath = (campaignId: string) => `/campaigns/${encodeURIComponent(campaignId)}`;
 export const makeClipsPath = (campaignId: string) => `/?campaign=${encodeURIComponent(campaignId)}`;
 export const CR_MONEY_PATH = "/money#content-rewards";
@@ -558,7 +560,14 @@ export interface GateInput {
 }
 
 const openCampaign = (url: string) => ({ label: "Open campaign", href: url, external: true });
-const findAnother = { label: "Find another campaign", href: CR_DISCOVER, external: true };
+/**
+ * "Find another campaign" (§38.4): Content Rewards' Discover, as the server sends it. With the finder on (§41.6 change
+ * 2) the screens open the Find page in the same tab instead (`finderHref` in lib/finder.ts); the server's words and
+ * hrefs stay as they are, so the gate below always uses Discover.
+ */
+export function findAnother(finderOn = false): { label: string; href: string; external: boolean } {
+  return finderOn ? { label: "Find another campaign", href: FIND_PATH, external: false } : { label: "Find another campaign", href: CR_DISCOVER, external: true };
+}
 
 /** The membership's own stop code (null for `in` and `manual`). */
 export function membershipStop(m: Membership): StopCode | null {
@@ -602,14 +611,14 @@ export function nextStepFor(g: GateInput): NextStep {
   const ending = g.stops.find((s) => s.hard && !MEMBERSHIP_STOPS.includes(s.code) && s.code !== "rules_reading" && s.code !== "rules_failed" && s.code !== "logo_missing");
   if (ending) {
     if (ending.code === "paused")
-      return { kind: "stop", chip: "Paused", text: ending.text, glass: [findAnother] };
+      return { kind: "stop", chip: "Paused", text: ending.text, glass: [findAnother()] };
     const other = PICK_ANOTHER.includes(ending.code);
     return {
       kind: other ? "pick_another" : "stop",
       chip: STOP_CHIP[ending.code] ?? chip(g.membership),
       text: ending.text,
       ...(ending.fixHref && !other ? { button: { label: ending.code === "no_place" ? "Set it up" : "Fix it", href: ending.fixHref, external: false } } : {}),
-      ...(other ? { glass: [findAnother] } : {}),
+      ...(other ? { glass: [findAnother()] } : {}),
     };
   }
   const quiet = (labels: SaidAnswer[]) =>
@@ -675,7 +684,7 @@ export function nextStepFor(g: GateInput): NextStep {
         asks: quiet(["joined_by_hand"]),
       };
     case "not_accepted":
-      return { kind: "pick_another", chip: chip("not_accepted"), text: MEMBERSHIP_TEXT.not_accepted, button: { ...findAnother } };
+      return { kind: "pick_another", chip: chip("not_accepted"), text: MEMBERSHIP_TEXT.not_accepted, button: findAnother() };
     default:
       break;
   }
@@ -728,7 +737,7 @@ export function vermilionOf(step: NextStep, boxText = ""): string | null {
 /** One row per platform the campaign pays on (CR's published rates, never a guess of what a clip earns). */
 export function payLine(p: Campaign["pay"][number], type: Campaign["type"]): string {
   if (type === "pool") return "Shares the prize money";
-  if (type === "retainer") return "A monthly fee for picked creators";
+  if (type === "retainer") return "Pays picked creators each month";
   if (p.perPostCents != null && p.per1kCents == null)
     return `${usd(p.perPostCents)} for each approved post${p.minViews ? ` · needs ${p.minViews.toLocaleString("en-US")} views` : ""}`;
   const parts: string[] = [];

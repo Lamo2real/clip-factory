@@ -1,0 +1,10 @@
+{
+  "$comment": "Test fixture: a model id with a wildcard must stop the plan (the grant would reach every model).",
+  "defaultModel": "any",
+  "defaultEffort": "high",
+  "models": [
+    { "key": "any", "label": "Any", "modelId": "anthropic.*", "profile": "global.anthropic.*", "regions": ["*"], "efforts": [] }
+  ],
+  "imageModel": { "label": "Amazon Nova Canvas", "modelId": "amazon.nova-canvas-v1:0", "region": "eu-west-1" },
+  "videoModel": { "label": "Amazon Nova Reel 1.1", "modelId": "amazon.nova-reel-v1:1", "region": "us-east-1" }
+}

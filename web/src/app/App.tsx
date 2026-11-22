@@ -1,4 +1,5 @@
 import "../styles/contentrewards.css";
+import "../styles/finder.css";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { initApi } from "../api/index.ts";
 import { auth, onSignedOut } from "../lib/auth.ts";
@@ -9,9 +10,10 @@ import { findBranch, findTree, legacySettingsRedirect } from "../lib/settingsTre
 import { forgetLoaded } from "../lib/hooks.ts";
 import { resetCr } from "../lib/contentRewards.ts";
 import { resetGetPaid } from "../lib/getPaid.ts";
+import { resetFinder } from "../lib/finder.ts";
 import { sounds } from "../lib/sounds.ts";
 import { Backdrop, GlassFilter } from "../components/Backdrop.tsx";
-import { Sidebar, TabBar } from "../components/Nav.tsx";
+import { Sidebar, TabBar, WorkspaceSwitch } from "../components/Nav.tsx";
 import { ToastProvider } from "../components/Toasts.tsx";
 import { UpdateBar } from "../components/UpdateBar.tsx";
 import { GetAppPanel } from "../components/GetApp.tsx";
@@ -33,13 +35,16 @@ import { MockConsent } from "../screens/settings/setup/MockConsent.tsx";
 import { MockCrConsent } from "../screens/campaigns/MockCrConsent.tsx";
 import { CampaignsPage } from "../screens/campaigns/CampaignsPage.tsx";
 import { CampaignPage } from "../screens/campaigns/CampaignPage.tsx";
+import { FindPage } from "../screens/campaigns/FindPage.tsx";
 import { CrSendNow } from "../components/CrSendNow.tsx";
 import { GUIDES } from "../setup/index.ts";
 import { AskClipFactory } from "../features/help/HelpLauncher.tsx";
+import { AskMemoryProvider } from "../features/help/askMemory.tsx";
 import { SetupTodo } from "../components/SetupTodo.tsx";
 import { AppBadge } from "../lib/badge.ts";
 import { MacFetchHost } from "./MacFetchHost.tsx";
 import { forgetDevice } from "../lib/push.ts";
+import { redirectAtStart, storiesTitle } from "../stories/workspace.ts";
 /**
  * The motion gallery (§20.10): mock builds only. Tested on import.meta.env directly (not isMock) so a real build
  * drops the import and does not even carry the code.
@@ -49,6 +54,10 @@ const MotionGallery = import.meta.env.VITE_MOCK === "1" ? lazy(() => import("../
 /** Lamo Stories (docs/CONTRACTS.md §45.16.2) loads only when it is opened, so Lamo Clips' own bundle and styles stay as
  * they were. */
 const StoriesApp = lazy(() => import("../stories/StoriesApp.tsx").then((m) => ({ default: m.StoriesApp })));
+
+// Opening the app at "/" when Lamo Stories was the last choice goes to the last Lamo Stories page (§45.16.1), before
+// the first screen draws. Nothing happens while Lamo Stories is switched off.
+redirectAtStart();
 
 type Boot = { state: "loading" } | { state: "signed_out"; note: string | null } | { state: "ready" } | { state: "broken" };
 
@@ -68,6 +77,7 @@ const TITLES: Record<Route["name"], string> = {
   cr_setup: "Content Rewards setup · Settings",
   getpaid: "Get paid · Settings",
   campaigns: "Your campaigns",
+  campaigns_find: "Find campaigns",
   campaign: "Campaign",
   motion_gallery: "Motion gallery",
   stories: "Lamo Stories",
@@ -85,6 +95,7 @@ export function titleFor(route: Route): string {
   }
   if (route.name === "skill") return `${route.mode === "new" ? "Write a skill" : route.mode === "edit" ? "Change a skill" : "Skill"} · Settings`;
   if (route.name === "library" && route.view === "week") return `${weekTitle(route.week)} · Library`;
+  if (route.name === "stories") return storiesTitle(route.page);
   return TITLES[route.name];
 }
 
@@ -114,6 +125,7 @@ export function App() {
         forgetLoaded();
         resetCr();
         resetGetPaid();
+        resetFinder();
         setBoot({ state: "signed_out", note: "Your sign-in on this device has ended. Please sign in again." });
       }),
     [],
@@ -129,6 +141,7 @@ export function App() {
     forgetLoaded();
     resetCr();
     resetGetPaid();
+    resetFinder();
     setBoot({ state: "signed_out", note: null });
   }, []);
 
@@ -155,7 +168,10 @@ export function App() {
         <SignIn note={boot.note} onDone={() => setBoot({ state: "ready" })} />
       ) : (
         <SessionProvider onSignOut={signOut}>
-          <Shell />
+          {/* Ask's conversation sits above the Clip Factory / Lamo Stories branch, so a switch keeps it (§45.16.1). */}
+          <AskMemoryProvider>
+            <Shell />
+          </AskMemoryProvider>
         </SessionProvider>
       )}
       {boot.state === "ready" || boot.state === "signed_out" ? <UpdateBar /> : null}
@@ -214,6 +230,7 @@ function Shell() {
               Clip <em>Factory</em>
             </span>
           </A>
+          <WorkspaceSwitch place="topbar" />
           <LiveDot />
         </header>
         <main className="main" id="main" ref={main} tabIndex={-1}>
@@ -258,6 +275,8 @@ function Screen({ route }: { route: Route }) {
       return <Settings tree="posting" branch="getpaid" getPaid={route.place} />;
     case "campaigns":
       return <CampaignsPage />;
+    case "campaigns_find":
+      return <FindPage />;
     case "campaign":
       return <CampaignPage key={route.campaignId} campaignId={route.campaignId} />;
     case "skill":

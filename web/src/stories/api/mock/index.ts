@@ -1,5 +1,7 @@
 // The in-memory Lamo Stories API for mock mode and Playwright (docs/CONTRACTS.md §45.16.8): one shared store, one
-// part per area. Builder F owns this file; F2 owns ai, skills, memory; G ideas, characters, stories; H chat, references.
+// part per area. Every part seeds, then the shell's stand-in seed fills in when no part seeded any story, then each
+// part that hangs things off another part's items finishes its seed (afterSeed). Builder F owns this file; F2 owns
+// ai, skills, memory; G ideas, characters, stories; H chat, references.
 import type { StoriesApi } from "../types.ts";
 import * as ai from "./ai.ts";
 import * as characters from "./characters.ts";
@@ -14,32 +16,51 @@ import * as references from "./references.ts";
 import * as skills from "./skills.ts";
 import * as social from "./social.ts";
 import * as stories from "./stories.ts";
-import { createStore } from "./store.ts";
+import { createStore, isNotBuilt, seedShellDemo, type MockStore } from "./store.ts";
 import * as workspace from "./workspace.ts";
 
-const PARTS = [workspace, dashboard, library, social, publishing, onboarding, ai, skills, memory, ideas, characters, stories, chat, references];
+interface Part {
+  seed(store: MockStore): void;
+  afterSeed?(store: MockStore): void;
+  api(store: MockStore): Partial<StoriesApi>;
+}
+
+const PARTS: Part[] = [workspace, dashboard, library, social, publishing, onboarding, ai, skills, memory, ideas, characters, stories, chat, references];
+
+/**
+ * Knobs a test sets before the app loads (page.addInitScript: window.__cfStoriesMock = { knobs: { fresh: true } }).
+ * Only before a store exists: a later mock never takes over the knobs of the one before it.
+ */
+function earlyKnobs(): Record<string, unknown> {
+  if (typeof window === "undefined") return {};
+  const early = (window as unknown as { __cfStoriesMock?: { knobs?: unknown; store?: unknown } }).__cfStoriesMock;
+  if (!early || early.store || !early.knobs || typeof early.knobs !== "object") return {};
+  return { ...(early.knobs as Record<string, unknown>) };
+}
 
 export function mockStoriesApi(): StoriesApi {
   const store = createStore();
+  store.knobs = earlyKnobs();
   for (const part of PARTS) part.seed(store);
+  seedShellDemo(store);
+  for (const part of PARTS) part.afterSeed?.(store);
   if (typeof window !== "undefined") {
     const w = window as unknown as { __cfStoriesMock?: Record<string, unknown> };
-    w.__cfStoriesMock = Object.assign(w.__cfStoriesMock ?? {}, { store });
+    w.__cfStoriesMock = Object.assign(w.__cfStoriesMock ?? {}, { store, knobs: store.knobs });
   }
-  return {
-    ...workspace.api(store),
-    ...dashboard.api(store),
-    ...library.api(store),
-    ...social.api(store),
-    ...publishing.api(store),
-    ...ideas.api(store),
-    ...characters.api(store),
-    ...stories.api(store),
-    ...onboarding.api(store),
-    ...ai.api(store),
-    ...skills.api(store),
-    ...memory.api(store),
-    ...chat.api(store),
-    ...references.api(store),
-  };
+  const joined: Record<string, unknown> = {};
+  for (const part of PARTS)
+    for (const [key, fn] of Object.entries(part.api(store))) {
+      // A built method always wins over a part's not-built stub, whichever comes first.
+      if (joined[key] && !isNotBuilt(joined[key]) && isNotBuilt(fn)) continue;
+      joined[key] = fn;
+    }
+  const fallbacks = { ...library.shellFallbacks(store), ...onboarding.shellFallbacks(store) };
+  for (const [key, fn] of Object.entries(fallbacks)) if (!joined[key] || isNotBuilt(joined[key])) joined[key] = fn;
+  // One name, two routes (§45.5): a character's reference picture (three ids, the characters part) or a reference
+  // video (two ids, the references part). Both parts list it, so the call goes by its arguments.
+  const forPicture = characters.api(store).deleteReference as (...a: unknown[]) => Promise<unknown>;
+  const forVideo = references.api(store).deleteReference as (...a: unknown[]) => Promise<unknown>;
+  joined.deleteReference = (...a: unknown[]) => (a.length >= 3 && a[2] !== undefined ? forPicture(...a) : forVideo(...a));
+  return joined as unknown as StoriesApi;
 }

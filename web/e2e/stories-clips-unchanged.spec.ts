@@ -1,0 +1,228 @@
+import { expect, test, type Browser, type Page } from "@playwright/test";
+import { settle } from "./helpers.ts";
+
+// Lamo Clips does not change (docs/CONTRACTS.md §45.1, §45.16.1, §45.17). With Lamo Stories switched off the shell
+// has no new element at all: no switcher in the page, the six menu items and the six phone tabs exactly as before,
+// and every /stories address is Lamo Clips' own "page does not exist". Switched on (cf.storiesPreview = 1) the six
+// items, their boxes and the tab bar are identical to the switched-off page, and the switcher sits only in space that
+// was empty at every size: the sidebar foot (or a round toggle beside the live dot, or a slim one between the menu and
+// the foot) and the phone top bar, never covering or pushing anything. Pixel before/after shots against main are taken by the lead on one machine (web/scripts/clips-unchanged.sh).
+
+const ITEMS = [
+  ["home", "/", "Home"],
+  ["jobs", "/jobs", "Jobs"],
+  ["review", "/review", "Review"],
+  ["library", "/library", "Library"],
+  ["money", "/money", "Money"],
+  ["settings", "/settings", "Settings"],
+] as const;
+
+type Box = { x: number; y: number; width: number; height: number };
+interface Layout {
+  items: (Box | null)[];
+  tabs: (Box | null)[];
+  tabbar: Box | null;
+  foot: Record<string, Box | null>;
+  top: Record<string, Box | null>;
+  mainTop: number;
+  switcher: { mode: string | null; box: Box | null; place: string }[];
+}
+
+const SIZES: { w: number; h: number; folded?: boolean }[] = [
+  { w: 320, h: 700 },
+  { w: 340, h: 700 },
+  { w: 360, h: 740 },
+  { w: 390, h: 844 },
+  { w: 1000, h: 600 },
+  { w: 1000, h: 600, folded: true },
+  { w: 1000, h: 650 },
+  { w: 1000, h: 650, folded: true },
+  { w: 1000, h: 720 },
+  { w: 1000, h: 720, folded: true },
+  { w: 1440, h: 900 },
+  { w: 1440, h: 900, folded: true },
+];
+
+async function open(browser: Browser, size: (typeof SIZES)[number], on: boolean, path = "/"): Promise<Page> {
+  const ctx = await browser.newContext({ viewport: { width: size.w, height: size.h }, reducedMotion: "reduce" });
+  await ctx.addInitScript(
+    ([flag, folded]) => {
+      if (flag) localStorage.setItem("cf.storiesPreview", "1");
+      if (folded) localStorage.setItem("cf.prefs", JSON.stringify({ sidebarCollapsed: true }));
+    },
+    [on, !!size.folded] as const,
+  );
+  const page = await ctx.newPage();
+  await page.goto(path);
+  await settle(page);
+  return page;
+}
+
+/** Waits for the late arrivals that change the shell (the live dot, the jobs line) so both runs compare the same page,
+ * then stops every animation and transition: the live dot pulses (a scale), and a box read in the middle of a pulse
+ * would differ between two otherwise identical pages. Only this test's page is frozen; the app is not changed. */
+async function steady(page: Page, phone: boolean) {
+  await page.locator(phone ? ".topbar .live-dot" : ".sidebar__live .live-dot").waitFor({ timeout: 10_000 }).catch(() => undefined);
+  await page.waitForTimeout(400);
+  await page.addStyleTag({
+    content: "*, *::before, *::after { animation: none !important; transition: none !important; }",
+  });
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(null)))));
+}
+
+async function layout(page: Page): Promise<Layout> {
+  return page.evaluate((keys) => {
+    const box = (el: Element | null) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) return null;
+      return { x: Math.round(r.x * 10) / 10, y: Math.round(r.y * 10) / 10, width: Math.round(r.width * 10) / 10, height: Math.round(r.height * 10) / 10 };
+    };
+    return {
+      items: keys.map((k) => box(document.querySelector(`nav.sidebar .sidebar__item[data-help="nav-${k}"]`))),
+      tabs: keys.map((k) => box(document.querySelector(`nav.tabbar .tabbar__item[data-help="nav-${k}"]`))),
+      tabbar: box(document.querySelector("nav.tabbar")),
+      foot: {
+        live: box(document.querySelector(".sidebar__live .live-dot")),
+        getapp: box(document.querySelector(".sidebar__getapp")),
+        status: box(document.querySelector(".sidebar__status")),
+        toggle: box(document.querySelector(".sidebar__toggle")),
+        brand: box(document.querySelector(".sidebar__top .brand")),
+      },
+      top: { brand: box(document.querySelector(".topbar .brand")), live: box(document.querySelector(".topbar .live-dot")), bar: box(document.querySelector(".topbar")) },
+      mainTop: Math.round(document.querySelector("main")!.getBoundingClientRect().top),
+      switcher: Array.from(document.querySelectorAll(".ws-switch-host")).map((el) => ({
+        mode: el.getAttribute("data-ws-switch"),
+        box: box(el),
+        place: el.classList.contains("ws-switch-host--topbar") ? "topbar" : "sidebar",
+      })),
+    };
+  }, ITEMS.map(([k]) => k));
+}
+
+const overlaps = (a: Box, b: Box) => a.x < b.x + b.width - 0.5 && b.x < a.x + a.width - 0.5 && a.y < b.y + b.height - 0.5 && b.y < a.y + a.height - 0.5;
+
+test.describe("with Lamo Stories switched off", () => {
+  for (const size of [SIZES[0]!, SIZES[3]!, SIZES[6]!, SIZES[10]!])
+    test(`the shell has no new element at ${size.w}×${size.h}`, async ({ browser }) => {
+      const page = await open(browser, size, false);
+      await steady(page, size.w < 768);
+      await expect(page.locator(".ws-switch-host, .ws-switch, .ws-round, [data-ws-switch]")).toHaveCount(0);
+      // The six menu items and the six phone tabs, in order, with their own words and addresses.
+      const side = page.locator("nav.sidebar .sidebar__list .sidebar__item");
+      await expect(side).toHaveCount(6);
+      const tabs = page.locator("nav.tabbar .tabbar__item");
+      await expect(tabs).toHaveCount(6);
+      for (const [i, [key, href, label]] of ITEMS.entries()) {
+        await expect(side.nth(i)).toHaveAttribute("href", href);
+        await expect(side.nth(i)).toHaveAttribute("data-help", `nav-${key}`);
+        await expect(side.nth(i).locator(".sidebar__label")).toHaveText(label);
+        await expect(tabs.nth(i)).toHaveAttribute("href", href);
+        await expect(tabs.nth(i)).toHaveAttribute("title", label);
+      }
+      // The sidebar foot holds what it held before, and nothing else.
+      const foot = await page.locator(".sidebar__foot > *").evaluateAll((els) => els.map((e) => e.className));
+      expect(foot.every((c) => /sidebar__(live|getapp|status)/.test(c)), foot.join(", ")).toBe(true);
+      const top = await page.locator(".topbar > *").evaluateAll((els) => els.map((e) => e.className.split(" ")[0]));
+      expect(top.filter((c) => c !== "live-dot")).toEqual(["brand"]);
+      await page.context().close();
+    });
+
+  for (const path of ["/stories", "/stories/ideas", "/stories/connections?platform=youtube&result=connected&ws=stories"])
+    test(`${path} is Lamo Clips' own "page does not exist"`, async ({ browser }) => {
+      const page = await open(browser, { w: 1280, h: 800 }, false, path);
+      await expect(page.getByText("This page does not exist")).toBeVisible();
+      await expect(page.locator(".stories-app")).toHaveCount(0);
+      await expect(page.locator("nav.sidebar .sidebar__item.is-active")).toHaveCount(0);
+      expect(await page.title()).toBe("Not found · Clip Factory");
+      await page.context().close();
+    });
+
+  test("opening / never jumps to Lamo Stories, whatever was stored", async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.addInitScript(() =>
+      localStorage.setItem("cf.workspace", JSON.stringify({ workspaceId: "stories", lastStoriesWorkspaceId: "stories", lastClipsPath: "/jobs", lastStoriesPath: "/stories/ideas" })),
+    );
+    const page = await ctx.newPage();
+    await page.goto("/");
+    await settle(page);
+    expect(new URL(page.url()).pathname).toBe("/");
+    await ctx.close();
+  });
+});
+
+test.describe("with Lamo Stories switched on", () => {
+  for (const size of SIZES)
+    test(`the six items, their boxes and the tab bar are as before, and the switcher covers nothing at ${size.w}×${size.h}${size.folded ? ", folded" : ""}`, async ({ browser }) => {
+      const phone = size.w < 768;
+      const off = await open(browser, size, false);
+      await steady(off, phone);
+      const before = await layout(off);
+      await off.context().close();
+      const on = await open(browser, size, true);
+      await steady(on, phone);
+      // The switcher measures after the live dot arrives: give it a frame or two to settle.
+      await on.waitForTimeout(300);
+      const after = await layout(on);
+
+      expect(after.items).toEqual(before.items);
+      expect(after.tabs).toEqual(before.tabs);
+      expect(after.tabbar).toEqual(before.tabbar);
+      expect(after.foot).toEqual(before.foot);
+      expect(after.top).toEqual(before.top);
+      expect(after.mainTop).toBe(before.mainTop);
+
+      const here = after.switcher.find((s) => s.place === (phone ? "topbar" : "sidebar"))!;
+      expect(here, "a switcher host in the shell").toBeTruthy();
+      const others = [...after.items, ...after.tabs, ...Object.values(after.foot), after.top.brand, after.top.live].filter((b): b is Box => !!b);
+      // There is a way across at every size (§45.16.1): never missing, never covering or moving anything.
+      expect(here.mode, "a switcher in the shell").not.toBe("none");
+      expect(here.box, "the switcher has a box").toBeTruthy();
+      const box = here.box!;
+      for (const b of others) expect(overlaps(box, b), `switcher ${JSON.stringify(box)} covers ${JSON.stringify(b)}`).toBe(false);
+      if (phone) {
+        // Inside the top bar, between the brand and the live dot, 48 px tall for a finger.
+        const bar = after.top.bar!;
+        expect(box.y).toBeGreaterThanOrEqual(bar.y - 0.5);
+        expect(box.y + box.height).toBeLessThanOrEqual(bar.y + bar.height + 0.5);
+        expect(box.x).toBeGreaterThanOrEqual(after.top.brand!.x + after.top.brand!.width + 3.5);
+        if (after.top.live) expect(box.x + box.width).toBeLessThanOrEqual(after.top.live.x - 3.5);
+        expect(box.height).toBeGreaterThanOrEqual(48);
+        // A full 48 px target from about 340 px; below that, a slim one cut to the gap (at least 28 px across).
+        expect(box.width).toBeGreaterThanOrEqual(here.mode === "slim" ? 28 : 48);
+      } else {
+        const sidebar = await on.locator("nav.sidebar").boundingBox();
+        expect(box.x).toBeGreaterThanOrEqual(sidebar!.x);
+        expect(box.x + box.width).toBeLessThanOrEqual(sidebar!.x + sidebar!.width + 0.5);
+        expect(box.y).toBeGreaterThanOrEqual(after.items[5]!.y + after.items[5]!.height + 3.5);
+        if (here.mode === "slim") {
+          expect(box.width).toBeGreaterThanOrEqual(44);
+          expect(box.height).toBeGreaterThanOrEqual(28);
+        } else expect(box.height).toBeGreaterThanOrEqual(44);
+      }
+      // Where there is room it is there in its largest form: the bar from about 650 px tall with the sidebar open, a
+      // round toggle beside the live dot below that; folded, a round toggle, and in a short folded window (600 px
+      // tall, 36 px between the menu and the foot) a slim one over that gap. On phones the icon over the short name
+      // from 360 px (a pill with the name where it is roomy); at 320 px the brand and the live dot leave about 38 px,
+      // so a slim icon-only toggle fills it with 4 px of air on each side.
+      if (!phone && !size.folded) expect(here.mode, "sidebar open").toBe(size.h >= 650 ? "bar" : "corner");
+      if (!phone && size.folded) expect(here.mode, "sidebar folded").toBe(size.h >= 650 ? "round" : "slim");
+      if (phone && size.w >= 360) expect(["label", "stack"], `phone at ${size.w}`).toContain(here.mode);
+      if (phone && size.w < 340) expect(here.mode, `phone at ${size.w}`).toBe("slim");
+      await on.context().close();
+    });
+
+  test("the switcher is a pick bar on the sliding highlight, never a menu item and never a new tab", async ({ browser }) => {
+    const page = await open(browser, { w: 1440, h: 900 }, true);
+    const bar = page.locator(".sidebar__foot .ws-switch");
+    await expect(bar).toBeVisible();
+    // One choice per workspace the server lists; Lamo Clips goes by the app's own name.
+    await expect(bar.locator(".ws-switch__opt")).toHaveText(["Clip Factory", "Lamo Stories"]);
+    await expect(bar.locator(".glide")).toHaveCount(1);
+    await expect(bar.locator(".ws-switch__opt.is-on")).toHaveText("Clip Factory");
+    await expect(page.locator(".sidebar__item.ws-switch__opt, .ws-switch .sidebar__item")).toHaveCount(0);
+    for (const a of await bar.locator("a").all()) expect(await a.getAttribute("target")).toBeNull();
+    await expect(page.locator("nav.sidebar .sidebar__list .sidebar__item")).toHaveCount(6);
+    await page.context().close();
+  });
+});

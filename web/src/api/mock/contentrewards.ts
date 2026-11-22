@@ -22,6 +22,7 @@ import type {
   ClipPostOptions,
   CrConnectResult,
   CrConnection,
+  CrFinderSummary,
   CrMoney,
   CrOverview,
   CrPay,
@@ -71,7 +72,7 @@ const crUrl = (uuid: string) => `https://contentrewards.com/c/campaigns/${uuid}`
 const iso = (ms: number) => new Date(ms).toISOString();
 
 /** A campaign as Content Rewards has it (its public page and, once joined, its brief). */
-interface Catalog {
+export interface Catalog {
   name: string;
   brand: string;
   access: "open" | "application";
@@ -260,9 +261,13 @@ const CATALOG: Record<string, Catalog> = {
   },
 };
 
+/** The finder's campaigns (§41.5), found by their public page once added, so a reload still knows them. */
+let finderCatalog: ((uuid: string) => Catalog | null) | null = null;
+
 function catalogFor(uuid: string): Catalog {
   return (
-    CATALOG[uuid] ?? {
+    CATALOG[uuid] ??
+    finderCatalog?.(uuid) ?? {
       name: "Clip Campaign",
       brand: "A brand",
       access: "open",
@@ -300,6 +305,8 @@ interface Stored {
   addedAt: string;
   checkedAt: string;
   waitingSince?: string;
+  /** Added by the campaign finder (§41.5): its own next steps while Clip Factory can't see the join yet. */
+  addedBy?: "finder";
 }
 
 /** One campaign post on Content Rewards (the CRSUB# item), keyed by the post's clip hook and platform. */
@@ -511,6 +518,10 @@ export interface CrMockDeps {
   store: { clips: Clip[]; posts: Post[] };
   setup: () => SetupOverview;
   publish: (id: string) => void;
+  /** The overview's `finder` (§41.5), from the finder mock; absent while it is off. */
+  finder?: () => CrFinderSummary | undefined;
+  /** A finder campaign's catalog entry (its public page), for campaigns the finder added. */
+  catalog?: (uuid: string, rules: (partial: Partial<CampaignRules>) => CampaignRules) => Catalog | null;
 }
 
 export type CrMockApi = Pick<
@@ -560,9 +571,16 @@ export interface CrMock {
   moneyItems(): { crconn: CrConnection | null; crmoney: Record<string, unknown> | null; on: boolean };
   /** Switched off (503) or before §38 (404): the §39 routes answer the same. */
   guard(): void;
+  /** §41: the campaigns he has, whether Clip Factory is signed in, and the finder's add (or adopt, `listed`). */
+  ownIds(): string[];
+  signedIn(): boolean;
+  setSignedIn(on: boolean): void;
+  finderAdd(uuid: string, cat: Catalog, how: { said?: SaidAnswer; listed?: boolean }): { campaign: Campaign; summary: CampaignSummary };
+  rules(partial: Partial<CampaignRules>): CampaignRules;
 }
 
-export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
+export function crMockApi({ store, setup, publish, finder, catalog }: CrMockDeps): CrMock {
+  finderCatalog = catalog ? (uuid) => catalog(uuid, rules) : null;
   let state = load();
   const off = readFlag("cf-mock-cr-off");
   const guard = () => {
@@ -710,7 +728,7 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
     if (r?.disclosure.spoken) add("spoken_needed");
     if (r?.audience) add("audience");
     const canSayIn = !!c.addedAt && now() - Date.parse(c.addedAt) > 2 * MIN;
-    const nextStep = nextStepFor({
+    const nextStep = finderStep(c, m, crUrl(c.campaignId)) ?? nextStepFor({
       campaignId: c.campaignId,
       url: crUrl(c.campaignId),
       membership: m,
@@ -768,6 +786,36 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
       sourceRuleText: sourceRuleText(cat.name, cat.brand, r),
       languageRuleText: r?.language?.trim() ? `${cat.name} wants clips in ${languageWords(r.language)}.` : null,
     };
+  }
+
+  /**
+   * §41.6 changes 10 and 11 (the API's gates.py), for campaigns the finder added: an application he added while Clip
+   * Factory can't look waits for the brand; an open one signed in but not listed yet says "Checking that you joined…"
+   * for 15 minutes, with "I joined, but it still says not joined" at once.
+   */
+  function finderStep(c: Stored, m: Membership, url: string): Campaign["nextStep"] | null {
+    if (c.addedBy !== "finder") return null;
+    const open = { label: "Open campaign", href: url, external: true };
+    if (m === "unknown" && c.said === "applied")
+      return {
+        kind: "wait",
+        chip: "Waiting for the brand",
+        text: "Waiting for the brand. Content Rewards shows **Pending review** while the brand decides. When it says **Submit clip**, tap It says Submit clip.",
+        glass: [open],
+        asks: [
+          { label: "It says Submit clip", said: "joined_by_hand" },
+          { label: "It says Not eligible", said: "not_eligible", text: "If Content Rewards shows **Not eligible**, tap It says Not eligible." },
+        ],
+      };
+    if (m === "not_joined" && now() - Date.parse(c.addedAt) < 15 * MIN)
+      return {
+        kind: "join",
+        chip: "Not joined yet",
+        text: "Checking that you joined… This can take a few minutes.",
+        glass: [open],
+        asks: [{ label: "I joined, but it still says not joined", said: "joined_by_hand" }],
+      };
+    return null;
   }
 
   function summary(c: Stored): CampaignSummary {
@@ -882,11 +930,13 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
   function overview(): CrOverview {
     const campaigns = [...state.campaigns].sort((a, b) => b.addedAt.localeCompare(a.addedAt)).map(summary);
     const all = subsFor({});
+    const found = finder?.();
     return {
       connection: structuredClone(state.connection),
       campaigns,
       money: structuredClone(state.money),
       waitingSends: all.filter((s) => s.state === "send_by_hand" && (s.minutesLeft ?? 0) > 0),
+      ...(found ? { finder: found } : {}),
     };
   }
 
@@ -1422,6 +1472,29 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
     return { crconn: structuredClone(state.connection), crmoney, on };
   }
 
+  /** The finder's add (§41.5): the campaign with its catalog entry, said for him, or listed when he joined on CR. */
+  function finderAdd(uuid: string, cat: Catalog, how: { said?: SaidAnswer; listed?: boolean }) {
+    if (!CATALOG[uuid]) CATALOG[uuid] = cat;
+    let c = state.campaigns.find((x) => x.campaignId === uuid);
+    if (!c) {
+      c = stored(uuid, { addedAt: iso(now()), checkedAt: iso(now()), addedBy: "finder", rulesState: cat.access === "application" && cat.rules ? "ready" : "waiting_for_join" });
+      state.campaigns.push(c);
+    }
+    if (how.said) {
+      c.said = how.said;
+      if (how.said === "applied") c.waitingSince = iso(now());
+    }
+    if (how.listed) {
+      c.listed = true;
+      c.wasListed = true;
+      if (!c.celebrated) c.celebrate = true;
+      // The rules read starts right after (§38.12 step 3): "Reading the rules…" first, Make clips 3 s later.
+      if (c.rulesState !== "ready") startReading(c, 3000);
+    }
+    changed(`campaign:${uuid}`);
+    return { campaign: serve(c), summary: summary(c) };
+  }
+
   return {
     api,
     onPosts,
@@ -1431,6 +1504,14 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
     connection: () => structuredClone(state.connection),
     moneyItems,
     guard,
+    ownIds: () => state.campaigns.map((c) => c.campaignId),
+    signedIn: () => signedIn(state.connection) && !state.connection.blocked,
+    setSignedIn(on: boolean) {
+      state.connection = on ? connectedConnection(now()) : { ...blankConnection(), stepsDone: state.connection.stepsDone };
+      changed();
+    },
+    finderAdd,
+    rules,
   };
 }
 

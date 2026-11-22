@@ -395,7 +395,7 @@ function TodoList({ rows, onSkip, onUnskip }: { rows: TodoRow[]; onSkip: (p: Pla
   // list's Set up is glass.
   const route = useRoute();
   const routeName = route.name;
-  const quietGo = routeName === "cr_setup" || routeName === "campaigns" || routeName === "campaign" || routeName === "getpaid" || (routeName === "settings" && route.branch === "getpaid");
+  const quietGo = routeName === "cr_setup" || routeName === "campaigns" || routeName === "campaigns_find" || routeName === "campaign" || routeName === "getpaid" || (routeName === "settings" && route.branch === "getpaid");
   return (
     <ul className="setup-todo__rows" aria-label="Places to set up">
       {rows.map((row) => {

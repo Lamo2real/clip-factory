@@ -12,12 +12,17 @@
 #
 # One run deploys from nothing:
 #   preflight - skips everything (with a notice) until the role and the email are set
-#   build     - web bundle, Lambda zip, and the agent image tag (a hash of the agent's sources)
-#   infra     - state bucket if missing, terraform plan, then apply exactly that plan. The apply builds and
-#               pushes the agent image (scripts/push-image.sh) once the ECR repository exists.
+#   build     - web bundle, Lambda zip, and the agent image tag (a hash of the agent's sources); Lamo Stories' agent
+#               has its own tag (a hash of stories/ and the animation engine), so neither image rebuilds for the other
+#   infra     - state bucket if missing, Lamo Stories' new agent image once its runtime is live (one that does not
+#               build keeps the live one, so Clip Factory still ships), terraform plan, the delete gate, the Clip
+#               Factory check (with Lamo Stories work in the deploy, the plan may not change Clip Factory's agent,
+#               cf-prod-api, cf-prod-hooks or the HTTP API's shared pieces, docs/CONTRACTS.md §45.15), then apply
+#               exactly that plan. The apply builds and pushes each agent image (scripts/push-image.sh) whose tag is new.
 #   web       - config.json from Terraform's outputs, version.json ("What's new": scripts/release-areas.sh over
 #               the commits since the live release), upload to S3, CloudFront refresh
-#   smoke     - the HTTP API answers /v1/health and the browser's CORS preflight from the app, the webhooks
+#   smoke     - the HTTP API answers /v1/health and the browser's CORS preflight from the app (also on Lamo Stories'
+#               /v1/workspaces routes), the webhooks
 #               REST API refuses a Meta challenge without the verify token (403), the WebSocket API refuses a
 #               connection without a valid token (401), Ask's worker reads a tiny picture with the real model
 #               (invoked with the deploy role; warns while Bedrock access is not set up), and the app serves this
@@ -41,6 +46,11 @@ on:
       - "style.css"
       - ".nojekyll"
   workflow_dispatch:
+    inputs:
+      allow_clip_factory_change:
+        description: "Clip Factory changes on purpose (this deploy carries Lamo Stories work and a Clip Factory pull request that changes its agent, cf-prod-api, cf-prod-hooks or the HTTP API): the Clip Factory check only warns"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -102,6 +112,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       image_tag: ${{ steps.image.outputs.tag }}
+      stories_image_tag: ${{ steps.stories_image.outputs.tag }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -136,6 +147,24 @@ jobs:
         run: |
           [ -n "$SOURCES_HASH" ] || { echo "::error::No agent sources found to hash."; exit 1; }
           echo "tag=agent-${SOURCES_HASH:0:16}" >> "$GITHUB_OUTPUT"
+      # docs/CONTRACTS.md §45.15 and ADR-76: Lamo Stories' own agent image (stories/agent/Dockerfile copies stories/ and
+      # the engine folder), so a Lamo Stories change never rebuilds or redeploys Clip Factory's agent, and the other way.
+      - name: Lamo Stories agent image tag (changes only when Lamo Stories' agent or engine changes)
+        id: stories_image
+        env:
+          STORIES_HASH: ${{ hashFiles('stories/**', 'web/src/stories/engine/**') }}
+          CLIPS_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          [ -n "$STORIES_HASH" ] || { echo "::error::No Lamo Stories agent sources found to hash."; exit 1; }
+          tag="stories-agent-${STORIES_HASH:0:16}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          # §45.23: the summary shows both tags, so a Lamo Stories deploy shows Clip Factory's agent tag unchanged.
+          {
+            echo "## Agent images"
+            echo
+            echo "- Clip Factory agent image: \`${CLIPS_TAG}\`"
+            echo "- Lamo Stories agent image: \`${tag}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: web-dist
@@ -211,6 +240,33 @@ jobs:
             -backend-config="key=${TF_STATE_KEY}" \
             -backend-config="region=${STATE_REGION}" \
             -backend-config="use_lockfile=true"
+      # docs/CONTRACTS.md §45.15, ADR-76: once Lamo Stories' runtime is live, its new image is built and pushed here,
+      # before the plan. If it does not build, this deploy keeps the image Lamo Stories runs now (the plan then leaves
+      # its runtime alone) and says so, so a broken Lamo Stories image never holds back Clip Factory's release. Its
+      # first image (no runtime yet) is built by the apply. Clip Factory's agent image is never built here.
+      - name: Lamo Stories agent image (built before the plan, so a broken one never holds back Clip Factory)
+        id: stories_push
+        working-directory: infra/envs/prod
+        env:
+          NEW_TAG: ${{ needs.build.outputs.stories_image_tag }}
+        run: |
+          repo="$(terraform output -raw stories_ecr_repository_url 2>/dev/null || true)"
+          live="$(terraform output -raw stories_agent_image_tag 2>/dev/null || true)"
+          if [ -z "$repo" ] || [ -z "$live" ]; then
+            echo "Lamo Stories' agent has no live image yet: the apply builds ${NEW_TAG}."
+            echo "tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
+          elif [ "$live" = "$NEW_TAG" ]; then
+            echo "Lamo Stories' agent image ${NEW_TAG} is already live."
+            echo "tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
+          elif REPO_URL="$repo" IMAGE_TAG="$NEW_TAG" CONTEXT_DIR="$GITHUB_WORKSPACE" \
+            DOCKERFILE="${GITHUB_WORKSPACE}/stories/agent/Dockerfile" bash "${GITHUB_WORKSPACE}/scripts/push-image.sh"; then
+            echo "tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
+            echo "- Lamo Stories agent image \`${NEW_TAG}\` is built and goes live in this deploy." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "tag=${live}" >> "$GITHUB_OUTPUT"
+            echo "::error title=Lamo Stories agent image::${NEW_TAG} did not build or push, so Lamo Stories keeps running ${live} and Clip Factory deploys as usual. Fix stories/agent (CI's stories-agent job builds the same image) and push again."
+            echo "- **Lamo Stories agent image \`${NEW_TAG}\` did not build.** Lamo Stories keeps \`${live}\`; Clip Factory is not affected." >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: terraform plan
         working-directory: infra/envs/prod
         env:
@@ -219,6 +275,7 @@ jobs:
           # Alarm emails (docs/CONTRACTS.md §14.9) go to CF_ALARM_EMAIL, or to the owner when it is not set.
           TF_VAR_alarm_email: ${{ secrets.CF_ALARM_EMAIL || secrets.CF_OWNER_EMAIL }}
           TF_VAR_agent_image_tag: ${{ needs.build.outputs.image_tag }}
+          TF_VAR_stories_agent_image_tag: ${{ steps.stories_push.outputs.tag }}
           TF_VAR_lambda_zip_path: ${{ github.workspace }}/api/dist/lambda.zip
           TF_VAR_app_version: ${{ github.sha }}
           TF_VAR_manage_api_gateway_account: ${{ vars.CF_MANAGE_API_GATEWAY_ACCOUNT || 'true' }}
@@ -240,9 +297,26 @@ jobs:
         run: |
           terraform show -json prod.tfplan > "${RUNNER_TEMP}/plan.json"
           bash "${GITHUB_WORKSPACE}/scripts/check-plan-deletes.sh" "${RUNNER_TEMP}/plan.json"
+      # docs/CONTRACTS.md §45.1, §45.15 and §45.18: Lamo Stories never changes Clip Factory. When Lamo Stories work that
+      # feeds the plan is in this deploy (the commits since the live release), the same saved plan may not change Clip
+      # Factory's agent (unless its own image tag changed), cf-prod-api's or cf-prod-hooks' role, policy or settings
+      # (only this release's zip and VERSION, and hooks' STORIES_OAUTH_CALLBACK), the HTTP API, its sign-in check,
+      # stage or existing routes. Clip Factory's own pull requests are only noted, so their push deploys go on. A run
+      # by hand with "Clip Factory changes on purpose" only warns (both kinds in one deploy); a Lamo Stories route on a
+      # Clip Factory path always stops it. The history is fetched first (the checkout has only this commit).
+      - name: Clip Factory check (Lamo Stories changes nothing of Clip Factory)
+        env:
+          ALLOW_CLIPS_CHANGE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_clip_factory_change && 'true' || 'false' }}
+        run: |
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            git fetch -q --no-tags --unshallow origin "$GITHUB_SHA" \
+              || echo "::warning::The commits since the live release could not be fetched; the Clip Factory check is strict."
+          fi
+          bash scripts/check-plan-clips-unchanged.sh "${RUNNER_TEMP}/plan.json"
       # docs/CONTRACTS.md §30.7: when the agent changes, wait (at most 25 minutes) for the jobs being made to finish, so
       # a deploy never stops one partway; a job still running after that resumes on the new version by itself. Reads
-      # only (one projection-only Scan every 30 s with this role), prints counts only.
+      # only (one projection-only Scan every 30 s with this role), prints counts only. §45.11.1, §45.15: when Lamo
+      # Stories' agent changes, the same for its production jobs, AI tasks and chat answers (and only then).
       - name: wait for running jobs (only when the agent changes)
         timeout-minutes: 27
         continue-on-error: true
@@ -524,3 +598,34 @@ jobs:
             echo
             echo "Webhook address for platform consoles: ${HOOKS_URL%/}/hooks/{platform}"
           } >> "$GITHUB_STEP_SUMMARY"
+      # docs/CONTRACTS.md §45.15: Lamo Stories' own routes (ANY /v1/workspaces and /v1/workspaces/{proxy+}, on
+      # cf-prod-stories-api) are more specific than /v1/{proxy+}, so their public OPTIONS twins must answer the browser's
+      # token-less preflight; a deep path (the dashboard) proves the {proxy+} one. Last in this job, so a Lamo Stories
+      # failure never hides a Clip Factory check.
+      - name: the Lamo Stories routes let the app's browsers in (CORS preflight)
+        env:
+          API_URL: ${{ needs.infra.outputs.api_url }}
+          APP_URL: ${{ needs.infra.outputs.app_url }}
+        run: |
+          origin="${APP_URL%/}"
+          headers="${RUNNER_TEMP}/stories-preflight-headers.txt"
+          for path in /v1/workspaces /v1/workspaces/stories/dashboard; do
+            url="${API_URL%/}${path}"
+            passed=false
+            for attempt in 1 2 3 4 5 6 7 8 9 10; do
+              : > "$headers" # fresh each time: no answer leaves it empty, never the last path's headers
+              status="$(curl -sS --max-time 15 -o /dev/null -D "$headers" -w '%{http_code}' -X OPTIONS "$url" \
+                -H "Origin: ${origin}" -H "Access-Control-Request-Method: GET" \
+                -H "Access-Control-Request-Headers: authorization" || echo 000)"
+              allow_origin="$(tr -d '\r' < "$headers" | awk -F': ' 'tolower($1)=="access-control-allow-origin"{print $2}')"
+              allow_headers="$(tr -d '\r' < "$headers" | awk -F': ' 'tolower($1)=="access-control-allow-headers"{print tolower($2)}')"
+              if [[ "$status" == 2?? ]] && [ "$allow_origin" = "$origin" ] && [[ ",${allow_headers// /}," == *",authorization,"* ]]; then
+                echo "Lamo Stories CORS preflight passed for ${path}: ${status}, allow-origin ${allow_origin}, allow-headers ${allow_headers}."
+                passed=true
+                break
+              fi
+              echo "Attempt ${attempt} (${path}): preflight got ${status}, allow-origin '${allow_origin}', allow-headers '${allow_headers}'; retrying in 10 s."
+              sleep 10
+            done
+            [ "$passed" = true ] || { echo "::error::The browser's CORS preflight to ${url} from ${origin} is refused, so Lamo Stories cannot load in any browser (Clip Factory is not affected)."; exit 1; }
+          done
