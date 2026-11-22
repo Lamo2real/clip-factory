@@ -5,6 +5,8 @@
 // most one glass button at each row's right end. An API from before §39 (404) shows nothing. §40.4: under each row one
 // small grey line says what that place sent toward the bank ("Sent to your bank by Google", or where to look), and
 // under the total the block "Sent to your bank, so far" (one line per currency, never added to the 30-day total).
+// §40.5.9: once a bank was ever connected, the block "Reached your bank, so far" (what the bank booked, per place and
+// per currency) comes under it, and its bank line says so instead of "Clip Factory can't see your bank".
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { api, friendlyMessage } from "../../api/index.ts";
 import { ApiError } from "../../api/errors.ts";
@@ -13,10 +15,12 @@ import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { Button, LinkButton } from "../../components/ui.tsx";
 import { usd } from "../../lib/contentRewards.ts";
+import { bankView, useBank } from "../../lib/bank.ts";
 import { onLiveSignal } from "../../lib/live.ts";
 import { formatMoney } from "../../lib/money.ts";
 import { OpenButton } from "../campaigns/bits.tsx";
 import { Rich } from "../settings/setup/bits.tsx";
+import { ReachedBlock } from "../getpaid/bank/BankMoney.tsx";
 
 export const ALL_MONEY_TITLE = "All your money";
 export const NOTHING_TO_ADD = "Nothing to add up yet.";
@@ -186,6 +190,9 @@ function namesOf(m: MoneyEverywhere, ids: readonly string[]): string {
 
 export function AllMoney({ load }: { load: EverywhereLoad & { reload: () => void } }) {
   const id = useId();
+  const bank = bankView(useBank());
+  // Only once a bank was ever connected (`moneyLine`); before that, and while Your bank is off, today's bank line stays.
+  const reached = bank?.moneyLine ? bank : null;
   if (load.state === "off") return null;
   if (load.state === "loading") return <section className="cr-all glass is-loading" aria-hidden="true" data-help="money-everywhere" />;
   if (load.state === "error")
@@ -241,7 +248,8 @@ export function AllMoney({ load }: { load: EverywhereLoad & { reload: () => void
         {m.totals.length > 1 ? <p className="cr-all__why">{TWO_MONIES}</p> : null}
         {m.notCountedText ? <p className="cr-all__why">{m.notCountedText}</p> : null}
       </div>
-      {m.sent ? <SentSoFar sent={m.sent} /> : null}
+      {m.sent ? <SentSoFar sent={m.sent} bankLine={reached?.moneyLine} /> : null}
+      {reached ? <ReachedBlock view={reached} /> : null}
     </section>
   );
 }
@@ -249,9 +257,10 @@ export function AllMoney({ load }: { load: EverywhereLoad & { reload: () => void
 /**
  * "Sent to your bank, so far" (§40.4): one line per currency in the places' order, each naming who sent it, with how
  * it is known; never added to the 30-day total, never across currencies; "Nothing sent to your bank yet." only with no
- * sent rows at all. What reached the bank only the bank can say: the bank line says so.
+ * sent rows at all. What reached the bank only the bank can say: the bank line says so (or, once Your bank read a
+ * bank, `moneyLine`: "What reached your bank is below.").
  */
-export function SentSoFar({ sent }: { sent: NonNullable<MoneyEverywhere["sent"]> }) {
+export function SentSoFar({ sent, bankLine }: { sent: NonNullable<MoneyEverywhere["sent"]>; bankLine?: string }) {
   return (
     <div className="cr-all__sentsofar" data-help="money-sent" data-sent-total={sent.totals.length ? "yes" : "none"}>
       <h3 className="cr-all__sent-title">{SENT_TITLE}</h3>
@@ -270,7 +279,7 @@ export function SentSoFar({ sent }: { sent: NonNullable<MoneyEverywhere["sent"]>
       {sent.totals.length ? <p className="cr-all__why">{SENT_TWO_MONIES}</p> : null}
       {sent.notAdded ? <p className="cr-all__why">{sent.notAdded}</p> : null}
       {sent.notCountedText ? <p className="cr-all__why">{sent.notCountedText}</p> : null}
-      <p className="cr-all__why cr-all__bank">{sent.bankText}</p>
+      <p className="cr-all__why cr-all__bank">{bankLine ?? sent.bankText}</p>
     </div>
   );
 }
