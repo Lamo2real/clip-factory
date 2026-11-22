@@ -24,6 +24,10 @@ const FLAGS = [
   "--no-first-run",
   "--no-default-browser-check",
   "--lang=en-US",
+  // Nothing of Chrome's own may reach the owner's screen: no web notifications, and not macOS's notification system
+  // (its alert helper made macOS ask about notifications once, during the first headless post on 22 Nov).
+  "--disable-notifications",
+  "--disable-features=NativeNotifications,SystemNotifications",
   // A hidden window still renders and runs timers at full speed (TikTok's uploader needs both).
   "--disable-backgrounding-occluded-windows",
   "--disable-renderer-backgrounding",
