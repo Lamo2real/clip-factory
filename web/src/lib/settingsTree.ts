@@ -373,6 +373,12 @@ export const TREES: Tree[] = [
             leaf: "Clips that show Post it yourself can go to your Mac too.",
             words: ["send", "post it yourself", "waiting", "old clips", "all", "TikTok"],
           },
+          {
+            id: "tiktok-mac-login",
+            name: "TikTok login on your Mac",
+            leaf: "Kept in your Mac's Keychain, so your Mac logs back in to TikTok by itself. Change it or forget it.",
+            words: ["login", "log in", "logged out", "password", "Keychain", "change", "forget", "remove", "delete", "TikTok"],
+          },
         ],
       },
       {

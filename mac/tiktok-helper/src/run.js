@@ -6,13 +6,13 @@ import path from "node:path";
 import { ApiError, client } from "./api.js";
 import { SignInNeeded, accessToken, appConfig } from "./auth.js";
 import * as chrome from "./chrome.js";
-import { ask, frame, frameAvailable } from "./frame.js";
+import { ask, frame, frameAvailable, yourTurn } from "./frame.js";
 import { freeName } from "./match.js";
 import { event, log, notify } from "./notify.js";
 import { DOWNLOADS, LOCK, VERSION } from "./paths.js";
 import { nextAction } from "./plan.js";
 import { loadSettings, loadState, remember, saveState } from "./store.js";
-import { countTry, passwordAllowed, readLogin } from "./login.js";
+import { askAndSaveLogin, countTry, forgetLogin, hasLogin, passwordAllowed, readLogin } from "./login.js";
 import { LOGIN_URL, REASONS, Stop, find, loggedIn, passwordLogin, post } from "./tiktok.js";
 
 // What the notification says at each step (the red frame stays up the whole time).
@@ -358,13 +358,40 @@ export async function tick() {
     if (["post", "resume", "find"].includes(action.action) && !frameAvailable()) {
       action = { action: "paused", reason: "The red frame is missing on your Mac, so TikTok waits." };
     }
+    // §47.6: the owner's Change TikTok login / Forget TikTok login, done between posts (never in the middle of one).
+    let loginDone;
+    const request = helper?.loginRequest;
+    if (request && !["post", "resume", "find"].includes(action.action)) {
+      if (request.action === "forget") {
+        await forgetLogin();
+        event("login_forgotten", {});
+      } else if (request.action === "change") {
+        const saved = await yourTurn("Type your TikTok login in the two Mac dialogs (kept only in your Keychain)", () =>
+          askAndSaveLogin()
+        );
+        if (saved) {
+          delete state.loginRefused; // a new login may be tried again
+          state.loginTries = [];
+          saveState(state);
+          event("login_saved", {});
+        }
+      }
+      loginDone = request.at;
+    }
     const pingState = needsYou ? "needs_you" : action.action === "paused" ? "paused" : "ok";
-    await api.ping({
+    const checkIn = {
       state: pingState,
       ...(pingState !== "ok" && action.reason ? { reason: action.reason } : {}),
       version: VERSION,
       device: state.device,
-    });
+    };
+    try {
+      await api.ping({ ...checkIn, login: (await hasLogin()) ? "saved" : "none", ...(loginDone ? { loginDone } : {}) });
+    } catch (e) {
+      // A Clip Factory from before §47.6 doesn't know the login fields yet: check in without them.
+      if (!(e instanceof ApiError && e.status === 400)) throw e;
+      await api.ping(checkIn);
+    }
     log("tick", { action: action.action, clipId: action.job?.clipId, waiting: queue.length, reason: action.reason });
     if (action.action === "post" || action.action === "resume") {
       // The red frame goes up before anything is claimed or driven; if it can't be shown, nothing happens.

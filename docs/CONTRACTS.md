@@ -129,8 +129,9 @@ try again in a minute, §17.4), `internal`.
 | POST `/v1/clips/{clipId}/tiktok/posted` | `{ "link"?: string }` | `{ "clip", "posts", "note"? }` (posted on TikTok by the owner himself, §42) |
 | DELETE `/v1/clips/{clipId}/tiktok/posted` | – | `{ "clip", "posts" }` (Undo of the above, §42; a post the owner's Mac made → 409, §47) |
 | GET `/v1/tiktok/mac` | – | `{ "on", "helper": MacHelper \| null, "queue": MacJob[] }` (the Mac helper's queue, §47) |
-| POST `/v1/tiktok/mac/ping` | `{ "state", "reason"?, "version"?, "device" }` | `{ "on" }` (the Mac helper checks in, §47) |
+| POST `/v1/tiktok/mac/ping` | `{ "state", "reason"?, "version"?, "device", "login"?, "loginDone"? }` | `{ "on" }` (the Mac helper checks in, §47; `login` and `loginDone` §47.8) |
 | POST `/v1/tiktok/mac/send` | `{ "clipIds": string[] (1–25) }` | `{ "results": [{ "clipId", "sent", "reason"? }] }` (Send these to my Mac, §47; in order, each id once) |
+| POST `/v1/tiktok/mac/login` | `{ "action": "change" \| "forget" }` | `{ "helper": MacHelper }` (Change or Forget the TikTok login kept on the Mac; the Mac does it when it next checks in, §47.8) |
 | POST `/v1/clips/{clipId}/tiktok/mac/claim` | `{ "device" }` | `{ "job": MacJob }` (§47) |
 | POST `/v1/clips/{clipId}/tiktok/mac/step` | `{ "device", "step" }` | `{ "job": MacJob }` (§47) |
 | POST `/v1/clips/{clipId}/tiktok/mac/done` | `{ "device", "link"? }` | `{ "clip", "posts", "note"? }` (the Mac posted it, §47) |
@@ -15484,8 +15485,9 @@ Upload and auto-posting write the Mac post in the same transaction as the clip's
 | Method & path | Body | 2xx |
 |---|---|---|
 | GET `/v1/tiktok/mac` | – | `{ on, helper: MacHelper \| null, queue: MacJob[] }` |
-| POST `/v1/tiktok/mac/ping` | `{ state: "ok" \| "needs_you" \| "paused", reason?, version?, device }` | `{ on }` |
+| POST `/v1/tiktok/mac/ping` | `{ state: "ok" \| "needs_you" \| "paused", reason?, version?, device, login?: "saved" \| "none", loginDone? }` | `{ on }` |
 | POST `/v1/tiktok/mac/send` | `{ clipIds }` | `{ results }` |
+| POST `/v1/tiktok/mac/login` | `{ action: "change" \| "forget" }` | `{ helper }` (§47.8) |
 | POST `/v1/clips/{clipId}/tiktok/mac/claim` | `{ device }` | `{ job: MacJob }` |
 | POST `/v1/clips/{clipId}/tiktok/mac/step` | `{ device, step }` | `{ job: MacJob }` |
 | POST `/v1/clips/{clipId}/tiktok/mac/done` | `{ device, link? }` | `{ clip, posts, note? }` |
@@ -15605,6 +15607,46 @@ Your Mac posts TikTok."
 * One Mac, one try at a time: the claim is conditional; a post whose helper pressed Post is never claimed again by
   itself, and never taken back (it could then go out through TikTok's API as well); only the owner's "It's not on
   TikTok, try again" clears that, or his I posted it makes it his.
+
+### 47.8 The TikTok login on the Mac (owner request, 2026-11-22)
+
+The owner, asked "Should the helper keep your TikTok password in the Mac's Keychain, so it can log back in by
+itself?": "Yes, use Keychain". Also: "i want you to have full unrestricted access to my computer to download videos and
+then log into tiktok and upload them then delete the video you downloaded after you uploaded it to tiktok successfully".
+
+* **The login never reaches Clip Factory.** The helper (`mac/tiktok-helper`, `src/login.js`) asks for it once in two Mac
+  dialogs (the password one hidden), with the yellow frame, and keeps it only in the login Keychain under the service
+  "Clip Factory TikTok helper" (accounts `tiktok-username`, `tiktok-password`): from the dialog's answer (a pipe) into
+  `security`'s stdin, never a file or a command line. Its log lines, events and notifications are scrubbed, and its API
+  client refuses any request whose path or body holds the password. The server only learns whether one is kept.
+* **Logging back in:** when TikTok logs the helper out, it logs in with the saved login under the red frame, at most
+  twice in 24 hours and never again after TikTok refused it (wrong login, "Maximum number of attempts"), until it is
+  changed. A code, a puzzle or a new-device check is the owner's turn: the yellow frame, a pop-up, and the helper's own
+  window comes forward as it is. The post waits (still this Mac's) and goes on after the login; after 20 minutes
+  without one it stops with TikTok's login sentence (`needsYou`).
+* **The video in Downloads:** the helper deletes only the file it saved itself for that post (in Downloads, named
+  `clip-factory-….mp4`, recorded in its ledger), and only once the post's link is found in TikTok Studio › Posts. A
+  failed try keeps it for the retry; a clip that got onto TikTok another way has its kept file removed. Nothing else
+  in Downloads is touched.
+* **The red frame** (`~/.claude-control`) is up whenever the helper drives Chrome or TikTok Studio, from before the claim
+  to the end (green when posted, down on a stop); without it the helper claims and drives nothing.
+* **API (additive, the `MACHELPER` item):** ping takes `login?: "saved" | "none"` and `loginDone?: ISO` (the `at` of the
+  request it handled; a newer request stays). `POST /v1/tiktok/mac/login {action: "change" | "forget"}` → `{helper}`
+  sets `loginRequestAction`/`loginRequestAt` (409 "Set up your Mac first. Then it can keep your TikTok login." when no
+  Mac ever checked in; 400 "Pick change or forget."). `MacHelper` gains `login?` and `loginRequest?: {action, at}`.
+  The helper does a pending request between posts, never in the middle of one, and still checks in without the new
+  fields to a server from before them.
+* **Web:** Settings › Posting › Your Mac posts TikTok › **TikTok login on your Mac** (`tiktok-mac-login`, shown once a Mac
+  checked in): "Your TikTok login is kept in your Mac's Keychain, so your Mac logs back in to TikTok by itself." or "No
+  TikTok login is kept on your Mac. If TikTok logs your Mac out, you log in again on the Mac.", **Change TikTok login**
+  (glass) and **Forget TikTok login** (only while one is kept; asks "Forget it? Then your Mac can't log back in to
+  TikTok by itself." with Yes, forget it / Not now). After a tap: "Your Mac asks for the new login the next time it
+  checks in, within a minute." / "Your Mac forgets the login the next time it checks in, within a minute."
+* **Tests:** `api/tests/test_tiktok_mac.py` (the login state, Change and Forget waiting for the Mac, an older done never
+  clears a newer request, unknown keys refused, no login fields stored); `web/test/tiktokMac.test.ts` and
+  `web/e2e/tiktok-mac.spec.ts` (the lines, the buttons, Forget's question); `mac/tiktok-helper/test/login.test.js` (at most
+  twice a day, never after a refusal, a code or a puzzle is the owner's turn, never in a log, an event or a request),
+  `files.test.js` (only its own videos), `frame.test.js` (no frame, no run).
 
 ### 47.7 Not verified live
 

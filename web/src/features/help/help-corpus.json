@@ -1,5 +1,5 @@
 {
-  "version": "9983892f6189",
+  "version": "1dba538c69d9",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -6450,7 +6450,8 @@
       "keywords": [
         "My Mac posts my TikTok clips",
         "Your Mac",
-        "Send these to my Mac"
+        "Send these to my Mac",
+        "TikTok login on your Mac"
       ],
       "answer": "Your Mac posts your TikTok clips for everyone, one at a time.",
       "steps": [
@@ -6576,6 +6577,44 @@
       ],
       "highlight": [
         "tiktok-mac-send"
+      ]
+    },
+    {
+      "id": "apple-tiktok-mac-login",
+      "kind": "apple",
+      "route": "/settings/posting/tiktok-mac",
+      "hash": "tiktok-mac-login",
+      "where": "Settings › Posting › Your Mac posts TikTok",
+      "title": "TikTok login on your Mac",
+      "keywords": [
+        "login",
+        "log in",
+        "logged out",
+        "Keychain",
+        "change",
+        "forget",
+        "remove",
+        "delete",
+        "TikTok"
+      ],
+      "answer": "Kept in your Mac's Keychain, so your Mac logs back in to TikTok by itself. Change it or forget it.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Your Mac posts TikTok**.",
+        "Find **TikTok login on your Mac**."
+      ],
+      "actions": [
+        {
+          "id": "apple-tiktok-mac-login:open",
+          "label": "Your Mac posts TikTok",
+          "to": "/settings/posting/tiktok-mac#tiktok-mac-login",
+          "highlight": [
+            "tiktok-mac-login"
+          ]
+        }
+      ],
+      "highlight": [
+        "tiktok-mac-login"
       ]
     },
     {

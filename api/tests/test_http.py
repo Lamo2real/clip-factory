@@ -290,6 +290,7 @@ def test_every_contract_route_is_registered() -> None:
         ("GET", "/v1/tiktok/mac"),
         ("POST", "/v1/tiktok/mac/ping"),
         ("POST", "/v1/tiktok/mac/send"),
+        ("POST", "/v1/tiktok/mac/login"),
         ("POST", "/v1/clips/X/tiktok/mac/claim"),
         ("POST", "/v1/clips/X/tiktok/mac/step"),
         ("POST", "/v1/clips/X/tiktok/mac/done"),

@@ -1500,6 +1500,10 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       await delay();
       return mac.status();
     },
+    async tiktokMacLogin(action) {
+      await delay();
+      return mac.loginRequest(action);
+    },
     async sendToMac(clipIds) {
       await delay();
       return mac.send(clipIds);

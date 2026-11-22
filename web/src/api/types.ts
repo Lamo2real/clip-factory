@@ -343,7 +343,14 @@ export interface MacHelper {
   state: "ok" | "needs_you" | "paused";
   reason?: string;
   version?: string;
+  /** §47.8: whether a TikTok login is kept in the Mac's Keychain (absent: a helper from before it said). */
+  login?: "saved" | "none";
+  /** §47.8: the owner's Change or Forget, until the Mac did it. */
+  loginRequest?: { action: MacLoginAction; at: string };
 }
+
+/** §47.8: what the owner can ask the Mac to do with its TikTok login. */
+export type MacLoginAction = "change" | "forget";
 
 /** One post in the Mac's queue (§47.3). */
 export interface MacJob {
@@ -2440,6 +2447,8 @@ export interface Api {
   // Your Mac posts TikTok (§47). An api from before it answers 404.
   /** GET /v1/tiktok/mac: on or off, the Mac's last check-in, and what waits for it. */
   tiktokMacStatus(): Promise<TikTokMacStatus>;
+  /** §47.8: Change TikTok login / Forget TikTok login on the owner's Mac. */
+  tiktokMacLogin(action: MacLoginAction): Promise<MacHelper | null>;
   /** POST /v1/tiktok/mac/send `{ clipIds }` (1–25): Send these to my Mac; one result per clip, in order. */
   sendToMac(clipIds: string[]): Promise<MacSendResult[]>;
   /** POST /v1/clips/{clipId}/tiktok/mac/retry: Try again on a stopped Mac post; `notOnTikTok` after it pressed Post. */
