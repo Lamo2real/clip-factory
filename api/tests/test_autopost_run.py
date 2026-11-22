@@ -7,6 +7,7 @@ retry. Offline: in-memory items and the fake Lambda client only.
 
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -365,13 +366,28 @@ def test_off_does_nothing(app: App, store: db.Store, table: FakeTable, at_slot: 
     assert table.all() == before
 
 
-def test_not_due_does_nothing(app: App, store: db.Store, table: FakeTable, clock: Clock) -> None:
+def test_not_due_does_nothing_but_mark_the_tick(app: App, store: db.Store, table: FakeTable, clock: Clock) -> None:
     ready(store, "youtube")
     turn_on(store)  # on at 12:00: the 12:00 tick is not due, 13:00 is
     review_clip(store)
     before = table.all()
     assert tick(app, NOW).result == "not_due"
-    assert table.all() == before
+    # Only the tick's own mark (§46.4): this slot was looked at, so the page stops showing it as the next run.
+    assert [i for i in table.all() if i not in before] == [
+        {"pk": PK, "sk": "AUTOPOST", "type": "autopost", "lastTickAt": iso(NOW)}
+    ]
+    assert all(i in table.all() for i in before)
+    assert run_item(store, f"{iso(NOW)}#scheduled") is None
+    # A later not-due tick moves the mark and keeps the rest of the item.
+    store.update(PK, "AUTOPOST", {"lastNowAt": iso(NOW)})
+    assert tick(app, NOW).result == "not_due"
+    assert state(store) == {
+        "pk": PK,
+        "sk": "AUTOPOST",
+        "type": "autopost",
+        "lastTickAt": iso(NOW),
+        "lastNowAt": iso(NOW),
+    }
 
 
 # --- never twice ----------------------------------------------------------------------------------------------------
@@ -821,6 +837,157 @@ def test_practice_writes_nothing_but_the_run(
     ]
     assert lambda_client.calls == []
     assert state(store)["lastRunAt"] == iso(SLOT)  # practice keeps the same times
+
+
+# --- a late run, and starts that never went through (§46.5 rule 5, §46.7 step 3) -----------------------------------
+
+
+def test_a_late_run_protects_its_clips_for_15_minutes_from_when_it_planned(
+    app: App, call: Call, store: db.Store, s3_client: FakeS3, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ready(store, "youtube")
+    turn_on(store)
+    first = review_clip(store, s3_client, made="2026-11-15T08:00:00.000Z")
+    second = review_clip(store, s3_client, made="2026-11-15T09:00:00.000Z")
+    clock.now = SLOT + timedelta(minutes=16)  # the 13:00 tick arrives late in its hour
+    crashed_run(app, monkeypatch)  # it planned the first clip at 13:16, then stopped
+    planned = run_item(store, RUN_ID)
+    assert planned is not None
+    assert (planned["at"], planned["plannedAt"], planned["state"]) == (
+        iso(SLOT),
+        iso(SLOT + timedelta(minutes=16)),
+        "planned",
+    )
+    # At 13:20 (20 minutes after its slot, 4 after it planned) a Private test run leaves that clip to it.
+    clock.now = SLOT + timedelta(minutes=20)
+    assert pick.busy(store, USER, clock()) == {first["clipId"]}
+    status, body = call("POST", "/v1/autopost/run", {"kind": "private"})
+    assert (status, [c["clipId"] for c in body["run"]["clips"]]) == (200, [second["clipId"]])
+    assert clip_of(store, first["clipId"])["status"] == "review"
+    clock.now = SLOT + timedelta(minutes=31, seconds=1)
+    assert pick.busy(store, USER, clock()) == set()
+
+
+def test_a_planned_run_stored_before_planned_at_counts_from_its_slot(store: db.Store) -> None:
+    store.put(
+        {
+            "pk": PK,
+            "sk": f"AUTORUN#{RUN_ID}",
+            "type": "autorun",
+            "runId": RUN_ID,
+            "at": iso(SLOT),
+            "state": "planned",
+            "clips": [{"clipId": "c1", "hook": "h", "places": ["youtube"]}],
+        }
+    )
+    assert pick.busy(store, USER, SLOT + timedelta(minutes=15)) == {"c1"}
+    assert pick.busy(store, USER, SLOT + timedelta(minutes=15, seconds=1)) == set()
+
+
+def every_retry_fails(app: App, lambda_client: FakeLambda) -> None:
+    """The 13:00 run sends its clip but its clip flow never starts, through the event and both of Lambda's retries."""
+    event = {"source": "aws.events", "time": "2026-11-15T13:00:02Z"}
+    lambda_client.fail = True
+    for _ in range(3):
+        with pytest.raises(handler.OwnersFailed):
+            handler.handle(event, deps(app))
+    lambda_client.fail = False
+
+
+def finished_starts(capsys: pytest.CaptureFixture[str], event: str = "autopost.finished_start") -> list[dict[str, Any]]:
+    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith("{")]
+    return [line for line in lines if line.get("event") == event]
+
+
+def test_the_next_run_finishes_a_start_that_never_went_through(
+    app: App,
+    store: db.Store,
+    table: FakeTable,
+    s3_client: FakeS3,
+    at_slot: Clock,
+    lambda_client: FakeLambda,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    ready(store, "youtube", "facebook")
+    turn_on(store)
+    stuck = review_clip(store, s3_client, made="2026-11-15T08:00:00.000Z")
+    every_retry_fails(app, lambda_client)
+    left = clip_of(store, stuck["clipId"])
+    assert (left["status"], left["publishState"], left["autoRun"]) == ("confirmed", "pending", RUN_ID)
+    later = review_clip(store, s3_client, made="2026-11-15T09:00:00.000Z")
+    next_slot = SLOT + timedelta(hours=5)
+    at_slot.now = next_slot + timedelta(seconds=5)
+    capsys.readouterr()
+    assert tick(app, next_slot).result == "ran"
+    assert clip_of(store, stuck["clipId"])["publishState"] == "started"
+    assert sorted(lambda_client.started) == sorted(f"clip-{c['clipId']}-1" for c in (stuck, later))
+    # The earlier clip first, then this run's own.
+    assert flow_starts(lambda_client)[-2:] == [f"clip-{stuck['clipId']}-1", f"clip-{later['clipId']}-1"]
+    assert post_count(table, stuck["clipId"]) == 2  # never a second set of posts
+    next_run = f"{iso(next_slot)}#scheduled"
+    assert outcomes(store, next_run) == [(later["clipId"], "sent", None)]
+    assert [(line["runId"], line["clipId"]) for line in finished_starts(capsys)] == [(next_run, stuck["clipId"])]
+    # Once started it is left alone.
+    third = SLOT + timedelta(hours=10)
+    at_slot.now = third + timedelta(seconds=5)
+    calls = len(lambda_client.calls)
+    tick(app, third)
+    assert len(lambda_client.calls) == calls
+
+
+def test_a_start_that_fails_again_is_logged_and_the_run_still_sends_its_own(
+    app: App,
+    store: db.Store,
+    s3_client: FakeS3,
+    at_slot: Clock,
+    lambda_client: FakeLambda,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ready(store, "youtube")
+    turn_on(store)
+    stuck = review_clip(store, s3_client, made="2026-11-15T08:00:00.000Z")
+    every_retry_fails(app, lambda_client)
+    later = review_clip(store, s3_client, made="2026-11-15T09:00:00.000Z")
+    real = release.start_flow
+
+    def broken_for_the_stuck_one(store_: Any, flows: Any, clip: Any) -> Any:
+        if clip["clipId"] == stuck["clipId"]:
+            raise RuntimeError("its item is broken")
+        return real(store_, flows, clip)
+
+    monkeypatch.setattr(release, "start_flow", broken_for_the_stuck_one)
+    next_slot = SLOT + timedelta(hours=5)
+    at_slot.now = next_slot + timedelta(seconds=5)
+    capsys.readouterr()
+    assert tick(app, next_slot).result == "ran"
+    assert outcomes(store, f"{iso(next_slot)}#scheduled") == [(later["clipId"], "sent", None)]
+    assert clip_of(store, later["clipId"])["publishState"] == "started"
+    assert clip_of(store, stuck["clipId"])["publishState"] == "pending"
+    failed = finished_starts(capsys, "autopost.finish_start_failed")
+    assert [(line["clipId"], line["error"]) for line in failed] == [(stuck["clipId"], "RuntimeError")]
+
+
+def test_practice_leaves_an_earlier_start_alone(
+    app: App, store: db.Store, s3_client: FakeS3, at_slot: Clock, lambda_client: FakeLambda
+) -> None:
+    ready(store, "youtube")
+    turn_on(store)
+    stuck = review_clip(store, s3_client)
+    every_retry_fails(app, lambda_client)
+    turn_on(store, practice=True)
+    next_slot = SLOT + timedelta(hours=5)
+    at_slot.now = next_slot + timedelta(seconds=5)
+    calls = len(lambda_client.calls)
+    assert tick(app, next_slot).result == "ran"
+    # "Nothing gets sent" while practising: the next live run finishes it.
+    assert len(lambda_client.calls) == calls
+    assert clip_of(store, stuck["clipId"])["publishState"] == "pending"
+    turn_on(store)
+    later = SLOT + timedelta(hours=10)
+    at_slot.now = later + timedelta(seconds=5)
+    assert tick(app, later).result == "ran"
+    assert clip_of(store, stuck["clipId"])["publishState"] == "started"
 
 
 # --- the Lambda (§46.11) --------------------------------------------------------------------------------------------

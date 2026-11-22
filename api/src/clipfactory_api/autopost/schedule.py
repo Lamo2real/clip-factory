@@ -19,6 +19,10 @@ from typing import Any
 from ..clock import parse
 
 HOUR = timedelta(hours=1)
+# How long after its :00 a tick can still arrive: the hourly rule's target and the function's async config both set
+# ``maximum_event_age_in_seconds = 3300`` (infra/modules/autopost, §46.11), so a tick (or its retry) older than this is
+# dropped and the next tick catches it up.
+TICK_EVENT_AGE = timedelta(seconds=3300)
 
 
 def floor_hour(moment: datetime) -> datetime:
@@ -54,14 +58,26 @@ def is_due(auto: Mapping[str, Any], state: Mapping[str, Any] | None, slot: datet
 
 
 def next_run_at(auto: Mapping[str, Any], state: Mapping[str, Any] | None, now: datetime) -> datetime | None:
-    """The next run as the owner sees it (None while off): ``due_at``, or the next full hour when that is already
-    past (a tick that was lost is caught up by the next one)."""
+    """The next run as the owner sees it (None while off).
+
+    Between :00 and the moment this hour's tick claims its slot, a slot that is due and that no tick has looked at yet
+    (``lastRunAt`` and ``lastTickAt`` both before it) is still this hour's run, until its event is too old to arrive
+    (``TICK_EVENT_AGE``). Otherwise ``due_at``, or the next full hour when that is already past (a tick that was lost,
+    or one that found the slot not due before a change made it due, is caught up by the next one)."""
     if not auto.get("on"):
         return None
     due = due_at(auto, state)
-    upcoming = next_full_hour(now)
+    current = floor_hour(now)
+    marks = [parse((state or {}).get(k)) for k in ("lastRunAt", "lastTickAt")]
+    evaluated = max((m for m in marks if m is not None), default=None)
+    if (
+        (due is None or due <= current)
+        and (evaluated is None or evaluated < current)
+        and now < current + TICK_EVENT_AGE
+    ):
+        return current  # this hour's tick has not come yet (or is claiming it now)
     if due is None or due <= now:
-        return upcoming
+        return next_full_hour(now)
     return due
 
 

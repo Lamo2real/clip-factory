@@ -115,6 +115,58 @@ def test_every_put_with_auto_post_registers_the_owner(call: Call, table: FakeTab
     assert table.raw(OWNERS_PK, f"USER#{USER}") == registry  # the first since stays
 
 
+def test_a_save_that_loaded_before_auto_posting_went_off_never_turns_it_back_on(
+    call: Call, table: FakeTable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert put(call, {"on": True, "everyHours": 5})[0] == 200
+    real = settings.merge_update
+    raced: list[bool] = []
+
+    def another_save_lands(current: Any, patch: Any, *, now: str | None = None) -> Any:
+        out = real(current, patch, now=now)
+        if not raced:
+            raced.append(True)
+            # Another tab turns auto-posting off after this save loaded the settings and before it saved them.
+            assert put(call, {"on": False})[0] == 200
+        return out
+
+    monkeypatch.setattr(settings, "merge_update", another_save_lands)
+    status, body = put(call, {"everyHours": 3})
+    assert status == 200
+    assert body["settings"]["autoPost"] == {**DEFAULT, "everyHours": 3, "onAt": iso(NOW)}  # still off
+    assert call("GET", "/v1/settings")[1]["settings"]["autoPost"] == body["settings"]["autoPost"]
+    # Every save got its own updatedAt, though the clock never moved.
+    raw = table.raw(PK, db.SETTINGS_SK)
+    assert raw is not None
+    assert raw["updatedAt"] == iso(NOW + timedelta(milliseconds=2))
+
+
+def test_a_save_that_keeps_losing_the_race_says_so(
+    call: Call, store: db.Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert put(call, {"on": True})[0] == 200
+    real = settings.merge_update
+    tries: list[str] = []
+
+    def another_save_each_time(current: Any, patch: Any, *, now: str | None = None) -> Any:
+        tries.append("x")
+        store.update(PK, db.SETTINGS_SK, {"updatedAt": f"2026-11-15T12:00:0{len(tries)}.000Z"})
+        return real(current, patch, now=now)
+
+    monkeypatch.setattr(settings, "merge_update", another_save_each_time)
+    status, body = put(call, {"perRun": 4})
+    assert (status, body["error"]["message"]) == (409, "Your settings just changed. Try again.")
+    assert len(tries) == 3
+    assert settings.load(store, USER)["autoPost"]["perRun"] == 1  # nothing of it was saved
+
+
+def test_a_save_over_settings_stored_without_updated_at(call: Call, store: db.Store) -> None:
+    store.put({"pk": PK, "sk": db.SETTINGS_SK, "type": "settings", "userId": USER, "clipMin": 3})
+    status, body = put(call, {"on": True})
+    assert status == 200
+    assert (body["settings"]["clipMin"], body["settings"]["autoPost"]["on"]) == (3, True)
+
+
 # --- GET /v1/autopost (§46.9) ---------------------------------------------------------------------------------------
 
 
@@ -163,6 +215,58 @@ def test_status_while_on_gives_each_clip_its_time(call: Call, store: db.Store, c
     assert [u["clipId"] for u in body["nextUp"]] == [c["clipId"] for c in made[:10]]
     hours = [0, 0, 3, 3, 6, 6, 9, 9, 12, 12]
     assert [u["runAt"] for u in body["nextUp"]] == [iso(SLOT + timedelta(hours=h)) for h in hours]
+
+
+def test_status_while_practising_times_only_the_clips_practice_picks(call: Call, store: db.Store, clock: Clock) -> None:
+    ready(store, "youtube")
+    turn_on(store, every=3, per_run=2, practice=True)
+    job = seed_job(store, status="ready", createdAt="2026-11-15T08:00:00.000Z")
+    made = [seed_clip(store, job_id=job["jobId"], rank=n) for n in range(1, 6)]
+    clock.now = NOW + timedelta(minutes=30)
+    body = call("GET", "/v1/autopost")[1]
+    assert [u["clipId"] for u in body["nextUp"]] == [c["clipId"] for c in made]
+    # Practice sends nothing, so every practice run picks these same two again.
+    assert [u.get("runAt") for u in body["nextUp"]] == [iso(SLOT), iso(SLOT), None, None, None]
+
+
+def test_status_with_nothing_set_up_gives_no_times(call: Call, store: db.Store, clock: Clock) -> None:
+    turn_on(store)
+    made = [review_clip(store, made=f"2026-11-15T0{n}:00:00.000Z") for n in (1, 2)]
+    clock.now = NOW + timedelta(minutes=30)
+    body = call("GET", "/v1/autopost")[1]
+    assert (body["places"], body["nextRunAt"]) == ([], iso(SLOT))
+    assert [u["clipId"] for u in body["nextUp"]] == [c["clipId"] for c in made]
+    assert all("runAt" not in u for u in body["nextUp"])  # nothing posts them (the run says why)
+    assert body["waiting"] == []
+    ready(store, "facebook")
+    assert [u.get("runAt") for u in call("GET", "/v1/autopost")[1]["nextUp"]] == [
+        iso(SLOT),
+        iso(SLOT + timedelta(hours=5)),
+    ]
+
+
+def test_status_shows_this_hours_run_until_its_tick_claims_it(
+    app: Any, call: Call, store: db.Store, s3_client: FakeS3, clock: Clock
+) -> None:
+    ready(store, "youtube")
+    turn_on(store)  # on at 12:00: due at 13:00
+    clip = review_clip(store, s3_client)
+    clock.now = SLOT + timedelta(seconds=20)  # 13:00:20, before the tick claimed
+    body = call("GET", "/v1/autopost")[1]
+    assert (body["nextRunAt"], body["nextUp"][0]["runAt"]) == (iso(SLOT), iso(SLOT))
+    assert run.run_once(deps(app), USER, "scheduled", SLOT).result == "ran"
+    assert call("GET", "/v1/autopost")[1]["nextRunAt"] == iso(SLOT + timedelta(hours=5))
+    # The 14:00 tick finds 5 hours not up, and says so.
+    later = review_clip(store, s3_client)
+    clock.now = SLOT + timedelta(hours=1, seconds=3)
+    assert run.run_once(deps(app), USER, "scheduled", SLOT + timedelta(hours=1)).result == "not_due"
+    assert state(store)["lastTickAt"] == iso(SLOT + timedelta(hours=1))
+    # Down to 1 hour at 14:20: due since 14:00, but that tick already looked, so 15:00 runs it.
+    clock.now = SLOT + timedelta(hours=1, minutes=20)
+    assert put(call, {"everyHours": 1})[0] == 200
+    body = call("GET", "/v1/autopost")[1]
+    assert (body["nextRunAt"], body["nextUp"][0]["clipId"]) == (iso(SLOT + timedelta(hours=2)), later["clipId"])
+    assert clip_of(store, clip["clipId"])["status"] == "confirmed"
 
 
 def test_status_after_a_run_lists_its_posts_the_failed_and_tiktok_yourself(

@@ -5,7 +5,9 @@ Pure: the hourly tick is simulated hour by hour, each run moving ``lastRunAt`` t
 from __future__ import annotations
 
 import itertools
+import re
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -81,9 +83,11 @@ def test_a_changed_every_hours_counts_from_the_last_run() -> None:
     on_at = "2026-11-15T08:30:00"
     assert schedule.due_at(auto(8, on_at=on_at), state) == at("2026-11-15T18:00:00")  # up
     assert schedule.due_at(auto(2, on_at=on_at), state) == at("2026-11-15T12:00:00")  # down
-    # Down to 2 at 14:30: 12:00 has passed, so the next full hour runs, then every 2 hours from it.
+    # Down to 2 at 14:30: 12:00 has passed and the 14:00 tick already looked (and found 8 h not up), so the next full
+    # hour runs, then every 2 hours from it.
     now = at("2026-11-15T14:30:00")
-    assert schedule.next_run_at(auto(2, on_at=on_at), state, now) == at("2026-11-15T15:00:00")
+    looked = {**state, "lastTickAt": iso(at("2026-11-15T14:00:00"))}
+    assert schedule.next_run_at(auto(2, on_at=on_at), looked, now) == at("2026-11-15T15:00:00")
     assert ticks(auto(2, on_at=on_at), at("2026-11-15T15:00:00"), 6, dict(state)) == [
         at("2026-11-15T15:00:00"),
         at("2026-11-15T17:00:00"),
@@ -131,12 +135,47 @@ def test_a_lost_tick_is_caught_up_by_the_next_one_once() -> None:
 def test_next_run_shown() -> None:
     state = {"lastRunAt": iso(at("2026-11-15T10:00:00"))}
     assert schedule.next_run_at(auto(5), state, at("2026-11-15T12:30:00")) == at("2026-11-15T15:00:00")
-    # Already past (a lost tick): the next full hour, which runs it.
-    assert schedule.next_run_at(auto(5), state, at("2026-11-15T15:20:00")) == at("2026-11-15T16:00:00")
+    # The 15:00 tick has not claimed it yet: it may still come (with its retries) until 15:55, so 15:00 stays.
+    assert schedule.next_run_at(auto(5), state, at("2026-11-15T15:20:00")) == at("2026-11-15T15:00:00")
+    # Already past (a lost tick: its event is too old now): the next full hour, which runs it.
+    assert schedule.next_run_at(auto(5), state, at("2026-11-15T15:55:00")) == at("2026-11-15T16:00:00")
     # Just switched on: the next full hour.
     assert schedule.next_run_at(auto(5, on_at="2026-11-15T12:10:00"), {}, at("2026-11-15T12:10:00")) == at(
         "2026-11-15T13:00:00"
     )
+
+
+def test_next_run_shown_between_the_hour_and_the_ticks_claim() -> None:
+    settings = auto(5, on_at="2026-11-15T07:30:00")
+    before = {"lastRunAt": iso(at("2026-11-15T08:00:00"))}  # due at 13:00
+    # 13:00:20, before the 13:00 tick claimed its slot: that run is this hour's, not 14:00.
+    assert schedule.next_run_at(settings, before, at("2026-11-15T13:00:20")) == at("2026-11-15T13:00:00")
+    # After the claim (lastRunAt moved to 13:00): five hours on.
+    claimed = {"lastRunAt": iso(at("2026-11-15T13:00:00"))}
+    assert schedule.next_run_at(settings, claimed, at("2026-11-15T13:00:20")) == at("2026-11-15T18:00:00")
+    # Past the event age (the rule's and the function's maximum_event_age_in_seconds) no 13:00 tick can come.
+    assert schedule.next_run_at(settings, before, at("2026-11-15T13:54:59")) == at("2026-11-15T13:00:00")
+    assert schedule.next_run_at(settings, before, at("2026-11-15T13:55:00")) == at("2026-11-15T14:00:00")
+
+
+def test_the_event_age_is_terraforms() -> None:
+    main = Path(__file__).resolve().parents[2] / "infra" / "modules" / "autopost" / "main.tf"
+    ages = re.findall(r"maximum_event_age_in_seconds\s*=\s*(\d+)", main.read_text())
+    assert len(ages) == 2  # the async invoke config and the rule's target
+    assert {timedelta(seconds=int(a)) for a in ages} == {schedule.TICK_EVENT_AGE}
+
+
+def test_next_run_shown_after_lowering_every_hours_once_this_hours_tick_looked() -> None:
+    state = {"lastRunAt": iso(at("2026-11-15T10:00:00"))}  # every 5 h: due at 15:00, so the 13:00 tick was not due
+    looked = {**state, "lastTickAt": iso(at("2026-11-15T13:00:00"))}
+    # Down to 2 at 13:20: due since 12:00, but the 13:00 tick already looked, so the 14:00 tick runs it.
+    assert schedule.next_run_at(auto(2), looked, at("2026-11-15T13:20:00")) == at("2026-11-15T14:00:00")
+    assert schedule.is_due(auto(2), looked, at("2026-11-15T14:00:00"))
+    # Without the tick's mark the page could not tell, and would say 13:00, a run that never comes.
+    assert schedule.next_run_at(auto(2), state, at("2026-11-15T13:20:00")) == at("2026-11-15T13:00:00")
+    # An older mark does not count for this hour.
+    older = {**state, "lastTickAt": iso(at("2026-11-15T12:00:00"))}
+    assert schedule.next_run_at(auto(2), older, at("2026-11-15T13:20:00")) == at("2026-11-15T13:00:00")
 
 
 @pytest.mark.parametrize(

@@ -22,7 +22,8 @@ Item = dict[str, Any]
 
 class ClipTaken(Exception):
     """The clip left Review before its posts were written: another Upload, a Throw away or an auto-posting run won
-    the race (the transaction's condition failed). The caller reads the clip again."""
+    the race (the transaction's condition failed), or, for an auto-posting run only, a Throw away holds it (§46.7).
+    The caller reads the clip again."""
 
 
 def upload_review_clip(
@@ -45,7 +46,8 @@ def upload_review_clip(
 
     ``auto`` (``{runId, at, test?}``, only ever set by an auto-posting run, §46.7) marks the clip (internal
     ``autoRun``, ``autoAt``, ``autoTest``) and every post (``autoRun``); with ``test: "private"`` every post's
-    ``postOptions`` also says ``test: "private"`` (§46.8). No request body can set these."""
+    ``postOptions`` also says ``test: "private"`` (§46.8). No request body can set these. With ``auto`` the clip's
+    write also needs no live Throw away hold (``holdUntil`` absent or past, §46.7); Upload by hand ignores the hold."""
     from .routes import clips as checks  # Upload's and Try again's shared checks (§33, §38.14)
 
     patch = dict(captions_patch or {})
@@ -93,8 +95,12 @@ def upload_review_clip(
         **({"tiktok": tiktok} if tiktok else {}),
     }
     post_fields: Item | None = None
+    not_held: db.Condition | None = None
     if auto is not None:
         fields.update({"autoRun": str(auto["runId"]), "autoAt": str(auto["at"])})
+        not_held = db.Condition(
+            "attribute_not_exists(#holdUntil) OR #holdUntil < :holdNow", {"#holdUntil": "holdUntil"}, {":holdNow": now}
+        )
         post_fields = {"autoRun": str(auto["runId"])}
         if auto.get("test") == "private":
             fields["autoTest"] = "private"
@@ -113,6 +119,7 @@ def upload_review_clip(
             campaign_id=campaign.campaign_id if campaign else None,
             campaign_options=campaign.options if campaign else None,
             post_fields=post_fields,
+            clip_condition=not_held,
         )
     except db.ConditionFailed as e:
         raise ClipTaken(str(item["clipId"])) from e

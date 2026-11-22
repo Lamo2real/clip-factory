@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime, timedelta
 from typing import Any
 
 from . import db, s3
+from .clock import iso
 from .errors import bad_request
 
 Item = dict[str, Any]
@@ -42,15 +44,26 @@ INTERNAL_FIELDS = (
     # §16.12: what the clip says (for the daily second look) and every key of its creator stay server side.
     "spokenText",
     "creatorKeys",
-    # §46.10: the auto-posting run that uploaded the clip (public as ``auto``).
+    # §46.10: the auto-posting run that uploaded the clip (public as ``auto``), and the hold a Throw away puts on it.
     "autoRun",
     "autoAt",
     "autoTest",
+    "holdUntil",
 )
 PUBLISH_PENDING = "pending"
 PUBLISH_STARTED = "started"
 # Uploaded clips whose flow start Confirm finishes when it is still pending (§14.5): the public ``startPending``.
 STARTABLE = ("confirmed", "publishing", "posted")
+# §46.2: Throw away holds the clip on the server the moment it is tapped (internal ``holdUntil``), so auto-posting never
+# sends it while Undo's 8 s toast is up; the decline itself goes when the toast ends, and Undo lifts the hold.
+HOLD_FOR = timedelta(seconds=60)
+
+
+def is_held(item: Mapping[str, Any], now: datetime) -> bool:
+    """A Throw away's hold is still on (``holdUntil`` in the future). Compared as ISO strings, as the run's
+    conditional write compares them (§46.7)."""
+    until = item.get("holdUntil")
+    return isinstance(until, str) and until > iso(now)
 
 
 def public_clip(

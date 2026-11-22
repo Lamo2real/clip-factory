@@ -45,6 +45,9 @@ ROUTES: list[Route] = [
     route("GET", "/v1/clips/{clipId}/similar", clips.similar),
     route("POST", "/v1/clips/{clipId}/confirm", clips.confirm),
     route("POST", "/v1/clips/{clipId}/decline", clips.decline),
+    # §46.2: Throw away holds the clip at the tap (no auto-posting run sends it); Undo lifts the hold.
+    route("POST", "/v1/clips/{clipId}/hold", clips.hold),
+    route("DELETE", "/v1/clips/{clipId}/hold", clips.hold_undo),
     route("GET", "/v1/clips/{clipId}/file", clips.clip_file),
     route("POST", "/v1/clips/{clipId}/tiktok/posted", clips.tiktok_posted),
     route("DELETE", "/v1/clips/{clipId}/tiktok/posted", clips.tiktok_posted_undo),

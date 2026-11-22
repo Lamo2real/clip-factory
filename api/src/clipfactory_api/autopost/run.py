@@ -5,18 +5,23 @@ is ``live``, ``practice`` (a scheduled run while Practice is on, or ``practice_n
 (``private_now``). ``runId = "{slot}#{kind}"`` (the slot to the second for a test run).
 
 1. **Scheduled only:** off → ``off``. A run item of this slot already there → it is **resumed** (``done`` → ``done``;
-   ``planned`` → step 4 with its own clips, never a new pick). Otherwise ``slot < nextRunAt`` → ``not_due``.
+   ``planned`` → step 4 with its own clips, never a new pick). Otherwise ``slot < nextRunAt`` → ``not_due``, and
+   ``AUTOPOST.lastTickAt`` becomes the slot (the page then stops showing this hour as the next run, §46.4).
 2. **Plan:** the first ``perRun`` taken clips (a Private test run: 1, never a campaign clip), each with its places.
+   The run item says when it planned (``plannedAt``, the clock's time): rule 5 of the pick counts from it.
 3. **Claim:** one transaction puts ``AUTORUN#{runId}`` (``planned``, its clips) and moves ``AUTOPOST.lastRunAt`` to the
    slot (only forward). Cancelled because the run exists → resume it; cancelled because ``lastRunAt`` already reached
    the slot → ``not_due``. Cancelled for neither (DynamoDB also cancels on a write to ``AUTOPOST`` at that moment, such
    as a test run's, or on throttling) → claim again once, then raise: the Lambda's retry of the same event claims the
    same slot, so the gaps stay even. A test run first moves ``AUTOPOST.lastNowAt`` (at most one a minute, else 409)
-   and puts its run alone; it never moves the schedule.
+   and puts its run alone; it never moves the schedule. Once a live scheduled run has claimed, it first finishes the
+   start of every clip an earlier scheduled run confirmed whose clip flow never started (``publishState: pending``
+   after all of that run's Lambda retries), with Upload's own ``release.start_flow``.
 4. **Send** each planned clip through Upload's own code (``uploads.upload_review_clip``): the same conditional
-   transaction (``status = review``, posts created once) and idempotent flow start, so a clip is confirmed and its flow
-   started only once, whichever run, retry or Upload gets there first. Practice sends nothing (``would_send``). A clip
-   still in Review after its transaction was cancelled (nothing took it) is tried once more.
+   transaction (``status = review``, no live Throw away hold, posts created once) and idempotent flow start, so a clip
+   is confirmed and its flow started only once, whichever run, retry or Upload gets there first. Practice sends
+   nothing (``would_send``). A clip still in Review after its transaction was cancelled (nothing took it) is tried
+   once more; a clip the owner is throwing away (its hold is on) is skipped: "You threw it away first."
 5. **Done:** the run item gets ``state: done`` and each clip's outcome. A new clip only starts with ``clip_seconds``
    left; the rest wait for the next run ("Out of time. It goes next run."). A scheduled run whose clip flow did not
    start stays ``planned`` and raises once every clip was tried: the Lambda's retry resumes it and finishes the start.
@@ -113,14 +118,15 @@ def run_once(deps: RunDeps, user_id: str, kind: str, slot: datetime) -> Outcome:
         if existing is not None:  # a retried delivery, or a run that overlaps this one: never a second pick
             return _resume(deps, user_id, existing, current, deadline)
         if not schedule.is_due(auto, store.get(pk, STATE_SK), slot):
-            return Outcome("not_due")
+            return _not_due(store, pk, slot)
         mode = "practice" if auto.get("practice") else "live"
     else:
         slot = slot.replace(microsecond=0)
         run_id = run_id_of(slot, kind)
         mode = "practice" if kind == "practice_now" else "private"
         _claim_now(store, user_id, slot)
-    planned, note = _plan(app, user_id, kind, mode, auto)
+    found = clips.all_clips(store, user_id)
+    planned, note = _plan(app, user_id, kind, mode, auto, every=found)
     item: Item = {
         "pk": pk,
         "sk": run_sk(run_id),
@@ -128,6 +134,7 @@ def run_once(deps: RunDeps, user_id: str, kind: str, slot: datetime) -> Outcome:
         "userId": user_id,
         "runId": run_id,
         "at": iso(slot),
+        "plannedAt": iso(app.clock()),
         "kind": kind,
         "mode": mode,
         "state": "planned",
@@ -145,10 +152,12 @@ def run_once(deps: RunDeps, user_id: str, kind: str, slot: datetime) -> Outcome:
                 if existing is not None:  # another delivery of this slot claimed first: its plan stands
                     return _resume(deps, user_id, existing, current, deadline)
                 if str((store.get(pk, STATE_SK) or {}).get("lastRunAt") or "") >= iso(slot):
-                    return Outcome("not_due")  # another run of a later slot moved the schedule first
+                    return _not_due(store, pk, slot)  # another run of a later slot moved the schedule first
                 log("warning", "autopost.claim_cancelled", runId=run_id)  # a conflict or throttling: claim again
         else:
             raise ClaimFailed(run_id)
+        if mode == "live":  # Practice sends nothing, not even an earlier run's clip
+            _finish_starts(deps, run_id, found, deadline)
     else:
         store.put(item, if_absent=True)
     log("info", "autopost.planned", runId=run_id, mode=mode, clips=len(planned), note=note or "")
@@ -160,6 +169,56 @@ def _resume(deps: RunDeps, user_id: str, run: Item, current: Mapping[str, Any], 
         return Outcome("done", run)
     log("info", "autopost.resumed", runId=run.get("runId"))
     return Outcome("ran", _send(deps, user_id, run, current, deadline))
+
+
+def _not_due(store: db.Store, pk: str, slot: datetime) -> Outcome:
+    """§46.4: this slot's tick looked and found it not due (``AUTOPOST.lastTickAt``), so the page stops showing this
+    hour as the next run. No condition: the item is created when it is not there yet."""
+    store.update_expr(
+        pk,
+        STATE_SK,
+        "SET #k = :slot, #t = :type",
+        names={"#k": "lastTickAt", "#t": "type"},
+        values={":slot": iso(slot), ":type": "autopost"},
+    )
+    return Outcome("not_due")
+
+
+def _finish_starts(deps: RunDeps, run_id: str, found: list[Item], deadline: float) -> None:
+    """§46.7 step 3: a clip an earlier scheduled run confirmed whose clip flow never started (its run's Lambda retries
+    ran out) gets its start finished now, with Upload's own ``release.start_flow`` (idempotent on the execution name,
+    conditional on ``publishState: pending``). Each is read again first; one that fails is logged and skipped."""
+    app = deps.app
+    for stale in found:
+        earlier = stale.get("autoRun")
+        if not (
+            stale.get("type") == "clip"
+            and isinstance(earlier, str)
+            and earlier.endswith("#scheduled")
+            and earlier != run_id
+            and stale.get("publishState") == clips.PUBLISH_PENDING
+            and stale.get("status") in clips.STARTABLE
+        ):
+            continue
+        if deps.monotonic() + deps.clip_seconds > deadline:
+            return  # this run's own clips need the time left; the next run finishes the rest
+        clip_id = str(stale.get("clipId"))
+        try:
+            clip = app.store.get(str(stale["pk"]), str(stale["sk"]))
+            if (
+                not clip
+                or clip.get("publishState") != clips.PUBLISH_PENDING
+                or clip.get("status") not in clips.STARTABLE
+            ):
+                continue
+            started = release.start_flow(app.store, app.flows, clip)
+        except Exception as e:  # one clip never stops the run
+            log("error", "autopost.finish_start_failed", runId=run_id, clipId=clip_id, error=type(e).__name__)
+            continue
+        if started.get("publishState") == clips.PUBLISH_PENDING:
+            log("warning", "autopost.finish_start_failed", runId=run_id, clipId=clip_id, error="not_started")
+            continue
+        log("info", "autopost.finished_start", runId=run_id, clipId=clip_id, earlierRunId=earlier)
 
 
 def _last_run(pk: str, slot: str, run_id: str) -> Item:
@@ -188,11 +247,13 @@ def _claim_now(store: db.Store, user_id: str, now: datetime) -> None:
         raise conflict(JUST_STARTED) from e
 
 
-def _plan(app: App, user_id: str, kind: str, mode: str, auto: Mapping[str, Any]) -> tuple[list[Item], str | None]:
-    """The run's clips (``{clipId, hook, places}``) and its note."""
+def _plan(
+    app: App, user_id: str, kind: str, mode: str, auto: Mapping[str, Any], *, every: list[Item]
+) -> tuple[list[Item], str | None]:
+    """The run's clips (``{clipId, hook, places}``) and its note. ``every`` is the owner's clips, read once."""
     private = mode == "private"
     count = 1 if private else int(auto.get("perRun") or 1)
-    found = pick(app, user_id, app.clock(), limit=count, normal_only=private)
+    found = pick(app, user_id, app.clock(), found=every, limit=count, normal_only=private)
     if private and not found.taken:
         return [], NOTHING_TO_TEST
     if not private and found.candidates == 0:
@@ -267,7 +328,7 @@ def _send_one(
     if run.get("mode") == "private":
         auto["test"] = "private"
     for _ in range(TRIES):
-        if clip is None or clip.get("status") != "review":
+        if clip is None or clip.get("status") != "review" or clips.is_held(clip, app.clock()):
             return _taken(app, run, clip)
         campaign = checks.campaign_clip(app, user_id, clip) is not None
         try:
@@ -280,29 +341,29 @@ def _send_one(
                 auto=auto,
             )
         except uploads.ClipTaken:
-            # Another run, a Throw away or an Upload took it, or DynamoDB cancelled the transaction (a write to the
-            # clip at that moment, or throttling) and it is still in Review: read it again.
+            # Another run, a Throw away (or its hold) or an Upload took it, or DynamoDB cancelled the transaction (a
+            # write to the clip at that moment, or throttling) and it is still in Review: read it again.
             clip = app.store.get(pk, db.clip_sk(clip_id))
         except ApiError as e:  # a campaign or fit refusal, or a place that is no longer set up: Upload's sentence
             log("info", "autopost.skipped", runId=run.get("runId"), clipId=clip_id, status=e.status)
             return "skipped", e.message, True
         else:
             return "sent", None, confirmed.get("publishState") != clips.PUBLISH_PENDING
-    if clip is None or clip.get("status") != "review":
+    if clip is None or clip.get("status") != "review" or clips.is_held(clip, app.clock()):
         return _taken(app, run, clip)
     log("warning", "autopost.not_sent", runId=run.get("runId"), clipId=clip_id)
     return "skipped", NOT_SENT, True  # still in Review: it goes in the next run
 
 
 def _taken(app: App, run: Item, clip: Item | None) -> tuple[str, str | None, bool]:
-    """The clip left Review before this run sent it: this run's own (a retry or an overlap sent it), another run's, or
-    the owner's."""
+    """The clip left Review before this run sent it (this run's own: a retry or an overlap sent it; another run's; or
+    the owner's), or the owner is throwing it away (still in Review, its hold on)."""
     if clip is not None and clip.get("autoRun") == run.get("runId"):
         if clip.get("publishState") == clips.PUBLISH_PENDING and clip.get("status") in clips.STARTABLE:
             clip = release.start_flow(app.store, app.flows, clip)  # its start did not go through: finish it (§14.5)
             return "sent", None, clip.get("publishState") != clips.PUBLISH_PENDING
         return "sent", None, True
-    if clip is None or clip.get("status") == "declined":
+    if clip is None or clip.get("status") in {"declined", "review"}:  # thrown away, or held by a Throw away
         return "skipped", THROWN_AWAY, True
     if clip.get("autoRun"):  # a test run (or a run of another slot) sent it between this run's plan and its send
         return "skipped", ANOTHER_RUN, True
