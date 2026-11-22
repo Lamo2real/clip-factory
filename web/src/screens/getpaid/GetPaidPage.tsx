@@ -49,6 +49,8 @@ import { StatusPill } from "./StatusPill.tsx";
 import { startWhop, WhopCard } from "./WhopCard.tsx";
 
 export const PICK_COUNTRY = "Pick your country in Money settings to see its rules.";
+/** The Finance question's id: the server's link to it (getpaid/status.py's FINANCE) ends in `#cr-finance`. */
+export const CR_FINANCE = "cr-finance";
 export const READING_GONE = "Clip Factory can't see YouTube payments anymore. Tap Allow payment reading again.";
 export const SET_UP_YOUTUBE = `/settings/posting/setup/youtube?back=${GETPAID_PATH}/youtube`;
 
@@ -142,7 +144,7 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
   const crDone = (id: string) => (conn?.stepsDone ?? []).includes(id) || !!card?.steps.find((x) => x.id === id)?.done;
   const numberedIds = guide ? drawnSteps(guide).filter((s) => s.role === "earn" || s.role === "payout").map((s) => s.id) : crSteps.filter((s) => s.repeat === "once").map((s) => s.id);
   const current = numberedIds.find((id) => (guide ? !stateOf(id).done : !crDone(id))) ?? null;
-  const anchor = hash === "yt-reading" ? "step-yt-reading" : hash?.startsWith("step-") ? hash : hash === "whop" || hash === "cr-finance" ? hash : null;
+  const anchor = hash === "yt-reading" ? "step-yt-reading" : hash?.startsWith("step-") ? hash : hash === "whop" || hash === CR_FINANCE ? hash : null;
   useEffect(() => {
     if (!card) return;
     const to = anchor ?? (result && (result in WHOP_RESULTS) ? "whop" : result ? "step-yt-reading" : current ? `step-${current}` : null);
@@ -314,13 +316,16 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
         </Button>
       );
     if (n.external) return <OpenButton label={n.label} href={n.href} primary={primary} size="lg" />;
-    if (n.href.startsWith("#"))
+    // A place on this page (the server's "…/contentrewards#cr-finance"): scrolled to on every tap, with the address
+    // (and its ?back=) left as it is. Going to the same address again would do nothing.
+    const at = n.href.indexOf("#");
+    if (at === 0 || (at > 0 && n.href.slice(0, at) === location.pathname))
       return (
         <Button
           variant={primary ? "primary" : "glass"}
           size="lg"
           icon="chevronDown"
-          onClick={() => document.getElementById(n.href.slice(1))?.scrollIntoView?.({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" })}
+          onClick={() => document.getElementById(n.href.slice(at + 1))?.scrollIntoView?.({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" })}
           data-help-clear={primary ? "" : undefined}
         >
           {n.label}
@@ -554,7 +559,7 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
           <h2 className="setup-part__title" id="gp-steps-title">
             Do these once
           </h2>
-          <div className="gstep__picker gp-finance glass" id="cr-finance" tabIndex={-1}>
+          <div className="gstep__picker gp-finance glass" id={CR_FINANCE} tabIndex={-1}>
             <span className="gstep__picker-label">
               <Rich text="Do you see **Finance** in the Content Rewards menu?" />
             </span>

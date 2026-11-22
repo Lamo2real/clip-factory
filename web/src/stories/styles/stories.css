@@ -2580,6 +2580,63 @@ a.st-file__title:hover {
   margin-left: auto;
 }
 
+/* "Continue: {name}": the idea, video, character or reference video opened last (§45.34), one tap back to it. */
+.st-continue {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 12px 16px;
+  border-radius: var(--r-xl);
+  background: linear-gradient(120deg, rgba(71, 214, 160, 0.16), rgba(98, 198, 255, 0.08) 70%), var(--st-panel);
+  box-shadow: var(--st-shadow-soft);
+  color: var(--st-ink);
+  text-decoration: none;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease;
+  animation: st-rise 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.st-continue:hover {
+  background-color: var(--st-panel-hover);
+  transform: translateY(-2px);
+}
+.st-continue__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-md);
+  background: var(--st-mint);
+  color: var(--st-on-sun);
+}
+.st-continue__text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+.st-continue__kind {
+  color: var(--st-ink-soft);
+  font-size: 0.9rem;
+}
+.st-continue__name {
+  font-size: 1.1rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.st-continue__go {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-pill);
+  background: var(--st-sun);
+  color: var(--st-on-sun);
+}
+
 /* The setup the first time: on its own, without the navigation (the brand and the switcher stay on top). */
 .stories-app.is-alone .st-top {
   display: flex;

@@ -24,8 +24,7 @@ import { relative, shortDate } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { KEY_LABEL, keyNames, keyProblem, normaliseKey } from "../../lib/keyFormats.ts";
 import { navigate } from "../../lib/router.ts";
-import { cheerOnNextTap } from "../../lib/sound.ts";
-import { sounds } from "../../lib/sounds.ts";
+import { storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
 import { SHARED_APP_PLATFORMS, type ClipsDestination, type KeyCheck, type Platform, type SocialAccount } from "../api/types.ts";
 import {
@@ -1001,7 +1000,7 @@ export function ConnectionsScreen({ ws, page }: StoriesScreenProps) {
     const { text, good } = resultSentence(result, platform);
     const cheerUp = () => {
       celebrate(undefined, false);
-      cheerOnNextTap(sounds);
+      storiesSound("success", { onNextTap: true });
     };
     if (result === "connected" || result === "clips_meta_check") {
       // Both are a connect (clips_meta_check also warns about Lamo Clips' own Meta connection): the card asks.

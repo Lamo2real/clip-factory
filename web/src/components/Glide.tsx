@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { createContext, useContext, useLayoutEffect, useRef } from "react";
 import { prefersReducedMotion } from "../lib/prefs.ts";
 
 /**
@@ -26,6 +26,13 @@ export const GLIDE_ANIMATION_ID = "glide-slide";
 const STEPS = 24;
 
 export type Box = { x: number; y: number; width: number; height: number };
+
+/**
+ * Whether a slide should be skipped for calm motion. Clip Factory never sets it, so its glides always follow its own
+ * setting (prefersReducedMotion). Lamo Stories gives its own (docs/CONTRACTS.md §45.34: its own device preferences),
+ * so Clip Factory's calm-motion choice never changes Lamo Stories' slides once Lamo Stories has its own.
+ */
+export const GlideCalm = createContext<() => boolean>(prefersReducedMotion);
 
 /** Solves a CSS cubic-bezier(x1, y1, x2, y2) for its progress at time t (0..1). */
 export function cubicBezier([x1, y1, x2, y2]: readonly number[], t: number): number {
@@ -140,6 +147,7 @@ export function Glide({
   as?: "span" | "li";
 }) {
   const ref = useRef<HTMLElement>(null);
+  const calm = useContext(GlideCalm);
 
   useLayoutEffect(() => {
     // The parent, not a ref from it: a parent's ref is attached after its children's layout effects run.
@@ -185,7 +193,7 @@ export function Glide({
       glide.style.height = `${r.height}px`;
       glide.style.opacity = "1";
       if (!box.classList.contains("has-glide")) box.classList.add("has-glide");
-      if (moved && from && !prefersReducedMotion() && typeof glide.animate === "function") {
+      if (moved && from && !calm() && typeof glide.animate === "function") {
         const axis = Math.abs(r.x - from.x) >= Math.abs(r.y - from.y) ? "x" : "y";
         glide.dataset.axis = axis;
         const run = glide.animate(slideFrames(from, r, axis, unevenBoxes(from, r)), { duration: GLIDE_MS, easing: "linear", fill: "backwards", id: GLIDE_ANIMATION_ID });
@@ -234,7 +242,7 @@ export function Glide({
       window.removeEventListener("resize", place);
       box.classList.remove("has-glide");
     };
-  }, [active]);
+  }, [active, calm]);
 
   return <Tag ref={ref as never} className={`glide is-still ${className}`.trim()} aria-hidden="true" />;
 }

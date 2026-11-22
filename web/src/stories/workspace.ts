@@ -269,6 +269,24 @@ export function takeClipsScroll(path: string): number | null {
   return r.y;
 }
 
+// ---------- Lamo Stories' scroll position across a switch (this visit only) ----------
+
+/** Lamo Stories' pages stay mounted behind Clip Factory (stories/pane.tsx); only where the window was is kept here. */
+let storiesScroll: { path: string; y: number } | null = null;
+
+/** Kept when the owner switches away from a Lamo Stories page; read once when that page is back on screen. */
+export function saveStoriesScroll(path: string, y: number): void {
+  if (!appPath(path) || !isStoriesPath(pathOf(path)) || !Number.isFinite(y)) return;
+  storiesScroll = { path: cleanPath(path), y: Math.max(0, Math.round(y)) };
+}
+
+/** The scroll position kept for the Lamo Stories page `path` (once: it is forgotten as it is read), else null. */
+export function takeStoriesScroll(path: string): number | null {
+  const kept = storiesScroll;
+  storiesScroll = null;
+  return kept && kept.path === cleanPath(path) ? kept.y : null;
+}
+
 /**
  * Scrolls the window back to `y` once the page is tall enough (its lists load after it opens), for up to `ms`;
  * stops at once if the owner scrolls, taps or types first. Returns a stop function.
@@ -402,6 +420,8 @@ export const DEFAULT_WORKSPACES: Workspace[] = [
 ];
 
 let known: Workspace[] | null = null;
+/** The list exactly as the server gave it this visit (null until it answered). */
+let fromServer: Workspace[] | null = null;
 const listListeners = new Set<() => void>();
 
 /** The server's list once it answered (GET /v1/workspaces), else the default two. */
@@ -409,8 +429,17 @@ export function knownWorkspaces(): Workspace[] {
   return known ?? DEFAULT_WORKSPACES;
 }
 
+/**
+ * The server's own list once it answered this visit (the switcher asks for it when it first shows), else null.
+ * StoriesApp opens its workspace from it at once and checks again in the background (§45.34).
+ */
+export function serverWorkspaces(): Workspace[] | null {
+  return fromServer;
+}
+
 /** StoriesApp and the switcher put the server's list here; every switcher then shows it. */
 export function setKnownWorkspaces(list: Workspace[]): void {
+  fromServer = list;
   const clips = list.filter((w) => w.workspaceType === "clips");
   const stories = list.filter((w) => w.workspaceType === "stories");
   // Lamo Clips first (the API's order too), never a second one, and at least one Lamo Stories workspace to go to.
@@ -460,7 +489,9 @@ export function storiesTitle(page: StoriesPage): string {
 export function resetWorkspaceMemory(): void {
   cached = null;
   known = null;
+  fromServer = null;
   started = false;
   prefsCache = null;
   pendingStories = null;
+  storiesScroll = null;
 }

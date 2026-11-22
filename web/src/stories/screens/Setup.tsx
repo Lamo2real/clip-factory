@@ -15,10 +15,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
 import { Glide } from "../../components/Glide.tsx";
-import { burst } from "../../lib/confetti.ts";
+import { storiesGoLater } from "../pane.tsx";
 import { useLoad } from "../../lib/hooks.ts";
-import { navigate } from "../../lib/router.ts";
-import { sounds } from "../../lib/sounds.ts";
+import { storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
 import { EFFORT_LABEL, type Effort, type ModelInfo, type Onboarding, type OnboardStep, type Platform, type SocialAccount, type StoriesAiConfig, type StoriesConfig } from "../api/types.ts";
 import { aiBody } from "../settings/data.ts";
@@ -26,6 +25,7 @@ import {
   celebrate,
   centerOf,
   PLATFORM_NAME,
+  starBurst,
   refreshDashboard,
   setOnboarding,
   StButton,
@@ -694,11 +694,11 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
             setBusy(true);
             try {
               await patch({ finish: true });
-              burst(centerOf(el), 140);
-              sounds.play("success");
+              starBurst(centerOf(el), 140);
+              storiesSound("success");
               toast.success("Lamo Stories is set up!");
               void refreshDashboard(ws).catch(() => undefined);
-              setTimeout(() => navigate("/stories"), 1400);
+              setTimeout(() => storiesGoLater("/stories"), 1400);
             } catch (err) {
               toast.error(friendlyMessage(err));
             } finally {

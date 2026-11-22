@@ -10,10 +10,10 @@ import "../styles/studio.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { A } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { burst } from "../../lib/confetti.ts";
+import { storiesGoLater, useAppActive } from "../pane.tsx";
 import { useLoad, usePoll } from "../../lib/hooks.ts";
-import { navigate } from "../../lib/router.ts";
 import { storiesApi } from "../api/client.ts";
+import { starBurst } from "../ui.tsx";
 import {
   STEP_LABEL,
   STEP_ORDER,
@@ -90,7 +90,9 @@ function ProductionList({ ws }: { ws: string }) {
   const all = list.data ?? [];
   const making = all.filter((r) => r.story.status === "producing" || r.story.status === "draft" || r.story.status === "failed");
   const made = all.filter((r) => !making.includes(r));
-  usePoll(() => list.reload(), making.some((r) => r.story.status === "producing"), 2000);
+  // Not while Clip Factory is on screen (this page stays kept behind it): coming back reads it again at once.
+  const active = useAppActive();
+  usePoll(() => list.reload(), active && making.some((r) => r.story.status === "producing"), 2000);
 
   return (
     <section className="st-page st-studio">
@@ -310,7 +312,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
       const { story } = await storiesApi().createStory(ws, body);
       celebrate(document.querySelector(".st-make"), 100);
       toast.success("Making your video now!");
-      navigate(storiesHref({ name: "production_story", storyId: story.storyId }));
+      storiesGoLater(storiesHref({ name: "production_story", storyId: story.storyId }));
     } catch (e) {
       const msg = say(e);
       setNoAdvice(isConflict(e) && /checked advice/i.test(msg));
@@ -595,7 +597,10 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
   const script: StoryScript | null = useSameScript(loaded.data?.script ?? null);
   const live = isLive(job) || story?.status === "producing";
 
-  usePoll(() => loaded.reload(), live, 2000);
+  // Not while Clip Factory is on screen: a run that finished meanwhile is noticed, and celebrated, once this page is
+  // back on screen (never confetti or a toast over Clip Factory).
+  const active = useAppActive();
+  usePoll(() => loaded.reload(), live && active, 2000);
 
   // A run that finishes while the owner watches gets its celebration.
   useEffect(() => {
@@ -607,7 +612,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
     wasLive.current = false;
     void jobs.reload();
     if (story.status === "review") {
-      burst(undefined, 120);
+      starBurst(undefined, 120);
       toast.success("Your video is ready to watch!");
     } else if (story.status === "needs_check") toast.info("Your video is made. Some facts need checking in Review.");
     else if (story.status === "failed") toast.error(job?.status === "failed" && job.error ? job.error : "Making the video stopped. Tap Try again.");

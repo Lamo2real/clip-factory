@@ -5,6 +5,7 @@ import { setPrefs, usePrefs } from "../lib/prefs.ts";
 import { navigate, section, useHash, useRoute } from "../lib/router.ts";
 import { storiesEnabled } from "../stories/flag.ts";
 import type { Workspace } from "../stories/api/types.ts";
+import { prefetchStoriesApp, useAppActive } from "../stories/pane.tsx";
 import {
   currentChoice,
   knownWorkspaces,
@@ -12,6 +13,7 @@ import {
   rememberClipsPath,
   restoreScroll,
   saveClipsScroll,
+  saveStoriesScroll,
   setKnownWorkspaces,
   settleSwitch,
   switcherName,
@@ -285,6 +287,8 @@ export function WorkspaceSwitch({ place, collapsed = false, current = "clips" }:
 
 function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed: boolean; current: string }) {
   const list = useWorkspaces();
+  // Its app is on screen (Clip Factory's shell stays mounted behind Lamo Stories, §45.34).
+  const active = useAppActive();
   const route = useRoute();
   const hash = useHash();
   const inClips = place === "sidebar" || place === "topbar";
@@ -298,14 +302,19 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
   const target = others.length === 1 ? others[0]! : null;
   const nameOnPhone = target ? shortName(target) : "";
 
+  // The workspace list, and Lamo Stories' own chunk while the browser is idle: the first switch waits for neither.
   useEffect(() => {
-    if (inClips) askWorkspaces();
+    if (!inClips) return;
+    askWorkspaces();
+    prefetchStoriesApp();
   }, [inClips]);
 
   // Every Lamo Clips page the owner opens is where switching back lands (one tracker: the sidebar's, always mounted).
+  // The query counts too: Home at /?campaign=… and Home at / are two ways of the same page.
+  const search = typeof location === "undefined" ? "" : location.search;
   useEffect(() => {
     if (place === "sidebar" && route.name !== "stories") rememberClipsPath(here());
-  }, [place, page, hash, route.name]);
+  }, [place, page, search, hash, route.name]);
 
   // A held switch: the owner chose Leave (the page is the switch's target now), or went somewhere else.
   useEffect(() => {
@@ -316,16 +325,18 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
   }, [page, hash]);
 
   // Back from Lamo Stories: the Clip Factory page opens where the owner left it (its lists may still be loading, so
-  // it waits for the page to grow, and lets go as soon as the owner scrolls himself).
+  // it waits for the page to grow, and lets go as soon as the owner scrolls himself). Also when Clip Factory stayed
+  // mounted behind Lamo Stories and comes back on screen.
   useEffect(() => {
-    if (place !== "sidebar") return;
+    if (place !== "sidebar" || !active) return;
     const y = takeClipsScroll(here());
     return y === null ? undefined : restoreScroll(y);
-  }, [place]);
+  }, [place, active]);
 
   // Measure the room in Lamo Clips' shell and pick the largest form that fits without moving or covering anything.
   useLayoutEffect(() => {
-    if (!inClips) return;
+    // Not while its app is hidden (nothing there has a size): it measures again the moment it is back on screen.
+    if (!inClips || !active) return;
     const anchor = ref.current;
     if (!anchor) return;
     const count = list.length;
@@ -369,7 +380,7 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
       window.removeEventListener("resize", soon);
       fonts?.removeEventListener?.("loadingdone", soon);
     };
-  }, [inClips, place, collapsed, list.length, nameOnPhone]);
+  }, [inClips, active, place, collapsed, list.length, nameOnPhone]);
 
   const go = (w: Workspace) => (e: MouseEvent) => {
     if (!plainClick(e)) return;
@@ -377,8 +388,10 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
     setMenu(false);
     if (w.workspaceId === current) return;
     const from = here();
-    // Leaving Clip Factory: its page's scroll position is kept for the way back (this tab only).
+    // Leaving Clip Factory: its page's scroll position is kept for the way back (this tab only). Leaving Lamo Stories:
+    // its own, which StoriesApp puts back when it is on screen again.
     if (inClips) saveClipsScroll(from, window.scrollY);
+    else saveStoriesScroll(from, window.scrollY);
     const to = switchTarget(w);
     navigate(to);
     // The choice is recorded only once the page really changed: a page with unsaved typing may be asking "Leave

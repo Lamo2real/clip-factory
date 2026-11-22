@@ -2,15 +2,16 @@
 // cards, chips, a pick-one bar on <Glide>, a switch, the Lamo Stories icons, the character-shaped empty states, the
 // star burst for a success, and the shared dashboard poll behind the Needs you bar. Builder F owns this file; builder
 // G uses these pieces and adds screen-level ones in its own files. Click and deny sounds come from the app's global
-// click handler (web/src/lib/sound.ts): nothing here plays a tap sound itself.
+// click handler (web/src/lib/sound.ts): nothing here plays a tap sound itself. Every sound and calm-motion check here
+// follows Lamo Stories' own device preferences (stories/prefs.ts: storiesSound, storiesReduceMotion).
 import { Component, useEffect, useId, useState, useSyncExternalStore, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type ErrorInfo, type ReactNode } from "react";
 import { friendlyMessage } from "../api/errors.ts";
 import { A } from "../components/ui.tsx";
 import { Glide } from "../components/Glide.tsx";
 import { usePoll } from "../lib/hooks.ts";
-import { prefersReducedMotion } from "../lib/prefs.ts";
-import { sounds } from "../lib/sounds.ts";
 import { storiesApi } from "./api/client.ts";
+import { storiesBehind, useAppActive } from "./pane.tsx";
+import { storiesReduceMotion, storiesSound } from "./prefs.ts";
 import type { Onboarding, Platform, StoriesDashboard, StoryStatus } from "./api/types.ts";
 
 // ---------- Buttons, cards, chips ----------
@@ -340,8 +341,17 @@ const STAR_COLOURS = ["#FFC94A", "#FF6F61", "#47D6A0", "#62C6FF", "#FFF6E5"];
 
 /** A short star burst from a point (a Connect that worked, a saved setting), with the success cheer on a tap. */
 export function celebrate(origin?: { x: number; y: number }, cheer = true): void {
-  if (cheer) sounds.play("success");
-  if (prefersReducedMotion() || typeof document === "undefined") return;
+  if (cheer) storiesSound("success");
+  starBurst(origin);
+}
+
+/**
+ * Lamo Stories' confetti: `amount` stars from a point (the middle of the page's top third without one). It follows
+ * Lamo Stories' own calm-motion switch (never Clip Factory's once it has its own), and draws nothing while Clip
+ * Factory is on screen (a page kept behind it never celebrates over Clip Factory).
+ */
+export function starBurst(origin?: { x: number; y: number }, amount = 46): void {
+  if (storiesBehind() || storiesReduceMotion() || typeof document === "undefined") return;
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -356,8 +366,9 @@ export function celebrate(origin?: { x: number; y: number }, cheer = true): void
   ctx.scale(dpr, dpr);
   const ox = origin?.x ?? W / 2;
   const oy = origin?.y ?? H / 3;
-  const stars = Array.from({ length: 46 }, (_, i) => {
-    const angle = (i / 46) * Math.PI * 2 + Math.random() * 0.3;
+  const count = Math.max(1, Math.round(amount));
+  const stars = Array.from({ length: count }, (_, i) => {
+    const angle = (i / count) * Math.PI * 2 + Math.random() * 0.3;
     const speed = 3 + Math.random() * 6;
     return { x: ox, y: oy, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 2, r: 4 + Math.random() * 5, spin: Math.random() * Math.PI, color: STAR_COLOURS[i % STAR_COLOURS.length]! };
   });
@@ -447,8 +458,9 @@ export function refreshDashboard(ws: string): Promise<void> {
   return run;
 }
 
-/** The dashboard of `ws`, polled every 15 s (§45.16.4) while something shows it. */
+/** The dashboard of `ws`, polled every 15 s (§45.16.4) while something shows it (not while Clip Factory is on screen). */
 export function useDashboard(ws: string): DashSnap & { reload: () => void } {
+  const active = useAppActive();
   const snap = useSyncExternalStore(
     (fn) => {
       dashSubs.add(fn);
@@ -458,10 +470,10 @@ export function useDashboard(ws: string): DashSnap & { reload: () => void } {
     () => EMPTY,
   );
   useEffect(() => {
-    // Fresh enough when another part of the page loaded it a moment ago.
-    if (Date.now() - (dashAt.get(ws) ?? 0) > 2000) refreshDashboard(ws).catch(() => undefined);
-  }, [ws]);
-  usePoll(() => refreshDashboard(ws), true, 15_000);
+    // Fresh enough when another part of the page loaded it a moment ago (or a moment before Clip Factory was shown).
+    if (active && Date.now() - (dashAt.get(ws) ?? 0) > 2000) refreshDashboard(ws).catch(() => undefined);
+  }, [ws, active]);
+  usePoll(() => refreshDashboard(ws), active, 15_000);
   return { ...snap, reload: () => void refreshDashboard(ws).catch(() => undefined) };
 }
 

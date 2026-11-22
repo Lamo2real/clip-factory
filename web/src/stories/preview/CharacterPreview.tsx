@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { previewCharacter } from "../engine/engine.ts";
 import type { ActionId, CharacterLook, Expression, MovementStyle } from "../engine/types.ts";
+import { storiesReduceMotion } from "../prefs.ts";
 import { drawPrims } from "./draw.ts";
 
 export interface CharacterPreviewProps {
@@ -26,7 +27,7 @@ export function CharacterPreview({ look, movementStyle, expression = "neutral", 
     const dpr = typeof window !== "undefined" ? Math.min(2, window.devicePixelRatio || 1) : 1;
     canvas.width = Math.round(size * dpr);
     canvas.height = Math.round(size * dpr);
-    const still = !playing || (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches);
+    const still = !playing || storiesReduceMotion();
     let raf = 0;
     let last = -1;
     const start = performance.now();
