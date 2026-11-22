@@ -14,6 +14,7 @@ the generator with `--check` and fails when this table is out of date. Do not ed
 | library | `/library?view=week` |
 | money | `/money` |
 | campaigns | `/campaigns` |
+| campaigns_find | `/campaigns/find` |
 | campaign | `/campaigns/{campaignId}` |
 | clip | `/clips/{clipId}` |
 | cr_setup | `/settings/posting/setup/contentrewards` |

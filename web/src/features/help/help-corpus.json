@@ -1,5 +1,5 @@
 {
-  "version": "2ee1324e6637",
+  "version": "05aef67fe479",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -61,6 +61,7 @@
     "/library?view=week",
     "/money",
     "/campaigns",
+    "/campaigns/find",
     "/campaigns/{campaignId}",
     "/clips/{clipId}",
     "/settings/posting/setup/contentrewards",
@@ -3719,14 +3720,14 @@
         "copy",
         "link",
         "sending",
+        "find",
+        "another",
+        "campaign",
         "ask",
         "words",
         "content",
         "rewards",
         "settings",
-        "campaign",
-        "find",
-        "another",
         "saved",
         "sent",
         "not",
@@ -3825,14 +3826,14 @@
         "copy",
         "link",
         "sending",
+        "find",
+        "another",
+        "campaign",
         "ask",
         "words",
         "content",
         "rewards",
         "settings",
-        "campaign",
-        "find",
-        "another",
         "saved",
         "sent",
         "not",
@@ -3877,14 +3878,14 @@
         "copy",
         "link",
         "sending",
+        "find",
+        "another",
+        "campaign",
         "ask",
         "words",
         "content",
         "rewards",
         "settings",
-        "campaign",
-        "find",
-        "another",
         "saved",
         "sent",
         "not",
@@ -4564,7 +4565,8 @@
         "Who can see your YouTube clips",
         "What X costs",
         "Content Rewards",
-        "Your campaigns"
+        "Your campaigns",
+        "Find campaigns"
       ],
       "answer": "Connect YouTube, TikTok, Instagram, Facebook and X.",
       "steps": [
@@ -4801,6 +4803,42 @@
       ],
       "highlight": [
         "campaigns"
+      ]
+    },
+    {
+      "id": "apple-campaign-finder",
+      "kind": "apple",
+      "route": "/campaigns/find",
+      "hash": "campaign-finder",
+      "where": "Settings › Posting › Set up posting",
+      "title": "Find campaigns",
+      "keywords": [
+        "find campaigns",
+        "campaign finder",
+        "discover",
+        "new campaigns",
+        "requirements",
+        "what i want",
+        "content rewards"
+      ],
+      "answer": "Campaigns on Content Rewards that pay what you want.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Find **Find campaigns**."
+      ],
+      "actions": [
+        {
+          "id": "apple-campaign-finder:open",
+          "label": "Open Set up posting",
+          "to": "/campaigns/find",
+          "highlight": [
+            "campaign-finder"
+          ]
+        }
+      ],
+      "highlight": [
+        "campaign-finder"
       ]
     },
     {
@@ -6214,7 +6252,7 @@
         "proof",
         "whop"
       ],
-      "answer": "You're in, send-now reminders, approvals, proof and money.",
+      "answer": "You're in, send-now reminders, approvals, proof, money and new campaigns.",
       "steps": [
         "Tap **Settings**.",
         "Tap **App & account**, then **Notifications**.",

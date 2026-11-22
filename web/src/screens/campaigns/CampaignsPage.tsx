@@ -3,17 +3,23 @@
 // first, then the box. In time order: while Content Rewards is not connected, "Set up Content Rewards" comes first and
 // is the vermilion ("Then join a campaign" follows, its Open glass); once connected, while the box is empty the
 // vermilion is "Open Content Rewards"; once a campaign link is in the box, "Add campaign". Paste itself is glass.
+// With the campaign finder on (§41.1), its card sits at the top, above the box; in that same empty state its "Find
+// campaigns" is the vermilion and the step's Open is glass (§41.6 change 1). "Find another campaign" opens the Find
+// page then (change 2).
 import { useState } from "react";
 import type { GroupChoice } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { A, ErrorPanel, LinkButton, PageHeader, Skeleton } from "../../components/ui.tsx";
 import { CR_SETUP_PATH, COMING_SOON, campaignPath, signedIn, useCr } from "../../lib/contentRewards.ts";
+import { finderHref, useFinderSummary } from "../../lib/finder.ts";
+import { CR_DISCOVER } from "../../setup/contentrewards.ts";
 import { withBack } from "../../lib/backLink.ts";
 import { crPart } from "../../setup/contentrewards.ts";
 import { useSetup } from "../settings/setup/useSetup.ts";
 import { Rich } from "../settings/setup/bits.tsx";
 import { BrandMark, CrStepCard, Note, OpenButton } from "./bits.tsx";
 import { CampaignPasteBox, GroupPicker } from "./CampaignPaste.tsx";
+import { FinderEntry } from "./FinderEntry.tsx";
 
 /** "Your YouTube link" chips for the application questions, from GET /v1/setup's connected accounts (§38.4). */
 export function accountLinks(platforms: { platform: string; account: { status: string; handle?: string } }[] | undefined): { label: string; value: string }[] {
@@ -74,6 +80,7 @@ export function CampaignsPage() {
   const [group, setGroup] = useState<{ name: string; choices: GroupChoice[] } | null>(null);
   const [typed, setTyped] = useState(false);
   const data = cr.state === "ok" ? cr.data : cr.state === "error" ? cr.data : null;
+  const finder = useFinderSummary();
 
   if (cr.state === "missing")
     return (
@@ -94,9 +101,13 @@ export function CampaignsPage() {
   const connected = signedIn(data?.connection);
   // Not connected yet: setting up comes first (§39.1 change 10), and is the vermilion while the box is empty.
   const setupFirst = !!data && !connected;
+  // §41.6 change 1: signed in, no campaign, the box empty, the finder on: "Find campaigns" is the vermilion.
+  const findFirst = !!finder && connected && !campaigns.length && !typed && !group;
+  const another = finderHref(CR_DISCOVER, !!finder);
   return (
     <div className="page page--narrow cr-campaigns">
       <PageHeader title="Your campaigns" lede="Join a campaign on Content Rewards. Paste its link here. I check the rules and if you're in." />
+      {finder ? <FinderEntry summary={finder} primary={findFirst} /> : null}
       {/* None yet: the three join steps come first, so step 1's Open Content Rewards is on the first screen. */}
       {setupFirst ? (
         <section className="cr-setup-first glass" aria-labelledby="cr-setup-first-title" data-cr="setup-first">
@@ -120,7 +131,7 @@ export function CampaignsPage() {
           <h2 className="setup-part__title" id="cr-join-title">
             {setupFirst ? "Then join a campaign" : "Join a campaign"}
           </h2>
-          <JoinSteps primaryOpen={!typed && !group && !setupFirst} boxBelow />
+          <JoinSteps primaryOpen={!typed && !group && !setupFirst && !findFirst} boxBelow />
         </section>
       ) : null}
       <CampaignPasteBox
@@ -162,7 +173,13 @@ export function CampaignsPage() {
       ) : null}
       {campaigns.length ? (
         <div className="cr-below">
-          <OpenButton label="Find another campaign" href="https://contentrewards.com/c/discover" icon="search" />
+          {another.external ? (
+            <OpenButton label="Find another campaign" href={another.href} icon="search" />
+          ) : (
+            <LinkButton href={another.href} variant="glass" icon="search">
+              Find another campaign
+            </LinkButton>
+          )}
         </div>
       ) : null}
     </div>

@@ -29,6 +29,7 @@ import {
   useNow,
   type SendGroup,
 } from "../lib/contentRewards.ts";
+import { finderHref, useFinderSummary } from "../lib/finder.ts";
 import { PLATFORM_LABEL } from "../lib/format.ts";
 import { CR_DISCOVER } from "../setup/contentrewards.ts";
 import { copyText, Rich } from "../screens/settings/setup/bits.tsx";
@@ -36,7 +37,7 @@ import { Fold, GreenButton, Hints, Lines, OpenButton } from "../screens/campaign
 import { Icon } from "./Icon.tsx";
 import { PlatformMark } from "./PlatformMark.tsx";
 import { useToast } from "./Toasts.tsx";
-import { Button } from "./ui.tsx";
+import { Button, LinkButton } from "./ui.tsx";
 
 /** The lines for a list of submissions: send-by-hand posts of one clip and campaign grouped into one line. */
 export function CrPostLines({
@@ -213,6 +214,18 @@ export function SendLine({
 }
 
 /** One campaign post's line (every state of §38.6 but a waiting send, which SendLine draws). */
+/** "Find another campaign": the Find page in the same tab while the finder is on (§41.6 change 2), else Discover. */
+export function FindAnother() {
+  const to = finderHref(CR_DISCOVER, !!useFinderSummary());
+  return to.external ? (
+    <OpenButton label="Find another campaign" href={to.href} />
+  ) : (
+    <LinkButton href={to.href} variant="glass" icon="search">
+      Find another campaign
+    </LinkButton>
+  );
+}
+
 export function CrPostLine({ sub, onChange, compact = false, now = Date.now() }: { sub: CrSubmission; onChange: (next: CrSubmission | null) => void; compact?: boolean; now?: number }) {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
@@ -299,7 +312,7 @@ export function CrPostLine({ sub, onChange, compact = false, now = Date.now() }:
           ) : sub.reason.code === "not_on_application" ? (
             <OpenButton label="Open campaign" href={safeHref(sub.openCampaignHref, crCampaignUrl(sub.campaignId))} />
           ) : CAMPAIGN_REASONS.includes(sub.reason.code) ? (
-            <OpenButton label="Find another campaign" href={CR_DISCOVER} />
+            <FindAnother />
           ) : null}
         </div>
       ) : null}
