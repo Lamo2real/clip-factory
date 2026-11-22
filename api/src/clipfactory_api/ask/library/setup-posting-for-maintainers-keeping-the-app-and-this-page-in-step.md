@@ -25,3 +25,15 @@
   and keep the step id. Why it is built this way: [ADR-62](DECISIONS.md#adr-62-content-rewards-the-official-sign-in-through-the-desktop-apps-loopback-door-sending-from-the-cloud-a-reminder-when-it-cant).
   How the sign-in and the token are kept: [SECURITY.md](SECURITY.md#content-rewards-contracts-38). How sending and
   checking run: [ARCHITECTURE.md flow 19](ARCHITECTURE.md#19-content-rewards-campaigns-contracts-38-adr-62).
+- **Get paid** is five more data files, `web/src/getpaid/{youtube,tiktok,instagram,facebook,x}.ts` (`GETPAID_GUIDES`,
+  `GETPAID_ORDER` in `index.ts`, its types in `web/src/getpaid/types.ts`); Content Rewards' Get paid page reuses
+  `CR_GUIDE`'s parts `move` and `bank`. The contract for their step ids, roles, titles and words is
+  [CONTRACTS.md §40.1](CONTRACTS.md#401-what-the-owner-sees), and the server keeps the same ids and roles
+  ([§40.2](CONTRACTS.md#402-the-status-per-place-honest-and-how-it-is-known)). Under `## Get paid` each place is a
+  `### {Place}` heading and each step title a `####` heading, word for word and in the app's order (numbered steps
+  as `#### 1. …`, the optional reading step as `#### Optional: …`). Its "Steps checked on" date is its own (21 Nov
+  2026), with its sources at the end of that section. When a place renames a button, change the data file and this
+  page together and keep the step id; never add a typed-in amount anywhere. Why it is built this way:
+  [ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner).
+  How its two read-only connections are kept: [SECURITY.md](SECURITY.md#get-paid-contracts-40). How the statuses and
+  the payout reads run: [ARCHITECTURE.md flow 24](ARCHITECTURE.md#24-get-paid-payout-steps-honest-statuses-and-money-sent-to-the-bank-contracts-40-adr-64).

@@ -17,7 +17,9 @@ and normal clips, all his money from every place in one view, and knowing before
 a campaign (BR-25 update, BR-26 to BR-28, NFR-19 AC8 to AC10, UX-19 AC8 to AC10), his question whether he can
 find campaigns and join them by requirements he sets (I-50), and the owner's request for
 auto-posting, the oldest clips in Review going up by themselves every X hours, with his "Yes, all your picks" to the
-seven questions asked before building (BR-29, BR-08 AC1 and BR-26 AC1 updates, NFR-02 AC1 update).
+seven questions asked before building (BR-29, BR-08 AC1 and BR-26 AC1 updates, NFR-02 AC1 update), and his request for
+a payout setup per place in the same system as the posting setup, a status that says whether money can reach him, and
+the money sent to his bank per place (BR-30, NFR-20, UX-20).
 Every requirement below traces back to one of them. Where
 the brief was open or unclear, the interpretation we chose is stated in [Interpretations and open questions](#interpretations-and-open-questions).
 
@@ -478,8 +480,9 @@ using eaither the content rewards way of videos or normal way we have done so fa
   Balance."), never a number and never $0. Nothing is calculated, guessed, converted or typed in; all arithmetic is on
   the server.
 - AC3: The Content Rewards row also shows, in money's time order and only what Content Rewards reported: "Right now":
-  Still earning, Ready to move to Whop, On its way to Whop; "Earned so far, since you started"; and "Paid out to your
-  bank: not available from Content Rewards. Look on Whop: **Balances**."
+  Still earning, Ready to move to Whop, On its way to Whop; "Earned so far, since you started"; and "Sent to your
+  bank: not available from Content Rewards. Look on Whop: **Balances**." (or, once "Connect Whop" is on, what Whop
+  sent: BR-30 AC5)
 - AC4: A place that isn't set up, needs his OK or must sign in again has one glass button to its own page; a setup
   page brings him back to Money when it's done.
 - AC5: The Monthly, Weekly, Daily and Yearly cards keep their numbers and words, apps only. While the Content Rewards
@@ -581,6 +584,45 @@ Built by §46 (its four parts, §46.16). It ships off for everyone: nothing post
   bucket, Cognito or `cf-prod-api` infrastructure change; existing settings, clips and posts read exactly as before;
   the deploy needs no step from the owner. Upload, Use my settings, TikTok's rules, Post it yourself and the campaign
   rules are unchanged.
+
+### BR-30 Get paid: set up each place's payout, see if money can reach you, and what was sent to your bank
+"I want the same system that we had for setting them up. I want that for setting the payment up so I can get paid
+for each platform that goes for content rewards as well so I just want to be a status check … if I'm not connected
+anything so I can't get paid even though I'm allowed to get paid then it should say disconnected or something like
+that … I want to know exactly how much I earn per platform and that includes content rewards, and then I wanna know a
+total of my exact number that I've gotten into my bank account". ([CONTRACTS.md
+§40](CONTRACTS.md#40-get-paid-set-up-payouts-see-if-you-can-get-paid-and-what-reached-your-bank-owner-request-2026-11-21),
+[ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner), the steps in [SETUP_POSTING.md](SETUP_POSTING.md#get-paid))
+- AC1: **Settings › Posting › Get paid**, right after Set up posting, has one card per place (YouTube, TikTok,
+  Instagram, Facebook, X, then Content Rewards while it is on); each card opens a page of numbered step cards that
+  walk the owner to that place's own payout pages in the order things happen, like Set up posting. The Money page has
+  a **Get paid** card with each place's status and one button to its page. A platform's setup page links to its Get
+  paid page.
+- AC2: Get paid is not part of Set up posting: the five setup cards, "2 of 5 ready" and the floating to-do list (still
+  exactly five rows) are unchanged, and no Get paid tick is stored with the posting setup.
+- AC3: Each place shows one honest status that says how it is known: "Can get paid ✓ (YouTube says)" or "(Whop says)"
+  when the place itself says so; "Can get paid (you said it's done)" when only his ticks say so; "Not set up yet" (not
+  red) with "You can earn here. Do the payout steps so money can reach you." when he can earn but a payout step isn't
+  done; red "Not set up (YouTube says)" or "Payment on hold" only when the place says so; "Not allowed yet" when the
+  place's rules aren't met; "Checking…"; "Clip Factory can't check"; "Not started". A sign from the place always beats
+  a tick, and "Live" is never shown. His word "disconnected" is "Clip Factory can't check" or "Not set up".
+- AC4: What he earned per place stays as on Money (BR-27): YouTube's estimate, Content Rewards' numbers, Facebook
+  "Coming soon", and "Not available from TikTok", "… Instagram" and "… X" with where to look. Nothing is typed in,
+  worked out, guessed or converted.
+- AC5: Money a place reports as sent shows as "Sent to your bank by Google" (AdSense for YouTube's payments, after the
+  optional "Allow payment reading") or "Sent to your bank by Whop" (Whop's payouts, after the optional "Connect
+  Whop"), per place and as one total per money type, with when it should arrive. Different money types are never added
+  together, an amount Clip Factory can't read is shown as written and not added, and the other places say "Not
+  available" with where to look, never $0. Whop's total covers all his Whop money, and says so.
+- AC6: Money that reached his bank can only come from his bank. Until the owner chooses how Clip Factory may see it
+  (Enable Banking, his bank's file, payout emails, or nothing new), every screen says "Clip Factory can't see your bank.
+  Look in your bank's app to see what arrived."
+- AC7: Clip Factory never asks for or stores bank details, card numbers or tax numbers; every payout is set up on the
+  place's own pages.
+- AC8: The facts are the places' own, checked on 21 Nov 2026 for Sweden: YouTube pays in kronor to the bank once there
+  is kr 700; TikTok's Creator Rewards isn't open in Sweden (Gifts may be); Meta pays from $25 through one payout
+  account shared by Instagram and Facebook; X's Original Content Rewards leaves out automated and reuploaded posts, so
+  X's page warns that Clip Factory clips probably won't earn there; Content Rewards pays through Whop.
 
 ---
 
@@ -777,6 +819,24 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
 - AC10: Additive only: new attributes on the job, clip and money items and one api setting (`CR_REMAKE`, from
   `cr_remake_enabled`; it shipped off and is on since PR #93); no new table, index, bucket, secret or Lambda, and
   nothing that holds the owner's data is replaced.
+
+### NFR-20 Get paid is read-only, additive and switched on piece by piece
+([CONTRACTS.md §40.6–§40.7](CONTRACTS.md#406-new-permissions-and-connections),
+[SECURITY.md](SECURITY.md#get-paid-contracts-40), [ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner))
+- AC1: Clip Factory never moves money. Its only permissions are read-only: AdSense's "View your AdSense data" and
+  Whop's balance, payouts, payout methods and ID-check reads.
+- AC2: "Allow payment reading" is its own connection with its own token, because the AdSense Google account can be
+  another one; it never changes the YouTube connection, and stopping it never calls Google's revoke (that would also end
+  YouTube's connection).
+- AC3: The new tokens live only in Secrets Manager under `cf-prod/platforms/*`, made at runtime (never in Terraform);
+  no answer carries a token, a raw platform answer, a trace code or a full AdSense id.
+- AC4: Every status and total is worked out on the server from stored items, by one pure function each; a reading
+  counts only when it is fresh (connected, first read done, checked in the last 48 hours). The web only formats.
+- AC5: Additive only: new sort keys (`GETPAID`, `PAYCONN#`, `PAYSTATE#`, `PAYOUT#`), new attributes, two stream filters
+  changed in place and one api setting; no new Lambda, table, index, bucket or role, IAM unchanged, nothing that holds
+  his connections or saved data replaced, and nothing deletes a payout record.
+- AC6: The Whop part ships switched off (`whop_connect_enabled = false`, the card says "Coming soon") until every part
+  has merged; one switch PR turns it on.
 
 ## Design and experience requirements
 
@@ -978,6 +1038,19 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 - AC10: All your money is a glass card with no vermilion button; each row has at most one glass button, at its right
   end, so nothing tappable sits in a phone's top-left third.
 
+### UX-20 Get paid that a child can follow
+([UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md#get-paid), [CONTRACTS.md §40.1](CONTRACTS.md#401-what-the-owner-sees))
+- AC1: The step cards look and work like Set up posting's: a number, a short title, short lines, Open, Copy, "If you
+  see…" and a green answer in the step's own words; **bold** is the other site's exact label.
+- AC2: One vermilion button per screen, the next step (pinned at the bottom right on phones); the list and Money's card
+  have none; a step that costs money (X Premium) is never it.
+- AC3: Plain words: "ID check" (never KYC), "bank transfer" (never EFT), "AdSense for YouTube" (never "AdSense"
+  alone), "Whop key"; never "OAuth", "token", "scope" or "API" on screen.
+- AC4: A status is never colour alone (an icon and words), "Not set up yet" is never red, and every tone is AA.
+- AC5: Every Undo is an 8-second toast; every connection result is one calm sentence that names the button to tap.
+- AC6: No edges, no `cursor` changes, `<Glide>` for pick-one bars, reduced motion respected, nothing overflows from
+  320 to 1920 px, targets at least 44 px (48 on phones), and Ask never covers the main button.
+
 ## Interpretations and open questions
 
 | Id | The brief said | What we built | Open? |
@@ -1038,6 +1111,11 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 | I-54 | "Post every X hours" on EventBridge, serverless only, with "even gaps between runs, including across midnight", and "Changes take effect immediately when I save, without a redeploy" | One EventBridge rule fires every hour on the hour, and a run happens only when his X hours are up (answer 7), so runs are exactly X hours apart on whole hours. A schedule the app rewrites would need a permission the deploy boundary forbids and could not say when the next run is ([ADR-81](DECISIONS.md#adr-81-auto-posting-an-hourly-eventbridge-rule-a-due-check-and-uploads-own-code)). A save is stored at once and counts from the next full hour. | No. |
 | I-55 | "e.g. '1 clip every 5 hours = about 5 clips a day per platform', and warn me if it is more than 5 a day" | That line is always under the controls, a whole number without "about" when the sum comes out whole, else rounded with "about"; over 5 a day a warning, and over 100 also that YouTube takes at most 100 uploads a day (BR-29 AC2). | No. |
 | I-56 | Testing auto-posting | **Practice** and **Private test run** test the whole flow with nothing public (BR-29 AC11). That Facebook keeps a draft Reel hidden from everyone but the Page's admins, and that the hourly rule fires within the first minute of the hour, are not verified live ([CONTRACTS.md §46.14](CONTRACTS.md#4614-not-verified-live)). | Checked at the first private test run and the first hours of practice. |
+| I-57 | "Can I have a step where all these platforms … the same system that we had for setting them up … for setting the payment up" | A **Get paid** area of its own in Settings › Posting, with the setup cards' look and step cards per place, and a status card on Money. It is not inside Set up posting, so the five setup cards, "2 of 5 ready" and the five-row to-do list stay as they are ([ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner)) (BR-30 AC1, AC2). | No. |
+| I-58 | "A status check … that's OK it's live if I have connected to my card … if I'm not connected … it should say disconnected" | One status per place that says how it is known. A place's own sign gives "Can get paid ✓ (YouTube says)"; only YouTube (AdSense for YouTube) and Whop give one, so the other places rest on his "I did this" and say "Can get paid (you said it's done)". "Disconnected" became "Clip Factory can't check" or "Not set up", and a missing tick is the calm "Not set up yet", because he may already be paid (BR-30 AC3). Clip Factory never connects to his card or bank: each place pays him itself. | No. |
+| I-59 | "Exactly how much I earn per platform … including content rewards" | The same numbers as All your money: YouTube's estimate and Content Rewards' own numbers. TikTok, Instagram and X tell apps nothing about money and Facebook's estimate is not checked yet, so they say "Not available" or "Coming soon" with where to look. Typed-in amounts stay refused ([ADR-47](DECISIONS.md#adr-47-only-platform-reported-money-the-estimates-are-removed), [ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner)) (BR-30 AC4). | Typed amounts for the places with no API? (Refused for now.) |
+| I-60 | "A total of my exact number that I've gotten into my bank account or accounts … for each of those platforms" | What Google and Whop report as sent, per place and per money type, worded "Sent to your bank by Google/Whop" (it can differ from what the bank books: fees, conversion, days in transit). Only the bank can say what arrived, so "Reached your bank" waits for the owner's choice of bank source: Enable Banking, his bank's monthly file, payout emails, or nothing new ([CONTRACTS.md §40.5](CONTRACTS.md#405-your-bank-waits-for-the-owners-choice)) (BR-30 AC5, AC6). | **Yes: pick A, B, C or D.** |
+| I-61 | "U2 TikTok, Instagram, Facebook and X, all of them" | All six places have a Get paid page. For Sweden: TikTok's Creator Rewards isn't open (Gifts may be), and X's Original Content Rewards leaves out automated and reuploaded posts, so X's page warns that Clip Factory clips probably won't earn there (BR-30 AC8). | No. |
 
 ## Out of scope for this phase
 
@@ -1051,8 +1129,11 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
   public pages (I-50).
 - Content Rewards campaigns that want drafts first or the brand's own sound, and sending proof of views for the owner
   (Clip Factory reminds him and says how).
-- Money from TikTok, Instagram and X (their tools tell apps nothing about it), and what left Content Rewards for Whop
-  and the bank (its tools list no withdrawals); they say "not available" with where to look (BR-27).
+- Money from TikTok, Instagram and X (their tools tell apps nothing about it); they say "not available" with where to
+  look (BR-27). What left Content Rewards for Whop and the bank shows only through Whop's own payouts, once "Connect
+  Whop" is on (BR-30 AC5).
+- Reading his bank (what reached it): it waits for the owner's choice of source (BR-30 AC6, I-60). Typing in amounts
+  for places with no API stays refused (I-59).
 - Turning a normal clip into a campaign clip in place (a copy is made instead, BR-28 AC5), and campaigns that want
   their own picture on top of the video (a hard stop "Pick another campaign").
 - Auto-posting to TikTok (TikTok's rules want the creator's own pick for each post; he posts it himself with **Post
