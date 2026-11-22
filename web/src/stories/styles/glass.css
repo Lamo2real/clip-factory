@@ -4,7 +4,8 @@
    The background (Stories › Settings › Look, Stories' own prefs: stories/look.ts useStoriesBackground puts
    data-look, data-strength, data-glass and the --st-veil-* numbers on .stories-app):
      .stories-app::before   one fixed layer under every Stories page, painted once (no animation, no filter):
-                            colours  the first colour as the base, the second and third as two soft lights
+                            colours  the first colour as the base, the second and third as soft lights (a strip,
+                                     two glows, a haze: look.ts STAGE_LIGHTS)
                             picture  the owner's picture at full strength (--st-picture)
                             window   nothing but the page veil (Frosted's 0.30 frost): the window's glass shows
                                      the desktop
@@ -74,7 +75,7 @@
 }
 .st-glass--hero {
   background: var(--st-tint-hero);
-  box-shadow: var(--st-sheen-hero), var(--st-depth-2), var(--st-glow-behind);
+  box-shadow: var(--st-sheen-hero), var(--st-rim-light), var(--st-depth-2), var(--st-glow-behind);
 }
 .st-glass--bar {
   background: var(--st-tint-bar);

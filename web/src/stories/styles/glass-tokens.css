@@ -23,8 +23,9 @@
 
 .stories-app {
   /* ========== 1. The base: warm dark espresso and smoky brown (Colours › Ember is the default background) ==========
-     The stage's base stops. Its two lights (copper and amber, out of focus) come from the colours the owner picked
-     (stories/look.ts EMBER and meshSpots), so the veils below are worked out from what is really drawn. */
+     The stage's base stops. Its lights (copper and amber, out of focus: a light strip, two glows, a warm haze) come
+     from the colours the owner picked (stories/look.ts EMBER and STAGE_LIGHTS, drawn by glass.css exactly), so the
+     veils are worked out from what is really drawn (stageSpots: the lightest pixel from phones to ultrawide). */
   --st-base: #1c130e; /* espresso: the page and the glass tint */
   --st-base-2: #2a1c14; /* smoky brown: the lightest base stop */
   --st-base-3: #0f0a07; /* roast: the far corner */
@@ -167,6 +168,8 @@
   --st-sheen: inset 0 14px 22px -18px rgb(255 240 220 / 0.36), inset 0 -18px 26px -22px rgb(var(--st-amber-rgb) / 0.2);
   --st-sheen-hero: inset 0 18px 28px -20px rgb(255 240 220 / 0.5), inset 0 -26px 34px -26px rgb(var(--st-amber-rgb) / 0.45);
   --st-sheen-control: inset 0 10px 14px -12px rgb(255 240 220 / 0.32);
+  --st-rim-light: inset 0 0 26px -12px rgb(255 238 214 / 0.3); /* a hero's thick edge catching light, painted (all a
+                                                                  WebKit hero has; under a liquid rim it softens it) */
   --st-sheen-cream: inset 0 -10px 18px -14px rgb(var(--st-copper-rgb) / 0.35);
   --st-glow-behind: 0 30px 70px -44px rgb(var(--st-amber-rgb) / 0.42);
   --st-glow-action: 0 14px 30px -14px rgb(var(--st-action-rgb) / 0.6);

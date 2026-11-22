@@ -112,10 +112,10 @@ glass classes; if a screen needs a look-specific rule, select `.stories-app[data
 | `--st-base` | #1c130e | espresso: the page and the glass tint |
 | `--st-base-2` | #2a1c14 | smoky brown: the lightest base stop |
 | `--st-base-3` | #0f0a07 | roast: the far corner |
-| `--st-glow-copper` | #e0763a | the copper light behind the glass (Ember's 2nd colour) |
-| `--st-glow-amber` | #ffa852 | the amber light behind the glass (Ember's 3rd colour) |
+| `--st-glow-copper` | #e2621f | the copper light behind the glass (Ember's 2nd colour: low left, and the warm haze) |
+| `--st-glow-amber` | #ff9a45 | the amber light behind the glass (Ember's 3rd colour: high right, and the light strip) |
 | `--st-stage-c1`, `--st-stage-c2-rgb`, `--st-stage-c3-rgb` | Ember | what the stage draws (look.ts sets them) |
-| `--st-stage-a2`, `--st-stage-a3` | 0.3 | how strong the two lights are |
+| `--st-stage-a2`, `--st-stage-a3` | 0.46, 0.3 | how strong the copper and the amber light are |
 | `--st-picture` | none | Picture: the owner's picture (look.ts) |
 | old: `--st-stage`, `--st-stage-2`, `--st-stage-3`, `--st-stage-copper`, `--st-stage-amber` | | |
 
@@ -160,12 +160,14 @@ glass classes; if a screen needs a look-specific rule, select `.stories-app[data
 | `--st-veil-bar` | 0.72 | 0.78 |
 | `--st-veil-float` | 0.76 | 0.80 |
 | `--st-veil-plate` | 0 | 0.78 |
-| `--st-veil-solid` | 0.96 | reduced transparency |
+| `--st-veil-solid` | 0.96 | reduced transparency (look.ts puts it inline on every glass, page 0.9 over a desktop or picture) |
+| `--st-veil-lens-rim` | 0.4 | a liquid hero's own tint: its filter lays the rest of `--st-veil-hero` under the words, so only the rim band (inside the padding, no words) is this thin |
 
 ### 5. The glass recipe
 | token | meaning |
 |---|---|
 | `--st-tint-card`, `--st-tint-hero`, `--st-tint-rail`, `--st-tint-bar`, `--st-tint-float`, `--st-tint-plate`, `--st-tint-tinted`, `--st-tint-cream` | the fills of each kind of surface |
+| `--st-tint-lens` | a liquid hero's fill (the rim's veil; glass.css only) |
 | `--st-fill-control`, `--st-fill-control-hover` | a glass control or inactive pill (a card's veil loose in Picture/See-through) |
 | `--st-fill-well`, `--st-fill-well-hover` | fields, tracks, the toggle's off track |
 | `--st-track` | a progress bar's empty part |
@@ -173,15 +175,25 @@ glass classes; if a screen needs a look-specific rule, select `.stories-app[data
 | `--st-filter-glass` (none over Ember, blur in Picture/See-through), `--st-filter-bar`, `--st-filter-float` | the backdrop filters |
 | `--st-edge-width` 1.25px, `--st-edge`, `--st-edge-hero`, `--st-edge-cream` | the thin light edge (a masked gradient ring, never a border) |
 | `--st-sheen`, `--st-sheen-hero`, `--st-sheen-control`, `--st-sheen-cream` | the soft inner top highlight |
+| `--st-rim-light` | a hero's thick edge catching light, painted (all a WebKit hero has; under a liquid rim it softens it) |
 | `--st-glow-behind`, `--st-glow-action`, `--st-glow-action-hover`, `--st-glow-accent` | the gentle warm outer glow |
 | `--st-depth-1`, `--st-depth-2`, `--st-depth-3` | soft dark depth |
 | `--st-focus-ring` | the focus ring (a box-shadow: cream then orange) |
 | old: `--st-panel`, `--st-panel-strong`, `--st-panel-hover`, `--st-s-fill`, `--st-s-fill-2`, `--st-s-fill-3`, `--st-shadow`, `--st-shadow-soft`, `--st-s-soft`, `--st-s-lift`, `--st-glow-sun`, `--st-glow-sun-hover` | |
 
 ### 6. Liquid
-`--st-lens-url` (none; the lens code sets it), `--st-lens-band` 26px, `--st-lens-depth` 22px, `--st-saturate-lens`
-1.5. Chromium only (`html.refract`), `data-glass="liquid"` only, at most `LENS_BUDGET` (3) per screen, never animated;
-WebKit keeps the plain CSS light (`--st-edge-hero`, `--st-sheen-hero`).
+`--st-lens-url` (none; glass/lens.ts sets it on each liquid hero), `--st-lens-band` 26px (how wide the bending rim
+is; the lens code never makes it wider than the hero's own padding, so it never reaches words), `--st-lens-depth` 12px
+(how far light moves at the very edge; never over 0.48 of the band, so the picture never folds), `--st-saturate-lens`
+1.5. How it works (glass/lens.ts, started by `useStoriesBackground` only for `data-glass="liquid"` while Stories is on
+screen): each `.st-lens` gets its own SVG filter in `svg.st-lens__defs` (put on `body`, taken away when Stories goes off
+screen), its displacement map drawn on a canvas at the hero's exact size and corner radius (a ResizeObserver rebuilds
+it only when that size changes). In the band the backdrop is read from further in, most at the very edge (t²); the
+middle is still (128, 128) and frosted inside the filter (`--st-blur`) under the rest of the hero's veil, so words
+keep exactly `--st-veil-hero`. One displacement pass, no `<animate>`, never a filter transition. At most
+`LENS_BUDGET` (3) per screen in document order, none over 1 MP or half the window (`LENS_MAX_AREA`, `pickLenses`).
+Chromium only (`html.refract`); WebKit (the Mac app, Safari, iPhone) ignores `url()` there and keeps the plain CSS
+light (`--st-edge-hero`, `--st-sheen-hero`, `--st-rim-light`). Reduced transparency: no lens, solid veils.
 
 ### 7. Radius
 `--st-r-surface` 20px, `--st-r-control` 14px, `--st-r-inner` 10px, `--st-r-tiny` 6px, `--st-r-round` 999px;
@@ -197,12 +209,15 @@ surfaces (12 → 28 px), `--st-inset` inside a surface (16 → 28 px).
 `--st-dial` 168px, `--st-dial-track` 10px.
 
 ### 10. Type
-`--st-font` Playfair (OFL, opsz 5-1200, wdth 87.5-112.5, wght 300-900; å ä ö covered), `--st-font-caps` Jost
+`--st-font` Playfair (OFL, opsz 5-1200, wdth 87.5-112.5, wght 300-900, read from the files' fvar table; the Latin file
+covers å ä ö Å Ä Ö and − – ’ … · ›), `--st-font-caps` Jost
 (OFL; short wide-tracked caps captions only), `--st-font-mark` (the logo's "C" stays Clip Factory's Times).
 Sizes: `--st-fs-hero` 34 → 72 px, `--st-fs-h1` 32 → 56, `--st-fs-h2` 24 → 36, `--st-fs-h3` 20 → 26, `--st-fs-body`
 17, `--st-fs-small` 15, `--st-fs-chip` 14, `--st-fs-caps` 13, **`--st-fs-min` 13 px: the floor**, `--st-fs-num`
 40 → 68 (big light numerals), `--st-fs-unit` 0.42em (the unit beside a numeral). Axes and weights:
-`--st-opsz-display` 600, `--st-opsz-num` 900, `--st-wdth-display` 92%, `--st-weight-display` 600,
+`--st-opsz-display` 600 (`.st-display` uses it: Womack-like hairlines and wedge serifs; reading sizes keep opsz
+auto, sturdy for a 6-8-year-old), `--st-opsz-num` 900, `--st-wdth-display` 92%, `--st-weight-display` 500 (Womack is a
+regular weight),
 `--st-weight-num` 300, `--st-weight-body` 450, `--st-weight-ui` 650, `--st-lh-head` 1.08, `--st-lh-body` 1.5,
 `--st-track-caps` 0.14em.
 
@@ -235,15 +250,18 @@ glass.css:
 - `.st-edge`: the thin light edge alone, for a surface with its own fill.
 - `.st-lens` (+ `.is-liquid` from the lens code), `.st-lens__defs`: the liquid rim.
 - `.st-display` (Playfair display), `.st-caps` (Jost caps caption), `.st-num` (lining tabular figures).
-- `.st-look`, `.st-look__picture`: Settings › Look (foundation only).
+- `.st-look`, `.st-look__picture`, `.st-look__art` (`--window`, `--picture`, `--colours`), `.st-look__pane`,
+  `.st-look__swatches`, `.st-look__swatch`, `.st-look__thumb`, `.st-look__actions`, `.st-look__modes`: Settings › Look
+  (foundation only).
 - The stage is `.stories-app::before` (foundation only; nobody else draws `::before` on `.stories-app`).
 
 glass-figures.css (the figures' own classes; screens place and size them, never restyle their inside):
 `.st-pill` `.st-pill--small` `.st-pill.is-on` `.st-pill__icon` · `.st-round-btn` `.st-round-btn--lg`
 `.st-round-btn--cream` `.st-round-btn--accent` `.st-round-btn.is-on` `.st-round-btn__dot` · `.st-stat`
 `.st-stat__value` `.st-stat__num` `.st-stat__unit` `.st-stat__label` `.st-stat__hint` · `.st-dial` `.st-dial__svg`
-`.st-dial__groove` `.st-dial__arc` `.st-dial__knob` `.st-dial__centre` `.st-dial__value` (size: `--st-dial-size`)
-· `.st-stepper` `.st-stepper__btn` `.st-stepper__value` · `.st-toggle` `.st-toggle__track` `.st-toggle__knob` ·
+`.st-dial__groove` `.st-dial__arc` `.st-dial__stop-a` `.st-dial__stop-b` `.st-dial__knob` `.st-dial__knob-shade`
+`.st-dial__centre` `.st-dial__value` (size: `--st-dial-size`) · `.st-stepper` `.st-stepper__btn` `.st-stepper__sign`
+`.st-stepper__value` · `.st-toggle` `.st-toggle__track` `.st-toggle__knob` ·
 `.st-cream-card` `.st-cream-card__head` `.st-cream-card__eyebrow` `.st-cream-card__title` `.st-cream-card__body`
 `.st-cream-card__toggle` `.st-cream-card__foot` · `.st-media` `.st-media__thumb` `.st-media__text`
 `.st-media__title` `.st-media__meta` `.st-media__bar` `.st-media__track` `.st-media__fill` `.st-media__time`
@@ -262,14 +280,50 @@ glass-figures.css (the figures' own classes; screens place and size them, never 
 - `MediaRow({ thumb?: string | ReactNode; thumbAlt?: string; title: ReactNode; meta?: ReactNode; progress?: number | null /* 0..1 */; progressLabel?: string; progressText?: ReactNode; controls?: ReactNode; as?: "div" | "li" | "article"; className? })`
 - `PhoneTabHighlight({ className? })` and `TAB_ORB` ("st-tab-orb"): the round active highlight; put it in the active tab, or give the bar's `<Glide>` the class so it slides. The bar itself is `.st-glass.st-glass--bar`.
 - `cx(...names)`: Stories' own class joiner.
+- `glass/lens.ts` (the foundation's; screens only add `.st-lens` to a hero): `watchLenses(root, opts?)` → stop,
+  `lensPixel`, `lensPixels`, `lensMapUrl`, `lensFilterMarkup`, `middleVeil`, `pickLenses`, `LENS_BUDGET`,
+  `LENS_MAX_AREA`, `LENS_BAND`, `LENS_DEPTH`, `LENS_FOLD`.
 
 ## The background (look.ts, foundation)
 
 `useStoriesBackground(root, active)` is StoriesApp's one call. Stories' own setting in `cf.stories.prefs` (`more`):
 `look.mode` (`see-through` | `picture` | `colours`, default `colours`), `look.strength` (`clear` | `frosted`),
-`look.colours` (1-3 hex, default Ember `#1c130e #e0763a #ffa852`), `look.glass` (a device override for checks);
-the picture in its own `cf.stories.picture`. Never Clip Factory's `cf.prefs` or `cf.background`. Readers and
-writers: `useStoriesLook()`, `storiesLook()`, `setStoriesLook(patch)`, `setStoriesPicture(url | null)`,
-`veilsFor(look)`, `lookKind(look)`, `glassTier(env)`, `LENS_BUDGET`, `THEME_COLOUR` (#1C130E, for the shell to adopt
-with its theme-colour tests). Settings › Look is `settings/LookSection.tsx`, shown for now at the end of Settings ›
-Storage (this device's own choices, beside Sounds and motion); its own tab is a later step.
+`look.colours` (1-3 hex, default Ember `#1c130e #e2621f #ff9a45`; presets Ember, Rose, Lagoon), `look.glass` (a device
+override for checks); the picture in its own `cf.stories.picture` (shrunk to at most 1920 px, JPEG). Never Clip
+Factory's `cf.prefs` or `cf.background`. Readers and writers: `useStoriesLook()`, `storiesLook()`,
+`setStoriesLook(patch)`, `setStoriesPicture(url | null)`, `veilsFor(look, glass?, tier?)`, `lookKind(look)`,
+`glassTier(env)`, `useReducedTransparency()`, `LENS_BUDGET`, `THEME_COLOUR` (#1C130E, for the shell to adopt with its
+theme-colour tests). Settings › Look is `settings/LookSection.tsx`, shown for now at the end of Settings › Storage
+(this device's own choices, beside Sounds and motion); its own tab is a later step.
+
+**The stage is worked out exactly.** `STAGE_LIGHTS` is what glass.css draws (a light strip at the right edge, amber
+high right, copper low left, a darker corner behind the page heads, a warm haze; test/storiesLens.test.ts holds the
+CSS and the list together, e2e/stories-glass.spec.ts the drawn pixels and the model). `stageAt` is CSS's gradient
+maths; `stageSpots(colours)` the lightest pixel over `STAGE_WINDOWS` (320 × 568 to 3440 × 900). Ember's lightest is
+0.118 luminance, so loose words need no page veil (every ink at 4.5:1 or more). Colours too bright to read on get a
+page veil instead, worked out the same way. Change a light: change both, and the test tells you if a word drops.
+
+**Solid glass comes from here.** The veils are inline on `.stories-app`, so they beat every stylesheet rule; for
+reduced transparency (and `look.glass` solid) `veilsFor` itself returns `--st-veil-solid` for every glass (page 0.9
+over a desktop or a picture). glass-tokens.css's `@media` only covers the first paint. The hook follows the device's
+setting live.
+
+## Measured (22 Nov, the foundation's figures and glass classes in the mock app, e2e/stories-glass.spec.ts)
+
+Every word against the lightest and the darkest pixel behind its own glyphs, at 375 and 1440 px, Chromium (liquid):
+
+| background | worst word |
+|---|---|
+| Colours › Ember | 6.0:1 (orange caps on cream; every word on glass 6.9:1 or more) |
+| a white picture | 5.3:1 (`--st-text-muted` on a card) |
+| a busy picture | 5.4:1 |
+| See-through, Clear, over a white desktop | 6.0:1 |
+| See-through, Clear, over a busy desktop | 5.5:1 |
+| See-through, Frosted, over white or busy | 6.0:1 |
+| reduced transparency over a busy picture | 6.0:1 (solid glass, no backdrop filter) |
+
+Not the foundation's, for the shell: the brand wordmark in the phone top bar measured 1.1:1 over a busy picture or a
+busy desktop and 3.8:1 in the rail over a white picture with today's (old) rail. The phone top bar needs its
+`.st-plate` (or `.st-glass--bar`) and the rail `--st-tint-rail`. WebKit in headless Playwright on a Mac does not really
+blur behind glass (a known gap of its software compositor): judge WebKit's blur in the real Mac app, never there;
+the veils are planned for a white pixel behind, so words hold either way.

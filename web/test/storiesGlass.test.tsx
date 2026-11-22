@@ -225,6 +225,19 @@ describe("the background is Stories' own", () => {
     expect(html.classList.contains("see-through")).toBe(true);
   });
 
+  it("solid glass (reduced transparency) comes inline from look.ts, so no rule can be beaten by the look's own veils", () => {
+    const look: StoriesLook = { mode: "picture", strength: "clear", colours: [...EMBER], picture: "data:image/png;base64,AAAA" };
+    const el = document.createElement("div");
+    applyStoriesLook(el, look, "none", "solid");
+    expect(el.dataset.glass).toBe("solid");
+    for (const k of ["card", "tinted", "hero", "rail", "bar", "float", "plate"]) expect(el.style.getPropertyValue(`--st-veil-${k}`), k).toBe("0.96");
+    expect(el.style.getPropertyValue("--st-veil-page")).toBe("0.9");
+    // the colours are the page, not something seen through it: they keep their own page veil
+    applyStoriesLook(el, { ...look, mode: "colours" }, "none", "solid");
+    expect(el.style.getPropertyValue("--st-veil-page")).toBe("0");
+    expect(el.style.getPropertyValue("--st-veil-card")).toBe("0.96");
+  });
+
   it("Picture puts the owner's picture on the stage", () => {
     const el = document.createElement("div");
     const look: StoriesLook = { mode: "picture", strength: "clear", colours: [...EMBER], picture: "data:image/png;base64,AAAA" };

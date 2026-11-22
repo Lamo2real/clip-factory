@@ -266,6 +266,13 @@ export const FROSTED: Veils = { page: 0.3, card: 0.89, tinted: 0.89, hero: 0.89,
 export const COLOUR_FLOORS: Veils = { page: 0, card: 0.58, tinted: 0.66, hero: 0.6, rail: 0.62, bar: 0.72, float: 0.76, plate: 0 };
 /** Frosted outside the app: the colours under a 0.30 frost. */
 export const FROST_PAGE = 0.3;
+/** Solid glass (reduced transparency, or the device's choice): every glass at --st-veil-solid; a desktop or a picture
+ *  behind is all but covered too (the colours stay: they are the page, not something seen through it). */
+export const SOLID = 0.96;
+export const SOLID_PAGE = 0.9;
+export function solidVeils(page: number): Veils {
+  return { page, card: SOLID, tinted: SOLID, hero: SOLID, rail: SOLID, bar: SOLID, float: SOLID, plate: SOLID };
+}
 /** How much of a tone a colour-tinted tile shows (--st-tint-cut). */
 export const TINT_CUT = 0.12;
 
@@ -282,8 +289,9 @@ export function stageColours(look: Pick<StoriesLook, "mode" | "colours">): reado
 }
 
 /** The veils for this look, worked out so every word stays at 4.5:1 over the lightest pixel it can sit on. */
-export function veilsFor(look: StoriesLook, glass: string = nativeGlass()): Veils {
+export function veilsFor(look: StoriesLook, glass: string = nativeGlass(), tier: GlassTier = "simple"): Veils {
   const kind = lookKind(look, glass);
+  if (tier === "solid") return solidVeils(kind === "colours" ? veilsFor(look, glass).page : SOLID_PAGE);
   if (kind === "window") return look.strength === "frosted" ? { ...FROSTED } : { ...MEASURED };
   if (kind === "picture") return { ...MEASURED };
   const colours = stageColours(look);
@@ -441,7 +449,8 @@ const rgbOf = (hex: string) => hexToRgb(hex).join(" ");
 /** The attributes and custom properties for .stories-app. */
 export function lookProps(value: StoriesLook, glass: string = nativeGlass(), tier: GlassTier = "simple"): { attrs: Record<string, string>; style: Record<string, string> } {
   const kind = lookKind(value, glass);
-  const v = veilsFor(value, glass);
+  // Inline, so it beats every rule: solid glass must come from here (glass-tokens.css's @media is only the first paint).
+  const v = veilsFor(value, glass, tier);
   const style: Record<string, string> = {};
   for (const k of Object.keys(v) as (keyof Veils)[]) style[`--st-veil-${k}`] = String(v[k]);
   const [c1, c2 = c1, c3 = c2] = stageColours(value);
@@ -490,14 +499,30 @@ export function applyStoriesLook(el: HTMLElement, value: StoriesLook, glass: Nat
  * screen) and puts it on `root`; while Stories is on screen (`active`) in See-through in the app, the page itself is
  * transparent so the window's glass shows the desktop.
  */
+const REDUCED_TRANSPARENCY = "(prefers-reduced-transparency: reduce)";
+/** True while the device asks for less transparency (it can change while Stories is open). */
+export function useReducedTransparency(): boolean {
+  return useSyncExternalStore(
+    (fn) => {
+      if (typeof matchMedia !== "function") return () => undefined;
+      const q = matchMedia(REDUCED_TRANSPARENCY);
+      q.addEventListener?.("change", fn);
+      return () => q.removeEventListener?.("change", fn);
+    },
+    () => typeof matchMedia === "function" && matchMedia(REDUCED_TRANSPARENCY).matches,
+    () => false,
+  );
+}
+
 export function useStoriesBackground(root: RefObject<HTMLElement | null>, active: boolean): StoriesLook {
   const value = useStoriesLook();
+  const lessTransparency = useReducedTransparency();
   useLayoutEffect(() => {
     const el = root.current;
     if (!el) return;
     const kind = applyStoriesLook(el, value);
     holdWindowGlass(active && kind === "window");
-  }, [root, value, active]);
+  }, [root, value, active, lessTransparency]);
   useLayoutEffect(() => () => holdWindowGlass(false), []);
   // The liquid rim (glass/lens.ts): only while Stories is on screen, only where the glass is "liquid" (Chromium on a
   // capable device; the layout effect above has just put data-glass on the root).
@@ -505,6 +530,6 @@ export function useStoriesBackground(root: RefObject<HTMLElement | null>, active
     const el = root.current;
     if (!el || !active || el.dataset.glass !== "liquid") return;
     return watchLenses(el);
-  }, [root, value, active]);
+  }, [root, value, active, lessTransparency]);
   return value;
 }
