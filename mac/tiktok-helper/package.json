@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test \"test/*.test.js\"",
     "run-once": "node src/cli.js run",
     "setup": "node src/cli.js setup",
     "status": "node src/cli.js status"
