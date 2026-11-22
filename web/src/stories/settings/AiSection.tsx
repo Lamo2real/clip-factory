@@ -157,7 +157,8 @@ function ModelOptionLine({ m }: { m: ModelInfo }) {
 function DefaultModel({ data, pending, onPick, ws, reload }: { data: AiData; pending: string | null; onPick: (key: string) => void; ws: string; reload: () => Promise<void> }) {
   const shown = pending ?? data.ai.defaultModel;
   const picked = modelOf(data.models, shown);
-  const here = useOnThisPage();
+  // Said under this card's list (its own SetCard is below this line, so the card is named here).
+  const here = useOnThisPage("Default model");
   const found = refusedLine(picked);
   const refused = found ? here(found) : null;
   return (

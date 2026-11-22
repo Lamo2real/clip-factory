@@ -33,7 +33,7 @@ import {
   type Price,
 } from "../api/types.ts";
 import { StTech } from "../ui.tsx";
-import { Btn, cheer, Chip, MODEL_STATUS, Note, SetCard, SetPick, SetSelect, SetSwitch, SIcon, useOnThisPage, whenText } from "./bits.tsx";
+import { Btn, cheer, Chip, ITS_ROW, MODEL_STATUS, Note, SetCard, SetPick, SetSelect, SetSwitch, SIcon, useOnThisPage, whenText } from "./bits.tsx";
 
 const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 
@@ -471,7 +471,8 @@ function OwnRow({ ws, m, stale = false, onChanged, onEdit }: { ws: string; m: Mo
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
   const s = MODEL_STATUS[m.status];
-  const here = useOnThisPage();
+  // Said in the model's own row: "on this row", and the tasks below it.
+  const here = useOnThisPage(ITS_ROW);
   const remove = async () => {
     setBusy(true);
     try {

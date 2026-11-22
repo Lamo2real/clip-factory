@@ -147,40 +147,67 @@ export const MODEL_STATUS_WORDS: Record<ModelInfo["status"], string> = {
 
 // ---- An added model's Region and its ID (§45.36 E4, builder W5b) ----
 
+// The same rule and sentences as the API's (workspaces/model_defs.py region_problem): the form checks before it sends,
+// the mock refuses as the API does.
+
 /** The Region an ARN names (`arn:aws:bedrock:eu-west-1:…`), else null. */
 export function regionOfArn(modelId: string): string | null {
-  const m = /^arn:aws[a-z-]*:bedrock:([a-z]{2}(?:-gov)?-[a-z]+-\d{1,2}):/.exec(modelId.trim());
-  return m ? m[1]! : null;
-}
-
-/** What a cross-Region inference profile's first part says about where it runs. */
-const PROFILE_AREAS: Record<string, { words: string; fits: (region: string) => boolean; example: string }> = {
-  us: { words: "the USA", fits: (r) => /^us-(east|west)-\d+$/.test(r), example: "us-east-1" },
-  "us-gov": { words: "AWS GovCloud (US)", fits: (r) => r.startsWith("us-gov-"), example: "us-gov-west-1" },
-  eu: { words: "Europe", fits: (r) => r.startsWith("eu-"), example: "eu-north-1" },
-  apac: { words: "Asia Pacific", fits: (r) => r.startsWith("ap-"), example: "ap-southeast-2" },
-  global: { words: "any Region", fits: () => true, example: "eu-north-1" },
-};
-
-/** The inference profile part of an ID or ARN ("eu" for eu.amazon.nova-premier-v1:0), else null. */
-function profileArea(modelId: string): string | null {
-  const id = modelId.trim().split("/").pop() ?? "";
-  const m = /^(us-gov|us|eu|apac|global)\./.exec(id);
+  const m = /^arn:aws(?:-[a-z]+)*:bedrock:([a-z0-9-]+):/.exec(modelId.trim());
   return m ? m[1]! : null;
 }
 
 /**
- * Why an added model's Region does not fit its ID, naming both, else null: an ARN's own Region must be the Region
- * picked, and a us., eu., apac. (or us-gov.) inference profile must run in that part of the world (§45.36 E4).
+ * The area each cross-Region inference profile's first part runs in. `global.` runs from any Region; a first part or
+ * a Region outside these areas is not checked, so a Region AWS adds to an area later is never refused by mistake.
+ */
+const PROFILE_AREAS: Record<string, string> = { us: "us", "us-gov": "us-gov", eu: "eu", apac: "ap", jp: "ap", au: "ap" };
+const REGION_AREAS: [string, string][] = [
+  ["us-gov-", "us-gov"],
+  ["us-", "us"],
+  ["eu-", "eu"],
+  ["ap-", "ap"],
+];
+/** Each area in words, one of its Regions, and the first part of its own profile ids. */
+const AREA_WORDS: Record<string, [string, string, string]> = {
+  us: ["a US Region", "us-east-1", "us"],
+  "us-gov": ["an AWS GovCloud Region", "us-gov-west-1", "us-gov"],
+  eu: ["a Europe Region", "eu-north-1", "eu"],
+  ap: ["an Asia Pacific Region", "ap-southeast-2", "apac"],
+};
+
+/** The first part of a cross-Region inference profile id ("eu" for eu.amazon.nova-premier-v1:0, also inside an ARN), else null. */
+function profileArea(modelId: string): string | null {
+  const id = modelId.trim();
+  let profile = id;
+  if (regionOfArn(id) !== null) {
+    const inside = /:inference-profile\/([^/]+)$/.exec(id);
+    if (!inside) return null;
+    profile = inside[1]!;
+  }
+  const parts = profile.split(".");
+  // A profile id is {area}.{maker}.{model}; a model id is {maker}.{model}.
+  return parts.length < 3 ? null : parts[0]!;
+}
+
+const regionArea = (region: string): string | null => REGION_AREAS.find(([start]) => region.startsWith(start))?.[1] ?? null;
+
+/**
+ * Why an added model's Region does not fit its ID, naming both, else null (§45.36 E4): an ARN's own Region must be the
+ * Region picked, and a us., eu., apac. (jp., au., us-gov.) inference profile must run in that part of the world.
  */
 export function modelRegionProblem(modelId: string, region: string): string | null {
+  const id = modelId.trim();
   const r = region.trim();
-  const inArn = regionOfArn(modelId);
-  if (inArn && inArn !== r) return `This model's ARN is in ${inArn}, but its Region says ${r}. Pick ${inArn} as its Region.`;
-  const area = profileArea(modelId);
-  const rule = area ? PROFILE_AREAS[area] : undefined;
-  if (area && rule && !rule.fits(r)) return `This model ID starts with ${area}., so it runs in ${rule.words}, but its Region says ${r}. Pick a Region in ${rule.words}, like ${rule.example}.`;
-  return null;
+  const inArn = regionOfArn(id);
+  if (inArn !== null && inArn !== r) return `This ARN is in ${inArn}, but the Region says ${r}. Type ${inArn} as the Region.`;
+  const first = profileArea(id);
+  const wanted = first === null ? undefined : PROFILE_AREAS[first];
+  const here = regionArea(r);
+  if (wanted === undefined || here === null || wanted === here) return null;
+  const [words, example] = AREA_WORDS[wanted]!;
+  const own = AREA_WORDS[here]![2];
+  if (inArn !== null) return `This ARN's inference profile starts with ${first}., so it runs in ${words} (like ${example}), not in ${r}. Paste the ARN of the ${own}. profile instead.`;
+  return `This inference profile id starts with ${first}., so it runs in ${words} (like ${example}), not in ${r}. Type ${words} as the Region, or paste the ${own}. profile id instead.`;
 }
 
 export interface StoriesAiConfig {

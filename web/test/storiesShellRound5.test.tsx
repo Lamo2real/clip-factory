@@ -24,7 +24,7 @@ import { mockStoriesApi } from "../src/stories/api/mock/index.ts";
 import { setMockLatency, type MockStore } from "../src/stories/api/mock/store.ts";
 import type { StoriesApi } from "../src/stories/api/types.ts";
 import { forgetDashboards, forgetOnboarding, NeedsYouBar, plainFirst, socialHere } from "../src/stories/ui.tsx";
-import { followReading, noteReading, READ_REST_MS, REACH_UP_MS, readingPlace, resetWorkspaceMemory } from "../src/stories/workspace.ts";
+import { followReading, noteReading, READ_REST_MS, readingPlace, resetWorkspaceMemory, TOP_REST_MS } from "../src/stories/workspace.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -33,7 +33,7 @@ vi.mock("../src/lib/router.ts", async (orig) => {
   return { ...real, navigate: () => undefined };
 });
 
-const { ConnectionsScreen, OWN_APP_TECH, thisPlace } = await import("../src/stories/screens/Connections.tsx");
+const { ConnectionsScreen, columnsFor, OWN_APP_TECH, shortestColumns, thisPlace } = await import("../src/stories/screens/Connections.tsx");
 const { DashboardScreen } = await import("../src/stories/screens/Dashboard.tsx");
 
 /** A source file of the web app, as written. */
@@ -42,46 +42,67 @@ const source = (path: string) => readFileSync(join(import.meta.dirname, "..", "s
 describe("where the owner was reading on a phone (§45.36 E1)", () => {
   beforeEach(() => resetWorkspaceMemory());
 
-  it("a switch he scrolled up to reach keeps where he was reading", () => {
-    noteReading("/library", 874, 1000, true);
-    // He scrolls up to the top bar, and taps the switch at once.
-    noteReading("/library", 300, 5000, false);
-    noteReading("/library", 0, 5200, false);
-    expect(readingPlace("/library", 0, 5400)).toBe(874);
-    // The browser's scroll event may come after the tap: the page moved, so it left the reading place just now.
-    resetWorkspaceMemory();
-    noteReading("/library", 874, 1000, true);
-    expect(readingPlace("/library", 0, 9000)).toBe(874);
+  it("a switch he scrolled up to reach keeps where he was reading, however long the way up took", () => {
+    noteReading("/library", 1500, READ_REST_MS, 60);
+    // He scrolls up to the top bar in short flicks (no rest), and taps the switch at once.
+    for (const y of [1300, 1000, 700, 400, 100, 0]) noteReading("/library", y, 0, 60);
+    expect(readingPlace("/library", 0)).toBe(1500);
+    // A status-bar tap to the top and two seconds to find the switch: still where he was reading.
+    noteReading("/library", 0, READ_REST_MS, 60);
+    expect(readingPlace("/library", 0)).toBe(1500);
+    // Just below the top bar's switch, the same.
+    noteReading("/library", 40, READ_REST_MS, 60);
+    expect(readingPlace("/library", 40)).toBe(1500);
   });
 
-  it("keeps the top when he stayed there, scrolled down since, or the page is another one", () => {
-    noteReading("/library", 874, 1000, true);
-    noteReading("/library", 0, 2000, false);
-    // Resting at the top: that is where he left it.
-    noteReading("/library", 0, 2000 + READ_REST_MS, true);
-    expect(readingPlace("/library", 0, 4000)).toBe(0);
-    // Long after leaving the reading place, the switch keeps where the page is.
-    noteReading("/library", 874, 5000, true);
-    noteReading("/library", 0, 6000, false);
-    expect(readingPlace("/library", 0, 6000 + REACH_UP_MS + 1)).toBe(0);
+  it("a rest below the top bar is the new reading place; a long rest at the top keeps the top", () => {
+    noteReading("/library", 1500, READ_REST_MS, 60);
+    // He stopped to read further up on the way: that is the place now.
+    noteReading("/library", 700, READ_REST_MS, 60);
+    expect(readingPlace("/library", 0)).toBe(700);
+    // A short stop on the way does not count.
+    noteReading("/library", 300, READ_REST_MS - 1, 60);
+    expect(readingPlace("/library", 0)).toBe(700);
+    // Reading at the top for a while: the top is where he left it.
+    noteReading("/library", 0, TOP_REST_MS, 60);
+    expect(readingPlace("/library", 0)).toBe(0);
     // Further down than the reading place: where the page is now.
-    noteReading("/library", 300, 20_000, true);
-    expect(readingPlace("/library", 900, 20_100)).toBe(900);
-    // Another page: its own place.
-    expect(readingPlace("/jobs", 0, 20_100)).toBe(0);
+    noteReading("/library", 300, READ_REST_MS, 60);
+    expect(readingPlace("/library", 900)).toBe(900);
+    // Another page: its own place, from the first sight of it.
+    expect(readingPlace("/jobs", 0)).toBe(0);
+    noteReading("/jobs", 0, 0, 60);
+    expect(readingPlace("/jobs", 0)).toBe(0);
   });
 
-  it("follows the window's scroll and rests after a moment", () => {
+  it("follows the window's scroll: a rest counts from the last move, not from leaving the reading place", () => {
     vi.useFakeTimers();
     try {
       Object.defineProperty(window, "scrollY", { configurable: true, value: 0, writable: true });
-      const stop = followReading(() => "/review");
-      (window as { scrollY: number }).scrollY = 640;
-      window.dispatchEvent(new Event("scroll"));
+      const scrollTo = (y: number) => {
+        (window as { scrollY: number }).scrollY = y;
+        window.dispatchEvent(new Event("scroll"));
+      };
+      const stop = followReading(
+        () => "/review",
+        () => 60,
+      );
+      scrollTo(1500);
       vi.advanceTimersByTime(READ_REST_MS + 10);
-      (window as { scrollY: number }).scrollY = 0;
-      window.dispatchEvent(new Event("scroll"));
-      expect(readingPlace("/review", 0, Date.now())).toBe(640);
+      expect(readingPlace("/review", 0)).toBe(1500);
+      // A six-second way up in flicks half a second apart, then the switch at once.
+      for (let y = 1400; y >= 0; y -= 125) {
+        scrollTo(y);
+        vi.advanceTimersByTime(500);
+      }
+      scrollTo(0);
+      expect(readingPlace("/review", 0)).toBe(1500);
+      // Two seconds at the top looking for the switch: still the reading place.
+      vi.advanceTimersByTime(2000);
+      expect(readingPlace("/review", 0)).toBe(1500);
+      // Ten seconds at the top: he reads there now.
+      vi.advanceTimersByTime(TOP_REST_MS);
+      expect(readingPlace("/review", 0)).toBe(0);
       stop();
     } finally {
       vi.useRealTimers();
@@ -92,7 +113,8 @@ describe("where the owner was reading on a phone (§45.36 E1)", () => {
   it("the phone top bar's switcher restores the kept place too, and saves the reading place (Nav.tsx)", () => {
     const nav = source("components/Nav.tsx");
     expect(nav).toContain('if ((place !== "sidebar" && place !== "topbar") || !active) return;');
-    expect(nav).toContain('place === "topbar" ? readingPlace(from, window.scrollY, Date.now()) : window.scrollY');
+    expect(nav).toContain('place === "topbar" ? readingPlace(from, window.scrollY) : window.scrollY');
+    expect(nav).toContain("followReading(here, topZone)");
   });
 });
 
@@ -266,10 +288,22 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
     expect(card("tiktok").textContent).not.toContain("app keys changed");
   });
 
-  it("the cards flow by their own height at every width, never in rows that leave holes", () => {
+  it("the cards flow by their own height: each goes into the shortest column, and keeps it", () => {
+    // As many 340 px columns as fit, with 16 px between them.
+    expect([320, 695, 696, 1051, 1052, 1440].map(columnsFor)).toEqual([1, 1, 2, 2, 3, 4]);
+    // The mock's five cards at 1440 (YouTube, TikTok, Instagram, Facebook, X): tall Instagram is never left beside
+    // two short columns' empty halves, as CSS columns left it (721 px short).
+    const heights = [1025, 1110, 1622, 1215, 1113];
+    const at = shortestColumns(heights, 3);
+    expect(at).toEqual([0, 1, 2, 0, 1]);
+    const bottoms = [0, 1, 2].map((k) => heights.filter((_, i) => at[i] === k).reduce((a, h) => a + h + 16, 0));
+    expect(Math.max(...bottoms) - Math.min(...bottoms)).toBeLessThan(700);
+    expect(shortestColumns([500, 500], 1)).toEqual([0, 0]);
+    // The grid places each card in its own column; a card that grows only pushes the cards under it (stories.css).
     const css = source("stories/styles/stories.css");
-    expect(css).toMatch(/\.st-conns:not\(\.st-conns--one\) \{\s*display: block;\s*columns: 340px;/);
-    expect(css).toMatch(/\.st-conns:not\(\.st-conns--one\) > \.st-conn \{[^}]*break-inside: avoid;/);
+    expect(css).toMatch(/\.st-conns\[data-cols\] \{[^}]*grid-auto-flow: row dense;/);
+    expect(css).toMatch(/\.st-conns\[data-cols\] > \.st-conn \{[^}]*grid-column: var\(--st-col, auto\);[^}]*grid-row-end: span var\(--st-span, 1\);/);
+    expect(css).not.toMatch(/\.st-conns[^{]*\{[^}]*columns: 340px/);
   });
 });
 

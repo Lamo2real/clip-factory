@@ -805,7 +805,7 @@ describe("AI: models the owner adds (§45.34)", () => {
     await click(byText("button", "Remove", byText(".st-stg-own", /Mistral Large 2/)));
     await click(byText("button", "Yes, remove it"));
     expect(called("deleteAiModel").at(-1)?.args).toEqual(["stories", "custom-mistral"]);
-    expect(byText(".st-stg-own", /Mistral Large 2/).querySelector("[role=alert]")?.textContent).toBe("Mistral Large 2 is still used by the task Write the story above. Pick another model there first.");
+    expect(byText(".st-stg-own", /Mistral Large 2/).querySelector("[role=alert]")?.textContent).toBe("Mistral Large 2 is still used by the task Write the story below. Pick another model there first.");
     // Once nothing uses it, it goes.
     setValue($$(".st-stg-assign__row").find((r) => r.querySelector(".st-stg-assign__title")?.textContent === "Write the story")!.querySelectorAll<HTMLSelectElement>("select")[0]!, "");
     await settle();

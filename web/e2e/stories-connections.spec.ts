@@ -161,12 +161,49 @@ test("round 5: one name for the other app, ids and developer words one tap away,
     col.sort((a, b) => a.top - b.top);
     for (let i = 1; i < col.length; i++) expect(col[i]!.top - col[i - 1]!.bottom, "the gap above a card").toBeLessThanOrEqual(17);
   }
+  // Each card went into the shortest column: the empty area under the shortest column is never taller than the last
+  // card of the tallest one (that card could not have gone anywhere shorter). Before, Instagram stood alone 721 px short.
+  const ends = [...columns.values()].map((col) => ({ bottom: col.at(-1)!.bottom, last: col.at(-1)!.bottom - col.at(-1)!.top }));
+  const tallest = ends.reduce((a, b) => (b.bottom > a.bottom ? b : a));
+  const shortest = Math.min(...ends.map((e) => e.bottom));
+  expect(tallest.bottom - shortest, "the empty area under the shortest column").toBeLessThanOrEqual(tallest.last + 16);
+  expect(tallest.bottom - shortest, "less empty than the columns left before").toBeLessThan(700);
   for (const width of [320, 768, 1024, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     await page.waitForTimeout(200);
     const o = await findOverflow(page);
     expect(o.page, `@${width}: the page scrolls sideways`).toBeLessThanOrEqual(o.viewport);
     expect(o.items, `@${width}`).toEqual([]);
+  }
+});
+
+test("round 5: a card that grows never moves another card to another column (§45.36 E18)", async ({ page }) => {
+  await on(page);
+  for (const width of [1100, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/stories/connections");
+    await ready(page);
+    const xs = () => page.locator(".st-conns > .st-conn").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
+    const before = await xs();
+    for (const [name, button] of [
+      ["YouTube", "Change app"],
+      ["TikTok", "Change app"],
+      ["Instagram", "New keys"],
+      ["X", "Change app"],
+    ] as const) {
+      const card = cardOf(page, name);
+      await card.getByRole("button", { name: button, exact: true }).click();
+      await page.waitForTimeout(250);
+      expect(await xs(), `@${width}: Change app on ${name}`).toEqual(before);
+      // Every card still starts right under the one above it in its column.
+      const boxes = await page.locator(".st-conns > .st-conn").evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => ({ x: Math.round(r.x), top: r.top, bottom: r.bottom })));
+      for (const x of new Set(boxes.map((b) => b.x))) {
+        const col = boxes.filter((b) => b.x === x).sort((a, b) => a.top - b.top);
+        for (let i = 1; i < col.length; i++) expect(col[i]!.top - col[i - 1]!.bottom, `@${width}: the gap above a card after ${name} grew`).toBeLessThanOrEqual(17);
+      }
+      await page.goto("/stories/connections");
+      await ready(page);
+    }
   }
 });
 
@@ -205,7 +242,8 @@ test("round 5: on Social accounts the Needs you bar never sends the owner there 
   await expect(bar.getByRole("link", { name: "Fix it" })).toHaveCount(0);
   const tiktok = cardOf(page, "TikTok");
   await expect(tiktok).toBeAttached();
-  await page.evaluate(() => window.scrollTo(0, 0));
+  // (Away from it: TikTok's card is at the top of its column now, so the page goes to the bottom.)
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await expect(tiktok).not.toBeInViewport();
   await bar.getByRole("button", { name: "Show me" }).click();
   // (It glides there.)

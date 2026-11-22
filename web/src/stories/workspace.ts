@@ -286,48 +286,55 @@ export function takeClipsScroll(path: string): number | null {
 // scrolls (or taps the status bar) up to the top. The place to come back to is where he was reading before that, not
 // the top he only passed through to reach the switch.
 
-/** How long the page rests at one place before that place counts as where the owner is reading. */
+/** How long the page rests at one place below the top bar before that place counts as where the owner is reading. */
 export const READ_REST_MS = 1500;
-/** A switch this soon after the page left the reading place keeps the reading place (he scrolled up to reach it). */
-export const REACH_UP_MS = 4000;
+/**
+ * At the top, where the top bar's switch is in view, the page counts as read only after this long: until then he is
+ * only finding the switch (a slow scroll up in several flicks, a status-bar tap and a look for the switch).
+ */
+export const TOP_REST_MS = 10_000;
 
-let reading: { path: string; y: number; leftAt: number | null } | null = null;
+let reading: { path: string; y: number } | null = null;
 
-/** The page `path` is now at `y` (a scroll, or the page resting there): kept as the reading place once it rests. */
-export function noteReading(path: string, y: number, now: number, resting: boolean): void {
+/**
+ * The page `path` has rested at `y` for `restedMs`; `topZone` is how far down the top bar's switch still shows. A rest
+ * below the top bar is a reading place after READ_REST_MS, a rest where the switch shows only after TOP_REST_MS. The
+ * first rest on a page is its place whatever it is.
+ */
+export function noteReading(path: string, y: number, restedMs: number, topZone: number): void {
   const p = cleanPath(path);
-  if (resting || !reading || reading.path !== p) {
-    reading = resting ? { path: p, y: Math.max(0, Math.round(y)), leftAt: null } : { path: p, y: 0, leftAt: now };
-    return;
-  }
-  if (reading.leftAt === null && Math.abs(Math.round(y) - reading.y) > 1) reading = { ...reading, leftAt: now };
+  const at = Math.max(0, Math.round(y));
+  if (reading && reading.path === p && restedMs < (at <= topZone ? TOP_REST_MS : READ_REST_MS)) return;
+  reading = { path: p, y: at };
 }
 
 /** The scroll position to keep for a switch from the phone top bar at `y`: the reading place when he scrolled up to reach it. */
-export function readingPlace(path: string, y: number, now: number): number {
+export function readingPlace(path: string, y: number): number {
   const r = reading;
-  if (!r || r.path !== cleanPath(path) || r.y <= y) return y;
-  // Moved with no scroll event yet (the browser sends it on the next frame): it left the reading place just now.
-  const leftAt = r.leftAt ?? now;
-  return now - leftAt > REACH_UP_MS ? y : r.y;
+  return r && r.path === cleanPath(path) && r.y > y ? r.y : y;
 }
 
-/** Follows the window's scroll on the Clip Factory page `path()` while the phone top bar's switch is shown. */
-export function followReading(path: () => string, rest = READ_REST_MS): () => void {
+/**
+ * Follows the window's scroll on the Clip Factory page `path()` while the phone top bar's switch is shown; `topZone()`
+ * is how far down the switch still shows (the bottom of the top bar on the page).
+ */
+export function followReading(path: () => string, topZone: () => number = () => 0): () => void {
   if (typeof window === "undefined") return () => undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const settle = () => {
-    clearTimeout(timer);
-    timer = setTimeout(() => noteReading(path(), window.scrollY, Date.now(), true), rest);
+  const timers: ReturnType<typeof setTimeout>[] = [];
+  const clear = () => {
+    for (const t of timers.splice(0)) clearTimeout(t);
   };
+  // Each scroll starts the count again: a rest is counted from the last move. A page he only just opened (no rest
+  // on it yet) is where he is.
   const moved = () => {
-    noteReading(path(), window.scrollY, Date.now(), false);
-    settle();
+    noteReading(path(), window.scrollY, 0, topZone());
+    clear();
+    for (const ms of [READ_REST_MS, TOP_REST_MS]) timers.push(setTimeout(() => noteReading(path(), window.scrollY, ms, topZone()), ms));
   };
-  noteReading(path(), window.scrollY, Date.now(), true);
+  noteReading(path(), window.scrollY, Number.POSITIVE_INFINITY, topZone());
   window.addEventListener("scroll", moved, { passive: true });
   return () => {
-    clearTimeout(timer);
+    clear();
     window.removeEventListener("scroll", moved);
   };
 }

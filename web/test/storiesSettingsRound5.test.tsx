@@ -20,7 +20,7 @@ import { setStoriesApi } from "../src/stories/api/client.ts";
 import { mockStoriesApi } from "../src/stories/api/mock/index.ts";
 import { setMockLatency } from "../src/stories/api/mock/store.ts";
 import { MODEL_STATUS_WORDS, modelRegionProblem, regionOfArn, type StoriesApi } from "../src/stories/api/types.ts";
-import { MODEL_STATUS, onThisPage } from "../src/stories/settings/bits.tsx";
+import { ITS_ROW, MODEL_STATUS, onThisPage } from "../src/stories/settings/bits.tsx";
 import { defOf, usualLevels, withMaker } from "../src/stories/settings/OwnModels.tsx";
 import { resetWorkspaceMemory } from "../src/stories/workspace.ts";
 import { forgetOnboarding } from "../src/stories/ui.tsx";
@@ -120,26 +120,39 @@ describe("an added model's Region fits its ID (§45.36 E4)", () => {
     expect(regionOfArn("arn:aws:bedrock:eu-west-1:123456789012:inference-profile/eu.anthropic.claude-x-v1:0")).toBe("eu-west-1");
     expect(regionOfArn("arn:aws-us-gov:bedrock:us-gov-west-1:123456789012:provisioned-model/abc")).toBe("us-gov-west-1");
     expect(regionOfArn("eu.amazon.nova-premier-v1:0")).toBeNull();
+    // The API's own sentences, word for word (workspaces/model_defs.py region_problem).
     expect(modelRegionProblem("arn:aws:bedrock:eu-west-1:123456789012:provisioned-model/abc", "eu-north-1")).toBe(
-      "This model's ARN is in eu-west-1, but its Region says eu-north-1. Pick eu-west-1 as its Region.",
+      "This ARN is in eu-west-1, but the Region says eu-north-1. Type eu-west-1 as the Region.",
     );
     expect(modelRegionProblem("arn:aws:bedrock:eu-west-1:123456789012:provisioned-model/abc", "eu-west-1")).toBeNull();
     expect(modelRegionProblem("eu.amazon.nova-premier-v1:0", "us-east-1")).toBe(
-      "This model ID starts with eu., so it runs in Europe, but its Region says us-east-1. Pick a Region in Europe, like eu-north-1.",
+      "This inference profile id starts with eu., so it runs in a Europe Region (like eu-north-1), not in us-east-1. Type a Europe Region as the Region, or paste the us. profile id instead.",
     );
-    expect(modelRegionProblem("us.meta.llama4-maverick-17b-instruct-v1:0", "eu-north-1")).toContain("runs in the USA, but its Region says eu-north-1");
+    expect(modelRegionProblem("us.meta.llama4-maverick-17b-instruct-v1:0", "eu-north-1")).toContain("runs in a US Region (like us-east-1), not in eu-north-1");
     expect(modelRegionProblem("apac.amazon.nova-pro-v1:0", "ap-southeast-2")).toBeNull();
-    expect(modelRegionProblem("apac.amazon.nova-pro-v1:0", "eu-west-1")).toContain("Asia Pacific");
+    expect(modelRegionProblem("apac.amazon.nova-pro-v1:0", "eu-west-1")).toContain("an Asia Pacific Region");
+    // jp. and au. profiles run in Asia Pacific too.
+    expect(modelRegionProblem("jp.anthropic.claude-x-v1:0", "ap-northeast-1")).toBeNull();
+    expect(modelRegionProblem("jp.anthropic.claude-x-v1:0", "eu-west-1")).toContain("starts with jp., so it runs in an Asia Pacific Region");
+    expect(modelRegionProblem("au.anthropic.claude-x-v1:0", "us-east-1")).toContain("an Asia Pacific Region");
+    // A US profile in GovCloud, and the other way round, do not fit.
+    expect(modelRegionProblem("us.anthropic.claude-x-v1:0", "us-gov-west-1")).toContain("paste the us-gov. profile id instead");
     expect(modelRegionProblem("global.anthropic.claude-x-v1:0", "us-west-2")).toBeNull();
     expect(modelRegionProblem("mistral.mistral-large-2407-v1:0", "eu-west-3")).toBeNull();
+    // A Region outside the known areas is not checked, as the API does not (a Region AWS adds later is never refused).
+    expect(modelRegionProblem("us.anthropic.claude-x-v1:0", "ca-central-1")).toBeNull();
+    expect(modelRegionProblem("eu.amazon.nova-premier-v1:0", "mx-central-1")).toBeNull();
+    expect(modelRegionProblem("eu.amazon.nova-premier-v1:0", "sa-east-1")).toBeNull();
     // A profile inside an ARN must fit too.
-    expect(modelRegionProblem("arn:aws:bedrock:us-east-1:123456789012:inference-profile/eu.amazon.nova-pro-v1:0", "us-east-1")).toContain("runs in Europe");
+    expect(modelRegionProblem("arn:aws:bedrock:us-east-1:123456789012:inference-profile/eu.amazon.nova-pro-v1:0", "us-east-1")).toBe(
+      "This ARN's inference profile starts with eu., so it runs in a Europe Region (like eu-north-1), not in us-east-1. Paste the ARN of the us. profile instead.",
+    );
   });
 
   it("the mock refuses a Region that does not fit, naming both, as the API does", async () => {
     start();
     const def = { label: "Nova Premier", provider: "Amazon", modelId: "eu.amazon.nova-premier-v1:0", region: "us-east-1", efforts: [], defaultEffort: null, vision: false, maxOutputTokens: 8000, price: null };
-    await expect(api.putAiModel("stories", "custom-nova", def)).rejects.toMatchObject({ status: 400, field: "region", message: expect.stringContaining("its Region says us-east-1") });
+    await expect(api.putAiModel("stories", "custom-nova", def)).rejects.toMatchObject({ status: 400, field: "region", message: expect.stringContaining("not in us-east-1") });
     await expect(api.putAiModel("stories", "custom-nova", { ...def, region: "eu-west-1" })).resolves.toMatchObject({ region: "eu-west-1" });
   });
 
@@ -162,7 +175,9 @@ describe("an added model's Region fits its ID (§45.36 E4)", () => {
     fill(form, "AWS Region", "us-east-1");
     await submit(form);
     expect(calls.filter((c) => c.name === "putAiModel")).toHaveLength(0);
-    expect(form.querySelector("[role=alert]")?.textContent).toBe("This model ID starts with eu., so it runs in Europe, but its Region says us-east-1. Pick a Region in Europe, like eu-north-1.");
+    expect(form.querySelector("[role=alert]")?.textContent).toBe(
+      "This inference profile id starts with eu., so it runs in a Europe Region (like eu-north-1), not in us-east-1. Type a Europe Region as the Region, or paste the us. profile id instead.",
+    );
     fill(form, "AWS Region", "eu-west-1");
     await submit(form);
     expect(calls.filter((c) => c.name === "putAiModel").at(-1)?.args[2]).toMatchObject({ modelId: "eu.anthropic.claude-x-v1:0", region: "eu-west-1" });
@@ -191,7 +206,7 @@ describe("Add a model in plain words (§45.36 E14, E17)", () => {
     const d = { label: "X", maker: "Meta", otherMaker: "", modelId: "eu.x.y-v1:0", region: "eu-north-1", otherRegion: "", efforts: [], defaultEffort: null, vision: false, maxTokens: "4096", priced: false, input: "", output: "", currency: "USD", effortField: "none" as const, tools: false, cache: false, ownCalling: false };
     expect(withMaker(d, { maker: "Anthropic" })).toMatchObject({ effortField: "output_config", efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "high" });
     expect(withMaker({ ...d, effortField: "output_config", efforts: ["low"], defaultEffort: "low" }, { maker: "Anthropic" })).toMatchObject({ efforts: ["low"], defaultEffort: "low" });
-    expect(defOf({ ...d, modelId: "eu.x.y-v1:0", region: "us-east-1" })).toEqual({ problem: expect.stringContaining("its Region says us-east-1") });
+    expect(defOf({ ...d, modelId: "eu.x.y-v1:0", region: "us-east-1" })).toEqual({ problem: expect.stringContaining("not in us-east-1") });
   });
 
   it("the ID's developer words and an added model's exact ID sit behind Technical details, under a plain first line", async () => {
@@ -303,13 +318,47 @@ describe("one set of status words (§45.36 E17)", () => {
 describe("never sent to the page he is on (§45.36 E17)", () => {
   it("drops the trip to the page on screen, keeps every other page's name", () => {
     const reel = "Amazon Nova Reel is not ready yet: its storage place in the USA (N. Virginia) is not switched on. Pick Built-in animation in Settings › Video, or finish its setup.";
-    expect(onThisPage(reel, "Video")).toBe("Amazon Nova Reel is not ready yet: its storage place in the USA (N. Virginia) is not switched on. Pick Built-in animation above, or finish its setup.");
-    expect(onThisPage(reel, "AI")).toBe(reel);
+    expect(onThisPage(reel, "Video", "Video maker")).toBe("Amazon Nova Reel is not ready yet: its storage place in the USA (N. Virginia) is not switched on. Pick Built-in animation above, or finish its setup.");
+    expect(onThisPage(reel, "AI", "Default model")).toBe(reel);
     expect(onThisPage(reel, null)).toBe(reel);
-    expect(onThisPage("Claude X does not accept tool use here. Turn off Tools in Settings › AI › its row.", "AI")).toBe("Claude X does not accept tool use here. Turn off Tools in its row above.");
-    expect(onThisPage("type Bedrock's price in Lamo Stories › Settings › AI to replace it.", "AI", "here")).toBe("type Bedrock's price here to replace it.");
-    expect(onThisPage("Turn them on in Lamo Stories › Settings › Video › Picture maker.", "Video")).toBe("Turn them on in Picture maker above.");
-    expect(onThisPage("Switch it on in Lamo Stories › Settings › Agents.", "AI")).toBe("Switch it on in Lamo Stories › Settings › Agents.");
+    expect(onThisPage("type Bedrock's price in Lamo Stories › Settings › AI to replace it.", "AI", "Prices", "here")).toBe("type Bedrock's price here to replace it.");
+    expect(onThisPage("Switch it on in Lamo Stories › Settings › Agents.", "AI", "Default model")).toBe("Switch it on in Lamo Stories › Settings › Agents.");
+    // Not knowing where it shows: never a wrong way, only this page.
+    expect(onThisPage("Pick another model in Lamo Stories › Settings › AI, or try again.", "AI")).toBe("Pick another model on this page, or try again.");
+    expect(onThisPage("Turn them on in Lamo Stories › Settings › Video › Picture maker.", "Video")).toBe("Turn them on in Picture maker.");
+  });
+
+  it("points above or below from the card it shows in (the cards' order on the page)", () => {
+    // The agent's tool refusal (§45.36 E6), said in Default model (first card), in the model's own row, and in a task row.
+    const tools = 'Claude X does not accept tool use here (Amazon Bedrock refused it). Tap Edit on its row in Lamo Stories › Settings › AI and turn off "It can use tools", then tap Check models.';
+    expect(onThisPage(tools, "AI", "Default model")).toBe('Claude X does not accept tool use here (Amazon Bedrock refused it). Tap Edit on its row below and turn off "It can use tools", then tap Check models.');
+    expect(onThisPage(tools, "AI", ITS_ROW)).toBe('Claude X does not accept tool use here (Amazon Bedrock refused it). Tap Edit on this row and turn off "It can use tools", then tap Check models.');
+    expect(onThisPage(tools, "AI", "Each agent and each task")).toContain("Tap Edit on its row above and turn off");
+    const short = "Claude X does not accept tool use here. Turn off Tools in Settings › AI › its row.";
+    expect(onThisPage(short, "AI", "Default model")).toBe("Claude X does not accept tool use here. Turn off Tools in its row below.");
+    expect(onThisPage(short, "AI", ITS_ROW)).toBe("Claude X does not accept tool use here. Turn off Tools in this row.");
+    // A refusal naming a task (the API's quotes or the mock's none), said in Add a model: the tasks are below it.
+    expect(onThisPage("Mistral is still used by the task “Write the story” in Settings › AI. Pick another model there first.", "AI", ITS_ROW)).toBe(
+      "Mistral is still used by the task “Write the story” below. Pick another model there first.",
+    );
+    expect(onThisPage("Mistral is still used by the default model in Settings › AI.", "AI", "Add a model")).toBe("Mistral is still used by the default model above.");
+    // Check models is in Default model's top: above from everywhere on the page.
+    const why = "No model has answered yet. Tap Check models in Lamo Stories › Settings › AI to see why.";
+    expect(onThisPage(why, "AI", "Default model")).toBe("No model has answered yet. Tap Check models above to see why.");
+    expect(onThisPage(why, "AI", "Providers")).toBe("No model has answered yet. Tap Check models above to see why.");
+  });
+
+  it("takes only a card's own name after the page, never the rest of the sentence (the API's Off and pictures-off lines)", () => {
+    // providers.py OFF_LINE and the API's pictures-off sentence, word for word.
+    const off = "Off. Pick it in Lamo Stories › Settings › Video › Picture maker to use it.";
+    expect(onThisPage(off, "Video", "Picture maker")).toBe("Off. Pick it here to use it.");
+    expect(onThisPage(off, "Video", "Prices and keys")).toBe("Off. Pick it in Picture maker above to use it.");
+    expect(onThisPage(off, "Video", "Video maker")).toBe("Off. Pick it in Picture maker below to use it.");
+    const imagesOff = "AI pictures are off. Turn them on in Lamo Stories › Settings › Video › Picture maker, or make one AI portrait to finish its setup.";
+    expect(onThisPage(imagesOff, "Video", "Picture maker")).toBe("AI pictures are off. Turn them on here, or make one AI portrait to finish its setup.");
+    expect(onThisPage(imagesOff, "Video", "Video maker")).toBe("AI pictures are off. Turn them on in Picture maker below, or make one AI portrait to finish its setup.");
+    // Storage and production is one page name.
+    expect(onThisPage("Pick it in Lamo Stories › Settings › Storage and production.", "Storage")).toBe("Pick it on this page.");
   });
 
   it("Settings › AI's list prices say type it here, never Lamo Stories › Settings › AI", async () => {

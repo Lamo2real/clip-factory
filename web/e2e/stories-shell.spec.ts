@@ -219,15 +219,57 @@ test.describe("switching", () => {
     await storiesReady(page);
     await page.locator(".st-top").getByRole("link", { name: "Go to Clip Factory" }).click();
     await expect.poll(() => page.evaluate(() => Math.round(scrollY)), { timeout: 6000 }).toBe(kept);
-    // Scrolled up to the top and resting there before the switch: the top is where he left it.
-    await page.evaluate(() => window.scrollTo(0, 0));
+    // A slow way up in short flicks (over four seconds), then the switch at once: still where he was reading.
     await page.waitForTimeout(1800);
+    for (let i = 1; i <= 10; i++) {
+      await page.evaluate((to) => window.scrollTo(0, to), Math.round(kept * (1 - i / 10)));
+      await page.waitForTimeout(500);
+    }
+    expect(await page.evaluate(() => Math.round(scrollY))).toBe(0);
+    await page.locator(".topbar").getByRole("link", { name: "Go to Lamo Stories" }).click();
+    await storiesReady(page);
+    await page.locator(".st-top").getByRole("link", { name: "Go to Clip Factory" }).click();
+    await expect(page).toHaveURL(/\/library$/);
+    await expect.poll(() => page.evaluate(() => Math.round(scrollY)), { timeout: 6000 }).toBe(kept);
+    // A jump to the top (a status-bar tap) and two seconds to find the switch: still where he was reading.
+    await page.waitForTimeout(1800);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(2000);
+    await page.locator(".topbar").getByRole("link", { name: "Go to Lamo Stories" }).click();
+    await storiesReady(page);
+    await page.locator(".st-top").getByRole("link", { name: "Go to Clip Factory" }).click();
+    await expect(page).toHaveURL(/\/library$/);
+    await expect.poll(() => page.evaluate(() => Math.round(scrollY)), { timeout: 6000 }).toBe(kept);
+  });
+
+  test("E1: on a phone, reading at the top of Clip Factory's Library for a while keeps the top on the way back", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/library");
+    await settle(page);
+    const room = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+    expect(room, "the Library is taller than the phone's window").toBeGreaterThan(300);
+    await page.evaluate((to) => window.scrollTo(0, to), Math.min(874, Math.round(room * 0.6)));
+    await page.waitForTimeout(1800);
+    // Up to the top, and reading there longer than it takes to find the switch: the top is where he left it.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(10_500);
     await page.locator(".topbar").getByRole("link", { name: "Go to Lamo Stories" }).click();
     await storiesReady(page);
     await page.locator(".st-top").getByRole("link", { name: "Go to Clip Factory" }).click();
     await expect(page).toHaveURL(/\/library$/);
     await page.waitForTimeout(600);
     expect(await page.evaluate(() => Math.round(scrollY))).toBe(0);
+    // Resting part way up (below the top bar) is a reading place of its own.
+    await page.evaluate((to) => window.scrollTo(0, to), Math.min(874, Math.round(room * 0.6)));
+    await page.waitForTimeout(1800);
+    await page.evaluate(() => window.scrollTo(0, 400));
+    await page.waitForTimeout(1800);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.locator(".topbar").getByRole("link", { name: "Go to Lamo Stories" }).click();
+    await storiesReady(page);
+    await page.locator(".st-top").getByRole("link", { name: "Go to Clip Factory" }).click();
+    await expect.poll(() => page.evaluate(() => Math.round(scrollY)), { timeout: 6000 }).toBe(400);
   });
 
   test("ask, switch to Lamo Stories while the answer streams, switch back: the answer is there", async ({ page }) => {

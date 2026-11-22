@@ -345,7 +345,12 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
   // On a phone the top bar scrolls away with the page: where the owner was reading is followed, so a switch he
   // scrolled up to reach keeps that place (§45.36 E1).
   const shownInTopbar = place === "topbar" && measured.mode !== "none";
-  useEffect(() => (shownInTopbar && active ? followReading(here) : undefined), [shownInTopbar, active]);
+  // The switch shows while the page is above the top bar's bottom edge (the top bar is not pinned on a phone).
+  const topZone = () => {
+    const bar = ref.current?.closest<HTMLElement>(".topbar") ?? ref.current;
+    return bar ? Math.max(0, Math.round(bar.getBoundingClientRect().bottom + window.scrollY)) : 0;
+  };
+  useEffect(() => (shownInTopbar && active ? followReading(here, topZone) : undefined), [shownInTopbar, active]);
 
   // Measure the room in Lamo Clips' shell and pick the largest form that fits without moving or covering anything.
   useLayoutEffect(() => {
@@ -407,7 +412,7 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
     // opens the page the kept screen shows. Leaving Lamo Stories: its own, which StoriesApp puts back when it is on
     // screen again.
     if (inClips) {
-      saveClipsScroll(from, place === "topbar" ? readingPlace(from, window.scrollY, Date.now()) : window.scrollY);
+      saveClipsScroll(from, place === "topbar" ? readingPlace(from, window.scrollY) : window.scrollY);
       rememberClipsPath(from);
     } else saveStoriesScroll(from, window.scrollY);
     const to = switchTarget(w);

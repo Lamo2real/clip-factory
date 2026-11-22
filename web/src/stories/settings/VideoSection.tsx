@@ -181,7 +181,10 @@ export function VideoSection({ ws }: { ws: string }) {
   const ai = useAi(ws);
   const { saved, flash } = useSaved();
   const [priceOpen, setPriceOpen] = useState<string | null>(null);
-  const here = useOnThisPage();
+  // Each maker's lines are said in its own card (the cards are below this line, so each is named here).
+  const inVideo = useOnThisPage("Video maker");
+  const inPicture = useOnThisPage("Picture maker");
+  const inSound = useOnThisPage("Sound maker");
   const reloadProviders = providers.reload;
   // A saved change shows "Saved" and asks the makers again (a newly picked one may need a check).
   useEffect(() => {
@@ -200,17 +203,17 @@ export function VideoSection({ ws }: { ws: string }) {
         <SavedMark saved={saved} busy={busy} />
       </div>
       <SetCard title="Video maker" icon="film" lede="What turns each story into moving pictures.">
-        <SetPick<VideoMaker> label="Video maker" stack value={c.providers.video} options={[makerOption(p, "builtin-2d", here), makerOption(p, "nova-reel", here)]} onChange={(v) => save({ providers: { ...c.providers, video: v } })} />
+        <SetPick<VideoMaker> label="Video maker" stack value={c.providers.video} options={[makerOption(p, "builtin-2d", inVideo), makerOption(p, "nova-reel", inVideo)]} onChange={(v) => save({ providers: { ...c.providers, video: v } })} />
         <ModelLine providers={p} id={c.providers.video} />
         {/* Nova Reel's own row: Try it, one 6-second test shot, so it can become ready before any video (§45.35 D2). */}
         {p?.some((x) => x.id === "nova-reel") ? <ReelTry ws={ws} p={stateOf(p, "nova-reel")} reload={providers.reload} /> : null}
       </SetCard>
       <SetCard title="Picture maker" icon="brush" id="picture-maker" lede="How the characters are drawn.">
-        <SetPick<PictureMaker> label="Picture maker" stack value={c.providers.images} options={[makerOption(p, "builtin-rig", here), makerOption(p, "nova-canvas", here)]} onChange={(v) => save({ providers: { ...c.providers, images: v } })} />
+        <SetPick<PictureMaker> label="Picture maker" stack value={c.providers.images} options={[makerOption(p, "builtin-rig", inPicture), makerOption(p, "nova-canvas", inPicture)]} onChange={(v) => save({ providers: { ...c.providers, images: v } })} />
         <ModelLine providers={p} id={c.providers.images} />
       </SetCard>
       <SetCard title="Sound maker" icon="sound" lede="Sound effects, character noises and music. No voice-over.">
-        <SetPick label="Sound maker" stack value={c.providers.audio} options={[makerOption(p, "builtin-synth", here)]} onChange={() => undefined} />
+        <SetPick label="Sound maker" stack value={c.providers.audio} options={[makerOption(p, "builtin-synth", inSound)]} onChange={() => undefined} />
         <ModelLine providers={p} id={c.providers.audio} />
       </SetCard>
       {providers.error && !p ? <Note tone="sun">{providers.error}</Note> : null}

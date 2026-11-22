@@ -238,8 +238,6 @@ test.describe("AI: add a model (§45.34)", () => {
     // Moved to a Region that is not in the list: its last check was of the old one, so a new check is asked for.
     await row.getByRole("button", { name: "Edit Nova Premier" }).click();
     const moved = page.getByRole("form", { name: "Change Nova Premier" });
-    // (Its Region must fit its ID, §45.36 E4: the eu. profile runs only in Europe, so it moves with the plain model ID.)
-    await moved.getByLabel("Model ID", { exact: true }).fill("amazon.nova-premier-v1:0");
     await moved.getByLabel("AWS Region").selectOption("another");
     await moved.getByLabel("Its Region code").fill("mx-central-1");
     await moved.getByRole("button", { name: "Save the changes" }).click();
@@ -615,7 +613,9 @@ test.describe("round 5: Add a model and the status words (§45.36 E4, E14, E17)"
     await form.getByLabel("Model ID", { exact: true }).fill("eu.anthropic.claude-x-v1:0");
     await form.getByLabel("AWS Region").selectOption("us-east-1");
     await form.getByRole("button", { name: "Add the model" }).click();
-    await expect(form.getByRole("alert")).toHaveText("This model ID starts with eu., so it runs in Europe, but its Region says us-east-1. Pick a Region in Europe, like eu-north-1.");
+    await expect(form.getByRole("alert")).toHaveText(
+      "This inference profile id starts with eu., so it runs in a Europe Region (like eu-north-1), not in us-east-1. Type a Europe Region as the Region, or paste the us. profile id instead.",
+    );
     await form.getByLabel("AWS Region").selectOption("eu-north-1");
     await form.getByRole("button", { name: "Add the model" }).click();
     await expect(page.locator(".toast").filter({ hasText: "My Claude is added!" })).toBeVisible();

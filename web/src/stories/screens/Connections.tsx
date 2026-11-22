@@ -14,7 +14,7 @@
 // also once the keys are saved. After a connect the page says "Connected as {name} ({handle})" and the card asks "Is
 // this your Lamo Stories {place}?" (Yes, or Pick another). An account's reason is a code (SocialReason), said in words.
 import "../styles/social.css";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { KeyName } from "../../api/types.ts";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
@@ -1035,6 +1035,96 @@ function SetupBack({ ws }: { ws: string }) {
   );
 }
 
+// ---------- The cards in columns by their own height (§45.36 E18) ----------
+
+/** The narrowest a card's column gets, and the space between cards (both as in stories.css). */
+const CARD_MIN = 340;
+const CARD_GAP = 16;
+/** The grid's row step (px): each card spans as many of these as its height and the gap below it. */
+const ROW_STEP = 1;
+
+/** How many columns of at least CARD_MIN fit in `width` (as `repeat(auto-fill, minmax(340px, 1fr))` gives). */
+export function columnsFor(width: number): number {
+  return Math.max(1, Math.floor((width + CARD_GAP) / (CARD_MIN + CARD_GAP)));
+}
+
+/** Each card's column (0-based), in page order: each goes into the shortest column so far, so no column is left short. */
+export function shortestColumns(heights: number[], columns: number): number[] {
+  const bottoms = Array.from({ length: Math.max(1, columns) }, () => 0);
+  return heights.map((h) => {
+    const k = bottoms.indexOf(Math.min(...bottoms));
+    bottoms[k] = bottoms[k]! + h + CARD_GAP;
+    return k;
+  });
+}
+
+/**
+ * Lays the list's cards out in columns by their own height. Each card keeps its column while the page is open (a
+ * card that grows, as Change app does, only pushes the cards under it in that column), and the columns are dealt
+ * again only when their number changes or the cards do. The cards stay in page order, so Tab goes as before.
+ */
+function useCardColumns(list: { current: HTMLUListElement | null }, keys: string, on: boolean): void {
+  useLayoutEffect(() => {
+    const ul = list.current;
+    if (!on || !ul || typeof ResizeObserver === "undefined") return;
+    let dealt: { columns: number; at: number[] } | null = null;
+    let frame = 0;
+    const cards = () => Array.from(ul.children).filter((c): c is HTMLElement => c instanceof HTMLElement);
+    const layout = () => {
+      // Not while Lamo Stories is hidden behind Clip Factory (nothing has a size): it stays as it was for the way back.
+      if (!ul.clientWidth) return;
+      const all = cards();
+      const columns = columnsFor(ul.clientWidth);
+      if (columns < 2 || all.length < 2) {
+        delete ul.dataset.cols;
+        for (const c of all) c.style.removeProperty("--st-col");
+        dealt = null;
+        return;
+      }
+      // Its own height at the width it has now (its rise-in animation only moves it, never sizes it).
+      const heights = all.map((c) => c.getBoundingClientRect().height);
+      if (!dealt || dealt.columns !== columns || dealt.at.length !== all.length) dealt = { columns, at: shortestColumns(heights, columns) };
+      ul.dataset.cols = String(columns);
+      ul.style.setProperty("--st-cols", String(columns));
+      all.forEach((c, i) => {
+        c.style.setProperty("--st-col", String(dealt!.at[i]! + 1));
+        c.style.setProperty("--st-span", String(Math.ceil((heights[i]! + CARD_GAP) / ROW_STEP)));
+      });
+    };
+    const soon = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(layout);
+    };
+    const ro = new ResizeObserver(soon);
+    ro.observe(ul);
+    for (const c of cards()) ro.observe(c);
+    layout();
+    // The page's own fonts arrive after the first paint and change the cards' heights: dealt again once.
+    let fresh = true;
+    const stopFresh = () => {
+      fresh = false;
+    };
+    ul.addEventListener("pointerdown", stopFresh, true);
+    ul.addEventListener("keydown", stopFresh, true);
+    void document.fonts?.ready?.then(() => {
+      if (!fresh) return;
+      dealt = null;
+      soon();
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+      ul.removeEventListener("pointerdown", stopFresh, true);
+      ul.removeEventListener("keydown", stopFresh, true);
+      delete ul.dataset.cols;
+      for (const c of cards()) {
+        c.style.removeProperty("--st-col");
+        c.style.removeProperty("--st-span");
+      }
+    };
+  }, [list, keys, on]);
+}
+
 /** The five cards and what they need, shared by this page and the setup's connect steps. */
 export function useSocial(ws: string) {
   return useLoad(() => storiesApi().social(ws), ws, "st-social");
@@ -1048,6 +1138,8 @@ export function ConnectionsScreen({ ws, page }: StoriesScreenProps) {
   // The platform just connected: its card asks whether this is the intended account (§45.34).
   const [asking, setAsking] = useState<Platform | null>(null);
   const shown = useRef<string | null>(null);
+  const cardList = useRef<HTMLUListElement | null>(null);
+  useCardColumns(cardList, social.data ? social.data.accounts.map((a) => a.platform).join(" ") : "", !!social.data);
   const result = page.name === "connections" ? page.result : null;
   const platform = page.name === "connections" ? page.platform : null;
 
@@ -1111,7 +1203,7 @@ export function ConnectionsScreen({ ws, page }: StoriesScreenProps) {
       ) : !social.data ? (
         <StLoading label="Checking the accounts…" />
       ) : (
-        <ul className="st-conns">
+        <ul className="st-conns" ref={cardList}>
           {social.data.accounts.map((a) => (
             <PlatformCard
               key={a.platform}
