@@ -5,8 +5,9 @@
 // contract, styles/GLASS-CONTRACT.md; the merge step makes it --st-r-* only), no type below 0.78rem, light only (no dark-scheme rules), nothing outside .stories-app
 // (or an st- class), and AA contrast: every --st-* text colour on the stage and the panels, words on the sunshine
 // and on each tinted chip, and the status fills at 3:1 where they are icons and marks.
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { brotliDecompressSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 
 const DIR = join(import.meta.dirname, "..", "src", "stories", "styles");
@@ -248,5 +249,104 @@ describe("contrast", () => {
         }
       }
     expect(low).toEqual([]);
+  });
+});
+
+// ---------- The font files themselves (web/public/fonts/stories): read from the WOFF2 tables, no tools needed ----------
+
+const FONTS = join(import.meta.dirname, "..", "public", "fonts", "stories");
+const WOFF2_TAGS = ["cmap", "head", "hhea", "hmtx", "maxp", "name", "OS/2", "post", "cvt ", "fpgm", "glyf", "loca", "prep", "CFF ", "VORG", "EBDT", "EBLC", "gasp", "hdmx", "kern", "LTSH", "PCLT", "VDMX", "vhea", "vmtx", "BASE", "GDEF", "GPOS", "GSUB", "EBSC", "JSTF", "MATH", "CBDT", "CBLC", "COLR", "CPAL", "SVG ", "sbix", "acnt", "avar", "bdat", "bloc", "bsln", "cvar", "fdsc", "feat", "fmtx", "fvar", "gvar", "hsty", "just", "lcar", "mort", "morx", "opbd", "prop", "trak", "Zapf", "Silf", "Glat", "Gloc", "Feat", "Sill"];
+
+/** The variation axes (tag → [min, max]) and the code points among `want` that the font maps. */
+function readWoff2(file: string, want: number[]): { axes: Record<string, [number, number]>; has: Set<number> } {
+  const b = readFileSync(join(FONTS, file));
+  expect(b.toString("latin1", 0, 4), file).toBe("wOF2");
+  const numTables = b.readUInt16BE(12);
+  const compressed = b.readUInt32BE(20);
+  let p = 48;
+  const u128 = () => {
+    let v = 0;
+    for (let i = 0; i < 5; i++) {
+      const x = b[p++]!;
+      v = (v << 7) | (x & 0x7f);
+      if (!(x & 0x80)) return v >>> 0;
+    }
+    return v >>> 0;
+  };
+  const tables: { tag: string; length: number }[] = [];
+  for (let i = 0; i < numTables; i++) {
+    const flags = b[p++]!;
+    let tag = WOFF2_TAGS[flags & 0x3f] ?? "";
+    if ((flags & 0x3f) === 63) {
+      tag = b.toString("latin1", p, p + 4);
+      p += 4;
+    }
+    const xf = (flags >> 6) & 3;
+    const orig = u128();
+    const transformed = tag === "glyf" || tag === "loca" ? xf === 0 : xf !== 0;
+    tables.push({ tag, length: transformed ? u128() : orig });
+  }
+  const data = brotliDecompressSync(b.subarray(p, p + compressed));
+  const at: Record<string, Buffer> = {};
+  let off = 0;
+  for (const t of tables) {
+    at[t.tag] = data.subarray(off, off + t.length);
+    off += t.length;
+  }
+  const axes: Record<string, [number, number]> = {};
+  const f = at.fvar;
+  if (f) {
+    const first = f.readUInt16BE(4);
+    const size = f.readUInt16BE(10);
+    for (let i = 0; i < f.readUInt16BE(8); i++) {
+      const o = first + i * size;
+      axes[f.toString("latin1", o, o + 4)] = [f.readInt32BE(o + 4) / 65536, f.readInt32BE(o + 12) / 65536];
+    }
+  }
+  const has = new Set<number>();
+  const c = at.cmap!;
+  for (let i = 0; i < c.readUInt16BE(2); i++) {
+    const so = c.readUInt32BE(4 + i * 8 + 4);
+    const fmt = c.readUInt16BE(so);
+    if (fmt === 4) {
+      const segs = c.readUInt16BE(so + 6) / 2;
+      const ends = so + 14;
+      const starts = ends + segs * 2 + 2;
+      for (const cp of want) for (let s = 0; s < segs; s++) if (cp >= c.readUInt16BE(starts + s * 2) && cp <= c.readUInt16BE(ends + s * 2)) has.add(cp);
+    } else if (fmt === 12) {
+      for (let g = 0; g < c.readUInt32BE(so + 12); g++) {
+        const lo = c.readUInt32BE(so + 16 + g * 12);
+        const hi = c.readUInt32BE(so + 20 + g * 12);
+        for (const cp of want) if (cp >= lo && cp <= hi) has.add(cp);
+      }
+    }
+  }
+  return { axes, has };
+}
+
+describe("Stories' own font files", () => {
+  // å ä ö Å Ä Ö and the marks the words use (− – ’ … · ›)
+  const WANT = [0xe5, 0xe4, 0xf6, 0xc5, 0xc4, 0xd6, 0x2212, 0x2013, 0x2019, 0x2026, 0xb7, 0x203a];
+
+  it("keep each family's OFL licence beside it", () => {
+    for (const f of ["OFL-Playfair.txt", "OFL-Jost.txt"]) {
+      expect(existsSync(join(FONTS, f)), f).toBe(true);
+      expect(readFileSync(join(FONTS, f), "utf8")).toMatch(/SIL OPEN FONT LICENSE/i);
+    }
+  });
+
+  it("Playfair has an optical-size axis (high contrast at display sizes, sturdy at reading sizes), a width and a weight axis", () => {
+    const { axes } = readWoff2("Playfair-latin.woff2", []);
+    expect(axes.opsz![0]).toBeLessThanOrEqual(8);
+    expect(axes.opsz![1]).toBeGreaterThanOrEqual(900);
+    expect(axes.wdth![0]).toBeLessThanOrEqual(92);
+    expect(axes.wght).toEqual([300, 900]);
+  });
+
+  it("the Latin files cover å ä ö and the marks the words use", () => {
+    for (const f of ["Playfair-latin.woff2", "Jost-latin.woff2"]) {
+      const { has } = readWoff2(f, WANT);
+      expect(WANT.filter((cp) => !has.has(cp)).map((cp) => String.fromCodePoint(cp)), f).toEqual([]);
+    }
   });
 });

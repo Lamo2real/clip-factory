@@ -273,7 +273,9 @@ a.st-pill.is-on:hover {
   border-radius: var(--st-r-round);
   background: var(--st-knob);
   box-shadow: var(--st-depth-1);
-  transition: transform var(--st-dur-hover) var(--st-ease-out);
+  transition:
+    transform var(--st-dur-hover) var(--st-ease-out),
+    width var(--st-dur-tap) var(--st-ease-out);
 }
 .st-toggle[aria-checked="true"] .st-toggle__track {
   background: var(--st-accent);
@@ -415,6 +417,33 @@ a.st-pill.is-on:hover {
   border-radius: var(--st-r-round);
   background: rgb(var(--st-cream-rgb) / 0.16);
   box-shadow: var(--st-sheen-control), var(--st-glow-behind);
+}
+
+/* ---------- A press you can feel: controls give a little under the finger (a surface never moves) ---------- */
+:is(.st-pill, .st-round-btn, .st-stepper__btn) {
+  transition-property: background-color, color, box-shadow, transform;
+  transition-duration: var(--st-dur-hover), var(--st-dur-hover), var(--st-dur-hover), var(--st-dur-tap);
+  transition-timing-function: var(--st-ease-out), var(--st-ease-out), var(--st-ease-out), var(--st-ease-spring);
+}
+:is(button.st-pill, a.st-pill, .st-round-btn, .st-stepper__btn):active {
+  transform: scale(0.95);
+}
+.st-toggle:active .st-toggle__knob {
+  width: calc(var(--st-knob-size) + 4px);
+}
+.st-toggle[aria-checked="true"]:active .st-toggle__knob {
+  transform: translateX(calc(var(--st-toggle-w) - var(--st-knob-size) - 10px));
+}
+
+/* Less motion: the knob jumps, a press does not give (things change, they do not travel) */
+@media (prefers-reduced-motion: reduce) {
+  .st-toggle__knob,
+  :is(.st-pill, .st-round-btn, .st-stepper__btn) {
+    transition-duration: 0ms;
+  }
+  :is(button.st-pill, a.st-pill, .st-round-btn, .st-stepper__btn):active {
+    transform: none;
+  }
 }
 
 /* ---------- Focus: a cream and orange ring (light, never an outline) ---------- */

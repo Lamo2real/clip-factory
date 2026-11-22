@@ -110,21 +110,44 @@ export function lensMapUrl(shape: LensShape): string | null {
  * than the hero's veil under words. One displacement pass (no prism split; the warm fringe is the painted edge's),
  * inside WebView2's budget.
  */
-export function lensFilterMarkup(mapUrl: string, { w, h }: { w: number; h: number }, depth = LENS_DEPTH, core = 28, veil = 0): string {
+export interface FilterPart {
+  tag: string;
+  attrs: Record<string, string>;
+  children?: FilterPart[];
+}
+export function lensFilterParts(mapUrl: string, { w, h }: { w: number; h: number }, depth = LENS_DEPTH, core = 28, veil = 0): FilterPart[] {
   const scale = (depth / 0.498).toFixed(1);
   const k = Math.min(1, Math.max(0, veil)).toFixed(3);
-  return (
-    `<feImage href="${mapUrl}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="none" result="map"/>` +
-    `<feColorMatrix in="map" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0" result="rim"/>` +
-    `<feGaussianBlur in="SourceGraphic" stdDeviation="${core}" edgeMode="duplicate" result="soft"/>` +
-    `<feFlood flood-color="rgb(28 19 14)" flood-opacity="${k}" result="veil"/>` +
-    `<feComposite in="veil" in2="rim" operator="out" result="middle"/>` +
-    `<feComposite in="middle" in2="soft" operator="over" result="frost"/>` +
-    `<feGaussianBlur in="SourceGraphic" stdDeviation="1.2" edgeMode="duplicate" result="src"/>` +
-    `<feDisplacementMap in="src" in2="map" scale="${scale}" xChannelSelector="R" yChannelSelector="G" result="bent"/>` +
-    `<feComposite in="bent" in2="rim" operator="in" result="edge"/>` +
-    `<feMerge><feMergeNode in="frost"/><feMergeNode in="edge"/></feMerge>`
-  );
+  return [
+    { tag: "feImage", attrs: { href: mapUrl, x: "0", y: "0", width: String(w), height: String(h), preserveAspectRatio: "none", result: "map" } },
+    { tag: "feColorMatrix", attrs: { in: "map", type: "matrix", values: "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0", result: "rim" } },
+    { tag: "feGaussianBlur", attrs: { in: "SourceGraphic", stdDeviation: String(core), edgeMode: "duplicate", result: "soft" } },
+    { tag: "feFlood", attrs: { "flood-color": "rgb(28 19 14)", "flood-opacity": k, result: "veil" } },
+    { tag: "feComposite", attrs: { in: "veil", in2: "rim", operator: "out", result: "middle" } },
+    { tag: "feComposite", attrs: { in: "middle", in2: "soft", operator: "over", result: "frost" } },
+    { tag: "feGaussianBlur", attrs: { in: "SourceGraphic", stdDeviation: "1.2", edgeMode: "duplicate", result: "src" } },
+    { tag: "feDisplacementMap", attrs: { in: "src", in2: "map", scale, xChannelSelector: "R", yChannelSelector: "G", result: "bent" } },
+    { tag: "feComposite", attrs: { in: "bent", in2: "rim", operator: "in", result: "edge" } },
+    { tag: "feMerge", attrs: {}, children: [{ tag: "feMergeNode", attrs: { in: "frost" } }, { tag: "feMergeNode", attrs: { in: "edge" } }] },
+  ];
+}
+
+/** The same as text (to read it in a test or a bug report; the page builds it as elements, never from text). */
+export function lensFilterMarkup(mapUrl: string, size: { w: number; h: number }, depth = LENS_DEPTH, core = 28, veil = 0): string {
+  const one = (p: FilterPart): string => {
+    const attrs = Object.entries(p.attrs)
+      .map(([k, v]) => ` ${k}="${v}"`)
+      .join("");
+    return p.children ? `<${p.tag}${attrs}>${p.children.map(one).join("")}</${p.tag}>` : `<${p.tag}${attrs}/>`;
+  };
+  return lensFilterParts(mapUrl, size, depth, core, veil).map(one).join("");
+}
+
+function toElement(p: FilterPart): SVGElement {
+  const el = document.createElementNS(NS, p.tag);
+  for (const [k, v] of Object.entries(p.attrs)) el.setAttribute(k, v);
+  for (const c of p.children ?? []) el.append(toElement(c));
+  return el;
 }
 
 /** How much more veil the filter lays under the words, so the rim tint on top adds up to the hero's veil. */
@@ -207,7 +230,7 @@ export function watchLenses(
       defs.append(filter);
     }
     for (const [k, v] of [["x", "0"], ["y", "0"], ["width", String(w)], ["height", String(h)]] as const) filter.setAttribute(k, v);
-    filter.innerHTML = lensFilterMarkup(url, { w, h }, rimDepth, blur, veil);
+    filter.replaceChildren(...lensFilterParts(url, { w, h }, rimDepth, blur, veil).map(toElement));
     built.set(el, { filter, key });
     el.style.setProperty("--st-lens-url", `url(#${filter.id})`);
     if (!el.classList.contains(LIQUID)) el.classList.add(LIQUID);
