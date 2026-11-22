@@ -650,6 +650,12 @@ test.describe("round 5: Add a model and the status words (§45.36 E4, E14, E17)"
     await maker.getByRole("radio", { name: /Amazon Nova Reel/ }).click();
     await expect(card(page, "Video maker").getByRole("status")).toContainText("Pick Built-in animation above");
     expect(await page.locator(".st-stg-section").evaluate((el) => (el as HTMLElement).innerText)).not.toContain("in Settings › Video");
+    // E14: the maker's plain name first; its exact Bedrock model ID one tap away.
+    const reelCard = card(page, "Video maker");
+    await expect(reelCard.locator(".st-stg-active strong")).toHaveText("Amazon Nova Reel 1.1");
+    await expect(reelCard.getByText("amazon.nova-reel-v1:1", { exact: false })).toBeHidden();
+    await reelCard.getByText("Technical details").click();
+    await expect(reelCard.getByText("amazon.nova-reel-v1:1", { exact: false })).toBeVisible();
     await expect(page.getByRole("link", { name: "Open setup again" })).toHaveAttribute("href", "/stories/setup");
     await openSection(page, "ai");
     expect(await card(page, "Prices").evaluate((el) => (el as HTMLElement).innerText)).not.toContain("Settings › AI");

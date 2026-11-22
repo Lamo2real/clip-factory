@@ -22,12 +22,28 @@ import { VideoUsage } from "./VideoUsage.tsx";
 type VideoMaker = StoriesConfig["providers"]["video"];
 type PictureMaker = StoriesConfig["providers"]["images"];
 
-/** Each maker's name and model, from Lamo Stories' own stories/config/models.json where it has one. */
-export const MAKERS: Record<string, { label: string; model: string; line: string }> = {
+/** An Amazon Bedrock model's exact ID and Region, said only behind "Technical details" (§45.36 E14). */
+const bedrockTech = (m: { label: string; host: string; modelId: string; region: string }) => `On ${m.host}: ${m.label} (${m.modelId}) in ${m.region}.`;
+
+/**
+ * Each maker's name and model, from Lamo Stories' own stories/config/models.json where it has one. `model` is its plain
+ * name; `tech` its exact Bedrock ID, folded away (§45.36 E14).
+ */
+export const MAKERS: Record<string, { label: string; model: string; line: string; tech?: string }> = {
   "builtin-2d": { label: "Built-in animator", model: "Lamo Stories' own 2D animator", line: "Draws and moves every character the same way in every video." },
-  "nova-reel": { label: modelsFile.videoModel.label, model: `${modelsFile.videoModel.label} (${modelsFile.videoModel.modelId})`, line: "AI footage for cut-aways (scenes with no character), 6 seconds a shot. Posts that use it carry the platforms' AI label." },
+  "nova-reel": {
+    label: modelsFile.videoModel.label,
+    model: modelsFile.videoModel.label,
+    line: "AI footage for cut-aways (scenes with no character), 6 seconds a shot. Posts that use it carry the platforms' AI label.",
+    tech: bedrockTech(modelsFile.videoModel),
+  },
   "builtin-rig": { label: "Built-in drawings", model: "Lamo Stories' own character drawings", line: "Every character looks the same in every video." },
-  "nova-canvas": { label: `Also AI portraits (${modelsFile.imageModel.label})`, model: `${modelsFile.imageModel.label} (${modelsFile.imageModel.modelId})`, line: "Makes a portrait of each character for the app. Videos still use the drawings." },
+  "nova-canvas": {
+    label: `Also AI portraits (${modelsFile.imageModel.label})`,
+    model: modelsFile.imageModel.label,
+    line: "Makes a portrait of each character for the app. Videos still use the drawings.",
+    tech: bedrockTech(modelsFile.imageModel),
+  },
   "builtin-synth": { label: "Built-in sounds and music", model: "Lamo Stories' own sound maker", line: "Every sound effect, noise and tune, made fresh for each video." },
 };
 
@@ -86,6 +102,12 @@ function ModelLine({ providers, id }: { providers: ProviderStatus[] | null; id: 
         <strong>{MAKERS[id]?.model ?? p?.label ?? id}</strong>
         {p ? <Chip tone={PROVIDER_STATE[p.state].tone}>{PROVIDER_STATE[p.state].label}</Chip> : null}
       </p>
+      {/* Its exact Bedrock model ID, one tap away (§45.36 E14). */}
+      {MAKERS[id]?.tech ? (
+        <StTech className="st-stg-tech">
+          <span>{MAKERS[id].tech}</span>
+        </StTech>
+      ) : null}
       {/* The picked maker is not working yet: what it needs, in the API's own words (§45.11.6: on only after a real call). */}
       {p && (p.state === "needs_setup" || p.state === "unavailable") ? (
         <Note tone="sun" role="status">

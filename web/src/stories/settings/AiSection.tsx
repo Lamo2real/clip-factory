@@ -201,8 +201,10 @@ function DefaultModel({ data, pending, onPick, ws, reload }: { data: AiData; pen
 function DefaultEffort({ data, pending, onPick }: { data: AiData; pending: string | null; onPick: (e: Effort) => void }) {
   const m = modelOf(data.models, pending ?? data.ai.defaultModel);
   const value = pending ? null : data.ai.defaultEffort;
+  // "How hard it thinks" only for a model that has levels: one with none never hears about them (§45.36 E17).
+  const lede = m && !m.efforts.length ? "This model picks how hard it thinks by itself." : "How hard the model thinks. Higher is slower and costs more. Lower is quick.";
   return (
-    <SetCard title="Default effort" icon="ruler" lede="How hard the model thinks. Higher is slower and costs more. Lower is quick.">
+    <SetCard title="Default effort" icon="ruler" lede={lede}>
       {!m ? null : !m.efforts.length ? (
         <Note tone="sky">This model has no effort setting; it runs at its own level.</Note>
       ) : (

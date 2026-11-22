@@ -257,6 +257,37 @@ describe("Video and Storage in plain words (§45.36 E14)", () => {
     expect(shown(quality)).not.toContain("CRF");
     expect(quality.querySelector("details.st-tech-fold")?.textContent).toContain("Good 23, Better 20, Best 17");
   });
+
+  it("a maker's Bedrock model ID is one tap away: its first line is the model's plain name", async () => {
+    start();
+    await open("video");
+    await click(byText("[role=radio]", /Nova Canvas/));
+    await settle();
+    const pictures = card("Picture maker");
+    expect(pictures.querySelector(".st-stg-active strong")?.textContent).toBe("Amazon Nova Canvas");
+    expect(shown(pictures)).not.toContain("amazon.nova-canvas-v1:0");
+    expect(pictures.querySelector("details.st-tech-fold:not([open])")?.textContent).toContain("On Amazon Bedrock: Amazon Nova Canvas (amazon.nova-canvas-v1:0) in eu-west-1.");
+    await click(byText("[role=radio]", /Nova Reel/));
+    await settle();
+    const video = card("Video maker");
+    expect(video.querySelector(".st-stg-active strong")?.textContent).toBe("Amazon Nova Reel 1.1");
+    expect(shown(video)).not.toContain("amazon.nova-reel-v1:1");
+    expect(video.querySelector("details.st-tech-fold")?.textContent).toContain("(amazon.nova-reel-v1:1) in us-east-1.");
+  });
+});
+
+describe("no effort words for a model without levels (§45.36 E17)", () => {
+  it("Default effort only explains effort for a model that has levels", async () => {
+    start();
+    await open("ai");
+    expect(card("Default effort").textContent).toContain("Higher is slower and costs more");
+    await click(byText("[role=radio]", /Nova Pro/));
+    await settle();
+    const effort = card("Default effort");
+    expect(effort.textContent).toContain("This model has no effort setting; it runs at its own level.");
+    expect(effort.textContent).toContain("This model picks how hard it thinks by itself.");
+    expect(effort.textContent).not.toMatch(/Higher is slower|costs more/);
+  });
 });
 
 describe("one set of status words (§45.36 E17)", () => {
