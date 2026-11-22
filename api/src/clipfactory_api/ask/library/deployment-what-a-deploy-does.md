@@ -15,7 +15,8 @@ Triggered by a push to `main` ([deploy.yml](../.github/workflows/deploy.yml)) or
 5. **Terraform** `init` (S3 backend with lockfile), `plan`, then `apply` of exactly that plan. No manual approval
    (the owner's choice).
    Between the delete gate and the apply, `scripts/wait-for-jobs.sh` (the drain, CONTRACTS §30.7) waits for jobs
-   being made when the plan changes anything under `module.agent`: up to 25 minutes (a failed Scan is tried three times, then it goes on), counting `queued`/`running` jobs
+   being made when the plan changes anything under `module.agent` (clip jobs) or `module.stories_agent` (Lamo Stories' story
+   jobs, AI tasks and streaming chat answers, each drained only when its own runtime changes): up to 25 minutes (a failed Scan is tried three times, then it goes on), counting `queued`/`running` jobs
    with a fresh heartbeat (counts only in the log, read only). A job still running after that resumes on the new
    agent version by itself.
    The apply creates or updates every resource, including the three API Gateway APIs (REST first, then WebSocket,
@@ -40,6 +41,13 @@ Triggered by a push to `main` ([deploy.yml](../.github/workflows/deploy.yml)) or
    (`allow_clip_factory_change`) ticked, which turns the findings into warnings. It never lets a Lamo Stories route
    take a Clip Factory path. A change only to `config/*.json`, `skills/` or `agent/` by a Clip Factory pull request
    changes Clip Factory's agent tag (`module.agent.terraform_data.image` is replaced) and passes the check.
+   **Lamo Stories' providers** (CONTRACTS §45.22, §45.31): Amazon Nova Reel needs `stories_video_us_bucket = true` in
+   `infra/envs/prod` (a one-line pull request; it adds only the bucket `cf-prod-stories-video-<account>-us` in
+   us-east-1, private, shots kept 14 days, and lets `cf_prod_story_agent` start Nova Reel there). It stays off until the
+   owner allows Lamo Stories to keep generated shots in the US. Then, in the AWS console, Bedrock › Model access: turn
+   on Amazon Nova Reel in us-east-1 and Amazon Nova Canvas in eu-west-1 (Ireland) for character pictures. Lamo Stories'
+   reasoning models (Claude on Bedrock, and any model the owner adds in Settings › AI) need model access in their
+   Regions; Settings › AI › Check models and Settings › Video › Try it (Nova Reel) show what works.
 6. **Web**: [scripts/write-web-config.sh](../scripts/write-web-config.sh) writes `config.json` from the Terraform
    outputs, including `wsUrl` from `ws_url` and `oauthCallbackBase` from `oauth_callback_base` (both required; the
    script stops if one is missing); the build is synced to the web bucket (the sync never deletes TikTok's

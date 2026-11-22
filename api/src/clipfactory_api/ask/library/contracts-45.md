@@ -88,6 +88,7 @@ Lamo Clips' partition `USER#{userId}` gets **no new items**. Two new kinds of pa
 | Usage | same | `USAGE#{day}#{id}` | `type="ws_usage"`, `kind: "model" \| "provider"`, §45.25's usage fields (providers: `providerId`, `modelId`, `images` / `videoSec` / `renderSec`), `ttl` 400 days |
 | Onboarding | same | `ONBOARD` | `type="ws_onboard"`, `stepsDone`, `skipped`, `finishedAt` (§45.29) |
 | AI configuration | same | `AICONFIG` | `type="ws_aiconfig"`, `defaultModel`, `defaultEffort`, `tasks`, `prices`, `version`, `updatedAt` (§45.25; made on the first PUT with a conditional put; updates conditional on `version`) |
+| Added model | same | `MODELDEF#{key}` | `type="ws_modeldef"`, the `ModelDef` fields of §45.34/§45.35 D1, `version`, `createdAt`, `updatedAt` (key `custom-…`; at most 20; merged over `stories/config/models.json` per call by the API and the agent) |
 | Provider key | same | `PROVCRED#{providerId}` | `type="ws_provcred"`, `savedAt`, `hint` (the key itself only in Secrets Manager, §45.31) |
 | Own rate counters | `RATE#WS#{workspaceId}#{platform}` | `BUDGET` | only with Lamo Stories' own developer app (§45.30) |
 | OAuth state | `OAUTH#{nonce}` | `STATE` | the existing item (§17.4) plus `workspaceId` and `socialAccountId`, written only for a `w1.` state (§45.13.2) |
@@ -181,8 +182,11 @@ Lamo Stories first." Bodies are validated with `validate.py`; unknown keys are `
 | POST `/v1/workspaces/{ws}/stories/{storyId}/reject` **S** | `{ "reason"?: string (≤ 500) }` | `{ "story" }` |
 | POST `/v1/workspaces/{ws}/stories/{storyId}/changes` **S** | `{ "note"?: string (0–500), "sceneIds"?: string[], "override"?: ModelOverride }` (a note or scene ids at least) | `202 { "story", "job" }`: the writer rewrites the named scenes (a new take when there is no note: "Remake this scene") or the whole story with the note, then everything that changed is remade |
 | GET `/v1/workspaces/{ws}/stories/{storyId}/download` **S** | – | `{ "url", "filename" }` (only `approved` or `published`) |
+| POST `/v1/workspaces/{ws}/stories/{storyId}/download` **S** | `{ "format"?: "mp4" \| "webm" \| "mov" }` | `{ "url", "filename" }` (404 "That format was not made for this video." when that copy is absent; §45.34) |
+| POST `/v1/workspaces/{ws}/stories/{storyId}/captions` **S** | `{ "override"?: ModelOverride }` | `202 { "task": AiTask }` (kind `captions`; result `{ storyId, scriptVersion, postCaptions }`, a draft; 409 without a storyboard; §45.34) |
 | GET `/v1/workspaces/{ws}/library` **S** | query `kind?` (an AssetKind or `all`), `storyId?`, `characterId?`, `limit` ≤ 100, `cursor` | `{ "items": LibraryItem[], "nextCursor" }` |
 | GET `/v1/workspaces/{ws}/providers` **S** | – | `{ "providers": ProviderStatus[] }` (§45.11.6) |
+| POST `/v1/workspaces/{ws}/providers/nova-reel/check` **S** | – | `202 { "job": ProductionJob }` (jobType `provider_check`, one step "Try it"; never behind the not-ready guard; §45.35 D2) |
 | GET `/v1/workspaces/{ws}/guidance` **S** | – | `{ "topics": GuidanceTopic[], "checkedAt" }` (§45.11.5) |
 | GET `/v1/workspaces/{ws}/social` **S** | – | `{ "accounts": SocialAccount[] /* 5, in STORIES_PLATFORMS order */, "clips": ClipsDestination[] }` |
 | POST `/v1/workspaces/{ws}/social/{platform}/connect` **S** | – | `{ "authorizeUrl", "expiresAt" }` (§45.13.2); `409` "Lamo Clips has no {Platform} app keys yet. Set up {Platform} in Lamo Clips first (Settings › Posting › Set up posting, up to the keys step)." |
@@ -198,6 +202,8 @@ Lamo Stories first." Bodies are validated with `validate.py`; unknown keys are `
 | PUT `/v1/workspaces/{ws}/ai` **S** | `StoriesAiConfig & { "version" }` | `{ "ai" }` (unknown model keys, efforts a model does not offer, unknown tasks → 400 with the sentence) |
 | POST `/v1/workspaces/{ws}/ai/check-models` **S** | `{ "models"?: string[] }` | `202 { "task" }` (one tiny real call per model, §45.25) |
 | PUT `/v1/workspaces/{ws}/ai/prices/{modelKey}` **S** | `{ "inputPer1M", "outputPer1M", "currency" }` or `{}` to clear | `{ "model": ModelInfo }` |
+| PUT `/v1/workspaces/{ws}/ai/models/{modelKey}` **S** | `ModelDef` (§45.34, §45.35 D1) | `{ "model": ModelInfo }` (400 with the sentence for a bad field; at most 20) |
+| DELETE `/v1/workspaces/{ws}/ai/models/{modelKey}` **S** | – | `204` (409 naming the saved setting that still uses it) |
 | GET `/v1/workspaces/{ws}/usage` **S** | query `days` ≤ 30 | `{ "usage": UsageSummary }` |
 | GET `/v1/workspaces/{ws}/agents/{agentId}` **S** | – | `{ "agent" }` |
 | PATCH `/v1/workspaces/{ws}/agents/{agentId}` **S** | `{ "version", "instructions"?, "active"?, "model"?: string \| null, "effort"?: Effort \| null, "skillIds"? }` or `{ "reset": true }` | `{ "agent" }` |
@@ -222,6 +228,7 @@ Lamo Stories first." Bodies are validated with `validate.py`; unknown keys are `
 | GET / PATCH `/v1/workspaces/{ws}/onboarding` **S** | PATCH: `{ "step": OnboardStep, "done"?: boolean, "skipped"?: boolean }` or `{ "finish": true }` | `{ "onboarding": Onboarding }` |
 | PUT / DELETE `/v1/workspaces/{ws}/providers/{providerId}/key` **S** | PUT: `{ "key" }` (≤ 4 KB) | `{ "provider": ProviderStatus }` (never returns the key) / `204` |
 | GET `/v1/workspaces/{ws}/storage` **S** | – | `{ "storage": StorageSummary }` |
+| POST `/v1/workspaces/{ws}/storage/cleanup` **S** | – | `{ "removed": { "files", "bytes" } }` (applies keepReferences, keepChatPictures and keepVersions now; §45.34) |
 | POST `/v1/workspaces/{ws}/stories/{storyId}/publish` **S** | `{ "targets": PublishTarget[] (1–5, each platform once) }` | `202 { "publishingJobs": PublishingJob[] }` (§45.14) |
 | GET `/v1/workspaces/{ws}/publishing` **S** | query `storyId?` | `{ "publishingJobs": PublishingJob[] }` newest first |
 | POST `/v1/workspaces/{ws}/publishing/{publishingJobId}/retry` **S** | `{ "options"?: PublishOptions, "confirmAccount"?: string /* the new externalAccountId the owner saw */ }` | `202 { "publishingJob" }` (only `failed` or `needs_attention`; `409` naming the new account when the destination changed and `confirmAccount` does not match it) |
@@ -1138,16 +1145,20 @@ every screen runs under `npm run dev:mock` and in Playwright.
 | `infra/modules/hooks`, `infra/modules/flows`, `infra/envs/prod` | §45.15 | C | `terraform test`; the deploy's Plan and Delete gate lines |
 | `.github/workflows/deploy.yml`, `ci.yml`, `scripts/wait-for-jobs.sh` | the Lamo Stories agent image tag and push, the scripted plan check, a deeper preflight in the smoke job; a `stories-agent` CI job (lint, types, tests, image build) and a web bundle check; the drain for `PJOB#`, running `TASK#` and streaming `MSG#` | C (deploy, drain), E (stories-agent job), F (bundle check) | `scripts/test-deploy-workflow.sh`, the drain's test; Clip Factory's agent tag and its CI job unchanged |
 | `web/src/lib/router.ts` | one route name `stories` (page from `web/src/stories/routes.ts`) for `/stories…`, only when `storiesEnabled()` | Phase 1, then F | every old path parses to the same route |
-| `web/src/app/App.tsx` | the lazy `StoriesApp` for the `stories` route; its TITLES entry; the `AskMemoryProvider` mount | Phase 1, then F | every old route renders the same `Shell`; the main chunk gains only `flag.ts`, `routes.ts` and the lazy stub, no `.stories-app` or `--st-` rule in the main CSS, no StoriesApp or engine code in the main JS (a CI grep over `web/dist`) |
-| `web/src/components/Nav.tsx` | the switcher in the sidebar foot and the phone top bar (hidden while off) | F | the nav specs unchanged; the before/after pixel check (§45.19) |
-| `web/src/styles/glide.css` | the switcher's container in the Glide list | F | – |
+| `web/src/app/App.tsx` | the lazy `StoriesApp` for the `stories` route; its TITLES entry; the `AskMemoryProvider` mount; round 3–4: `BothApps`/`AppPanes` (each app stays mounted once shown, the hidden one `hidden` + `inert`, its own error boundary), `redirectAtStart()`, `<WorkspaceSwitch place="topbar" />` in the phone top bar, the calm-motion and error-sound hooks; the main chunk gains `flag.ts`, `routes.ts`, `pane.tsx`, `prefs.ts`, `workspace.ts` and the lazy stub, each inert while `STORIES_ON` is false | Phase 1, then F, W3b, W4b | every old route renders the same `Shell`; `stories-clips-unchanged.spec.ts` (the page tree, the shell boxes at 12 sizes); the before/after pixel check (§45.19) |
+| `web/src/components/Nav.tsx` | the switcher in the sidebar foot, the phone top bar and (round 4) a slim toggle beside the fold button in short folded windows; the idle prefetch of `StoriesApp` (all hidden while off) | F, W3b, W4b | the nav specs unchanged; the before/after pixel check (§45.19) |
+| `web/src/components/Glide.tsx` | an additive `GlideCalm` context; its default is Clip Factory's `prefersReducedMotion`, so every Clip Factory `<Glide>` behaves as before; only `StoriesApp` provides Lamo Stories' own motion setting | W3b | `storiesShellQuiet.test.tsx` ("Clip Factory's Glide unchanged"); the flag-off pixel check |
+| `web/src/lib/confetti.ts` | one guard: no burst while Lamo Stories is on screen (a no-op while `STORIES_ON` is false) | W4b | the confetti tests unchanged; the flag-off pixel check |
+| `web/src/screens/home/NewJobForm.tsx` | reads its search through `useKeptSearch()`, which returns `window.location.search` exactly as before outside a Lamo Stories pane wrapper (so campaign Home survives a round trip) | W4b | the Home and campaign specs unchanged; the flag-off pixel check |
+| `web/vite.config.ts` | the dev server may read `stories/config` (dev mode only; builds unchanged) | lead | the build is byte-identical |
+| `web/src/styles/glide.css` | the switcher's container in the Glide list and its own `.ws-*` styles | F | the flag-off pixel check |
 | `web/areas.json` | Lamo Stories folders → "Behind the scenes" (Phase 1), "Lamo Stories" by the switch PR | Phase 1 | `update.test.ts` |
 | generated files | help corpus, the HELP_ASSISTANT routes table, Ask knowledge | every PR that changes docs, the router, Nav or App | their `--check` steps |
 
 Not touched at all: `agent/**` (Clip Factory's agent: code, Dockerfile, dockerignore, tests, scan allow-list),
 `config/**` (`config/stories-guidance.json` moves to `stories/config/guidance.json`), `app.py`, `agent_client.py`,
 `flow_client.py`, `platforms/**`, `oauth/tokens.py`, `oauth/providers.py`, `oauth/secrets.py`, Clip Factory's
-screens and styles.
+screens and styles (except the one `NewJobForm.tsx` hook above).
 
 Open pull requests that touch the same files on 2026-11-21 (whoever merges second keeps both sides; generated files
 are never merged by hand: take main's and rerun `node web/scripts/help-corpus.mjs --write-docs` then `node
@@ -1842,3 +1853,52 @@ Factory change landing in the same unapplied range; it never lets a Lamo Stories
 `App.tsx` row also covers `redirectAtStart()` and `<WorkspaceSwitch place="topbar" />` in the phone top bar, and the
 `glide.css` row covers the switcher's own `.ws-*` styles. `web/vite.config.ts` lets the dev server read
 `stories/config` (dev mode only).
+
+### 45.35 Round-4 decisions (the second audit; they win over anything above)
+
+A second audit of main against every numbered point of both requests (after round 3) left 48 verified gaps, 5 major
+and 43 minor, none blocking. Round 4 closes them as follows.
+
+* **D1.** Added models say how they are called: ModelDef gains effortField: "output_config" | "none" (default "output_config" when provider is "Anthropic", else "none"; efforts must be empty when "none", refused with a sentence otherwise), tools: boolean (default true for Anthropic, false otherwise) and cache: boolean (default true for Anthropic and Amazon, false otherwise). The agent builds each Bedrock request from these: output_config.effort only for effortField output_config; toolConfig only when tools is true (otherwise structured answers are asked for as JSON in the text, parsed and validated with one retry; the chat runs without tool actions and says so once); cachePoint only when cache is true. Check models sends the same shape.
+* **D2.** Nova Reel can be tried: POST /v1/workspaces/{ws}/providers/nova-reel/check -> 202 { job: ProductionJob } (jobType "provider_check", one step key "check", label "Try it"), never behind the not-ready guard; the agent makes one 6-second test shot into the US bucket when CF_VIDEO_BUCKET is set (else the job ends with the needs_setup sentence), proves PROVIDER#animation#nova-reel on success or records Bedrock's sentence, and deletes the test file. Settings › Video shows "Try it" on the Nova Reel row (the line says it makes one 6-second test shot, which Amazon bills).
+* **D3.** Pictures do not stop videos: the story create/produce/changes guard checks only configuration.providers.video; the images provider (Nova Canvas) gates portraits only.
+* **D4.** Messages return their one-time choice: assistant messages carry requested: ModelOverride | null; the web prefers it over its own device copy.
+* **D5.** Model records are exact: meta.models entries (jobs), TASK# and assistant MSG# keep model, modelId (the Bedrock id or profile really called), region, effort, effortApplied, task, and failed: true when the call failed; the API passes all of them through; the web shows the model id in a details line.
+* **D6.** Changing an added model's modelId or region deletes its MODELSTATUS# (it reads "Not checked yet").
+* **D7.** Setup step 1 ticks only from AICONFIG.pickedAt.environment or a MODELSTATUS# written by Check models (attribute by: "check").
+* **D8.** ModelInfo gains host (who runs it: "Amazon Bedrock"); provider is the maker ("Anthropic", "Amazon", ...). stories/config/models.json: bundled Claude models provider "Anthropic", host "Amazon Bedrock"; Amazon models provider "Amazon". Screens say "{provider} on {host}".
+* **D9.** A cleared reference video: the mark is fileRemovedAt everywhere (both sides still read the old sourceRemovedAt); ReferenceVideo carries fileRemoved: boolean and studyKept: boolean; the page says "The video was removed to save space. Its study stays." only when studyKept, else "The video was removed to save space."; Settings says "its study stays if it was studied". A failed re-analysis keeps status "analyzed" when an analysisKey exists (the API's rule), and the pipeline and the chat accept a reference whose analysisKey exists.
+* **D10.** The Library's Videos tab lists kind "video" copies (WebM, MOV) next to final_video; the API's library filter accepts kind "video".
+* **D11.** The dashboard reads accounts through social.public_of (settled), onboarding treats a stored "connected" that equals Lamo Clips' identity as todo with the same-as-Clips line, a failed post whose reason is an account problem links Fix it to Social accounts, and the API's own job failures (stale heartbeat, failed start) write a "failed" ACT# like the agent does.
+* **D12.** Added-model ARNs: the runtime role may also invoke provisioned-model, custom-model, custom-model-deployment and imported-model ARNs of the account (in place, never a replace).
+* **D13.** Post captions follow the video's shape: the brief says vertical, square or wide from story.format; #shorts is added only for 9:16.
+* **D14.** The ASS writer uses the engine's safe boxes (cli.ts catalog formats[].safe) for every shape, so burned-in text sits where the preview shows it.
+* **D15.** Writer rule: each cast member acts like its personality and traits, and its own sound moments use its favouriteEffects where they fit (writer SYSTEM and the storyboard agent's instructions in stories/config/agents.json).
+* **D16.** The two apps stay apart when something breaks: each pane (Clip Factory and Lamo Stories) has its own error boundary; Lamo Stories' card says "Lamo Stories had a problem." with Try again (re-creates the lazy app) and Go to Clip Factory (writes workspace clips, goes to the last Clip Factory page). Clip Factory's own boundary and fallback stay as they are.
+* **D17.** The hidden app is quiet: when a pane is hidden, every playing video and audio inside it is paused; Lamo Stories' previews stop painting while hidden; Clip Factory's confetti burst does not draw while Lamo Stories is on screen (an additive guard in web/src/lib/confetti.ts that is a no-op while Lamo Stories is off); every Lamo Stories page change after an await goes through storiesGoLater (Characters create/delete, RefPage talk/delete, Chat New chat, chat action cards, Connections' connect redirect is skipped while Lamo Stories is behind and resumes when it is back).
+* **D18.** Campaign Home is kept on a round trip: NewJobForm reads its search through a tiny hook (useKeptSearch) that returns window.location.search exactly as today when no Lamo Stories pane wrapper is around it (so Clip Factory with Lamo Stories off is byte-for-byte the same), and the kept route's search inside the Clip Factory pane; App.tsx then drops the campaign case from "fresh" (the skill editor stays fresh only while it has unsaved typing, or stays fresh as today if that cannot be done without changing it).
+* **D19.** One click everywhere: with the sidebar folded in short windows (under about 570 px tall), a slim switcher toggle sits in .sidebar__top beside the fold button without moving it; the flag-off app is unchanged.
+* **D20.** The pixel check ignores antialiasing only (pixelmatch includeAA false, threshold about 0.1) and still fails on any layout or colour change; the lead runs it on the switch PR.
+* **D21.** Words and layout: provider ids are never shown raw (Built-in animator, Built-in drawing, Built-in sounds, Claude on Amazon Bedrock, Amazon Nova Canvas/Reel); one "Made with" heading (the other "Helpers used"); no raw s3:// paths (say "Lamo Stories' own folder in Clip Factory's media storage", the path behind a "Technical details" fold); the safety topic's title, not its id; previews show a character's own face (happy if it has it, else its first non-neutral face); Setup step 4 says "On. Cartoons drawn right here, tall, square or wide, 30 frames a second."; Ideas' "Write it again" keeps the full idea's own length; Check now is hidden on a choose_account card; one toast per pick on Social accounts (drop the duplicate), and toasts sit above an open sheet's action bar on phones; text never cut off at 320 px (dashboard accounts wrap, the timeline chip shows the short name, idea tiles clamp at 5 lines); the Post it sheet's "Not ready to post" rows stay readable at 320-390 px (min-width 0, the link on its own row on phones).
+
+**Written down from round 3** (built; the shapes the API, the agent and the web share):
+
+* `ModelInfo` gains `custom: boolean`, `host: string` (D8), and for added models `region` and `maxOutputTokens`.
+* `ReferenceVideo` gains `fileRemoved: boolean` and `studyKept: boolean` (D9); `bytes` is 0 once the file is cleared.
+* `Message` (assistant) gains `requested: ModelOverride | null` (D4).
+* `ProductionJob.meta.models[]` entries may carry `task`, `modelId`, `region` and `failed: true` (D5).
+* `PATCH …/stories/{storyId}` with a new `format` on a story that has a storyboard but no video writes script
+  `v{n+1}` at the new size (an owner `ASSET#`, the safety check carried over) and marks scenes through preview stale.
+* Settings › Video's render minutes are render work: each built-in scene's own render seconds, summed (scenes rendered
+  side by side each count fully), not wall-clock time.
+* Nova Reel's not-ready sentence is the API's `NOT_READY["nova-reel"]`, word for word in the agent; other causes use
+  the same template with what is missing.
+* Internal attributes (never returned; in the tests' leak lists): `REFVID#` `fileRemovedAt` (the old name
+  `sourceRemovedAt` is still read) and `note`; `MSG#` `picturesRemovedAt` (attachments emptied by keepChatPictures,
+  the same in the API's cleanup and the agent's sweep); `AICONFIG.pickedAt`; `MODELSTATUS#.by` (`"check"` when Check
+  models wrote it).
+* Web: Lamo Stories' celebrations use its own star burst (`ui.tsx` `starBurst`), never Clip Factory's confetti; its
+  sounds go through `stories/prefs.ts` (`storiesSound`, `storiesReduceMotion`, `setStoriesDevicePref`; keys
+  `sound.enabled`, `sound.click`, `motion.reduce` in `cf.stories.prefs`); page changes after a request go through
+  `storiesGoLater` (`stories/pane.tsx`), which waits while Clip Factory is on screen. Plain toasts stay global
+  (§45.16.2); cheers and confetti never show over the other app.
