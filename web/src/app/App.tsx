@@ -1,6 +1,6 @@
 import "../styles/contentrewards.css";
 import "../styles/finder.css";
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentType } from "react";
 import { initApi } from "../api/index.ts";
 import { auth, onSignedOut } from "../lib/auth.ts";
 import { loadConfig } from "../lib/config.ts";
@@ -20,6 +20,7 @@ import { GetAppPanel } from "../components/GetApp.tsx";
 import { LiveDot } from "../components/LiveDot.tsx";
 import { A, Button, Empty, LinkButton } from "../components/ui.tsx";
 import { Home } from "../screens/home/Home.tsx";
+import { campaignStart } from "../screens/home/NewJobForm.tsx";
 import { JobDetail } from "../screens/jobs/JobDetail.tsx";
 import { Jobs } from "../screens/jobs/Jobs.tsx";
 import { Library } from "../screens/library/Library.tsx";
@@ -45,15 +46,19 @@ import { AppBadge } from "../lib/badge.ts";
 import { MacFetchHost } from "./MacFetchHost.tsx";
 import { forgetDevice } from "../lib/push.ts";
 import { redirectAtStart, storiesTitle } from "../stories/workspace.ts";
+import { storiesEnabled } from "../stories/flag.ts";
+import type { StoriesPage } from "../stories/routes.ts";
+import { AppPanes, loadStoriesApp, storiesModule, useAppActive } from "../stories/pane.tsx";
+import { calmPage, deniedSound, followStoriesMotion } from "../stories/prefs.ts";
 /**
  * The motion gallery (§20.10): mock builds only. Tested on import.meta.env directly (not isMock) so a real build
  * drops the import and does not even carry the code.
  */
 const MotionGallery = import.meta.env.VITE_MOCK === "1" ? lazy(() => import("../dev/MotionGallery.tsx").then((m) => ({ default: m.MotionGallery }))) : null;
 
-/** Lamo Stories (docs/CONTRACTS.md §45.16.2) loads only when it is opened, so Lamo Clips' own bundle and styles stay as
- * they were. */
-const StoriesApp = lazy(() => import("../stories/StoriesApp.tsx").then((m) => ({ default: m.StoriesApp })));
+/** Lamo Stories (docs/CONTRACTS.md §45.16.2) loads only when it is opened (or, once the switcher is on screen, while
+ * the browser is idle: stories/pane.tsx), so Lamo Clips' own bundle and styles stay as they were. */
+const LazyStoriesApp = lazy(() => loadStoriesApp().then((m) => ({ default: m.StoriesApp })));
 
 // Opening the app at "/" when Lamo Stories was the last choice goes to the last Lamo Stories page (§45.16.1), before
 // the first screen draws. Nothing happens while Lamo Stories is switched off.
@@ -131,8 +136,9 @@ export function App() {
     [],
   );
 
+  // Calm motion (Settings › Look & feel). While a Lamo Stories page is on screen, Lamo Stories' own switch (§45.34).
   useEffect(() => {
-    document.documentElement.classList.toggle("reduce-motion", prefs.reduceMotion);
+    document.documentElement.classList.toggle("reduce-motion", calmPage(prefs.reduceMotion));
   }, [prefs.reduceMotion]);
 
   const signOut = useCallback(async () => {
@@ -146,7 +152,7 @@ export function App() {
   }, []);
 
   return (
-    <ToastProvider onError={() => sounds.play("deny")}>
+    <ToastProvider onError={() => (storiesEnabled() ? deniedSound() : sounds.play("deny"))}>
       <Backdrop />
       <GlassFilter />
       {/* The desktop window's title bar band (macOS, §11.1): invisible, and only there when look.ts set
@@ -169,9 +175,7 @@ export function App() {
       ) : (
         <SessionProvider onSignOut={signOut}>
           {/* Ask's conversation sits above the Clip Factory / Lamo Stories branch, so a switch keeps it (§45.16.1). */}
-          <AskMemoryProvider>
-            <Shell />
-          </AskMemoryProvider>
+          <AskMemoryProvider>{storiesEnabled() ? <BothApps /> : <Shell />}</AskMemoryProvider>
         </SessionProvider>
       )}
       {boot.state === "ready" || boot.state === "signed_out" ? <UpdateBar /> : null}
@@ -179,8 +183,50 @@ export function App() {
   );
 }
 
-function Shell() {
+/**
+ * Lamo Stories switched on (docs/CONTRACTS.md §45.16.2, §45.34): Clip Factory's Shell for every Lamo Clips route and
+ * Lamo Stories' own shell for /stories. Each, once shown, stays mounted while the other is on screen (hidden and
+ * inert), so coming back shows it exactly as it was left. Two Clip Factory pages open fresh instead: the skill editor
+ * (it asks "Leave without saving?", and unsaved typing is never carried across a switch) and Home opened for a
+ * campaign (`/?campaign=…`: Home picks its way from the live address, which is Lamo Stories' while it is hidden, so it
+ * could not be kept as it was; it is let go, as before this shell, never half kept).
+ */
+function BothApps() {
   const route = useRoute();
+  const inStories = route.name === "stories";
+  const lastStories = useRef<StoriesPage>(inStories ? route.page : { name: "dashboard" });
+  if (route.name === "stories") lastStories.current = route.page;
+  const lastClips = useRef<Route>(route);
+  const lastClipsSearch = useRef(typeof location === "undefined" ? "" : location.search);
+  if (!inStories) {
+    lastClips.current = route;
+    lastClipsSearch.current = typeof location === "undefined" ? "" : location.search;
+  }
+  const held = lastClips.current;
+  const fresh = (held.name === "skill" && held.mode !== "read") || (held.name === "home" && campaignStart(lastClipsSearch.current).campaignId) ? "clips" : null;
+  // The calm-motion class follows the app on screen (Lamo Stories' own switch, Clip Factory's otherwise).
+  useLayoutEffect(() => followStoriesMotion(), [inStories]);
+  return <AppPanes on={inStories ? "stories" : "clips"} fresh={fresh} clips={<Shell />} stories={<StoriesHost page={lastStories.current} />} />;
+}
+
+/** Lamo Stories' shell, from its own chunk: at once when the idle prefetch already brought it, else after it loads. */
+function StoriesHost({ page }: { page: StoriesPage }) {
+  const [Stories] = useState<ComponentType<{ page: StoriesPage }>>(() => storiesModule()?.StoriesApp ?? LazyStoriesApp);
+  return (
+    <Suspense fallback={<div className="boot" role="status" aria-label="Loading Lamo Stories" />}>
+      <Stories page={page} />
+    </Suspense>
+  );
+}
+
+function Shell() {
+  // On screen (always, while Lamo Stories is switched off). Hidden behind Lamo Stories, it keeps its last page and
+  // stays quiet: no title, no focus move, no redirect.
+  const active = useAppActive();
+  const live = useRoute();
+  const kept = useRef(live);
+  if (active) kept.current = live;
+  const route = kept.current;
   const hash = useHash();
   const main = useRef<HTMLElement>(null);
   const first = useRef(true);
@@ -189,30 +235,26 @@ function Shell() {
 
   // Old one-page Settings links (`/settings#skills`, the hooks API's `?account=…`) go to their branch (§15.1).
   useLayoutEffect(() => {
+    if (!active) return;
     const to = legacySettingsRedirect(location.pathname, location.search, location.hash);
     if (to) navigate(to, { replace: true });
-  }, [page, hash]);
+  }, [page, hash, active]);
 
-  // After a page change, move focus to the page so screen readers start at its heading.
+  // After a page change (or coming back from Lamo Stories), move focus to the page so screen readers start at its
+  // heading.
   useEffect(() => {
+    if (!active) return;
     document.title = `${titleFor(JSON.parse(page) as Route)} · Clip Factory`;
     if (first.current) {
       first.current = false;
       return;
     }
     main.current?.focus({ preventScroll: true });
-  }, [page]);
+  }, [page, active]);
 
   // Mock mode's pretend consent pages stand alone, like the platform's real page would.
   if (route.name === "mock_oauth") return <MockConsent platform={route.platform} />;
   if (route.name === "mock_cr_consent") return <MockCrConsent />;
-  // Lamo Stories has its own shell (docs/CONTRACTS.md §45.16.2); every other route keeps this one, unchanged.
-  if (route.name === "stories")
-    return (
-      <Suspense fallback={<div className="boot" role="status" aria-label="Loading Lamo Stories" />}>
-        <StoriesApp page={route.page} />
-      </Suspense>
-    );
 
   return (
     <div className="app">
@@ -233,7 +275,7 @@ function Shell() {
           <WorkspaceSwitch place="topbar" />
           <LiveDot />
         </header>
-        <main className="main" id="main" ref={main} tabIndex={-1}>
+        <main className="main" id={active ? "main" : undefined} ref={main} tabIndex={-1}>
           {/* One broken screen never blanks the app; moving to another page clears the error. */}
           {/* The Mac app's "send this now" banner (§38.6): in the flow, so it never covers a control. */}
           <CrSendNow route={route} />

@@ -5,7 +5,11 @@
 // others, reached from the dashboard's card until it is finished. Lamo Clips' Ask and setup to-do are not shown
 // here; the Mac app's "send this now" banner (CrSendNow), the Mac download host and the app badge are, unchanged, and
 // the update bar, toasts and sounds stay global (App.tsx). The page title and the theme colour go back to Lamo
-// Clips' when this unmounts.
+// Clips' when this is hidden or unmounts. With Clip Factory on screen it stays mounted behind it, hidden and inert
+// (stories/pane.tsx, §45.34), so coming back shows the page exactly as it was; meanwhile it is quiet (no title, no
+// focus move, no workspace check, no dashboard poll). Its workspace is picked at once from the list the switcher
+// already read, and checked again in the background. Clicks and sounds follow Lamo Stories' own sound setting
+// (stories/prefs.ts).
 import "./styles/stories.css";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ApiError } from "../api/errors.ts";
@@ -17,6 +21,9 @@ import { A } from "../components/ui.tsx";
 import { AppBadge } from "../lib/badge.ts";
 import { navigate, useHash } from "../lib/router.ts";
 import { loadStoriesApi, setStoriesApi } from "./api/client.ts";
+import { GlideCalm } from "../components/Glide.tsx";
+import { takeParkedStoriesGo, useAppPane } from "./pane.tsx";
+import { followStoriesClicks, storiesReduceMotion } from "./prefs.ts";
 import type { StoriesApi, Workspace } from "./api/types.ts";
 import { storiesHref, type StoriesPage } from "./routes.ts";
 import { CharactersScreen } from "./screens/Characters.tsx";
@@ -32,7 +39,18 @@ import { SettingsScreen } from "./screens/Settings.tsx";
 import { SetupScreen } from "./screens/Setup.tsx";
 import type { StoriesScreenProps } from "./screens/types.ts";
 import { NeedsYouBar, refreshOnboarding, StBoundary, StEmpty, StError, StIcon, StLinkButton, StLoading, useDashboard, type StIconName } from "./ui.tsx";
-import { onChoiceChange, rememberStoriesPath, setKnownWorkspaces, setStoriesPrefs, storiesPrefs, wantedStoriesWorkspace } from "./workspace.ts";
+import {
+  onChoiceChange,
+  rememberStoriesPath,
+  restoreScroll,
+  serverWorkspaces,
+  setKnownWorkspaces,
+  setStoriesPrefs,
+  storiesPrefs,
+  storiesTitle,
+  takeStoriesScroll,
+  wantedStoriesWorkspace,
+} from "./workspace.ts";
 
 interface NavItem {
   label: string;
@@ -261,13 +279,30 @@ function ReviewCountFor({ ws }: { ws: string }) {
   );
 }
 
+/** The workspace the switcher's list already names (null until the server answered this visit). */
+function quickWorkspace(fromAddress: string | null): string | null {
+  const list = serverWorkspaces();
+  return list ? chooseWorkspace(list, fromAddress, wantedStoriesWorkspace()) : null;
+}
+
 export function StoriesApp({ page }: { page: StoriesPage }) {
-  const [ws, setWs] = useState<string | null>(null);
+  // Its sliding highlights follow Lamo Stories' own calm-motion switch, never Clip Factory's once it has its own.
+  return (
+    <GlideCalm.Provider value={storiesReduceMotion}>
+      <StoriesShell page={page} />
+    </GlideCalm.Provider>
+  );
+}
+
+function StoriesShell({ page }: { page: StoriesPage }) {
+  // On screen (Clip Factory's shell may stay mounted behind it, and this one behind Clip Factory: stories/pane.tsx).
+  const { active, clipsMounted } = useAppPane();
+  const fromAddress = page.name === "connections" ? page.ws : null;
+  const [ws, setWs] = useState<string | null>(() => quickWorkspace(fromAddress));
   const [problem, setProblem] = useState<string | null>(null);
   const [more, setMore] = useState(false);
   /** The setup opened by itself: it shows on its own until the owner leaves it. */
   const [alone, setAlone] = useState(false);
-  const fromAddress = page.name === "connections" ? page.ws : null;
   const tried = useRef<Set<string>>(new Set());
   const main = useRef<HTMLElement>(null);
   const first = useRef(true);
@@ -284,10 +319,19 @@ export function StoriesApp({ page }: { page: StoriesPage }) {
     [fromAddress],
   );
 
-  // The workspace check, before the first screen (§45.16.2). listWorkspaces also makes "Lamo Stories" on first use.
+  // The workspace check (§45.16.2, §45.34): at once from the list the switcher already read, then the server's list
+  // again in the background, which wins when it disagrees (before the first screen when there is no list yet).
+  // listWorkspaces also makes "Lamo Stories" on first use. While Clip Factory is on screen it rests; coming back
+  // checks again.
   useEffect(() => {
+    if (!active) return;
     let live = true;
-    const run = () =>
+    const run = () => {
+      const quick = quickWorkspace(fromAddress);
+      if (quick) {
+        setWs(quick);
+        setProblem(null);
+      }
       check()
         .then((id) => {
           if (!live) return;
@@ -296,15 +340,16 @@ export function StoriesApp({ page }: { page: StoriesPage }) {
             setProblem(null);
           } else setProblem("Lamo Stories is not ready yet. Try again in a minute.");
         })
-        .catch(() => live && setProblem("Lamo Stories could not load. Check that you are online, then try again."));
-    void run();
+        .catch(() => live && !quick && setProblem("Lamo Stories could not load. Check that you are online, then try again."));
+    };
+    run();
     // The switcher picked another Lamo Stories workspace: check again.
-    const off = onChoiceChange(() => void run());
+    const off = onChoiceChange(run);
     return () => {
       live = false;
       off();
     };
-  }, [check]);
+  }, [check, active, fromAddress]);
 
   // A screen found its workspace gone: ask for the list once more and use another one (once per id).
   useEffect(() => {
@@ -332,13 +377,13 @@ export function StoriesApp({ page }: { page: StoriesPage }) {
 
   // Every Lamo Stories page is where switching back lands.
   useEffect(() => {
-    if (ws) rememberStoriesPath(location.pathname + location.search + location.hash, ws);
-  }, [ws, pageKey, hash]);
+    if (active && ws) rememberStoriesPath(location.pathname + location.search + location.hash, ws);
+  }, [ws, pageKey, hash, active]);
 
   // The first time this studio opens, its setup opens by itself (once per studio on this device).
   const pageName = page.name;
   useEffect(() => {
-    if (!ws || pageName !== "dashboard") return;
+    if (!active || !ws || pageName !== "dashboard") return;
     let live = true;
     void refreshOnboarding(ws).then((o) => {
       if (!live || !opensSetup({ name: "dashboard" }, ws, o, storiesPrefs().setupShown)) return;
@@ -349,13 +394,14 @@ export function StoriesApp({ page }: { page: StoriesPage }) {
     return () => {
       live = false;
     };
-  }, [ws, pageName]);
+  }, [ws, pageName, active]);
   useEffect(() => {
     if (pageName !== "setup") setAlone(false);
   }, [pageName]);
 
-  // Its own title (App.tsx's titleFor names the page) and theme colour, given back on the way out.
+  // Its own theme colour and title while on screen, given back when it is hidden or leaves.
   useLayoutEffect(() => {
+    if (!active) return;
     const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     const colour = meta?.getAttribute("content") ?? null;
     const title = document.title;
@@ -364,17 +410,42 @@ export function StoriesApp({ page }: { page: StoriesPage }) {
       if (meta && colour !== null) meta.setAttribute("content", colour);
       document.title = title;
     };
-  }, []);
+  }, [active]);
 
-  // After a page change, focus moves to the page so screen readers start at its heading.
+  // The tab title names the page ("Ideas · Lamo Stories · Clip Factory", as App.tsx's titleFor does).
   useEffect(() => {
-    setMore(false);
+    if (active) document.title = `${storiesTitle(JSON.parse(pageKey) as StoriesPage)} · Clip Factory`;
+  }, [pageKey, active]);
+
+  // After a page change (or coming back from Clip Factory), focus moves to the page so screen readers start at its
+  // heading.
+  useEffect(() => {
+    if (!active) return;
     if (first.current) {
       first.current = false;
       return;
     }
     main.current?.focus({ preventScroll: true });
-  }, [pageKey]);
+  }, [pageKey, active]);
+  useEffect(() => setMore(false), [pageKey]);
+
+  // Clicks follow Lamo Stories' own sound setting while it is on screen.
+  useEffect(() => (active ? followStoriesClicks() : undefined), [active]);
+
+  // Back on screen: a page change that waited while Clip Factory was shown happens now (stories/pane.tsx
+  // storiesGoLater), else the page opens where the window was when the owner switched away.
+  useEffect(() => {
+    if (!active) return;
+    const at = location.pathname + location.search + location.hash;
+    const to = takeParkedStoriesGo();
+    if (to) {
+      takeStoriesScroll(at);
+      navigate(to, { replace: true });
+      return;
+    }
+    const y = takeStoriesScroll(at);
+    return y === null ? undefined : restoreScroll(y);
+  }, [active]);
 
   const on = (item: NavItem) => item.match.includes(page.name);
   const moreOn = MORE.some(on);
@@ -410,7 +481,7 @@ export function StoriesApp({ page }: { page: StoriesPage }) {
           <Brand />
           <WorkspaceSwitch place="stories-top" current={ws ?? "stories"} />
         </header>
-        <main className="st-main" id="main" ref={main} tabIndex={-1}>
+        <main className="st-main" id={active ? "main" : undefined} ref={main} tabIndex={-1}>
           <CrSendNow route={{ name: "stories", page }} />
           {ws && !solo ? <NeedsYouBar ws={ws} /> : null}
           {problem ? (
@@ -471,8 +542,13 @@ export function StoriesApp({ page }: { page: StoriesPage }) {
           </div>
         </div>
       ) : null}
-      <AppBadge />
-      <MacFetchHost />
+      {/* Clip Factory's shell runs these for both while it is mounted (behind this one or on screen). */}
+      {clipsMounted ? null : (
+        <>
+          <AppBadge />
+          <MacFetchHost />
+        </>
+      )}
     </div>
   );
 }

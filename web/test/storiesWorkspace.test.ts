@@ -32,6 +32,9 @@ import {
   settleSwitch,
   wantedStoriesWorkspace,
   setKnownWorkspaces,
+  serverWorkspaces,
+  saveStoriesScroll,
+  takeStoriesScroll,
   startPath,
   storiesTitle,
   switchTarget,
@@ -291,6 +294,33 @@ describe("the workspace list", () => {
     setKnownWorkspaces([STORIES, CLIPS, CARS, ws("clips2", "clips")]);
     expect(knownWorkspaces().map((w) => w.workspaceId)).toEqual(["clips", "stories", CARS.workspaceId]);
   });
+
+  it("keeps the server's own list for StoriesApp to open from at once (§45.34), none before it answered", () => {
+    expect(serverWorkspaces()).toBeNull();
+    // Even a list with no Lamo Stories workspace stays the server's own (the switcher still shows a default one).
+    setKnownWorkspaces([CLIPS]);
+    expect(serverWorkspaces()).toEqual([CLIPS]);
+    expect(knownWorkspaces().map((w) => w.workspaceId)).toEqual(["clips", "stories"]);
+    setKnownWorkspaces([CLIPS, CARS]);
+    expect(serverWorkspaces()).toEqual([CLIPS, CARS]);
+    resetWorkspaceMemory();
+    expect(serverWorkspaces()).toBeNull();
+  });
+});
+
+it("keeps Lamo Stories' own scroll position for one way back, only for a Lamo Stories page (§45.34)", () => {
+  saveStoriesScroll("/stories/review/S1", 812.4);
+  expect(takeStoriesScroll("/stories/review/S2")).toBeNull();
+  saveStoriesScroll("/stories/review/S1?ws=stories", 812.4);
+  expect(takeStoriesScroll("/stories/review/S1"), "the one-visit words do not count").toBe(812);
+  expect(takeStoriesScroll("/stories/review/S1")).toBeNull();
+  saveStoriesScroll("/library", 300);
+  expect(takeStoriesScroll("/library")).toBeNull();
+  saveStoriesScroll("/stories", Number.NaN);
+  expect(takeStoriesScroll("/stories")).toBeNull();
+  saveStoriesScroll("/stories", 40);
+  resetWorkspaceMemory();
+  expect(takeStoriesScroll("/stories")).toBeNull();
 });
 
 it("names each Lamo Stories page in the tab title", () => {

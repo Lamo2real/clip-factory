@@ -13,6 +13,7 @@ import { ConversationView } from "../chat/ConversationView.tsx";
 import { lastConversationId, rememberConversation } from "../chat/device.ts";
 import { Btn, Director, Empty, sentence, UndoBar, Waiting } from "../chat/kit.tsx";
 import { isPendingDelete, refusedDelete, scheduleDelete, undoDelete, usePendingDelete } from "../chat/undo.ts";
+import { useAppActive } from "../pane.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
 function newestFirst(list: Conversation[]): Conversation[] {
@@ -33,6 +34,7 @@ export function ChatScreen({ ws, page }: StoriesScreenProps) {
   const [creating, setCreating] = useState(false);
   const [createProblem, setCreateProblem] = useState<string | null>(null);
   const { pending, version } = usePendingDelete("conversation");
+  const active = useAppActive();
 
   useEffect(() => {
     let live = true;
@@ -49,12 +51,13 @@ export function ChatScreen({ ws, page }: StoriesScreenProps) {
     };
   }, [ws, round, version]);
 
-  // Opening Chat goes back to the chat that was open last (unless the owner asked for the list).
+  // Opening Chat goes back to the chat that was open last (unless the owner asked for the list). Never while Clip
+  // Factory is on screen (this page kept behind it): the address is Clip Factory's then, and the owner stays there.
   useEffect(() => {
-    if (convId || !list || wantsList()) return;
+    if (!active || convId || !list || wantsList()) return;
     const last = lastConversationId();
     if (last && list.some((c) => c.convId === last) && !isPendingDelete("conversation", last)) navigate(storiesHref({ name: "chat_conv", convId: last }), { replace: true });
-  }, [convId, list]);
+  }, [convId, list, active]);
 
   const onConversation = useCallback((c: Conversation) => {
     setList((prev) => (prev ? newestFirst([c, ...prev.filter((x) => x.convId !== c.convId)]) : prev));

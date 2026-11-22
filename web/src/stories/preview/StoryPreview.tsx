@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { drawFrame, frameCount, sceneFrames, textTrack } from "../engine/engine.ts";
 import type { StoryScript } from "../engine/types.ts";
+import { storiesReduceMotion } from "../prefs.ts";
 import { drawPrims, drawText } from "./draw.ts";
 
 export interface StoryPreviewProps {
@@ -43,7 +44,7 @@ export function StoryPreview({ script, sceneId, width, playing = true, loop = tr
     canvas.height = Math.round(height * dpr);
     const scale = canvas.width / script.width;
     const [from, to] = sceneId ? sceneFrames(script, sceneId) : [0, frameCount(script)];
-    const still = !playing || (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches);
+    const still = !playing || storiesReduceMotion();
     let raf = 0;
     let last = -1;
     const start = performance.now();

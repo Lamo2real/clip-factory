@@ -2,15 +2,18 @@
 // made, waiting for review, published, being made now (each with its step), connected accounts (n of 5 with names
 // and statuses), performance (views, likes, comments, shares; "No numbers yet"; numbers until 7 days after each post)
 // and recent activity (the last 10). Polled every 15 s with the Needs you bar (one shared call, §45.16.4). Until the
-// setup is finished, a card above the tiles shows its ring ("4 of 11 done") and what is left (§45.29).
-import { useState } from "react";
-import { friendlyMessage } from "../../api/errors.ts";
+// setup is finished, a card above the tiles shows its ring ("4 of 11 done") and what is left (§45.29). Above both,
+// "Continue: {name}" opens the idea, video, character or reference video the owner had open last (§45.34, request 2
+// §2 "Each application should remember its own ... Open projects"), hidden once it is gone.
+import { useEffect, useState } from "react";
+import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { A } from "../../components/ui.tsx";
 import { count, relative } from "../../lib/format.ts";
 import { storiesApi } from "../api/client.ts";
-import { STEP_LABEL, type StoriesDashboard } from "../api/types.ts";
+import { STEP_LABEL, type ProjectRef, type StoriesApi, type StoriesDashboard, type StoryStatus } from "../api/types.ts";
+import { currentChoice, rememberProject } from "../workspace.ts";
 import {
   celebrate,
   centerOf,
@@ -265,6 +268,93 @@ function Activity({ items }: { items: StoriesDashboard["activity"] }) {
   );
 }
 
+// ---------- Continue: the project open last ----------
+
+interface OpenProject {
+  kind: ProjectRef["kind"];
+  name: string;
+  href: string;
+}
+
+const PROJECT_WORDS: Record<ProjectRef["kind"], { line: string; icon: StIconName }> = {
+  idea: { line: "The idea you had open", icon: "bulb" },
+  story: { line: "The video you had open", icon: "clapper" },
+  character: { line: "The character you had open", icon: "face" },
+  reference: { line: "The reference video you had open", icon: "film" },
+};
+
+/** A video waiting for review (or done) opens in Review; one still being made, or stopped, in Production. */
+const IN_REVIEW: readonly StoryStatus[] = ["review", "needs_check", "approved", "rejected", "published"];
+
+/** A project that is not there any more (deleted): its own "could not find", never the workspace's. */
+export function projectGone(e: unknown): boolean {
+  return e instanceof ApiError && e.code === "not_found" && !/could not find that workspace/i.test(e.message);
+}
+
+/** The project's name and its page; null when it is gone (an idea no longer in the list), throws what the API threw. */
+export async function openProject(api: StoriesApi, ws: string, ref: ProjectRef): Promise<OpenProject | null> {
+  const id = encodeURIComponent(ref.id);
+  switch (ref.kind) {
+    case "idea": {
+      const idea = (await api.listIdeas(ws, "all")).find((i) => i.ideaId === ref.id);
+      return idea ? { kind: "idea", name: idea.title, href: `/stories/production/new?idea=${id}` } : null;
+    }
+    case "story": {
+      const { story } = await api.getStory(ws, ref.id);
+      return { kind: "story", name: story.title, href: `/stories/${IN_REVIEW.includes(story.status) ? "review" : "production"}/${id}` };
+    }
+    case "character": {
+      const c = await api.getCharacter(ws, ref.id);
+      return { kind: "character", name: c.name, href: `/stories/characters/${id}` };
+    }
+    case "reference": {
+      const { reference } = await api.getReference(ws, ref.id);
+      return { kind: "reference", name: reference.title, href: `/stories/references/${id}` };
+    }
+  }
+}
+
+/** "Continue: {name}": the project open last in this workspace (cf.workspace lastProject), hidden once it is gone. */
+function ContinueCard({ ws }: { ws: string }) {
+  const [open, setOpen] = useState<OpenProject | null>(null);
+  useEffect(() => {
+    const c = currentChoice();
+    const ref = c.lastProject;
+    // Another Lamo Stories workspace's project is not this one's.
+    if (!ref || (c.lastStoriesWorkspaceId !== null && c.lastStoriesWorkspaceId !== ws)) return;
+    let live = true;
+    openProject(storiesApi(), ws, ref)
+      .then((p) => {
+        if (!live) return;
+        setOpen(p);
+        if (!p) rememberProject(null);
+      })
+      .catch((e: unknown) => {
+        // Gone: forgotten, so it is not asked for again. Offline or a hiccup: simply not shown this time.
+        if (projectGone(e)) rememberProject(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [ws]);
+  if (!open) return null;
+  const words = PROJECT_WORDS[open.kind];
+  return (
+    <A href={open.href} className="st-continue" data-kind={open.kind}>
+      <span className="st-continue__icon" aria-hidden="true">
+        <StIcon name={words.icon} size={24} />
+      </span>
+      <span className="st-continue__text">
+        <span className="st-continue__kind">{words.line}</span>
+        <span className="st-continue__name">Continue: {open.name}</span>
+      </span>
+      <span className="st-continue__go" aria-hidden="true">
+        <StIcon name="chevron" size={20} />
+      </span>
+    </A>
+  );
+}
+
 /** The setup's card (§45.29): shown until the setup is finished, with the ring and the first things left. */
 function SetupCard({ ws }: { ws: string }) {
   const { data } = useOnboarding(ws);
@@ -314,6 +404,7 @@ export function DashboardScreen({ ws }: StoriesScreenProps) {
           </>
         }
       />
+      <ContinueCard ws={ws} />
       <SetupCard ws={ws} />
       {!data && error ? (
         <StError message={error} onRetry={reload} />
