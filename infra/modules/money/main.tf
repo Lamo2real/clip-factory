@@ -76,11 +76,17 @@ resource "aws_lambda_function" "money" {
     log_group  = aws_cloudwatch_log_group.money.name
   }
   environment {
-    variables = {
+    variables = merge({
       TABLE_NAME                = var.table_name
       SECRET_PREFIX             = var.secret_prefix
       MONEY_TIME_BUDGET_SECONDS = "240"
-    }
+      # §40.5.11: Your bank's reader follows the same switch as cf-prod-api, so turning it off also stops the daily
+      # read (the way back if Enable Banking says no). CONTENT_REWARDS: a Whop hint suggests Content Rewards only
+      # while it is on. An in-place env change.
+      BANK_READING    = var.bank_reading_enabled ? "on" : "off"
+      CONTENT_REWARDS = var.content_rewards_enabled ? "on" : "off"
+      # APP_URL fills the psu-referer header of his attended bank read ({APP_URL}/settings/posting/getpaid/bank).
+    }, var.app_url == "" ? {} : { APP_URL = var.app_url })
   }
 
   tags = local.tags
