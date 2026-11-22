@@ -29,6 +29,7 @@ the generator with `--check` and fails when this table is out of date. Do not ed
 | settings | `/settings/posting/where` |
 | settings | `/settings/posting/my-settings` |
 | settings | `/settings/posting/auto` |
+| settings | `/settings/posting/tiktok-mac` |
 | settings | `/settings/posting/money` |
 | settings | `/settings/look-and-feel/sounds` |
 | settings | `/settings/look-and-feel/motion` |

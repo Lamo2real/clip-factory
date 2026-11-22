@@ -23,3 +23,8 @@
   holds a clip on the server the moment it is tapped (a 24 h `holdUntil` that runs skip and a run's write refuses;
   Undo lifts it), because the decline itself only goes when Undo's 8 s toast ends and a run could fall in that gap;
   a day, because a phone locked during the toast stops its timer, so that decline can come hours late.
+- **Note (2026-11-22, ADR-83).** "TikTok never posts by itself" was the owner's own answer (§46.1 rule 2). On
+  2026-11-22 he gave a new, explicit go ("Full auto, 3-post trial", relayed by the coordinator after he saw the risks):
+  while Your Mac posts TikTok is on, a live run's normal clip also gets a TikTok post that his own Mac posts (CONTRACTS
+  §47). TikTok is still never one of a run's places and never goes through TikTok's API; Practice, Private test runs
+  and campaign clips never get one; and auto-posted Mac posts that wait are held while auto-posting is off.

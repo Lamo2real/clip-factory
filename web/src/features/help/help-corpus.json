@@ -1,5 +1,5 @@
 {
-  "version": "92c26d8edf22",
+  "version": "448523b66f94",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -36,6 +36,7 @@
     "src/screens/jobs/mergeJobs.ts",
     "src/screens/jobs/pendingStops.ts",
     "src/screens/library/Library.tsx",
+    "src/screens/library/MacButtons.tsx",
     "src/screens/library/PostYourself.tsx",
     "src/screens/library/WeekView.tsx",
     "src/screens/review/CampaignFit.tsx",
@@ -51,6 +52,7 @@
     "src/screens/settings/FollowBranch.tsx",
     "src/screens/settings/MoneyBranch.tsx",
     "src/screens/settings/NotifyBranch.tsx",
+    "src/screens/settings/TikTokMacBranch.tsx",
     "src/screens/settings/parts.tsx",
     "src/screens/settings/setup/bits.tsx",
     "src/screens/settings/setup/useSetup.ts"
@@ -79,6 +81,7 @@
     "/settings/posting/where",
     "/settings/posting/my-settings",
     "/settings/posting/auto",
+    "/settings/posting/tiktok-mac",
     "/settings/posting/money",
     "/settings/look-and-feel/sounds",
     "/settings/look-and-feel/motion",
@@ -697,9 +700,10 @@
         "private test run",
         "test it first",
         "auto-posting tiktok",
-        "auto-posting campaign clips"
+        "auto-posting campaign clips",
+        "auto-posting tiktok mac"
       ],
-      "answer": "**Auto-posting** posts your oldest clips in **Review** by themselves, every few hours, to each place that is set up. TikTok: you post it yourself (TikTok's rule). Each clip gets **Post it yourself**. Campaign clips wait for your **Upload**: Content Rewards can't take clips from Clip Factory by itself yet. Test it first with **Practice**: it picks the clips, but sends nothing.",
+      "answer": "**Auto-posting** posts your oldest clips in **Review** by themselves, every few hours, to each place that is set up. TikTok: you post it yourself (TikTok's rule), or your Mac does with **Your Mac posts TikTok** on. Campaign clips wait for your **Upload**: Content Rewards can't take clips from Clip Factory by itself yet. Test it first with **Practice**: it picks the clips, but sends nothing.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Auto-posting**.",
@@ -713,6 +717,45 @@
           "id": "autopost-turn-on:open",
           "label": "Open Auto-posting",
           "to": "/settings/posting/auto"
+        }
+      ]
+    },
+    {
+      "id": "tiktok-mac",
+      "kind": "guide",
+      "route": "/settings/posting/tiktok-mac",
+      "where": "Settings › Posting › Your Mac posts TikTok",
+      "title": "Let your Mac post your TikTok clips",
+      "keywords": [
+        "your mac posts tiktok",
+        "mac posts tiktok",
+        "my mac posts my tiktok clips",
+        "tiktok automation",
+        "automate tiktok",
+        "tiktok by itself",
+        "post on tiktok automatically",
+        "waiting for your mac",
+        "your mac is posting it",
+        "your mac stopped",
+        "posted by your mac",
+        "send these to my mac",
+        "post it yourself instead",
+        "set up your mac",
+        "mac helper",
+        "stop the mac"
+      ],
+      "answer": "With **Your Mac posts TikTok** on, **Upload** and auto-posting give TikTok to your Mac. It posts each clip for everyone, one at a time. **Library** shows **Waiting for your Mac**, then **Your Mac is posting it**, then **Posted by your Mac**. Stopped? Tap **Try again** or **Post it yourself instead**. To stop it, turn the switch off.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Your Mac posts TikTok**.",
+        "Turn on **My Mac posts my TikTok clips**.",
+        "Clips that show **Post it yourself**? Tap **Send these to my Mac**. They go one at a time, oldest first."
+      ],
+      "actions": [
+        {
+          "id": "tiktok-mac:open",
+          "label": "Open the switch",
+          "to": "/settings/posting/tiktok-mac"
         }
       ]
     },
@@ -4435,15 +4478,15 @@
         "review",
         "show",
         "views",
+        "post",
+        "yourself",
+        "instead",
         "save",
         "video",
         "tiktok",
         "paste",
         "close",
-        "make",
-        "earlier",
-        "week",
-        "later"
+        "make"
       ],
       "answer": "Library has every clip you uploaded.",
       "steps": [
@@ -4488,6 +4531,9 @@
         "loading",
         "check",
         "views",
+        "post",
+        "yourself",
+        "instead",
         "save",
         "video",
         "tiktok",
@@ -5132,9 +5178,10 @@
         "Where clips go",
         "My settings",
         "Auto-posting",
+        "Your Mac posts TikTok",
         "Money"
       ],
-      "answer": "Where your clips go. It has Set up posting, Get paid, Where clips go, My settings, Auto-posting, Money.",
+      "answer": "Where your clips go. It has Set up posting, Get paid, Where clips go, My settings, Auto-posting, Your Mac posts TikTok, Money.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**."
@@ -6105,6 +6152,143 @@
       ],
       "highlight": [
         "auto-post-test"
+      ]
+    },
+    {
+      "id": "settings-posting-tiktok-mac",
+      "kind": "page",
+      "route": "/settings/posting/tiktok-mac",
+      "where": "Settings › Posting › Your Mac posts TikTok",
+      "title": "Your Mac posts TikTok",
+      "keywords": [
+        "My Mac posts my TikTok clips",
+        "Your Mac",
+        "Send these to my Mac"
+      ],
+      "answer": "Your Mac posts your TikTok clips for everyone, one at a time.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Your Mac posts TikTok**."
+      ],
+      "actions": [
+        {
+          "id": "settings-posting-tiktok-mac:open",
+          "label": "Your Mac posts TikTok",
+          "to": "/settings/posting/tiktok-mac"
+        }
+      ]
+    },
+    {
+      "id": "apple-tiktok-mac-on",
+      "kind": "apple",
+      "route": "/settings/posting/tiktok-mac",
+      "hash": "tiktok-mac-on",
+      "where": "Settings › Posting › Your Mac posts TikTok",
+      "title": "My Mac posts my TikTok clips",
+      "keywords": [
+        "TikTok",
+        "Mac",
+        "computer",
+        "automation",
+        "automatic",
+        "by itself",
+        "helper",
+        "Chrome",
+        "everyone",
+        "public",
+        "on",
+        "off"
+      ],
+      "answer": "Upload and auto-posting give TikTok to your Mac. It posts each clip for everyone.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Your Mac posts TikTok**.",
+        "Find **My Mac posts my TikTok clips**."
+      ],
+      "actions": [
+        {
+          "id": "apple-tiktok-mac-on:open",
+          "label": "Your Mac posts TikTok",
+          "to": "/settings/posting/tiktok-mac#tiktok-mac-on",
+          "highlight": [
+            "tiktok-mac-on"
+          ]
+        }
+      ],
+      "highlight": [
+        "tiktok-mac-on"
+      ]
+    },
+    {
+      "id": "apple-tiktok-mac-status",
+      "kind": "apple",
+      "route": "/settings/posting/tiktok-mac",
+      "hash": "tiktok-mac-status",
+      "where": "Settings › Posting › Your Mac posts TikTok",
+      "title": "Your Mac",
+      "keywords": [
+        "checked in",
+        "last seen",
+        "waiting",
+        "queue",
+        "needs you",
+        "paused",
+        "set up",
+        "asleep"
+      ],
+      "answer": "When your Mac last checked in, and how many clips wait for it.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Your Mac posts TikTok**.",
+        "Find **Your Mac**."
+      ],
+      "actions": [
+        {
+          "id": "apple-tiktok-mac-status:open",
+          "label": "Your Mac posts TikTok",
+          "to": "/settings/posting/tiktok-mac#tiktok-mac-status",
+          "highlight": [
+            "tiktok-mac-status"
+          ]
+        }
+      ],
+      "highlight": [
+        "tiktok-mac-status"
+      ]
+    },
+    {
+      "id": "apple-tiktok-mac-send",
+      "kind": "apple",
+      "route": "/settings/posting/tiktok-mac",
+      "hash": "tiktok-mac-send",
+      "where": "Settings › Posting › Your Mac posts TikTok",
+      "title": "Send these to my Mac",
+      "keywords": [
+        "send",
+        "post it yourself",
+        "waiting",
+        "old clips",
+        "all",
+        "TikTok"
+      ],
+      "answer": "Clips that show Post it yourself can go to your Mac too.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Your Mac posts TikTok**.",
+        "Find **Send these to my Mac**."
+      ],
+      "actions": [
+        {
+          "id": "apple-tiktok-mac-send:open",
+          "label": "Your Mac posts TikTok",
+          "to": "/settings/posting/tiktok-mac#tiktok-mac-send",
+          "highlight": [
+            "tiktok-mac-send"
+          ]
+        }
+      ],
+      "highlight": [
+        "tiktok-mac-send"
       ]
     },
     {

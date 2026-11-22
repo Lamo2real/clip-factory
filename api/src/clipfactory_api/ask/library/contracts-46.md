@@ -22,6 +22,12 @@ Asked before building, he answered "Yes, all your picks" (2026-11-22). They are 
 2. **TikTok is never part of a run.** Clip Factory's uploads fail on his public account until TikTok approves the app
    (§42), and TikTok's rules want the creator's own pick of who can see each post, with no default (§17.8), so a
    post nobody tapped can't be a TikTok post even after approval. Each auto-posted clip keeps **Post it yourself**.
+   **Amended 2026-11-22 by the owner's new go ("Full auto, 3-post trial", relayed by the coordinator after he saw the
+   risks; ADR-83):** TikTok is still never one of a run's places and never goes through TikTok's API, but while
+   **Your Mac posts TikTok** is on (`settings.tiktokMac.on`, §47) a live run's normal clip also gets a TikTok post
+   for his Mac (`source: "auto"`, My settings' Everyone with Comment, Duet and Stitch on), written in the same
+   transaction as its other posts. Practice, Private test runs and campaign clips never get one. Clips already
+   waiting go too when he sends them ("Send them too": oldest first, one every 30 minutes, after the trial).
 3. **Campaign clips wait for his Upload** while Content Rewards can't take them from Clip Factory by itself (it only
    takes a clip in its first 30 minutes, §38.6; his account can't connect apps yet). Once it can (§46.5 rule 4) they go
    too, the campaign way (§38.14).
@@ -55,7 +61,8 @@ toast "Saved.":
 3. **Where they go**: "Goes to YouTube, Instagram and Facebook." (the run's places, §46.6, in STATS_ORDER), then one
    line per place left out: "TikTok: you post it yourself (TikTok's rule). Each clip gets Post it yourself."; "X: not
    set up yet." (with "Set up X" → `/settings/posting/setup/x`). With nothing set up: "Nothing is set up to post to.
-   Set up a place first." and runs post nothing.
+   Set up a place first." and runs post nothing. While Your Mac posts TikTok is on (§47) the TikTok line is
+   "TikTok: your Mac posts it." instead (`macPlaces`, and `leftOut` leaves TikTok out).
 4. **Next up** (`autopost.nextUp`, at most 10): cover, hook, and its time ("Sun 15:00"; with it off, no times and the
    title "Would go first"; a clip with no `runAt` shows no time), each with **Throw away** (the Review card's own
    decline with its Undo, §20.7, accessible name "Throw away, {hook}"). Empty: "Nothing in Review. New clips join the
@@ -72,7 +79,8 @@ toast "Saved.":
    friendly error (§17.6), **Try again** (the Library's per-place Try again: `confirm` with `platforms: [p]`, accessible
    name "Try again, {place}"). Hidden when empty.
 7. **Post these on TikTok yourself** (`autopost.tiktokYourself`): auto-posted clips not on TikTok yet, each with **Post
-   it yourself** (§42's `PostYourselfButton`). Hidden when empty.
+   it yourself** (§42's `PostYourselfButton`). Hidden when empty. While Your Mac posts TikTok is on, also **Send these
+   to my Mac** (§47.4); clips the Mac has (any state) or posted are not listed.
 8. **Recent** (`autopost.runs`, newest first, 10): "Sun 10:00 · “hook”: YouTube ✓ Instagram ✓ Facebook ✗", each
    posted place with **Open** (its live `url`); a run with nothing: "Sun 05:00 · Nothing in Review, so nothing posted.";
    practice: "Sun 05:00 · Practice: would post “hook” to YouTube, Instagram and Facebook."; private test: "Private test
@@ -265,7 +273,8 @@ interface AutoPostStatus {
   nextRunAt: string | null;               // null while off; the shown rule of §46.4
   perDay: number;                         // perRun * 24 / everyHours, not rounded
   places: Platform[];                     // a normal clip's places now (§46.6)
-  leftOut: { platform: Platform; reason: "tiktok_yourself" | "not_set_up" }[];
+  leftOut: { platform: Platform; reason: "tiktok_yourself" | "not_set_up" }[];  // no TikTok while macPlaces has it
+  macPlaces: Platform[];                  // §47: ["tiktok"] while Your Mac posts TikTok is on, else []
   nextUp: { clipId: string; jobId: string; hook: string; coverUrl?: string; runAt?: string }[];   // ≤ 10; §46.5
   waiting: { clipId: string; jobId: string; hook: string; coverUrl?: string; reason: string }[];  // ≤ 20
   runs: AutoRun[];                        // newest first, ≤ 10
