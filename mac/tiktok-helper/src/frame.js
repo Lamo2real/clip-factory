@@ -100,53 +100,22 @@ export function frameAvailable() {
   return fs.existsSync(APP());
 }
 
-/** A frame for one run of the helper: red while it drives, green when done, back as it was otherwise. */
+/**
+ * A normal run shows nothing on the owner's screen. The owner, 22 Nov 2026: "it should not appear on my screen it
+ * should allow me to work like normal in parallel" (this replaced his earlier red-frame rule for the helper). So the
+ * run's "frame" is silent: no frame, no notification, no sound. Only his own turn (ask, yourTurn) shows the yellow
+ * frame and one pop-up.
+ */
 export function frame() {
-  const before = readState();
-  // Another session's frame (its own control, or the owner's turn) comes back when the helper is done.
-  const restore = before.mode === "control" || before.mode === "yourturn" ? before : null;
-  let shown = false;
   return {
-    /** Turns the frame red and waits until it is up. Returns false when it could not be shown (then: no post). */
-    async on(step) {
-      if (!frameAvailable()) return false;
-      fs.writeFileSync(LAST_STEP(), step);
-      writeState("control", step);
-      if (!(await appRunning())) {
-        try {
-          await run("/usr/bin/open", ["-g", APP()]);
-        } catch {
-          return false;
-        }
-      }
-      for (let i = 0; i < 20 && !(await appRunning()); i++) await sleep(250);
-      shown = await appRunning();
-      if (shown) await notifyStep(step);
-      return shown;
+    async on() {
+      return true;
     },
-    /** A new step: the frame stays red and names it. No notification: the owner works on the Mac meanwhile, so
-     * there is one at the start (on) and one at the end (the post's own), never one per step. */
-    async step(step) {
-      if (!shown) return;
-      fs.writeFileSync(LAST_STEP(), step);
-      writeState("control", step);
-    },
-    /** Finished: green for 20 s (the app closes itself), or the earlier session's frame back. */
-    async done(message) {
-      if (!shown) return;
-      shown = false;
-      if (restore) writeState(restore.mode, restore.message);
-      else writeState("done", message);
-    },
-    /** Stopped or failed: the frame comes down (or the earlier session's frame comes back). */
-    async off() {
-      if (!shown) return;
-      shown = false;
-      if (restore) writeState(restore.mode, restore.message);
-      else writeState("off", "");
-    },
+    async step() {},
+    async done() {},
+    async off() {},
     get shown() {
-      return shown;
+      return true;
     },
   };
 }

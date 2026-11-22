@@ -1,15 +1,18 @@
-// The helper's own Chrome: a separate profile, started hidden in the background (`open -g -j`), never the owner's
-// everyday Chrome or Safari. The owner's mouse, keyboard and windows are never touched. Only `setup` shows the window.
-import { execFile } from "node:child_process";
+// The helper's own Chrome: a separate profile, never the owner's everyday Chrome or Safari.
+//
+// The owner, 22 Nov 2026: "i want that process to upload to tiktok to be done behind the scenes, it should not appear
+// on my screen it should allow me to work like normal in parallel". So a normal run starts Chrome headless (new
+// headless mode, the same profile and its TikTok login): macOS registers it BackgroundOnly, so there is no window on
+// screen, no Dock icon, no Cmd-Tab entry, and it can never take his focus. It tells TikTok it is the Chrome he has
+// (user agent and client hints without "HeadlessChrome", this Mac's screen size, a Retina pixel ratio). Only his own
+// turn (setup, or a TikTok login the Keychain can't do) opens a visible window.
+import { execFile, spawn } from "node:child_process";
 import fs from "node:fs";
 import { promisify } from "node:util";
 
 import { chromium } from "playwright-core";
 
-import os from "node:os";
-import path from "node:path";
-
-import { CDP_PORT, CHROME_APP, PROFILE } from "./paths.js";
+import { CDP_PORT, CHROME, CHROME_APP, PROFILE } from "./paths.js";
 
 const run = promisify(execFile);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -36,41 +39,100 @@ async function cdpUp() {
   }
 }
 
+// What the helper's headless Chrome tells TikTok: the installed Chrome's own version, this Mac's screen.
+export const SCREEN = { width: 1512, height: 982 };
+
+async function chromeVersion() {
+  try {
+    const { stdout } = await run(CHROME, ["--version"]);
+    return (/(\d+)\.(\d+)\.(\d+)\.(\d+)/.exec(stdout) || [])[0] || "157.0.8103.80";
+  } catch {
+    return "157.0.8103.80";
+  }
+}
+
+export function identity(full) {
+  const major = String(full).split(".")[0];
+  return {
+    userAgent: `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`,
+    acceptLanguage: "en-US,en",
+    platform: "MacIntel",
+    userAgentMetadata: {
+      brands: [
+        { brand: "Google Chrome", version: major },
+        { brand: "Chromium", version: major },
+        { brand: "Not/A)Brand", version: "24" },
+      ],
+      fullVersionList: [
+        { brand: "Google Chrome", version: full },
+        { brand: "Chromium", version: full },
+        { brand: "Not/A)Brand", version: "24.0.0.0" },
+      ],
+      fullVersion: full,
+      platform: "macOS",
+      platformVersion: "15.7.0",
+      architecture: "arm",
+      bitness: "64",
+      model: "",
+      mobile: false,
+      wow64: false,
+    },
+  };
+}
+
+/** Every page of the headless Chrome tells TikTok the same as the visible one would. */
+async function dressPage(page, who) {
+  try {
+    const session = await page.context().newCDPSession(page);
+    await session.send("Emulation.setUserAgentOverride", who);
+    await session.send("Emulation.setDeviceMetricsOverride", {
+      width: 0,
+      height: 0,
+      deviceScaleFactor: 0,
+      mobile: false,
+      screenWidth: SCREEN.width,
+      screenHeight: SCREEN.height,
+    });
+  } catch {
+    // a page that closed meanwhile
+  }
+}
+
 /**
- * Starts (or reuses) the helper's Chrome and connects to it. ``visible`` is only for setup, on the owner's command.
+ * Starts (or reuses) the helper's Chrome and connects to it. ``visible`` is only for the owner's own turn (setup, or
+ * a TikTok login), on his command; everything else is headless and never shows.
  * @returns {Promise<{browser: import("playwright-core").Browser, page: import("playwright-core").Page}>}
  */
 export async function open({ visible = false } = {}) {
   fs.mkdirSync(PROFILE, { recursive: true });
+  const full = await chromeVersion();
+  const who = identity(full);
+  let headless = false;
   if (!(await cdpUp())) {
-    const how = visible ? ["-n", "-a", CHROME_APP] : ["-g", "-j", "-n", "-a", CHROME_APP];
-    // In the background Chrome starts with no window at all (a first window would bring it to the front and take
-    // the owner's keyboard: seen 22 Nov); the helper's tab is then made through CDP as a background target.
-    const where = visible
-      ? ["--window-position=80,60", "--window-size=1280,900"]
-      : ["--no-startup-window", "--window-position=-2600,40", "--window-size=1280,900"];
-    await run("/usr/bin/open", [...how, "--args", ...FLAGS, ...where]);
+    if (visible) {
+      await run("/usr/bin/open", ["-n", "-a", CHROME_APP, "--args", ...FLAGS, "--window-position=80,60", "--window-size=1280,900"]);
+    } else {
+      // Started directly (not through `open`), so nothing is registered for the Dock; headless is BackgroundOnly.
+      const child = spawn(
+        CHROME,
+        [...FLAGS, "--headless=new", "--window-size=1280,900", "--force-device-scale-factor=2", `--user-agent=${who.userAgent}`, "about:blank"],
+        { detached: true, stdio: "ignore" }
+      );
+      child.unref();
+      headless = true;
+    }
     for (let i = 0; i < 60 && !(await cdpUp()); i++) await sleep(500);
     if (!(await cdpUp())) throw new Error("The helper's Chrome did not start.");
+  } else {
+    headless = !visible;
   }
   const browser = await chromium.connectOverCDP(`http://127.0.0.1:${CDP_PORT}`);
   const context = browser.contexts()[0];
   let page = context.pages()[0];
-  if (!page) {
-    // A background target in its own off-screen window: Chrome is never activated, the owner's app keeps the focus.
-    const session = await browser.newBrowserCDPSession();
-    await session.send("Target.createTarget", {
-      url: "about:blank",
-      newWindow: true,
-      background: true,
-      left: -2600,
-      top: 40,
-      width: 1280,
-      height: 900,
-    });
-    for (let i = 0; i < 40 && !context.pages()[0]; i++) await sleep(150);
-    page = context.pages()[0];
-    if (!page) throw new Error("The helper's Chrome did not open its tab.");
+  if (!page) page = await context.newPage();
+  if (headless) {
+    await dressPage(page, who);
+    context.on("page", (p) => void dressPage(p, who));
   }
   page.setDefaultTimeout(30_000);
   return { browser, page };
@@ -91,44 +153,6 @@ export async function quit(browser) {
   }
   // Wait until it has really gone, so the next open (maybe visible, for a login) starts a fresh window.
   for (let i = 0; i < 40 && (await cdpUp()); i++) await sleep(250);
-}
-
-/**
- * Brings the helper's own Chrome window forward on the screen, as it is (a TikTok code page stays open), for the
- * owner's turn. Only the helper's Chrome (its own profile) is touched. Returns false when it could not.
- */
-export async function show(browser) {
-  try {
-    const session = await browser.newBrowserCDPSession();
-    const { targetInfos } = await session.send("Target.getTargets");
-    const target = targetInfos.find((t) => t.type === "page");
-    if (target) {
-      const { windowId } = await session.send("Browser.getWindowForTarget", { targetId: target.targetId });
-      await session.send("Browser.setWindowBounds", { windowId, bounds: { windowState: "normal" } });
-      await session.send("Browser.setWindowBounds", { windowId, bounds: { left: 80, top: 60, width: 1280, height: 900 } });
-    }
-  } catch {
-    return false;
-  }
-  try {
-    const { stdout } = await run("/bin/ps", ["-axo", "pid=,command="]);
-    const main = stdout
-      .split("\n")
-      .map((l) => l.trim())
-      .find((l) => l.includes(`--user-data-dir=${PROFILE}`) && !l.includes("--type="));
-    const pid = main ? Number(main.split(/\s+/)[0]) : 0;
-    if (!pid) return false;
-    const aeosa = path.join(os.homedir(), ".claude-control", "aeosa");
-    await run(aeosa, [
-      "-e",
-      `tell application "System Events" to set visible of (first process whose unix id is ${pid}) to true`,
-      "-e",
-      `tell application "System Events" to set frontmost of (first process whose unix id is ${pid}) to true`,
-    ]);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export async function running() {

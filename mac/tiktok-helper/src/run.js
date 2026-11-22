@@ -6,9 +6,9 @@ import path from "node:path";
 import { ApiError, client } from "./api.js";
 import { SignInNeeded, accessToken, appConfig } from "./auth.js";
 import * as chrome from "./chrome.js";
-import { ask, frame, frameAvailable, yourTurn } from "./frame.js";
+import { ask, frame, yourTurn } from "./frame.js";
 import { freeName } from "./match.js";
-import { event, log, notify } from "./notify.js";
+import { event, log } from "./notify.js";
 import { DOWNLOADS, LOCK, VERSION } from "./paths.js";
 import { nextAction } from "./plan.js";
 import { loadSettings, loadState, remember, saveState } from "./store.js";
@@ -101,7 +101,8 @@ async function stopped(api, state, job, reason, needsYou) {
   }
   remember(state, job.clipId, { step: pressed ? "finding" : "stopped", reason });
   event("stopped", { clipId: job.clipId, hook: job.hook, reason, needsYou, pressed });
-  await notify("TikTok: your Mac stopped", `${job.hook ? `“${job.hook}”: ` : ""}${reason}`);
+  // On screen only when he is truly needed (yellow frame, one pop-up); otherwise the clip's row says it.
+  if (needsYou) ask(`${job.hook ? `“${job.hook}”: ` : ""}${reason}`);
 }
 
 /** TikTok has it (its link was found): tell Clip Factory, then delete the helper's own video file. */
@@ -113,8 +114,8 @@ async function finished(api, state, job, link, { counted }) {
     saveState(state);
   }
   deleteVideo(state, job.clipId);
+  // Nothing on screen (the owner's rule): the clip's row in Clip Factory and events.log say it.
   event("posted", { clipId: job.clipId, hook: job.hook, link, note: answer?.note });
-  await notify("On TikTok ✓", job.hook ? `“${job.hook}” is on TikTok for everyone.` : "Your clip is on TikTok for everyone.");
 }
 
 const LOGIN_WAIT_MS = 20 * 60_000;
@@ -155,23 +156,15 @@ async function relogin(fr, state, browser, page) {
   } else if (!allowed.ok) {
     log("login.saved_not_tried", { reason: allowed.reason });
   }
-  // The owner's turn, in the helper's own window.
+  // The owner's turn: yellow frame, one pop-up, and the helper's window (visible only now) on TikTok's login. The
+  // headless Chrome can't be shown, so it closes and a visible one opens with the same profile.
   const closeAsk = ask(ask_);
   event("login_needed", { why: ask_ === CODE_ASK ? "code" : "logged_out" });
-  await notify("TikTok: your turn", ask_);
-  let shownBrowser = browser;
-  let shownPage = page;
-  let opened = null;
-  if (!(await chrome.show(browser))) {
-    // Couldn't bring it forward: open it visibly on the login page instead.
-    await chrome.quit(browser);
-    opened = await chrome.open({ visible: true });
-    shownBrowser = opened.browser;
-    shownPage = opened.page;
-    await shownPage.goto(LOGIN_URL).catch(() => {});
-  } else if (!login) {
-    await page.goto(LOGIN_URL).catch(() => {});
-  }
+  await chrome.quit(browser);
+  const opened = await chrome.open({ visible: true });
+  const shownBrowser = opened.browser;
+  const shownPage = opened.page;
+  await shownPage.goto(LOGIN_URL).catch(() => {});
   try {
     const until = Date.now() + LOGIN_WAIT_MS;
     while (Date.now() < until) {
@@ -186,7 +179,7 @@ async function relogin(fr, state, browser, page) {
     closeAsk();
     return false;
   } finally {
-    if (opened) await chrome.quit(shownBrowser);
+    await chrome.quit(shownBrowser);
   }
 }
 
@@ -342,7 +335,7 @@ export async function tick() {
           state.lastSignInNotice = new Date().toISOString().slice(0, 10);
           saveState(state);
           event("signin", { reason: e.message });
-          await notify("Clip Factory TikTok helper", e.message);
+          ask(e.message);
         }
         return { action: "signin" };
       }
@@ -354,10 +347,6 @@ export async function tick() {
     let action = needsYou
       ? { action: "paused", reason: helper.reason || "Your Mac needs you." }
       : nextAction({ on, queue, state, settings, device: state.device, now: new Date() });
-    // No red frame, no driving (the owner's rule): the clip waits on the server until the frame is back.
-    if (["post", "resume", "find"].includes(action.action) && !frameAvailable()) {
-      action = { action: "paused", reason: "The red frame is missing on your Mac, so TikTok waits." };
-    }
     // §47.6: the owner's Change TikTok login / Forget TikTok login, done between posts (never in the middle of one).
     let loginDone;
     const request = helper?.loginRequest;
