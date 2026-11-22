@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import Any
 
-from . import db, s3
+from . import db, mojibake, s3
 from .clock import iso
 from .errors import bad_request
 
@@ -82,6 +82,9 @@ def public_clip(
     auto-posting run uploaded it (§46.9)."""
     clip = db.strip_keys(item, INTERNAL_FIELDS)
     clip.pop("totalViews", None)
+    if "captions" in clip:
+        # A caption saved garbled from a Mac clipboard shows (and is copied) as it was written (mojibake.py).
+        clip["captions"] = mojibake.repair_captions(clip["captions"])
     if item.get("publishState") == PUBLISH_PENDING and item.get("status") in STARTABLE:
         clip["startPending"] = True  # uploaded, but its flow has not started yet: the Library offers Try again
     auto = public_auto(item)
@@ -128,7 +131,8 @@ def posts_by_clip(posts: list[Item]) -> dict[str, list[Item]]:
 
 
 def caption_patch(value: Any) -> dict[str, str]:
-    """Validates ``Partial<Captions>``. Empty text is allowed: the owner may clear a caption."""
+    """Validates ``Partial<Captions>``. Empty text is allowed: the owner may clear a caption. Text pasted garbled
+    from a Mac clipboard is saved repaired (mojibake.py)."""
     if not isinstance(value, dict):
         raise bad_request("captions must be an object.")
     out: dict[str, str] = {}
@@ -138,14 +142,15 @@ def caption_patch(value: Any) -> dict[str, str]:
             raise bad_request(f"Unknown caption: {field}.")
         if not isinstance(text, str):
             raise bad_request(f"The {field} caption must be text.")
-        if len(text) > limit:
+        fixed = mojibake.repair(text)
+        if len(fixed) > limit:
             raise bad_request(f"The {field} caption is too long (at most {limit} characters).")
-        out[field] = text
+        out[field] = fixed
     return out
 
 
 def merged_captions(current: Mapping[str, Any] | None, patch: Mapping[str, str]) -> dict[str, str]:
-    base = {k: str((current or {}).get(k, "")) for k in CAPTION_LIMITS}
+    base = {k: mojibake.repair(str((current or {}).get(k, ""))) for k in CAPTION_LIMITS}
     base.update(patch)
     return base
 

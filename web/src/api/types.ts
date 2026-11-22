@@ -193,7 +193,30 @@ export interface Skill {
   updatedAt: string;
   /** ≥ 1; sent back on every save so a change made somewhere else is noticed (§18.4). */
   version: number;
+  /** Only on the owner's own copy of a built-in skill that gained a part since (§44): the parts it lacks and he
+   * has not said Not now to. */
+  newSections?: SectionOffer[];
 }
+
+/** A part a built-in skill gained after the owner copied it (§44), offered to add to his copy. */
+export interface SectionOffer {
+  /** "viral-clip-editing/chat@1": the built-in, the part and its version. */
+  key: string;
+  /** "Chat went wild". */
+  title: string;
+  builtinId: string;
+  /** "Viral clip editing". */
+  builtinTitle: string;
+  /** The part, as the built-in has it (markdown). */
+  text: string;
+  /** A few of his lines just before and just after where it would go. */
+  preview: { before: string[]; after: string[] };
+  /** He tapped Not now: the Skills list stops asking; the skill's own page still offers it in a small note. */
+  notNow: boolean;
+}
+
+/** POST /v1/skills/{skillId}/sections (§44.3). */
+export type SectionAction = { key: string; action: "add" | "undo"; version: number } | { key: string; action: "not_now" };
 
 /** The three questions of "Write a skill" (§18.2). */
 export interface SkillForm {
@@ -212,6 +235,8 @@ export interface SkillDetail {
   formBlocked?: "builtin" | "too_long";
   /** Zip only: the other files inside, sorted; [] for .md. */
   files: string[];
+  /** Owner skills: the built-in parts his copy lacks, Not now ones included (flagged) (§44). */
+  newSections?: SectionOffer[];
 }
 
 /** PUT /v1/skills/{skillId}: the form, or a whole new file, with the version last read. */
@@ -1938,6 +1963,8 @@ export interface Api {
   /** POST /v1/skills after the upload. */
   createSkill(body: { skillId: string; key: string }): Promise<Skill>;
   deleteSkill(skillId: string): Promise<void>;
+  /** POST /v1/skills/{skillId}/sections: add a new built-in part to his copy, undo that, or Not now (§44.3). */
+  skillSection(skillId: string, body: SectionAction): Promise<{ skill: Skill; newSections: SectionOffer[] }>;
   getSettings(): Promise<Settings>;
   putSettings(patch: SettingsPut): Promise<Settings>;
   // Notifications (§32.3)

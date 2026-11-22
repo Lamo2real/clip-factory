@@ -45,6 +45,7 @@ try again in a minute, §17.4), `internal`.
 | PATCH `/v1/skills/{skillId}` | – | always `400 bad_request` "Skills are always used now, so there is no switch." (§18.1; the on/off switch is gone) |
 | DELETE `/v1/skills/{skillId}` | – | `204` (owner skills only; built-ins → `409 conflict`, §18.5) |
 | GET `/v1/skills/{skillId}/content` | – | `{ "content": "<SKILL.md text>" }` (kept for old clients; the web uses `GET /v1/skills/{skillId}`) |
+| POST `/v1/skills/{skillId}/sections` | `{ "key", "action": "add" \| "undo", "version" }` or `{ "key", "action": "not_now" }` | `{ "skill": Skill, "newSections": SectionOffer[] }` (§44.3; owner skills only, built-ins → `409`) |
 | GET `/v1/settings` | – | `{ "settings": Settings }` |
 | PUT `/v1/settings` | `Partial<Settings>` (validated) | `{ "settings": Settings }` |
 | POST `/v1/settings/cookies` | `{ "filename" }` | presigned PUT for an optional YouTube `cookies.txt` (helps when YouTube blocks cloud IPs) |
@@ -134,5 +135,13 @@ Home checks a pasted link as it is typed (`web/src/lib/links.ts` `checkLink`): a
 live channel, except the sites' own pages (for example `twitch.tv/directory`, `/settings`, `/videos`, `/search`;
 `kick.com/categories`, `/browse`, `/following`), which are refused on the spot with "That Twitch link goes to a Twitch
 page, not a video, clip or channel. Open the video or the channel and copy its link." (Kick the same).
+
+**Captions garbled on a Mac (owner report, 2026-11-22).** A Mac tool with no UTF-8 locale (`pbcopy`/`pbpaste` run
+from an app, for example) reads each UTF-8 byte as one Mac Roman letter, so 💀 becomes an Apple logo and `üíÄ`, é
+becomes `√©` and 日本 `Êó•Êú¨`. One TikTok caption was saved like that and copied into TikTok by Post it yourself (§42).
+The API repairs such runs (`api/src/clipfactory_api/mojibake.py`: 3- and 4-byte characters, and 2-byte ones after
+`√` or `¬`; real emoji, accents and other scripts stay exactly as written): in every `Clip` it returns, in
+`Partial<Captions>` it saves (PATCH, confirm, the campaign caption fix), and in what the publishers send. Stored items
+are never rewritten for it.
 
 `Performance` sums treat a `null` metric as 0. Ids are ULIDs (26 chars, time-sortable). Timestamps are ISO-8601 UTC strings.

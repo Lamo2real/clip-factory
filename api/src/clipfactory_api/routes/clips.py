@@ -11,6 +11,7 @@ from typing import Any
 from .. import (
     clips,
     db,
+    mojibake,
     post_preset,
     posts,
     release,
@@ -464,7 +465,7 @@ def tiktok_posted(app: App, req: Request) -> Response:
             app.store,
             account,
             since=_since(app, body.get("since")),
-            caption=str((item.get("captions") or {}).get("tiktok") or ""),
+            caption=mojibake.repair(str((item.get("captions") or {}).get("tiktok") or "")),
         )
         if video is None:
             note = NOT_FOUND_YET

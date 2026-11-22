@@ -33,6 +33,7 @@ from datetime import timedelta
 from typing import Any
 from urllib.parse import quote, urlencode
 
+from .. import mojibake
 from ..clock import iso, parse
 from ..log import log
 from . import errors
@@ -120,7 +121,8 @@ def _bearer(token: str, extra: dict[str, str] | None = None) -> dict[str, str]:
 
 def _captions(job: PublishJob) -> dict[str, Any]:
     raw = job.clip.get("captions")
-    return raw if isinstance(raw, dict) else {}
+    # Never posts a caption garbled by a Mac clipboard (mojibake.py).
+    return mojibake.repair_captions(raw) if isinstance(raw, dict) else {}
 
 
 def _campaign(job: PublishJob) -> dict[str, Any] | None:
