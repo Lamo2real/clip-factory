@@ -168,12 +168,14 @@ function unsure(store: MockStore, a: SocialAccount | undefined, confirm: string 
     confirmedOf(store).add(a.externalAccountId);
     return null;
   }
-  const name = a.accountName ?? a.handle ?? a.externalAccountId;
+  // A raw open_id never goes in the sentence (§45.36 E14): "this TikTok account" when it has no name or handle.
+  const name = a.accountName ?? a.handle ?? null;
   return accountConflict(`Lamo Stories cannot tell if ${thisAccount("tiktok", name)} is the one Clip Factory posts to. Tap Yes if it is your Lamo Stories TikTok.`, a);
 }
 
 function changed(a: SocialAccount): ApiError {
-  const name = a.accountName ?? a.externalAccountId ?? null;
+  // Its name or handle, never a raw channel id (§45.36 E14), as the API's _changed_account.
+  const name = a.accountName ?? a.handle ?? null;
   return accountConflict(`Lamo Stories' ${PLATFORM_NAME[a.platform]} is a different account now: ${thisAccount(a.platform, name)}. Tap Yes if that is right.`, a);
 }
 

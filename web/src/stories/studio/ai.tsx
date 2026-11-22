@@ -666,19 +666,23 @@ export function TaskLine({
   }
   if (run.phase === "failed" && run.problem) {
     return (
-      <Notice
-        tone="bad"
-        action={
-          <span className="st-s-ai-fix">
-            <button type="button" className="st-btn st-btn--main" onClick={run.retry}>
-              Try again
-            </button>
-            <SettingsFix sentence={run.problem} />
-          </span>
-        }
-      >
-        {run.problem}
-      </Notice>
+      <>
+        <Notice
+          tone="bad"
+          action={
+            <span className="st-s-ai-fix">
+              <button type="button" className="st-btn st-btn--main" onClick={run.retry}>
+                Try again
+              </button>
+              <SettingsFix sentence={run.problem} />
+            </span>
+          }
+        >
+          {run.problem}
+        </Notice>
+        {/* The model it stopped on, with its exact id behind the fold (§45.36 E8): the fact behind a no access or a Region. */}
+        <TaskMade info={info} task={run.task} />
+      </>
     );
   }
   if (run.phase === "done") return <TaskMade info={info} task={run.task} />;
@@ -686,15 +690,19 @@ export function TaskLine({
 }
 
 /**
- * What made a finished AI task (an idea, a full idea, captions, a character): its model and effort in words, and the
- * exact model id and Region behind "Technical details", the same line production steps have (§45.36 E8).
+ * What made a finished AI task (an idea, a full idea, captions, a character), or what a failed one was tried with: its
+ * model and effort in words, and the exact model id and Region behind "Technical details", the same line production
+ * steps have (§45.36 E8; the agent records them for a failed call too).
  */
 export function TaskMade({ info, task }: { info: AiInfo; task: Pick<AiTask, "status" | "model" | "effort" | "effortApplied" | "modelId" | "region"> | null }) {
-  if (!task || task.status !== "done" || !task.model) return null;
+  if (!task || (task.status !== "done" && task.status !== "failed") || !task.model) return null;
   const id = modelIdLine(task);
+  const word = task.status === "done" ? "Made with" : "Tried with";
   return (
-    <div className="st-s-taskmade">
-      <p className="st-s-taskmade__line">Made with {modelLine(info, task.model, task.effort, task.effortApplied)}</p>
+    <div className={`st-s-taskmade${task.status === "failed" ? " st-s-taskmade--failed" : ""}`}>
+      <p className="st-s-taskmade__line">
+        {word} {modelLine(info, task.model, task.effort, task.effortApplied)}
+      </p>
       {id ? (
         <TechDetails className="st-s-taskmade__tech">
           <p className="st-s-used__id">{id}</p>

@@ -356,6 +356,22 @@ describe("every model record has its details, folded away (§45.36 E8, E14)", ()
     expect(plainText(card)).not.toContain("Model ID");
   });
 
+  it("a failed full idea still says what it was tried with, the exact model behind Technical details", async () => {
+    start({ taskFail: true });
+    await show(<IdeasScreen ws="stories" page={{ name: "ideas" }} />);
+    const card = document.querySelector<HTMLElement>(`[data-idea="${I.sandwich}"]`)!;
+    if (Array.from(card.querySelectorAll("button")).some((b) => b.textContent?.trim() === "See the full idea")) await click(control("See the full idea", card), 50);
+    await click(control(/^(Make it a full idea|Write it again)$/, card), 50);
+    for (let i = 0; i < 24; i += 1) await wait(250);
+    expect(card.textContent).toContain("The idea helper could not finish. Tap Try again.");
+    const tried = card.querySelector<HTMLElement>(".st-s-taskmade--failed")!;
+    expect(tried.querySelector(".st-s-taskmade__line")?.textContent).toMatch(/^Tried with Claude .+/);
+    const fold = tried.querySelector<HTMLDetailsElement>(".st-s-tech")!;
+    expect(fold.open).toBe(false);
+    expect(fold.textContent).toMatch(/Model ID \S*anthropic\.claude-\S+ in eu-north-1/);
+    expect(plainText(card)).not.toContain("Model ID");
+  });
+
   it("Review's How it was made keeps the ids in its fold, never as a first line", async () => {
     await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />);
     const made = document.querySelector<HTMLElement>(".st-s-made")!;
@@ -454,7 +470,57 @@ describe("post words alone need Check again, never a remake (§45.36 E10)", () =
     expect(text()).not.toContain("Tap Remake");
     const notice = Array.from(document.querySelectorAll<HTMLElement>(".st-s-notice")).find((n) => n.textContent?.includes(POST_WORDS_CHECK))!;
     await click(control("Check again", notice));
-    expect(produce).toHaveBeenCalledWith("stories", S.review, { from: "safety" });
+    // No `from`: the run is exactly the stale steps, so only the fact check (a `from: "safety"` makes every step after it again).
+    expect(produce).toHaveBeenCalledWith("stories", S.review);
+    expect(produce.mock.calls[0]).toHaveLength(2);
+  });
+
+  it("Check again runs the fact check alone, then the video can be approved", async () => {
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.review })} />);
+    await click(document.querySelector<HTMLElement>(".st-s-editor-box .st-s-pick__opt:nth-of-type(2) input")!, 50);
+    type(field("X"), "Pip keeps calm on the ice!");
+    await click(control("Save post words"));
+    const notice = Array.from(document.querySelectorAll<HTMLElement>(".st-s-notice")).find((n) => n.textContent?.includes(POST_WORDS_CHECK))!;
+    const before = store.jobs.length;
+    await click(control("Check again", notice), 300);
+    expect(store.jobs).toHaveLength(before + 1);
+    const job = store.jobs.filter((j) => j.contentId === S.review).at(-1)!;
+    expect(job.steps.filter((st) => st.status !== "done").map((st) => st.key)).toEqual(["safety"]);
+    expect(store.stories.find((s) => s.storyId === S.review)!.stale).toEqual(["safety"]);
+    for (let i = 0; i < 40 && store.stories.find((s) => s.storyId === S.review)!.status === "producing"; i += 1) await wait(500);
+    const after = await call(api.getStory("stories", S.review));
+    expect(after.story).toMatchObject({ status: "review", stale: [] });
+    expect((await call(api.approve("stories", S.review, after.story.version))).status).toBe("approved");
+  });
+
+  it("a video waiting for its check says Check again for new post words too, never Remake", async () => {
+    const story = store.stories.find((s) => s.storyId === S.needsCheck)!;
+    expect(onlyPostWords({ ...story, stale: ["safety"] })).toBe(true);
+    expect(approveBlock({ ...story, stale: ["safety"], safety: { ...story.safety!, status: "pending", problems: [] } })).toBe(POST_WORDS_CHECK);
+    expect(approveBlock({ ...story, stale: ["safety"] })).toBe("Fix the facts first, then tap Check again.");
+    const produce = vi.spyOn(api, "produce");
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.needsCheck })} />);
+    await click(document.querySelector<HTMLElement>(".st-s-editor-box .st-s-pick__opt:nth-of-type(2) input")!, 50);
+    type(field("X"), "Nana Rose sees and is seen in the fog.");
+    await click(control("Save post words"));
+    expect(store.stories.find((s) => s.storyId === S.needsCheck)!.stale).toEqual(["safety"]);
+    expect(text()).toContain(`Saved. ${POST_WORDS_CHECK}`);
+    expect(text()).not.toContain("Tap Remake");
+    const notice = Array.from(document.querySelectorAll<HTMLElement>(".st-s-notice")).find((n) => n.textContent?.includes(POST_WORDS_CHECK))!;
+    await click(control("Check again", notice));
+    expect(produce).toHaveBeenCalledWith("stories", S.needsCheck);
+  });
+
+  it("the mock's approve says Check again for a video waiting for its check, unless the facts need fixing", async () => {
+    const seeded = store.stories.find((s) => s.storyId === S.review)!;
+    seeded.status = "needs_check";
+    seeded.safety = { ...seeded.safety!, status: "pending", problems: [] };
+    const { story } = await call(api.getStory("stories", S.review));
+    const r = await call(api.patchStory("stories", S.review, { version: story.version, postCaptions: { x: "New words" } }));
+    expect(r.story.stale).toEqual(["safety"]);
+    const refused = api.approve("stories", S.review, r.story.version).catch((e: unknown) => e);
+    await wait(500);
+    expect(((await refused) as Error).message).toBe(POST_WORDS_CHECK);
   });
 
   it("Use these keeps the tab too", async () => {
@@ -618,6 +684,31 @@ describe("one name on screen: Clip Factory, and accounts by their place (§45.36
     );
   });
 
+  it("the mock's account questions use the handle, else no name, never the raw account id (as the API)", async () => {
+    start({ tiktokUnsure: true });
+    const tiktok = store.social.find((a) => a.platform === "tiktok")!;
+    Object.assign(tiktok, { accountName: null, handle: "@tiktok.stories", externalAccountId: "7312000000000000001" });
+    const asked = async (p: Promise<unknown>) => {
+      const e = p.catch((x: unknown) => x);
+      await wait(500);
+      return (await e) as Error;
+    };
+    let e = await asked(api.publish("stories", S.approved, [{ platform: "tiktok", socialAccountId: "stories.tiktok" }]));
+    expect(e.message).toContain("cannot tell if this TikTok account (@tiktok.stories) is the one Clip Factory posts to");
+    Object.assign(tiktok, { handle: null });
+    e = await asked(api.publish("stories", S.approved, [{ platform: "tiktok", socialAccountId: "stories.tiktok" }]));
+    expect(e.message).toContain("cannot tell if this TikTok account is the one Clip Factory posts to");
+    expect(e.message).not.toContain("7312");
+    // The account changed: the same, by its handle or without a name.
+    const youtube = store.social.find((a) => a.platform === "youtube")!;
+    Object.assign(youtube, { accountName: null, handle: "@stories.channel", externalAccountId: "UCx9raw-channel-id" });
+    e = await asked(api.publish("stories", S.approved, [{ platform: "youtube", socialAccountId: "stories.youtube", confirmAccount: "UC-old" }]));
+    expect(e.message).toBe("Lamo Stories' YouTube is a different account now: this YouTube account (@stories.channel). Tap Yes if that is right.");
+    Object.assign(youtube, { handle: null });
+    e = await asked(api.publish("stories", S.approved, [{ platform: "youtube", socialAccountId: "stories.youtube", confirmAccount: "UC-old" }]));
+    expect(e.message).toBe("Lamo Stories' YouTube is a different account now: this YouTube account. Tap Yes if that is right.");
+  });
+
   it("the TikTok question reads right for an account called Lamo Stories, and its button matches", async () => {
     start({ tiktokUnsure: true });
     await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />);
@@ -772,7 +863,48 @@ describe("a model the studio knows cannot be used, kept or per run (§45.36 E12)
     await click(control("Save post words"));
     const notice = Array.from(document.querySelectorAll<HTMLElement>(".st-s-notice")).find((n) => n.textContent?.includes(POST_WORDS_CHECK))!;
     await click(control("Check again", notice));
-    expect(produce).toHaveBeenCalledWith("stories", S.review, { from: "safety" });
+    expect(produce).toHaveBeenCalledWith("stories", S.review);
+    expect(produce.mock.calls[0]).toHaveLength(2);
+  });
+
+  it("the chips show the usual of the run each button starts, and Remake sends that run's stand-in", async () => {
+    // Only the fact check's usual is refused; a captions edit makes the next remake start at the fact check.
+    models = models.map((m) => (m.key === "sonnet-5-5" ? { ...m, status: "denied", statusLine: "Amazon Bedrock said this account has no access to Claude Sonnet 5.5." } : m));
+    tasks = tasks.map((t) => (t.kind === "fact_check" ? { ...t, effective: { model: "sonnet-5-5", effort: "high", effortApplied: true, from: "agent" } } : t));
+    const seeded = store.stories.find((s) => s.storyId === S.review)!;
+    seeded.stale = ["safety", "captions", "assemble", "preview"];
+    const produce = vi.spyOn(api, "produce");
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.review })} />);
+    const chip = document.querySelector<HTMLElement>(".st-s-decide__ai .st-s-ai-btn")!;
+    expect(chip.textContent).toContain("Opus 5.5");
+    expect(chip.textContent).not.toContain("Sonnet 5.5");
+    // Ask for changes starts at the storyboard: its own chip shows the storyboard's usual.
+    await click(control("Ask for changes"), 50);
+    expect(document.querySelector(".st-s-changes__ai .st-s-field__hint")?.textContent).toBe("These changes use");
+    const notice = Array.from(document.querySelectorAll<HTMLElement>(".st-s-notice")).find((n) => n.textContent?.includes("Your changes aren't in the video yet"))!;
+    await click(control("Remake", notice));
+    expect(produce).toHaveBeenCalledWith("stories", S.review, { override: { model: "opus-5-5" } });
+  });
+
+  it("a chat card never pre-picks the message's one-time model once it is known to be unusable", async () => {
+    fableDenied();
+    const changes = vi.spyOn(api, "requestChanges");
+    const sceneId = store.stories.find((s) => s.storyId === S.review)!.scenes[0]!.sceneId;
+    await show(<ActionCard ws="stories" id="m-once" info={live()} once={{ model: "fable-5-1", effort: "high" }} action={{ kind: "remake_scene", label: "Remake scene 1", payload: { storyId: S.review, sceneIds: [sceneId] } }} />);
+    const chip = document.querySelector<HTMLElement>(".st-s-ai-btn.st-chat-action__ai")!;
+    expect(chip.textContent).not.toContain("Fable 5.1");
+    expect(chip.querySelector(".st-s-ai-btn__status")).toBeNull();
+    await click(control("Remake scene 1"));
+    expect(changes.mock.calls[0]![2]).toEqual({ sceneIds: [sceneId], override: { effort: "high" } });
+  });
+
+  it("a one-time model that works is still the card's first choice", async () => {
+    const changes = vi.spyOn(api, "requestChanges");
+    const sceneId = store.stories.find((s) => s.storyId === S.review)!.scenes[0]!.sceneId;
+    await show(<ActionCard ws="stories" id="m-once-ok" info={live()} once={{ model: "sonnet-5-5", effort: "low" }} action={{ kind: "remake_scene", label: "Remake scene 1", payload: { storyId: S.review, sceneIds: [sceneId] } }} />);
+    expect(document.querySelector(".st-s-ai-btn.st-chat-action__ai")?.textContent).toContain("Sonnet 5.5");
+    await click(control("Remake scene 1"));
+    expect(changes.mock.calls[0]![2]).toEqual({ sceneIds: [sceneId], override: { model: "sonnet-5-5", effort: "low" } });
   });
 
   it("a chat card never sends the stand-in before the video's own setting is read", async () => {

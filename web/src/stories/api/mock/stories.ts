@@ -999,8 +999,9 @@ function checkReferences(store: MockStore, ids: string[] | undefined): string[] 
 /** The approve rule (§45.9), as the sentence the 409 carries, or null when it holds. */
 function approveProblem(story: Story): string | null {
   if (story.safety?.status === "problems") return `Fix the facts first: ${story.safety.problems.join(" ")}`;
-  // Only the post words changed: they are not in the video, so only the fact check is out of date (§45.36 E10).
-  if (story.status === "review" && story.stale.length === 1 && story.stale[0] === "safety") return "Your new post words need a quick check. Tap Check again.";
+  // Only the post words changed: they are not in the video, so only the fact check is out of date (§45.36 E10), also
+  // while the video waits for its check (the API's only_check_stale).
+  if ((story.status === "review" || story.status === "needs_check") && story.stale.length === 1 && story.stale[0] === "safety") return "Your new post words need a quick check. Tap Check again.";
   if (story.status !== "review" || story.stale.length) return "Your changes aren't in the video yet. Tap Remake first.";
   const s = story.safety;
   const passed = !s || ((s.status === "ok" || (s.status === "skipped" && story.category !== "driving_safety")) && s.checkedScriptVersion === story.scriptVersion);

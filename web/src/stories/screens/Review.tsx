@@ -59,10 +59,12 @@ export const POST_WORDS_CHECK = "Your new post words need a quick check. Tap Che
 
 /**
  * True when the only thing out of date is the fact check because the post words changed (§45.36 E10: the API marks
- * only "safety" for a postCaptions edit, STALE_POST): Check again (from "safety") is the fix, never a remake.
+ * only "safety" for a postCaptions edit, STALE_POST), while the video waits for review or for its check (the API's
+ * only_check_stale). Check again is the fix: a produce with no `from`, which runs exactly the stale steps, so only the
+ * fact check (a `from: "safety"` would make every step after it again). Never a remake.
  */
 export function onlyPostWords(story: Pick<Story, "stale" | "status">): boolean {
-  return story.status === "review" && story.stale.length === 1 && story.stale[0] === "safety";
+  return (story.status === "review" || story.status === "needs_check") && story.stale.length === 1 && story.stale[0] === "safety";
 }
 
 /**
@@ -71,9 +73,9 @@ export function onlyPostWords(story: Pick<Story, "stale" | "status">): boolean {
  */
 export function approveBlock(story: Story): string | null {
   if (story.safety?.status === "problems") return "Fix the facts first, then tap Check again.";
+  if (onlyPostWords(story)) return POST_WORDS_CHECK;
   if (story.status === "needs_check") return "Check the facts first.";
   if (story.status !== "review") return null;
-  if (onlyPostWords(story)) return POST_WORDS_CHECK;
   if (story.stale.length) return "Your changes aren't in the video yet. Tap Remake first.";
   if (checkOutdated(story)) return OUTDATED_CHECK;
   return null;
@@ -339,8 +341,15 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     try {
       const r = await storiesApi().patchStory(ws, storyId, { version: story.version, ...edit });
       loaded.setData((d) => (d ? { ...d, story: r.story, script: r.script } : d));
-      // New post words are not in the video: they only need the quick fact check (§45.36 E10), never a remake.
-      toast.success(onlyPostWords(r.story) ? `Saved. ${POST_WORDS_CHECK}` : "Saved. Tap Remake to put it in the video.");
+      // New post words are not in the video: they only need the quick fact check (§45.36 E10), never a remake. A video
+      // waiting for its check says the page's own button, Check again.
+      toast.success(
+        onlyPostWords(r.story)
+          ? `Saved. ${POST_WORDS_CHECK}`
+          : r.story.status === "needs_check"
+            ? "Saved. Tap Check again to check the facts and update the video."
+            : "Saved. Tap Remake to put it in the video.",
+      );
     } catch (e) {
       if (isConflict(e) && /changed|reload/i.test(say(e))) setStale(true);
       else setProblem(say(e));
@@ -421,7 +430,13 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const postWords = !live && onlyPostWords(story);
   const stopped = story.status === "failed" ? (job?.status === "failed" && job.error ? job.error : "Making this video stopped.") : null;
   const used = live ? (job?.meta.models ?? []) : madeWith([job, ...(runs.data ?? [])]);
-  const remakeMenu = <ModelMenu info={info} usual={storyUsual(info, story)} value={pick} onChange={setPick} note="Just for the next remake. This video's own setting and yours stay the same." />;
+  // Each menu shows the usual of the run its button starts, so what it shows is what is sent (§45.36 E12): the page's
+  // next remake starts at the first out-of-date step (the fact check after new post words or an outdated check), the
+  // whole-video remake and Ask for changes at the storyboard.
+  const nextTask = story.stale.length ? runTask(null, { stale: story.stale }) : outdated ? "fact_check" : "storyboard";
+  const menuFor = (task: TaskKind) => <ModelMenu info={info} usual={storyUsual(info, story, task)} value={pick} onChange={setPick} note="Just for the next remake. This video's own setting and yours stay the same." />;
+  const remakeMenu = menuFor(nextTask);
+  const changesTask = runTask("storyboard", { sceneIds: !note.trim() && picked.length > 0 });
   // Phones get a smaller player, so the decision is close below it.
   const width = colWidth < 500 ? Math.max(180, Math.min(250, colWidth - 40)) : Math.max(200, Math.min(340, colWidth));
 
@@ -487,7 +502,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   type="button"
                   className="st-btn st-btn--main"
                   aria-disabled={busy !== null || undefined}
-                  onClick={() => remake("check", "fact_check", async (x) => startRun(await produceNow({ from: "safety" }, x)))}
+                  onClick={() => remake("check", "fact_check", async (x) => startRun(await produceNow({}, x)))}
                 >
                   {busy === "check" ? "Starting…" : "Check again"}
                 </button>
@@ -587,7 +602,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   onSubmit={(e) => {
                     e.preventDefault();
                     if (!note.trim() && !picked.length) return setProblem("Say what to change, or pick a scene.");
-                    remake("changes", runTask("storyboard", { sceneIds: !note.trim() && picked.length > 0 }), async (x) => {
+                    remake("changes", changesTask, async (x) => {
                       const body: { note?: string; sceneIds?: string[]; override?: ModelOverride } = { ...x };
                       if (note.trim()) body.note = note.trim();
                       if (picked.length) body.sceneIds = picked;
@@ -609,6 +624,12 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                       ))}
                     </div>
                   </div>
+                  {changesTask !== nextTask ? (
+                    <div className="st-s-decide__ai st-s-changes__ai">
+                      <span className="st-s-field__hint">These changes use</span>
+                      {menuFor(changesTask)}
+                    </div>
+                  ) : null}
                   <div className="st-s-actionbar">
                     <button type="submit" className="st-btn st-btn--main" aria-disabled={busy !== null || (!note.trim() && !picked.length) || undefined}>
                       {busy === "changes" ? "Sending…" : "Send the changes"}
@@ -788,7 +809,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           <p>Lamo Stories writes a new storyboard with your characters as they look now, then makes every step again. This one is kept in the Library.</p>
           <div className="st-s-decide__ai">
             <span className="st-s-field__hint">This remake uses</span>
-            {remakeMenu}
+            {menuFor("storyboard")}
           </div>
         </StSheet>
       ) : null}

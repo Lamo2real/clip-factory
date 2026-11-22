@@ -707,6 +707,13 @@ test("round 5, Review: new post words need only Check again and the tab stays; a
     expect(await audit(page, `Review, new post words ${w}`, touch && w < 768)).toEqual([]);
     await notice.getByRole("button", { name: "Check again" }).click();
     await expect(page.locator(".st-s-review__side .st-s-steps, .st-s-review__side [aria-label='Being made again']").first()).toBeVisible({ timeout: 10_000 });
+    // Only the fact check runs: every other step stays done (never a remake of the video).
+    const track = page.locator(".st-s-review__side [aria-label='Being made again'] .st-s-track__step");
+    await expect(track.first()).toBeVisible();
+    expect(await track.evaluateAll((li) => li.filter((x) => !x.classList.contains("is-done") && !x.textContent?.includes("Check the facts")).length)).toBe(0);
+    // Then the video can be approved.
+    await expect(page.locator("[aria-label='Being made again']")).toHaveCount(0, { timeout: 20_000 });
+    await expect(page.locator("#st-approve-why")).toHaveCount(0);
 
     // §45.36 E9 and E14: the posted video's Posts panel.
     await go(page, `/stories/review/${S.published}`);
@@ -812,6 +819,18 @@ test("round 5: the play badge leaves a square video's caption clear; a full idea
   await expect(made.locator(".st-s-tech")).toContainText(/Model ID \S+ in eu-north-1/);
   await settle(page);
   expect(await audit(page, "A full idea with its exact model open", false)).toEqual([]);
+  // A failed one still says what it was tried with, the exact model behind the same fold.
+  await page.evaluate(() => {
+    const st = (window as R5Window).__cfStoriesMock?.store;
+    if (st) st.knobs.taskFail = true;
+  });
+  await card.getByRole("button", { name: /^(Make it a full idea|Write it again)$/ }).click();
+  const tried = card.locator(".st-s-taskmade--failed");
+  await expect(tried).toContainText(/^Tried with Claude .+/, { timeout: 20_000 });
+  await expect(card).toContainText("The idea helper could not finish. Tap Try again.");
+  expect(await plainOf(page, `[data-idea="${I.sandwich}"]`)).not.toContain("Model ID");
+  await tried.locator(".st-s-tech summary").click();
+  await expect(tried.locator(".st-s-tech")).toContainText(/Model ID \S+ in eu-north-1/);
 
   // §45.36 E9: the dashboard's Fix it for a post that stopped on an account problem opens Social accounts.
   await page.evaluate(() => {

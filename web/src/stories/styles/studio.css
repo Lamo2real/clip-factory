@@ -3236,6 +3236,11 @@ button.st-s-place:hover {
   margin-top: 2px;
 }
 
+/* Under a failed task's notice: what it was tried with. */
+.st-s-taskmade--failed {
+  margin-top: 6px;
+}
+
 /* The exact model of each step, one a line, in the Made with list's own fold. */
 .st-s-used__ids {
   display: grid;
