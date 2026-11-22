@@ -615,13 +615,12 @@ for (const scheme of ["light", "dark"] as const)
 async function pinProblems(page: Page, label: string, opts: { card?: "match" | "want"; phone?: boolean } = {}): Promise<string[]> {
   const card = opts.card === "want" ? ".finder-want.has-pin" : ".finder-match.is-open";
   const inner = opts.card === "want" ? ".finder-want.has-pin" : ".finder-match.is-open .finder-match__body";
-  return page.evaluate(async ([label, card, inner, phone]) => {
+  return page.evaluate(([label, card, inner, phone]) => {
     const out: string[] = [];
-    const tick = () => new Promise((r) => requestAnimationFrame(() => r(null)));
-    const go = async (y: number) => {
-      window.scrollTo({ top: y, behavior: "instant" });
-      await tick();
-    };
+    // No frame waits: an instant scroll and focus() move the page at once, and every box is read with
+    // getBoundingClientRect, which lays the page out first (the pin is position: sticky, laid out with the page). A
+    // frame per step made one card take minutes on a busy CI runner (thousands of steps).
+    const go = (y: number) => window.scrollTo({ top: y, behavior: "instant" });
     const pinEl = () => document.querySelector<HTMLElement>(`${card} .cr-pin`);
     if (!pinEl()) return [`${label}: no pinned vermilion`];
     const over = (a: DOMRect, b: DOMRect) => Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)) * (a.right > b.left && a.left < b.right ? 1 : 0);
@@ -645,7 +644,7 @@ async function pinProblems(page: Page, label: string, opts: { card?: "match" | "
     const seen = texts.map((t) => lines(t).map(() => false));
     const max = document.documentElement.scrollHeight - innerHeight;
     for (let y = 0; y <= max + 8; y += 8) {
-      await go(Math.min(y, max));
+      go(Math.min(y, max));
       const pin = pinEl()!.getBoundingClientRect();
       const low = floor();
       texts.forEach((t, i) => {
@@ -660,10 +659,9 @@ async function pinProblems(page: Page, label: string, opts: { card?: "match" | "
     const controls = [...body.querySelectorAll<HTMLElement>("a, button, summary, textarea, input")].filter((e) => !e.closest(".cr-pin") && e.getClientRects().length);
     for (const e of controls)
       for (let y = 0; y <= max; y += 160) {
-        await go(y);
+        go(y);
         (document.activeElement as HTMLElement | null)?.blur?.();
         e.focus();
-        await tick();
         const b = e.getBoundingClientRect();
         const hidden = over(b, pinEl()!.getBoundingClientRect());
         // A text box scrolls only its caret's line into view: most of it shows, the line he types on included.
@@ -674,7 +672,7 @@ async function pinProblems(page: Page, label: string, opts: { card?: "match" | "
         }
       }
     if (!phone) {
-      await go(0);
+      go(0);
       return out;
     }
     // 3. Room at the end for the pinned bar (its height and 12 px), and the last line clears its lane.
@@ -682,11 +680,11 @@ async function pinProblems(page: Page, label: string, opts: { card?: "match" | "
     const pin = pinEl()!;
     const room = parseFloat(getComputedStyle(pageEl).paddingBottom);
     if (room < pin.getBoundingClientRect().height + 12 - 0.5) out.push(`${label}: only ${room} px of room under the page for a ${Math.round(pin.getBoundingClientRect().height)} px pinned bar`);
-    await go(max);
+    go(max);
     const lane = innerHeight - parseFloat(getComputedStyle(pin).bottom) - pin.getBoundingClientRect().height;
     const last = [...pageEl.querySelectorAll<HTMLElement>("*")].filter((e) => !e.children.length && e.getClientRects().length).pop()!;
     if (last.getBoundingClientRect().bottom > lane) out.push(`${label}: the page's last line (${Math.round(last.getBoundingClientRect().bottom)}) is in the pinned bar's lane (${Math.round(lane)})`);
-    await go(0);
+    go(0);
     return out;
   }, [label, card, inner, opts.phone ?? true] as const);
 }
