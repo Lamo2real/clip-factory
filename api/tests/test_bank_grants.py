@@ -35,7 +35,8 @@ from bank_cases import (
 )
 from clipfactory_api import db, hooks
 from clipfactory_api.app import App
-from clipfactory_api.bank import CHECK_TEXT
+from clipfactory_api.bank import CHECK_TEXT, eb, grants
+from clipfactory_api.clock import iso
 from clipfactory_api.platforms.base import NetworkError
 from conftest import APP_URL, NOW, USER, Call, Clock
 from fakes import FakeSecretsManager, FakeTable
@@ -426,6 +427,99 @@ def test_a_reconnect_keeps_the_old_session_for_later_and_never_closes_it_itself(
     assert "failingSince" not in found
     assert found["historyWanted"] is False
     assert app.store.get(PK, "BANKCONN")["lastConnect"]["reconnect"] is True  # type: ignore[index]
+
+
+def _env_and_key(app: App, bank: FakeBank) -> tuple[Any, Any, Any]:
+    assert app.oauth is not None
+    env = eb.from_oauth(app.oauth, bank, bank.mono)
+    return env, eb.app_key(eb.read_app(env)), eb.Deadline(25, bank.mono)
+
+
+STOPPED_AT = "2026-11-14T10:00:00.000Z"
+
+
+def _stopped_with_an_open_session(app: App, secrets_client: FakeSecretsManager) -> dict[str, Any]:
+    """Stop ran while Enable Banking was down: the link is stopped, its secret and ``closePending`` stay."""
+    stale = link(status="stopped", connected=iso(NOW), stoppedAt=STOPPED_AT, closePending=True)
+    app.store.put({"pk": PK, "sk": f"BANKLINK#{LINK_A}", **stale})
+    secrets_client.values[TOKEN + LINK_A] = json.dumps(
+        {"sessionId": "sess-old", "accounts": [], "connectedAt": stale["connectedAt"], "closeLater": []}
+    )
+    return stale
+
+
+def test_closing_never_ends_a_reconnect_that_came_in_meanwhile(
+    call: Call, app: App, bank: FakeBank, clock: Clock, secrets_client: FakeSecretsManager
+) -> None:
+    """A GET read the stopped link, then "Connect Swedbank again" came back before it read the secret: only the old
+    session is closed, and the new one (and its secret) stays."""
+    ready(call, app, bank)
+    stale = _stopped_with_an_open_session(app, secrets_client)
+    clock.now += timedelta(minutes=10)
+    signed = start(call, bank, {"linkId": LINK_A})
+    bank.on("POST", "/sessions", (200, SESSION))
+    assert come_back(hooks_deps(app, bank), {"code": "C", "state": signed}) == "bank_connected"
+    assert secret_of(secrets_client)["closeLater"] == ["sess-old"]
+    bank.on("DELETE", "/sessions/", (200, {}))
+    env, key, deadline = _env_and_key(app, bank)
+    assert grants._close(env, app.store, USER, stale, key=key, deadline=deadline) is True
+    assert bank.paths("DELETE") == ["/sessions/sess-old"]  # never the reconnect's own session
+    secret = secret_of(secrets_client)
+    assert (secret["sessionId"], secret["closeLater"]) == ("sess-new-1", [])
+    found = the_link(app)
+    assert found["status"] == "connected"
+    assert "closePending" not in found
+
+
+def test_closing_waits_while_a_callback_is_still_writing_its_link(
+    call: Call, app: App, bank: FakeBank, secrets_client: FakeSecretsManager
+) -> None:
+    ready(call, app, bank)
+    stale = _stopped_with_an_open_session(app, secrets_client)
+    newer = {"sessionId": "sess-new", "accounts": [], "connectedAt": "2026-11-15T12:05:00.000Z", "closeLater": []}
+    secrets_client.values[TOKEN + LINK_A] = json.dumps(newer)  # the secret is written, the BANKLINK# not yet
+    bank.on("DELETE", "/sessions/", (200, {}))
+    env, key, deadline = _env_and_key(app, bank)
+    assert grants._close(env, app.store, USER, stale, key=key, deadline=deadline) is False
+    assert bank.paths("DELETE") == []
+    assert secret_of(secrets_client) == newer
+    assert the_link(app)["closePending"] is True  # the next GET, Stop or Forget tries again
+
+
+def test_a_bare_link_closes_its_session_from_before_the_stop(
+    call: Call, app: App, bank: FakeBank, secrets_client: FakeSecretsManager
+) -> None:
+    ready(call, app, bank)
+    bare = {"type": "banklink", "linkId": LINK_A, "bank": "Swedbank", "status": "stopped", "stoppedAt": STOPPED_AT}
+    app.store.put({"pk": PK, "sk": f"BANKLINK#{LINK_A}", **bare, "closePending": True})
+    secrets_client.values[TOKEN + LINK_A] = json.dumps(
+        {"sessionId": "sess-old", "connectedAt": "2026-11-01T09:00:00.000Z", "closeLater": ["sess-older"]}
+    )
+    bank.on("DELETE", "/sessions/", (200, {}))
+    assert call("GET", "/v1/getpaid/bank")[0] == 200
+    assert sorted(bank.paths("DELETE")) == ["/sessions/sess-old", "/sessions/sess-older"]
+    assert TOKEN + LINK_A not in secrets_client.values
+    assert app.store.query_all(PK, "BANKLINK#") == []  # Forget's bare link goes once its close worked
+
+
+def test_stop_also_closes_the_other_links_old_sessions(
+    call: Call, app: App, bank: FakeBank, secrets_client: FakeSecretsManager
+) -> None:
+    ready(call, app, bank)
+    _stopped_with_an_open_session(app, secrets_client)
+    other = "0b0b0b0b0b0b"
+    app.store.put({"pk": PK, "sk": f"BANKLINK#{other}", **link(other, "PayPal", connected=iso(NOW))})
+    secrets_client.values[TOKEN + other] = json.dumps(
+        {"sessionId": "sess-paypal", "accounts": [], "connectedAt": iso(NOW), "closeLater": []}
+    )
+    bank.on("DELETE", "/sessions/", (200, {}))
+    assert call("DELETE", f"/v1/getpaid/bank/links/{other}")[0] == 204
+    assert sorted(bank.paths("DELETE")) == ["/sessions/sess-old", "/sessions/sess-paypal"]
+    assert TOKEN + LINK_A not in secrets_client.values
+    assert TOKEN + other not in secrets_client.values
+    for found in app.store.query_all(PK, "BANKLINK#"):
+        assert found["status"] == "stopped"
+        assert "closePending" not in found
 
 
 def test_slow_sessions_and_closes_still_give_a_302_inside_25_seconds(call: Call, app: App, bank: FakeBank) -> None:

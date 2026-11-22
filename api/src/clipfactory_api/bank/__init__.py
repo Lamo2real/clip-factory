@@ -234,17 +234,19 @@ class Step:
 
     id: str
     number: int | None  # None: the optional "Ask Enable Banking first", never in the ring
-    role: str  # "optional" | "reading" (each numbered step lets Clip Factory see the bank)
+    role: str  # always "reading" (§40.1's GetPaidRole: every step lets Clip Factory see the bank; the optional one
+    #            is a ``reading`` step with "Optional" in its circle, told apart by ``number`` None)
     title: str
     label: str  # ``next.label`` when this step is next
     manual: bool  # True: his green answer ticks it (PATCH /v1/getpaid/bank/steps)
-    auto: str | None  # what ticks it by itself (BankView.steps[].by "auto")
+    auto: str | None  # what ticks it by itself (BankView.steps[].by "auto"): the server's own key into
+    #                   view.AUTO_WORDS. Only whether it ticks itself is shared (bank_steps.json ``auto``: bool)
     action: str | None = None  # Clip Factory's own button
     vermilion: bool = True
 
 
 STEPS: tuple[Step, ...] = (
-    Step("bank-ask", None, "optional", "Ask Enable Banking first", "Open email", True, None),
+    Step("bank-ask", None, "reading", "Ask Enable Banking first", "Open email", True, None),
     Step("bank-account", 1, "reading", "Make an Enable Banking account", "Open Enable Banking", True, "app_known"),
     Step("bank-key", 2, "reading", "Make your bank key", "Make my bank key", False, "key_made", "make_bank_key"),
     Step(

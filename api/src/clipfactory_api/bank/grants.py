@@ -32,6 +32,7 @@ from ..oauth import STATE_SECONDS, setup, state
 from . import (
     BANK_GONE,
     CHECK_TEXT,
+    CLOSE_SECONDS,
     CONN_SK,
     COUNTRY_NOT_LINKED,
     DEPOSIT_PREFIX,
@@ -603,15 +604,34 @@ def _remove(store: db.Store, user_id: str, link_id: str, fields: list[str]) -> N
     )
 
 
+def _same_session(secret: Mapping[str, Any], link: Mapping[str, Any]) -> bool:
+    """The secret still holds the session of the link as it was read. A reconnect's callback can write a new secret
+    at any moment (``connectedAt`` equal in the secret and the ``BANKLINK#``, §40.5.5), and a link Forget kept bare has
+    no ``connectedAt``: then the secret must be from before the stop."""
+    if link.get("connectedAt"):
+        return secret.get("connectedAt") == link.get("connectedAt")
+    connected, stopped_at = parse(secret.get("connectedAt")), parse(link.get("stoppedAt"))
+    return connected is None or stopped_at is None or connected <= stopped_at
+
+
 def _close(
     env: BankEnv, store: db.Store, user_id: str, link: Mapping[str, Any], *, key: AppKey | None, deadline: Deadline
 ) -> bool:
     """Closes a link's old sessions (and, for a stopped link, its own). True when every one worked; then the secret
-    is put back without ``closeLater`` (a connected link) or deleted (a stopped link), and ``closePending`` goes."""
+    is put back without ``closeLater`` (a connected link) or deleted (a stopped link), and ``closePending`` goes.
+
+    A reconnect can never be ended by its old session: when the secret is newer than the stopped link that was read
+    (its callback ran meanwhile), the link is read again and only the new secret's ``closeLater`` is closed."""
     link_id = str(link.get("linkId") or "")
     name = token_secret(env.secrets.prefix, link_id)
     secret = env.secrets.read(name, fresh=True)
     stopped = link.get("status") == "stopped"
+    if secret and stopped and not _same_session(secret, link):
+        log("info", "bank.close_reconnected")
+        fresh = store.get(db.user_pk(user_id), link_sk(link_id))
+        if fresh is None or fresh.get("status") == "stopped" or not _same_session(secret, fresh):
+            return False  # the callback is still writing its link: the next GET, Stop or Forget tries again
+        link, stopped = fresh, False
     ids: list[str] = []
     if secret:
         earlier = secret.get("closeLater")
@@ -627,7 +647,10 @@ def _close(
     if secret and stopped:
         env.secrets.delete(name)
     elif secret and secret.get("closeLater"):
-        env.secrets.write(name, {**secret, "closeLater": []}, platform=PLATFORM)
+        latest = env.secrets.read(name, fresh=True)
+        if not latest or latest.get("connectedAt") != secret.get("connectedAt"):
+            return False  # another reconnect wrote a newer secret meanwhile: it is never put back to an older one
+        env.secrets.write(name, {**latest, "closeLater": []}, platform=PLATFORM)
     if stopped and not link.get("firstConnectedAt"):
         store.delete(db.user_pk(user_id), link_sk(link_id))  # a link Forget kept bare until its close worked
     elif link.get("closePending"):
@@ -635,14 +658,26 @@ def _close(
     return True
 
 
-def close_pending(env: BankEnv, store: db.Store, user_id: str, deadline: Deadline) -> None:
-    """``GET /v1/getpaid/bank`` first: at most 5 s on ``DELETE /sessions`` for links with ``closePending``. A failure
-    changes nothing, and the view is answered anyway."""
-    pending = [i for i in store.query_all(db.user_pk(user_id), LINK_PREFIX) if i.get("closePending")]
+def close_pending(
+    env: BankEnv,
+    store: db.Store,
+    user_id: str,
+    deadline: Deadline,
+    *,
+    skip: str | None = None,
+    key: AppKey | None = None,
+) -> None:
+    """``GET /v1/getpaid/bank`` first (and Stop, after its own link, ``skip``): at most 5 s on ``DELETE /sessions``
+    for links with ``closePending``. A failure changes nothing, and the view is answered anyway."""
+    pending = [
+        i
+        for i in store.query_all(db.user_pk(user_id), LINK_PREFIX)
+        if i.get("closePending") and (skip is None or i.get("linkId") != skip)
+    ]
     if not pending:
         return
     try:
-        key = app_key(read_app(env))
+        key = key or app_key(read_app(env))
         for link in pending:
             _close(env, store, user_id, link, key=key, deadline=deadline)
     except Exception as e:
@@ -682,10 +717,14 @@ def stop_link(
 
 
 def stop(env: BankEnv, store: db.Store, user_id: str, link_id: str, deadline: Deadline) -> None:
+    """ "Stop reading Swedbank", then (with what is left, at most 5 s) the other links' old sessions (§40.5.5: a
+    later GET, Stop or Forget closes them)."""
     link = store.get(db.user_pk(user_id), link_sk(link_id))
     if link is None or link.get("type") != "banklink":
         raise ApiError(404, "not_found", "We could not find that bank link.")
-    stop_link(env, store, user_id, link, deadline=deadline, key=app_key(read_app(env)))
+    key = app_key(read_app(env))
+    stop_link(env, store, user_id, link, deadline=deadline, key=key)
+    close_pending(env, store, user_id, deadline.sub(CLOSE_SECONDS), skip=link_id, key=key)
 
 
 def _lease_until(conn: Mapping[str, Any]) -> datetime | None:

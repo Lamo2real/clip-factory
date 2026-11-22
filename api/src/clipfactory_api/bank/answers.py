@@ -11,7 +11,7 @@ on ``state = "needs_you"``) and his answer never both win.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -107,36 +107,64 @@ def _learns(row: Mapping[str, Any]) -> bool:
     return bool(row.get("payerKey")) and row.get("shared") is not True and row.get("hintFrom") == "payer"
 
 
+RULE_TRIES = 5  # two quick answers on two cards: each rewrite of ``rules`` waits for the other, none is lost
+
+
+def _rewrite_rules(
+    store: db.Store, user_id: str, now: datetime, change: Callable[[dict[str, Item]], dict[str, Item] | None]
+) -> None:
+    """``BANKPAYERS.rules`` read, changed and written back only if nobody wrote it meanwhile (the whole map is the
+    condition), else read again: two answers at once never lose a learned payer."""
+    for _ in range(RULE_TRIES):
+        current = _payers(store, user_id)
+        raw = current.get("rules")
+        rules = {k: dict(v) for k, v in raw.items() if isinstance(v, Mapping)} if isinstance(raw, Mapping) else {}
+        changed = change(rules)
+        if changed is None:
+            return
+        names = {"#t": "type", "#r": "rules", "#u": "updatedAt"}
+        values: Item = {":t": "bankpayers", ":r": changed, ":u": iso(now)}
+        if "rules" in current:
+            condition = "#r = :old"
+            values[":old"] = raw
+        else:
+            condition = "attribute_not_exists(#r)"
+        try:
+            store.update_expr(
+                db.user_pk(user_id),
+                PAYERS_SK,
+                "SET #t = :t, #r = :r, #u = :u",
+                condition=condition,
+                names=names,
+                values=values,
+            )
+        except db.ConditionFailed:
+            continue
+        return
+    log("warning", "bank.payers_busy")
+
+
 def _learn(store: db.Store, user_id: str, payer_key: str, place: str, now: datetime) -> None:
     """``BANKPAYERS.rules[payerKey] = {place, learnedAt}`` (at most 50: the oldest goes)."""
-    current = _payers(store, user_id)
-    rules = {k: dict(v) for k, v in (current.get("rules") or {}).items() if isinstance(v, Mapping)}
-    rules[payer_key] = {"place": place, "learnedAt": iso(now)}
-    while len(rules) > MAX_RULES:
-        oldest = min((k for k in rules if k != payer_key), key=lambda k: str(rules[k].get("learnedAt") or ""))
-        rules.pop(oldest)
-    store.update_expr(
-        db.user_pk(user_id),
-        PAYERS_SK,
-        "SET #t = :t, #r = :r, #u = :u",
-        names={"#t": "type", "#r": "rules", "#u": "updatedAt"},
-        values={":t": "bankpayers", ":r": rules, ":u": iso(now)},
-    )
+
+    def change(rules: dict[str, Item]) -> dict[str, Item]:
+        rules[payer_key] = {"place": place, "learnedAt": iso(now)}
+        while len(rules) > MAX_RULES:
+            oldest = min((k for k in rules if k != payer_key), key=lambda k: str(rules[k].get("learnedAt") or ""))
+            rules.pop(oldest)
+        return rules
+
+    _rewrite_rules(store, user_id, now, change)
 
 
 def _unlearn(store: db.Store, user_id: str, payer_key: str, now: datetime) -> None:
-    current = _payers(store, user_id)
-    rules = current.get("rules")
-    if not isinstance(rules, Mapping) or payer_key not in rules:
-        return
-    kept = {k: dict(v) for k, v in rules.items() if k != payer_key and isinstance(v, Mapping)}
-    store.update_expr(
-        db.user_pk(user_id),
-        PAYERS_SK,
-        "SET #r = :r, #u = :u",
-        names={"#u": "updatedAt", "#r": "rules"},
-        values={":u": iso(now), ":r": kept},
-    )
+    def change(rules: dict[str, Item]) -> dict[str, Item] | None:
+        if payer_key not in rules:
+            return None
+        rules.pop(payer_key)
+        return rules
+
+    _rewrite_rules(store, user_id, now, change)
 
 
 def _not_income(store: db.Store, user_id: str, payer_key: str, now: datetime) -> None:

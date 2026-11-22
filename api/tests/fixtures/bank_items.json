@@ -15,7 +15,7 @@
   "app": ["status", "source", "keyMadeAt", "savedAt", "appIdHint", "active", "environment", "check", "downAt"],
   "readLease": {"until": "an ISO time (UTC, ms, Z); claimed when absent or past, released by its holder"},
   "byWriter": {"cf-prod-hooks": ["type", "lastConnect"], "cf-prod-money": ["readLease", "lastNotice", "lastRunAt", "app.check"]},
-  "example": {"type": "bankconn", "updatedAt": "2026-11-01T09:00:00.000Z", "lastManualAt": "2026-11-22T11:00:00.000Z", "manual": {"day": "2026-11-22", "n": 1}, "lastConnect": {"result": "bank_connected", "linkId": "a1b2c3d4e5f6", "bank": "Swedbank", "reconnect": false, "at": "2026-11-01T09:00:00.000Z"}, "stepsDone": ["bank-account", "bank-app", "bank-details"], "app": {"status": "saved", "source": "clipfactory", "keyMadeAt": "2026-11-01T09:00:00.000Z", "savedAt": "2026-11-01T09:00:00.000Z", "appIdHint": "0f6e1d2c…", "check": {"code": "ok", "at": "2026-11-01T09:00:00.000Z"}, "active": true, "environment": "PRODUCTION"}}
+  "example": {"type": "bankconn", "updatedAt": "2026-11-01T09:00:00.000Z", "lastManualAt": "2026-11-22T11:00:00.000Z", "manual": {"day": "2026-11-22", "n": 1}, "lastConnect": {"result": "bank_connected", "linkId": "a1b2c3d4e5f6", "bank": "Swedbank", "reconnect": false, "at": "2026-11-01T09:00:00.000Z"}, "stepsDone": ["bank-account", "bank-app", "bank-details"], "app": {"status": "saved", "source": "clipfactory", "keyMadeAt": "2026-04-01T09:00:00.000Z", "savedAt": "2026-11-01T09:00:00.000Z", "appIdHint": "0f6e1d2c…", "check": {"code": "ok", "at": "2026-11-01T09:00:00.000Z"}, "active": true, "environment": "PRODUCTION"}}
  },
  {
   "sk": "BANKLINK#{linkId}",

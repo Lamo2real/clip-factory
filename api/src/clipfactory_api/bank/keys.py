@@ -174,6 +174,23 @@ def conn(store: db.Store, user_id: str) -> Item:
     return store.get(db.user_pk(user_id), CONN_SK) or {}
 
 
+def _finish_half_made(store: db.Store, user_id: str, now: datetime, secret: Mapping[str, Any]) -> None:
+    """A key whose ``BANKCONN`` write never happened (the UpdateItem failed, or the Lambda ran out of time after the
+    secret was written): ``app`` is written from the secret now, so step 2 ticks and the button isn't stuck. Only the
+    public facts go in (where the key came from, when, and the app ID's first 8 characters)."""
+    stored = conn(store, user_id).get("app")
+    if isinstance(stored, Mapping) and stored.get("status") in {"key_made", "saved"}:
+        return
+    source = secret.get("source") if secret.get("source") in {"clipfactory", "file"} else "clipfactory"
+    made_at = secret.get("keyMadeAt") if isinstance(secret.get("keyMadeAt"), str) else iso(now)
+    app: Item = {"status": "key_made", "source": source, "keyMadeAt": made_at}
+    app_id = secret.get("appId")
+    if isinstance(app_id, str) and APP_ID.match(app_id):
+        app.update(status="saved", savedAt=iso(now), appIdHint=f"{app_id[:8]}…")
+    _set_app(store, user_id, now, app)
+    log("warning", "bank.key_finished", status=app["status"])
+
+
 def make_key(env: BankEnv, store: db.Store, user_id: str, *, again: bool) -> bool:
     """ "Make my bank key". True when a key was made; with a key already there (and no ``again``) nothing changes."""
     now = env.clock()
@@ -181,6 +198,7 @@ def make_key(env: BankEnv, store: db.Store, user_id: str, *, again: bool) -> boo
     name = env.app_name()
     current = env.secrets.read(name, fresh=True) or {}
     if current.get("privateKeyPem") and not again:
+        _finish_half_made(store, user_id, now, current)
         return False
     if current.get("privateKeyPem") and any_session(store, user_id):
         raise conflict(STOP_FIRST)
@@ -279,13 +297,16 @@ def save_app(env: BankEnv, store: db.Store, user_id: str, body: Mapping[str, Any
     current = env.secrets.read(name, fresh=True) or {}
     if not current.get("privateKeyPem"):
         raise conflict(KEY_FIRST)
-    if current.get("appId") == app_id:
-        return False
-    if any_session(store, user_id):
-        raise conflict(STOP_FIRST)
-    env.secrets.write(name, {**current, "appId": app_id}, platform=PLATFORM)
     stored = conn(store, user_id).get("app")
     old: Mapping[str, Any] = stored if isinstance(stored, Mapping) else {}
+    if current.get("appId") == app_id:
+        if old.get("status") == "saved" and old.get("appIdHint") == f"{app_id[:8]}…":
+            return False
+        # The secret got the app ID but ``BANKCONN`` didn't (a write that failed half way): finish it, no 409.
+    elif any_session(store, user_id):
+        raise conflict(STOP_FIRST)
+    else:
+        env.secrets.write(name, {**current, "appId": app_id}, platform=PLATFORM)
     app = {
         "status": "saved",
         "source": old.get("source") or current.get("source") or "clipfactory",

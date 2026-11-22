@@ -40,6 +40,7 @@ VALUES = view.values(APP_URL, REDIRECT)
 APP_ID = "0f6e1d2c-3b4a-4c5d-8e9f-a0b1c2d3e4f5"
 NOW = "2026-11-22T12:00:00.000Z"
 T0 = "2026-11-01T09:00:00.000Z"
+KEY_T = "2026-04-01T09:00:00.000Z"  # the bank key was made before every link below (a link counts for its own key)
 LINK_A = "a1b2c3d4e5f6"
 LINK_B = "0a1b2c3d4e5f"
 # Made-up personal data Enable Banking's answers can hold. None of it may ever reach an item, a secret, a log line,
@@ -270,7 +271,7 @@ def conn(
         out["stepsDone"] = sorted(ticks)
     if status is None:
         return out
-    app: dict[str, Any] = {"status": status, "source": source, "keyMadeAt": T0}
+    app: dict[str, Any] = {"status": status, "source": source, "keyMadeAt": KEY_T}
     if status == "saved":
         app.update(savedAt=T0, appIdHint="0f6e1d2c…")
     if check:
@@ -342,6 +343,13 @@ def dep(
 
 
 DONE_TICKS = ("bank-account", "bank-app", "bank-details")
+NEW_KEY_T = "2026-11-21T10:00:00.000Z"  # "Make a new key", after every link was stopped
+
+
+def new_key(stored: dict[str, Any]) -> dict[str, Any]:
+    """``BANKCONN`` after "Make a new key" (or a .pem) at ``NEW_KEY_T``."""
+    stored["app"]["keyMadeAt"] = NEW_KEY_T
+    return stored
 
 
 def run(case: dict[str, Any]) -> dict[str, Any]:
@@ -395,6 +403,32 @@ def build_view() -> dict[str, list[dict[str, Any]]]:
         _case(
             "key_wrong after connecting unfolds the steps again",
             {"conn": conn("saved", "key_wrong"), "links": [link()]},
+        ),
+        _case(
+            "a new key with a stopped link: steps 3 and 4 again, nothing ticks itself for the new app",
+            {
+                "conn": new_key(conn("key_made", None, ticks=("bank-account",))),
+                "links": [link(status="stopped", stoppedAt="2026-11-20T06:00:00.000Z")],
+                "key": KEY_PARTS,
+            },
+        ),
+        _case(
+            "a new key, its app ID saved and ok: step 7 next, the stopped link still ticks nothing",
+            {
+                "conn": new_key(conn("saved", "ok", ticks=DONE_TICKS)),
+                "links": [link(status="stopped", stoppedAt="2026-11-20T06:00:00.000Z")],
+                "key": KEY_PARTS,
+            },
+        ),
+        _case(
+            "a new key and a bank connected with it: every step done again",
+            {
+                "conn": new_key(conn("saved", "ok", ticks=DONE_TICKS)),
+                "links": [
+                    link(status="stopped", stoppedAt="2026-11-20T06:00:00.000Z"),
+                    link(LINK_B, "PayPal", connected="2026-11-21T11:00:00.000Z"),
+                ],
+            },
         ),
     ]
     one = "2026-11-22T11:50:00.000Z"
@@ -653,7 +687,12 @@ def _money_cases() -> list[dict[str, Any]]:
 
 
 def build_steps() -> list[dict[str, Any]]:
-    return [{"id": s.id, "role": s.role, "auto": s.auto} for s in STEPS]
+    """Only what §40.5.2 itself says: the id, the number (None: the optional email), the role (§40.1's
+    ``GetPaidRole``: every step is ``reading``), ``manual`` (his green answer ticks it) and ``auto`` (it also ticks
+    itself). The server's own names for what ticks a step stay inside ``bank/``."""
+    return [
+        {"id": s.id, "number": s.number, "role": s.role, "manual": s.manual, "auto": s.auto is not None} for s in STEPS
+    ]
 
 
 def build_items() -> list[dict[str, Any]]:

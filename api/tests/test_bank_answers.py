@@ -15,7 +15,7 @@ from bank_cases import LINK_A, dep, link, setup_bank
 from clipfactory_api import db
 from clipfactory_api.app import App
 from clipfactory_api.bank import answers
-from conftest import USER, Call
+from conftest import NOW, USER, Call
 
 PK = db.user_pk(USER)
 PAYER = "0123456789abcdef0123456789abcdef"
@@ -383,3 +383,37 @@ def test_no_answer_ever_changes_an_amount(call: Call, app: App) -> None:
         assert row(app, found["depositId"])["exponent"] == found["exponent"]
     assert answer(call, "1" * 32, {"answer": "not_this"})[0] == 200
     assert money(row(app, "1" * 32)) == money(rows[0])
+
+
+THIRD_PAYER = "00112233445566778899aabbccddeeff"
+
+
+def _race_once(app: App, monkeypatch: pytest.MonkeyPatch, other: tuple[str, str] | None) -> None:
+    """The other card's answer lands between this answer's read of ``BANKPAYERS`` and its write."""
+    real = answers._payers
+    raced: list[bool] = []
+
+    def racing(store: db.Store, user_id: str) -> dict[str, Any]:
+        found = real(store, user_id)
+        if not raced:
+            raced.append(True)
+            if other is None:
+                answers._learn(store, user_id, THIRD_PAYER, "tiktok", NOW)
+            else:
+                answers._unlearn(store, user_id, other[0], NOW)
+        return found
+
+    monkeypatch.setattr(answers, "_payers", racing)
+
+
+def test_two_quick_answers_never_lose_a_learned_payer(app: App, monkeypatch: pytest.MonkeyPatch) -> None:
+    _race_once(app, monkeypatch, None)  # no BANKPAYERS yet: both answers make it at once
+    answers._learn(app.store, USER, PAYER, "youtube", NOW)
+    assert sorted(payers(app)["rules"]) == sorted([PAYER, THIRD_PAYER])
+    _race_once(app, monkeypatch, (THIRD_PAYER, ""))  # "Not from TikTok?" on one card, YouTube learned on another
+    answers._learn(app.store, USER, OTHER_PAYER, "x", NOW)
+    assert sorted(payers(app)["rules"]) == sorted([PAYER, OTHER_PAYER])
+    _race_once(app, monkeypatch, None)
+    answers._unlearn(app.store, USER, PAYER, NOW)
+    assert sorted(payers(app)["rules"]) == sorted([OTHER_PAYER, THIRD_PAYER])
+    assert payers(app)["rules"][THIRD_PAYER]["place"] == "tiktok"

@@ -31,10 +31,11 @@ from bank_cases import (
 )
 from clipfactory_api import db, money
 from clipfactory_api.app import App
+from clipfactory_api.clock import iso
 from clipfactory_api.http import dispatch
 from clipfactory_api.platforms.base import NetworkError
 from clipfactory_api.routes import ROUTES
-from conftest import OTHER, USER, Call, Clock, make_event
+from conftest import NOW, OTHER, USER, Call, Clock, make_event
 from fakes import FakeLambda, FakeSecretsManager, FakeTable
 
 PK = db.user_pk(USER)
@@ -69,7 +70,8 @@ def seed_link(
     close_later: tuple[str, ...] = (),
     **extra: Any,
 ) -> dict[str, Any]:
-    item = link(link_id, **extra)
+    # Connected with today's key (``ready`` makes it at NOW): only those links tick the steps.
+    item = link(link_id, **{"connected": iso(NOW), **extra})
     app.store.put({"pk": PK, "sk": f"BANKLINK#{link_id}", **item})
     secrets_client.values[TOKEN + link_id] = json.dumps(
         {
@@ -236,7 +238,7 @@ def test_check_now_once_every_15_minutes_and_12_a_day(
 def test_the_first_read_passes_once_per_link(
     app: App, bank: FakeBank, clock: Clock, lambda_client: FakeLambda, secrets_client: FakeSecretsManager
 ) -> None:
-    seed_link(app, secrets_client)
+    seed_link(app, secrets_client, connected="2026-11-15T10:00:00.000Z")  # read already, BankID 2 hours ago
     seed_link(app, secrets_client, LINK_B, bank="PayPal", first_read=False, connected="2026-11-15T11:58:00.000Z")
     assert check(app)[0] == 202  # his own Check now
     status, _ = check(app, {"first": True})  # passes the 15 minutes anyway
@@ -246,6 +248,46 @@ def test_the_first_read_passes_once_per_link(
     status, _ = check(app, {"first": True})
     assert status == 202
     assert len(lambda_client.calls) == 2
+
+
+def test_a_reconnects_own_read_starts_at_once_once(
+    app: App, bank: FakeBank, clock: Clock, lambda_client: FakeLambda, secrets_client: FakeSecretsManager
+) -> None:
+    """A reconnect keeps ``firstReadDone`` true, and the callback REMOVEs ``firstReadStartedAt``: the page's
+    ``{"first": true}`` after ``bank_connected`` starts that link's read at once, once."""
+    seed_link(app, secrets_client, connected="2026-11-15T11:40:00.000Z", historyWanted=True)  # BankID 20 min ago
+    status, _ = check(app, {"first": True})
+    assert status == 202
+    (invoke,) = lambda_client.calls
+    assert invoke["payload"]["first"] is True
+    found = app.store.get(PK, f"BANKLINK#{LINK_A}") or {}
+    assert found["firstReadStartedAt"] == "2026-11-15T12:00:00.000Z"
+    assert check(app, {"first": True})[0] == 202
+    assert len(lambda_client.calls) == 1  # one per link
+    assert "lastManualAt" not in (app.store.get(PK, "BANKCONN") or {})  # never spends his Check now
+
+
+def test_an_old_link_gets_no_first_read(
+    app: App, bank: FakeBank, lambda_client: FakeLambda, secrets_client: FakeSecretsManager
+) -> None:
+    seed_link(app, secrets_client, connected="2026-11-15T10:59:00.000Z")  # read already, and BankID over an hour ago
+    assert check(app, {"first": True})[0] == 202
+    assert lambda_client.calls == []
+    assert "firstReadStartedAt" not in (app.store.get(PK, f"BANKLINK#{LINK_A}") or {})
+
+
+@pytest.mark.parametrize("first", [True, False])
+def test_check_now_without_the_invoker_holds_nothing_back(
+    app: App, bank: FakeBank, secrets_client: FakeSecretsManager, first: bool
+) -> None:
+    seed_link(app, secrets_client, first_read=False, connected=iso(NOW))
+    app.invoker = None
+    status, body = check(app, {"first": first})
+    assert (status, body["error"]["message"]) == (503, "Checking your bank is not switched on for this app yet.")
+    assert "firstReadStartedAt" not in (app.store.get(PK, f"BANKLINK#{LINK_A}") or {})
+    conn = app.store.get(PK, "BANKCONN") or {}
+    assert "lastManualAt" not in conn
+    assert "manual" not in conn
 
 
 def test_a_failed_invoke_gives_the_claim_back(

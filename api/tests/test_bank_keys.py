@@ -20,8 +20,9 @@ from bank_cases import APP_ID, APPLICATION, LINK_A, FakeBank, forget_caches, lin
 from clipfactory_api import db
 from clipfactory_api.app import App
 from clipfactory_api.bank import keys
-from conftest import NOW, OTHER, USER, Call
-from fakes import FakeSecretsManager, FakeTable
+from clipfactory_api.clock import iso
+from conftest import NOW, OTHER, USER, Call, Clock
+from fakes import FakeSecretsManager, FakeTable, client_error
 
 SECRET = "cf-prod/platforms/bank/app"
 PK = db.user_pk(USER)
@@ -158,13 +159,26 @@ def test_again_a_new_app_id_or_a_pem_wait_while_a_link_has_a_session(
 
 
 def test_a_stopped_link_without_a_session_lets_a_new_key_through(
-    call: Call, app: App, bank: FakeBank, quick: None
+    call: Call, app: App, bank: FakeBank, clock: Clock, quick: None
 ) -> None:
     assert call("POST", "/v1/getpaid/bank/key")[0] == 200
-    app.store.put(
-        {"pk": PK, "sk": f"BANKLINK#{LINK_A}", **link(status="stopped", stoppedAt="2026-11-14T10:00:00.000Z")}
-    )
-    assert call("POST", "/v1/getpaid/bank/key", {"again": True})[0] == 200
+    assert call("PUT", "/v1/getpaid/bank/app", {"appId": APP_ID})[0] == 200
+    for step in ("bank-account", "bank-app", "bank-details"):
+        assert call("PATCH", "/v1/getpaid/bank/steps", {"step": step, "done": True})[0] == 200
+    stopped = link(status="stopped", connected=iso(NOW), stoppedAt=iso(NOW))
+    app.store.put({"pk": PK, "sk": f"BANKLINK#{LINK_A}", **stopped})
+    _, before = call("GET", "/v1/getpaid/bank")
+    assert before["status"] == "stopped"  # every step done: the old key's link counts for the old key
+    clock.now += timedelta(minutes=5)
+    status, body = call("POST", "/v1/getpaid/bank/key", {"again": True})
+    assert status == 200
+    # The stopped link belongs to the old app: nothing ticks itself for the new one, and step 3 is next.
+    steps = {s["id"]: s for s in body["steps"]}
+    for step_id in ("bank-app", "bank-details", "bank-appid", "bank-link", "bank-connect"):
+        assert steps[step_id] == {"id": step_id, "done": False, "by": None}, step_id
+    assert body["next"]["stepId"] == "bank-app"
+    assert body["status"] == "setting_up"
+    assert "fold" not in body
 
 
 def test_save_the_app_id(call: Call, app: App, bank: FakeBank, secrets_client: FakeSecretsManager, quick: None) -> None:
@@ -260,6 +274,49 @@ def test_the_file_name_rule() -> None:
     assert keys.FILE_NAME.match(f"{APP_ID} (3).pem")
     assert not keys.FILE_NAME.match(f"{APP_ID}.pem.txt")
     assert not keys.FILE_NAME.match(f"Downloads/{APP_ID}.pem")
+
+
+def test_a_half_made_key_is_finished_by_the_next_tap(
+    call: Call,
+    app: App,
+    bank: FakeBank,
+    table: FakeTable,
+    secrets_client: FakeSecretsManager,
+    quick: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The secret was written but the ``BANKCONN`` UpdateItem failed (or the Lambda ran out of time): the next "Make
+    my bank key" writes ``app`` from the secret, so step 2 ticks and the button is never stuck."""
+    real = table.update_item
+    failed: list[str] = []
+
+    def once(**kw: object) -> dict[str, object]:
+        key = kw["Key"]
+        if isinstance(key, dict) and key.get("sk") == "BANKCONN" and not failed:
+            failed.append("BANKCONN")
+            raise client_error("InternalServerError", 500)
+        return real(**kw)
+
+    monkeypatch.setattr(table, "update_item", once)
+    assert call("POST", "/v1/getpaid/bank/key")[0] == 500
+    made = secrets_client.json(SECRET)
+    assert made["privateKeyPem"]
+    assert "app" not in (app.store.get(PK, "BANKCONN") or {})
+    status, body = call("POST", "/v1/getpaid/bank/key")
+    assert status == 200
+    assert secrets_client.json(SECRET) == made  # the same key: nothing new is made
+    stored = (app.store.get(PK, "BANKCONN") or {})["app"]
+    assert stored == {"status": "key_made", "source": "clipfactory", "keyMadeAt": made["keyMadeAt"]}
+    assert {s["id"]: s["done"] for s in body["steps"]}["bank-key"] is True
+    assert body["key"]["publicKeyPem"] == made["publicKeyPem"]
+    # The same for an app ID the secret got but BANKCONN didn't: Save again finishes it.
+    failed.clear()
+    assert call("PUT", "/v1/getpaid/bank/app", {"appId": APP_ID})[0] == 500
+    assert secrets_client.json(SECRET)["appId"] == APP_ID
+    status, body = call("PUT", "/v1/getpaid/bank/app", {"appId": APP_ID})
+    assert status == 200
+    stored = (app.store.get(PK, "BANKCONN") or {})["app"]
+    assert (stored["status"], stored["appIdHint"], stored["check"]["code"]) == ("saved", "0f6e1d2c…", "ok")
 
 
 def test_only_the_owner(call: Call, app: App, bank: FakeBank, quick: None) -> None:

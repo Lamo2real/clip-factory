@@ -42,13 +42,14 @@ from ..bank import (
     view,
 )
 from ..bank.eb import BankEnv, Deadline
-from ..clock import iso
+from ..clock import iso, parse
 from ..errors import ApiError, bad_request, not_found
 from ..http import Request, Response, no_content, ok
 from ..log import log
 
 MAX_UA = 512
 MAX_LANG = 100
+FIRST_READ_HOURS = 1  # a reconnect's own read counts as his first read within this long of BankID (§40.5.6)
 
 
 def _on(app: App) -> None:
@@ -207,10 +208,22 @@ def _psu(req: Request) -> dict[str, str]:
     }
 
 
+def _wants_first(link: dict[str, Any], now: datetime) -> bool:
+    """A connected link whose own read hasn't started: a new link (``firstReadDone`` false), or a reconnect within an
+    hour of its ``connectedAt`` (the callback REMOVEd ``firstReadStartedAt``, and full history is often there only
+    in that first hour after BankID)."""
+    if link.get("status") != "connected" or link.get("firstReadStartedAt"):
+        return False
+    if link.get("firstReadDone") is not True:
+        return True
+    connected = parse(link.get("connectedAt"))
+    return connected is not None and timedelta(0) <= now - connected < timedelta(hours=FIRST_READ_HOURS)
+
+
 def _claim_first(app: App, user_id: str, links: list[dict[str, Any]], now: datetime) -> str | None:
-    """The first read of a link that hasn't started: one per link (a conditional ``firstReadStartedAt``)."""
+    """The first read of a new or reconnected link: one per link (a conditional ``firstReadStartedAt``)."""
     for link in links:
-        if link.get("status") != "connected" or link.get("firstReadDone") is True or link.get("firstReadStartedAt"):
+        if not _wants_first(link, now):
             continue
         try:
             app.store.update_expr(
@@ -286,6 +299,8 @@ def check_now(app: App, req: Request) -> Response:
     links = app.store.query_all(db.user_pk(req.user_id), LINK_PREFIX)
     if not any(link.get("status") == "connected" for link in links):
         raise ApiError(409, "conflict", CONNECT_FIRST)
+    if app.invoker is None:  # before any claim, so nothing is held back for a read that can't start
+        raise ApiError(503, "unavailable", CHECK_OFF)
     claimed: str | None = None
     old: dict[str, Any] | None = None
     if first:
@@ -294,8 +309,6 @@ def check_now(app: App, req: Request) -> Response:
             return ok(_view(app, env, req.user_id), status=202)
     else:
         old = _claim_manual(app, req.user_id, now)
-    if app.invoker is None:
-        raise ApiError(503, "unavailable", CHECK_OFF)
     try:
         app.invoker.bank_check(req.user_id, first, _psu(req), iso(now))
     except InvokeError as e:

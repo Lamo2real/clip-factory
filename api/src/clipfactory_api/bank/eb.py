@@ -61,18 +61,53 @@ class Skipped(EbError):
         super().__init__(0, "DEADLINE")
 
 
-def urllib_transport(request: HttpRequest, timeout: float) -> HttpResponse:
-    """The production transport: Enable Banking's host only, over https, with the call's own timeout."""
-    if not request.url.startswith(EB_HOST + "/"):
-        raise NetworkError("only Enable Banking's API is called")
-    req = urllib.request.Request(request.url, data=request.body, method=request.method, headers=request.headers)  # noqa: S310
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Enable Banking never redirects an API call. Following one would carry ``Authorization: Bearer`` (the JWT) to
+    another host, even over plain http, so a 3xx comes back as itself: the check's ``down``, Connect's 503 and the
+    callback's ``bank_error``."""
+
+    def redirect_request(self, *_args: Any, **_kwargs: Any) -> None:
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
+def _fetch(req: urllib.request.Request, timeout: float) -> HttpResponse:
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+        with _OPENER.open(req, timeout=timeout) as resp:
             return HttpResponse(resp.status, _lower(resp.headers.items()), resp.read(MAX_RESPONSE_BYTES))
-    except urllib.error.HTTPError as e:
+    except urllib.error.HTTPError as e:  # 4xx, 5xx and every 3xx (never followed)
         return HttpResponse(e.code, _lower(e.headers.items() if e.headers else []), e.read(MAX_RESPONSE_BYTES))
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         raise NetworkError(type(e).__name__) from e
+
+
+def urllib_transport(request: HttpRequest, timeout: float) -> HttpResponse:
+    """The production transport: Enable Banking's host only, over https, redirects never followed, and the whole call
+    (connect, headers and body) inside ``timeout``. urllib's own timeout is per socket step, so an answer that
+    drips in slowly could pass the route's deadline; the call runs on a worker thread that is given up on at
+    ``timeout`` (it ends by itself at its next socket timeout, and its answer is never used)."""
+    if not request.url.startswith(EB_HOST + "/"):
+        raise NetworkError("only Enable Banking's API is called")
+    req = urllib.request.Request(request.url, data=request.body, method=request.method, headers=request.headers)  # noqa: S310
+    box: list[HttpResponse | BaseException] = []
+
+    def run() -> None:
+        try:
+            box.append(_fetch(req, timeout))
+        except BaseException as e:  # handed to the caller below
+            box.append(e)
+
+    worker = threading.Thread(target=run, name="bank-call", daemon=True)
+    worker.start()
+    worker.join(timeout)
+    if not box:
+        raise NetworkError("TimeoutError")
+    found = box[0]
+    if isinstance(found, BaseException):
+        raise found
+    return found
 
 
 def _lower(items: Any) -> dict[str, str]:

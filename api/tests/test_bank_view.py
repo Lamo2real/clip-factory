@@ -129,6 +129,34 @@ def test_fold_only_with_all_seven_and_gone_again_on_key_wrong() -> None:
     assert len(broken["links"]) == 1  # his bank stays on the page
 
 
+def test_a_new_key_never_ticks_steps_with_the_old_apps_links() -> None:
+    """ "Make a new key" is allowed only once every link is stopped. Those links belong to the old app, so the steps
+    never say "Enable Banking knows your app" or "Clip Factory can see Swedbank" for an app it has never seen."""
+    fresh = out("a new key with a stopped link: steps 3 and 4 again, nothing ticks itself for the new app")
+    steps = {s["id"]: s for s in fresh["steps"]}
+    assert steps["bank-account"] == {"id": "bank-account", "done": True, "by": "you"}
+    assert steps["bank-key"]["auto"] == "Clip Factory made your bank key"
+    for step_id in ("bank-app", "bank-details", "bank-appid", "bank-link", "bank-connect"):
+        assert steps[step_id] == {"id": step_id, "done": False, "by": None}, step_id
+    assert fresh["next"] == {
+        "stepId": "bank-app",
+        "label": "Open your Enable Banking apps",
+        "text": "Next: step 3, Add Clip Factory on Enable Banking.",
+        "vermilion": True,
+    }
+    assert (fresh["status"], fresh["ring"]) == ("setting_up", {"done": 2, "total": 7})
+    assert "fold" not in fresh
+    assert len(fresh["links"]) == 1  # the stopped bank stays a quiet row
+    assert fresh["key"]["publicKeyPem"]  # the step cards show, with the new public key to copy
+    saved = out("a new key, its app ID saved and ok: step 7 next, the stopped link still ticks nothing")
+    assert {s["id"]: s["done"] for s in saved["steps"]}["bank-connect"] is False
+    assert saved["next"]["stepId"] == "bank-connect"
+    again = out("a new key and a bank connected with it: every step done again")
+    assert {s["id"]: s for s in again["steps"]}["bank-connect"]["auto"] == "Clip Factory can see PayPal"
+    assert again["fold"] == "Set up ✓ (Enable Banking knows your app)"
+    assert again["status"] == "can_see"
+
+
 def test_the_key_box() -> None:
     key = out("step 1 next after the key: Open Enable Banking")["key"]
     assert key["made"] is True

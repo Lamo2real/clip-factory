@@ -177,11 +177,28 @@ def visible_links(links: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]
     return [link for link in links if link.get("type", "banklink") == "banklink" and link.get("connectedAt")]
 
 
+def key_links(conn: Mapping[str, Any], links: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """The links made with today's bank key: connected at or after ``app.keyMadeAt``. A new key ("Make a new key",
+    or a .pem) is only allowed once every link is stopped, and those old links belong to an app Enable Banking has
+    never seen with the new key, so they never tick a step for it. Without a ``keyMadeAt`` every link counts."""
+    made = parse(_map(conn.get("app")).get("keyMadeAt"))
+    if made is None:
+        return list(links)
+    out = []
+    for link in links:
+        connected = parse(link.get("connectedAt"))
+        if connected is not None and connected >= made:
+            out.append(link)
+    return out
+
+
 def steps(conn: Mapping[str, Any], links: Sequence[Mapping[str, Any]]) -> list[Item]:
-    """``BankView.steps`` from stored items only (never a secret)."""
+    """``BankView.steps`` from stored items only (never a secret). The link autos count only the links of today's key
+    (``key_links``), so a new key never shows "Clip Factory can see Swedbank" for an app Enable Banking doesn't know."""
     ticks = _ticks(conn)
     check = _check_code(conn)
     app = _map(conn.get("app"))
+    links = key_links(conn, links)
     any_link = bool(links)
     app_known = check in {"ok", "not_active"} or any_link
     newest = (

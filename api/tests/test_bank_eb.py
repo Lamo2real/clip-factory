@@ -8,7 +8,13 @@ names leaves nothing in any log line, ``http.internal`` included. Offline: a fak
 from __future__ import annotations
 
 import base64
+import email.message
+import io
 import json
+import threading
+import time
+import urllib.request
+import urllib.response
 from datetime import UTC, datetime
 from typing import Any
 
@@ -93,10 +99,77 @@ def test_every_call_goes_to_api_enablebanking_com_only(call: Call, bank: FakeBan
     assert eb.EB_HOST == "https://api.enablebanking.com"
 
 
+class _Answers(urllib.request.BaseHandler):
+    """Stands in for the network under the real opener: Enable Banking's host answers 302 to another host, and any
+    request that reaches the other host is recorded (it must never happen: the JWT would go with it). It runs before
+    urllib's own http and https handlers, so nothing ever leaves the machine."""
+
+    handler_order = 100
+
+    def __init__(self) -> None:
+        self.seen: list[tuple[str, str | None]] = []
+
+    def _answer(self, req: urllib.request.Request, code: int, location: str | None) -> Any:
+        self.seen.append((req.full_url, req.get_header("Authorization")))
+        headers = email.message.Message()
+        if location:
+            headers["Location"] = location
+        resp = urllib.response.addinfourl(io.BytesIO(b'{"error": "MOVED"}'), headers, req.full_url, code)
+        resp.msg = "Found" if location else "OK"
+        return resp
+
+    def https_open(self, req: urllib.request.Request) -> Any:
+        if req.full_url.startswith(eb.EB_HOST + "/"):
+            return self._answer(req, 302, "http://elsewhere.example/steal")
+        return self._answer(req, 200, None)
+
+    def http_open(self, req: urllib.request.Request) -> Any:
+        return self._answer(req, 200, None)
+
+
+def test_a_redirect_is_never_followed(monkeypatch: pytest.MonkeyPatch) -> None:
+    answers = _Answers()
+    monkeypatch.setattr(eb, "_OPENER", urllib.request.build_opener(eb._NoRedirect, answers))
+    request = HttpRequest("GET", f"{eb.EB_HOST}/application", {"Authorization": "Bearer ey.fake.jwt"})
+    resp = eb.urllib_transport(request, 5)
+    assert resp.status == 302
+    assert answers.seen == [(f"{eb.EB_HOST}/application", "Bearer ey.fake.jwt")]  # never the other host
+    assert eb.check_code(resp.status, eb.error_code(resp), None, REDIRECT) == "down"
+    with pytest.raises(eb.EbError):
+        eb.ok_json(resp)  # Connect's 503, the callback's bank_error
+
+
+def test_the_whole_call_stays_inside_its_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """urllib's timeout is per socket step: an answer that drips in could pass the route's deadline. The transport
+    gives up on the whole call at its timeout."""
+    release = threading.Event()
+
+    def drip(_req: urllib.request.Request, _timeout: float) -> HttpResponse:
+        release.wait(5)
+        return HttpResponse(200, {}, b"{}")
+
+    monkeypatch.setattr(eb, "_fetch", drip)
+    start = time.monotonic()
+    with pytest.raises(NetworkError, match="TimeoutError"):
+        eb.urllib_transport(HttpRequest("GET", f"{eb.EB_HOST}/application"), 0.2)
+    assert time.monotonic() - start < 2
+    release.set()
+    monkeypatch.setattr(eb, "_fetch", lambda _req, _timeout: HttpResponse(200, {}, b"{}"))
+    assert eb.urllib_transport(HttpRequest("GET", f"{eb.EB_HOST}/application"), 1).status == 200
+
+    def broken(_req: urllib.request.Request, _timeout: float) -> HttpResponse:
+        raise NetworkError("URLError")
+
+    monkeypatch.setattr(eb, "_fetch", broken)
+    with pytest.raises(NetworkError, match="URLError"):
+        eb.urllib_transport(HttpRequest("GET", f"{eb.EB_HOST}/application"), 1)
+
+
 @pytest.mark.parametrize(
     ("answer", "code"),
     [
         ((200, APPLICATION), "ok"),
+        ((302, {"error": "MOVED"}), "down"),
         ((200, {**APPLICATION, "active": False}), "not_active"),
         ((200, {**APPLICATION, "redirect_urls": [REDIRECT + "/"]}), "redirect_missing"),
         ((200, {**APPLICATION, "redirect_urls": []}), "redirect_missing"),
