@@ -1760,11 +1760,6 @@ ol.md__list {
   font-weight: 600;
   min-width: 0;
 }
-@media (min-width: 1100px) {
-  .money-tile {
-    grid-template-columns: minmax(200px, 0.9fr) minmax(0, 3.2fr);
-  }
-}
 
 /* ---------- What it learned (docs/CONTRACTS.md §16.12) ---------- */
 .learned__intro {
