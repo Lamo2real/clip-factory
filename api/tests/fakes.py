@@ -47,6 +47,8 @@ class _FakeTableClient:
                     table.put_item(**body)
                 elif kind == "Update":
                     table.update_item(**body)
+                elif kind == "Delete":
+                    table.delete_item(**body)
                 else:
                     raise AssertionError(kind)
         except ClientError:

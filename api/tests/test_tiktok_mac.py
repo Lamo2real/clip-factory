@@ -172,7 +172,8 @@ def test_upload_with_the_switch_on_writes_tiktok_as_a_mac_post_in_the_same_trans
     assert next(p for p in body["posts"] if p["platform"] == "youtube")["status"] == "queued"
     raw = _raw_tiktok(table, clip["clipId"])
     assert raw is not None
-    assert (raw["madeForMac"], raw["macAttempt"], raw["postOptions"]) == (True, 0, TIKTOK)
+    # Every Mac post asks the Mac for My settings' choices, whatever the sheet said (§47.1).
+    assert (raw["madeForMac"], raw["macAttempt"], raw["postOptions"]) == (True, 0, MINE)
     assert body["clip"]["uploadTo"] == ["youtube", "tiktok"]  # he chose TikTok; his Mac posts it
     writes = [c for c in table.calls[before:] if c[0] == "transact_write_items"]
     assert len(writes) == 1  # the clip and both posts, in one transaction
@@ -421,6 +422,7 @@ def test_the_queue_order_and_its_jobs(call: Call, store: db.Store, clock: Clock)
         "source": "upload",
         "since": "2026-11-15T10:00:00.000Z",
         "state": "waiting",
+        "attempt": 0,
     }
 
 
@@ -990,3 +992,139 @@ def test_another_owner_never_sees_or_claims_the_mac_post(call: Call, store: db.S
     clip = _mac_clip(store)
     assert call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/claim", {"device": DEVICE}, sub=OTHER)[0] == 404
     assert call("GET", "/v1/tiktok/mac", sub=OTHER)[1]["queue"] == []
+
+
+# --- review fixes: Everyone for real, Take it back after Post, the switch off, one write, the attempt ----------------
+
+
+def test_an_upload_that_picked_only_me_still_asks_the_mac_for_everyone_and_done_marks_it_public(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    # Before TikTok approves the app the sheet only offers Only me, so Upload sends SELF_ONLY: the Mac never posts that.
+    _connect(store, "tiktok")
+    _mac_on(call)
+    clip = seed_clip(store)
+    _upload(call, clip["clipId"], ["tiktok"], tiktok={**TIKTOK, "privacyLevel": "SELF_ONLY"})
+    job = call("GET", "/v1/tiktok/mac")[1]["queue"][0]
+    assert (job["privacy"], job["comment"], job["duet"], job["stitch"]) == ("PUBLIC_TO_EVERYONE", True, True, True)
+    _claim(call, clip["clipId"])
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/done", {"device": DEVICE, "link": LINK})
+    assert status == 200
+    assert (_tiktok(body)["privacy"], _tiktok(body)["via"]) == ("public", "mac")
+    raw = _raw_tiktok(table, clip["clipId"])
+    assert raw is not None
+    assert raw["statsId"] == VIDEO_ID
+
+
+def test_done_writes_the_privacy_the_mac_set(call: Call, store: db.Store, table: FakeTable) -> None:
+    # Belt and braces: a Mac post that ever held another choice is never called public.
+    _connect(store, "tiktok")
+    _mac_on(call)
+    clip = _mac_clip(store, postOptions={**TIKTOK, "privacyLevel": "SELF_ONLY"})
+    _claim(call, clip["clipId"])
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/done", {"device": DEVICE, "link": LINK})
+    assert status == 200
+    assert _tiktok(body)["privacy"] == "private"
+    raw = _raw_tiktok(table, clip["clipId"])
+    assert raw is not None
+    assert "statsId" not in raw  # a private post never joins the poller
+    assert "gsi2pk" not in raw
+
+
+@pytest.mark.parametrize("made", [True, False])
+def test_take_it_back_after_the_mac_pressed_post_is_refused(
+    call: Call, store: db.Store, table: FakeTable, app: App, made: bool
+) -> None:
+    _connect(store, "tiktok")
+    _mac_on(call)
+    if made:
+        clip = _mac_clip(store)
+    else:
+        clip = seed_clip(store, status="failed", postsCreated=True, postIds=[])
+        _post(store, clip, "tiktok", status="failed", error="x", postOptions=TIKTOK)
+        assert call("POST", "/v1/tiktok/mac/send", {"clipIds": [clip["clipId"]]})[1]["results"][0]["sent"] is True
+    _claim(call, clip["clipId"])
+    _step(call, clip["clipId"], "pressing")
+    call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/stopped", {"device": DEVICE, "reason": "Timed out."})
+    status, body = call("DELETE", f"/v1/clips/{clip['clipId']}/tiktok/mac")
+    assert (status, _message(body)) == (409, "Your Mac may have posted it already. Check your TikTok first.")
+    raw = _raw_tiktok(table, clip["clipId"])
+    assert raw is not None
+    assert (raw["status"], raw["macState"]) == ("mac", "stopped")
+    # Nothing can send it through TikTok's API meanwhile: the release and Try again leave it alone.
+    assert release.release_waiting(store, app.flows, USER, "tiktok") == 0
+    assert (_raw_tiktok(table, clip["clipId"]) or {})["status"] == "mac"
+    # His ways out: I posted it (it is there), or It's not on TikTok, try again.
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    assert (status, _tiktok(body)["by"]) == (200, "you")
+
+
+def test_while_the_switch_is_off_auto_posting_offers_post_it_yourself_instead(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    waiting = _mac_clip(store, source="auto", status="posted")
+    stopped = _mac_clip(store, source="auto", status="posted", macState="stopped", macDevice=DEVICE)
+    pressed = _mac_clip(
+        store, source="auto", status="posted", macState="stopped", macDevice=DEVICE, macPressedAt=iso(NOW)
+    )
+    working = _mac_clip(store, source="auto", status="posted", macState="working", macDevice=DEVICE)
+    for c in (waiting, stopped, pressed, working):
+        store.update(PK, db.clip_sk(c["clipId"]), {"autoRun": "r#scheduled", "autoAt": iso(NOW)})
+    listed = {t["clipId"]: t for t in call("GET", "/v1/autopost")[1]["tiktokYourself"]}
+    assert set(listed) == {waiting["clipId"], stopped["clipId"]}  # never one the Mac is posting or pressed Post on
+    assert all(t["mac"] is True for t in listed.values())
+    _mac_on(call)
+    assert call("GET", "/v1/autopost")[1]["tiktokYourself"] == []  # on: the Mac has them
+
+
+def test_take_it_back_is_one_write_with_its_clip(call: Call, store: db.Store, table: FakeTable) -> None:
+    _mac_on(call)
+    clip = seed_clip(store, status="posted", postsCreated=True, postIds=[])
+    call("POST", "/v1/tiktok/mac/send", {"clipIds": [clip["clipId"]]})
+    raw = _raw_tiktok(table, clip["clipId"])
+    assert raw is not None
+    before = len(table.calls)
+    assert call("DELETE", f"/v1/clips/{clip['clipId']}/tiktok/mac")[0] == 200
+    writes = [c for c in table.calls[before:] if c[0] == "transact_write_items"]
+    assert len(writes) == 1  # the fake records the transaction's own update and delete after it
+    actions = writes[0][1]["TransactItems"]
+    assert {next(iter(a)) for a in actions} == {"Update", "Delete"}
+    stored = table.raw(clip["pk"], clip["sk"]) or {}
+    assert "tiktokForMac" not in stored
+    assert raw["postId"] not in stored["postIds"]
+    # A clip write that fails rolls the delete back too: the post is never lost while the clip still names it.
+    call("POST", "/v1/tiktok/mac/send", {"clipIds": [clip["clipId"]]})
+    again = _raw_tiktok(table, clip["clipId"])
+    assert again is not None
+    table.meta.client.fail_transact = True
+    status, _ = call("DELETE", f"/v1/clips/{clip['clipId']}/tiktok/mac")
+    table.meta.client.fail_transact = False
+    assert status >= 500
+    assert _raw_tiktok(table, clip["clipId"]) is not None
+    assert (table.raw(clip["pk"], clip["sk"]) or {})["tiktokForMac"] == again["postId"]
+
+
+def test_take_it_back_reads_a_clip_that_just_settled_again(store: db.Store, table: FakeTable) -> None:
+    clip = _mac_clip(store, status="confirmed")
+    store.update(PK, db.clip_sk(clip["clipId"]), {"status": "posted"})  # a flow settled it after it was read
+    tiktok_mac.take_back(store, clip)
+    assert _raw_tiktok(table, clip["clipId"]) is None
+
+
+def test_the_job_carries_its_attempt_and_an_older_attempt_is_refused(call: Call, store: db.Store, clock: Clock) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store)
+    job = _claim(call, clip["clipId"])[1]["job"]
+    assert job["attempt"] == 1
+    clock.now = NOW + timedelta(minutes=16)  # the same Mac crashed, came back and took its own stale claim again
+    assert _claim(call, clip["clipId"])[1]["job"]["attempt"] == 2
+    path = f"/v1/clips/{clip['clipId']}/tiktok/mac"
+    status, body = call("POST", f"{path}/step", {"device": DEVICE, "step": "pressing", "attempt": 1})
+    assert (status, _message(body)) == (409, "Another try already has this clip.")
+    assert call("POST", f"{path}/stopped", {"device": DEVICE, "reason": "x", "attempt": 1})[0] == 409
+    assert call("POST", f"{path}/done", {"device": DEVICE, "attempt": 1})[0] == 409
+    assert call("POST", f"{path}/step", {"device": DEVICE, "step": "pressing", "attempt": 2})[0] == 200
+    assert call("POST", f"{path}/step", {"device": DEVICE, "step": "finding"})[0] == 200  # still optional
+    assert call("POST", f"{path}/step", {"device": DEVICE, "step": "finding", "attempt": "two"})[0] == 400
+    status, body = call("POST", f"{path}/done", {"device": DEVICE, "attempt": 2, "link": LINK})
+    assert (status, _tiktok(body)["via"]) == (200, "mac")

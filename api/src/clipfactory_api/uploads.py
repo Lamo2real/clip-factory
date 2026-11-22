@@ -53,9 +53,9 @@ def upload_review_clip(
 
     Your Mac posts it on TikTok (§47), only while ``settings.tiktokMac.on`` and never for a campaign clip: Upload by
     hand with TikTok among ``platforms``, while TikTok has not approved Clip Factory's public uploads, writes the TikTok
-    post as a Mac post (``source: "upload"``, the TikTok sheet's choices as its options) instead of ``queued``; an
-    auto-posting run's live clip (``tiktok_mac=True``, never a Private test) also gets one (``source: "auto"``, My
-    settings' TikTok choices), though TikTok is never one of its places. Both go through ``create_for_clip``'s explicit
+    post as a Mac post (``source: "upload"``) instead of ``queued`` (the sheet's choices are still required and
+    checked); an auto-posting run's live clip (``tiktok_mac=True``, never a Private test) also gets one (``source:
+    "auto"``), though TikTok is never one of its places. Every Mac post's options are My settings' TikTok choices. Both go through ``create_for_clip``'s explicit
     ``tiktok_mac`` path, in the same transaction as the other posts. Otherwise TikTok's rule is exactly as before."""
     from .routes import clips as checks  # Upload's and Try again's shared checks (§33, §38.14)
 
@@ -112,7 +112,9 @@ def upload_review_clip(
         auto=auto,
         asked=tiktok_mac,
     )
-    if mac_source == "auto":
+    if mac_source:
+        # Every Mac post asks the Mac for My settings' choices (Everyone, Comment, Duet and Stitch on), whatever the
+        # TikTok sheet said: before TikTok approves the app the sheet only offers Only me, and his Mac posts for everyone.
         post_options["tiktok"] = mac_posts.preset_options(current_settings)
     post_fields: Item | None = None
     not_held: db.Condition | None = None

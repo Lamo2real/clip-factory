@@ -89,20 +89,33 @@ def public_run(item: Mapping[str, Any], by_id: Mapping[str, Item], found: Mappin
     return out
 
 
-def _tiktok_not_out(clip: Mapping[str, Any], rows: list[Item]) -> bool:
+def _tiktok_not_out(clip: Mapping[str, Any], rows: list[Item], *, mac_on: bool) -> bool:
     """§42.1: an uploaded clip whose TikTok is not out for everyone (none, waiting, failed or uploaded privately), not
     while Clip Factory is uploading it and not once the owner marked it. Not while the owner's Mac has it either (a
-    Mac post in any state, §47), nor once his Mac posted it (``by: "you"``, ``via: "mac"``)."""
+    Mac post in any state, §47), nor once his Mac posted it (``by: "you"``, ``via: "mac"``), unless Your Mac posts
+    TikTok is switched off: then a Mac post that waits or stopped (never one the Mac is posting, nor one it pressed Post
+    on) is his to post again (Post it yourself instead)."""
     if clip.get("status") not in tiktok_self.DECIDED or not clip.get("postsCreated"):
         return False
     row = tiktok_self.tiktok_row(rows)
     if row is None:
         return True
+    if row.get("status") == posts.MAC_STATUS:
+        return not mac_on and _mac_handable(row)
     if row.get("by") == "you" or row.get("status") == "queued":
         return False
     if row.get("status") == "posted":
         return row.get("privacy") != "public"
     return row.get("status") in {"pending_integration", "failed"}
+
+
+def _is_mac(rows: list[Item]) -> bool:
+    row = tiktok_self.tiktok_row(rows)
+    return row is not None and row.get("status") == posts.MAC_STATUS
+
+
+def _mac_handable(row: Mapping[str, Any]) -> bool:
+    return row.get("macState") in {"waiting", "stopped"} and not row.get("macPressedAt")
 
 
 def status(app: App, req: Request) -> Response:
@@ -164,9 +177,15 @@ def status(app: App, req: Request) -> Response:
         reverse=True,
     )
     tiktok_yourself = [
-        {"clipId": c["clipId"], "hook": str(c.get("hook") or ""), **_cover(app, c)}
+        {
+            "clipId": c["clipId"],
+            "hook": str(c.get("hook") or ""),
+            **_cover(app, c),
+            # §47: his Mac's post, there while the switch is off: the page offers Post it yourself instead.
+            **({"mac": True} if _is_mac(by_clip.get(str(c["clipId"]), [])) else {}),
+        }
         for c in auto_clips
-        if _tiktok_not_out(c, by_clip.get(str(c["clipId"]), []))
+        if _tiktok_not_out(c, by_clip.get(str(c["clipId"]), []), mac_on=mac)
     ][:TIKTOK_SHOWN]
     return ok(
         {

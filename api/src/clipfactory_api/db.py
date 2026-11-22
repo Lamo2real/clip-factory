@@ -275,6 +275,37 @@ def update_request(
     return kwargs
 
 
+def delete_request(
+    pk: str,
+    sk: str,
+    *,
+    expect_in: Mapping[str, Iterable[Any]] | None = None,
+    expect_absent: Iterable[str] = (),
+) -> dict[str, Any]:
+    """The Delete parameters for ``Store.transact(deletes=...)``: the item must exist, each ``expect_in`` field hold
+    one of its values and each ``expect_absent`` field be missing (a Mac post taken back with its clip, CONTRACTS
+    §47.2)."""
+    names: dict[str, str] = {}
+    values: dict[str, Any] = {}
+    conditions = ["attribute_exists(pk)"]
+    for i, (field, allowed) in enumerate((expect_in or {}).items()):
+        names[f"#c{i}"] = field
+        placeholders = []
+        for j, value in enumerate(allowed):
+            values[f":c{i}_{j}"] = to_dynamo(value)
+            placeholders.append(f":c{i}_{j}")
+        conditions.append(f"#c{i} IN ({', '.join(placeholders)})")
+    for i, field in enumerate(expect_absent):
+        names[f"#a{i}"] = field
+        conditions.append(f"attribute_not_exists(#a{i})")
+    out: dict[str, Any] = {"Key": {"pk": pk, "sk": sk}, "ConditionExpression": " AND ".join(conditions)}
+    if names:
+        out["ExpressionAttributeNames"] = names
+    if values:
+        out["ExpressionAttributeValues"] = values
+    return out
+
+
 # --- the store ------------------------------------------------------------------------------------------------
 
 
@@ -424,13 +455,15 @@ class Store:
         puts: Iterable[Mapping[str, Any]] = (),
         updates: Iterable[Mapping[str, Any]] = (),
         raw_puts: Iterable[Mapping[str, Any]] = (),
+        deletes: Iterable[Mapping[str, Any]] = (),
     ) -> None:
         """All-or-nothing TransactWriteItems. ``puts`` are new items (each must not exist yet); ``updates`` are
-        requests built by ``update_request``; ``raw_puts`` are built by ``put_if``. A failed condition anywhere
-        raises ``ConditionFailed``."""
+        requests built by ``update_request``; ``raw_puts`` are built by ``put_if``; ``deletes`` by
+        ``delete_request``. A failed condition anywhere raises ``ConditionFailed``."""
         name = self._table.name
         actions: list[dict[str, Any]] = [{"Put": {"TableName": name, **p}} for p in raw_puts]
         actions += [{"Update": {"TableName": name, **u}} for u in updates]
+        actions += [{"Delete": {"TableName": name, **d}} for d in deletes]
         actions += [
             {"Put": {"TableName": name, "Item": to_dynamo(p), "ConditionExpression": "attribute_not_exists(pk)"}}
             for p in puts

@@ -16,6 +16,7 @@ or stopped (its Mac fields go into ``beforeYou``, so Undo puts the Mac post back
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -99,6 +100,23 @@ MAC_MARK = "tiktokForMac"
 UNDONE = (*REPLACED, *MAC_FIELDS)
 
 
+@dataclass(frozen=True)
+class MacDone:
+    """The owner's Mac saying it posted the clip (§47): the device that claimed the post and, when the helper sends
+    it, the claim's attempt (``macAttempt``), so an older attempt of the same device is never taken for the new one."""
+
+    device: str
+    attempt: int | None = None
+
+
+def mac_privacy(row: Mapping[str, Any]) -> str:
+    """What the Mac set: ``public`` only for Everyone (``PUBLIC_TO_EVERYONE``, every Mac post's choice), else
+    ``private``."""
+    options = row.get("postOptions")
+    level = options.get("privacyLevel") if isinstance(options, Mapping) else None
+    return "public" if level in (None, "PUBLIC_TO_EVERYONE") else "private"
+
+
 class Refused(Exception):
     """A plain sentence for the owner, with the HTTP status that goes with it (409 or 400)."""
 
@@ -125,13 +143,14 @@ def mark_posted(
     *,
     min_interval: int,
     count_views: bool = True,
-    mac_device: str | None = None,
+    mac: MacDone | None = None,
 ) -> None:
     """Writes the clip's TikTok post as posted by the owner (creating it when the clip has none). With ``video``
     the post gets its link and, when ``count_views``, joins the poller. Marking again only adds or changes the link.
-    ``mac_device`` is the owner's Mac saying it posted it (§47): only the Mac post it claimed (``macDevice``, still
-    ``working`` or ``stopped``) becomes posted, with ``via: "mac"`` and its Mac fields gone; a post it already finished
-    only gets the link. Raises ``Refused``."""
+    ``mac`` is the owner's Mac saying it posted it (§47): only the Mac post it claimed (``macDevice``, and
+    ``macAttempt`` when given, still ``working`` or ``stopped``) becomes posted, with ``via: "mac"``, the privacy it
+    set (``mac_privacy``) and its Mac fields gone; a post it already finished only gets the link. Raises
+    ``Refused``."""
     status = clip.get("status")
     if status not in DECIDED:
         raise Refused(NOT_UPLOADED)
@@ -141,7 +160,7 @@ def mark_posted(
     clip_id = str(clip["clipId"])
     rows = posts_for_clip(store, user_id, clip_id, consistent=True)
     row = tiktok_row(rows)
-    _check_mac(row, mac_device)
+    _check_mac(row, mac)
     if row is not None and row.get("status") == "queued":
         raise Refused(STILL_UPLOADING)
     if row is not None and row.get("by") != "you" and row.get("status") == "posted" and row.get("privacy") == "public":
@@ -154,11 +173,11 @@ def mark_posted(
     post_id = str(row["postId"])
     fields: Item = {"status": "posted", "by": "you", "privacy": "public"}
     remove: list[str] = []
-    expect = _mac_fields(row, mac_device, fields, remove)
+    expect = _mac_fields(row, mac, fields, remove)
     if row.get("by") != "you":
         # Clip Factory's own post (waiting, failed or private), or a Mac post: keep what it was, for Undo. The Mac's
         # own done keeps nothing: what it posted is on TikTok and is never undone.
-        if mac_device is None:
+        if mac is None:
             fields["beforeYou"] = {k: row[k] for k in UNDONE if k in row}
         posted_at = now
         fields["postedAt"] = iso(posted_at)
@@ -249,35 +268,45 @@ def _new_post(
     store.transact(puts=[item], updates=[update])
 
 
-def _check_mac(row: Mapping[str, Any] | None, mac_device: str | None) -> None:
-    """§47: the Mac's done is only for the Mac post its device claimed (or one it already finished); I posted it is
-    never taken while the Mac is posting it."""
+def _check_mac(row: Mapping[str, Any] | None, mac: MacDone | None) -> None:
+    """§47: the Mac's done is only for the Mac post its device (and attempt) claimed, or one it already finished; I
+    posted it is never taken while the Mac is posting it."""
     is_mac = row is not None and row.get("status") == MAC_STATUS
-    if mac_device is not None:
+    if mac is not None:
         if row is None or not (is_mac or row.get("via") == "mac"):
             raise Refused(MAC_NOT_POSTING)
-        if is_mac and (row.get("macDevice") != mac_device or row.get("macState") not in ("working", "stopped")):
+        if is_mac and not owns(row, mac.device, ("working", "stopped"), mac.attempt):
             raise Refused(MAC_TAKEN)
     elif is_mac and row is not None and row.get("macState") == "working":
         raise Refused(MAC_WORKING)
 
 
-def _mac_fields(
-    row: Mapping[str, Any], mac_device: str | None, fields: Item, remove: list[str]
-) -> dict[str, list[Any]]:
+def owns(row: Mapping[str, Any], device: str, states: tuple[str, ...], attempt: int | None = None) -> bool:
+    """The Mac post is ``device``'s claim, in one of ``states`` (and of ``attempt``, when the helper sends it)."""
+    if row.get("macDevice") != device or row.get("macState") not in states:
+        return False
+    return attempt is None or row.get("macAttempt") == attempt
+
+
+def _mac_fields(row: Mapping[str, Any], mac: MacDone | None, fields: Item, remove: list[str]) -> dict[str, list[Any]]:
     """The write's condition, and what a Mac post loses (§47): its Mac fields go; the Mac's done adds ``via: "mac"``
-    and needs the claim to still be its own; I posted it needs the Mac not to be posting it."""
+    and the privacy the Mac set, and needs the claim to still be its own; I posted it needs the Mac not to be posting
+    it."""
     expect: dict[str, list[Any]] = {"status": [str(row.get("status"))]}
     if row.get("status") == MAC_STATUS:
         remove += [k for k in MAC_FIELDS if k in row]
-        if mac_device is not None:
+        if mac is not None:
             # The Mac posted it: it stays his one TikTok post, and Undo never takes it back (it is on TikTok).
             fields["via"] = "mac"
-            expect.update({"macDevice": [mac_device], "macState": ["working", "stopped"]})
+            fields["privacy"] = mac_privacy(row)
+            expect.update({"macDevice": [mac.device], "macState": ["working", "stopped"]})
+            if mac.attempt is not None:
+                expect["macAttempt"] = [mac.attempt]
         else:
             expect["macState"] = ["waiting", "stopped"]  # never while the Mac is posting it
-    elif mac_device is not None:
+    elif mac is not None:
         fields["via"] = "mac"  # a repeat of the Mac's done: only the link changes
+        fields["privacy"] = str(row.get("privacy") or "public")
     return expect
 
 

@@ -146,11 +146,18 @@ def job(post: Mapping[str, Any], clip: Mapping[str, Any]) -> Item:
         "source": str(mac.get("source") or "upload"),
         "since": str(mac.get("since") or ""),
         "state": str(mac.get("state") or "waiting"),
+        "attempt": _attempt(post),
     }
     for key in ("step", "claimedAt", "pressedAt"):
         if mac.get(key):
             out[key] = mac[key]
     return out
+
+
+def _attempt(post: Mapping[str, Any]) -> int:
+    """How many claims the post had (``macAttempt``); the helper may send it back with each step, stop and done."""
+    value = post.get("macAttempt")
+    return int(value) if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
 def public_helper(item: Mapping[str, Any] | None) -> Item | None:
@@ -267,14 +274,13 @@ def claim(store: db.Store, clip: Mapping[str, Any], device: str, now: datetime, 
         {"#mState": "macState", "#mPressed": "macPressedAt", "#mBeat": "macBeatAt"},
         {":mWaiting": "waiting", ":mWorking": "working", ":mStale": iso(now - STALE_CLAIM)},
     )
-    attempt = row.get("macAttempt")
     fields: Item = {
         "macState": "working",
         "macClaimedAt": iso(now),
         "macDevice": device,
         "macBeatAt": iso(now),
         "macStep": "video",
-        "macAttempt": (int(attempt) if isinstance(attempt, int) and not isinstance(attempt, bool) else 0) + 1,
+        "macAttempt": _attempt(row) + 1,
     }
     request = db.update_request(
         str(row["pk"]),
@@ -290,19 +296,34 @@ def claim(store: db.Store, clip: Mapping[str, Any], device: str, now: datetime, 
         raise Refused(MAC_TAKEN) from None
 
 
-def _own(row: Mapping[str, Any], device: str, states: Iterable[str]) -> None:
-    if row.get("macDevice") != device or row.get("macState") not in tuple(states):
+def _own(row: Mapping[str, Any], device: str, states: Iterable[str], attempt: int | None = None) -> None:
+    if not tiktok_self.owns(row, device, tuple(states), attempt):
         raise Refused(MAC_TAKEN)
 
 
+def _claim_of(device: str, states: list[str], attempt: int | None) -> dict[str, list[Any]]:
+    """The write's condition: still this device's claim (and attempt, when the helper sent it), in these states."""
+    expect: dict[str, list[Any]] = {"status": [MAC_STATUS], "macState": states, "macDevice": [device]}
+    if attempt is not None:
+        expect["macAttempt"] = [attempt]
+    return expect
+
+
 def step(
-    store: db.Store, clip: Mapping[str, Any], device: str, name: str, now: datetime, *, settings: Mapping[str, Any]
+    store: db.Store,
+    clip: Mapping[str, Any],
+    device: str,
+    name: str,
+    now: datetime,
+    *,
+    settings: Mapping[str, Any],
+    attempt: int | None = None,
 ) -> Item:
     """The helper's progress: only from the device that claimed it, while it works on it. ``pressing`` also sets
     ``macPressedAt``, the point of no return. While the switch is off, nothing before Post goes on (the owner's "Your
     Mac stops at once"); after Post the helper may still look for the link."""
     row, _rows = mac_row(store, clip)
-    _own(row, device, ("working",))
+    _own(row, device, ("working",), attempt)
     if not is_on(settings) and not row.get("macPressedAt"):
         raise Refused(MAC_OFF)
     fields: Item = {"macStep": name, "macBeatAt": iso(now)}
@@ -312,7 +333,7 @@ def step(
         str(row["pk"]),
         str(row["sk"]),
         fields,
-        expect_in={"status": [MAC_STATUS], "macState": ["working"], "macDevice": [device]},
+        expect_in=_claim_of(device, ["working"], attempt),
     )
     try:
         return _write(store, row, request)
@@ -328,12 +349,13 @@ def stopped(
     now: datetime,
     *,
     needs_you: bool = False,
+    attempt: int | None = None,
 ) -> Item:
     """The helper stopped instead of guessing. The post says why (at most 200 characters); once it pressed Post the
     reason is always ``PRESSED`` (only the owner knows whether it is on TikTok). ``needs_you`` also puts the helper
     item in ``needs_you`` with that reason."""
     row, _rows = mac_row(store, clip)
-    _own(row, device, ("working", "stopped"))
+    _own(row, device, ("working", "stopped"), attempt)
     said = _reason(reason)
     fields: Item = {
         "macState": "stopped",
@@ -344,7 +366,7 @@ def stopped(
         str(row["pk"]),
         str(row["sk"]),
         fields,
-        expect_in={"status": [MAC_STATUS], "macState": ["working", "stopped"], "macDevice": [device]},
+        expect_in=_claim_of(device, ["working", "stopped"], attempt),
     )
     try:
         written = _write(store, row, request)
@@ -416,25 +438,49 @@ def retry(store: db.Store, clip: Mapping[str, Any], *, not_on_tiktok: bool) -> N
 
 
 def take_back(store: db.Store, clip: Mapping[str, Any]) -> None:
-    """Take it back (Post it yourself instead): only while the Mac post waits or stopped (a conditional write). A post
-    made for the Mac is deleted and leaves ``postIds``; a Clip Factory post that was handed over gets its fields back
-    (``beforeMac``). The clip's status follows the clip flow's settle rule (§14.5)."""
-    row, rows = mac_row(store, clip)
+    """Take it back (Post it yourself instead): only while the Mac post waits or stopped, and never once the Mac
+    pressed Post (it may be on TikTok: the owner's ways out are I posted it, or It's not on TikTok, try again). A post
+    made for the Mac is deleted and leaves ``postIds`` (and ``tiktokForMac``); a Clip Factory post that was handed over
+    gets its fields back (``beforeMac``). The post and the clip (its settle rule, §14.5) are one transaction,
+    conditional on the post as read; a clip that changed meanwhile (a flow settled it) is read again, at most 3 times."""
+    for _ in range(3):
+        row, rows = mac_row(store, clip)
+        _can_take_back(row)
+        others = [r for r in rows if r is not row]
+        try:
+            store.transact(**_take_back_writes(clip, row, others))
+            return
+        except db.ConditionFailed:
+            fresh = store.get(db.user_pk(str(clip["userId"])), db.clip_sk(str(clip["clipId"])))
+            if fresh is None:
+                raise Refused(CHANGED) from None
+            clip = fresh
+    raise Refused(CHANGED)
+
+
+def _can_take_back(row: Mapping[str, Any]) -> None:
     if row.get("macState") == "working":
         raise Refused(MAC_WORKING)
+    if row.get("macPressedAt"):
+        raise Refused(MAY_HAVE_POSTED)
+
+
+def _take_back_writes(clip: Mapping[str, Any], row: Mapping[str, Any], others: list[Item]) -> dict[str, Any]:
     user_id = str(clip["userId"])
     clip_id = str(clip["clipId"])
-    others = [r for r in rows if r is not row]
+    status = str(clip.get("status"))
+    still = {"status": [MAC_STATUS], "macState": ["waiting", "stopped"]}
     if row.get("madeForMac") or not isinstance(row.get("beforeMac"), Mapping):
-        if not store.delete_if(
-            str(row["pk"]), str(row["sk"]), {"status": [MAC_STATUS], "macState": ["waiting", "stopped"]}
-        ):
-            fresh = tiktok_self.tiktok_row(posts_for_clip(store, user_id, clip_id, consistent=True))
-            if fresh is not None and fresh.get("status") == MAC_STATUS and fresh.get("macState") == "working":
-                raise Refused(MAC_WORKING)
-            raise Refused(CHANGED)
-        _forget(store, clip, str(row["postId"]), others)
-        return
+        ids = [i for i in tiktok_self._post_ids(clip, [*others, dict(row)]) if i != str(row["postId"])]
+        clip_update = db.update_request(
+            db.user_pk(user_id),
+            db.clip_sk(clip_id),
+            {"postIds": ids, **tiktok_self._clip_status(status, others, now_posted=False)},
+            remove=[MAC_MARK] if clip.get(MAC_MARK) else [],
+            expect_in={"status": [status]},
+        )
+        post_delete = db.delete_request(str(row["pk"]), str(row["sk"]), expect_in=still, expect_absent=["macPressedAt"])
+        return {"updates": [clip_update], "deletes": [post_delete]}
     before = row["beforeMac"]
     back = {k: v for k, v in before.items() if k in HANDED_OVER}
     back.setdefault("status", "failed")
@@ -442,51 +488,16 @@ def take_back(store: db.Store, clip: Mapping[str, Any]) -> None:
     remove += [k for k in HANDED_OVER if k in row and k not in back]
     updates = [
         db.update_request(
-            str(row["pk"]),
-            str(row["sk"]),
-            back,
-            remove=remove,
-            expect_in={"status": [MAC_STATUS], "macState": ["waiting", "stopped"]},
+            str(row["pk"]), str(row["sk"]), back, remove=remove, expect_in=still, expect_absent=["macPressedAt"]
         )
     ]
-    status = str(clip.get("status"))
     restored = {**{k: v for k, v in row.items() if k not in remove}, **back}
     clip_fields = tiktok_self._clip_status(status, [*others, restored], now_posted=False)
     if clip_fields:
         updates.append(
             db.update_request(db.user_pk(user_id), db.clip_sk(clip_id), clip_fields, expect_in={"status": [status]})
         )
-    try:
-        store.transact(updates=updates)
-    except db.ConditionFailed:
-        fresh = tiktok_self.tiktok_row(posts_for_clip(store, user_id, clip_id, consistent=True))
-        if fresh is not None and fresh.get("status") == MAC_STATUS and fresh.get("macState") == "working":
-            raise Refused(MAC_WORKING) from None
-        raise Refused(CHANGED) from None
-
-
-def _forget(store: db.Store, clip: Mapping[str, Any], post_id: str, others: list[Item]) -> None:
-    """The clip after its Mac post was deleted: off ``postIds``, without the send's mark, settled again. Read again
-    and written once more when the clip changed meanwhile (a deleted post the list still named is never read)."""
-    pk, sk = db.user_pk(str(clip["userId"])), db.clip_sk(str(clip["clipId"]))
-    current: Mapping[str, Any] | None = clip
-    for _ in range(3):
-        if current is None:
-            return
-        status = str(current.get("status"))
-        ids = [i for i in tiktok_self._post_ids(current, [*others]) if i != post_id]
-        fields: Item = {"postIds": ids, **tiktok_self._clip_status(status, others, now_posted=False)}
-        try:
-            store.update(
-                pk,
-                sk,
-                fields,
-                remove=[MAC_MARK] if current.get(MAC_MARK) else [],
-                expect_in={"status": [status]},
-            )
-            return
-        except db.ConditionFailed:
-            current = store.get(pk, sk)
+    return {"updates": updates}
 
 
 def send(
@@ -600,12 +611,12 @@ def _not_handable(row: Mapping[str, Any]) -> str | None:
     return None
 
 
-def check_done(row: Mapping[str, Any], device: str) -> None:
+def check_done(row: Mapping[str, Any], device: str, attempt: int | None = None) -> None:
     """The Mac's done comes from the device that claimed the post, while it works on it or after it stopped; a post
     it already finished (``via: "mac"``) is answered again. Anything else is ``Refused`` (``mark_posted`` checks the
     same in its write)."""
     if row.get("status") == MAC_STATUS:
-        _own(row, device, ("working", "stopped"))
+        _own(row, device, ("working", "stopped"), attempt)
     elif row.get("via") != "mac":
         raise Refused(MAC_NOT_POSTING)
 

@@ -36,6 +36,16 @@ def _device(body: dict[str, Any]) -> str:
     return validate.required_string(body, "device", max_len=DEVICE_MAX)
 
 
+def _attempt(body: dict[str, Any]) -> int | None:
+    """The claim's ``attempt`` (``MacJob.attempt``), optional: when sent it must still be the post's (§47.3)."""
+    if body.get("attempt") is None:
+        return None
+    number = validate.whole_number(body["attempt"])
+    if number is None or number < 1:
+        raise bad_request("attempt must be a whole number from 1.")
+    return number
+
+
 def _job(app: App, req: Request, row: dict[str, Any]) -> Response:
     clip = clip_routes._clip_or_404(app, req)
     return ok({"job": tiktok_mac.job(row, clip)})
@@ -120,15 +130,16 @@ def claim(app: App, req: Request) -> Response:
 def step(app: App, req: Request) -> Response:
     """``POST /v1/clips/{clipId}/tiktok/mac/step`` ``{device, step}`` → ``{job}``."""
     body = req.json()
-    validate.only_keys(body, {"device", "step"})
+    validate.only_keys(body, {"device", "step", "attempt"})
     device = _device(body)
+    attempt = _attempt(body)
     name = body.get("step")
     if name not in tiktok_mac.STEPS:
         raise bad_request("step must be video, opening, uploading, settings, pressing or finding.")
     item = clip_routes._clip_or_404(app, req)
     try:
         row = tiktok_mac.step(
-            app.store, item, device, name, app.clock(), settings=settings.load(app.store, req.user_id)
+            app.store, item, device, name, app.clock(), settings=settings.load(app.store, req.user_id), attempt=attempt
         )
     except tiktok_self.Refused as e:
         raise _refused(e) from e
@@ -140,13 +151,14 @@ def step(app: App, req: Request) -> Response:
 def stopped(app: App, req: Request) -> Response:
     """``POST /v1/clips/{clipId}/tiktok/mac/stopped`` ``{device, reason, needsYou?}`` → ``{job}``."""
     body = req.json()
-    validate.only_keys(body, {"device", "reason", "needsYou"})
+    validate.only_keys(body, {"device", "reason", "needsYou", "attempt"})
     device = _device(body)
+    attempt = _attempt(body)
     reason = validate.required_string(body, "reason", max_len=10_000)
     needs_you = validate.boolean(body.get("needsYou", False), "needsYou")
     item = clip_routes._clip_or_404(app, req)
     try:
-        row = tiktok_mac.stopped(app.store, item, device, reason, app.clock(), needs_you=needs_you)
+        row = tiktok_mac.stopped(app.store, item, device, reason, app.clock(), needs_you=needs_you, attempt=attempt)
     except tiktok_self.Refused as e:
         raise _refused(e) from e
     log("info", "tiktok_mac.stopped", clipId=item["clipId"], pressed=bool(row.get("macPressedAt")))
@@ -158,8 +170,9 @@ def done(app: App, req: Request) -> Response:
     Through ``tiktok_self.mark_posted`` (one TikTok post per clip). The link is read as I posted it reads one; without
     one, the §42 finder looks from a minute before the claim. A repeat is answered as the first (adding the link)."""
     body = req.json()
-    validate.only_keys(body, {"device", "link"})
+    validate.only_keys(body, {"device", "link", "attempt"})
     device = _device(body)
+    attempt = _attempt(body)
     link = body.get("link")
     if link is not None and not isinstance(link, str):
         raise bad_request("Paste the TikTok link as text.")
@@ -167,21 +180,24 @@ def done(app: App, req: Request) -> Response:
     rows = posts.posts_for_clip(app.store, req.user_id, item["clipId"], consistent=True)
     row = tiktok_self.tiktok_row(rows) or {}
     try:
-        tiktok_mac.check_done(row, device)  # before the finder asks TikTok anything
+        tiktok_mac.check_done(row, device, attempt)  # before the finder asks TikTok anything
     except tiktok_self.Refused as e:
         raise _refused(e) from e
     since = tiktok_mac.since_for_finder(row)
     video, count_views, note = clip_routes.tiktok_video(app, req.user_id, item, link, since)
+    if row.get("status") == posts.MAC_STATUS and tiktok_self.mac_privacy(row) != "public":
+        count_views = False  # a private post never joins the poller (§16.3)
+    done_by = tiktok_self.MacDone(device, attempt)
     minutes = stats_config.load().platform("tiktok").min_interval
     try:
         try:
             tiktok_self.mark_posted(
-                app.store, item, video, app.clock(), min_interval=minutes, count_views=count_views, mac_device=device
+                app.store, item, video, app.clock(), min_interval=minutes, count_views=count_views, mac=done_by
             )
         except db.ConditionFailed:
             fresh = clip_routes._clip_or_404(app, req)  # the clip just changed (a flow settled it): once more
             tiktok_self.mark_posted(
-                app.store, fresh, video, app.clock(), min_interval=minutes, count_views=count_views, mac_device=device
+                app.store, fresh, video, app.clock(), min_interval=minutes, count_views=count_views, mac=done_by
             )
     except tiktok_self.Refused as e:
         raise _refused(e) from e
