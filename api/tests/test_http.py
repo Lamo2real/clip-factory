@@ -215,6 +215,8 @@ def test_every_contract_route_is_registered() -> None:
         ("POST", "/v1/getpaid/whop/connect"),
         ("DELETE", "/v1/getpaid/connections/adsense"),
         ("DELETE", "/v1/getpaid/connections/whop"),
+        # §43: follower counts
+        ("GET", "/v1/followers"),
         # §19.6: Ask Clip Factory
         ("GET", "/v1/help"),
         ("POST", "/v1/help/answers"),
