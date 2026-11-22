@@ -277,7 +277,7 @@ interface OpenProject {
 }
 
 const PROJECT_WORDS: Record<ProjectRef["kind"], { line: string; icon: StIconName }> = {
-  idea: { line: "The idea you were making a video of", icon: "bulb" },
+  idea: { line: "The idea you had open", icon: "bulb" },
   story: { line: "The video you had open", icon: "clapper" },
   character: { line: "The character you had open", icon: "face" },
   reference: { line: "The reference video you had open", icon: "film" },

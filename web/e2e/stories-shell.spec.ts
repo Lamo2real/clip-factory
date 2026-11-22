@@ -269,7 +269,7 @@ test.describe("each app stays exactly as it was left (§45.34)", () => {
     await expect(rows).toHaveCount(3);
     await page.getByRole("button", { name: "Show older jobs" }).click();
     await expect(rows).toHaveCount(6);
-    await page.getByRole("button", { name: "Select" }).click();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
     const picked = page.getByRole("toolbar", { name: "Picked jobs" });
     await expect(picked).toBeVisible();
     const room = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
@@ -369,6 +369,16 @@ test.describe("each app stays exactly as it was left (§45.34)", () => {
     await card.hover();
     await page.waitForTimeout(300);
     expect(await card.evaluate((e) => getComputedStyle(e).backgroundColor), "hover").not.toBe(before);
+    // The owner's rules: AA contrast, no visible edges, no overflow from 320 px.
+    const axe = await new AxeBuilder({ page }).include(".st-continue").withRules(["color-contrast"]).analyze();
+    expect(axe.violations.flatMap((v) => v.nodes.map((n) => n.target.join(" "))), "contrast").toEqual([]);
+    expect((await visibleEdges(page)).filter((e) => e.includes("st-continue")), "edges").toEqual([]);
+    await page.setViewportSize({ width: 320, height: 700 });
+    await page.waitForTimeout(250);
+    const o = await findOverflow(page);
+    expect(o.page, "320 px: the page scrolls sideways").toBeLessThanOrEqual(o.viewport);
+    expect(o.items, "320 px").toEqual([]);
+    await page.setViewportSize({ width: 1280, height: 900 });
     await card.click();
     await expect(page).toHaveURL(new RegExp(`${href}$`));
 
