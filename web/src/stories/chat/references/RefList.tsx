@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { A } from "../../../components/ui.tsx";
 import { storiesApi } from "../../api/client.ts";
+import { cx, MediaRow } from "../../glass/index.ts";
 import { storiesGoLater } from "../../pane.tsx";
 import type { ReferenceVideo } from "../../api/types.ts";
 import { storiesHref } from "../../routes.ts";
@@ -78,15 +79,15 @@ export function RefList({ ws }: { ws: string }) {
 
   return (
     <section className="st-page st-refs">
-      <header className="st-chat-head">
+      <header className="st-chat-head st-plate">
         <div className="st-chat-head__text">
-          <h1 className="st-chat-head__title">Reference videos</h1>
+          <h1 className="st-chat-head__title st-display">Reference videos</h1>
           <p className="st-chat-head__lede">Upload a video you like. The video analysis agent studies its shots, timing and jokes, so your videos can borrow the ideas. It never copies the characters or the footage.</p>
         </div>
       </header>
 
       <div
-        className={`st-ref-drop${drag ? " is-over" : ""}`}
+        className={cx("st-ref-drop st-glass st-glass--hero", drag && "is-over")}
         onDragOver={(e) => {
           e.preventDefault();
           setDrag(true);
@@ -94,7 +95,9 @@ export function RefList({ ws }: { ws: string }) {
         onDragLeave={() => setDrag(false)}
         onDrop={onDrop}
       >
-        <Icon name="film" size={36} />
+        <span className="st-ref-drop__icon" aria-hidden="true">
+          <Icon name="film" size={32} />
+        </span>
         <div className="st-ref-drop__text">
           <p className="st-ref-drop__title">Add a reference video</p>
           <p className="st-ref-drop__line">MP4 or MOV, up to 2 GB and 10 minutes. Found one online? Save it to your device first, then upload the video file.</p>
@@ -123,13 +126,14 @@ export function RefList({ ws }: { ws: string }) {
       ) : null}
 
       {refused ? (
-        <p className="st-chat-note st-chat-note--bad" role="alert">
+        <p className="st-chat-note st-chat-note--bad st-plate" role="alert">
           {refused}
         </p>
       ) : null}
 
       {problem ? (
         <Empty
+          card
           mood="oops"
           title="Your reference videos did not load"
           action={
@@ -141,28 +145,30 @@ export function RefList({ ws }: { ws: string }) {
           {problem}
         </Empty>
       ) : list === null ? (
-        <Waiting label="Finding your reference videos…" />
+        <Waiting plate label="Finding your reference videos…" />
       ) : shown.length ? (
         <ul className="st-ref-grid" aria-label="Your reference videos">
           {shown.map((r) => (
             <li key={r.refId}>
-              <A href={storiesHref({ name: "reference", refId: r.refId })} className="st-ref-card">
-                <span className="st-ref-card__tile" aria-hidden="true">
-                  <Icon name="clapper" size={30} />
-                </span>
-                <span className="st-ref-card__text">
-                  <span className="st-ref-card__title">{r.title}</span>
-                  <span className="st-ref-card__line">
-                    {[r.durationSec ? clock(r.durationSec) : null, r.bytes ? size(r.bytes) : null, r.analyzedWith ? `Analyzed with ${modelLabel(models.models, r.analyzedWith.model)}` : null].filter(Boolean).join(" · ")}
-                  </span>
-                  <Chip tone={REF_STATUS[r.status].tone}>{REF_STATUS[r.status].text}</Chip>
-                </span>
+              <A href={storiesHref({ name: "reference", refId: r.refId })} className="st-ref-card st-glass">
+                <MediaRow
+                  thumb={
+                    <span className="st-ref-card__tile" aria-hidden="true">
+                      <Icon name="clapper" size={28} />
+                    </span>
+                  }
+                  title={r.title}
+                  meta={[r.durationSec ? clock(r.durationSec) : null, r.bytes ? size(r.bytes) : null, r.analyzedWith ? `Analyzed with ${modelLabel(models.models, r.analyzedWith.model)}` : null].filter(Boolean).join(" · ")}
+                  controls={<Chip tone={REF_STATUS[r.status].tone}>{REF_STATUS[r.status].text}</Chip>}
+                />
               </A>
             </li>
           ))}
         </ul>
       ) : !uploads.length ? (
-        <Empty title="No reference videos yet">Upload a short video you love. You'll see what makes it work, shot by shot.</Empty>
+        <Empty card title="No reference videos yet">
+          Upload a short video you love. You'll see what makes it work, shot by shot.
+        </Empty>
       ) : null}
 
       {pending ? <UndoBar text={pending.text} onUndo={() => undoDelete()} /> : null}
@@ -185,15 +191,23 @@ function UploadRow({ u, onRetry }: { u: UploadJob; onRetry: () => void }) {
               ? "Stopped. Nothing was kept."
               : (u.problem ?? "The upload stopped before it finished.");
   return (
-    <li className={`st-ref-upload is-${u.status}`}>
-      <div className="st-ref-upload__text">
-        <span className="st-ref-upload__title">{u.title}</span>
-        <span className="st-ref-upload__line" role={u.status === "failed" ? "alert" : undefined}>
-          {line}
+    <li className={`st-ref-upload st-glass is-${u.status}`}>
+      <div className="st-media">
+        <span className="st-media__thumb st-ref-upload__thumb" aria-hidden="true">
+          <Icon name="film" size={28} />
         </span>
-      </div>
-      {u.status === "checking" || u.status === "uploading" || u.status === "finishing" ? <Progress value={u.fraction} label={`Uploading ${u.title}`} /> : null}
-      <div className="st-ref-upload__buttons">
+        <div className="st-media__text st-ref-upload__text">
+          <span className="st-media__title st-ref-upload__title">{u.title}</span>
+          <span className="st-media__meta st-ref-upload__line" role={u.status === "failed" ? "alert" : undefined}>
+            {line}
+          </span>
+        </div>
+        {u.status === "checking" || u.status === "uploading" || u.status === "finishing" ? (
+          <div className="st-media__bar">
+            <Progress value={u.fraction} label={`Uploading ${u.title}`} />
+          </div>
+        ) : null}
+        <div className="st-media__controls st-ref-upload__buttons">
         {u.status === "checking" || u.status === "uploading" ? (
           <Btn quiet icon="stop" onClick={() => stopUpload(u.key)}>
             Stop
@@ -207,6 +221,7 @@ function UploadRow({ u, onRetry }: { u: UploadJob; onRetry: () => void }) {
         {u.status === "failed" || u.status === "stopped" ? (
           <Btn quiet icon="close" label={`Hide ${u.title}`} onClick={() => dismissUpload(u.key)} />
         ) : null}
+        </div>
       </div>
     </li>
   );

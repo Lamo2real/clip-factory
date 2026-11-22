@@ -101,9 +101,9 @@ export function ChatScreen({ ws, page }: StoriesScreenProps) {
 
   return (
     <section className="st-page st-chat" data-view={convId ? "conv" : "list"}>
-      <header className="st-chat-head">
+      <header className="st-chat-head st-plate">
         <div className="st-chat-head__text">
-          <h1 className="st-chat-head__title">Chat</h1>
+          <h1 className="st-chat-head__title st-display">Chat</h1>
           <p className="st-chat-head__lede">Talk ideas through with your creative director. Nothing is made until you tap a button.</p>
         </div>
         <Btn main icon="plus" off={creating} onClick={() => void startChat()}>
@@ -111,18 +111,18 @@ export function ChatScreen({ ws, page }: StoriesScreenProps) {
         </Btn>
       </header>
       {createProblem ? (
-        <p className="st-chat-note st-chat-note--bad" role="alert">
+        <p className="st-chat-note st-chat-note--bad st-plate" role="alert">
           {createProblem}
         </p>
       ) : null}
       {refused ? (
-        <p className="st-chat-note st-chat-note--bad" role="alert">
+        <p className="st-chat-note st-chat-note--bad st-plate" role="alert">
           {refused}
         </p>
       ) : null}
 
       <div className="st-chat-layout">
-        <aside className="st-chat-side" aria-label="Chats">
+        <aside className="st-chat-side st-glass" aria-label="Chats">
           {problem ? (
             <Empty
               mood="oops"
@@ -156,7 +156,7 @@ export function ChatScreen({ ws, page }: StoriesScreenProps) {
           {convId ? (
             <ConversationView key={convId} ws={ws} convId={convId} listTitle={list?.find((c) => c.convId === convId)?.title} onConversation={onConversation} onMissing={() => void startChat()} />
           ) : (
-            <div className="st-chat-pick-one">
+            <div className="st-chat-pick-one st-glass">
               <Director size={88} mood="cheer" />
               <p>Pick a chat on the left, or tap New chat.</p>
             </div>
