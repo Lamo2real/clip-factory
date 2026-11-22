@@ -237,6 +237,26 @@ def with_last_look(record: dict[str, Any], found: Sequence[str]) -> dict[str, An
     return {**record, "problems": problems, "status": status, "checkStatus": own, "lastLook": looks}
 
 
+def studied_key(ref: dict[str, Any] | None, user_id: str, workspace_id: str, ref_id: str) -> str | None:
+    """A reference's study (``analysisKey``) when it has one in the reference's own folder, else None (§45.35 D9)."""
+    key = str((ref or {}).get("analysisKey") or "")
+    if not key or not keys.SAFE_ID.match(ref_id):
+        return None
+    return key if key.startswith(keys.reference_prefix(user_id, workspace_id, ref_id)) else None
+
+
+def called(model_id: Any, region: Any) -> dict[str, str]:
+    """``modelId`` (the Bedrock model id or inference profile really called) and ``region`` (where), each only when
+    known: what a model record keeps besides the model's key, so an old job still says what ran after the owner
+    edits his model under the same key (§45.35 D5)."""
+    out: dict[str, str] = {}
+    if isinstance(model_id, str) and model_id:
+        out["modelId"] = model_id
+    if isinstance(region, str) and region:
+        out["region"] = region
+    return out
+
+
 def _int(value: Any, default: int, lo: int, hi: int) -> int:
     try:
         return max(lo, min(hi, int(value)))
@@ -288,7 +308,7 @@ class Job:
         if job.get("sessionId") != self.fence.session_id:
             log("info", "stories.superseded", job=self.fence.job_id, session=self.fence.session_id)
             return "superseded"
-        if job.get("status") not in ("queued", "running") or job.get("contentId") != self.content_id:
+        if job.get("status") not in ("queued", "running") or not self.owns(job):
             log("info", "stories.job_settled", job=self.fence.job_id, status=job.get("status"))
             return "ignored"
         self.job = job
@@ -346,6 +366,10 @@ class Job:
     def order(self, job: dict[str, Any]) -> tuple[str, ...]:
         """The job's step keys in order (a story's eight, a portrait's one; a reference job takes the API's)."""
         return self.step_keys
+
+    def owns(self, job: dict[str, Any]) -> bool:
+        """Whether the ``PJOB#`` is this run's work: its content is the one this run was started for."""
+        return job.get("contentId") == self.content_id
 
     async def _run(self) -> str:
         raise NotImplementedError
@@ -496,6 +520,7 @@ class Job:
             "agentId": agent_id,
             "task": task,
             "model": reply.model,
+            **called(reply.model_id, reply.region),
             "effort": reply.effort,
             "effortApplied": reply.effort_applied,
         }
@@ -514,6 +539,7 @@ class Job:
             return
         effort = getattr(e, "effort", None)
         entry = {"step": step, "agentId": agent_id, "task": task, "model": model,
+                 **called(getattr(e, "model_id", None), getattr(e, "region", None)),
                  "effort": effort if isinstance(effort, str) and effort else None, "effortApplied": False,
                  "failed": True}  # fmt: skip
         used = self.meta.setdefault("models", [])
@@ -1037,14 +1063,20 @@ class StoryJob(Job):
         return {k: v for k, v in out.items() if v is not None}
 
     async def _references(self) -> list[dict[str, Any]]:
-        """The analyses of the story's reference videos (§45.28), for the writer; one that is not ready is left out."""
+        """The analyses of the story's reference videos (§45.28), for the writer. A reference counts once it has a
+        study (``analysisKey`` in its own folder), whatever its status: a re-analysis that runs or failed keeps the
+        earlier one (§45.35 D9). One with no study is left out (logged)."""
         out: list[dict[str, Any]] = []
         for ref_id in (self.story.get("referenceIds") or [])[:3]:
             ref = await self.data.reference(self.fence.user_id, self.fence.workspace_id, str(ref_id))
-            if not ref or ref.get("status") != "analyzed" or not ref.get("analysisKey"):
+            key = studied_key(ref, self.fence.user_id, self.fence.workspace_id, str(ref_id))
+            if key is None:
+                log("info", "stories.reference_skipped", job=self.fence.job_id, ref=ref_id,
+                    status=(ref or {}).get("status"))  # fmt: skip
                 continue
+            assert ref is not None
             try:
-                got = await self.data.get_json(self.fence, str(ref["analysisKey"]))
+                got = await self.data.get_json(self.fence, key)
             except Exception as e:
                 log("warn", "stories.reference_unreadable", ref=ref_id, error=type(e).__name__)
                 continue
@@ -1215,15 +1247,16 @@ class StoryJob(Job):
         keep = {f: current[f] for f in sorted(mine) if current.get(f)}
         if not self.budget.take("captions"):
             raise StoryFailed(keys.WRITER_FAILED)
+        aspect = writer.aspect_of(None, script)  # the script is made at the story's own size (§45.34)
         reply = await self.ask(
             step="storyboard",
             agent_id="storyboard",
             task="captions",
-            messages=writer.captions_request(script, topic, keep=keep, concept=await self._concept()),
+            messages=writer.captions_request(script, topic, keep=keep, concept=await self._concept(), aspect=aspect),
             schema=writer.POST_SCHEMA,
             max_tokens=8000,
         )
-        post = writer.post_captions(reply.data, topic)
+        post = writer.post_captions(reply.data, topic, aspect)
         post.update(keep)
         return post
 
@@ -1679,7 +1712,7 @@ class StoryJob(Job):
             return Done("No captions", skipped=True)
         text = ass.build(
             events, captions_on=captions_on, width=int(script.get("width") or 1080),
-            height=int(script.get("height") or 1920),
+            height=int(script.get("height") or 1920), safe=await self._safe_box(script),
         )  # fmt: skip
         out = self.work / "captions" / "captions.ass"
         out.write_text(text, "utf-8")
@@ -1699,10 +1732,21 @@ class StoryJob(Job):
         out = work / "symbols.ass"
         out.write_text(
             ass.build(events, captions_on=False, width=int(script.get("width") or 1080),
-                      height=int(script.get("height") or 1920)),
+                      height=int(script.get("height") or 1920), safe=await self._safe_box(script)),
             "utf-8",
         )  # fmt: skip
         return out
+
+    async def _safe_box(self, script: dict[str, Any]) -> dict[str, Any] | None:
+        """The engine's safe box for the script's size (``cli.ts catalog`` ``formats[].safe``), the box its text and
+        the app's preview are laid out in, for the ASS writer (§45.35 D14); None (the writer's copy of the engine's
+        boxes) when the catalog cannot be read."""
+        try:
+            _catalog, extra = await self._engine_catalog()
+        except Exception as e:
+            log("warn", "stories.catalog_unreadable", job=self.fence.job_id, error=type(e).__name__)
+            return None
+        return ass.safe_box(extra.get("formats"), int(script.get("width") or 1080), int(script.get("height") or 1920))
 
     async def assemble(self) -> str | None:
         script = await self._load_script()

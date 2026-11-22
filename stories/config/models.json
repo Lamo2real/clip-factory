@@ -1,12 +1,13 @@
 {
-  "$comment": "Lamo Stories' own model list (docs/CONTRACTS.md §45.25, ADR-77). Separate from config/models.json, which is Clip Factory's and is never read by Lamo Stories. Terraform builds the Lamo Stories agent's bedrock:InvokeModel grants from this file. 'profile' is the inference profile the agent calls; 'regions' are that profile's destination Regions (for IAM; '*' for a global profile). 'efforts' are the output_config.effort levels the model accepts (empty: no effort setting, the model runs at its own level). 'pricing' is Anthropic's own list price for reference (source anthropic_list, checked 2026-11-21); Amazon Bedrock bills its own price, which can differ, so the owner may type Bedrock's in Lamo Stories › Settings › AI (source owner). null where no price is known. The owner's 'Sable 5.2 / Sable 5.1' are the Claude Fable 5.2 / 5.1 models below.",
+  "$comment": "Lamo Stories' own model list (docs/CONTRACTS.md §45.25, ADR-77). Separate from config/models.json, which is Clip Factory's and is never read by Lamo Stories. Terraform records this file's model ids in the plan (model_invoke_arns); the Lamo Stories agent's bedrock:InvokeModel grant covers every foundation model and this account's profiles and model ARNs (§45.34, §45.35 D12). 'provider' is who makes the model (Anthropic, Amazon) and 'host' who runs it (Amazon Bedrock, §45.35 D8); the bundled Claude models take output_config.effort, tools and cache points (§45.35 D1). 'profile' is the inference profile the agent calls; 'regions' are that profile's destination Regions (for IAM; '*' for a global profile). 'efforts' are the output_config.effort levels the model accepts (empty: no effort setting, the model runs at its own level). 'pricing' is Anthropic's own list price for reference (source anthropic_list, checked 2026-11-21); Amazon Bedrock bills its own price, which can differ, so the owner may type Bedrock's in Lamo Stories › Settings › AI (source owner). null where no price is known. The owner's 'Sable 5.2 / Sable 5.1' are the Claude Fable 5.2 / 5.1 models below.",
   "defaultModel": "opus-5-5",
   "defaultEffort": "high",
   "models": [
     {
       "key": "fable-5-2",
       "label": "Claude Fable 5.2",
-      "provider": "Amazon Bedrock",
+      "provider": "Anthropic",
+      "host": "Amazon Bedrock",
       "modelId": "anthropic.claude-fable-5-2",
       "profile": "global.anthropic.claude-fable-5-2",
       "regions": [
@@ -36,7 +37,8 @@
     {
       "key": "fable-5-1",
       "label": "Claude Fable 5.1",
-      "provider": "Amazon Bedrock",
+      "provider": "Anthropic",
+      "host": "Amazon Bedrock",
       "modelId": "anthropic.claude-fable-5-1",
       "profile": "global.anthropic.claude-fable-5-1",
       "regions": [
@@ -66,7 +68,8 @@
     {
       "key": "opus-5-5",
       "label": "Claude Opus 5.5",
-      "provider": "Amazon Bedrock",
+      "provider": "Anthropic",
+      "host": "Amazon Bedrock",
       "modelId": "anthropic.claude-opus-5-5",
       "profile": "global.anthropic.claude-opus-5-5",
       "regions": [
@@ -96,7 +99,8 @@
     {
       "key": "sonnet-5-5",
       "label": "Claude Sonnet 5.5",
-      "provider": "Amazon Bedrock",
+      "provider": "Anthropic",
+      "host": "Amazon Bedrock",
       "modelId": "anthropic.claude-sonnet-5-5",
       "profile": "global.anthropic.claude-sonnet-5-5",
       "regions": [
@@ -126,7 +130,8 @@
     {
       "key": "haiku-5-5",
       "label": "Claude Haiku 5.5",
-      "provider": "Amazon Bedrock",
+      "provider": "Anthropic",
+      "host": "Amazon Bedrock",
       "modelId": "anthropic.claude-haiku-5-5",
       "profile": "eu.anthropic.claude-haiku-5-5",
       "regions": [
@@ -165,12 +170,16 @@
   ],
   "imageModel": {
     "label": "Amazon Nova Canvas",
+    "provider": "Amazon",
+    "host": "Amazon Bedrock",
     "modelId": "amazon.nova-canvas-v1:0",
     "region": "eu-west-1",
     "pricing": null
   },
   "videoModel": {
     "label": "Amazon Nova Reel 1.1",
+    "provider": "Amazon",
+    "host": "Amazon Bedrock",
     "modelId": "amazon.nova-reel-v1:1",
     "region": "us-east-1",
     "pricing": null

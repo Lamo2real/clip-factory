@@ -214,6 +214,8 @@ def _finish(fence: Fence, outcome: Outcome) -> None:
         "effort": reply.effort if reply else outcome.effort,
         "effortApplied": reply.effort_applied if reply else outcome.effort_applied,
     }
+    if reply is not None:  # what was really called, and for which task (§45.35 D5)
+        fields.update(reply_called(reply))
     if not outcome.ops:
         fence.write(fields)
         return
@@ -239,6 +241,34 @@ def asked_of(error: BaseException | None) -> tuple[str, str | None] | None:
     return None
 
 
+def reply_called(reply: models.Reply) -> dict[str, str]:
+    """``modelId``, ``region`` and ``task`` of an answer, each only when known (§45.35 D5)."""
+    out: dict[str, str] = {}
+    for name, value in (("modelId", reply.model_id), ("region", reply.region), ("task", reply.task)):
+        if isinstance(value, str) and value:
+            out[name] = value
+    return out
+
+
+def called_of(error: BaseException | None) -> dict[str, str]:
+    """``{"modelId", "region", "task"}`` of a failed model call (the model client puts them on its error, §45.35
+    D5), anywhere in the error's chain; empty when the call never got that far."""
+    seen: set[int] = set()
+    cur = error
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        model_id = getattr(cur, "model_id", None)
+        if isinstance(model_id, str) and model_id:
+            out = {"modelId": model_id}
+            for attr, name in (("region", "region"), ("task", "task")):
+                value = getattr(cur, attr, None)
+                if isinstance(value, str) and value:
+                    out[name] = value
+            return out
+        cur = cur.__cause__ or cur.__context__
+    return {}
+
+
 async def _fail(fence: Fence, sentence: str, error: BaseException | None = None) -> str:
     """Ends the task ``failed`` with the sentence; a task that failed on its model also keeps the model and effort it
     was sent with on ``TASK#`` (``effortApplied`` false: no answer came), so the owner sees what was asked."""
@@ -246,6 +276,7 @@ async def _fail(fence: Fence, sentence: str, error: BaseException | None = None)
     fields: dict[str, Any] = {"status": "failed", "error": sentence, "updatedAt": at, "heartbeatAt": at}
     asked = asked_of(error)
     if asked is not None:
-        fields.update({"model": asked[0], "effort": asked[1], "effortApplied": False})
+        fields.update({"model": asked[0], "effort": asked[1], "effortApplied": False, "failed": True})
+        fields.update(called_of(error))
     ok = await asyncio.to_thread(fence.try_write, fields)
     return "failed" if ok else "superseded"

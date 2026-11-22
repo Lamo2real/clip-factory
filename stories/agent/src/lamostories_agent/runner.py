@@ -6,8 +6,9 @@ is ignored; ``cancel`` stops it (its Deno, rasterizer and ffmpeg processes die w
 ``HealthyBusy``; ``shutdown`` cancels everything when the container stops (the job is then failed by the API's
 stale-heartbeat fence and "Try again" resumes from its first unfinished step, because finished steps' files stay).
 
-``register`` adds this builder's actions: ``process_story``, ``process_portrait``, ``process_reference`` and
-``cancel``. Each runs as the session AgentCore invoked it in (``sessionId``, from the session header): every write is
+``register`` adds this builder's actions: ``process_story``, ``process_portrait``, ``process_reference``,
+``provider_check`` (Try it, §45.35 D2: ``{userId, workspaceId, jobId, providerId?}``, ``providerId`` ``nova-reel``
+when left out) and ``cancel``. Each runs as the session AgentCore invoked it in (``sessionId``, from the session header): every write is
 fenced on it, so a start for a job that a newer run owns, or that already ended, does nothing."""
 
 from __future__ import annotations
@@ -96,10 +97,15 @@ def register(actions: Any, runner: Any, services: Callable[[], Any]) -> None:
     """``services`` builds (once) what the jobs need; it is called on the first start, never at startup."""
     from .pipeline import StoryJob, clean_work
     from .portrait import PortraitJob
+    from .provider_check import PROVIDERS, ProviderCheckJob
     from .refjob import ReferenceJob
 
-    def starter(job_cls: type[Any], content: str) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    def starter(
+        job_cls: type[Any], content: str, default: str | None = None
+    ) -> Callable[[dict[str, Any]], dict[str, Any]]:
         def start(inv: dict[str, Any]) -> dict[str, Any]:
+            if default is not None and not inv.get(content):
+                inv = {**inv, content: default}
             ids = _ids(inv, "userId", "workspaceId", content, "jobId")
             session = inv.get("sessionId")
             if ids is None:
@@ -135,5 +141,6 @@ def register(actions: Any, runner: Any, services: Callable[[], Any]) -> None:
     actions.register("process_story", starter(StoryJob, "storyId"))
     actions.register("process_portrait", starter(PortraitJob, "characterId"))
     actions.register("process_reference", starter(ReferenceJob, "refId"))
+    actions.register("provider_check", starter(ProviderCheckJob, "providerId", PROVIDERS[0]))
     actions.register("cancel", cancel)
     actions.busy_checks.append(runner.busy)

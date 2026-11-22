@@ -98,13 +98,17 @@ class ProviderUnavailable(Exception):
 
 
 class ProviderFailed(Exception):
-    """A provider's real call failed. ``state`` is what that call proved (None: nothing, try again)."""
+    """A provider's real call failed. ``state`` is what that call proved (None: nothing, try again); ``detail`` is
+    what Bedrock itself said, when it said something (Try it records it, §45.35 D2)."""
 
-    def __init__(self, sentence: str, *, state: str | None = None, last_error: str | None = None) -> None:
+    def __init__(
+        self, sentence: str, *, state: str | None = None, last_error: str | None = None, detail: str | None = None
+    ) -> None:
         super().__init__(sentence)
         self.sentence = sentence
         self.state = state
         self.last_error = last_error
+        self.detail = detail
 
 
 Ask = Callable[..., Awaitable[Any]]  # pipeline.StoryJob.ask(task=..., messages=..., schema=..., max_tokens=...)
@@ -480,18 +484,39 @@ class NovaReel(_Base):
         scene = next((s for s in script.get("scenes") or [] if s.get("sceneId") == scene_id), None)
         if scene is None:
             raise ValueError(f"scene {scene_id} is not in the script")
+        prefix = self.ctx.reel_prefix(scene_id)
+        dimension = reel_dimension(int(script.get("width") or 1080), int(script.get("height") or 1920))
+        seed = int(scene.get("seed") or self.ctx.seed or 0)
+        key = await self.shot(reel_prompt(script, scene), seed, dimension, prefix)
+        local = self.ctx.workdir / "reel" / f"{scene_id}-shot.mp4"
+        local.parent.mkdir(parents=True, exist_ok=True)
+        bucket = self.ctx.video_bucket
+        s3 = self.ctx.us_s3()
+        await asyncio.to_thread(s3.download_file, bucket, f"{key.rstrip('/')}/output.mp4", str(local))
+        seconds = float(scene.get("durationSec") or REEL_SHOT)
+        size = (int(script.get("width") or 1080), int(script.get("height") or 1920))
+        await fit_shot(local, out, seconds, self.ctx.crf, size)
+        if self.ctx.on_progress:
+            self.ctx.on_progress(1, 1)
+        return SceneClip(out, None, seconds)
+
+    async def shot(self, prompt: str, seed: int, dimension: str, prefix: str) -> str:
+        """One 6-second shot (``StartAsyncInvoke``, then ``GetAsyncInvoke`` until it is ready) written under
+        ``prefix`` in the US bucket; returns the shot's folder key there. Raises ProviderFailed with what the call
+        proved (and Bedrock's own words in ``detail``)."""
+        if self.ctx.reel_client is None:
+            raise ProviderUnavailable(REEL_SETUP)
         from botocore.exceptions import ClientError
 
         client = self.ctx.reel_client()
-        prefix = self.ctx.reel_prefix(scene_id)
         model_input = {
             "taskType": "TEXT_VIDEO",
-            "textToVideoParams": {"text": reel_prompt(script, scene)},
+            "textToVideoParams": {"text": prompt[:500]},
             "videoGenerationConfig": {
                 "durationSeconds": REEL_SHOT,
                 "fps": 24,
-                "dimension": reel_dimension(int(script.get("width") or 1080), int(script.get("height") or 1920)),
-                "seed": int(scene.get("seed") or self.ctx.seed or 0) % 2147483646,
+                "dimension": dimension,
+                "seed": int(seed) % 2147483646,
             },
         }
         try:
@@ -502,25 +527,18 @@ class NovaReel(_Base):
                 outputDataConfig={"s3OutputDataConfig": {"s3Uri": f"s3://{self.ctx.video_bucket}/{prefix}"}},
             )
         except ClientError as e:
-            log("warn", "stories.reel_refused", code=(e.response.get("Error") or {}).get("Code"))
+            error = e.response.get("Error") or {}
+            said = str(error.get("Message") or "")[:300] or None
+            log("warn", "stories.reel_refused", code=error.get("Code"))
             if _refused_model(e):
-                raise ProviderFailed(REEL_SETUP, state="needs_setup", last_error=REEL_NOT_ENABLED) from e
-            raise ProviderFailed(REEL_FAILED) from e
+                raise ProviderFailed(REEL_SETUP, state="needs_setup", last_error=REEL_NOT_ENABLED, detail=said) from e
+            raise ProviderFailed(REEL_FAILED, detail=said) from e
         arn = str(started.get("invocationArn") or "")
         uri = await self._wait(client, arn)
-        local = self.ctx.workdir / "reel" / f"{scene_id}-shot.mp4"
-        local.parent.mkdir(parents=True, exist_ok=True)
         bucket, _, key = uri.removeprefix("s3://").partition("/")
         if bucket != self.ctx.video_bucket or not key.startswith(prefix):
             raise ProviderFailed(REEL_FAILED, state="on", last_error="The shot was not where it was asked to be.")
-        s3 = self.ctx.us_s3()
-        await asyncio.to_thread(s3.download_file, bucket, f"{key.rstrip('/')}/output.mp4", str(local))
-        seconds = float(scene.get("durationSec") or REEL_SHOT)
-        size = (int(script.get("width") or 1080), int(script.get("height") or 1920))
-        await fit_shot(local, out, seconds, self.ctx.crf, size)
-        if self.ctx.on_progress:
-            self.ctx.on_progress(1, 1)
-        return SceneClip(out, None, seconds)
+        return key
 
     async def _wait(self, client: Any, arn: str) -> str:
         """Polls ``GetAsyncInvoke`` until the shot is ready; returns its S3 folder."""
@@ -531,8 +549,11 @@ class NovaReel(_Base):
             if status == "Completed":
                 return str(((got.get("outputDataConfig") or {}).get("s3OutputDataConfig") or {}).get("s3Uri") or "")
             if status == "Failed":
-                log("warn", "stories.reel_failed", detail=str(got.get("failureMessage") or "")[:300])
-                raise ProviderFailed(REEL_FAILED, state="on", last_error="Nova Reel could not make the shot.")
+                said = str(got.get("failureMessage") or "")[:300] or None
+                log("warn", "stories.reel_failed", detail=said)
+                raise ProviderFailed(
+                    REEL_FAILED, state="on", last_error="Nova Reel could not make the shot.", detail=said
+                )
             await self.ctx.sleep(REEL_POLL)
             waited += REEL_POLL
         raise ProviderFailed(REEL_FAILED)
