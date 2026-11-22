@@ -1,5 +1,5 @@
 {
- "version": "f414e2fbcb14",
+ "version": "d8793a76f06f",
  "parts": [
   {
    "id": "app-map",
@@ -57,7 +57,7 @@
    "id": "contracts-5",
    "title": "CONTRACTS: 5. HTTP API (API Gateway HTTP API v2 → Lambda `cf-prod-api`)",
    "line": "Base: ${apiUrl}/v1. JSON in and out, camelCase. Every route requires the JWT except GET /v1/health.",
-   "chars": 15021
+   "chars": 15250
   },
   {
    "id": "contracts-6",
@@ -249,7 +249,7 @@
    "id": "contracts-37",
    "title": "CONTRACTS: 37. Chat hype: the crowd as a signal (owner request, 2026-11-20)",
    "line": "37.1 The owner's words",
-   "chars": 9831
+   "chars": 9944
   },
   {
    "id": "contracts-38",
@@ -280,6 +280,12 @@
    "title": "CONTRACTS: 42. Post it on TikTok yourself (owner request, 2026-11-21)",
    "line": "The owner: he needs \"the real deal\", TikTok posts everyone can see, today. TikTok's API keeps every post of an",
    "chars": 14266
+  },
+  {
+   "id": "contracts-44",
+   "title": "CONTRACTS: 44. New parts of a built-in skill, for the owner's own copy of it (owner request, 2026-11-20)",
+   "line": "44.1 The problem and the rule",
+   "chars": 5563
   },
   {
    "id": "contracts-45",
@@ -682,6 +688,12 @@
    "title": "DECISIONS: ADR-66 TikTok for everyone: the owner posts it in TikTok himself, Clip Factory hands it over and counts it",
    "line": "Context. TikTok's API keeps an unaudited app's posts \"Only me\" on a private account, and its review and Direct Post",
    "chars": 1498
+  },
+  {
+   "id": "adr-67",
+   "title": "DECISIONS: ADR-67 New built-in skill parts are offered to the owner's copy, never written into it",
+   "line": "Context. §37 added a Chat block to the built-in viral-clip-editing. An owner who had made his own copy of that",
+   "chars": 1310
   },
   {
    "id": "adr-70",
