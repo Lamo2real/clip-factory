@@ -30,11 +30,14 @@ exactly as before. Nothing here calls TikTok's posting API.
   `macAttempt` (claims so far), `beforeMac` (a Clip Factory TikTok post's fields before it was handed over, for Take it
   back), `madeForMac: true` (the post was created for the Mac, so Take it back deletes it). Its `postOptions` hold the
   TikTok sheet's shape (§17.8: `privacyLevel`, `disableComment`, `disableDuet`, `disableStitch`, …): what the Mac
-  sets.
+  sets. **Every Mac post (upload, auto and sent) stores My settings' TikTok choices** (`tiktok_mac.preset_options`:
+  `PUBLIC_TO_EVERYONE` with Comment, Duet and Stitch on), whatever Upload's TikTok sheet sent: before TikTok approves
+  the app the sheet offers only Only me, and his Mac posts for everyone.
 * **Clip** `tiktokForMac` (internal): the id of a TikTok post Send these to my Mac created, next to §42's `tiktokByYou`.
-* **After the Mac posts it**: the post becomes `posted`, `by: "you"`, `privacy: "public"`, with the public
-  **`via: "mac"`**, through `tiktok_self.mark_posted`'s conditional write, and loses every `mac*` field and
-  `beforeMac`/`madeForMac`. Undo (`DELETE …/tiktok/posted`) of a `via: "mac"` post → 409 "Your Mac posted this one. To
+* **After the Mac posts it**: the post becomes `posted`, `by: "you"`, with the public **`via: "mac"`**, through
+  `tiktok_self.mark_posted`'s conditional write, and loses every `mac*` field and `beforeMac`/`madeForMac`. Its
+  `privacy` follows the stored `privacyLevel` (`public` only for `PUBLIC_TO_EVERYONE`, which every Mac post holds;
+  otherwise `private`, never joining the stats poller). Undo (`DELETE …/tiktok/posted`) of a `via: "mac"` post → 409 "Your Mac posted this one. To
   take it down, delete it in TikTok."
 
 ```ts
@@ -49,7 +52,9 @@ interface MacHelper { seenAt: string; state: "ok" | "needs_you" | "paused"; reas
 interface MacJob { clipId: string; postId: string; hook: string; caption: string /* captions.tiktok */;
                    fileName: string /* videoFileName(hook) */; privacy: string; comment: boolean; duet: boolean;
                    stitch: boolean; source: "upload" | "auto" | "sent"; since: string;
-                   state: "waiting" | "working" | "stopped"; step?: MacStep; claimedAt?: string; pressedAt?: string }
+                   state: "waiting" | "working" | "stopped"; step?: MacStep; claimedAt?: string; pressedAt?: string;
+                   attempt: number /* macAttempt: the claims so far */ }
+// AutoPostStatus.tiktokYourself[].mac?: true (his Mac's post, listed while the switch is off, §47.2).
 ```
 
 ### 47.2 Where Mac posts come from
@@ -61,15 +66,17 @@ Upload and auto-posting write the Mac post in the same transaction as the clip's
    (`source: "upload"`, `madeForMac`) instead of `queued` when all hold: `"tiktok"` is among the chosen places;
    `settings.tiktokMac.on`; TikTok has not approved the app (`tiktok_mac.tiktok_audited`, the server twin of the web's
    `tiktokAudited`: `app_review` and `posting_audit` not both `ok`); the clip is not a campaign clip (they keep
-   today's path). The `tiktok` body stays required ("Pick who can see it on TikTok.") and becomes the post's
-   `postOptions`; `uploadTo` names TikTok (he chose it). Upload's API TikTok rule (`queued`, the refusals) is
+   today's path). The `tiktok` body stays required ("Pick who can see it on TikTok.") and is checked as before, but
+   the post's `postOptions` are My settings' choices (§47.1); `uploadTo` names TikTok (he chose it). Upload's API TikTok rule (`queued`, the refusals) is
    otherwise unchanged, and exactly as before with the switch off or once TikTok approved the app.
 2. **Auto-posting runs** (`autopost/run.py`, live mode only): with `tiktokMac.on`, a normal (non-campaign) clip also
    gets a TikTok Mac post (`source: "auto"`) through `upload_review_clip(..., tiktok_mac=True)`; its options are My
    settings' (§36: Everyone, Comment, Duet and Stitch on). TikTok is **not** added to the run's places (`uploadTo`
    never names it). Practice and Private test runs never make one ("Nothing gets sent"). `GET /v1/autopost`:
    `leftOut` drops TikTok while on, `macPlaces: ["tiktok"]` (else `[]`), and `tiktokYourself` drops clips whose TikTok
-   post is a Mac post (any state) or was posted `via: "mac"`. **Off switch:** while `autoPost.on` is false, Mac posts
+   post is a Mac post (any state) or was posted `via: "mac"`, except while **Your Mac posts TikTok is off**: then a
+   clip whose Mac post waits or stopped (not working, Post never pressed) is listed again with `mac: true`, and the
+   page offers **Post it yourself instead** on it. **Off switch:** while `autoPost.on` is false, Mac posts
    with `source: "auto"` that are still `waiting` are left out of the queue and refused to a claim ("Auto-posting is
    off, so this one waits."); the app shows "Waiting for your Mac · auto-posting is off".
 3. **Send these to my Mac** (`POST /v1/tiktok/mac/send {clipIds: string[] 1–25}` → `{results: [{clipId, sent,
@@ -88,10 +95,14 @@ Upload and auto-posting write the Mac post in the same transaction as the clip's
    TikTok.", "This clip is already on TikTok for everyone.", "Your Mac already has this clip.", "We could not find
    that clip.", "This clip just changed. Try again."
 4. **Take it back** (`DELETE /v1/clips/{clipId}/tiktok/mac` → `{clip, posts}`): only while `mac.state` is `waiting` or
-   `stopped` (conditional). A `madeForMac` post is deleted (on that condition) and leaves `postIds` (and
-   `tiktokForMac`); a handed-over post gets `beforeMac` back. The clip's status follows the settle rule. Working → 409
-   "Your Mac is posting it right now. Wait a minute."; not a Mac post → 409 "Your Mac isn't posting this clip." The
-   app calls it from **Post it yourself instead**, then opens the §42 sheet.
+   `stopped` and the Mac never pressed Post. A `madeForMac` post is deleted and leaves `postIds` (and
+   `tiktokForMac`); a handed-over post gets `beforeMac` back. The post and the clip (its settle rule) are **one
+   transaction** (`db.delete_request` / `Store.transact(deletes=…)`), conditional on the post's state and
+   `macPressedAt` absent; a clip that changed meanwhile is read again, at most 3 times. Working → 409 "Your Mac is
+   posting it right now. Wait a minute."; `macPressedAt` set → 409 "Your Mac may have posted it already. Check your
+   TikTok first." (the restored post could otherwise go out through TikTok's API and make two copies; his ways out
+   are I posted it, allowed while stopped, and Try again with `notOnTikTok`); not a Mac post → 409 "Your Mac isn't
+   posting this clip." The app calls it from **Post it yourself instead**, then opens the §42 sheet.
 
 ### 47.3 The helper's routes (JWT: the helper signs in as the owner)
 
@@ -119,16 +130,19 @@ Your Mac posts TikTok."
 * **Ping:** puts the helper item (`seenAt` now) and answers `on`. State other than the three → 400.
 * **Claim:** one conditional write. It succeeds when `status = mac` and either `macState = waiting`, or `working` with
   no `macPressedAt` and `macBeatAt` older than 15 minutes (a crashed helper). It sets `working`, `macClaimedAt`,
-  `macDevice`, `macBeatAt`, `macStep: "video"` and `macAttempt + 1`. Anything else → 409 "Another try already has this
+  `macDevice`, `macBeatAt`, `macStep: "video"` and `macAttempt + 1` (the job's `attempt`). Anything else → 409 "Another try already has this
   clip."; not a Mac post → 409 "Your Mac isn't posting this clip."; switch off → 409 `MAC_OFF`. A post with
   `macPressedAt` is **never** claimed again by itself: never twice.
+* **The attempt:** `step`, `done` and `stopped` take an optional `attempt` (a whole number from 1). When sent it must
+  equal `macAttempt`, else 409 "Another try already has this clip.", so an older attempt of the same device (which
+  took back its own stale claim) is never taken for the new one; the writes are conditional on it too.
 * **Step:** only from `macDevice` while `working` (409 "Another try already has this clip." otherwise; an unknown step
   → 400). It sets `macStep` and `macBeatAt`; `pressing` also sets `macPressedAt` (the first press is kept), the point
   of no return. While the switch is off a step before Post → 409 `MAC_OFF` (the owner's "Your Mac stops at once");
   after Post the helper may still look for the link. Each step reaches the web live: post item changes stream as post
   events (§14.2, `POST#` is in the broadcast filter) with the public `mac`.
 * **Done:** from `macDevice`, while `working` or `stopped` (409 otherwise). It runs `tiktok_self.mark_posted` on the
-  row (`mac_device`), so the one-post-per-clip rule and the `tiktokByYou` race guard stay as they are: the same write
+  row (`mac=MacDone(device, attempt)`), so the one-post-per-clip rule and the `tiktokByYou` race guard stay as they are: the same write
   sets `via: "mac"` and removes the Mac fields, conditional on `macDevice` and the state. `link`: read by
   `tiktok_link.resolve`, as in I posted it (§42.2, the same `note` for another account). No link: the §42 finder, with
   `since = macClaimedAt − 1 minute`. A repeat call is answered as the first, adding the link when it brings one. The
@@ -151,15 +165,19 @@ Your Mac posts TikTok."
 * Every place that reads `Post.status` handles `"mac"`: the types, `metrics.calmCopy`, Library's TikTok row, the clip
   page's stack (`PlatformPerformance` carries the same `mac` and `via`), Review's "Uploaded just now" and the
   auto-posting lists. The helpers are in `web/src/lib/tiktokMac.ts`.
-* **The TikTok row:** Waiting: "Waiting for your Mac", plus " · auto-posting is off" (`source: "auto"` while it is
-  off), else " · set up your Mac first" (the helper never checked in), else " · your Mac was last seen {Sun 14:03}"
+* **The TikTok row:** Waiting: "Waiting for your Mac", plus " · it's switched off" (Your Mac posts TikTok is off), else
+  " · auto-posting is off" (`source: "auto"` while it is off), else " · set up your Mac first" (the helper never checked in), else " · your Mac was last seen {Sun 14:03}"
   (not seen for 10 minutes). Working: "Your Mac is posting it · {step}" with the step words "Getting the video",
   "Opening TikTok", "Uploading", "Setting Everyone and the switches", "Posting" and "Finding the link". Stopped: "Your
   Mac stopped: {reason}", with **Try again** (retry; once `pressedAt` is set it says "It's not on TikTok, try again" and
-  sends `notOnTikTok`) and **Post it yourself instead**. Posted `via: "mac"`: "Posted by your Mac · Everyone", with
+  sends `notOnTikTok`) and **Post it yourself instead**, except once `pressedAt` is set: then **I posted it** (the §42
+  sheet's link box, Find it looking from a minute before the press) instead of Post it yourself instead. Posted
+  `via: "mac"`: "Posted by your Mac · Everyone", with
   Open and the numbers as for "Posted by you".
 * **Post it yourself** stays as it is for clips without a Mac post. On a waiting or stopped Mac post it reads **Post it
-  yourself instead**: Take it back (DELETE), then the §42 sheet. Hidden while the Mac works on it.
+  yourself instead**: Take it back (DELETE), then the §42 sheet. Hidden while the Mac works on it and once it pressed
+  Post. While the switch is off the row says "Waiting for your Mac · it's switched off" and keeps Post it yourself
+  instead.
 * **Review:** with `tiktokMac.on` and TikTok not approved, the hint above Upload reads "TikTok: your Mac posts it for
   everyone." instead of §42's `TIKTOK_PUBLIC_HINT`, and §42's sheet does not open by itself after Upload. Upload's own
   rules and buttons are unchanged.
@@ -171,7 +189,7 @@ Your Mac posts TikTok."
   (its confirm line: "They go one at a time, oldest first."); and one quiet line: "To stop it, turn the switch off.
   Your Mac stops at once."
 * **Auto-posting page** (§46.2): "Where they go" says "TikTok: your Mac posts it." while on, and "Post these on TikTok
-  yourself" gets the same **Send these to my Mac**.
+  yourself" gets the same **Send these to my Mac**; while off, its `mac: true` clips get **Post it yourself instead**.
 * Mock mode (`web/src/api/mock/tiktokMac.ts`) follows these rules; the helper's routes are test knobs
   (`window.__cfMock.mac`: ping, seen, claim, step, done, stopped, queue, post).
 
@@ -187,7 +205,11 @@ Your Mac posts TikTok."
   the switch off before Post; stops and needs you, the pressed reason; done through `mark_posted` with a link, with the
   finder's `since`, repeat-safe, only from the claiming Mac, after a stop, never undone, never a second post with I
   posted it; I posted it vs the Mac (refused while working; waiting or stopped, and its Undo); Try again with and
-  without `notOnTikTok`; Take it back (deleted, restored, refused while working); Send these to my Mac (the switch, 1–25
+  without `notOnTikTok`; Take it back (deleted, restored, refused while working,
+  refused after Post was pressed with nothing then sent through the API, one transaction that rolls back whole, a clip
+  that just settled); an Upload that picked Only me still asks for Everyone and done marks it public; done's privacy
+  follows the stored choice; the switch off lists waiting and stopped Mac posts in `tiktokYourself`; the job's
+  `attempt` and an older attempt refused; Send these to my Mac (the switch, 1–25
   ids, a new post once, the race guard both ways, each hand-over and its Take it back, every refusal, the queue order);
   the clip page; another owner.
 * `test_autopost_run.py`: `test_tiktok_is_never_a_place_even_when_ready` (unchanged, the switch off) and beside it the
@@ -195,7 +217,8 @@ Your Mac posts TikTok."
   Private test never make one; a campaign clip from a run never. `test_autopost_routes.py`: `leftOut`/`macPlaces`, the
   `tiktokYourself` filter. `test_http.py`: the nine routes.
 * Web: `web/test/tiktokMac.test.ts` (the row words, step words, labels, who may be sent, the lines and the mock's
-  rules) and `web/e2e/tiktok-mac.spec.ts` (Library row states, the Settings branch switch, Send these, the Review hint).
+  rules) and `web/e2e/tiktok-mac.spec.ts` (Library row states, I posted it after Post was pressed, the switch off,
+  the Settings branch switch, Send these, the Review hint).
 
 ### 47.6 Never twice, never TikTok's API
 
@@ -205,7 +228,8 @@ Your Mac posts TikTok."
   `tiktokForMac` nor `tiktokByYou`, I posted it's new post neither; the Mac's done and I posted it are the same
   conditional write on the one row.
 * One Mac, one try at a time: the claim is conditional; a post whose helper pressed Post is never claimed again by
-  itself; only the owner's "It's not on TikTok, try again" clears that.
+  itself, and never taken back (it could then go out through TikTok's API as well); only the owner's "It's not on
+  TikTok, try again" clears that, or his I posted it makes it his.
 
 ### 47.7 Not verified live
 

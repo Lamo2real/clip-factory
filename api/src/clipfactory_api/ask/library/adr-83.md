@@ -21,7 +21,12 @@
   "pressing" (`macPressedAt`) the post is never claimed again by itself, and only the owner's "It's not on TikTok, try
   again" clears it. Its done runs `tiktok_self.mark_posted`, so the Mac and I posted it share one write and one post
   per clip (`tiktokByYou`, and the new `tiktokForMac` for sends). Undo never takes back what the Mac posted (it is on
-  TikTok). Campaign clips keep their own path (Branded content, the first 30 minutes). Everything is under `ANY
+  TikTok), and Take it back is refused once the Mac pressed Post (the restored post could go out through TikTok's API
+  as a second copy); it deletes or restores the post and updates the clip in one transaction. Every Mac post asks
+  for My settings' choices (Everyone, Comment, Duet and Stitch on), whatever Upload's TikTok sheet said (before the
+  audit it offers only Only me), and done writes the privacy that was asked for. The job carries the claim's
+  `attempt`, which the helper may send back, so an older attempt of the same Mac is never taken for the new one.
+  While the switch is off, waiting and stopped Mac posts are offered again as Post it yourself instead. Campaign clips keep their own path (Branded content, the first 30 minutes). Everything is under `ANY
   /v1/{proxy+}`, additive, and with the switch off nothing changes.
 - **Consequences.** No Terraform, table, index, secret or bucket change. The owner sees each step live (post events
   already stream). The risks stay his choice: TikTok may remove posts, cut reach or ban the account; the 3-post trial
