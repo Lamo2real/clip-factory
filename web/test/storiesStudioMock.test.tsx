@@ -338,7 +338,11 @@ describe("a new story", () => {
     const r = await call(api.getStory("stories", story.storyId));
     expect(r.story.status).toBe("failed");
     expect(r.job?.error).toMatch(/^Claude Haiku 5.5 isn't available right now/);
-    expect(r.job?.meta.models).toEqual([]);
+    // As the real API keeps it (§45.34, §45.35 D5): the step that stopped, with exactly what it asked for.
+    expect(r.job?.meta.models).toEqual([
+      { step: "storyboard", agentId: "storyboard", task: "storyboard", model: "haiku-5-5", modelId: expect.stringMatching(/claude-haiku-5-5/), region: "eu-north-1", effort: "high", effortApplied: false, failed: true },
+    ]);
+    expect(r.job?.meta.models.some((m) => m.model !== "haiku-5-5")).toBe(false);
     expect(r.story.stale).toEqual(STEP_ORDER);
   });
 

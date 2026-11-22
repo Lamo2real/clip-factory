@@ -172,15 +172,19 @@ async function justThisMessage(model: RegExp, effort?: RegExp) {
   await click(byText(".st-chat-sheet button", "Done"));
 }
 
+// §45.35 D8 words: "{provider} on {host}" ("Anthropic on Amazon Bedrock"); a bundled list from before D8 names only
+// the host as its provider and says "Amazon Bedrock" (storiesChatRound4.test.tsx covers each case on its own).
+const BEDROCK = /^(Anthropic on )?Amazon Bedrock$/;
+
 describe("the chat names the provider (§45.34)", () => {
   it("beside the model line and on every model in the picker", async () => {
     await openChat(CONV.winter);
-    expect($(".st-chat-ai__provider")?.textContent).toBe("From Amazon Bedrock");
-    expect(byLabel(".st-chat-ai__part", /^Model: Claude Opus 5\.5 on Amazon Bedrock/)).not.toBeNull();
+    expect($(".st-chat-ai__provider")?.textContent).toMatch(BEDROCK);
+    expect(byLabel(".st-chat-ai__part", /^Model: Claude Opus 5\.5, (Anthropic on )?Amazon Bedrock\./)).not.toBeNull();
     await click($(".st-chat-ai__part"));
-    expect($(".st-chat-sheet")?.textContent).toContain("Amazon Bedrock. Good and fast.");
-    expect(modelOptions(withLines(models), null).every((o) => o.line?.startsWith("Amazon Bedrock."))).toBe(true);
-    expect(providerOf(fileModels(), "haiku-5-5")).toBe("Amazon Bedrock");
+    expect($(".st-chat-sheet")?.textContent).toMatch(/(Anthropic on )?Amazon Bedrock\. Good and fast\./);
+    expect(modelOptions(withLines(models), null).every((o) => /^(Anthropic on )?Amazon Bedrock\./.test(o.line ?? ""))).toBe(true);
+    expect(providerOf(fileModels(), "haiku-5-5")).toMatch(BEDROCK);
     expect(providerOf([], "not-a-model")).toBeNull();
   });
 });

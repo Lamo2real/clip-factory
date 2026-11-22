@@ -188,3 +188,14 @@ export function inputOf(c: CharacterInput): CharacterInput {
     voice: structuredClone(c.voice),
   };
 }
+
+/**
+ * The face a preview shows for a character (§45.35 D21): happy when it has that face, else its first face that is not
+ * neutral, else neutral. A character needs only neutral and two other faces, so a cast without "happy" is never drawn
+ * smiling with a face it does not have.
+ */
+export function showFace(c: Pick<CharacterInput, "expressions">): Expression {
+  const faces = Array.isArray(c.expressions) ? c.expressions : [];
+  if (faces.includes("happy")) return "happy";
+  return faces.find((e) => e !== "neutral") ?? "neutral";
+}

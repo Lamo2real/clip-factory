@@ -9,14 +9,16 @@
 // answer (an older API): `failed` is a failure, and a video that goes back to `analyzed` with the very same analysis
 // as before was a re-run that did not finish (Lamo Stories' agent keeps the last analysis then).
 //
-// A video whose file was cleared to save space (§45.34 "Keeping and clearing files": the API then leaves `url` out of
-// a reference that is past uploading) says "The video was removed to save space. Its study stays." and is not
-// analyzed again (the API refuses it); its study and "Use in a video" stay.
+// A video whose file was cleared to save space (§45.34 "Keeping and clearing files", §45.35 D9: the API says
+// `fileRemoved`, and leaves `url` out) says "The video was removed to save space. Its study stays." when its study is
+// kept (`studyKept`), else only "The video was removed to save space." (the 30- and 90-day rules also clear videos
+// that were never studied). It is not analyzed again (the API refuses it); a kept study and "Use in a video" stay.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { A } from "../../../components/ui.tsx";
 import { usePoll } from "../../../lib/hooks.ts";
 import { navigate } from "../../../lib/router.ts";
 import { storiesApi } from "../../api/client.ts";
+import { storiesGoLater } from "../../pane.tsx";
 import { REF_STEP_LABEL, REF_STEP_ORDER, type AiSetting, type ModelOverride, type ProductionJob, type ReferenceAnalysis, type ReferenceVideo, type StoryStep } from "../../api/types.ts";
 import { storiesHref } from "../../routes.ts";
 import { AiLine, AiSheet, DEFAULT, type AiScope } from "../ai.tsx";
@@ -44,6 +46,20 @@ export const RERUN_FAILED = "The new analysis did not finish, so this is still t
 const RERUN_LEAD = "The new analysis did not finish, so this is still the last one.";
 /** A video whose file was cleared by the keep setting (§45.34): the study stays. */
 export const FILE_REMOVED = "The video was removed to save space. Its study stays.";
+/** A video whose file was cleared before it was ever studied (§45.35 D9): there is no study to keep. */
+export const FILE_REMOVED_NO_STUDY = "The video was removed to save space.";
+
+/**
+ * Whether the keep setting cleared this video's file, and whether its study stays (§45.35 D9). The API says both
+ * (`fileRemoved`, `studyKept`); an older one only leaves `url` out of a video past uploading, and then a study the page
+ * has is the one kept.
+ */
+export function removedState(ref: Pick<ReferenceVideo, "status" | "url" | "fileRemoved" | "studyKept">, analysis: ReferenceAnalysis | null | undefined): { removed: boolean; studyKept: boolean; line: string | null } {
+  const removed = typeof ref.fileRemoved === "boolean" ? ref.fileRemoved : ref.status !== "uploading" && !ref.url;
+  if (!removed) return { removed: false, studyKept: false, line: null };
+  const studyKept = typeof ref.studyKept === "boolean" ? ref.studyKept : !!analysis;
+  return { removed: true, studyKept, line: studyKept ? FILE_REMOVED : FILE_REMOVED_NO_STUDY };
+}
 
 const same = (a: ReferenceAnalysis | null | undefined) => (a ? JSON.stringify(a) : null);
 
@@ -165,8 +181,9 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
   const effortBad = effortProblem(model, current.effort);
   // The file itself when it was sent from this device this visit, else the server's link.
   const src = localVideo(ref.refId) ?? ref.url ?? null;
-  // Past uploading without a link: the keep setting cleared the file (§45.34).
-  const removed = ref.status !== "uploading" && !ref.url;
+  // The keep setting cleared the file (§45.34, §45.35 D9).
+  const cleared = removedState(ref, data.analysis);
+  const removed = cleared.removed;
   const analyzable = !removed && (ref.status === "ready" || ref.status === "analyzed" || ref.status === "failed");
 
   async function analyze() {
@@ -222,7 +239,8 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
     try {
       const c = await storiesApi().createConversation(ws, { title: `About ${ref.title}`.slice(0, 80), projectRef: { kind: "reference", id: ref.refId } });
       rememberConversation(c.convId);
-      navigate(storiesHref({ name: "chat_conv", convId: c.convId }));
+      // After the wait: never while Clip Factory is on screen (it happens once Lamo Stories is back, §45.35 D17).
+      storiesGoLater(storiesHref({ name: "chat_conv", convId: c.convId }));
     } catch (e) {
       setActionProblem(sentence(e, "The chat did not start. Try again."));
     }
@@ -230,7 +248,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
 
   function remove() {
     scheduleDelete({ kind: "reference", id: ref.refId, text: `Deleted “${ref.title}”.`, run: () => storiesApi().deleteReferenceVideo(ws, ref.refId) });
-    navigate(storiesHref({ name: "references" }));
+    storiesGoLater(storiesHref({ name: "references" }));
   }
 
   /** The video's own setting as the sheet shows it: the last pick while its save is on the way. */
@@ -350,7 +368,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
           ) : (
             <div className="st-ref-player__none">
               <Icon name="film" size={40} />
-              <span>{ref.status === "uploading" ? "The video is still on its way." : removed ? FILE_REMOVED : "The video plays here."}</span>
+              <span>{ref.status === "uploading" ? "The video is still on its way." : removed ? cleared.line : "The video plays here."}</span>
             </div>
           )}
         </div>

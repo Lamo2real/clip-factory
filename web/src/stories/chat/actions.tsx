@@ -26,6 +26,7 @@ import { navigate } from "../../lib/router.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { A } from "../../components/ui.tsx";
 import { storiesApi } from "../api/client.ts";
+import { storiesGoLater } from "../pane.tsx";
 import type { AiSetting, CharacterInput, ChatAction, IdeaCategory, IdeaInput, ModelOverride, ProjectRef, TaskKind } from "../api/types.ts";
 import { cleanPick, LISTED_INFO, ModelMenu, storyUsual, type AiInfo } from "../studio/ai.tsx";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
@@ -278,7 +279,8 @@ export function ActionCard({
       done.set(id, result);
       setState({ kind: "done", ...result });
       cheer(at);
-      if (result.go) navigate(result.href);
+      // After the wait: never while Clip Factory is on screen (it happens once Lamo Stories is back, §45.35 D17).
+      if (result.go) storiesGoLater(result.href);
     } catch (err) {
       setState({ kind: "failed", text: sentence(err) });
     }

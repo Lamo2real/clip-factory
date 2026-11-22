@@ -162,6 +162,8 @@ export interface ModelInfo {
   /** a custom model's own Region and output limit, so Edit starts from them (contractIssues) */
   region?: string;
   maxOutputTokens?: number;
+  /** who runs it, e.g. "Amazon Bedrock" (§45.35 D8); `provider` is who makes it. Missing from an older API: Amazon Bedrock */
+  host?: string;
 }
 
 export type AgentId = "creative_director" | "video_analysis" | "storyboard" | "character" | "quality_assurance";
@@ -212,6 +214,9 @@ export interface AiTask {
   effortApplied: boolean | null;
   result: Record<string, unknown> | null;
   error?: string;
+  /** the Bedrock model id or inference profile really called, and its Region (§45.35 D5); missing from an older API */
+  modelId?: string | null;
+  region?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -250,6 +255,11 @@ export interface Message {
   usage: { input: number; output: number } | null;
   actions: ChatAction[];
   error?: string;
+  /** an answer's one-time "Just for this message" choice (§45.35 D4); null or missing when there was none */
+  requested?: ModelOverride | null;
+  /** the Bedrock model id or inference profile really called, and its Region (§45.35 D5) */
+  modelId?: string | null;
+  region?: string | null;
   createdAt: string;
 }
 
@@ -271,6 +281,10 @@ export interface ReferenceVideo {
   currentJobId: string | null;
   ai: AiSetting;
   analyzedWith: { model: string; effort: Effort | null } | null;
+  /** the keep setting cleared the video file (§45.35 D9: REFVID# fileRemovedAt); missing from an older API */
+  fileRemoved?: boolean;
+  /** with fileRemoved: its study is kept (it was studied before the file went) */
+  studyKept?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -557,11 +571,28 @@ export interface ProductionJob {
     safetyTopicId: string | null;
     providers: Record<string, string>;
     /** `failed`: the step stopped on this model; model and effort are what was asked (§45.34), no answer came */
-    models: { step: string; agentId: string; model: string; effort: Effort | null; effortApplied: boolean; failed?: boolean }[];
+    models: ModelUse[];
   };
   error?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * One step's model record in a job (§45.25 "Recorded", §45.34, §45.35 D5): `modelId` is the Bedrock model id or
+ * inference profile really called and `region` its Region, so an old job still says exactly what ran after the
+ * model's settings changed; `task` is the task it ran for. Missing from an older API.
+ */
+export interface ModelUse {
+  step: string;
+  agentId: string;
+  model: string;
+  effort: Effort | null;
+  effortApplied: boolean;
+  failed?: boolean;
+  task?: string;
+  modelId?: string;
+  region?: string;
 }
 
 export interface SceneEdit {

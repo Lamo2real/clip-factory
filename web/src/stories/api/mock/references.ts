@@ -14,16 +14,17 @@
 // characters part).
 //
 // Like the API, a reference past uploading carries `url` (here a pretend link: mock mode plays nothing), except once
-// its file was cleared to save space (§45.34 "Keeping and clearing files"): then `url` is left out and Analyze answers
-// 409 "The video was removed to save space. Its study stays." clearReferenceFile does that (the storage part's cleanup
-// may call it).
+// its file was cleared to save space (§45.34 "Keeping and clearing files"): then `url` is left out, `bytes` is 0,
+// `fileRemoved` is true and `studyKept` says whether its study stays (§45.35 D9), and Analyze answers 409 "The video was
+// removed to save space. Its study stays." clearReferenceFile does that; clearByKeepSetting applies the workspace's
+// keepReferences the way the API's storage cleanup does (index.ts runs it with POST …/storage/cleanup).
 //
 // Test knobs: refSeconds (how long an analysis takes, default 5), refFail (the next analysis fails with this sentence),
 // refJobInGet (kept for older tests: the job is always in the answer now), refNoJob (the answer leaves `job` out, as
 // the API did before §45.34, for the page's own fallback), refFileRemoved (refIds whose file was cleared).
 import { ApiError } from "../../../api/errors.ts";
 import type { AiSetting, ModelOverride, ProductionJob, ReferenceAnalysis, ReferenceVideo, StoriesApi, StoryStep } from "../types.ts";
-import { checkWs, lowerLevels, MODELS, newId, resolve } from "./chat.ts";
+import { checkWs, lowerLevels, modelCall, MODELS, newId, resolve } from "./chat.ts";
 import { delay, type MockStore } from "./store.ts";
 
 export const KEYS = ["listReferences", "createReference", "completeReference", "analyzeReference", "getReference", "patchReference", "deleteReferenceVideo"] as const;
@@ -74,15 +75,45 @@ export function clearReferenceFile(store: MockStore, refId: string): boolean {
   const ref = store.references.find((r) => r.refId === refId);
   if (!ref || ref.status === "uploading" || ref.currentJobId || isCleared(store, refId)) return false;
   state(store).cleared.add(refId);
+  // The file is gone, so it no longer counts in Settings › Storage (the API sums bytes 0 for it).
+  ref.bytes = 0;
   ref.updatedAt = iso();
   return true;
+}
+
+/**
+ * Applies the workspace's keepReferences now, as the API's storage cleanup does (§45.34, §45.35 D9): `study_only`
+ * clears the file of every studied video (its study stays); `days_30` and `days_90` clear every video older than that,
+ * studied or not (one never studied keeps no study). A video being uploaded or analyzed is left alone.
+ */
+export function clearByKeepSetting(store: MockStore, ws: string, keep: string | undefined, now = Date.now()): { files: number; bytes: number } {
+  const removed = { files: 0, bytes: 0 };
+  if (!keep || keep === "all") return removed;
+  const days = keep === "days_30" ? 30 : keep === "days_90" ? 90 : null;
+  const s = state(store);
+  for (const ref of store.references) {
+    if ((s.owner.get(ref.refId) ?? "stories") !== ws) continue;
+    const old = days !== null && Date.parse(ref.createdAt) < now - days * 24 * 3600 * 1000;
+    const studied = s.analyses.has(ref.refId);
+    if (keep === "study_only" ? !studied : !old) continue;
+    const bytes = ref.bytes;
+    if (!clearReferenceFile(store, ref.refId)) continue;
+    removed.files += 1;
+    removed.bytes += bytes;
+  }
+  return removed;
 }
 
 /** A reference as the API answers it: a link to the file once it is uploaded, none after the file was cleared. */
 function pub(store: MockStore, ref: ReferenceVideo): ReferenceVideo {
   const out = structuredClone(ref);
   delete out.url;
-  if (ref.status !== "uploading" && !isCleared(store, ref.refId)) out.url = `data:text/plain;charset=utf-8,${encodeURIComponent(`Pretend reference video "${ref.title}" (mock mode plays nothing).`)}`;
+  const cleared = isCleared(store, ref.refId);
+  if (ref.status !== "uploading" && !cleared) out.url = `data:text/plain;charset=utf-8,${encodeURIComponent(`Pretend reference video "${ref.title}" (mock mode plays nothing).`)}`;
+  // §45.35 D9: the mark the API reads (fileRemovedAt), and whether the study stays; a cleared file counts 0 bytes.
+  out.fileRemoved = cleared;
+  out.studyKept = cleared && state(store).analyses.has(ref.refId);
+  if (cleared) out.bytes = 0;
   return out;
 }
 
@@ -321,7 +352,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
           actualSec: null,
           safetyTopicId: null,
           providers: {},
-          models: [{ step: "write", agentId: "video_analysis", model: eff.model, effort: eff.effort, effortApplied: eff.effortApplied }],
+          models: [{ step: "write", agentId: "video_analysis", task: "reference_analysis", model: eff.model, ...(modelCall(eff.model) ?? {}), effort: eff.effort, effortApplied: eff.effortApplied }],
         },
         createdAt: iso(now),
         updatedAt: iso(now),

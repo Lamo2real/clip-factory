@@ -524,7 +524,7 @@
 
 .st-s-ideapick .st-s-pick__line {
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -2003,7 +2003,7 @@
   bottom: calc(100% + 2px);
   left: 50%;
   transform: translateX(-50%);
-  max-width: 92px;
+  max-width: 120px;
   padding: 1px 6px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2433,14 +2433,19 @@ button.st-s-place:hover {
   list-style: none;
 }
 
+.st-s-used__item {
+  display: grid;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  background: var(--st-s-fill);
+}
+
 .st-s-used__row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 10px;
-  padding: 8px 12px;
-  border-radius: var(--r-md);
-  background: var(--st-s-fill);
 }
 
 .st-s-used__step {
@@ -3048,5 +3053,79 @@ button.st-s-place:hover {
 
   .st-s-lines__row > .st-btn {
     justify-self: end;
+  }
+}
+
+/* ---------- Round 4 (§45.35 D5, D21) ---------- */
+
+/* "Not ready to post" in the publish sheet: the words always get the room; the link wraps, and on phones it has its
+   own row under them, at the right where the thumb is. */
+.st-s-place__text {
+  min-width: 0;
+}
+
+.st-s-place--off {
+  grid-template-columns: auto minmax(0, 1fr) fit-content(45%);
+}
+
+@media (max-width: 560px) {
+  .st-s-place--off {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .st-s-place--off > .st-btn {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+}
+
+/* The exact model a step called (a details line under it). */
+.st-s-used__id {
+  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+/* "Technical details": the folder, the seed, the versions and the model ids, folded away. */
+.st-s-tech {
+  margin-top: 12px;
+  padding: 0 12px 6px;
+  border-radius: var(--r-md);
+  background: rgba(255, 246, 229, 0.05);
+}
+
+.st-s-tech__sum {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
+  font-weight: 800;
+  border-radius: var(--r-sm);
+  transition: color 160ms ease;
+}
+
+.st-s-tech__sum:hover {
+  color: var(--st-sun, #ffc94a);
+}
+
+.st-s-tech[open] > .st-s-tech__sum {
+  color: var(--st-ink, #fff6e5);
+}
+
+.st-s-tech__body {
+  padding-bottom: 8px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .st-s-tech__sum {
+    min-height: 48px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-s-tech__sum {
+    transition: none;
   }
 }

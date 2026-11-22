@@ -2,7 +2,7 @@
 // part per area. Every part seeds, then the shell's stand-in seed fills in when no part seeded any story, then each
 // part that hangs things off another part's items finishes its seed (afterSeed). Builder F owns this file; F2 owns
 // ai, skills, memory; G ideas, characters, stories; H chat, references.
-import type { StoriesApi } from "../types.ts";
+import type { StoriesApi, StoriesConfig } from "../types.ts";
 import * as ai from "./ai.ts";
 import * as characters from "./characters.ts";
 import * as chat from "./chat.ts";
@@ -57,6 +57,16 @@ export function mockStoriesApi(): StoriesApi {
     }
   const fallbacks = { ...library.shellFallbacks(store), ...onboarding.shellFallbacks(store) };
   for (const [key, fn] of Object.entries(fallbacks)) if (!joined[key] || isNotBuilt(joined[key])) joined[key] = fn;
+  // "Clear now" (POST …/storage/cleanup) also clears reference videos as keepReferences says, as the API does
+  // (§45.34, §45.35 D9): their page then says the video was removed, and whether its study stays.
+  const cleanup = joined.storageCleanup as StoriesApi["storageCleanup"] | undefined;
+  if (cleanup && !isNotBuilt(cleanup))
+    joined.storageCleanup = async (ws: string) => {
+      const r = await cleanup(ws);
+      const conf = store.workspaces.find((w) => w.workspaceId === ws)?.configuration as Partial<StoriesConfig> | undefined;
+      const refs = references.clearByKeepSetting(store, ws, conf?.production?.keepReferences);
+      return { removed: { files: r.removed.files + refs.files, bytes: r.removed.bytes + refs.bytes } };
+    };
   // A character's reference picture is deleteReference (the characters part); a reference video is
   // deleteReferenceVideo (the references part), the rename of CONTRACTS §45.34.
   return joined as unknown as StoriesApi;

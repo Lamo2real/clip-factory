@@ -432,6 +432,19 @@ export function ShowMore({ list, what }: { list: { hasMore: boolean; busy: boole
   );
 }
 
+/**
+ * "Technical details" (§45.35 D21): the exact folder, the seed and the version numbers, folded away so the page itself
+ * says everything in plain words. Closed to start.
+ */
+export function TechDetails({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <details className={`st-s-tech${className ? ` ${className}` : ""}`}>
+      <summary className="st-s-tech__sum">Technical details</summary>
+      <div className="st-s-tech__body">{children}</div>
+    </details>
+  );
+}
+
 /** A celebration: Lamo Stories' confetti from the button and the success cheer (it answers the owner's own tap). */
 export function celebrate(from?: Element | null, amount = 110): void {
   starBurst(centerOf(from ?? null), amount);
