@@ -4,14 +4,16 @@
 // second while one is being written); its buttons wait for the owner's tap. A failed answer keeps the model and effort
 // it was sent with, and Try again sends it with the same "just this message" choice (unless the owner picked another
 // since). The director's "Remake these scenes" and "Analyze this reference video" buttons start from the choice that
-// message was sent with.
+// message was sent with. Each answer's exact model id and Region sit behind "Technical details" under its model line,
+// as production steps and AI tasks have them (§45.36 E8).
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { A } from "../../components/ui.tsx";
 import { usePoll } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
 import type { Conversation, Message, ModelOverride, ProjectRef } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
-import type { AiInfo } from "../studio/ai.tsx";
+import { modelIdLine, type AiInfo } from "../studio/ai.tsx";
+import { TechDetails } from "../studio/kit.tsx";
 import { ActionCard } from "./actions.tsx";
 import { AiLine, AiSheet, DEFAULT } from "./ai.tsx";
 import { rememberConversation } from "./device.ts";
@@ -792,9 +794,16 @@ function MessageItem({
           </div>
         ) : null}
         {m.model && m.status !== "pending" ? (
-          <span className="st-chat-msg__meta">
-            {modelLabel(models, m.model)} · {m.effortApplied === false ? "no effort setting" : effortLabel(m.effort)}
-          </span>
+          <>
+            <span className="st-chat-msg__meta">
+              {modelLabel(models, m.model)} · {m.effortApplied === false ? "no effort setting" : effortLabel(m.effort)}
+            </span>
+            {modelIdLine(m) ? (
+              <TechDetails className="st-chat-msg__tech">
+                <p className="st-s-used__id">{modelIdLine(m)}</p>
+              </TechDetails>
+            ) : null}
+          </>
         ) : m.status === "failed" && once?.model ? (
           // The server did not keep the model this answer was asked with: the choice sent with it still says it.
           <span className="st-chat-msg__meta">

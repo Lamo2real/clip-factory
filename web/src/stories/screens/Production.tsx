@@ -35,9 +35,9 @@ import {
 import { CATALOG } from "../engine/catalog.ts";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { storiesHref } from "../routes.ts";
-import { cleanPick, effortName, madeWith, ModelMenu, modelName, ModelsUsed, NextRun, SettingsFix, shortName, stoppedOn, StoryAi, storyUsual, useAiInfo, usualFor, type AiInfo } from "../studio/ai.tsx";
+import { effortName, madeWith, ModelIdList, modelIdLine, ModelMenu, modelName, modelOf, ModelsUsed, NextRun, sendPick, SettingsFix, shortName, stoppedOn, StoryAi, storyUsual, UnusableSheet, unusableAsk, useAiInfo, usedOf, usualFor, type AiInfo } from "../studio/ai.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
-import { usePaged, useSameScript, useWorkspace } from "../studio/hooks.ts";
+import { referencesCache, usePaged, useSameScript, useWorkspace } from "../studio/hooks.ts";
 import { formatOf, formatWords, sameFormat, ShapePicker } from "../studio/shape.tsx";
 import { Busy, celebrate, Notice, Pick, ShowMore, Slider, Switch, Tag, TechDetails, TextField } from "../studio/kit.tsx";
 import { showFace } from "../studio/looks.ts";
@@ -216,8 +216,12 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
   const [busy, setBusy] = useState(false);
   const [refIds, setRefIds] = useState<string[]>(() => givenRefs.slice(0, 3));
   const [ai, setAi] = useState<ModelOverride | null>(null);
+  /** The question before making it with a model the studio knows cannot be used (§45.36 E12). */
+  const [asking, setAsking] = useState<ReturnType<typeof unusableAsk>>(null);
   const info = useAiInfo(ws);
-  const refs = useLoad(() => storiesApi().listReferences(ws), ws, "st-s-refvids");
+  const refs = useLoad(() => storiesApi().listReferences(ws), ws, referencesCache());
+  /** The address's reference ids were checked against a list read just now (never a remembered one, §45.36 E2). */
+  const refsChecked = useRef(false);
 
   useEffect(() => {
     let live = true;
@@ -247,14 +251,17 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
   }, [idea, characters]);
 
   // Reference videos from the address keep only this workspace's own (a deleted one is dropped, so it never uses up
-  // one of the 3 picks without a tile to unpick it).
+  // one of the 3 picks without a tile to unpick it). Only against the list read just now: a list remembered from an
+  // earlier visit lacks a video uploaded since, which must stay picked (§45.36 E2). A list that could not be read
+  // drops nothing.
   useEffect(() => {
     const list = refs.data;
-    if (!list || !givenRefs.length) return;
+    if (refsChecked.current || refs.loading || refs.error || !list || !givenRefs.length) return;
+    refsChecked.current = true;
     setRefIds((ids) => ids.filter((id) => list.some((r) => r.refId === id)));
-    // Once, when the reference videos arrive.
+    // Once, when the fresh list arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refs.data]);
+  }, [refs.data, refs.loading, refs.error]);
 
   // A cast from the address keeps only this workspace's own characters.
   useEffect(() => {
@@ -293,17 +300,22 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
     return null;
   }
 
-  async function make() {
+  async function make(pickNow: ModelOverride | null = ai, sure = false) {
     const why = check();
     setNoAdvice(why === NO_GUIDANCE);
     if (why) return setProblem(why);
+    // A model picked on purpose that the studio knows cannot be used: ask first, never swap it by itself.
+    const ask = sure ? null : unusableAsk(info, usualFor(info, "storyboard"), pickNow);
+    if (ask) return setAsking(ask);
+    setAsking(null);
     setBusy(true);
     setProblem(null);
     const body: StoryInput = { characterIds: cast, durationSec: lengthSec, captionsOn, musicMood: music };
     // This video's own shape, only when the owner picked one that is not the workspace's (§45.34). Nothing picked:
     // the API uses Settings › Video itself (also while it has not loaded here, or could not be read).
     if (shape && (!workspace || !sameFormat(shape, usualShape))) body.format = { ...shape };
-    const own = cleanPick(ai);
+    // The owner's pick, or the model the menu shows when the usual one cannot be used (§45.36 E12).
+    const own = sendPick(info, usualFor(info, "storyboard"), pickNow);
     if (own) body.ai = { model: own.model ?? null, effort: own.effort ?? null };
     const usable = refIds.filter((id) => refs.data?.some((r) => r.refId === id));
     if (usable.length) body.referenceIds = usable;
@@ -484,6 +496,20 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
           </div>
         </div>
       )}
+      {asking ? (
+        <UnusableSheet
+          info={info}
+          ask={asking}
+          onClose={() => setAsking(null)}
+          onKeep={() => void make(ai, true)}
+          onUse={() => {
+            // The usual (which skips it); an effort picked here stays when that model offers it.
+            const keep = ai?.effort && modelOf(info, asking.instead)?.efforts.includes(ai.effort) ? { effort: ai.effort } : null;
+            setAi(keep);
+            void make(keep, true);
+          }}
+        />
+      ) : null}
     </section>
   );
 }
@@ -590,8 +616,9 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
   const [busy, setBusy] = useState<"none" | "cancel" | "again" | "ai">("none");
   const [problem, setProblem] = useState<string | null>(null);
   const [pick, setPick] = useState<ModelOverride | null>(null);
+  const [asking, setAsking] = useState<ReturnType<typeof unusableAsk>>(null);
   const info = useAiInfo(ws);
-  const refs = useLoad(() => storiesApi().listReferences(ws), ws, "st-s-refvids");
+  const refs = useLoad(() => storiesApi().listReferences(ws), ws, referencesCache());
   const wasLive = useRef(false);
   const story = loaded.data?.story ?? null;
   const job = loaded.data?.job ?? null;
@@ -636,11 +663,16 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
     }
   }
 
-  async function again() {
+  async function again(pickNow: ModelOverride | null = pick, sure = false) {
+    if (!story) return;
+    // A model picked on purpose that the studio knows cannot be used: ask first (§45.36 E12).
+    const ask = sure ? null : unusableAsk(info, storyUsual(info, story), pickNow);
+    if (ask) return setAsking(ask);
+    setAsking(null);
     setBusy("again");
     setProblem(null);
     try {
-      const override = cleanPick(pick);
+      const override = sendPick(info, storyUsual(info, story), pickNow);
       const r = override ? await storiesApi().produce(ws, storyId, { override }) : await storiesApi().produce(ws, storyId);
       loaded.setData((d) => (d ? { ...d, story: r.story, job: r.job } : d));
       setPick(null);
@@ -735,6 +767,19 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
             </>
           ) : null}
         </div>
+        {asking ? (
+          <UnusableSheet
+            info={info}
+            ask={asking}
+            onClose={() => setAsking(null)}
+            onKeep={() => void again(pick, true)}
+            onUse={() => {
+              const keep = pick?.effort && modelOf(info, asking.instead)?.efforts.includes(pick.effort) ? { effort: pick.effort } : null;
+              setPick(keep);
+              void again(keep, true);
+            }}
+          />
+        ) : null}
       </section>
 
       <section className="st-s-panel" aria-labelledby="st-board-title">
@@ -772,7 +817,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
           {job ? (
             <>
               <dt>Helpers used</dt>
-              <dd>{helpersLine(job.meta.providers) || "Lamo Stories' own built-in helpers"}</dd>
+              <dd>{helpersLine(job.meta.providers, job.meta.writerModel, (key) => modelOf(info, key)) || "Lamo Stories' own built-in helpers"}</dd>
             </>
           ) : null}
           <dt>Model and effort for this video</dt>
@@ -789,7 +834,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
           <dt>Saved in</dt>
           <dd>{STORAGE_WORDS}</dd>
         </dl>
-        <ModelsUsed info={info} job={job} jobs={jobs.data} title={live ? "Models working on it" : "Made with"} />
+        <ModelsUsed info={info} job={job} jobs={jobs.data} title={live ? "Models working on it" : "Made with"} ids={false} />
         <TechDetails>
           <dl className="st-s-techfacts">
             <dt>Folder</dt>
@@ -804,6 +849,14 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
               <>
                 <dt>Seed</dt>
                 <dd>{script.seed}</dd>
+              </>
+            ) : null}
+            {usedOf(job, jobs.data).some((u) => modelIdLine(u)) ? (
+              <>
+                <dt>Exact models</dt>
+                <dd>
+                  <ModelIdList used={usedOf(job, jobs.data)} />
+                </dd>
               </>
             ) : null}
           </dl>

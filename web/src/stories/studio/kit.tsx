@@ -358,12 +358,15 @@ export function StSheet({
   children,
   actions,
   wide = false,
+  className = "",
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   actions?: ReactNode;
   wide?: boolean;
+  /** one more class on the sheet (a screen that finds its own sheet again) */
+  className?: string;
 }) {
   const id = useId();
   const box = useRef<HTMLDivElement>(null);
@@ -394,7 +397,7 @@ export function StSheet({
     <div className="st-s-scrim" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={box}
-        className={`st-s-sheet${wide ? " st-s-sheet--wide" : ""}`}
+        className={`st-s-sheet${wide ? " st-s-sheet--wide" : ""}${className ? ` ${className}` : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${id}-t`}

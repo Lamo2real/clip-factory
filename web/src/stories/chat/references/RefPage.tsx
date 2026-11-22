@@ -28,6 +28,7 @@ import { productionNewHref } from "../handoff.ts";
 import { Btn, centerOf, cheer, Chip, clock, Empty, Icon, Progress, sentence, size, Waiting } from "../kit.tsx";
 import { effortProblem, findModel, modelLabel, effortLabel, projectEffective, useModels } from "../models.ts";
 import { rememberProjectName } from "../project.ts";
+import { referencesChanged } from "../../studio/hooks.ts";
 import { scheduleDelete } from "../undo.ts";
 import { AnalysisView } from "./Analysis.tsx";
 import { REF_STATUS } from "./RefList.tsx";
@@ -104,6 +105,8 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
     setJob(live);
     const status = r.reference.status;
     if (status === "analyzing" && before.current === undefined) before.current = same(r.analysis);
+    // A study that started or ended changes what Production can pick (§45.36 E2).
+    if (was.current !== null && was.current !== status) referencesChanged();
     if (was.current === "analyzing" && status !== "analyzing") {
       const old = before.current;
       before.current = undefined;
@@ -179,11 +182,12 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
   const current = projectEffective(task, ref.ai, override);
   const model = findModel(models.models, current.model);
   const effortBad = effortProblem(model, current.effort);
-  // The file itself when it was sent from this device this visit, else the server's link.
-  const src = localVideo(ref.refId) ?? ref.url ?? null;
   // The keep setting cleared the file (§45.34, §45.35 D9).
   const cleared = removedState(ref, data.analysis);
   const removed = cleared.removed;
+  // The file itself when it was sent from this device this visit, else the server's link; never once the file was
+  // cleared (§45.36 E18: the page then says so, with the D9 sentence).
+  const src = removed ? null : (localVideo(ref.refId) ?? ref.url ?? null);
   const analyzable = !removed && (ref.status === "ready" || ref.status === "analyzed" || ref.status === "failed");
 
   async function analyze() {
@@ -210,6 +214,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
       setStarted(r.job);
       setData((d) => (d ? { ...d, reference: r.reference } : d));
       was.current = r.reference.status;
+      referencesChanged();
       setOverride(null);
     } catch (e) {
       setActionProblem(sentence(e, "The analysis did not start. Try again."));
@@ -247,7 +252,15 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
   }
 
   function remove() {
-    scheduleDelete({ kind: "reference", id: ref.refId, text: `Deleted “${ref.title}”.`, run: () => storiesApi().deleteReferenceVideo(ws, ref.refId) });
+    scheduleDelete({
+      kind: "reference",
+      id: ref.refId,
+      text: `Deleted “${ref.title}”.`,
+      run: async () => {
+        await storiesApi().deleteReferenceVideo(ws, ref.refId);
+        referencesChanged();
+      },
+    });
     storiesGoLater(storiesHref({ name: "references" }));
   }
 

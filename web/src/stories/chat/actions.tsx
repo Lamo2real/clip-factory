@@ -28,7 +28,7 @@ import { A } from "../../components/ui.tsx";
 import { storiesApi } from "../api/client.ts";
 import { storiesGoLater } from "../pane.tsx";
 import type { AiSetting, CharacterInput, ChatAction, IdeaCategory, IdeaInput, ModelOverride, ProjectRef, TaskKind } from "../api/types.ts";
-import { cleanPick, LISTED_INFO, ModelMenu, storyUsual, type AiInfo } from "../studio/ai.tsx";
+import { cleanPick, LISTED_INFO, ModelMenu, sendPick, storyUsual, type AiInfo } from "../studio/ai.tsx";
 import { showFace } from "../studio/looks.ts";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { isStoriesPath, matchStories } from "../routes.ts";
@@ -276,7 +276,8 @@ export function ActionCard({
     const at = centerOf(e.currentTarget);
     setState({ kind: "busy" });
     try {
-      const result = await plan.run(ws, task ? cleanPick(pick) : undefined);
+      // The pick, or the usual's stand-in for a model the studio knows cannot be used (§45.36 E12).
+      const result = await plan.run(ws, task ? sendPick(info, storyUsual(info, { ai: own.data ?? { model: null, effort: null } }, task), pick) : undefined);
       done.set(id, result);
       setState({ kind: "done", ...result });
       cheer(at);

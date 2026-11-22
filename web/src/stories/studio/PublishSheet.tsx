@@ -7,11 +7,13 @@
 // accounts. Each chosen place shows the exact account the video goes to (name, handle and id) with Check now
 // (a live check with the platform, §45.16.7); Upload checks every chosen account that was not checked in the sheet and
 // stops, saying what changed, when one is no longer connected or is now a different account. When the API answers 409
-// naming an account (it changed, or Lamo Stories cannot tell this TikTok from Lamo Clips' own; `error.account`,
+// naming an account (it changed, or Lamo Stories cannot tell this TikTok from Clip Factory's own; `error.account`,
 // §45.34), the sheet asks "Post to {name}?" with the account shown and, on Yes, sends the same request again with
 // `confirmAccount` for that place. After Upload, the sheet shows each publishing job's status, its sentence and Try
-// again.
-import { useEffect, useId, useMemo, useState } from "react";
+// again, and "Posted!" gets Lamo Stories' star burst and success cheer, as Approve does (§45.36 E11). Account ids sit
+// behind "Technical details" (§45.36 E14); an account problem offers "Open Social accounts" (§45.36 E9); the other
+// app is always "Clip Factory" (§45.36 E13).
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Dropdown } from "../../components/Dropdown.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { A } from "../../components/ui.tsx";
@@ -35,13 +37,13 @@ import {
 import { storiesApi } from "../api/client.ts";
 import { STORIES_PLATFORMS, type ErrorAccount, type Platform, type PublishOptions, type PublishingJob, type PublishTarget, type SocialAccount, type StoriesConfig, type Story, type TikTokCreator } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
-import { Busy, Notice, Pick, StSheet, Switch } from "./kit.tsx";
-import { PostRow } from "./PostsPanel.tsx";
-import { accountOf, accountWords, ago, PLATFORM_LABEL, say } from "./words.ts";
+import { Busy, celebrate, Notice, Pick, StSheet, Switch, TechDetails } from "./kit.tsx";
+import { PostRow, SocialAccountsLink } from "./PostsPanel.tsx";
+import { accountOf, accountProblem, accountWords, ago, PLATFORM_LABEL, say, thisAccount } from "./words.ts";
 
 type YouTubeOptions = { privacy: "public" | "unlisted" | "private"; category: string; notifySubscribers: boolean };
 
-/** The owner's own post settings for Lamo Stories (his standing preferences; Lamo Clips' preset never applies). */
+/** The owner's own post settings for Lamo Stories (his standing preferences; Clip Factory's preset never applies). */
 export const MY_TIKTOK = { privacy: "PUBLIC_TO_EVERYONE", comments: true, duet: true, stitch: true };
 
 export const YOUTUBE_CATEGORIES: { id: StoriesConfig["youtubeCategory"]; label: string }[] = [
@@ -66,7 +68,7 @@ export function accountState(a: SocialAccount): string {
     case "choose_account":
       return "Pick which account to use first.";
     case "same_as_clips":
-      return "This is Lamo Clips' account. Decide in Social accounts.";
+      return "This is Clip Factory's account. Decide in Social accounts.";
     default:
       return "Not connected yet.";
   }
@@ -82,7 +84,7 @@ export function checkProblem(before: SocialAccount, after: SocialAccount): strin
         : after.connectionStatus === "choose_account"
           ? "needs you to pick the account first"
           : after.connectionStatus === "same_as_clips"
-            ? "is Lamo Clips' own account right now"
+            ? "is Clip Factory's own account right now"
             : "is not connected any more";
     return `Lamo Stories' ${place} ${state}. Fix it in Social accounts, or leave ${place} out.`;
   }
@@ -103,19 +105,40 @@ export function placeOf(message: string, account: ErrorAccount, chosen: Platform
   return chosen.length === 1 ? chosen[0]! : null;
 }
 
-/** The account a post would go to, shown before the owner says yes (name, handle and id, §45.34). */
+/**
+ * The account a post would go to, shown before the owner says yes (name and handle, §45.34; the id behind "Technical
+ * details", §45.36 E14). Named by its place first, so it reads right when the account is itself "Lamo Stories".
+ */
 export function AccountCard({ platform, account }: { platform: Platform; account: ErrorAccount }) {
   return (
     <div className="st-s-dest st-s-dest--ask" aria-label={`The ${PLATFORM_LABEL[platform]} account`}>
       <p className="st-s-dest__who">
-        Lamo Stories&apos; {PLATFORM_LABEL[platform]} sends to <strong>{accountWords(account)}</strong>
+        Goes to this {PLATFORM_LABEL[platform]} account: <strong>{accountWords(account)}</strong>
       </p>
-      <p className="st-s-dest__id">Account id {account.externalAccountId}</p>
+      <AccountId id={account.externalAccountId} />
     </div>
   );
 }
 
-/** The Lamo Clips-shaped creator the shared TikTok rules read (the same fields, §17.4). */
+/** An account's own id, folded away (§45.36 E14): the name and handle say which one it is. */
+export function AccountId({ id }: { id: string | null | undefined }) {
+  if (!id) return null;
+  return (
+    <TechDetails className="st-s-dest__tech">
+      <p className="st-s-dest__id">Account id {id}</p>
+    </TechDetails>
+  );
+}
+
+/** "Post to this TikTok account (Lamo Stories)?": the question before posting to an account the API named (§45.36 E13). */
+export function postToTitle(platform: Platform, account: ErrorAccount): string {
+  return `Post to ${thisAccount(platform, account.accountName || account.handle)}?`;
+}
+
+/** The yes of that question: the server's sentence says "Tap Yes …". */
+export const POST_YES = "Yes, post to this account";
+
+/** The Clip Factory-shaped creator the shared TikTok rules read (the same fields, §17.4). */
 const asClips = (c: TikTokCreator): ClipsTikTokCreator => ({ ...c, avatarUrl: c.avatarUrl ?? undefined });
 
 /** The flat options each target carries (§45.6 PublishOptions; the server allow-lists them). */
@@ -303,26 +326,7 @@ export function PublishSheet({
 
   if (sentIds) {
     const sent = sentIds.map((jid) => jobs.find((j) => j.publishingJobId === jid)).filter((j): j is PublishingJob => !!j);
-    const done = sent.length > 0 && sent.every((j) => j.publishingStatus === "posted");
-    return (
-      <StSheet
-        title={done ? "Posted!" : "Sending your video"}
-        onClose={onClose}
-        wide
-        actions={
-          <button type="button" className="st-btn st-btn--main" onClick={onClose}>
-            {done ? "Done" : "Close (it keeps going)"}
-          </button>
-        }
-      >
-        <p className="st-s-field__hint">{done ? "Your video is up. The numbers come in over the next 7 days." : "Each place shows here as it goes. You can close this: it keeps going."}</p>
-        <ul className="st-s-posts">
-          {sent.map((j) => (
-            <PostRow key={j.publishingJobId} job={j} onRetry={onRetry} />
-          ))}
-        </ul>
-      </StSheet>
-    );
+    return <SentSheet sent={sent} onClose={onClose} onRetry={onRetry} />;
   }
 
   const ttPrivacy = creator ? privacyChoices(creator.privacyOptions, tt.commercial && tt.branded) : [];
@@ -379,7 +383,7 @@ export function PublishSheet({
                           Goes to <strong>{a.accountName ?? "the connected account"}</strong>
                           {a.handle ? ` (${a.handle})` : ""}
                         </p>
-                        {a.externalAccountId ? <p className="st-s-dest__id">Account id {a.externalAccountId}</p> : null}
+                        <AccountId id={a.externalAccountId} />
                         <p className={`st-s-dest__note${checkNote[a.platform] && checkNote[a.platform] !== "Checked just now: this is the account the video goes to." ? " is-bad" : ""}`} role="status">
                           {checkNote[a.platform] ?? (when ? `Last checked ${when}.` : "Not checked yet.")}
                         </p>
@@ -393,7 +397,7 @@ export function PublishSheet({
               })}
             </ul>
           ) : (
-            <Notice tone="info" action={<A href={storiesHref({ name: "connections", platform: null, result: null, ws: null })} className="st-btn">Open Social accounts</A>}>
+            <Notice tone="info" action={<SocialAccountsLink className="st-btn" />}>
               No Lamo Stories account is connected yet. Connect one in Social accounts first.
             </Notice>
           )}
@@ -529,10 +533,14 @@ export function PublishSheet({
           ) : null}
 
           {why && chosen.length ? <p className="st-s-field__hint st-s-why">{why}</p> : null}
-          {problem ? <Notice tone="bad">{problem}</Notice> : null}
+          {problem ? (
+            <Notice tone="bad" action={accountProblem(problem) ? <SocialAccountsLink className="st-btn" /> : undefined}>
+              {problem}
+            </Notice>
+          ) : null}
           {ask ? (
             <StSheet
-              title={`Post to ${ask.account.accountName || ask.account.handle || "this account"}?`}
+              title={postToTitle(ask.platform, ask.account)}
               onClose={() => setAsk(null)}
               actions={
                 <>
@@ -540,7 +548,7 @@ export function PublishSheet({
                     Not now
                   </button>
                   <button type="button" className="st-btn st-btn--main" aria-disabled={sending || undefined} onClick={() => !sending && sayYes()}>
-                    {sending ? "Sending…" : `Yes, post to ${ask.account.accountName || ask.account.handle || "it"}`}
+                    {sending ? "Sending…" : POST_YES}
                   </button>
                 </>
               }
@@ -551,6 +559,38 @@ export function PublishSheet({
           ) : null}
         </>
       )}
+    </StSheet>
+  );
+}
+
+/** After Upload: each place as it goes; "Posted!" once every one is up, with the star burst and the cheer (§45.36 E11). */
+function SentSheet({ sent, onClose, onRetry }: { sent: PublishingJob[]; onClose: () => void; onRetry: (job: PublishingJob) => void }) {
+  const done = sent.length > 0 && sent.every((j) => j.publishingStatus === "posted");
+  const cheered = useRef(false);
+  useEffect(() => {
+    if (!done || cheered.current) return;
+    cheered.current = true;
+    // The same as Approve: Lamo Stories' own star burst from the sheet's title, and the success cheer.
+    celebrate(document.querySelector(".st-s-posted-sheet .st-s-sheet__title"), 150);
+  }, [done]);
+  return (
+    <StSheet
+      title={done ? "Posted!" : "Sending your video"}
+      onClose={onClose}
+      wide
+      className="st-s-posted-sheet"
+      actions={
+        <button type="button" className="st-btn st-btn--main" onClick={onClose}>
+          {done ? "Done" : "Close (it keeps going)"}
+        </button>
+      }
+    >
+      <p className="st-s-field__hint">{done ? "Your video is up. The numbers come in over the next 7 days." : "Each place shows here as it goes. You can close this: it keeps going."}</p>
+      <ul className="st-s-posts">
+        {sent.map((j) => (
+          <PostRow key={j.publishingJobId} job={j} onRetry={onRetry} />
+        ))}
+      </ul>
     </StSheet>
   );
 }

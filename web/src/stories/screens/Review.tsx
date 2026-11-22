@@ -17,14 +17,14 @@ import { starBurst } from "../ui.tsx";
 import { storiesApi } from "../api/client.ts";
 import type { DownloadFormat, ErrorAccount, ModelOverride, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
-import { cleanPick, madeWith, ModelMenu, ModelsUsed, NextRun, SettingsFix, StoryAi, storyUsual, useAiInfo } from "../studio/ai.tsx";
-import { CaptionEditor } from "../studio/CaptionEditor.tsx";
+import { madeWith, ModelMenu, ModelsUsed, NextRun, sendPick, SettingsFix, StoryAi, storyUsual, useAiInfo } from "../studio/ai.tsx";
+import { CaptionEditor, type CaptionTab } from "../studio/CaptionEditor.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
 import { usePaged, useSameScript, useWidth, useWorkspace } from "../studio/hooks.ts";
 import { Busy, celebrate, Chip, Notice, ShowMore, StSheet, Tag, TextField } from "../studio/kit.tsx";
 import { Player } from "../studio/Player.tsx";
 import { PostsPanel } from "../studio/PostsPanel.tsx";
-import { AccountCard, PublishSheet } from "../studio/PublishSheet.tsx";
+import { AccountCard, POST_YES, postToTitle, PublishSheet } from "../studio/PublishSheet.tsx";
 import { SfxEditor } from "../studio/SfxEditor.tsx";
 import { StepTrack } from "../studio/StepTrack.tsx";
 import { accountOf, CATEGORY_LABEL, isConflict, PLATFORM_LABEL, say, seconds, STATUS_LABEL, STATUS_TONE } from "../studio/words.ts";
@@ -54,6 +54,17 @@ export function checkOutdated(story: Story): boolean {
 
 export const OUTDATED_CHECK = "The facts were checked on an older version of the words. Tap Check again.";
 
+/** Only the words posted with the video changed: they are not in the video, so only the fact check is out of date. */
+export const POST_WORDS_CHECK = "Your new post words need a quick check. Tap Check again.";
+
+/**
+ * True when the only thing out of date is the fact check because the post words changed (§45.36 E10: the API marks
+ * only "safety" for a postCaptions edit, STALE_POST): Check again (from "safety") is the fix, never a remake.
+ */
+export function onlyPostWords(story: Pick<Story, "stale" | "status">): boolean {
+  return story.status === "review" && story.stale.length === 1 && story.stale[0] === "safety";
+}
+
 /**
  * Why Approve cannot be tapped yet, or null when it can (the approve rule, §45.9): the video waits for review, every
  * change is in it, and the facts were checked on this very storyboard.
@@ -62,6 +73,7 @@ export function approveBlock(story: Story): string | null {
   if (story.safety?.status === "problems") return "Fix the facts first, then tap Check again.";
   if (story.status === "needs_check") return "Check the facts first.";
   if (story.status !== "review") return null;
+  if (onlyPostWords(story)) return POST_WORDS_CHECK;
   if (story.stale.length) return "Your changes aren't in the video yet. Tap Remake first.";
   if (checkOutdated(story)) return OUTDATED_CHECK;
   return null;
@@ -69,7 +81,7 @@ export function approveBlock(story: Story): string | null {
 
 /**
  * True when a publishing 409 is about the account (it now sends to another one, or Lamo Stories cannot tell it from
- * Lamo Clips' own): the server's sentence names the account, so the owner is asked before it is sent there. Every
+ * Clip Factory's own): the server's sentence names the account, so the owner is asked before it is sent there. Every
  * other 409 (already retried, not stuck, the story changed) is only shown.
  */
 export function accountQuestion(sentence: string, account: SocialAccount): boolean {
@@ -203,6 +215,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const [retrying, setRetrying] = useState<string | null>(null);
   /** The model and effort for the next remake only (never saved). */
   const [pick, setPick] = useState<ModelOverride | null>(null);
+  /** The captions box's tab, kept here so it stays where the owner was after Use these or Save (§45.36 E10). */
+  const [captionTab, setCaptionTab] = useState<CaptionTab>("video");
   const info = useAiInfo(ws);
   const [col, colWidth] = useWidth<HTMLDivElement>(300);
   const seen = useRef<Map<string, PublishingJob["publishingStatus"]> | null>(null);
@@ -250,8 +264,11 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     if (!before) return;
     const up = list.filter((j) => j.publishingStatus === "posted" && before.get(j.publishingJobId) !== "posted");
     if (!up.length) return;
-    starBurst(undefined, 140);
-    storiesSound("success", { onNextTap: true });
+    // With the Post it sheet open, its own "Posted!" has the star burst and the cheer (§45.36 E11): only one of each.
+    if (!posting) {
+      starBurst(undefined, 140);
+      storiesSound("success", { onNextTap: true });
+    }
     toast.success(`Posted to ${up.map((j) => PLATFORM_LABEL[j.platform]).join(" and ")}!`);
     void loaded.reload();
     // Reacts to new publishing results only.
@@ -279,9 +296,9 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     setPick(null);
   };
 
-  /** This remake's own model and effort, when the owner picked one. */
+  /** This remake's own model and effort: the owner's pick, or the usual's stand-in for a model that cannot be used (§45.36 E12). */
   const once = (): { override?: ModelOverride } => {
-    const o = cleanPick(pick);
+    const o = story ? sendPick(info, storyUsual(info, story), pick) : undefined;
     return o ? { override: o } : {};
   };
 
@@ -308,7 +325,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     try {
       const r = await storiesApi().patchStory(ws, storyId, { version: story.version, ...edit });
       loaded.setData((d) => (d ? { ...d, story: r.story, script: r.script } : d));
-      toast.success("Saved. Tap Remake to put it in the video.");
+      // New post words are not in the video: they only need the quick fact check (§45.36 E10), never a remake.
+      toast.success(onlyPostWords(r.story) ? `Saved. ${POST_WORDS_CHECK}` : "Saved. Tap Remake to put it in the video.");
     } catch (e) {
       if (isConflict(e) && /changed|reload/i.test(say(e))) setStale(true);
       else setProblem(say(e));
@@ -386,6 +404,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const citations = story.safety?.citations ?? [];
   const checkAgain = story.status === "needs_check";
   const outdated = !live && checkOutdated(story);
+  const postWords = !live && onlyPostWords(story);
   const stopped = story.status === "failed" ? (job?.status === "failed" && job.error ? job.error : "Making this video stopped.") : null;
   const used = live ? (job?.meta.models ?? []) : madeWith([job, ...(runs.data ?? [])]);
   const remakeMenu = <ModelMenu info={info} usual={storyUsual(info, story)} value={pick} onChange={setPick} note="Just for the next remake. This video's own setting and yours stay the same." />;
@@ -446,7 +465,23 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           ) : null}
 
 
-          {!live && story.stale.length && story.status !== "draft" ? (
+          {postWords ? (
+            <Notice
+              tone="info"
+              action={
+                <button
+                  type="button"
+                  className="st-btn st-btn--main"
+                  aria-disabled={busy !== null || undefined}
+                  onClick={() => void act("check", async () => startRun(await produceNow({ from: "safety" })))}
+                >
+                  {busy === "check" ? "Starting…" : "Check again"}
+                </button>
+              }
+            >
+              {POST_WORDS_CHECK}
+            </Notice>
+          ) : !live && story.stale.length && story.status !== "draft" ? (
             <Notice
               tone={stopped ? "bad" : "info"}
               action={
@@ -678,7 +713,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
             <h2 className="st-s-panel__title" id="st-captions-title">
               Captions
             </h2>
-            <CaptionEditor key={`c:${story.scriptVersion}:${story.version}`} ws={ws} info={info} story={story} script={script} saving={saving} onSave={(e) => void save(e)} />
+            <CaptionEditor key={`c:${story.scriptVersion}:${story.version}`} ws={ws} info={info} story={story} script={script} saving={saving} onSave={(e) => void save(e)} tab={captionTab} onTab={setCaptionTab} />
           </section>
           <section className="st-s-panel" aria-labelledby="st-sfx-title">
             <h2 className="st-s-panel__title" id="st-sfx-title">
@@ -742,7 +777,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
 
       {confirm ? (
         <StSheet
-          title={`Post to ${confirm.account.accountName || confirm.account.handle || "this account"}?`}
+          title={postToTitle(confirm.job.platform, confirm.account)}
           onClose={() => setConfirm(null)}
           actions={
             <>
@@ -755,7 +790,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 aria-disabled={retrying !== null || undefined}
                 onClick={() => retrying === null && void retry(confirm.job, confirm.account.externalAccountId)}
               >
-                {retrying ? "Trying…" : `Yes, post to ${confirm.account.accountName || confirm.account.handle || "it"}`}
+                {retrying ? "Trying…" : POST_YES}
               </button>
             </>
           }

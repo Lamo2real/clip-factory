@@ -5,6 +5,23 @@ import { useLoad } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
 import type { Workspace } from "../api/types.ts";
 
+// ---------- The remembered reference list (§45.36 E2) ----------
+
+let refsVersion = 0;
+
+/**
+ * Says the reference videos changed (an upload finished, an analysis started or ended, one was deleted): the studio's
+ * remembered list from before is never shown again, so a new reference is in the next list Production reads.
+ */
+export function referencesChanged(): void {
+  refsVersion += 1;
+}
+
+/** The cache name of the studio's reference list (useLoad): a new one after every change. */
+export function referencesCache(): string {
+  return `st-s-refvids:${refsVersion}`;
+}
+
 /** The width an element has to draw in (a 9:16 player or preview fits it), following resizes. */
 export function useWidth<T extends HTMLElement>(fallback: number): [RefObject<T | null>, number] {
   const ref = useRef<T | null>(null);

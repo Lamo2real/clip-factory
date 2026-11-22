@@ -3,11 +3,12 @@
 // or off) and the six post captions, each with its platform's limit. Save sends only what changed; the API then marks
 // the steps it makes out of date (captions, put together, ready to watch and the fact check), so Remake shows.
 // "Write them again" asks the storyboard agent for new post captions (a captions task, with its own model menu): the
-// draft shows next to the saved words, and only "Use these" saves it (PATCH postCaptions).
+// draft shows next to the saved words, and only "Use these" saves it (PATCH postCaptions). The tab can be kept by the
+// page (`tab`, `onTab`), so the box stays on "With the post" after Use these or Save remakes it (§45.36 E10).
 import { useMemo, useState } from "react";
 import { storiesApi } from "../api/client.ts";
 import type { AiTask, CaptionCue, Captions, CaptionsResult, ModelOverride, Story, StoryPatch, StoryScript } from "../api/types.ts";
-import { cleanPick, LISTED_INFO, merged, ModelMenu, storyUsual, TaskLine, useAiTask, type AiInfo } from "./ai.tsx";
+import { LISTED_INFO, merged, ModelMenu, sendPick, storyUsual, TaskLine, useAiTask, type AiInfo } from "./ai.tsx";
 import { celebrate, Notice, Pick, Slider, Switch, TextField } from "./kit.tsx";
 import { clock } from "./words.ts";
 
@@ -24,6 +25,9 @@ const POST_FIELDS: { key: keyof Captions; label: string; rows: number }[] = [
 ];
 
 type Edit = Omit<StoryPatch, "version">;
+
+/** Which words the box shows: the ones on the video, or the ones posted with it. */
+export type CaptionTab = "video" | "posts";
 
 /** Which scene a moment of the video falls in (1-based), for the caption rows. */
 function sceneAt(script: StoryScript, t: number): number {
@@ -63,6 +67,8 @@ export function CaptionEditor({
   script,
   saving,
   onSave,
+  tab: keptTab,
+  onTab,
 }: {
   ws: string;
   info?: AiInfo;
@@ -70,9 +76,17 @@ export function CaptionEditor({
   script: StoryScript;
   saving: boolean;
   onSave: (e: Edit) => void;
+  /** the tab, when the page keeps it (it outlives this box, which starts again after each save) */
+  tab?: CaptionTab;
+  onTab?: (t: CaptionTab) => void;
 }) {
   const total = useMemo(() => script.scenes.reduce((s, sc) => s + sc.durationSec, 0), [script]);
-  const [tab, setTab] = useState<"video" | "posts">("video");
+  const [ownTab, setOwnTab] = useState<CaptionTab>("video");
+  const tab = keptTab ?? ownTab;
+  const setTab = (t: CaptionTab) => {
+    setOwnTab(t);
+    onTab?.(t);
+  };
   const [cues, setCues] = useState<CaptionCue[]>(() => [...script.captions].sort((a, b) => a.at - b.at));
   const [on, setOn] = useState(script.captionsOn);
   const [sceneWords, setSceneWords] = useState<Record<string, string>>(() => Object.fromEntries(script.scenes.map((sc) => [sc.sceneId, sc.caption ?? ""])));
@@ -96,7 +110,7 @@ export function CaptionEditor({
     if (writing.phase === "working") return;
     setProblem(null);
     setDraft(null);
-    const override = cleanPick(pick);
+    const override = sendPick(info, writeUsual, pick);
     void writing.start(() => storiesApi().writeCaptions(ws, story.storyId, override ? { override } : undefined));
   }
 

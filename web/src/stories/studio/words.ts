@@ -104,13 +104,34 @@ export function isConflict(e: unknown): boolean {
 
 /**
  * The account a publishing 409 names (`error.account`, CONTRACTS §45.34: the account changed, or Lamo Stories cannot
- * tell this TikTok from Lamo Clips' own), which Lamo Stories' client keeps on its ApiError; null for any other error.
+ * tell this TikTok from Clip Factory's own), which Lamo Stories' client keeps on its ApiError; null for any other error.
  */
 export function accountOf(e: unknown): ErrorAccount | null {
   if (!(e instanceof ApiError) || e.code !== "conflict") return null;
   const a = (e as ApiError & { account?: Partial<ErrorAccount> }).account;
   if (!a || typeof a.externalAccountId !== "string" || !a.externalAccountId) return null;
   return { externalAccountId: a.externalAccountId, accountName: typeof a.accountName === "string" ? a.accountName : null, handle: typeof a.handle === "string" ? a.handle : null };
+}
+
+/**
+ * "this TikTok account (Lamo Stories)": an account named by its place first, so a sentence still reads right when the
+ * account itself is called "Lamo Stories" (§45.36 E13); "this TikTok account" when it has no name.
+ */
+export function thisAccount(platform: Platform, name: string | null | undefined): string {
+  const n = (name ?? "").trim();
+  return n ? `this ${PLATFORM_LABEL[platform]} account (${n})` : `this ${PLATFORM_LABEL[platform]} account`;
+}
+
+/**
+ * True when a stopped post (or a sentence) is an account problem the owner fixes in Social accounts (§45.36 E9): the
+ * sentence names that page, the API's own test (dashboard._post_href: needs connecting again, not connected, the app
+ * keys changed, Clip Factory's own account).
+ */
+export function accountProblem(job: Pick<PublishingJob, "publishingStatus" | "error"> | string | null | undefined): boolean {
+  if (!job) return false;
+  if (typeof job === "string") return /Social accounts/i.test(job);
+  const stuck = job.publishingStatus === "failed" || job.publishingStatus === "needs_attention";
+  return stuck && /Social accounts/i.test(job.error ?? "");
 }
 
 /** "Lamo Stories (@lamo.stories)": an account's name and handle, as the owner reads them. */
@@ -180,17 +201,57 @@ export const PROVIDER_WORDS: Record<string, string> = {
   "nova-reel": "Amazon Nova Reel",
 };
 
-/** A helper's name; an id this list does not know yet is never shown as it is. */
-export function providerName(id: string | null | undefined): string {
+/** The writer id of a model the owner added that is not Anthropic's (§45.36 E7): "bedrock-model:{key}". */
+export const BEDROCK_MODEL = "bedrock-model:";
+
+/** The parts of a model a helper's name is made of (its label, who makes it and who runs it, §45.35 D8). */
+export type HelperModel = { label: string; provider?: string | null; host?: string | null };
+
+/** Finds a model by its key (the screen's own list), for a helper named after the model that did the work. */
+export type ModelLookup = (key: string) => HelperModel | null | undefined;
+
+/** "Meta Llama 4 Maverick on Amazon Bedrock": a model as a helper, by its maker and label (never "Meta Meta …"). */
+export function modelHelperWords(m: HelperModel): string {
+  const maker = (m.provider ?? "").trim();
+  const host = (m.host ?? "").trim() || "Amazon Bedrock";
+  const label = m.label.trim();
+  const named = !maker || maker === host || label.toLowerCase().startsWith(maker.toLowerCase()) ? label : `${maker} ${label}`;
+  return `${named} on ${host}`;
+}
+
+/**
+ * A helper's name; an id this list does not know yet is never shown as it is. "bedrock-model:{key}" (an added model
+ * that is not Anthropic's did the work, §45.36 E7) is named from that model, or "A model on Amazon Bedrock" when the
+ * screen does not know it (any more).
+ */
+export function providerName(id: string | null | undefined, model?: ModelLookup): string {
+  if (id && id.startsWith(BEDROCK_MODEL)) {
+    const m = model?.(id.slice(BEDROCK_MODEL.length));
+    return m ? modelHelperWords(m) : "A model on Amazon Bedrock";
+  }
   return (id && PROVIDER_WORDS[id]) || "Another helper";
+}
+
+/**
+ * One helper of a run by its kind (§45.36 E7): the writer is named from the model that really wrote the storyboard
+ * when that is not Anthropic's (a run recorded before the agent said so still says "bedrock-claude"), so the page never
+ * says "Claude" next to a Writer line that names another maker's model.
+ */
+export function helperName(kind: string, id: string | null | undefined, writerModel?: string | null, model?: ModelLookup): string {
+  if (kind === "writer" && id === "bedrock-claude" && writerModel) {
+    const m = model?.(writerModel);
+    const maker = (m?.provider ?? "").trim().toLowerCase();
+    if (m && maker && maker !== "anthropic" && maker !== "amazon bedrock") return modelHelperWords(m);
+  }
+  return providerName(id, model);
 }
 
 /** What each kind of helper does, for its row ("Writing: Claude on Amazon Bedrock"). */
 export const HELPER_KIND: Record<string, string> = { writer: "Writing", images: "Pictures", animation: "Animation", video: "Animation", audio: "Sound" };
 
 /** The helpers of a run in one line: "Claude on Amazon Bedrock, Built-in drawing, …" (each named once). */
-export function helpersLine(providers: Record<string, string> | null | undefined): string {
-  const names = Object.values(providers ?? {}).map(providerName);
+export function helpersLine(providers: Record<string, string> | null | undefined, writerModel?: string | null, model?: ModelLookup): string {
+  const names = Object.entries(providers ?? {}).map(([kind, id]) => helperName(kind, id, writerModel, model));
   return [...new Set(names)].join(", ");
 }
 

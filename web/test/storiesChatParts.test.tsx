@@ -343,8 +343,11 @@ describe("the model words", () => {
     const haiku = { ...fileModels().find((m) => m.key === "haiku-5-5")!, efforts: ["low", "medium", "high"] as const };
     expect(effortProblem({ ...haiku, efforts: [...haiku.efforts] }, "max")).toBe("Claude Haiku 5.5 does not offer Maximum. Pick another level.");
     expect(effortProblem({ ...haiku, efforts: [...haiku.efforts] }, "high")).toBeNull();
-    expect(statusWords({ status: "denied", statusLine: "Bedrock says no." })).toEqual({ tone: "coral", text: "Not available", line: "Bedrock says no." });
-    expect(statusWords({ status: "ok", statusLine: "" }).text).toBe("Working");
+    // One word set everywhere (§45.36 E17): Works, Not checked yet, No access, Not found, Problem.
+    expect(statusWords({ status: "denied", statusLine: "Bedrock says no." })).toEqual({ tone: "coral", text: "No access", line: "Bedrock says no." });
+    expect(statusWords({ status: "not_found", statusLine: "Bedrock does not know it." })).toEqual({ tone: "coral", text: "Not found", line: "Bedrock does not know it." });
+    expect(statusWords({ status: "error", statusLine: "" }).text).toBe("Problem");
+    expect(statusWords({ status: "ok", statusLine: "" }).text).toBe("Works");
     expect(statusWords(null).text).toBe("Not checked yet");
   });
 

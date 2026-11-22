@@ -117,18 +117,24 @@ export function effortProblem(model: ModelView | null, effort: Effort | null | u
 
 export type Tone = "sun" | "coral" | "mint" | "sky";
 
-/** What the last real call to the model said, in two or three words (shown before sending, §45.25). */
+/**
+ * What the last real call to the model said, in two or three words (shown before sending, §45.25), in the one word set
+ * Settings and the studio use too (§45.36 E17): Works, Not checked yet, No access, Not found, Problem.
+ */
 export function statusWords(m: Pick<ModelInfo, "status" | "statusLine"> | null): { tone: Tone; text: string; line: string } {
   if (!m) return { tone: "sky", text: "Not checked yet", line: "" };
+  const failed = m.statusLine || "The last try did not work. Pick another model, or try again.";
   switch (m.status) {
     case "ok":
-      return { tone: "mint", text: "Working", line: m.statusLine };
+      return { tone: "mint", text: "Works", line: m.statusLine };
     case "not_checked":
       return { tone: "sky", text: "Not checked yet", line: m.statusLine };
     case "denied":
+      return { tone: "coral", text: "No access", line: failed };
     case "not_found":
+      return { tone: "coral", text: "Not found", line: failed };
     case "error":
-      return { tone: "coral", text: "Not available", line: m.statusLine || "The last try did not work. Pick another model, or try again." };
+      return { tone: "coral", text: "Problem", line: failed };
   }
 }
 

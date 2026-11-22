@@ -5,6 +5,11 @@
 //
 // The models come from Lamo Stories' own settings (GET …/ai). When that cannot be read, the names come from Lamo
 // Stories' own model list (stories/config/models.json); nothing here ever reads Clip Factory's models.
+//
+// A model the studio already knows is unusable (its last call said no access, not found or a problem) is never
+// pre-picked (§45.36 E12): the menus show it with its status line, the usual choice skips it (and the model shown is the
+// one sent), and the chip of one picked on purpose says so. Every exact model id ("Model ID … in {Region}") sits behind
+// "Technical details" (§45.36 E8, E14), for production steps, AI tasks and chat answers alike.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "../../api/errors.ts";
 import { A } from "../../components/ui.tsx";
@@ -15,7 +20,7 @@ import { storiesApi } from "../api/client.ts";
 import { EFFORT_LABEL, STEP_ORDER, type AiSetting, type AiTask, type Effective, type Effort, type ModelInfo, type ModelOverride, type ModelUse, type ProductionJob, type Story, type TaskInfo, type TaskKind } from "../api/types.ts";
 import { providerWords } from "../chat/models.ts";
 import { storiesHref } from "../routes.ts";
-import { Busy, Notice, Pick, StSheet, Tag } from "./kit.tsx";
+import { Busy, Notice, Pick, StSheet, Tag, TechDetails } from "./kit.tsx";
 import { say } from "./words.ts";
 
 interface ModelEntry {
@@ -119,6 +124,8 @@ export interface AiInfo {
   tasks: TaskInfo[];
   /** false: Lamo Stories' settings could not be read, so the names come from the bundled list and no status is known */
   live: boolean;
+  /** the workspace's default model (AICONFIG.defaultModel), the first choice when the usual one cannot be used */
+  defaultModel?: string;
 }
 
 function listedTasks(): TaskInfo[] {
@@ -140,7 +147,7 @@ export function useAiInfo(ws: string): AiInfo {
   const loaded = useLoad(
     async () => {
       const r = await storiesApi().getAi(ws);
-      return { models: r.models.length ? r.models : LISTED_MODELS, tasks: r.tasks.length ? r.tasks : listedTasks(), live: true } satisfies AiInfo;
+      return { models: r.models.length ? r.models : LISTED_MODELS, tasks: r.tasks.length ? r.tasks : listedTasks(), live: true, defaultModel: r.ai?.defaultModel ?? LISTED_DEFAULT.model } satisfies AiInfo;
     },
     ws,
     "st-s-ai",
@@ -189,8 +196,109 @@ export interface Planned {
   effortKnown: boolean;
 }
 
+// ---------- Models the studio knows cannot be used (§45.36 E12) ----------
+
+/** One set of status words everywhere (§45.36 E17): Settings, the menus and the chat say the same. */
+export const MODEL_STATUS_WORD: Record<ModelInfo["status"], string> = {
+  ok: "Works",
+  not_checked: "Not checked yet",
+  denied: "No access",
+  not_found: "Not found",
+  error: "Problem",
+};
+
+const UNUSABLE: readonly ModelInfo["status"][] = ["denied", "not_found", "error"];
+
+/** The model, when Lamo Stories' settings say its last call was refused (no access, not found, a problem); else null. */
+export function unusableModel(info: AiInfo, key: string | null | undefined): ModelInfo | null {
+  if (!info.live || !key) return null;
+  const m = info.models.find((x) => x.key === key);
+  return m && UNUSABLE.includes(m.status) ? m : null;
+}
+
+/** "Claude Fable 5.1 has no access right now": why a model is skipped, in a few words. */
+export function unusableWords(m: Pick<ModelInfo, "label" | "status">): string {
+  if (m.status === "not_found") return `${m.label} is not found right now`;
+  if (m.status === "error") return `${m.label} had a problem on its last call`;
+  return `${m.label} has no access right now`;
+}
+
+/** The model to use instead: the workspace's default, else one that works, else one not checked yet (never `not`). */
+function fallbackModel(info: AiInfo, not: string): ModelInfo | null {
+  const usable = (m: ModelInfo) => m.key !== not && !UNUSABLE.includes(m.status);
+  const def = info.defaultModel ? info.models.find((m) => m.key === info.defaultModel) : undefined;
+  if (def && usable(def)) return def;
+  return info.models.find((m) => usable(m) && m.status === "ok") ?? info.models.find(usable) ?? null;
+}
+
+/**
+ * The usual, skipping a model the studio knows cannot be used (§45.36 E12): the workspace's default model (else one that
+ * works) takes its place, with the same effort when it offers it. `skipped` names the model left out; it is null when
+ * nothing was skipped (also when there is nothing better to offer: then the usual shows with its status).
+ */
+export function usableUsual(info: AiInfo, usual: Usual): Usual & { skipped: string | null } {
+  const bad = unusableModel(info, usual.model);
+  const next = bad ? fallbackModel(info, usual.model) : null;
+  if (!bad || !next) return { ...usual, skipped: null };
+  const applied = next.efforts.length > 0;
+  const effort = !applied ? null : usual.effort && next.efforts.includes(usual.effort) ? usual.effort : (next.defaultEffort ?? next.efforts[0] ?? null);
+  return { model: next.key, effort, effortApplied: applied, from: usual.from, modelKnown: true, effortKnown: true, skipped: usual.model };
+}
+
+/**
+ * What a run sends as its model and effort: the owner's pick, or, when the usual skipped a model the studio knows
+ * cannot be used, the model the menu shows instead (so what the screen says is what runs, §45.36 E12). The effort goes
+ * with it only when the owner picked one, or when the usual effort is one that model does not offer.
+ */
+export function sendPick(info: AiInfo, usual: Usual, pick: ModelOverride | null | undefined): ModelOverride | undefined {
+  const own = cleanPick(pick);
+  if (own?.model) return own;
+  const base = usableUsual(info, usual);
+  if (!base.skipped) return own;
+  const out: ModelOverride = { model: base.model };
+  const m = modelOf(info, base.model);
+  if (own?.effort && m?.efforts.includes(own.effort)) out.effort = own.effort;
+  else if (!own?.effort && base.effort && base.effort !== usual.effort) out.effort = base.effort;
+  return out;
+}
+
+/** The question before a run with a model the studio knows cannot be used, picked on purpose (§45.36 E12); null: go on. */
+export function unusableAsk(info: AiInfo, usual: Usual, pick: ModelOverride | AiSetting | null | undefined): { bad: ModelInfo; instead: string } | null {
+  const bad = unusableModel(info, pick?.model);
+  if (!bad) return null;
+  const base = usableUsual(info, usual);
+  if (base.model === bad.key || unusableModel(info, base.model)) return null;
+  return { bad, instead: base.model };
+}
+
+/** "Claude Fable 5.1 has no access right now. Use Claude Opus 5.5 instead?" with Use … and Try … anyway (§45.36 E12). */
+export function UnusableSheet({ info, ask, onUse, onKeep, onClose }: { info: AiInfo; ask: { bad: ModelInfo; instead: string }; onUse: () => void; onKeep: () => void; onClose: () => void }) {
+  const instead = modelName(info, ask.instead);
+  return (
+    <StSheet
+      title={`${unusableWords(ask.bad)}. Use ${instead} instead?`}
+      onClose={onClose}
+      actions={
+        <>
+          <button type="button" className="st-btn" onClick={onKeep}>
+            Try {ask.bad.label} anyway
+          </button>
+          <button type="button" className="st-btn st-btn--main" onClick={onUse}>
+            Use {instead}
+          </button>
+        </>
+      }
+    >
+      <p>{ask.bad.statusLine || `${ask.bad.label} said no on its last call.`}</p>
+      <p className="st-s-field__hint">Lamo Stories never swaps in another model by itself. You choose.</p>
+    </StSheet>
+  );
+}
+
 /** A model and effort put together over the usual: the chosen parts win, the rest stays as usual (merged apart). */
-export function merged(info: AiInfo, usual: Usual, pick: ModelOverride | AiSetting | null | undefined): Planned {
+export function merged(info: AiInfo, usualIn: Usual, pick: ModelOverride | AiSetting | null | undefined): Planned {
+  // The usual never names a model the studio knows cannot be used (§45.36 E12).
+  const usual = usableUsual(info, usualIn);
   const model = pick?.model || usual.model;
   const m = modelOf(info, model);
   const offers = m ? m.efforts : [];
@@ -237,7 +345,7 @@ const ALL_EFFORTS: Effort[] = (["low", "medium", "high", "xhigh", "max"] as Effo
  */
 export function ModelMenu({
   info,
-  usual,
+  usual: usualIn,
   value,
   onChange,
   title = "Model and effort for this one",
@@ -261,7 +369,12 @@ export function ModelMenu({
   const [open, setOpen] = useState(false);
   const [model, setModel] = useState<string>(value?.model || USUAL);
   const [effort, setEffort] = useState<string>(value?.effort || USUAL);
-  const now = merged(info, usual, value);
+  // The usual skips a model the studio knows cannot be used (§45.36 E12); `usualIn` is what the settings say.
+  const usual = usableUsual(info, usualIn);
+  const skipped = usual.skipped ? modelOf(info, usual.skipped) : null;
+  const now = merged(info, usualIn, value);
+  // The model that will run, when the studio knows it cannot be used (picked on purpose, or nothing better to offer).
+  const nowBad = now.modelKnown ? unusableModel(info, now.model) : null;
 
   function show() {
     setModel(value?.model || USUAL);
@@ -294,13 +407,15 @@ export function ModelMenu({
     <>
       <button
         type="button"
-        className={`st-btn st-s-ai-btn${now.changed ? " is-set" : ""}${compact ? " is-compact" : ""}${className ? ` ${className}` : ""}`}
+        className={`st-btn st-s-ai-btn${now.changed ? " is-set" : ""}${nowBad ? " is-bad" : ""}${compact && !nowBad ? " is-compact" : ""}${className ? ` ${className}` : ""}`}
         aria-haspopup="dialog"
-        aria-label={`${title}: ${spoken(info, now)}${now.changed ? (note.startsWith("Kept") ? ", kept with this video" : ", just this one") : ""}`}
+        aria-label={`${title}: ${spoken(info, now)}${nowBad ? `, ${MODEL_STATUS_WORD[nowBad.status].toLowerCase()}` : ""}${now.changed ? (note.startsWith("Kept") ? ", kept with this video" : ", just this one") : ""}`}
+        title={nowBad ? nowBad.statusLine || undefined : undefined}
         onClick={show}
       >
         <Icon name="sliders" size={18} aria-hidden="true" />
-        {!compact || now.changed ? <span className="st-s-ai-btn__words">{words}</span> : null}
+        {!compact || now.changed || nowBad ? <span className="st-s-ai-btn__words">{words}</span> : null}
+        {nowBad ? <span className="st-s-ai-btn__status">{MODEL_STATUS_WORD[nowBad.status]}</span> : null}
         {now.changed ? <span className="st-s-ai-btn__set">{note.startsWith("Kept") ? "Kept" : "Just this one"}</span> : null}
       </button>
       {open ? (
@@ -337,7 +452,11 @@ export function ModelMenu({
             }}
             options={[
               usualModelKnown
-                ? { value: USUAL, label: `Usual: ${modelName(info, usual.model)}`, line: usual.from === "project" && usual.modelKnown ? "Kept with this video" : usualWords }
+                ? {
+                    value: USUAL,
+                    label: `Usual: ${modelName(info, usual.model)}`,
+                    line: skipped ? `${unusableWords(skipped)}, so the usual is this one.` : usual.from === "project" && usual.modelKnown ? "Kept with this video" : usualWords,
+                  }
                 : { value: USUAL, label: "Your usual model", line: "Your Lamo Stories settings could not be read just now, so its name is not shown." },
               ...info.models.map((m) => ({ value: m.key, label: m.label, line: modelStatusWords(m, info.live) })),
             ]}
@@ -356,7 +475,8 @@ export function ModelMenu({
             />
           )}
           {usualMissing && chosen && usualEffort ? <Notice tone="bad">{`${chosen.label} does not offer ${EFFORT_LABEL[usualEffort]}. Pick another level.`}</Notice> : null}
-          <p className="st-s-field__hint">More effort thinks longer and costs more. Less is quicker.</p>
+          {/* Only for a model with effort levels: one with no effort setting has nothing to make longer (§45.36 E17). */}
+          {chosen && efforts.length === 0 ? null : <p className="st-s-field__hint">More effort thinks longer and costs more. Less is quicker.</p>}
         </StSheet>
       ) : null}
     </>
@@ -372,13 +492,14 @@ function spoken(info: AiInfo, p: Planned): string {
   return p.effort ? `${name}, ${EFFORT_LABEL[p.effort]} effort` : name;
 }
 
-function modelStatusWords(m: ModelInfo, live: boolean): string {
+/** A model's line in the menu: who makes it, then its status in the one word set, and for one that said no, why. */
+export function modelStatusWords(m: ModelInfo, live: boolean): string {
   const who = providerWords(m);
   const by = who ? `${who}. ` : "";
   if (!live) return `${by}Not checked yet.`;
-  if (m.status === "ok") return `${by}Ready.`;
+  if (m.status === "ok") return `${by}Works.`;
   if (m.status === "not_checked") return `${by}Not checked yet.`;
-  return `${by}${m.statusLine || "Not available right now."}`;
+  return `${by}${MODEL_STATUS_WORD[m.status]}: ${m.statusLine || "The last try did not work."}`;
 }
 
 export type TaskPhase = "idle" | "working" | "done" | "failed";
@@ -532,7 +653,60 @@ export function TaskLine({
       </Notice>
     );
   }
+  if (run.phase === "done") return <TaskMade info={info} task={run.task} />;
   return null;
+}
+
+/**
+ * What made a finished AI task (an idea, a full idea, captions, a character): its model and effort in words, and the
+ * exact model id and Region behind "Technical details", the same line production steps have (§45.36 E8).
+ */
+export function TaskMade({ info, task }: { info: AiInfo; task: Pick<AiTask, "status" | "model" | "effort" | "effortApplied" | "modelId" | "region"> | null }) {
+  if (!task || task.status !== "done" || !task.model) return null;
+  const id = modelIdLine(task);
+  return (
+    <div className="st-s-taskmade">
+      <p className="st-s-taskmade__line">Made with {modelLine(info, task.model, task.effort, task.effortApplied)}</p>
+      {id ? (
+        <TechDetails className="st-s-taskmade__tech">
+          <p className="st-s-used__id">{id}</p>
+        </TechDetails>
+      ) : null}
+    </div>
+  );
+}
+
+type IdRecord = Pick<ModelUse, "step" | "task" | "modelId" | "region">;
+
+/** The exact model ids of a list of records, one line each ("Write the story: Model ID … in eu-north-1"); null for none. */
+export function ModelIdList({ used, steps }: { used: IdRecord[]; steps?: Record<string, string> }) {
+  const lines = used.map((u) => ({ u, id: modelIdLine(u) })).filter((x): x is { u: IdRecord; id: string } => !!x.id);
+  if (!lines.length) return null;
+  return (
+    <ul className="st-s-used__ids">
+      {lines.map(({ u, id }, i) => (
+        <li key={`${u.step}:${u.task ?? ""}:${i}`}>
+          <span className="st-s-used__idstep">{modelUseWords(u, steps)}:</span> <span className="st-s-used__id">{id}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** The same list folded away under "Technical details" (§45.36 E14); nothing when no record says its id. */
+export function ModelIds({ used, steps }: { used: IdRecord[]; steps?: Record<string, string> }) {
+  if (!used.some((u) => modelIdLine(u))) return null;
+  return (
+    <TechDetails className="st-s-used__tech">
+      <ModelIdList used={used} steps={steps} />
+    </TechDetails>
+  );
+}
+
+/** The records ModelsUsed lists: while a run works, that run's; else every step of the video as it is now. */
+export function usedOf(job: ProductionJob | null, jobs?: ProductionJob[] | null): ModelUse[] {
+  const working = !!job && (job.status === "queued" || job.status === "running");
+  return working || !jobs ? (job?.meta.models ?? []) : madeWith([job, ...jobs]);
 }
 
 /** The Lamo Stories setting a stop sentence sends the owner to (§45.25: "… in Lamo Stories › Settings › AI"). */
@@ -561,7 +735,7 @@ export function SettingsFix({ sentence }: { sentence: string | null | undefined 
  * The exact model a step called (§45.35 D5): "Model ID global.anthropic.claude-opus-5-5 in eu-north-1", from the job's
  * own record; null for a record that does not say (an older run), so nothing is guessed from today's settings.
  */
-export function modelIdLine(u: Pick<ModelUse, "modelId" | "region">): string | null {
+export function modelIdLine(u: { modelId?: string | null; region?: string | null }): string | null {
   const id = typeof u.modelId === "string" ? u.modelId.trim() : "";
   if (!id) return null;
   const region = typeof u.region === "string" ? u.region.trim() : "";
@@ -617,10 +791,23 @@ export function madeWith(list: (ProductionJob | null | undefined)[]): ModelUse[]
  * Which model and effort made each step of a video, from the jobs' own records (CONTRACTS §45.25 "Recorded"): while
  * a run works, that run's; else, with `jobs`, every step of the video as it is now (see madeWith).
  */
-export function ModelsUsed({ info, job, jobs, title = "Made with" }: { info: AiInfo; job: ProductionJob | null; jobs?: ProductionJob[] | null; title?: string }) {
+export function ModelsUsed({
+  info,
+  job,
+  jobs,
+  title = "Made with",
+  ids = true,
+}: {
+  info: AiInfo;
+  job: ProductionJob | null;
+  jobs?: ProductionJob[] | null;
+  title?: string;
+  /** false: the page shows the exact model ids in its own Technical details (ModelIdList) */
+  ids?: boolean;
+}) {
   const working = !!job && (job.status === "queued" || job.status === "running");
   const own = working || !jobs;
-  const used = own ? (job?.meta.models ?? []) : madeWith([job, ...jobs]);
+  const used = usedOf(job, jobs);
   if (!used.length) return null;
   // madeWith keeps only finished steps; a stopped one is told apart only in a run's own list.
   const stopped = (u: ModelUse) => stoppedOn(own && job ? job : { steps: [] }, u);
@@ -636,10 +823,10 @@ export function ModelsUsed({ info, job, jobs, title = "Made with" }: { info: AiI
               <Tag>{AGENT_WORDS[u.agentId] ?? u.agentId}</Tag>
               {stopped(u) ? <span className="st-s-used__note">This step stopped on this model. This is what it was asked with.</span> : !u.effortApplied ? <span className="st-s-used__note">This model has no effort setting; it ran at its own level.</span> : null}
             </div>
-            {modelIdLine(u) ? <span className="st-s-used__id">{modelIdLine(u)}</span> : null}
           </li>
         ))}
       </ul>
+      {ids ? <ModelIds used={used} /> : null}
     </div>
   );
 }

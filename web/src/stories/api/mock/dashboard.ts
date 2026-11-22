@@ -1,6 +1,9 @@
 // Lamo Stories mock: the dashboard part (docs/CONTRACTS.md §45.16.3, §45.16.8). Worked out from the store on every
 // call, the way the API reads its items: so whatever another part changes (a story made, approved or posted, an
-// account connected) shows on the dashboard and in the Needs you bar at the next poll.
+// account connected) shows on the dashboard and in the Needs you bar at the next poll. A post that stopped on an
+// account problem (its sentence names Lamo Stories › Social accounts) has Fix it go to Social accounts, as the API's
+// _post_href does (§45.35 D11, §45.36 E9); an account is named by its place first ("this TikTok account (Lamo
+// Stories)"), so the line reads right when the account is itself called Lamo Stories (§45.36 E13).
 import { ApiError } from "../../../api/errors.ts";
 import { STORIES_PLATFORMS, STEP_ORDER, type Platform, type StepKey, type StoriesApi, type StoriesDashboard } from "../types.ts";
 import { PLATFORM_NAME } from "./social.ts";
@@ -12,6 +15,15 @@ export const KEYS = ["dashboard"] as const;
 export function seed(_store: MockStore): void {}
 
 type Activity = StoriesDashboard["activity"][number];
+
+/** The page an account problem's sentence names (the API's sentences.CONNECTIONS). */
+const CONNECTIONS = "Lamo Stories › Social accounts";
+
+/** Fix it for a stopped post: Social accounts when it stopped on an account problem, else the video's Review page. */
+export function postHref(error: string | null | undefined, storyId: string): string {
+  if ((error ?? "").includes(CONNECTIONS)) return "/stories/connections";
+  return storyId ? `/stories/review/${encodeURIComponent(storyId)}` : "/stories";
+}
 
 /** The dashboard of workspace `ws`, as GET …/dashboard answers it. */
 export function dashboardOf(store: MockStore, ws: string): StoriesDashboard {
@@ -34,7 +46,7 @@ export function dashboardOf(store: MockStore, ws: string): StoriesDashboard {
       title: title(j.contentId),
       platform: j.platform,
       sentence: j.error ?? `Posting “${title(j.contentId)}” to ${PLATFORM_NAME[j.platform]} stopped. Tap Try again.`,
-      href: `/stories/review/${encodeURIComponent(j.contentId)}`,
+      href: postHref(j.error, j.contentId),
     });
   }
   // One line per account, as the API words it (its reason is a code, never shown as it is): connect again, else
@@ -43,7 +55,7 @@ export function dashboardOf(store: MockStore, ws: string): StoriesDashboard {
     const name = PLATFORM_NAME[a.platform as Platform];
     const sentence =
       a.connectionStatus === "needs_reconnect"
-        ? `Lamo Stories' ${name}${a.accountName ? ` (${a.accountName})` : ""} needs connecting again. Open Social accounts and tap Connect.`
+        ? `This ${name} account${a.accountName ? ` (${a.accountName})` : ""} needs connecting again. Open Social accounts and tap Connect.`
         : a.warning?.trim() || null;
     if (sentence) needsYou.push({ publishingJobId: null, storyId: null, title: name, platform: a.platform as Platform, sentence, href: "/stories/connections" });
   }

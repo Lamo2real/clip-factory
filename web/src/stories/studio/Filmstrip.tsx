@@ -1,12 +1,23 @@
 // The storyboard as a filmstrip (docs/CONTRACTS.md §45.16.5): one card per scene with the engine's live preview of
 // that scene (it plays while the card is picked or under the mouse), the finished still once the scenes are drawn, the
-// scene's title, its on-screen words and its length. Review adds a Remake this scene button to each card.
+// scene's title, its on-screen words and its length. Review adds a Remake this scene button to each card. On square
+// and wide videos the play badge sits in the top corner, smaller, so it never covers the burned-in caption, which those
+// shapes draw low across the frame (§45.36 E18).
 import { useState, type ReactNode } from "react";
 import type { Story, StoryScript } from "../api/types.ts";
 import { StoryPreview } from "../preview/StoryPreview.tsx";
 import { seconds } from "./words.ts";
 
 /** The words that show during one scene: its own scene words and every caption that starts inside it. */
+/** The thumbnail's shape: tall (9:16, the caption sits clear of the corner), square or wide. */
+export function frameShape(script: Pick<StoryScript, "width" | "height"> | null): "tall" | "square" | "wide" {
+  if (!script || !script.width || !script.height) return "tall";
+  const r = script.width / script.height;
+  if (r > 1.2) return "wide";
+  if (r > 0.8) return "square";
+  return "tall";
+}
+
 export function sceneWords(script: StoryScript | null, sceneId: string): string[] {
   if (!script) return [];
   let start = 0;
@@ -38,8 +49,9 @@ export function Filmstrip({
   const [playing, setPlaying] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   if (!scenes.length) return null;
+  const shape = frameShape(script);
   return (
-    <ol className="st-s-film" aria-label={label}>
+    <ol className={`st-s-film st-s-film--${shape}`} aria-label={label}>
       {scenes.map((sc, i) => {
         const live = playing === sc.sceneId || hover === sc.sceneId;
         const words = sceneWords(script, sc.sceneId);

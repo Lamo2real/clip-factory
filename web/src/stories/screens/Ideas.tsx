@@ -15,7 +15,7 @@ import { navigate } from "../../lib/router.ts";
 import { storiesApi } from "../api/client.ts";
 import type { AiTask, GuidanceTopic, Idea, IdeaCategory, IdeaInput, ModelOverride, StoriesConfig, VideoConcept } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
-import { cleanPick, merged, ModelMenu, TaskLine, useAiInfo, useAiTask, usualFor, type AiInfo } from "../studio/ai.tsx";
+import { merged, ModelMenu, sendPick, TaskLine, useAiInfo, useAiTask, usualFor, type AiInfo } from "../studio/ai.tsx";
 import { useWorkspace } from "../studio/hooks.ts";
 import { Busy, celebrate, Notice, Pick, Slider, Tag, TextField } from "../studio/kit.tsx";
 import { CATEGORIES, CATEGORY_LABEL, CATEGORY_LINE, NO_GUIDANCE, say, seconds, TONE_LABEL } from "../studio/words.ts";
@@ -447,7 +447,7 @@ function AskForIdeas({ ws, info, onDrafts, onCancel }: { ws: string; info: AiInf
     const body: { topic?: string; category?: IdeaCategory; count: number; override?: ModelOverride } = { count: 4 };
     if (topic.trim()) body.topic = topic.trim();
     if (kind !== "any") body.category = kind;
-    const override = cleanPick(pick);
+    const override = sendPick(info, usual, pick);
     if (override) body.override = override;
     asked.current = topic.trim();
     void run.start(() => storiesApi().generateIdeas(ws, body));
@@ -529,7 +529,7 @@ function IdeaCard({
     varying.reset();
     // "Write it again" keeps the full idea's own length (§45.35 D21); a first try starts from the workspace's length.
     const body: { durationSec: number; override?: ModelOverride } = { durationSec: Math.min(90, Math.max(15, idea.concept?.durationSec ?? length)) };
-    const override = cleanPick(expandPick);
+    const override = sendPick(info, expandUsual, expandPick);
     if (override) body.override = override;
     void expanding.start(() => storiesApi().expandIdea(ws, idea.ideaId, body));
   }
@@ -539,7 +539,7 @@ function IdeaCard({
     setProblem(null);
     expanding.reset();
     const body: { count: number; override?: ModelOverride } = { count: 3 };
-    const override = cleanPick(morePick);
+    const override = sendPick(info, moreUsual, morePick);
     if (override) body.override = override;
     void varying.start(() => storiesApi().ideaVariations(ws, idea.ideaId, body));
   }
