@@ -1,41 +1,143 @@
 /* ---------- Characters ---------- */
+
+/* Back to the cast: a round glass arrow beside the word. */
+.st-s-make .st-s-castback {
+  gap: var(--st-space-3);
+  min-height: var(--st-tap);
+  margin-bottom: var(--st-space-2);
+  padding: 0 var(--st-space-3) 0 0;
+  border-radius: var(--st-r-round);
+  color: var(--st-text);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
+  text-decoration: none;
+}
+
+.st-s-make .st-s-castback:hover {
+  color: var(--st-text-strong);
+  text-decoration: none;
+}
+
+.st-s-castback__orb {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--st-tap);
+  height: var(--st-tap);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-s-castback:hover .st-s-castback__orb {
+  background: var(--st-fill-control-hover);
+}
+
+.st-s-castback:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+/* A character's own page: Delete is a round glass button at the head's top right. */
+.st-s-make .st-s-head--tool {
+  position: relative;
+}
+
+.st-s-head--tool > .st-s-head__tool {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+/* Where the head has its plate (Picture, See-through), the button sits inside the plate's padding, beside the back
+   arrow, never on the plate's corner. */
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-s-head--tool > .st-s-head__tool {
+  top: var(--st-space-3);
+  right: var(--st-space-3);
+}
+
+/* The cast: character cards on glass. Each figure stands on its own warm-lit stage that hugs the card's corners
+   (the card's radius less its 6 px gap); the name, a line and the tags sit under it. */
 .st-s-cast {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
-  gap: var(--st-s-gap);
+  gap: var(--st-gap);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+.st-s-cast > li {
+  container-type: inline-size;
+}
+
 .st-s-cast__card {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   justify-items: center;
-  gap: 8px;
+  align-content: start;
+  gap: var(--st-space-2);
   height: 100%;
-  padding: 18px 14px;
-  border-radius: var(--r-lg);
+  padding: var(--st-gap-surface) var(--st-gap-surface) var(--st-space-5);
   text-align: center;
   text-decoration: none;
-  color: var(--st-ink, #fff6e5);
-  background: radial-gradient(circle at 50% 35%, rgba(98, 198, 255, 0.16), transparent 65%), var(--st-s-fill);
-  box-shadow: var(--st-s-soft);
-  transition: transform 200ms ease, box-shadow 200ms ease;
+  color: var(--st-text);
+  transition: box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-s-cast__card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--st-s-lift);
+  box-shadow: var(--st-sheen-hero), var(--st-depth-2), var(--st-glow-behind);
+}
+
+.st-s-cast__card:hover::after {
+  background: var(--st-edge-hero);
+}
+
+.st-s-cast__card:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+.st-s-cast__stage {
+  display: grid;
+  place-items: center;
+  justify-self: stretch;
+  min-height: 160px;
+  margin-bottom: var(--st-space-2);
+  padding: var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background:
+    radial-gradient(62% 58% at 50% 60%, rgb(var(--st-amber-rgb) / 0.26), transparent 72%),
+    rgb(var(--st-well-rgb) / 0.3);
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-s-cast__card:hover .st-s-cast__stage {
+  background-color: rgb(var(--st-well-rgb) / 0.18);
+}
+
+.st-s-cast__name,
+.st-s-cast__line,
+.st-s-cast__tags {
+  padding: 0 var(--st-space-3);
 }
 
 .st-s-cast__name {
-  font: 800 1.2rem / 1.2 var(--st-font, system-ui);
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  line-height: var(--st-lh-head);
+  overflow-wrap: anywhere;
 }
 
 .st-s-cast__line {
-  color: var(--st-s-ink-2);
-  font-size: 0.92rem;
-  line-height: 1.4;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  line-height: 1.45;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -44,11 +146,49 @@
 
 .st-s-cast__tags {
   justify-content: center;
+  margin-top: var(--st-space-1);
 }
 
+/* One card across a phone: the stage beside the words, like a media row. */
+@container (min-width: 330px) {
+  .st-s-cast__card {
+    grid-template-columns: 150px minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    justify-items: start;
+    align-items: start;
+    column-gap: var(--st-space-4);
+    padding: var(--st-gap-surface) var(--st-space-4) var(--st-gap-surface) var(--st-gap-surface);
+    text-align: left;
+  }
+
+  .st-s-cast__stage {
+    grid-row: 1 / span 3;
+    align-self: stretch;
+    margin-bottom: 0;
+    padding: var(--st-space-2);
+  }
+
+  .st-s-cast__name {
+    margin-top: var(--st-space-4);
+  }
+
+  .st-s-cast__name,
+  .st-s-cast__line,
+  .st-s-cast__tags {
+    padding: 0;
+  }
+
+  .st-s-cast__tags {
+    justify-content: flex-start;
+  }
+}
+
+/* ---------- The character editor (studio/CharacterEditor.tsx): the stage, the panel, faces, moves ----------
+   Its markup is the studio's, so these surfaces take the glass from the tokens here; the thin light edge is the
+   same masked ring as .st-glass::after (glass.css), drawn from --st-edge. */
 .st-s-editor {
   display: grid;
-  gap: var(--st-s-gap);
+  gap: var(--st-gap);
   align-items: start;
 }
 
@@ -59,67 +199,159 @@
 
   .st-s-editor__stage {
     position: sticky;
-    top: 16px;
+    top: var(--st-space-4);
   }
 }
 
 .st-s-editor__stage {
   display: grid;
-  gap: 14px;
+  gap: var(--st-gap);
 }
 
+.st-s-editor__preview,
+.st-s-editor__panel,
+.st-s-refs,
+.st-s-portrait {
+  position: relative;
+  border-radius: var(--st-r-surface);
+  color: var(--st-text);
+  background: var(--st-tint-card);
+  box-shadow: var(--st-sheen), var(--st-depth-1), var(--st-glow-behind);
+  -webkit-backdrop-filter: var(--st-filter-glass);
+  backdrop-filter: var(--st-filter-glass);
+}
+
+.st-s-editor__preview::after,
+.st-s-editor__panel::after,
+.st-s-refs::after,
+.st-s-portrait::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: var(--st-edge-width);
+  border-radius: inherit;
+  background: var(--st-edge);
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+
+/* The character on its stage: the hero of the editor (brighter edge and sheen, the amber light behind the figure,
+   never behind the words under it). */
 .st-s-editor__preview {
   display: grid;
   justify-items: center;
-  gap: 8px;
-  padding: 18px 12px;
-  border-radius: var(--r-lg);
-  background: radial-gradient(circle at 50% 40%, rgba(255, 201, 74, 0.2), transparent 62%), var(--st-s-fill);
-  box-shadow: var(--st-s-soft);
+  gap: var(--st-space-2);
+  padding: var(--st-space-5) var(--st-space-3);
+  background:
+    radial-gradient(58% 44% at 50% 40%, rgb(var(--st-amber-rgb) / 0.2), transparent 72%),
+    var(--st-tint-hero);
+  box-shadow: var(--st-sheen-hero), var(--st-depth-2), var(--st-glow-behind);
+}
+
+.st-s-editor__preview::after {
+  padding: calc(var(--st-edge-width) + 0.25px);
+  background: var(--st-edge-hero);
 }
 
 .st-s-editor__now {
   display: grid;
   justify-items: center;
-  gap: 2px;
+  gap: var(--st-space-1);
   margin: 0;
   text-align: center;
 }
 
 .st-s-editor__now strong {
-  font: 800 1.15rem / 1.2 var(--st-font, system-ui);
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  line-height: var(--st-lh-head);
   overflow-wrap: anywhere;
 }
 
 .st-s-editor__now span {
-  color: var(--st-s-ink-2);
-  font-weight: 700;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-editor__panel {
   display: grid;
-  gap: 16px;
-  padding: clamp(14px, 0.8rem + 1vw, 22px);
-  border-radius: var(--r-lg);
-  background: var(--st-s-fill);
-  box-shadow: var(--st-s-soft);
+  gap: var(--st-space-4);
+  padding: var(--st-inset);
 }
 
 .st-s-editor__part {
   display: grid;
-  gap: 16px;
+  gap: var(--st-space-4);
 }
 
 .st-s-editor__lede {
   margin: 0;
-  color: var(--st-s-ink-2);
-  line-height: 1.45;
+  color: var(--st-text-soft);
+  line-height: var(--st-lh-body);
 }
 
+/* Make your character (Looks, Face, Moves, Sounds, Name) and Try a move: pills, the chosen one solid cream. */
+:is(.st-s-editor__parts, .st-s-moves) .st-s-pick {
+  gap: var(--st-space-2);
+  padding: 0;
+  border-radius: var(--st-r-round);
+  background: none;
+}
+
+:is(.st-s-editor__parts, .st-s-moves) .st-s-pick > .glide {
+  border-radius: var(--st-r-round);
+  background: var(--st-cream);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1);
+}
+
+:is(.st-s-editor__parts, .st-s-moves) .st-s-pick__opt {
+  min-height: var(--st-tap);
+  padding: 0 var(--st-space-4);
+  border-radius: var(--st-r-round);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  transition:
+    color var(--st-dur-hover) var(--st-ease-out),
+    background-color var(--st-dur-hover) var(--st-ease-out);
+}
+
+:is(.st-s-editor__parts, .st-s-moves) .st-s-pick__opt:hover {
+  background: var(--st-fill-control-hover);
+}
+
+:is(.st-s-editor__parts, .st-s-moves) .st-s-pick__opt.is-on {
+  color: var(--st-on-cream);
+  background: var(--st-cream);
+  box-shadow: none;
+}
+
+:is(.st-s-editor__parts, .st-s-moves) .st-s-pick__opt.is-on:hover {
+  background: var(--st-cream-hover);
+}
+
+:is(.st-s-editor__parts, .st-s-moves) .st-s-pick.has-glide > .st-s-pick__opt.is-on {
+  background: transparent;
+}
+
+/* The faces: glass tiles; a face the character uses gets a little mint, the one being tried a little amber. */
 .st-s-faces {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
-  gap: 10px;
+  gap: var(--st-space-3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -128,76 +360,94 @@
 .st-s-face {
   display: grid;
   justify-items: center;
-  gap: 6px;
-  padding: 10px;
-  border-radius: var(--r-md);
-  background: rgba(255, 246, 229, 0.05);
-  transition: background-color 200ms ease;
+  gap: var(--st-space-2);
+  padding: var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-s-face:hover {
-  background: var(--st-s-fill-2);
+  background: var(--st-fill-control-hover);
 }
 
 .st-s-face.is-on {
-  background: rgba(71, 214, 160, 0.12);
+  background:
+    linear-gradient(rgb(var(--st-mint-rgb) / var(--st-tint-cut)), rgb(var(--st-mint-rgb) / var(--st-tint-cut))),
+    var(--st-fill-control);
 }
 
 .st-s-face.is-trying {
-  background: rgba(255, 201, 74, 0.18);
+  background:
+    linear-gradient(rgb(var(--st-amber-rgb) / 0.16), rgb(var(--st-amber-rgb) / 0.16)),
+    rgb(var(--st-well-rgb) / 0.3);
+  box-shadow: var(--st-sheen-control), var(--st-glow-behind);
 }
 
 .st-s-face__name {
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-face__btns {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 6px;
-}
-
-.st-s-moves .st-s-pick__opt {
-  padding: 8px 12px;
-  font-size: 0.92rem;
+  gap: var(--st-space-2);
 }
 
 .st-s-trait-add {
   display: flex;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 
 .st-s-trait-add .st-s-input {
   flex: 1 1 auto;
 }
 
+/* Pictures to aim for and the AI picture: glass cards with their pictures as rounded thumbnails. */
 .st-s-refs,
 .st-s-portrait {
   display: grid;
-  gap: 10px;
-  padding: 16px;
-  border-radius: var(--r-lg);
-  background: var(--st-s-fill);
-  box-shadow: var(--st-s-soft);
+  gap: var(--st-space-3);
+  padding: var(--st-inset);
 }
 
 .st-s-refs__title {
   margin: 0;
-  font: 800 1.05rem / 1.2 var(--st-font, system-ui);
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  line-height: var(--st-lh-head);
 }
 
 .st-s-refs__lede {
   margin: 0;
-  color: var(--st-s-ink-2);
-  font-size: 0.92rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
   line-height: 1.45;
+}
+
+/* The way to Settings › Video › Picture maker: the sky tone's words (the sky fill is for marks only). The chain of
+   :not()s matches the kit's link rule (sd-kit.css), so this one wins on the make screens. */
+.st-s-make .st-s-refs__lede a:not(.st-btn):not(.st-s-back):not(.st-s-cast__card):not(.st-s-qcard):not(.st-s-run__title):not(.st-s-run__cover) {
+  color: var(--st-sky-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.st-s-make .st-s-refs__lede a:not(.st-btn):not(.st-s-back):not(.st-s-cast__card):not(.st-s-qcard):not(.st-s-run__title):not(.st-s-run__cover):hover {
+  color: var(--st-text-strong);
 }
 
 .st-s-refs__list {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--st-space-3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -213,8 +463,8 @@
   width: 88px;
   height: 88px;
   object-fit: cover;
-  border-radius: var(--r-md);
-  box-shadow: 0 6px 16px rgba(8, 6, 30, 0.45);
+  border-radius: var(--st-r-control);
+  box-shadow: var(--st-depth-1);
 }
 
 .st-s-portrait__img {
@@ -222,24 +472,46 @@
   height: 120px;
 }
 
+/* Remove a picture: a round coral button with an espresso cross. */
 .st-s-refs__remove {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  color: #1c1842;
-  background: var(--st-coral, #ff6f61);
+  top: var(--st-space-1);
+  right: var(--st-space-1);
+  border-radius: var(--st-r-round);
+  color: var(--st-on-cream);
+  background: var(--st-coral);
+  box-shadow: var(--st-depth-1);
 }
 
 .st-s-refs__remove:hover {
-  background: #ff8a7f;
+  background:
+    linear-gradient(rgb(var(--st-cream-rgb) / 0.24), rgb(var(--st-cream-rgb) / 0.24)),
+    var(--st-coral);
 }
 
 .st-s-refs__sending {
   display: grid;
-  gap: 6px;
-  font-weight: 700;
+  gap: var(--st-space-2);
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-refs__add label {
   justify-self: start;
+}
+
+/* ---------- Phones: every target 48 px ---------- */
+@media (max-width: 767px), (pointer: coarse) {
+  .st-s-make .st-s-castback {
+    min-height: var(--st-tap-phone);
+  }
+
+  .st-s-castback__orb {
+    width: var(--st-tap-phone);
+    height: var(--st-tap-phone);
+  }
+
+  :is(.st-s-editor__parts, .st-s-moves) .st-s-pick__opt {
+    min-height: var(--st-tap-phone);
+  }
 }

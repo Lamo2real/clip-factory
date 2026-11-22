@@ -12,6 +12,7 @@ import { useLoad } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
 import type { Character, CharacterInput, StoriesConfig } from "../api/types.ts";
 import { CATALOG } from "../engine/catalog.ts";
+import { Glass, RoundGlassButton } from "../glass/index.ts";
 import { storiesGoLater } from "../pane.tsx";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { storiesHref } from "../routes.ts";
@@ -23,6 +24,7 @@ import { Busy, celebrate, Notice, StSheet, Tag } from "../studio/kit.tsx";
 import { DEFAULT_LOOK, inputOf, MOVE_LINE, newCharacter, showFace } from "../studio/looks.ts";
 import { Portrait, References } from "../studio/References.tsx";
 import { count, isConflict, say } from "../studio/words.ts";
+import { MakeIcon } from "./Ideas.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
 export function CharactersScreen({ ws, page }: StoriesScreenProps) {
@@ -34,21 +36,33 @@ export function CharactersScreen({ ws, page }: StoriesScreenProps) {
 /** A character-shaped empty state: a friendly figure waiting to be made. */
 export function EmptyCast({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="st-s-empty">
+    <Glass className="st-s-empty st-s-make-empty">
       <CharacterPreview look={{ ...DEFAULT_LOOK, outfit: { ...DEFAULT_LOOK.outfit, top: "#62c6ff" } }} movementStyle="bouncy" expression="happy" action="wave" size={140} label="A friendly character waving" />
       <h2 className="st-s-empty__title">{title}</h2>
       <p className="st-s-empty__text">{children}</p>
       {action}
-    </div>
+    </Glass>
+  );
+}
+
+/** Back to the cast: a round glass arrow beside the word (the word stays, so a child can read where it goes). */
+function BackToCast() {
+  return (
+    <A href={storiesHref({ name: "characters" })} className="st-s-back st-s-castback">
+      <span className="st-s-castback__orb" aria-hidden="true">
+        <MakeIcon name="back" size={20} />
+      </span>
+      Characters
+    </A>
   );
 }
 
 function Gallery({ ws }: { ws: string }) {
   const list = useLoad(() => storiesApi().listCharacters(ws), ws, "st-characters");
   return (
-    <section className="st-page st-studio">
+    <section className="st-page st-studio st-s-make">
       <header className="st-s-head">
-        <div>
+        <div className="st-plate st-s-head__text">
           <h1 className="st-s-head__title">Characters</h1>
           <p className="st-s-head__lede">Your cast. Each one looks and moves the same in every video.</p>
         </div>
@@ -75,8 +89,10 @@ function Gallery({ ws }: { ws: string }) {
         <ul className="st-s-cast">
           {list.data.map((c) => (
             <li key={c.characterId}>
-              <A href={storiesHref({ name: "character", characterId: c.characterId })} className="st-s-cast__card">
-                <CharacterPreview look={c.look} movementStyle={c.movementStyle} action="idle" expression={showFace(c)} size={132} label={`${c.name}, moving`} />
+              <A href={storiesHref({ name: "character", characterId: c.characterId })} className="st-glass st-s-cast__card">
+                <span className="st-s-cast__stage">
+                  <CharacterPreview look={c.look} movementStyle={c.movementStyle} action="idle" expression={showFace(c)} size={132} label={`${c.name}, moving`} />
+                </span>
                 <span className="st-s-cast__name">{c.name}</span>
                 <span className="st-s-cast__line">{c.personality || MOVE_LINE[c.movementStyle]}</span>
                 <span className="st-s-cast__tags">
@@ -117,12 +133,10 @@ function NewCharacter({ ws }: { ws: string }) {
   }
 
   return (
-    <section className="st-page st-studio">
+    <section className="st-page st-studio st-s-make">
       <header className="st-s-head">
-        <div>
-          <A href={storiesHref({ name: "characters" })} className="st-s-back">
-            ‹ Characters
-          </A>
+        <div className="st-plate st-s-head__text">
+          <BackToCast />
           <h1 className="st-s-head__title">New character</h1>
           <p className="st-s-head__lede">Pick how they look, their faces, how they move and their sounds. Then give them a name.</p>
         </div>
@@ -204,7 +218,7 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
 
   if (loaded.error && !c)
     return (
-      <section className="st-page st-studio">
+      <section className="st-page st-studio st-s-make">
         <Notice tone="bad" action={<A href={storiesHref({ name: "characters" })} className="st-btn">Back to Characters</A>}>
           {loaded.error}
         </Notice>
@@ -212,26 +226,24 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
     );
   if (!c)
     return (
-      <section className="st-page st-studio">
+      <section className="st-page st-studio st-s-make">
         <Busy>Getting the character…</Busy>
       </section>
     );
 
   return (
-    <section className="st-page st-studio">
-      <header className="st-s-head">
-        <div>
-          <A href={storiesHref({ name: "characters" })} className="st-s-back">
-            ‹ Characters
-          </A>
+    <section className="st-page st-studio st-s-make">
+      <header className="st-s-head st-s-head--tool">
+        <div className="st-plate st-s-head__text">
+          <BackToCast />
           <h1 className="st-s-head__title">{c.name}</h1>
           <p className="st-s-head__lede">
             In {count(c.storyCount, "video")}. Changes show in new videos and in a Remake the whole video, never in one already made.
           </p>
         </div>
-        <button type="button" className="st-btn st-s-quiet" onClick={() => setAsking(true)}>
-          Delete
-        </button>
+        <RoundGlassButton label="Delete" className="st-s-head__tool" onClick={() => setAsking(true)}>
+          <MakeIcon name="delete" />
+        </RoundGlassButton>
       </header>
       <DesignPanel
         ws={ws}

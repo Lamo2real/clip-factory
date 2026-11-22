@@ -1,31 +1,204 @@
-/* ---------- Ideas ---------- */
-.st-s-filter {
-  justify-self: start;
+/* ---------- The make screens (Ideas and Characters): shared parts ----------
+   The warm liquid glass (styles/GLASS-CONTRACT.md): every surface is the contract's glass, every number a --st-*
+   token. No cursor rules, light never a border, hover on every control, a glass surface never moves. */
+
+/* The studio title and its line sit on a backing plate (.st-plate): nothing over Ember, a glass plate in Picture and
+   See-through, where a white desktop or a busy photo can be behind them. */
+.st-s-make .st-s-head__text {
+  min-width: 0;
+  max-width: 100%;
 }
 
+/* The kit's panels, empty states and drafts carry the glass on the make screens (the kit keeps its own look
+   elsewhere): the card veil, the soft inner top highlight, depth and the warm glow behind. */
+.st-s-make :is(.st-s-make-panel, .st-s-drafts, .st-s-make-empty).st-glass {
+  border-radius: var(--st-r-surface);
+  background: var(--st-tint-card);
+  box-shadow: var(--st-sheen), var(--st-depth-1), var(--st-glow-behind);
+}
+
+.st-s-make .st-s-make-panel,
+.st-s-make .st-s-drafts {
+  gap: var(--st-space-4);
+  padding: var(--st-inset);
+}
+
+/* An empty board or cast: a warm light high in the card, never behind the words. */
+.st-s-make .st-s-make-empty.st-glass {
+  gap: var(--st-space-3);
+  padding: var(--st-space-7) var(--st-inset);
+  background:
+    radial-gradient(42% 34% at 50% 18%, rgb(var(--st-amber-rgb) / 0.2), transparent 72%),
+    var(--st-tint-card);
+}
+
+.st-s-make .st-s-make-empty .st-s-empty__title {
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  line-height: var(--st-lh-head);
+}
+
+.st-s-make .st-s-make-empty .st-s-empty__text {
+  color: var(--st-text-soft);
+  line-height: var(--st-lh-body);
+}
+
+/* ---------- Readable on every background, on the make screens ----------
+   The studio kit (sd-kit.css, sd-sheet.css) still draws a few things in the old way: Design with AI has no veil (its
+   words fall under 4.5:1 over a white desktop or photo), fields lighten what is under them (their hints fall to
+   3.4:1 there), group titles and slider values are the bright orange (the contract keeps it for shapes), and a
+   switched-off button's words are see-through. On the make screens they take the contract's glass, wells and words
+   here (every selector starts with .st-s-make, so the order of the files does not matter); once the kit does the
+   same, this block can go. */
+.st-s-make .st-s-design {
+  position: relative;
+  border-radius: var(--st-r-surface);
+  color: var(--st-text);
+  background: var(--st-tint-card);
+  box-shadow: var(--st-sheen), var(--st-depth-1), var(--st-glow-behind);
+  -webkit-backdrop-filter: var(--st-filter-glass);
+  backdrop-filter: var(--st-filter-glass);
+}
+
+.st-s-make .st-s-design::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: var(--st-edge-width);
+  border-radius: inherit;
+  background: var(--st-edge);
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+
+.st-s-make .st-s-design__title {
+  color: var(--st-text-strong);
+}
+
+.st-s-make .st-s-design__lede {
+  color: var(--st-text-soft);
+}
+
+.st-s-make :is(.st-s-group__title, .st-s-slider__value) {
+  color: var(--st-text-amber);
+}
+
+.st-s-make .st-btn:not(.st-btn--main)[aria-disabled="true"] {
+  color: var(--st-text-soft);
+}
+
+.st-s-make .st-s-input {
+  background: var(--st-fill-well);
+}
+
+.st-s-make .st-s-input:hover {
+  background: var(--st-fill-well-hover);
+}
+
+.st-s-make .st-s-input::placeholder {
+  color: var(--st-text-muted);
+}
+
+.st-s-make .st-s-field.is-bad .st-s-input {
+  background:
+    linear-gradient(rgb(var(--st-coral-rgb) / 0.16), rgb(var(--st-coral-rgb) / 0.16)),
+    var(--st-fill-well);
+}
+
+/* ---------- Ideas ---------- */
+
+/* Show: All, Saved, Made into videos as pills. The chosen one is solid cream with espresso words (the sliding
+   highlight is the cream pill); the others are glass pills, each with its own veil, so they read over anything. */
+.st-s-filter {
+  justify-self: start;
+  max-width: 100%;
+}
+
+.st-s-filter .st-s-pick {
+  gap: var(--st-space-2);
+  padding: 0;
+  border-radius: var(--st-r-round);
+  background: none;
+}
+
+.st-s-filter .st-s-pick > .glide {
+  border-radius: var(--st-r-round);
+  background: var(--st-cream);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1);
+}
+
+.st-s-filter .st-s-pick__opt {
+  min-height: var(--st-tap);
+  padding: 0 var(--st-space-4);
+  border-radius: var(--st-r-round);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  transition:
+    color var(--st-dur-hover) var(--st-ease-out),
+    background-color var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-s-filter .st-s-pick__opt:hover {
+  background: var(--st-fill-control-hover);
+}
+
+.st-s-filter .st-s-pick__opt.is-on {
+  color: var(--st-on-cream);
+  background: var(--st-cream);
+  box-shadow: none;
+}
+
+.st-s-filter .st-s-pick.has-glide > .st-s-pick__opt.is-on {
+  background: transparent;
+}
+
+.st-s-filter .st-s-pick__opt.is-on:hover {
+  background: var(--st-cream-hover);
+}
+
+/* The board: glass idea cards; the chosen one (its full idea open, or being edited) is the hero across the row. */
 .st-s-board {
+  container-type: inline-size;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
-  gap: var(--st-s-gap);
+  gap: var(--st-gap);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .st-s-idea {
-  display: grid;
-  align-content: start;
-  gap: 10px;
-  padding: 18px;
-  border-radius: var(--r-lg);
-  background: var(--st-s-fill);
-  box-shadow: var(--st-s-soft);
-  transition: transform 200ms ease, box-shadow 200ms ease;
+  display: flex;
+  flex-direction: column;
+  gap: var(--st-space-4);
+  padding: var(--st-inset);
 }
 
-.st-s-idea:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--st-s-lift);
+.st-s-idea__main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--st-space-3);
+}
+
+.st-s-idea__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--st-space-2);
 }
 
 .st-s-idea__tags,
@@ -33,91 +206,189 @@
 .st-s-concept__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--st-space-1) var(--st-space-2);
+}
+
+.st-s-idea__tags {
+  align-items: center;
+  min-height: var(--st-tap);
+}
+
+/* Edit and Delete: round glass icon buttons at the card's top right. */
+.st-s-idea__tools {
+  display: flex;
+  flex: none;
+  gap: var(--st-space-2);
 }
 
 .st-s-idea__title,
 .st-s-draft__title {
   margin: 0;
-  font: 800 1.2rem / 1.25 var(--st-font, system-ui);
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  font-optical-sizing: auto;
+  line-height: var(--st-lh-head);
+  letter-spacing: -0.005em;
   overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 .st-s-idea__line,
 .st-s-draft__line {
   margin: 0;
-  color: var(--st-s-ink-2);
-  line-height: 1.45;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-body);
+  line-height: var(--st-lh-body);
   overflow-wrap: anywhere;
 }
 
+/* The checked advice: a deeper well inside the card with a little of its tone (the words keep their contrast over
+   a white desktop or photo: the well only ever darkens). */
 .st-s-idea__advice {
   margin: 0;
-  padding: 10px 12px;
-  border-radius: var(--r-sm);
-  background: rgba(71, 214, 160, 0.14);
-  font-size: 0.92rem;
-  line-height: 1.4;
+  padding: var(--st-space-3) var(--st-space-4);
+  border-radius: var(--st-r-control);
+  color: var(--st-mint-ink);
+  background:
+    linear-gradient(rgb(var(--st-mint-rgb) / var(--st-tint-cut)), rgb(var(--st-mint-rgb) / var(--st-tint-cut))),
+    rgb(var(--st-well-rgb) / 0.36);
+  font-size: var(--st-fs-small);
+  line-height: 1.45;
 }
 
 .st-s-idea__advice.is-bad {
-  background: rgba(255, 111, 97, 0.18);
+  color: var(--st-coral-ink);
+  background:
+    linear-gradient(rgb(var(--st-coral-rgb) / var(--st-tint-cut)), rgb(var(--st-coral-rgb) / var(--st-tint-cut))),
+    rgb(var(--st-well-rgb) / 0.36);
 }
 
+/* The actions sit at the foot of every card, so a row of cards lines them up. */
 .st-s-idea__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 4px;
+  gap: var(--st-space-2);
+  margin-top: auto;
+  padding-top: var(--st-space-1);
 }
 
+/* The full idea: a reading well inside the hero. */
 .st-s-concept {
   display: grid;
-  gap: 8px;
-  padding: 14px;
-  border-radius: var(--r-md);
-  background: rgba(98, 198, 255, 0.12);
-  line-height: 1.45;
+  align-content: start;
+  gap: var(--st-space-3);
+  padding: var(--st-space-4) var(--st-space-5);
+  border-radius: var(--st-r-control);
+  color: var(--st-text);
+  background: rgb(var(--st-well-rgb) / 0.4);
+  box-shadow: inset 0 1px 12px -6px rgb(var(--st-shadow-rgb) / 0.6);
+  font-size: var(--st-fs-body);
+  line-height: var(--st-lh-body);
 }
 
 .st-s-concept p {
   margin: 0;
 }
 
+.st-s-concept strong {
+  color: var(--st-text-amber);
+  font-weight: var(--st-weight-ui);
+}
+
 .st-s-concept__premise {
-  font-weight: 700;
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: calc(var(--st-fs-body) * 1.12);
+  font-weight: var(--st-weight-display);
+  line-height: 1.4;
 }
 
-.st-s-concept__beats {
-  margin: 0;
-  padding-left: 1.3em;
+/* The steps, each with its number in a small round count. */
+.st-s-make .st-s-concept__beats {
   display: grid;
-  gap: 4px;
+  gap: var(--st-space-2);
+  margin: 0;
+  padding: 0;
+  counter-reset: st-beat;
 }
 
+.st-s-concept__beats > li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--st-space-3);
+  counter-increment: st-beat;
+}
+
+.st-s-concept__beats > li::before {
+  content: counter(st-beat);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 0.1em;
+  border-radius: var(--st-r-round);
+  color: var(--st-text-amber);
+  background: rgb(var(--st-cream-rgb) / 0.1);
+  box-shadow: var(--st-sheen-control);
+  font-size: var(--st-fs-chip);
+  font-variant-numeric: lining-nums tabular-nums;
+  font-weight: var(--st-weight-ui);
+  line-height: 1;
+}
+
+.st-s-concept__words {
+  color: var(--st-text-soft);
+  overflow-wrap: anywhere;
+}
+
+/* The hero across the row, from two columns up: the idea on the left, its full idea on the right. */
+@container (min-width: 700px) {
+  .st-s-idea.is-hero {
+    grid-column: 1 / -1;
+  }
+
+  .st-s-idea.is-hero:not(.is-editing) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    align-items: start;
+    column-gap: var(--st-space-6);
+  }
+}
+
+/* The drafts the AI wrote: glass tiles in the drafts panel; a saved one turns mint. */
 .st-s-drafts__head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 
 .st-s-drafts__title {
   margin: 0;
-  font: 800 1.15rem / 1.2 var(--st-font, system-ui);
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h2);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  line-height: var(--st-lh-head);
   overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 .st-s-drafts__lede {
   margin: 0;
-  color: var(--st-s-ink-2);
+  color: var(--st-text-soft);
 }
 
 .st-s-drafts__list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
-  gap: 12px;
+  gap: var(--st-space-3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -127,21 +398,69 @@
   display: grid;
   align-content: start;
   justify-items: start;
-  gap: 8px;
-  padding: 14px;
-  border-radius: var(--r-md);
-  background: rgba(255, 246, 229, 0.07);
-  transition: background-color 200ms ease;
+  gap: var(--st-space-2);
+  padding: var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-s-draft:hover {
-  background: var(--st-s-fill-2);
+  background: var(--st-fill-control-hover);
 }
 
 .st-s-draft .st-btn {
   justify-self: end;
+  margin-top: auto;
 }
 
 .st-s-draft.is-saved {
-  background: rgba(71, 214, 160, 0.14);
+  background:
+    linear-gradient(rgb(var(--st-mint-rgb) / var(--st-tint-cut)), rgb(var(--st-mint-rgb) / var(--st-tint-cut))),
+    var(--st-fill-control);
+}
+
+/* Edit an idea: the idea's basics, then its full idea beside them once the hero is wide enough. */
+@container (min-width: 760px) {
+  .st-s-ideaedit:has(> .st-s-ideaedit__full) {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    align-items: start;
+    column-gap: var(--st-space-6);
+  }
+
+  .st-s-ideaedit > :not(.st-s-ideaedit__basics, .st-s-ideaedit__full) {
+    grid-column: 1 / -1;
+  }
+}
+
+.st-s-ideaedit__basics {
+  display: grid;
+  gap: var(--st-space-4);
+}
+
+/* Beside a long full idea, the basics stay in view while the steps scroll by. */
+@container (min-width: 760px) {
+  .st-s-ideaedit:has(> .st-s-ideaedit__full) > .st-s-ideaedit__basics {
+    position: sticky;
+    top: var(--st-space-4);
+  }
+}
+
+/* The length of a full idea: white rounded-square − and + around the seconds. */
+.st-s-length .st-stepper {
+  justify-self: start;
+  max-width: 100%;
+}
+
+/* The make screens' small icons. */
+.st-s-makeicon {
+  display: block;
+}
+
+/* ---------- Phones: every target 48 px ---------- */
+@media (max-width: 767px), (pointer: coarse) {
+  .st-s-filter .st-s-pick__opt {
+    min-height: var(--st-tap-phone);
+  }
 }

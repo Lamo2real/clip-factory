@@ -264,45 +264,55 @@
   border-radius: var(--r-md);
 }
 
-/* A redesign beside the character as it is. */
+/* A redesign beside the character as it is (Characters): an amber-tinted glass panel (the tone cut to
+   --st-tint-cut over the tinted veil), the two figures on deeper wells. */
 .st-s-redesign {
   display: grid;
-  gap: 12px;
-  padding: clamp(14px, 0.8rem + 1vw, 22px);
-  border-radius: var(--r-lg);
-  background: rgba(255, 201, 74, 0.1);
-  box-shadow: var(--st-s-soft);
+  gap: var(--st-space-3);
+  padding: var(--st-inset);
+  border-radius: var(--st-r-surface);
+  color: var(--st-text);
+  background:
+    linear-gradient(rgb(var(--st-amber-rgb) / var(--st-tint-cut)), rgb(var(--st-amber-rgb) / var(--st-tint-cut))),
+    rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
+  box-shadow: var(--st-sheen), var(--st-depth-1), var(--st-glow-behind);
+  -webkit-backdrop-filter: var(--st-filter-glass);
+  backdrop-filter: var(--st-filter-glass);
 }
 
 .st-s-redesign__pair {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--st-space-3);
 }
 
 .st-s-redesign__fig {
   display: grid;
   justify-items: center;
-  gap: 6px;
+  gap: var(--st-space-2);
   margin: 0;
-  padding: 10px;
-  border-radius: var(--r-md);
-  background: rgba(255, 246, 229, 0.06);
+  padding: var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background:
+    radial-gradient(60% 55% at 50% 55%, rgb(var(--st-amber-rgb) / 0.2), transparent 72%),
+    rgb(var(--st-well-rgb) / 0.34);
 }
 
 .st-s-redesign__cap {
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-redesign__lede {
   margin: 0;
-  font-weight: 700;
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-redesign__list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--st-space-2);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -312,29 +322,25 @@
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--st-space-2);
   max-width: 100%;
 }
 
 .st-s-redesign__detail {
-  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
-  font-size: 0.92rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
 
-/* Edit an idea. */
-.st-s-idea.is-editing:hover {
-  transform: none;
-}
-
+/* Edit an idea (Ideas): the form inside the hero card. */
 .st-s-ideaedit {
   display: grid;
-  gap: 14px;
+  gap: var(--st-space-4);
 }
 
 .st-s-lines__list {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -344,7 +350,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 
 .st-s-lines > .st-btn {

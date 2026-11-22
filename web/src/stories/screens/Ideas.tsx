@@ -14,10 +14,11 @@ import { useLoad } from "../../lib/hooks.ts";
 import { navigate } from "../../lib/router.ts";
 import { storiesApi } from "../api/client.ts";
 import type { AiTask, GuidanceTopic, Idea, IdeaCategory, IdeaInput, ModelOverride, StoriesConfig, VideoConcept } from "../api/types.ts";
+import { cx, Glass, RoundGlassButton, Stepper } from "../glass/index.ts";
 import { storiesHref } from "../routes.ts";
 import { merged, ModelMenu, sendPick, TaskLine, useAiInfo, useAiTask, usualFor, type AiInfo } from "../studio/ai.tsx";
 import { useWorkspace } from "../studio/hooks.ts";
-import { Busy, celebrate, Notice, Pick, Slider, Tag, TextField } from "../studio/kit.tsx";
+import { Busy, celebrate, Notice, Pick, Tag, TextField } from "../studio/kit.tsx";
 import { CATEGORIES, CATEGORY_LABEL, CATEGORY_LINE, NO_GUIDANCE, say, seconds, TONE_LABEL } from "../studio/words.ts";
 import type { StoriesScreenProps } from "./types.ts";
 
@@ -139,9 +140,9 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
   const counts = { all: all.length, saved: all.filter((i) => i.status === "saved").length, used: all.filter((i) => i.status === "used").length };
 
   return (
-    <section className="st-page st-studio">
+    <section className="st-page st-studio st-s-make">
       <header className="st-s-head">
-        <div>
+        <div className="st-plate st-s-head__text">
           <h1 className="st-s-head__title">Ideas</h1>
           <p className="st-s-head__lede">Keep ideas for videos here. Make one into a video when you are ready.</p>
         </div>
@@ -171,7 +172,7 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
       {open === "ask" ? <AskForIdeas ws={ws} info={info} onCancel={() => setOpen("none")} onDrafts={(list, from) => showDrafts({ from, drafts: list.map((input) => ({ input, saved: false, saving: false })) })} /> : null}
 
       {drafts ? (
-        <section className="st-s-drafts" ref={draftsRef} aria-labelledby="st-drafts-title">
+        <section className="st-glass st-s-drafts" ref={draftsRef} aria-labelledby="st-drafts-title">
           <div className="st-s-drafts__head">
             <h2 className="st-s-drafts__title" id="st-drafts-title">
               {drafts.from}
@@ -183,7 +184,7 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
           <p className="st-s-drafts__lede">Nothing is kept until you tap Save.</p>
           <ul className="st-s-drafts__list">
             {drafts.drafts.map((d, k) => (
-              <li key={k} className={`st-s-draft${d.saved ? " is-saved" : ""}`} data-draft={k}>
+              <li key={k} className={cx("st-s-draft", d.saved && "is-saved")} data-draft={k}>
                 <Tag tone={CATEGORY_TONE[d.input.category]}>{CATEGORY_LABEL[d.input.category]}</Tag>
                 <h3 className="st-s-draft__title">{d.input.title}</h3>
                 <p className="st-s-draft__line">{d.input.logline}</p>
@@ -216,11 +217,11 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
       ) : !ideas.data ? (
         <Busy>Getting your ideas…</Busy>
       ) : shown.length === 0 ? (
-        <div className="st-s-empty">
+        <Glass className="st-s-empty st-s-make-empty">
           <span className="st-s-empty__bulb" aria-hidden="true" />
           <h2 className="st-s-empty__title">{filter === "all" ? "No ideas yet" : filter === "saved" ? "No saved ideas waiting" : "No ideas made into videos yet"}</h2>
           <p className="st-s-empty__text">Tap New idea to type one, or Ask for ideas to get a few to pick from.</p>
-        </div>
+        </Glass>
       ) : (
         <ul className="st-s-board">
           {shown.map((idea) => (
@@ -267,7 +268,7 @@ function NewIdeaForm({ onSave, onCancel }: { onSave: (i: IdeaInput) => Promise<v
 
   return (
     <form
-      className="st-s-panel"
+      className="st-glass st-s-panel st-s-make-panel"
       aria-label="New idea"
       onSubmit={(e) => {
         e.preventDefault();
@@ -398,19 +399,26 @@ function EditIdeaForm({ idea, onSave, onCancel }: { idea: Idea; onSave: (patch: 
         void save();
       }}
     >
-      <TextField label="Title" value={title} onChange={setTitle} max={80} />
-      <TextField label="What happens, in one line" value={logline} onChange={setLogline} max={280} multiline rows={2} />
-      <Pick label="What kind of video?" big value={category} options={KIND_OPTIONS} onChange={setCategory} />
-      {category === "driving_safety" ? <p className="st-s-field__hint">Driving-safety videos only use checked advice from road authorities.</p> : null}
+      <div className="st-s-ideaedit__basics">
+        <TextField label="Title" value={title} onChange={setTitle} max={80} />
+        <TextField label="What happens, in one line" value={logline} onChange={setLogline} max={280} multiline rows={2} />
+        <Pick label="What kind of video?" big value={category} options={KIND_OPTIONS} onChange={setCategory} />
+        {category === "driving_safety" ? <p className="st-s-field__hint">Driving-safety videos only use checked advice from road authorities.</p> : null}
+      </div>
       {concept ? (
-        <fieldset className="st-s-group">
+        <fieldset className="st-s-group st-s-ideaedit__full">
           <legend className="st-s-group__title">The full idea</legend>
           <TextField label="What it is about" value={concept.premise} max={600} multiline rows={3} onChange={(premise) => setPart({ premise })} />
           <Lines label="What happens, step by step" item="Step" lines={concept.beats} max={160} most={8} least={3} onChange={(beats) => setPart({ beats })} />
           <TextField label="The lesson (you can leave this empty)" value={concept.lesson ?? ""} max={280} multiline rows={2} onChange={(lesson) => setPart({ lesson })} />
           <TextField label="How it ends" value={concept.ending} max={280} multiline rows={2} onChange={(ending) => setPart({ ending })} />
           <Pick label="How it feels" value={concept.tone} options={TONES.map((t) => ({ value: t, label: TONE_LABEL[t] }))} onChange={(tone) => setPart({ tone })} />
-          <Slider label="Length" min={15} max={90} step={5} value={concept.durationSec} words={seconds(concept.durationSec)} onChange={(durationSec) => setPart({ durationSec })} />
+          <div className="st-s-field st-s-length">
+            <span className="st-s-field__label" aria-hidden="true">
+              Length
+            </span>
+            <Stepper label="Length" min={15} max={90} step={5} value={concept.durationSec} format={seconds} onChange={(durationSec) => setPart({ durationSec })} />
+          </div>
           <Lines label="Words on screen" item="Words" lines={concept.onScreenText} max={60} most={6} onChange={(onScreenText) => setPart({ onScreenText })} />
         </fieldset>
       ) : null}
@@ -455,7 +463,7 @@ function AskForIdeas({ ws, info, onDrafts, onCancel }: { ws: string; info: AiInf
 
   return (
     <form
-      className="st-s-panel"
+      className="st-glass st-s-panel st-s-make-panel"
       aria-label="Ask for ideas"
       onSubmit={(e) => {
         e.preventDefault();
@@ -545,9 +553,10 @@ function IdeaCard({
   }
 
   const c = idea.concept;
+  // The chosen idea (being edited, or its full idea open) is the board's hero: brighter glass across the whole row.
   if (editing)
     return (
-      <li className={`st-s-idea st-s-idea--${idea.category} is-editing`} data-idea={idea.ideaId}>
+      <li className={cx("st-glass st-glass--hero st-lens", "st-s-idea", `st-s-idea--${idea.category}`, "is-hero is-editing")} data-idea={idea.ideaId}>
         <h2 className="st-s-idea__title">Edit “{idea.title}”</h2>
         <EditIdeaForm
           idea={idea}
@@ -563,17 +572,67 @@ function IdeaCard({
         />
       </li>
     );
+  const hero = !!c && showConcept;
   return (
-    <li className={`st-s-idea st-s-idea--${idea.category}`} data-idea={idea.ideaId}>
-      <span className="st-s-idea__tags">
-        <Tag tone={CATEGORY_TONE[idea.category]}>{CATEGORY_LABEL[idea.category]}</Tag>
-        {idea.status === "used" ? <Tag tone="mint">In {idea.storyIds.length === 1 ? "1 video" : `${idea.storyIds.length} videos`}</Tag> : <Tag>Saved</Tag>}
-        {blocked ? <Tag tone="coral">Needs checked advice</Tag> : null}
-      </span>
-      <h2 className="st-s-idea__title">{idea.title}</h2>
-      <p className="st-s-idea__line">{idea.logline}</p>
-      {advice ? <p className="st-s-idea__advice">{advice}</p> : null}
-      {blocked ? <p className="st-s-idea__advice is-bad">{NO_GUIDANCE}</p> : null}
+    <li className={cx("st-glass", hero && "st-glass--hero st-lens", "st-s-idea", `st-s-idea--${idea.category}`, hero && "is-hero")} data-idea={idea.ideaId}>
+      <div className="st-s-idea__main">
+        <div className="st-s-idea__top">
+          <span className="st-s-idea__tags">
+            <Tag tone={CATEGORY_TONE[idea.category]}>{CATEGORY_LABEL[idea.category]}</Tag>
+            {idea.status === "used" ? <Tag tone="mint">In {idea.storyIds.length === 1 ? "1 video" : `${idea.storyIds.length} videos`}</Tag> : <Tag>Saved</Tag>}
+            {blocked ? <Tag tone="coral">Needs checked advice</Tag> : null}
+          </span>
+          <span className="st-s-idea__tools">
+            <RoundGlassButton label={`Edit ${idea.title}`} aria-disabled={busy || undefined} onClick={() => !busy && setEditing(true)}>
+              <MakeIcon name="edit" />
+            </RoundGlassButton>
+            <RoundGlassButton label="Delete" onClick={onDelete}>
+              <MakeIcon name="delete" />
+            </RoundGlassButton>
+          </span>
+        </div>
+        <h2 className="st-s-idea__title">{idea.title}</h2>
+        <p className="st-s-idea__line">{idea.logline}</p>
+        {advice ? <p className="st-s-idea__advice">{advice}</p> : null}
+        {blocked ? <p className="st-s-idea__advice is-bad">{NO_GUIDANCE}</p> : null}
+
+        {problem ? <Notice tone="bad">{problem}</Notice> : null}
+        <TaskLine info={info} kind="expand_idea" run={expanding} expected={merged(info, expandUsual, expandPick)} />
+        <TaskLine info={info} kind="variations" run={varying} expected={merged(info, moreUsual, morePick)} />
+
+        <span className="st-s-idea__actions">
+          <button
+            type="button"
+            className="st-btn st-btn--main"
+            aria-disabled={blocked || undefined}
+            title={blocked ? NO_GUIDANCE : undefined}
+            onClick={() => {
+              if (!blocked) navigate(storiesHref({ name: "production_new", ideaId: idea.ideaId }));
+            }}
+          >
+            Make the video
+          </button>
+          {c ? (
+            <button type="button" className="st-btn" aria-expanded={showConcept} onClick={() => setShowConcept((s) => !s)}>
+              {showConcept ? "Hide the full idea" : "See the full idea"}
+            </button>
+          ) : null}
+          {!c || showConcept ? (
+            <span className="st-s-aipair">
+              <button type="button" className="st-btn" aria-disabled={blocked || busy || undefined} title={blocked ? NO_GUIDANCE : undefined} onClick={expand}>
+                {expanding.phase === "working" ? "Writing…" : c ? "Write it again" : "Make it a full idea"}
+              </button>
+              <ModelMenu info={info} usual={expandUsual} value={expandPick} onChange={setExpandPick} compact />
+            </span>
+          ) : null}
+          <span className="st-s-aipair">
+            <button type="button" className="st-btn" aria-disabled={busy || undefined} onClick={more}>
+              {varying.phase === "working" ? "Thinking…" : "More like this"}
+            </button>
+            <ModelMenu info={info} usual={moreUsual} value={morePick} onChange={setMorePick} compact />
+          </span>
+        </span>
+      </div>
 
       {c && showConcept ? (
         <div className="st-s-concept" aria-label={`The full idea for ${idea.title}`}>
@@ -602,49 +661,21 @@ function IdeaCard({
           ) : null}
         </div>
       ) : null}
-
-      {problem ? <Notice tone="bad">{problem}</Notice> : null}
-      <TaskLine info={info} kind="expand_idea" run={expanding} expected={merged(info, expandUsual, expandPick)} />
-      <TaskLine info={info} kind="variations" run={varying} expected={merged(info, moreUsual, morePick)} />
-
-      <span className="st-s-idea__actions">
-        <button
-          type="button"
-          className="st-btn st-btn--main"
-          aria-disabled={blocked || undefined}
-          title={blocked ? NO_GUIDANCE : undefined}
-          onClick={() => {
-            if (!blocked) navigate(storiesHref({ name: "production_new", ideaId: idea.ideaId }));
-          }}
-        >
-          Make the video
-        </button>
-        {c ? (
-          <button type="button" className="st-btn" aria-expanded={showConcept} onClick={() => setShowConcept((s) => !s)}>
-            {showConcept ? "Hide the full idea" : "See the full idea"}
-          </button>
-        ) : null}
-        {!c || showConcept ? (
-          <span className="st-s-aipair">
-            <button type="button" className="st-btn" aria-disabled={blocked || busy || undefined} title={blocked ? NO_GUIDANCE : undefined} onClick={expand}>
-              {expanding.phase === "working" ? "Writing…" : c ? "Write it again" : "Make it a full idea"}
-            </button>
-            <ModelMenu info={info} usual={expandUsual} value={expandPick} onChange={setExpandPick} compact />
-          </span>
-        ) : null}
-        <span className="st-s-aipair">
-          <button type="button" className="st-btn" aria-disabled={busy || undefined} onClick={more}>
-            {varying.phase === "working" ? "Thinking…" : "More like this"}
-          </button>
-          <ModelMenu info={info} usual={moreUsual} value={morePick} onChange={setMorePick} compact />
-        </span>
-        <button type="button" className="st-btn" aria-disabled={busy || undefined} onClick={() => !busy && setEditing(true)}>
-          Edit<span className="st-s-sr"> {idea.title}</span>
-        </button>
-        <button type="button" className="st-btn st-s-quiet" onClick={onDelete}>
-          Delete
-        </button>
-      </span>
     </li>
+  );
+}
+
+const ICON_PATHS = {
+  edit: "M4.5 19.5h4l10.2-10.2a2.4 2.4 0 0 0-4-4L4.5 15.5zM13.5 6.5l4 4",
+  delete: "M5 7h14M10 7V4.8h4V7M7 7l.9 12.2a1.5 1.5 0 0 0 1.5 1.3h5.2a1.5 1.5 0 0 0 1.5-1.3L17 7M10.3 11v5.5M13.7 11v5.5",
+  back: "M14.5 5.5 8 12l6.5 6.5",
+} as const;
+
+/** The make screens' own small icons (round strokes, like Stories' StIcon): Edit, Delete and Back. */
+export function MakeIcon({ name, size = 22 }: { name: keyof typeof ICON_PATHS; size?: number }) {
+  return (
+    <svg className="st-s-makeicon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <path d={ICON_PATHS[name]} />
+    </svg>
   );
 }
