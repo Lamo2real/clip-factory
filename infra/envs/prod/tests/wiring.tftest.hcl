@@ -630,17 +630,18 @@ run "whop_connect_switch_off_plans" {
   }
 }
 
-# docs/CONTRACTS.md §40.5.11 and ADR-82: Your bank (BANK_READING) defaults to off until BA, BR, BW and BD of §40.5.12
-# have merged (then one switch PR, "Get paid: switch on Your bank", sets it to true). It only changes the environment of
-# cf-prod-api and cf-prod-money (their modules' own tests prove BANK_READING = var.bank_reading_enabled ? "on" :
-# "off"), so flipping it is an in-place env change and can never delete or replace what holds the owner's data: the
-# bank secrets are made at runtime, never by Terraform, and every stored deposit, payer and link stays.
-run "bank_reading_is_wired_and_off" {
+# docs/CONTRACTS.md §40.5.11 and ADR-82: Your bank (BANK_READING) defaults to on now that BA, BR, BW and BD of §40.5.12
+# have merged (#157, #158, #162, #156). It only changes the environment of cf-prod-api and cf-prod-money (their
+# modules' own tests prove BANK_READING = var.bank_reading_enabled ? "on" : "off"), so flipping it is an in-place env
+# change and can never delete or replace what holds the owner's data: the bank secrets are made at runtime, never by
+# Terraform, and every stored deposit, payer and link stays. The stack still plans with it off, the one-line way to
+# stop it (the same day if Enable Banking says no).
+run "bank_reading_is_wired_and_on" {
   command = plan
 
   assert {
-    condition     = var.bank_reading_enabled == false
-    error_message = "bank_reading_enabled defaults to false until every builder of §40.5.12 has merged."
+    condition     = var.bank_reading_enabled == true
+    error_message = "bank_reading_enabled defaults to true now that BA, BR, BW and BD of §40.5.12 have merged."
   }
 
   assert {
@@ -652,32 +653,32 @@ run "bank_reading_is_wired_and_off" {
 
   assert {
     condition     = module.api.function_names == { api = "cf-prod-api" } && module.money.function_names == { money = "cf-prod-money" } && module.notify.notify_function_name == "cf-prod-notify"
-    error_message = "With the switch off the stack plans the same cf-prod-api, cf-prod-money and cf-prod-notify."
-  }
-
-  assert {
-    condition = (output.table_name == "cf-prod-data" && output.media_bucket == "cf-prod-media-123456789012" &&
-    output.vector_bucket == "cf-prod-vectors-123456789012" && output.web_bucket == "cf-prod-web-123456789012")
-    error_message = "Your bank keeps the table and the buckets that hold the owner's data."
-  }
-}
-
-run "bank_reading_switch_on_plans" {
-  command = plan
-
-  variables {
-    bank_reading_enabled = true
-  }
-
-  assert {
-    condition     = module.api.function_names == { api = "cf-prod-api" } && module.money.function_names == { money = "cf-prod-money" } && module.notify.notify_function_name == "cf-prod-notify"
-    error_message = "With the switch on the stack still plans the same cf-prod-api, cf-prod-money and cf-prod-notify."
+    error_message = "With the switch on the stack plans the same cf-prod-api, cf-prod-money and cf-prod-notify."
   }
 
   assert {
     condition = (output.table_name == "cf-prod-data" && output.media_bucket == "cf-prod-media-123456789012" &&
     output.vector_bucket == "cf-prod-vectors-123456789012" && output.web_bucket == "cf-prod-web-123456789012")
     error_message = "Switching Your bank on keeps the table and the buckets that hold the owner's data."
+  }
+}
+
+run "bank_reading_switch_off_plans" {
+  command = plan
+
+  variables {
+    bank_reading_enabled = false
+  }
+
+  assert {
+    condition     = module.api.function_names == { api = "cf-prod-api" } && module.money.function_names == { money = "cf-prod-money" } && module.notify.notify_function_name == "cf-prod-notify"
+    error_message = "With the switch off the stack still plans the same cf-prod-api, cf-prod-money and cf-prod-notify."
+  }
+
+  assert {
+    condition = (output.table_name == "cf-prod-data" && output.media_bucket == "cf-prod-media-123456789012" &&
+    output.vector_bucket == "cf-prod-vectors-123456789012" && output.web_bucket == "cf-prod-web-123456789012")
+    error_message = "Switching Your bank off keeps the table and the buckets that hold the owner's data: every stored deposit, payer, link and secret stays."
   }
 }
 
