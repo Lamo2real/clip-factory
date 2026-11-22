@@ -85,6 +85,8 @@ def answers(**over: Any) -> dict[str, Any]:
         "final_review": OK,
     }
     out.update(over)
+    # The writer's re-staging pass (task animation_plan, §45.37 G5) answers as the storyboard does unless a test says.
+    out.setdefault("animation_plan", out["storyboard"])
     return out
 
 
@@ -689,7 +691,9 @@ def test_the_writer_is_asked_once_more_with_the_engines_errors_then_the_job_fail
     bad["scenes"][0]["set"] = "the_moon"
     svc, _store, table, models = world(tmp_path, answers(storyboard=bad))
     assert run_job(svc) == "failed"
-    assert models.tasks() == ["storyboard", "storyboard"]
+    # the second call is the writer's re-staging pass, on the owner's model and effort for animation planning (G5)
+    assert models.tasks() == ["storyboard", "animation_plan"]
+    assert models.calls[1]["ctx"].agent_id == "storyboard" and models.calls[1]["schema"] == models.calls[0]["schema"]
     retry = json.loads(models.calls[1]["messages"][0]["content"][1]["text"].split("\n", 1)[1])
     assert retry["problems"] and any("set" in p for p in retry["problems"])
     job, story = table.item("PJOB#J1"), table.item(f"STORY#{STORY}")

@@ -37,6 +37,12 @@ variable "stories_video_us_bucket" {
   description = "Amazon Nova Reel for Lamo Stories (docs/CONTRACTS.md §45.31): true makes the bucket cf-prod-stories-video-<account>-us in us-east-1 (private, TLS only, shots kept 14 days) and lets cf_prod_story_agent start Nova Reel jobs there. Off until the owner allows Lamo Stories to keep generated shots in the US (N. Virginia)."
 }
 
+variable "stories_video_west_bucket" {
+  type        = bool
+  default     = false
+  description = "Luma AI Ray2 for Lamo Stories (docs/CONTRACTS.md §45.37 G7): true makes the bucket cf-prod-stories-video-<account>-usw2 in us-west-2 (private, TLS only, shots kept 14 days) and lets cf_prod_story_agent start Luma AI Ray2 jobs there. Off until the owner allows Lamo Stories to keep generated shots in the US (Oregon)."
+}
+
 variable "app_version" {
   type        = string
   default     = ""

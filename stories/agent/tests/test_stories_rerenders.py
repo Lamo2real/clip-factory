@@ -33,7 +33,8 @@ from test_stories_pipeline import (
     world,
 )
 
-FAKES = {**REGISTRY, "animation": {"builtin-2d": _Clips, "nova-reel": _Never}, "audio": {"builtin-synth": _Clips}}
+FAKES = {**REGISTRY, "animation": {"builtin-2d": _Clips, "nova-reel": _Never, "luma-ray": _Never},
+         "audio": {"builtin-synth": _Clips}}  # fmt: skip
 
 
 def fake_world(
@@ -103,8 +104,9 @@ def test_a_re_render_at_the_same_version_never_loses_a_current_file_when_old_ver
 def test_the_job_names_the_animator_that_made_the_clips_in_the_video(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Nova Reel picked, but every scene has a character: the built-in animator draws them all, and the job says so
-    reel = {"providers": {"images": "builtin-rig", "video": "nova-reel", "audio": "builtin-synth"}}
+    # Luma AI Ray2 picked (Nova Reel's replacement, §45.37 G7), but every scene has a character: the built-in animator
+    # draws them all, and the job says so
+    reel = {"providers": {"images": "builtin-rig", "video": "luma-ray", "audio": "builtin-synth"}}
     svc, _store, table = fake_world(tmp_path, monkeypatch, config=reel)
     assert run_job(svc) == "ready"
     job = table.item("PJOB#J1")
@@ -117,8 +119,9 @@ def test_the_job_names_the_animator_that_made_the_clips_in_the_video(
     clips = [a for a in table.prefix("ASSET#") if a["kind"] == "scene_clip"]
     assert {a["meta"]["provider"] for a in clips} == {"builtin-2d"}
 
-    # The other way round: a Reel cut-away an earlier job made is still in the video after the owner picked the
-    # built-in animator again; a caption edit's job (captions, assemble, preview) still says nova-reel.
+    # The other way round: a Nova Reel cut-away an earlier job made (before Amazon ended it) is still in the video
+    # after the owner picked the built-in animator again; a caption edit's job (captions, assemble, preview) still
+    # says nova-reel, so the post keeps its AI labels.
     s2 = next(a for a in clips if a["meta"]["sceneId"] == "s2")
     table.seed({**table.items[(PK, s2["sk"])], "meta": {**s2["meta"], "provider": "nova-reel"}})
     ws = table.items[(PK.split("#WS#")[0] + "#WSREG", f"WS#{WS}")]

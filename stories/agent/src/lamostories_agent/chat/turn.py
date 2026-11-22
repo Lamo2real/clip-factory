@@ -8,7 +8,9 @@ usage, or ``failed`` with one plain sentence. Stop (``stopped``) or the API's fe
 turn ends without writing anything else.
 
 The model and effort: the per-message override first, then the conversation's own setting (model and effort merged
-separately), then the client's own levels (task, agent, workspace default). It never runs on another model.
+separately), then the client's own levels (task, agent, workspace default). It never runs on another model. A short
+text edit (rename, fix a word, shorten a caption) is the task ``text_edit`` instead of ``chat`` (§45.37 G5,
+``edits``), so its own model and effort setting applies; the answer records the task it ran as.
 """
 
 from __future__ import annotations
@@ -36,7 +38,7 @@ from lamostories_agent.tasks.services import Services
 from lamostories_agent.tasks.store import Expr
 from lamostories_agent.tasks.work import agent_off, asked_of, called_of, merge_override, reply_called
 
-from . import history, tools
+from . import edits, history, tools
 
 MAX_ROUNDS = 8
 MAX_TEXT = 100_000  # an answer's text stays well inside DynamoDB's item size
@@ -141,6 +143,7 @@ class Turn:
         self.earlier: list[dict[str, Any]] = []  # this conversation's earlier messages (whatever is summarized)
         self._about: tuple[str, dict[str, Any]] | None = None  # the conversation's project (kind, item), read once
         self._about_read = False
+        self.task = edits.CHAT  # the answer's task: ``text_edit`` for a short text edit (§45.37 G5)
 
     # --- the conversation ----------------------------------------------------------------------------------------
 
@@ -242,8 +245,17 @@ class Turn:
         self.usage["input"] += u["input"]
         self.usage["output"] += u["output"]
 
+    def _task(self) -> str:
+        """``text_edit`` when the owner's message (the newest of his) is a short text edit, else ``chat``."""
+        asked = next((m for m in reversed(self.earlier) if m.get("role") == "user"), None)
+        if asked is None:
+            return edits.CHAT
+        pictures = len([a for a in asked.get("attachments") or [] if isinstance(a, dict)])
+        return edits.chat_task(str(asked.get("text") or ""), pictures=pictures)
+
     def run(self) -> None:
         msgs, summary = self._maybe_compact(self._history())
+        self.task = self._task()
         messages = history.to_messages(
             self.svc,
             msgs,
@@ -259,7 +271,7 @@ class Turn:
             self.stream.gap()
             reply = self.svc.model.complete(
                 self.ctx,
-                task="chat",
+                task=self.task,
                 messages=messages,
                 override=self.override,
                 tools=specs,

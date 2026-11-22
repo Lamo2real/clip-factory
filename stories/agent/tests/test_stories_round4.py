@@ -347,17 +347,23 @@ def test_the_bundled_models_name_their_maker_and_their_host_and_keep_every_other
     assert raw["defaultModel"] == "opus-5-5" and raw["defaultEffort"] == "high"
 
 
-# --- D2: Try it for Nova Reel -------------------------------------------------------------------------------------
+# --- D2: Try it, moved to Luma AI Ray2 (§45.37 G7: Amazon ended Nova Reel) --------------------------------------
 
 
 class FakeUS:
-    """Nova Reel in us-east-1 (start/get async invoke) and the US bucket (list and delete)."""
+    """Luma AI Ray2 in us-west-2 (start/get async invoke) and the us-west-2 bucket (list and delete). The shot lands in
+    the job's folder under a name of the model's own choosing."""
 
     def __init__(self, *, error: tuple[str, str] | None = None, fail: bool = False, elsewhere: bool = False) -> None:
         self.error, self.fail, self.elsewhere = error, fail, elsewhere
         self.starts: list[dict[str, Any]] = []
         self.objects: dict[str, bytes] = {}
         self.deleted: list[str] = []
+        self.regions: list[str] = []
+
+    def __call__(self, region: str) -> FakeUS:
+        self.regions.append(region)
+        return self
 
     def start_async_invoke(self, **kw: Any) -> dict[str, Any]:
         self.starts.append(kw)
@@ -365,9 +371,9 @@ class FakeUS:
             raise ClientError({"Error": {"Code": self.error[0], "Message": self.error[1]}}, "StartAsyncInvoke")
         uri = kw["outputDataConfig"]["s3OutputDataConfig"]["s3Uri"]
         folder = uri.removeprefix("s3://").split("/", 1)[1] + "inv1"
-        self.objects[f"{folder}/output.mp4"] = b"mp4"
+        self.objects[f"{folder}/shot-7f3a.mp4"] = b"mp4"
         self.objects[f"{folder}/manifest.json"] = b"{}"
-        return {"invocationArn": "arn:aws:bedrock:us-east-1:1:async-invoke/inv1"}
+        return {"invocationArn": "arn:aws:bedrock:us-west-2:1:async-invoke/inv1"}
 
     def get_async_invoke(self, **kw: Any) -> dict[str, Any]:
         if self.fail:
@@ -387,8 +393,8 @@ class FakeUS:
         return {}
 
 
-BUCKET = "cf-prod-stories-video-123456789012-us"
-CHECK_PREFIX = f"ws/{USER}/{WS}/checks/nova-reel/J9/"
+BUCKET = "cf-prod-stories-video-123456789012-usw2"
+CHECK_PREFIX = f"ws/{USER}/{WS}/checks/luma-ray/J9/"
 
 
 def check_world(
@@ -398,15 +404,16 @@ def check_world(
     bucket: str = BUCKET,
     job_type: str = "provider_check",
     before: dict[str, Any] | None = None,
+    provider: str = "luma-ray",
 ) -> tuple[Services, FakeTable]:
     from ls_fakes import ENGINE_DIR
 
     table = FakeTable()
     if before is not None:  # the PROVIDER# record an earlier Try it or story left
-        table.seed(item(keys.provider_sk("animation", "nova-reel"), type="ws_provider", kind="animation",
-                        providerId="nova-reel", **before))  # fmt: skip
+        table.seed(item(keys.provider_sk("animation", provider), type="ws_provider", kind="animation",
+                        providerId=provider, **before))  # fmt: skip
     table.seed(item("PJOB#J9", type="ws_pjob", jobId="J9", jobType=job_type, contentType="provider",
-                    contentId="nova-reel", status="queued",
+                    contentId=provider, status="queued",
                     steps=[{"key": "check", "label": "Try it", "status": "pending"}], progress=0, configuration={},
                     meta={}, sessionId="S9"))  # fmt: skip
     d, _ = data(table)
@@ -415,61 +422,64 @@ def check_world(
         return None
 
     svc = Services(data=d, work_root=tmp_path / "work", models=FakeModels({}), engine_dir=ENGINE_DIR,
-                   video_bucket=bucket, video_model_id="amazon.nova-reel-v1:1",
+                   video_west_bucket=bucket, bedrock_runtime=fake, s3_in=fake,
                    reel_client=(lambda: fake) if fake else None, us_s3=(lambda: fake) if fake else None,
+                   video_bucket="cf-prod-stories-video-123456789012-us", video_model_id="amazon.nova-reel-v1:1",
                    reel_sleep=no_wait, heartbeat_seconds=0.2, flush_seconds=0.05)  # fmt: skip
     return svc, table
 
 
-def run_check(svc: Services) -> str:
+def run_check(svc: Services, provider: str = "luma-ray") -> str:
     from lamostories_agent.provider_check import ProviderCheckJob
 
-    return asyncio.run(ProviderCheckJob(svc, JobFence(USER, WS, "J9", "S9"), "nova-reel").run())
+    return asyncio.run(ProviderCheckJob(svc, JobFence(USER, WS, "J9", "S9"), provider).run())
 
 
-def test_try_it_makes_one_6_second_test_shot_proves_nova_reel_and_deletes_the_file(tmp_path: Path) -> None:
+def test_try_it_makes_one_5_second_test_shot_proves_luma_ray_and_deletes_the_file(tmp_path: Path) -> None:
     from lamostories_agent.provider_check import TRIED
 
     fake = FakeUS()
     svc, table = check_world(tmp_path, fake)
     assert run_check(svc) == "ready"
     (start,) = fake.starts
-    assert start["modelId"] == "amazon.nova-reel-v1:1"
-    assert start["modelInput"]["videoGenerationConfig"]["durationSeconds"] == 6
-    assert start["modelInput"]["videoGenerationConfig"]["dimension"] == "1280x720"
+    assert start["modelId"] == "luma.ray-v2:0" and set(fake.regions) == {"us-west-2"}
+    assert start["modelInput"]["duration"] == "5s" and start["modelInput"]["resolution"] == "720p"
+    assert start["modelInput"]["aspect_ratio"] == "16:9" and start["modelInput"]["loop"] is False
     assert start["outputDataConfig"]["s3OutputDataConfig"]["s3Uri"] == f"s3://{BUCKET}/{CHECK_PREFIX}"
     assert fake.objects == {} and sorted(fake.deleted) == [f"{CHECK_PREFIX}inv1/manifest.json",
-                                                            f"{CHECK_PREFIX}inv1/output.mp4"]  # fmt: skip
-    record = table.item(keys.provider_sk("animation", "nova-reel"))
+                                                            f"{CHECK_PREFIX}inv1/shot-7f3a.mp4"]  # fmt: skip
+    record = table.item(keys.provider_sk("animation", "luma-ray"))
     assert record is not None and record["state"] == "on" and "lastError" not in record and record["checkedAt"]
     job = table.item("PJOB#J9")
     assert job is not None and job["status"] == "ready" and job["steps"][0]["message"] == TRIED
-    assert job["meta"]["providers"] == {"animation": "nova-reel"} and job["progress"] == 1.0
+    assert job["meta"]["providers"] == {"animation": "luma-ray"} and job["progress"] == 1.0
+    assert job["meta"]["videoModel"] == "luma-ray2"
     (usage,) = table.prefix("USAGE#")
-    assert (usage["provider"], usage["units"], usage["unit"], usage["kind"]) == ("nova-reel", 6, "second", "provider")
+    assert (usage["provider"], usage["units"], usage["unit"], usage["kind"]) == ("luma-ray", 5, "second", "provider")
+    assert usage["modelId"] == "luma.ray-v2:0"
 
 
 def test_try_it_records_bedrock_s_refusal_and_still_deletes_the_test_shot(tmp_path: Path) -> None:
-    from lamostories_agent.providers import REEL_NOT_ENABLED, REEL_SETUP
+    from lamostories_agent.providers import LUMA_NOT_ENABLED, LUMA_SETUP
 
     fake = FakeUS(error=("AccessDeniedException", "You don't have access to the model with the specified model ID."))
     svc, table = check_world(tmp_path, fake)
     assert run_check(svc) == "failed"
-    record = table.item(keys.provider_sk("animation", "nova-reel"))
+    record = table.item(keys.provider_sk("animation", "luma-ray"))
     assert record is not None and record["state"] == "needs_setup"
     assert (
         record["lastError"]
-        == f"{REEL_NOT_ENABLED} Bedrock said: “You don't have access to the model with the specified model ID.”"
+        == f"{LUMA_NOT_ENABLED} Bedrock said: “You don't have access to the model with the specified model ID.”"
     )
     job = table.item("PJOB#J9")
-    assert job is not None and job["status"] == "failed" and job["error"].startswith(REEL_SETUP)
+    assert job is not None and job["status"] == "failed" and job["error"].startswith(LUMA_SETUP)
     assert "Bedrock said" in job["error"] and job["steps"][0]["status"] == "failed"
 
     blocked = FakeUS(fail=True)
     svc, table = check_world(tmp_path / "b", blocked)
     assert run_check(svc) == "failed"
     assert blocked.objects == {}  # the failed shot's files are gone too
-    record = table.item(keys.provider_sk("animation", "nova-reel"))
+    record = table.item(keys.provider_sk("animation", "luma-ray"))
     assert record is not None and "The prompt was blocked." in record["lastError"]
     assert record["state"] == "needs_setup"  # never shown ready after a Try it that failed
 
@@ -483,7 +493,7 @@ def test_a_test_shot_bedrock_took_but_could_not_make_is_never_recorded_ready(tmp
     for name, fake in (("failed", FakeUS(fail=True)), ("elsewhere", FakeUS(elsewhere=True))):
         svc, table = check_world(tmp_path / name, fake, before=earlier)
         assert run_check(svc) == "failed"
-        record = table.item(keys.provider_sk("animation", "nova-reel"))
+        record = table.item(keys.provider_sk("animation", "luma-ray"))
         assert record is not None and record["state"] == "needs_setup" and record["checkedAt"] > earlier["checkedAt"]
         job = table.item("PJOB#J9")
         assert job is not None and job["status"] == "failed" and job["steps"][0]["status"] == "failed"
@@ -496,7 +506,7 @@ def test_a_test_shot_bedrock_took_but_could_not_make_is_never_recorded_ready(tmp
 
 
 def test_a_throttle_or_a_timeout_on_try_it_says_try_it_again_and_keeps_the_record(tmp_path: Path) -> None:
-    """A throttle or a timeout proved nothing about Nova Reel: the record stays as it was, and the job says the
+    """A throttle or a timeout proved nothing about Luma AI Ray2: the record stays as it was, and the job says the
     button the Settings row has (Try it), never a story's Try again."""
     from lamostories_agent.provider_check import FAILED, said
 
@@ -504,7 +514,7 @@ def test_a_throttle_or_a_timeout_on_try_it_says_try_it_again_and_keeps_the_recor
     throttled = FakeUS(error=("ThrottlingException", "Too many requests, please wait."))
     svc, table = check_world(tmp_path / "t", throttled, before=earlier)
     assert run_check(svc) == "failed"
-    record = table.item(keys.provider_sk("animation", "nova-reel"))
+    record = table.item(keys.provider_sk("animation", "luma-ray"))
     assert record is not None and record["state"] == "on" and record["checkedAt"] == earlier["checkedAt"]
     job = table.item("PJOB#J9")
     assert job is not None and job["error"] == said(FAILED, "Too many requests, please wait.")
@@ -516,20 +526,32 @@ def test_a_throttle_or_a_timeout_on_try_it_says_try_it_again_and_keeps_the_recor
 
     svc, table = check_world(tmp_path / "s", Slow())
     assert run_check(svc) == "failed"
-    assert table.item(keys.provider_sk("animation", "nova-reel")) is None
+    assert table.item(keys.provider_sk("animation", "luma-ray")) is None
     job = table.item("PJOB#J9")
     assert job is not None and job["error"] == FAILED
 
 
-def test_try_it_without_the_us_bucket_calls_nothing_and_says_the_not_ready_sentence(tmp_path: Path) -> None:
-    from lamostories_agent.providers import REEL_NO_BUCKET
+def test_try_it_without_the_oregon_bucket_calls_nothing_and_says_the_not_ready_sentence(tmp_path: Path) -> None:
+    from lamostories_agent.providers import LUMA_NOT_READY
 
     fake = FakeUS()
     svc, table = check_world(tmp_path, fake, bucket="")
     assert run_check(svc) == "failed"
-    assert fake.starts == [] and table.item(keys.provider_sk("animation", "nova-reel")) is None
+    assert fake.starts == [] and table.item(keys.provider_sk("animation", "luma-ray")) is None
     job = table.item("PJOB#J9")
-    assert job is not None and job["error"] == REEL_NO_BUCKET
+    assert job is not None and job["error"] == LUMA_NOT_READY
+
+
+def test_try_it_of_nova_reel_says_it_was_ended_and_calls_nothing(tmp_path: Path) -> None:
+    fake = FakeUS()
+    svc, table = check_world(tmp_path, fake, provider="nova-reel")
+    assert run_check(svc, "nova-reel") == "failed"
+    job = table.item("PJOB#J9")
+    assert job is not None and job["error"] == (
+        "Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Lamo Stories › Settings › "
+        "Video."
+    )
+    assert fake.starts == [] and table.item(keys.provider_sk("animation", "nova-reel")) is None
 
 
 def test_try_it_only_runs_a_provider_check_job(tmp_path: Path) -> None:
@@ -575,7 +597,7 @@ def test_the_provider_check_action_is_registered_and_answers_at_once() -> None:
         client.portal.call(asyncio.sleep, 0.05)  # type: ignore[union-attr]
         bad = client.post("/invocations", json={**body, "providerId": "../x"}, headers={SESSION_HEADER: "S1"})
         assert bad.json()["accepted"] is False
-    assert ran == ["J9:nova-reel"]
+    assert ran == ["J9:luma-ray"]  # Try it is Luma AI Ray2's now (§45.37 G7)
 
 
 # --- D9: a failed re-analysis keeps its study -------------------------------------------------------------------------

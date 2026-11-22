@@ -17,3 +17,6 @@ output "image_model_arn" { value = local.image_model_arn }
 
 # Nova Reel's us-east-1 bucket, or "" while stories_video_us_bucket is off.
 output "video_bucket" { value = var.stories_video_us_bucket ? aws_s3_bucket.video_us[0].bucket : "" }
+
+# Luma AI Ray2's us-west-2 bucket, or "" while stories_video_west_bucket is off (§45.37 G7).
+output "video_west_bucket" { value = var.stories_video_west_bucket ? aws_s3_bucket.video_west[0].bucket : "" }

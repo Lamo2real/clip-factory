@@ -16,6 +16,11 @@ mock_provider "aws" {
   alias = "us_east_1"
 }
 
+# Lamo Stories' Luma AI Ray2 bucket provider (us-west-2, §45.37 G7): mocked too, so no plan ever configures a real one.
+mock_provider "aws" {
+  alias = "us_west_2"
+}
+
 variables {
   owner_email     = "owner@example.test"
   agent_image_tag = "test"
@@ -445,6 +450,27 @@ run "lamo_stories_nova_reel_switch_plans" {
   assert {
     condition     = module.stories_agent.video_bucket == "cf-prod-stories-video-123456789012-us"
     error_message = "With the switch on, the us-east-1 bucket is cf-prod-stories-video-<account>-us."
+  }
+
+  assert {
+    condition = (output.table_name == "cf-prod-data" && output.media_bucket == "cf-prod-media-123456789012" &&
+    output.vector_bucket == "cf-prod-vectors-123456789012" && output.web_bucket == "cf-prod-web-123456789012")
+    error_message = "The table and the buckets that hold the owner's data keep their names."
+  }
+}
+
+# docs/CONTRACTS.md §45.37 G7: the Luma AI Ray2 switch (off by default) plans the us-west-2 bucket through the
+# aws.us_west_2 provider and changes nothing that holds the owner's data.
+run "lamo_stories_luma_switch_plans" {
+  command = plan
+
+  variables {
+    stories_video_west_bucket = true
+  }
+
+  assert {
+    condition     = module.stories_agent.video_west_bucket == "cf-prod-stories-video-123456789012-usw2" && module.stories_agent.video_bucket == ""
+    error_message = "With the switch on, the us-west-2 bucket is cf-prod-stories-video-<account>-usw2 (and the us-east-1 one stays off)."
   }
 
   assert {
