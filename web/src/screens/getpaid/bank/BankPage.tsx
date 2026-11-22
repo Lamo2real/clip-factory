@@ -133,6 +133,22 @@ export function BankPage() {
     if (lc.result === "bank_connected") sendFirstRead(`lc:${lc.at}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view?.lastConnect?.at, arrived]);
+  // The Mac app opens Enable Banking in the system browser and this page waits (§17.1 useConnecting): the spinner
+  // stops when he comes back to the window, or when the browser brings this page back with Back.
+  useEffect(() => {
+    if (!connecting) return;
+    const stop = () => setConnecting(null);
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) stop();
+    };
+    window.addEventListener("pageshow", onShow);
+    const t = setTimeout(() => window.addEventListener("focus", stop), 400);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("focus", stop);
+      window.removeEventListener("pageshow", onShow);
+    };
+  }, [connecting]);
   // A new link still waiting for its first read, within the hour after BankID: the first read is asked for once.
   useEffect(() => {
     const lc = view?.lastConnect;
@@ -300,6 +316,7 @@ export function BankPage() {
       const { authorizeUrl } = await api().bankConnect("linkId" in body ? { linkId: body.linkId } : { bank: body.bank });
       if (!/^https:\/\//.test(authorizeUrl) && !authorizeUrl.startsWith("/mock-bank")) throw new Error("bad authorize url");
       markConnectSent();
+      setPicker(false);
       location.assign(authorizeUrl);
       return true;
     } catch (e) {

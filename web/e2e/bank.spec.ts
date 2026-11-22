@@ -72,7 +72,8 @@ async function screenProblems(page: Page, phone: boolean, scope = "main"): Promi
         const cur = getComputedStyle(e).cursor;
         if (cur !== "auto" && cur !== "default") found.push(`"${name}" has cursor ${cur}`);
       }
-      const red = [...document.querySelectorAll<HTMLElement>("main .btn--primary")].filter((e) => e.getBoundingClientRect().height > 0);
+      // The whole screen: the floating setup list's Set up is glass here too (it has its own vermilion elsewhere).
+      const red = [...document.querySelectorAll<HTMLElement>(location.pathname === "/money" ? "main .btn--primary" : ".btn--primary")].filter((e) => e.getBoundingClientRect().height > 0);
       if (red.length > 1) found.push(`${red.length} vermilion buttons: ${red.map((e) => e.textContent?.trim()).join(" | ")}`);
       return found;
     },

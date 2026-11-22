@@ -187,14 +187,19 @@
 }
 .bank-link__head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 14px;
+  min-width: 0;
+}
+.bank-link__title {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 .bank-link__text {
   display: grid;
-  gap: 4px;
-  flex: 1 1 auto;
+  gap: 6px;
   min-width: 0;
 }
 .bank-link__text .gp-pill {
@@ -585,4 +590,16 @@
 }
 .reduce-motion :is(.bank-fold, .bank-asks__fold) .act-turn {
   transition: none;
+}
+
+/* Phones: a card's answers sit at the right, under the thumb (the main button is pinned bottom right, §40.5.2). */
+@media (max-width: 767px) {
+  .bank-ask__actions,
+  .bank-link__actions,
+  .bank-reached__need {
+    justify-content: flex-end;
+  }
+  .bank-ask__actions > .btn {
+    flex: 0 1 auto;
+  }
 }

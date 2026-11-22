@@ -105,15 +105,17 @@ export function BankLinks({ view, onReconnect, connecting }: { view: BankView; o
                 <span className="gp-bank__icon" aria-hidden="true">
                   <Icon name="card" size={24} />
                 </span>
-                <div className="bank-link__text">
+                <div className="bank-link__title">
                   <h3 className="bank-link__name">{link.bank}</h3>
                   <p className="bank-link__small">{plural(link.accounts, "account")}</p>
-                  <BankPill status={link.status} tone={link.tone} pill={link.pill} />
-                  <p className="bank-link__line">{link.line}</p>
-                  {link.lastError ? <p className="bank-link__error">{link.lastError}</p> : null}
-                  {link.checkedAt ? <p className="bank-link__small">Checked {relative(link.checkedAt)}</p> : null}
                 </div>
                 {link.daysLeft !== undefined && link.totalDays ? <DaysRing link={link} /> : null}
+              </div>
+              <div className="bank-link__text">
+                <BankPill status={link.status} tone={link.tone} pill={link.pill} />
+                <p className="bank-link__line">{link.line}</p>
+                {link.lastError ? <p className="bank-link__error">{link.lastError}</p> : null}
+                {link.checkedAt ? <p className="bank-link__small">Checked {relative(link.checkedAt)}</p> : null}
               </div>
               <div className="bank-link__actions">
                 {link.reconnect ? (
