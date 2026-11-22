@@ -179,7 +179,7 @@ def test_every_tile(call: Call, store: db.Store, s3_client: FakeS3) -> None:
     assert you[0]["title"] == "Out"
     assert (
         you[2]["sentence"]
-        == "Lamo Stories' Facebook (Lamo Page) needs connecting again. Open Social accounts and tap Connect."
+        == "This Facebook account (Lamo Page) needs connecting again. Open Social accounts and tap Connect."
     )
     assert d["producing"] == [{"storyId": making["storyId"], "title": "Making", "step": "scenes", "progress": 0.3125}]
     accounts = {a["platform"]: a for a in d["accounts"]}
@@ -242,7 +242,7 @@ def test_the_dashboards_accounts_are_the_ones_social_accounts_shows(
     )
     you = [n for n in d["needsYou"] if n["platform"] == "tiktok"]
     assert [(n["href"], n["sentence"]) for n in you] == [
-        ("/stories/connections", "Lamo Stories' TikTok (Lamo Stories tiktok) needs connecting again. Open Social "
+        ("/stories/connections", "This TikTok account (Lamo Stories tiktok) needs connecting again. Open Social "
                                  "accounts and tap Connect."),
     ]  # fmt: skip
     # the same as the Social accounts page itself
