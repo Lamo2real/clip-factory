@@ -681,10 +681,14 @@ export function topbarMode(anchor: HTMLElement, name = ""): Measured {
   // box would count as room (offsetWidth is rounded, so half a pixel more each, to be safe).
   const used = kids.reduce((n, el) => n + el.offsetWidth + 0.5, 0) + gap * Math.max(0, kids.length - 1);
   const free = bar.clientWidth - px(s.paddingLeft) - px(s.paddingRight) - used;
-  // What dropping the brand's name gives back: its width and the gap before it.
+  // What dropping the brand's name gives back: its width and the gap before it, less what the brand keeps to stay a
+  // 44 px target (glide.css).
   const brandName = bar.querySelector<HTMLElement>(".brand .brand__name");
   const brand = brandName?.parentElement;
-  const nameRoom = brandName && brand && getComputedStyle(brandName).display !== "none" ? brandName.offsetWidth + (px(getComputedStyle(brand).columnGap) || 0) : 0;
+  const nameRoom =
+    brandName && brand && getComputedStyle(brandName).display !== "none"
+      ? brand.offsetWidth - Math.max(ROUND, brand.offsetWidth - brandName.offsetWidth - (px(getComputedStyle(brand).columnGap) || 0))
+      : 0;
   anchor.style.display = shown;
   if (squeezed) anchor.setAttribute("data-ws-squeeze", "");
   const before = kids.some((el) => el.compareDocumentPosition(anchor) & Node.DOCUMENT_POSITION_FOLLOWING);
