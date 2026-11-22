@@ -9,7 +9,7 @@
 // engine version and each step's exact model id behind "Technical details" (§45.35 D5, D21).
 import "../styles/studio.css";
 import { useMemo, useState } from "react";
-import { friendlyMessage } from "../../api/errors.ts";
+import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
 import { A } from "../../components/ui.tsx";
 import { Glide } from "../../components/Glide.tsx";
@@ -200,6 +200,19 @@ function FileCard({ ws, item, pictures, stories }: { ws: string; item: LibraryIt
   );
 }
 
+/**
+ * One page of one kind. A video's extra copies (kind `video`, §45.35 D10) are asked for too; an API that does not know
+ * that kind yet answers 400, and then the tab simply has no copies (its MP4s still show), never a broken tab.
+ */
+async function kindPage(ws: string, q: { kind: AssetKind; storyId?: string; limit: number; cursor?: string }): Promise<{ items: LibraryItem[]; nextCursor: string | null }> {
+  try {
+    return await storiesApi().library(ws, q);
+  } catch (e) {
+    if (q.kind === "video" && e instanceof ApiError && e.status === 400) return { items: [], nextCursor: null };
+    throw e;
+  }
+}
+
 /** One tab's files: each of its kinds asked for separately and shown newest first, with Show more. */
 function useFiles(ws: string, kinds: AssetKind[], storyId: string | null) {
   const [extra, setExtra] = useState<{ items: LibraryItem[]; cursors: (string | null)[] } | null>(null);
@@ -207,7 +220,7 @@ function useFiles(ws: string, kinds: AssetKind[], storyId: string | null) {
   const loaded = useLoad(
     async () => {
       setExtra(null);
-      const pages = await Promise.all(kinds.map((kind) => storiesApi().library(ws, { kind, storyId: storyId ?? undefined, limit: 48 })));
+      const pages = await Promise.all(kinds.map((kind) => kindPage(ws, { kind, storyId: storyId ?? undefined, limit: 48 })));
       return { items: pages.flatMap((p) => p.items), cursors: pages.map((p) => p.nextCursor) };
     },
     key,
@@ -217,7 +230,7 @@ function useFiles(ws: string, kinds: AssetKind[], storyId: string | null) {
   const more = async () => {
     if (!data) return;
     const pages = await Promise.all(
-      kinds.map((kind, i) => (data.cursors[i] ? storiesApi().library(ws, { kind, storyId: storyId ?? undefined, limit: 48, cursor: data.cursors[i]! }) : Promise.resolve({ items: [], nextCursor: null }))),
+      kinds.map((kind, i) => (data.cursors[i] ? kindPage(ws, { kind, storyId: storyId ?? undefined, limit: 48, cursor: data.cursors[i]! }) : Promise.resolve({ items: [], nextCursor: null }))),
     );
     setExtra({ items: [...data.items, ...pages.flatMap((p) => p.items)], cursors: pages.map((p) => p.nextCursor) });
   };

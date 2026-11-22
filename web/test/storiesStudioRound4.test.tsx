@@ -7,6 +7,7 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../src/api/errors.ts";
 import { ToastProvider } from "../src/components/Toasts.tsx";
 import { forgetLoaded } from "../src/lib/hooks.ts";
 import { setStoriesApi } from "../src/stories/api/client.ts";
@@ -256,6 +257,18 @@ describe("the Library's Videos tab lists a video's WebM and MOV copies (§45.35 
     expect(kinds).toContain("Video");
     expect(control(/^Download video copy \(WebM\) of /)).toBeTruthy();
     expect(control(/^Download video copy \(MOV\) of /)).toBeTruthy();
+  });
+
+  it("an API that does not know the kind yet (400) still shows the MP4s, never a broken tab", async () => {
+    const real = api.library.bind(api);
+    vi.spyOn(api, "library").mockImplementation(async (ws, q) => {
+      if (q?.kind === "video") throw new ApiError(400, "bad_request", "kind must be a file kind or all.");
+      return real(ws, q);
+    });
+    await show(<LibraryScreen {...page({ name: "library", kind: "videos", storyId: null })} />);
+    expect(document.querySelectorAll(".st-file").length).toBeGreaterThan(0);
+    expect(Array.from(document.querySelectorAll(".st-file__kind")).every((k) => k.textContent === "Video")).toBe(true);
+    expect(text()).not.toContain("kind must be");
   });
 });
 

@@ -65,7 +65,9 @@ export function mockStoriesApi(): StoriesApi {
       const r = await cleanup(ws);
       const conf = store.workspaces.find((w) => w.workspaceId === ws)?.configuration as Partial<StoriesConfig> | undefined;
       const refs = references.clearByKeepSetting(store, ws, conf?.production?.keepReferences);
-      return { removed: { files: r.removed.files + refs.files, bytes: r.removed.bytes + refs.bytes } };
+      // The storage part's first answer is its seed's pretend total of everything clearable, reference videos
+      // included; after that only what is really cleared here counts.
+      return { removed: r.removed.files ? r.removed : refs };
     };
   // A character's reference picture is deleteReference (the characters part); a reference video is
   // deleteReferenceVideo (the references part), the rename of CONTRACTS §45.34.
