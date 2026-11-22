@@ -182,18 +182,19 @@ glass classes; if a screen needs a look-specific rule, select `.stories-app[data
 | old: `--st-panel`, `--st-panel-strong`, `--st-panel-hover`, `--st-s-fill`, `--st-s-fill-2`, `--st-s-fill-3`, `--st-shadow`, `--st-shadow-soft`, `--st-s-soft`, `--st-s-lift`, `--st-glow-sun`, `--st-glow-sun-hover` | |
 
 ### 6. Liquid
-`--st-lens-url` (none; glass/lens.ts sets it on each liquid hero), `--st-lens-band` 26px (how wide the bending rim
-is; the lens code never makes it wider than the hero's own padding, so it never reaches words), `--st-lens-depth` 12px
+`--st-lens-url` (none; glass/lens.ts sets it on each liquid hero), `--st-lens-band` 26px (how wide the bending rim is;
+the lens code never makes it wider than the hero's own padding, so it never reaches words), `--st-lens-depth` 12px
 (how far light moves at the very edge; never over 0.48 of the band, so the picture never folds), `--st-saturate-lens`
 1.5. How it works (glass/lens.ts, started by `useStoriesBackground` only for `data-glass="liquid"` while Stories is on
-screen): each `.st-lens` gets its own SVG filter in `svg.st-lens__defs` (put on `body`, taken away when Stories goes off
-screen), its displacement map drawn on a canvas at the hero's exact size and corner radius (a ResizeObserver rebuilds
-it only when that size changes). In the band the backdrop is read from further in, most at the very edge (t²); the
-middle is still (128, 128) and frosted inside the filter (`--st-blur`) under the rest of the hero's veil, so words
-keep exactly `--st-veil-hero`. One displacement pass, no `<animate>`, never a filter transition. At most
-`LENS_BUDGET` (3) per screen in document order, none over 1 MP or half the window (`LENS_MAX_AREA`, `pickLenses`).
-Chromium only (`html.refract`); WebKit (the Mac app, Safari, iPhone) ignores `url()` there and keeps the plain CSS
-light (`--st-edge-hero`, `--st-sheen-hero`, `--st-rim-light`). Reduced transparency: no lens, solid veils.
+screen, and never in `data-look="window"`, where the desktop is not part of the page): each `.st-lens` gets its own
+SVG filter in `svg.st-lens__defs` (put on `body`, taken away when Stories goes off screen), its displacement map drawn
+on a canvas at the hero's exact size and corner radius (a ResizeObserver rebuilds it only when that size changes). In
+the band the backdrop is read from further in, most at the very edge (t²); the middle is still (128, 128) and frosted
+inside the filter (`--st-blur`) under the rest of the hero's veil, so words keep exactly `--st-veil-hero`. One
+displacement pass, no `<animate>`, never a filter transition. At most `LENS_BUDGET` (3) per screen in document order,
+none over 1 MP or half the window (`LENS_MAX_AREA`, `pickLenses`). Chromium only (`html.refract`); WebKit (the Mac
+app, Safari, iPhone) ignores `url()` there and keeps the plain CSS light (`--st-edge-hero`, `--st-sheen-hero`,
+`--st-rim-light`). Reduced transparency: no lens, solid veils.
 
 ### 7. Radius
 `--st-r-surface` 20px, `--st-r-control` 14px, `--st-r-inner` 10px, `--st-r-tiny` 6px, `--st-r-round` 999px;
@@ -281,8 +282,8 @@ glass-figures.css (the figures' own classes; screens place and size them, never 
 - `PhoneTabHighlight({ className? })` and `TAB_ORB` ("st-tab-orb"): the round active highlight; put it in the active tab, or give the bar's `<Glide>` the class so it slides. The bar itself is `.st-glass.st-glass--bar`.
 - `cx(...names)`: Stories' own class joiner.
 - `glass/lens.ts` (the foundation's; screens only add `.st-lens` to a hero): `watchLenses(root, opts?)` → stop,
-  `lensPixel`, `lensPixels`, `lensMapUrl`, `lensFilterMarkup`, `middleVeil`, `pickLenses`, `LENS_BUDGET`,
-  `LENS_MAX_AREA`, `LENS_BAND`, `LENS_DEPTH`, `LENS_FOLD`.
+  `lensPixel`, `lensPixels`, `lensMapUrl`, `lensFilterParts` (built as elements), `lensFilterMarkup` (as text),
+  `middleVeil`, `pickLenses`, `LENS_BUDGET`, `LENS_MAX_AREA`, `LENS_BAND`, `LENS_DEPTH`, `LENS_FOLD`.
 
 ## The background (look.ts, foundation)
 

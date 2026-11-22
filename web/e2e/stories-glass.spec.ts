@@ -233,6 +233,15 @@ test("the liquid rim bends at most three heroes, each with a filter of its own s
   await expect(page.locator("svg.st-lens__defs")).toHaveCount(0);
 });
 
+test("no rim bends over the window's own glass (See-through in the app: the desktop is not part of the page)", async ({ page }) => {
+  await open(page, { mode: "see-through" }, { desktop: "white" });
+  await expect(page.locator(".stories-app")).toHaveAttribute("data-look", "window");
+  await specimen(page);
+  await page.waitForTimeout(300);
+  expect(await page.locator(".st-lens.is-liquid").count()).toBe(0);
+  await expect(page.locator("svg.st-lens__defs")).toHaveCount(0);
+});
+
 test("reduced transparency makes every glass solid, with no backdrop filter", async ({ page, context }) => {
   const cdp = await context.newCDPSession(page);
   await cdp.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-transparency", value: "reduce" }] });

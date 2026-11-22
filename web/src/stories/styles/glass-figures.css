@@ -418,6 +418,24 @@ a.st-pill.is-on:hover {
   background: rgb(var(--st-cream-rgb) / 0.16);
   box-shadow: var(--st-sheen-control), var(--st-glow-behind);
 }
+/* On the bar's sliding <Glide> (className "… st-tab-orb"): Glide sizes its box to the tab, so the box itself stays
+   clear and the orb is drawn round in its middle, sliding with it. */
+.glide.st-tab-orb {
+  border-radius: var(--st-r-control);
+  background: none;
+  box-shadow: none;
+}
+.glide.st-tab-orb::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: var(--st-tap-phone);
+  height: var(--st-tap-phone);
+  margin: auto;
+  border-radius: var(--st-r-round);
+  background: rgb(var(--st-cream-rgb) / 0.16);
+  box-shadow: var(--st-sheen-control), var(--st-glow-behind);
+}
 
 /* ---------- A press you can feel: controls give a little under the finger (a surface never moves) ---------- */
 :is(.st-pill, .st-round-btn, .st-stepper__btn) {

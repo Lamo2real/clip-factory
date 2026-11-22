@@ -525,10 +525,12 @@ export function useStoriesBackground(root: RefObject<HTMLElement | null>, active
   }, [root, value, active, lessTransparency]);
   useLayoutEffect(() => () => holdWindowGlass(false), []);
   // The liquid rim (glass/lens.ts): only while Stories is on screen, only where the glass is "liquid" (Chromium on a
-  // capable device; the layout effect above has just put data-glass on the root).
+  // capable device; the layout effect above has just put data-glass on the root), and never over the window's own
+  // glass (See-through in the app: the desktop is not part of the page, so there is nothing to bend, and the hero's
+  // veil must not depend on a filter drawing over a see-through page).
   useEffect(() => {
     const el = root.current;
-    if (!el || !active || el.dataset.glass !== "liquid") return;
+    if (!el || !active || el.dataset.glass !== "liquid" || el.dataset.look === "window") return;
     return watchLenses(el);
   }, [root, value, active, lessTransparency]);
   return value;

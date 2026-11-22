@@ -169,9 +169,12 @@ describe("the figures", () => {
     expect($(".st-dial__knob")?.getAttribute("cx")).toBe(String(knobAt(0.4).x));
   });
 
-  it("PhoneTabHighlight: the round highlight, decorative", () => {
+  it("PhoneTabHighlight: the round highlight, decorative, and still round when it rides on the bar's Glide", () => {
     render(<PhoneTabHighlight />);
     expect($(".st-tab-orb")?.getAttribute("aria-hidden")).toBe("true");
+    // Glide sizes its own box to the tab: the orb is then drawn round in its middle
+    const figures = readFileSync(join(import.meta.dirname, "..", "src", "stories", "styles", "glass-figures.css"), "utf8");
+    expect(figures).toMatch(/\.glide\.st-tab-orb::before \{[^}]*width: var\(--st-tap-phone\);[^}]*border-radius: var\(--st-r-round\);/);
   });
 });
 
