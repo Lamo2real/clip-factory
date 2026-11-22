@@ -623,6 +623,31 @@ def test_clip_flow_exhausted_retries_fail_the_post(store: db.Store, table: FakeT
     assert ctx.waits == []
 
 
+def test_one_place_failing_never_stops_the_others(store: db.Store, table: FakeTable) -> None:
+    # The owner's auto-posting ask (CONTRACTS §46.1, answer 6): "If posting fails on one platform, retry ..., record the
+    # error, and still post to the other platforms." YouTube fails all 3 tries; Instagram and Facebook still post.
+    for platform in ("youtube", "instagram", "facebook"):
+        _connect(store, platform)
+    clip = _kept_clip(store)
+    youtube = FakeAdapter("youtube", fail=[RetryablePublishError("down")] * 3)
+    instagram = FakeAdapter("instagram")
+    facebook = FakeAdapter("facebook")
+    ctx = FakeDurableContext()
+    adapters = {"youtube": youtube, "instagram": instagram, "facebook": facebook}
+    out = run_clip_flow(ctx, _event(clip), _clip_deps(store, adapters))
+    assert ctx.attempts["publish-youtube"] == 3
+    by_place = {p["platform"]: p for p in posts.posts_for_clip(store, USER, clip["clipId"], consistent=True)}
+    assert by_place["youtube"]["status"] == "failed"
+    assert by_place["youtube"]["error"] == "Posting to YouTube did not work. Press Try again."
+    for platform, adapter in (("instagram", instagram), ("facebook", facebook)):
+        assert by_place[platform]["status"] == "posted"
+        assert by_place[platform]["url"]  # the live link, saved next to its clip
+        assert adapter.published == [by_place[platform]["postId"]]
+    # One place posted, so the clip is posted (YouTube keeps its own Try again) and the flow goes on to its numbers.
+    assert table.raw(clip["pk"], clip["sk"])["status"] == "posted"  # type: ignore[index]
+    assert out["outcome"] == "done"
+
+
 def test_clip_flow_permanent_error_is_not_retried(store: db.Store) -> None:
     _connect(store, "youtube")
     clip = _kept_clip(store)

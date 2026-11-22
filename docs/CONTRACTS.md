@@ -14175,6 +14175,8 @@ run and the first hours of practice.
   after a not-due tick), run-now practice and private, the 60 s limit, private with nothing.
 * `test_autopost_private.py`: the three publishers' test behaviour, that only `postOptions.test` turns it on, that
   Upload's `options` can't set it, no `gsi2`.
+* `test_flows.py` `test_one_place_failing_never_stops_the_others`: YouTube fails all 3 tries, Instagram and Facebook
+  still post with their links, YouTube keeps its error, and the clip is `posted`.
 * Upload's existing tests (`test_upload_to.py`, `test_campaign_posting.py`, `test_clips.py`, `test_release.py`) pass
   unchanged after the refactor.
 * Web: `web/test/autopost.test.ts` (the result line for every pair 1..5 × 1..24, the warnings, time words, the
