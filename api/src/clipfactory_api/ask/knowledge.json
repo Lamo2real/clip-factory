@@ -1,5 +1,5 @@
 {
- "version": "e7badbed591f",
+ "version": "68960ebb4b29",
  "parts": [
   {
    "id": "app-map",
@@ -297,7 +297,7 @@
    "id": "contracts-46",
    "title": "CONTRACTS: 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)",
    "line": "Decision record: ADR-81. Builders: §46.16. Everything here is additive: no table, index, secret, bucket, Cognito or",
-   "chars": 38791
+   "chars": 38990
   },
   {
    "id": "adr-01",
