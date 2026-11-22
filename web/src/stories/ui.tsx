@@ -51,6 +51,34 @@ export function StChip({ children, tone }: { children: ReactNode; tone?: StTone 
   return <span className={`st-chip${tone ? ` st-chip--${tone}` : ""}`}>{children}</span>;
 }
 
+/**
+ * "Technical details" (§45.36 E14): developer-app words (redirect URIs, Login configuration, App Review, Sandbox,
+ * inference profiles, ARNs) and raw ids (account ids, model ids, app ids) folded away under a plain first line, one
+ * tap away. Closed to start.
+ */
+export function StTech({ children, className = "", label = "Technical details" }: { children: ReactNode; className?: string; label?: string }) {
+  return (
+    <details className={`st-tech-fold${className ? ` ${className}` : ""}`}>
+      <summary className="st-tech-fold__sum">
+        <StIcon name="chevron" size={16} className="st-tech-fold__mark" />
+        {label}
+      </summary>
+      <div className="st-tech-fold__body">{children}</div>
+    </details>
+  );
+}
+
+/** Developer-app words a 6-8 year old would not follow: a line that has one goes behind "Technical details". */
+export const TECH_WORDS = /\b(sandbox|app review|development mode|oauth|login configuration|redirect uri|inference profile|arn|client id|config(uration)? id)\b/i;
+
+/** A list of sentences split into the plain ones (shown) and the technical ones (folded away, §45.36 E14). */
+export function plainFirst(lines: readonly string[]): { plain: string[]; tech: string[] } {
+  const plain: string[] = [];
+  const tech: string[] = [];
+  for (const l of lines) (TECH_WORDS.test(l) ? tech : plain).push(l);
+  return { plain, tech };
+}
+
 /** A page's heading row: the title, one plain line under it, and its main actions. */
 export function StPageHead({ title, lede, actions }: { title: ReactNode; lede?: ReactNode; actions?: ReactNode }) {
   return (
@@ -484,8 +512,37 @@ export function forgetDashboards(): void {
   dashFlight.clear();
 }
 
-/** On every Lamo Stories page: the first thing that needs the owner, with its sentence and the way there. */
-export function NeedsYouBar({ ws }: { ws: string }) {
+/** The Social accounts page as Needs you sentences name it ("Lamo Stories › Social accounts", or just "Social accounts"). */
+const SOCIAL_PAGE = String.raw`(?:Lamo Stories\s*›\s*)?Social accounts`;
+
+/**
+ * A Needs you sentence shown on the Social accounts page it sends the owner to, without the trip (§45.36 E17): "Open
+ * Lamo Stories › Social accounts, then tap Try again." reads "Fix it below, then tap Try again."; "Pick another in Lamo
+ * Stories › Social accounts" reads "Pick another below". Anything else stays as the server said it.
+ */
+export function socialHere(sentence: string): string {
+  return sentence
+    .replace(new RegExp(String.raw`\bOpen ${SOCIAL_PAGE},? (?:and|then) tap (Connect|Reconnect)\b`, "g"), "Tap $1 below")
+    .replace(new RegExp(String.raw`\bOpen ${SOCIAL_PAGE}, connect it, then\b`, "g"), "Connect it below, then")
+    .replace(new RegExp(String.raw`\bOpen ${SOCIAL_PAGE}, then\b`, "g"), "Fix it below, then")
+    .replace(new RegExp(String.raw`\s+(?:in|on) ${SOCIAL_PAGE}(?![A-Za-z])`, "g"), " below");
+}
+
+/** The address's page, without its query or hash. */
+const pathOf = (href: string) => href.replace(/[?#].*$/, "").replace(/\/+$/, "") || "/";
+
+/** On the page a Needs you item points to: where on it to look (the platform's card on Social accounts), else null. */
+function targetOn(item: StoriesDashboard["needsYou"][number]): HTMLElement | null {
+  if (!item.platform || typeof document === "undefined") return null;
+  return document.querySelector<HTMLElement>(`.st-conn[data-platform="${item.platform}"]`);
+}
+
+/**
+ * On every Lamo Stories page: the first thing that needs the owner, with its sentence and the way there. `here` is the
+ * page on screen: on the page the item points to, the sentence does not send him there again, and Show me brings the
+ * card to fix into view instead of opening the same page (§45.36 E17).
+ */
+export function NeedsYouBar({ ws, here }: { ws: string; here?: string }) {
   const { data } = useDashboard(ws);
   const [gone, setGone] = useState<string | null>(null);
   const first = data?.needsYou[0];
@@ -493,6 +550,16 @@ export function NeedsYouBar({ ws }: { ws: string }) {
   const key = `${first.href}|${first.sentence}`;
   if (gone === key) return null;
   const more = (data?.needsYou.length ?? 1) - 1;
+  const onIt = here !== undefined && pathOf(first.href) === pathOf(here);
+  const onSocial = onIt && pathOf(first.href) === "/stories/connections";
+  const sentence = onSocial ? socialHere(first.sentence) : first.sentence;
+  const show = () => {
+    const card = targetOn(first);
+    if (!card) return;
+    card.scrollIntoView({ block: "start", behavior: storiesReduceMotion() ? "auto" : "smooth" });
+    if (!card.hasAttribute("tabindex")) card.setAttribute("tabindex", "-1");
+    card.focus({ preventScroll: true });
+  };
   return (
     <aside className="st-needs" aria-label="Needs you">
       <span className="st-needs__mark" aria-hidden="true">
@@ -500,14 +567,22 @@ export function NeedsYouBar({ ws }: { ws: string }) {
       </span>
       <p className="st-needs__text">
         <strong>Needs you: </strong>
-        {first.sentence}
+        {sentence}
         {more > 0 ? <span className="st-needs__more"> And {more} more on the dashboard.</span> : null}
       </p>
       <div className="st-needs__actions">
-        <StLinkButton href={first.href} main className="st-needs__go">
-          Fix it
-          <StIcon name="chevron" size={18} />
-        </StLinkButton>
+        {!onIt ? (
+          <StLinkButton href={first.href} main className="st-needs__go">
+            Fix it
+            <StIcon name="chevron" size={18} />
+          </StLinkButton>
+        ) : onSocial && first.platform ? (
+          // Already on Social accounts: the card to fix comes into view, instead of the same page opening again.
+          <StButton main className="st-needs__go" onClick={show}>
+            Show me
+            <StIcon name="chevron" size={18} />
+          </StButton>
+        ) : null}
         <button type="button" className="st-needs__hide" aria-label="Hide this for now" onClick={() => setGone(key)}>
           <StIcon name="close" size={20} />
         </button>

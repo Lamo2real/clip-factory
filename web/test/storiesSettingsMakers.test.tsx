@@ -337,10 +337,10 @@ describe("where an added AI model runs (§45.37 G4)", () => {
     expect(form.textContent).toContain("It uses your Anthropic API key, saved under Provider keys below. The key is never shown again.");
     fill(form, "Name", "Opus direct");
     fill(form, "Model name", "claude-opus-5-5");
-    await click(byText("button", "High", form));
+    // Anthropic's usual levels start ticked (§45.36 E17): all five, its usual High the default.
     await submit(form);
     const body = lastBody("putAiModel") as Record<string, unknown>;
-    expect(body).toMatchObject({ label: "Opus direct", provider: "Anthropic", modelId: "claude-opus-5-5", host: "anthropic", efforts: ["high"], defaultEffort: "high", effortField: "output_config", tools: true, cache: true });
+    expect(body).toMatchObject({ label: "Opus direct", provider: "Anthropic", modelId: "claude-opus-5-5", host: "anthropic", efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "high", effortField: "output_config", tools: true, cache: true });
     expect(body).not.toHaveProperty("region");
     expect(body).not.toHaveProperty("baseUrl");
     const row = byText(".st-stg-own", /Opus direct/);
@@ -382,7 +382,7 @@ describe("where an added AI model runs (§45.37 G4)", () => {
     const form = $<HTMLElement>('form[aria-label="Add a model"]')!;
     fill(form, "Name", "Nova Lite");
     await click(byText("[role=radio]", "Amazon", form));
-    fill(form, "Bedrock model ID or inference profile", "eu.amazon.nova-lite-v1:0");
+    fill(form, "Model ID", "eu.amazon.nova-lite-v1:0");
     await submit(form);
     const body = lastBody("putAiModel") as Record<string, unknown>;
     expect(body).toMatchObject({ label: "Nova Lite", provider: "Amazon", modelId: "eu.amazon.nova-lite-v1:0", region: "eu-north-1" });

@@ -10,7 +10,7 @@ import { ActGlyph, Button } from "../../components/ui.tsx";
 import { campaignPath, payLine, reloadCr } from "../../lib/contentRewards.ts";
 import { campaignLink } from "../../lib/links.ts";
 import { useAction } from "../../lib/motion.ts";
-import { navigate } from "../../lib/router.ts";
+import { clipsGoLater } from "../../app/shell.ts";
 import { Rich } from "../settings/setup/bits.tsx";
 import { BrandText } from "./bits.tsx";
 
@@ -37,7 +37,7 @@ export function GroupPicker({ name, choices, onPicked }: { name: string; choices
     setBusy(null);
     if (out.kind === "added") {
       onPicked?.();
-      navigate(campaignPath(out.campaignId));
+      clipsGoLater(campaignPath(out.campaignId));
       return true;
     }
     toast.error(out.kind === "failed" ? out.message : "Tap one campaign.");
@@ -115,7 +115,7 @@ export function CampaignPasteBox({ onGroup, onTyped }: { onGroup: (g: { name: st
     const out = await addCampaign(link.url + (link.group ? "?group=1" : ""));
     setBusy(false);
     if (out.kind === "added") {
-      navigate(campaignPath(out.campaignId));
+      clipsGoLater(campaignPath(out.campaignId));
       return true;
     }
     if (out.kind === "group") {

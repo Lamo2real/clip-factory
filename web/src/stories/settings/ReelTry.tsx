@@ -13,7 +13,7 @@ import { usePoll } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
 import { useAppActive } from "../pane.tsx";
 import type { ProductionJob, ProviderStatus } from "../api/types.ts";
-import { Btn, cheer, Chip, Note, Progress, SIcon, whenText } from "./bits.tsx";
+import { Btn, cheer, Chip, Note, Progress, SIcon, useOnThisPage, whenText } from "./bits.tsx";
 
 /** How often the row asks how the try is going (the shot takes a minute or two). */
 export const TRY_POLL_MS = 2500;
@@ -69,6 +69,7 @@ export function ReelTry({ ws, p, reload, maker = "luma-ray" }: { ws: string; p: 
   const [started, setStarted] = useState<ProductionJob | null>(null);
   const [asking, setAsking] = useState(false);
   const anchor = useRef<HTMLElement | null>(null);
+  const here = useOnThisPage();
   const job = shownTry(started, p?.check);
   const running = tryRunning(job);
   // Followed while it runs and Lamo Stories is on screen (behind Clip Factory it rests, and catches up when back).
@@ -82,10 +83,12 @@ export function ReelTry({ ws, p, reload, maker = "luma-ray" }: { ws: string; p: 
     if (done.status === "ready") {
       cheer(anchor.current);
       toast.success(words.made);
-    } else toast.error(tryProblem(done, p, words.stopped) ?? words.stopped);
-  }, [done, p, toast, words]);
+    } else toast.error(here(tryProblem(done, p, words.stopped) ?? words.stopped));
+  }, [done, p, toast, words, here]);
 
-  const problem = tryProblem(job, p, words.stopped);
+  // Said on this page, so it never sends the owner here again (§45.36 E17).
+  const found = tryProblem(job, p, words.stopped);
+  const problem = found ? here(found) : null;
   return (
     <div className="st-stg-try" data-provider={maker} aria-label={`Try ${words.name}`} role="group">
       <div className="st-stg-try__head">

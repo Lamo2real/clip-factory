@@ -60,3 +60,42 @@ test("round 4: step 4 says the built-in animator makes tall, square or wide vide
   expect(o.page).toBeLessThanOrEqual(o.viewport);
   expect(o.items).toEqual([]);
 });
+
+test("round 5: after Finish with steps skipped, the dashboard keeps what is left, and Settings opens the setup again (§45.36 E15)", async ({ page }) => {
+  await fresh(page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/stories/setup");
+  await ready(page);
+  // Skip three of the connect steps, then go to the end and Finish.
+  for (const name of ["Connect TikTok", "Connect Facebook", "Connect X"]) {
+    await page.locator(".st-steps__item").filter({ hasText: name }).click();
+    await expect(page.locator("#st-setup-step")).toHaveText(name);
+    await page.locator(".st-setup__foot").getByRole("button", { name: "Skip for now" }).click();
+    await expect(page.locator(".st-steps__item").filter({ hasText: name })).toContainText("Later");
+  }
+  await page.locator(".st-steps__item").filter({ hasText: "Done" }).click();
+  await expect(page.locator("#st-setup-step")).toHaveText("Done");
+  await page.locator(".st-setup__foot").getByRole("button", { name: "Finish" }).click();
+  await expect(page).toHaveURL(/\/stories$/, { timeout: 8000 });
+  await ready(page);
+  const left = page.locator(".st-setupcard--left");
+  await expect(left).toBeVisible();
+  await expect(left.getByRole("heading", { level: 2 })).toHaveText(/^Finish setting up: \d+ left$/);
+  await expect(left.locator(".st-setupcard__list li")).toContainText(["Connect TikTok"]);
+  await left.getByRole("link", { name: "Open setup" }).click();
+  await expect(page).toHaveURL(/\/stories\/setup$/);
+  await ready(page);
+  // Settings always has the way back.
+  await page.goto("/stories/settings/ai");
+  await ready(page);
+  await expect(page.getByRole("link", { name: "Open setup again" })).toBeVisible();
+  await expect(page.locator(".st-stg-head__setup-left")).toHaveText(/^\d+ steps? left$/);
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/stories");
+    await ready(page);
+    const o = await findOverflow(page);
+    expect(o.page, `@${width}: the page scrolls sideways`).toBeLessThanOrEqual(o.viewport);
+    expect(o.items, `@${width}`).toEqual([]);
+  }
+});

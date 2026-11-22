@@ -214,7 +214,7 @@ test.describe("AI: add a model (§45.34)", () => {
     const form = page.getByRole("form", { name: "Add a model" });
     await form.getByLabel("Name").fill("Nova Premier");
     await form.getByRole("radiogroup", { name: "Who makes it" }).getByRole("radio", { name: "Amazon" }).click();
-    await form.getByLabel("Bedrock model ID or inference profile").fill("eu.amazon.nova-premier-v1:0");
+    await form.getByLabel("Model ID", { exact: true }).fill("eu.amazon.nova-premier-v1:0");
     await form.getByLabel("AWS Region").selectOption("eu-west-1");
     // How it is called (§45.35 D1): an Amazon model starts with no effort levels and no tools, the prompt cache on.
     await expect(form.getByRole("switch", { name: "It has effort levels" })).toHaveAttribute("aria-checked", "false");
@@ -396,7 +396,9 @@ test.describe("Video and storage", () => {
     await expect(reel).toHaveAttribute("aria-checked", "true");
     // The API's own sentence (§45.34): it says what to do, and nothing switches to the built-in animation by itself.
     await expect(card(page, "Video maker").getByRole("status")).toContainText("Luma AI Ray2 is not ready yet: ");
-    await expect(card(page, "Video maker").getByRole("status")).toContainText("Pick Built-in animation in Settings › Video, or finish its setup.");
+    // Said on Settings › Video itself, it never sends the owner here again (§45.36 E17).
+    await expect(card(page, "Video maker").getByRole("status")).toContainText("Pick Built-in animation above, or finish its setup.");
+    await expect(card(page, "Video maker")).not.toContainText("in Settings › Video");
     // Said once, though the API's label (Luma AI Ray2 (AI video)) is not the name its sentence uses.
     await expect(card(page, "Video maker").getByRole("status")).toHaveText(/^Luma AI Ray2 is not ready yet: /);
     await expect(card(page, "Video maker").getByRole("status")).not.toContainText("(AI video) is not ready yet");
@@ -570,7 +572,7 @@ test.describe("round 4 (§45.35)", () => {
     const form = page.getByRole("form", { name: "Add a model" });
     await form.getByLabel("Name").fill("Mistral Large");
     await form.getByRole("radiogroup", { name: "Who makes it" }).getByRole("radio", { name: "Mistral" }).click();
-    await form.getByLabel("Bedrock model ID or inference profile").fill("mistral.mistral-large-2407-v1:0");
+    await form.getByLabel("Model ID", { exact: true }).fill("mistral.mistral-large-2407-v1:0");
     await form.getByLabel("AWS Region").selectOption("eu-west-3");
     await form.getByRole("button", { name: "Add the model" }).click();
     const row = add.locator(".st-stg-own").filter({ hasText: "Mistral Large" });
@@ -661,5 +663,78 @@ test.describe("the makers' models (§45.37)", () => {
       const box = await b.boundingBox();
       if (box) expect(box.height).toBeGreaterThanOrEqual(43.5);
     }
+  });
+});
+
+test.describe("round 5: Add a model and the status words (§45.36 E4, E14, E17)", () => {
+  test("Anthropic's levels start ticked; a pasted ARN fills the Region; a Region that does not fit is refused naming both", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openSection(page, "ai");
+    const add = card(page, "Add a model");
+    await add.getByRole("button", { name: "Add a model" }).click();
+    const form = page.getByRole("form", { name: "Add a model" });
+    // E17: an Anthropic model starts with its five levels ticked and its usual own level, so the first Add works.
+    for (const level of ["Low", "Medium", "High", "Extra high", "Maximum"]) await expect(form.getByRole("button", { name: level, exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(form.getByRole("radiogroup", { name: "Its own level" }).getByRole("radio", { name: "High", exact: true })).toHaveAttribute("aria-checked", "true");
+    // E14: the first line is plain; inference profiles and ARNs are one tap away.
+    await expect(form.getByText("inference profile", { exact: false })).toBeHidden();
+    await form.getByText("Technical details").click();
+    await expect(form.getByText("inference profile", { exact: false })).toBeVisible();
+    // E4: a pasted ARN fills the Region in.
+    await form.getByLabel("Name").fill("My Claude");
+    await form.getByLabel("Model ID", { exact: true }).fill("arn:aws:bedrock:eu-west-3:123456789012:inference-profile/eu.anthropic.claude-x-v1:0");
+    await expect(form.getByLabel("AWS Region")).toHaveValue("eu-west-3");
+    // An eu. profile with a US Region: refused before sending, naming both.
+    await form.getByLabel("Model ID", { exact: true }).fill("eu.anthropic.claude-x-v1:0");
+    await form.getByLabel("AWS Region").selectOption("us-east-1");
+    await form.getByRole("button", { name: "Add the model" }).click();
+    await expect(form.getByRole("alert")).toHaveText(
+      "This inference profile id starts with eu., so it runs in a Europe Region (like eu-north-1), not in us-east-1. Type a Europe Region as the Region, or paste the us. profile id instead.",
+    );
+    await form.getByLabel("AWS Region").selectOption("eu-north-1");
+    await form.getByRole("button", { name: "Add the model" }).click();
+    await expect(page.locator(".toast").filter({ hasText: "My Claude is added!" })).toBeVisible();
+    // E17: its marks sit together at the row's right edge with the usual gap, in its row and in the Default model list.
+    const row = add.locator(".st-stg-own").filter({ hasText: "My Claude" });
+    const marks = await row.locator(".st-stg-own__head").evaluate((head) => {
+      const chips = Array.from(head.querySelectorAll(".st-stg-chip")).map((c) => c.getBoundingClientRect());
+      const h = head.getBoundingClientRect();
+      return { gap: chips[1]!.left - chips[0]!.right, right: h.right - chips[chips.length - 1]!.right };
+    });
+    expect(marks.gap).toBeGreaterThanOrEqual(5);
+    expect(marks.right).toBeLessThanOrEqual(1);
+    const option = page.getByRole("radiogroup", { name: "Default model" }).getByRole("radio", { name: /My Claude/ });
+    const inList = await option.evaluate((opt) => {
+      const chips = Array.from(opt.querySelectorAll(".st-stg-chip")).map((c) => c.getBoundingClientRect());
+      const top = opt.querySelector(".st-stg-pick__top")!.getBoundingClientRect();
+      return { gap: chips[1]!.left - chips[0]!.right, right: top.right - chips[chips.length - 1]!.right };
+    });
+    expect(inList.gap).toBeGreaterThanOrEqual(5);
+    expect(inList.right).toBeLessThanOrEqual(1);
+    // E14: its exact ID is folded under Technical details.
+    await expect(row.locator(".st-tech-fold code")).toBeHidden();
+    await row.getByText("Technical details").click();
+    await expect(row.locator(".st-tech-fold code")).toHaveText("eu.anthropic.claude-x-v1:0");
+  });
+
+  test("Settings › Video never sends the owner to Settings › Video; Settings has Open setup again", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openSection(page, "video");
+    const maker = page.getByRole("radiogroup", { name: "Video maker" });
+    // Amazon ended Nova Reel (§45.37): Luma AI Ray2 is the AI video maker that can still be picked.
+    await maker.getByRole("radio", { name: /Luma AI Ray2/ }).click();
+    await expect(card(page, "Video maker").getByRole("status")).toContainText("Pick Built-in animation above");
+    expect(await page.locator(".st-stg-section").evaluate((el) => (el as HTMLElement).innerText)).not.toContain("in Settings › Video");
+    // E14: the maker's plain name first; its exact Bedrock model ID one tap away.
+    const reelCard = card(page, "Video maker");
+    await expect(reelCard.locator(".st-stg-active strong")).toHaveText("Luma AI Ray2");
+    await expect(reelCard.getByText("luma.ray-v2:0", { exact: false })).toBeHidden();
+    await reelCard.getByText("Technical details").click();
+    await expect(reelCard.getByText("luma.ray-v2:0", { exact: false })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open setup again" })).toHaveAttribute("href", "/stories/setup");
+    await openSection(page, "ai");
+    expect(await card(page, "Prices").evaluate((el) => (el as HTMLElement).innerText)).not.toContain("Settings › AI");
   });
 });

@@ -20,7 +20,7 @@
 // also once the keys are saved. After a connect the page says "Connected as {name} ({handle})" and the card asks "Is
 // this your Lamo Stories {place}?" (Yes, or Pick another). An account's reason is a code (SocialReason), said in words.
 import "../styles/social.css";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { KeyName } from "../../api/types.ts";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
@@ -48,6 +48,8 @@ import {
   StPageHead,
   StPick,
   StRing,
+  StTech,
+  plainFirst,
   useOnboarding,
   type StTone,
 } from "../ui.tsx";
@@ -91,16 +93,25 @@ export function sameAsClipsLine(a: Pick<SocialAccount, "reason"> & { warning?: s
   return a.warning?.trim() || (a.reason === "clips_now" ? CLIPS_LATER_LINE : SAME_AS_CLIPS_LINE);
 }
 
-/** After a Disconnect with Clip Factory's app (shared on purpose): removing that app would touch Lamo Clips too. */
+/** After a Disconnect with Clip Factory's app (shared on purpose): removing that app would touch Clip Factory too. */
 export const AFTER_DISCONNECT =
-  "To remove Clip Factory from this account completely, remove the app in the account's own settings. Only do that if Lamo Clips does not use the same account.";
+  "To remove Clip Factory from this account completely, remove the app in the account's own settings. Only do that if Clip Factory does not use the same account.";
 /** After a Disconnect with Lamo Stories' own developer app (always for Facebook and Instagram, §45.34). */
 export const AFTER_DISCONNECT_OWN =
-  "To remove Lamo Stories completely, remove your Lamo Stories app in the account's own settings. Lamo Clips is not affected.";
+  "To remove Lamo Stories completely, remove your Lamo Stories app in the account's own settings. Clip Factory is not affected.";
 
 /** The after-disconnect line for the app the account used (§45.34). */
 export function afterDisconnect(choice: SocialAccount["app"]["choice"]): string {
   return choice === "own" ? AFTER_DISCONNECT_OWN : AFTER_DISCONNECT;
+}
+
+/**
+ * "this Facebook Page (Lamo Stories)": the place named by its platform, with its own name after it, so a sentence
+ * reads right even when the account itself is called "Lamo Stories" (§45.36 E13).
+ */
+export function thisPlace(a: Pick<SocialAccount, "platform" | "accountName" | "handle">): string {
+  const name = a.accountName ?? a.handle;
+  return `this ${PLATFORM_NAME[a.platform]} ${PLACE[a.platform]}${name ? ` (${name})` : ""}`;
 }
 
 /** "Connected as Lamo Stories (@lamo.stories)": the account's name, and its handle when it says more. */
@@ -128,7 +139,7 @@ export function resultSentence(code: string, p: Platform): { text: string; good:
     case "same_as_clips":
       return { text: SAME_AS_CLIPS_LINE, good: false };
     case "clips_meta_check":
-      return { text: `${name} is connected. But Lamo Clips may have lost ${name}: connect it again in Lamo Clips, keeping its Page ticked.`, good: false };
+      return { text: `${name} is connected. But Clip Factory may have lost ${name}: connect it again in Clip Factory, keeping its Page ticked.`, good: false };
     case "denied":
       return { text: `You pressed cancel. Tap Connect ${name} to try again.`, good: false };
     case "expired":
@@ -136,7 +147,7 @@ export function resultSentence(code: string, p: Platform): { text: string; good:
     case "keys_wrong":
       return { text: `${name} did not accept the app keys. Check them on this page, then connect again.`, good: false };
     case "redirect_wrong":
-      return { text: `The return address does not match. Copy the redirect URI on this page into your ${name} app, then connect again.`, good: false };
+      return { text: `The return address does not match. Copy the address on this page into your ${name} app's settings, then connect again.`, good: false };
     case "missing_permissions":
       return { text: "A permission box was not ticked. Connect again and tick every box.", good: false };
     case "no_channel":
@@ -173,7 +184,7 @@ export function reasonSentence(code: string | null, p: Platform): string {
     case "expired":
       return `That took too long. Tap Connect ${name} again.`;
     case "clips_unknown":
-      return `Lamo Stories cannot tell this ${name} account apart from Lamo Clips' own. Check which account is signed in.`;
+      return `Lamo Stories cannot tell this ${name} account apart from Clip Factory's own. Check which account is signed in.`;
     case "clips_now":
       return CLIPS_LATER_LINE;
     default:
@@ -207,34 +218,48 @@ const PASTE_HERE = "Paste its keys in the boxes below, never in Clip Factory.";
 const OWN_APP_NOTES: Record<Platform, string[]> = {
   youtube: [
     "Make a new project in Google Cloud and give its app its own name, for example Lamo Stories.",
-    "Add the redirect URI below (not Clip Factory's).",
+    "Copy the address below into your app's settings (not Clip Factory's).",
     "Its uploads per day are its own.",
     PASTE_HERE,
   ],
   tiktok: [
     "Make a new app on TikTok for Developers, named for example Lamo Stories.",
-    "Add the redirect URI below (not Clip Factory's).",
+    "Copy the address below into your app's settings (not Clip Factory's).",
     "TikTok checks every new app before posts can be public. That can take days to weeks.",
     PASTE_HERE,
   ],
   instagram: [
     "Make one new Meta app for Lamo Stories. It serves Instagram and Facebook: its keys are entered once.",
-    "Add both redirect URIs below in Facebook Login › Valid OAuth Redirect URIs, and make a Login configuration (its ID goes in the last box).",
-    "While the app is in Development mode only you can connect. Going Live needs Meta's App Review.",
+    "Copy both addresses below into your Meta app's settings, and make a sign-in setup there. Its number goes in the last box.",
+    "At first only you can connect. Meta checks the app before anyone else can.",
     PASTE_HERE,
   ],
   facebook: [
     "Make one new Meta app for Lamo Stories. It serves Instagram and Facebook: its keys are entered once.",
-    "Add both redirect URIs below in Facebook Login › Valid OAuth Redirect URIs, and make a Login configuration (its ID goes in the last box).",
-    "While the app is in Development mode only you can connect. Going Live needs Meta's App Review.",
+    "Copy both addresses below into your Meta app's settings, and make a sign-in setup there. Its number goes in the last box.",
+    "At first only you can connect. Meta checks the app before anyone else can.",
     PASTE_HERE,
   ],
   x: [
     "Make a new app in the X Developer Portal, named for example Lamo Stories.",
-    "Add the redirect URI below (not Clip Factory's).",
+    "Copy the address below into your app's settings (not Clip Factory's).",
     "It needs its own X credits.",
     PASTE_HERE,
   ],
+};
+
+/** The same steps in the developer sites' own words, one tap away (§45.36 E14). */
+const META_TECH = [
+  "The addresses are the app's redirect URIs: add both in Facebook Login › Settings › Valid OAuth Redirect URIs.",
+  "The sign-in setup is a Login configuration (Facebook Login for Business › Configurations). Its ID goes in the Configuration ID box.",
+  "While the app is in Development mode only you can connect. Going Live needs Meta's App Review.",
+];
+export const OWN_APP_TECH: Record<Platform, string[]> = {
+  youtube: ["The address is the app's redirect URI: add it under Authorized redirect URIs of its OAuth client (APIs & Services › Credentials)."],
+  tiktok: ["The address is the app's redirect URI: add it in Login Kit › Redirect URI.", "Until TikTok approves the app it runs in Sandbox: only its test accounts can connect."],
+  instagram: META_TECH,
+  facebook: META_TECH,
+  x: ["The address is the app's redirect URI: add it as the Callback URI / Redirect URL in the app's User authentication settings."],
 };
 
 /** Said before the link to Clip Factory's guide, whose keys step changes Clip Factory's own app (§45.1, §45.30). */
@@ -255,10 +280,13 @@ function Identity({ a }: { a: SocialAccount }) {
       <div className="st-who__text">
         <span className="st-who__name">{a.accountName ?? "No name"}</span>
         {a.handle && a.handle !== a.accountName ? <span className="st-who__handle">{a.handle}</span> : null}
+        {/* The platform's own id for it, one tap away (§45.36 E14). */}
         {a.externalAccountId ? (
-          <span className="st-who__id">
-            ID <code>{a.externalAccountId}</code>
-          </span>
+          <StTech className="st-who__tech">
+            <span className="st-who__id">
+              {PLATFORM_NAME[a.platform]}'s ID for it: <code>{a.externalAccountId}</code>
+            </span>
+          </StTech>
         ) : null}
       </div>
     </div>
@@ -299,11 +327,11 @@ function CopyLine({ label, value, copyLabel }: { label: string; value: string; c
  * Facebook's (one Meta app serves both, and Meta only returns to an address it was given, §45.34).
  */
 function RedirectLines({ p }: { p: Platform }) {
-  if (!isMeta(p)) return <CopyLine label="Redirect URI" value={storiesRedirectUri(p)} />;
+  if (!isMeta(p)) return <CopyLine label="The address to copy" copyLabel="Copy the redirect URI" value={storiesRedirectUri(p)} />;
   return (
     <div className="st-redirects" role="group" aria-label="Both redirect URIs for the Meta app">
-      <CopyLine label="Instagram's redirect URI" copyLabel="Copy Instagram's redirect URI" value={storiesRedirectUri("instagram")} />
-      <CopyLine label="Facebook's redirect URI" copyLabel="Copy Facebook's redirect URI" value={storiesRedirectUri("facebook")} />
+      <CopyLine label="Instagram's address" copyLabel="Copy Instagram's redirect URI" value={storiesRedirectUri("instagram")} />
+      <CopyLine label="Facebook's address" copyLabel="Copy Facebook's redirect URI" value={storiesRedirectUri("facebook")} />
     </div>
   );
 }
@@ -456,32 +484,39 @@ function AppPart({
               </>
             ) : (
               <>
-                Uses <strong>its own {isMeta(p) ? "Meta" : name} app</strong>: fully separate from Clip Factory.
-                {a.app.hints?.clientId ? (
-                  <>
-                    {" "}
-                    {KEY_LABEL[p].clientId} <code>{a.app.hints.clientId}</code>
-                    {a.app.hints.configId ? (
-                      <>
-                        {" "}
-                        · configuration <code>{a.app.hints.configId}</code>
-                      </>
-                    ) : null}
-                    .
-                  </>
-                ) : null}
+                Uses <strong>its own {isMeta(p) ? "Meta" : name} app</strong>: fully separate from Clip Factory. Its keys are saved.
               </>
             )}
           </p>
+          {choice === "own" && a.app.hints?.clientId ? (
+            <StTech className="st-app__tech">
+              <span>
+                {KEY_LABEL[p].clientId} <code>{a.app.hints.clientId}</code>
+                {a.app.hints.configId ? (
+                  <>
+                    {" "}
+                    · {KEY_LABEL[p].configId ?? "Configuration ID"} <code>{a.app.hints.configId}</code>
+                  </>
+                ) : null}
+              </span>
+            </StTech>
+          ) : null}
           {choice === "own" ? <CheckLine check={a.app.check} /> : null}
           {choice === "own" ? (
             <div className="st-app__uris">
               <p className="st-app__uris-note">
                 {isMeta(p)
-                  ? "Your Meta app needs both of these in Facebook Login › Valid OAuth Redirect URIs, so Instagram and Facebook can each come back here."
-                  : `Your ${name} app needs this redirect URI.`}
+                  ? "Copy these two addresses into your Meta app's settings, so Instagram and Facebook can each come back here."
+                  : `Copy this address into your ${name} app's settings.`}
               </p>
               <RedirectLines p={p} />
+              <StTech>
+                <ul>
+                  {OWN_APP_TECH[p].slice(0, 1).map((t) => (
+                    <li key={t}>{t}</li>
+                  ))}
+                </ul>
+              </StTech>
             </div>
           ) : null}
           {sure === "remove" ? (
@@ -595,6 +630,13 @@ function AppPart({
                 ))}
               </ul>
               <RedirectLines p={p} />
+              <StTech>
+                <ul>
+                  {OWN_APP_TECH[p].map((t) => (
+                    <li key={t}>{t}</li>
+                  ))}
+                </ul>
+              </StTech>
               <div className="st-app__guide">
                 <p>Every other step is the same as in Clip Factory's own guide. It opens in Clip Factory: come back here with the switcher.</p>
                 <p className="st-note st-note--coral st-app__keys-here" role="note">
@@ -792,7 +834,10 @@ export function PlatformCard({
       ) : null}
       {/* The server's warning is text only; when it says what the reason already said, it is said once (for Clip
           Factory's own account it is the line above). */}
-      {a.warning && a.connectionStatus !== "same_as_clips" && a.warning.trim() !== reasonText ? (
+      {a.warning &&
+      a.connectionStatus !== "same_as_clips" &&
+      a.warning.trim() !== reasonText &&
+      !(connected && a.warning.trim() === reasonSentence("keys_changed", p)) ? (
         <p className="st-note st-note--coral" role="note">
           <StIcon name="alert" size={18} />
           {a.warning}
@@ -866,7 +911,7 @@ export function PlatformCard({
           busy={busy !== null}
           onYes={(el) => {
             celebrate(centerOf(el));
-            toast.success(`Great! Lamo Stories posts to ${a.accountName ?? a.handle ?? name} on ${name}.`);
+            toast.success(`Great! Lamo Stories posts to ${thisPlace(a)}.`);
             setPicked(false);
             onAnswered?.();
           }}
@@ -879,7 +924,7 @@ export function PlatformCard({
       ) : ask ? (
         <div className="st-sure" role="group" aria-label="Are you sure?">
           <p className="st-sure__ask">
-            <strong>Are you sure?</strong> Lamo Stories stops posting to {a.accountName ?? name}. Clip Factory is not touched.
+            <strong>Are you sure?</strong> Lamo Stories stops posting to {thisPlace(a)}. Clip Factory is not touched.
           </p>
           <div className="st-sure__buttons">
             <StButton onClick={() => setAsk(null)}>No, keep it as it is</StButton>
@@ -951,18 +996,37 @@ export function PlatformCard({
         </div>
       )}
 
-      {a.limits.length ? (
-        <div className="st-limits">
-          <h3 className="st-limits__title">What {name} allows for a second account</h3>
-          <ul className="st-limits__list">
-            {a.limits.map((l) => (
+      {a.limits.length ? <Limits name={name} limits={a.limits} /> : null}
+      {a.connectedAt && a.connectionStatus !== "not_connected" ? <p className="st-conn__since">Connected {relative(a.connectedAt)}.</p> : null}
+    </li>
+  );
+}
+
+/** What the platform allows for a second account: the plain lines, and its developer words one tap away (§45.36 E14). */
+function Limits({ name, limits }: { name: string; limits: string[] }) {
+  const { plain, tech } = plainFirst(limits);
+  return (
+    <div className="st-limits">
+      <h3 className="st-limits__title">What {name} allows for a second account</h3>
+      {plain.length ? (
+        <ul className="st-limits__list">
+          {plain.map((l) => (
+            <li key={l}>{l}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="st-limits__plain">{name} checks a new app before everyone can use it.</p>
+      )}
+      {tech.length ? (
+        <StTech>
+          <ul>
+            {tech.map((l) => (
               <li key={l}>{l}</li>
             ))}
           </ul>
-        </div>
+        </StTech>
       ) : null}
-      {a.connectedAt && a.connectionStatus !== "not_connected" ? <p className="st-conn__since">Connected {relative(a.connectedAt)}.</p> : null}
-    </li>
+    </div>
   );
 }
 
@@ -984,6 +1048,178 @@ function SetupBack({ ws }: { ws: string }) {
   );
 }
 
+// ---------- The cards in columns by their own height (§45.36 E18) ----------
+
+/** The narrowest a card's column gets, and the space between cards (both as in stories.css). */
+const CARD_MIN = 340;
+const CARD_GAP = 16;
+/** The grid's row step (px): each card spans as many of these as its height and the gap below it. */
+const ROW_STEP = 1;
+
+/** How many columns of at least CARD_MIN fit in `width` (as `repeat(auto-fill, minmax(340px, 1fr))` gives). */
+export function columnsFor(width: number): number {
+  return Math.max(1, Math.floor((width + CARD_GAP) / (CARD_MIN + CARD_GAP)));
+}
+
+/** Each card's column (0-based), in page order: each goes into the shortest column so far, so no column is left short. */
+export function shortestColumns(heights: number[], columns: number): number[] {
+  const bottoms = Array.from({ length: Math.max(1, columns) }, () => 0);
+  return heights.map((h) => {
+    const k = bottoms.indexOf(Math.min(...bottoms));
+    bottoms[k] = bottoms[k]! + h + CARD_GAP;
+    return k;
+  });
+}
+
+/** Where each column ends (the cards in it and a gap under each) for the cards dealt as `at`. */
+export function columnBottoms(heights: number[], at: number[], columns: number): number[] {
+  const bottoms = Array.from({ length: Math.max(1, columns) }, () => 0);
+  heights.forEach((h, i) => {
+    bottoms[at[i]!] = bottoms[at[i]!]! + h + CARD_GAP;
+  });
+  return bottoms;
+}
+
+/** The empty area under the shortest column: how far the tallest column runs on past it. */
+export function emptyUnder(heights: number[], at: number[], columns: number): number {
+  const b = columnBottoms(heights, at, columns);
+  return Math.max(...b) - Math.min(...b);
+}
+
+/** More ways to deal the cards than this and the shortest-column deal is used as it is (a page has five cards). */
+const MOST_DEALS = 20_000;
+
+/**
+ * The cards in `columns` columns so the columns end as close together as they can (the least empty area under the
+ * shortest one; then the shortest page): every way of dealing them is tried (the five cards in three columns are 243
+ * ways), each card staying in page order within its column. A tall card is never left beside two short columns' empty
+ * halves, whatever the fonts make of the cards' heights.
+ */
+export function balancedColumns(heights: number[], columns: number): number[] {
+  const k = Math.max(1, columns);
+  const greedy = shortestColumns(heights, k);
+  if (k === 1 || heights.length < 2 || k ** heights.length > MOST_DEALS) return greedy;
+  let best = greedy;
+  let bestEmpty = emptyUnder(heights, greedy, k);
+  let bestTall = Math.max(...columnBottoms(heights, greedy, k));
+  const at = heights.map(() => 0);
+  const walk = (i: number) => {
+    if (i === heights.length) {
+      // Every column holds a card (an empty column would be a hole of its own).
+      if (new Set(at).size < Math.min(k, heights.length)) return;
+      const b = columnBottoms(heights, at, k);
+      const empty = Math.max(...b) - Math.min(...b);
+      const tall = Math.max(...b);
+      if (empty < bestEmpty - 0.5 || (Math.abs(empty - bestEmpty) <= 0.5 && tall < bestTall - 0.5)) {
+        best = [...at];
+        bestEmpty = empty;
+        bestTall = tall;
+      }
+      return;
+    }
+    for (let c = 0; c < k; c++) {
+      at[i] = c;
+      walk(i + 1);
+    }
+  };
+  walk(0);
+  return best;
+}
+
+/**
+ * How many columns, and which card in each: of the column counts that fit (two up to `most`), the one whose best deal
+ * leaves the least empty area, measured with each card's own height at that count's width (`heightsAt`); on a tie, more
+ * columns. Five cards cannot fill three columns evenly, so where two columns of wider (shorter) cards leave less empty
+ * area, two it is.
+ */
+export function pickColumns(heightsAt: (columns: number) => number[], most: number): { columns: number; at: number[] } {
+  let best: { columns: number; at: number[]; empty: number } | null = null;
+  for (let k = 2; k <= Math.max(2, most); k++) {
+    const h = heightsAt(k);
+    const at = balancedColumns(h, k);
+    const empty = emptyUnder(h, at, k);
+    if (!best || empty < best.empty - 0.5 || (Math.abs(empty - best.empty) <= 0.5 && k > best.columns)) best = { columns: k, at, empty };
+  }
+  return { columns: best!.columns, at: best!.at };
+}
+
+/**
+ * Lays the list's cards out in columns by their own height. Each card keeps its column while the page is open (a
+ * card that grows, as Change app does, only pushes the cards under it in that column), and the columns are dealt
+ * again only when the number of columns that fit changes or the cards do. The cards stay in page order, so Tab goes
+ * as before.
+ */
+function useCardColumns(list: { current: HTMLUListElement | null }, keys: string, on: boolean): void {
+  useLayoutEffect(() => {
+    const ul = list.current;
+    if (!on || !ul || typeof ResizeObserver === "undefined") return;
+    let dealt: { most: number; columns: number; at: number[] } | null = null;
+    let frame = 0;
+    const cards = () => Array.from(ul.children).filter((c): c is HTMLElement => c instanceof HTMLElement);
+    /** Each card's own height were it as wide as one of `columns` columns (measured, then put back). */
+    const heightsAt = (all: HTMLElement[], columns: number) => {
+      const w = (ul.clientWidth - CARD_GAP * (columns - 1)) / columns;
+      const was = all.map((c) => c.style.width);
+      for (const c of all) c.style.width = `${w}px`;
+      const heights = all.map((c) => c.getBoundingClientRect().height);
+      all.forEach((c, i) => (c.style.width = was[i]!));
+      return heights;
+    };
+    const layout = () => {
+      // Not while Lamo Stories is hidden behind Clip Factory (nothing has a size): it stays as it was for the way back.
+      if (!ul.clientWidth) return;
+      const all = cards();
+      const most = columnsFor(ul.clientWidth);
+      if (most < 2 || all.length < 2) {
+        delete ul.dataset.cols;
+        for (const c of all) c.style.removeProperty("--st-col");
+        dealt = null;
+        return;
+      }
+      if (!dealt || dealt.most !== most || dealt.at.length !== all.length) dealt = { most, ...pickColumns((k) => heightsAt(all, k), most) };
+      ul.dataset.cols = String(dealt.columns);
+      ul.style.setProperty("--st-cols", String(dealt.columns));
+      // Its own height at the width it has now (its rise-in animation only moves it, never sizes it).
+      const heights = all.map((c) => c.getBoundingClientRect().height);
+      all.forEach((c, i) => {
+        c.style.setProperty("--st-col", String(dealt!.at[i]! + 1));
+        c.style.setProperty("--st-span", String(Math.ceil((heights[i]! + CARD_GAP) / ROW_STEP)));
+      });
+    };
+    const soon = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(layout);
+    };
+    const ro = new ResizeObserver(soon);
+    ro.observe(ul);
+    for (const c of cards()) ro.observe(c);
+    layout();
+    // The page's own fonts arrive after the first paint and change the cards' heights: dealt again once.
+    let fresh = true;
+    const stopFresh = () => {
+      fresh = false;
+    };
+    ul.addEventListener("pointerdown", stopFresh, true);
+    ul.addEventListener("keydown", stopFresh, true);
+    void document.fonts?.ready?.then(() => {
+      if (!fresh) return;
+      dealt = null;
+      soon();
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+      ul.removeEventListener("pointerdown", stopFresh, true);
+      ul.removeEventListener("keydown", stopFresh, true);
+      delete ul.dataset.cols;
+      for (const c of cards()) {
+        c.style.removeProperty("--st-col");
+        c.style.removeProperty("--st-span");
+      }
+    };
+  }, [list, keys, on]);
+}
+
 /** The five cards and what they need, shared by this page and the setup's connect steps. */
 export function useSocial(ws: string) {
   return useLoad(() => storiesApi().social(ws), ws, "st-social");
@@ -997,6 +1233,8 @@ export function ConnectionsScreen({ ws, page }: StoriesScreenProps) {
   // The platform just connected: its card asks whether this is the intended account (§45.34).
   const [asking, setAsking] = useState<Platform | null>(null);
   const shown = useRef<string | null>(null);
+  const cardList = useRef<HTMLUListElement | null>(null);
+  useCardColumns(cardList, social.data ? social.data.accounts.map((a) => a.platform).join(" ") : "", !!social.data);
   const result = page.name === "connections" ? page.result : null;
   const platform = page.name === "connections" ? page.platform : null;
 
@@ -1060,7 +1298,7 @@ export function ConnectionsScreen({ ws, page }: StoriesScreenProps) {
       ) : !social.data ? (
         <StLoading label="Checking the accounts…" />
       ) : (
-        <ul className="st-conns">
+        <ul className="st-conns" ref={cardList}>
           {social.data.accounts.map((a) => (
             <PlatformCard
               key={a.platform}

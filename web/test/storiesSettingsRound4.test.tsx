@@ -136,7 +136,7 @@ describe("how an added model is called (§45.35 D1)", () => {
     expect([switchOf(form, /It has effort levels/), switchOf(form, /It can use tools/), switchOf(form, /It can reuse its instructions/)].map(checked)).toEqual(["false", "false", "true"]);
     fill(form, "Name", "Llama 4");
     await click(byText("[role=radio]", "Meta", form));
-    fill(form, "Bedrock model ID or inference profile", "eu.meta.llama4-maverick-17b-instruct-v1:0");
+    fill(form, "Model ID", "eu.meta.llama4-maverick-17b-instruct-v1:0");
     await act(async () => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
     await settle();
     expect(calls.filter((c) => c.name === "putAiModel").at(-1)?.args[2]).toMatchObject({
@@ -275,8 +275,12 @@ describe("Try it on Luma AI Ray2 (§45.35 D2, moved from Nova Reel by §45.37)",
     expect(calls.filter((c) => c.name === "tryMaker").map((c) => c.args)).toEqual([["stories", "luma-ray"]]);
     expect(calls.filter((c) => c.name === "tryNovaReel")).toHaveLength(0);
     expect(row.textContent).toContain("It did not work");
-    expect(row.textContent).toContain(LUMA_NOT_READY);
-    expect(document.body.textContent).toContain(LUMA_NOT_READY);
+    // The API's own sentence, said on the page it names without sending the owner there again (§45.36 E17).
+    const here = LUMA_NOT_READY.replace(" in Settings › Video", " above");
+    expect(here).toContain("Pick Built-in animation above, or finish its setup.");
+    expect(row.textContent).toContain(here);
+    expect(document.body.textContent).toContain(here);
+    expect(document.body.textContent).not.toContain("in Settings › Video");
     // The video maker is still the built-in animator.
     expect((await api.getWorkspace("stories")).configuration).toMatchObject({ providers: { video: "builtin-2d" } });
     expect(byText("button", "Try it again", row)).toBeTruthy();

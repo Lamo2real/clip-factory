@@ -281,6 +281,66 @@ export function takeClipsScroll(path: string): number | null {
   return r.y;
 }
 
+// ---------- Where the owner was reading on a phone (§45.36 E1) ----------
+// On a phone Clip Factory's switch is in the top bar, which scrolls away with the page: to tap it the owner first
+// scrolls (or taps the status bar) up to the top. The place to come back to is where he was reading before that, not
+// the top he only passed through to reach the switch.
+
+/** How long the page rests at one place below the top bar before that place counts as where the owner is reading. */
+export const READ_REST_MS = 1500;
+/**
+ * At the top, where the top bar's switch is in view, the page counts as read only after this long: until then he is
+ * only finding the switch (a slow scroll up in several flicks, a status-bar tap and a look for the switch).
+ */
+export const TOP_REST_MS = 10_000;
+
+let reading: { path: string; y: number } | null = null;
+
+/**
+ * The page `path` has rested at `y` for `restedMs`; `topZone` is how far down the top bar's switch still shows. A rest
+ * below the top bar is a reading place after READ_REST_MS, a rest where the switch shows only after TOP_REST_MS. The
+ * first rest on a page is its place whatever it is.
+ */
+export function noteReading(path: string, y: number, restedMs: number, topZone: number): void {
+  const p = cleanPath(path);
+  const at = Math.max(0, Math.round(y));
+  if (reading && reading.path === p && restedMs < (at <= topZone ? TOP_REST_MS : READ_REST_MS)) return;
+  reading = { path: p, y: at };
+}
+
+/** The scroll position to keep for a switch from the phone top bar at `y`: the reading place when he scrolled up to reach it. */
+export function readingPlace(path: string, y: number): number {
+  const r = reading;
+  return r && r.path === cleanPath(path) && r.y > y ? r.y : y;
+}
+
+/**
+ * Follows the window's scroll on the Clip Factory page `path()` while the phone top bar's switch is shown; `topZone()`
+ * is how far down the switch still shows (the bottom of the top bar on the page).
+ */
+export function followReading(path: () => string, topZone: () => number = () => 0): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  const timers: ReturnType<typeof setTimeout>[] = [];
+  const clear = () => {
+    for (const t of timers.splice(0)) clearTimeout(t);
+  };
+  // Each scroll starts the count again: a rest is counted from the last move. A page he only just opened (no rest
+  // on it yet) is where he is.
+  const moved = () => {
+    noteReading(path(), window.scrollY, 0, topZone());
+    clear();
+    for (const ms of [READ_REST_MS, TOP_REST_MS]) timers.push(setTimeout(() => noteReading(path(), window.scrollY, ms, topZone()), ms));
+  };
+  // A page seen for the first time is where it is; back on the same page (its place being put back) the place it was
+  // read at stays until the page rests somewhere else.
+  noteReading(path(), window.scrollY, 0, topZone());
+  window.addEventListener("scroll", moved, { passive: true });
+  return () => {
+    clear();
+    window.removeEventListener("scroll", moved);
+  };
+}
+
 // ---------- Lamo Stories' scroll position across a switch (this visit only) ----------
 
 /** Lamo Stories' pages stay mounted behind Clip Factory (stories/pane.tsx); only where the window was is kept here. */
@@ -506,4 +566,5 @@ export function resetWorkspaceMemory(): void {
   prefsCache = null;
   pendingStories = null;
   storiesScroll = null;
+  reading = null;
 }

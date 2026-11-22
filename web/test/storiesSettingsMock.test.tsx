@@ -348,7 +348,8 @@ describe("round 3 (§45.34)", () => {
     await expect(api.putAiModel("stories", "custom-x", { ...def, maxOutputTokens: 0 })).rejects.toMatchObject({ field: "maxOutputTokens" });
     await expect(api.putAiModel("stories", "custom-x", { ...def, extra: 1 } as never)).rejects.toMatchObject({ field: "extra" });
     // An ARN and an inference profile are fine; no efforts at all is fine (it runs at its own level).
-    await api.putAiModel("stories", "custom-arn", { ...def, label: "By ARN", modelId: "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/eu.amazon.nova-pro-v1:0", efforts: [], defaultEffort: null });
+    // (Its Region is the one the ARN names: a Region that does not fit is refused, §45.36 E4.)
+    await api.putAiModel("stories", "custom-arn", { ...def, label: "By ARN", modelId: "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/eu.amazon.nova-pro-v1:0", region: "eu-north-1", efforts: [], defaultEffort: null });
     for (let i = 1; i < 20; i++) await api.putAiModel("stories", `custom-m${i}`, { ...def, label: `Model ${i}` });
     await expect(api.putAiModel("stories", "custom-m21", { ...def, label: "One too many" })).rejects.toMatchObject({ status: 400, message: "You can add up to 20 models. Remove one first." });
   });

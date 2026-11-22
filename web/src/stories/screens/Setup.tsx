@@ -20,7 +20,7 @@ import { useLoad } from "../../lib/hooks.ts";
 import { storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
 import { EFFORT_LABEL, type Effort, type ModelInfo, type Onboarding, type OnboardStep, type Platform, type SocialAccount, type StoriesAiConfig, type StoriesConfig } from "../api/types.ts";
-import { madeBy } from "../settings/bits.tsx";
+import { madeBy, MODEL_STATUS } from "../settings/bits.tsx";
 import { aiBody } from "../settings/data.ts";
 import {
   celebrate,
@@ -144,13 +144,8 @@ function CheckRow({ checking, busy, onCheck }: { checking: boolean; busy: boolea
   );
 }
 
-const STATE_CHIP: Record<ModelInfo["status"], { label: string; tone: string }> = {
-  ok: { label: "Works", tone: "mint" },
-  not_checked: { label: "Not checked yet", tone: "sky" },
-  denied: { label: "No access", tone: "coral" },
-  not_found: { label: "Not found", tone: "coral" },
-  error: { label: "Had a problem", tone: "sun" },
-};
+/** The same words as Settings › AI (§45.36 E17: one set everywhere). */
+const STATE_CHIP: Record<ModelInfo["status"], { label: string; tone: string }> = MODEL_STATUS;
 
 /** Step 1: what Lamo Stories uses, the models and their state, Check models, and "These look right" (§45.34). */
 function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy }: { ws: string; ai: Ai; onSaved: (next: StoriesAiConfig) => void; onChecked: (models: ModelInfo[]) => void; busy: boolean; setBusy: (b: boolean) => void }) {
@@ -415,7 +410,7 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
         <p className="st-note st-note--sun" role="note">
           <StIcon name="alert" size={18} />
           Nova Reel is not ready yet. Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in
-          animation by itself. Pick Built-in animation to keep making videos. To make it ready, tap Try it in Settings › Video: it makes one 6-second
+          animation by itself. Pick Built-in animation above to keep making videos. To make it ready, tap Try it in Settings › Video: it makes one 6-second
           test shot. Posts made with Nova Reel get the platforms' AI labels.
         </p>
       ) : null}
@@ -725,7 +720,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
           <StMascot mood="cheer" size={120} tone="mint" />
           <p className="st-setup__text">
             {left.length
-              ? `You can start making videos now. ${left.length === 1 ? "One thing is" : `${left.length} things are`} still on the list; the dashboard keeps it until you finish.`
+              ? `You can start making videos now. ${left.length === 1 ? "One thing is" : `${left.length} things are`} still on the list; the dashboard keeps it for you, also after you finish.`
               : "Everything is set up. Tap Finish!"}
           </p>
         </div>

@@ -4,11 +4,11 @@
 // words and number formats the sections share. Builder F2 owns this folder. Click and deny sounds come from the app's
 // global click handler (web/src/lib/sound.ts): a control that cannot be used is aria-disabled (it plays the deny
 // sound), never `disabled` (that would swallow the click and its sound).
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { Glide } from "../../components/Glide.tsx";
 import { storiesBehind, storiesReduceMotion, storiesSound } from "../prefs.ts";
 import type { Effort, ModelInfo, ProviderStatus } from "../api/types.ts";
-import { EFFORT_LABEL, HOST_LABEL, hostIdOf } from "../api/types.ts";
+import { EFFORT_LABEL, HOST_LABEL, MODEL_STATUS_WORDS, hostIdOf } from "../api/types.ts";
 
 // ---------- Icons: Lamo Stories' chunky round strokes (no generic AI sparkle anywhere) ----------
 
@@ -68,7 +68,7 @@ export function SetCard({ title, icon, lede, actions, children, id, tone }: { ti
         </div>
         {actions ? <div className="st-stg-card__actions">{actions}</div> : null}
       </div>
-      {children}
+      <SettingsCardProvider value={title}>{children}</SettingsCardProvider>
     </section>
   );
 }
@@ -460,12 +460,92 @@ export function Failed({ message, onRetry }: { message: string; onRetry?: () => 
 
 // ---------- Words ----------
 
+/** The Settings page on screen, by the name sentences use for it ("AI", "Video", …); null outside Settings. */
+export type SettingsPageName = "AI" | "Agents" | "Skills" | "Memory" | "Video" | "Storage";
+const SettingsPage = createContext<SettingsPageName | null>(null);
+export const SettingsPageProvider = SettingsPage.Provider;
+/** The card (its title) a sentence shows in, for onThisPage's "above" and "below"; SetCard gives it. */
+const SettingsCard = createContext<string | null>(null);
+export const SettingsCardProvider = SettingsCard.Provider;
+
+const escape = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Each Settings page's cards from top to bottom (their titles), so a sentence can say "above" or "below". */
+const CARDS: Partial<Record<SettingsPageName, readonly string[]>> = {
+  AI: ["Default model", "Default effort", "Add a model", "Each agent and each task", "Usage and cost, last 30 days", "Prices", "Providers"],
+  Video: ["Video maker", "Picture maker", "Sound maker", "Add a picture, video or sound model", "Shape and size", "Usual length", "Quality", "Words and music", "Use and costs, last 30 days", "Prices and keys"],
+};
+/** A model's own row (inside Add a model), as the place a sentence shows in. */
+export const ITS_ROW = "its row";
+/** The parts a sentence may name after the page ("Settings › Video › Picture maker"), and the card each is in. */
+const NAMED: Partial<Record<SettingsPageName, Record<string, string>>> = {
+  AI: { [ITS_ROW]: "Add a model", "Add a model": "Add a model", "Check models": "Default model" },
+  Video: { "Picture maker": "Picture maker", "Video maker": "Video maker", "Nova Reel": "Video maker", "Sound maker": "Sound maker" },
+};
+/** What a sentence points at when it names no part, by the words just before the page ("the task … in Settings › AI"). */
+const POINTED: Partial<Record<SettingsPageName, [RegExp, string][]>> = {
+  AI: [
+    [/\bthe task\b[^.!?]*$/, "Each agent and each task"],
+    [/\bthe default model$/, "Default model"],
+    [/\bCheck models$/, "Default model"],
+  ],
+  Video: [
+    [/\bBuilt-in animation$/, "Video maker"],
+    // The owner's own picture, video and sound models are added in their own card (§45.37 G2).
+    [/\bAdd a model$/, "Add a picture, video or sound model"],
+  ],
+};
+const PAGE_WORDS: Record<SettingsPageName, string> = { AI: "AI", Agents: "Agents", Skills: "Skills", Memory: "Memory", Video: "Video", Storage: "Storage(?: and production)?" };
+
+/**
+ * A sentence shown on the page it sends the owner to, without the trip (§45.36 E17). `from` is the card the sentence
+ * shows in (ITS_ROW: a model's own row). The place it points at is said "above" or "below" from there, "this row"
+ * inside the row it means, "here" inside the card it names; when either is not known, the part's name alone, or
+ * `word` ("on this page"). On Settings › Video, "Pick Built-in animation in Settings › Video, or finish its setup." in
+ * the Video maker card reads "Pick Built-in animation above, or finish its setup."; on Settings › AI, "Tap Edit on its
+ * row in Lamo Stories › Settings › AI and turn off …" reads "Tap Edit on its row below and turn off …" in Default
+ * model and "Tap Edit on this row and turn off …" in the row itself. Any other page's name stays as it is.
+ */
+export function onThisPage(text: string, page: SettingsPageName | null, from: string | null = null, word = "on this page"): string {
+  if (!page || !text) return text;
+  const named = NAMED[page] ?? {};
+  const names = Object.keys(named).map(escape).join("|");
+  // Only a part's own name is taken after the page, never the rest of the sentence ("› Picture maker to use it").
+  const part = names ? `(?:\\s*›\\s*(${names})(?![A-Za-z]))?` : "()";
+  const re = new RegExp(`(\\bits row)?\\s+(?:in|on)\\s+(?:Lamo Stories\\s*›\\s*)?Settings\\s*›\\s*${PAGE_WORDS[page]}(?![A-Za-z])${part}`, "g");
+  const order = CARDS[page] ?? [];
+  const place = (card: string | null) => (card === ITS_ROW ? order.indexOf("Add a model") : card ? order.indexOf(card) : -1);
+  const at = place(from);
+  return text.replace(re, (_all: string, row: string | undefined, name: string | undefined, offset: number) => {
+    // "on its row in Settings › AI" said in that row: "on this row".
+    if (row && from === ITS_ROW) return "this row";
+    const target = row ? ITS_ROW : (name ?? POINTED[page]?.find(([pattern]) => pattern.test(text.slice(0, offset)))?.[1] ?? null);
+    if (name === ITS_ROW && from === ITS_ROW) return " in this row";
+    // Said in the very card it names: "Pick it here".
+    if (name && name === from) return " here";
+    const to = place(target && target !== ITS_ROW ? (named[target] ?? target) : target);
+    const way = at < 0 || to < 0 ? null : to > at ? "below" : "above";
+    if (row) return way ? `${row} ${way}` : row;
+    if (name) return way ? ` in ${name} ${way}` : ` in ${name}`;
+    return ` ${way ?? word}`;
+  });
+}
+
+/** onThisPage for the Settings page on screen, said from the card it shows in (`from`, else the card around it). */
+export function useOnThisPage(from?: string): (text: string, word?: string) => string {
+  const page = useContext(SettingsPage);
+  const card = useContext(SettingsCard);
+  const at = from ?? card;
+  return useCallback((text: string, word?: string) => onThisPage(text, page, at, word), [page, at]);
+}
+
+/** A model's state: the one set of words every screen uses (MODEL_STATUS_WORDS, §45.36 E17), with its tone. */
 export const MODEL_STATUS: Record<ModelInfo["status"], { label: string; tone: Tone }> = {
-  ok: { label: "Works", tone: "mint" },
-  not_checked: { label: "Not checked yet", tone: "sky" },
-  denied: { label: "No access", tone: "coral" },
-  not_found: { label: "Not found", tone: "coral" },
-  error: { label: "Had a problem", tone: "sun" },
+  ok: { label: MODEL_STATUS_WORDS.ok, tone: "mint" },
+  not_checked: { label: MODEL_STATUS_WORDS.not_checked, tone: "sky" },
+  denied: { label: MODEL_STATUS_WORDS.denied, tone: "coral" },
+  not_found: { label: MODEL_STATUS_WORDS.not_found, tone: "coral" },
+  error: { label: MODEL_STATUS_WORDS.error, tone: "sun" },
 };
 
 export const PROVIDER_STATE: Record<ProviderStatus["state"], { label: string; tone: Tone }> = {

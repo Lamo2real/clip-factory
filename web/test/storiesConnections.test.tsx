@@ -190,7 +190,10 @@ describe("round 3 on the Social accounts page (§45.34)", () => {
     // The keys form shows them too (the saved state's lines make way for it).
     expect(card("facebook").querySelector(".st-keys")).not.toBeNull();
     expect(uris(card("facebook"))).toEqual(BOTH);
-    expect(card("facebook").querySelector(".st-app__notes")?.textContent).toContain("Add both redirect URIs below in Facebook Login › Valid OAuth Redirect URIs");
+    // The first lines are plain words; the developer site's own words are one tap away (§45.36 E14).
+    expect(card("facebook").querySelector(".st-app__notes")?.textContent).toContain("Copy both addresses below into your Meta app's settings");
+    expect(card("facebook").querySelector(".st-app__notes")?.textContent).not.toContain("Valid OAuth Redirect URIs");
+    expect(card("facebook").querySelector(".st-app__go .st-tech-fold")?.textContent).toContain("Facebook Login › Settings › Valid OAuth Redirect URIs");
     // A platform with one app of its own shows its own one.
     expect(uris(card("youtube"))).toEqual([]);
   });
@@ -208,7 +211,7 @@ describe("round 3 on the Social accounts page (§45.34)", () => {
     expect(card("youtube").querySelector(".st-intended")).toBeNull();
     await click(button(ask, "Yes, that's it"));
     expect(card("tiktok").querySelector(".st-intended")).toBeNull();
-    expect(document.body.textContent).toContain("Great! Lamo Stories posts to Lamo Stories on TikTok.");
+    expect(document.body.textContent).toContain("Great! Lamo Stories posts to this TikTok account (Lamo Stories).");
   });
 
   it("Pick another connects again, to pick the intended account", async () => {
@@ -233,7 +236,7 @@ describe("round 3 on the Social accounts page (§45.34)", () => {
     expect(card("facebook").querySelector(".st-intended")).toBeNull();
     await click(button(ask, "Yes, that's it"));
     expect(card("instagram").querySelector(".st-intended")).toBeNull();
-    expect(document.body.textContent).toContain("Great! Lamo Stories posts to lamo.stories on Instagram.");
+    expect(document.body.textContent).toContain("Great! Lamo Stories posts to this Instagram account (lamo.stories).");
   });
 
   it("Clip Factory's own account in the list is never picked: the tap says why and sends nothing (§45.37 G8)", async () => {
@@ -251,7 +254,7 @@ describe("round 3 on the Social accounts page (§45.34)", () => {
       const fb = s.social.find((a) => a.platform === "facebook")!;
       Object.assign(fb, { connectionStatus: "connected", externalAccountId: "109876543210987", accountName: "Lamo Stories", handle: "Lamo Stories" });
     });
-    expect(document.body.textContent).toContain("But Lamo Clips may have lost Facebook");
+    expect(document.body.textContent).toContain("But Clip Factory may have lost Facebook");
     const ask = card("facebook").querySelector<HTMLElement>(".st-intended")!;
     expect(ask.getAttribute("aria-label")).toBe("Is this your Lamo Stories Page?");
     expect(ask.textContent).toContain("Connected as Lamo Stories.");
@@ -265,7 +268,7 @@ describe("round 3 on the Social accounts page (§45.34)", () => {
     await click(button(card("facebook"), "Disconnect"));
     await click(button(card("facebook"), "Yes, disconnect"));
     const note = () => host.querySelector(".st-note--wide")?.textContent ?? "";
-    expect(note()).toContain("To remove Lamo Stories completely, remove your Lamo Stories app in the account's own settings. Lamo Clips is not affected.");
+    expect(note()).toContain("To remove Lamo Stories completely, remove your Lamo Stories app in the account's own settings. Clip Factory is not affected.");
     await click(host.querySelector<HTMLElement>(".st-note__close")!);
     await click(button(card("youtube"), "Disconnect"));
     await click(button(card("youtube"), "Yes, disconnect"));
@@ -277,7 +280,7 @@ describe("round 3 on the Social accounts page (§45.34)", () => {
       const t = s.social.find((a) => a.platform === "tiktok")!;
       Object.assign(t, { connectionStatus: "connected", reason: "clips_unknown", warning: null });
     });
-    expect(card("tiktok").textContent).toContain("Lamo Stories cannot tell this TikTok account apart from Lamo Clips' own. Check which account is signed in.");
+    expect(card("tiktok").textContent).toContain("Lamo Stories cannot tell this TikTok account apart from Clip Factory's own. Check which account is signed in.");
     expect(card("tiktok").textContent).not.toContain("clips_unknown");
   });
 

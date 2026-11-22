@@ -53,6 +53,7 @@ import {
   MAX_CUSTOM_MAKER_MODELS,
   MAX_CUSTOM_MODELS,
   MODEL_HOSTS,
+  modelRegionProblem,
   OWN_MAKER,
   type ModelCalling,
 } from "../types.ts";
@@ -684,6 +685,10 @@ function cleanDef(store: MockStore, key: string, value: unknown): ModelDef {
   if (!provider || provider.length > 40) throw bad("Say who makes it, for example Anthropic or Amazon.", "provider");
   const modelId = cleanModelId(v.modelId, host);
   const region = cleanRegion(v.region, host);
+  // On Amazon Bedrock its Region must be the one its ARN names, or in the part of the world its profile runs in
+  // (§45.36 E4); a model on a keyed host has no Region.
+  const misfit = region === undefined ? null : modelRegionProblem(modelId, region);
+  if (misfit) throw bad(misfit, "region");
   if (!Array.isArray(v.efforts) || v.efforts.some((e) => !EFFORTS.includes(e as Effort)) || new Set(v.efforts).size !== v.efforts.length) throw bad("Pick each effort level once.", "efforts");
   const efforts = EFFORTS.filter((e) => (v.efforts as Effort[]).includes(e));
   const defaultEffort = v.defaultEffort ?? null;
@@ -1052,6 +1057,9 @@ function cleanMakerDef(store: MockStore, key: string, value: unknown): MakerMode
   }
   if (host === "elevenlabs" && !ELEVENLABS_SOUND_ID.test(modelId)) throw bad(ELEVENLABS_ONLY_SOUND, "modelId");
   const region = cleanRegion(v.region, host);
+  // The same Region rule as an AI model's (§45.36 E4; the API's makers.clean checks it too).
+  const misfit = region === undefined ? null : modelRegionProblem(modelId, region);
+  if (misfit) throw bad(misfit, "region");
   let price: MakerPrice | null = null;
   if (v.price !== null && v.price !== undefined) {
     const p = v.price as Partial<MakerPrice>;

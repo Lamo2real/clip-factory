@@ -32,7 +32,8 @@
   --st-shadow: 0 10px 30px rgba(8, 6, 30, 0.45);
   --st-shadow-soft: 0 6px 18px rgba(8, 6, 30, 0.35);
   --st-font: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --st-rail-w: 248px;
+  /* As wide as Clip Factory's sidebar: the shell's workspace switch sits over both at the same place (§45.38). */
+  --st-rail-w: var(--sidebar-w, 252px);
   --st-tab-h: 66px;
   /* The app's focus ring and platform marks, in this stage's colours. */
   --focus: 0 0 0 4px rgba(255, 201, 74, 0.35);
@@ -169,8 +170,9 @@
   gap: 12px;
   margin-bottom: 14px;
 }
-.st-top > .ws-switch-host {
-  margin-left: auto;
+/* The smallest phones: the brand keeps its mark and drops its name, so the shell's toggle keeps its place (§45.38). */
+.st-top:has(> .ws-switch-host--topbar[data-ws-squeeze]) .st-brand__name {
+  display: none;
 }
 
 .st-rail {
@@ -332,7 +334,9 @@
     gap: 14px;
     width: var(--st-rail-w);
     padding: 14px 12px;
-    overflow-y: auto;
+    /* The brand and the switcher at its foot always stay in view; only the list of pages scrolls in a short window
+       (§45.36 E16), so going to Clip Factory is one click at every height. */
+    overflow: hidden;
     border-radius: var(--r-xl);
     background: linear-gradient(180deg, rgba(50, 42, 115, 0.86), rgba(38, 32, 90, 0.9));
     -webkit-backdrop-filter: blur(20px) saturate(1.3);
@@ -340,7 +344,31 @@
     box-shadow: 0 20px 44px -18px rgba(8, 6, 30, 0.85);
   }
   .st-rail .st-brand {
+    flex: none;
     padding: 0 8px;
+  }
+  .st-rail .st-rail__list {
+    flex: 0 1 auto;
+    min-height: 0;
+    /* Its scroll box reaches the rail's own edges, so the highlight's glow and focus rings are not cut short. */
+    margin: -6px -12px;
+    padding: 6px 12px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+  .st-rail .st-rail__foot {
+    flex: none;
+    /* The shell's workspace switch and Live chip are laid over the rail's foot (app/WorkspaceDock.tsx): the foot keeps
+       their box free, from the window's bottom up to the dock's top and 4 px of air (--ws-dock-room), less the rail's
+       own 14 px padding and its 14 px gap above the foot, less the 6 px the list's scroll box reaches past its own
+       margin. So the list of pages always stops above them. */
+    height: max(0px, calc(var(--ws-dock-room, 0px) - 36px));
+  }
+  /* A folded sidebar in a short window has the switch beside its fold button, over the brand's name here: the shell
+     says so with --ws-dock-name (hidden). */
+  .st-rail .st-brand__name {
+    visibility: var(--ws-dock-name, visible);
   }
 }
 
@@ -401,38 +429,6 @@
   margin-top: auto;
   display: grid;
   gap: 6px;
-}
-
-/* The workspace switcher in Lamo Stories' own navigation (the same component as in Lamo Clips, in this look). */
-.stories-app .ws-switch {
-  background: rgba(13, 11, 38, 0.45);
-}
-.stories-app .ws-switch__opt {
-  color: var(--st-ink-soft);
-  font-weight: 700;
-  font-size: 0.875rem;
-}
-.stories-app .ws-switch__opt:not(.is-on):hover {
-  color: var(--st-ink);
-  background: var(--st-panel-strong);
-}
-.stories-app .ws-switch__opt.is-on {
-  color: var(--st-stage);
-  background: var(--st-sun);
-}
-.stories-app .has-glide > .ws-switch__opt.is-on {
-  background: transparent;
-}
-.stories-app .glide--ws {
-  background: var(--st-sun);
-  box-shadow: 0 8px 18px -10px rgba(255, 201, 74, 0.65);
-}
-.stories-app .ws-round {
-  color: var(--st-ink);
-  background: var(--st-panel-strong);
-}
-.stories-app .ws-round:hover {
-  background: var(--st-panel-hover);
 }
 
 /* ---------- Page parts ---------- */
@@ -1605,6 +1601,20 @@ a.st-file__title:hover {
   gap: 16px;
   align-items: start;
 }
+/* Social accounts' five cards flow by their own height (§45.36 E18): Connections.tsx deals each card a column (the
+   shortest so far) and sets how many 1 px rows it spans, so a tall card (Instagram with its Meta box) never leaves a
+   hole beside a short one, and a card that grows only pushes the cards under it in its own column. */
+.st-conns[data-cols] {
+  grid-template-columns: repeat(var(--st-cols, 2), minmax(0, 1fr));
+  grid-auto-rows: 1px;
+  grid-auto-flow: row dense;
+  row-gap: 0;
+  column-gap: 16px;
+}
+.st-conns[data-cols] > .st-conn {
+  grid-column: var(--st-col, auto);
+  grid-row-end: span var(--st-span, 1);
+}
 .st-conn {
   display: grid;
   gap: 12px;
@@ -1714,6 +1724,60 @@ a.st-file__title:hover {
 }
 .st-note--wide {
   align-items: center;
+}
+
+/* "Technical details" (§45.36 E14): developer words and raw ids, folded under a plain first line. */
+.st-tech-fold {
+  min-width: 0;
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  background: rgba(13, 11, 38, 0.22);
+}
+.st-tech-fold__sum {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--st-ink-soft);
+  font-size: 0.9rem;
+  font-weight: 800;
+  list-style: none;
+  border-radius: var(--r-sm);
+  transition: color 160ms ease;
+}
+.st-tech-fold__sum::-webkit-details-marker {
+  display: none;
+}
+.st-tech-fold__sum:hover {
+  color: var(--st-sun);
+}
+.st-tech-fold__mark {
+  flex: none;
+  transition: transform 200ms ease;
+}
+.st-tech-fold[open] > .st-tech-fold__sum {
+  color: var(--st-ink);
+}
+.st-tech-fold[open] > .st-tech-fold__sum .st-tech-fold__mark {
+  transform: rotate(90deg);
+}
+.st-tech-fold__body {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 10px;
+  color: var(--st-ink-soft);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.st-tech-fold__body ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+.st-tech-fold__body code {
+  color: var(--st-sky-ink);
+  overflow-wrap: anywhere;
 }
 .st-note__close {
   display: grid;
@@ -2592,6 +2656,42 @@ a.st-file__title:hover {
 .st-setupcard__go {
   margin-left: auto;
 }
+/* After Finish with steps skipped: a smaller card listing them (§45.36 E15). */
+.st-setupcard--left {
+  padding: 12px 16px;
+  background: var(--st-panel);
+}
+.st-setupcard__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--st-on-sun, #1c1842);
+  background: var(--st-sun);
+}
+.st-setupcard--left .st-setupcard__title {
+  font-size: 1.02rem;
+}
+.st-setupcard__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.st-setupcard__list > li {
+  min-width: 0;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  color: var(--st-ink);
+  font-size: 0.88rem;
+  font-weight: 700;
+  background: var(--st-panel-strong);
+  overflow-wrap: anywhere;
+}
 
 /* "Continue: {name}": the idea, video, character or reference video opened last (§45.34), one tap back to it. */
 .st-continue {
@@ -2650,13 +2750,18 @@ a.st-file__title:hover {
   color: var(--st-on-sun);
 }
 
-/* The setup the first time: on its own, without the navigation (the brand and the switcher stay on top). */
+/* The setup the first time: on its own, without the navigation (the brand stays on top). On a computer its page
+   keeps the left column free, where the shell's workspace switch and Live chip are in every app (§45.38). */
 .stories-app.is-alone .st-top {
   display: flex;
 }
 .stories-app.is-alone .st-frame {
-  padding-left: max(var(--gutter), env(safe-area-inset-left));
   padding-bottom: calc(env(safe-area-inset-bottom) + 36px);
+}
+@media (min-width: 768px) {
+  .stories-app.is-alone .st-frame {
+    padding-bottom: 48px;
+  }
 }
 
 /* ---------- Phones: every target at least 48 px (after the rules above, so it wins) ---------- */

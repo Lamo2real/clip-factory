@@ -126,8 +126,9 @@ describe("each app has its own error boundary (§45.35 D16)", () => {
 
   it("App.tsx gives each pane its boundary: Clip Factory's own (its fallback as before) and Lamo Stories' card", async () => {
     const app = source("app/App.tsx");
-    expect(app).toMatch(/clips=\{\s*<KeptSearchProvider value=\{lastClipsSearch\.current\}>\s*<ErrorBoundary scope="app">\s*<Shell \/>/);
-    expect(app).toMatch(/stories=\{\s*<StoriesPaneBoundary onClips=\{\(\) => navigate\(chooseClips\(\)\)\}>\s*<StoriesHost/);
+    // Each pane has its own toasts too (§45.38 A2): a toast of the app that is hidden waits for it.
+    expect(app).toMatch(/clips=\{\s*<KeptSearchProvider value=\{lastClipsSearch\.current\}>\s*<ToastScope active=\{!inStories\} onScreen=\{clipsOnScreen\} onError=\{clipsDenied\}>\s*<ErrorBoundary scope="app">\s*<Shell \/>/);
+    expect(app).toMatch(/stories=\{\s*<ToastScope active=\{inStories\} onScreen=\{storiesOnScreen\} onError=\{storiesDeniedSound\}>\s*<StoriesPaneBoundary onClips=\{\(\) => navigate\(chooseClips\(\)\)\}>\s*<StoriesHost/);
     // Clip Factory without Lamo Stories: the same Shell, with no pane and no new boundary around it.
     expect(app).toContain("{storiesEnabled() ? <BothApps /> : <Shell />}");
     // Campaign Home is kept now; only the skill editor opens fresh (§45.35 D18).
@@ -310,7 +311,9 @@ describe("Clip Factory's kept search (§45.35 D18)", () => {
 
   it("NewJobForm reads its way and its start through the hook only (its one change)", async () => {
     const form = source("screens/home/NewJobForm.tsx");
-    expect(form).toContain('import { useKeptSearch } from "../../stories/pane.tsx";');
+    // From the shell, never from Lamo Stories' own files (§45.38 A3); with clipsGoLater, its one other change.
+    expect(form).toContain('import { clipsGoLater, useKeptSearch } from "../../app/shell.ts";');
+    expect(form).not.toMatch(/stories\//);
     expect(form).not.toMatch(/location\.search/);
     expect(form).toContain('const way = campaignStart(search).campaignId ? "campaign" : "normal";');
     expect(form).toContain("const [start] = useState(() => fileStart(search));");

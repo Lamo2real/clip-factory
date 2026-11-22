@@ -19,6 +19,7 @@
 // OpenAI-compatible service (its https address and the owner's key; its effort, when it has one, goes in
 // reasoning_effort, Low to Extra high, and it has no prompt cache). A model on a keyed host has no Region.
 import { useId, useState, type ReactNode } from "react";
+import modelsFile from "../../../../stories/config/models.json";
 import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
 import { storiesApi } from "../api/client.ts";
@@ -31,7 +32,9 @@ import {
   keySavedFor,
   makerModelsIn,
   MAX_CUSTOM_MODELS,
+  modelRegionProblem,
   REASONING_EFFORTS,
+  regionOfArn,
   type Effort,
   type EffortField,
   type ModelCalling,
@@ -41,10 +44,26 @@ import {
   type Price,
   type ProviderStatus,
 } from "../api/types.ts";
+import { StTech } from "../ui.tsx";
 import { baseUrlProblem } from "./MakerModels.tsx";
-import { Btn, cheer, Chip, hostName, MODEL_STATUS, Note, SetCard, SetPick, SetSelect, SetSwitch, SIcon, whenText } from "./bits.tsx";
+import { Btn, cheer, Chip, hostName, ITS_ROW, MODEL_STATUS, Note, SetCard, SetPick, SetSelect, SetSwitch, SIcon, useOnThisPage, whenText } from "./bits.tsx";
 
 const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
+
+/**
+ * The effort levels a maker's models usually take, and the usual one (§45.36 E17): Anthropic's, as Lamo Stories' own
+ * Claude models in stories/config/models.json take them (all five, the usual one its default effort); no other maker
+ * has levels of its own. On the Anthropic API they are Anthropic's (§45.37 G4); on an OpenAI-compatible service, its
+ * maker's up to Extra high (reasoning_effort has no Maximum).
+ */
+export function usualLevels(maker: string, host: ModelHost = "bedrock"): { efforts: Effort[]; defaultEffort: Effort | null } {
+  const openai = host === "openai_compatible";
+  if (callingFor(maker, openai ? "bedrock" : host).effortField !== "output_config") return { efforts: [], defaultEffort: null };
+  const taken = new Set<string>(modelsFile.models.filter((m) => m.provider.toLowerCase() === "anthropic").flatMap((m) => m.efforts));
+  const efforts = (openai ? REASONING_EFFORTS : EFFORTS).filter((e) => taken.has(e));
+  const usual = modelsFile.defaultEffort as Effort;
+  return { efforts, defaultEffort: efforts.includes(usual) ? usual : (efforts[0] ?? null) };
+}
 
 /** Who makes the model: the usual Bedrock makers, or anyone else by name. */
 const MAKERS = ["Anthropic", "Amazon", "Meta", "Mistral"] as const;
@@ -180,8 +199,16 @@ const makerOf = (d: Pick<Draft, "maker" | "otherMaker">) => (d.maker === SOMEONE
 export function withMaker(d: Draft, patch: Partial<Pick<Draft, "maker" | "otherMaker" | "host">>): Draft {
   const next = { ...d, ...patch };
   if (d.ownCalling) return next;
-  const usual = callingFor(makerOf(next), next.host ?? "bedrock");
-  return { ...next, ...usual, efforts: usual.effortField === "none" ? [] : next.efforts, defaultEffort: usual.effortField === "none" ? null : next.defaultEffort };
+  const host = next.host ?? "bedrock";
+  const usual = callingFor(makerOf(next), host);
+  if (usual.effortField === "none") return { ...next, ...usual, efforts: [], defaultEffort: null };
+  // A maker whose models take levels: its usual ones, ticked (§45.36 E17), unless some are ticked already.
+  return { ...next, ...usual, ...(next.efforts.length ? {} : usualLevels(makerOf(next), host)) };
+}
+
+/** The Region list's value for a Region code: a listed one, or Another Region with the code typed in. */
+function regionFields(code: string): Pick<Draft, "region" | "otherRegion"> {
+  return REGIONS.some((r) => r.value === code) ? { region: code, otherRegion: "" } : { region: ANOTHER_REGION, otherRegion: code };
 }
 
 function draftOf(m: ModelInfo | null): Draft {
@@ -201,8 +228,8 @@ function draftOf(m: ModelInfo | null): Draft {
     modelId: m?.modelId ?? "",
     region: m?.region && !REGIONS.some((r) => r.value === m.region) ? ANOTHER_REGION : (m?.region ?? DEFAULT_REGION),
     otherRegion: m?.region && !REGIONS.some((r) => r.value === m.region) ? m.region : "",
-    efforts: m ? [...m.efforts] : [],
-    defaultEffort: m?.defaultEffort ?? null,
+    // A new model starts as an Anthropic one, with the levels Anthropic's models take ticked (§45.36 E17).
+    ...(m ? { efforts: [...m.efforts], defaultEffort: m.defaultEffort ?? null } : usualLevels("Anthropic")),
     vision: m?.vision ?? false,
     maxTokens: String(m?.maxOutputTokens ?? DEFAULT_MAX_TOKENS),
     priced: !!price,
@@ -229,6 +256,9 @@ export function defOf(d: Draft): ModelDef | { problem: string } {
   const region = d.region === ANOTHER_REGION ? d.otherRegion.trim() : d.region;
   const badRegion = bedrock ? regionProblem(region) : null;
   if (badRegion) return { problem: badRegion };
+  // The Region must be where its ID says it runs (§45.36 E4): an ARN's own Region, a profile's part of the world.
+  const misfit = bedrock ? modelRegionProblem(d.modelId, region) : null;
+  if (misfit) return { problem: misfit };
   const badUrl = host === "openai_compatible" ? baseUrlProblem(d.baseUrl ?? "") : null;
   if (badUrl) return { problem: badUrl };
   const efforts = d.effortField === "none" ? [] : EFFORTS.filter((e) => d.efforts.includes(e));
@@ -377,13 +407,31 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
         </Field>
       ) : null}
       {host === "bedrock" ? (
-        <Field
-          id={`${id}-mid`}
-          label="Bedrock model ID or inference profile"
-          hint="Copy it from the Amazon Bedrock console: a model ID, an inference profile like eu.amazon.nova-premier-v1:0, or its ARN."
-        >
-          <input id={`${id}-mid`} className="st-stg-input st-stg-input--code" value={d.modelId} spellCheck={false} autoComplete="off" maxLength={200} placeholder="eu.amazon.nova-premier-v1:0" onChange={(e) => set({ modelId: e.target.value })} />
-        </Field>
+        <>
+          <Field id={`${id}-mid`} label="Model ID" hint="Copy it from the model's page in the Amazon Bedrock console.">
+            <input
+              id={`${id}-mid`}
+              className="st-stg-input st-stg-input--code"
+              value={d.modelId}
+              spellCheck={false}
+              autoComplete="off"
+              maxLength={200}
+              placeholder="eu.amazon.nova-premier-v1:0"
+              onChange={(e) => {
+                const modelId = e.target.value;
+                // A pasted ARN says its own Region: the Region below follows it (§45.36 E4).
+                const inArn = regionOfArn(modelId);
+                set({ modelId, ...(inArn ? regionFields(inArn) : {}) });
+              }}
+            />
+          </Field>
+          <StTech className="st-stg-tech">
+            <span>
+              It can be a model ID, an inference profile like <code>eu.amazon.nova-premier-v1:0</code>, or an ARN. A profile that starts with eu., us. or
+              apac. runs only in that part of the world, so its Region must be there too. An ARN names its own Region, which is filled in for you.
+            </span>
+          </StTech>
+        </>
       ) : (
         <Field
           id={`${id}-mid`}
@@ -440,7 +488,12 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
         }
         checked={d.effortField !== "none"}
         onChange={(v) =>
-          setD((x) => ({ ...x, ownCalling: true, effortField: v ? ((x.host ?? "bedrock") === "openai_compatible" ? "reasoning_effort" : "output_config") : "none", efforts: v ? x.efforts : [], defaultEffort: v ? x.defaultEffort : null }))
+          setD((x) => {
+            const where = x.host ?? "bedrock";
+            // Switched on with nothing ticked: its maker's usual levels to start from (§45.36 E17).
+            const start = v && !x.efforts.length ? usualLevels(makerOf(x), where) : { efforts: x.efforts, defaultEffort: x.defaultEffort };
+            return { ...x, ownCalling: true, effortField: v ? (where === "openai_compatible" ? "reasoning_effort" : "output_config") : "none", efforts: v ? start.efforts : [], defaultEffort: v ? start.defaultEffort : null };
+          })
         }
       />
       {d.effortField !== "none" ? (
@@ -540,6 +593,8 @@ function OwnRow({
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
   const s = MODEL_STATUS[m.status];
+  // Said in the model's own row: "on this row", and the tasks below it.
+  const here = useOnThisPage(ITS_ROW);
   const remove = async () => {
     setBusy(true);
     try {
@@ -551,7 +606,7 @@ function OwnRow({
       // A model a saved setting still uses stays: the API names that setting (409).
       const text = friendlyMessage(e);
       setRefused(e instanceof ApiError && e.code === "conflict" ? text : null);
-      toast.error(text);
+      toast.error(here(text));
       setSure(false);
     } finally {
       setBusy(false);
@@ -561,14 +616,23 @@ function OwnRow({
     <li className="st-stg-own" data-model={m.key}>
       <div className="st-stg-own__head">
         <span className="st-stg-own__name">{m.label}</span>
-        <Chip tone="sky">Added by you</Chip>
-        {/* The API clears a moved model's last check (§45.35 D6): "Not checked yet"; an older one kept it: "Check it again". */}
-        {stale && m.status !== "not_checked" ? <Chip tone="sun">Check it again</Chip> : <Chip tone={s.tone}>{s.label}</Chip>}
+        {/* Its marks together, with the usual gap, its status at the right edge like every other row (§45.36 E17). */}
+        <span className="st-stg-chips">
+          <Chip tone="sky">Added by you</Chip>
+          {/* The API clears a moved model's last check (§45.35 D6): "Not checked yet"; an older one kept it: "Check it again". */}
+          {stale && m.status !== "not_checked" ? <Chip tone="sun">Check it again</Chip> : <Chip tone={s.tone}>{s.label}</Chip>}
+        </span>
       </div>
       <p className="st-stg-small">
         Made by {m.provider} · on {hostName(m.host ?? "Amazon Bedrock", m.baseUrl, m.hostId)}
-        {m.region && hostIdOf(m.hostId ?? m.host) === "bedrock" ? ` in ${m.region}` : ""} · <code className="st-stg-code">{m.modelId}</code>
+        {m.region && hostIdOf(m.hostId ?? m.host) === "bedrock" ? ` in ${m.region}` : ""}
       </p>
+      {/* Its exact ID, one tap away (§45.36 E14): a Bedrock model ID, or the model's name on a keyed host. */}
+      <StTech className="st-stg-tech">
+        <span>
+          {hostIdOf(m.hostId ?? m.host) === "bedrock" ? "Model ID" : "Model name"} <code className="st-stg-code">{m.modelId}</code>
+        </span>
+      </StTech>
       {keySaved === false ? (
         <Note tone="sun" icon="key">
           Paste your {HOST_LABEL[hostIdOf(m.hostId ?? m.host)]} key in Provider keys below, then tap Check models.
@@ -580,12 +644,12 @@ function OwnRow({
       </p>
       <p className="st-stg-small">{callingWords(callingOf(m))}.</p>
       <p className="st-stg-small">
-        {stale ? "Changed since its last check. Check it again: tap Check models above to see if it answers now." : m.statusLine}
+        {stale ? "Changed since its last check. Check it again: tap Check models above to see if it answers now." : here(m.statusLine)}
         {!stale && m.checkedAt ? ` (${whenText(m.checkedAt)})` : ""}
       </p>
       {refused ? (
         <Note tone="coral" role="alert">
-          {refused}
+          {here(refused)}
         </Note>
       ) : null}
       {sure ? (

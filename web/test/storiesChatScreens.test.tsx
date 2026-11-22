@@ -17,7 +17,8 @@ import { forgetVisit } from "../src/stories/chat/device.ts";
 import { fileModels, forgetModels } from "../src/stories/chat/models.ts";
 import { forgetProjectNames } from "../src/stories/chat/project.ts";
 import { forgetUploads } from "../src/stories/chat/references/uploads.ts";
-import { sounds } from "../src/lib/sounds.ts";
+// Lamo Stories plays its own sound engine (§45.38 A2): every engine's play is watched.
+import { SoundEngine } from "../src/lib/sound.ts";
 import type { StoriesPage } from "../src/stories/routes.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -361,7 +362,7 @@ describe("references", () => {
   }, 20_000);
 
   it("with the contract's answer (no job): the moving bar while it runs, and a cheer only for a real result", async () => {
-    const play = vi.spyOn(sounds, "play");
+    const play = vi.spyOn(SoundEngine.prototype, "play");
     store.knobs.refSeconds = 1.5;
     await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.ready })} />);
     await until(() => !!byText("button", "Analyze it"));
@@ -378,7 +379,7 @@ describe("references", () => {
   }, 20_000);
 
   it("a failed re-run is not cheered: it says so, keeps the last analysis and offers another model", async () => {
-    const play = vi.spyOn(sounds, "play");
+    const play = vi.spyOn(SoundEngine.prototype, "play");
     await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.analyzed })} />);
     await until(() => !!$(".st-ref-analysis"));
     store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Lamo Stories › Settings › AI, or try again.";
