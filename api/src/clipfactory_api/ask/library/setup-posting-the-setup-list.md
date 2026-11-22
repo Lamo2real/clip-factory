@@ -19,3 +19,8 @@ Settings.
 **Get paid by brands.** Under the five cards sits one more card, **Content Rewards**, for paid clipping campaigns. It
 is set up once too (3 steps), but it is not a place Clip Factory posts to, so it never counts in **2 of 5 ready** and
 is never in the floating list. Its steps are in [Content Rewards](#content-rewards) below.
+
+**Get paid.** How each place pays you is its own list, **Settings › Posting › Get paid**, right after Set up posting:
+one card per place with its payout steps, a status that says if money can reach you and how Clip Factory knows, and
+what was sent to your bank. It never counts in **2 of 5 ready** and is never in the floating list. Its steps are in
+[Get paid](#get-paid) below.

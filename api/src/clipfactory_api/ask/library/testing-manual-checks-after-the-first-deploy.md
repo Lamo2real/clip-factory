@@ -139,7 +139,6 @@
    - Check once a week that Content Rewards' robots.txt still allows `/sitemap.xml` and `/c/campaigns/` (the finder
      checks it every day and stops by itself when it doesn't).
 
-
 18. **Auto-posting** ([CONTRACTS §46.8 and §46.14](CONTRACTS.md#468-testing-with-nothing-public)): test the whole
    flow with nothing public before he turns it on for real. Not checked live when built.
    - In the deploy log, the plan adds only `module.autopost.*` and the two new alarms, with 0 to destroy; the delete
@@ -160,3 +159,25 @@
      you", "Private test · draft on your Page" and "Private test · checked, not published", with no numbers.
    - Only then turn **Practice** off. The first live run posts the oldest clip at the time the page showed; its posts
      say "· by auto-posting" with **Open** links, and the clip is under **Post these on TikTok yourself**.
+
+19. **Get paid** ([CONTRACTS §40.8](CONTRACTS.md#408-changes-to-earlier-sections-who-builds-what-tests-not-verified-live),
+   "Not verified live"): not checked live when built. Do them at the owner's first use; each failure becomes "not
+   available" or "can't check", never a number.
+   - In the deploy log, the plan changes only the two stream filters and the api's environment (`WHOP_CONNECT`) in
+     place, destroys nothing and replaces nothing; the five setup cards, "2 of 5 ready" and the five-row to-do list
+     are unchanged.
+   - YouTube: tap "Allow payment reading" with the Google account that has AdSense for YouTube. Note whether
+     `accounts.list` returns that account, how Google writes a SEK amount in `payments`, whether `Payment.date` is the
+     day Google sent it, whether Google showed more than its unverified-app screen, and whether `/channel/UC/monetization`
+     opens **Earn**. When a hold appears, note its alert type and where the red message shows on **Payments**.
+   - Note which error a switched-off AdSense API gives (`accessNotConfigured` or `SERVICE_DISABLED`; both are handled).
+   - Meta: the payout steps' words in Sweden (is **Sign into your bank** offered?), the path **All tools** ›
+     **Payouts**, and whether the Meta Business Suite addresses open after sign-in. For Facebook's estimate: read one
+     day of `monetization_approximate_earnings` and compare it with Meta Business Suite › Insights › Earnings; if they
+     match, a one-line PR sets `moneyVerified: true` (§40.3).
+   - TikTok: whether Video Gifts and LIVE Gifts are open in Sweden, and the buttons after **Balance** › **LIVE
+     rewards**.
+   - X: the words of Creator Studio's Stripe button and whether Creator Studio shows paid-out history.
+   - Whop (only after the `whop_connect_enabled` PR): whether a personal user can make an app and grant the four
+     permissions, whether `GET /users/me` and `GET /payouts` accept his sign-in, whether Content Rewards pays into his
+     own or a business balance, and the units of `destination_amount`.

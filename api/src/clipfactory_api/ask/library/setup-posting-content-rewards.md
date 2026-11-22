@@ -601,3 +601,5 @@ be checked before the first real Connect is listed in CONTRACTS §38.21.
   the owner's own tap) and [Direct Post](https://developers.tiktok.com/doc/content-posting-api-reference-direct-post)
 - Instagram and Facebook: [Content publishing](https://developers.facebook.com/docs/instagram-platform/content-publishing)
   (no paid-partnership field for this kind of app)
+
+---
