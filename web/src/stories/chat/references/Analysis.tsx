@@ -23,7 +23,12 @@ export function AnalysisView({ analysis, durationSec, onSeek }: { analysis: Refe
         <h2 id="st-ref-hook" className="st-ref-block__title">
           The hook
         </h2>
-        <p className="st-ref-big">At {clock(analysis.hook.atSec)}</p>
+        {/* The contract's big light numeral with a small unit (StatNumeral's look; the words stay as they are). */}
+        <p className="st-ref-big st-stat">
+          <span className="st-stat__value">
+            <span className="st-stat__unit">At</span> <span className="st-stat__num">{clock(analysis.hook.atSec)}</span>
+          </span>
+        </p>
         <p>{analysis.hook.what}</p>
       </Glass>
 
@@ -31,8 +36,11 @@ export function AnalysisView({ analysis, durationSec, onSeek }: { analysis: Refe
         <h2 id="st-ref-pace" className="st-ref-block__title">
           Pacing
         </h2>
-        <p className="st-ref-big">
-          {analysis.pacing.cutsPer10s.toLocaleString(undefined, { maximumFractionDigits: 1 })} {analysis.pacing.cutsPer10s === 1 ? "cut" : "cuts"} every 10 seconds
+        <p className="st-ref-big st-stat">
+          <span className="st-stat__value">
+            <span className="st-stat__num">{analysis.pacing.cutsPer10s.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>{" "}
+            <span className="st-stat__unit">{analysis.pacing.cutsPer10s === 1 ? "cut" : "cuts"} every 10 seconds</span>
+          </span>
         </p>
         <p>{analysis.pacing.notes}</p>
       </Glass>

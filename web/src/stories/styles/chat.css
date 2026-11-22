@@ -6,7 +6,8 @@
 
    Every selector is an st-chat- or st-ref- class (or sits under .stories-app). The glass itself comes from the
    contract's classes in the markup (.st-glass, .st-glass--hero, --bar, --float, --tinted, .st-cream, .st-plate): this
-   file places and sizes, and never sets a --st-* token (its one local value is --st-chat-dot, a chip's dot colour).
+   file places and sizes, and never sets a --st-* token (its two local values: --st-chat-dot, a chip's dot colour, and
+   --st-chat-seek, how far the player's scrubber is filled, set inline by chat/references/Player.tsx).
    Words loose on the page sit in .st-plate (a glass plate over a picture or the desktop, nothing over the colours).
 
    The owner's rules, checked by test/storiesStyles.test.ts and e2e/stories-chat.spec.ts: the cursor never changes,
@@ -119,10 +120,26 @@
   background: linear-gradient(rgb(var(--st-coral-rgb) / 0.3), rgb(var(--st-coral-rgb) / 0.3)), var(--st-fill-control);
 }
 
+/* Not ready yet (aria-disabled: a tap plays the deny sound). Never faded: the main action steps back to a glass control
+   with soft words at full strength (no orange, no glow), so its words keep 4.5:1 over every background; an icon button
+   keeps its glass and only its glyph softens. */
 .st-chat-btn[aria-disabled="true"],
-.st-chat-btn--icon[aria-disabled="true"] {
-  opacity: 0.55;
+.st-chat-btn[aria-disabled="true"]:active,
+.st-chat-btn--icon[aria-disabled="true"],
+.st-chat-btn--icon[aria-disabled="true"]:active {
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text-soft);
   transform: none;
+}
+
+.st-chat-btn[aria-disabled="true"]:hover,
+.st-chat-btn--icon[aria-disabled="true"]:hover {
+  background: var(--st-fill-control-hover);
+}
+
+.st-chat-btn--icon[aria-disabled="true"] > span {
+  opacity: 0.6;
 }
 
 .st-chat-btn:focus-visible,
@@ -983,8 +1000,17 @@
   margin-top: var(--st-space-1);
 }
 
+/* A bullet is a shape (the orange accent); a number is a word: warm amber on glass, deep orange on cream. */
 .st-chat-text__list li::marker {
   color: var(--st-accent);
+}
+
+.stories-app ol.st-chat-text__list > li::marker {
+  color: var(--st-text-amber);
+}
+
+.stories-app .st-cream .st-chat-text__list > li::marker {
+  color: var(--st-on-cream-orange);
 }
 
 .st-chat-bubble strong {
@@ -1203,8 +1229,11 @@
   min-height: var(--st-tap-phone);
 }
 
+/* The foot the page keeps in view (the newest words, or a new chat's hello card). Its scroll margin is the sticky box's
+   own offset, so at the end the box sits in its place under the last message and covers nothing. */
 .st-chat-end {
   height: 1px;
+  scroll-margin-bottom: calc(var(--st-tab-h, 0px) + env(safe-area-inset-bottom) + 18px);
 }
 
 /* The model and effort line: two pills (cream while "Just for this message" is on), who runs it, how it is doing. */
@@ -1456,6 +1485,15 @@
   justify-content: flex-start;
 }
 
+/* A video's whole name, never cut off: two that start alike must still look different. */
+.st-ref-card .st-media__title,
+.st-ref-upload .st-media__title {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+
 .st-ref-card__tile {
   width: 100%;
   height: 100%;
@@ -1495,29 +1533,122 @@
   align-items: start;
 }
 
-/* The player in its bezel: a hero surface 10 px round the video, whose corners are 20 − 10 = 10. */
+/* The player in its bezel: a hero surface 10 px round the video, whose corners are 20 − 10 = 10, and Stories' own
+   controls under it on the same glass (never the browser's grey strip): the scrubber, then play, the time, sound and
+   full screen. */
 .st-ref-player {
+  display: grid;
+  gap: var(--st-space-2);
   width: 100%;
   max-width: 340px;
   margin: 0 auto;
-  aspect-ratio: 9 / 16;
-  max-height: min(70vh, 604px);
   overflow: hidden;
   padding: var(--st-bezel-pad);
 }
 
 .st-ref-player--empty {
-  aspect-ratio: auto;
   min-height: 160px;
 }
 
 .st-ref-player__video {
   display: block;
   width: 100%;
-  height: 100%;
+  aspect-ratio: 9 / 16;
+  max-height: min(62vh, 540px);
   object-fit: contain;
   border-radius: var(--st-r-inner);
   background: var(--st-base-3);
+}
+
+.st-ref-controls {
+  display: grid;
+  gap: var(--st-space-1);
+  min-width: 0;
+}
+
+.st-ref-controls__row {
+  display: flex;
+  align-items: center;
+  gap: var(--st-space-2);
+  min-width: 0;
+}
+
+.st-ref-controls__time {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 var(--st-space-1);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
+}
+
+/* The scrubber: the browser's own range (arrow keys, Home and End), drawn as a thin track with the orange fill to
+   where the video is and the white knob there. A 44 px target (48 on phones) round a 6 px track. */
+.st-ref-seek {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: var(--st-tap);
+  margin: 0;
+  padding: 0;
+  border-radius: var(--st-r-inner);
+  background: transparent;
+}
+
+.st-ref-seek::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: var(--st-r-round);
+  background: linear-gradient(var(--st-accent), var(--st-accent)) 0 0 / var(--st-chat-seek, 0%) 100% no-repeat, var(--st-track);
+}
+
+.st-ref-seek::-moz-range-track {
+  height: 6px;
+  border-radius: var(--st-r-round);
+  background: var(--st-track);
+}
+
+.st-ref-seek::-moz-range-progress {
+  height: 6px;
+  border-radius: var(--st-r-round);
+  background: var(--st-accent);
+}
+
+.st-ref-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: var(--st-knob-size);
+  height: var(--st-knob-size);
+  margin-top: calc((6px - var(--st-knob-size)) / 2);
+  border: 0;
+  border-radius: var(--st-r-round);
+  background: var(--st-knob);
+  box-shadow: var(--st-glow-accent), var(--st-depth-1);
+  transition: box-shadow var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-ref-seek::-moz-range-thumb {
+  width: var(--st-knob-size);
+  height: var(--st-knob-size);
+  border: 0;
+  border-radius: var(--st-r-round);
+  background: var(--st-knob);
+  box-shadow: var(--st-glow-accent), var(--st-depth-1);
+}
+
+.st-ref-seek:hover::-webkit-slider-thumb {
+  box-shadow: var(--st-glow-action-hover), var(--st-depth-2);
+}
+
+.st-ref-seek:hover::-moz-range-thumb {
+  box-shadow: var(--st-glow-action-hover), var(--st-depth-2);
+}
+
+.st-ref-seek:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
 }
 
 .st-ref-player__none {
@@ -1616,6 +1747,30 @@
   font-weight: var(--st-weight-body);
 }
 
+/* The steps, with the job's own progress beside them as the arc with the white knob (ArcDial). */
+.st-ref-run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-3) var(--st-space-5);
+  min-width: 0;
+}
+
+.st-ref-run > .st-ref-track {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.st-chat-progress--dial {
+  flex: none;
+  margin-inline: auto;
+  height: auto;
+  width: auto;
+  overflow: visible;
+  border-radius: 0;
+  background: none;
+}
+
 .st-ref-busybar {
   height: 8px;
   border-radius: var(--st-r-round);
@@ -1669,14 +1824,23 @@
   line-height: var(--st-lh-head);
 }
 
-/* The hook's time and the pacing: big light figures in warm amber. */
-.st-ref-big {
+/* The hook's time and the pacing: the contract's big light numeral (.st-stat) with its small unit in warm amber. */
+.stories-app .st-ref-big {
+  margin: var(--st-space-1) 0 var(--st-space-3);
+}
+
+.st-ref-big .st-stat__value {
+  flex-wrap: wrap;
+  column-gap: 0.2em;
+  row-gap: var(--st-space-1);
+  min-width: 0;
+}
+
+.st-ref-big .st-stat__unit {
   color: var(--st-text-amber);
-  font-size: var(--st-fs-h2);
-  font-weight: var(--st-weight-num);
-  font-variant-numeric: lining-nums tabular-nums;
-  letter-spacing: -0.01em;
-  line-height: 1.1;
+  font-family: var(--st-font);
+  font-size: max(var(--st-fs-min), var(--st-fs-unit));
+  line-height: 1.2;
 }
 
 .st-ref-small {
@@ -1839,6 +2003,43 @@
     min-height: 56px;
   }
 
+  .st-ref-seek {
+    height: var(--st-tap-phone);
+  }
+
+  /* The box stays light on a phone: the model and effort pills, then "Just for this message" beside how the model is
+     doing, then who runs it on one small line; tighter gaps. (The order is visual only: Tab still goes pills first.) */
+  .st-chat-compose {
+    gap: var(--st-space-1);
+    padding-top: var(--st-gap-surface);
+  }
+
+  .st-chat-compose .st-chat-ai,
+  .st-chat-compose .st-chat-ai__row {
+    row-gap: var(--st-space-1);
+  }
+
+  .st-chat-compose .st-chat-ai__row > .st-chat-chip,
+  .st-chat-compose .st-chat-ai__once {
+    order: 1;
+  }
+
+  .st-chat-compose .st-chat-ai__status {
+    order: 2;
+  }
+
+  .st-chat-compose .st-chat-ai__provider {
+    order: 3;
+    flex-basis: 100%;
+    padding: 0 var(--st-space-2);
+  }
+
+  /* A new chat's hello card is a little tighter, so its ideas clear the box on a phone's first view. */
+  .st-chat-start {
+    gap: var(--st-space-2);
+    padding: var(--st-space-4) var(--st-space-3);
+  }
+
   /* The thumb's side: the main actions sit on the right. */
   .st-chat-head {
     align-items: center;
@@ -1891,6 +2092,10 @@
 @media (min-width: 768px) {
   .st-chat-compose {
     bottom: 14px;
+  }
+
+  .st-chat-end {
+    scroll-margin-bottom: 14px;
   }
 
   .st-chat-scrim {
@@ -2087,5 +2292,11 @@
 /* An answer's exact model id, folded away under its model line. */
 .st-chat-msg__tech {
   margin-top: var(--st-space-1);
+  font-size: var(--st-fs-min);
+}
+
+/* The exact model id inside Chat's and References' "Technical details": never under the text floor. */
+.st-chat-msg__tech .st-s-used__id,
+.st-ref-tech .st-s-used__id {
   font-size: var(--st-fs-min);
 }

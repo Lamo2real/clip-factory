@@ -8,7 +8,7 @@ import { createPortal } from "react-dom";
 import { ApiError } from "../../api/errors.ts";
 import { Glide } from "../../components/Glide.tsx";
 import { trapTab } from "../../components/Sheet.tsx";
-import { cx, RoundGlassButton } from "../glass/index.ts";
+import { ArcDial, cx, RoundGlassButton } from "../glass/index.ts";
 import { storiesBehind, storiesReduceMotion, storiesSound } from "../prefs.ts";
 
 /** The sentence for a failed call: the server's own when it sent one, else `fallback`. */
@@ -42,6 +42,11 @@ const PATHS = {
   tune: "M4 7h9M17 7h3M4 17h3M11 17h9M15 4.5v5M9 14.5v5",
   ear: "M8 9a4 4 0 1 1 8 0c0 3-3 4-3 6.5a2.5 2.5 0 0 1-5 0M10.5 10a1.5 1.5 0 1 1 3 0",
   pen: "M5 19h4l10-10-4-4L5 15zM13 7l4 4",
+  play: "M8.5 5.5v13L18.5 12z",
+  pause: "M9 6v12M15 6v12",
+  sound: "M4.5 9.5H8l4.5-3.5v12L8 14.5H4.5zM16 9.2a4 4 0 0 1 0 5.6M18.6 6.6a7.6 7.6 0 0 1 0 10.8",
+  muted: "M4.5 9.5H8l4.5-3.5v12L8 14.5H4.5zM16.5 9.5l5 5M21.5 9.5l-5 5",
+  expand: "M4.5 9V4.5H9M15 4.5h4.5V9M19.5 15v4.5H15M9 19.5H4.5V15",
 } as const;
 
 export type IconName = keyof typeof PATHS;
@@ -148,9 +153,10 @@ export function Btn({
     onClick?.(e);
   };
   if (!children && icon && label) {
-    const { "aria-label": _named, ...button } = rest;
+    // title "" (unless given): the name is for screen readers, as before; no new hover tooltip words.
+    const { "aria-label": _named, title = "", ...button } = rest;
     return (
-      <RoundGlassButton label={label} tone={main ? "accent" : "glass"} className={cx("st-chat-btn--icon", danger && "st-chat-btn--danger", className)} aria-disabled={off || undefined} onClick={tap} {...button}>
+      <RoundGlassButton label={label} title={title} tone={main ? "accent" : "glass"} className={cx("st-chat-btn--icon", danger && "st-chat-btn--danger", className)} aria-disabled={off || undefined} onClick={tap} {...button}>
         <Icon name={icon} size={20} />
       </RoundGlassButton>
     );
@@ -267,9 +273,18 @@ export function Sheet({ title, onClose, children, actions, wide = false }: { tit
 
 // ---------- Progress, Undo ----------
 
-/** An eased progress bar (0..1); `label` is read out. */
-export function Progress({ value, label }: { value: number; label: string }) {
+/**
+ * An eased progress bar (0..1); `label` is read out. `dial` draws it as the contract's arc with the white knob
+ * (ArcDial) instead, for a long run with its own progress (a reference video's analysis).
+ */
+export function Progress({ value, label, dial = false }: { value: number; label: string; dial?: boolean }) {
   const v = Math.max(0, Math.min(1, value));
+  if (dial)
+    return (
+      <div className="st-chat-progress st-chat-progress--dial">
+        <ArcDial value={v} label={label} size={120} />
+      </div>
+    );
   return (
     <div className="st-chat-progress" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(v * 100)}>
       <span className="st-chat-progress__fill" style={{ transform: `scaleX(${v})` }} />
