@@ -475,6 +475,17 @@ export const PROVIDER_STATE: Record<ProviderStatus["state"], { label: string; to
   unavailable: { label: "Not available yet", tone: "coral" },
 };
 
+/**
+ * Who makes a model and who runs it (§45.35 D8): "Anthropic on Amazon Bedrock", "Mistral on Amazon Bedrock"; just the
+ * one name while they are the same (an older model list named Amazon Bedrock as the maker too).
+ */
+export function madeBy(m: Pick<ModelInfo, "provider" | "host">): string {
+  const maker = m.provider.trim();
+  const host = m.host?.trim() ?? "";
+  if (!host || host.toLowerCase() === maker.toLowerCase()) return maker || host;
+  return maker ? `${maker} on ${host}` : host;
+}
+
 /** A model's status in a few words, for the end of a select option ("Claude Fable 5.1 · no access"). */
 export function statusSuffix(m: ModelInfo): string {
   return m.status === "ok" ? "" : ` · ${MODEL_STATUS[m.status].label.toLowerCase()}`;

@@ -1,4 +1,5 @@
 import { prefersReducedMotion } from "./prefs.ts";
+import { storiesOnScreen } from "../stories/pane.tsx";
 
 /**
  * Vermilion, bone and leaf for the green glass, plus one raised green (#1B4A3B) that shows when the glass is light
@@ -24,6 +25,9 @@ interface Piece {
  * done, skipped entirely when motion is reduced.
  */
 export function burst(origin?: { x: number; y: number }, amount = 90): void {
+  // Never over Lamo Stories (a Clip Factory page kept behind it finished something, §45.35 D17); always false while
+  // Lamo Stories is switched off.
+  if (storiesOnScreen()) return;
   if (prefersReducedMotion() || typeof document === "undefined") return;
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");

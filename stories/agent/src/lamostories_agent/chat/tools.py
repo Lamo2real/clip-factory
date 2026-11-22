@@ -37,6 +37,7 @@ from lamostories_agent.tasks.common import (
     owned,
     public,
     ulid,
+    ws_prefix,
 )
 from lamostories_agent.tasks.fence import Fence
 from lamostories_agent.tasks.ideas import CATEGORIES, LOGLINE_MAX, TITLE_MAX, TONES, check_concept
@@ -300,9 +301,16 @@ class Toolbox:
             raise ToolError("Pick 1 to 3 saved characters.")
         return out
 
+    def _studied(self, r: dict[str, Any]) -> bool:
+        """Whether a reference has a study (``analysisKey`` in its own folder), whatever its status: a re-analysis
+        that runs or failed keeps the earlier one (§45.35 D9)."""
+        key = str(r.get("analysisKey") or "")
+        folder = f"{ws_prefix(self.user_id, self.workspace_id)}references/{r.get('refId')}/"
+        return bool(key) and in_workspace(key, self.user_id, self.workspace_id) and key.startswith(folder)
+
     def _references(self, ids: Any) -> list[str]:
-        """Up to 3 reference videos of this workspace that have been analyzed (their study is what the writer reads,
-        §45.28); anything else is a mistake the model can fix."""
+        """Up to 3 reference videos of this workspace that have a study (what the writer reads, §45.28); anything
+        else is a mistake the model can fix."""
         if ids is None:
             return []
         wanted = list(dict.fromkeys(str(i) for i in ids)) if isinstance(ids, list) else None
@@ -312,7 +320,7 @@ class Toolbox:
         unknown = [i for i in wanted if i not in refs]
         if unknown:
             raise ToolError(f"These are not reference videos here: {', '.join(unknown)}. Use list_references.")
-        waiting = [i for i in wanted if refs[i].get("status") != "analyzed" or not refs[i].get("analysisKey")]
+        waiting = [i for i in wanted if not self._studied(refs[i])]
         if waiting:
             raise ToolError(
                 f"These reference videos have not been analyzed yet: {', '.join(waiting)}. Offer the Analyze button "
@@ -496,6 +504,7 @@ class Toolbox:
                     "title": r.get("title"),
                     "status": r.get("status"),
                     "durationSec": r.get("durationSec"),
+                    "studied": self._studied(r),  # usable in offer_make_video (§45.35 D9)
                 }
                 for r in refs[:MAX_LIST]
             ]

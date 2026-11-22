@@ -19,7 +19,8 @@ find campaigns and join them by requirements he sets (I-50), and the owner's req
 auto-posting, the oldest clips in Review going up by themselves every X hours, with his "Yes, all your picks" to the
 seven questions asked before building (BR-29, BR-08 AC1 and BR-26 AC1 updates, NFR-02 AC1 update), and his request for
 a payout setup per place in the same system as the posting setup, a status that says whether money can reach him, and
-the money sent to his bank per place (BR-30, NFR-20, UX-20).
+the money sent to his bank per place (BR-30, NFR-20, UX-20), and, for what really reached his bank, his choice of
+option A, Enable Banking, on 22 Nov 2026 (BR-31, NFR-21, UX-21).
 Every requirement below traces back to one of them. Where
 the brief was open or unclear, the interpretation we chose is stated in [Interpretations and open questions](#interpretations-and-open-questions).
 
@@ -614,15 +615,42 @@ total of my exact number that I've gotten into my bank account". ([CONTRACTS.md
   Whop"), per place and as one total per money type, with when it should arrive. Different money types are never added
   together, an amount Clip Factory can't read is shown as written and not added, and the other places say "Not
   available" with where to look, never $0. Whop's total covers all his Whop money, and says so.
-- AC6: Money that reached his bank can only come from his bank. Until the owner chooses how Clip Factory may see it
-  (Enable Banking, his bank's file, payout emails, or nothing new), every screen says "Clip Factory can't see your bank.
-  Look in your bank's app to see what arrived."
+- AC6: Money that reached his bank can only come from his bank: that is Your bank (BR-31). Until it is set up, and
+  while it is switched off, every screen says "Clip Factory can't see your bank. Look in your bank's app to see what
+  arrived."
 - AC7: Clip Factory never asks for or stores bank details, card numbers or tax numbers; every payout is set up on the
   place's own pages.
 - AC8: The facts are the places' own, checked on 21 Nov 2026 for Sweden: YouTube pays in kronor to the bank once there
   is kr 700; TikTok's Creator Rewards isn't open in Sweden (Gifts may be); Meta pays from $25 through one payout
   account shared by Instagram and Facebook; X's Original Content Rewards leaves out automated and reuploaded posts, so
   X's page warns that Clip Factory clips probably won't earn there; Content Rewards pays through Whop.
+
+### BR-31 Your bank: the money from each app that really reached your bank
+"after I've connected I want to know exactly how much I earn per platform and that includes content rewards, and then
+I wanna know a total of my exact number that I've gotten into my bank account or accounts, but in total for each of
+those platforms meaning content rewards meaning U2 TikTok, Instagram, Facebook and X, all of them". Offered four bank
+sources (A Enable Banking, B his bank's file, C payout emails, D nothing new), he chose on 22 Nov 2026: "A: bank
+connection". ([CONTRACTS.md §40.5](CONTRACTS.md#405-your-bank-what-really-reached-it-read-through-enable-banking-owners-choice-a-2026-11-22),
+[ADR-82](DECISIONS.md#adr-82-your-bank-enable-banking-restricted-mode-read-once-a-day-keep-only-matched-app-money), the
+steps in [SETUP_POSTING.md](SETUP_POSTING.md#your-bank))
+- AC1: A **Your bank** card under Get paid's place cards opens one page of step cards (an optional email to Enable
+  Banking, then seven numbered steps) that walk him through his own Enable Banking account and app and connect each
+  bank with BankID: about 25 minutes in one sitting, 64 taps (18 of them Clip Factory's). Up to 4 banks, PayPal too.
+- AC2: "Reached your bank", tagged "Your bank says", shows per place (YouTube, TikTok, Instagram, Facebook, "Instagram
+  and Facebook together" for Meta, X, Content Rewards) and per money type, plus a total per money type, on the Your
+  bank card and page, each place's Get paid page and Money. Only money his bank booked and Clip Factory matched to an
+  app counts. Money types are never added together; nothing is converted or estimated; a place with nothing is named
+  ("No money from TikTok or X reached your bank yet."), never $0; it is never added to "Sent to your bank" or the
+  30-day total.
+- AC3: He never types an amount. A payment matches Google's or Whop's own payout record, Whop's trace code or a payer
+  he confirmed; otherwise a card asks "Is this money from YouTube?" and he answers with one or two taps. A tap never
+  changes an amount, and a match can be undone ("Not from YouTube?").
+- AC4: Clip Factory reads his bank once a day and when he taps Check now. A bank link lasts 90 to 180 days, as his
+  bank sets, with a notice 7 days before it ends and one-tap "Reconnect Swedbank". "Stop reading Swedbank" and "Forget
+  my bank" are only his own taps, with an 8-second Undo.
+- AC5: Enable Banking's free terms are kept: his own account and app, only his own personal accounts (business
+  accounts are dropped), only the owner. The optional first step holds a ready email that asks Enable Banking whether
+  his app money counts as personal use; sending it is his choice.
 
 ---
 
@@ -838,6 +866,27 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
 - AC6: The Whop part ships switched off (`whop_connect_enabled = false`, the card says "Coming soon") until every part
   has merged; one switch PR turns it on.
 
+### NFR-21 Your bank keeps the least data and stays off until every part has merged
+([CONTRACTS.md §40.5.7, §40.5.11](CONTRACTS.md#4057-least-data-br-filters-ba-and-br-store),
+[SECURITY.md](SECURITY.md#your-bank-contracts-405), [ADR-82](DECISIONS.md#adr-82-your-bank-enable-banking-restricted-mode-read-once-a-day-keep-only-matched-app-money))
+- AC1: Clip Factory never moves money and never asks for, sees or stores a bank login: BankID happens on Enable
+  Banking's and his bank's own pages.
+- AC2: Only booked incoming payments are looked at, in memory. Stored are only matched payments (day, amount in minor
+  units, money type, place, how it matched, a keyed id) and those waiting for his tap (about 180 days at most); a payer
+  is kept only as a keyed hash; never an account number or IBAN, a name, a balance, a debit, another payment or the
+  bank's text. Logs carry counts only.
+- AC3: The private bank key and each bank link's session live only in Secrets Manager, made at runtime (never in
+  Terraform, DynamoDB or logs), read fresh, and denied to `cf-prod-clip-flow` and `cf-prod-stats`; the private key
+  passes through his browser only on the .pem path (I-63). A link's database item keeps only its state (bank name,
+  account count, end date). His IP address, browser and
+  language go to Enable Banking only for his own Check now and are never stored.
+- AC4: Additive only: new sort keys, two runtime secrets, two Deny statements, two stream filters and one api setting
+  changed in place; nothing that holds his data or connections is replaced, and a read never deletes.
+- AC5: It ships switched off (`bank_reading_enabled = false`); one switch PR turns it on once the api, the reader,
+  the web and the docs have merged. The switch is the api's only: off again, it hides the screens and routes, but the
+  daily read goes on for links still connected, so if Enable Banking says no he taps "Stop reading" on each bank
+  first, then the same line turns it off (I-64).
+
 ## Design and experience requirements
 
 ### UX-01 Colours
@@ -1051,6 +1100,15 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 - AC6: No edges, no `cursor` changes, `<Glide>` for pick-one bars, reduced motion respected, nothing overflows from
   320 to 1920 px, targets at least 44 px (48 on phones), and Ask never covers the main button.
 
+### UX-21 Your bank that a child can follow
+([CONTRACTS.md §40.5.2](CONTRACTS.md#4052-what-he-sees))
+- AC1: Plain words: "bank key", "app ID", "bank link"; never "consent", "session", "token", "PSD2" or "AISP", and
+  "API", "certificate" or "PEM" only inside Enable Banking's own bold labels. No account number is ever on screen.
+- AC2: One vermilion per screen: the next step's main button, or "Reconnect Swedbank" in the status block once set up;
+  the green answers stay green; pinned at the bottom right on phones. Get paid's card and Money's block have none.
+- AC3: Every status says how it is known ("Clip Factory can see it (Your bank says)"), never "Connected", "Not
+  connected" or "disconnected", and coming back from BankID never lands on a sign-in page.
+
 ## Interpretations and open questions
 
 | Id | The brief said | What we built | Open? |
@@ -1114,8 +1172,11 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 | I-57 | "Can I have a step where all these platforms … the same system that we had for setting them up … for setting the payment up" | A **Get paid** area of its own in Settings › Posting, with the setup cards' look and step cards per place, and a status card on Money. It is not inside Set up posting, so the five setup cards, "2 of 5 ready" and the five-row to-do list stay as they are ([ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner)) (BR-30 AC1, AC2). | No. |
 | I-58 | "A status check … that's OK it's live if I have connected to my card … if I'm not connected … it should say disconnected" | One status per place that says how it is known. A place's own sign gives "Can get paid ✓ (YouTube says)"; only YouTube (AdSense for YouTube) and Whop give one, so the other places rest on his "I did this" and say "Can get paid (you said it's done)". "Disconnected" became "Clip Factory can't check" or "Not set up", and a missing tick is the calm "Not set up yet", because he may already be paid (BR-30 AC3). Clip Factory never connects to his card or bank: each place pays him itself. | No. |
 | I-59 | "Exactly how much I earn per platform … including content rewards" | The same numbers as All your money: YouTube's estimate and Content Rewards' own numbers. TikTok, Instagram and X tell apps nothing about money and Facebook's estimate is not checked yet, so they say "Not available" or "Coming soon" with where to look. Typed-in amounts stay refused ([ADR-47](DECISIONS.md#adr-47-only-platform-reported-money-the-estimates-are-removed), [ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner)) (BR-30 AC4). | Typed amounts for the places with no API? (Refused for now.) |
-| I-60 | "A total of my exact number that I've gotten into my bank account or accounts … for each of those platforms" | What Google and Whop report as sent, per place and per money type, worded "Sent to your bank by Google/Whop" (it can differ from what the bank books: fees, conversion, days in transit). Only the bank can say what arrived, so "Reached your bank" waits for the owner's choice of bank source: Enable Banking, his bank's monthly file, payout emails, or nothing new ([CONTRACTS.md §40.5](CONTRACTS.md#405-your-bank-waits-for-the-owners-choice)) (BR-30 AC5, AC6). | **Yes: pick A, B, C or D.** |
+| I-60 | "A total of my exact number that I've gotten into my bank account or accounts … for each of those platforms" | What Google and Whop report as sent stays "Sent to your bank by Google/Whop" (BR-30 AC5). What his bank booked is "Reached your bank": he chose A, Enable Banking, on 22 Nov 2026 ("A: bank connection"), so Clip Factory reads his own personal accounts with BankID and keeps only the payments it can match to an app, per place and per money type ([CONTRACTS.md §40.5](CONTRACTS.md#405-your-bank-what-really-reached-it-read-through-enable-banking-owners-choice-a-2026-11-22), [ADR-82](DECISIONS.md#adr-82-your-bank-enable-banking-restricted-mode-read-once-a-day-keep-only-matched-app-money)) (BR-31). | No: he chose A. |
 | I-61 | "U2 TikTok, Instagram, Facebook and X, all of them" | All six places have a Get paid page. For Sweden: TikTok's Creator Rewards isn't open (Gifts may be), and X's Original Content Rewards leaves out automated and reuploaded posts, so X's page warns that Clip Factory clips probably won't earn there (BR-30 AC8). | No. |
+| I-62 | "In total for each of those platforms … all of them" | One "Reached your bank" line per place and per money type, plus a total per money type, never added across money types or converted. Meta pays Instagram and Facebook in one payment, so that money is "Instagram and Facebook together" (it shows on both pages) instead of a split Clip Factory would have to guess. A payout whose bank text names no app can't be told apart from his other money, so that place says "Nothing from Instagram reached your bank yet." until a new word is added; TikTok, Instagram, Facebook and X tell apps nothing, so only the bank's text and his taps can name them (BR-31 AC2, AC3). | Checked at his first payments ([CONTRACTS.md §40.5.14](CONTRACTS.md#40514-not-verified-live-each-is-checked-at-his-first-connect-a-failure-becomes-a-plain-sentence-never-a-number)). |
+| I-63 | His rule that the bank's private key lives only in Secrets Manager, never in the browser, and a paste or upload box like the TikTok file box (asked for in the build task) | The main way makes the bank key inside Clip Factory, so the private key never touches his browser. If he already let Enable Banking make the key, step 5 has a folded box that takes its .pem file once, straight into Secrets Manager, and then asks him to delete the file: the one place the private key passes through his browser ([SECURITY.md](SECURITY.md#your-bank-contracts-405)). | **Yes: keep the .pem box, or remove it?** (a one-file change) |
+| I-64 | "A: bank connection", offered with the risk that Enable Banking's free terms say "personal use of private individuals" and no "commercial purpose" | Creator income on his own personal account, read once a day, is a grey area. It is built switched off, with an optional ready email that asks Enable Banking, as little reading as possible, and a way back: "Stop reading" on each bank, then the switch. The switch is set on `cf-prod-api` only, so on its own it hides the screens and routes but doesn't stop `cf-prod-money`'s daily read of a link still connected, or a connect already on its way back from BankID (BR-31 AC5, NFR-21 AC5). | Enable Banking's answer, if he sends the email. And for the spec ([CONTRACTS.md §40.5.11](CONTRACTS.md#40511-data-secrets-live-notifications-infra-the-switch-and-mock-mode)): should the switch also reach `cf-prod-money` and the callback, so one line stops every read? |
 
 ## Out of scope for this phase
 
@@ -1132,8 +1193,9 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 - Money from TikTok, Instagram and X (their tools tell apps nothing about it); they say "not available" with where to
   look (BR-27). What left Content Rewards for Whop and the bank shows only through Whop's own payouts, once "Connect
   Whop" is on (BR-30 AC5).
-- Reading his bank (what reached it): it waits for the owner's choice of source (BR-30 AC6, I-60). Typing in amounts
-  for places with no API stays refused (I-59).
+- From his bank, everything but booked incoming payments from apps: balances, debits, other payments, business
+  accounts, moving money, and his bank's file (B) or payout emails (C), which stay possible later through the same
+  deposit rows (BR-31, I-60). Typing in amounts for places with no API stays refused (I-59).
 - Turning a normal clip into a campaign clip in place (a copy is made instead, BR-28 AC5), and campaigns that want
   their own picture on top of the video (a hard stop "Pick another campaign").
 - Auto-posting to TikTok (TikTok's rules want the creator's own pick for each post; he posts it himself with **Post

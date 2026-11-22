@@ -50,6 +50,8 @@ House rules (always):
 - The video's shape is the request's "format" (9:16 is vertical, 1:1 square, 16:9 wide); stage every scene for that
   frame. Scenes last 2 to 15 seconds; the whole video lands close to the target length.
 - Recurring characters: use only the cast you are given, by cast id. Never describe or change how a character looks.
+  Each cast member acts like its personality and traits, and its own sound moments use its favouriteEffects where
+  they fit.
 - A character only makes the faces in its faces list and only the noises in its noises list (a beat's "face" and
   "noise"). Use "neutral" when none of its faces fits.
 - Use only ids from the catalog for sets, views, cameras, actions, prop kinds, prop actions, faces, bubbles, noises,
@@ -73,17 +75,46 @@ House rules (always):
 - Reference videos, when given, are other people's videos the owner liked: borrow only structure, timing and staging
   ideas from their analyses; never copy their characters, logos, footage, music or catchphrases."""
 
-CAPTIONS_PROMPT = """You write the six post captions of one finished Lamo Stories video (a short animated story with
-no voice-over), from its script.
+CAPTIONS_TEMPLATE = """You write the six post captions of one finished Lamo Stories video (a short {shape} animated
+story with no voice-over), from its script.
 
 - youtubeTitle: at most 100 characters, no hashtags, makes people curious.
-- youtubeDescription: two or three short lines, ending with #shorts.
+- youtubeDescription: two or three short lines{shorts}
 - instagram, facebook, tiktok: one or two short lines with a few relevant hashtags.
 - x: at most 200 characters.
 - Plain, kind words for a general audience; never written for children; no false promises.
 - For a driving-safety video every description names the sources the advice is based on (given below) and says
   "Check your local road rules."
 - Keep every caption the owner wrote himself exactly as it is (listed under "keep")."""
+SHAPES = {"9:16": "vertical", "1:1": "square", "16:9": "wide"}  # what the post captions call each shape (§45.35 D13)
+SHORTS = re.compile(r"(?i)(?<![\w#])#shorts\b")
+
+
+def captions_prompt(aspect: str = "9:16") -> str:
+    """The captions call's rules for the video's own shape: only a vertical (9:16) video is a Short, so only its
+    YouTube description ends with #shorts (§45.35 D13)."""
+    shorts = ", ending with #shorts." if aspect == "9:16" else ". No #shorts: this video is not a Short."
+    return CAPTIONS_TEMPLATE.format(shape=SHAPES.get(aspect, "vertical"), shorts=shorts)
+
+
+CAPTIONS_PROMPT = captions_prompt("9:16")
+
+
+def aspect_of(story_format: Any = None, script: dict[str, Any] | None = None) -> str:
+    """The video's shape: the story's ``format.aspect``, else the script's own size, else 9:16 (§45.34)."""
+    if isinstance(story_format, dict) and story_format.get("aspect") in SHAPES:
+        return str(story_format["aspect"])
+    size = (int((script or {}).get("width") or 1080), int((script or {}).get("height") or 1920))
+    return SIZES.get(size, "9:16")
+
+
+def shorts_tag(description: str, aspect: str) -> str:
+    """The YouTube description with ``#shorts`` exactly when the video is vertical (9:16): added when it is missing,
+    taken out of a square or wide video's (§45.35 D13)."""
+    text = description.strip()
+    if aspect == "9:16":
+        return text if SHORTS.search(text) else f"{text} #shorts".strip()
+    return re.sub(r"[ \t]{2,}", " ", SHORTS.sub("", text)).strip()
 
 
 def catalog_ids(catalog: dict[str, Any], key: str) -> list[str]:
@@ -257,11 +288,14 @@ def captions_request(
     *,
     keep: dict[str, str],
     concept: dict[str, Any] | None = None,
+    aspect: str | None = None,
 ) -> list[dict[str, Any]]:
-    """The ``captions`` call's message: the final script without looks, the sources of a safety story and the owner's
-    own captions to keep."""
+    """The ``captions`` call's message: the video's shape (``aspect``, else the script's size), the final script
+    without looks, the sources of a safety story and the owner's own captions to keep."""
+    shape = aspect if aspect in SHAPES else aspect_of(None, script)
     body: dict[str, Any] = {
         "story": concept or {"title": script.get("title")},
+        "format": {"aspect": shape, "shape": SHAPES[shape]},
         "script": without_looks(script),
         "sources": [c.get("publisher") for c in topic.citations] if topic else None,
         "keep": keep,
@@ -270,7 +304,7 @@ def captions_request(
         {
             "role": "user",
             "content": [
-                {"text": CAPTIONS_PROMPT},
+                {"text": captions_prompt(shape)},
                 {"text": "The video, as JSON:\n" + json.dumps(body, ensure_ascii=False, separators=(",", ":"))},
             ],
         }
@@ -385,12 +419,12 @@ def clean_captions(raw: Sequence[dict[str, Any]] | None) -> list[dict[str, Any]]
     return sorted(out, key=lambda c: float(c.get("at") or 0))
 
 
-def post_captions(raw: dict[str, Any] | None, topic: Topic | None) -> dict[str, str]:
-    """The six post captions within each platform's limit; a safety story's descriptions name its sources."""
+def post_captions(raw: dict[str, Any] | None, topic: Topic | None, aspect: str = "9:16") -> dict[str, str]:
+    """The six post captions within each platform's limit; a safety story's descriptions name its sources; only a
+    vertical (9:16) video's YouTube description carries #shorts (§45.35 D13)."""
     raw = raw or {}
     out = {f: str(raw.get(f) or "").strip() for f in POST_FIELDS}
-    if not re.search(r"(?i)#shorts\b", out["youtubeDescription"]):
-        out["youtubeDescription"] = f"{out['youtubeDescription']} #shorts".strip()
+    out["youtubeDescription"] = shorts_tag(out["youtubeDescription"], aspect)
     if topic is not None and topic.citations:
         publishers = ", ".join(dict.fromkeys(c["publisher"] for c in topic.citations if c.get("publisher")))
         line = f"Based on advice from {publishers}. Check your local road rules."

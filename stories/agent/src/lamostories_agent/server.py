@@ -1,7 +1,7 @@
 """The Lamo Stories runtime's HTTP server: ``GET /ping`` and ``POST /invocations`` (docs/CONTRACTS.md §45.11.1).
 
 Builder E's ``runner.JobRunner`` is the ``Runner`` and ``runner.register`` adds ``process_story``,
-``process_portrait``, ``process_reference`` and ``cancel``; builder E2 fills ``register`` in its own packages (``chat``,
+``process_portrait``, ``process_reference``, ``provider_check`` and ``cancel``; builder E2 fills ``register`` in its own packages (``chat``,
 ``tasks``, ``reference``), which ``build_app`` already calls, for ``run_task``, ``chat_turn`` and ``check_models``. Each
 action handler takes the payload and returns the immediate answer; the work runs in the background and ``busy()``
 says whether anything still runs. The payload's ``sessionId`` is AgentCore's session header

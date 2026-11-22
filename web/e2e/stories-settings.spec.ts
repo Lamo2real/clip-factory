@@ -216,6 +216,12 @@ test.describe("AI: add a model (§45.34)", () => {
     await form.getByRole("radiogroup", { name: "Who makes it" }).getByRole("radio", { name: "Amazon" }).click();
     await form.getByLabel("Bedrock model ID or inference profile").fill("eu.amazon.nova-premier-v1:0");
     await form.getByLabel("AWS Region").selectOption("eu-west-1");
+    // How it is called (§45.35 D1): an Amazon model starts with no effort levels and no tools, the prompt cache on.
+    await expect(form.getByRole("switch", { name: "It has effort levels" })).toHaveAttribute("aria-checked", "false");
+    await expect(form.getByRole("switch", { name: "It can use tools" })).toHaveAttribute("aria-checked", "false");
+    await expect(form.getByRole("switch", { name: "It can reuse its instructions" })).toHaveAttribute("aria-checked", "true");
+    await expect(form.getByRole("button", { name: "Medium" })).toHaveCount(0);
+    await form.getByRole("switch", { name: "It has effort levels" }).click();
     await form.getByRole("button", { name: "Medium" }).click();
     await expect(form.getByRole("button", { name: "Medium" })).toHaveAttribute("aria-pressed", "true");
     await expect(form.getByRole("radiogroup", { name: "Its own level" }).getByRole("radio", { name: "Medium" })).toHaveAttribute("aria-checked", "true");
@@ -495,5 +501,89 @@ test.describe("Video and storage", () => {
     await expect(card(page, "Sounds and motion").getByLabel("Click sound")).toHaveValue("3");
     // By age only the video goes; its study stays.
     await expect(card(page, "Keeping other files").getByRole("radiogroup", { name: "Keep reference videos" }).getByRole("radio", { name: /30 days/ })).toContainText("Then the video goes; its study stays");
+  });
+});
+
+test.describe("round 4 (§45.35)", () => {
+  /** Lamo Stories on, with the mock's knobs for this test. */
+  async function withKnobs(page: Page, knobs: Record<string, unknown>) {
+    await on(page);
+    await page.addInitScript((k) => {
+      (window as unknown as { __cfStoriesMock?: unknown }).__cfStoriesMock = { knobs: k };
+    }, knobs);
+  }
+
+  test("D2: Try it on Nova Reel makes one test shot; without the US storage it says what is missing, and nothing switches", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openSection(page, "video");
+    const row = page.locator('[data-provider="nova-reel"]');
+    await expect(row).toContainText("Try it makes one 6-second test shot to see if Nova Reel works for you. Amazon bills that one shot.");
+    await row.getByRole("button", { name: "Try Amazon Nova Reel" }).click();
+    await expect(row.getByRole("progressbar", { name: "Trying Amazon Nova Reel" })).toBeVisible();
+    await expect(row).toContainText("It did not work", { timeout: 15_000 });
+    await expect(row).toContainText("its storage place in the USA (N. Virginia) is not switched on");
+    await expect(page.locator(".toast").filter({ hasText: "its storage place in the USA" })).toBeVisible();
+    await expect(row.getByRole("button", { name: "Try Amazon Nova Reel" })).toContainText("Try it again");
+    // Nothing switched: the built-in animator still makes the videos.
+    await expect(page.getByRole("radiogroup", { name: "Video maker" }).getByRole("radio", { name: /Built-in animator/ })).toHaveAttribute("aria-checked", "true");
+    // The owner's rules on the row, on the smallest phone.
+    await page.setViewportSize({ width: 320, height: 700 });
+    await page.waitForTimeout(250);
+    const o = await findOverflow(page);
+    expect(o.page).toBeLessThanOrEqual(o.viewport);
+    expect(o.items).toEqual([]);
+    const axe = await new AxeBuilder({ page }).include('[data-provider="nova-reel"]').withRules(["color-contrast"]).analyze();
+    expect(axe.violations.flatMap((v) => v.nodes.map((n) => n.target.join(" ")))).toEqual([]);
+    expect((await visibleEdges(page)).filter((e) => /st-stg-try/.test(e))).toEqual([]);
+    const button = (await row.getByRole("button", { name: "Try Amazon Nova Reel" }).boundingBox())!;
+    expect(button.height).toBeGreaterThanOrEqual(47.5);
+  });
+
+  test("D2: with the US storage on, Try it works: the row and a toast say so, and Nova Reel shows Working once picked", async ({ page }) => {
+    await withKnobs(page, { reelBucket: true, reelTryMs: 1200 });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openSection(page, "video");
+    const row = page.locator('[data-provider="nova-reel"]');
+    await row.getByRole("button", { name: "Try Amazon Nova Reel" }).click();
+    await expect(row).toContainText("It worked", { timeout: 15_000 });
+    await expect(row).toContainText("It is ready for cut-aways.");
+    await expect(page.locator(".toast").filter({ hasText: "It works! Nova Reel made its test shot." })).toBeVisible();
+    const reel = page.getByRole("radiogroup", { name: "Video maker" }).getByRole("radio", { name: /Amazon Nova Reel/ });
+    await reel.click();
+    await expect(reel).toContainText("Working", { timeout: 10_000 });
+  });
+
+  test("D6 and D8: a model moved to another Region reads Not checked yet, also when the page is opened again; lines name the maker on its host", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openSection(page, "ai");
+    const add = card(page, "Add a model");
+    await add.getByRole("button", { name: "Add a model" }).click();
+    const form = page.getByRole("form", { name: "Add a model" });
+    await form.getByLabel("Name").fill("Mistral Large");
+    await form.getByRole("radiogroup", { name: "Who makes it" }).getByRole("radio", { name: "Mistral" }).click();
+    await form.getByLabel("Bedrock model ID or inference profile").fill("mistral.mistral-large-2407-v1:0");
+    await form.getByLabel("AWS Region").selectOption("eu-west-3");
+    await form.getByRole("button", { name: "Add the model" }).click();
+    const row = add.locator(".st-stg-own").filter({ hasText: "Mistral Large" });
+    await expect(row).toContainText("Made by Mistral · on Amazon Bedrock in eu-west-3");
+    await expect(row).toContainText("No effort levels · no tools · no prompt cache.");
+    await expect(page.getByRole("radiogroup", { name: "Default model" }).getByRole("radio", { name: /Mistral Large/ })).toContainText("Mistral on Amazon Bedrock");
+    await add.locator(".st-stg-suggest").getByRole("button", { name: "Check models" }).click();
+    await expect(row).toContainText("Works", { timeout: 10_000 });
+    await row.getByRole("button", { name: "Edit Mistral Large" }).click();
+    const moved = page.getByRole("form", { name: "Change Mistral Large" });
+    await moved.getByLabel("AWS Region").selectOption("eu-west-1");
+    await moved.getByRole("button", { name: "Save the changes" }).click();
+    await expect(row.locator(".st-stg-chip")).toHaveText(["Added by you", "Not checked yet"]);
+    await expect(row).not.toContainText("Works");
+    // Opened again later: still Not checked yet (the API cleared its check), everywhere it is picked.
+    await page.locator(".st-rail .st-rail__item").filter({ hasText: "Dashboard" }).click();
+    await expect(page).toHaveURL(/\/stories$/);
+    await page.locator(".st-rail .st-rail__item").filter({ hasText: "Settings" }).click();
+    await ready(page);
+    await expect(card(page, "Add a model").locator(".st-stg-own").filter({ hasText: "Mistral Large" }).locator(".st-stg-chip")).toHaveText(["Added by you", "Not checked yet"]);
+    await expect(page.getByRole("radiogroup", { name: "Default model" }).getByRole("radio", { name: /Mistral Large/ })).toContainText("Not checked yet");
   });
 });

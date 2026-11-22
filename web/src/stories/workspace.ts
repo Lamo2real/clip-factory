@@ -231,6 +231,18 @@ export function settleSwitch(ws: Pick<Workspace, "workspaceId" | "workspaceType"
   });
 }
 
+/**
+ * Back to Clip Factory without the switcher (Lamo Stories' error card, §45.35 D16): the stored choice says Clip
+ * Factory at once (a reload then opens Clip Factory, never the Lamo Stories page that broke), and the page to open is
+ * Clip Factory's last one.
+ */
+export function chooseClips(): string {
+  pendingStories = null;
+  const c = currentChoice();
+  if (c.workspaceId !== CLIPS_WORKSPACE_ID) write({ ...c, workspaceId: CLIPS_WORKSPACE_ID });
+  return c.lastClipsPath;
+}
+
 /** The Lamo Stories workspace StoriesApp should open: the one a switch is on its way to, else the last one used. */
 export function wantedStoriesWorkspace(): string | null {
   return pendingStories ?? currentChoice().lastStoriesWorkspaceId;

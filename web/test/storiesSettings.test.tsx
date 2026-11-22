@@ -193,6 +193,8 @@ describe("AI", () => {
     const models = $$("[role=radio]", group("Default model"));
     expect(models.map((m) => m.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["Claude Fable 5.2", "Claude Fable 5.1", "Claude Opus 5.5", "Claude Sonnet 5.5", "Claude Haiku 5.5", "Amazon Nova Pro"]);
     for (const m of models) expect(m.textContent).toContain("Amazon Bedrock");
+    // §45.35 D8: the maker on its host.
+    expect(byText("[role=radio]", /Opus 5\.5/).textContent).toContain("Anthropic on Amazon Bedrock");
     expect(byText("[role=radio]", /Fable 5\.1/).textContent).toContain("No access");
     expect(byText("[role=radio]", /Sonnet 5\.5/).textContent).toContain("Not checked yet");
     expect(byText("[role=radio]", /Opus 5\.5/).getAttribute("aria-checked")).toBe("true");
@@ -713,6 +715,12 @@ describe("AI: models the owner adds (§45.34)", () => {
     expect(form.querySelector("[role=alert]")?.textContent).toContain("does not look like a Bedrock model ID");
     fill(form, "Bedrock model ID or inference profile", "eu.amazon.nova-premier-v1:0");
     fill(form, "AWS Region", "eu-west-1");
+    // How it is called (§45.35 D1): an Amazon model starts with no effort levels, no tools and the prompt cache on;
+    // the levels show once the owner says it has them.
+    const sw = (name: RegExp) => byText("[role=switch]", /On|Off/, byText(".st-stg-switchrow", name, form));
+    expect([sw(/It has effort levels/), sw(/It can use tools/), sw(/It can reuse its instructions/)].map((b) => b.getAttribute("aria-checked"))).toEqual(["false", "false", "true"]);
+    expect(Array.from(form.querySelectorAll("button")).some((b) => b.textContent === "Low")).toBe(false);
+    await click(sw(/It has effort levels/));
     // Efforts: toggles, more than one; its own level is one of them.
     await click(byText("button", "Low", form));
     await click(byText("button", /High$/, form));
@@ -738,6 +746,9 @@ describe("AI: models the owner adds (§45.34)", () => {
         vision: true,
         maxOutputTokens: 8000,
         price: { inputPer1M: 2.5, outputPer1M: 12.5, cacheReadPer1M: null, cacheWritePer1M: null, longContext: null, currency: "USD", source: "owner", note: "Your own price." },
+        effortField: "output_config",
+        tools: false,
+        cache: true,
       },
     ]);
     // Listed with its mark, everywhere a model is picked.

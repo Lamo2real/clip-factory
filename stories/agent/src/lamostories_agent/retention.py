@@ -9,8 +9,8 @@ The workspace's ``production`` settings say what stays:
 * ``keepChatPictures``: ``all`` (the default), ``days_30`` or ``days_90`` (the pictures of chat messages that old
   go; the message keeps its words, its ``attachments`` empty and ``picturesRemovedAt`` set, as the API's cleanup).
 
-A cleared reference gets ``fileRemovedAt`` (internal, the name the API reads: it stops offering the file, shows the
-note and refuses Analyze; the agent also reads the older ``sourceRemovedAt``).
+A cleared reference gets ``fileRemovedAt`` (internal; the one name the API and the agent both write, §45.35 D9: the
+API then stops offering the file, shows the note and refuses Analyze). Both still read the older ``sourceRemovedAt``.
 
 Only files under the workspace's own ``ws/{userId}/{workspaceId}/`` prefix are ever listed or deleted, a reference
 that is uploading or being analyzed is never touched, and every run is logged with what it removed (files and
@@ -33,8 +33,8 @@ REMOVED_NOTE = "The video was removed to save space. Its study stays."
 REMOVED_NO_STUDY = "The video was removed to save space."
 KEEP_FILES = ("analysis.json",)  # a reference's study always stays
 BUSY = ("uploading", "analyzing")
-FILE_REMOVED = "fileRemovedAt"  # the API's name (§45.34 internal attributes)
-OLD_FILE_REMOVED = "sourceRemovedAt"  # what an earlier round-3 build wrote; still read
+FILE_REMOVED = "fileRemovedAt"  # the mark's one name, written by the API and the agent (§45.35 D9)
+OLD_FILE_REMOVED = "sourceRemovedAt"  # the old name an earlier build of the API wrote; still read
 
 
 def file_removed(ref: Mapping[str, Any]) -> bool:

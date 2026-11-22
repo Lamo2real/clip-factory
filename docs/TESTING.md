@@ -1159,8 +1159,8 @@ store, a fake Lambda client for the clip flow's start and fake publishers. No AW
 
 ### Get paid (CONTRACTS §40)
 From [CONTRACTS.md §40.8](CONTRACTS.md#408-changes-to-earlier-sections-who-builds-what-tests-not-verified-live).
-Offline, fakes only: no AWS, Google, Whop, platform or network. The bank part (§40.5) is not built, so it has no
-tests. Merge order: the api (K) and the collector (L) in any order, the web (M) after the api, the help and docs (N)
+Offline, fakes only: no AWS, Google, Whop, platform or network. The bank part (§40.5) has its own tests:
+[Your bank](#your-bank-contracts-405) below. Merge order: the api (K) and the collector (L) in any order, the web (M) after the api, the help and docs (N)
 after the web. Each part passes on its own: before L the api finds no `PAYSTATE#` or `PAYOUT#`; before K the
 collector finds no `PAYCONN#`; L's and M's tests read K's golden files when they are there.
 
@@ -1253,6 +1253,100 @@ collector finds no `PAYCONN#`; L's and M's tests read K's golden files when they
   for YouTube, how Google writes SEK amounts, the alert types of each hold, the Meta and TikTok payout screens in
   Sweden, X's Stripe button, and whether Whop lets a personal user make an app and read payouts. Each is checked at
   the owner's first use; a failure becomes "not available" or "can't check", never a number.
+
+### Your bank (CONTRACTS §40.5)
+From [CONTRACTS.md §40.5.13](CONTRACTS.md#40513-tests-offline-fakes-only-no-aws-no-enable-banking-no-bank-no-network).
+**Offline, fakes only**: no AWS, no Enable Banking, no bank and no network. Enable Banking is a fake that answers
+`/application`, `/aspsps`, `/auth`, `/sessions` and `/accounts/{uid}/transactions` from fixtures, checks the signed
+token on every call, and can be slow, down or full of names, IBANs, addresses and other people's payments. Merge
+order: the api (BA), the reader and infra (BR), the web and help (BW) and the docs (BD) in any order, then the switch
+PR. Each passes alone: before BR nothing reads a link; before BA the reader finds no `BANKLINK#`; before BA the web
+runs against its mock. BA and BR meet only through the golden files, each reading the other's when it is there.
+
+```bash
+cd api && uv run pytest -q tests/test_bank_*.py tests/test_bankread_*.py tests/test_notify_bank.py
+cd web && npx vitest run test/bank.test.tsx test/bankGuide.test.ts test/setup-docs.test.ts
+cd web && CF_E2E_PORT=4804 npx playwright test e2e/bank.spec.ts
+```
+
+- **Golden files**: `api/tests/bank_cases.py` writes `api/tests/fixtures/{bank_view_cases.json, bank_items.json,
+  bank_steps.json}` (BA); `api/tests/bankread_cases.py` writes `api/tests/fixtures/bank_match_cases.json` (BR). The
+  web's guide test reads `bank_steps.json`, and the reader checks its item shapes against `bank_items.json`.
+- **API, setup and connect** (BA, `test_bank_keys.py`, `test_bank_eb.py`, `test_bank_grants.py`, updates to
+  `test_hooks.py` and `test_oauth_callback.py`): the RSA-4096 key, the 10-year certificate, `hashKey` made once and
+  kept on `again`; `again`, a new app ID or any `pem` refused while a link has a session (`closePending` too), the
+  same app ID only re-checked; the .pem name and content rules and a 1024-bit key refused; `BANKOWNER` and the 403.
+  The JWT's header and body, base64url, a signature that verifies with the public key, `api.enablebanking.com` only;
+  every check code, and `down` never replacing the stored check; secrets read with `fresh=True`; a slow fake never
+  pushes a route past 25 s; **typed errors**: a fake error body full of IBANs and names leaves nothing in any log line,
+  `http.internal` included. `POST /auth` holds `psu_type "personal"`, `balances: false`, the capped `valid_until`,
+  `transactions_extended_history` from `history`, and no `credentials` or `auth_method`; its errors mapped; the five
+  country cases and the 1-hour bank list; every result code with `lastConnect` and the 302 to `/bank-done`; a reused
+  state writes nothing; **ORGA accounts dropped**; names, IBANs and addresses from the fake appear in no item, secret,
+  log line or redirect; one `at` for the secret's and the link's `connectedAt`; a reconnect puts the old session into
+  `closeLater` and never closes it in the callback; a slow fake still gives the 302 inside 25 s; `/hooks/bank` is 404.
+- **API, the view and his answers** (BA, `test_bank_view.py` over `bank_view_cases.json`, `test_bank_answers.py`,
+  `test_bank_routes.py`): totals per place per currency, never across; `meta` on its own and in Instagram's and
+  Facebook's `metaAmounts`; `needs_you`, `notSure` and `not_income` never counted; a row past its `ttl` hidden;
+  `notYet`, `since`, `empty`, `needYou`; never $0; every status, pill and line (`cant_read` at 26 hours, `reconnect` at
+  3 days, `look_in_bank`), the worst-link order, `daysLeft`, `totalDays` (a 90-day bank) and `ending_soon` at 14 days;
+  `next` for every step (step 4 `vermilion: false`; step 5 "Save", then "Check again") and for a reconnect; the autos,
+  the green answers, `fold` only with all seven done and gone again on `key_wrong`, the ring of 7; `pairs`, `places`
+  in its three states, `lastConnect`. Every answer row, learning only from `hintFrom "payer"` rows with a `payerKey`,
+  `not_this` freeing the payout into `notPayout`, the 409s, no amount ever changed. Routes: `{on: false}` and the 503s
+  while off, the 403, Check now's 409, 15 minutes, 12 a day and the `first` pass once per link; `bank_check`'s payload
+  with `psu` and `at`, never stored or logged; Stop with Enable Banking up (secret deleted) and down (`closePending`,
+  closed by the next GET); Forget (a `closePending` link kept bare, the app key kept, the 409 under the lease); no
+  secret, session id, uid, hash, `payerKey` or IP in any answer.
+- **API, the reader** (BR, `test_bankread_client.py`, `test_bankread_filter.py`, `test_bankread_match.py` over
+  `bank_match_cases.json`, `test_bankread_collect.py`, `test_notify_bank.py`, updates to `test_realtime.py` and
+  `test_money.py`): the PSU headers all or none, names matched without regard to case, a bank with no `psuHeaders`
+  unattended, **the rolling 24 hours** (two late Check nows on day 1 and two early on day 2 make at most 3 unattended
+  reads in any 24 hours), an unattended `longest` counted twice, the 6-hour pause, every error row and `failingSince`.
+  The filter: CRDT and BOOK only, bad amounts and currencies refused, `norm`, the hints in order, `shared`, `hintFrom`,
+  `payerKey`, `depositId` with and without `entry_reference`, **the overlap-window repeat** and **the same ids after a
+  reconnect**. The golden matching cases: a YouTube SEK payout within 10 workdays and the same amount on day 11 asked
+  about; Google's test deposit (SEK 4.12) dropped and not stored; Whop's trace code (10 or more characters) at any
+  amount, and a 6-character code inside a longer number not matched; a learned Meta payer; STRIPE asked every time,
+  suggesting X; "YOUTUBE" only in a stranger's message never learned; PayPal with a PayPal link → `own_move`; a debit,
+  a PDNG, a negative CRDT and a salary dropped; the tie-breaks; `notPayout`; **a `notIncome` Google payer with a
+  matching AdSense payout `matched`**; `XXX` and `1234.567` dropped; a stored `needs_you` matched once its payout
+  appears; his answer during a run wins; the first read `quiet`. Collect: `longest` only on his first read; `default`
+  from today − 89 days otherwise; the 10-day overlap; continuation pages; `resume` and `WRONG_CONTINUATION_KEY`;
+  every end; writes conditional on `connected`; **a warm secrets cache across a reconnect never ends the new link**;
+  the lease and Forget during a read; `ttl` from the later of the booking and fetch days; nothing deleted; the 7-day
+  `warnedFor`; `lastNotice` without quiet rows; **the leak test** (a fake page full of names, IBANs, texts and other
+  people's payments leaves only §40.5.7's attributes in every item and nothing in any log line); `bankread.collect.run`
+  raising never stops `run_user`; **`{"action": "refresh"}` never calls the bank reader**, the daily loop does.
+  Notify: each event once, none for quiet rows or with `getPaid` off, the exact bodies. Realtime: the four prefixes
+  → one `bank` event per owner, next to one `getpaid`.
+- **Infrastructure** (BR, `terraform test`): the realtime and notify filters change in place; `NoBankSecrets` on
+  `clip-flow` and `stats` only, with `Effect = "Deny"`; `bank_reading_enabled` defaults to `false` → `BANK_READING =
+  "off"`, `true` → `"on"`; nothing replaced.
+- **Web** (BW, Vitest `bank.test.tsx` and `bankGuide.test.ts`, updates to `getpaid.test.tsx`, `allMoney.test.tsx`,
+  `backLink.test.ts`, `noGuesses.test.ts`, `settingsTree.test.ts`): the guide's ids, roles and autos equal
+  `bank_steps.json`; titles of 6 words or fewer, lines of 26 or fewer, at most 4 a card, https Opens (the `mailto:`
+  aside), bold only for Enable Banking's labels; every pill (never "Live", "Connected", "Not connected" or
+  "disconnected"); **one vermilion per screen** (none on step 4, a reconnect's in the status block and pinned bottom
+  right on phones, the link card's glass, none on the Get paid card or Money's block); the App ID found inside a
+  pasted message and only it sent; the .pem box (`autoComplete="off"`, `spellCheck={false}`, nothing kept after a send
+  or on unmount) and its "Now delete the .pem file" line; every check and result sentence word for word; the picker;
+  Stop and Forget with the 8 s Undo, sent at once with `keepalive` on `pagehide`, hidden or a route change; `BankDone`
+  before the sign-in gate with no API call; question cards and "Not from YouTube?"; the Money block per place and per
+  currency, never $0, never in the 30-day total; `on: false` and a 404 keep today's words exactly.
+- **Playwright** (BW, mock mode `VITE_MOCK=1` with `?mockBank=…`, 375×812 and 1440×900, the `tap()` counter of
+  `web/e2e/flows.ts`, `CF_E2E_PORT=4804`): Clip Factory's taps per step equal §40.5.3 (18 without the email, 20 with
+  it); the ways in (4 from Settings, 2 from Money); Connect through `/bank-done` signed in and with
+  `?mockBankDone=signedout`, and every result; reconnect at 9 days; a question answered with 1 tap and with 2. Every
+  new screen: no sideways scroll at 320–1920, no edges, targets of 44 px or more (48 on phones), the arrow cursor only,
+  axe contrast in light and dark, reduced motion, phone controls bottom right, Ask never over the main button.
+  `screenshots.spec.ts` adds `getpaid-bank`, `getpaid-bank-connected`, `getpaid-bank-asks` and `money-reached`.
+- **Help and docs** (BW and BD): the guides `bank-setup`, `bank-reached`, `bank-ask`, `bank-reconnect`, `bank-keeps`
+  and `bank-enablebanking` each have one question in `helpEvals.json` that both retrievers rank first, and light up
+  only their own anchors. `node scripts/help-corpus.mjs --check` and `node scripts/ask-knowledge.mjs --check` pass after
+  running both without `--check` (the Ask pack stays under its 110k-token cap with the new `## Your bank` section of
+  `docs/SETUP_POSTING.md`), and `web/test/setup-docs.test.ts` still finds every setup and Content Rewards step title
+  under its own heading.
 
 ### Agent (pytest)
 - Prior learnings (`tests/test_learnings.py`): the exact heading `Prior learnings`, only active unexpired lessons for
@@ -1589,3 +1683,28 @@ The list is CONTRACTS §45.19. Three checks matter most, because the owner put p
    - Whop (only after the `whop_connect_enabled` PR): whether a personal user can make an app and grant the four
      permissions, whether `GET /users/me` and `GET /payouts` accept his sign-in, whether Content Rewards pays into his
      own or a business balance, and the units of `destination_amount`.
+
+20. **Your bank** ([CONTRACTS §40.5.14](CONTRACTS.md#40514-not-verified-live-each-is-checked-at-his-first-connect-a-failure-becomes-a-plain-sentence-never-a-number),
+   "Not verified live"): the plan lines at each deploy, the rest only after the switch PR (`bank_reading_enabled =
+   true`), at the owner's first connect. Each failure becomes a plain sentence, never a number.
+   - BR's merge, in the deploy log: the plan changes only the two stream filters, the `NoBankSecrets` statements of
+     `cf-prod-clip-flow` and `cf-prod-stats` and the api's environment (`BANK_READING` set to `off`), all in place,
+     with 0 to destroy and 0 to replace.
+   - The switch PR, in the deploy log: the plan changes only `cf-prod-api`'s `BANK_READING`, `off` to `on`, in place,
+     and the PR says "Delete gate: the plan deletes or replaces nothing that holds the owner's data."
+   - Enable Banking: whether **Public certificate in PEM format** takes the bare public key or wants the certificate
+     (the "Other bank key" chip); where the app ID shows on **API applications** once the **New application … has been
+     added.** message is gone; what `GET /application`'s `countries` holds for a restricted app; which errors a wrong
+     app ID and a wrong key give (`not_found` or `key_wrong`); the sign-in page's button words and Enable Banking's own
+     page before the bank; whether the redirect address is compared exactly. Note whether the owner sent the optional
+     email, and Enable Banking's answer.
+   - His bank: which bank and accounts get his payouts, whether PayPal is one, whether any of them is a business
+     account (it is dropped), whether `transactions_extended_history` adds a second BankID, how far back the first read
+     went ("Counted from …"), and whether another app reading the same bank ends the link early.
+   - The first payments: the payer names and texts his bank shows for AdSense for YouTube, Meta, TikTok (or PayPal),
+     Stripe (X) and Whop, and whether Whop's trace code shows in the text. A payout whose text names no platform is
+     never seen; the fix is a new hint word in `bankread/filter.py` with a golden case, in a later PR. How Google writes
+     a SEK amount, on which the exact payout match depends.
+   - Logs: `/aws/lambda/cf-prod-money` shows only counts (`bank.read`) and Enable Banking's error codes, never an
+     amount, a name, an IBAN, an IP address or a text; the item `DEPOSIT#…` in the table holds only §40.5.7's
+     attributes.

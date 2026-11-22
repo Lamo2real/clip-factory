@@ -22,16 +22,23 @@ connection; back to ``/settings/posting/getpaid/youtube?result={code}``) and "Co
 served on this callback only; back to ``/settings/posting/getpaid/contentrewards?result={code}#whop``). A payments
 state is signed for ``youtube:payments`` (``state_label``), so one that is expired, used already or fails on the way
 (a Secrets Manager or DynamoDB error) still lands on Get paid with ``payments_error``, never on the YouTube setup page.
+
+Your bank (§40.5.5) is the platform ``bank``, handed to ``bank.grants.save_bank_grant`` before anything else (its own
+state check, its own 25 s deadline, never ``save``). It always goes back to the public page
+``{APP_URL}/bank-done?result={code}`` (a code from ``bank.RESULTS`` only), which needs no sign-in and shows no data.
 """
 
 from __future__ import annotations
 
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import timedelta
 from typing import Any
 
 from .. import db, release
+from ..bank import PLATFORM as BANK
+from ..bank import RESULTS as BANK_RESULTS
+from ..bank import ROUTE_SECONDS as BANK_SECONDS
 from ..clock import iso
 from ..getpaid import grants
 from ..log import log
@@ -70,6 +77,9 @@ MAX_CODE_CHARS = 2048
 
 
 def location(app_url: str, platform: str, result: str) -> str:
+    if platform == BANK:
+        code = result if result in BANK_RESULTS else "bank_error"
+        return f"{app_url.rstrip('/')}/bank-done?result={code}"
     if platform == WHOP:
         code = result if result in WHOP_RESULTS else "whop_expired" if result == "expired" else "whop_error"
         return f"{app_url.rstrip('/')}/settings/posting/getpaid/contentrewards?result={code}#whop"
@@ -101,10 +111,15 @@ def handle_callback(
     store: db.Store,
     env: OAuthEnv,
     flows: release.ClipFlowStarter | None = None,
+    *,
+    bank_http: Callable[..., Any] | None = None,
+    bank_monotonic: Callable[[], float] | None = None,
 ) -> str:
     """The result code (one of ``RESULTS``). On ``connected``, the clips waiting for this place go out
     (``release.release_waiting`` with ``flows``, §17.6); that never changes the result the owner sees."""
     started = time.monotonic()  # the release must be done before the owner's answer is due
+    if platform == BANK:
+        return _bank(query, store, env, bank_http, bank_monotonic)
     if platform not in SETUP_ORDER and platform != WHOP:
         return "error"
     now = env.clock()
@@ -187,6 +202,21 @@ def handle_callback(
             log("error", "oauth.release_failed", platform=platform, error=type(e).__name__)
     log("info", "oauth.callback", platform=platform, result=result)
     return result
+
+
+def _bank(
+    query: Mapping[str, str],
+    store: db.Store,
+    env: OAuthEnv,
+    http: Callable[..., Any] | None,
+    monotonic: Callable[[], float] | None,
+) -> str:
+    """§40.5.5: Your bank's BankID return, with its own 25 s deadline (a ``bank.RESULTS`` code)."""
+    from ..bank import eb
+    from ..bank import grants as bank_grants
+
+    bank_env = eb.from_oauth(env, http, monotonic)
+    return bank_grants.save_bank_grant(query, store, bank_env, eb.Deadline(BANK_SECONDS, bank_env.monotonic))
 
 
 def _result(

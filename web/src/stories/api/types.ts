@@ -111,6 +111,26 @@ export interface ModelDef {
   vision: boolean;
   maxOutputTokens: number;
   price: Price | null;
+  // ---- How Lamo Stories calls it (§45.35 D1, builder W4b); each may be left out: its maker's defaults (ModelCalling) ----
+  /** where its effort goes: "output_config" (Anthropic's Claude models), or "none" (no effort sent; efforts empty) */
+  effortField?: EffortField;
+  /** it takes tool use (the chat's actions and tidy answers); off: tidy answers are asked for as text */
+  tools?: boolean;
+  /** it takes Amazon Bedrock's prompt cache (cachePoint) */
+  cache?: boolean;
+}
+/** Where an added model's effort goes (§45.35 D1): Anthropic's output_config, or nowhere. */
+export type EffortField = "output_config" | "none";
+/** How an added model is called (§45.35 D1). */
+export interface ModelCalling {
+  effortField: EffortField;
+  tools: boolean;
+  cache: boolean;
+}
+/** The defaults per maker (§45.35 D1): an Anthropic model takes all three, an Amazon model the cache only, any other none. */
+export function callingFor(provider: string): ModelCalling {
+  const maker = provider.trim().replace(/\s+/g, " ").toLowerCase();
+  return { effortField: maker === "anthropic" ? "output_config" : "none", tools: maker === "anthropic", cache: maker === "anthropic" || maker === "amazon" };
 }
 /** A custom model's key: `custom-` and up to 40 small letters, digits and dashes; never a bundled key; at most 20. */
 export const CUSTOM_MODEL_KEY = /^custom-[a-z0-9-]{1,40}$/;
@@ -162,6 +182,13 @@ export interface ModelInfo {
   /** a custom model's own Region and output limit, so Edit starts from them (contractIssues) */
   region?: string;
   maxOutputTokens?: number;
+  // ---- §45.35 D8 and D1 (builder W4b) ----
+  /** who runs it ("Amazon Bedrock"); `provider` is who makes it ("Anthropic", "Amazon", …). Screens say "{provider} on {host}" */
+  host?: string;
+  /** an added model's own way of being called (D1), so Edit starts from it; missing: its maker's defaults */
+  effortField?: EffortField;
+  tools?: boolean;
+  cache?: boolean;
 }
 
 export type AgentId = "creative_director" | "video_analysis" | "storyboard" | "character" | "quality_assurance";
@@ -302,7 +329,8 @@ export interface ReferenceAnalysis {
 export type OnboardStep = "ai" | "model" | "effort" | "video" | "agents" | "instagram" | "tiktok" | "youtube" | "facebook" | "x" | "done";
 
 export interface Onboarding {
-  steps: { step: OnboardStep; label: string; state: "done" | "skipped" | "todo" }[];
+  /** `line`: why a step is still to do when the account is Lamo Clips' own (the same-as-Clips line, §45.34, §45.35 D11) */
+  steps: { step: OnboardStep; label: string; state: "done" | "skipped" | "todo"; line?: string }[];
   done: number;
   total: 11;
   finishedAt: string | null;
@@ -537,8 +565,8 @@ export const REF_STEP_ORDER: RefStepKey[] = ["look", "listen", "write"];
 export const REF_STEP_LABEL: Record<RefStepKey, string> = { look: "Look at it", listen: "Listen", write: "Write it up" };
 
 export interface StoryStep {
-  /** a portrait job has one step of its own: { key: "portrait", label: "Draw the picture" }; a reference analysis has look, listen, write */
-  key: StepKey | "portrait" | RefStepKey;
+  /** a portrait job has one step of its own: { key: "portrait", label: "Draw the picture" }; a reference analysis has look, listen, write; Nova Reel's try has { key: "check", label: "Try it" } (§45.35 D2) */
+  key: StepKey | "portrait" | RefStepKey | "check";
   label: string;
   status: "pending" | "running" | "done" | "failed" | "skipped";
   message?: string;
@@ -551,14 +579,16 @@ export interface StoryStep {
 export interface ProductionJob {
   jobId: string;
   workspaceId: string;
-  contentType: "animation" | "character" | "reference";
+  /** provider: a maker's "Try it" (§45.35 D2), whose contentId is the provider's id */
+  contentType: "animation" | "character" | "reference" | "provider";
   /** storyId, characterId (portrait) or refId (reference analysis) */
   contentId: string;
-  jobType: "produce" | "changes" | "portrait" | "reference_analysis";
+  /** provider_check: Nova Reel's "Try it" (one 6-second test shot, §45.35 D2) */
+  jobType: "produce" | "changes" | "portrait" | "reference_analysis" | "provider_check";
   status: "queued" | "running" | "ready" | "needs_check" | "failed" | "canceled";
   steps: StoryStep[];
   progress: number;
-  configuration: { run: (StepKey | "portrait" | RefStepKey)[]; from: StepKey | null; sceneIds: string[] | null; note: string | null };
+  configuration: { run: (StepKey | "portrait" | RefStepKey | "check")[]; from: StepKey | null; sceneIds: string[] | null; note: string | null };
   meta: {
     writerModel: string | null;
     engineVersion: number | null;
@@ -653,6 +683,8 @@ export interface ProviderStatus {
   lastError?: string;
   /** present only for a provider that takes a key (§45.34); the key itself never comes back */
   key?: { saved: boolean; hint: string | null; savedAt: string | null } | null;
+  /** a maker that can be tried (Nova Reel, §45.35 D2): its newest "Try it" job (jobType provider_check), null before the first */
+  check?: ProductionJob | null;
 }
 
 export interface GuidanceTopic {
@@ -844,6 +876,8 @@ export interface StoriesApi {
 
   library(ws: string, q?: { kind?: AssetKind | "all"; storyId?: string; characterId?: string; limit?: number; cursor?: string }): Promise<{ items: LibraryItem[]; nextCursor: string | null }>;
   providers(ws: string): Promise<ProviderStatus[]>;
+  /** "Try it" on Nova Reel (§45.35 D2): one 6-second test shot; the job ends with the provider's new state (GET …/providers) */
+  tryNovaReel(ws: string): Promise<ProductionJob>;
   guidance(ws: string): Promise<{ topics: GuidanceTopic[]; checkedAt: string }>;
 
   social(ws: string): Promise<{ accounts: SocialAccount[]; clips: ClipsDestination[] }>;

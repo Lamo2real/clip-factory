@@ -26,9 +26,9 @@ only on each place's own pages (AdSense for YouTube, Meta, TikTok, Stripe, Whop)
 | X | Not available from X | Your ticks, plus X's Premium and verified-follower counts | Not available from X |
 | Content Rewards | Content Rewards' own numbers, as on Money | "Whop says", once "Connect Whop" works (ID check, bank), plus your ticks | What Whop sent, once "Connect Whop" works (all your Whop money, Content Rewards too) |
 
-Money that **reached** your bank can only come from your bank. Until you choose how Clip Factory may see it, every
-screen says: "Clip Factory can't see your bank. Look in your bank's app to see what arrived." (The choices are in
-[CONTRACTS.md §40.5](CONTRACTS.md#405-your-bank-waits-for-the-owners-choice); nothing of it is built yet.)
+Money that **reached** your bank can only come from your bank: that is [Your bank](#your-bank), the **Your bank**
+card under the place cards. Until it is set up (and while it is switched off), every screen says: "Clip Factory can't
+see your bank. Look in your bank's app to see what arrived."
 
 Clip Factory shows only money a place reported. It never works money out, guesses it, changes it into another money
 type or lets you type it in. A place that doesn't tell apps says "Not available from TikTok" and where to look,
@@ -738,8 +738,8 @@ are written in words because Ask hides every link that has a `?` part.
   Whop's MCP server ([guide](https://docs.whop.com/developer/guides/ai_and_mcp.md),
   [its sign-in metadata](https://mcp.whop.com/.well-known/oauth-authorization-server))
 
-**Your bank** (for the owner's choice in [CONTRACTS.md §40.5](CONTRACTS.md#405-your-bank-waits-for-the-owners-choice);
-nothing of it is built)
+**Your bank: the choice** (the pages the owner chose option A from; what was checked again for the build is under
+[Your bank](#your-bank))
 - Enable Banking: [terms](https://enablebanking.com/terms/) (last updated 9 Jan 2026; the Control Panel's own words
   too), [the EBA register entry](https://euclid.eba.europa.eu/register/pir/view/PSD_AISP/FI_FIN_FSA!29884997),
   [linked accounts](https://enablebanking.com/docs/api/linked-accounts/), its public list of Swedish banks

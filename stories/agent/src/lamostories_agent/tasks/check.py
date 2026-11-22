@@ -5,7 +5,8 @@
 plain line and ``checkedAt``. Each call names its model explicitly (a per-request override), so nothing is ever
 checked on another model; the lowest effort the model offers and 512 output tokens keep the call small. The client
 sends it bare (``task="check_models"``: no agent instructions, skills or memory) and writes no MODELSTATUS# of its
-own: this check writes exactly one item per model, with the key attribute ``model`` (§45.34). The models the owner
+own: this check writes exactly one item per model, with the key attribute ``model`` (§45.34) and ``by: "check"``
+(setup step 1 ticks from it, §45.35 D7; a later call's own status keeps it). The models the owner
 added (``MODELDEF#``) are checked like the bundled ones. The check runs whichever agents are switched on (the
 client's ``allow_inactive`` when it has one), and a failure that sent nothing to the model never changes a status.
 """
@@ -109,6 +110,7 @@ def write_status(env: TaskEnv, key: str, status: str, line: str, at: str) -> Non
                 "status": status,
                 "line": line,
                 "checkedAt": at,
+                "by": "check",  # written by Check models: what ticks setup step 1 (§45.35 D7)
             }
         ),
     )

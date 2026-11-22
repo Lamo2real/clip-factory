@@ -37,3 +37,14 @@
   [ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner).
   How its two read-only connections are kept: [SECURITY.md](SECURITY.md#get-paid-contracts-40). How the statuses and
   the payout reads run: [ARCHITECTURE.md flow 24](ARCHITECTURE.md#24-get-paid-payout-steps-honest-statuses-and-money-sent-to-the-bank-contracts-40-adr-64).
+- **Your bank** is one more data file, `web/src/getpaid/bank.ts` (`BANK_GUIDE`), and the server's `bank/__init__.py`
+  `STEPS` keeps the same step ids, roles and autos. The contract for its words, steps and sentences is
+  [CONTRACTS.md §40.5](CONTRACTS.md#405-your-bank-what-really-reached-it-read-through-enable-banking-owners-choice-a-2026-11-22).
+  Under `## Your bank` each step title is a `####` heading, word for word and in the app's order (`#### 1. …`, the
+  optional email as `#### Optional: …`). Its "Steps checked on" date is its own (22 Nov 2026), with its sources at the
+  end of that section. There **bold** is only Enable Banking's exact label (Clip Factory's own words are in quotes);
+  when it renames one, change `BANK_GUIDE`, `STEPS` and this page together and keep the step id. A new platform word on bank statements (the hint list) is a one-line PR in
+  `bankread/filter.py`, with a golden case. Why it is built this way:
+  [ADR-82](DECISIONS.md#adr-82-your-bank-enable-banking-restricted-mode-read-once-a-day-keep-only-matched-app-money).
+  How the bank key, the links and the least-data rules are kept: [SECURITY.md](SECURITY.md#your-bank-contracts-405).
+  How connecting and reading run: [ARCHITECTURE.md flow 25](ARCHITECTURE.md#25-your-bank-the-connect-flow-through-bank-done-and-the-daily-read-contracts-405-adr-82).

@@ -20,7 +20,6 @@ import { GetAppPanel } from "../components/GetApp.tsx";
 import { LiveDot } from "../components/LiveDot.tsx";
 import { A, Button, Empty, LinkButton } from "../components/ui.tsx";
 import { Home } from "../screens/home/Home.tsx";
-import { campaignStart } from "../screens/home/NewJobForm.tsx";
 import { JobDetail } from "../screens/jobs/JobDetail.tsx";
 import { Jobs } from "../screens/jobs/Jobs.tsx";
 import { Library } from "../screens/library/Library.tsx";
@@ -48,20 +47,16 @@ import { SetupTodo } from "../components/SetupTodo.tsx";
 import { AppBadge } from "../lib/badge.ts";
 import { MacFetchHost } from "./MacFetchHost.tsx";
 import { forgetDevice } from "../lib/push.ts";
-import { redirectAtStart, storiesTitle } from "../stories/workspace.ts";
+import { chooseClips, redirectAtStart, storiesTitle } from "../stories/workspace.ts";
 import { storiesEnabled } from "../stories/flag.ts";
 import type { StoriesPage } from "../stories/routes.ts";
-import { AppPanes, loadStoriesApp, storiesModule, useAppActive } from "../stories/pane.tsx";
+import { AppPanes, KeptSearchProvider, loadStoriesApp, storiesModule, StoriesPaneBoundary, useAppActive } from "../stories/pane.tsx";
 import { calmPage, deniedSound, followStoriesMotion } from "../stories/prefs.ts";
 /**
  * The motion gallery (§20.10): mock builds only. Tested on import.meta.env directly (not isMock) so a real build
  * drops the import and does not even carry the code.
  */
 const MotionGallery = import.meta.env.VITE_MOCK === "1" ? lazy(() => import("../dev/MotionGallery.tsx").then((m) => ({ default: m.MotionGallery }))) : null;
-
-/** Lamo Stories (docs/CONTRACTS.md §45.16.2) loads only when it is opened (or, once the switcher is on screen, while
- * the browser is idle: stories/pane.tsx), so Lamo Clips' own bundle and styles stay as they were. */
-const LazyStoriesApp = lazy(() => loadStoriesApp().then((m) => ({ default: m.StoriesApp })));
 
 // Opening the app at "/" when Lamo Stories was the last choice goes to the last Lamo Stories page (§45.16.1), before
 // the first screen draws. Nothing happens while Lamo Stories is switched off.
@@ -197,12 +192,13 @@ export function App() {
 }
 
 /**
- * Lamo Stories switched on (docs/CONTRACTS.md §45.16.2, §45.34): Clip Factory's Shell for every Lamo Clips route and
- * Lamo Stories' own shell for /stories. Each, once shown, stays mounted while the other is on screen (hidden and
- * inert), so coming back shows it exactly as it was left. Two Clip Factory pages open fresh instead: the skill editor
- * (it asks "Leave without saving?", and unsaved typing is never carried across a switch) and Home opened for a
- * campaign (`/?campaign=…`: Home picks its way from the live address, which is Lamo Stories' while it is hidden, so it
- * could not be kept as it was; it is let go, as before this shell, never half kept).
+ * Lamo Stories switched on (docs/CONTRACTS.md §45.16.2, §45.34, §45.35): Clip Factory's Shell for every Lamo Clips
+ * route and Lamo Stories' own shell for /stories. Each, once shown, stays mounted while the other is on screen (hidden
+ * and inert), so coming back shows it exactly as it was left. Home opened for a campaign (`/?campaign=…`) is kept too:
+ * Clip Factory's pane carries the search of its kept page (useKeptSearch), so Home still reads its own way while
+ * Lamo Stories' address is shown. Only the skill editor opens fresh (it asks "Leave without saving?", and unsaved
+ * typing is never carried across a switch). Each pane has its own error boundary: Clip Factory's own (its fallback as
+ * it always was) and Lamo Stories' card, so one app breaking never takes the other with it.
  */
 function BothApps() {
   const route = useRoute();
@@ -216,15 +212,35 @@ function BothApps() {
     lastClipsSearch.current = typeof location === "undefined" ? "" : location.search;
   }
   const held = lastClips.current;
-  const fresh = (held.name === "skill" && held.mode !== "read") || (held.name === "home" && campaignStart(lastClipsSearch.current).campaignId) ? "clips" : null;
+  const fresh = held.name === "skill" && held.mode !== "read" ? "clips" : null;
   // The calm-motion class follows the app on screen (Lamo Stories' own switch, Clip Factory's otherwise).
   useLayoutEffect(() => followStoriesMotion(), [inStories]);
-  return <AppPanes on={inStories ? "stories" : "clips"} fresh={fresh} clips={<Shell />} stories={<StoriesHost page={lastStories.current} />} />;
+  return (
+    <AppPanes
+      on={inStories ? "stories" : "clips"}
+      fresh={fresh}
+      clips={
+        <KeptSearchProvider value={lastClipsSearch.current}>
+          <ErrorBoundary scope="app">
+            <Shell />
+          </ErrorBoundary>
+        </KeptSearchProvider>
+      }
+      stories={
+        <StoriesPaneBoundary onClips={() => navigate(chooseClips())}>
+          <StoriesHost page={lastStories.current} />
+        </StoriesPaneBoundary>
+      }
+    />
+  );
 }
 
-/** Lamo Stories' shell, from its own chunk: at once when the idle prefetch already brought it, else after it loads. */
+/**
+ * Lamo Stories' shell, from its own chunk: at once when the idle prefetch already brought it, else after it loads.
+ * Each mount makes its own lazy app, so Try again on Lamo Stories' error card fetches a chunk that failed once more.
+ */
 function StoriesHost({ page }: { page: StoriesPage }) {
-  const [Stories] = useState<ComponentType<{ page: StoriesPage }>>(() => storiesModule()?.StoriesApp ?? LazyStoriesApp);
+  const [Stories] = useState<ComponentType<{ page: StoriesPage }>>(() => storiesModule()?.StoriesApp ?? lazy(() => loadStoriesApp().then((m) => ({ default: m.StoriesApp }))));
   return (
     <Suspense fallback={<div className="boot" role="status" aria-label="Loading Lamo Stories" />}>
       <Stories page={page} />

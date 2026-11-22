@@ -5,10 +5,10 @@
 import defaultsFile from "../../../../../stories/config/workspace-defaults.json";
 import guidanceFile from "../../../../../stories/config/guidance.json";
 import { ApiError } from "../../../api/errors.ts";
-import { RESOLUTIONS, type GuidanceTopic, type ProviderStatus, type StoriesApi, type StoriesConfig, type VideoAspect, type Workspace } from "../types.ts";
-import { CLIPS_WORKSPACE_ID, delay, DAY, FIRST_STORIES_WORKSPACE_ID, ago, type MockStore } from "./store.ts";
+import { RESOLUTIONS, type GuidanceTopic, type ProductionJob, type ProviderStatus, type StoriesApi, type StoriesConfig, type VideoAspect, type Workspace } from "../types.ts";
+import { CLIPS_WORKSPACE_ID, delay, DAY, FIRST_STORIES_WORKSPACE_ID, ago, mockId, type MockStore } from "./store.ts";
 
-export const KEYS = ["listWorkspaces", "getWorkspace", "patchWorkspace", "providers", "guidance"] as const;
+export const KEYS = ["listWorkspaces", "getWorkspace", "patchWorkspace", "providers", "tryNovaReel", "guidance"] as const;
 
 /** StoriesConfig's defaults, from the one file (its "$comment" left out). */
 export const DEFAULT_CONFIG: StoriesConfig = (() => {
@@ -32,6 +32,20 @@ export function seed(store: MockStore): void {
       updatedAt: ago(2 * DAY),
     },
   ];
+  // Test knob: moreStudios (a number, 1 to 8) adds that many more Lamo Stories workspaces after the first, so the
+  // switchers show their short list (more than two workspaces).
+  const more = typeof store.knobs.moreStudios === "number" ? Math.min(8, Math.max(0, Math.floor(store.knobs.moreStudios))) : 0;
+  for (let i = 1; i <= more; i++)
+    store.workspaces.push({
+      workspaceId: `ws_studio_${i + 1}`,
+      workspaceName: `Studio ${i + 1}`,
+      workspaceType: "stories",
+      builtin: false,
+      configuration: structuredClone(DEFAULT_CONFIG),
+      version: 1,
+      createdAt: ago(DAY),
+      updatedAt: ago(DAY),
+    });
   // The image provider's last real call (the agent writes it after a portrait job, §45.11.6). None yet.
   store.knobs.novaCanvas = store.knobs.novaCanvas ?? null;
 }
@@ -76,11 +90,48 @@ function checkConfig(c: Partial<StoriesConfig>): void {
   if (c.xMonthlyLimitUsd !== undefined && c.xMonthlyLimitUsd !== null && !(c.xMonthlyLimitUsd >= 0)) throw bad("xMonthlyLimitUsd", "Type an amount of 0 or more.");
 }
 
+// ---------- "Try it" on Amazon Nova Reel (§45.35 D2) ----------
+
+/** The mock's words for Nova Reel not being ready (the providers row's own line, as the API's NOT_READY). */
+export const REEL_NOT_READY =
+  "Amazon Nova Reel is not ready yet: its storage place in the USA (N. Virginia) is not switched on. Pick Built-in animation in Settings › Video, or finish its setup.";
+/** What the pretend Amazon Bedrock says when the account may not use Nova Reel (knob `reelDenied`). */
+export const REEL_DENIED = "Amazon Bedrock said this account has no access to Amazon Nova Reel. Turn it on in the Bedrock console (Model access) in US East (N. Virginia), then tap Try it.";
+export const REEL_BUSY = "Amazon Nova Reel is being tried. Wait until it is done.";
+
+type ReelRecord = { state: "on" | "needs_setup"; checkedAt: string; lastError?: string };
+
+/** The newest "Try it" job (store.jobs keeps it, as PJOB# does), finished once its time is up. */
+function reelTry(store: MockStore): ProductionJob | null {
+  const job = [...store.jobs].reverse().find((j) => j.jobType === "provider_check" && j.contentId === "nova-reel") ?? null;
+  if (!job || (job.status !== "queued" && job.status !== "running")) return job;
+  const ms = typeof store.knobs.reelTryMs === "number" ? store.knobs.reelTryMs : 2500;
+  const started = Date.parse(job.createdAt);
+  const step = job.steps[0]!;
+  if (Date.now() - started < ms / 3) return job;
+  if (Date.now() - started < ms) {
+    Object.assign(job, { status: "running", progress: 0.5, updatedAt: new Date().toISOString() });
+    Object.assign(step, { status: "running", startedAt: step.startedAt ?? new Date().toISOString() });
+    return job;
+  }
+  // One 6-second test shot into the US bucket: only when the bucket is switched on (knob `reelBucket`), and Bedrock
+  // may still refuse it (knob `reelDenied`); the test file is deleted after (nothing lands in the Library).
+  const at = new Date().toISOString();
+  const problem = store.knobs.reelBucket !== true ? REEL_NOT_READY : store.knobs.reelDenied === true ? REEL_DENIED : null;
+  store.knobs.novaReel = problem ? ({ state: "needs_setup", checkedAt: at, lastError: problem } satisfies ReelRecord) : ({ state: "on", checkedAt: at } satisfies ReelRecord);
+  Object.assign(step, { status: problem ? "failed" : "done", finishedAt: at, message: problem ?? "Nova Reel made a 6-second test shot." });
+  Object.assign(job, { status: problem ? "failed" : "ready", progress: 1, updatedAt: at });
+  return job;
+}
+
 function providersFor(store: MockStore, config: StoriesConfig): ProviderStatus[] {
   const nova = store.knobs.novaCanvas as { state: "on" | "needs_setup"; checkedAt: string; lastError?: string } | null;
   const novaOn = config.providers.images === "nova-canvas";
+  const check = reelTry(store);
+  const reel = (store.knobs.novaReel ?? null) as ReelRecord | null;
+  const reelPicked = config.providers.video === "nova-reel";
   return [
-    { kind: "writer", id: "bedrock-claude", label: "Claude in Amazon Bedrock", state: "on", line: "Writes the stories. It is already set up." },
+    { kind: "writer", id: "bedrock-claude", label: "Claude on Amazon Bedrock", state: "on", line: "Writes the stories. It is already set up." },
     { kind: "images", id: "builtin-rig", label: "Built-in characters", state: "on", line: "Draws every character the same way in every video." },
     !novaOn
       ? { kind: "images", id: "nova-canvas", label: "Amazon Nova Canvas", state: "off", line: "Off. Turn on AI pictures to make character portraits." }
@@ -100,9 +151,13 @@ function providersFor(store: MockStore, config: StoriesConfig): ProviderStatus[]
       id: "nova-reel",
       // The API's label (providers.py), while its sentence names the maker's short name.
       label: "Amazon Nova Reel 1.1 (AI video)",
-      state: config.providers.video === "nova-reel" ? "needs_setup" : "off",
+      // On only after a real call worked (a story's cut-away, or Try it, §45.35 D2).
+      state: reelPicked ? (reel?.state === "on" ? "on" : "needs_setup") : "off",
       // The API's own sentence (§45.34): nothing switches to the built-in animation by itself.
-      line: "Amazon Nova Reel is not ready yet: its storage place in the USA (N. Virginia) is not switched on. Pick Built-in animation in Settings › Video, or finish its setup.",
+      line: reel?.state === "on" ? "Makes 6-second AI shots for scenes with no characters (cut-aways). It worked when you tried it." : (reel?.lastError ?? REEL_NOT_READY),
+      ...(reel ? { checkedAt: reel.checkedAt, ...(reel.lastError ? { lastError: reel.lastError } : {}) } : {}),
+      // Its newest "Try it" job, so Settings › Video shows how it went (the API's `check`).
+      check: check ? structuredClone(check) : null,
     },
     { kind: "audio", id: "builtin-synth", label: "Built-in sounds and music", state: "on", line: "Makes every sound effect, noise and tune. It is built in." },
   ];
@@ -198,6 +253,30 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
     async providers(ws) {
       await delay(120);
       return providersFor(store, storiesWorkspace(store, ws).configuration);
+    },
+    async tryNovaReel(ws) {
+      await delay(200);
+      storiesWorkspace(store, ws);
+      // One at a time (the API's 409), never behind the not-ready guard: that is how Nova Reel becomes ready.
+      const now = reelTry(store);
+      if (now && (now.status === "queued" || now.status === "running")) throw new ApiError(409, "conflict", REEL_BUSY);
+      const at = new Date().toISOString();
+      const job: ProductionJob = {
+        jobId: mockId(),
+        workspaceId: ws,
+        contentType: "provider",
+        contentId: "nova-reel",
+        jobType: "provider_check",
+        status: "queued",
+        steps: [{ key: "check", label: "Try it", status: "pending" }],
+        progress: 0,
+        configuration: { run: ["check"], from: null, sceneIds: null, note: null },
+        meta: { writerModel: null, engineVersion: null, seed: null, scriptVersion: null, targetSec: null, actualSec: null, safetyTopicId: null, providers: { animation: "nova-reel" }, models: [] },
+        createdAt: at,
+        updatedAt: at,
+      };
+      store.jobs.push(job);
+      return copy(job);
     },
     async guidance(ws) {
       await delay(120);

@@ -1,14 +1,16 @@
 """The engine's text track as an ASS subtitle file, burned into the video by libass (docs/CONTRACTS.md §45.11.3).
 
 ``textTrack`` gives every caption, bubble symbol and the safety end card with its time, centre, size and colour in
-output pixels. Here each becomes one ``Dialogue`` line in Inter, kept inside the platforms' safe area (their buttons
-and captions cover the right edge, the top and the bottom of a 9:16 video; a square or wide video has narrower
-margins), long captions wrapped on word breaks. The file is laid out for the script's own size (any of the engine's
-six, §45.34). Nothing a model wrote can reach libass as an override: braces and backslashes are replaced."""
+output pixels. Here each becomes one ``Dialogue`` line in Inter, kept inside the engine's own safe box for the shape
+(``cli.ts catalog`` ``formats[].safe``, the box the engine and the app's preview lay the text out in: clear of the
+platforms' buttons and captions on a 9:16 video, a thin band on a square or wide one), so burned-in text sits where
+the preview shows it (§45.35 D14). Long captions are wrapped on word breaks. The file is laid out for the script's
+own size (any of the engine's six, §45.34). Nothing a model wrote can reach libass as an override: braces and
+backslashes are replaced."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,6 +23,13 @@ SAFE_RIGHT = WIDTH - 170
 SAFE_TOP = 260
 SAFE_BOTTOM = HEIGHT - 480
 MAX_LINE = 22  # characters per caption line before a wrap
+# The engine's safe boxes in design pixels, the short side 1080 (web/src/stories/engine/frame.ts SAFE): used when the
+# catalog's own box for the size is not given; the same numbers ``cli.ts catalog`` prints scaled to each size.
+ENGINE_SAFE = {
+    "9:16": {"left": 80, "top": 260, "right": 910, "bottom": 1440},
+    "1:1": {"left": 54, "top": 54, "right": 1026, "bottom": 1026},
+    "16:9": {"left": 96, "top": 54, "right": 1824, "bottom": 1026},
+}
 DEFAULT_COLOR = "#fff6e5"
 OUTLINE = "&H00421C1C"  # the stage's night indigo (#1C1842), as ASS's &HAABBGGRR
 KINDS = ("caption", "bubble", "endcard")
@@ -41,19 +50,37 @@ class Frame:
     line: int
 
 
-def frame(width: int = WIDTH, height: int = HEIGHT) -> Frame:
-    """The safe area of a ``width`` × ``height`` video: 9:16 keeps clear of TikTok's, Reels' and Shorts' buttons and
-    texts (the right column, the top tabs, the bottom bar); 1:1 and 16:9 have only thin margins with a little more at
-    the bottom (the players' bars)."""
+def frame(width: int = WIDTH, height: int = HEIGHT, safe: Mapping[str, Any] | None = None) -> Frame:
+    """The safe area of a ``width`` × ``height`` video: the engine's own box for that size (``safe``, from ``cli.ts
+    catalog`` ``formats[].safe`` in output pixels; else the engine's design box scaled to the size, §45.35 D14). 9:16
+    keeps clear of TikTok's, Reels' and Shorts' buttons and texts (the right column, the top tabs, the bottom bar);
+    1:1 and 16:9 have a thin band 5% in from each edge."""
     w, h = max(1, int(width)), max(1, int(height))
     ratio = w / h
-    if ratio < 0.8:  # 9:16
-        left, right, top, bottom, line = 80 / 1080 * w, 170 / 1080 * w, 260 / 1920 * h, 480 / 1920 * h, MAX_LINE
-    elif ratio < 1.3:  # 1:1
-        left, right, top, bottom, line = 0.06 * w, 0.06 * w, 0.06 * h, 0.12 * h, 26
-    else:  # 16:9
-        left, right, top, bottom, line = 0.05 * w, 0.05 * w, 0.07 * h, 0.14 * h, 40
-    return Frame(w, h, round(left), w - round(right), round(top), h - round(bottom), min(w, h) / 1080, line)
+    aspect, line = ("9:16", MAX_LINE) if ratio < 0.8 else ("1:1", 26) if ratio < 1.3 else ("16:9", 40)
+    k = min(w, h) / 1080
+    box = {name: round(v * k) for name, v in ENGINE_SAFE[aspect].items()}
+    if safe is not None:
+        try:
+            given = {name: round(float(safe[name])) for name in ("left", "top", "right", "bottom")}
+        except (KeyError, TypeError, ValueError):
+            given = None
+        if given and 0 <= given["left"] < given["right"] <= w and 0 <= given["top"] < given["bottom"] <= h:
+            box = given
+    return Frame(w, h, box["left"], box["right"], box["top"], box["bottom"], k, line)
+
+
+def safe_box(formats: Any, width: int, height: int) -> dict[str, Any] | None:
+    """The engine's safe box for this size from ``cli.ts catalog``'s ``formats`` (None when it does not list it)."""
+    for f in formats if isinstance(formats, list) else []:
+        if (
+            isinstance(f, dict)
+            and f.get("width") == width
+            and f.get("height") == height
+            and isinstance(f.get("safe"), dict)
+        ):
+            return dict(f["safe"])
+    return None
 
 
 HEADER = """[Script Info]
@@ -166,11 +193,16 @@ def needs_file(events: Sequence[dict[str, Any]], captions_on: bool) -> bool:
 
 
 def build(
-    events: Sequence[dict[str, Any]], *, captions_on: bool = True, width: int = WIDTH, height: int = HEIGHT
+    events: Sequence[dict[str, Any]],
+    *,
+    captions_on: bool = True,
+    width: int = WIDTH,
+    height: int = HEIGHT,
+    safe: Mapping[str, Any] | None = None,
 ) -> str:
-    """The whole ASS file for a ``width`` × ``height`` video; captions are left out when the story's captions are off
-    (bubbles and the end card stay)."""
-    f = frame(width, height)
+    """The whole ASS file for a ``width`` × ``height`` video, inside the engine's safe box for it (``safe``);
+    captions are left out when the story's captions are off (bubbles and the end card stay)."""
+    f = frame(width, height, safe)
     head = HEADER.format(w=f.width, h=f.height, font=FONT, outline=OUTLINE, ml=f.left, mr=f.width - f.right)
     lines = []
     for e in sorted(events, key=lambda e: (float(e.get("start") or 0), str(e.get("kind")))):

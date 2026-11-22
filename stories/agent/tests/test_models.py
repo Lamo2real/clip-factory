@@ -438,6 +438,11 @@ def modeldef(key: str, **over: Any) -> dict[str, Any]:
         "maxOutputTokens": 4096,
         "price": {"inputPer1M": 1.0, "outputPer1M": 2.0, "cacheReadPer1M": None, "cacheWritePer1M": None,
                   "longContext": None, "currency": "USD", "source": "owner"},
+        # How the owner said it is called (§45.35 D1; the API stores all three): this one takes the effort field,
+        # tools and cache points.
+        "effortField": "output_config",
+        "tools": True,
+        "cache": True,
     }  # fmt: skip
     return item(f"MODELDEF#{key}", **{**fields, **over})
 

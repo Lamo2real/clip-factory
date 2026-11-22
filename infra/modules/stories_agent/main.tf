@@ -47,16 +47,21 @@ locals {
   ])))
   model_invoke_arns = concat(local.model_profile_arns, local.model_foundation_arns)
 
-  # What StoryModels grants (docs/CONTRACTS.md §45.34 "Adding models without a release"): Converse and ConverseStream on
-  # every foundation model in any Region and every inference profile and application inference profile of this
-  # account, so a model the owner adds in Lamo Stories › Settings › AI (a Bedrock model id, inference profile id or
-  # ARN) works after Check models with no deploy. It covers every model of stories/config/models.json
+  # What StoryModels grants (docs/CONTRACTS.md §45.34 "Adding models without a release", §45.35 D12): Converse and
+  # ConverseStream on every foundation model in any Region and on this account's inference profiles, application
+  # inference profiles, provisioned models, custom models, custom model deployments and imported models, so a model
+  # the owner adds in Lamo Stories › Settings › AI (a Bedrock model id, inference profile id or any ARN the form
+  # takes) works after Check models with no deploy. It covers every model of stories/config/models.json
   # (model_invoke_arns, still the plan's record of the bundled list); Nova Reel jobs still need StartAsyncInvoke,
-  # granted only with the bucket switch.
+  # granted only with the bucket switch. A change here updates the role's inline policy in place.
   story_model_arns = [
     "arn:aws:bedrock:*::foundation-model/*",
     "arn:aws:bedrock:*:${var.account_id}:inference-profile/*",
     "arn:aws:bedrock:*:${var.account_id}:application-inference-profile/*",
+    "arn:aws:bedrock:*:${var.account_id}:provisioned-model/*",
+    "arn:aws:bedrock:*:${var.account_id}:custom-model/*",
+    "arn:aws:bedrock:*:${var.account_id}:custom-model-deployment/*",
+    "arn:aws:bedrock:*:${var.account_id}:imported-model/*",
   ]
 
   # Amazon Nova Canvas (character portraits, §45.11.6) in its own Region, never through a profile.
