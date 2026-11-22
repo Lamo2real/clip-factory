@@ -379,20 +379,24 @@ describe("AI", () => {
     await open("ai");
     const names = () => $$(".st-stg-keyrow", card("Providers")).map((r) => r.querySelector(".st-stg-keyrow__name")?.textContent);
     expect(names()).toEqual(["ElevenLabs", "Anthropic API", "OpenAI-compatible API"]);
-    for (const [label, id, key] of [
-      ["Anthropic API", "anthropic", "sk-ant-api03-0123456789abcdefWXYZ"],
-      ["OpenAI-compatible API", "openai_compatible", "sk-proj-0123456789abcdef9k2q"],
+    // An OpenAI-compatible key is for one address (the API's provider_keys, §45.37 G4): with no model on it yet, its
+    // address goes with the key, and the row names it.
+    for (const [label, id, key, address, saved] of [
+      ["Anthropic API", "anthropic", "sk-ant-api03-0123456789abcdefWXYZ", null, "Key saved · ends WXYZ."],
+      ["OpenAI-compatible API", "openai_compatible", "sk-proj-0123456789abcdef9k2q", "https://api.example.com/v1", "Key saved for api.example.com · ends 9k2q."],
     ] as const) {
       const row = byText(".st-stg-keyrow", new RegExp(label), card("Providers"));
       expect(row.textContent).toContain(`Paste your ${label} key to use it.`);
       await click(byText("button", "Paste a key", row));
       setValue(row.querySelector("input")!, key);
       expect(row.querySelector("input")!.type).toBe("password");
+      expect(!!row.querySelector("input[type=url]")).toBe(!!address);
+      if (address) setValue(row.querySelector<HTMLInputElement>("input[type=url]")!, address);
       await act(async () => row.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
       await settle(8);
-      expect(called("setProviderKey").at(-1)?.args).toEqual(["stories", id, key]);
+      expect(called("setProviderKey").at(-1)?.args).toEqual(address ? ["stories", id, key, address] : ["stories", id, key]);
       const after = byText(".st-stg-keyrow", new RegExp(label), card("Providers"));
-      expect(after.textContent).toContain(`Key saved · ends ${key.slice(-4)}.`);
+      expect(after.textContent).toContain(saved);
       expect(after.querySelector("input")).toBeNull();
       expect(host.innerHTML).not.toContain(key);
       expect(host.innerHTML).not.toContain("0123456789abcdef");

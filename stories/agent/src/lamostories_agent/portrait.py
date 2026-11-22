@@ -132,8 +132,9 @@ class PortraitJob(Job):
         return "ready"
 
     def _provider_item(self, provider_id: str, state: str, last_error: str | None) -> dict[str, Any]:
+        model = self.meta.get("imageModel")  # the model key the call used (§45.37: the proof names it)
         return provider_item(self.fence.pk, self.fence.user_id, self.fence.workspace_id, "images", provider_id, state,
-                             now_iso(), last_error)  # fmt: skip
+                             now_iso(), last_error, str(model) if model else None)  # fmt: skip
 
     async def _portrait(self) -> None:
         ws = await self.data.workspace(self.fence.user_id, self.fence.workspace_id)
@@ -154,6 +155,8 @@ class PortraitJob(Job):
         self.meta["seed"] = seed
         if entry:
             self.meta["imageModel"] = entry["key"]
+        else:
+            self.meta.pop("imageModel", None)
         ctx = ProviderContext(
             engine=self.engine,
             workdir=self.work,

@@ -554,6 +554,69 @@ def test_try_it_of_nova_reel_says_it_was_ended_and_calls_nothing(tmp_path: Path)
     assert fake.starts == [] and table.item(keys.provider_sk("animation", "nova-reel")) is None
 
 
+def test_try_it_names_the_model_it_proved(tmp_path: Path) -> None:
+    """§45.37: the API counts a ``PROVIDER#`` proof only for the model in use, so every record names its model."""
+    svc, table = check_world(tmp_path, FakeUS())
+    assert run_check(svc) == "ready"
+    assert table.item(keys.provider_sk("animation", "luma-ray"))["model"] == "luma-ray2"  # type: ignore[index]
+    svc, table = check_world(tmp_path / "r", FakeUS(error=("AccessDeniedException", "No access.")))
+    assert run_check(svc) == "failed"
+    refused = table.item(keys.provider_sk("animation", "luma-ray"))
+    assert refused is not None and (refused["state"], refused["model"]) == ("needs_setup", "luma-ray2")
+
+
+OWN_RAY = item("MAKERDEF#custom-ray", type="ws_makerdef", key="custom-ray", kind="video", host="bedrock",
+               label="My Ray", provider="Luma AI", modelId="us.luma.ray-v2:0", region="us-west-2")  # fmt: skip
+OWN_PREFIX = f"ws/{USER}/{WS}/checks/own-video/J9/"
+
+
+def test_try_it_of_an_own_video_model_makes_one_test_shot_and_proves_own_video(tmp_path: Path) -> None:
+    from lamostories_agent.provider_check import TRIED_OWN
+
+    fake = FakeUS()
+    svc, table = check_world(tmp_path, fake, provider="own-video")
+    table.seed(OWN_RAY)
+    assert run_check(svc, "own-video") == "ready"
+    (start,) = fake.starts
+    assert start["modelId"] == "us.luma.ray-v2:0" and set(fake.regions) == {"us-west-2"}  # called as saved
+    assert start["modelInput"]["duration"] == "5s"
+    assert start["outputDataConfig"]["s3OutputDataConfig"]["s3Uri"] == f"s3://{BUCKET}/{OWN_PREFIX}"
+    assert fake.objects == {} and fake.deleted  # the test shot is gone
+    record = table.item(keys.provider_sk("animation", "own-video"))
+    assert record is not None and (record["state"], record["model"]) == ("on", "custom-ray")
+    job = table.item("PJOB#J9")
+    assert job is not None and job["status"] == "ready" and job["meta"]["videoModel"] == "custom-ray"
+    assert job["steps"][0]["message"] == TRIED_OWN.format(seconds=5, label="My Ray")
+    (usage,) = table.prefix("USAGE#")
+    assert (usage["provider"], usage["units"], usage["modelId"]) == ("own-video", 5, "us.luma.ray-v2:0")
+
+
+def test_try_it_of_own_video_without_a_model_or_its_bucket_calls_nothing(tmp_path: Path) -> None:
+    from lamostories_agent.providers import NO_OWN_MODEL, OWN_VIDEO_NOT_READY
+
+    fake = FakeUS()
+    svc, table = check_world(tmp_path, fake, provider="own-video")
+    assert run_check(svc, "own-video") == "failed"
+    assert table.item("PJOB#J9")["error"] == NO_OWN_MODEL.format(what="video")  # type: ignore[index]
+    assert fake.starts == [] and table.item(keys.provider_sk("animation", "own-video")) is None
+    off = FakeUS()
+    svc, table = check_world(tmp_path / "off", off, provider="own-video", bucket="")
+    table.seed(OWN_RAY)
+    assert run_check(svc, "own-video") == "failed"
+    assert table.item("PJOB#J9")["error"] == OWN_VIDEO_NOT_READY  # type: ignore[index]
+    assert off.starts == [] and table.item(keys.provider_sk("animation", "own-video")) is None
+
+
+def test_a_refused_own_video_try_it_records_needs_setup_for_its_model(tmp_path: Path) -> None:
+    fake = FakeUS(error=("AccessDeniedException", "You don't have access to the model with the specified model ID."))
+    svc, table = check_world(tmp_path, fake, provider="own-video")
+    table.seed(OWN_RAY)
+    assert run_check(svc, "own-video") == "failed"
+    record = table.item(keys.provider_sk("animation", "own-video"))
+    assert record is not None and (record["state"], record["model"]) == ("needs_setup", "custom-ray")
+    assert record["lastError"].startswith("Bedrock says My Ray is not turned on for this account.")
+
+
 def test_try_it_only_runs_a_provider_check_job(tmp_path: Path) -> None:
     fake = FakeUS()
     svc, table = check_world(tmp_path, fake, job_type="produce")

@@ -4,7 +4,8 @@ with the owner's own key.
 
 * **Keys.** Each lives only in Secrets Manager, ``cf-prod/workspaces/{workspaceId}/providers/{host}`` (JSON
   ``{"key": …}``, written by the API's provider-keys route), and is read per call for the workspace the call works
-  for (``ProviderKeys``); it is never logged, stored, sent anywhere else or returned. This runtime's role may read
+  for (``ProviderKeys``); it is never logged, stored, sent anywhere else or returned. An OpenAI-compatible key is
+  for one address: its secret is ``{"key", "origin"}`` and it is sent only to a base URL on that origin. This runtime's role may read
   only ``…/workspaces/*/providers/*`` (infra/modules/stories_agent).
 * **One shape.** Each host takes the model client's Converse-shaped request (system blocks, messages, tool specs) and
   answers in the same shape (content blocks, a stop reason, usage), so ``models.BedrockModels`` keeps one contract
@@ -65,6 +66,7 @@ class HostError(Exception):
         sent: bool = True,
     ) -> None:
         super().__init__(message)
+        self.code = code
         self.response = {"Error": {"Code": code, "Message": message}, "ResponseMetadata": {"HTTPStatusCode": status}}
         self.status_code = status
         self.kind = kind
@@ -148,7 +150,10 @@ class ProviderKeys:
             raise ValueError("not a keyed host")
         return f"{self.prefix}{workspace_id}/providers/{host}"
 
-    def key(self, workspace_id: str, host: str) -> str | None:
+    def key(self, workspace_id: str, host: str, url: str | None = None) -> str | None:
+        """The key, or None when none is saved. An OpenAI-compatible key is for one address only (the API saves it as
+        ``{"key", "origin"}``): it is given out only for a ``url`` on that origin, and otherwise refused before
+        anything is sent (``KEY_FOR_OTHER``)."""
         name = self.name(workspace_id, host)
         try:
             got = self._client().get_secret_value(SecretId=name)
@@ -166,11 +171,46 @@ class ProviderKeys:
         except ValueError:
             return raw or None
         found = data.get("key") if isinstance(data, dict) else data if isinstance(data, str) else None
-        return (str(found).strip() or None) if found else None
+        found = (str(found).strip() or None) if found else None
+        if found and host == "openai_compatible":
+            bound = str(data.get("origin") or "") if isinstance(data, dict) else ""
+            if not bound or not same_origin(bound, url):
+                raise key_for_other(bound, url)
+        return found
+
+
+def origin_of(url: str | None) -> tuple[str, str, int] | None:
+    """``(scheme, host, port)`` of an https address, the port 443 when none is given; None when it has none."""
+    try:
+        parts = urlsplit(str(url or "").strip())
+        port = parts.port
+    except ValueError:
+        return None
+    if not parts.scheme or not parts.hostname:
+        return None
+    return parts.scheme.lower(), parts.hostname.lower().rstrip("."), port if port is not None else 443
+
+
+def same_origin(saved: str | None, url: str | None) -> bool:
+    """Whether ``url`` is on the origin an OpenAI-compatible key was saved for (scheme, host and port)."""
+    a, b = origin_of(saved), origin_of(url)
+    return a is not None and a == b
+
+
+def key_for_other(saved: str, url: str | None) -> HostError:
+    """An OpenAI-compatible key saved for another address than the model's: nothing is sent (§45.37 G4)."""
+    there = (origin_of(saved) or ("", "", 0))[1] or "another address"
+    here = (origin_of(url) or ("", "", 0))[1] or "this model's address"
+    reason = (
+        f"your OpenAI-compatible key is for {there}, not {here}, so Lamo Stories did not send it (use {there} for "
+        f"this model, or remove the key in {KEY_PAGE} and paste the key for {here})"
+    )
+    return HostError(reason, code="KeyForOtherAddress", kind="key", found=("denied", reason),
+                     host="openai_compatible", sent=False)  # fmt: skip
 
 
 class KeySource(Protocol):
-    def key(self, workspace_id: str, host: str) -> str | None: ...
+    def key(self, workspace_id: str, host: str, url: str | None = None) -> str | None: ...
 
 
 # --- plain HTTPS, public addresses only ----------------------------------------------------------------------------

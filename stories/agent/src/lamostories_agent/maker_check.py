@@ -160,8 +160,10 @@ class MakerChecker:
 
     # --- the keyed hosts and Amazon Polly ----------------------------------------------------------------------
 
-    def _key(self, workspace_id: str, host: str) -> str:
-        found = self.keys.key(workspace_id, host) if self.keys is not None else None
+    def _key(self, workspace_id: str, host: str, url: str | None = None) -> str:
+        if self.keys is None:
+            raise keyed.no_key(host)
+        found = self.keys.key(workspace_id, host, url) if url is not None else self.keys.key(workspace_id, host)
         if not found:
             raise keyed.no_key(host)
         return found
@@ -180,8 +182,9 @@ class MakerChecker:
         )
 
     def _openai(self, workspace_id: str, entry: dict[str, Any]) -> tuple[str, str]:
-        key = self._key(workspace_id, "openai_compatible")
-        listed = keyed.openai_models(self.http or keyed.https, str(entry.get("baseUrl") or ""), key)
+        base_url = str(entry.get("baseUrl") or "")
+        key = self._key(workspace_id, "openai_compatible", base_url)
+        listed = keyed.openai_models(self.http or keyed.https, base_url, key)
         model_id = str(entry.get("modelId") or "")
         if listed and model_id not in listed:
             return "not_found", f"The address accepted your key but does not list {model_id}."

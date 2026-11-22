@@ -10,12 +10,18 @@ import { Btn, cheer, Chip, money, SetSelect } from "./bits.tsx";
 import type { useAi } from "./data.ts";
 
 /**
- * The makers that can carry a price, with the unit their use is counted in: Stability AI by the picture and Luma AI
- * Ray2 by the second of video (§45.37), and the two Amazon ended on 30 Sep 2026, kept for what they made before.
+ * The makers that can carry a price, with the unit their use is counted in (the API's ai_config.PRICE_PROVIDERS):
+ * Stability AI by the picture and Luma AI Ray2 by the second of video (§45.37), the sound makers by the second of
+ * sound (ElevenLabs, your own sound model) or the character spoken (Amazon Polly), and the two Amazon ended on 30 Sep
+ * 2026, kept for what they made before.
  */
-export const PRICED_MAKERS: { id: "stability" | "luma-ray" | "nova-canvas" | "nova-reel"; label: string; unit: "image" | "second"; per: string; units: string; example: string }[] = [
+export type PricedUnit = "image" | "second" | "character";
+export const PRICED_MAKERS: { id: "stability" | "luma-ray" | "elevenlabs" | "own-sound" | "polly" | "nova-canvas" | "nova-reel"; label: string; unit: PricedUnit; per: string; units: string; example: string }[] = [
   { id: "stability", label: "Stability AI pictures", unit: "image", per: "a picture", units: "picture", example: "0.04" },
   { id: "luma-ray", label: "Luma AI Ray2", unit: "second", per: "a second of video", units: "second", example: "0.75" },
+  { id: "elevenlabs", label: "ElevenLabs sound effects and music", unit: "second", per: "a second of sound", units: "second", example: "0.002" },
+  { id: "own-sound", label: "Your own sound model", unit: "second", per: "a second of sound", units: "second", example: "0.002" },
+  { id: "polly", label: "A spoken voice (Amazon Polly)", unit: "character", per: "a character spoken", units: "character", example: "0.000016" },
   { id: "nova-canvas", label: "Amazon Nova Canvas", unit: "image", per: "a picture", units: "picture", example: "0.04" },
   { id: "nova-reel", label: "Amazon Nova Reel 1.1", unit: "second", per: "a second of video", units: "second", example: "0.08" },
 ];
@@ -30,7 +36,7 @@ export function unitPrice(p: Price): number {
 }
 
 /** The stored price for one unit (§45.34): perUnit and its unit, the token prices 0. */
-export function makerPrice(perUnit: number, currency: string, unit: "image" | "second", per: string): Price {
+export function makerPrice(perUnit: number, currency: string, unit: PricedUnit, per: string): Price {
   return {
     inputPer1M: 0,
     outputPer1M: 0,

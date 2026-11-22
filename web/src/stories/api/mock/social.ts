@@ -48,6 +48,9 @@ export const LIMITS: Record<Platform, string[]> = {
   x: [
     "It needs its own X account. X connects the account that is signed in on x.com.",
     "Posts use Clip Factory's X app. Clip Factory's posts come first: Lamo Stories uses what is left of the month's credits.",
+    // The API's lines (social._LIMITS["x"], shared_room.X_OVER_LIMIT, §45.37 G6).
+    "Stories uses only what Clip Factory's share of your monthly X limit leaves.",
+    "Clip Factory does not count Stories' X posts, so if Clip Factory posts much more than planned, the month can go over your X limit by what Stories spent.",
   ],
 };
 

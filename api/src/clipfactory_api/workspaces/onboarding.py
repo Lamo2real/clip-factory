@@ -10,7 +10,8 @@ real state and cannot be ticked by hand (§45.34 "Setup steps 1–3", "Onboardin
   the default effort was picked (``pickedAt.effort``). A configuration saved before ``pickedAt`` existed keeps
   ticking all three from ``configSavedAt``, so nothing goes backwards;
 * step 4 when ``PATCH …/workspaces/{ws}`` saved ``configuration.providers`` (``providersPickedAt``, even unchanged:
-  keeping the built-in animator is a pick too) or a maker other than the built-in default is picked;
+  keeping the built-in animator is a pick too) or a maker other than the built-in default is picked; a picture or
+  video maker Amazon ended (Nova Canvas, Nova Reel, §45.37 G7) is never a pick and makes the step one to do again;
 * steps 6–10 when that platform's own Lamo Stories account is ``connected`` as the Social accounts page shows it
   (``social.accounts_shown``, settled the same way, round 5 E3): Clip Factory's own account (``same_as_clips``) is
   not, since nothing can be posted there, so the step stays to do with a line saying why; an account whose chosen
@@ -32,7 +33,7 @@ from .. import db, validate
 from ..clock import iso
 from ..errors import bad_request, conflict
 from . import ai_config as cfg
-from . import guard, social
+from . import guard, makers, social
 from . import types as ws
 from .secrets import WorkspaceSecrets
 
@@ -102,11 +103,15 @@ def _item(store: db.Store, user_id: str, workspace_id: str) -> dict[str, Any] | 
 
 
 def _video_picked(workspace: Mapping[str, Any]) -> bool:
+    """Step 4: the owner saved the makers. A picture or video maker Amazon ended since (Nova Canvas, Nova Reel, §45.37
+    G7) is a step to do again: it stops what it makes until the owner picks another, and it never counts as picked."""
+    config = workspace.get("configuration") if isinstance(workspace.get("configuration"), Mapping) else {}
+    chosen = (config or {}).get("providers") if isinstance((config or {}).get("providers"), Mapping) else {}
+    if any(makers.maker_ended(str((chosen or {}).get(k) or "")) is not None for k in ("video", "images")):
+        return False
     picked_at = workspace.get("providersPickedAt")
     if isinstance(picked_at, str) and picked_at:
         return True
-    config = workspace.get("configuration") if isinstance(workspace.get("configuration"), Mapping) else {}
-    chosen = (config or {}).get("providers") if isinstance((config or {}).get("providers"), Mapping) else {}
     defaults = guard.default_stories_config().get("providers") or {}
     return any((chosen or {}).get(k) not in (None, defaults.get(k)) for k in ("video", "images"))
 

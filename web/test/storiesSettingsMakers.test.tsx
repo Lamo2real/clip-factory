@@ -169,8 +169,10 @@ describe("the makers' models in stories/config/models.json (§45.37 G1)", () => 
     expect(bundled.every((m) => m.price === null)).toBe(true);
     // Nothing is shown as working because it is listed.
     expect(bundled.filter((m) => !m.ended).every((m) => m.status === "not_checked")).toBe(true);
-    // An ended model is never checked (the API's makers.model_info): its end day, in words.
-    expect(models.find((m) => m.key === "nova-canvas")).toMatchObject({ status: "not_checked", endedLine: "Ended by Amazon on 30 Sep 2026", checkedAt: null });
+    // An ended model is never checked (the API's makers.model_info): final, "Not found" with its end day in words, never
+    // "tap Check models".
+    expect(models.find((m) => m.key === "nova-canvas")).toMatchObject({ status: "not_found", statusLine: "Ended by Amazon on 30 Sep 2026.", endedLine: "Ended by Amazon on 30 Sep 2026", checkedAt: null });
+    expect(models.filter((m) => m.ended).every((m) => !/Check models/.test(m.statusLine))).toBe(true);
     expect(models.find((m) => m.key === "luma-ray2")?.regionLine).toBe("Runs in the US (Oregon)");
     const w = await api.getWorkspace("stories");
     expect((w.configuration as StoriesConfig).providers).toMatchObject({ images: "builtin-rig", video: "builtin-2d", audio: "builtin-synth" });
@@ -288,8 +290,8 @@ describe("the owner's own picture, video and sound models (§45.37 G2)", () => {
     const form = $<HTMLElement>('form[aria-label="Add a picture, video or sound model"]')!;
     await click(byText("[role=radio]", /^Sound/, form));
     expect(form.textContent).toContain("Sound models make sound effects and music only. Lamo Stories never asks them for a voice.");
-    // Sound runs on ElevenLabs (the owner's key) or Amazon Bedrock; ElevenLabs first.
-    expect($$("[role=radio]", $<HTMLElement>('[aria-label="Where it runs"]', form)!).map((r) => r.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["ElevenLabs", "Amazon Bedrock"]);
+    // Sound runs on ElevenLabs only (the owner's key): Amazon Bedrock has no sound or music model (the API's NO_BEDROCK_SOUND).
+    expect($$("[role=radio]", $<HTMLElement>('[aria-label="Where it runs"]', form)!).map((r) => r.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["ElevenLabs"]);
     expect($$("select", form).some((s) => s.getAttribute("aria-label") === "AWS Region")).toBe(false);
     fill(form, "Name", "Rain sounds");
     fill(form, "Model name", "eleven_text_to_sound_v2");

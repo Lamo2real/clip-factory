@@ -111,9 +111,11 @@ class FakeKeys:
     def __init__(self, found: dict[tuple[str, str], str]) -> None:
         self.found = found
         self.reads: list[tuple[str, str]] = []
+        self.urls: list[str | None] = []  # the address each read was for (an OpenAI-compatible key's, §45.37 G4)
 
-    def key(self, workspace_id: str, host: str) -> str | None:
+    def key(self, workspace_id: str, host: str, url: str | None = None) -> str | None:
         self.reads.append((workspace_id, host))
+        self.urls.append(url)
         return self.found.get((workspace_id, host))
 
 
@@ -247,6 +249,52 @@ def test_a_key_is_read_from_its_own_workspace_s_secret_each_time() -> None:
             "stories", "anthropic"
         )
     assert e.value.kind == "key" and e.value.sent is False
+
+
+def test_an_openai_compatible_key_is_given_only_for_the_address_it_was_saved_for() -> None:
+    """The API saves an OpenAI-compatible key as ``{"key", "origin"}`` (§45.37 G4): it goes only to that origin."""
+    name = "cf-prod/workspaces/stories/providers/openai_compatible"
+    secrets = FakeSecrets({name: json.dumps({"key": "oc-1", "origin": "https://api.example-llm.com"})})
+    reader = hosts.ProviderKeys("cf-prod/workspaces/", lambda: secrets)
+    assert reader.key("stories", "openai_compatible", "https://api.example-llm.com/openai/v1") == "oc-1"
+    assert reader.key("stories", "openai_compatible", "https://API.example-llm.com:443/v2") == "oc-1"
+    for other in ("https://api.other-llm.com/v1", "https://api.example-llm.com:8443/v1", "https://evil.com/?x=api",
+                  "http://api.example-llm.com/v1", "", None):  # fmt: skip
+        with pytest.raises(HostError) as e:
+            reader.key("stories", "openai_compatible", other)
+        assert e.value.response["Error"]["Code"] == "KeyForOtherAddress" and e.value.sent is False, other
+        assert e.value.kind == "key" and e.value.found and e.value.found[0] == "denied"
+        assert "oc-1" not in str(e.value) and "api.example-llm.com" in e.value.found[1]
+    # a key saved without its address is never sent anywhere
+    unbound = FakeSecrets({name: json.dumps({"key": "oc-2"})})
+    with pytest.raises(HostError) as e:
+        hosts.ProviderKeys("cf-prod/workspaces/", lambda: unbound).key(
+            "stories", "openai_compatible", "https://api.example-llm.com/v1"
+        )
+    assert e.value.response["Error"]["Code"] == "KeyForOtherAddress"
+    # the other keyed hosts have one fixed address each: no origin is asked of them
+    anth = FakeSecrets({"cf-prod/workspaces/stories/providers/anthropic": json.dumps({"key": "sk-ant-1"})})
+    assert hosts.ProviderKeys("cf-prod/workspaces/", lambda: anth).key("stories", "anthropic") == "sk-ant-1"
+
+
+def test_the_model_client_never_sends_an_openai_compatible_key_to_another_address() -> None:
+    secrets = FakeSecrets({f"cf-prod/workspaces/{WS}/providers/openai_compatible":
+                           json.dumps({"key": "oc-owner-1", "origin": "https://api.other-llm.com"})})  # fmt: skip
+    http = FakeHttp(chat_answer("Sure"))
+    m, table, _keys, runtime = client_with(*defs(GROQ), setting("custom-llama-oc"), http=http)
+    m._keys = hosts.ProviderKeys("cf-prod/workspaces/", lambda: secrets)
+    with pytest.raises(ModelUnavailable) as e:
+        m.complete(CTX, task="chat", messages=HELLO)
+    assert "your OpenAI-compatible key is for api.other-llm.com, not api.example-llm.com" in str(e.value)
+    assert http.calls == [] and runtime.requests == []  # nothing was sent, not even without the key
+    status = table.item("MODELSTATUS#custom-llama-oc")
+    assert status is not None and status["status"] == "denied"
+    # the key's own address works
+    ok = FakeSecrets({f"cf-prod/workspaces/{WS}/providers/openai_compatible":
+                      json.dumps({"key": "oc-owner-1", "origin": "https://api.example-llm.com"})})  # fmt: skip
+    m._keys = hosts.ProviderKeys("cf-prod/workspaces/", lambda: ok)
+    assert m.complete(CTX, task="chat", messages=HELLO).text == "Sure"
+    assert http.calls[0]["headers"]["Authorization"] == "Bearer oc-owner-1"
 
 
 # --- the Anthropic API ---------------------------------------------------------------------------------------------

@@ -142,9 +142,14 @@ describe("the maker models and the keys come from GET …/providers (§45.37 G1,
     ];
     expect(makerModelsIn(rows).map((m) => m.key)).toEqual(["stable-image-core", "custom-paint"]);
     expect(shownMakerModels(rows).map((m) => m.key)).toEqual(["stable-image-core", "custom-paint"]);
-    // No maker row with models (an older API, or still loading): the bundled set, each "Not checked yet".
+    // No maker row with models (an older API, or still loading): the bundled set, each "Not checked yet", and an ended
+    // one final with its end day (the API's makers.model_info).
     expect(shownMakerModels(null).length).toBeGreaterThan(5);
-    expect(shownMakerModels(null).every((m) => m.status === "not_checked")).toBe(true);
+    expect(shownMakerModels(null).filter((m) => !m.ended).every((m) => m.status === "not_checked")).toBe(true);
+    expect(shownMakerModels(null).filter((m) => m.ended).map((m) => [m.key, m.status, m.statusLine])).toEqual([
+      ["nova-canvas", "not_found", "Ended by Amazon on 30 Sep 2026."],
+      ["nova-reel", "not_found", "Ended by Amazon on 30 Sep 2026."],
+    ]);
     expect(keySavedFor(rows, "elevenlabs")).toBe(true);
     expect(keySavedFor(rows, "ElevenLabs")).toBe(true);
     expect(keySavedFor(rows, "anthropic")).toBe(false);

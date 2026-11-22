@@ -72,10 +72,14 @@ function clipsOwn(store: MockStore, ws: string, step: OnboardStep): boolean {
   return store.social.some((a) => a.workspaceId === ws && a.platform === step && sameAsClips(a));
 }
 
-/** Step 4: providersPickedAt, or a picture or video maker other than the built-in default (the API's rule). */
+/**
+ * Step 4: providersPickedAt, or a picture or video maker other than the built-in default (the API's rule); a maker
+ * Amazon ended (Nova Canvas, Nova Reel, §45.37 G7) is never a pick and makes the step one to do again.
+ */
 function videoPicked(store: MockStore, ws: string): boolean {
-  if (store.onboarding.providersPickedAt) return true;
   const chosen = storiesWorkspace(store, ws).configuration.providers;
+  if ((["video", "images"] as const).some((k) => chosen[k] === "nova-reel" || chosen[k] === "nova-canvas")) return false;
+  if (store.onboarding.providersPickedAt) return true;
   return (["video", "images"] as const).some((k) => chosen[k] !== DEFAULT_CONFIG.providers[k]);
 }
 

@@ -136,7 +136,7 @@ export interface Price {
   note: string;
   /** a picture or video maker's price for one unit (§45.34), with inputPer1M and outputPer1M 0; null for models */
   perUnit?: number | null;
-  unit?: "image" | "second" | null;
+  unit?: "image" | "second" | "character" | null;
 }
 
 /** What a PUT …/ai says the owner picked on purpose (§45.34), stamped on AICONFIG.pickedAt for setup steps 1 to 3. */
@@ -174,15 +174,22 @@ export interface ModelDef {
  * Who runs a model the owner adds (§45.37 G4). The two keyed hosts read the owner's key from Provider keys
  * (PUT …/providers/{host}/key; the key never comes back, only its hint). A model on a keyed host has no Region.
  */
-export type ModelHost = "bedrock" | "anthropic" | "openai_compatible" | "elevenlabs";
+export type ModelHost = "bedrock" | "anthropic" | "openai_compatible" | "elevenlabs" | "polly";
 /** The hosts a reasoning model can run on (Settings › AI › Add a model); ElevenLabs makes sound only. */
 export const MODEL_HOSTS: ModelHost[] = ["bedrock", "anthropic", "openai_compatible"];
 /** The hosts that need the owner's key: their provider ids in GET …/providers and the key routes are the same words. */
 export const KEYED_HOSTS: ModelHost[] = ["anthropic", "openai_compatible", "elevenlabs"];
-/** Each host's name, as the API's hosts.LABEL says it. */
-export const HOST_LABEL: Record<ModelHost, string> = { bedrock: "Amazon Bedrock", anthropic: "Anthropic API", openai_compatible: "OpenAI-compatible API", elevenlabs: "ElevenLabs" };
-/** The hosts a maker model of each kind can run on (§45.37): video only on Amazon Bedrock; ElevenLabs for sound only. */
-export const MAKER_HOSTS: Record<MakerKind, MakerHost[]> = { image: ["bedrock", "openai_compatible"], video: ["bedrock"], audio: ["elevenlabs", "bedrock"] };
+/**
+ * Each host's name, as the API's hosts.LABEL says it. "polly" (Amazon Polly) is for display only: it runs only the
+ * bundled spoken-voice maker (opt-in), takes no key and is never offered for a model the owner adds.
+ */
+export const HOST_LABEL: Record<ModelHost, string> = { bedrock: "Amazon Bedrock", anthropic: "Anthropic API", openai_compatible: "OpenAI-compatible API", elevenlabs: "ElevenLabs", polly: "Amazon Polly" };
+/**
+ * The hosts a maker model the owner adds can run on (§45.37, the API's makers.clean): video only on Amazon Bedrock
+ * (Luma AI's models); sound only on ElevenLabs (Amazon Bedrock has no sound or music model: the API answers 400
+ * NO_BEDROCK_SOUND).
+ */
+export const MAKER_HOSTS: Record<MakerKind, MakerHost[]> = { image: ["bedrock", "openai_compatible"], video: ["bedrock"], audio: ["elevenlabs"] };
 export type MakerHost = "bedrock" | "openai_compatible" | "elevenlabs";
 /**
  * The host id of a ModelInfo (its `hostId`, else its `host` words) or a MakerModelInfo.host: "Amazon Bedrock" (or
@@ -194,6 +201,7 @@ export function hostIdOf(host: string | null | undefined): ModelHost {
   if (h === "anthropic" || h === "anthropic api" || h === "the anthropic api") return "anthropic";
   if (h === "openai_compatible" || h === "openai-compatible" || h === "openai-compatible api") return "openai_compatible";
   if (h === "elevenlabs") return "elevenlabs";
+  if (h === "polly" || h === "amazon polly") return "polly";
   return "bedrock";
 }
 
@@ -523,7 +531,8 @@ export interface UsageSummary {
 export interface ProviderUsage {
   provider: string;
   units: number;
-  unit: "image" | "second";
+  /** pictures, seconds (of video, sound or rendering) or characters spoken (Amazon Polly, §45.37) */
+  unit: "image" | "second" | "character";
   cost: number | null;
   currency: string | null;
 }
@@ -1113,7 +1122,7 @@ export interface StoriesApi {
   /** "Try it" on Nova Reel (§45.35 D2): one 6-second test shot; the job ends with the provider's new state (GET …/providers) */
   tryNovaReel(ws: string): Promise<ProductionJob>;
   /** "Try it" on a maker that can be tried (§45.37: Luma AI Ray2, one 5-second test shot, which Amazon bills): POST …/providers/{id}/check */
-  tryMaker(ws: string, providerId: "luma-ray"): Promise<ProductionJob>;
+  tryMaker(ws: string, providerId: "luma-ray" | "own-video"): Promise<ProductionJob>;
   guidance(ws: string): Promise<{ topics: GuidanceTopic[]; checkedAt: string }>;
 
   social(ws: string): Promise<{ accounts: SocialAccount[]; clips: ClipsDestination[] }>;
@@ -1191,7 +1200,8 @@ export interface StoriesApi {
 
   getOnboarding(ws: string): Promise<Onboarding>;
   patchOnboarding(ws: string, body: { step: OnboardStep; done?: boolean; skipped?: boolean } | { finish: true }): Promise<Onboarding>;
-  setProviderKey(ws: string, providerId: string, key: string): Promise<ProviderStatus>;
+  /** an OpenAI-compatible key is for one address: its models' (or `baseUrl`, before any is added); §45.37 G4 */
+  setProviderKey(ws: string, providerId: string, key: string, baseUrl?: string): Promise<ProviderStatus>;
   deleteProviderKey(ws: string, providerId: string): Promise<void>;
   storage(ws: string): Promise<StorageSummary>;
   /** applies keepReferences, keepChatPictures and keepVersions now (§45.34) */

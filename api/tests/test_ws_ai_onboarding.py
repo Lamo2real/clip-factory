@@ -242,8 +242,26 @@ def test_a_configuration_saved_before_the_picks_keeps_its_ticks(
 
 
 def test_picking_a_provider_ticks_step_four(wcall: WsCall, store: db.Store) -> None:
-    seed_workspace(store, providers={"images": "nova-canvas", "video": "builtin-2d", "audio": "builtin-synth"})
+    seed_workspace(store, providers={"images": "stability", "video": "builtin-2d", "audio": "builtin-synth"})
     assert _states(wcall)["video"] == "done"
+
+
+@pytest.mark.parametrize(
+    "providers",
+    [
+        {"images": "nova-canvas", "video": "builtin-2d", "audio": "builtin-synth"},
+        {"images": "builtin-rig", "video": "nova-reel", "audio": "builtin-synth"},
+    ],
+)
+def test_a_maker_amazon_ended_is_never_a_pick_for_step_four(
+    wcall: WsCall, store: db.Store, table: FakeTable, providers: dict[str, str]
+) -> None:
+    """§45.37 G7: a stored Nova Canvas or Nova Reel pick stops what it makes, so step 4 is to do again, even when the
+    makers were saved on purpose before Amazon ended them."""
+    seed_workspace(store, providers=providers)
+    assert _states(wcall)["video"] == "todo"
+    table.items[(ws.registry_pk(USER), ws.workspace_sk(WS))]["providersPickedAt"] = "2026-09-01T10:00:00.000Z"
+    assert _states(wcall)["video"] == "todo"
 
 
 def test_keeping_the_built_in_animator_ticks_step_four_once_the_pick_is_recorded(

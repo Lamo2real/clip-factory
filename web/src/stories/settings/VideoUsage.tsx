@@ -38,6 +38,7 @@ export function makerName(id: string, providers: ProviderStatus[] | null): strin
 export function unitsText(u: Pick<ProviderUsage, "provider" | "units" | "unit">): string {
   const n = Math.round(u.units * 10) / 10;
   if (u.unit === "image") return `${n.toLocaleString("en-GB")} ${n === 1 ? "picture" : "pictures"}`;
+  if (u.unit === "character") return `${Math.round(u.units).toLocaleString("en-GB")} ${Math.round(u.units) === 1 ? "character" : "characters"} spoken`;
   const what = u.provider === "nova-reel" || u.provider === "luma-ray" || u.provider === "own-video" ? "of video" : u.provider === "elevenlabs" || u.provider === "own-sound" || u.provider === "polly" ? "of sound" : "of rendering";
   if (n >= 120) {
     const min = Math.round(n / 60);

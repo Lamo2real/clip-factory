@@ -49,7 +49,6 @@ import {
   HOST_LABEL,
   hostIdOf,
   KEYED_HOSTS,
-  MAKER_HOSTS,
   MAKER_KINDS,
   MAX_CUSTOM_MAKER_MODELS,
   MAX_CUSTOM_MODELS,
@@ -226,7 +225,7 @@ interface MakerUse {
   day: string;
   provider: string;
   units: number;
-  unit: "image" | "second";
+  unit: "image" | "second" | "character";
 }
 
 interface AiState {
@@ -234,7 +233,8 @@ interface AiState {
   usage: Usage[];
   /** the picture and video makers' use (USAGE# kind provider): built-in render seconds are builtin-rig */
   makers: MakerUse[];
-  keys: Record<string, { savedAt: string; hint: string }>;
+  /** the saved keys (PROVCRED#): an OpenAI-compatible key is for one address (`forOrigin`, §45.37 G4) */
+  keys: Record<string, { savedAt: string; hint: string; forOrigin?: string }>;
   /** the models the owner added (MODELDEF#{key}), in the order they were added */
   custom: Record<string, ModelDef & { createdAt: string; updatedAt: string }>;
   /** the maker models the owner added (MAKERDEF#{key}, §45.37 G2), in the order they were added */
@@ -540,12 +540,14 @@ function keyed(store: MockStore): Record<string, KeyedProvider> {
 function keyStatusOf(store: MockStore, p: KeyedProvider): ProviderStatus {
   const saved = state(store).keys[p.id];
   if (!saved) return { kind: p.kind, id: p.id, label: p.label, state: "needs_setup", line: `Paste your ${p.label} key to use it.`, key: { saved: false, hint: null, savedAt: null } };
+  // An OpenAI-compatible key names the one address it is for (the API's provider_keys.statuses).
+  const what = saved.forOrigin ? `Key saved for ${originHost(saved.forOrigin)}` : "Key saved";
   return {
     kind: p.kind,
     id: p.id,
     label: p.label,
     state: "needs_setup",
-    line: `${saved.hint ? `Key saved · ends ${saved.hint}.` : "Key saved."} It is checked on its first real call.`,
+    line: `${saved.hint ? `${what} · ends ${saved.hint}.` : `${what}.`} It is checked on its first real call.`,
     key: { saved: true, hint: saved.hint || null, savedAt: saved.savedAt },
   };
 }
@@ -555,20 +557,76 @@ export function keyedHostStatus(store: MockStore, id: ModelHost): ProviderStatus
   return keyStatusOf(store, KEYED_HOST_PROVIDERS.find((p) => p.id === id)!);
 }
 
+/** `https://{host}[:port]` of a base URL (the API's hosts.origin): who gets an OpenAI-compatible key. */
+export function originOf(baseUrl: string | null | undefined): string {
+  if (!baseUrl) return "";
+  try {
+    const u = new URL(baseUrl);
+    return `${u.protocol}//${u.host}`.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+function originHost(origin: string): string {
+  try {
+    return new URL(origin).hostname;
+  } catch {
+    return origin;
+  }
+}
+
+/** The API's sentences for the one OpenAI-compatible service a workspace may use (hosts.ONE_SERVICE, KEY_FOR_OTHER, provider_keys.NEED_MODEL_FIRST). */
+export const ONE_SERVICE = (host: string) =>
+  `Lamo Stories keeps one key for one OpenAI-compatible service. Your other OpenAI-compatible models use ${host}: use that address too, or remove those models first.`;
+export const KEY_FOR_OTHER = (saved: string, host: string) =>
+  `Your OpenAI-compatible key is for ${saved}. To use ${host}, remove that key in Lamo Stories › Settings › AI › Provider keys first, then paste the key for ${host}.`;
+export const NEED_MODEL_FIRST =
+  "Add the model on your OpenAI-compatible API first (Lamo Stories › Settings › AI › Add a model), then paste its key, so Lamo Stories knows the one address it is for.";
+
+/** The origins every OpenAI-compatible model of the workspace uses (reasoning and picture models), but `skip`. */
+function openAiOrigins(store: MockStore, skip?: string): string[] {
+  const s = state(store);
+  const used = [
+    ...Object.entries(s.custom).filter(([k, d]) => k !== skip && d.host === "openai_compatible").map(([, d]) => originOf(d.baseUrl)),
+    ...Object.entries(s.makerCustom).filter(([k, d]) => k !== skip && d.host === "openai_compatible").map(([, d]) => originOf(d.baseUrl)),
+  ];
+  return [...new Set(used.filter(Boolean))].sort();
+}
+
+/** One OpenAI-compatible service per workspace, the one its saved key is for (the API's provider_keys.check_openai_origin, 409). */
+function checkOpenAiOrigin(store: MockStore, key: string, baseUrl: string | null): void {
+  const origin = originOf(baseUrl);
+  const others = openAiOrigins(store, key);
+  if (others.length && !others.includes(origin)) throw new ApiError(409, "conflict", ONE_SERVICE(originHost(others[0]!)));
+  const saved = state(store).keys.openai_compatible?.forOrigin;
+  if (saved && saved !== origin) throw new ApiError(409, "conflict", KEY_FOR_OTHER(originHost(saved), originHost(origin)));
+}
+
 /** Whether the owner saved a key for a keyed host (a model on it cannot answer without one). */
 export function hostHasKey(store: MockStore, host: string): boolean {
   return !!state(store).keys[host];
 }
 
 /** The provider ids whose use can carry the owner's price beside the models (as the API's PRICE_PROVIDERS). */
-export const PRICE_PROVIDERS = ["stability", "luma-ray", "nova-canvas", "nova-reel"];
+export const PRICE_PROVIDERS = ["stability", "luma-ray", "own-images", "own-video", "elevenlabs", "polly", "own-sound", "nova-canvas", "nova-reel"];
 
 const OWNER_NOTE = "The price you typed.";
 /** The highest price for a million (tokens, pictures or seconds) the API takes. */
 const MAX_PRICE = 100_000;
 
-/** Each maker's unit (§45.34): Nova Canvas by the picture, Nova Reel by the second of video. */
-export const PROVIDER_UNIT: Record<string, "image" | "second"> = { stability: "image", "luma-ray": "second", "nova-canvas": "image", "nova-reel": "second" };
+/** Each maker's unit (§45.34, §45.37): pictures by the picture, video and sound by the second, Amazon Polly by the character spoken. */
+export const PROVIDER_UNIT: Record<string, "image" | "second" | "character"> = {
+  stability: "image",
+  "luma-ray": "second",
+  "own-images": "image",
+  "own-video": "second",
+  elevenlabs: "second",
+  polly: "character",
+  "own-sound": "second",
+  "nova-canvas": "image",
+  "nova-reel": "second",
+};
+const UNIT_WORD: Record<"image" | "second" | "character", string> = { image: "picture", second: "second", character: "character" };
 /** The highest price for one picture or one second the mock takes. */
 const MAX_UNIT_PRICE = 100;
 
@@ -584,8 +642,8 @@ function cleanPrice(value: unknown, field: string, provider?: string): Price {
   if (typeof v.currency !== "string" || !/^[A-Z]{3}$/.test(v.currency)) throw bad("Pick a currency.", "currency");
   const unit = provider ? PROVIDER_UNIT[provider] : undefined;
   if (unit) {
-    if (typeof v.perUnit !== "number" || !Number.isFinite(v.perUnit) || v.perUnit < 0 || v.perUnit > MAX_UNIT_PRICE) throw bad(`Type a price from 0 to ${MAX_UNIT_PRICE} for one ${unit === "image" ? "picture" : "second"}.`, "perUnit");
-    if (v.unit !== unit) throw bad(`${provider} is priced by the ${unit === "image" ? "picture" : "second"}.`, "unit");
+    if (typeof v.perUnit !== "number" || !Number.isFinite(v.perUnit) || v.perUnit < 0 || v.perUnit > MAX_UNIT_PRICE) throw bad(`Type a price from 0 to ${MAX_UNIT_PRICE} for one ${UNIT_WORD[unit]}.`, "perUnit");
+    if (v.unit !== unit) throw bad(`${provider} is priced by the ${UNIT_WORD[unit]}.`, "unit");
     if (v.inputPer1M !== 0 || v.outputPer1M !== 0) throw bad("A maker's price is for one unit: leave the token prices at 0.", "inputPer1M");
   } else if ((v.perUnit !== undefined && v.perUnit !== null) || (v.unit !== undefined && v.unit !== null)) throw bad("A model's price is per million tokens, not per unit.", "perUnit");
   return {
@@ -854,7 +912,7 @@ export const MAKER_NOT_CHECKED = "Not checked yet. Tap Check models to see if it
 /**
  * A maker model as the API's makers.model_info sends it (§45.37 G1, G2): who makes it, who runs it, its Region (null
  * on a keyed host) in words, its price, its end day and its last access check. No key state: the screens read that
- * from GET …/providers' `key` (G4). An ended model is never checked: "Not checked yet", with its end day.
+ * from GET …/providers' `key` (G4). An ended model is never checked: "Not found", "Ended by Amazon on 30 Sep 2026."
  */
 export function makerInfo(store: MockStore, m: MakerEntry): MakerModelInfo {
   const st = state(store).makerStatus[m.key] ?? { status: "not_checked" as const, line: MAKER_NOT_CHECKED, checkedAt: null };
@@ -871,8 +929,9 @@ export function makerInfo(store: MockStore, m: MakerEntry): MakerModelInfo {
     kind: m.kind,
     price: m.price ? { ...m.price } : null,
     note: m.note,
-    status: m.ended ? "not_checked" : st.status,
-    statusLine: m.ended ? MAKER_NOT_CHECKED : st.line,
+    // An ended model is final (the API's makers.model_info): "Not found" with its end day, never "tap Check models".
+    status: m.ended ? "not_found" : st.status,
+    statusLine: m.ended ? "Ended by Amazon on 30 Sep 2026." : st.line,
     checkedAt: m.ended ? null : st.checkedAt,
     custom: m.custom,
     ...(m.maker ? { maker: m.maker } : {}),
@@ -943,8 +1002,27 @@ function makerUsedBy(store: MockStore, key: string): MakerKind | null {
 }
 
 const MAX_MAKER_PRICE = 100;
-/** A Bedrock picture model the owner adds must be one the agent knows how to call (the API's rule). */
-const BEDROCK_PICTURE_ID = /^(stability\.|amazon\.titan-image|amazon\.nova-canvas)/;
+/** A Bedrock picture model the owner adds must be one the agent knows how to call (the API's makers.BEDROCK_PICTURE). */
+const BEDROCK_PICTURE_ID = /^(stability\.|amazon\.titan-image)/;
+/** Video on Amazon Bedrock: Luma AI's models only (the API's makers.BEDROCK_VIDEO). */
+const BEDROCK_VIDEO_ID = /^luma\./;
+/** Amazon's ended families: never added (the API's makers.ENDED_FAMILIES). */
+const ENDED_ID = /^amazon\.nova-(canvas|reel)/;
+/** ElevenLabs makes sound effects and music only, never a voice (the API's makers.ELEVENLABS_SOUND). */
+const ELEVENLABS_SOUND_ID = /^(eleven_text_to_sound|music_)/;
+/** The hosts the API's makers.KIND_HOSTS knows per kind (Bedrock sound is then refused with its own sentence). */
+const MOCK_KIND_HOSTS: Record<MakerKind, ModelHost[]> = { image: ["bedrock", "openai_compatible"], video: ["bedrock"], audio: ["elevenlabs", "bedrock"] };
+/** The model id inside an ARN or a cross-Region profile id (the API's makers._bare_model_id). */
+function bareModelId(id: string): string {
+  const tail = id.split("/").pop() ?? id;
+  const parts = tail.split(".");
+  return parts.length > 2 && ["us", "eu", "apac", "global", "jp", "au", "ca", "us-gov"].includes(parts[0]!) ? parts.slice(1).join(".") : tail;
+}
+export const BAD_PICTURE_MODEL = "Lamo Stories can make pictures on Amazon Bedrock with Stability AI's or Amazon Titan Image's models. Paste a model id like stability.stable-image-core-v1:1.";
+export const BAD_VIDEO_MODEL = "Lamo Stories can make video on Amazon Bedrock with Luma AI's models only. Paste a model id like luma.ray-v2:0.";
+export const ENDED_MODEL = "Amazon ended that model on 30 Sep 2026, so it can't be added. Pick another model, like stability.stable-image-core-v1:1 for pictures or luma.ray-v2:0 for video.";
+export const NO_BEDROCK_SOUND = "Amazon Bedrock has no sound-effect or music model yet, so Lamo Stories can't add one there. Add an ElevenLabs model instead, like eleven_text_to_sound_v2.";
+export const ELEVENLABS_ONLY_SOUND = "ElevenLabs is used for sound effects and music only, never a voice. Paste a model like eleven_text_to_sound_v2 or music_v1.";
 
 /** A MakerModelDef checked as the API does (unknown keys and bad values are a 400 with the field). */
 function cleanMakerDef(store: MockStore, key: string, value: unknown): MakerModelDef {
@@ -962,10 +1040,17 @@ function cleanMakerDef(store: MockStore, key: string, value: unknown): MakerMode
   if (!label || label.length > 60) throw bad("Give it a name of 1 to 60 letters.", "label");
   const provider = typeof v.provider === "string" ? v.provider.trim() : "";
   if (!provider || provider.length > 40) throw bad("Say who makes it, for example Stability AI or ElevenLabs.", "provider");
-  const refused = kind === "video" ? "Video models run on Amazon Bedrock only." : kind === "image" ? "Picture models run on Amazon Bedrock or an OpenAI-compatible API." : "Sound models run on ElevenLabs or Amazon Bedrock.";
-  const { host, baseUrl } = cleanHost(v.host, v.baseUrl, MAKER_HOSTS[kind], refused);
+  const refused = kind === "video" ? "Video models run on Amazon Bedrock only." : kind === "image" ? "Picture models run on Amazon Bedrock or an OpenAI-compatible API." : "Sound models run on ElevenLabs.";
+  const { host, baseUrl } = cleanHost(v.host, v.baseUrl, MOCK_KIND_HOSTS[kind], refused);
   const modelId = cleanModelId(v.modelId, host);
-  if (kind === "image" && host === "bedrock" && !BEDROCK_PICTURE_ID.test(modelId)) throw bad("Lamo Stories can make pictures with Stability AI's and Amazon's picture models on Amazon Bedrock. Paste one of those.", "modelId");
+  if (host === "bedrock") {
+    const bare = bareModelId(modelId);
+    if (ENDED_ID.test(bare)) throw bad(ENDED_MODEL, "modelId");
+    if (kind === "image" && !BEDROCK_PICTURE_ID.test(bare)) throw bad(BAD_PICTURE_MODEL, "modelId");
+    if (kind === "video" && !BEDROCK_VIDEO_ID.test(bare)) throw bad(BAD_VIDEO_MODEL, "modelId");
+    if (kind === "audio") throw bad(NO_BEDROCK_SOUND, "host");
+  }
+  if (host === "elevenlabs" && !ELEVENLABS_SOUND_ID.test(modelId)) throw bad(ELEVENLABS_ONLY_SOUND, "modelId");
   const region = cleanRegion(v.region, host);
   let price: MakerPrice | null = null;
   if (v.price !== null && v.price !== undefined) {
@@ -1076,6 +1161,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       guardStories(store, ws);
       const s = state(store);
       const clean = cleanDef(store, key, def);
+      if (clean.host === "openai_compatible") checkOpenAiOrigin(store, key, clean.baseUrl ?? null);
       const before = s.custom[key];
       if (!before && Object.keys(s.custom).length >= MAX_CUSTOM_MODELS) throw bad(`You can add up to ${MAX_CUSTOM_MODELS} models. Remove one first.`, "key");
       const at = iso(Date.now());
@@ -1157,6 +1243,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       guardStories(store, ws);
       const s = state(store);
       const clean = cleanMakerDef(store, key, def);
+      if (clean.host === "openai_compatible") checkOpenAiOrigin(store, key, clean.baseUrl ?? null);
       const before = s.makerCustom[key];
       // An added model keeps what it makes, picked or not (the API's makers.clean, KIND_FIXED).
       if (before && before.kind !== clean.kind) throw bad("A model you added keeps what it makes. Remove it and add it again as another kind.", "kind");
@@ -1278,14 +1365,25 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       return clone(a);
     },
 
-    async setProviderKey(ws, providerId, key) {
+    async setProviderKey(ws, providerId, key, baseUrl) {
       await delay();
       guardStories(store, ws);
       const p = keyedProvider(providerId);
       const k = key.trim();
       if (!k) throw bad("Paste the key.", "key");
       if (new Blob([k]).size > 4096) throw bad("That key is too long (at most 4 KB).", "key");
-      state(store).keys[p.id] = { savedAt: iso(Date.now()), hint: k.length >= 12 ? k.slice(-4) : "" };
+      // An OpenAI-compatible key is for one address: its models' (or the baseUrl sent), never another (§45.37 G4).
+      let forOrigin: string | undefined;
+      if (p.id === "openai_compatible") {
+        const used = openAiOrigins(store);
+        if (baseUrl) {
+          const origin = originOf(cleanBaseUrl(baseUrl));
+          if (used.length && !used.includes(origin)) throw new ApiError(409, "conflict", ONE_SERVICE(originHost(used[0]!)));
+          forOrigin = origin;
+        } else if (used.length) forOrigin = used[0];
+        else throw new ApiError(409, "conflict", NEED_MODEL_FIRST);
+      } else if (baseUrl) throw bad("Only an OpenAI-compatible key is for an address (baseUrl). Leave it out.", "baseUrl");
+      state(store).keys[p.id] = { savedAt: iso(Date.now()), hint: k.length >= 12 ? k.slice(-4) : "", ...(forOrigin ? { forOrigin } : {}) };
       return keyStatus(p);
     },
 

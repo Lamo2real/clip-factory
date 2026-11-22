@@ -50,7 +50,7 @@ export function modelIdHint(kind: MakerKind, host: MakerHost): { hint: string; e
   if (host === "elevenlabs") return { hint: "The model's name in ElevenLabs, like eleven_text_to_sound_v2 or music_v1.", example: "eleven_text_to_sound_v2" };
   if (host === "openai_compatible") return { hint: "The model's name as that service lists it.", example: "my-picture-model" };
   if (kind === "image") return { hint: "Copy it from the Amazon Bedrock console: a Stability AI or Amazon picture model ID.", example: "stability.stable-image-core-v1:1" };
-  if (kind === "video") return { hint: "Copy it from the Amazon Bedrock console: a video model ID.", example: "luma.ray-v2:0" };
+  if (kind === "video") return { hint: "Copy it from the Amazon Bedrock console: a Luma AI video model ID.", example: "luma.ray-v2:0" };
   return { hint: "Copy it from the Amazon Bedrock console: a sound or music model ID.", example: "maker.sound-model-v1:0" };
 }
 

@@ -154,6 +154,12 @@ export const LUMA_NOT_READY =
 /** What the pretend Amazon Bedrock says when the account may not use Luma AI Ray2 (knob `lumaDenied`). */
 export const LUMA_DENIED = "Amazon Bedrock said this account has no access to Luma AI Ray2. Turn it on in the Bedrock console (Model access) in US West (Oregon), then tap Try it.";
 export const LUMA_BUSY = "Luma AI Ray2 is being tried. Wait until it is done.";
+/** The API's lines for the owner's own video model's Try it (providers.CHECK_BUSY_LINE, routes/core.check_provider). */
+export const OWN_VIDEO_BUSY = "Your own video model is being tried. Wait until it is done.";
+export const OWN_VIDEO_FIRST = "Add a video model first: tap Add a model in Lamo Stories › Settings › Video.";
+/** The API's not-ready sentence for the owner's own video model (providers.NOT_READY["own-video"]). */
+export const OWN_VIDEO_NOT_READY =
+  "Your own video model is not ready yet: it needs a storage bucket in the United States (Oregon), which is switched off, and the model turned on for your account. Pick Built-in animation in Settings › Video, or finish its setup and tap Try it.";
 /** Nova Reel's Try it is gone: Amazon ended the model (a call could only fail). */
 export const REEL_ENDED = endedSentence({ label: "Amazon Nova Reel", kind: "video" });
 
@@ -175,9 +181,12 @@ function tryJob(store: MockStore, providerId: string): ProductionJob | null {
   // One 5-second test shot into the Oregon bucket: only when the bucket is switched on (knob `lumaBucket`), and
   // Bedrock may still refuse it (knob `lumaDenied`); the test file is deleted after (nothing lands in the Library).
   const at = new Date().toISOString();
-  const problem = store.knobs.lumaBucket !== true ? LUMA_NOT_READY : store.knobs.lumaDenied === true ? LUMA_DENIED : null;
-  store.knobs.lumaRay = problem ? ({ state: "needs_setup", checkedAt: at, lastError: problem } satisfies TryRecord) : ({ state: "on", checkedAt: at } satisfies TryRecord);
-  Object.assign(step, { status: problem ? "failed" : "done", finishedAt: at, message: problem ?? "Luma AI Ray2 made a 5-second test shot." });
+  const mine = providerId === "own-video";
+  const problem = store.knobs.lumaBucket !== true ? (mine ? OWN_VIDEO_NOT_READY : LUMA_NOT_READY) : store.knobs.lumaDenied === true ? LUMA_DENIED : null;
+  const record = problem ? ({ state: "needs_setup", checkedAt: at, lastError: problem } satisfies TryRecord) : ({ state: "on", checkedAt: at } satisfies TryRecord);
+  if (mine) store.knobs.ownVideo = record;
+  else store.knobs.lumaRay = record;
+  Object.assign(step, { status: problem ? "failed" : "done", finishedAt: at, message: problem ?? (mine ? "Your own video model made a test shot." : "Luma AI Ray2 made a 5-second test shot.") });
   Object.assign(job, { status: problem ? "failed" : "ready", progress: 1, updatedAt: at });
   return job;
 }
@@ -211,10 +220,16 @@ function withModels(store: MockStore, config: StoriesConfig, row: ProviderStatus
 function own(store: MockStore, config: StoriesConfig, kind: MakerKind, providerKind: ProviderStatus["kind"], id: string, label: string, noun: string): ProviderStatus {
   const models = allMakerModels(store).filter((m) => m.custom && m.kind === kind);
   const { maker, model } = MAKER_FIELD_OF[kind];
-  if (config.providers[maker] !== id) return off(providerKind, id, label, models.length ? `Off. Uses a ${noun} model you added.` : `Add your own ${noun} model first.`);
+  // The owner's own video model has a Try it, like Luma AI Ray2 (the API's providers.CHECKABLE): on only after its test shot.
+  const tried = kind === "video" ? ((store.knobs.ownVideo ?? null) as TryRecord | null) : null;
+  const check = kind === "video" ? { check: structuredClone(tryJob(store, id)) } : {};
+  if (config.providers[maker] !== id) return { ...off(providerKind, id, label, models.length ? `Off. Uses a ${noun} model you added.` : `Add your own ${noun} model first.`), ...check };
   const picked = models.find((m) => m.key === config.providers[model]) ?? models[0];
-  if (!picked) return { kind: providerKind, id, label, state: "needs_setup", line: `Add your own ${noun} model first.` };
+  if (!picked) return { kind: providerKind, id, label, state: "needs_setup", line: `Add your own ${noun} model first.`, ...check };
   if (picked.hostId !== "bedrock" && !hostHasKey(store, picked.hostId)) return { kind: providerKind, id, label, state: "needs_setup", line: `Paste the key for ${picked.label} under Provider keys first.` };
+  if (tried?.state === "on") return { kind: providerKind, id, label, state: "on", line: `It uses ${picked.label}. It worked when you tried it.`, checkedAt: tried.checkedAt, ...check };
+  if (kind === "video")
+    return { kind: providerKind, id, label, state: "needs_setup", line: tried?.lastError ?? OWN_VIDEO_NOT_READY, ...(tried ? { checkedAt: tried.checkedAt, lastError: tried.lastError } : {}), ...check };
   return { kind: providerKind, id, label, state: "needs_setup", line: `It uses ${picked.label}. It is shown as working after its first real work.` };
 }
 
@@ -379,10 +394,12 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
     async tryMaker(ws, providerId) {
       await delay(200);
       storiesWorkspace(store, ws);
-      if (providerId !== "luma-ray") throw new ApiError(404, "not_found", "That maker cannot be tried.");
-      // One at a time (the API's 409), never behind the not-ready guard: that is how Luma AI Ray2 becomes ready.
+      if (providerId !== "luma-ray" && providerId !== "own-video") throw new ApiError(404, "not_found", "Only Luma AI Ray2 and your own video model have a Try it.");
+      // The owner's own video model needs one first (the API's providers.try_problem).
+      if (providerId === "own-video" && !allMakerModels(store).some((m) => m.custom && m.kind === "video")) throw new ApiError(409, "conflict", OWN_VIDEO_FIRST);
+      // One at a time (the API's 409), never behind the not-ready guard: that is how the maker becomes ready.
       const now = tryJob(store, providerId);
-      if (now && (now.status === "queued" || now.status === "running")) throw new ApiError(409, "conflict", LUMA_BUSY);
+      if (now && (now.status === "queued" || now.status === "running")) throw new ApiError(409, "conflict", providerId === "own-video" ? OWN_VIDEO_BUSY : LUMA_BUSY);
       const at = new Date().toISOString();
       const job: ProductionJob = {
         jobId: mockId(),

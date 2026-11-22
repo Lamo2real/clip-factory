@@ -884,11 +884,14 @@ class BedrockModels:
             base_url=str(info.get("baseUrl") or "") or None,
         )
 
-    def _key(self, ctx: CallContext, host: str) -> str:
-        """The owner's key for ``host`` in ``ctx``'s workspace, read now (never kept between calls)."""
+    def _key(self, ctx: CallContext, host: str, url: str | None = None) -> str:
+        """The owner's key for ``host`` in ``ctx``'s workspace, read now (never kept between calls). An
+        OpenAI-compatible key is given only for a ``url`` on the address it was saved for (``hosts.key_for_other``)."""
         if self._keys is None:
             raise keyed.no_key(host)
-        found = self._keys.key(ctx.workspace_id, host)
+        found = (
+            self._keys.key(ctx.workspace_id, host, url) if url is not None else self._keys.key(ctx.workspace_id, host)
+        )
         if not found:
             raise keyed.no_key(host)
         return found
@@ -917,7 +920,7 @@ class BedrockModels:
         words = keyed.host_words(host)
         call = self.host_call(choice, info, system, messages, tools, max_tokens)
         try:
-            key = self._key(ctx, host)
+            key = self._key(ctx, host, call.base_url if host == "openai_compatible" else None)
             client = self.host(host)
             got = retry_sync(
                 lambda: client.send(key, call, on_text),

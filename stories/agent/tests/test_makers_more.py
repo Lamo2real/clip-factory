@@ -191,7 +191,7 @@ def test_a_key_that_cannot_be_read_stops_with_a_plain_sentence_and_proves_nothin
     secrets = UnreadableKeys(code)
     source = keyed.ProviderKeys("cf-prod/workspaces/", lambda: secrets)
     http = FakeHttp(Answer(200, b""))
-    reader = lambda host: source.key(WS, host)  # noqa: E731
+    reader = lambda host, url=None: source.key(WS, host, url)  # noqa: E731
     with pytest.raises(ProviderFailed) as sound:
         asyncio.run(ElevenLabsSound(sound_ctx(tmp_path, sound_models=sound_models({"providers": {"audio": "elevenlabs"}}),
                                               provider_key=reader, http=http)).mix(SCRIPT, tmp_path / "m.m4a"))  # fmt: skip
@@ -236,7 +236,7 @@ def picture_answer(data: bytes) -> Answer:
 def oc_ctx(tmp: Path, http: FakeHttp, key: str | None = "oc-owner-key-123") -> ProviderContext:
     keys_ = FakeKeys({(WS, "openai_compatible"): key} if key else {})
     return ProviderContext(engine=Engine(ENGINE_DIR, Path("/tmp")), workdir=tmp, image_model=OC_PIC,
-                           provider_key=lambda host: keys_.key(WS, host), http=http)  # fmt: skip
+                           provider_key=lambda host, url=None: keys_.key(WS, host, url), http=http)  # fmt: skip
 
 
 def test_the_openai_compatible_picture_maker_asks_its_address_with_the_owner_s_key(tmp_path: Path) -> None:
@@ -300,6 +300,28 @@ def test_openai_compatible_picture_failures_say_what_the_call_proved_and_never_s
         assert "oc-owner-key-123" not in text
 
 
+def test_the_openai_compatible_picture_maker_never_sends_a_key_saved_for_another_address(tmp_path: Path) -> None:
+    name = f"cf-prod/workspaces/{WS}/providers/openai_compatible"
+
+    class Secrets:
+        def get_secret_value(self, *, SecretId: str) -> dict[str, Any]:
+            assert SecretId == name
+            return {"SecretString": json.dumps({"key": "oc-owner-key-123", "origin": "https://api.other.com"})}
+
+    source = keyed.ProviderKeys("cf-prod/workspaces/", Secrets)
+    http = FakeHttp(picture_answer(PNG))
+    ctx = ProviderContext(engine=Engine(ENGINE_DIR, Path("/tmp")), workdir=tmp_path, image_model=OC_PIC,
+                          provider_key=lambda host, url=None: source.key(WS, host, url), http=http)  # fmt: skip
+    with pytest.raises(ProviderFailed) as e:
+        asyncio.run(OwnImages(ctx).image("a cartoon", 1024, 1024, 1, []))
+    assert e.value.sentence.startswith(
+        "Lamo Stories did not make this picture: your OpenAI-compatible key is for api.other.com, not "
+        "api.example-images.com, so Lamo Stories did not send it"
+    )
+    assert e.value.state is None and http.calls == []  # nothing sent, nothing proven
+    assert "oc-owner-key-123" not in e.value.sentence + (e.value.last_error or "")
+
+
 def test_without_a_key_the_openai_compatible_picture_maker_needs_setting_up_and_calls_nothing(tmp_path: Path) -> None:
     http = FakeHttp(picture_answer(PNG))
     with pytest.raises(ProviderFailed) as e:
@@ -320,6 +342,7 @@ def test_a_portrait_job_with_an_own_openai_compatible_model_reads_its_own_worksp
     (asset,) = table.prefix("ASSET#")
     assert store.objects[asset["key"]][0] == PNG and asset["meta"]["model"] == "custom-oc"
     assert table.item("PROVIDER#images#own-images")["state"] == "on"  # type: ignore[index]
+    assert table.item("PROVIDER#images#own-images")["model"] == "custom-oc"  # type: ignore[index]  # the proof's model
     (usage,) = table.prefix("USAGE#")
     assert usage["modelId"] == "gpt-image-1" and usage["units"] == 1
 

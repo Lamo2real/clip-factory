@@ -94,13 +94,17 @@ export function usedModel(models: readonly MakerModelInfo[], kind: MakerKind, ma
 /** "US$0.04 a picture", "US$0.75 a second", or null with no price known. */
 export function priceWords(p: MakerPrice | null | undefined): string | null {
   if (!p) return null;
-  const per = p.unit === "image" ? "a picture" : p.unit === "second" ? "a second" : `per ${p.unit}`;
+  const per = p.unit === "image" ? "a picture" : p.unit === "second" ? "a second" : p.unit === "character" ? "a character spoken" : `per ${p.unit}`;
   return `${money(p.perUnit, p.currency)} ${per}`;
 }
 
 /** The maker models from the file while GET …/providers loads (or when it fails): every one "Not checked yet". */
 export function fallbackMakerModels(): MakerModelInfo[] {
-  return bundledMakerModels().map((m) => ({ ...m, custom: false, status: "not_checked", statusLine: "Not checked yet. Tap Check models to see if it works.", checkedAt: null }));
+  return bundledMakerModels().map((m) =>
+    m.ended
+      ? { ...m, custom: false, status: "not_found", statusLine: "Ended by Amazon on 30 Sep 2026.", checkedAt: null }
+      : { ...m, custom: false, status: "not_checked", statusLine: "Not checked yet. Tap Check models to see if it works.", checkedAt: null },
+  );
 }
 
 /** The maker models to show: from the maker rows of GET …/providers (§45.37: no route of their own), else the file's. */
@@ -400,6 +404,10 @@ export function VideoSection({ ws }: { ws: string }) {
       <MakerCard kind="video" c={c} providers={p} models={models} save={save}>
         {/* Luma AI Ray2's own row: Try it, one 5-second test shot, so it can become ready before any video (§45.37). */}
         {p?.some((x) => x.id === "luma-ray") ? <ReelTry ws={ws} p={stateOf(p, "luma-ray")} reload={providers.reload} /> : null}
+        {/* The owner's own video model is tried the same way (its shots go to the same storage); only once one is added. */}
+        {models.some((m) => m.kind === "video" && m.custom) && p?.some((x) => x.id === "own-video") ? (
+          <ReelTry ws={ws} p={stateOf(p, "own-video")} reload={providers.reload} maker="own-video" />
+        ) : null}
       </MakerCard>
       <MakerCard kind="image" c={c} providers={p} models={models} save={save} />
       <MakerCard kind="audio" c={c} providers={p} models={models} save={save} />

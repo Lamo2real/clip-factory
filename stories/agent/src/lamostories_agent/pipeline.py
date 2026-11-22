@@ -581,21 +581,27 @@ class Job:
                  and r.get("workspaceId") in (None, self.fence.workspace_id)]  # fmt: skip
         return config.merged_makers(owned)
 
-    def key_reader(self) -> Callable[[str], str | None] | None:
+    def key_reader(self) -> Callable[..., str | None] | None:
         """This job's workspace's key for a keyed host, read on each call (never kept)."""
         source = self.svc.provider_keys
         if source is None:
             return None
         workspace_id = self.fence.workspace_id
-        return lambda host: source.key(workspace_id, host)
 
-    async def prove(self, kind: str, provider_id: str, state: str = "on", last_error: str | None = None) -> None:
-        """``PROVIDER#{kind}#{id}`` after a real call (§45.11.6): once per job and provider."""
+        def read(host: str, url: str | None = None) -> str | None:
+            return source.key(workspace_id, host, url)
+
+        return read
+
+    async def prove(
+        self, kind: str, provider_id: str, state: str = "on", last_error: str | None = None, model: str | None = None
+    ) -> None:
+        """``PROVIDER#{kind}#{id}`` after a real call (§45.11.6): once per job and provider, naming the ``model`` key
+        the call used when the maker has models (§45.37)."""
         if (kind, provider_id) in self._proven and state == "on":
             return
-        item = provider_item(
-            self.fence.pk, self.fence.user_id, self.fence.workspace_id, kind, provider_id, state, now_iso(), last_error
-        )
+        item = provider_item(self.fence.pk, self.fence.user_id, self.fence.workspace_id, kind, provider_id, state,
+                             now_iso(), last_error, model)  # fmt: skip
         await self.data.write(self.fence, puts=[item])
         if state == "on":
             self._proven.add((kind, provider_id))
@@ -871,6 +877,14 @@ class StoryJob(Job):
             return maker_model(kind, self.config, self.maker_models)
         except ProviderUnavailable:
             return None
+
+    def _model_key(self, kind: str, pid: str) -> str | None:
+        """The model key a step of the workspace's picked maker ``pid`` made with (what its ``PROVIDER#`` proof
+        names); None for a built-in maker, or a scene a built-in maker drew in its place."""
+        if pid != chosen(self.config)[kind]:
+            return None
+        entry = self._pick(kind)
+        return str(entry["key"]) if entry and entry.get("key") else None
 
     def _sound_models(self) -> dict[str, dict[str, Any]]:
         try:
@@ -1827,7 +1841,7 @@ class StoryJob(Job):
                     clip = await provider.render_scene(script, sid, {}, out)
                 except ProviderFailed as e:
                     if e.state:
-                        await self.prove("animation", pid, e.state, e.last_error)
+                        await self.prove("animation", pid, e.state, e.last_error, self._model_key("animation", pid))
                     raise
                 spent[pid] = spent.get(pid, 0.0) + (time.monotonic() - began)
                 used[pid] = used.get(pid, 0.0) + clip.duration_sec
@@ -1843,7 +1857,7 @@ class StoryJob(Job):
 
         await side_by_side(one(s) for s in scenes)
         for pid, seconds in used.items():
-            await self.prove("animation", pid)
+            await self.prove("animation", pid, model=self._model_key("animation", pid))
             if pid == "builtin-2d":  # the built-in renderer's own seconds count as builtin-rig (§45.34)
                 rendered = round(spent.get(pid, 0.0), 3)
                 await self.provider_usage(pid, "", provider="builtin-rig", units=rendered, unit="second",
@@ -1881,7 +1895,7 @@ class StoryJob(Job):
         except Exception as e:
             await self._sound_usage(pid, provider)  # what was made before the failure was billed all the same
             if isinstance(e, ProviderFailed) and e.state:  # what the real call proved (a refused key: needs_setup)
-                await self.prove("audio", pid, e.state, e.last_error)
+                await self.prove("audio", pid, e.state, e.last_error, self._model_key("audio", pid))
             raise
         meta: dict[str, Any] = {"provider": pid}
         made = getattr(provider, "made", None)
@@ -1889,7 +1903,7 @@ class StoryJob(Job):
             # which of the maker's models made which part (madeEffects, madeMusic, madeVoice, madeLines)
             meta.update({f"made{k[:1].upper()}{k[1:]}": v for k, v in made.items() if isinstance(v, str | int)})
         await self._save(path, self._key(keys.audio_key, self.version), "audio", "audio/mp4", meta=meta)
-        await self.prove("audio", pid)
+        await self.prove("audio", pid, model=self._model_key("audio", pid))
         await self._sound_usage(pid, provider)
         return path
 

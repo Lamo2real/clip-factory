@@ -49,9 +49,15 @@ export function keepName(old: ProviderStatus, next: ProviderStatus): ProviderSta
   };
 }
 
+/** An OpenAI-compatible key is for one address only (§45.37 G4): the one its models use, never sent anywhere else. */
+export const ONE_ADDRESS_LINE =
+  "This key is for one address only: the one your OpenAI-compatible models use. Lamo Stories never sends it anywhere else. Add the model first, or type its address here.";
+
 function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStatus; onSaved: (p: ProviderStatus) => void }) {
   const toast = useToast();
   const [text, setText] = useState("");
+  const [address, setAddress] = useState("");
+  const forAddress = provider.id === "openai_compatible";
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const s = PROVIDER_STATE[provider.state];
@@ -63,8 +69,10 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
     }
     setBusy(true);
     try {
-      const next = await storiesApi().setProviderKey(ws, provider.id, text.trim());
+      const api = storiesApi();
+      const next = forAddress && address.trim() ? await api.setProviderKey(ws, provider.id, text.trim(), address.trim()) : await api.setProviderKey(ws, provider.id, text.trim());
       setText("");
+      setAddress("");
       setOpen(false);
       onSaved(next);
       cheer(el);
@@ -127,6 +135,25 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
             placeholder="Paste the key here"
             onChange={(e) => setText(e.target.value)}
           />
+          {forAddress ? (
+            <>
+              <p className="st-stg-small">{ONE_ADDRESS_LINE}</p>
+              <label className="st-stg-label" htmlFor={`key-address-${provider.id}`}>
+                Its address (only if you have not added its model yet)
+              </label>
+              <input
+                id={`key-address-${provider.id}`}
+                className="st-stg-input"
+                type="url"
+                autoComplete="off"
+                spellCheck={false}
+                maxLength={300}
+                value={address}
+                placeholder="https://api.example.com/v1"
+                onChange={(e) => setAddress(e.target.value)}
+              />
+            </>
+          ) : null}
           <div className="st-stg-actions">
             <Btn main type="submit" off={busy ? "Saving…" : undefined}>
               Save the key

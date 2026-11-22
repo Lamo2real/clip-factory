@@ -274,7 +274,8 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     getOnboarding: async (ws) => (await call<{ onboarding: Onboarding }>("GET", w(ws, "/onboarding"))).onboarding,
     patchOnboarding: async (ws, body) => (await call<{ onboarding: Onboarding }>("PATCH", w(ws, "/onboarding"), body)).onboarding,
     // A provider's key is sent once and never returned (§45.31).
-    setProviderKey: async (ws, providerId, key) => (await call<{ provider: ProviderStatus }>("PUT", w(ws, `/providers/${id(providerId)}/key`), { key })).provider,
+    setProviderKey: async (ws, providerId, key, baseUrl) =>
+      (await call<{ provider: ProviderStatus }>("PUT", w(ws, `/providers/${id(providerId)}/key`), { key, ...(baseUrl ? { baseUrl } : {}) })).provider,
     deleteProviderKey: (ws, providerId) => call<void>("DELETE", w(ws, `/providers/${id(providerId)}/key`)),
     storage: async (ws) => (await call<{ storage: StorageSummary }>("GET", w(ws, "/storage"))).storage,
     storageCleanup: (ws) => call<{ removed: { files: number; bytes: number } }>("POST", w(ws, "/storage/cleanup")),

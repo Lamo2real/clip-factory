@@ -387,6 +387,7 @@ def test_the_sound_step_uses_the_picked_maker_records_its_usage_and_proves_it(tm
     assert asset["meta"]["provider"] == "elevenlabs" and asset["meta"]["madeEffects"] == "elevenlabs-effects"
     prov = table.item(keys.provider_sk("audio", "elevenlabs"))
     assert prov is not None and prov["state"] == "on"
+    assert prov["model"] == "elevenlabs-effects"  # the proof names the model in use (the maker's first, §45.37)
     # one USAGE# per model that made a part, each with its own model id and seconds (§45.37 G1: per-model prices)
     rows = {u["modelId"]: u for u in table.prefix("USAGE#")}
     assert set(rows) == {"eleven_text_to_sound_v2", "music_v1"}

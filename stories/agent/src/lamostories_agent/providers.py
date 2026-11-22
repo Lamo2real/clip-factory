@@ -106,9 +106,10 @@ LUMA_SETUP = (
 )
 LUMA_NOT_ENABLED = "Bedrock says Luma AI Ray2 is not turned on for this account in US West (Oregon)."
 SHOT_FAILED = "{label} could not make this shot. Tap Try again, or pick the Built-in animator in Settings › Video."
-OWN_VIDEO_NOT_READY = (
-    "Your video model is not ready yet: it needs Lamo Stories' storage in its Region (US West, Oregon) switched on. "
-    "Pick Built-in animation in Settings › Video, or finish its setup."
+OWN_VIDEO_NOT_READY = (  # word for word the API's line (providers.NOT_READY["own-video"], §45.37 G2)
+    "Your own video model is not ready yet: it needs a storage bucket in the United States (Oregon), which is "
+    "switched off, and the model turned on for your account. Pick Built-in animation in Settings › Video, or finish "
+    "its setup and tap Try it."
 )
 NO_OWN_MODEL = (
     "You have not added a {what} model yet. Add one in Lamo Stories › Settings › Video, or pick another {what} maker."
@@ -132,6 +133,7 @@ KEY_UNREADABLE = (
     "Lamo Stories could not read the key you saved for {words}. Tap Try again. If it keeps happening, paste the key "
     "again in Lamo Stories › Settings › AI › Provider keys."
 )
+KEY_ELSEWHERE = "Lamo Stories did not make this picture: {why}."
 SOUND_FAILED = (
     "{label} could not make the sounds. Tap Try again, or pick Built-in sounds in Lamo Stories › Settings › Video."
 )
@@ -192,20 +194,28 @@ class ProviderFailed(Exception):
         self.detail = detail
 
 
-def read_key(ctx: ProviderContext, host: str) -> str | None:
+def read_key(ctx: ProviderContext, host: str, url: str | None = None) -> str | None:
     """This workspace's key for a keyed host, read for this call (§45.37 G4); None when none is saved. A key that is
     there but cannot be read (Secrets Manager denied or throttled the read) stops the step with a plain sentence and
     proves nothing about the maker (``state`` None: no ``PROVIDER#`` record is written for a read that never reached
-    it)."""
+    it). An OpenAI-compatible key is read for the model's ``url``: a key saved for another address is never sent
+    (``KEY_ELSEWHERE``, nothing proven either)."""
     if ctx.provider_key is None:
         return None
     try:
-        return ctx.provider_key(host)
-    except (keyed.HostError, ValueError) as e:
+        return ctx.provider_key(host) if url is None else ctx.provider_key(host, url)
+    except keyed.HostError as e:
+        if e.code == "KeyForOtherAddress":
+            log("warn", "stories.provider_key_other_address", host=host)
+            raise ProviderFailed(KEY_ELSEWHERE.format(why=e.found[1] if e.found else str(e)),
+                                 last_error=_said(e.found[1] if e.found else str(e)) or None) from e  # fmt: skip
         words = keyed.host_words(host)
-        found = e.found[1] if isinstance(e, keyed.HostError) and e.found else ""
+        found = e.found[1] if e.found else ""
         log("warn", "stories.provider_key_failed", host=host, error=type(e).__name__)
         raise ProviderFailed(KEY_UNREADABLE.format(words=words), last_error=_said(found) or None) from e
+    except ValueError as e:
+        log("warn", "stories.provider_key_failed", host=host, error=type(e).__name__)
+        raise ProviderFailed(KEY_UNREADABLE.format(words=keyed.host_words(host))) from e
 
 
 def _said(text: str) -> str:
@@ -244,7 +254,7 @@ class ProviderContext:
     bedrock: Callable[[str], Any] | None = None  # bedrock-runtime in a Region
     s3_in: Callable[[str], Any] | None = None  # S3 in a Region (the shots' buckets)
     video_west_bucket: str = ""  # Luma AI Ray2's bucket in us-west-2 (empty while the switch is off)
-    provider_key: Callable[[str], str | None] | None = None  # this workspace's key for a keyed host, read per call
+    provider_key: Callable[..., str | None] | None = None  # this workspace's key for a keyed host (and url), per call
     http: Any = None  # hosts.Http (tests give a fake)
     polly: Callable[[str], Any] | None = None  # Amazon Polly in a Region
 
@@ -593,7 +603,7 @@ class AiPictures(_Base):
         return picture_from(data, label)
 
     async def _openai(self, entry: dict[str, Any], label: str, prompt: str, width: int, height: int) -> bytes:
-        key = read_key(self.ctx, "openai_compatible")
+        key = read_key(self.ctx, "openai_compatible", str(entry.get("baseUrl") or ""))
         if not key:
             raise ProviderFailed(PICTURE_SETUP.format(why="there is no OpenAI-compatible key saved in Settings › AI › "
                                  "Provider keys"), state="needs_setup", last_error="No key is saved.")  # fmt: skip
@@ -1411,8 +1421,10 @@ def has_actors(scene: dict[str, Any]) -> bool:
 
 
 def provider_item(fence_pk: str, user_id: str, workspace_id: str, kind: str, pid: str, state: str, at: str,
-                  last_error: str | None = None) -> dict[str, Any]:  # fmt: skip
-    """``PROVIDER#{kind}#{id}``: what a real call proved (written only by the agent, after the call, §45.11.6)."""
+                  last_error: str | None = None, model: str | None = None) -> dict[str, Any]:  # fmt: skip
+    """``PROVIDER#{kind}#{id}``: what a real call proved (written only by the agent, after the call, §45.11.6), with
+    the ``model`` key it was made with for a maker that has models (§45.37: the API counts a proof only for the model
+    in use)."""
     item: dict[str, Any] = {
         "pk": fence_pk,
         "sk": keys.provider_sk(kind, pid),
@@ -1426,6 +1438,8 @@ def provider_item(fence_pk: str, user_id: str, workspace_id: str, kind: str, pid
     }
     if last_error:
         item["lastError"] = last_error
+    if model:
+        item["model"] = model
     return item
 
 
