@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import { asMacWindow } from "./desktopWindow.ts";
 import { settle } from "./helpers.ts";
 
 // The workspace switch and the Live chip under it are ONE element of the app's shell, at exactly the same place, size
@@ -13,12 +14,15 @@ import { settle } from "./helpers.ts";
 
 const CLIPS = ["/", "/library", "/settings"];
 const STORIES = ["/stories", "/stories/setup", "/stories/ideas", "/stories/production", "/stories/settings", "/stories/connections"];
-const SIZES: { w: number; h: number; folded?: boolean }[] = [
+const SIZES: { w: number; h: number; folded?: boolean; window?: "mac" | "windows" }[] = [
   { w: 1440, h: 900 },
   { w: 1280, h: 800 },
   { w: 768, h: 1024 },
   { w: 375, h: 812 },
   { w: 1440, h: 900, folded: true },
+  // The desktop app's see-through window: the Mac's (its title bar laid over the page) and Windows' (its frame outside).
+  { w: 1280, h: 800, window: "mac" },
+  { w: 1280, h: 800, window: "windows" },
 ];
 const SHOTS = join(import.meta.dirname, "..", "test-results", "switch-place");
 
@@ -53,7 +57,10 @@ async function open(browser: Browser, size: (typeof SIZES)[number], setupDone: b
     },
     [!!size.folded, setupDone] as const,
   );
-  return ctx.newPage();
+  const page = await ctx.newPage();
+  if (size.window === "mac") await asMacWindow(page);
+  if (size.window === "windows") await asMacWindow(page, { titlebar: 0, glass: "mica" });
+  return page;
 }
 
 /** The switch and the Live chip as they are on screen now (the app on screen's own, on a phone). */
@@ -120,7 +127,7 @@ const same = (a: Box | null, b: Box | null, what: string) => {
 };
 
 for (const size of SIZES) {
-  const label = `${size.w}x${size.h}${size.folded ? " folded" : ""}`;
+  const label = `${size.w}x${size.h}${size.folded ? " folded" : ""}${size.window ? ` ${size.window}-window` : ""}`;
   test(`the switch and the Live chip are one box, the same in Clip Factory and on every Lamo Stories page, at ${label}`, async ({ browser }) => {
     mkdirSync(SHOTS, { recursive: true });
     const page = await open(browser, size, true);
@@ -130,7 +137,7 @@ for (const size of SIZES) {
       const at = await place(page);
       seen.push({ path, at });
       await page.screenshot({
-        path: join(SHOTS, `${label.replace(" ", "-")}${path === "/" ? "_home" : path.replace(/\//g, "_")}.png`),
+        path: join(SHOTS, `${label.replace(/ /g, "-")}${path === "/" ? "_home" : path.replace(/\//g, "_")}.png`),
       });
     }
     const [first, ...rest] = seen;
