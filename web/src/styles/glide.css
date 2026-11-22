@@ -134,48 +134,90 @@
   box-shadow: none;
 }
 
-/* The workspace switcher (docs/CONTRACTS.md §45.16.1): Lamo Clips | Lamo Stories, only while Lamo Stories is switched
-   on. In the sidebar foot it is the first thing, so the foot (pinned to the bottom) grows up into the free space and
-   nothing under it moves; Nav.tsx measures that space and uses a round toggle, or nothing, when the bar does not fit.
-   On phones it is a round toggle (a small pill with the name when there is room) between the brand and the live dot. */
+/* The workspace switch and the Live chip under it (docs/CONTRACTS.md §45.16.1, §45.37): one element of the app's
+   shell, only while Lamo Stories is switched on, at the same place, size and look in both apps. On a computer it is
+   the dock (app/WorkspaceDock.tsx): fixed over the left column, where Clip Factory's sidebar foot has it (the switch,
+   then the Live chip, above Get the app and the jobs line), placed in numbers worked out from Clip Factory's sidebar,
+   so nothing in either app moves and it covers nothing. On a phone it is the round toggle with the Live chip at the
+   right end of each app's own top bar. Its words and fills are the shell's in both apps (Lamo Stories' styles never
+   reach it), and nothing of it paints outside its own box (the before/after pixel check, §45.19). */
 .ws-switch-host {
   position: relative;
+  font-family: var(--font-ui);
+  line-height: 1.5;
 }
 .ws-switch-host[hidden] {
   display: none !important;
 }
-.ws-switch-host--sidebar[data-ws-switch="round"] {
-  display: grid;
-  justify-items: start;
-  padding-inline: 10px;
+.ws-dock {
+  display: none;
 }
-.ws-switch-host--sidebar.is-collapsed[data-ws-switch="round"] {
-  justify-items: center;
-  padding-inline: 0;
+@media (min-width: 768px) {
+  /* The left column (the sidebar's own box): the dock's parts are placed in it; the column itself takes no clicks. */
+  .ws-dock {
+    display: block;
+    position: fixed;
+    z-index: 41;
+    top: var(--top-line);
+    bottom: 14px;
+    left: max(14px, env(safe-area-inset-left));
+    width: var(--sidebar-w);
+    pointer-events: none;
+    font-family: var(--font-ui);
+    line-height: 1.5;
+  }
+  .ws-dock.is-folded {
+    width: var(--sidebar-w-collapsed);
+  }
+  .ws-dock[hidden] {
+    display: none;
+  }
+  .ws-dock > .ws-switch-host,
+  .ws-dock > .ws-dock__live {
+    position: absolute;
+    pointer-events: auto;
+  }
+  .ws-dock > .ws-switch-host {
+    display: grid;
+  }
+  /* A round toggle is the host's own size; a slim one fills it (as wide or as tall as the gap allows). */
+  .ws-dock > .ws-switch-host > .ws-round--slim {
+    width: 100%;
+    height: 100%;
+  }
+  /* The Live chip's row, as in the sidebar's foot (components.css .sidebar__live), centred when it is folded. */
+  .ws-dock.is-folded > .sidebar__live {
+    justify-content: center;
+    padding-inline: 0;
+  }
 }
-/* Next to the live dot with 4 px of air (12 px flex gap minus 8). Narrower than the round toggle (from 320 px) it is
-   slim: Nav.tsx gives it the gap's width less 4 px of air on each side, and its margins (inline) pull it into the gaps. */
-.topbar > .ws-switch-host--topbar {
+/* A phone's top bar: the toggle and the Live chip at its right end, 4 px apart, 4 px clear of the brand (the bar's
+   12 px gap, less 8). Narrower than the brand and both of them (320 px) the brand drops its name (its mark stays). */
+.ws-switch-host--topbar {
   display: flex;
-  flex: none;
-  margin-left: auto;
-  margin-right: -8px;
+  flex: 1 1 0;
+  min-width: max-content;
+  margin-left: -8px;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
 }
-.topbar > .ws-switch-host--topbar:last-child {
-  margin-right: 0;
+/* The Live chip sits right after the toggle here (the top bar's own rule pushes it to the far right). */
+.ws-switch-host.ws-switch-host--topbar > .live-dot {
+  margin-left: 0;
 }
-/* The smallest phones (320 px): the brand keeps its mark and drops its name, so the toggle stays a full 48 px round
-   one (§45.36 E16). Only while the switcher asks for it; with Lamo Stories off it is never there. */
+@media (min-width: 768px) {
+  .ws-switch-host--topbar {
+    display: none;
+  }
+}
+/* The smallest phones (320 px): the brand keeps its mark and drops its name, so the toggle stays where it is in both
+   apps (§45.36 E16). Only while the switch asks for it; with Lamo Stories off it is never there. */
 .topbar:has(> .ws-switch-host--topbar[data-ws-squeeze]) .brand__name {
   display: none;
 }
 .topbar:has(> .ws-switch-host--topbar[data-ws-squeeze]) .brand {
   min-width: 44px;
-}
-/* The room the name leaves is the switcher's own: its toggle stays beside the live dot, as on every other phone. */
-.topbar > .ws-switch-host--topbar[data-ws-squeeze] {
-  flex: 1 1 auto;
-  justify-content: flex-end;
 }
 .ws-switch {
   display: grid;
@@ -263,36 +305,16 @@ html:where(.see-through, [data-backdrop]) .ws-round:hover {
   width: 48px;
   height: 48px;
 }
-/* The pill with the short name (a roomy phone) and the icon over the name (from 360 px); Nav.tsx measures the name
-   at this size (LABEL_REM, --fs-xs) before it picks one. */
-.ws-round--label {
-  width: auto;
-  gap: 6px;
-  padding: 0 12px 0 10px;
-  border-radius: var(--r-pill);
+/* Below 360 px the phone toggle is 44 px wide (still 48 px tall): the same box in both apps at every width. */
+@media (max-width: 359.98px) {
+  .ws-round--phone {
+    width: 44px;
+  }
 }
-.ws-round__name {
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  line-height: 1.1;
-  white-space: nowrap;
-}
-.ws-round--stack {
-  grid-auto-flow: row;
-  align-content: center;
-  gap: 1px;
-  width: auto;
-  min-width: 48px;
-  padding: 0 6px;
-  border-radius: var(--r-md);
-}
-/* Slim: as wide (top bar) or as tall (folded sidebar) as the empty gap allows, icon only. */
+/* Slim: as wide or as tall as the empty gap allows, icon only. */
 .ws-round--slim {
   width: 100%;
   border-radius: var(--r-pill);
-}
-.ws-switch-host--sidebar[data-ws-switch="slim"] .ws-round--slim {
-  height: 100%;
 }
 .ws-mark {
   display: block;
@@ -309,7 +331,7 @@ html:where(.see-through, [data-backdrop]) .ws-round:hover {
   background: rgb(var(--green-deep-rgb) / 0.94);
   box-shadow: 0 18px 40px -18px rgb(var(--shadow-rgb) / 0.83);
 }
-.topbar .ws-menu {
+.ws-switch-host--topbar .ws-menu {
   top: calc(100% + 8px);
   bottom: auto;
   left: auto;

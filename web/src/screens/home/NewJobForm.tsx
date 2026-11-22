@@ -24,7 +24,7 @@ import { navigate, useRoute } from "../../lib/router.ts";
 import { plural } from "../../lib/format.ts";
 import { useUnsaved } from "../../features/help/unsaved.ts";
 import { canMacFetch, macBridge } from "../../lib/macFetch.ts";
-import { useKeptSearch } from "../../stories/pane.tsx";
+import { clipsGoLater, useKeptSearch } from "../../app/shell.ts";
 
 const MAX_UPLOAD = 5 * 1024 ** 3;
 
@@ -407,7 +407,7 @@ function JobForm() {
     setBusy(true);
     const out = await addCampaign(crLink.url + (crLink.group ? "?group=1" : ""));
     setBusy(false);
-    if (out.kind === "added") navigate(campaignPath(out.campaignId));
+    if (out.kind === "added") clipsGoLater(campaignPath(out.campaignId));
     else if (out.kind === "group") setGroup({ name: out.name, choices: out.choices });
     else {
       send.fail({ sound: false });

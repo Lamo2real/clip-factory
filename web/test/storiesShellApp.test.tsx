@@ -3,6 +3,8 @@
 // title, no theme colour, no page landmark id, no dashboard poll, no workspace check) and comes back as it was; the
 // Mac download host and the app badge run once, in Clip Factory's shell when that is mounted too. The dashboard's
 // "Continue: {name}" opens the project open last (idea, video, character or reference video), hidden once it is gone.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -218,14 +220,22 @@ describe("kept behind Clip Factory", () => {
     }
   });
 
-  it("runs the Mac download host and the app badge only when Clip Factory's shell (which has its own) is not mounted", async () => {
+  it("never runs the Mac download host or the app badge itself: the shell runs them once, for both apps (§45.37 A2)", async () => {
     await inPanes("stories");
     await flush();
-    expect(host.querySelectorAll("[data-host]")).toHaveLength(2);
+    expect(host.querySelectorAll("[data-host]")).toHaveLength(0);
     await inPanes("clips");
     await inPanes("stories");
     await flush();
     expect(host.querySelectorAll("[data-host]")).toHaveLength(0);
+    const read = (path: string) => readFileSync(join(import.meta.dirname, "..", "src", path), "utf8");
+    // BothApps draws them once, outside both panes; Clip Factory's shell draws its own only with Lamo Stories off.
+    const app = read("app/App.tsx");
+    expect(app).toMatch(/<WorkspaceDock \/>\s*<AppBadge \/>\s*<MacFetchHost \/>\s*<\/>/);
+    expect(app).toMatch(/\{hosted \? null : \(\s*<>\s*<AppBadge \/>\s*<MacFetchHost \/>/);
+    // Nothing of Clip Factory's own is drawn by Lamo Stories: no Content Rewards banner, no badge, no Mac host.
+    const stories = read("stories/StoriesApp.tsx");
+    for (const name of ["CrSendNow", "AppBadge", "MacFetchHost"]) expect(stories, name).not.toContain(name);
   });
 });
 

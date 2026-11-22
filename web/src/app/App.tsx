@@ -4,7 +4,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useSta
 import { initApi } from "../api/index.ts";
 import { auth, onSignedOut } from "../lib/auth.ts";
 import { loadConfig } from "../lib/config.ts";
-import { usePrefs } from "../lib/prefs.ts";
+import { getPrefs, usePrefs } from "../lib/prefs.ts";
 import { navigate, useHash, useRoute, type Route } from "../lib/router.ts";
 import { findBranch, findTree, legacySettingsRedirect } from "../lib/settingsTree.ts";
 import { forgetLoaded } from "../lib/hooks.ts";
@@ -13,8 +13,8 @@ import { resetGetPaid } from "../lib/getPaid.ts";
 import { resetFinder } from "../lib/finder.ts";
 import { sounds } from "../lib/sounds.ts";
 import { Backdrop, GlassFilter } from "../components/Backdrop.tsx";
-import { Sidebar, TabBar, WorkspaceSwitch } from "../components/Nav.tsx";
-import { ToastProvider } from "../components/Toasts.tsx";
+import { Sidebar, TabBar } from "../components/Nav.tsx";
+import { ToastProvider, ToastScope } from "../components/Toasts.tsx";
 import { UpdateBar } from "../components/UpdateBar.tsx";
 import { GetAppPanel } from "../components/GetApp.tsx";
 import { LiveDot } from "../components/LiveDot.tsx";
@@ -47,11 +47,13 @@ import { SetupTodo } from "../components/SetupTodo.tsx";
 import { AppBadge } from "../lib/badge.ts";
 import { MacFetchHost } from "./MacFetchHost.tsx";
 import { forgetDevice } from "../lib/push.ts";
-import { chooseClips, redirectAtStart, storiesTitle } from "../stories/workspace.ts";
+import { chooseClips, redirectAtStart, restoreScroll, storiesTitle, takeClipsScroll } from "../stories/workspace.ts";
 import { storiesEnabled } from "../stories/flag.ts";
 import type { StoriesPage } from "../stories/routes.ts";
-import { AppPanes, KeptSearchProvider, loadStoriesApp, storiesModule, StoriesPaneBoundary, useAppActive } from "../stories/pane.tsx";
-import { calmPage, deniedSound, followStoriesMotion } from "../stories/prefs.ts";
+import { AppPanes, loadStoriesApp, storiesModule, StoriesPaneBoundary } from "../stories/pane.tsx";
+import { calmPage, followStoriesMotion, storiesDeniedSound } from "../stories/prefs.ts";
+import { KeptSearchProvider, storiesOnScreen, takeParkedClipsGo, useAppActive, useShellHosted } from "./shell.ts";
+import { TopBarSwitch, WorkspaceDock } from "./WorkspaceDock.tsx";
 /**
  * The motion gallery (§20.10): mock builds only. Tested on import.meta.env directly (not isMock) so a real build
  * drops the import and does not even carry the code.
@@ -157,7 +159,7 @@ export function App() {
   }, []);
 
   return (
-    <ToastProvider onError={() => (storiesEnabled() ? deniedSound() : sounds.play("deny"))}>
+    <ToastProvider onError={() => (storiesOnScreen() ? storiesDeniedSound() : sounds.play("deny"))}>
       <Backdrop />
       <GlassFilter />
       {/* The desktop window's title bar band (macOS, §11.1): invisible, and only there when look.ts set
@@ -192,13 +194,16 @@ export function App() {
 }
 
 /**
- * Lamo Stories switched on (docs/CONTRACTS.md §45.16.2, §45.34, §45.35): Clip Factory's Shell for every Lamo Clips
- * route and Lamo Stories' own shell for /stories. Each, once shown, stays mounted while the other is on screen (hidden
- * and inert), so coming back shows it exactly as it was left. Home opened for a campaign (`/?campaign=…`) is kept too:
- * Clip Factory's pane carries the search of its kept page (useKeptSearch), so Home still reads its own way while
- * Lamo Stories' address is shown. Only the skill editor opens fresh (it asks "Leave without saving?", and unsaved
- * typing is never carried across a switch). Each pane has its own error boundary: Clip Factory's own (its fallback as
- * it always was) and Lamo Stories' card, so one app breaking never takes the other with it.
+ * Lamo Stories switched on (docs/CONTRACTS.md §45.16.2, §45.34, §45.35, §45.37): Clip Factory's Shell for every
+ * Lamo Clips route and Lamo Stories' own shell for /stories. Each, once shown, stays mounted while the other is on
+ * screen (hidden and inert), so coming back shows it exactly as it was left. Home opened for a campaign
+ * (`/?campaign=…`) is kept too: Clip Factory's pane carries the search of its kept page (useKeptSearch), so Home still
+ * reads its own way while Lamo Stories' address is shown. Only the skill editor opens fresh (it asks "Leave without
+ * saving?", and unsaved typing is never carried across a switch). Each pane has its own error boundary: Clip Factory's
+ * own (its fallback as it always was) and Lamo Stories' card, so one app breaking never takes the other with it, and
+ * its own toasts (a toast its app raises while hidden waits for it to be back). The shell itself draws what both share,
+ * once, outside both panes: the workspace switch with the Live chip (WorkspaceDock), the app badge and the Mac download
+ * host.
  */
 function BothApps() {
   const route = useRoute();
@@ -214,26 +219,39 @@ function BothApps() {
   const held = lastClips.current;
   const fresh = held.name === "skill" && held.mode !== "read" ? "clips" : null;
   // The calm-motion class follows the app on screen (Lamo Stories' own switch, Clip Factory's otherwise).
-  useLayoutEffect(() => followStoriesMotion(), [inStories]);
+  useLayoutEffect(() => followStoriesMotion(clipsCalm), [inStories]);
   return (
-    <AppPanes
-      on={inStories ? "stories" : "clips"}
-      fresh={fresh}
-      clips={
-        <KeptSearchProvider value={lastClipsSearch.current}>
-          <ErrorBoundary scope="app">
-            <Shell />
-          </ErrorBoundary>
-        </KeptSearchProvider>
-      }
-      stories={
-        <StoriesPaneBoundary onClips={() => navigate(chooseClips())}>
-          <StoriesHost page={lastStories.current} />
-        </StoriesPaneBoundary>
-      }
-    />
+    <>
+      <AppPanes
+        on={inStories ? "stories" : "clips"}
+        fresh={fresh}
+        clips={
+          <KeptSearchProvider value={lastClipsSearch.current}>
+            <ToastScope active={!inStories} onScreen={clipsOnScreen} onError={clipsDenied}>
+              <ErrorBoundary scope="app">
+                <Shell />
+              </ErrorBoundary>
+            </ToastScope>
+          </KeptSearchProvider>
+        }
+        stories={
+          <ToastScope active={inStories} onScreen={storiesOnScreen} onError={storiesDeniedSound}>
+            <StoriesPaneBoundary onClips={() => navigate(chooseClips())}>
+              <StoriesHost page={lastStories.current} />
+            </StoriesPaneBoundary>
+          </ToastScope>
+        }
+      />
+      <WorkspaceDock />
+      <AppBadge />
+      <MacFetchHost />
+    </>
   );
 }
+
+const clipsCalm = () => getPrefs().reduceMotion;
+const clipsOnScreen = () => !storiesOnScreen();
+const clipsDenied = () => sounds.play("deny");
 
 /**
  * Lamo Stories' shell, from its own chunk: at once when the idle prefetch already brought it, else after it loads.
@@ -252,6 +270,8 @@ function Shell() {
   // On screen (always, while Lamo Stories is switched off). Hidden behind Lamo Stories, it keeps its last page and
   // stays quiet: no title, no focus move, no redirect.
   const active = useAppActive();
+  // Next to Lamo Stories: the shell draws the switch and the Live chip, the app badge and the Mac download host.
+  const hosted = useShellHosted();
   const live = useRoute();
   const kept = useRef(live);
   if (active) kept.current = live;
@@ -281,6 +301,22 @@ function Shell() {
     main.current?.focus({ preventScroll: true });
   }, [page, active]);
 
+  // Back on screen next to Lamo Stories: a page change that waited while Lamo Stories was shown happens now (a
+  // campaign added, a skill saved: clipsGoLater, §45.37), else the page opens where the owner left it (its lists may
+  // still be loading, so it waits for the page to grow, and lets go as soon as the owner scrolls himself, §45.36 E1).
+  useEffect(() => {
+    if (!active || !hosted) return;
+    const at = location.pathname + location.search + location.hash;
+    const go = takeParkedClipsGo();
+    if (go) {
+      takeClipsScroll(at);
+      navigate(go.to, { replace: go.replace, force: go.force });
+      return;
+    }
+    const y = takeClipsScroll(at);
+    return y === null ? undefined : restoreScroll(y);
+  }, [active, hosted]);
+
   // Mock mode's pretend consent pages stand alone, like the platform's real page would.
   if (route.name === "mock_oauth") return <MockConsent platform={route.platform} />;
   if (route.name === "mock_cr_consent") return <MockCrConsent />;
@@ -303,8 +339,7 @@ function Shell() {
               Clip <em>Factory</em>
             </span>
           </A>
-          <WorkspaceSwitch place="topbar" />
-          <LiveDot />
+          {hosted ? <TopBarSwitch /> : <LiveDot />}
         </header>
         <main className="main" id={active ? "main" : undefined} ref={main} tabIndex={-1}>
           {/* One broken screen never blanks the app; moving to another page clears the error. */}
@@ -318,8 +353,12 @@ function Shell() {
       <TabBar />
       <AskClipFactory />
       <SetupTodo />
-      <AppBadge />
-      <MacFetchHost />
+      {hosted ? null : (
+        <>
+          <AppBadge />
+          <MacFetchHost />
+        </>
+      )}
     </div>
   );
 }

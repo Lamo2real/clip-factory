@@ -11,12 +11,11 @@ import { useEffect, useState } from "react";
 import { friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad } from "../../lib/hooks.ts";
-import { usePrefs } from "../../lib/prefs.ts";
 import { SoundEngine } from "../../lib/sound.ts";
-import { CLICK_SOUNDS } from "../../lib/soundCatalog.ts";
+import { CLICK_SOUNDS, ERROR_SOUNDS } from "../../lib/soundCatalog.ts";
 import { storiesApi } from "../api/client.ts";
 import type { ExtraFormat, KeepChatPictures, KeepReferences, StorageSummary, StoriesConfig } from "../api/types.ts";
-import { setStoriesDevicePref, storiesClickSound, storiesDeviceOwn, storiesMotionSetting, storiesReduceMotion, storiesSoundOn, useStoriesDevicePrefs } from "../prefs.ts";
+import { setStoriesDevicePref, storiesClickSound, storiesDeviceOwn, storiesErrorSound, storiesMotionSetting, storiesReduceMotion, storiesSoundOn, useStoriesDevicePrefs } from "../prefs.ts";
 import { Btn, cheer, Empty, Failed, Loading, Note, SavedMark, SetCard, SetPick, SetSelect, SetSwitch, SIcon, sizeText, useSaved } from "./bits.tsx";
 import { useWorkspaceConfig } from "./data.ts";
 import { StTech } from "../ui.tsx";
@@ -194,33 +193,32 @@ function Cleanup({ ws, onDone }: { ws: string; onDone: () => Promise<void> }) {
   );
 }
 
-/** Plays a click sound by its number, for the picker (its own engine: the usual click sound is kept out of the way). */
+/** Plays a click or error sound by its number, for the pickers (its own engine: the usual click sound is kept out of the way). */
 let preview: SoundEngine | null = null;
-function hearClick(id: number, target: EventTarget | null): void {
-  (preview ??= new SoundEngine(storiesSoundOn)).play("tap", target, id);
+function hear(kind: "tap" | "deny", id: number, target: EventTarget | null): void {
+  (preview ??= new SoundEngine(storiesSoundOn)).play(kind, target, id);
 }
 
-const FOLLOWS = " Follows Clip Factory's setting until you change it.";
-
 /**
- * Settings › Storage and production › Sounds and motion (§45.34): this device's own choices for Lamo Stories, read
- * with the same readers Lamo Stories' sounds and motion use (stories/prefs.ts), so the card shows what really applies.
+ * Settings › Storage and production › Sounds and motion (§45.34, §45.37): this device's own choices for Lamo Stories,
+ * read with the same readers Lamo Stories' sounds and motion use (stories/prefs.ts), so the card shows what really
+ * applies. Unset, each is Lamo Stories' own usual choice; Clip Factory's settings never change them.
  */
 function SoundsAndMotion() {
-  usePrefs(); // Clip Factory's choices apply while Lamo Stories' own are unset: follow them too.
   useStoriesDevicePrefs();
   const mine = storiesDeviceOwn();
   const soundOn = storiesSoundOn();
   const click = storiesClickSound();
+  const deny = storiesErrorSound();
   const calm = storiesMotionSetting();
   const systemCalm = !calm && storiesReduceMotion();
-  const anySet = mine.sound !== undefined || mine.click !== undefined || mine.motion !== undefined;
+  const anySet = mine.sound !== undefined || mine.click !== undefined || mine.deny !== undefined || mine.motion !== undefined;
   const offWhy = soundOn ? undefined : "Turn Sounds on first";
   return (
     <SetCard title="Sounds and motion" icon="sound" id="sounds-and-motion" lede="For Lamo Stories on this device. Clip Factory's sounds and motion stay as they are.">
       <SetSwitch
         label="Sounds"
-        description={`Click sounds on every button, and cheers when something works.${mine.sound === undefined ? FOLLOWS : ""}`}
+        description="Click sounds on every button, and cheers when something works."
         checked={soundOn}
         onChange={(v) => setStoriesDevicePref("sound.enabled", v)}
       />
@@ -233,7 +231,7 @@ function SoundsAndMotion() {
           onChange={(v) => {
             const id = Number(v);
             setStoriesDevicePref("sound.click", id);
-            hearClick(id, null);
+            hear("tap", id, null);
           }}
         />
         {/* It plays the picked sound itself (data-sound="off" keeps the usual click sound out of the way); with Sounds off it is switched off. */}
@@ -244,17 +242,27 @@ function SoundsAndMotion() {
           aria-disabled={soundOn ? undefined : true}
           title={offWhy}
           onClick={(e) => {
-            if (soundOn) hearClick(click, e.currentTarget);
+            if (soundOn) hear("tap", click, e.currentTarget);
           }}
         >
           <SIcon name="sound" size={20} />
           Hear it
         </button>
       </div>
-      <p className="st-stg-small">{mine.click === undefined ? "Clip Factory's click sound until you pick one." : "Lamo Stories' own click sound."}</p>
+      <SetSelect
+        label="Error sound"
+        value={String(deny)}
+        off={offWhy}
+        options={ERROR_SOUNDS.map((x) => ({ value: String(x.id), label: `${x.name}: ${x.feel.toLowerCase()}` }))}
+        onChange={(v) => {
+          const id = Number(v);
+          setStoriesDevicePref("sound.deny", id);
+          hear("deny", id, null);
+        }}
+      />
       <SetSwitch
         label="Less motion"
-        description={`Fewer things slide, bounce and burst on the screen.${mine.motion === undefined ? FOLLOWS : ""}`}
+        description="Fewer things slide, bounce and burst on the screen."
         checked={calm}
         onChange={(v) => setStoriesDevicePref("motion.reduce", v)}
       />
@@ -265,10 +273,11 @@ function SoundsAndMotion() {
           onClick={() => {
             setStoriesDevicePref("sound.enabled", null);
             setStoriesDevicePref("sound.click", null);
+            setStoriesDevicePref("sound.deny", null);
             setStoriesDevicePref("motion.reduce", null);
           }}
         >
-          Use Clip Factory's settings again
+          Use the usual settings again
         </Btn>
       ) : null}
     </SetCard>

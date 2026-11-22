@@ -1,8 +1,8 @@
-// Lamo Stories' own device preferences (docs/CONTRACTS.md §45.34; request 2 §2 "Each application should remember its
-// own ... User preferences", §9 "separate configuration namespaces"): cf.stories.prefs `sound.enabled`, `sound.click`
-// and `motion.reduce` are read first, Clip Factory's cf.prefs only while one is unset, and once set Clip Factory's
-// choice never changes Lamo Stories'. Clip Factory's own preferences are never written. While Lamo Stories' own sound
-// is set and one of its pages is on screen, a click plays Lamo Stories' sound and the app's click handler stays quiet.
+// Lamo Stories' own device preferences (docs/CONTRACTS.md §45.34, §45.37 A2; request 2 §2 "Each application should
+// remember its own ... User preferences", §9 "separate configuration namespaces"): cf.stories.prefs `sound.enabled`,
+// `sound.click`, `sound.deny` and `motion.reduce`, each with Lamo Stories' own default while it is unset; Clip
+// Factory's cf.prefs is never read (nor written) for them. While one of its pages is on screen, a click plays Lamo
+// Stories' own sound and the app's click handler stays quiet.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,13 +11,14 @@ import { installClickSounds, type SoundLogEntry } from "../src/lib/sound.ts";
 import { sounds } from "../src/lib/sounds.ts";
 import {
   calmPage,
-  deniedSound,
   setStoriesDevicePref,
   storiesDeviceOwn,
   followStoriesClicks,
   followStoriesMotion,
   STORIES_PREF_KEYS,
   storiesClickSound,
+  storiesDeniedSound,
+  storiesErrorSound,
   storiesMotionSetting,
   storiesReduceMotion,
   storiesSound,
@@ -48,17 +49,18 @@ afterEach(() => {
 
 describe("the keys and their fallbacks", () => {
   it("uses the agreed keys in cf.stories.prefs", () => {
-    expect(STORIES_PREF_KEYS).toEqual({ sound: "sound.enabled", click: "sound.click", motion: "motion.reduce" });
+    expect(STORIES_PREF_KEYS).toEqual({ sound: "sound.enabled", click: "sound.click", deny: "sound.deny", motion: "motion.reduce" });
     setStoriesPref("sound.enabled", false);
     setStoriesPref("sound.click", 9);
+    setStoriesPref("sound.deny", 3);
     setStoriesPref("motion.reduce", true);
-    expect(JSON.parse(localStorage.getItem(STORIES_PREFS_KEY)!).more).toEqual({ "sound.enabled": false, "sound.click": 9, "motion.reduce": true });
+    expect(JSON.parse(localStorage.getItem(STORIES_PREFS_KEY)!).more).toEqual({ "sound.enabled": false, "sound.click": 9, "sound.deny": 3, "motion.reduce": true });
   });
 
-  it("follows Clip Factory's while unset", () => {
-    expect([storiesSoundOn(), storiesClickSound(), storiesMotionSetting(), storiesReduceMotion()]).toEqual([true, 4, false, false]);
-    setPrefs({ soundEnabled: false, clickSound: 12, reduceMotion: true });
-    expect([storiesSoundOn(), storiesClickSound(), storiesMotionSetting(), storiesReduceMotion()]).toEqual([false, 12, true, true]);
+  it("while unset: Lamo Stories' own defaults, never Clip Factory's choices (§45.37 A2)", () => {
+    expect([storiesSoundOn(), storiesClickSound(), storiesErrorSound(), storiesMotionSetting(), storiesReduceMotion()]).toEqual([true, 6, 5, false, false]);
+    setPrefs({ soundEnabled: false, clickSound: 12, errorSound: 2, reduceMotion: true });
+    expect([storiesSoundOn(), storiesClickSound(), storiesErrorSound(), storiesMotionSetting(), storiesReduceMotion()]).toEqual([true, 6, 5, false, false]);
   });
 
   it("once set, its own wins, and Clip Factory's later choice never changes it (nor is Clip Factory's ever written)", () => {
@@ -73,8 +75,9 @@ describe("the keys and their fallbacks", () => {
 
   it("ignores a stored value of the wrong kind (a broken click sound falls back)", () => {
     setStoriesPref("sound.click", 99);
+    setStoriesPref("sound.deny", 0);
     setStoriesPref("sound.enabled", "no");
-    expect([storiesClickSound(), storiesSoundOn()]).toEqual([4, true]);
+    expect([storiesClickSound(), storiesErrorSound(), storiesSoundOn()]).toEqual([6, 5, true]);
   });
 
   it("calm motion: the system's setting always calms it, its own switch otherwise", () => {
@@ -91,17 +94,19 @@ describe("the keys and their fallbacks", () => {
 
 describe("the Settings card's writer (one file with the readers, builder W3c's exports)", () => {
   it("keeps only the right shape per key, null forgets, and the readers see it at once", () => {
-    expect(storiesDeviceOwn()).toEqual({ sound: undefined, click: undefined, motion: undefined });
+    expect(storiesDeviceOwn()).toEqual({ sound: undefined, click: undefined, deny: undefined, motion: undefined });
     setStoriesDevicePref("sound.enabled", false);
     setStoriesDevicePref("sound.click", 12);
+    setStoriesDevicePref("sound.deny", 7);
     setStoriesDevicePref("motion.reduce", true);
-    expect(storiesDeviceOwn()).toEqual({ sound: false, click: 12, motion: true });
-    expect([storiesSoundOn(), storiesClickSound(), storiesReduceMotion()]).toEqual([false, 12, true]);
+    expect(storiesDeviceOwn()).toEqual({ sound: false, click: 12, deny: 7, motion: true });
+    expect([storiesSoundOn(), storiesClickSound(), storiesErrorSound(), storiesReduceMotion()]).toEqual([false, 12, 7, true]);
     (setStoriesDevicePref as (k: string, v: unknown) => void)("sound.click", 99);
+    (setStoriesDevicePref as (k: string, v: unknown) => void)("sound.deny", true);
     (setStoriesDevicePref as (k: string, v: unknown) => void)("motion.reduce", "yes");
     (setStoriesDevicePref as (k: string, v: unknown) => void)("chat.enterSends", true);
-    expect(storiesDeviceOwn()).toEqual({ sound: false, click: 12, motion: true });
-    expect(JSON.parse(localStorage.getItem(STORIES_PREFS_KEY)!).more).toEqual({ "sound.enabled": false, "sound.click": 12, "motion.reduce": true });
+    expect(storiesDeviceOwn()).toEqual({ sound: false, click: 12, deny: 7, motion: true });
+    expect(JSON.parse(localStorage.getItem(STORIES_PREFS_KEY)!).more).toEqual({ "sound.enabled": false, "sound.click": 12, "sound.deny": 7, "motion.reduce": true });
     setStoriesDevicePref("motion.reduce", null);
     expect(storiesDeviceOwn().motion).toBeUndefined();
     expect(storiesReduceMotion()).toBe(false);
@@ -124,7 +129,7 @@ describe("the page's calm-motion class", () => {
   it("follows Lamo Stories' own switch the moment it changes", () => {
     localStorage.setItem("cf.storiesPreview", "1");
     history.replaceState(null, "", "/stories");
-    const stop = followStoriesMotion();
+    const stop = followStoriesMotion(() => getPrefs().reduceMotion);
     expect(document.documentElement.classList.contains("reduce-motion")).toBe(false);
     setStoriesPref("motion.reduce", true);
     expect(document.documentElement.classList.contains("reduce-motion")).toBe(true);
@@ -134,15 +139,25 @@ describe("the page's calm-motion class", () => {
   });
 });
 
+/** Only ever forward, across the tests too (the engine remembers its last sound). */
+let clock = 1e9;
+
 describe("sounds", () => {
   // These were written with Lamo Stories switched off by default (no page of it behind Clip Factory to keep quiet);
   // since the switch (STORIES_ON true) that state is chosen explicitly. The on-screen cases set "1" themselves.
-  beforeEach(() => localStorage.setItem("cf.storiesPreview", "0"));
+  // Every Lamo Stories sound plays from its one engine now (§45.37 A2), which hears one sound of a kind per short
+  // moment (two taps within 60 ms, two cheers within 300 ms): each sound here is a second after the one before.
+  beforeEach(() => {
+    localStorage.setItem("cf.storiesPreview", "0");
+    vi.spyOn(performance, "now").mockImplementation(() => (clock += 1000));
+  });
+  afterEach(() => vi.restoreAllMocks());
 
-  it("unset: Clip Factory's sound engine plays, exactly as before", () => {
+  it("unset: Lamo Stories' own engine plays, by its own default (never Clip Factory's engine)", () => {
     const play = vi.spyOn(sounds, "play");
+    setPrefs({ soundEnabled: false });
     storiesSound("success");
-    expect(play).toHaveBeenCalledWith("success");
+    expect(play).not.toHaveBeenCalled();
     play.mockRestore();
     expect(log().at(-1)).toMatchObject({ kind: "success", muted: false });
   });
@@ -170,15 +185,22 @@ describe("sounds", () => {
     expect(log()).toHaveLength(1);
   });
 
-  it("an error toast's sound is Lamo Stories' own on its pages, Clip Factory's elsewhere", () => {
+  it("an error toast's sound is Lamo Stories' own error sound by its own switch, and quiet behind Clip Factory", () => {
     localStorage.setItem("cf.storiesPreview", "1");
-    setStoriesPref("sound.enabled", false);
     history.replaceState(null, "", "/stories");
-    deniedSound();
-    expect(log().at(-1)).toMatchObject({ kind: "deny", muted: true });
+    storiesDeniedSound();
+    expect(log().at(-1)).toMatchObject({ kind: "deny", sound: 5, muted: false });
+    setStoriesPref("sound.deny", 11);
+    storiesDeniedSound();
+    expect(log().at(-1)).toMatchObject({ kind: "deny", sound: 11, muted: false });
+    setStoriesPref("sound.enabled", false);
+    storiesDeniedSound();
+    expect(log().at(-1)).toMatchObject({ kind: "deny", sound: 11, muted: true });
+    // Clip Factory on screen: Lamo Stories kept behind it makes no sound at all.
+    window.__cfSoundLog = [];
     history.replaceState(null, "", "/jobs");
-    deniedSound();
-    expect(log().at(-1)).toMatchObject({ kind: "deny", muted: false });
+    storiesDeniedSound();
+    expect(log()).toEqual([]);
   });
 
   it("clicks on a Lamo Stories page follow its own setting, and the app's click handler stays quiet for them", async () => {
@@ -190,9 +212,10 @@ describe("sounds", () => {
     button.textContent = "Videos";
     document.body.appendChild(button);
     try {
-      // Unset: the app's own handler, Clip Factory's click sound.
+      // Unset: Lamo Stories' own click sound (its default), and only that one (Clip Factory's stays quiet).
       button.click();
-      expect(log()).toEqual([expect.objectContaining({ kind: "tap", sound: 4, muted: false })]);
+      expect(log()).toEqual([expect.objectContaining({ kind: "tap", sound: 6, muted: false })]);
+      expect(button.hasAttribute("data-sound")).toBe(false);
       window.__cfSoundLog = [];
       // Set: one sound, Lamo Stories' (muted, its own click sound); the button is left as it was.
       setStoriesPref("sound.enabled", false);
@@ -200,12 +223,12 @@ describe("sounds", () => {
       button.click();
       expect(log()).toEqual([expect.objectContaining({ kind: "tap", sound: 9, muted: true })]);
       expect(button.hasAttribute("data-sound")).toBe(false);
-      // A switched-off control denies, in Lamo Stories' voice too.
+      // A switched-off control denies, in Lamo Stories' voice too (its own error sound, not Clip Factory's 6).
       window.__cfSoundLog = [];
       setStoriesPref("sound.enabled", true);
       button.setAttribute("aria-disabled", "true");
       button.click();
-      expect(log()).toEqual([expect.objectContaining({ kind: "deny", sound: 6, muted: false })]);
+      expect(log()).toEqual([expect.objectContaining({ kind: "deny", sound: 5, muted: false })]);
       // A Clip Factory page: the app's handler, Clip Factory's choice (a moment later: two taps within 60 ms are one).
       await new Promise((done) => setTimeout(done, 80));
       window.__cfSoundLog = [];

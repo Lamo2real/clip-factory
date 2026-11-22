@@ -2,10 +2,11 @@
 // workspace check, the Needs you bar, then the page. Only reached while Lamo Stories is switched on
 // (web/src/stories/flag.ts); Lamo Clips keeps its own Shell, untouched. The first time a studio opens, its setup
 // (/stories/setup, §45.29) opens by itself, on its own without the navigation; after that it is one page among the
-// others, reached from the dashboard's card until it is finished. Lamo Clips' Ask and setup to-do are not shown
-// here; the Mac app's "send this now" banner (CrSendNow), the Mac download host and the app badge are, unchanged, and
-// the update bar, toasts and sounds stay global (App.tsx). The page title and the theme colour go back to Lamo
-// Clips' when this is hidden or unmounts. With Clip Factory on screen it stays mounted behind it, hidden and inert
+// others, reached from the dashboard's card until it is finished. Nothing of Clip Factory's own is shown here (its
+// Ask, its setup to-do, its Content Rewards banner, its toasts and sounds); the shell draws what both apps share
+// outside both panes (the workspace switch with the Live chip, the app badge, the Mac download host and the update
+// bar), and this rail, top bar and every page leave the switch's box free (§45.37). The page title and the theme
+// colour go back to Lamo Clips' when this is hidden or unmounts. With Clip Factory on screen it stays mounted behind it, hidden and inert
 // (stories/pane.tsx, §45.34), so coming back shows the page exactly as it was; meanwhile it is quiet (no title, no
 // focus move, no workspace check, no dashboard poll). Its workspace is picked at once from the list the switcher
 // already read, and checked again in the background. Clicks and sounds follow Lamo Stories' own sound setting
@@ -13,13 +14,11 @@
 import "./styles/stories.css";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ApiError } from "../api/errors.ts";
-import { MacFetchHost } from "../app/MacFetchHost.tsx";
-import { CrSendNow } from "../components/CrSendNow.tsx";
+import { setStoriesWorkspaceShown } from "../app/shell.ts";
+import { TopBarSwitch } from "../app/WorkspaceDock.tsx";
 import { useToast } from "../components/Toasts.tsx";
 import { Glide } from "../components/Glide.tsx";
-import { WorkspaceSwitch } from "../components/Nav.tsx";
 import { A } from "../components/ui.tsx";
-import { AppBadge } from "../lib/badge.ts";
 import { navigate, useHash } from "../lib/router.ts";
 import { loadStoriesApi, setStoriesApi } from "./api/client.ts";
 import { GlideCalm } from "../components/Glide.tsx";
@@ -351,7 +350,7 @@ export function StoriesApp({ page }: { page: StoriesPage }) {
 
 function StoriesShell({ page }: { page: StoriesPage }) {
   // On screen (Clip Factory's shell may stay mounted behind it, and this one behind Clip Factory: stories/pane.tsx).
-  const { active, clipsMounted } = useAppPane();
+  const { active } = useAppPane();
   const fromAddress = page.name === "connections" ? page.ws : null;
   const [ws, setWs] = useState<string | null>(() => quickWorkspace(fromAddress));
   const [problem, setProblem] = useState<string | null>(null);
@@ -432,10 +431,13 @@ function StoriesShell({ page }: { page: StoriesPage }) {
     };
   }, [check]);
 
-  // Every Lamo Stories page is where switching back lands.
+  // Every Lamo Stories page is where switching back lands, and the shell's switch marks the workspace shown.
   useEffect(() => {
     if (active && ws) rememberStoriesPath(location.pathname + location.search + location.hash, ws);
   }, [ws, pageKey, hash, active]);
+  useEffect(() => {
+    if (active) setStoriesWorkspaceShown(ws);
+  }, [ws, active]);
 
   // The first time this studio opens, its setup opens by itself (once per studio on this device).
   const pageName = page.name;
@@ -539,18 +541,17 @@ function StoriesShell({ page }: { page: StoriesPage }) {
               </li>
             ))}
           </ul>
-          <div className="st-rail__foot">
-            <WorkspaceSwitch place="stories-rail" current={ws ?? "stories"} />
-          </div>
+          {/* The shell's workspace switch and Live chip sit here, over the rail (app/WorkspaceDock.tsx): the list of
+              pages stops above them. */}
+          <div className="st-rail__foot" aria-hidden="true" />
         </nav>
       )}
       <div className="st-frame">
         <header className="st-top">
           <Brand />
-          <WorkspaceSwitch place="stories-top" current={ws ?? "stories"} />
+          <TopBarSwitch />
         </header>
         <main className="st-main" id={active ? "main" : undefined} ref={main} tabIndex={-1}>
-          <CrSendNow route={{ name: "stories", page }} />
           {ws && !solo ? <NeedsYouBar ws={ws} here={storiesHref(page)} /> : null}
           {problem ? (
             <section className="st-page">
@@ -610,13 +611,6 @@ function StoriesShell({ page }: { page: StoriesPage }) {
           </div>
         </div>
       ) : null}
-      {/* Clip Factory's shell runs these for both while it is mounted (behind this one or on screen). */}
-      {clipsMounted ? null : (
-        <>
-          <AppBadge />
-          <MacFetchHost />
-        </>
-      )}
     </div>
   );
 }

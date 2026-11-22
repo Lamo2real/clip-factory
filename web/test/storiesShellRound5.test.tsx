@@ -118,11 +118,14 @@ describe("where the owner was reading on a phone (§45.36 E1)", () => {
     }
   });
 
-  it("the phone top bar's switcher restores the kept place too, and saves the reading place (Nav.tsx)", () => {
-    const nav = source("components/Nav.tsx");
-    expect(nav).toContain('if ((place !== "sidebar" && place !== "topbar") || !active) return;');
-    expect(nav).toContain('place === "topbar" ? readingPlace(from, window.scrollY) : window.scrollY');
-    expect(nav).toContain("followReading(here, topZone)");
+  it("the phone top bar's switch saves the reading place, and Clip Factory restores it once back on screen (§45.37)", () => {
+    // The switch is the shell's now (app/WorkspaceDock.tsx), one for both apps; Clip Factory's shell puts the kept
+    // place back whenever its pane is on screen again, phone or computer.
+    const dock = source("app/WorkspaceDock.tsx");
+    expect(dock).toContain("y: clips && phone ? readingPlace(from, window.scrollY) : window.scrollY");
+    expect(dock).toContain("followReading(here, topZone)");
+    const app = source("app/App.tsx");
+    expect(app).toMatch(/if \(!active \|\| !hosted\) return;[\s\S]*?const y = takeClipsScroll\(at\);\s*return y === null \? undefined : restoreScroll\(y\);/);
   });
 });
 
@@ -141,9 +144,12 @@ describe("the switchers stay in reach (§45.36 E16)", () => {
     expect(glide).toMatch(/\.topbar:has\(> \.ws-switch-host--topbar\[data-ws-squeeze\]\) \.brand__name \{\s*display: none;/);
     // Nothing else of the top bar is styled from here, and with Lamo Stories off the switcher (and its mark) is never there.
     expect(glide.match(/\.topbar:has\(/g)).toHaveLength(2);
-    const nav = source("components/Nav.tsx");
-    expect(nav).toContain('data-ws-squeeze={squeeze ? "" : undefined}');
-    expect(nav).toContain("if (!storiesEnabled()) return null;");
+    const dock = source("app/WorkspaceDock.tsx");
+    expect(dock).toContain('data-ws-squeeze={squeeze ? "" : undefined}');
+    // Only next to Lamo Stories: the shell draws it (BothApps), and Clip Factory's top bar only while it is hosted.
+    const app = source("app/App.tsx");
+    expect(app).toContain("{storiesEnabled() ? <BothApps /> : <Shell />}");
+    expect(app).toContain("{hosted ? <TopBarSwitch /> : <LiveDot />}");
   });
 });
 

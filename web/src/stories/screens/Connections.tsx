@@ -1058,34 +1058,116 @@ export function shortestColumns(heights: number[], columns: number): number[] {
   });
 }
 
+/** Where each column ends (the cards in it and a gap under each) for the cards dealt as `at`. */
+export function columnBottoms(heights: number[], at: number[], columns: number): number[] {
+  const bottoms = Array.from({ length: Math.max(1, columns) }, () => 0);
+  heights.forEach((h, i) => {
+    bottoms[at[i]!] = bottoms[at[i]!]! + h + CARD_GAP;
+  });
+  return bottoms;
+}
+
+/** The empty area under the shortest column: how far the tallest column runs on past it. */
+export function emptyUnder(heights: number[], at: number[], columns: number): number {
+  const b = columnBottoms(heights, at, columns);
+  return Math.max(...b) - Math.min(...b);
+}
+
+/** More ways to deal the cards than this and the shortest-column deal is used as it is (a page has five cards). */
+const MOST_DEALS = 20_000;
+
+/**
+ * The cards in `columns` columns so the columns end as close together as they can (the least empty area under the
+ * shortest one; then the shortest page): every way of dealing them is tried (the five cards in three columns are 243
+ * ways), each card staying in page order within its column. A tall card is never left beside two short columns' empty
+ * halves, whatever the fonts make of the cards' heights.
+ */
+export function balancedColumns(heights: number[], columns: number): number[] {
+  const k = Math.max(1, columns);
+  const greedy = shortestColumns(heights, k);
+  if (k === 1 || heights.length < 2 || k ** heights.length > MOST_DEALS) return greedy;
+  let best = greedy;
+  let bestEmpty = emptyUnder(heights, greedy, k);
+  let bestTall = Math.max(...columnBottoms(heights, greedy, k));
+  const at = heights.map(() => 0);
+  const walk = (i: number) => {
+    if (i === heights.length) {
+      // Every column holds a card (an empty column would be a hole of its own).
+      if (new Set(at).size < Math.min(k, heights.length)) return;
+      const b = columnBottoms(heights, at, k);
+      const empty = Math.max(...b) - Math.min(...b);
+      const tall = Math.max(...b);
+      if (empty < bestEmpty - 0.5 || (Math.abs(empty - bestEmpty) <= 0.5 && tall < bestTall - 0.5)) {
+        best = [...at];
+        bestEmpty = empty;
+        bestTall = tall;
+      }
+      return;
+    }
+    for (let c = 0; c < k; c++) {
+      at[i] = c;
+      walk(i + 1);
+    }
+  };
+  walk(0);
+  return best;
+}
+
+/**
+ * How many columns, and which card in each: of the column counts that fit (two up to `most`), the one whose best deal
+ * leaves the least empty area, measured with each card's own height at that count's width (`heightsAt`); on a tie, more
+ * columns. Five cards cannot fill three columns evenly, so where two columns of wider (shorter) cards leave less empty
+ * area, two it is.
+ */
+export function pickColumns(heightsAt: (columns: number) => number[], most: number): { columns: number; at: number[] } {
+  let best: { columns: number; at: number[]; empty: number } | null = null;
+  for (let k = 2; k <= Math.max(2, most); k++) {
+    const h = heightsAt(k);
+    const at = balancedColumns(h, k);
+    const empty = emptyUnder(h, at, k);
+    if (!best || empty < best.empty - 0.5 || (Math.abs(empty - best.empty) <= 0.5 && k > best.columns)) best = { columns: k, at, empty };
+  }
+  return { columns: best!.columns, at: best!.at };
+}
+
 /**
  * Lays the list's cards out in columns by their own height. Each card keeps its column while the page is open (a
  * card that grows, as Change app does, only pushes the cards under it in that column), and the columns are dealt
- * again only when their number changes or the cards do. The cards stay in page order, so Tab goes as before.
+ * again only when the number of columns that fit changes or the cards do. The cards stay in page order, so Tab goes
+ * as before.
  */
 function useCardColumns(list: { current: HTMLUListElement | null }, keys: string, on: boolean): void {
   useLayoutEffect(() => {
     const ul = list.current;
     if (!on || !ul || typeof ResizeObserver === "undefined") return;
-    let dealt: { columns: number; at: number[] } | null = null;
+    let dealt: { most: number; columns: number; at: number[] } | null = null;
     let frame = 0;
     const cards = () => Array.from(ul.children).filter((c): c is HTMLElement => c instanceof HTMLElement);
+    /** Each card's own height were it as wide as one of `columns` columns (measured, then put back). */
+    const heightsAt = (all: HTMLElement[], columns: number) => {
+      const w = (ul.clientWidth - CARD_GAP * (columns - 1)) / columns;
+      const was = all.map((c) => c.style.width);
+      for (const c of all) c.style.width = `${w}px`;
+      const heights = all.map((c) => c.getBoundingClientRect().height);
+      all.forEach((c, i) => (c.style.width = was[i]!));
+      return heights;
+    };
     const layout = () => {
       // Not while Lamo Stories is hidden behind Clip Factory (nothing has a size): it stays as it was for the way back.
       if (!ul.clientWidth) return;
       const all = cards();
-      const columns = columnsFor(ul.clientWidth);
-      if (columns < 2 || all.length < 2) {
+      const most = columnsFor(ul.clientWidth);
+      if (most < 2 || all.length < 2) {
         delete ul.dataset.cols;
         for (const c of all) c.style.removeProperty("--st-col");
         dealt = null;
         return;
       }
+      if (!dealt || dealt.most !== most || dealt.at.length !== all.length) dealt = { most, ...pickColumns((k) => heightsAt(all, k), most) };
+      ul.dataset.cols = String(dealt.columns);
+      ul.style.setProperty("--st-cols", String(dealt.columns));
       // Its own height at the width it has now (its rise-in animation only moves it, never sizes it).
       const heights = all.map((c) => c.getBoundingClientRect().height);
-      if (!dealt || dealt.columns !== columns || dealt.at.length !== all.length) dealt = { columns, at: shortestColumns(heights, columns) };
-      ul.dataset.cols = String(columns);
-      ul.style.setProperty("--st-cols", String(columns));
       all.forEach((c, i) => {
         c.style.setProperty("--st-col", String(dealt!.at[i]! + 1));
         c.style.setProperty("--st-span", String(Math.ceil((heights[i]! + CARD_GAP) / ROW_STEP)));

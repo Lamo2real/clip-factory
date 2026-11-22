@@ -979,42 +979,50 @@ describe("Storage and production (§45.34)", () => {
     const clipsBefore = localStorage.getItem("cf.prefs");
     await open("storage");
     const sm = card("Sounds and motion");
-    expect(sm.textContent).toContain("Follows Clip Factory's setting until you change it.");
-    expect(sm.textContent).toContain("Clip Factory's click sound until you pick one.");
+    // Its own choices from the start (§45.37 A2): nothing on the card follows Clip Factory's settings.
+    expect(sm.textContent).not.toContain("Follows Clip Factory");
     const sw = (label: RegExp) => byText(".st-stg-switchrow", label, sm).querySelector<HTMLElement>("[role=switch]")!;
     const picker = () => byText(".st-stg-selectbox", /^Click sound/, sm).querySelector<HTMLSelectElement>("select")!;
+    const errors = () => byText(".st-stg-selectbox", /^Error sound/, sm).querySelector<HTMLSelectElement>("select")!;
     const kept = () => (JSON.parse(localStorage.getItem("cf.stories.prefs") ?? "{}") as { more?: Record<string, unknown> }).more ?? {};
-    const { getPrefs } = await import("../src/lib/prefs.ts");
-    // Unset, the card shows what Lamo Stories really uses: Clip Factory's choices.
-    expect(sw(/^Sounds/).getAttribute("aria-checked")).toBe(String(getPrefs().soundEnabled));
-    expect(picker().value).toBe(String(getPrefs().clickSound));
+    // Unset, the card shows what Lamo Stories really uses: its own usual choices (sounds on, Water drop, Nope nope nope).
+    expect(sw(/^Sounds/).getAttribute("aria-checked")).toBe("true");
+    expect(picker().value).toBe("6");
+    expect(errors().value).toBe("5");
     expect(picker().options).toHaveLength(30);
+    expect(errors().options).toHaveLength(30);
     expect(picker().options[2]?.textContent).toBe("Bubble: rises a little");
     // The click sound is kept as its number (the shape Lamo Stories' sounds read), and it plays once picked.
     const log = () => (window as unknown as { __cfSoundLog?: { kind: string; sound: number }[] }).__cfSoundLog ?? [];
-    if (sw(/^Sounds/).getAttribute("aria-checked") === "false") await click(sw(/^Sounds/));
     setValue(picker(), "3");
     await settle();
     expect(kept()["sound.click"]).toBe(3);
     expect(log().at(-1)).toMatchObject({ kind: "tap", sound: 3 });
-    expect(card("Sounds and motion").textContent).toContain("Lamo Stories' own click sound.");
     await click(byText("button", "Hear it", sm));
     expect(log().at(-1)).toMatchObject({ kind: "tap", sound: 3 });
+    // Its own error sound too, kept as its number, and heard once picked.
+    setValue(errors(), "8");
+    await settle();
+    expect(kept()["sound.deny"]).toBe(8);
+    expect(log().at(-1)).toMatchObject({ kind: "deny", sound: 8 });
     await click(sw(/^Less motion/));
-    expect(kept()).toMatchObject({ "sound.click": 3, "motion.reduce": true });
-    // Sounds off turns every click sound off; the picker and Hear it wait until it is on again.
+    expect(kept()).toMatchObject({ "sound.click": 3, "sound.deny": 8, "motion.reduce": true });
+    // Sounds off turns every click sound off; the pickers and Hear it wait until it is on again.
     await click(sw(/^Sounds/));
     expect(kept()["sound.enabled"]).toBe(false);
     expect(picker().getAttribute("aria-disabled")).toBe("true");
+    expect(errors().getAttribute("aria-disabled")).toBe("true");
     expect(byText("button", "Hear it", sm).getAttribute("aria-disabled")).toBe("true");
     setValue(picker(), "9");
     expect(kept()["sound.click"]).toBe(3);
     expect(localStorage.getItem("cf.prefs")).toBe(clipsBefore);
-    await click(byText("button", "Use Clip Factory's settings again", sm));
+    await click(byText("button", "Use the usual settings again", sm));
     expect(kept()).not.toHaveProperty("sound.enabled");
     expect(kept()).not.toHaveProperty("sound.click");
+    expect(kept()).not.toHaveProperty("sound.deny");
     expect(kept()).not.toHaveProperty("motion.reduce");
-    expect(card("Sounds and motion").textContent).toContain("Follows Clip Factory's setting until you change it.");
+    expect(picker().value).toBe("6");
+    expect(localStorage.getItem("cf.prefs")).toBe(clipsBefore);
   });
 });
 
