@@ -35,6 +35,8 @@ import { useUnsaved } from "../../features/help/unsaved.ts";
 import { offerAfterUpload, TIKTOK_PUBLIC_HINT, tiktokAudited } from "../../lib/tiktokYourself.ts";
 import { PostYourself, PostYourselfButton } from "../library/PostYourself.tsx";
 import { useAutoPost } from "../settings/AutoPostBranch.tsx";
+import { useTikTokMac } from "../settings/TikTokMacBranch.tsx";
+import { MAC_HINT, MAC_POSTED, macOn, macRowWords } from "../../lib/tiktokMac.ts";
 import { autoPostOf, reviewLede, reviewLine, sentFirstLine } from "../../lib/autopost.ts";
 
 /** Video and cover links are presigned for an hour (docs/CONTRACTS.md §5); fetch new ones a little before that. */
@@ -162,9 +164,29 @@ export function Review({ jobId }: { jobId: string | null }) {
   // Uploaded without TikTok while TikTok keeps Clip Factory's uploads Only me: offer Post it yourself (§42.1).
   const [tiktokYourself, setTikTokYourself] = useState<ReadonlySet<string>>(() => new Set());
   const [handOff, setHandOff] = useState<Clip | null>(null);
+  // Uploaded here with TikTok going to the owner's Mac (§47.4): its line in Uploaded just now follows the Mac live.
+  const [macPosts, setMacPosts] = useState<Readonly<Record<string, Post>>>({});
+  const macStatus = useTikTokMac(Object.values(macPosts).some((p) => p.status === "mac"));
+  useLiveEvents(
+    (e) => {
+      if (e.type !== "post" || e.op !== "upsert" || !e.item || e.item.platform !== "tiktok") return;
+      const item = e.item;
+      setMacPosts((m) => (m[item.clipId] ? { ...m, [item.clipId]: item } : m));
+    },
+    () => undefined,
+  );
+  const macLine = (p: Post | undefined): string | null => {
+    if (!p) return null;
+    if (p.via === "mac") return `TikTok: ${MAC_POSTED}`;
+    if (p.status !== "mac" || !p.mac) return null;
+    return `TikTok: ${macRowWords(p.mac, { helper: macStatus.status ? macStatus.status.helper : undefined })}`;
+  };
   const kept = (clip: Clip, posts: Post[] = []) => {
     setJustKept((k) => [clip, ...k.filter((c) => c.clipId !== clip.clipId)].slice(0, 5));
-    const after = offerAfterUpload(posts, setup.data?.platforms);
+    const tiktok = posts.find((p) => p.platform === "tiktok" && p.status === "mac");
+    if (tiktok) setMacPosts((m) => ({ ...m, [clip.clipId]: tiktok }));
+    // With Your Mac posts TikTok on, the Post it yourself sheet never opens by itself (§47.4).
+    const after = offerAfterUpload(posts, setup.data?.platforms, macOn(me?.settings));
     if (after.offer) setTikTokYourself((s) => new Set(s).add(clip.clipId));
     // Not for a campaign clip: Content Rewards takes its TikTok post through the campaign's own places (§38).
     if (after.open && !clip.campaignId) setHandOff(clip);
@@ -271,6 +293,11 @@ export function Review({ jobId }: { jobId: string | null }) {
             {justKept.map((c) => (
               <li key={c.clipId} className="kept-now__item">
                 <span className="kept-now__hook clamp-2 user-text">{c.hook}</span>
+                {macLine(macPosts[c.clipId]) ? (
+                  <span className="kept-now__mac small" data-mac="kept">
+                    {macLine(macPosts[c.clipId])}
+                  </span>
+                ) : null}
                 <LinkButton href={`/clips/${c.clipId}`} size="sm" icon="chart" iconAfter="chevronRight">
                   See how it does
                 </LinkButton>
@@ -1128,7 +1155,10 @@ function ReviewCard({
           </p>
         ) : null}
         {/* Above TikTok's Music Usage line, which stays right above Upload (§17.8). */}
-        {placesReady && !noneReady && tiktokOn && !tiktokApproved && !keepFailed ? <p className="tt-yourself-hint">{TIKTOK_PUBLIC_HINT}</p> : null}
+        {/* With Your Mac posts TikTok on (§47.4), his Mac posts it for everyone: no need to untick TikTok. */}
+        {placesReady && !noneReady && tiktokOn && !tiktokApproved && !keepFailed ? (
+          <p className="tt-yourself-hint">{macOn(me?.settings) ? MAC_HINT : TIKTOK_PUBLIC_HINT}</p>
+        ) : null}
         {placesReady && !noneReady && tiktokOn ? (
           <TikTokLegal className="tt-legal" branded={choices.commercial && choices.branded} />
         ) : null}

@@ -32,14 +32,16 @@ export function canShareVideo(): boolean {
 
 /**
  * Where a clip's TikTok stands for this button. `offer`: show Post on TikTok yourself. `uploading`: Clip Factory is
- * uploading it right now. `public`: already on TikTok for everyone through Clip Factory. `yours`: he posted it.
+ * uploading it right now. `public`: already on TikTok for everyone through Clip Factory. `yours`: he posted it (or his
+ * Mac did, §47). `mac`: his Mac posts it (§47): the row offers Post it yourself instead, never the plain button.
  */
-export type TikTokState = "offer" | "uploading" | "public" | "yours";
+export type TikTokState = "offer" | "uploading" | "public" | "yours" | "mac";
 
 export function tiktokState(posts: Post[]): TikTokState {
   const post = posts.find((p) => p.platform === "tiktok");
   if (!post) return "offer";
   if (post.by === "you") return "yours";
+  if (post.status === "mac") return "mac";
   if (post.status === "queued") return "uploading";
   if (post.status === "posted" && post.privacy === "public") return "public";
   return "offer";
@@ -58,7 +60,8 @@ export function canPostYourself(clip: Clip, posts: Post[]): boolean {
 export function canPostYourselfHere(clip: Clip, tiktok: Pick<PlatformPerformance, "status" | "by"> | undefined): boolean {
   const kept = clip.status === "confirmed" || clip.status === "publishing" || clip.status === "posted" || clip.status === "failed";
   if (!kept || !tiktok || tiktok.by === "you") return false;
-  return tiktok.status !== "posting" && tiktok.status !== "posted";
+  // His Mac posts it (§47): the clip page offers Post it yourself instead (or nothing while it works), not this.
+  return tiktok.status !== "posting" && tiktok.status !== "posted" && tiktok.status !== "mac";
 }
 
 /**
@@ -95,12 +98,18 @@ export const TIKTOK_PUBLIC_HINT =
  * Clip Factory's is on its way there) and TikTok has not approved public uploads. `open`: the sheet opens by itself,
  * only when TikTok is set up (he posts there) but was left unticked.
  */
-export function offerAfterUpload(posts: Post[], setups: readonly PlatformSetup[] | undefined): { offer: boolean; open: boolean } {
+export function offerAfterUpload(
+  posts: Post[],
+  setups: readonly PlatformSetup[] | undefined,
+  macOn = false,
+): { offer: boolean; open: boolean } {
   const tiktok = posts.find((p) => p.platform === "tiktok");
   // No TikTok post, or one that waits for TikTok to be set up: nothing of Clip Factory's is on its way to TikTok.
+  // A Mac post (§47) is on its way: no offer.
   const offer = posts.length > 0 && (!tiktok || tiktok.status === "pending_integration") && !tiktokAudited(setups);
   const tiktokReady = !!setups?.find((s) => s.platform === "tiktok")?.ready;
-  return { offer, open: offer && !tiktok && tiktokReady };
+  // With Your Mac posts TikTok on, the sheet never opens by itself (§47.4): his Mac is the way to TikTok.
+  return { offer, open: offer && !tiktok && tiktokReady && !macOn };
 }
 
 /** Is this a campaign clip (a paid partnership on TikTok)? */

@@ -12,6 +12,7 @@ import { Sparkline } from "./Sparkline.tsx";
 import { LinkButton, Pill, type Tone } from "./ui.tsx";
 import { formatMoney } from "../lib/money.ts";
 import { autoPerfLabel, isPrivateTest } from "../lib/autopost.ts";
+import { macChip } from "../lib/tiktokMac.ts";
 import type { Clip } from "../api/types.ts";
 
 const CHIP_TONE: Record<PlatformPerformance["status"], Tone> = {
@@ -21,6 +22,7 @@ const CHIP_TONE: Record<PlatformPerformance["status"], Tone> = {
   posting: "neutral",
   failed: "vermilion",
   not_posted: "neutral",
+  mac: "neutral",
 };
 
 function Rows({ rows, reactions }: { rows: MetricRow[]; reactions?: Record<string, number> }) {
@@ -96,7 +98,11 @@ export function PlatformStack({
         </header>
         <div className="pstack__chip">
           <Pill tone={CHIP_TONE[perf.status]} icon={perf.status === "failed" ? "alert" : perf.status === "posted" ? "checkCircle" : undefined}>
-            {autoPerfLabel(perf.status, perf.platform, auto, perf.by, STATUS_LABEL[perf.status])}
+            {perf.status === "mac" && perf.mac
+              ? macChip(perf.mac)
+              : perf.via === "mac"
+                ? "Posted by your Mac"
+                : autoPerfLabel(perf.status, perf.platform, auto, perf.by, STATUS_LABEL[perf.status])}
           </Pill>
         </div>
 

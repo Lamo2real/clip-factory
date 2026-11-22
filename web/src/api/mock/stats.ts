@@ -124,6 +124,10 @@ export function statsApi({ store, publish, faults, automated }: Deps) {
       final: m?.final === true,
       ...(post?.error ? { error: post.error } : {}),
       ...(revenue ? { revenue } : {}),
+      // §42, §47: posted by the owner himself (or by his Mac), and what his Mac is doing with it.
+      ...(post?.by ? { by: post.by } : {}),
+      ...(post?.mac ? { mac: clone(post.mac) } : {}),
+      ...(post?.via ? { via: post.via } : {}),
     };
   }
 

@@ -38,6 +38,8 @@ import { onClipBack, throwAwayWithUndo, useThrownAway } from "../../lib/throwAwa
 import { UploadAgain } from "../library/Library.tsx";
 import { PostYourselfButton } from "../library/PostYourself.tsx";
 import { Apple, AppleSwitch, Panel } from "./parts.tsx";
+import { MAC_WHERE_LINE, macOn } from "../../lib/tiktokMac.ts";
+import { SendToMac } from "./TikTokMacBranch.tsx";
 import "../../styles/autopost.css";
 
 /** How often the page reads the status while open, and after a test run (every 3 s for 30 s). */
@@ -268,6 +270,13 @@ export function AutoPostBranch() {
           {status ? (
             <div className="autopost__where">
               <p className="autopost__line">{placesLine(status.places)}</p>
+              {/* §47.2: while his Mac posts TikTok, each clip's TikTok goes to the Mac. */}
+              {status.macPlaces?.includes("tiktok") ? (
+                <p className="autopost__left-row" data-mac="where">
+                  <PlatformMark platform="tiktok" size={18} title={PLATFORM_LABEL.tiktok} />
+                  <span className="autopost__left-text">{MAC_WHERE_LINE}</span>
+                </p>
+              ) : null}
               {status.leftOut.length ? (
                 <ul className="autopost__left">
                   {status.leftOut.map((l) => (
@@ -390,6 +399,15 @@ export function AutoPostBranch() {
           ) : null}
           {status.tiktokYourself.length ? (
             <Apple id="auto-post-tiktok" wide>
+              {/* §47.4: while his Mac posts TikTok, these can go to the Mac too (never a campaign clip). */}
+              {macOn(me.settings) ? (
+                <div className="autopost__send">
+                  <SendToMac
+                    clipIds={status.tiktokYourself.map((c) => c.clipId).filter((id) => !actions.clips.get(id)?.campaignId)}
+                    onSent={() => void reload()}
+                  />
+                </div>
+              ) : null}
               <ul className="autopost__list">
                 {status.tiktokYourself.map((c) => {
                   const clip = actions.clips.get(c.clipId);

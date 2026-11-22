@@ -994,6 +994,13 @@
   font-style: italic;
   font-size: 1.1rem;
 }
+/* What the owner's Mac is doing with the clip's TikTok post (§47.4), under its hook. */
+.kept-now__mac {
+  flex: 1 1 100%;
+  order: 1;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
 .account-note {
   margin-top: 12px;
 }

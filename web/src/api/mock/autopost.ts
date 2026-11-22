@@ -9,6 +9,7 @@ import { autoPostOf, floorHour, nextFullHour, perDay } from "../../lib/autopost.
 import { PLATFORM_ORDER } from "../../lib/format.ts";
 import { campaignCardOptions, cardOptionsFrom, optionsFor, presetOf } from "../../lib/preset.ts";
 import { tiktokState } from "../../lib/tiktokYourself.ts";
+import { macOn } from "../../lib/tiktokMac.ts";
 
 const HOUR = 3_600_000;
 const MINUTE = 60_000;
@@ -370,7 +371,12 @@ export function autoPostMock(deps: AutoPostDeps) {
         nextRunAt: next === null ? null : iso(next),
         perDay: perDay(s.perRun, s.everyHours),
         places,
-        leftOut: PLATFORM_ORDER.filter((p) => !places.includes(p)).map((p) => ({ platform: p, reason: p === "tiktok" ? ("tiktok_yourself" as const) : ("not_set_up" as const) })),
+        // §47.2: while the owner's Mac posts TikTok, TikTok is not left out: it is the Mac's place.
+        leftOut: PLATFORM_ORDER.filter((p) => !places.includes(p) && !(p === "tiktok" && macOn(deps.settings()))).map((p) => ({
+          platform: p,
+          reason: p === "tiktok" ? ("tiktok_yourself" as const) : ("not_set_up" as const),
+        })),
+        macPlaces: macOn(deps.settings()) ? (["tiktok"] as Platform[]) : [],
         nextUp: picked.taken.slice(0, 10).map((c, i) => ({
           clipId: c.clipId,
           jobId: c.jobId,
