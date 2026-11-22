@@ -364,9 +364,10 @@ test.describe("the pages", () => {
     // 1 → 2: pick the default model; Check models really runs; saving ticks steps 1 to 3.
     await page.getByRole("button", { name: "Next" }).click();
     await expect(page.locator("#st-setup-step")).toHaveText("Pick your default model");
-    await expect(page.getByRole("radiogroup", { name: "Lamo Stories' default model" }).getByRole("radio")).toHaveText([/Claude Fable 5.2/, /Claude Fable 5.1/, /Claude Opus 5.5/, /Claude Sonnet 5.5/, /Claude Haiku 5.5/]);
+    await expect(page.getByRole("radiogroup", { name: "Lamo Stories' default model" }).getByRole("radio")).toHaveText([/Claude Fable 5.2/, /Claude Fable 5.1/, /Claude Opus 5.5/, /Claude Sonnet 5.5/, /Claude Haiku 5.5/, /Amazon Nova Pro/]);
+    // Builder F2's mock: a sixth, mock-only model (no effort, no price), and this account cannot use Fable 5.1.
     await page.getByRole("button", { name: "Check models" }).click();
-    await expect(page.locator(".toast").filter({ hasText: "5 of 5 models answered." })).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator(".toast").filter({ hasText: "5 of 6 models answered." })).toBeVisible({ timeout: 10_000 });
     await page.getByRole("radio", { name: /Claude Fable 5.2/ }).click();
     await page.getByRole("button", { name: "Use Claude Fable 5.2" }).click();
     await expect(page.locator(".st-setup__head .st-ring")).toHaveAttribute("aria-label", "3 of 11 done");
