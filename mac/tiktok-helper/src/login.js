@@ -80,9 +80,9 @@ export async function forgetLogin() {
 // --- asking the owner once ------------------------------------------------------------------------------------------
 
 /** One Mac dialog; its answer comes back through osascript's stdout (never a file). null = Cancel or no answer. */
-async function dialog(text, { hidden = false } = {}) {
+async function dialog(text, { hidden = false, title = "TikTok login for your Mac" } = {}) {
   const script = [
-    `set r to display dialog ${JSON.stringify(text)} default answer "" ${hidden ? "with hidden answer " : ""}with title "TikTok login for your Mac" buttons {"Cancel", "Save"} default button "Save" giving up after 600`,
+    `set r to display dialog ${JSON.stringify(text)} default answer "" ${hidden ? "with hidden answer " : ""}with title ${JSON.stringify(title)} buttons {"Cancel", "Save"} default button "Save" giving up after 600`,
     `if gave up of r then return ""`,
     `return text returned of r`,
   ];
@@ -97,11 +97,17 @@ async function dialog(text, { hidden = false } = {}) {
 
 /** Asks for the @lamo.clips login in two dialogs and saves it in the Keychain. Returns true when it was saved. */
 export async function askAndSaveLogin() {
+  // The owner (22 Nov): "the first one should be email and second is password". Anything half-saved goes first.
+  await forgetLogin();
   const username = await dialog(
-    "Clip Factory's TikTok helper can log back in to TikTok by itself when TikTok logs it out.\n\nType the email or username you log in to TikTok with (@lamo.clips). It is kept only in your Mac's Keychain."
+    "Email for TikTok\n\nThe email you log in to TikTok with (@lamo.clips). It is kept only in your Mac's Keychain, so your Mac can log back in to TikTok by itself.",
+    { title: "Email for TikTok" }
   );
   if (!username) return false;
-  const password = await dialog("Now the TikTok password. It is kept only in your Mac's Keychain, never sent anywhere.", { hidden: true });
+  const password = await dialog("Password for TikTok\n\nIt shows as dots. It is kept only in your Mac's Keychain, never sent anywhere.", {
+    hidden: true,
+    title: "Password for TikTok",
+  });
   if (!password) return false;
   addSecret(password);
   await saveLogin(username.trim(), password);

@@ -124,12 +124,12 @@ export function frame() {
       if (shown) await notifyStep(step);
       return shown;
     },
-    /** A new step: the frame stays red and a notification names it. */
+    /** A new step: the frame stays red and names it. No notification: the owner works on the Mac meanwhile, so
+     * there is one at the start (on) and one at the end (the post's own), never one per step. */
     async step(step) {
       if (!shown) return;
       fs.writeFileSync(LAST_STEP(), step);
       writeState("control", step);
-      await notifyStep(step);
     },
     /** Finished: green for 20 s (the app closes itself), or the earlier session's frame back. */
     async done(message) {
