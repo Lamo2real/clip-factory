@@ -1173,18 +1173,23 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       if (before) publishPost(p);
       return { clip: clone(c), posts: clone(left) };
     },
-    // Throw away's tap (§46.13): auto-posting leaves the clip alone for its Undo (60 s); Undo lets it go again.
+    // Throw away's tap (§46.13): auto-posting leaves the clip alone for a day (its Undo, and a decline that comes late);
+    // Undo lets it go again.
     async holdClip(clipId) {
       await delay();
       const c = clip(clipId);
       if (c.auto) throw conflict(AUTO_ALREADY_SENT);
       if (c.status !== "review") throw conflict(ALREADY_DECIDED);
       autopost.hold(clipId);
+      // The server writes the clip item (its holdUntil), so live news says it changed (§46.9).
+      publishClip(c);
       return clone(c);
     },
     async unholdClip(clipId) {
       await delay();
       autopost.unhold(clipId);
+      const c = store.clips.find((x) => x.clipId === clipId);
+      if (c) publishClip(c);
     },
     async declineClip(clipId) {
       await delay();

@@ -1,8 +1,8 @@
 // Mock mode's auto-posting (docs/CONTRACTS.md §46.3–§46.9): the same rules as the API's autopost/*.py and
 // routes/autopost.py, with a fake clock the e2e tests can move (window.__cfMock.autopost). The hourly EventBridge
 // tick is a tick at every whole hour the fake clock passes; a status read catches up a tick the clock passed by
-// itself (one run, never two). Throw away's tap holds a clip for 60 s (§46.13), so a run inside its Undo leaves it
-// alone. Only bundled into mock builds.
+// itself (one run, never two). Throw away's tap holds a clip for a day (§46.9, §46.13), so a run inside its Undo,
+// or before a decline that comes late, leaves it alone. Only bundled into mock builds.
 import { ApiError } from "../errors.ts";
 import type { AutoPostSettings, AutoPostStatus, AutoRun, AutoRunClip, AutoRunKind, AutoRunMode, Clip, ClipPostOptions, Job, Platform, Post, Settings } from "../types.ts";
 import { autoPostOf, floorHour, nextFullHour, perDay } from "../../lib/autopost.ts";
@@ -12,8 +12,11 @@ import { tiktokState } from "../../lib/tiktokYourself.ts";
 
 const HOUR = 3_600_000;
 const MINUTE = 60_000;
-/** Throw away's hold: long enough for its 8 s Undo and the decline after it (§46.13). */
-export const HOLD_MS = 60 * 1000;
+/**
+ * Throw away's hold (the server's `clips.HOLD_FOR`, §46.9): a day, so a decline that comes late (a phone locked during
+ * the 8 s Undo stops its timer) still finds the clip held; Undo lifts it at once.
+ */
+export const HOLD_MS = 24 * HOUR;
 /** §46.5 rule 5: a run still `planned` this long after it planned has its clips; an older one has stopped. */
 export const PLANNED_FRESH_MS = 15 * MINUTE;
 /** How long EventBridge keeps trying to deliver one hour's tick (its maximum event age, §46.11). */
@@ -323,7 +326,7 @@ export function autoPostMock(deps: AutoPostDeps) {
   return {
     controls,
     clock,
-    /** POST /v1/clips/{clipId}/hold on a clip in Review (the route checks it): runs leave it alone for 60 s. */
+    /** POST /v1/clips/{clipId}/hold on a clip in Review (the route checks it): runs leave it alone for a day. */
     hold(clipId: string) {
       holds.set(clipId, clock() + HOLD_MS);
     },

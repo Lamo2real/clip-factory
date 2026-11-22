@@ -5,9 +5,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { ApiError } from "../src/api/errors.ts";
 import { autoPostMock, CR_CANT_TAKE, HOLD_MS, PLANNED_FRESH_MS, shownNextRun, TICK_MAX_AGE_MS, NOTE_ALL_WAITING, NOTE_NO_PLACES, NOTE_NOTHING, NOTE_NOTHING_TO_TEST, PICK_CLIPS, PICK_HOURS, PICK_KIND, STILL_BEING_MADE, THREW_AWAY, NOT_AN_OBJECT, UNKNOWN_SETTING, UPLOADED_YOURSELF, VIDEO_MISSING, WAIT_A_MINUTE, type AutoPostDeps } from "../src/api/mock/autopost.ts";
 import { mockApi } from "../src/api/mock/index.ts";
+import { mockLive } from "../src/api/mock/live.ts";
 import { TIKTOK_PRIVATE_ONLY } from "../src/lib/tiktokYourself.ts";
 import { seed } from "../src/api/mock/fixtures.ts";
-import type { AutoRun, Clip, ClipPostOptions, Job, Platform, Post, Settings } from "../src/api/types.ts";
+import type { AutoRun, Clip, ClipPostOptions, Job, LiveEvent, Platform, Post, Settings } from "../src/api/types.ts";
 import {
   AUTO_ALREADY_SENT,
   AUTO_POST_DEFAULTS,
@@ -676,7 +677,7 @@ describe("the mock's holds and the server's latest rules (§46.4, §46.5, §46.1
   beforeEach(() => sessionStorage.clear());
   const three = () => world({ clips: ["A", "B", "C"].map((id, i) => ({ clipId: id, jobId: "J1", rank: i + 1, hook: id.toLowerCase() })) });
 
-  it("Throw away's hold: the pick skips the clip silently for 60 s, Undo lets it go again", async () => {
+  it("Throw away's hold: the pick skips the clip silently for a day, Undo lets it go again", async () => {
     const w = three();
     w.m.controls.set("2026-11-22T10:59:50.000Z");
     w.turnOn();
@@ -693,13 +694,33 @@ describe("the mock's holds and the server's latest rules (§46.4, §46.5, §46.1
     w.m.unhold("A");
     expect(w.m.controls.held()).toEqual([]);
     expect((await w.m.status()).nextUp.map((c) => c.clipId)).toEqual(["A", "C"]);
-    // A hold ends by itself after 60 s.
+    // A hold ends by itself a day after the tap, like the server's (clips.HOLD_FOR): a decline that comes late (the
+    // phone was locked during the Undo, so its timer stopped) still finds it held; a second hold restarts the day.
+    // (Off for this part, so the status reads that catch up the hours passed send nothing.)
+    expect(HOLD_MS).toBe(24 * HOUR);
+    w.turnOn({ on: false });
+    w.m.hold("A");
+    w.m.controls.skip(HOUR);
     w.m.hold("A");
     w.m.controls.skip(HOLD_MS - 1000);
+    expect(w.m.controls.held()).toEqual(["A"]);
     expect((await w.m.status()).nextUp.map((c) => c.clipId)).toEqual(["C"]);
     w.m.controls.skip(1000);
     expect(w.m.controls.held()).toEqual([]);
     expect((await w.m.status()).nextUp.map((c) => c.clipId)).toEqual(["A", "C"]);
+  });
+
+  it("a phone locked inside the Undo: a run 90 s later still leaves the held clip alone", async () => {
+    const w = three();
+    w.m.controls.set("2026-11-22T10:59:50.000Z");
+    w.turnOn();
+    w.m.hold("A");
+    // The page's timers stop, so no decline comes; the clock runs on past the 11:00 tick.
+    w.m.controls.skip(90_000);
+    expect(await w.m.controls.tick("2026-11-22T11:00:00.000Z")).toBe("2026-11-22T11:00:00.000Z#scheduled");
+    expect(w.m.controls.held()).toEqual(["A"]);
+    expect(w.m.controls.runs()[0]!.clips.map((c) => [c.clipId, c.outcome])).toEqual([["B", "sent"]]);
+    expect(w.clips.find((c) => c.clipId === "A")!.status).toBe("review");
   });
 
   it("a run's send refuses a clip held after it planned: You threw it away first; the others still go", async () => {
@@ -826,8 +847,21 @@ describe("the mock api (wired like the other mock modules)", () => {
   it("hold: a clip in Review only; one auto-posting already sent says so; Undo's DELETE always answers", async () => {
     const a = mockApi(seed(), { keepStopsAfterSave: 0, resumeAfterMs: 60_000 });
     const [first, second] = await a.listClips({ status: "review" });
-    expect((await a.holdClip(first!.clipId)).clipId).toBe(first!.clipId);
-    await expect(a.unholdClip(first!.clipId)).resolves.toBeUndefined();
+    // Both write the clip item on the server, so each sends its live clip event (§46.9), still in Review.
+    const news: LiveEvent[] = [];
+    const hear = (e: LiveEvent) => void news.push(e);
+    mockLive.listeners.add(hear);
+    try {
+      expect((await a.holdClip(first!.clipId)).clipId).toBe(first!.clipId);
+      expect(news.map((e) => [e.type, e.id, (e.item as Clip).status])).toEqual([["clip", first!.clipId, "review"]]);
+      await expect(a.unholdClip(first!.clipId)).resolves.toBeUndefined();
+      expect(news.map((e) => [e.type, e.id])).toEqual([
+        ["clip", first!.clipId],
+        ["clip", first!.clipId],
+      ]);
+    } finally {
+      mockLive.listeners.delete(hear);
+    }
     await a.declineClip(second!.clipId);
     await expect(a.holdClip(second!.clipId)).rejects.toMatchObject({ status: 409, message: "This clip has already been confirmed or declined." });
     await expect(a.holdClip("nope")).rejects.toMatchObject({ status: 404 });

@@ -96,12 +96,75 @@ describe("Throw away holds the clip for its Undo (§46.13)", () => {
     act(() => throwAwayWithUndo(clip, toast));
     await wait(2000);
     act(() => undoButton()!.click());
-    expect(calls.unholdClip).toHaveBeenCalledWith(clip.clipId);
+    // Back at once; the release follows the hold's answer (already here).
     expect(isThrownAway(clip.clipId)).toBe(false);
-    expect(back).toHaveBeenCalledWith(clip.clipId);
+    expect(back).toHaveBeenCalledWith(clip.clipId, expect.any(Promise));
+    await wait();
+    expect(calls.unholdClip).toHaveBeenCalledWith(clip.clipId);
     await wait(UNDO_MS * 2);
     expect(calls.declineClip).not.toHaveBeenCalled();
     expect(texts()).toEqual([]);
+    stop();
+  });
+
+  it("Undo before the hold answered: the release goes only after it, and the clip's back news waits for the release", async () => {
+    let answerHold!: () => void;
+    let answerUnhold!: () => void;
+    const order: string[] = [];
+    const calls = api({
+      holdClip: vi.fn(
+        () =>
+          new Promise<Clip>((ok) => {
+            answerHold = () => {
+              order.push("hold answered");
+              ok(clip);
+            };
+          }),
+      ),
+      unholdClip: vi.fn(() => {
+        order.push("unhold sent");
+        return new Promise<void>((ok) => {
+          answerUnhold = () => {
+            order.push("unhold answered");
+            ok();
+          };
+        });
+      }),
+    });
+    const released = vi.fn();
+    const stop = onClipBack((id, done) => void done.then(() => released(id)));
+    act(() => throwAwayWithUndo(clip, toast));
+    // A slow hold (a cold start): Undo is tapped before it answers.
+    await wait(200);
+    act(() => undoButton()!.click());
+    expect(isThrownAway(clip.clipId)).toBe(false);
+    await wait(1000);
+    expect(calls.unholdClip).not.toHaveBeenCalled();
+    answerHold();
+    await wait();
+    expect(calls.unholdClip).toHaveBeenCalledTimes(1);
+    expect(released).not.toHaveBeenCalled();
+    answerUnhold();
+    await wait();
+    expect(released).toHaveBeenCalledWith(clip.clipId);
+    expect(order).toEqual(["hold answered", "unhold sent", "unhold answered"]);
+    await wait(UNDO_MS * 2);
+    expect(calls.declineClip).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it("a decline that fails brings the clip back and lets the hold go, so auto-posting may take it again", async () => {
+    const calls = api({ declineClip: vi.fn(async () => Promise.reject(new ApiError(500, "internal", "Something went wrong."))) });
+    const released = vi.fn();
+    const stop = onClipBack((id, done) => void done.then(() => released(id)));
+    act(() => throwAwayWithUndo(clip, toast));
+    await wait(UNDO_MS);
+    await wait();
+    expect(calls.declineClip).toHaveBeenCalledTimes(1);
+    expect(isThrownAway(clip.clipId)).toBe(false);
+    expect(calls.unholdClip).toHaveBeenCalledWith(clip.clipId);
+    expect(released).toHaveBeenCalledWith(clip.clipId);
+    expect(texts()).toEqual([expect.stringMatching(/^error:.* The clip is back in your list\.$/)]);
     stop();
   });
 

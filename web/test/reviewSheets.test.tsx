@@ -554,7 +554,8 @@ describe("thrown-away store (F007)", () => {
     expect(isThrownAway(clip.clipId)).toBe(true);
     undo[0]!.onUndo();
     expect(isThrownAway(clip.clipId)).toBe(false);
-    expect(back).toHaveBeenCalledWith(clip.clipId);
+    // With the promise that settles once its auto-posting hold is let go (§46.13).
+    expect(back).toHaveBeenCalledWith(clip.clipId, expect.any(Promise));
     stop();
   });
 

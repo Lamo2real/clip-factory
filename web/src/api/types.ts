@@ -1912,7 +1912,8 @@ export interface Api {
   ): Promise<{ clip: Clip; posts: Post[] }>;
   declineClip(clipId: string): Promise<Clip>;
   /**
-   * POST /v1/clips/{clipId}/hold (§46.13): Throw away's tap keeps auto-posting off the clip for its Undo (60 s). 409
+   * POST /v1/clips/{clipId}/hold (§46.13): Throw away's tap keeps auto-posting off the clip for a day (its Undo, and a
+   * decline that comes late), unless Undo lets it go first. 409
    * "Auto-posting already sent this clip." when a run took it first (or the already-decided sentence); 404 when gone.
    */
   holdClip(clipId: string): Promise<Clip>;
