@@ -84,12 +84,13 @@ def places_now(setups: list[Item]) -> list[str]:
     return [p for p in UPLOAD_ORDER if p in ready and p != "tiktok"]
 
 
-def left_out(places: list[str]) -> list[Item]:
-    """The places a run leaves out and why (§46.9 ``leftOut``): TikTok always (Post it yourself), the rest not set up."""
+def left_out(places: list[str], *, mac: bool = False) -> list[Item]:
+    """The places a run leaves out and why (§46.9 ``leftOut``): TikTok (Post it yourself) unless the owner's Mac posts
+    it (``mac``, §47: then it is in ``macPlaces`` instead), the rest not set up."""
     return [
         {"platform": p, "reason": "tiktok_yourself" if p == "tiktok" else "not_set_up"}
         for p in UPLOAD_ORDER
-        if p not in places
+        if p not in places and not (mac and p == "tiktok")
     ]
 
 

@@ -26,7 +26,22 @@ POST_FIELDS = (
     "campaignId",  # the Content Rewards campaign the post is for: set at creation, never changed (§38.11)
     "paidLabel",  # "not_set" when the platform refused the paid-partnership switch (§38.14)
     "by",  # "you": the owner posted it on TikTok himself (§42)
+    "via",  # "mac": the owner's Mac posted it on TikTok for him (§47)
 )
+# §47 Your Mac posts it on TikTok: a TikTok post waiting for (or being posted by) the owner's Mac has its own status,
+# never ``queued`` or ``pending_integration``, so no path that sends posts through TikTok's API ever picks it up.
+MAC_STATUS = "mac"
+# The internal fields of a Mac post that the public ``mac`` object shows, by their public names.
+MAC_PUBLIC = {
+    "macState": "state",
+    "macStep": "step",
+    "macSince": "since",
+    "macSource": "source",
+    "macClaimedAt": "claimedAt",
+    "macPressedAt": "pressedAt",
+    "macStoppedAt": "stoppedAt",
+    "macReason": "reason",
+}
 COMMON_METRICS = ("views", "likes", "comments", "shares")
 REFRESH_CLAIM = timedelta(minutes=5)  # a manual refresh counts as running for this long (§16.2)
 PERF_CHECK_DELAY = timedelta(hours=48)
@@ -63,11 +78,30 @@ def is_private_test(item: Mapping[str, Any]) -> bool:
     return isinstance(options, Mapping) and options.get("test") == "private"
 
 
+def public_mac(item: Mapping[str, Any]) -> Item | None:
+    """``Post.mac`` (§47): where a Mac post stands (``state``, ``step``, ``since``, ``source``, ``claimedAt``,
+    ``pressedAt``, ``stoppedAt``, ``reason``); None for every other post. ``macDevice``, ``macBeatAt``,
+    ``macAttempt``, ``beforeMac`` and ``madeForMac`` stay internal."""
+    if item.get("status") != MAC_STATUS:
+        return None
+    return {public: item[field] for field, public in MAC_PUBLIC.items() if item.get(field) not in (None, "")}
+
+
+def new_mac_fields(source: str, now: str) -> Item:
+    """A new Mac post's internal fields (§47): waiting for the owner's Mac since ``now``, from ``source`` (``upload``,
+    ``auto`` or ``sent``), never claimed yet."""
+    return {"status": MAC_STATUS, "macState": "waiting", "macSince": now, "macSource": source, "macAttempt": 0}
+
+
 def public_post(item: Item, now: datetime | None = None) -> Item:
     """The Post shape of §5/§16.3. Internal fields (``platformPostId``, ``statsId``, ``statsDueAt``, ``gsi2*``,
-    ``refreshStartedAt``, ``lastSnapshotAt``, ``insightsDueAt``, ``statsError``, ``postOptions``, ``autoRun``) never
-    leave. An auto-posted post says ``auto: true``, a Private test run's ``test: "private"`` (§46.9)."""
+    ``refreshStartedAt``, ``lastSnapshotAt``, ``insightsDueAt``, ``statsError``, ``postOptions``, ``autoRun``, the
+    ``mac*`` fields) never leave. An auto-posted post says ``auto: true``, a Private test run's ``test: "private"``
+    (§46.9); a Mac post carries ``mac`` (§47)."""
     out = {k: item[k] for k in POST_FIELDS if k in item}
+    mac = public_mac(item)
+    if mac is not None:
+        out["mac"] = mac
     if item.get("autoRun"):
         out["auto"] = True
     if is_private_test(item):
@@ -201,6 +235,7 @@ def create_for_clip(
     campaign_options: Mapping[str, Any] | None = None,
     post_fields: Mapping[str, Any] | None = None,
     clip_condition: db.Condition | None = None,
+    tiktok_mac: str | None = None,
 ) -> list[Item]:
     """Creates the clip's Posts, one per chosen platform (the clip's ``uploadTo``, §33) or, when the clip has none,
     one per platform enabled in settings, and returns all its posts (public shape).
@@ -214,6 +249,10 @@ def create_for_clip(
     ``campaign`` (``campaign_options``: paid partnership, disclosure, required items). ``post_fields`` are internal
     fields every new post gets (the auto-posting run that made it, ``autoRun``, §46.10). ``clip_condition`` is one more
     condition on the clip's write (an auto-posting run's: the clip is not held by a Throw away, §46.7).
+    ``tiktok_mac`` (``"upload"`` or ``"auto"``, §47) is the explicit Mac path: the clip's TikTok post is written as a
+    Mac post (``status: "mac"``, waiting for the owner's Mac, ``madeForMac``), never ``queued``, in this same
+    transaction; with ``"auto"`` TikTok is added to the places for that post only (it is never one of the run's API
+    places, so ``uploadTo`` does not name it). Without it nothing changes.
     """
     clip_id = str(clip["clipId"])
     if clip.get("postsCreated"):
@@ -230,6 +269,8 @@ def create_for_clip(
     # The flow run that sends these posts (§17.6): a later run started by Try again or a release leaves them alone.
     run = int((clip_fields or {}).get("flowRun") or clip.get("flowRun") or 1)
     targets = [p for p in UPLOAD_ORDER if p in chosen] if chosen else settings.get("platforms", PLATFORMS)
+    if tiktok_mac and "tiktok" not in targets:
+        targets = [p for p in UPLOAD_ORDER if p in {*targets, "tiktok"}]
     for platform in targets:
         if platform in have or platform not in PLATFORMS:
             continue
@@ -241,10 +282,14 @@ def create_for_clip(
             "status": "queued" if platform in connected else "pending_integration",
             **({"campaignId": campaign_id} if campaign_id else {}),
         }
+        mac: Item = {}
+        if platform == "tiktok" and tiktok_mac:
+            mac = {**new_mac_fields(tiktok_mac, now), "madeForMac": True}
+            post["status"] = MAC_STATUS
         options = dict((post_options or {}).get(platform) or {})
         if campaign_options is not None:
             options["campaign"] = dict(campaign_options)
-        created.append(post)
+        created.append({**post, "mac": public_mac({**post, **mac})} if mac else post)
         items.append(
             {
                 "pk": db.user_pk(user_id),
@@ -257,6 +302,7 @@ def create_for_clip(
                 "flowRun": run,
                 **(post_fields or {}),
                 **post,
+                **mac,
                 **({"postOptions": options} if options or (post_options and platform in post_options) else {}),
             }
         )

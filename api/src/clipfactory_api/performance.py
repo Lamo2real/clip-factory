@@ -38,6 +38,8 @@ def perf_status(post: Mapping[str, Any] | None) -> str:
         return "failed"
     if status == "posted":
         return "posted_private" if post.get("privacy") == "private" else "posted"
+    if status == posts.MAC_STATUS:
+        return "mac"  # §47: waiting for (or being posted by) the owner's Mac
     return "not_posted"
 
 
@@ -110,6 +112,11 @@ def platform_performance(platform: str, post: Item | None, account_status: str, 
             out[key] = post[key]
     if post.get("by") == "you":
         out["by"] = "you"  # posted on TikTok by the owner himself (§42)
+    if post.get("via") == "mac":
+        out["via"] = "mac"  # ... by his Mac (§47)
+    mac = posts.public_mac(post)
+    if mac is not None:
+        out["mac"] = mac
     if metrics:
         if metrics.get("metricsUpdatedAt"):
             out["updatedAt"] = metrics["metricsUpdatedAt"]

@@ -286,6 +286,16 @@ def test_every_contract_route_is_registered() -> None:
         # §46: auto-posting
         ("GET", "/v1/autopost"),
         ("POST", "/v1/autopost/run"),
+        # §47: Your Mac posts it on TikTok
+        ("GET", "/v1/tiktok/mac"),
+        ("POST", "/v1/tiktok/mac/ping"),
+        ("POST", "/v1/tiktok/mac/send"),
+        ("POST", "/v1/clips/X/tiktok/mac/claim"),
+        ("POST", "/v1/clips/X/tiktok/mac/step"),
+        ("POST", "/v1/clips/X/tiktok/mac/done"),
+        ("POST", "/v1/clips/X/tiktok/mac/stopped"),
+        ("POST", "/v1/clips/X/tiktok/mac/retry"),
+        ("DELETE", "/v1/clips/X/tiktok/mac"),
     }
     for method, path in expected:
         assert any(r.method == method and r.pattern.match(path) for r in ROUTES), (method, path)

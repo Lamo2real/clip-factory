@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from .. import clips, db, posts, release, settings, tiktok_self, validate
+from .. import clips, db, posts, release, settings, tiktok_mac, tiktok_self, validate
 from ..app import App
 from ..autopost import RUN_PREFIX, STATE_SK, pick, run, schedule
 from ..clock import iso
@@ -91,7 +91,8 @@ def public_run(item: Mapping[str, Any], by_id: Mapping[str, Item], found: Mappin
 
 def _tiktok_not_out(clip: Mapping[str, Any], rows: list[Item]) -> bool:
     """§42.1: an uploaded clip whose TikTok is not out for everyone (none, waiting, failed or uploaded privately), not
-    while Clip Factory is uploading it and not once the owner marked it."""
+    while Clip Factory is uploading it and not once the owner marked it. Not while the owner's Mac has it either (a
+    Mac post in any state, §47), nor once his Mac posted it (``by: "you"``, ``via: "mac"``)."""
     if clip.get("status") not in tiktok_self.DECIDED or not clip.get("postsCreated"):
         return False
     row = tiktok_self.tiktok_row(rows)
@@ -111,7 +112,9 @@ def status(app: App, req: Request) -> Response:
     store = app.store
     pk = db.user_pk(user_id)
     now = app.clock()
-    auto = settings.load(store, user_id)["autoPost"]
+    current = settings.load(store, user_id)
+    auto = current["autoPost"]
+    mac = tiktok_mac.is_on(current)
     state = store.get(pk, STATE_SK)
     every = clips.all_clips(store, user_id)
     by_id = {str(c.get("clipId")): c for c in every if c.get("type") == "clip"}
@@ -171,7 +174,9 @@ def status(app: App, req: Request) -> Response:
             "nextRunAt": iso(next_at) if next_at is not None else None,
             "perDay": schedule.per_day(auto),
             "places": picked.places,
-            "leftOut": pick.left_out(picked.places),
+            "leftOut": pick.left_out(picked.places, mac=mac),
+            # §47: the places the owner's Mac posts each auto-posted clip to (TikTok while Your Mac posts TikTok is on).
+            "macPlaces": ["tiktok"] if mac else [],
             "nextUp": next_up,
             "waiting": waiting,
             "runs": [public_run(r, by_id, run_posts) for r in runs],

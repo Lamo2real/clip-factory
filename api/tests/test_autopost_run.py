@@ -249,6 +249,75 @@ def test_tiktok_is_never_a_place_even_when_ready(
     assert clip_of(store, clip["clipId"])["uploadTo"] == ["youtube", "instagram", "facebook", "x"]
 
 
+def test_tiktok_is_never_a_place_even_when_ready_but_the_mac_gets_it_while_its_switch_is_on(
+    app: App, store: db.Store, table: FakeTable, at_slot: Clock, s3_client: FakeS3, lambda_client: FakeLambda
+) -> None:
+    # §47 (the owner's go of 2026-11-22, "Full auto, 3-post trial"): with Your Mac posts TikTok on, TikTok is still
+    # never one of the run's API places, but the clip's TikTok post is written for his Mac in the same transaction.
+    ready(store, "youtube", "tiktok", "instagram", "facebook", "x", audit="ok")
+    turn_on(store, tiktokMac={"on": True})
+    clip = review_clip(store, s3_client)
+    found = pick.pick(app, USER, at_slot())
+    assert found.places == ["youtube", "instagram", "facebook", "x"]
+    assert pick.left_out(found.places, mac=True) == []
+    calls_before = len(table.calls)
+    tick(app)
+    found_posts = posts_of(table, clip["clipId"])
+    assert set(found_posts) == {"youtube", "tiktok", "instagram", "facebook", "x"}
+    mac = found_posts["tiktok"]
+    assert (mac["status"], mac["macState"], mac["macSource"], mac["madeForMac"]) == ("mac", "waiting", "auto", True)
+    assert mac["autoRun"] == RUN_ID
+    # My settings' TikTok choices: Everyone, with Comment, Duet and Stitch on.
+    assert mac["postOptions"] == {
+        "privacyLevel": "PUBLIC_TO_EVERYONE",
+        "disableComment": False,
+        "disableDuet": False,
+        "disableStitch": False,
+        "brandContent": False,
+        "brandOrganic": False,
+    }
+    for platform in ("youtube", "instagram", "facebook", "x"):
+        assert found_posts[platform]["status"] == "queued"
+    # TikTok is not added to the places (Upload refuses TikTok without the sheet's choices).
+    assert clip_of(store, clip["clipId"])["uploadTo"] == ["youtube", "instagram", "facebook", "x"]
+    # One transaction wrote all five posts with the clip (never a TikTok post afterwards).
+    writes = [c for c in table.calls[calls_before:] if c[0] == "transact_write_items"]
+    with_posts = [
+        w for w in writes if any("Put" in a and a["Put"]["Item"].get("type") == "post" for a in w[1]["TransactItems"])
+    ]
+    assert len(with_posts) == 1
+    assert len([a for a in with_posts[0][1]["TransactItems"] if "Put" in a]) == 5
+    assert flow_starts(lambda_client) == [f"clip-{clip['clipId']}-1"]
+
+
+def test_practice_and_a_private_test_never_make_a_mac_post(
+    app: App, store: db.Store, table: FakeTable, at_slot: Clock, s3_client: FakeS3
+) -> None:
+    ready(store, "youtube", "facebook")
+    turn_on(store, practice=True, tiktokMac={"on": True})
+    clip = review_clip(store, s3_client)
+    assert tick(app).result == "ran"
+    assert posts_of(table, clip["clipId"]) == {}  # Practice: "Nothing gets sent."
+    private = run.run_once(deps(app), USER, "private_now", at_slot())
+    assert private.result == "ran"
+    found = posts_of(table, clip["clipId"])
+    assert set(found) == {"youtube", "facebook"}
+    assert all(p["status"] != "mac" for p in found.values())
+
+
+def test_a_campaign_clip_never_gets_a_mac_post_from_a_run(
+    app: App, store: db.Store, table: FakeTable, at_slot: Clock, cr_on: Any
+) -> None:
+    ready(store, "youtube", "instagram", "facebook")
+    put_campaign(store)
+    put_crconn(store)
+    turn_on(store, tiktokMac={"on": True})
+    clip = campaign_clip(store, checklist=FITS)
+    assert tick(app).result == "ran"
+    assert outcomes(store) == [(clip["clipId"], "sent", None)]
+    assert set(posts_of(table, clip["clipId"])) == {"youtube", "instagram"}
+
+
 def test_x_only_when_it_is_set_up(app: App, store: db.Store, table: FakeTable, at_slot: Clock) -> None:
     ready(store, "youtube", "facebook")
     turn_on(store)

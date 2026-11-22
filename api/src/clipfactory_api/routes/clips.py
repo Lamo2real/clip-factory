@@ -443,32 +443,7 @@ def tiktok_posted(app: App, req: Request) -> Response:
     if link is not None and not isinstance(link, str):
         raise bad_request("Paste the TikTok link as text.")
     item = _clip_or_404(app, req)
-    video = None
-    count_views = True
-    note = None
-    account = posts.connected_account(app.store, req.user_id, "tiktok")
-    if link and link.strip():
-        try:
-            video = tiktok_link.resolve(link, app.tiktok_open)
-        except tiktok_link.LinkError as e:
-            raise bad_request(str(e)) from e
-        # The connected handle is "@username" when TikTok gave one, else the display name (which a link never has).
-        stored = str((account or {}).get("handle") or "")
-        handle = stored[1:].lower() if stored.startswith("@") else ""
-        if account is None or (handle and video.handle and video.handle.lower() != handle):
-            count_views = False
-            note = OTHER_ACCOUNT
-    elif account is not None and app.oauth is not None and not _has_link(app, req.user_id, item):
-        # No link: look for the post on his connected TikTok (posted since the sheet opened).
-        video = tiktok_find.find_recent(
-            app.oauth,
-            app.store,
-            account,
-            since=_since(app, body.get("since")),
-            caption=mojibake.repair(str((item.get("captions") or {}).get("tiktok") or "")),
-        )
-        if video is None:
-            note = NOT_FOUND_YET
+    video, count_views, note = tiktok_video(app, req.user_id, item, link, body.get("since"))
     minutes = stats_config.load().platform("tiktok").min_interval
     try:
         try:
@@ -484,6 +459,38 @@ def tiktok_posted(app: App, req: Request) -> Response:
         raise conflict("This clip just changed. Try again.") from e
     log("info", "clip.tiktok_by_you", clipId=item["clipId"], link=video is not None, views=count_views)
     return _with_posts(app, req, note=note)
+
+
+def tiktok_video(
+    app: App, user_id: str, item: Mapping[str, Any], link: str | None, since: Any
+) -> tuple[tiktok_link.TikTokVideo | None, bool, str | None]:
+    """The TikTok video a clip was posted as (I posted it, §42, and the Mac's done, §47): the pasted ``link`` read by
+    ``tiktok_link`` (400 when it is not a TikTok video), else, with TikTok connected and no link stored yet, the post
+    found on his TikTok made since ``since``. Also whether its views count (the link is on the connected account) and
+    the answer's ``note``."""
+    account = posts.connected_account(app.store, user_id, "tiktok")
+    if link and link.strip():
+        try:
+            video = tiktok_link.resolve(link, app.tiktok_open)
+        except tiktok_link.LinkError as e:
+            raise bad_request(str(e)) from e
+        # The connected handle is "@username" when TikTok gave one, else the display name (which a link never has).
+        stored = str((account or {}).get("handle") or "")
+        handle = stored[1:].lower() if stored.startswith("@") else ""
+        if account is None or (handle and video.handle and video.handle.lower() != handle):
+            return video, False, OTHER_ACCOUNT
+        return video, True, None
+    if account is not None and app.oauth is not None and not _has_link(app, user_id, item):
+        # No link: look for the post on his connected TikTok (posted since the sheet opened, or the Mac claimed it).
+        found = tiktok_find.find_recent(
+            app.oauth,
+            app.store,
+            account,
+            since=_since(app, since),
+            caption=mojibake.repair(str((item.get("captions") or {}).get("tiktok") or "")),
+        )
+        return found, True, None if found is not None else NOT_FOUND_YET
+    return None, True, None
 
 
 def tiktok_posted_undo(app: App, req: Request) -> Response:

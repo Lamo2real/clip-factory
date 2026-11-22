@@ -49,6 +49,8 @@ INTERNAL_FIELDS = (
     "autoAt",
     "autoTest",
     "holdUntil",
+    # §47: a Send these to my Mac made the clip's TikTok post (its id), so two sends never make two.
+    "tiktokForMac",
 )
 PUBLISH_PENDING = "pending"
 PUBLISH_STARTED = "started"
