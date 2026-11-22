@@ -6,11 +6,13 @@
 // "Continue: {name}" opens the idea, video, character or reference video the owner had open last (§45.34, request 2
 // §2 "Each application should remember its own ... Open projects"), hidden once it is gone.
 //
-// The look (styles/st-dashboard.css, the liquid-glass contract styles/GLASS-CONTRACT.md): every tile a smoky glass
-// card (.st-glass), the counts as big light numerals with a small unit (StatNumeral), one solid cream card among them
-// with an orange toggle (the next video's music, saved in the workspace's settings like Settings › Video does), the
-// videos being made as media rows, the setup's progress on an arc with a white knob (ArcDial), and pills to pick what
-// "What happened lately" shows (on the sliding highlight).
+// The look (styles/st-dashboard.css, the liquid-glass contract styles/GLASS-CONTRACT.md): the page head on its backing
+// plate (rule 6), every tile a smoky glass card (.st-glass), the counts as big light numerals with a small unit
+// (StatNumeral), one solid cream card among them with an orange toggle (the next video's music, saved in the
+// workspace's settings like Settings › Video does), the videos being made as media rows, the setup's progress on an
+// arc with a white knob (ArcDial), round glass marks (.st-round-btn) with warm glyphs, and pills to pick what "What
+// happened lately" shows (on the sliding highlight). One orange main action per screen: the setup's way on while it
+// is open, else the empty studio's first video, else Make a video; every other button is glass.
 import { useEffect, useId, useState } from "react";
 import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
@@ -18,7 +20,7 @@ import { useToast } from "../../components/Toasts.tsx";
 import { A } from "../../components/ui.tsx";
 import { count, relative } from "../../lib/format.ts";
 import { storiesApi } from "../api/client.ts";
-import { STEP_LABEL, type ProjectRef, type StoriesApi, type StoriesDashboard, type StoryStatus } from "../api/types.ts";
+import { STEP_LABEL, type Onboarding, type ProjectRef, type StoriesApi, type StoriesDashboard, type StoryStatus } from "../api/types.ts";
 import { ArcDial, CreamCard, GlassToggle, MediaRow, StatNumeral } from "../glass/index.ts";
 import { useWorkspaceConfig } from "../settings/data.ts";
 import { currentChoice, rememberProject } from "../workspace.ts";
@@ -51,13 +53,14 @@ const ACCOUNT_WORDS: Record<StoriesDashboard["accounts"][number]["status"], { la
   not_connected: { label: "Not connected", tone: "sky" },
 };
 
-const ACTIVITY: Record<StoriesDashboard["activity"][number]["kind"], { icon: StIconName; words: string }> = {
+/** Each line's icon and word; a status (done, or stopped) also gets its colour, the rest a round glass mark. */
+const ACTIVITY: Record<StoriesDashboard["activity"][number]["kind"], { icon: StIconName; words: string; status?: "mint" | "coral" }> = {
   made: { icon: "clapper", words: "Made" },
-  approved: { icon: "check", words: "Approved" },
-  rejected: { icon: "close", words: "Not used" },
+  approved: { icon: "check", words: "Approved", status: "mint" },
+  rejected: { icon: "close", words: "Not used", status: "coral" },
   changes: { icon: "retry", words: "Changes asked for" },
-  posted: { icon: "share", words: "Posted" },
-  failed: { icon: "alert", words: "Stopped" },
+  posted: { icon: "share", words: "Posted", status: "mint" },
+  failed: { icon: "alert", words: "Stopped", status: "coral" },
 };
 
 /** "1.5K" → a big "1.5" and a small "K": the numeral and its unit (plain counts have no unit). */
@@ -67,16 +70,23 @@ export function splitCount(n: number): { num: string; unit?: string } {
   return m ? { num: m[1]!, unit: m[2]! } : { num: s };
 }
 
+/** The small unit of a count of videos: "video" for one, else "videos" (after a K or M: "K videos"). */
+export function videosUnit(n: number): string {
+  const { unit } = splitCount(n);
+  const word = n === 1 ? "video" : "videos";
+  return unit ? `${unit} ${word}` : word;
+}
+
 function Stat({ value, label, tone, icon, href }: { value: number; label: string; tone: StTone; icon: StIconName; href?: string }) {
   const n = splitCount(value);
   const body = (
     <>
-      <span className={`st-dash-stat__icon st-dash-stat__icon--${tone}`} aria-hidden="true">
+      <span className={`st-round-btn st-dash-stat__icon st-dash-stat__icon--${tone}`} aria-hidden="true">
         <StIcon name={icon} size={22} />
       </span>
-      <StatNumeral value={n.num} unit={n.unit} label={label} className="st-dash-stat__figure" />
+      <StatNumeral value={n.num} unit={videosUnit(value)} label={label} className="st-dash-stat__figure" />
       {href ? (
-        <span className="st-dash-stat__go" aria-hidden="true">
+        <span className="st-round-btn st-dash-stat__go" aria-hidden="true">
           <StIcon name="chevron" size={18} />
         </span>
       ) : null}
@@ -124,11 +134,11 @@ function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou
           {items.map((n, i) => (
             <li key={`${n.href}-${n.publishingJobId ?? n.storyId ?? n.platform ?? i}-${i}`} className="st-needs-list__item">
               {n.platform ? (
-                <span className="st-needs-list__mark" title={PLATFORM_NAME[n.platform]}>
+                <span className="st-round-btn st-needs-list__mark" title={PLATFORM_NAME[n.platform]}>
                   <PlatformMark platform={n.platform} size={20} />
                 </span>
               ) : (
-                <span className="st-needs-list__mark" aria-hidden="true">
+                <span className="st-round-btn st-needs-list__mark" aria-hidden="true">
                   <StIcon name="screen" size={20} />
                 </span>
               )}
@@ -149,9 +159,7 @@ function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou
                     Try again
                   </StButton>
                 ) : null}
-                <StLinkButton href={n.href} main>
-                  Open
-                </StLinkButton>
+                <StLinkButton href={n.href}>Open</StLinkButton>
               </div>
             </li>
           ))}
@@ -180,14 +188,18 @@ function Producing({ items }: { items: StoriesDashboard["producing"] }) {
             <li key={p.storyId}>
               <A href={`/stories/production/${encodeURIComponent(p.storyId)}`} className="st-making__row">
                 <MediaRow
-                  thumb={<StIcon name="clapper" size={28} />}
+                  thumb={
+                    <span className="st-making__thumb">
+                      <StIcon name="clapper" size={28} />
+                    </span>
+                  }
                   title={<span className="st-making__title">{p.title}</span>}
                   meta={<span className="st-making__step">{STEP_LABEL[p.step]}</span>}
                   progress={p.progress}
                   progressLabel={`${p.title}: ${STEP_LABEL[p.step]}`}
                   progressText={`${Math.round(p.progress * 100)}%`}
                 />
-                <span className="st-making__go" aria-hidden="true">
+                <span className="st-round-btn st-making__go" aria-hidden="true">
                   <StIcon name="chevron" size={18} />
                 </span>
               </A>
@@ -213,7 +225,7 @@ function Accounts({ items }: { items: StoriesDashboard["accounts"] }) {
       <ul className="st-accounts">
         {items.map((a) => (
           <li key={a.platform} className="st-accounts__row">
-            <span className="st-accounts__mark">
+            <span className="st-round-btn st-accounts__mark">
               <PlatformMark platform={a.platform} size={20} />
             </span>
             <span className="st-accounts__name">
@@ -251,7 +263,7 @@ function Performance({ perf }: { perf: StoriesDashboard["performance"] }) {
             const v = splitCount(n.value);
             return (
               <li key={n.label} className="st-perf__item">
-                <span className="st-perf__icon" aria-hidden="true">
+                <span className="st-round-btn st-perf__icon" aria-hidden="true">
                   <StIcon name={n.icon} size={18} />
                 </span>
                 <StatNumeral value={v.num} unit={v.unit} label={n.label} className="st-perf__figure" />
@@ -305,7 +317,7 @@ function Activity({ items }: { items: StoriesDashboard["activity"] }) {
           {shown.map((a, i) => (
             <li key={`${a.at}-${a.storyId}-${a.kind}-${i}`}>
               <A href={`/stories/review/${encodeURIComponent(a.storyId)}`} className={`st-activity__row st-activity__row--${a.kind}`}>
-                <span className="st-activity__icon" aria-hidden="true">
+                <span className={ACTIVITY[a.kind].status ? `st-activity__icon st-activity__icon--${ACTIVITY[a.kind].status}` : "st-round-btn st-activity__icon"} aria-hidden="true">
                   <StIcon name={ACTIVITY[a.kind].icon} size={18} />
                 </span>
                 <span className="st-activity__text">
@@ -339,13 +351,13 @@ function NextVideo({ ws }: { ws: string }) {
       title="Next video"
       headingLevel={2}
       footer={
-        <>
+        <div className="st-dash-next__music">
           <label className="st-dash-next__label" htmlFor={`${id}-music`}>
             <StIcon name="music" size={18} />
             Music
           </label>
           <GlassToggle id={`${id}-music`} label="Music" checked={music} onChange={(v) => save({ musicOn: v })} />
-        </>
+        </div>
       }
     >
       <p className="st-dash-next__len">
@@ -428,14 +440,14 @@ function ContinueCard({ ws }: { ws: string }) {
   const words = PROJECT_WORDS[open.kind];
   return (
     <A href={open.href} className="st-continue st-glass st-glass--hero st-lens" data-kind={open.kind}>
-      <span className="st-continue__icon" aria-hidden="true">
+      <span className="st-round-btn st-dash-continue__icon" aria-hidden="true">
         <StIcon name={words.icon} size={24} />
       </span>
       <span className="st-continue__text">
         <span className="st-continue__kind">{words.line}</span>
         <span className="st-continue__name">Continue: {open.name}</span>
       </span>
-      <span className="st-continue__go" aria-hidden="true">
+      <span className="st-round-btn st-round-btn--cream st-dash-continue__go" aria-hidden="true">
         <StIcon name="chevron" size={20} />
       </span>
     </A>
@@ -446,7 +458,7 @@ function ContinueCard({ ws }: { ws: string }) {
 function SetupLeft({ left }: { left: { step: string; label: string }[] }) {
   return (
     <section className="st-setupcard st-setupcard--left st-glass" aria-labelledby="st-setupleft-title">
-      <span className="st-setupcard__mark" aria-hidden="true">
+      <span className="st-round-btn st-dash-setup__mark" aria-hidden="true">
         <StIcon name="bulb" size={24} />
       </span>
       <div className="st-setupcard__text">
@@ -467,12 +479,16 @@ function SetupLeft({ left }: { left: { step: string; label: string }[] }) {
   );
 }
 
+/** The setup is still open: its big card shows, and its way on is the screen's one orange action. */
+function setupOpen(o: Onboarding | null): boolean {
+  return !!o && !o.finishedAt;
+}
+
 /**
  * The setup's card (§45.29): shown until the setup is finished, with the ring and the first things left. After Finish
  * with steps skipped, a small card keeps listing them (§45.36 E15).
  */
-function SetupCard({ ws }: { ws: string }) {
-  const { data } = useOnboarding(ws);
+function SetupCard({ data }: { data: Onboarding | null }) {
   if (!data) return null;
   const left = data.steps.filter((s) => s.state !== "done" && s.step !== "done");
   if (data.finishedAt) return left.length ? <SetupLeft left={left} /> : null;
@@ -507,33 +523,42 @@ function SetupCard({ ws }: { ws: string }) {
 
 export function DashboardScreen({ ws }: StoriesScreenProps) {
   const { data, error, reload } = useDashboard(ws);
+  const setup = useOnboarding(ws).data;
+  const empty = !!data && data.counts.made === 0 && data.producing.length === 0 && data.needsYou.length === 0 && data.activity.length === 0;
+  // One orange main action on the screen (the contract's --st-action): the setup's way on while it is open, else the
+  // empty studio's first video, else Make a video.
+  const settingUp = setupOpen(setup);
   return (
     <section className="st-page st-dash">
-      <StPageHead
-        title="Dashboard"
-        lede="Everything happening in your animation studio."
-        actions={
-          <>
-            <StLinkButton href="/stories/ideas">
-              <StIcon name="bulb" size={20} />
-              New idea
-            </StLinkButton>
-            <StLinkButton href="/stories/production/new" main>
-              <StIcon name="clapper" size={20} />
-              Make a video
-            </StLinkButton>
-          </>
-        }
-      />
+      {/* Loose words on the page sit on a backing plate (rule 6): nothing over Ember, a glass plate over a picture or
+          the desktop. Once the shell's head is a plate itself, this one steps back (st-dashboard.css). */}
+      <div className="st-plate st-dash-head">
+        <StPageHead
+          title="Dashboard"
+          lede="Everything happening in your animation studio."
+          actions={
+            <>
+              <StLinkButton href="/stories/ideas">
+                <StIcon name="bulb" size={20} />
+                New idea
+              </StLinkButton>
+              <StLinkButton href="/stories/production/new" main={!settingUp && !empty}>
+                <StIcon name="clapper" size={20} />
+                Make a video
+              </StLinkButton>
+            </>
+          }
+        />
+      </div>
       <ContinueCard ws={ws} />
-      <SetupCard ws={ws} />
+      <SetupCard data={setup} />
       {!data && error ? (
         <StError message={error} onRetry={reload} />
       ) : !data ? (
         <StLoading label="Counting the videos…" />
-      ) : data.counts.made === 0 && data.producing.length === 0 && data.needsYou.length === 0 && data.activity.length === 0 ? (
+      ) : empty ? (
         <>
-          <StEmpty title="Your studio is ready" action={<StLinkButton href="/stories/production/new" main>Make your first video</StLinkButton>}>
+          <StEmpty title="Your studio is ready" action={<StLinkButton href="/stories/production/new" main={!settingUp}>Make your first video</StLinkButton>}>
             Pick an idea and a character, and Lamo Stories makes the cartoon.
           </StEmpty>
           <div className="st-tiles st-tiles--start">
@@ -554,7 +579,11 @@ export function DashboardScreen({ ws }: StoriesScreenProps) {
           <Activity items={data.activity} />
         </div>
       )}
-      {error && data ? <p className="st-stale" role="status">{error}</p> : null}
+      {error && data ? (
+        <p className="st-stale st-plate" role="status">
+          {error}
+        </p>
+      ) : null}
     </section>
   );
 }

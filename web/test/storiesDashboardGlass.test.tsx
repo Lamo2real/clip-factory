@@ -22,7 +22,7 @@ vi.mock("../src/lib/router.ts", async (orig) => {
   return { ...real, navigate: () => undefined };
 });
 
-const { DashboardScreen, activityPills, splitCount } = await import("../src/stories/screens/Dashboard.tsx");
+const { DashboardScreen, activityPills, splitCount, videosUnit } = await import("../src/stories/screens/Dashboard.tsx");
 
 const line = (kind: StoriesDashboard["activity"][number]["kind"], i: number): StoriesDashboard["activity"][number] => ({ at: new Date(Date.now() - i * 60_000).toISOString(), kind, storyId: `S${i}`, title: `Story ${i}` });
 
@@ -32,6 +32,13 @@ describe("the numerals and the pills", () => {
     expect(splitCount(214)).toEqual({ num: "214" });
     expect(splitCount(1500)).toEqual({ num: "1.5", unit: "K" });
     expect(splitCount(2_000_000)).toEqual({ num: "2", unit: "M" });
+  });
+
+  it("videosUnit: the small unit of a count of videos (one video, K videos)", () => {
+    expect(videosUnit(1)).toBe("video");
+    expect(videosUnit(0)).toBe("videos");
+    expect(videosUnit(5)).toBe("videos");
+    expect(videosUnit(1500)).toBe("K videos");
   });
 
   it("activityPills: All, then only the kinds in the list, in one fixed order; no pills for one kind", () => {
@@ -93,7 +100,12 @@ describe("the Dashboard's glass", () => {
     for (const t of tiles) expect(t.classList.contains("st-glass"), t.className).toBe(true);
     const stats = $$(".st-dash-stat");
     expect(stats).toHaveLength(3);
-    for (const s of stats) expect(s.querySelector(".st-stat__num")?.textContent).toMatch(/^\d/);
+    for (const s of stats) {
+      expect(s.querySelector(".st-stat__num")?.textContent).toMatch(/^\d/);
+      // The big numeral's small unit, and a round glass mark (never a status colour) for what it counts.
+      expect(s.querySelector(".st-stat__unit")?.textContent).toMatch(/^(\S+ )?videos?$/);
+      expect(s.querySelector(".st-dash-stat__icon")?.classList.contains("st-round-btn")).toBe(true);
+    }
     expect($$(".st-perf__item .st-stat__label").map((e) => e.textContent)).toEqual(["Views", "Likes", "Comments", "Shares"]);
     expect($(".st-tile .st-tile__big")?.textContent).toMatch(/^\d+ of 5$/);
   });
@@ -117,6 +129,18 @@ describe("the Dashboard's glass", () => {
     await act(async () => card.querySelector<HTMLLabelElement>("label")!.click());
     await settle();
     expect((await api.getWorkspace("stories")).configuration.musicOn).toBe(was);
+  });
+
+  it("has its head on a backing plate and one orange main action: the setup's way on while it is open", async () => {
+    const o = await api.getOnboarding("stories");
+    expect(o.finishedAt).toBeFalsy();
+    expect($(".st-dash > .st-dash-head.st-plate > .st-head")).not.toBeNull();
+    const mains = $$(".st-dash .st-btn--main");
+    expect(mains.map((m) => m.textContent?.trim())).toEqual(["Carry on"]);
+    expect($(".st-setupcard .st-btn--main")).not.toBeNull();
+    // Every Needs you row opens with a glass button.
+    expect($$(".st-needs-list__item a.st-btn").length).toBeGreaterThan(0);
+    expect($$(".st-needs-list .st-btn--main")).toEqual([]);
   });
 
   it("shows the setup's progress on the arc: a progress bar with its words", async () => {
