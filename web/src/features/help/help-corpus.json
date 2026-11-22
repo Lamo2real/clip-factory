@@ -1,5 +1,5 @@
 {
-  "version": "79e78fbb2d6a",
+  "version": "92c26d8edf22",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -19,8 +19,10 @@
     "src/screens/campaigns/CampaignPaste.tsx",
     "src/screens/campaigns/bits.tsx",
     "src/screens/clip/ClipFit.tsx",
+    "src/screens/clip/ClipFollowers.tsx",
     "src/screens/clip/ClipPerformance.tsx",
     "src/screens/home/CampaignsRow.tsx",
+    "src/screens/home/FollowersTile.tsx",
     "src/screens/home/Home.tsx",
     "src/screens/home/MoneyTile.tsx",
     "src/screens/home/NewJobForm.tsx",
@@ -4227,8 +4229,11 @@
         "done",
         "yet",
         "campaigns",
-        "worth",
+        "followers",
+        "set",
+        "up",
         "posting",
+        "worth",
         "ready",
         "review",
         "working",
@@ -4245,10 +4250,7 @@
         "progress",
         "many",
         "number",
-        "videos",
-        "streamers",
-        "follow",
-        "find"
+        "videos"
       ],
       "answer": "Paste a link to a stream or a video. Clip Factory finds the best moments and makes short clips. You pick the ones to upload.",
       "steps": [

@@ -1,5 +1,5 @@
 {
- "version": "6ed57b1aad85",
+ "version": "a9f7d2515359",
  "parts": [
   {
    "id": "app-map",
@@ -280,6 +280,12 @@
    "title": "CONTRACTS: 42. Post it on TikTok yourself (owner request, 2026-11-21)",
    "line": "The owner: he needs \"the real deal\", TikTok posts everyone can see, today. TikTok's API keeps every post of an",
    "chars": 14266
+  },
+  {
+   "id": "contracts-43",
+   "title": "CONTRACTS: 43. Followers and subscribers: per clip and in total (owner request, 2026-11-20)",
+   "line": "The owner's ask: see per video how many followers each posted clip brought in, on each platform it went to, and",
+   "chars": 7259
   },
   {
    "id": "contracts-44",

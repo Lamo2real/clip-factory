@@ -83,8 +83,8 @@ variable "cr_remake_enabled" {
 
 variable "cr_finder_enabled" {
   type        = bool
-  default     = false
-  description = "The campaign finder (docs/CONTRACTS.md §41, CR_FINDER on cf-prod-api, cf-prod-stats and cf-prod-campaigns). Off until P, Q, R, S and T of §41.6 have merged; then one switch PR sets it true. Set false to turn it off again (the same day if Content Rewards or Whop asks Clip Factory to stop reading): every finder route answers 503 \"Coming soon.\", the tick starts no look and the stored items stay."
+  default     = true
+  description = "The campaign finder (docs/CONTRACTS.md §41, CR_FINDER on cf-prod-api, cf-prod-stats and cf-prod-campaigns). On: P, Q, R, S and T of §41.6 have merged. Set false to turn it off again (the same day if Content Rewards or Whop asks Clip Factory to stop reading): every finder route answers 503 \"Coming soon.\", the tick starts no look and the stored items stay."
 }
 
 variable "whop_connect_enabled" {
