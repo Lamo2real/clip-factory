@@ -1,9 +1,15 @@
-/* Lamo Stories studio screens: Ideas, Characters, Production and Review (docs/CONTRACTS.md §45.16.2, §45.16.5,
-   §45.16.6). Builder G. Every selector starts with .st- or sits under .stories-app, so nothing here reaches a Lamo Clips
-   screen; the tokens are web/src/stories/styles/stories.css's --st-* ones. The owner's rules hold: the cursor never
-   changes (no cursor rules here; base.css keeps the arrow), every control has a hover state, no visible borders
-   (fills and soft shadows instead), radii from var(--r-*), no text under 0.78rem, AA contrast on the stage, nothing
-   wider than a 320 px screen, targets of 44 px (48 on phones), and phone controls at the bottom right. */
+/* Clip Factory Stories · the studio kit (Ideas, Characters, Production and Review: docs/CONTRACTS.md §45.16.2,
+   §45.16.5, §45.16.6), on the warm liquid glass (styles/GLASS-CONTRACT.md). Every selector starts with .st- or sits
+   under .stories-app, so nothing here reaches a Clip Factory screen. It uses the contract's tokens and never sets one
+   (one-offs keep this file's own --st-s- prefix, on .st-studio). The owner's rules hold: the cursor never changes
+   (no cursor rules here), every control has a hover state, no visible borders (light only: the thin glass edge),
+   radii from the --st-r-* scale (concentric), no text under the floor (--st-fs-min), every word at 4.5:1 on all three
+   backgrounds (words sit on glass that carries look.ts's veils, or on a .st-plate), nothing wider than a 320 px
+   screen, targets of 44 px (48 on phones), phone controls at the bottom right, and nothing animates a filter.
+
+   Surfaces: a panel is .st-glass (the markup adds it; :not(.st-glass) keeps a token-built fallback for a screen that
+   has not moved over). Controls on a panel: glass pills (inactive) and a solid cream pill (chosen), white knobs,
+   orange for toggles, progress and the active dot. */
 
 /* ---------- Page frame ---------- */
 .st-studio {
@@ -12,7 +18,7 @@
   gap: var(--st-s-gap);
   min-width: 0;
   max-width: 1280px;
-  color: var(--st-ink, #fff6e5);
+  color: var(--st-text);
 }
 
 .st-studio *,
@@ -33,6 +39,7 @@
   white-space: nowrap;
 }
 
+/* The page head: its words sit on a .st-plate (nothing over Ember, glass in Picture and See-through). */
 .st-s-head {
   display: flex;
   flex-wrap: wrap;
@@ -41,10 +48,24 @@
   gap: 12px 20px;
 }
 
+.st-s-head > .st-plate {
+  display: grid;
+  justify-items: start;
+  gap: var(--st-space-2);
+  max-width: 100%;
+}
+
 .st-s-head__title {
   margin: 0;
-  font: 800 clamp(1.7rem, 1.2rem + 2vw, 2.6rem) / 1.1 var(--st-font, system-ui);
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h1);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  font-optical-sizing: auto;
+  line-height: var(--st-lh-head);
   letter-spacing: -0.01em;
+  text-wrap: balance;
   overflow-wrap: anywhere;
 }
 
@@ -55,9 +76,14 @@
   gap: 8px;
   margin: 8px 0 0;
   max-width: 62ch;
-  color: var(--st-s-ink-2);
-  font-size: 1rem;
-  line-height: 1.45;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-body);
+  line-height: var(--st-lh-body);
+}
+
+.st-s-head > .st-plate .st-s-head__lede {
+  margin: 0;
 }
 
 .st-s-head__actions {
@@ -66,63 +92,145 @@
   gap: 10px;
 }
 
+/* Back: a small glass pill ("‹ Production"). */
 .st-s-back {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
-  padding: 0 4px;
-  color: var(--st-sky, #62c6ff);
-  font-weight: 700;
+  gap: var(--st-space-1);
+  min-height: var(--st-tap);
+  padding: 0 var(--st-space-4) 0 var(--st-space-3);
+  border-radius: var(--st-r-round);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.2;
   text-decoration: none;
-  border-radius: var(--r-xs);
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-s-back:hover {
-  color: var(--st-ink, #fff6e5);
-  text-decoration: underline;
+  color: var(--st-text-strong);
+  background: var(--st-fill-control-hover);
 }
 
+.st-s-back:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+/* Back with its round glass button (the produce screens): the ‹ in a round glass orb, the word beside it on the
+   head's plate. The whole link is the target; hover lights the orb. */
+.st-s-back--orb {
+  gap: var(--st-space-2);
+  padding: 0 var(--st-space-3) 0 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: var(--st-fs-small);
+}
+
+.st-s-back--orb:hover {
+  background: transparent;
+}
+
+.st-s-back__orb {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--st-tap);
+  height: var(--st-tap);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
+  color: var(--st-text-strong);
+  font-family: var(--st-font-caps);
+  font-size: 1.625rem;
+  font-weight: 500;
+  line-height: 1;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-s-back--orb:hover .st-s-back__orb {
+  background: var(--st-fill-control-hover);
+  box-shadow: var(--st-sheen-control), var(--st-depth-2);
+}
+
+/* A section title loose on the page (it sits on a .st-plate in the markup, hugging its words). */
 .st-s-section {
   margin: 8px 0 0;
-  font: 800 1.25rem / 1.2 var(--st-font, system-ui);
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-optical-sizing: auto;
+  line-height: 1.2;
 }
 
-.st-studio a:not(.st-btn):not(.st-s-back):not(.st-s-cast__card):not(.st-s-qcard):not(.st-s-run__title):not(.st-s-run__cover),
-.st-s-sheet a:not(.st-btn) {
-  color: var(--st-sky, #62c6ff);
-  font-weight: 700;
+.st-s-section.st-plate {
+  width: fit-content;
+  max-width: 100%;
 }
 
-.st-studio a:not(.st-btn):not(.st-s-back):not(.st-s-cast__card):not(.st-s-qcard):not(.st-s-run__title):not(.st-s-run__cover):hover,
-.st-s-sheet a:not(.st-btn):hover {
-  color: var(--st-ink, #fff6e5);
+/* A section's title and what follows it inside one section (Review's queue groups; the page's own grid spaces the rest). */
+:not(.st-studio) > .st-s-section + :is(.st-s-queue, .st-s-runs, .st-s-notice, .st-s-busy, .st-s-field__hint) {
+  margin-top: 12px;
 }
 
-/* ---------- Buttons (on top of the shell's .st-btn) ---------- */
+/* Links in words: warm amber, underlined (the bright orange is never a text colour). */
+.st-studio a:not(.st-btn):not(.st-s-back):not(.st-s-cast__card):not(.st-s-qcard):not(.st-s-run__title):not(.st-s-run__cover):not(.st-pill),
+.st-s-sheet a:not(.st-btn):not(.st-pill) {
+  color: var(--st-text-amber);
+  font-weight: var(--st-weight-ui);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+  transition: color var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-studio a:not(.st-btn):not(.st-s-back):not(.st-s-cast__card):not(.st-s-qcard):not(.st-s-run__title):not(.st-s-run__cover):not(.st-pill):hover,
+.st-s-sheet a:not(.st-btn):not(.st-pill):hover {
+  color: var(--st-text-strong);
+}
+
+/* ---------- Buttons (on top of the shell's .st-btn): radius control, glass, the one main action warm orange ---------- */
 .st-studio .st-btn,
 .st-s-sheet .st-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 44px;
-  min-width: 44px;
+  min-height: var(--st-tap);
+  min-width: var(--st-tap);
   padding: 0 18px;
+  border-radius: var(--st-r-control);
+  font-family: var(--st-font);
+  font-weight: var(--st-weight-ui);
   text-align: center;
   text-decoration: none;
   line-height: 1.15;
   white-space: normal;
 }
 
+.st-studio .st-btn:focus-visible,
+.st-s-sheet .st-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
 .st-s-small {
   padding: 0 14px;
-  font-size: 0.92rem;
+  font-size: var(--st-fs-small);
 }
 
 .st-s-big {
-  min-height: 56px;
+  min-height: var(--st-tap-main);
   padding: 0 28px;
-  font-size: 1.12rem;
+  font-size: 1.125rem;
 }
 
 .st-s-quiet {
@@ -131,16 +239,18 @@
 }
 
 .st-s-quiet:hover {
-  background: var(--st-s-fill-2);
+  background: var(--st-fill-control-hover);
 }
 
 .st-s-danger {
-  color: #1c1842;
-  background: var(--st-coral, #ff6f61);
+  color: var(--st-on-cream);
+  background: var(--st-coral);
+  box-shadow: var(--st-depth-1);
 }
 
 .st-s-danger:hover {
-  background: #ff8a7f;
+  color: var(--st-on-cream);
+  background: color-mix(in srgb, var(--st-coral) 78%, var(--st-cream));
 }
 
 /* Switched off: still readable (AA), just quieter; the tap plays the deny sound. */
@@ -148,42 +258,55 @@
 .st-s-sheet .st-btn[aria-disabled="true"] {
   opacity: 1;
   transform: none;
-  color: rgba(255, 246, 229, 0.8);
-  background: rgba(255, 246, 229, 0.1);
+  color: var(--st-text-soft);
+  background: var(--st-fill-control);
+  box-shadow: none;
 }
 
 .st-studio .st-btn--main[aria-disabled="true"],
 .st-s-sheet .st-btn--main[aria-disabled="true"] {
-  color: #fff6e5;
-  background: rgba(255, 201, 74, 0.26);
+  color: var(--st-text-strong);
+  background: linear-gradient(rgb(var(--st-action-rgb) / 0.3), rgb(var(--st-action-rgb) / 0.3)), var(--st-fill-well);
 }
 
+/* A button that is on (a picked face): the solid cream with espresso words. */
 .st-btn[aria-pressed="true"] {
-  color: #1c1842;
-  background: var(--st-sky, #62c6ff);
+  color: var(--st-on-cream);
+  background: var(--st-cream);
+  box-shadow: var(--st-depth-1);
 }
 
 .st-btn[aria-pressed="true"]:hover {
-  background: #8dd6ff;
+  color: var(--st-on-cream);
+  background: var(--st-cream-hover);
 }
 
+/* A round icon button (a sheet's ×, a picture's remove): the round glass button's size; .st-round-btn gives the look. */
 .st-s-iconbtn {
   display: inline-grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: var(--st-tap);
+  height: var(--st-tap);
   padding: 0;
   border: 0;
-  border-radius: var(--r-pill);
-  font: 700 1.5rem / 1 var(--st-font, system-ui);
-  color: var(--st-ink, #fff6e5);
-  background: var(--st-s-fill-2);
-  transition: background-color 160ms ease, transform 160ms ease;
+  border-radius: var(--st-r-round);
+  font: var(--st-weight-ui) 1.75rem / 1 var(--st-font);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-s-iconbtn:hover {
-  background: var(--st-s-fill-3);
-  transform: scale(1.06);
+  color: var(--st-text-strong);
+  background: var(--st-fill-control-hover);
+}
+
+.st-s-iconbtn:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
 }
 
 /* ---------- Panels, notices, tags ---------- */
@@ -192,10 +315,16 @@
 .st-s-drafts {
   display: grid;
   gap: 14px;
-  padding: clamp(14px, 0.8rem + 1vw, 22px);
-  border-radius: var(--r-lg);
-  background: var(--st-s-fill);
-  box-shadow: var(--st-s-soft);
+  padding: var(--st-inset);
+  border-radius: var(--st-r-surface);
+}
+
+/* A panel a screen has not moved onto .st-glass yet: the same recipe, from the tokens. */
+:is(.st-s-panel, .st-s-drafts):not(.st-glass) {
+  background: var(--st-tint-card);
+  -webkit-backdrop-filter: var(--st-filter-glass);
+  backdrop-filter: var(--st-filter-glass);
+  box-shadow: var(--st-sheen), var(--st-depth-1), var(--st-glow-behind);
 }
 
 .st-s-editor-box {
@@ -210,48 +339,74 @@
   align-items: center;
   gap: 10px;
   margin: 0;
-  font: 800 1.2rem / 1.2 var(--st-font, system-ui);
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-optical-sizing: auto;
+  line-height: 1.2;
 }
 
 .st-s-panel__hint {
-  color: var(--st-s-ink-2);
-  font-weight: 600;
-  font-size: 0.95rem;
+  color: var(--st-text-soft);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-body);
 }
 
+/* A step's number: a small cream round with an espresso numeral. */
 .st-s-num {
   display: inline-grid;
   place-items: center;
+  flex: none;
   width: 32px;
   height: 32px;
-  border-radius: var(--r-pill);
-  color: #1c1842;
-  background: var(--st-sun, #ffc94a);
-  font-weight: 800;
+  border-radius: var(--st-r-round);
+  color: var(--st-on-cream);
+  background: var(--st-cream);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
+/* A notice: a colour-tinted glass tile (the colour cut to --st-tint-cut over the tinted veil, so its words stay at
+   4.5:1 over anything, loose on the page or on a panel). */
 .st-s-notice {
+  --st-s-tone: var(--st-sky-rgb);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px 14px;
   padding: 14px 16px;
-  border-radius: var(--r-md);
-  line-height: 1.45;
-  background: rgba(98, 198, 255, 0.16);
+  border-radius: var(--st-r-control);
+  color: var(--st-text);
+  line-height: var(--st-lh-body);
+  background:
+    linear-gradient(rgb(var(--st-s-tone) / var(--st-tint-cut)), rgb(var(--st-s-tone) / var(--st-tint-cut))),
+    rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
+  box-shadow: var(--st-sheen-control);
 }
 
 .st-s-notice--bad {
-  background: rgba(255, 111, 97, 0.2);
+  --st-s-tone: var(--st-coral-rgb);
 }
 
 .st-s-notice--good {
-  background: rgba(71, 214, 160, 0.18);
+  --st-s-tone: var(--st-mint-rgb);
 }
 
 .st-s-notice__text {
   flex: 1 1 220px;
+}
+
+.st-s-notice__text strong {
+  color: var(--st-text-strong);
+}
+
+.st-s-notice--bad .st-s-notice__text strong {
+  color: var(--st-coral-ink);
 }
 
 .st-s-notice__action {
@@ -269,39 +424,44 @@
 .st-s-topics {
   display: block;
   margin-top: 8px;
-  color: var(--st-s-ink-2);
+  color: var(--st-text-soft);
 }
 
+/* A status word: a small solid pill (espresso words on a status fill), or glass for a plain one. */
 .st-s-tag {
   display: inline-flex;
   align-items: center;
   min-height: 28px;
   padding: 3px 12px;
-  border-radius: var(--r-pill);
-  font: 800 0.82rem / 1.2 var(--st-font, system-ui);
-  color: #1c1842;
-  background: var(--st-s-fill-3);
+  border-radius: var(--st-r-round);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.2;
+  color: var(--st-on-cream);
+  background: var(--st-cream);
 }
 
 .st-s-tag--plain {
-  color: var(--st-ink, #fff6e5);
-  background: var(--st-s-fill-2);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
 }
 
 .st-s-tag--sun {
-  background: var(--st-sun, #ffc94a);
+  background: var(--st-action);
 }
 
 .st-s-tag--coral {
-  background: var(--st-coral, #ff6f61);
+  background: var(--st-coral);
 }
 
 .st-s-tag--mint {
-  background: var(--st-mint, #47d6a0);
+  background: var(--st-mint);
 }
 
 .st-s-tag--sky {
-  background: var(--st-sky, #62c6ff);
+  background: var(--st-sky);
 }
 
 .st-s-busy {
@@ -309,16 +469,21 @@
   align-items: center;
   gap: 12px;
   margin: 0;
-  color: var(--st-s-ink-2);
-  font-weight: 700;
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
+}
+
+.st-s-busy.st-plate {
+  width: fit-content;
+  max-width: 100%;
 }
 
 .st-s-busy__dot {
   width: 22px;
   height: 22px;
   flex: 0 0 22px;
-  border-radius: var(--r-pill);
-  background: conic-gradient(var(--st-sun, #ffc94a) 0 70%, transparent 70% 100%);
+  border-radius: var(--st-r-round);
+  background: conic-gradient(var(--st-accent) 0 70%, rgb(var(--st-cream-rgb) / 0.18) 70% 100%);
   mask: radial-gradient(circle, transparent 6px, #000 7px);
   animation: st-s-spin 900ms linear infinite;
 }
@@ -329,7 +494,7 @@
   }
 }
 
-/* ---------- Fields ---------- */
+/* ---------- Fields: a deep well (radius control) ---------- */
 .st-s-field {
   display: grid;
   gap: 6px;
@@ -337,29 +502,36 @@
 }
 
 .st-s-field__label {
-  font-weight: 800;
-  font-size: 0.98rem;
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
+  font-size: var(--st-fs-body);
 }
 
 .st-s-field__hint {
   margin: 0;
-  color: var(--st-s-ink-2);
-  font-size: 0.92rem;
-  line-height: 1.45;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  line-height: var(--st-lh-body);
+}
+
+.st-s-field__hint.st-plate {
+  width: fit-content;
+  max-width: 100%;
 }
 
 .st-s-field__count {
   justify-self: end;
-  color: var(--st-s-ink-2);
-  font-size: 0.85rem;
-  font-weight: 700;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 .st-s-field__count.is-over,
 .st-s-field__problem {
-  color: #ffb4ab;
-  font-weight: 800;
-  font-size: 0.92rem;
+  color: var(--st-coral-ink);
+  font-weight: var(--st-weight-ui);
+  font-size: var(--st-fs-small);
 }
 
 .st-s-input {
@@ -367,20 +539,37 @@
   min-height: 48px;
   padding: 12px 14px;
   border: 0;
-  border-radius: var(--r-sm);
-  font: 600 1rem / 1.4 var(--st-font, system-ui);
-  color: var(--st-ink, #fff6e5);
-  background: rgba(255, 246, 229, 0.11);
-  box-shadow: inset 0 2px 10px rgba(8, 6, 30, 0.35);
-  transition: background-color 160ms ease;
+  border-radius: var(--st-r-control);
+  font: var(--st-weight-body) var(--st-fs-body) / 1.4 var(--st-font);
+  color: var(--st-text-strong);
+  background: var(--st-fill-well);
+  box-shadow: inset 0 2px 10px -2px rgb(var(--st-shadow-rgb) / 0.55);
+  caret-color: var(--st-accent);
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-s-input:hover {
-  background: rgba(255, 246, 229, 0.16);
+  background: var(--st-fill-well-hover);
+}
+
+.st-s-input:focus-visible {
+  outline: none;
+  background: var(--st-fill-well-hover);
+  box-shadow:
+    inset 0 2px 10px -2px rgb(var(--st-shadow-rgb) / 0.55),
+    var(--st-focus-ring);
 }
 
 .st-s-input::placeholder {
-  color: rgba(255, 246, 229, 0.62);
+  color: var(--st-text-muted);
+  opacity: 1;
+}
+
+.st-s-input::selection {
+  color: var(--st-on-accent);
+  background: var(--st-accent);
 }
 
 .st-s-input--area {
@@ -389,17 +578,18 @@
 }
 
 .st-s-field.is-bad .st-s-input {
-  background: rgba(255, 111, 97, 0.18);
+  background: linear-gradient(rgb(var(--st-coral-rgb) / 0.16), rgb(var(--st-coral-rgb) / 0.16)), var(--st-fill-well);
 }
 
+/* A group of fields (a fieldset): a shallow well inside the panel. */
 .st-s-group {
   display: grid;
   gap: 14px;
   margin: 0;
   padding: 16px;
   border: 0;
-  border-radius: var(--r-md);
-  background: rgba(255, 246, 229, 0.05);
+  border-radius: var(--st-r-control);
+  background: rgb(var(--st-well-rgb) / 0.24);
 }
 
 .st-s-group__title {
@@ -407,15 +597,20 @@
   width: 100%;
   margin: 0 0 4px;
   padding: 0;
-  font: 800 1.05rem / 1.2 var(--st-font, system-ui);
-  color: var(--st-sun, #ffc94a);
+  color: var(--st-text-amber);
+  font-family: var(--st-font);
+  font-size: 1.0625rem;
+  font-weight: var(--st-weight-display);
+  line-height: 1.2;
 }
 
 .st-s-group__title + * {
   clear: both;
 }
 
-/* ---------- Pick-one bars (on <Glide>) ---------- */
+/* ---------- Pick-one bars (on <Glide>): glass pills, the chosen one a solid cream pill with espresso words ----------
+   The pills are free-standing glass (no track to wrap round them), so a bar that wraps on a phone stays tidy; each
+   pill carries its own veil in Picture and See-through. The cream highlight slides between them. */
 .st-s-pick {
   position: relative;
   isolation: isolate;
@@ -423,16 +618,15 @@
   flex-wrap: wrap;
   width: fit-content;
   max-width: 100%;
-  gap: 6px;
-  padding: 5px;
-  border-radius: var(--r-lg);
-  background: rgba(255, 246, 229, 0.07);
+  gap: var(--st-space-2);
+  padding: 0;
+  border-radius: var(--st-r-round);
 }
 
 .st-s-pick > .glide {
-  border-radius: var(--r-pill);
-  background: var(--st-sun, #ffc94a);
-  box-shadow: 0 6px 18px rgba(255, 201, 74, 0.35);
+  border-radius: var(--st-r-round);
+  background: var(--st-cream);
+  box-shadow: var(--st-depth-1), var(--st-glow-behind);
 }
 
 .st-s-pick__opt {
@@ -441,30 +635,43 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 8px 16px;
-  border-radius: var(--r-pill);
-  font-weight: 800;
-  color: var(--st-ink, #fff6e5);
-  transition: color 300ms ease, background-color 200ms ease, transform 200ms ease;
+  min-height: var(--st-tap);
+  padding: 8px 18px;
+  border-radius: var(--st-r-round);
+  font-weight: var(--st-weight-ui);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  transition:
+    color var(--st-dur-glide) var(--st-ease-out),
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-s-pick__opt:hover {
-  background: var(--st-s-fill-2);
+  color: var(--st-text-strong);
+  background: var(--st-fill-control-hover);
 }
 
 .st-s-pick__opt.is-on {
-  color: #1c1842;
-  background: var(--st-sun, #ffc94a);
+  color: var(--st-on-cream);
+  background: var(--st-cream);
+  box-shadow: var(--st-depth-1);
+}
+
+.st-s-pick__opt.is-on:hover {
+  color: var(--st-on-cream);
+  background: var(--st-cream-hover);
 }
 
 .st-s-pick.has-glide > .st-s-pick__opt.is-on {
   background: transparent;
+  box-shadow: none;
 }
 
-/* The keyboard's place: a soft sky glow (no outline edge). */
+/* The keyboard's place: the cream and orange focus ring (light, no outline). */
 .st-s-pick__opt:has(input:focus-visible) {
-  box-shadow: 0 0 14px 3px rgba(98, 198, 255, 0.95);
+  box-shadow: var(--st-focus-ring);
 }
 
 .st-s-pick__text {
@@ -473,38 +680,44 @@
 }
 
 .st-s-pick__line {
-  font-weight: 600;
-  font-size: 0.9rem;
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-body);
+  font-size: var(--st-fs-small);
   line-height: 1.35;
-  opacity: 0.92;
 }
 
+.st-s-pick__opt.is-on .st-s-pick__line {
+  color: var(--st-on-cream-soft);
+}
+
+/* Big picks: option cards (radius control) in a grid; the chosen one solid cream. */
 .st-s-pick--big {
   display: grid;
   width: auto;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
   gap: 8px;
-  padding: 6px;
+  padding: 0;
+  border-radius: var(--st-r-control);
 }
 
 .st-s-pick--big > .glide {
-  border-radius: var(--r-md);
+  border-radius: var(--st-r-control);
 }
 
 .st-s-pick--big .st-s-pick__opt {
   align-items: flex-start;
   min-height: 76px;
   padding: 14px 16px;
-  border-radius: var(--r-md);
-  background: rgba(255, 246, 229, 0.06);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
 }
 
 .st-s-pick--big .st-s-pick__opt:hover {
-  background: var(--st-s-fill-2);
+  background: var(--st-fill-control-hover);
 }
 
 .st-s-pick--big .st-s-pick__opt.is-on {
-  background: var(--st-sun, #ffc94a);
+  background: var(--st-cream);
 }
 
 .st-s-pick.st-s-pick--big.has-glide > .st-s-pick__opt.is-on {
@@ -512,7 +725,7 @@
 }
 
 .st-s-pick__label {
-  font-size: 1.02rem;
+  font-size: var(--st-fs-body);
   overflow-wrap: anywhere;
 }
 
@@ -528,7 +741,7 @@
   overflow: hidden;
 }
 
-/* ---------- Swatches ---------- */
+/* ---------- Swatches: the chosen colour sits in a cream ring ---------- */
 .st-s-swatches {
   position: relative;
   isolation: isolate;
@@ -538,9 +751,9 @@
 }
 
 .st-s-swatches > .glide {
-  border-radius: var(--r-pill);
-  background: var(--st-sun, #ffc94a);
-  box-shadow: 0 0 18px rgba(255, 201, 74, 0.55);
+  border-radius: var(--st-r-round);
+  background: var(--st-cream);
+  box-shadow: var(--st-depth-1), var(--st-glow-behind);
 }
 
 .st-s-swatch {
@@ -550,17 +763,19 @@
   place-items: center;
   width: 46px;
   height: 46px;
-  border-radius: var(--r-pill);
-  transition: transform 160ms ease, background-color 160ms ease;
+  border-radius: var(--st-r-round);
+  transition:
+    transform var(--st-dur-hover) var(--st-ease-out),
+    background-color var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-s-swatch:hover {
-  background: var(--st-s-fill-2);
-  transform: scale(1.08);
+  background: var(--st-fill-control-hover);
+  transform: scale(1.06);
 }
 
 .st-s-swatch.is-on {
-  background: var(--st-sun, #ffc94a);
+  background: var(--st-cream);
 }
 
 .st-s-swatches.has-glide > .st-s-swatch.is-on {
@@ -568,17 +783,17 @@
 }
 
 .st-s-swatch:has(input:focus-visible) {
-  box-shadow: 0 0 14px 3px rgba(98, 198, 255, 0.95);
+  box-shadow: var(--st-focus-ring);
 }
 
 .st-s-swatch__dot {
   width: 30px;
   height: 30px;
-  border-radius: var(--r-pill);
-  box-shadow: 0 3px 10px rgba(8, 6, 30, 0.5);
+  border-radius: var(--st-r-round);
+  box-shadow: 0 3px 10px rgb(var(--st-shadow-rgb) / 0.5);
 }
 
-/* ---------- Switches, sliders, chips ---------- */
+/* ---------- Switches (the orange toggle, .st-toggle), sliders (a white knob on an orange fill), chips ---------- */
 .st-s-switch-row {
   display: flex;
   align-items: center;
@@ -592,64 +807,23 @@
 }
 
 .st-s-switch-row__label {
-  font-weight: 800;
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-switch-row__line {
-  color: var(--st-s-ink-2);
-  font-size: 0.92rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
 }
 
+/* The switch is the contract's .st-toggle (orange track and white knob when on); this keeps it in its row. */
 .st-s-switch {
-  position: relative;
   flex: 0 0 auto;
-  width: 60px;
-  height: 44px;
-  padding: 0;
   border: 0;
-  border-radius: var(--r-pill);
-  background: transparent;
+  border-radius: var(--st-r-round);
 }
 
-.st-s-switch::before {
-  content: "";
-  position: absolute;
-  inset: 6px 0;
-  border-radius: var(--r-pill);
-  background: rgba(255, 246, 229, 0.24);
-  transition: background-color 200ms ease;
-}
-
-.st-s-switch:hover::before {
-  background: rgba(255, 246, 229, 0.34);
-}
-
-.st-s-switch[aria-checked="true"]::before {
-  background: var(--st-mint, #47d6a0);
-}
-
-.st-s-switch[aria-checked="true"]:hover::before {
-  background: #6ee3b8;
-}
-
-.st-s-switch__thumb {
-  position: absolute;
-  top: 10px;
-  left: 4px;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--r-pill);
-  background: #fff6e5;
-  box-shadow: 0 3px 8px rgba(8, 6, 30, 0.45);
-  transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.st-s-switch[aria-checked="true"] .st-s-switch__thumb {
-  transform: translateX(28px);
-}
-
-.st-s-switch[aria-disabled="true"] {
-  opacity: 0.6;
+.st-s-switch[aria-disabled="true"] .st-toggle__track {
+  opacity: 0.72;
 }
 
 .st-s-slider__top {
@@ -661,8 +835,40 @@
 }
 
 .st-s-slider__value {
-  color: var(--st-sun, #ffc94a);
-  font-weight: 800;
+  color: var(--st-text-amber);
+  font-weight: var(--st-weight-ui);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* With the contract's Stepper (a new video's length): the words between the white − and + squares, at the right;
+   on a narrow phone they wrap under the label and the words wrap between the squares. */
+.st-s-slider__top:has(.st-s-slider__stepper) {
+  align-items: center;
+}
+
+.st-s-slider__stepper.st-stepper {
+  max-width: 100%;
+  margin-inline-start: auto;
+  gap: var(--st-space-2);
+}
+
+/* The − and + in Jost, sturdy and centred (Playfair's are hairline at this size). */
+.st-s-slider__stepper .st-stepper__btn {
+  flex: none;
+  font-family: var(--st-font-caps);
+  font-size: 1.625rem;
+  font-weight: 500;
+}
+
+.st-s-slider__stepper .st-stepper__value {
+  flex: 0 1 auto;
+  width: 9.5em;
+  min-width: 0;
+  color: var(--st-text-amber);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .st-s-slider__track {
@@ -670,18 +876,21 @@
   display: block;
 }
 
+/* The best part of the track (30 to 60 seconds): a soft mint band. */
 .st-s-slider__mark {
   position: absolute;
   top: 50%;
-  height: 12px;
-  margin-top: -6px;
-  border-radius: var(--r-pill);
-  background: rgba(71, 214, 160, 0.42);
+  height: 14px;
+  margin-top: -7px;
+  border-radius: var(--st-r-round);
+  background: rgb(var(--st-mint-rgb) / 0.34);
   pointer-events: none;
 }
 
 .st-s-range {
+  --st-s-at: 50%;
   position: relative;
+  display: block;
   width: 100%;
   height: 44px;
   margin: 0;
@@ -692,14 +901,20 @@
 
 .st-s-range::-webkit-slider-runnable-track {
   height: 8px;
-  border-radius: var(--r-pill);
-  background: rgba(255, 246, 229, 0.22);
+  border-radius: var(--st-r-round);
+  background: linear-gradient(90deg, var(--st-action-top), var(--st-accent)) 0 0 / var(--st-s-at) 100% no-repeat, var(--st-track);
 }
 
 .st-s-range::-moz-range-track {
   height: 8px;
-  border-radius: var(--r-pill);
-  background: rgba(255, 246, 229, 0.22);
+  border-radius: var(--st-r-round);
+  background: var(--st-track);
+}
+
+.st-s-range::-moz-range-progress {
+  height: 8px;
+  border-radius: var(--st-r-round);
+  background: var(--st-accent);
 }
 
 .st-s-range::-webkit-slider-thumb {
@@ -707,21 +922,21 @@
   height: 28px;
   margin-top: -10px;
   border: 0;
-  border-radius: var(--r-pill);
-  background: var(--st-sun, #ffc94a);
-  box-shadow: 0 4px 12px rgba(8, 6, 30, 0.5);
+  border-radius: var(--st-r-round);
+  background: var(--st-knob);
+  box-shadow: var(--st-glow-accent), var(--st-depth-1);
   appearance: none;
   -webkit-appearance: none;
-  transition: transform 160ms ease;
+  transition: transform var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-s-range::-moz-range-thumb {
   width: 28px;
   height: 28px;
   border: 0;
-  border-radius: var(--r-pill);
-  background: var(--st-sun, #ffc94a);
-  box-shadow: 0 4px 12px rgba(8, 6, 30, 0.5);
+  border-radius: var(--st-r-round);
+  background: var(--st-knob);
+  box-shadow: var(--st-glow-accent), var(--st-depth-1);
 }
 
 .st-s-range:hover::-webkit-slider-thumb {
@@ -730,6 +945,18 @@
 
 .st-s-range:hover::-moz-range-thumb {
   transform: scale(1.12);
+}
+
+.st-s-range:focus-visible {
+  outline: none;
+}
+
+.st-s-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: var(--st-focus-ring);
+}
+
+.st-s-range:focus-visible::-moz-range-thumb {
+  box-shadow: var(--st-focus-ring);
 }
 
 .st-s-chips {
@@ -741,58 +968,83 @@
   list-style: none;
 }
 
+/* A chip that turns on and off: a glass pill, solid cream when on (the contract's .st-pill gives the look). */
 .st-s-chipbtn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 44px;
+  min-height: var(--st-tap);
   padding: 0 14px;
   border: 0;
-  border-radius: var(--r-pill);
-  font: 700 0.95rem / 1.15 var(--st-font, system-ui);
-  color: var(--st-ink, #fff6e5);
-  background: var(--st-s-fill-2);
-  transition: background-color 160ms ease, transform 160ms ease;
+  border-radius: var(--st-r-round);
+  font: var(--st-weight-ui) var(--st-fs-small) / 1.15 var(--st-font);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-s-chipbtn:hover {
-  background: var(--st-s-fill-3);
-  transform: translateY(-1px);
+  color: var(--st-text-strong);
+  background: var(--st-fill-control-hover);
 }
 
 .st-s-chipbtn.is-on {
-  color: #1c1842;
-  background: var(--st-mint, #47d6a0);
+  color: var(--st-on-cream);
+  background: var(--st-cream);
+  box-shadow: var(--st-depth-1);
 }
 
 .st-s-chipbtn.is-on:hover {
-  background: #6ee3b8;
+  color: var(--st-on-cream);
+  background: var(--st-cream-hover);
 }
 
 .st-s-chipbtn[aria-disabled="true"] {
-  opacity: 0.7;
+  opacity: 0.86;
+}
+
+.st-s-chipbtn:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
 }
 
 .st-s-chipbtn__tick {
-  font-weight: 900;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--st-r-round);
+  color: var(--st-text);
+  background: rgb(var(--st-cream-rgb) / 0.14);
+  font-weight: var(--st-weight-ui);
+  line-height: 1;
+}
+
+.st-s-chipbtn.is-on .st-s-chipbtn__tick {
+  color: var(--st-on-accent);
+  background: var(--st-accent);
 }
 
 /* ---------- Progress and the step track ---------- */
 .st-s-progress {
   display: block;
-  height: 10px;
+  height: 8px;
   overflow: hidden;
-  border-radius: var(--r-pill);
-  background: rgba(255, 246, 229, 0.14);
+  border-radius: var(--st-r-round);
+  background: var(--st-track);
 }
 
 .st-s-progress__fill {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--st-sun, #ffc94a), var(--st-coral, #ff6f61));
+  background: linear-gradient(90deg, var(--st-action-top), var(--st-accent));
+  box-shadow: var(--st-glow-accent);
   /* Eased: slow at the start and the end, fast in the middle. */
-  transition: width 900ms cubic-bezier(0.65, 0, 0.35, 1);
+  transition: width var(--st-dur-progress) var(--st-ease-progress);
 }
 
 .st-s-track {
@@ -800,25 +1052,50 @@
   gap: 12px;
 }
 
+/* The eight steps always fill whole rows: 1, 2, 4 or 8 a row by the track's own width (never 7 and 1 alone). */
+.st-s-track:not(.st-s-track--compact) {
+  container-type: inline-size;
+}
+
 .st-s-track__steps {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 128px), 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+@container (min-width: 280px) {
+  .st-s-track__steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 600px) {
+  .st-s-track__steps {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 1180px) {
+  .st-s-track__steps {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+}
+
+/* A step: a small glass tile (radius control) with its round mark. */
 .st-s-track__step {
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 4px 8px;
   padding: 10px;
-  border-radius: var(--r-sm);
-  background: rgba(255, 246, 229, 0.06);
-  font-weight: 700;
-  font-size: 0.92rem;
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  font-weight: var(--st-weight-ui);
+  font-size: var(--st-fs-small);
   line-height: 1.25;
 }
 
@@ -827,62 +1104,66 @@
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: var(--r-pill);
-  font-weight: 900;
-  font-size: 0.85rem;
-  color: var(--st-ink, #fff6e5);
-  background: rgba(255, 246, 229, 0.16);
+  border-radius: var(--st-r-round);
+  font-weight: var(--st-weight-ui);
+  font-size: var(--st-fs-chip);
+  font-variant-numeric: lining-nums tabular-nums;
+  color: var(--st-text);
+  background: rgb(var(--st-cream-rgb) / 0.16);
 }
 
 .st-s-track__step.is-done .st-s-track__dot {
-  color: #1c1842;
-  background: var(--st-mint, #47d6a0);
+  color: var(--st-on-cream);
+  background: var(--st-mint);
 }
 
+/* The step working now: the orange active dot with its glow, on a warmer tile. */
 .st-s-track__step.is-running {
-  background: rgba(98, 198, 255, 0.18);
+  background: linear-gradient(rgb(var(--st-accent-rgb) / 0.16), rgb(var(--st-accent-rgb) / 0.16)), var(--st-fill-control);
 }
 
 .st-s-track__step.is-running .st-s-track__dot {
-  background: var(--st-sky, #62c6ff);
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
 }
 
 .st-s-track__step.is-failed {
-  background: rgba(255, 111, 97, 0.2);
+  background: linear-gradient(rgb(var(--st-coral-rgb) / 0.2), rgb(var(--st-coral-rgb) / 0.2)), var(--st-fill-control);
 }
 
 .st-s-track__step.is-failed .st-s-track__dot {
-  color: #1c1842;
-  background: var(--st-coral, #ff6f61);
+  color: var(--st-on-cream);
+  background: var(--st-coral);
 }
 
 .st-s-track__spin {
   width: 14px;
   height: 14px;
-  border-radius: var(--r-pill);
-  background: conic-gradient(#1c1842 0 70%, transparent 70% 100%);
+  border-radius: var(--st-r-round);
+  background: conic-gradient(var(--st-on-accent) 0 70%, transparent 70% 100%);
   mask: radial-gradient(circle, transparent 3px, #000 4px);
   animation: st-s-spin 900ms linear infinite;
 }
 
 .st-s-track__msg {
   grid-column: 2;
-  color: var(--st-s-ink-2);
-  font-size: 0.85rem;
-  font-weight: 600;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-body);
 }
 
 .st-s-track__msg.is-bad {
-  color: #ffb4ab;
+  color: var(--st-coral-ink);
 }
 
 .st-s-track__now {
   margin: 0;
-  font-weight: 700;
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-track__now.is-bad {
-  color: #ffb4ab;
+  color: var(--st-coral-ink);
 }
 
 .st-s-track--compact .st-s-track__steps {
@@ -895,34 +1176,45 @@
   display: block;
   padding: 0;
   background: transparent;
+  box-shadow: none;
 }
 
 .st-s-track--compact .st-s-track__dot {
   width: 24px;
   height: 24px;
-  font-size: 0.78rem;
+  font-size: var(--st-fs-min);
 }
 
-/* ---------- Empty states ---------- */
+/* ---------- Empty states: a glass card with a warm light in it ---------- */
 .st-s-empty {
   display: grid;
   justify-items: center;
   gap: 10px;
   padding: 28px 18px;
   text-align: center;
-  border-radius: var(--r-lg);
-  background: radial-gradient(circle at 50% 30%, rgba(255, 201, 74, 0.14), transparent 60%), var(--st-s-fill);
+  border-radius: var(--st-r-surface);
+}
+
+.st-s-empty:not(.st-glass) {
+  background: radial-gradient(circle at 50% 22%, rgb(var(--st-amber-rgb) / 0.16), transparent 60%), var(--st-tint-card);
+  -webkit-backdrop-filter: var(--st-filter-glass);
+  backdrop-filter: var(--st-filter-glass);
+  box-shadow: var(--st-sheen), var(--st-depth-1), var(--st-glow-behind);
 }
 
 .st-s-empty__title {
   margin: 0;
-  font: 800 1.3rem / 1.2 var(--st-font, system-ui);
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  line-height: 1.2;
 }
 
 .st-s-empty__text {
   margin: 0;
   max-width: 44ch;
-  color: var(--st-s-ink-2);
+  color: var(--st-text-soft);
 }
 
 .st-s-empty__bulb {
@@ -935,9 +1227,9 @@
   content: "";
   position: absolute;
   inset: 0 6px 22px;
-  border-radius: var(--r-pill);
-  background: var(--st-sun, #ffc94a);
-  box-shadow: 0 0 40px rgba(255, 201, 74, 0.6);
+  border-radius: var(--st-r-round);
+  background: radial-gradient(circle at 40% 35%, var(--st-cream), var(--st-action) 70%);
+  box-shadow: 0 0 40px rgb(var(--st-amber-rgb) / 0.6);
 }
 
 .st-s-empty__bulb::after {
@@ -947,17 +1239,17 @@
   right: 20px;
   bottom: 4px;
   height: 18px;
-  border-radius: var(--r-xs);
-  background: var(--st-sky, #62c6ff);
+  border-radius: var(--st-r-tiny);
+  background: var(--st-cream-2);
 }
 
 .st-s-empty__film {
   width: 96px;
   height: 64px;
-  border-radius: var(--r-sm);
+  border-radius: var(--st-r-inner);
   background:
-    radial-gradient(circle, #1c1842 4px, transparent 5px) 0 4px / 16px 14px repeat-x,
-    radial-gradient(circle, #1c1842 4px, transparent 5px) 0 calc(100% - 4px) / 16px 14px repeat-x,
-    var(--st-coral, #ff6f61);
-  box-shadow: 0 0 34px rgba(255, 111, 97, 0.45);
+    radial-gradient(circle, var(--st-base) 4px, transparent 5px) 0 4px / 16px 14px repeat-x,
+    radial-gradient(circle, var(--st-base) 4px, transparent 5px) 0 calc(100% - 4px) / 16px 14px repeat-x,
+    linear-gradient(160deg, var(--st-action-top), var(--st-accent));
+  box-shadow: 0 0 34px rgb(var(--st-accent-rgb) / 0.45);
 }

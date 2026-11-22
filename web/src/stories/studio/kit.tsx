@@ -1,13 +1,16 @@
 // The studio screens' small building blocks (docs/CONTRACTS.md §45.16.2): pick-one bars on <Glide> (the owner's
 // sliding highlight), colour swatches, fields with counters, switches, sliders, chips, a modal sheet and the eased
-// progress bar. Styled by web/src/stories/styles/studio.css. Sounds come from the app's global click handler: a
-// switched-off control carries aria-disabled (so it plays the deny sound) and ignores the tap.
-import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+// progress bar. Styled by web/src/stories/styles/studio.css on the warm liquid glass (styles/GLASS-CONTRACT.md: the
+// switch is the contract's orange .st-toggle, a sheet is hero float glass, its × a round glass button). Sounds come
+// from the app's global click handler: a switched-off control carries aria-disabled (so it plays the deny sound) and
+// ignores the tap.
+import { useEffect, useId, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Glide } from "../../components/Glide.tsx";
 import { trapTab } from "../../components/Sheet.tsx";
 import { centerOf, starBurst } from "../ui.tsx";
 import { storiesSound } from "../prefs.ts";
+import { Stepper } from "../glass/index.ts";
 
 export interface PickOption<T extends string> {
   value: T;
@@ -199,7 +202,7 @@ export function Switch({
       <button
         type="button"
         role="switch"
-        className="st-s-switch"
+        className="st-s-switch st-toggle"
         aria-checked={checked}
         aria-labelledby={`${id}-l`}
         aria-describedby={line ? `${id}-d` : undefined}
@@ -208,13 +211,15 @@ export function Switch({
           if (!disabled) onChange(!checked);
         }}
       >
-        <span className="st-s-switch__thumb" />
+        <span className="st-toggle__track" aria-hidden="true">
+          <span className="st-toggle__knob st-s-switch__thumb" />
+        </span>
       </button>
     </div>
   );
 }
 
-/** A slider with its label and the value in words. */
+/** A slider with its label and the value in words (with `stepper`, the words sit between the white − and + squares). */
 export function Slider({
   label,
   value,
@@ -224,6 +229,7 @@ export function Slider({
   onChange,
   words,
   marks,
+  stepper = false,
 }: {
   label: string;
   value: number;
@@ -235,6 +241,8 @@ export function Slider({
   words: string;
   /** A highlighted part of the track, e.g. the best length (30 to 60 s). */
   marks?: { from: number; to: number; label: string };
+  /** The contract's Stepper beside the slider: one step less or more a tap (a tap past the end says no: aria-disabled). */
+  stepper?: boolean;
 }) {
   const id = useId();
   const pct = (n: number) => ((n - min) / (max - min)) * 100;
@@ -244,9 +252,13 @@ export function Slider({
         <label className="st-s-field__label" htmlFor={id}>
           {label}
         </label>
-        <output className="st-s-slider__value" htmlFor={id}>
-          {words}
-        </output>
+        {stepper ? (
+          <Stepper className="st-s-slider__stepper" label={label} value={value} min={min} max={max} step={step} onChange={onChange} format={() => words} />
+        ) : (
+          <output className="st-s-slider__value" htmlFor={id}>
+            {words}
+          </output>
+        )}
       </span>
       <span className="st-s-slider__track">
         {marks ? (
@@ -256,6 +268,7 @@ export function Slider({
           id={id}
           type="range"
           className="st-s-range"
+          style={{ "--st-s-at": `${pct(value)}%` } as CSSProperties}
           min={min}
           max={max}
           step={step}
@@ -323,10 +336,11 @@ export function ProgressBar({ value, label }: { value: number; label: string }) 
   );
 }
 
-/** A turning circle for a short wait, with its words. */
-export function Busy({ children }: { children: ReactNode }) {
+/** A turning circle for a short wait, with its words. `plate` when it stands loose on the page (a backing plate in
+ * Picture and See-through, where anything can be behind it). */
+export function Busy({ children, plate = false }: { children: ReactNode; plate?: boolean }) {
   return (
-    <p className="st-s-busy" role="status">
+    <p className={`st-s-busy${plate ? " st-plate" : ""}`} role="status">
       <span className="st-s-busy__dot" aria-hidden="true" />
       {children}
     </p>
@@ -397,7 +411,7 @@ export function StSheet({
     <div className="st-s-scrim" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={box}
-        className={`st-s-sheet${wide ? " st-s-sheet--wide" : ""}${className ? ` ${className}` : ""}`}
+        className={`st-s-sheet st-glass st-glass--hero st-glass--float${wide ? " st-s-sheet--wide" : ""}${className ? ` ${className}` : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${id}-t`}
@@ -408,7 +422,7 @@ export function StSheet({
           <h2 className="st-s-sheet__title" id={`${id}-t`}>
             {title}
           </h2>
-          <button type="button" className="st-s-iconbtn" aria-label="Close" onClick={onClose}>
+          <button type="button" className="st-s-iconbtn st-round-btn" aria-label="Close" onClick={onClose}>
             <span aria-hidden="true">×</span>
           </button>
         </header>

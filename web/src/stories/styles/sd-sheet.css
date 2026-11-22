@@ -1,14 +1,16 @@
-/* ---------- The sheet ---------- */
+/* ---------- The sheet: hero float glass (StSheet adds .st-glass.st-glass--hero.st-glass--float) ----------
+   The float veil and the heaviest blur over a warm dim, the hero's brighter edge and inner top light. Its buttons sit
+   at the bottom right (on phones, at the bottom of the screen). */
 .st-s-scrim {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: var(--st-z-float);
   display: grid;
   align-items: end;
   justify-items: center;
   padding: 12px;
-  background: rgba(8, 6, 30, 0.66);
-  animation: st-s-fade 200ms ease;
+  background: rgb(var(--st-shadow-rgb) / 0.62);
+  animation: st-s-fade var(--st-dur-hover) var(--st-ease-out);
 }
 
 @media (min-width: 720px) {
@@ -29,12 +31,18 @@
   width: min(100%, 560px);
   max-height: min(92vh, 900px);
   overflow: hidden;
-  border-radius: var(--r-xl);
-  color: var(--st-ink, #fff6e5);
-  font-family: var(--st-font, system-ui);
-  background: linear-gradient(170deg, #2b2466, #1c1842 70%);
-  box-shadow: 0 24px 60px rgba(4, 3, 18, 0.7);
-  animation: st-s-rise 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: var(--st-r-surface);
+  color: var(--st-text);
+  font-family: var(--st-font);
+  box-shadow: var(--st-sheen-hero), var(--st-depth-3), var(--st-glow-behind);
+  animation: st-s-rise var(--st-dur-enter) var(--st-ease-out);
+}
+
+/* A sheet drawn before the glass classes (or without them): the same float recipe from the tokens. */
+.st-s-sheet:not(.st-glass) {
+  background: var(--st-tint-float);
+  -webkit-backdrop-filter: var(--st-filter-float);
+  backdrop-filter: var(--st-filter-float);
 }
 
 .st-s-sheet--wide {
@@ -57,12 +65,17 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 18px 8px;
+  padding: 16px 16px 8px 20px;
 }
 
 .st-s-sheet__title {
   margin: 0;
-  font: 800 1.35rem / 1.2 var(--st-font, system-ui);
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-optical-sizing: auto;
+  line-height: 1.2;
   overflow-wrap: anywhere;
 }
 
@@ -70,24 +83,26 @@
   display: grid;
   align-content: start;
   gap: 14px;
-  padding: 6px 18px 16px;
+  padding: 6px 20px 16px;
   overflow-y: auto;
-  line-height: 1.45;
+  line-height: var(--st-lh-body);
 }
 
 .st-s-sheet__body p {
   margin: 0;
 }
 
+/* The foot: a shallow well across the sheet, its buttons at the bottom right. */
 .st-s-sheet__actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
-  padding: 12px 18px 18px;
-  background: rgba(8, 6, 30, 0.25);
+  padding: 12px 20px 18px;
+  background: rgb(var(--st-well-rgb) / 0.32);
 }
 
+/* ---------- Where to post: account tiles (radius control); a picked one solid cream with the orange tick ---------- */
 .st-s-places {
   display: grid;
   gap: 8px;
@@ -103,38 +118,53 @@
   gap: 12px;
   width: 100%;
   min-height: 64px;
-  padding: 10px 14px;
+  padding: 10px 14px 10px 10px;
   border: 0;
-  border-radius: var(--r-md);
+  border-radius: var(--st-r-control);
   text-align: left;
-  color: var(--st-ink, #fff6e5);
-  background: rgba(255, 246, 229, 0.08);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
   font: inherit;
-  transition: background-color 200ms ease, transform 200ms ease;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 
 button.st-s-place:hover {
-  background: var(--st-s-fill-2);
-  transform: translateY(-1px);
+  background: var(--st-fill-control-hover);
+}
+
+button.st-s-place:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
 }
 
 .st-s-place.is-on {
-  background: rgba(255, 201, 74, 0.24);
-  box-shadow: 0 0 24px rgba(255, 201, 74, 0.3);
+  color: var(--st-on-cream);
+  background: var(--st-tint-cream);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1), var(--st-glow-behind);
+}
+
+button.st-s-place.is-on:hover {
+  background: var(--st-cream-hover);
 }
 
 .st-s-place--off {
-  background: rgba(255, 246, 229, 0.04);
+  background: rgb(var(--st-well-rgb) / 0.24);
+  box-shadow: none;
 }
 
+/* The platform's mark in a deep round puck (its cut-outs are the shell's --mark-cut, espresso in Stories). */
 .st-s-place__mark {
   display: grid;
   place-items: center;
   width: 44px;
   height: 44px;
-  border-radius: var(--r-pill);
-  background: var(--st-s-fill-2);
-  --mark-cut: #1c1842;
+  border-radius: var(--st-r-round);
+  color: var(--st-text);
+  background: var(--st-fill-well);
 }
 
 .st-s-place__text {
@@ -143,18 +173,22 @@ button.st-s-place:hover {
 }
 
 .st-s-place__platform {
-  font-weight: 800;
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-place__name {
-  font-weight: 700;
+  font-weight: var(--st-weight-body);
   overflow-wrap: anywhere;
 }
 
 .st-s-place__handle {
-  color: var(--st-s-ink-2);
-  font-size: 0.9rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
+}
+
+.st-s-place.is-on .st-s-place__handle {
+  color: var(--st-on-cream-soft);
 }
 
 .st-s-place__tick {
@@ -162,14 +196,16 @@ button.st-s-place:hover {
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: var(--r-pill);
-  color: #1c1842;
-  background: var(--st-s-fill-3);
-  font-weight: 900;
+  border-radius: var(--st-r-round);
+  color: var(--st-text);
+  background: rgb(var(--st-cream-rgb) / 0.16);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-place.is-on .st-s-place__tick {
-  background: var(--st-sun, #ffc94a);
+  color: var(--st-on-accent);
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
 }
 
 .st-s-presets {
@@ -184,59 +220,70 @@ button.st-s-place:hover {
 }
 
 .st-s-why {
-  font-weight: 700;
+  font-weight: var(--st-weight-ui);
 }
 
-/* The app's own dropdown, in the studio's colours. */
+/* The app's own dropdown, in Stories' colours: a glass control, its list float glass, the chosen one cream. */
 .stories-app .dropdown__button,
 .st-s-sheet .dropdown__button {
-  color: var(--st-ink, #fff6e5);
-  background: rgba(255, 246, 229, 0.11);
-  transition: background-color 160ms ease;
+  border-radius: var(--st-r-control);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
 }
 
 .stories-app .dropdown__button:hover,
 .st-s-sheet .dropdown__button:hover {
-  background: rgba(255, 246, 229, 0.18);
+  background: var(--st-fill-control-hover);
 }
 
 .stories-app .dropdown__button.is-picked,
 .st-s-sheet .dropdown__button.is-picked {
-  color: #1c1842;
-  background: var(--st-sun, #ffc94a);
+  color: var(--st-on-cream);
+  background: var(--st-cream);
 }
 
 .stories-app .dropdown__value.is-empty,
 .st-s-sheet .dropdown__value.is-empty {
-  color: rgba(255, 246, 229, 0.86);
+  color: var(--st-text-soft);
 }
 
 .stories-app .dropdown__list,
 .st-s-sheet .dropdown__list {
   max-height: 320px;
   overflow-y: auto;
-  color: var(--st-ink, #fff6e5);
-  background: #2b2466;
+  border-radius: var(--st-r-control);
+  color: var(--st-text);
+  background: var(--st-tint-float);
+  -webkit-backdrop-filter: var(--st-filter-float);
+  backdrop-filter: var(--st-filter-float);
+  box-shadow: var(--st-sheen), var(--st-depth-3);
+}
+
+.stories-app .dropdown__opt,
+.st-s-sheet .dropdown__opt {
+  border-radius: var(--st-r-inner);
 }
 
 .stories-app .dropdown__opt:hover,
 .stories-app .dropdown__opt.is-at,
 .st-s-sheet .dropdown__opt:hover,
 .st-s-sheet .dropdown__opt.is-at {
-  background: rgba(255, 246, 229, 0.14);
+  background: var(--st-fill-control-hover);
 }
 
 .stories-app .dropdown__opt.is-on,
 .st-s-sheet .dropdown__opt.is-on {
-  color: #1c1842;
-  background: var(--st-sun, #ffc94a);
+  color: var(--st-on-cream);
+  background: var(--st-cream);
 }
 
 /* ---------- Model and effort (the "for this one" menu, task lines, made with) ---------- */
 .st-s-ai-btn {
   gap: 8px;
   padding: 0 14px;
-  font-size: 0.92rem;
+  font-size: var(--st-fs-small);
 }
 
 .st-s-ai-btn .icon {
@@ -247,27 +294,28 @@ button.st-s-place:hover {
   overflow-wrap: anywhere;
 }
 
+/* "Just this one": a small cream badge. */
 .st-s-ai-btn__set {
   padding: 2px 8px;
-  border-radius: var(--r-pill);
-  color: #1c1842;
-  background: var(--st-sky, #62c6ff);
-  font: 800 0.8rem / 1.2 var(--st-font, system-ui);
+  border-radius: var(--st-r-round);
+  color: var(--st-on-cream);
+  background: var(--st-cream);
+  font: var(--st-weight-ui) var(--st-fs-min) / 1.2 var(--st-font);
 }
 
 .st-s-ai-btn.is-set {
-  background: rgba(98, 198, 255, 0.22);
+  background: linear-gradient(rgb(var(--st-amber-rgb) / 0.18), rgb(var(--st-amber-rgb) / 0.18)), var(--st-fill-control);
 }
 
 .st-s-ai-btn.is-set:hover {
-  background: rgba(98, 198, 255, 0.32);
+  background: linear-gradient(rgb(var(--st-amber-rgb) / 0.26), rgb(var(--st-amber-rgb) / 0.26)), var(--st-fill-control-hover);
 }
 
 .st-s-ai-btn.is-compact:not(.is-set) {
   padding: 0;
 }
 
-/* A button and its menu side by side, as one pair. */
+/* A button and its menu side by side, as one pair: the corners where they meet are tiny. */
 .st-s-aipair {
   display: inline-flex;
   flex-wrap: wrap;
@@ -277,19 +325,19 @@ button.st-s-place:hover {
 }
 
 .st-s-aipair > .st-btn:first-child {
-  border-top-right-radius: var(--r-sm);
-  border-bottom-right-radius: var(--r-sm);
+  border-top-right-radius: var(--st-r-tiny);
+  border-bottom-right-radius: var(--st-r-tiny);
 }
 
 .st-s-aipair > .st-s-ai-btn {
-  border-top-left-radius: var(--r-sm);
-  border-bottom-left-radius: var(--r-sm);
+  border-top-left-radius: var(--st-r-tiny);
+  border-bottom-left-radius: var(--st-r-tiny);
 }
 
 .st-s-ai-secs {
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-  color: var(--st-sun, #ffc94a);
+  font-variant-numeric: lining-nums tabular-nums;
+  color: var(--st-text-amber);
 }
 
 .st-s-ai-fix {
@@ -325,12 +373,14 @@ button.st-s-place:hover {
   list-style: none;
 }
 
+/* One step and its model: a row (radius control) on the card. */
 .st-s-used__item {
   display: grid;
   gap: 4px;
-  padding: 8px 12px;
-  border-radius: var(--r-md);
-  background: var(--st-s-fill);
+  padding: 10px 12px;
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
 }
 
 .st-s-used__row {
@@ -341,27 +391,27 @@ button.st-s-place:hover {
 }
 
 .st-s-used__step {
-  font-weight: 800;
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-used__model {
-  color: var(--st-s-ink-2);
+  color: var(--st-text-soft);
   overflow-wrap: anywhere;
 }
 
 .st-s-used__note {
   flex: 1 1 100%;
-  color: var(--st-s-ink-2);
-  font-size: 0.88rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
 }
 
 .st-s-jobs__models {
   flex: 1 1 100%;
-  font-size: 0.88rem;
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
 
-/* ---------- Reference videos in a new video ---------- */
+/* ---------- Reference videos in a new video: tiles like the places, a picked one cream ---------- */
 .st-s-refpick {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
@@ -383,29 +433,41 @@ button.st-s-place:hover {
   gap: 10px;
   width: 100%;
   min-height: 64px;
-  padding: 10px 14px;
+  padding: 10px 14px 10px 10px;
   border: 0;
-  border-radius: var(--r-md);
+  border-radius: var(--st-r-control);
   text-align: left;
-  color: var(--st-ink, #fff6e5);
-  background: rgba(255, 246, 229, 0.06);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
   font: inherit;
-  transition: background-color 200ms ease, transform 200ms ease;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-s-reftile:hover {
-  background: var(--st-s-fill-2);
-  transform: translateY(-1px);
+  background: var(--st-fill-control-hover);
+}
+
+.st-s-reftile:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
 }
 
 .st-s-reftile.is-on {
-  background: rgba(255, 201, 74, 0.26);
-  box-shadow: 0 0 22px rgba(255, 201, 74, 0.32);
+  color: var(--st-on-cream);
+  background: var(--st-tint-cream);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1);
+}
+
+.st-s-reftile.is-on:hover {
+  background: var(--st-cream-hover);
 }
 
 .st-s-reftile[aria-disabled="true"] {
-  background: rgba(255, 246, 229, 0.04);
-  transform: none;
+  background: rgb(var(--st-well-rgb) / 0.24);
+  box-shadow: none;
 }
 
 .st-s-reftile__tick {
@@ -413,14 +475,16 @@ button.st-s-place:hover {
   place-items: center;
   width: 30px;
   height: 30px;
-  border-radius: var(--r-pill);
-  color: #1c1842;
-  background: var(--st-s-fill-3);
-  font-weight: 900;
+  border-radius: var(--st-r-round);
+  color: var(--st-text);
+  background: rgb(var(--st-cream-rgb) / 0.16);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-reftile.is-on .st-s-reftile__tick {
-  background: var(--st-sun, #ffc94a);
+  color: var(--st-on-accent);
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
 }
 
 .st-s-reftile__text {
@@ -429,27 +493,36 @@ button.st-s-place:hover {
 }
 
 .st-s-reftile__title {
-  font-weight: 800;
+  font-weight: var(--st-weight-ui);
   overflow-wrap: anywhere;
 }
 
 .st-s-reftile__meta {
-  color: var(--st-s-ink-2);
-  font-size: 0.88rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+
+.st-s-reftile.is-on .st-s-reftile__meta {
+  color: var(--st-on-cream-soft);
 }
 
 .st-s-refpick .st-s-small {
   justify-self: end;
 }
 
-/* ---------- Design with AI ---------- */
+/* ---------- Design with AI: a hero glass card (Design.tsx adds .st-glass.st-glass--hero) ---------- */
 .st-s-design {
   display: grid;
   gap: 12px;
-  padding: clamp(14px, 0.8rem + 1vw, 22px);
-  border-radius: var(--r-lg);
-  background: radial-gradient(120% 140% at 0% 0%, rgba(98, 198, 255, 0.16), rgba(255, 246, 229, 0.05) 60%);
-  box-shadow: var(--st-s-soft);
+  padding: var(--st-inset);
+  border-radius: var(--st-r-surface);
+}
+
+.st-s-design:not(.st-glass) {
+  background: var(--st-tint-hero);
+  -webkit-backdrop-filter: var(--st-filter-glass);
+  backdrop-filter: var(--st-filter-glass);
+  box-shadow: var(--st-sheen-hero), var(--st-depth-2), var(--st-glow-behind);
 }
 
 .st-s-design--closed {
@@ -462,13 +535,18 @@ button.st-s-place:hover {
 
 .st-s-design__title {
   margin: 0;
-  font: 800 1.15rem / 1.2 var(--st-font, system-ui);
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-optical-sizing: auto;
+  line-height: 1.2;
 }
 
 .st-s-design__lede {
   margin: 4px 0 0;
-  color: var(--st-s-ink-2);
-  line-height: 1.45;
+  color: var(--st-text-soft);
+  line-height: var(--st-lh-body);
 }
 
 .st-s-design__pic,
@@ -483,10 +561,10 @@ button.st-s-place:hover {
 .st-s-design__noimg {
   width: 72px;
   height: 72px;
-  border-radius: var(--r-md);
+  border-radius: var(--st-r-control);
   object-fit: cover;
-  background: var(--st-s-fill-2);
-  box-shadow: var(--st-s-soft);
+  background: var(--st-fill-well);
+  box-shadow: var(--st-depth-1);
 }
 
 .st-s-design__own {
@@ -496,15 +574,23 @@ button.st-s-place:hover {
   height: 64px;
   padding: 0;
   border: 0;
-  border-radius: var(--r-md);
+  border-radius: var(--st-r-control);
   overflow: hidden;
-  background: var(--st-s-fill-2);
-  transition: transform 200ms ease, box-shadow 200ms ease;
+  background: var(--st-fill-well);
+  box-shadow: var(--st-depth-1);
+  transition:
+    transform var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-s-design__own:hover {
   transform: translateY(-2px);
-  box-shadow: 0 0 18px rgba(255, 201, 74, 0.45);
+  box-shadow: var(--st-depth-1), 0 0 18px rgb(var(--st-amber-rgb) / 0.5);
+}
+
+.st-s-design__own:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
 }
 
 .st-s-design__own img {
@@ -513,7 +599,7 @@ button.st-s-place:hover {
   object-fit: cover;
 }
 
-/* ---------- Where the video goes (the publish sheet) ---------- */
+/* ---------- Where the video goes (the publish sheet): a sky-tinted well under its place ---------- */
 .st-s-places__item {
   display: grid;
   gap: 6px;
@@ -526,8 +612,8 @@ button.st-s-place:hover {
   gap: 2px 12px;
   margin-left: clamp(8px, 4vw, 56px);
   padding: 10px 14px;
-  border-radius: var(--r-md);
-  background: rgba(98, 198, 255, 0.12);
+  border-radius: var(--st-r-control);
+  background: linear-gradient(rgb(var(--st-sky-rgb) / var(--st-tint-cut)), rgb(var(--st-sky-rgb) / var(--st-tint-cut))), rgb(var(--st-well-rgb) / 0.3);
 }
 
 .st-s-dest > p {
@@ -543,13 +629,13 @@ button.st-s-place:hover {
 
 .st-s-dest__id,
 .st-s-dest__note {
-  color: var(--st-s-ink-2);
-  font-size: 0.88rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
 }
 
 .st-s-dest__note.is-bad {
-  color: #ffb4ab;
-  font-weight: 700;
+  color: var(--st-coral-ink);
+  font-weight: var(--st-weight-ui);
 }
 
 @media (max-width: 420px) {
@@ -565,22 +651,36 @@ button.st-s-place:hover {
   }
 }
 
-/* ---------- Bottom bars: phone controls at the bottom right ---------- */
+/* ---------- Bottom bars: phone controls at the bottom right ----------
+   On a phone the main action rides in a glass bar (the bar recipe: heavy blur in every look) just above the shell's
+   tab bar, so the thumb finds it and nothing scrolls under its words unblurred. */
 .st-s-actionbar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 10px;
 }
 
-@media (max-width: 720px) {
+.st-s-actionbar:empty {
+  display: none;
+}
+
+@media (max-width: 767.98px) {
   .st-s-actionbar--pin {
     position: sticky;
-    bottom: 12px;
+    bottom: calc(env(safe-area-inset-bottom) + var(--st-tab-h) + 20px);
     z-index: 5;
-    padding: 10px;
-    border-radius: var(--r-lg);
-    background: rgba(28, 24, 66, 0.92);
-    box-shadow: var(--st-s-lift);
+    padding: var(--st-gap-surface);
+    border-radius: var(--st-r-surface);
+    background: var(--st-tint-bar);
+    -webkit-backdrop-filter: var(--st-filter-bar);
+    backdrop-filter: var(--st-filter-bar);
+    box-shadow: var(--st-sheen), var(--st-depth-2);
+  }
+
+  /* The main action in the bar hugs its corner: the bar's radius less the bar's gap. */
+  .st-studio .st-s-actionbar--pin > .st-btn {
+    border-radius: var(--st-r-control);
   }
 }

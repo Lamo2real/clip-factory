@@ -36,16 +36,20 @@
     height: 48px;
   }
 
-  .st-s-switch {
-    height: 48px;
-  }
-
-  .st-s-switch__thumb {
-    top: 12px;
-  }
-
   .st-s-range {
     height: 48px;
+  }
+
+  /* The switch, the length's − and + and the back orb grow with the rest on a touch screen of any width. */
+  .st-s-switch.st-toggle {
+    height: var(--st-tap-phone);
+    min-height: var(--st-tap-phone);
+  }
+
+  .st-s-slider__stepper .st-stepper__btn,
+  .st-s-back__orb {
+    width: var(--st-tap-phone);
+    height: var(--st-tap-phone);
   }
 
   .st-s-head__actions,
@@ -95,12 +99,40 @@
   animation: none;
 }
 
+/* The studio's own parts that travel on hover or tap: still under calm motion (fills and colours still change). */
+@media (prefers-reduced-motion: reduce) {
+  .st-s-run__cover,
+  .st-s-film__play,
+  .st-s-design__own,
+  .st-s-range::-webkit-slider-thumb {
+    transition: none;
+  }
+
+  .st-s-run__cover:hover,
+  .st-s-film__frame:hover .st-s-film__play,
+  .st-s-casttile:hover,
+  .st-s-swatch:hover,
+  .st-s-design__own:hover,
+  .st-s-timeline__mark:hover {
+    transform: none;
+  }
+}
+
+.reduce-motion .st-s-run__cover:hover,
+.reduce-motion .st-s-film__frame:hover .st-s-film__play,
+.reduce-motion .st-s-casttile:hover,
+.reduce-motion .st-s-swatch:hover,
+.reduce-motion .st-s-design__own:hover,
+.reduce-motion .st-s-timeline__mark:hover {
+  transform: none;
+}
+
 /* ---------- Round 3 (CONTRACTS §45.34): Next run, Show more, shape, new post words, copies, redesign, idea edit ---------- */
 .st-s-nextrun {
   margin: 0;
-  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
-  font-weight: 700;
-  font-size: 0.95rem;
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
+  font-size: var(--st-fs-small);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -133,13 +165,13 @@
 
 .st-s-shape__art {
   display: block;
-  border-radius: 5px;
-  background: rgba(255, 246, 229, 0.55);
-  box-shadow: 0 4px 10px rgba(8, 6, 30, 0.35);
+  border-radius: var(--st-r-tiny);
+  background: rgb(var(--st-cream-rgb) / 0.6);
+  box-shadow: 0 4px 10px rgb(var(--st-shadow-rgb) / 0.35);
 }
 
 .st-s-pick__opt.is-on .st-s-shape__art {
-  background: #1c1842;
+  background: var(--st-on-cream);
 }
 
 .st-s-shape__art--tall {
@@ -171,14 +203,17 @@
   display: grid;
   gap: 10px;
   padding: 14px;
-  border-radius: var(--r-md);
-  background: rgba(98, 198, 255, 0.12);
+  border-radius: var(--st-r-control);
+  background: linear-gradient(rgb(var(--st-sky-rgb) / var(--st-tint-cut)), rgb(var(--st-sky-rgb) / var(--st-tint-cut))), rgb(var(--st-well-rgb) / 0.24);
 }
 
 .st-s-draftcaps__title {
   margin: 0;
-  font: 800 1.05rem / 1.2 var(--st-font, system-ui);
-  color: var(--st-sun, #ffc94a);
+  font-family: var(--st-font);
+  font-size: 1.0625rem;
+  font-weight: var(--st-weight-display);
+  line-height: 1.2;
+  color: var(--st-text-amber);
 }
 
 .st-s-draftcaps__list {
@@ -195,7 +230,7 @@
 }
 
 .st-s-draftcaps__place {
-  font-weight: 800;
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-draftcaps__pair {
@@ -210,21 +245,26 @@
   align-content: start;
   gap: 4px;
   padding: 10px 12px;
-  border-radius: var(--r-sm);
-  background: rgba(255, 246, 229, 0.06);
+  border-radius: var(--st-r-inner);
+  background: var(--st-fill-control);
 }
 
 .st-s-draftcaps__new {
-  background: rgba(71, 214, 160, 0.16);
+  background: linear-gradient(rgb(var(--st-mint-rgb) / 0.14), rgb(var(--st-mint-rgb) / 0.14)), var(--st-fill-control);
 }
 
 .st-s-draftcaps__row.is-same .st-s-draftcaps__new {
-  background: rgba(255, 246, 229, 0.06);
+  background: var(--st-fill-control);
 }
 
 .st-s-draftcaps__tag {
-  font: 800 0.8rem / 1.2 var(--st-font, system-ui);
-  color: var(--st-sun, #ffc94a);
+  font-family: var(--st-font-caps);
+  font-size: var(--st-fs-caps);
+  font-weight: 500;
+  letter-spacing: var(--st-track-caps);
+  line-height: 1.3;
+  text-transform: uppercase;
+  color: var(--st-text-amber);
 }
 
 .st-s-draftcaps__words {
@@ -248,36 +288,51 @@
 }
 
 .st-s-post__id {
-  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
-  font-size: 0.86rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
   overflow-wrap: anywhere;
 }
 
-/* A place's own sounds (whole scene): a cooler fill than the owner's effects. */
+/* A place's own sounds (whole scene): a cooler mint knob and row than the owner's effects. */
 .st-s-timeline__mark.is-place {
-  background: var(--st-mint, #47d6a0);
-  color: #1c1842;
+  background: var(--st-mint);
+  color: var(--st-on-cream);
+  box-shadow: 0 0 14px -2px rgb(var(--st-mint-rgb) / 0.7), var(--st-depth-1);
 }
 
 .st-s-sfx__row.is-place {
-  background: rgba(71, 214, 160, 0.1);
-  border-radius: var(--r-md);
+  background: linear-gradient(rgb(var(--st-mint-rgb) / 0.1), rgb(var(--st-mint-rgb) / 0.1)), rgb(var(--st-well-rgb) / 0.28);
+  border-radius: var(--st-r-inner);
 }
 
-/* A redesign beside the character as it is. */
+/* A redesign beside the character as it is: amber-tinted glass (the markup adds .st-glass .st-glass--tinted), the
+   amber cut to --st-tint-cut over the tinted veil. The tint is written out here: --st-tint-tinted is worked out on
+   .stories-app, so a --st-tone-rgb set on the card alone would not reach it. Each figure is a glass control tile. */
 .st-s-redesign {
+  --st-tone-rgb: var(--st-amber-rgb);
   display: grid;
-  gap: 12px;
-  padding: clamp(14px, 0.8rem + 1vw, 22px);
-  border-radius: var(--r-lg);
-  background: rgba(255, 201, 74, 0.1);
-  box-shadow: var(--st-s-soft);
+  gap: var(--st-space-3);
+  padding: var(--st-inset);
+  border-radius: var(--st-r-surface);
+}
+
+.st-s-redesign.st-glass,
+.st-s-redesign:not(.st-glass) {
+  background:
+    linear-gradient(rgb(var(--st-amber-rgb) / var(--st-tint-cut)), rgb(var(--st-amber-rgb) / var(--st-tint-cut))),
+    rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
+}
+
+.st-s-redesign:not(.st-glass) {
+  -webkit-backdrop-filter: var(--st-filter-glass);
+  backdrop-filter: var(--st-filter-glass);
+  box-shadow: var(--st-sheen), var(--st-depth-1);
 }
 
 .st-s-redesign__pair {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--st-space-3);
 }
 
 .st-s-redesign__fig {
@@ -285,24 +340,27 @@
   justify-items: center;
   gap: 6px;
   margin: 0;
-  padding: 10px;
-  border-radius: var(--r-md);
-  background: rgba(255, 246, 229, 0.06);
+  padding: var(--st-bezel-pad);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
 }
 
 .st-s-redesign__cap {
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-redesign__lede {
   margin: 0;
-  font-weight: 700;
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-redesign__list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--st-space-2);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -317,8 +375,8 @@
 }
 
 .st-s-redesign__detail {
-  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
-  font-size: 0.92rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
 
@@ -382,36 +440,41 @@
 
 /* The exact model a step called (a details line under it). */
 .st-s-used__id {
-  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
+  color: var(--st-text-soft);
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 0.8rem;
+  font-size: var(--st-fs-min);
   overflow-wrap: anywhere;
 }
 
-/* "Technical details": the folder, the seed, the versions and the model ids, folded away. */
+/* "Technical details": the folder, the seed, the versions and the model ids, folded away in a shallow well. */
 .st-s-tech {
   margin-top: 12px;
   padding: 0 12px 6px;
-  border-radius: var(--r-md);
-  background: rgba(255, 246, 229, 0.05);
+  border-radius: var(--st-r-control);
+  background: rgb(var(--st-well-rgb) / 0.24);
 }
 
 .st-s-tech__sum {
   display: flex;
   align-items: center;
   min-height: 44px;
-  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
-  font-weight: 800;
-  border-radius: var(--r-sm);
-  transition: color 160ms ease;
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
+  border-radius: var(--st-r-inner);
+  transition: color var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-s-tech__sum:hover {
-  color: var(--st-sun, #ffc94a);
+  color: var(--st-text-amber);
+}
+
+.st-s-tech__sum:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
 }
 
 .st-s-tech[open] > .st-s-tech__sum {
-  color: var(--st-ink, #fff6e5);
+  color: var(--st-text);
 }
 
 .st-s-tech__body {
@@ -439,12 +502,12 @@
 
 .st-s-techfacts dt {
   max-width: 15em;
-  font-weight: 800;
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-techfacts dd {
   margin: 0;
-  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
+  color: var(--st-text-soft);
   overflow-wrap: anywhere;
 }
 
@@ -482,7 +545,7 @@
   bottom: auto;
   width: 26px;
   height: 26px;
-  font-size: 0.78rem;
+  font-size: var(--st-fs-min);
 }
 
 /* Ids folded away in a post row and an account card: closer to the words they belong to. */
@@ -496,21 +559,21 @@
   margin: 0;
 }
 
-/* A model the studio knows cannot be used, on its chip: the status says why in the coral tone. */
+/* A model the studio knows cannot be used, on its chip: the status says why on a coral badge. */
 .st-s-ai-btn.is-bad {
-  background: rgba(255, 122, 107, 0.2);
+  background: linear-gradient(rgb(var(--st-coral-rgb) / 0.2), rgb(var(--st-coral-rgb) / 0.2)), var(--st-fill-control);
 }
 
 .st-s-ai-btn.is-bad:hover {
-  background: rgba(255, 122, 107, 0.3);
+  background: linear-gradient(rgb(var(--st-coral-rgb) / 0.28), rgb(var(--st-coral-rgb) / 0.28)), var(--st-fill-control-hover);
 }
 
 .st-s-ai-btn__status {
   padding: 2px 8px;
-  border-radius: var(--r-pill);
-  color: #1c1842;
-  background: var(--st-coral, #ff7a6b);
-  font: 800 0.8rem / 1.2 var(--st-font, system-ui);
+  border-radius: var(--st-r-round);
+  color: var(--st-on-cream);
+  background: var(--st-coral);
+  font: var(--st-weight-ui) var(--st-fs-min) / 1.2 var(--st-font);
   white-space: nowrap;
 }
 
@@ -523,8 +586,8 @@
 
 .st-s-taskmade__line {
   margin: 0;
-  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
-  font-size: 0.88rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
   overflow-wrap: anywhere;
 }
 
@@ -548,7 +611,7 @@
 }
 
 .st-s-used__idstep {
-  font-weight: 800;
+  font-weight: var(--st-weight-ui);
 }
 
 /* The chip of a model with no access wraps on a narrow screen: its status goes under the name, never off it. */

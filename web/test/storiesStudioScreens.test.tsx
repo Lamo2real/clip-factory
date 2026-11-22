@@ -603,6 +603,25 @@ describe("Production", () => {
     expect(location.pathname).toMatch(/^\/stories\/production\/[0-9A-Z]{26}$/);
   });
 
+  it("New: the length's white − and + step it 5 seconds a tap, and past 90 seconds the + says no", async () => {
+    const create = vi.spyOn(api, "createStory");
+    await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich })} />);
+    const length = () => document.querySelector<HTMLInputElement>('input[type="range"]')!;
+    expect(length().value).toBe("50");
+    await click(control("More: Length"), 50);
+    expect(length().value).toBe("55");
+    expect(document.querySelector(".st-s-slider__stepper output")?.textContent).toBe("55 seconds");
+    await click(control("Less: Length"), 50);
+    await click(control("Less: Length"), 50);
+    expect(length().value).toBe("45");
+    for (let i = 0; i < 12; i++) await click(control("More: Length"), 20);
+    expect(length().value).toBe("90");
+    expect(control("More: Length").getAttribute("aria-disabled")).toBe("true");
+    expect(control("Less: Length").getAttribute("aria-disabled")).toBeNull();
+    await click(control("Make the video"));
+    expect(create).toHaveBeenCalledWith("stories", expect.objectContaining({ durationSec: 90 }));
+  });
+
   it("New: up to 3 studied reference videos and this video's own model and effort go with the story", async () => {
     const create = vi.spyOn(api, "createStory");
     await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich })} />);
@@ -685,6 +704,20 @@ describe("Production", () => {
     await wait(10_000);
     expect(document.querySelectorAll(".st-s-track__step.is-done")).toHaveLength(8);
     expect(control("Watch it in Review").getAttribute("href")).toBe(`/stories/review/${S.producing}`);
+  });
+
+  it("a video's preview row has its kind and length, a bar with its percent, and the page's actions (Cancel, Try again)", async () => {
+    await show(<ProductionScreen {...page({ name: "production_story", storyId: S.producing })} />);
+    const row = () => document.querySelector<HTMLElement>(".st-s-preview__row")!;
+    expect(row().querySelector(".st-media__meta")?.textContent).toMatch(/ · \d+ seconds?$/);
+    expect(row().querySelector('[role="progressbar"]')).not.toBeNull();
+    expect(row().querySelector(".st-media__time")?.textContent).toMatch(/^\d+%$/);
+    expect(control("Cancel", row())).not.toBeNull();
+    await act(async () => root.render(<ToastProvider><ProductionScreen {...page({ name: "production_story", storyId: S.failed })} /></ToastProvider>));
+    await wait();
+    expect(control("Try again from “Animate”", row()).className).toContain("st-btn--main");
+    // The steps panel below shows the steps only.
+    expect(document.querySelector('[aria-label="The steps"] button')).toBeNull();
   });
 
   it("Cancel stops a run; Try again on a stopped one runs only what is left", async () => {
