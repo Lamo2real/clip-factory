@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Clip Factory's TikTok helper: every minute it checks Clip Factory for a TikTok post waiting for this Mac and, at
+     most one at a time, posts it from its own background Chrome (docs/CONTRACTS.md §47). install.sh fills in @NODE@
+     and @APP@. Turn it off: Clip Factory › Settings › Posting › Your Mac posts TikTok, or ./uninstall.sh. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.clipfactory.tiktok-helper</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@NODE@</string>
+    <string>@APP@/src/cli.js</string>
+    <string>run</string>
+  </array>
+  <key>StartInterval</key><integer>60</integer>
+  <key>RunAtLoad</key><true/>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
+  <key>StandardOutPath</key><string>@BASE@/launchd.log</string>
+  <key>StandardErrorPath</key><string>@BASE@/launchd.log</string>
+</dict>
+</plist>
