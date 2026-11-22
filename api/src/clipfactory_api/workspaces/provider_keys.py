@@ -97,11 +97,21 @@ def secret_name(app: Any, workspace_id: str, provider_id: str) -> str:
     return ws.provider_secret_name(deps.of(app).ws_secret_prefix, workspace_id, provider_id)
 
 
+def key_state(cred: Mapping[str, Any] | None) -> dict[str, Any]:
+    """``ProviderStatus.key`` (§45.34): whether a key is saved, its hint and when; never the key."""
+    if cred is None:
+        return {"saved": False, "hint": None, "savedAt": None}
+    hint = str(cred.get("hint") or "")
+    saved_at = cred.get("savedAt")
+    return {"saved": True, "hint": hint or None, "savedAt": str(saved_at) if isinstance(saved_at, str) else None}
+
+
 def status(store: db.Store, user_id: str, workspace_id: str, p: KeyedProvider) -> dict[str, Any]:
-    """``ProviderStatus`` of a keyed provider: ``on`` only after a real call (its ``PROVIDER#`` item)."""
+    """``ProviderStatus`` of a keyed provider: ``on`` only after a real call (its ``PROVIDER#`` item), with ``key``
+    (§45.34: only a provider that takes a key has it)."""
     cred = cfg.get_owned(store, user_id, workspace_id, provcred_sk(p.id))
     record = cfg.get_owned(store, user_id, workspace_id, f"{ws.PROVIDER_SK}{p.kind}#{p.id}") or {}
-    out: dict[str, Any] = {"kind": p.kind, "id": p.id, "label": p.label}
+    out: dict[str, Any] = {"kind": p.kind, "id": p.id, "label": p.label, "key": key_state(cred)}
     if cred is None:
         return {**out, "state": "needs_setup", "line": f"Paste your {p.label} key to use it."}
     hint = str(cred.get("hint") or "")
@@ -115,6 +125,11 @@ def status(store: db.Store, user_id: str, workspace_id: str, p: KeyedProvider) -
         out["lastError"] = str(record["lastError"])
         out["line"] = str(record["lastError"])
     return out
+
+
+def statuses(store: db.Store, user_id: str, workspace_id: str) -> list[dict[str, Any]]:
+    """Every provider that takes a key, for ``GET …/providers`` (none today)."""
+    return [status(store, user_id, workspace_id, p) for p in KEYED.values()]
 
 
 def put_key(

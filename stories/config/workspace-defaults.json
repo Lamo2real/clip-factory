@@ -17,7 +17,10 @@
   "production": {
     "burnCaptions": true,
     "scenesAtOnce": 2,
-    "keepVersions": "all"
+    "keepVersions": "all",
+    "extraFormats": [],
+    "keepReferences": "all",
+    "keepChatPictures": "all"
   },
   "youtubeCategory": "27",
   "youtubePrivacy": "public",

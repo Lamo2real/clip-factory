@@ -14,11 +14,20 @@ merged **separately** (a level that sets only the effort takes the model from th
 An unknown model and an effort the model does not offer are refused with the owner's sentence, never swapped for
 another one. ``from`` names the level the model came from. Pure: no I/O beyond the bundled configuration files.
 Clip Factory's ``config/models.json`` is never read.
+
+**Models the owner added** (§45.34 "Adding models without a release"): a workspace's ``MODELDEF#{key}`` items are
+merged after the bundled list wherever models are listed, checked or resolved. They are per workspace: each request
+binds its own workspace's loader (``bind``, called by ``guard.require_workspace`` for every ``/v1/workspaces/{ws}``
+route) and the list is read once, on first use, for that request only; an unbound call (no workspace) sees the
+bundled models alone. A custom key never shadows a bundled one.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import contextlib
+from collections.abc import Callable, Iterator, Mapping
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 from typing import Any, Final
 
 from . import config
@@ -80,12 +89,86 @@ class ResolveError(Exception):
         self.message = message
 
 
-# --- the bundled lists ----------------------------------------------------------------------------------------
+# --- the models the owner added (per workspace, per request) ---------------------------------------------------
+
+
+@dataclass
+class _Scope:
+    """One request's workspace: who it is for and how to read its ``MODELDEF#`` items (read once, on first use)."""
+
+    user_id: str
+    workspace_id: str
+    loader: Callable[[], list[dict[str, Any]]]
+    loaded: list[dict[str, Any]] | None = field(default=None)
+
+
+_SCOPE: ContextVar[_Scope | None] = ContextVar("ws_custom_models", default=None)
+
+
+def bind(user_id: str, workspace_id: str, loader: Callable[[], list[dict[str, Any]]]) -> None:
+    """This request works in this workspace: its own added models (from ``loader``) join the list."""
+    _SCOPE.set(_Scope(user_id, workspace_id, loader))
+
+
+def unbind() -> None:
+    """No workspace (a request that lists workspaces, a callback, a test): the bundled models only."""
+    _SCOPE.set(None)
+
+
+def forget_custom() -> None:
+    """The workspace's added models changed (a PUT or DELETE of one): read them again on next use."""
+    scope = _SCOPE.get()
+    if scope is not None:
+        scope.loaded = None
+
+
+def bound_to() -> tuple[str, str] | None:
+    scope = _SCOPE.get()
+    return (scope.user_id, scope.workspace_id) if scope is not None else None
+
+
+@contextlib.contextmanager
+def overlay(extra: list[dict[str, Any]]) -> Iterator[None]:
+    """While a save is checked: these added models in place of the stored ones of the same keys."""
+    scope = _SCOPE.get()
+    keys = {str(m.get("key")) for m in extra}
+    merged = [m for m in custom_models() if str(m.get("key")) not in keys] + [dict(m) for m in extra]
+    user_id, workspace_id = (scope.user_id, scope.workspace_id) if scope is not None else ("", "")
+    token = _SCOPE.set(_Scope(user_id, workspace_id, lambda: merged, merged))
+    try:
+        yield
+    finally:
+        _SCOPE.reset(token)
+
+
+def custom_models() -> list[dict[str, Any]]:
+    """The bound workspace's added models (``models.json``-shaped, ``custom: True``), or none."""
+    scope = _SCOPE.get()
+    if scope is None:
+        return []
+    if scope.loaded is None:
+        scope.loaded = [dict(m) for m in scope.loader()]
+    return [dict(m) for m in scope.loaded]
+
+
+def bundled_models() -> list[dict[str, Any]]:
+    """The reasoning models of ``stories/config/models.json``, in the file's order."""
+    return [dict(m) for m in config.load("models.json").get("models") or [] if isinstance(m, dict)]
+
+
+def bundled_keys() -> set[str]:
+    return {str(m.get("key")) for m in bundled_models()}
+
+
+# --- the lists ------------------------------------------------------------------------------------------------
 
 
 def models() -> list[dict[str, Any]]:
-    """The reasoning models Lamo Stories may use, in the file's order."""
-    return [dict(m) for m in config.load("models.json").get("models") or [] if isinstance(m, dict)]
+    """The reasoning models Lamo Stories may use: the file's, in its order, then the workspace's added ones (a key
+    the file has already is never replaced)."""
+    listed = bundled_models()
+    keys = {str(m.get("key")) for m in listed}
+    return listed + [m for m in custom_models() if str(m.get("key")) not in keys]
 
 
 def model(key: Any) -> dict[str, Any] | None:
@@ -136,6 +219,11 @@ def unknown_effort(effort: str) -> str:
 def effort_not_offered(model_key: str, effort: str) -> str:
     """ "Claude Haiku 5.5 does not offer Maximum. Pick another level." (§45.25)."""
     return f"{model_label(model_key)} does not offer {EFFORT_LABEL.get(effort, effort)}. Pick another level."
+
+
+def no_effort_setting(model_key: str) -> str:
+    """An effort saved together with a model that has none (§45.34 "Model and effort pairs")."""
+    return f"{model_label(model_key)} has no effort setting; it runs at its own level."
 
 
 # --- the resolver ---------------------------------------------------------------------------------------------
@@ -242,6 +330,18 @@ def check_effort_for(model_key: str, effort: str | None) -> None:
     offered = [str(e) for e in info.get("efforts") or []]
     if offered and effort not in offered:
         raise ResolveError("effort", effort_not_offered(model_key, effort))
+
+
+def check_pair(model_key: str | None, effort: str | None) -> None:
+    """One setting that names both a model and an effort (a task's, an agent's, a conversation's, a video's): the
+    model must offer that effort, and a model with no effort setting takes none (§45.34 "Model and effort pairs":
+    refused when saved; only an inherited effort runs such a model with no effort sent)."""
+    if not model_key or not effort:
+        return
+    check_effort_for(model_key, effort)
+    info = model(model_key) or {}
+    if not [e for e in info.get("efforts") or [] if e in EFFORTS]:
+        raise ResolveError("effort", no_effort_setting(model_key))
 
 
 def story_effective(

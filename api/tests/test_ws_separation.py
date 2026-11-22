@@ -315,6 +315,7 @@ def _ai_flow(call: Recorder, s3: RecordingS3) -> None:
         {"defaultModel": "fable-5-2", "defaultEffort": "high", "tasks": {"chat": {"effort": "low"}}, "version": 0},
     )
     ok("PUT", "/ai/prices/opus-5-5", {"inputPer1M": 5, "outputPer1M": 25, "currency": "USD"})
+    ok("PUT", "/ai/models/custom-llama", MODEL_DEF)  # a model the owner adds (§45.34), kept in MODELDEF# only
     ok("POST", "/ai/check-models", {"models": ["opus-5-5"]}, 202)
     ok("GET", "/usage")
     agent = ok("GET", "/agents/storyboard")["agent"]
@@ -362,6 +363,8 @@ def _ai_flow(call: Recorder, s3: RecordingS3) -> None:
     ok("PATCH", "/onboarding", {"finish": True})
     ok("PUT", "/providers/runway/key", {"key": "sk-live-0123456789abcdef"})
     ok("GET", "/storage")
+    ok("POST", "/storage/cleanup", {})
+    ok("DELETE", "/ai/models/custom-llama", expect=204)
     ok("DELETE", "/providers/runway/key", expect=204)
     ok("DELETE", f"/memory/{mem['memId']}", expect=204)
     ok("DELETE", f"/references/{ref_id}", expect=204)
@@ -369,6 +372,17 @@ def _ai_flow(call: Recorder, s3: RecordingS3) -> None:
     ok("DELETE", f"/skills/{uploaded['skillId']}", expect=204)
 
 
+MODEL_DEF = {
+    "label": "Llama 4 (test only)",
+    "provider": "Meta",
+    "modelId": "us.meta.llama4-maverick-17b-instruct-v1:0",
+    "region": "us-east-1",
+    "efforts": [],
+    "defaultEffort": None,
+    "vision": False,
+    "maxOutputTokens": 8192,
+    "price": None,
+}
 LOOK = {
     "body": "bean",
     "skin": "#f2c9a0",
@@ -414,6 +428,19 @@ def _sample_bodies(r: Route, ids: dict[str, str]) -> list[Any]:
         ("POST", "/characters/(?P<characterId>[^/]+)/references", picture),
         ("POST", "/design/uploads", picture),
         ("POST", "/design", {"description": "A tall driver."}),
+        ("POST", "/design", {"description": "Taller.", "characterId": ids["characterId"]}),
+        ("POST", "/download", {"format": "webm"}),
+        ("PUT", "/models/(?P<modelKey>[^/]+)", MODEL_DEF),
+        (
+            "PATCH",
+            "/v1/workspaces/(?P<ws>[^/]+)",
+            {
+                "version": 2,
+                "configuration": {
+                    "production": {"keepReferences": "study_only", "keepChatPictures": "days_30", "keepVersions": 1}
+                },
+            },
+        ),
         ("POST", "/stories", {"characterIds": [ids["characterId"]], "brief": brief}),
         ("PATCH", "/stories/(?P<storyId>[^/]+)", {"version": 1, "title": "Ice 2"}),
         ("POST", "/produce", {"from": "storyboard"}),
@@ -476,10 +503,10 @@ def test_every_lamo_stories_route_stays_in_its_own_namespaces(
         for m, p, s, _ in flow
         if m == r.method and r.pattern.match(p) and s < 300
     }
-    assert len(hit) == len(ai_routes.ROUTES) == 38  # the real flow answered every AI route
+    assert len(hit) == len(ai_routes.ROUTES) == 41  # the real flow answered every AI route
 
     # every route of Lamo Stories' own table, with every id a seeded or a made-up one, writes and reads first
-    values = {"ws": "stories", "platform": "youtube", "agentId": "creative_director", "modelKey": "opus-5-5",
+    values = {"ws": "stories", "platform": "youtube", "agentId": "creative_director", "modelKey": "custom-sweep",
               "providerId": "runway", "skillId": "nonverbal-storytelling", **ids}  # fmt: skip
     ordered = sorted(ROUTES, key=lambda r: r.method == "DELETE")
     for r in ordered:
@@ -488,6 +515,10 @@ def test_every_lamo_stories_route_stays_in_its_own_namespaces(
         if r.method != "DELETE":
             call(r.method, _path(r, {"ws": "stories"}), {} if r.method not in {"GET", "DELETE"} else None)
 
+    # the sweep turned the keep settings on and cleared files with them (§45.34), inside the workspace only
+    stored = table.items[(ws.registry_pk(USER), ws.workspace_sk("stories"))]["configuration"]["production"]
+    assert (stored["keepReferences"], stored["keepVersions"]) == ("study_only", 1)
+    assert [s for m, p, s, _ in call.responses if m == "POST" and p.endswith("/storage/cleanup")].count(200) >= 2
     assert ddb_problems(table) == []
     assert expression_problems(table) == []
     assert s3_problems(s3_client) == []
@@ -571,6 +602,8 @@ AI_MODULES = (
     "provider_keys",
     "storage",
     "routes/ai",
+    "model_defs",  # §45.34: the models the owner adds
+    "retention",  # §45.34: keeping and clearing files
 )
 # Clip Factory's own model, skill, conversation and runtime code: never imported by the AI modules.
 FORBIDDEN_FOR_AI = (

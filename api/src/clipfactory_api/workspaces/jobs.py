@@ -80,11 +80,13 @@ def new_job(
     story_version: int | None = None,
     override: Mapping[str, Any] | None = None,
     reference_ids: list[str] | None = None,
+    video_format: Mapping[str, Any] | None = None,
 ) -> Item:
     """``story_version``: the story's ``version`` once this job is launched. The agent's every story write adds 1, so
     a cancel can tell whether the run already changed the story (``cancel``). ``override``: the owner's model and
     effort for this job only (``configuration.override``, §45.25 level 1, never saved as a setting);
-    ``reference_ids``: the reference videos whose analyses the writer reads (§45.28)."""
+    ``reference_ids``: the reference videos whose analyses the writer reads (§45.28); ``video_format``: the story's
+    ``{aspect, width, height}`` for the agent (``configuration.format``, §45.34; internal)."""
     at = iso(now)
     configuration: Item = {"run": list(run)}
     if from_step:
@@ -97,6 +99,8 @@ def new_job(
         configuration["override"] = dict(override)
     if reference_ids:
         configuration["referenceIds"] = list(reference_ids)
+    if video_format:
+        configuration["format"] = dict(video_format)
     item: Item = {
         "pk": ws.workspace_pk(user_id, workspace_id),
         "sk": job_sk(job_id),

@@ -183,14 +183,21 @@ def patch(
         else:
             removes.append("effort")
     if effort and ("model" in body or "effort" in body):
-        ai = cfg.current(store, user_id, workspace_id)
-        try:
-            res.check_effort_for(str(model or ai["defaultModel"]), effort)
-        except res.ResolveError as e:
-            raise bad_request(e.message, "effort") from e
+        _check_setting(store, user_id, workspace_id, model, effort)
     if "skillIds" in body:
         sets["skillIds"] = clean_skill_ids(body.get("skillIds"), known_skills)
     return _update(store, item, sets, removes, at, version=version)
+
+
+def _check_setting(store: db.Store, user_id: str, workspace_id: str, model: str | None, effort: str) -> None:
+    """The agent's effort on the model it runs (its own, else the default), and its own model and effort together
+    (§45.34 "Model and effort pairs")."""
+    ai = cfg.current(store, user_id, workspace_id)
+    try:
+        res.check_effort_for(str(model or ai["defaultModel"]), effort)
+        res.check_pair(model, effort)
+    except res.ResolveError as e:
+        raise bad_request(e.message, "effort") from e
 
 
 def _update(

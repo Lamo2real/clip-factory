@@ -305,3 +305,66 @@ def test_delete_removes_the_files_and_stops_the_job(
     upload_id = created["upload"]["uploadId"]
     assert wcall("DELETE", f"{BASE}/references/{created['reference']['refId']}")[0] == 204
     assert s3_client.multipart[upload_id]["aborted"] is True
+
+
+# --- §45.34: the analysis job on the reference's page, and its own setting ----------------------------------------
+
+
+def test_get_answers_the_analysis_job_so_the_page_shows_each_step_and_the_reason(
+    wcall: WsCall, runtime: FakeRuntime, s3_client: FakeS3, table: FakeTable, clock: Clock
+) -> None:
+    ref = _upload(wcall, s3_client)
+    status, got = wcall("GET", f"{BASE}/references/{ref['refId']}")
+    assert (status, got["job"]) == (200, None)  # never studied
+    _, started = wcall("POST", f"{BASE}/references/{ref['refId']}/analyze", {})
+    job_id = started["job"]["jobId"]
+    got = wcall("GET", f"{BASE}/references/{ref['refId']}")[1]
+    assert got["job"]["jobId"] == job_id  # the job of currentJobId while it runs
+    assert [s["key"] for s in got["job"]["steps"]] == ["look", "listen", "write"]
+    assert [s["label"] for s in got["job"]["steps"]] == ["Look at it", "Listen", "Write it up"]
+    # the agent fails it with its own reason and clears currentJobId: the newest job is still answered
+    reason = "This video is longer than 10 minutes."
+    table.items[(pk(), f"PJOB#{job_id}")].update(status="failed", error=reason)
+    table.items[(pk(), f"REFVID#{ref['refId']}")].update(status="failed")
+    table.items[(pk(), f"REFVID#{ref['refId']}")].pop("currentJobId", None)
+    got = wcall("GET", f"{BASE}/references/{ref['refId']}")[1]
+    assert (got["job"]["jobId"], got["job"]["status"], got["job"]["error"]) == (job_id, "failed", reason)
+    assert leaked([got]) == []
+    # a second, newer study is the one shown
+    clock.now += timedelta(minutes=1)
+    _, again = wcall("POST", f"{BASE}/references/{ref['refId']}/analyze", {})
+    table.items[(pk(), f"PJOB#{again['job']['jobId']}")].update(status="ready")
+    table.items[(pk(), f"REFVID#{ref['refId']}")].pop("currentJobId", None)
+    assert wcall("GET", f"{BASE}/references/{ref['refId']}")[1]["job"]["jobId"] == again["job"]["jobId"]
+
+
+def test_another_references_or_a_storys_job_is_never_answered(
+    wcall: WsCall, s3_client: FakeS3, table: FakeTable
+) -> None:
+    ref = _upload(wcall, s3_client)
+    other = _upload(wcall, s3_client)
+    _, started = wcall("POST", f"{BASE}/references/{other['refId']}/analyze", {})
+    table.items[(pk(), f"REFVID#{ref['refId']}")]["currentJobId"] = started["job"]["jobId"]  # a wrong pointer
+    table.items[(pk(), "PJOB#01JD000000000000000000STJ")] = {
+        "pk": pk(), "sk": "PJOB#01JD000000000000000000STJ", "type": "ws_pjob", "userId": USER,
+        "workspaceId": "stories", "jobId": "01JD000000000000000000STJ", "contentType": "animation",
+        "contentId": ref["refId"], "status": "ready", "createdAt": "2026-11-15T13:00:00.000Z",
+    }  # fmt: skip
+    assert wcall("GET", f"{BASE}/references/{ref['refId']}")[1]["job"] is None
+
+
+def test_patch_takes_a_title_and_the_videos_own_setting_alone_or_together(wcall: WsCall, s3_client: FakeS3) -> None:
+    """``patchReference(ws, refId, { title?, ai? })`` (§45.34): "Keep with this video" saves the setting alone."""
+    ref = _upload(wcall, s3_client)
+    status, body = wcall("PATCH", f"{BASE}/references/{ref['refId']}", {"ai": {"model": "fable-5-2", "effort": "high"}})
+    assert (status, body["reference"]["ai"], body["reference"]["title"]) == (
+        200,
+        {"model": "fable-5-2", "effort": "high"},
+        "Skid",
+    )
+    status, body = wcall("PATCH", f"{BASE}/references/{ref['refId']}", {"title": "  Ice   skid "})
+    assert (status, body["reference"]["title"], body["reference"]["ai"]["model"]) == (200, "Ice skid", "fable-5-2")
+    status, body = wcall("PATCH", f"{BASE}/references/{ref['refId']}", {"ai": {"model": None, "effort": None}})
+    assert body["reference"]["ai"] == {"model": None, "effort": None}
+    for bad in ({"ai": {"effort": "turbo"}}, {"title": ""}, {"ai": "fable-5-2"}, {"colour": "red"}):
+        assert wcall("PATCH", f"{BASE}/references/{ref['refId']}", bad)[0] == 400, bad

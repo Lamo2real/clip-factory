@@ -170,7 +170,7 @@ def test_every_tile(call: Call, store: db.Store, s3_client: FakeS3) -> None:
     assert you[0]["title"] == "Out"
     assert (
         you[2]["sentence"]
-        == "Lamo Stories' Facebook (Lamo Page) needs connecting again. Open Connections and tap Connect."
+        == "Lamo Stories' Facebook (Lamo Page) needs connecting again. Open Social accounts and tap Connect."
     )
     assert d["producing"] == [{"storyId": making["storyId"], "title": "Making", "step": "scenes", "progress": 0.3125}]
     accounts = {a["platform"]: a for a in d["accounts"]}

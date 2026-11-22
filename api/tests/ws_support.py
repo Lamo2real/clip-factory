@@ -526,6 +526,21 @@ INTERNAL = (
     "input",
     "referenceKey",
     "applied",
+    # §45.34's internal attributes, and the ones round 3 added
+    "ownerEdits",
+    "staleScenes",
+    "brief",
+    "lastJobId",
+    "checkStatus",
+    "lastLook",
+    "configSavedAt",
+    "providersPickedAt",
+    "pickedAt",
+    "notClipsConfirmed",
+    "rev",
+    "fileRemovedAt",
+    "sourceRemovedAt",
+    "picturesRemovedAt",
 )
 
 
