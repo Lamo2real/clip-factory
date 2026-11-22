@@ -738,11 +738,11 @@ highlights must be real anchors).
   false, `notify.contentRewards` false, the singular); the tick (it starts a look only when on, due and not
   running); the poll hook (signed in only, only with an adopt candidate, inside the 25 calls); gates (§41.6 changes
   10 and 11, and §38's own adds unchanged).
-- **Infrastructure** (`terraform test`, mock providers): `CR_FINDER = "off"` by default and `"on"` with the variable,
-  on `cf-prod-api`, `cf-prod-stats` and `cf-prod-campaigns` (each module's exact env key set updated);
+- **Infrastructure** (`terraform test`, mock providers): `CR_FINDER = "off"` by the modules' default and `"on"` with
+  the variable, on `cf-prod-api`, `cf-prod-stats` and `cf-prod-campaigns` (each module's exact env key set updated);
   `cf-prod-campaigns` still has no `secretsmanager` action; the realtime and notify filters include `CRFIND`
-  (notify still `MODIFY` only); `envs/prod` defaults to `false` and still plans with `true`; nothing replaced (the
-  delete gate test).
+  (notify still `MODIFY` only); `envs/prod` defaults to `true` since the switch PR #136 (it defaulted to `false`
+  before) and still plans with `false`; nothing replaced (the delete gate test).
 - **Web units** (Vitest, `web/test/finder.test.ts`, `web/test/finderPage.test.tsx`, and the updated
   `backLink.test.ts` and `noGuesses.test.ts`): `lib/finder.ts` (404 and 503 → hidden, the debounced `PATCH`, `places:
   null` when the picked chips equal every ready place, `finderHref` only for the Discover link and only while the

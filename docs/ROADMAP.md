@@ -101,8 +101,9 @@ the owner's words: "will I be able to find campaigns and join them based on some
 - **Polite and anonymous**: only what robots.txt allows (`/sitemap.xml`, `/c/campaigns/{uuid}`), never an `/api/…`
   path, at most 40 pages a look, 1 s apart, from AWS only, with no cookie and nothing about the owner; a backoff, a
   `blocked` state, and "Look on Content Rewards yourself" always there.
-- Ships switched off (`cr_finder_enabled = false`) until its five parts (reader, routes, infra, web, docs and help)
-  have merged; then one switch PR turns it on. It goes off again the same day if Content Rewards or Whop asks.
+- Shipped switched off (`cr_finder_enabled = false`) until its five parts (reader, routes, infra, web, docs and help)
+  had merged; then the one-line switch PR #136 turned it on (22 Nov 2026), so it is on in prod. It goes off again the
+  same day if Content Rewards or Whop asks.
 
 **Built by the auto-posting request** ([CONTRACTS.md §46](CONTRACTS.md#46-auto-posting-the-oldest-clips-in-review-go-up-by-themselves-every-x-hours-owner-request-2026-11-22),
 [ADR-81](DECISIONS.md#adr-81-auto-posting-an-hourly-eventbridge-rule-a-due-check-and-uploads-own-code); the owner's

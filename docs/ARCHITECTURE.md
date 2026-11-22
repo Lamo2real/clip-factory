@@ -1366,8 +1366,8 @@ No new Lambda, schedule, table, index, bucket, secret or grant: one page (`/camp
 `/v1/contentrewards/finder`, one owner item (`CRFIND`), a shared cache under pk `CRPUBLIC` (with TTL), one new action
 (`find`) of `cf-prod-campaigns`, started by the existing `cf-prod-stats` tick and by the api on the owner's taps. The
 normal way of making clips at `/` is untouched (§39.5's 5-tap click counts still hold), and the floating setup to-do
-list keeps its five rows. The whole finder ships behind its own switch, `cr_finder_enabled` (default `false`), see
-**The switch** below.
+list keeps its five rows. The whole finder sits behind its own switch, `cr_finder_enabled` (shipped `false`; **on** in
+prod since the switch PR #136, 22 Nov 2026), see **The switch** below.
 
 **A look.** `finder.run.run(deps, user_id, why, now)` in `cf-prod-campaigns`, `why` one of `schedule` (the tick,
 every 6 hours: "I look 4 times a day"), `start` (his first "Find campaigns for me"), `check_now` ("Look again now")
@@ -1524,13 +1524,14 @@ entry card need no extra call.
 `CRPUBLIC` items hold no owner data and never travel (the broadcast takes only `USER#` keys). Nothing that holds the
 owner's data is replaced or destroyed.
 
-**The switch.** Every finder route answers 503 `unavailable`, the tick never starts a
-look and `cf-prod-campaigns` answers `off`, unless `CR_FINDER=on` on `cf-prod-api`, `cf-prod-stats` and
-`cf-prod-campaigns`, set by Terraform `cr_finder_enabled` (default `false`). The web hides the Campaigns entry card,
-Home's chips and the "Find another campaign" mapping on 404 or 503, and the page says "Find campaigns is coming soon
-to Clip Factory." After the five parts of §41.6 have merged, one switch PR turns it on; setting it back to `false`
-turns the whole finder off again (the stored items stay), and is done the same day if Content Rewards or Whop asks
-Clip Factory to stop reading ([DEPLOYMENT.md](DEPLOYMENT.md#campaign-finder-contracts-41)).
+**The switch.** The finder is **on** in prod since the switch PR #136 (22 Nov 2026). Every finder route answers 503
+`unavailable`, the tick never starts a look and `cf-prod-campaigns` answers `off`, unless `CR_FINDER=on` on
+`cf-prod-api`, `cf-prod-stats` and `cf-prod-campaigns`, set by Terraform `cr_finder_enabled` (the modules default
+`false`; `envs/prod` shipped `false` and defaults `true` since PR #136). Turned off, the web hides the Campaigns entry
+card, Home's chips and the "Find another campaign" mapping on 404 or 503, and the page says "Find campaigns is coming
+soon to Clip Factory." Once the five parts of §41.6 had merged, the switch PR #136 turned it on; setting it back to
+`false` turns the whole finder off again (the stored items stay), and is done the same day if Content Rewards or Whop
+asks Clip Factory to stop reading ([DEPLOYMENT.md](DEPLOYMENT.md#campaign-finder-contracts-41)).
 
 ### 23. Auto-posting: the hourly tick, the due check and Upload's code (CONTRACTS §46, ADR-81)
 

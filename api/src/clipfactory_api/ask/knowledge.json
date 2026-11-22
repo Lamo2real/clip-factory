@@ -1,5 +1,5 @@
 {
- "version": "d782c4ab9b59",
+ "version": "db3cb751b3b4",
  "parts": [
   {
    "id": "app-map",
@@ -273,7 +273,7 @@
    "id": "contracts-41",
    "title": "CONTRACTS: 41. Campaign finder: campaigns that match what you want (owner request, 2026-11-21)",
    "line": "The owner's words: \"Also, will I be able to find campaigns and join them based on some requirements that I set if the",
-   "chars": 99490
+   "chars": 100268
   },
   {
    "id": "contracts-42",
@@ -693,7 +693,7 @@
    "id": "adr-65",
    "title": "DECISIONS: ADR-65 Campaign finder: Content Rewards' public pages read politely, joining stays the owner's own tap",
    "line": "Context. The owner asked (2026-11-21) whether he can find campaigns and join them by requirements he sets, once",
-   "chars": 6434
+   "chars": 6491
   },
   {
    "id": "adr-66",
@@ -795,7 +795,7 @@
    "id": "architecture-data-flows",
    "title": "ARCHITECTURE: Data flows",
    "line": "1. Sign in and token lifetimes",
-   "chars": 96586
+   "chars": 96799
   },
   {
    "id": "architecture-failure-handling",
@@ -855,7 +855,7 @@
    "id": "deployment-content-rewards-contracts-38",
    "title": "DEPLOYMENT: Content Rewards (CONTRACTS §38)",
    "line": "Paid clipping campaigns on Content Rewards ([CONTRACTS.md §38](CONTRACTS.md#38-content-rewards-campaigns-owner-request-2026-11-21),",
-   "chars": 8585
+   "chars": 8840
   },
   {
    "id": "deployment-first-sign-in",
@@ -909,7 +909,7 @@
    "id": "security-campaign-finder-contracts-41",
    "title": "SECURITY: Campaign finder (CONTRACTS §41)",
    "line": "The finder reads Content Rewards' public campaign pages (what anyone sees logged out) a few times a day and",
-   "chars": 5930
+   "chars": 5978
   },
   {
    "id": "security-auto-posting-contracts-46",
@@ -987,7 +987,7 @@
    "id": "testing-what-the-tests-must-cover",
    "title": "TESTING: What the tests must cover",
    "line": "Web (Playwright, mock mode)",
-   "chars": 98889
+   "chars": 98960
   },
   {
    "id": "testing-lamo-stories-contracts-45",
@@ -999,7 +999,7 @@
    "id": "testing-manual-checks-after-the-first-deploy",
    "title": "TESTING: Manual checks after the first deploy",
    "line": "1. Sign in with the temporary password and set a new one.",
-   "chars": 15938
+   "chars": 16203
   },
   {
    "id": "ux-principles",
@@ -1137,7 +1137,7 @@
    "id": "ux-content-rewards-campaigns",
    "title": "UX_DESIGN_SYSTEM: Content Rewards campaigns",
    "line": "Contract: [CONTRACTS.md §38.1](CONTRACTS.md#381-words-and-rules-every-new-screen-follows) and the screens of §38.3–§38.7,",
-   "chars": 29878
+   "chars": 29915
   },
   {
    "id": "ux-kid-proof-checklist",

@@ -1055,11 +1055,11 @@ highlights must be real anchors).
   false, `notify.contentRewards` false, the singular); the tick (it starts a look only when on, due and not
   running); the poll hook (signed in only, only with an adopt candidate, inside the 25 calls); gates (§41.6 changes
   10 and 11, and §38's own adds unchanged).
-- **Infrastructure** (`terraform test`, mock providers): `CR_FINDER = "off"` by default and `"on"` with the variable,
-  on `cf-prod-api`, `cf-prod-stats` and `cf-prod-campaigns` (each module's exact env key set updated);
+- **Infrastructure** (`terraform test`, mock providers): `CR_FINDER = "off"` by the modules' default and `"on"` with
+  the variable, on `cf-prod-api`, `cf-prod-stats` and `cf-prod-campaigns` (each module's exact env key set updated);
   `cf-prod-campaigns` still has no `secretsmanager` action; the realtime and notify filters include `CRFIND`
-  (notify still `MODIFY` only); `envs/prod` defaults to `false` and still plans with `true`; nothing replaced (the
-  delete gate test).
+  (notify still `MODIFY` only); `envs/prod` defaults to `true` since the switch PR #136 (it defaulted to `false`
+  before) and still plans with `false`; nothing replaced (the delete gate test).
 - **Web units** (Vitest, `web/test/finder.test.ts`, `web/test/finderPage.test.tsx`, and the updated
   `backLink.test.ts` and `noGuesses.test.ts`): `lib/finder.ts` (404 and 503 → hidden, the debounced `PATCH`, `places:
   null` when the picked chips equal every ready place, `finderHref` only for the Discover link and only while the
@@ -1425,10 +1425,12 @@ The list is CONTRACTS §45.19. Three checks matter most, because the owner put p
      Whether Meta's earnings metrics still answer
      ([CONTRACTS §25.8](CONTRACTS.md#258-not-verified-live-each-failure-becomes-a-not-available-label-never-a-number)).
 17. **Campaign finder** ([CONTRACTS §41.6](CONTRACTS.md#416-who-builds-what-the-switch-tests-not-verified-live)): not
-   checked live when built. Do them after the finder's switch PR has merged
-   ([DEPLOYMENT.md](DEPLOYMENT.md#campaign-finder-contracts-41)).
-   - In the deploy log of the switch PR, the plan changes only `CR_FINDER` on `cf-prod-api`, `cf-prod-stats` and
-     `cf-prod-campaigns` in place, and the delete gate passes.
+   checked live when built. The finder's switch PR #136 merged on 22 Nov 2026
+   ([DEPLOYMENT.md](DEPLOYMENT.md#campaign-finder-contracts-41)), so the finder is on and these can be done now.
+   - Done: in the deploy log of the switch PR #136 (run 44984165179), the plan was "Plan: 0 to add, 4 to change, 0 to
+     destroy.": `CR_FINDER` `"off"` → `"on"` in place on `cf-prod-api`, `cf-prod-stats` and `cf-prod-campaigns`, plus
+     the usual per-deploy `VERSION` update on `cf-prod-api` and `cf-prod-stories-api`; nothing added, deleted or
+     replaced, and the delete gate passed.
    - Open Your campaigns › **Find campaigns**, keep the defaults and tap **Find campaigns for me**. In CloudWatch Logs,
      `/aws/lambda/cf-prod-campaigns` shows `finder.read` lines: note whether Content Rewards serves `robots.txt`, the
      sitemap and campaign pages to AWS addresses (a 403 or a bot wall means `blocked`, and the page says so), and

@@ -106,8 +106,8 @@ The finder reads Content Rewards' **public** campaign pages (what anyone sees lo
 matches them to what the owner wants ([CONTRACTS.md §41](CONTRACTS.md#41-campaign-finder-campaigns-that-match-what-you-want-owner-request-2026-11-21),
 [ADR-65](DECISIONS.md#adr-65-campaign-finder-content-rewards-public-pages-read-politely-joining-stays-the-owners-own-tap),
 [ARCHITECTURE.md flow 22](ARCHITECTURE.md#22-campaign-finder-contracts-41-adr-65)). Joining stays his own tap on
-Content Rewards; nothing drives Content Rewards' or Whop's site for him. It ships switched off (`CR_FINDER=off`,
-every finder route 503) until all its parts have merged.
+Content Rewards; nothing drives Content Rewards' or Whop's site for him. It shipped switched off (`CR_FINDER=off`,
+every finder route 503) until all its parts had merged; the switch PR #136 turned it on (22 Nov 2026).
 
 | What | How it is protected |
 |---|---|
