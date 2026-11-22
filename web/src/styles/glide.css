@@ -172,6 +172,11 @@
 .topbar:has(> .ws-switch-host--topbar[data-ws-squeeze]) .brand {
   min-width: 44px;
 }
+/* The room the name leaves is the switcher's own: its toggle stays beside the live dot, as on every other phone. */
+.topbar > .ws-switch-host--topbar[data-ws-squeeze] {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
 .ws-switch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

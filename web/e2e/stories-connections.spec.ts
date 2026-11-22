@@ -59,7 +59,7 @@ test("after a connect: Connected as {name} ({handle}), and the card asks whether
   await expect(page.locator(".toast").filter({ hasText: "Connected as Lamo Stories (@lamostories)." }).first()).toBeVisible();
   await expect(yt.getByRole("group", { name: "Is this your Lamo Stories channel?" })).toBeVisible();
   await yt.getByRole("button", { name: "Yes, that's it" }).click();
-  await expect(page.locator(".toast").filter({ hasText: "Great! Lamo Stories posts to Lamo Stories on YouTube." })).toBeVisible();
+  await expect(page.locator(".toast").filter({ hasText: "Great! Lamo Stories posts to this YouTube channel (Lamo Stories)." })).toBeVisible();
   await expect(yt.locator(".st-intended")).toHaveCount(0);
   await expect(page.locator("canvas.confetti").first()).toBeAttached();
 });
@@ -78,7 +78,7 @@ test("a connect finished by picking the Instagram account from the list asks whe
   expect(o.page, "@320: the page scrolls sideways").toBeLessThanOrEqual(o.viewport);
   expect(o.items, "@320").toEqual([]);
   await ask.getByRole("button", { name: "Yes, that's it" }).click();
-  await expect(page.locator(".toast").filter({ hasText: "Great! Lamo Stories posts to lamo.stories on Instagram." })).toBeVisible();
+  await expect(page.locator(".toast").filter({ hasText: "Great! Lamo Stories posts to this Instagram account (lamo.stories)." })).toBeVisible();
   await expect(ig.locator(".st-intended")).toHaveCount(0);
 });
 
@@ -125,8 +125,59 @@ test("round 4: no Check now while the account is still to be picked, and one toa
   const ask = ig.getByRole("group", { name: "Is this your Lamo Stories account?" });
   await expect(ask).toBeVisible();
   await ask.getByRole("button", { name: "Yes, that's it" }).click();
-  await expect(page.locator(".toast").filter({ hasText: "Great! Lamo Stories posts to lamo.stories on Instagram." })).toBeVisible();
-  expect(await page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts)).toEqual(["Great! Lamo Stories posts to lamo.stories on Instagram."]);
+  await expect(page.locator(".toast").filter({ hasText: "Great! Lamo Stories posts to this Instagram account (lamo.stories)." })).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts)).toEqual(["Great! Lamo Stories posts to this Instagram account (lamo.stories)."]);
   // Connected now: Check now is back.
   await expect(ig.getByRole("button", { name: /Check now/ })).toBeVisible();
+});
+
+test("round 5: one name for the other app, ids and developer words one tap away, cards that flow by their height (§45.36 E13, E14, E18)", async ({ page }) => {
+  await on(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/stories/connections");
+  await ready(page);
+  // E13: "Clip Factory" everywhere, never "Lamo Clips".
+  const words = await page.locator(".st-connections").evaluate((el) => (el as HTMLElement).innerText);
+  expect(words).toContain("Clip Factory");
+  expect(words).not.toContain("Lamo Clips");
+  // E14: the account's id is not on screen until Technical details is opened; then it is, one tap away.
+  const yt = cardOf(page, "YouTube");
+  await expect(yt.locator(".st-who__id")).toBeHidden();
+  await yt.locator(".st-who").getByText("Technical details").click();
+  await expect(yt.locator(".st-who__id code")).toBeVisible();
+  await expect(yt.locator(".st-who__id code")).toHaveText(/^UC/);
+  // The Meta card's first lines say what to do in plain words; Facebook Login's own words are folded.
+  const insta = cardOf(page, "Instagram");
+  await expect(insta.getByText("Copy these two addresses into your Meta app's settings", { exact: false })).toBeVisible();
+  await expect(insta.getByText("Valid OAuth Redirect URIs", { exact: false })).toBeHidden();
+  const tiktok = cardOf(page, "TikTok");
+  await expect(tiktok.getByText("Sandbox", { exact: false })).toBeHidden();
+  // E18: in each column every card starts right under the one above it (16 px apart), never under an empty area.
+  const boxes = await page.locator(".st-conns > .st-conn").evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => ({ x: Math.round(r.x), top: r.top, bottom: r.bottom })));
+  const columns = new Map<number, { top: number; bottom: number }[]>();
+  for (const b of boxes) columns.set(b.x, [...(columns.get(b.x) ?? []), b]);
+  expect(columns.size, "the cards sit in more than one column at 1440").toBeGreaterThan(1);
+  for (const col of columns.values()) {
+    col.sort((a, b) => a.top - b.top);
+    for (let i = 1; i < col.length; i++) expect(col[i]!.top - col[i - 1]!.bottom, "the gap above a card").toBeLessThanOrEqual(17);
+  }
+  for (const width of [320, 768, 1024, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.waitForTimeout(200);
+    const o = await findOverflow(page);
+    expect(o.page, `@${width}: the page scrolls sideways`).toBeLessThanOrEqual(o.viewport);
+    expect(o.items, `@${width}`).toEqual([]);
+  }
+});
+
+test("round 5: reconnecting clears the old warning (§45.36 E18)", async ({ page }) => {
+  await on(page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/stories/connections");
+  await ready(page);
+  const tiktok = cardOf(page, "TikTok");
+  await expect(tiktok).toContainText("The TikTok app keys changed. Connect again.");
+  await tiktok.getByRole("button", { name: "Reconnect" }).click();
+  await expect(tiktok.locator(".st-chip").first()).toHaveText("Connected");
+  await expect(tiktok).not.toContainText("app keys changed");
 });

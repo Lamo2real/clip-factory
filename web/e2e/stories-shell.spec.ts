@@ -900,13 +900,16 @@ test.describe("the pages", () => {
     await expect(page).toHaveURL(/\/stories\/setup$/);
     await storiesReady(page);
     await expect(page.locator(".st-rail")).toBeVisible();
-    // Step 11: finish with steps left (none of them blocks making videos): confetti, then the card is gone.
+    // Step 11: finish with steps left (none of them blocks making videos): confetti, then the big card is gone and
+    // a small one keeps what is left, with a way back to it (§45.36 E15).
     await page.locator(".st-steps__item").filter({ hasText: "Done" }).click();
     await page.getByRole("button", { name: "Finish" }).click();
     await expect(page.locator("canvas.confetti").first()).toBeAttached();
     await expect(page).toHaveURL(/\/stories$/, { timeout: 8000 });
     await storiesReady(page);
-    await expect(page.locator(".st-setupcard")).toHaveCount(0);
+    await expect(page.locator(".st-setupcard:not(.st-setupcard--left)")).toHaveCount(0);
+    await expect(page.locator(".st-setupcard--left h2")).toHaveText(/^Finish setting up: \d+ left$/);
+    await expect(page.locator(".st-setupcard--left").getByRole("link", { name: "Open setup" })).toHaveAttribute("href", "/stories/setup");
   });
 
   test("Library: files by kind with their story, Download, and a project with how it was made", async ({ page }) => {

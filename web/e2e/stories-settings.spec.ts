@@ -238,6 +238,8 @@ test.describe("AI: add a model (§45.34)", () => {
     // Moved to a Region that is not in the list: its last check was of the old one, so a new check is asked for.
     await row.getByRole("button", { name: "Edit Nova Premier" }).click();
     const moved = page.getByRole("form", { name: "Change Nova Premier" });
+    // (Its Region must fit its ID, §45.36 E4: the eu. profile runs only in Europe, so it moves with the plain model ID.)
+    await moved.getByLabel("Model ID", { exact: true }).fill("amazon.nova-premier-v1:0");
     await moved.getByLabel("AWS Region").selectOption("another");
     await moved.getByLabel("Its Region code").fill("mx-central-1");
     await moved.getByRole("button", { name: "Save the changes" }).click();
@@ -587,5 +589,69 @@ test.describe("round 4 (§45.35)", () => {
     await ready(page);
     await expect(card(page, "Add a model").locator(".st-stg-own").filter({ hasText: "Mistral Large" }).locator(".st-stg-chip")).toHaveText(["Added by you", "Not checked yet"]);
     await expect(page.getByRole("radiogroup", { name: "Default model" }).getByRole("radio", { name: /Mistral Large/ })).toContainText("Not checked yet");
+  });
+});
+
+test.describe("round 5: Add a model and the status words (§45.36 E4, E14, E17)", () => {
+  test("Anthropic's levels start ticked; a pasted ARN fills the Region; a Region that does not fit is refused naming both", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openSection(page, "ai");
+    const add = card(page, "Add a model");
+    await add.getByRole("button", { name: "Add a model" }).click();
+    const form = page.getByRole("form", { name: "Add a model" });
+    // E17: an Anthropic model starts with its five levels ticked and its usual own level, so the first Add works.
+    for (const level of ["Low", "Medium", "High", "Extra high", "Maximum"]) await expect(form.getByRole("button", { name: level, exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(form.getByRole("radiogroup", { name: "Its own level" }).getByRole("radio", { name: "High", exact: true })).toHaveAttribute("aria-checked", "true");
+    // E14: the first line is plain; inference profiles and ARNs are one tap away.
+    await expect(form.getByText("inference profile", { exact: false })).toBeHidden();
+    await form.getByText("Technical details").click();
+    await expect(form.getByText("inference profile", { exact: false })).toBeVisible();
+    // E4: a pasted ARN fills the Region in.
+    await form.getByLabel("Name").fill("My Claude");
+    await form.getByLabel("Model ID", { exact: true }).fill("arn:aws:bedrock:eu-west-3:123456789012:inference-profile/eu.anthropic.claude-x-v1:0");
+    await expect(form.getByLabel("AWS Region")).toHaveValue("eu-west-3");
+    // An eu. profile with a US Region: refused before sending, naming both.
+    await form.getByLabel("Model ID", { exact: true }).fill("eu.anthropic.claude-x-v1:0");
+    await form.getByLabel("AWS Region").selectOption("us-east-1");
+    await form.getByRole("button", { name: "Add the model" }).click();
+    await expect(form.getByRole("alert")).toHaveText("This model ID starts with eu., so it runs in Europe, but its Region says us-east-1. Pick a Region in Europe, like eu-north-1.");
+    await form.getByLabel("AWS Region").selectOption("eu-north-1");
+    await form.getByRole("button", { name: "Add the model" }).click();
+    await expect(page.locator(".toast").filter({ hasText: "My Claude is added!" })).toBeVisible();
+    // E17: its marks sit together at the row's right edge with the usual gap, in its row and in the Default model list.
+    const row = add.locator(".st-stg-own").filter({ hasText: "My Claude" });
+    const marks = await row.locator(".st-stg-own__head").evaluate((head) => {
+      const chips = Array.from(head.querySelectorAll(".st-stg-chip")).map((c) => c.getBoundingClientRect());
+      const h = head.getBoundingClientRect();
+      return { gap: chips[1]!.left - chips[0]!.right, right: h.right - chips[chips.length - 1]!.right };
+    });
+    expect(marks.gap).toBeGreaterThanOrEqual(5);
+    expect(marks.right).toBeLessThanOrEqual(1);
+    const option = page.getByRole("radiogroup", { name: "Default model" }).getByRole("radio", { name: /My Claude/ });
+    const inList = await option.evaluate((opt) => {
+      const chips = Array.from(opt.querySelectorAll(".st-stg-chip")).map((c) => c.getBoundingClientRect());
+      const top = opt.querySelector(".st-stg-pick__top")!.getBoundingClientRect();
+      return { gap: chips[1]!.left - chips[0]!.right, right: top.right - chips[chips.length - 1]!.right };
+    });
+    expect(inList.gap).toBeGreaterThanOrEqual(5);
+    expect(inList.right).toBeLessThanOrEqual(1);
+    // E14: its exact ID is folded under Technical details.
+    await expect(row.locator(".st-tech-fold code")).toBeHidden();
+    await row.getByText("Technical details").click();
+    await expect(row.locator(".st-tech-fold code")).toHaveText("eu.anthropic.claude-x-v1:0");
+  });
+
+  test("Settings › Video never sends the owner to Settings › Video; Settings has Open setup again", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openSection(page, "video");
+    const maker = page.getByRole("radiogroup", { name: "Video maker" });
+    await maker.getByRole("radio", { name: /Amazon Nova Reel/ }).click();
+    await expect(card(page, "Video maker").getByRole("status")).toContainText("Pick Built-in animation above");
+    expect(await page.locator(".st-stg-section").evaluate((el) => (el as HTMLElement).innerText)).not.toContain("in Settings › Video");
+    await expect(page.getByRole("link", { name: "Open setup again" })).toHaveAttribute("href", "/stories/setup");
+    await openSection(page, "ai");
+    expect(await card(page, "Prices").evaluate((el) => (el as HTMLElement).innerText)).not.toContain("Settings › AI");
   });
 });
