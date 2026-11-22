@@ -6,11 +6,18 @@
 // changed (Edit) or removed (Remove: a model a saved setting still uses is refused with the API's own sentence, shown
 // here). Nothing is shown as working because it is listed: after a save the card suggests Check models, and a model
 // Amazon Bedrock refuses keeps Bedrock's sentence; nothing is ever swapped for another model.
+//
+// Round 4 (§45.35): each model also says how Lamo Stories calls it (D1): whether it takes an effort level the way
+// Claude models do (effortField output_config, else none: no level is ever sent), whether it can use tools (the
+// chat's actions; without them it only talks and tidy answers are asked for as text) and whether it takes Amazon
+// Bedrock's prompt cache. They start right for its maker (Anthropic: all three; Amazon: the cache; anyone else: none)
+// until the owner changes one. Changing its model ID or Region makes it "Not checked yet" again (D6), and every
+// line says who makes it and who runs it ("Mistral on Amazon Bedrock", D8).
 import { useId, useState, type ReactNode } from "react";
 import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
 import { storiesApi } from "../api/client.ts";
-import { CUSTOM_MODEL_KEY, EFFORT_LABEL, MAX_CUSTOM_MODELS, type Effort, type ModelDef, type ModelInfo, type Price } from "../api/types.ts";
+import { callingFor, CUSTOM_MODEL_KEY, EFFORT_LABEL, MAX_CUSTOM_MODELS, type Effort, type EffortField, type ModelCalling, type ModelDef, type ModelInfo, type Price } from "../api/types.ts";
 import { Btn, cheer, Chip, MODEL_STATUS, Note, SetCard, SetPick, SetSelect, SetSwitch, SIcon, whenText } from "./bits.tsx";
 
 const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
@@ -88,6 +95,11 @@ interface Draft {
   label: string;
   maker: string;
   otherMaker: string;
+  /** how Lamo Stories calls it (§45.35 D1); they follow the maker until the owner changes one (`ownCalling`) */
+  effortField: EffortField;
+  tools: boolean;
+  cache: boolean;
+  ownCalling: boolean;
   modelId: string;
   /** a listed Region, or ANOTHER_REGION with the code in otherRegion */
   region: string;
@@ -102,13 +114,42 @@ interface Draft {
   currency: string;
 }
 
+/**
+ * How an added model is called: what it says itself, else what its maker's models take. A model with levels takes them;
+ * one with none ticked has no effort setting, whatever it was saved with (an Anthropic model saved before round 4 reads
+ * back as output_config with no levels: nothing is ever sent to it, so it shows, and saves again, as none).
+ */
+export function callingOf(m: Pick<ModelInfo, "provider" | "efforts" | "effortField" | "tools" | "cache">): ModelCalling {
+  const usual = callingFor(m.provider);
+  return {
+    effortField: m.efforts.length ? (m.effortField ?? "output_config") : "none",
+    tools: m.tools ?? usual.tools,
+    cache: m.cache ?? usual.cache,
+  };
+}
+
+/** The maker a draft names (a listed one, or the name typed under Someone else). */
+const makerOf = (d: Pick<Draft, "maker" | "otherMaker">) => (d.maker === SOMEONE_ELSE ? d.otherMaker.trim() : d.maker);
+
+/** The draft after the maker changed: the three ways of calling it follow the new maker unless the owner set them. */
+export function withMaker(d: Draft, patch: Partial<Pick<Draft, "maker" | "otherMaker">>): Draft {
+  const next = { ...d, ...patch };
+  if (d.ownCalling) return next;
+  const usual = callingFor(makerOf(next));
+  return { ...next, ...usual, efforts: usual.effortField === "none" ? [] : next.efforts, defaultEffort: usual.effortField === "none" ? null : next.defaultEffort };
+}
+
 function draftOf(m: ModelInfo | null): Draft {
   const known = m && (MAKERS as readonly string[]).includes(m.provider);
   const price = m?.price ?? null;
+  const calling = m ? callingOf(m) : callingFor("Anthropic");
   return {
     label: m?.label ?? "",
     maker: m ? (known ? m.provider : SOMEONE_ELSE) : "Anthropic",
     otherMaker: m && !known ? m.provider : "",
+    ...calling,
+    // An existing model keeps what it was saved with: a new maker name no longer moves them.
+    ownCalling: !!m,
     modelId: m?.modelId ?? "",
     region: m?.region && !REGIONS.some((r) => r.value === m.region) ? ANOTHER_REGION : (m?.region ?? DEFAULT_REGION),
     otherRegion: m?.region && !REGIONS.some((r) => r.value === m.region) ? m.region : "",
@@ -138,7 +179,9 @@ export function defOf(d: Draft): ModelDef | { problem: string } {
   const region = d.region === ANOTHER_REGION ? d.otherRegion.trim() : d.region;
   const badRegion = regionProblem(region);
   if (badRegion) return { problem: badRegion };
-  if (d.efforts.length && (!d.defaultEffort || !d.efforts.includes(d.defaultEffort))) return { problem: "Pick its own level, the one it uses when nothing else is set." };
+  const efforts = d.effortField === "none" ? [] : EFFORTS.filter((e) => d.efforts.includes(e));
+  if (d.effortField === "output_config" && !efforts.length) return { problem: "Tick the effort levels it accepts, or switch off It has effort levels." };
+  if (efforts.length && (!d.defaultEffort || !efforts.includes(d.defaultEffort))) return { problem: "Pick its own level, the one it uses when nothing else is set." };
   const tokens = num(d.maxTokens);
   if (!Number.isInteger(tokens) || tokens < 1 || tokens > MAX_TOKENS) return { problem: `Type how many tokens it may write, a whole number from 1 to ${MAX_TOKENS.toLocaleString("en-GB")}.` };
   let price: Price | null = null;
@@ -153,12 +196,20 @@ export function defOf(d: Draft): ModelDef | { problem: string } {
     provider,
     modelId: d.modelId.trim(),
     region,
-    efforts: EFFORTS.filter((e) => d.efforts.includes(e)),
-    defaultEffort: d.efforts.length ? d.defaultEffort : null,
+    efforts,
+    defaultEffort: efforts.length ? d.defaultEffort : null,
     vision: d.vision,
     maxOutputTokens: tokens,
     price,
+    effortField: d.effortField,
+    tools: d.tools,
+    cache: d.cache,
   };
+}
+
+/** "Effort levels · tools · prompt cache", or what it does without them, in a few words. */
+export function callingWords(c: ModelCalling): string {
+  return [c.effortField === "output_config" ? "Takes effort levels" : "No effort levels", c.tools ? "uses tools" : "no tools", c.cache ? "prompt cache on" : "no prompt cache"].join(" · ");
 }
 
 /** A field with its label above it. */
@@ -186,7 +237,8 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
       const efforts = x.efforts.includes(e) ? x.efforts.filter((y) => y !== e) : EFFORTS.filter((y) => y === e || x.efforts.includes(y));
       // Its own level stays one of the levels it accepts: the first one ticked, until the owner picks another.
       const defaultEffort = x.defaultEffort && efforts.includes(x.defaultEffort) ? x.defaultEffort : (efforts[0] ?? null);
-      return { ...x, efforts, defaultEffort };
+      // Ticking its levels is saying how it is called: a later maker change no longer moves the three switches.
+      return { ...x, efforts, defaultEffort, ownCalling: true };
     });
   const save = async (el: HTMLElement | null) => {
     if (busy) return;
@@ -235,13 +287,13 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
         <SetPick<string>
           label="Who makes it"
           value={d.maker}
-          onChange={(v) => set({ maker: v })}
+          onChange={(v) => setD((x) => withMaker(x, { maker: v }))}
           options={[...MAKERS.map((m) => ({ value: m, label: m })), { value: SOMEONE_ELSE, label: "Someone else" }]}
         />
       </span>
       {d.maker === SOMEONE_ELSE ? (
         <Field id={`${id}-other`} label="Its maker's name">
-          <input id={`${id}-other`} className="st-stg-input" value={d.otherMaker} maxLength={40} placeholder="Cohere" onChange={(e) => set({ otherMaker: e.target.value })} />
+          <input id={`${id}-other`} className="st-stg-input" value={d.otherMaker} maxLength={40} placeholder="Cohere" onChange={(e) => setD((x) => withMaker(x, { otherMaker: e.target.value }))} />
         </Field>
       ) : null}
       <Field
@@ -269,28 +321,56 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
         ) : null}
       </span>
 
-      <span className="st-stg-field">
-        <span className="st-stg-label" id={`${id}-eff`}>
-          Effort levels it accepts
-        </span>
-        <span className="st-stg-toggles" role="group" aria-labelledby={`${id}-eff`}>
-          {EFFORTS.map((e) => (
-            <button key={e} type="button" className={`st-stg-toggle${d.efforts.includes(e) ? " is-on" : ""}`} aria-pressed={d.efforts.includes(e)} onClick={() => toggleEffort(e)}>
-              {d.efforts.includes(e) ? <SIcon name="check" size={18} /> : null}
-              {EFFORT_LABEL[e]}
-            </button>
-          ))}
-        </span>
+      <span className="st-stg-field st-stg-calling">
+        <span className="st-stg-label">How Lamo Stories talks to it</span>
         <span className="st-stg-small">
-          {d.efforts.length ? "Only these levels are ever sent to it." : "None ticked: it has no effort setting and runs at its own level. Lamo Stories never sends it one."}
+          {d.ownCalling
+            ? "Change these only if Amazon Bedrock says the model does not take them."
+            : `These start right for ${makerOf(d) || "its maker"}'s models. Change one only if Amazon Bedrock says the model does not take it.`}
         </span>
       </span>
-      {d.efforts.length ? (
+      <SetSwitch
+        label="It has effort levels"
+        description={d.effortField === "output_config" ? "Lamo Stories sends the level you pick, the way Claude models take it." : "It runs at its own level. Lamo Stories never sends it one."}
+        checked={d.effortField === "output_config"}
+        onChange={(v) => setD((x) => ({ ...x, ownCalling: true, effortField: v ? "output_config" : "none", efforts: v ? x.efforts : [], defaultEffort: v ? x.defaultEffort : null }))}
+      />
+      {d.effortField === "output_config" ? (
+        <span className="st-stg-field">
+          <span className="st-stg-label" id={`${id}-eff`}>
+            Effort levels it accepts
+          </span>
+          <span className="st-stg-toggles" role="group" aria-labelledby={`${id}-eff`}>
+            {EFFORTS.map((e) => (
+              <button key={e} type="button" className={`st-stg-toggle${d.efforts.includes(e) ? " is-on" : ""}`} aria-pressed={d.efforts.includes(e)} onClick={() => toggleEffort(e)}>
+                {d.efforts.includes(e) ? <SIcon name="check" size={18} /> : null}
+                {EFFORT_LABEL[e]}
+              </button>
+            ))}
+          </span>
+          <span className="st-stg-small">{d.efforts.length ? "Only these levels are ever sent to it." : "Tick the levels it accepts. Only those are ever sent to it."}</span>
+        </span>
+      ) : null}
+      {d.effortField === "output_config" && d.efforts.length ? (
         <span className="st-stg-field">
           <span className="st-stg-label">Its own level</span>
           <SetPick<Effort> label="Its own level" value={d.defaultEffort} onChange={(v) => set({ defaultEffort: v })} options={d.efforts.map((e) => ({ value: e, label: EFFORT_LABEL[e] }))} />
         </span>
       ) : null}
+      <SetSwitch
+        label="It can use tools"
+        description={
+          d.tools ? "In the chat it can do things for you, like starting a video. Answers come back in a tidy shape." : "It only talks: in the chat it cannot start things, and Lamo Stories asks it for tidy answers as text."
+        }
+        checked={d.tools}
+        onChange={(v) => set({ tools: v, ownCalling: true })}
+      />
+      <SetSwitch
+        label="It can reuse its instructions"
+        description={d.cache ? "Amazon Bedrock keeps the long instructions for a few minutes (its prompt cache), so answers come faster and cost less." : "Every answer reads the whole instructions again. Fine for a model that has no prompt cache."}
+        checked={d.cache}
+        onChange={(v) => set({ cache: v, ownCalling: true })}
+      />
       <SetSwitch label="It can look at pictures" description="On for models that read pictures, like chat photos and reference videos." checked={d.vision} onChange={(v) => set({ vision: v })} />
       <Field id={`${id}-max`} label="Most tokens it may write in one answer" hint="Its maker's page says this. 16,000 suits most stories.">
         <input id={`${id}-max`} className="st-stg-input" inputMode="numeric" value={d.maxTokens} onChange={(e) => set({ maxTokens: e.target.value })} />
@@ -325,7 +405,7 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
   );
 }
 
-function OwnRow({ ws, m, stale = false, onChanged, onEdit }: { ws: string; m: ModelInfo; /** changed since its last check */ stale?: boolean; onChanged: () => Promise<void>; onEdit: () => void }) {
+function OwnRow({ ws, m, stale = false, onChanged, onEdit }: { ws: string; m: ModelInfo; /** its model ID or Region changed since its last check */ stale?: boolean; onChanged: () => Promise<void>; onEdit: () => void }) {
   const toast = useToast();
   const [sure, setSure] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -353,17 +433,20 @@ function OwnRow({ ws, m, stale = false, onChanged, onEdit }: { ws: string; m: Mo
       <div className="st-stg-own__head">
         <span className="st-stg-own__name">{m.label}</span>
         <Chip tone="sky">Added by you</Chip>
-        {stale ? <Chip tone="sun">Check it again</Chip> : <Chip tone={s.tone}>{s.label}</Chip>}
+        {/* The API clears a moved model's last check (§45.35 D6): "Not checked yet"; an older one kept it: "Check it again". */}
+        {stale && m.status !== "not_checked" ? <Chip tone="sun">Check it again</Chip> : <Chip tone={s.tone}>{s.label}</Chip>}
       </div>
       <p className="st-stg-small">
-        Made by {m.provider} · on Amazon Bedrock{m.region ? ` in ${m.region}` : ""} · <code className="st-stg-code">{m.modelId}</code>
+        Made by {m.provider} · on {m.host ?? "Amazon Bedrock"}
+        {m.region ? ` in ${m.region}` : ""} · <code className="st-stg-code">{m.modelId}</code>
       </p>
       <p className="st-stg-small">
         {m.efforts.length ? `Levels: ${m.efforts.map((e) => EFFORT_LABEL[e]).join(", ")}. Its own: ${m.defaultEffort ? EFFORT_LABEL[m.defaultEffort] : "none"}.` : "No effort setting: it runs at its own level."}
         {m.vision ? " Looks at pictures." : " Words only."}
       </p>
+      <p className="st-stg-small">{callingWords(callingOf(m))}.</p>
       <p className="st-stg-small">
-        {stale ? "Changed since its last check. Tap Check models above to see if it answers now." : m.statusLine}
+        {stale ? "Changed since its last check. Check it again: tap Check models above to see if it answers now." : m.statusLine}
         {!stale && m.checkedAt ? ` (${whenText(m.checkedAt)})` : ""}
       </p>
       {refused ? (
@@ -412,8 +495,20 @@ function OwnRow({ ws, m, stale = false, onChanged, onEdit }: { ws: string; m: Mo
 /** The model just saved: suggest checking it while it is new, or its model ID or Region changed since `checkedAt`. */
 interface Saved {
   key: string;
+  /** a new model, or an existing one whose model ID or Region changed */
   moved: boolean;
+  /** an existing model that was changed (not a new one) */
+  edited: boolean;
   checkedAt: string | null;
+}
+
+/**
+ * A changed model ID or Region whose new check has not come yet (§45.35 D6): the API clears its status ("Not checked
+ * yet") until Check models answers; an older API kept the old one, which is then just as stale until a new check.
+ */
+export function movedUnchecked(saved: Saved | null, m: Pick<ModelInfo, "status" | "checkedAt"> | undefined): boolean {
+  if (!saved || !m || !saved.edited || !saved.moved) return false;
+  return m.status === "not_checked" || (m.checkedAt ?? null) === saved.checkedAt;
 }
 
 /**
@@ -426,8 +521,8 @@ export function OwnModels({ ws, models, onChanged, check }: { ws: string; models
   const own = models.filter((m) => m.custom);
   const full = own.length >= MAX_CUSTOM_MODELS;
   const just = added ? models.find((m) => m.key === added.key) : undefined;
-  // A changed model ID or Region: its last check was of the old one (the API keeps it), until a new check is stamped.
-  const stale = !!just && !!added?.moved && just.status !== "not_checked" && (just.checkedAt ?? null) === added.checkedAt;
+  // A changed model ID or Region: its last check was of the old one, until a new check is stamped.
+  const stale = movedUnchecked(added, just);
   return (
     <SetCard
       title="Add a model"
@@ -462,7 +557,7 @@ export function OwnModels({ ws, models, onChanged, check }: { ws: string; models
           onCancel={() => setOpen(null)}
           onSaved={(m) => {
             setOpen(null);
-            setAdded({ key: m.key, moved: true, checkedAt: m.checkedAt ?? null });
+            setAdded({ key: m.key, moved: true, edited: false, checkedAt: m.checkedAt ?? null });
             void onChanged();
           }}
         />
@@ -480,7 +575,8 @@ export function OwnModels({ ws, models, onChanged, check }: { ws: string; models
                   onCancel={() => setOpen(null)}
                   onSaved={(saved) => {
                     setOpen(null);
-                    setAdded({ key: saved.key, moved: saved.modelId !== m.modelId || saved.region !== m.region, checkedAt: saved.checkedAt ?? null });
+                    // The check it had before this change (the API answers with the cleared one when it moved).
+                    setAdded({ key: saved.key, moved: saved.modelId !== m.modelId || saved.region !== m.region, edited: true, checkedAt: m.checkedAt ?? null });
                     void onChanged();
                   }}
                 />

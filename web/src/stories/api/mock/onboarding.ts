@@ -12,6 +12,7 @@ import modelsFile from "../../../../../stories/config/models.json";
 import { ApiError } from "../../../api/errors.ts";
 import type { Agent, AgentId, AiTask, Effort, ModelInfo, Onboarding, OnboardStep, SocialAccount, StoriesAiConfig, StoriesApi, TaskInfo, TaskKind } from "../types.ts";
 import { aiPicks, stampPicked } from "./ai.ts";
+import { sameAsClips } from "./social.ts";
 import { ago, delay, HOUR, mockId, type MockStore } from "./store.ts";
 import { DEFAULT_CONFIG, storiesWorkspace } from "./workspace.ts";
 
@@ -58,6 +59,16 @@ export function seed(store: MockStore): void {
 /** A platform step is done only once Lamo Stories' own account there is connected (§45.34): Lamo Clips' own on hold is not. */
 const COUNTS_CONNECTED: SocialAccount["connectionStatus"][] = ["connected"];
 
+/** Why a platform's step stays to do while its account is Lamo Clips' own (the API's same_as_clips_line, word for word). */
+export function sameAsClipsLine(step: OnboardStep): string {
+  return `This is Lamo Clips' ${SOCIAL_LABEL[step] ?? step} account. Pick another in Social accounts, or tap Use it for both.`;
+}
+
+/** The platform's Lamo Stories account in this workspace when it is Lamo Clips' own (stored so, or found later, D11). */
+function clipsOwn(store: MockStore, ws: string, step: OnboardStep): boolean {
+  return store.social.some((a) => a.workspaceId === ws && a.platform === step && sameAsClips(a));
+}
+
 /** Step 4: providersPickedAt, or a picture or video maker other than the built-in default (the API's rule). */
 function videoPicked(store: MockStore, ws: string): boolean {
   if (store.onboarding.providersPickedAt) return true;
@@ -75,7 +86,7 @@ function aiDone(store: MockStore, step: "ai" | "model" | "effort"): boolean {
 function realDone(store: MockStore, ws: string, step: OnboardStep): boolean {
   if (step === "ai" || step === "model" || step === "effort") return aiDone(store, step);
   if (step === "video") return videoPicked(store, ws);
-  if (SOCIAL_STEPS.includes(step)) return store.social.some((a) => a.workspaceId === ws && a.platform === step && COUNTS_CONNECTED.includes(a.connectionStatus));
+  if (SOCIAL_STEPS.includes(step)) return !clipsOwn(store, ws, step) && store.social.some((a) => a.workspaceId === ws && a.platform === step && COUNTS_CONNECTED.includes(a.connectionStatus));
   if (step === "done") return store.onboarding.stepsDone.includes("done") || store.onboarding.finishedAt !== null;
   return store.onboarding.stepsDone.includes(step);
 }
@@ -83,7 +94,9 @@ function realDone(store: MockStore, ws: string, step: OnboardStep): boolean {
 export function onboardingOf(store: MockStore, ws: string): Onboarding {
   const steps = ONBOARD_STEPS.map(({ step, label }) => {
     const done = realDone(store, ws, step);
-    return { step, label, state: done ? ("done" as const) : store.onboarding.skipped.includes(step) ? ("skipped" as const) : ("todo" as const) };
+    const state = done ? ("done" as const) : store.onboarding.skipped.includes(step) ? ("skipped" as const) : ("todo" as const);
+    // Lamo Clips' own account: the step stays to do and says why (§45.34, §45.35 D11).
+    return SOCIAL_STEPS.includes(step) && clipsOwn(store, ws, step) ? { step, label, state, line: sameAsClipsLine(step) } : { step, label, state };
   });
   return { steps, done: steps.filter((s) => s.state === "done").length, total: 11, finishedAt: store.onboarding.finishedAt };
 }
@@ -128,6 +141,7 @@ interface FileModel {
   key: string;
   label: string;
   provider: string;
+  host?: string;
   modelId: string;
   efforts: Effort[];
   defaultEffort: Effort | null;
@@ -167,6 +181,7 @@ function modelsOf(store: MockStore): ModelInfo[] {
     key: m.key,
     label: m.label,
     provider: m.provider,
+    host: m.host ?? "Amazon Bedrock",
     modelId: m.modelId,
     efforts: m.efforts,
     defaultEffort: m.defaultEffort,

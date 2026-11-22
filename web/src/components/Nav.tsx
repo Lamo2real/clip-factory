@@ -106,6 +106,7 @@ export function Sidebar() {
             Clip <em>Factory</em>
           </span>
         </A>
+        <WorkspaceSwitch place="sidebar-top" collapsed={sidebarCollapsed} />
       </div>
       <ul className="sidebar__list" id="sidebar-list">
         <Glide active=".sidebar__item.is-active" className="glide--menu" as="li" />
@@ -198,8 +199,12 @@ export function TabBar() {
 // it shrinks to one round toggle, and where even that does not fit it becomes a slim toggle that fills the empty gap
 // with 4 px of air on each side (it is measured, never guessed), so there is a way across at every size.
 
-/** Where a switcher sits: Lamo Clips' sidebar foot or phone top bar, or Lamo Stories' own rail or top bar. */
-export type SwitchPlace = "sidebar" | "topbar" | "stories-rail" | "stories-top";
+/**
+ * Where a switcher sits: Lamo Clips' sidebar foot or phone top bar, or Lamo Stories' own rail or top bar. In a folded
+ * sidebar too short for the foot's toggle (a window under about 570 px tall), "sidebar-top": a slim toggle beside the
+ * fold button, laid over the empty strip on its right (§45.35 D19), so there is one click across at every size.
+ */
+export type SwitchPlace = "sidebar" | "topbar" | "stories-rail" | "stories-top" | "sidebar-top";
 
 /**
  * bar: the pick bar; corner: a round toggle beside the live dot; round: a round toggle; label: a pill with the
@@ -291,7 +296,7 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
   const active = useAppActive();
   const route = useRoute();
   const hash = useHash();
-  const inClips = place === "sidebar" || place === "topbar";
+  const inClips = place === "sidebar" || place === "topbar" || place === "sidebar-top";
   const ref = useRef<HTMLDivElement>(null);
   const [measured, setMeasured] = useState<Measured>({ mode: place === "stories-rail" ? "bar" : place === "stories-top" ? "round" : "none" });
   const [menu, setMenu] = useState(false);
@@ -342,7 +347,7 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
     const count = list.length;
     let frame = 0;
     const measure = () => {
-      const next = place === "sidebar" ? sidebarMode(anchor, collapsed, count) : topbarMode(anchor, nameOnPhone);
+      const next = place === "sidebar" ? sidebarMode(anchor, collapsed, count) : place === "sidebar-top" ? sidebarTopMode(anchor, collapsed, count) : topbarMode(anchor, nameOnPhone);
       setMeasured((m) => (m.mode === next.mode && JSON.stringify(m.style) === JSON.stringify(next.style) ? m : next));
     };
     // Again on the next frame too: a late font or a child that just arrived settles its size only after layout.
@@ -352,7 +357,7 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
       frame = requestAnimationFrame(measure);
     };
     measure();
-    const host = anchor.closest<HTMLElement>(place === "sidebar" ? ".sidebar" : ".topbar");
+    const host = anchor.closest<HTMLElement>(place === "topbar" ? ".topbar" : ".sidebar");
     if (!host) return;
     const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(soon);
     const watch = () => {
@@ -388,10 +393,14 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
     setMenu(false);
     if (w.workspaceId === current) return;
     const from = here();
-    // Leaving Clip Factory: its page's scroll position is kept for the way back (this tab only). Leaving Lamo Stories:
-    // its own, which StoriesApp puts back when it is on screen again.
-    if (inClips) saveClipsScroll(from, window.scrollY);
-    else saveStoriesScroll(from, window.scrollY);
+    // Leaving Clip Factory: its page's scroll position is kept for the way back (this tab only), and its address as it
+    // is right now (a page may have moved it without a page change, as Home's "Which campaign" does), so the way back
+    // opens the page the kept screen shows. Leaving Lamo Stories: its own, which StoriesApp puts back when it is on
+    // screen again.
+    if (inClips) {
+      saveClipsScroll(from, window.scrollY);
+      rememberClipsPath(from);
+    } else saveStoriesScroll(from, window.scrollY);
     const to = switchTarget(w);
     navigate(to);
     // The choice is recorded only once the page really changed: a page with unsaved typing may be asking "Leave
@@ -406,7 +415,8 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
   };
   const here_ = list.find((w) => w.workspaceId === current) ?? list[0]!;
   const { mode, style } = measured;
-  const cls = `ws-switch-host ws-switch-host--${place}${collapsed ? " is-collapsed" : ""}`;
+  // The toggle beside the fold button is a slim toggle of the sidebar's (glide.css styles it as the foot's slim one).
+  const cls = `ws-switch-host ${place === "sidebar-top" ? "ws-switch-host--sidebar ws-switch-host--sidebar-top" : `ws-switch-host--${place}`}${collapsed ? " is-collapsed" : ""}`;
 
   if (mode === "none") return <div ref={ref} className={cls} data-ws-switch="none" hidden />;
 
@@ -461,24 +471,34 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
           <WorkspaceMark type={here_.workspaceType} size={markSize} />
         </button>
       )}
-      {menu && !target ? <WorkspaceMenu list={list} current={current} hrefFor={hrefFor} go={go} close={() => setMenu(false)} /> : null}
+      {menu && !target ? (
+        <WorkspaceMenu list={list} current={current} hrefFor={hrefFor} go={go} close={() => setMenu(false)} below={place === "sidebar-top"} />
+      ) : null}
     </div>
   );
 }
 
-/** The short list a round toggle opens when there are more than two workspaces. */
+/** Where the list opens below its toggle (as glide.css's `.topbar .ws-menu`), left-aligned with it. */
+const BELOW = { top: "calc(100% + 8px)", bottom: "auto" } as const;
+
+/**
+ * The short list a round toggle opens when there are more than two workspaces: above the toggle, or below it for the
+ * toggle beside the fold button (`below`, at the top of the window, where there is no room above).
+ */
 function WorkspaceMenu({
   list,
   current,
   hrefFor,
   go,
   close,
+  below = false,
 }: {
   list: Workspace[];
   current: string;
   hrefFor: (w: Workspace) => string;
   go: (w: Workspace) => (e: MouseEvent) => void;
   close: () => void;
+  below?: boolean;
 }) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -494,7 +514,7 @@ function WorkspaceMenu({
     };
   }, [close]);
   return (
-    <div ref={box} className="ws-menu" role="dialog" aria-label="Pick a workspace">
+    <div ref={box} className="ws-menu" role="dialog" aria-label="Pick a workspace" style={below ? BELOW : undefined}>
       <div className="ws-switch ws-switch--stack" role="group" aria-label="Workspace">
         <Glide active=".ws-switch__opt.is-on" className="glide--ws" />
         {list.map((w) => (
@@ -570,6 +590,44 @@ export function sidebarMode(anchor: HTMLElement, collapsed: boolean, count: numb
       },
     };
   return { mode: "none" };
+}
+
+/**
+ * Beside the fold button (§45.35 D19): only in a folded sidebar whose foot has no room for any toggle (sidebarMode
+ * says none, a window under about 570 px tall). Then a slim toggle sits on the right of the fold button, over the
+ * empty strip between it and the page (4 px of air on each side, at most 44 px wide, as tall as the fold button),
+ * laid over the page so the fold button and everything else stay exactly where they are; else nothing.
+ */
+export function sidebarTopMode(anchor: HTMLElement, collapsed: boolean, count: number): Measured {
+  if (!collapsed) return { mode: "none" };
+  const sidebar = anchor.closest<HTMLElement>(".sidebar");
+  const foot = sidebar?.querySelector<HTMLElement>(".sidebar__foot .ws-switch-host");
+  const toggle = sidebar?.querySelector<HTMLElement>(".sidebar__toggle");
+  if (!sidebar || !foot || !toggle || getComputedStyle(sidebar).display === "none") return { mode: "none" };
+  if (sidebarMode(foot, collapsed, count).mode !== "none") return { mode: "none" };
+  const sb = sidebar.getBoundingClientRect();
+  const t = toggle.getBoundingClientRect();
+  if (sb.height === 0 || t.height === 0) return { mode: "none" };
+  // What is to the right on the fold button's row: the page's own box when it reaches up there, else the window.
+  const page = sidebar.parentElement?.querySelector<HTMLElement>(".shell > .main");
+  const p = page?.getBoundingClientRect();
+  const right = p && p.width > 0 && p.top < t.bottom && p.bottom > t.top && p.left >= t.right ? p.left : window.innerWidth;
+  const left = t.right + AIR;
+  const w = Math.floor(Math.min(ROUND, right - AIR - left));
+  const h = Math.floor(Math.min(ROUND, t.height));
+  if (w < SLIM_MIN || h < SLIM_MIN) return { mode: "none" };
+  // Placed from the sidebar's padding box (inside its 1 px edge), where an absolute child starts.
+  return {
+    mode: "slim",
+    style: {
+      position: "absolute",
+      top: t.top + (t.height - h) / 2 - (sb.top + sidebar.clientTop),
+      left: left - (sb.left + sidebar.clientLeft),
+      width: w,
+      height: h,
+      zIndex: 1,
+    },
+  };
 }
 
 let ruler: CanvasRenderingContext2D | null | undefined;

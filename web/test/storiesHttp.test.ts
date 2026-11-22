@@ -72,6 +72,8 @@ const CASES: Case[] = [
   ["download", (a) => a.download("stories", "s1"), "GET", `${B}/stories/stories/s1/download`, undefined, { url: "u", filename: "f.mp4" }, { url: "u", filename: "f.mp4" }],
   ["library", (a) => a.library("stories", { kind: "cover", storyId: "s1", limit: 10 }), "GET", `${B}/stories/library?kind=cover&storyId=s1&limit=10`, undefined, { items: [27], nextCursor: "n" }, { items: [27], nextCursor: "n" }],
   ["providers", (a) => a.providers("stories"), "GET", `${B}/stories/providers`, undefined, { providers: [28] }, [28]],
+  // Nova Reel's Try it (§45.35 D2, builder W4b): one 6-second test shot, a provider_check job.
+  ["tryNovaReel", (a) => a.tryNovaReel("stories"), "POST", `${B}/stories/providers/nova-reel/check`, undefined, { job: 28.5 }, 28.5],
   ["guidance", (a) => a.guidance("stories"), "GET", `${B}/stories/guidance`, undefined, { topics: [], checkedAt: "c" }, { topics: [], checkedAt: "c" }],
   ["social", (a) => a.social("stories"), "GET", `${B}/stories/social`, undefined, { accounts: [], clips: [] }, { accounts: [], clips: [] }],
   ["connectSocial", (a) => a.connectSocial("stories", "youtube"), "POST", `${B}/stories/social/youtube/connect`, undefined, { authorizeUrl: "https://a", expiresAt: "e" }, { authorizeUrl: "https://a", expiresAt: "e" }],

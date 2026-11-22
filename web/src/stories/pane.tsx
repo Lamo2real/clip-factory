@@ -10,7 +10,15 @@
 // Lamo Clips' main bundle imports this file (App.tsx, Nav.tsx): it carries no Lamo Stories screen, style or
 // engine code. StoriesApp itself loads in its own chunk (loadStoriesApp), fetched while the browser is idle once the
 // switcher is on screen (prefetchStoriesApp), so the first switch does not wait for it either.
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+//
+// Round 4 (§45.35 D16, D17, D18): each pane has its own error boundary, so one app breaking never takes the other
+// with it (Lamo Stories' own card is StoriesPaneBoundary below; Clip Factory's pane keeps Clip Factory's own
+// boundary and fallback, App.tsx); a pane that is hidden has every playing video and sound in it paused; Clip
+// Factory's pane carries the search of its kept route (useKeptSearch), so Home opened for a campaign is kept across a
+// round trip; and a Lamo Stories redirect to another site that comes after a wait (Connect) waits while Clip Factory
+// is on screen.
+import { Component, createContext, Fragment, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
+import { Button, Empty } from "../components/ui.tsx";
 import { navigate } from "../lib/router.ts";
 import { storiesEnabled } from "./flag.ts";
 import { isStoriesPath } from "./routes.ts";
@@ -66,6 +74,53 @@ export function takeParkedStoriesGo(): string | null {
   const to = parked;
   parked = null;
   return to;
+}
+
+let parkedAway: { url: string; expiresAt: string | null } | null = null;
+
+/**
+ * A Lamo Stories move to another site that comes after a wait (Connect's sign-in page, once the server gave its
+ * address): while Clip Factory is on screen it waits, and goes the moment Lamo Stories is back (StoriesApp), so the
+ * owner is never taken out of Clip Factory. `expiresAt` is when the address stops working (Connect's sign-in state is
+ * good for 10 minutes, §45.13.2): one that ran out while it waited is never opened.
+ */
+export function storiesAwayLater(url: string, expiresAt: string | null = null, go: (url: string) => void = (u) => location.assign(u)): void {
+  if (storiesBehind()) parkedAway = { url, expiresAt };
+  else go(url);
+}
+
+/**
+ * The move to another site that waited while Clip Factory was on screen (once: it is forgotten as it is read), else
+ * null. `expired` is true when its address ran out while it waited (then it must not be opened).
+ */
+export function takeParkedStoriesAway(now: number = Date.now()): { url: string; expired: boolean } | null {
+  const held = parkedAway;
+  parkedAway = null;
+  if (!held) return null;
+  const until = held.expiresAt ? Date.parse(held.expiresAt) : Number.NaN;
+  return { url: held.url, expired: Number.isFinite(until) && now >= until };
+}
+
+/** What Lamo Stories says when a held sign-in page ran out before it was back on screen. */
+export const AWAY_RAN_OUT = "That sign-in link ran out. Tap Connect again.";
+
+// ---------- Clip Factory's search, kept while it is hidden (§45.35 D18) ----------
+
+/** The search of Clip Factory's kept route, given by BothApps around Clip Factory's pane (null: no pane around). */
+const KeptSearch = createContext<string | null>(null);
+
+/** Gives Clip Factory's pane the search of the page it keeps (App.tsx, only while Lamo Stories is switched on). */
+export const KeptSearchProvider = KeptSearch.Provider;
+
+/**
+ * The address's search for a Clip Factory screen: exactly `window.location.search` when no pane is around it (always,
+ * while Lamo Stories is switched off), and the search of Clip Factory's own kept page inside its pane, so a page kept
+ * behind Lamo Stories still reads its own address, not Lamo Stories'.
+ */
+export function useKeptSearch(): string {
+  const kept = useContext(KeptSearch);
+  if (kept !== null) return kept;
+  return typeof location === "undefined" ? "" : location.search;
 }
 
 // ---------- StoriesApp's own chunk ----------
@@ -125,6 +180,22 @@ function dialogOpenOutside(shown: HTMLElement | null): boolean {
   return Array.from(document.querySelectorAll('[aria-modal="true"]')).some((el) => !shown?.contains(el));
 }
 
+/** Pauses every video and sound playing inside `box` (a pane just hidden keeps quiet, §45.35 D17). */
+export function pauseMediaIn(box: HTMLElement | null): number {
+  if (!box) return 0;
+  let n = 0;
+  for (const m of Array.from(box.querySelectorAll<HTMLMediaElement>("video, audio"))) {
+    if (m.paused) continue;
+    try {
+      m.pause();
+      n++;
+    } catch {
+      // A media element that cannot pause (not loaded yet) makes no sound either.
+    }
+  }
+  return n;
+}
+
 /**
  * Both apps, each in its pane: `on` is the one on screen. An app is mounted from the first time it is shown, and then
  * stays (unless it was hidden with a dialog open, or `fresh` names it: then it opens fresh next time).
@@ -144,6 +215,8 @@ export function AppPanes({ on, clips, stories, fresh = null }: { on: AppName; cl
     const hidden = was.current;
     was.current = on;
     if (hidden === on) return;
+    // The app now hidden makes no sound: its playing videos and sounds pause (they stay where they were).
+    pauseMediaIn((hidden === "clips" ? clipsBox : storiesBox).current);
     if (dialogOpenOutside((on === "clips" ? clipsBox : storiesBox).current)) setShown((s) => ({ ...s, [hidden]: false }));
   }, [on]);
 
@@ -173,5 +246,66 @@ export function AppPanes({ on, clips, stories, fresh = null }: { on: AppName; cl
       {pane("clips", clips)}
       {pane("stories", stories)}
     </>
+  );
+}
+
+// ---------- Lamo Stories' own error boundary (§45.35 D16) ----------
+
+interface StoriesBoundaryProps {
+  children: ReactNode;
+  /** Go to Clip Factory: the stored choice says Clip Factory, then its last page opens (App.tsx gives it). */
+  onClips: () => void;
+}
+
+/**
+ * Around Lamo Stories' pane: a render error anywhere in Lamo Stories (its shell, its navigation, its chunk that did
+ * not load) shows Lamo Stories' own card, "Lamo Stories had a problem.", and never reaches Clip Factory. Try again
+ * mounts Lamo Stories afresh (a new lazy app, so a chunk that failed is fetched again); Go to Clip Factory opens Clip
+ * Factory's last page. Lamo Stories' styles may not have loaded, so the card is drawn with Clip Factory's own parts.
+ */
+export class StoriesPaneBoundary extends Component<StoriesBoundaryProps, { failed: boolean; attempt: number }> {
+  override state = { failed: false, attempt: 0 };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  override componentDidCatch(error: unknown, info: ErrorInfo): void {
+    console.error(error, info.componentStack);
+  }
+
+  override render(): ReactNode {
+    if (!this.state.failed) return <Fragment key={this.state.attempt}>{this.props.children}</Fragment>;
+    return <StoriesProblem onRetry={() => this.setState((s) => ({ failed: false, attempt: s.attempt + 1 }))} onClips={this.props.onClips} />;
+  }
+}
+
+/** Centred in the window, as Clip Factory's start-up card is (its own box, so nothing waits for a "boot" to end). */
+const PROBLEM_BOX: CSSProperties = { display: "grid", placeItems: "center", minHeight: "100dvh", padding: 24 };
+
+/** Lamo Stories' own card when it broke (the page's main landmark only while its pane is on screen). */
+function StoriesProblem({ onRetry, onClips }: { onRetry: () => void; onClips: () => void }) {
+  const active = useAppActive();
+  return (
+    <main style={PROBLEM_BOX} id={active ? "main" : undefined} data-stories-problem="">
+      <h1 className="sr-only">Lamo Stories had a problem</h1>
+      <Empty
+        icon="alert"
+        title="Lamo Stories had a problem."
+        heading="h2"
+        action={
+          <>
+            <Button variant="primary" icon="retry" act="retry" onClick={onRetry}>
+              Try again
+            </Button>
+            <Button icon="home" onClick={onClips}>
+              Go to Clip Factory
+            </Button>
+          </>
+        }
+      >
+        Tap Try again. Clip Factory is fine: tap Go to Clip Factory to keep working there.
+      </Empty>
+    </main>
   );
 }

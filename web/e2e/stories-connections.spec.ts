@@ -103,3 +103,30 @@ test("after Disconnect, an own Meta app gets the Lamo Stories line, Clip Factory
   await yt.getByRole("button", { name: "Yes, disconnect" }).click();
   await expect(page.getByText("To remove Clip Factory from this account completely, remove the app in the account's own settings.")).toBeVisible();
 });
+
+test("round 4: no Check now while the account is still to be picked, and one toast per pick (§45.35 D21)", async ({ page }) => {
+  await on(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/stories/connections");
+  await ready(page);
+  const ig = cardOf(page, "Instagram");
+  await expect(ig.locator(".st-choose")).toBeVisible();
+  await expect(ig.getByRole("button", { name: /Check now/ })).toHaveCount(0);
+  await expect(cardOf(page, "YouTube").getByRole("button", { name: /Check now/ })).toBeVisible();
+  // Every toast from here on.
+  await page.evaluate(() => {
+    const w = window as unknown as { __toasts: string[] };
+    w.__toasts = [];
+    new MutationObserver((records) => {
+      for (const r of records) for (const n of Array.from(r.addedNodes)) if (n instanceof HTMLElement) for (const t of [n, ...Array.from(n.querySelectorAll(".toast__text"))]) if (t.matches(".toast__text")) w.__toasts.push(t.textContent?.trim() ?? "");
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  await ig.locator(".st-choose").getByRole("button", { name: /lamo\.stories/ }).click();
+  const ask = ig.getByRole("group", { name: "Is this your Lamo Stories account?" });
+  await expect(ask).toBeVisible();
+  await ask.getByRole("button", { name: "Yes, that's it" }).click();
+  await expect(page.locator(".toast").filter({ hasText: "Great! Lamo Stories posts to lamo.stories on Instagram." })).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts)).toEqual(["Great! Lamo Stories posts to lamo.stories on Instagram."]);
+  // Connected now: Check now is back.
+  await expect(ig.getByRole("button", { name: /Check now/ })).toBeVisible();
+});
