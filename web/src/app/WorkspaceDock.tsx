@@ -502,9 +502,6 @@ export function WorkspaceDock() {
     if (here() === h.to) settleSwitch(h.w);
   }, [page, hash]);
 
-  // Longer names (another workspace's) that do not fit side by side stand one above the other.
-  useEffect(() => setStacked(false), [names]);
-
   // Measure the column and the Live chip, and place the switch (again on a resize, a font that arrived, the chip
   // coming or going, a fold, a row of the foot that came or went).
   useLayoutEffect(() => {
@@ -539,7 +536,10 @@ export function WorkspaceDock() {
       });
       setLayout((l) => (JSON.stringify(l) === JSON.stringify(next) ? l : next));
     };
+    // At once (a resize, a font, a row that came) and again on the next frame: a late font or a child that just
+    // arrived settles its size only after layout.
     const soon = () => {
+      measure();
       cancelAnimationFrame(frameId);
       frameId = requestAnimationFrame(measure);
     };
@@ -559,12 +559,23 @@ export function WorkspaceDock() {
     };
   }, [folded, getApp, jobs, list.length, stacked]);
 
-  // A name cut short (a longer workspace name) stacks the bar's choices instead.
+  // Two names that do not fit side by side (a longer workspace name) stand one above the other; they go back side by
+  // side once they fit again. Each name's own width (its words, unwrapped) against half the bar.
   useLayoutEffect(() => {
-    if (layout.mode !== "bar" || stacked) return;
-    const cut = Array.from(barRef.current?.querySelectorAll<HTMLElement>(".ws-switch__opt") ?? []).some((o) => o.scrollWidth > o.clientWidth + 1);
-    if (cut) setStacked(true);
-  }, [layout.mode, stacked, names]);
+    const bar = barRef.current;
+    if (layout.mode !== "bar" || !bar || list.length !== 2) return;
+    const opts = Array.from(bar.querySelectorAll<HTMLElement>(".ws-switch__opt"));
+    const s = getComputedStyle(bar);
+    const column = (bar.clientWidth - px(s.paddingLeft) - px(s.paddingRight) - px(s.columnGap) * (opts.length - 1)) / opts.length;
+    const words = (o: HTMLElement) => {
+      const r = document.createRange();
+      r.selectNodeContents(o);
+      const os = getComputedStyle(o);
+      return r.getBoundingClientRect().width + px(os.paddingLeft) + px(os.paddingRight);
+    };
+    const need = opts.some((o) => words(o) > column + 0.5);
+    if (need !== stacked) setStacked(need);
+  }, [layout.mode, layout.sw?.width, stacked, names, list.length]);
 
   // Lamo Stories' rail and its pages leave the dock's box free (stories.css reads these).
   useLayoutEffect(() => {
@@ -654,7 +665,10 @@ export function TopBarSwitch() {
       if (had) host.setAttribute("data-ws-squeeze", "");
       setSqueeze(!fits);
     };
+    // At once (a resize, a font, a row that came) and again on the next frame: a late font or a child that just
+    // arrived settles its size only after layout.
     const soon = () => {
+      measure();
       cancelAnimationFrame(frameId);
       frameId = requestAnimationFrame(measure);
     };

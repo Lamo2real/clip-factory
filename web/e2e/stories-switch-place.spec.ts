@@ -179,3 +179,37 @@ test("on a phone, while Clip Factory's own Set up posting pill sits above its to
   expect(Math.abs(clips.sw!.y - bar!.y - (stories.sw!.y - top!.y))).toBeLessThanOrEqual(0.5);
   await page.context().close();
 });
+
+test("a longer name (the rename to Clip Factory Stories) stands the choices one above the other, the same box in both apps, never cut short", async ({ browser }) => {
+  const page = await open(browser, { w: 1440, h: 900 }, true);
+  await ready(page, "/library");
+  // The server names the studio so from now on (the shell reads the list again when Lamo Stories opens).
+  await page.evaluate(() => {
+    const store = (window as unknown as { __cfStoriesMock?: { store?: { workspaces: { workspaceName: string }[] } } }).__cfStoriesMock?.store;
+    store!.workspaces[1]!.workspaceName = "Clip Factory Stories";
+  });
+  await page.locator(".ws-dock .ws-switch__opt", { hasText: "Lamo Stories" }).click();
+  await page.locator(".stories-app[data-ws]").waitFor();
+  const bar = page.locator(".ws-dock .ws-switch");
+  await expect(bar).toHaveClass(/ws-switch--stack/);
+  await expect(bar.locator(".ws-switch__opt")).toHaveText(["Clip Factory", "Clip Factory Stories"]);
+  const cut = () => bar.locator(".ws-switch__opt").evaluateAll((els) => els.filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.textContent));
+  expect(await cut()).toEqual([]);
+  await page.waitForTimeout(400);
+  const stories = await place(page);
+  // The rail's pages stop above it.
+  const list = (await page.locator(".st-rail .st-rail__list").boundingBox())!;
+  expect(list.y + list.height).toBeLessThanOrEqual(stories.sw!.y + 0.5);
+  await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Clip Factory$/ }).click();
+  await expect(page).toHaveURL(/\/library$/);
+  await settle(page);
+  await page.waitForTimeout(400);
+  const clips = await place(page);
+  same(clips.sw, stories.sw, "the stacked switch");
+  same(clips.live, stories.live, "the Live chip");
+  // Clip Factory's menu is not covered either: the bar starts below the sixth item.
+  const sixth = (await page.locator('nav.sidebar .sidebar__item[data-help="nav-settings"]').boundingBox())!;
+  expect(clips.sw!.y).toBeGreaterThanOrEqual(sixth.y + sixth.height + 3.5);
+  expect(await cut()).toEqual([]);
+  await page.context().close();
+});

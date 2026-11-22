@@ -87,7 +87,8 @@ test("the Live dot shows in the sidebar on larger screens and in the top bar on 
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
   await settle(page);
-  await expect(page.locator(".sidebar .live-dot")).toBeVisible();
+  // The sidebar foot's Live chip row (the shell draws it there next to Lamo Stories, §45.37).
+  await expect(page.locator(".sidebar__live .live-dot")).toBeVisible();
   await page.setViewportSize({ width: 375, height: 800 });
   await expect(page.locator(".topbar .live-dot")).toBeVisible();
   await expect(page.locator(".topbar .live-dot")).toHaveAttribute("title", "Live: changes show up by themselves");
