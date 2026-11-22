@@ -62,7 +62,7 @@ describe("the pixel check's comparison", () => {
     expect(script).toContain("window.cfPixelDiff(da, db, W, H, { threshold, exact, mask })");
     // A shot that differs is taken again of both, each time in a fresh browser and the other way round, and it is the
     // same only when one of the branch's shots matches one of the base's (the switcher's box from the branch's shot).
-    expect(script).toContain('const TRIES = Number(process.env.CF_TRIES || 4);');
+    expect(script).toContain('const TRIES = Number(process.env.CF_TRIES || 6);');
     expect(script).toContain("const run = t === 0 ? browser : await chromium.launch();");
     expect(script).toContain("if (t % 2 === 0) {");
     expect(script).toContain("for (const [x, y] of [...as.map((x) => [x, nb]), ...bs.slice(0, -1).map((y) => [na, y])]) {");

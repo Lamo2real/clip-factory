@@ -12,12 +12,14 @@
 #   web/scripts/clips-unchanged.sh [base-ref] [--out <dir>] [--sizes 390x844,1440x900]
 #
 # base-ref defaults to the merge base of HEAD and origin/main. --out keeps before, after and a diff picture (the
-# differing pixels in red) of every shot that differs. Chromium draws a line of text that sits at a fractional
-# height 1 px up or down from one shot to the next (the layout itself exactly the same, in the base as in the
-# branch), and a few mock pages move on their own, so a shot that differs is taken again of both (CF_TRIES, default
-# 4), each time in a fresh browser and in the other order. It counts as the same as soon as one of the branch's shots
-# matches one of the base's shots (the branch can draw exactly what the base draws); it differs only when none do,
-# and the closest pair is reported. Exits 1 when any shot differs. Nothing leaves the machine:
+# differing pixels in red) of every shot that differs. The same page is not always drawn the same: Lamo Clips' mock
+# sometimes adds a section below the fold (Review's "Similar clips", for one), and with it Chromium draws a line
+# of text at a fractional height 1 px up or down (measured on the merge base alone: two pictures of one page, about
+# half and half). So a shot that differs is taken again of both (CF_TRIES, default 6), each time in a fresh browser
+# and in the other order. It counts as the same as soon as one of the branch's shots matches one of the base's (the
+# branch can draw exactly what the base draws); it differs only when none do, and the closest pair is reported.
+# A shot that differs only by such a 1 px line in one run and matches in the next is that, not a change: a real
+# change differs in every run. Exits 1 when any shot differs. Nothing leaves the machine:
 # the mock build talks to no server, and the only network use is `npm ci` for the base checkout's packages.
 set -euo pipefail
 
@@ -30,7 +32,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --out) out="$2"; shift 2 ;;
     --sizes) sizes="$2"; shift 2 ;;
-    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,23p' "$0"; exit 0 ;;
     *) base="$1"; shift ;;
   esac
 done
@@ -99,7 +101,7 @@ const EXACT = process.env.CF_EXACT === "1";
 const THRESHOLD = EXACT ? 0 : Number(process.env.CF_THRESHOLD || 0.1);
 /** A fixed moment, so every "2 h ago" and every chart reads the same in both runs. */
 const CLOCK = new Date("2026-11-21T12:00:00.000Z");
-const TRIES = Number(process.env.CF_TRIES || 4);
+const TRIES = Number(process.env.CF_TRIES || 6);
 const STILL = "*, *::before, *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }";
 
 if (out) mkdirSync(out, { recursive: true });
@@ -212,8 +214,8 @@ const rows = [];
 for (const size of SIZES)
   for (const folded of size[0] >= 768 ? [false, true] : [false])
     for (const path of PAGES) {
-      // A line of text can be drawn 1 px up or down from one shot to the next, and a few mock pages move on their own
-      // (live job progress, timed numbers), so one pair can differ by chance: a differing shot is taken again of both,
+      // A line of text can be drawn 1 px up or down from one shot to the next (a mock section below the fold that
+      // comes or not), and a few mock pages move on their own (live job progress), so one pair can differ by chance: a differing shot is taken again of both,
       // up to TRIES times, each time in a fresh browser and in the other order, and it is the same as soon as one of
       // the branch's shots matches one of the base's. Only when none do is it reported, with its closest pair.
       const as = [];
