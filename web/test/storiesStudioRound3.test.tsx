@@ -238,6 +238,16 @@ describe("Production › New from the address (§45.34)", () => {
     expect(create.mock.calls[0]![1]).toEqual({ characterIds: [C.bolt, C.nana], durationSec: 35, captionsOn: true, musicMood: "comedic", referenceIds: [REFS[1]!.refId], ideaId: I.sandwich });
   });
 
+  it("a new hand-over while the page is open starts the form again from its own address", async () => {
+    await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich, refIds: [], castIds: [C.bolt], durationSec: 30 })} />);
+    const cast = () => Array.from(document.querySelectorAll('.st-s-casttile[aria-pressed="true"]')).map((t) => t.textContent?.replace(/[✓+]/g, "").trim());
+    expect(cast()).toEqual(["Bolt"]);
+    await act(async () => root.render(<ToastProvider><ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich, refIds: [], castIds: [C.nana], durationSec: 60 })} /></ToastProvider>));
+    await wait();
+    expect(cast()).toEqual(["Nana Rose"]);
+    expect(document.querySelector<HTMLInputElement>('input[type="range"]')!.value).toBe("60");
+  });
+
   it("a cast from the address keeps only this workspace's characters", async () => {
     const create = vi.spyOn(api, "createStory");
     await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich, refIds: [], castIds: ["01JSTCHNOPE00000000000000", C.dash], durationSec: null })} />);

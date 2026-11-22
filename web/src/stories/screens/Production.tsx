@@ -46,8 +46,13 @@ import { KIND_OPTIONS } from "./Ideas.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
 export function ProductionScreen({ ws, page }: StoriesScreenProps) {
-  if (page.name === "production_new")
-    return <NewVideo ws={ws} ideaId={page.ideaId} refIds={page.refIds ?? []} castIds={page.castIds ?? []} durationSec={page.durationSec ?? null} />;
+  if (page.name === "production_new") {
+    const refIds = page.refIds ?? [];
+    const castIds = page.castIds ?? [];
+    // A new hand-over (another chat button, another reference video) starts the form again from its address.
+    const from = [page.ideaId ?? "", refIds.join(","), castIds.join(","), page.durationSec ?? ""].join("|");
+    return <NewVideo key={from} ws={ws} ideaId={page.ideaId} refIds={refIds} castIds={castIds} durationSec={page.durationSec ?? null} />;
+  }
   if (page.name === "production_story") return <StoryProduction ws={ws} storyId={page.storyId} />;
   return <ProductionList ws={ws} />;
 }
