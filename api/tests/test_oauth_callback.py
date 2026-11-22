@@ -477,7 +477,14 @@ def test_state_is_single_use(call: Call, hooks_deps: hooks.HooksDeps, http: Fake
 def test_state_checks(call: Call, hooks_deps: hooks.HooksDeps, http: FakeHttp, clock: Clock) -> None:
     signed = start(call, "youtube")
     assert back(hooks_deps, "youtube", {"code": "C"}) == "expired"
-    assert back(hooks_deps, "youtube", {"code": "C", "state": signed[:-2] + "AA"}) == "expired"
+    # A tampered signature: change one character in the middle of it (every middle character carries a full 6 bits,
+    # so the decoded bytes always change). Replacing the last two characters with "AA" was the same signature whenever
+    # it already ended in "AA", and the test then failed by chance (main ci, 22 Nov 2026).
+    head, signature = signed.rsplit(".", 1)
+    middle = len(signature) // 2
+    tampered = signature[:middle] + ("B" if signature[middle] == "A" else "A") + signature[middle + 1 :]
+    assert tampered != signature
+    assert back(hooks_deps, "youtube", {"code": "C", "state": f"{head}.{tampered}"}) == "expired"
     assert back(hooks_deps, "x", {"code": "C", "state": signed}) == "expired"  # another platform's state
     clock.now = clock.now.replace(minute=11)
     assert back(hooks_deps, "youtube", {"code": "C", "state": signed}) == "expired"
