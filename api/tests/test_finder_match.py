@@ -201,7 +201,7 @@ def test_heads_ups_and_cant_tell_lines() -> None:
     by_id = {m["campaignId"]: m for m in result["matches"]}
     assert by_id[_u(1)]["headsUp"] == [words.HEADS_OVERLAY, words.HEADS_FACE]
     assert by_id[_u(2)]["cantTell"] == ["I can't tell how much money is left."]
-    assert by_id[_u(2)]["why"] == "Pays $1.50 per 1,000 views on YouTube. Open to join."
+    assert by_id[_u(2)]["why"] == "Pays $1.50 per 1,000 views on YouTube. Anyone can join."
     assert by_id[_u(2)]["budget"]["line"] is None
     assert by_id[_u(3)]["headsUp"] == [words.HEADS_SOUND, words.HEADS_AUDIENCE]
 
@@ -213,7 +213,7 @@ def test_topic_and_language_only_when_he_picked_some() -> None:
     assert picked["matches"][1]["cantTell"] == ["I can't tell what it's about."]
     assert (
         picked["matches"][0]["why"]
-        == "Pays $1.50 per 1,000 views on YouTube. Gaming. 99% of the money left. Open to join."
+        == "Pays $1.50 per 1,000 views on YouTube. Gaming. Most of the money is left. Anyone can join."
     )
     other = _go([_card(_u(3), categories=[{"id": "music", "name": "Music"}])], categories=["gaming"])
     assert [s["code"] for s in other["skipped"]] == ["topic"]
@@ -241,7 +241,7 @@ def test_other_kinds_of_pay() -> None:
     result = _go([other, retainer, per_post], otherPay=True)
     assert [m["campaignId"] for m in result["matches"]] == [_u(1), _u(2), _u(3)]  # per post, retainer, other
     first, second, third = result["matches"]
-    assert first["why"] == "Pays $5.00 for each approved post on YouTube. 99% of the money left. Open to join."
+    assert first["why"] == "Pays $5.00 for each approved post on YouTube. Most of the money is left. Anyone can join."
     assert first["pay"][0]["line"] == "$5.00 for each approved post · needs 1,000 views"
     assert second["pay"][0]["line"] == "Pays picked creators each month"
     assert second["why"].startswith("Pays picked creators each month on YouTube.")
@@ -264,9 +264,9 @@ def test_not_on_discover_is_never_shown_and_refusals_come_from_the_page_only() -
     [
         ("low_pay", 62, {"minPer1kCents": 100}, "62 pay less than $1.00 per 1,000 views."),
         ("low_pay", 1, {"minPer1kCents": 50}, "1 campaign pays less than $0.50 per 1,000 views."),
-        ("budget_low", 31, {"minLeftPct": 25}, "31 have less than a quarter of the money left."),
+        ("budget_low", 31, {"minLeftPct": 25}, "31 have only a little money left."),
         ("budget_low", 2, {"minLeftPct": 50}, "2 have less than half the money left."),
-        ("budget_low", 1, {"minLeftPct": 75}, "1 campaign has less than three quarters of the money left."),
+        ("budget_low", 1, {"minLeftPct": 75}, "1 campaign has less money left than you want."),
         ("budget_gone", 3, {}, "3 have almost no money left."),
         ("not_your_places", 12, {}, "12 don't pay for the places you post."),
         ("not_your_places", 1, {}, "1 campaign doesn't pay for the places you post."),
@@ -281,6 +281,47 @@ def test_not_on_discover_is_never_shown_and_refusals_come_from_the_page_only() -
 )
 def test_skipped_words(code: str, n: int, want: dict[str, Any], text: str) -> None:
     assert words.skipped(code, n, match.with_defaults(want)) == text
+
+
+@pytest.mark.parametrize(
+    ("left", "text"),
+    [
+        (100, "All the money is left."),
+        (99, "Most of the money is left."),
+        (75, "Most of the money is left."),
+        (74, "Half or more of the money is left."),
+        (50, "Half or more of the money is left."),
+        (49, "Some of the money is left."),
+        (25, "Some of the money is left."),
+        (24, "A little money is left."),
+        (5, "A little money is left."),
+    ],
+)
+def test_the_money_left_in_plain_words_follows_the_money_left_choices(left: int, text: str) -> None:
+    # No percent and no "quarter" on a screen: the bands are the choices "Some left", "Half or more", "Most left".
+    assert words.left_line(left) == text
+    line = words.why(
+        kind="cpm", tops=[150], geo=False, per_post=[], counted=["youtube"], category=None, left=left, access="open"
+    )
+    assert line == f"Pays $1.50 per 1,000 views on YouTube. {text} Anyone can join."
+    assert "%" not in line
+    assert "quarter" not in line
+
+
+def test_a_match_never_says_less_money_than_he_asked_for() -> None:
+    # Kept by "Some left" / "Half or more" / "Most left" (check 10) ⇒ its line says at least that much.
+    least = {
+        25: "Some of the money is left.",
+        50: "Half or more of the money is left.",
+        75: "Most of the money is left.",
+    }
+    order = ["A little money is left.", *least.values(), "All the money is left."]
+    for pct, floor in least.items():
+        for used_bps in range(0, 10001, 7):
+            if used_bps > 10000 - 100 * pct:
+                continue
+            said = words.left_line(normalize.left_pct(used_bps))
+            assert order.index(said) >= order.index(floor), (pct, used_bps, said)
 
 
 def test_every_line_is_short_plain_and_only_content_rewards_numbers() -> None:

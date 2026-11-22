@@ -189,6 +189,30 @@
 .finder-want .segmented__opt {
   min-height: 44px;
 }
+/* "Money left" and "Who can join" where their plain words don't fit on one row (phones up to about 465 px, measured
+   on the row itself, not the window): each choice takes an even half (a 2 x 2 grid, and two halves side by side)
+   instead of one choice left alone on a second row. A long label wraps inside its own half. The 2 x 2 grid's track and
+   sliding highlight turn into rounded rectangles to match; <Glide> slides across and down. */
+.finder-want__row--even {
+  container: finder-even / inline-size;
+}
+@container finder-even (max-width: 399px) {
+  .finder-want__row--even .segmented {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .finder-want__row--even .segmented__opt {
+    padding: 6px 10px;
+    line-height: 1.2;
+    text-wrap: balance;
+  }
+  .finder-want__row--even .segmented:has(> .segmented__opt:nth-of-type(3)) {
+    border-radius: var(--r-lg);
+  }
+  .finder-want__row--even .segmented:has(> .segmented__opt:nth-of-type(3)) > :is(.segmented__opt, .glide) {
+    border-radius: calc(var(--r-lg) - 4px);
+  }
+}
 .finder-chips {
   display: flex;
   flex-wrap: wrap;
@@ -470,6 +494,21 @@
   .finder-chip {
     min-height: 48px;
   }
+  /* The pinned vermilion rides over its card, so on phones and touch tablets the page ends with room for it (its
+     height, 12 px over it, the home bar): every line scrolls up above it. */
+  .finder-page:has(.cr-pin) {
+    padding-bottom: calc(var(--finder-pin-h) + 12px + env(safe-area-inset-bottom));
+  }
+}
+:root {
+  /* The pinned bar's height: one big button (56 px, system.css), 60 when its label takes two lines (320 px). */
+  --finder-pin-h: 60px;
+}
+/* The vermilion is pinned at every width on this page, so at every width focus and scrolls stop above the pinned
+   bar's lane (WCAG 2.4.11): the tab bar's band, the home bar, the pin's 22 px over it, the bar and 12 px. A control he
+   focuses, a category or language chip on a wide screen too, is never under it. */
+html:has(.finder-page .cr-pin) {
+  scroll-padding-bottom: calc(var(--tabbar-h, 66px) + env(safe-area-inset-bottom) + 22px + var(--finder-pin-h) + 12px);
 }
 
 @media (prefers-reduced-motion: reduce) {
