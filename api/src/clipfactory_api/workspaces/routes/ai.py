@@ -20,7 +20,20 @@ from ...http import Request, Response, Route, no_content, ok, route
 from .. import agents as agents_mod
 from .. import ai_config as cfg
 from .. import ai_resolve as res
-from .. import chat, guard, memory, model_defs, onboarding, provider_keys, references, retention, skills, storage, usage
+from .. import (
+    chat,
+    guard,
+    makers,
+    memory,
+    model_defs,
+    onboarding,
+    provider_keys,
+    references,
+    retention,
+    skills,
+    storage,
+    usage,
+)
 from .. import deps as ws_deps
 from .. import secrets as ws_secrets
 
@@ -62,9 +75,29 @@ def put_ai(app: App, req: Request) -> Response:
 
 
 def check_models(app: App, req: Request) -> Response:
+    """Check models: one tiny real call per reasoning model, and (``makers``, §45.37 G2) an access check that costs
+    nothing per picture, video or sound model."""
     user_id, ws_id, _, now = _open(app, req)
-    keys = cfg.clean_check_models(req.json())
-    return ok({"task": cfg.start_check_models(app, user_id, ws_id, keys, now)}, 202)
+    body = req.json()
+    keys = cfg.clean_check_models(body)
+    picked: list[str] = []
+    if body.get("makers") is not None:
+        listed = makers.all_models(makers.custom(app.store, user_id, ws_id))
+        picked = makers.clean_check(body.get("makers"), listed)
+    return ok({"task": cfg.start_check_models(app, user_id, ws_id, keys, now, makers=picked)}, 202)
+
+
+def put_maker_model(app: App, req: Request) -> Response:
+    """Settings › Video › "Add a model" (§45.37 G2): adds or changes one picture, video or sound model."""
+    user_id, ws_id, _, now = _open(app, req)
+    model = makers.put(app.store, user_id, ws_id, req.params["modelKey"], req.json(), now=now)
+    return ok({"model": model})
+
+
+def delete_maker_model(app: App, req: Request) -> Response:
+    user_id, ws_id, workspace, _ = _open(app, req)
+    makers.delete(app.store, user_id, ws_id, workspace, req.params["modelKey"])
+    return no_content()
 
 
 def put_price(app: App, req: Request) -> Response:
@@ -330,6 +363,8 @@ ROUTES: list[Route] = [
     route("PUT", f"{BASE}/ai/prices/{{modelKey}}", put_price),
     route("PUT", f"{BASE}/ai/models/{{modelKey}}", put_model),
     route("DELETE", f"{BASE}/ai/models/{{modelKey}}", delete_model),
+    route("PUT", f"{BASE}/makers/models/{{modelKey}}", put_maker_model),
+    route("DELETE", f"{BASE}/makers/models/{{modelKey}}", delete_maker_model),
     route("GET", f"{BASE}/usage", get_usage),
     route("GET", f"{BASE}/agents/{{agentId}}", get_agent),
     route("PATCH", f"{BASE}/agents/{{agentId}}", patch_agent),

@@ -6,11 +6,12 @@ with the tags ``app=cf-prod``, ``workspace`` and ``provider``; the workspace par
 (``savedAt`` and a ``hint``, the last 4 characters of a long key). The key is never returned, logged or stored
 anywhere else.
 
-**Structure only today** (§45.31): every provider Lamo Stories has now uses the app's own AWS access (Amazon
-Bedrock for the models, Nova Canvas and Nova Reel; the built-in animator, rig and synth need nothing), so
-``KEYED`` is empty and a PUT answers 404 until a provider that takes a key is added in code (one ``KEYED`` entry here
-and its class in the agent's registry). A provider is shown ``on`` only after a real call succeeded (its
-``PROVIDER#`` item), never because a key was saved.
+**The keyed hosts** (§45.37 G4, G7): ``anthropic`` (the Anthropic API), ``openai_compatible`` (an OpenAI-compatible
+API the owner names in Add a model) and ``elevenlabs`` (sound effects and music only) take the owner's key, stored as
+JSON ``{"key"}`` and read by Lamo Stories' agent on every call (its runtime role reads only
+``cf-prod/workspaces/*/providers/*``). Everything else Lamo Stories calls uses the app's own AWS access (Amazon
+Bedrock, Amazon Polly; the built-in animator, rig and synth need nothing), so a key is never asked for. A provider is
+shown ``on`` only after a real call (its ``PROVIDER#`` item) or the model's own check, never because a key was saved.
 """
 
 from __future__ import annotations
@@ -40,13 +41,23 @@ class KeyedProvider:
     label: str
 
 
-# Providers that take an API key. None does today; a new one is added here and in the agent's registry together.
-KEYED: Final[dict[str, KeyedProvider]] = {}
+# The keyed hosts (§45.37 G4): the owner's key for models he adds there, and for the ElevenLabs sound maker.
+KEYED: Final[dict[str, KeyedProvider]] = {
+    "anthropic": KeyedProvider("writer", "anthropic", "Anthropic API"),
+    "openai_compatible": KeyedProvider("writer", "openai_compatible", "OpenAI-compatible API"),
+    "elevenlabs": KeyedProvider("audio", "elevenlabs", "ElevenLabs"),
+}
+# ElevenLabs' key shows on its sound maker's row of GET …/providers; every other keyed host has its own row.
+ON_MAKER_ROW: Final = ("elevenlabs",)
 # Providers that use the app's own AWS access (IAM), so a key is never asked for.
 NO_KEY: Final = {
     "bedrock-claude": "Claude on Amazon Bedrock",
+    "bedrock": "Amazon Bedrock",
     "nova-canvas": "Amazon Nova Canvas",
     "nova-reel": "Amazon Nova Reel",
+    "stability": "Stability AI on Amazon Bedrock",
+    "luma-ray": "Luma AI Ray2 on Amazon Bedrock",
+    "polly": "Amazon Polly",
     "builtin-rig": "The built-in characters",
     "builtin-2d": "The built-in animation",
     "builtin-synth": "The built-in sounds and music",
@@ -128,8 +139,25 @@ def status(store: db.Store, user_id: str, workspace_id: str, p: KeyedProvider) -
 
 
 def statuses(store: db.Store, user_id: str, workspace_id: str) -> list[dict[str, Any]]:
-    """Every provider that takes a key, for ``GET …/providers`` (none today)."""
-    return [status(store, user_id, workspace_id, p) for p in KEYED.values()]
+    """The keyed hosts' own rows of ``GET …/providers`` (the Anthropic API, an OpenAI-compatible API), each with its
+    ``key`` and never the key itself."""
+    return [status(store, user_id, workspace_id, p) for h, p in KEYED.items() if h not in ON_MAKER_ROW]
+
+
+def saved_hosts(store: db.Store, user_id: str, workspace_id: str) -> frozenset[str]:
+    """The keyed hosts whose key the owner saved (their ``PROVCRED#`` items; the key itself only in Secrets
+    Manager)."""
+    found = cfg.query_owned(store, user_id, workspace_id, ws.PROVCRED_SK)
+    return frozenset(
+        str(i["sk"])[len(ws.PROVCRED_SK) :]
+        for i in found
+        if i.get("type") == ws.TYPE_PROVCRED and str(i.get("sk") or "")[len(ws.PROVCRED_SK) :] in KEYED
+    )
+
+
+def key_of(store: db.Store, user_id: str, workspace_id: str, host: str) -> dict[str, Any]:
+    """``ProviderStatus.key`` of one keyed host."""
+    return key_state(cfg.get_owned(store, user_id, workspace_id, provcred_sk(host)))
 
 
 def put_key(

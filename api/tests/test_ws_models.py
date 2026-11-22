@@ -103,6 +103,7 @@ def test_an_added_model_is_listed_after_the_bundled_ones_and_not_checked_yet(wca
         "price": None,
         "custom": True,
         "host": "Amazon Bedrock",  # who runs it; ``provider`` is who makes it (§45.35 D8)
+        "hostId": "bedrock",  # §45.37 G4: left out, an added model runs on Amazon Bedrock as before
         "region": "us-east-1",
         "maxOutputTokens": 8192,
         # how it is called (§45.35 D1): a Meta model takes no effort, no tool use and no prompt cache by default
@@ -191,7 +192,15 @@ def first_time_plus_one() -> Any:
         # how it is called (§45.35 D1): a Meta model takes no effort, so it lists none
         ("custom-x", {"efforts": ["low"]}, "This model has no effort setting (effortField none)"),
         ("custom-x", {"efforts": ["low"], "effortField": "none"}, "This model has no effort setting"),
-        ("custom-x", {"effortField": "reasoning_effort"}, "Say how the model takes an effort"),
+        ("custom-x", {"effortField": "speed"}, "Say how the model takes an effort"),
+        # §45.37 G4: reasoning_effort is an OpenAI-compatible API's own field
+        ("custom-x", {"effortField": "reasoning_effort"}, "Only a model on an OpenAI-compatible API takes"),
+        ("custom-x", {"host": "elevenlabs"}, "ElevenLabs makes sounds only."),
+        ("custom-x", {"host": "azure"}, "Pick where the model runs"),
+        ("custom-x", {"baseUrl": "https://api.example.org/v1"}, "Only a model on an OpenAI-compatible API has"),
+        ("custom-x", {"host": "anthropic", "modelId": "claude-opus-5-5"}, "Only a model on Amazon Bedrock has a"),
+        ("custom-x", {"host": "anthropic", "region": None, "modelId": "bad id!"}, "Type the model's name exactly"),
+        ("custom-x", {"host": "openai_compatible", "region": None}, "Paste the address of the OpenAI-compatible"),
         ("custom-x", {"tools": "yes"}, "Say whether the model takes tool use"),
         ("custom-x", {"cache": 1}, "Say whether the model takes Bedrock's prompt cache"),
     ],
@@ -729,3 +738,97 @@ def test_changing_an_added_models_id_or_region_clears_its_status(
                "workspaceId": "stories", "model": "custom-llama", "status": "ok", "checkedAt": AT})  # fmt: skip
     _add(wcall, body={**LLAMA, "region": "us-east-2"})
     assert table.raw(pk(), "MODELSTATUS#custom-llama") is not None
+
+
+# --- §45.37 G4: where an added model runs (Amazon Bedrock, the Anthropic API, an OpenAI-compatible API) ---------
+
+ANTHROPIC_API: dict[str, Any] = {
+    "label": "Claude Opus 5.5 (my Anthropic key)",
+    "provider": "Anthropic",
+    "host": "anthropic",
+    "modelId": "claude-opus-5-5",
+    "efforts": ["low", "medium", "high", "xhigh", "max"],
+    "defaultEffort": "medium",
+    "vision": True,
+    "maxOutputTokens": 64000,
+    "price": None,
+}
+OPENAI_API: dict[str, Any] = {
+    "label": "Llama on my host",
+    "provider": "Meta",
+    "host": "openai_compatible",
+    "baseUrl": "https://api.example.org/v1/",
+    "modelId": "meta-llama/Llama-4-Maverick",
+    "efforts": ["low", "medium", "high"],
+    "defaultEffort": None,
+    "vision": False,
+    "maxOutputTokens": 8192,
+    "price": None,
+    "effortField": "reasoning_effort",
+}
+
+
+def test_a_model_on_the_anthropic_api_takes_its_effort_in_output_config(wcall: WsCall, table: FakeTable) -> None:
+    model = _add(wcall, "custom-opus-api", ANTHROPIC_API)
+    assert (model["host"], model["hostId"], model["region"]) == ("Anthropic API", "anthropic", "")
+    assert (model["effortField"], model["tools"], model["cache"]) == ("output_config", True, True)
+    assert model["efforts"] == ["low", "medium", "high", "xhigh", "max"]
+    assert "baseUrl" not in model
+    item = table.raw(pk(), "MODELDEF#custom-opus-api")
+    assert item is not None
+    assert (item["host"], item["modelId"]) == ("anthropic", "claude-opus-5-5")
+    listed = {m["key"]: m for m in _ai(wcall)["models"]}
+    assert listed["custom-opus-api"]["hostId"] == "anthropic"
+    # the resolver treats it like any other model: the effort is checked against its own list
+    assert (
+        wcall("PUT", f"{BASE}/ai", {"version": 0, "defaultModel": "custom-opus-api", "defaultEffort": "max"})[0] == 200
+    )
+
+
+def test_a_model_on_an_openai_compatible_api_keeps_its_address_and_reasoning_effort(
+    wcall: WsCall, table: FakeTable, store: db.Store
+) -> None:
+    model = _add(wcall, "custom-llama-api", OPENAI_API)
+    assert (model["host"], model["hostId"]) == ("api.example.org", "openai_compatible")
+    assert model["baseUrl"] == "https://api.example.org/v1"  # no trailing slash
+    assert (model["effortField"], model["tools"], model["cache"]) == ("reasoning_effort", False, False)
+    item = table.raw(pk(), "MODELDEF#custom-llama-api")
+    assert item is not None
+    assert (item["host"], item["baseUrl"]) == ("openai_compatible", "https://api.example.org/v1")
+    # moving it to another address is another model: its old check no longer counts (D6)
+    seed(store, "MODELSTATUS#custom-llama-api", "ws_modelstatus", model="custom-llama-api", status="ok")
+    _add(wcall, "custom-llama-api", {**OPENAI_API, "baseUrl": "https://other.example.net/v1"})
+    assert table.raw(pk(), "MODELSTATUS#custom-llama-api") is None
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "http://api.example.org/v1",
+        "https://localhost/v1",
+        "https://127.0.0.1/v1",
+        "https://10.0.0.8/v1",
+        "https://192.168.1.4/v1",
+        "https://169.254.169.254/latest",
+        "https://[::1]/v1",
+        "https://[fd00::1]/v1",
+        "https://[::ffff:127.0.0.1]/v1",
+        "https://metadata.google.internal/v1",
+        "https://my-server/v1",
+        "https://service.internal/v1",
+        "https://printer.local/v1",
+        "https://2130706433/v1",
+        "https://0x7f.0.0.1/v1",
+        "https://user:pass@api.example.org/v1",
+        "https://api.example.org/v1?key=1",
+        "https://api.example.org/v1#x",
+        "https://api.example.org/../v1",
+        "ftp://api.example.org/v1",
+        "",
+    ],
+)
+def test_an_openai_compatible_address_must_be_public_https(wcall: WsCall, table: FakeTable, base_url: str) -> None:
+    status, body = wcall("PUT", f"{BASE}/ai/models/custom-llama-api", {**OPENAI_API, "baseUrl": base_url})
+    assert status == 400, body
+    assert body["error"].get("field") in (None, "baseUrl")
+    assert not [k for k in table.items if k[1].startswith("MODELDEF#")]

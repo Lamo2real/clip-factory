@@ -54,15 +54,16 @@ def test_youtube_posts_with_the_workspace_token_and_lamo_stories_settings_only(
     ctx = FakeDurableContext()
     out = run_story_flow(ctx, sup.flow_event(), sup.flow_deps(store, secrets_client, http, clock))
     assert out == {"storyId": sup.STORY_ID, "outcome": "done"}
-    assert ctx.steps[:6] == [
+    assert ctx.steps[:7] == [
         "load-jobs",
         "validate-youtube",
+        "room-youtube-1",  # Clip Factory's shared app: its posts go first (§45.37 G6); there is room
         "publish-youtube",
         "check-youtube-1",
         "check-youtube-2",
         "posted-youtube",
     ]
-    assert ctx.steps[6:] == ["numbers-1", "numbers-2", "numbers-3", "numbers-4"]
+    assert ctx.steps[7:] == ["numbers-1", "numbers-2", "numbers-3", "numbers-4"]
     numbers_waits = [w for w in ctx.waits if str(w[0]).startswith("wait-numbers")]
     assert numbers_waits == [
         ("wait-numbers-1", 3600),
@@ -110,9 +111,18 @@ def test_youtube_posts_with_the_workspace_token_and_lamo_stories_settings_only(
     acts = [i for i in table.all() if str(i["sk"]).startswith("ACT#")]
     assert [(a["kind"], a["platform"], a["title"]) for a in acts] == [("posted", "youtube", "Ice is slippery")]
     assert acts[0]["ttl"] == int((NOW + timedelta(days=90)).timestamp())
-    budget = store.get("RATE#youtube", "BUDGET")
-    assert budget is not None
-    assert budget["unitsUsed"] == 4  # one Data API unit per numbers read, shared with Lamo Clips
+    # §45.37 G6: Clip Factory's counters are never written; Lamo Stories counts its upload, its two processing checks
+    # and its four numbers reads (one Data API unit each) in its own item of its own partition
+    assert store.get("RATE#youtube", "BUDGET") is None
+    own = table.raw(sup.PK, "SHAREUSE#youtube#2026-11-15")
+    assert own is not None
+    assert (own["type"], own["posts"], own["units"], own["userId"], own["workspaceId"]) == (
+        "ws_shareuse",
+        1,
+        6,
+        USER,
+        "stories",
+    )
     for _, name in secrets_client.calls:
         assert name.startswith("cf-prod/workspaces/stories/") or name.endswith("/app"), name
 
@@ -131,21 +141,53 @@ def test_a_replayed_publish_and_posted_step_change_nothing_twice(
     assert len([i for i in table.all() if str(i["sk"]).startswith("ACT#")]) == 1
 
 
-def test_x_is_charged_once_on_the_shared_monthly_limit_and_stops_at_it(
+def test_x_waits_for_the_next_month_when_clip_factory_used_its_credits_and_then_posts_by_itself(
     world: None, store: db.Store, table: FakeTable, secrets_client: FakeSecretsManager, clock: Clock
 ) -> None:
+    """§45.37 G6 (c, f): no room on Clip Factory's shared X app this month → the post waits (never fails, never
+    takes Clip Factory's share), then goes out after the month resets; Clip Factory's RATE#x is never written."""
+    token = {**sup.TOKENS["x"], "expiresAt": "2027-06-01T00:00:00.000Z"}  # still fresh after the month's wait
+    sup.social(store, secrets_client, "x", token=token)
     sup.pubjob(store, "x")
-    store.put({"pk": "RATE#x", "sk": "BUDGET", "type": "rate", "monthKey": "2026-11", "monthUsd": 9.99, "version": 1})
-    http = FakeHttp()
-    run_story_flow(FakeDurableContext(), sup.flow_event(), sup.flow_deps(store, secrets_client, http, clock))
+    cf_budget = {"pk": "RATE#x", "sk": "BUDGET", "type": "rate", "monthKey": "2026-11", "monthUsd": 9.99, "version": 1}
+    store.put(cf_budget)
+    http = FakeHttp(
+        (200, "publish/x_initialize"),
+        (204, b""),
+        (200, "publish/x_finalize"),
+        (200, "publish/x_status_succeeded"),
+        (201, "publish/x_tweet"),
+        *([(200, "x_tweets_lookup")] * 4),
+    )
+    seen: dict[str, Any] = {}
+
+    class Watching(TimedContext):
+        def wait(self, duration: Any, name: str | None = None) -> None:
+            if name == "wait-room-x-1":  # what the owner sees while it waits
+                found = table.raw(sup.PK, JOB_SK) or {}
+                seen.update(job=dict(found), calls=len(http.calls), shown=publish.public_job(found))
+            super().wait(duration, name=name)
+
+    ctx = Watching(clock)
+    run_story_flow(ctx, sup.flow_event(), sup.flow_deps(store, secrets_client, http, clock))
+    waiting = seen["job"]
+    assert waiting["publishingStatus"] == "queued"
+    assert waiting["waitUntil"] == "2026-12-01T00:00:30.000Z"
+    assert seen["shown"]["waiting"] == "Waiting: Clip Factory's posts go first. Posts at 1 Dec 00:00 UTC."
+    assert seen["shown"]["waitingUntil"] == "2026-12-01T00:00:30.000Z"
+    assert "error" not in waiting
+    assert seen["calls"] == 0  # nothing went to X while it waited
+    assert ctx.steps[1:4] == ["validate-x", "room-x-1", "room-x-2"]
     job = table.raw(sup.PK, JOB_SK)
     assert job is not None
-    assert (job["publishingStatus"], job["error"]) == (
-        "needs_attention",
-        "Lamo Stories stopped X: this month's X limit is used up (it is shared with Clip Factory).",
-    )
-    assert http.calls == []
-    assert store.get(db.user_pk(USER), "SETUP#x") is None  # Lamo Clips' setup gates are never written
+    assert job["publishingStatus"] == "posted"
+    assert "waitUntil" not in job
+    assert "waiting" not in job
+    assert store.get("RATE#x", "BUDGET") == {**cf_budget}  # Clip Factory's budget: byte for byte as it was
+    own = table.raw(sup.PK, "SHAREUSE#x#2026-12")
+    assert own is not None
+    assert own["usd"] >= 0.015
+    assert store.get(db.user_pk(USER), "SETUP#x") is None  # Clip Factory's setup gates are never written
 
 
 def test_x_credits_run_out_without_touching_lamo_clips_gates(
@@ -158,9 +200,10 @@ def test_x_credits_run_out_without_touching_lamo_clips_gates(
     assert job is not None
     assert job["publishingStatus"] == "needs_attention"
     assert job["error"] == "X has no credits left. Buy more in console.x.com › Billing › Credits, then tap Try again."
-    budget = store.get("RATE#x", "BUDGET")
-    assert budget is not None
-    assert budget["monthUsd"] == 0.015
+    assert store.get("RATE#x", "BUDGET") is None  # §45.37 G6: Clip Factory's X budget is never written
+    own = table.raw(sup.PK, "SHAREUSE#x#2026-11")
+    assert own is not None
+    assert float(own["usd"]) == 0.015  # Lamo Stories' own count of the shared app's credits
     assert store.get(db.user_pk(USER), "SETUP#x") is None
 
 
@@ -178,7 +221,7 @@ def test_x_full_post(
     )
     ctx = FakeDurableContext()
     run_story_flow(ctx, sup.flow_event(), sup.flow_deps(store, secrets_client, http, clock))
-    assert ctx.steps[1:6] == ["validate-x", "publish-x", "check-x-1", "finish-x", "posted-x"]
+    assert ctx.steps[1:7] == ["validate-x", "room-x-1", "publish-x", "check-x-1", "finish-x", "posted-x"]
     tweet = json.loads(http.calls[4].body)
     assert tweet["text"] == "ice tips"
     assert "paid_partnership" not in tweet
@@ -574,8 +617,9 @@ def test_tiktok_s_id_waits_after_every_post_and_the_numbers_wait_counts_its_time
     world: None, store: db.Store, table: FakeTable, secrets_client: FakeSecretsManager, clock: Clock
 ) -> None:
     public = {**TIKTOK_OPTIONS, "privacyLevel": "PUBLIC_TO_EVERYONE"}
+    sup.social(store, secrets_client, "tiktok", choice="own")  # its own app's counters block the numbers reads
     sup.pubjob(store, "tiktok", postOptions=public)
-    store.put({"pk": "RATE#tiktok", "sk": "BUDGET", "type": "rate", "blockedUntil": "2027-01-01T00:00:00.000Z"})
+    store.put({"pk": "RATE#WS#stories#tiktok", "sk": "BUDGET", "blockedUntil": "2027-01-01T00:00:00.000Z"})
     no_id = {"data": {"status": "PUBLISH_COMPLETE", "uploaded_bytes": 3145728}, "error": {"code": "ok"}}
     http = FakeHttp(
         (200, "publish/tiktok_creator"),
@@ -617,8 +661,9 @@ def test_tiktok_s_id_loop_never_holds_up_the_next_platform(
 ) -> None:
     sup.pubjob(store, "tiktok", postOptions={**TIKTOK_OPTIONS, "privacyLevel": "PUBLIC_TO_EVERYONE"})
     sup.pubjob(store, "x", "01JZ0000000000000000000PJ2")
-    for platform in ("tiktok", "x"):
-        store.put({"pk": f"RATE#{platform}", "sk": "BUDGET", "type": "rate", "blockedUntil": "2027-01-01T00:00:00Z"})
+    for platform in ("tiktok", "x"):  # their own apps' counters block the numbers reads
+        sup.social(store, secrets_client, platform, choice="own")
+        store.put({"pk": f"RATE#WS#stories#{platform}", "sk": "BUDGET", "blockedUntil": "2027-01-01T00:00:00Z"})
     no_id = {"data": {"status": "PUBLISH_COMPLETE", "uploaded_bytes": 3145728}, "error": {"code": "ok"}}
     http = FakeHttp(
         (200, "publish/tiktok_creator"),

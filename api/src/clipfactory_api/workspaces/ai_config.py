@@ -42,8 +42,22 @@ from . import types as ws
 
 # Provider ids with a price the owner may type (§45.34 "Provider usage and cost"): per picture or per second of video,
 # saved through PUT …/ai ``prices`` by provider id with ``inputPer1M`` and ``outputPer1M`` 0 and ``perUnit`` set.
-PRICE_PROVIDERS: Final = {"nova-canvas": "image", "nova-reel": "second"}
-PROVIDER_LABEL: Final = {"nova-canvas": "Amazon Nova Canvas", "nova-reel": "Amazon Nova Reel"}
+PRICE_PROVIDERS: Final = {
+    "nova-canvas": "image",
+    "nova-reel": "second",
+    "stability": "image",
+    "luma-ray": "second",
+    "own-images": "image",
+    "own-video": "second",
+}
+PROVIDER_LABEL: Final = {
+    "nova-canvas": "Amazon Nova Canvas",
+    "nova-reel": "Amazon Nova Reel",
+    "stability": "Stability AI",
+    "luma-ray": "Luma AI Ray2",
+    "own-images": "Your own picture model",
+    "own-video": "Your own video model",
+}
 UNIT_WORD: Final = {"image": "picture", "second": "second of video"}
 UNITS: Final = ("image", "second")
 # What the setup's steps 1–3 record (§45.34 "Setup steps 1–3"): ``PUT …/ai`` ``picked``, stamped on ``pickedAt``.
@@ -603,6 +617,9 @@ def model_info(m: Mapping[str, Any], status: Mapping[str, Any] | None, ai: Mappi
         "custom": bool(m.get("custom")),
     }
     if out["custom"]:  # what the owner typed, so Settings › AI can show and change it (§45.34, §45.35 D1)
+        out["hostId"] = str(m.get("hostId") or "bedrock")  # §45.37 G4: bedrock | anthropic | openai_compatible
+        if m.get("baseUrl"):
+            out["baseUrl"] = str(m["baseUrl"])
         out["region"] = str(m.get("region") or "")
         out["maxOutputTokens"] = int(m.get("maxOutputTokens") or 0) or None
         out["effortField"] = str(m.get("effortField") or "none")
@@ -694,10 +711,11 @@ def public_task(item: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def clean_check_models(body: Mapping[str, Any]) -> list[str]:
-    validate.only_keys(body, ("models",))
+    """The reasoning models to check: every one when the body names none (and no maker models either)."""
+    validate.only_keys(body, ("models", "makers"))
     raw = body.get("models")
     if raw is None:
-        return [str(m["key"]) for m in res.models()]
+        return [] if body.get("makers") is not None else [str(m["key"]) for m in res.models()]
     if not isinstance(raw, list) or not raw or len(raw) > len(res.models()):
         raise bad_request("models must be a list of the models to check.", "models")
     keys: list[str] = []
@@ -709,9 +727,13 @@ def clean_check_models(body: Mapping[str, Any]) -> list[str]:
     return keys
 
 
-def start_check_models(app: Any, user_id: str, workspace_id: str, keys: list[str], now: datetime) -> dict[str, Any]:
+def start_check_models(
+    app: Any, user_id: str, workspace_id: str, keys: list[str], now: datetime, *, makers: list[str] | None = None
+) -> dict[str, Any]:
     """Writes the task (``queued``, its own ``sessionId`` and ``heartbeatAt``) and asks the runtime to run it; a
-    runtime that is off or refuses fails the task at once with a plain sentence."""
+    runtime that is off or refuses fails the task at once with a plain sentence. ``makers`` (§45.37 G2) are the
+    picture, video and sound models to give an access check that costs nothing (``input.makers``; the agent writes
+    ``MAKERSTATUS#{key}``)."""
     task_id = ulid()
     at = iso(now)
     session_id = new_session(task_id)
@@ -720,7 +742,7 @@ def start_check_models(app: Any, user_id: str, workspace_id: str, keys: list[str
         "taskId": task_id,
         "kind": "check_models",
         "status": "queued",
-        "input": {"models": keys},
+        "input": {"models": keys, **({"makers": list(makers)} if makers else {})},
         "createdAt": at,
         "updatedAt": at,
         "sessionId": session_id,

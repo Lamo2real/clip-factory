@@ -1,5 +1,5 @@
 {
-  "$comment": "Lamo Stories' own model list (docs/CONTRACTS.md §45.25, ADR-77). Separate from config/models.json, which is Clip Factory's and is never read by Lamo Stories. Terraform records this file's model ids in the plan (model_invoke_arns); the Lamo Stories agent's bedrock:InvokeModel grant covers every foundation model and this account's profiles and model ARNs (§45.34, §45.35 D12). 'provider' is who makes the model (Anthropic, Amazon) and 'host' who runs it (Amazon Bedrock, §45.35 D8); the bundled Claude models take output_config.effort, tools and cache points (§45.35 D1). 'profile' is the inference profile the agent calls; 'regions' are that profile's destination Regions (for IAM; '*' for a global profile). 'efforts' are the output_config.effort levels the model accepts (empty: no effort setting, the model runs at its own level). 'pricing' is Anthropic's own list price for reference (source anthropic_list, checked 2026-11-21); Amazon Bedrock bills its own price, which can differ, so the owner may type Bedrock's in Lamo Stories › Settings › AI (source owner). null where no price is known. The owner's 'Sable 5.2 / Sable 5.1' are the Claude Fable 5.2 / 5.1 models below.",
+  "$comment": "Lamo Stories' own model list (docs/CONTRACTS.md §45.25, ADR-77). Separate from config/models.json, which is Clip Factory's and is never read by Lamo Stories. Terraform records this file's model ids in the plan (model_invoke_arns); the Lamo Stories agent's bedrock:InvokeModel grant covers every foundation model and this account's profiles and model ARNs (§45.34, §45.35 D12). 'provider' is who makes the model (Anthropic, Amazon) and 'host' who runs it (Amazon Bedrock, §45.35 D8); the bundled Claude models take output_config.effort, tools and cache points (§45.35 D1). 'profile' is the inference profile the agent calls; 'regions' are that profile's destination Regions (for IAM; '*' for a global profile). 'efforts' are the output_config.effort levels the model accepts (empty: no effort setting, the model runs at its own level). 'pricing' is Anthropic's own list price for reference (source anthropic_list, checked 2026-11-21); Amazon Bedrock bills its own price, which can differ, so the owner may type Bedrock's in Lamo Stories › Settings › AI (source owner). null where no price is known. The owner's 'Sable 5.2 / Sable 5.1' are the Claude Fable 5.2 / 5.1 models below. The picture, video and sound makers' models (§45.37 G1, G7) are in imageModels, videoModels and audioModels: { key, label, provider (who makes it), maker (the StoriesConfig.providers id it belongs to), host ('Amazon Bedrock', 'Amazon Polly' or a keyed host id), modelId, region, kind, price ({perUnit, unit, currency} or null), note, ended? (the day its maker ended it) }. Amazon Nova Canvas and Nova Reel reached end of life on 2026-09-30 (AWS's model cards, docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html); the Stability AI and Luma AI models are on Bedrock in us-west-2 only. imageModel and videoModel stay as the older single entries until every reader uses the lists.",
   "defaultModel": "opus-5-5",
   "defaultEffort": "high",
   "models": [
@@ -183,5 +183,122 @@
     "modelId": "amazon.nova-reel-v1:1",
     "region": "us-east-1",
     "pricing": null
-  }
+  },
+  "imageModels": [
+    {
+      "key": "nova-canvas",
+      "label": "Amazon Nova Canvas",
+      "provider": "Amazon",
+      "maker": "nova-canvas",
+      "host": "Amazon Bedrock",
+      "modelId": "amazon.nova-canvas-v1:0",
+      "region": "eu-west-1",
+      "kind": "image",
+      "price": null,
+      "note": "Ended by Amazon on 30 Sep 2026.",
+      "ended": "2026-09-30"
+    },
+    {
+      "key": "stable-image-core",
+      "label": "Stable Image Core",
+      "provider": "Stability AI",
+      "maker": "stability",
+      "host": "Amazon Bedrock",
+      "modelId": "stability.stable-image-core-v1:1",
+      "region": "us-west-2",
+      "kind": "image",
+      "price": null,
+      "note": "Runs in the US (Oregon). Quick pictures for portraits."
+    },
+    {
+      "key": "stable-image-ultra",
+      "label": "Stable Image Ultra",
+      "provider": "Stability AI",
+      "maker": "stability",
+      "host": "Amazon Bedrock",
+      "modelId": "stability.stable-image-ultra-v1:1",
+      "region": "us-west-2",
+      "kind": "image",
+      "price": null,
+      "note": "Runs in the US (Oregon). The most detailed pictures."
+    },
+    {
+      "key": "sd3-5-large",
+      "label": "Stable Diffusion 3.5 Large",
+      "provider": "Stability AI",
+      "maker": "stability",
+      "host": "Amazon Bedrock",
+      "modelId": "stability.sd3-5-large-v1:0",
+      "region": "us-west-2",
+      "kind": "image",
+      "price": null,
+      "note": "Runs in the US (Oregon). Detailed pictures in many styles."
+    }
+  ],
+  "videoModels": [
+    {
+      "key": "nova-reel",
+      "label": "Amazon Nova Reel 1.1",
+      "provider": "Amazon",
+      "maker": "nova-reel",
+      "host": "Amazon Bedrock",
+      "modelId": "amazon.nova-reel-v1:1",
+      "region": "us-east-1",
+      "kind": "video",
+      "price": null,
+      "note": "Ended by Amazon on 30 Sep 2026.",
+      "ended": "2026-09-30"
+    },
+    {
+      "key": "luma-ray2",
+      "label": "Luma AI Ray2",
+      "provider": "Luma AI",
+      "maker": "luma-ray",
+      "host": "Amazon Bedrock",
+      "modelId": "luma.ray-v2:0",
+      "region": "us-west-2",
+      "kind": "video",
+      "price": null,
+      "note": "Runs in the US (Oregon). Makes 5-second AI shots for scenes with no characters (cut-aways)."
+    }
+  ],
+  "audioModels": [
+    {
+      "key": "polly-neural",
+      "label": "Amazon Polly neural voices",
+      "provider": "Amazon",
+      "maker": "polly",
+      "host": "Amazon Polly",
+      "modelId": "neural",
+      "region": "eu-west-1",
+      "kind": "audio",
+      "price": null,
+      "note": "Adds words spoken aloud. Your videos are made without a voice unless you pick this."
+    },
+    {
+      "key": "elevenlabs-effects",
+      "label": "ElevenLabs sound effects",
+      "provider": "ElevenLabs",
+      "maker": "elevenlabs",
+      "host": "elevenlabs",
+      "modelId": "eleven_text_to_sound_v2",
+      "region": null,
+      "kind": "audio",
+      "price": null,
+      "note": "Sound effects from your ElevenLabs account. Never a voice."
+    },
+    {
+      "key": "elevenlabs-music",
+      "label": "ElevenLabs music (instrumental)",
+      "provider": "ElevenLabs",
+      "maker": "elevenlabs",
+      "host": "elevenlabs",
+      "modelId": "music_v1",
+      "region": null,
+      "kind": "audio",
+      "price": null,
+      "note": "An instrumental music bed from your ElevenLabs account. Never a voice.",
+      "instrumental": true
+    }
+  ]
 }

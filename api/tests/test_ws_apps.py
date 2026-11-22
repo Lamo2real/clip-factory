@@ -410,9 +410,11 @@ TIKTOK_TARGET = {"platform": "tiktok", "socialAccountId": "stories.tiktok", "opt
 
 @pytest.fixture
 def unsure(app: App, store: db.Store, secrets_client: FakeSecretsManager) -> sup.FakeStarter:
-    """Lamo Clips posts to a TikTok; Lamo Stories' TikTok is connected through Lamo Stories' own TikTok app."""
+    """Lamo Clips posts to a TikTok; Lamo Stories' TikTok is connected through Lamo Stories' own TikTok app. Clip
+    Factory's TikTok has no username stored (only its display name), so the usernames cannot be compared either
+    (§45.37 G8 b): only then does Lamo Stories have to ask."""
     sup.ready(store, secrets_client)
-    sup.clips_account(store, secrets_client, "tiktok")
+    sup.clips_account(store, secrets_client, "tiktok", handle="Owner Plays")
     sup.social(store, secrets_client, "tiktok", choice="own", identity=OTHER_APP_ID)
     found = sup.FakeStarter()
     sup.install(app, secrets_client, found)
@@ -521,4 +523,4 @@ def test_the_shared_tiktok_app_compares_open_ids_and_asks_nothing(
     store.delete(sup.PK, "PUBJOB#" + body["publishingJobs"][0]["publishingJobId"])
     status, body = call("POST", PUBLISH, {"targets": [TIKTOK_TARGET]})
     assert status == 409
-    assert "same place Clip Factory posts to" in body["error"]["message"]
+    assert "Clip Factory's own account" in body["error"]["message"]

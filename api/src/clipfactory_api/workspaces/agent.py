@@ -155,7 +155,7 @@ class StoryAgent:
     def start_provider_check(
         self, *, user_id: str, workspace_id: str, provider_id: str, job_id: str, session_id: str
     ) -> None:
-        """``provider_check`` (§45.35 D2): the job's one step ``check`` tries the maker once (Nova Reel: one 6-second
+        """``provider_check`` (§45.35 D2): the job's one step ``check`` tries the maker once (Luma AI Ray2: one 5-second
         test shot into the United States bucket, deleted after), then proves ``PROVIDER#{kind}#{id}`` or records the
         maker's own sentence."""
         self._start(

@@ -8,7 +8,8 @@
         "chat",
         "brainstorm",
         "expand_idea",
-        "variations"
+        "variations",
+        "text_edit"
       ],
       "skills": [
         "nonverbal-storytelling",
@@ -38,7 +39,8 @@
       "tasks": [
         "storyboard",
         "scene_rewrite",
-        "captions"
+        "captions",
+        "animation_plan"
       ],
       "skills": [
         "nonverbal-storytelling",

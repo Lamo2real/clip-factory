@@ -300,7 +300,7 @@ run "alias_arns_are_the_outputs" {
 
 # docs/CONTRACTS.md §45.15, ADR-73: cf-prod-story-flow, Lamo Stories' publisher. Durable for longer than the 7-day
 # numbers, its own role (not clip-flow's statements): DynamoDB writes only under USER#*#WS#* and RATE#*, reads on
-# USER#*#WS#*, USER#*#WSREG and RATE#*, plus GetItem of five attributes on USER#* (Lamo Clips' ACCOUNT#), the table
+# USER#*#WS#*, USER#*#WSREG and RATE#*, plus GetItem of seven attributes on USER#* (Lamo Clips' ACCOUNT# and settings' autoPost), the table
 # only; S3 GetObject on ws/* only; the workspace secrets and Clip Factory's YouTube, TikTok and X app keys read, a
 # workspace token put back; no Bedrock, no Delete, no Scan. IAM patterns are checked as globs against sample ARNs and
 # keys: "*" becomes ".*" and "?" becomes "." in an anchored regex, dots escaped.
@@ -316,8 +316,8 @@ run "story_flow_is_kept_apart" {
   }
 
   assert {
-    condition     = one(aws_lambda_function.fn["story-flow"].durable_config).execution_timeout == 777600
-    error_message = "story-flow execution_timeout must be 777600 s (9 days: the 7-day numbers and the publish loops)."
+    condition     = one(aws_lambda_function.fn["story-flow"].durable_config).execution_timeout == 3456000
+    error_message = "story-flow execution_timeout must be 3456000 s (40 days: the 7-day numbers, the publish loops and a post waiting for room on Clip Factory's shared app, §45.37 G6)."
   }
 
   assert {
@@ -419,11 +419,11 @@ run "story_flow_is_kept_apart" {
       s.Resource == ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"] &&
       s.Condition == {
         "ForAllValues:StringLike"   = { "dynamodb:LeadingKeys" = ["USER#*"] }
-        "ForAllValues:StringEquals" = { "dynamodb:Attributes" = ["pk", "sk", "platform", "status", "accountId"] }
+        "ForAllValues:StringEquals" = { "dynamodb:Attributes" = ["pk", "sk", "platform", "status", "accountId", "handle", "autoPost"] }
         "StringEqualsIfExists"      = { "dynamodb:Select" = "SPECIFIC_ATTRIBUTES", "dynamodb:ReturnValues" = "NONE" }
       }
     ])
-    error_message = "story-flow reads Lamo Clips' ACCOUNT# items only with GetItem of pk, sk, platform, status and accountId."
+    error_message = "story-flow reads Lamo Clips' items only with GetItem of pk, sk, platform, status, accountId, handle and autoPost (§45.37 G6, G8)."
   }
 
   # Every statement that reaches Lamo Clips' own partition (USER#u1) is that attribute-limited GetItem: no Query, no
@@ -431,12 +431,12 @@ run "story_flow_is_kept_apart" {
   assert {
     condition = alltrue([
       for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement :
-      flatten([s.Action]) == ["dynamodb:GetItem"] && try(s.Condition["ForAllValues:StringEquals"]["dynamodb:Attributes"], []) == ["pk", "sk", "platform", "status", "accountId"]
+      flatten([s.Action]) == ["dynamodb:GetItem"] && try(s.Condition["ForAllValues:StringEquals"]["dynamodb:Attributes"], []) == ["pk", "sk", "platform", "status", "accountId", "handle", "autoPost"]
       if anytrue([for a in flatten([s.Action]) : startswith(a, "dynamodb:")]) && anytrue([
         for r in try(s.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"], ["*"]) : can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", "USER#u1"))
       ])
     ])
-    error_message = "story-flow reaches USER#{userId} (Lamo Clips) only through the five-attribute GetItem."
+    error_message = "story-flow reaches USER#{userId} (Lamo Clips) only through the attribute-limited GetItem."
   }
 
   assert {

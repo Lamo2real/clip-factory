@@ -38,10 +38,13 @@ locals {
   story_shared_app_platforms = ["youtube", "tiktok", "x"]
   story_app_secret_arns      = [for p in local.story_shared_app_platforms : "${trimsuffix(var.platform_secrets_arn, "*")}${p}/app*"]
 
-  # The five attributes of Lamo Clips' ACCOUNT# items the story flow may read, and only with GetItem (§45.15): what
-  # "not Lamo Clips' own destination" compares. IAM limits partitions, not sort keys; the code reads only
-  # ACCOUNT#{platform} with a ProjectionExpression of these names, so nothing else of USER#{userId} is ever returned.
-  clips_account_attributes = ["pk", "sk", "platform", "status", "accountId"]
+  # The attributes of Clip Factory's items the story flow may read, and only with GetItem (§45.15, §45.37): its
+  # ACCOUNT#{platform}'s id and username ("handle"), what "never Clip Factory's own account" compares (G8 b), and its
+  # SETTINGS item's autoPost, the schedule whose share Lamo Stories leaves to it on a shared developer app (G6 b). IAM
+  # limits partitions, not sort keys; the code reads only ACCOUNT#{platform} (pk, sk, platform, status, accountId,
+  # handle) and SETTINGS (pk, sk, autoPost) with a ProjectionExpression of those names, so nothing else of
+  # USER#{userId} is ever returned. Widened in place (more names in the same statement): nothing is replaced.
+  clips_account_attributes = ["pk", "sk", "platform", "status", "accountId", "handle", "autoPost"]
 
   functions = {
     job-flow = {
@@ -79,8 +82,11 @@ locals {
       handler = "clipfactory_api.flows.story_flow.handler"
       memory  = 1024 # the same 8 MB upload chunks and resumable uploads as clip-flow (§17.9)
       timeout = 900  # a replay may upload a video
-      # 9 days: numbers at 1 h, 24 h, 72 h and 7 days after each platform's post, plus the longest publish loop.
-      execution_timeout = 777600
+      # 40 days: numbers at 1 h, 24 h, 72 h and 7 days after each platform's post, the longest publish loop, and a
+      # post that waits for room on Clip Factory's shared developer app (§45.37 G6: up to the next month on X).
+      # Raised in place, like job-flow's: Terraform replaces a function only when durable_config is added or removed;
+      # running executions keep their own timeout.
+      execution_timeout = 3456000
       env = {
         TABLE_NAME       = var.table_name
         MEDIA_BUCKET     = var.media_bucket
@@ -141,9 +147,9 @@ locals {
         Resource  = [var.table_arn]
         Condition = { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["USER#*#WS#*", "USER#*#WSREG", "RATE#*"] } }
       },
-      # Lamo Clips' ACCOUNT#{platform} item, read only and only five attributes (the "not Lamo Clips' own destination"
-      # rule): GetItem with a ProjectionExpression of those names; no Query, no other attribute, nothing returned by
-      # a write.
+      # Lamo Clips' ACCOUNT#{platform} item (the "never Clip Factory's own account" rule) and its settings' autoPost
+      # (the share it keeps on a shared app), read only: GetItem with a ProjectionExpression of those names; no
+      # Query, no other attribute, nothing returned by a write.
       {
         Sid      = "ClipsAccountRead"
         Action   = ["dynamodb:GetItem"]

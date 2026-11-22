@@ -4,7 +4,9 @@
 Every route of ``workspaces/routes/social.py`` (and the public callback), then the story flow on every platform with
 both developer-app choices, runs against a seeded Clip Factory. Every DynamoDB key, query and secret name they touch
 is recorded: nothing outside ``USER#{u}#WS#…``, ``USER#{u}#WSREG``, ``OAUTH#ws.…`` and ``cf-prod/workspaces/…``,
-except the allowed reads (five attributes of ``ACCOUNT#``, the YouTube, TikTok and X app keys, the OAuth state key)
+except the allowed reads (six attributes of ``ACCOUNT#``, the YouTube, TikTok and X app keys, the OAuth state key;
+the story flow on the shared app also Clip Factory's ``RATE#`` counters and its settings' ``autoPost``, read only,
+§45.37 G6)
 and ``RATE#{platform}`` writes only for the shared-app choice. Clip Factory's items and secrets are byte-identical
 after.
 """
@@ -76,10 +78,18 @@ def assert_only_allowed(table: FakeTable, secrets_client: FakeSecretsManager, *,
             if pk.startswith(ALLOWED_PK):
                 continue
             if pk == f"USER#{USER}" and op == "get_item" and sk.startswith("ACCOUNT#"):
-                assert set(kw["ExpressionAttributeNames"].values()) == {"pk", "sk", "platform", "status", "accountId"}
+                names = set(kw["ExpressionAttributeNames"].values())
+                assert names == {"pk", "sk", "platform", "status", "accountId", "handle"}  # §45.37 G8 b
+                continue
+            if pk == f"USER#{USER}" and op == "get_item" and sk == "SETTINGS":
+                # §45.37 G6: Clip Factory's auto-posting schedule, read only, and nothing else of its settings
+                assert rates, (op, pk)  # only the story flow, on Clip Factory's shared app, reads it
+                assert set(kw["ExpressionAttributeNames"].values()) == {"pk", "sk", "autoPost"}
                 continue
             if pk.startswith("RATE#") and not pk.startswith("RATE#WS#"):
-                assert pk in rates, (op, pk)  # the shared counters only with Clip Factory's app
+                # Clip Factory's counters: read only, and only to work out the room its share leaves (§45.37 G6)
+                assert pk in rates, (op, pk)
+                assert op == "get_item", (op, pk)
                 continue
             if pk.startswith("RATE#WS#stories#"):
                 continue
@@ -179,10 +189,6 @@ def test_the_story_flow_stays_inside_lamo_stories(
     run_story_flow(FakeDurableContext(), sup.flow_event(), sup.flow_deps(store, secrets_client, http, clock))
     shared = {f"RATE#{platform}"} if choice == "clips" else set()
     assert_only_allowed(table, secrets_client, since=since, rates=shared)
-    if choice == "own":
-        assert clips_world(table, secrets_client) == before  # byte for byte, the shared counters too
-    else:
-        assert [i for i in clips_world(table, secrets_client)[0] if '"RATE#' not in i] == [
-            i for i in before[0] if '"RATE#' not in i
-        ]
-        assert clips_world(table, secrets_client)[1] == before[1]
+    # §45.37 G6 (a, f): with Clip Factory's shared app too, every Clip Factory item (its RATE# counters, settings and
+    # X budget included) and secret is byte for byte as it was
+    assert clips_world(table, secrets_client) == before

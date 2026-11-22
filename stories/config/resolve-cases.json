@@ -158,6 +158,45 @@
       "expect": {
         "error": "effort"
       }
+    },
+    {
+      "name": "a small text edit takes its own task setting",
+      "task": "text_edit",
+      "agent": {
+        "model": "opus-5-5",
+        "effort": "high"
+      },
+      "ai": {
+        "defaultModel": "opus-5-5",
+        "defaultEffort": "high",
+        "tasks": {
+          "text_edit": {
+            "model": "haiku-5-5",
+            "effort": "low"
+          }
+        }
+      },
+      "expect": {
+        "model": "haiku-5-5",
+        "effort": "low",
+        "from": "task"
+      }
+    },
+    {
+      "name": "animation planning inherits the storyboard agent and the default",
+      "task": "animation_plan",
+      "agent": {
+        "model": "fable-5-2"
+      },
+      "ai": {
+        "defaultModel": "opus-5-5",
+        "defaultEffort": "high"
+      },
+      "expect": {
+        "model": "fable-5-2",
+        "effort": "high",
+        "from": "agent"
+      }
     }
   ]
 }

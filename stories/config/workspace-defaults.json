@@ -6,7 +6,10 @@
   "providers": {
     "images": "builtin-rig",
     "video": "builtin-2d",
-    "audio": "builtin-synth"
+    "audio": "builtin-synth",
+    "imageModel": null,
+    "videoModel": null,
+    "audioModel": null
   },
   "video": {
     "resolution": "1080x1920",

@@ -85,14 +85,16 @@ def test_the_other_screens_lines_say_clip_factory() -> None:
             lines.append(apps.not_ready_sentence(platform, reason))
     assert [line for line in lines if "Lamo Clips" in line] == []
     assert onboarding.same_as_clips_line("youtube") == (
-        "This is Clip Factory's YouTube account. Pick another in Social accounts, or tap Use it for both."
+        "This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a "
+        "different one."
     )
     assert apps.not_ready_sentence("tiktok", "clips_missing") == (
         "Clip Factory has no TikTok app keys yet. Set up TikTok in Clip Factory first (Settings › Posting › Set up "
         "posting, up to the keys step)."
     )
     assert social.TIKTOK_UNSURE.startswith("Lamo Stories cannot tell if this is Clip Factory's TikTok")
-    assert any(line.endswith("shared with Clip Factory.") for line in social.limits("x", apps.CLIPS))
+    assert "Clip Factory's posts always go first. Stories uses what's left." in social.limits("x", apps.CLIPS)
+    assert not any("quicker" in line or "Use it for both" in line for line in lines)  # §45.37 G6 d, G8
 
 
 def test_an_account_named_lamo_stories_reads_plainly() -> None:
@@ -108,8 +110,8 @@ def test_an_account_named_lamo_stories_reads_plainly() -> None:
         "tap Try again."
     )
     assert say("same_as_clips", "instagram") == (
-        "This Instagram account (Lamo Stories) is the same place Clip Factory posts to. Pick another in Lamo "
-        "Stories › Social accounts, or tap Use it for both there."
+        "This Instagram account (Lamo Stories) is Clip Factory's own account. Clip Factory Stories needs its own "
+        "separate account: connect a different one in Lamo Stories › Social accounts, then tap Try again."
     )
     assert say("clips_unknown") == (
         "Lamo Stories cannot tell if this TikTok account (Lamo Stories) is Clip Factory's TikTok. Tap Try again to "

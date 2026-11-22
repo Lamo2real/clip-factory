@@ -543,6 +543,12 @@ INTERNAL = (
     "picturesRemovedAt",
     # §45.35: the "Try it" lock (``CHECKLOCK#``) is never returned
     "checkJobId",
+    # §45.37: a publishing job's raw wait (shown as ``waitingUntil``), the old share flag, the share counters
+    "waitUntil",
+    "sharedExternalAccountId",
+    "requestsThisMinute",
+    "dayPostIds",
+    "blockedReason",
 )
 
 

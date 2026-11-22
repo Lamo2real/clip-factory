@@ -19,10 +19,11 @@ locals {
   # (OAUTH#ws.{nonce}, never Clip Factory's OAUTH#{nonce}).
   story_leading_keys = ["USER#*#WS#*", "USER#*#WSREG", "OAUTH#ws.*"]
 
-  # The five attributes of Lamo Clips' ACCOUNT# items "same as Clip Factory" compares (§45.13.3, §45.15): GetItem with a
-  # ProjectionExpression of these names only. IAM limits partitions, not sort keys; the code reads only
-  # ACCOUNT#{platform}, so nothing else of USER#{userId} is ever returned.
-  clips_account_attributes = ["pk", "sk", "platform", "status", "accountId"]
+  # The six attributes of Lamo Clips' ACCOUNT# items "same as Clip Factory" compares (§45.13.3, §45.15, §45.37 G8 b:
+  # the platform's id and its username, "handle"): GetItem with a ProjectionExpression of these names only. IAM limits
+  # partitions, not sort keys; the code reads only ACCOUNT#{platform}, so nothing else of USER#{userId} is ever
+  # returned. Widened in place (one more attribute name in the same statement): nothing is replaced.
+  clips_account_attributes = ["pk", "sk", "platform", "status", "accountId", "handle"]
 
   # Clip Factory's developer apps Lamo Stories may use on the owner's choice (§45.30): YouTube, TikTok and X only,
   # read only. Facebook and Instagram always use Lamo Stories' own Meta app (under <name>/workspaces/). No "-" before
@@ -52,7 +53,7 @@ locals {
       Resource  = [var.table_arn]
       Condition = { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = local.story_leading_keys } }
     },
-    # Lamo Clips' ACCOUNT#{platform}: read only, five attributes, GetItem only ("same as Lamo Clips", Lamo Clips'
+    # Lamo Clips' ACCOUNT#{platform}: read only, six attributes, GetItem only ("same as Lamo Clips", Lamo Clips'
     # destinations on the Connections page). No Query of USER#{userId}, nothing returned by a write.
     {
       Sid      = "ClipsAccountRead"

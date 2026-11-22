@@ -45,8 +45,10 @@ def keyed(monkeypatch: pytest.MonkeyPatch) -> provider_keys.KeyedProvider:
     return found
 
 
-def test_no_provider_takes_a_key_today(wcall: WsCall, secrets_client: FakeSecretsManager) -> None:
-    assert provider_keys.KEYED == {}
+def test_only_the_keyed_hosts_take_a_key(wcall: WsCall, secrets_client: FakeSecretsManager) -> None:
+    """§45.37 G4: the Anthropic API, an OpenAI-compatible API and ElevenLabs take the owner's key; every maker on
+    Lamo Stories' own AWS access (Bedrock, Polly) never asks for one."""
+    assert set(provider_keys.KEYED) == {"anthropic", "openai_compatible", "elevenlabs"}
     status, body = wcall("PUT", f"{BASE}/providers/runway/key", {"key": KEY})
     assert (status, body["error"]["message"]) == (
         404,
@@ -57,8 +59,29 @@ def test_no_provider_takes_a_key_today(wcall: WsCall, secrets_client: FakeSecret
         400,
         "Amazon Nova Canvas uses Lamo Stories' own AWS access, so it needs no key.",
     )
+    for aws in ("stability", "luma-ray", "polly", "bedrock"):
+        assert wcall("PUT", f"{BASE}/providers/{aws}/key", {"key": KEY})[0] == 400
     assert wcall("PUT", f"{BASE}/providers/Bad_Id/key", {"key": KEY})[0] == 404
     assert secrets_client.writes == []
+
+
+@pytest.mark.parametrize("host", ["anthropic", "openai_compatible", "elevenlabs"])
+def test_a_keyed_hosts_key_is_saved_as_json_under_its_own_name(
+    wcall: WsCall, secrets_client: FakeSecretsManager, table: FakeTable, host: str
+) -> None:
+    status, body = wcall("PUT", f"{BASE}/providers/{host}/key", {"key": KEY})
+    assert status == 200, body
+    name = f"cf-prod/workspaces/stories/providers/{host}"
+    assert secrets_client.json(name) == {"key": KEY}
+    assert body["provider"]["key"] == {"saved": True, "hint": "4f2a", "savedAt": "2026-11-15T12:00:00.000Z"}
+    assert KEY not in json.dumps(body)
+    assert KEY not in json.dumps(table.all())
+    _, listed = wcall("GET", f"{BASE}/providers")
+    row = next(p for p in listed["providers"] if p["id"] == host)
+    assert row["key"]["saved"] is True
+    assert KEY not in json.dumps(listed)
+    assert wcall("DELETE", f"{BASE}/providers/{host}/key")[0] == 204
+    assert name not in secrets_client.values
 
 
 def test_a_key_is_stored_only_in_secrets_manager(
@@ -137,7 +160,8 @@ def test_the_providers_list_shows_each_keyed_providers_key_state(
     by = {p["id"]: p for p in body["providers"]}
     assert by["runway"]["key"] == {"saved": False, "hint": None, "savedAt": None}
     assert by["runway"]["state"] == "needs_setup"
-    assert all("key" not in p for i, p in by.items() if i != "runway")  # the others take no key
+    keyed = {"runway", "anthropic", "openai_compatible", "elevenlabs"}  # §45.37 G4: the keyed hosts too
+    assert all("key" not in p for i, p in by.items() if i not in keyed)  # the others take no key
     wcall("PUT", f"{BASE}/providers/runway/key", {"key": KEY})
     _, body = wcall("GET", f"{BASE}/providers")
     shown = next(p for p in body["providers"] if p["id"] == "runway")
@@ -148,6 +172,10 @@ def test_the_providers_list_shows_each_keyed_providers_key_state(
     assert next(p for p in body["providers"] if p["id"] == "runway")["key"]["saved"] is False
 
 
-def test_without_a_keyed_provider_the_list_is_the_registry_only(wcall: WsCall) -> None:
+def test_only_the_keyed_rows_carry_a_key(wcall: WsCall) -> None:
+    """The registry's makers on AWS take no key; ElevenLabs' key shows on its sound maker's row, the Anthropic API
+    and an OpenAI-compatible API have their own rows (§45.37 G4)."""
     _, body = wcall("GET", f"{BASE}/providers")
-    assert all("key" not in p for p in body["providers"])
+    keyed = {p["id"] for p in body["providers"] if "key" in p}
+    assert keyed == {"elevenlabs", "anthropic", "openai_compatible"}
+    assert next(p for p in body["providers"] if p["id"] == "elevenlabs")["kind"] == "audio"
