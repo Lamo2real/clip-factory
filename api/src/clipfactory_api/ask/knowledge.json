@@ -1,5 +1,5 @@
 {
- "version": "d3e894d0b833",
+ "version": "27deceba8f2e",
  "parts": [
   {
    "id": "app-map",
@@ -273,7 +273,7 @@
    "id": "contracts-41",
    "title": "CONTRACTS: 41. Campaign finder: campaigns that match what you want (owner request, 2026-11-21)",
    "line": "The owner's words: \"Also, will I be able to find campaigns and join them based on some requirements that I set if the",
-   "chars": 94827
+   "chars": 98309
   },
   {
    "id": "contracts-42",
@@ -675,7 +675,7 @@
    "id": "adr-65",
    "title": "DECISIONS: ADR-65 Campaign finder: Content Rewards' public pages read politely, joining stays the owner's own tap",
    "line": "Context. The owner asked (2026-11-21) whether he can find campaigns and join them by requirements he sets, once",
-   "chars": 6402
+   "chars": 6434
   },
   {
    "id": "adr-66",

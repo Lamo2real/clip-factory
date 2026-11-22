@@ -449,7 +449,6 @@ function payLine(c: MockCard, row: MockCard["pay"][number]): string {
 const SKIP_WORDS: Record<string, [string, string]> = {
   // [plural after the count, singular after "1 campaign"]
   low_pay: ["pay less than {min} per 1,000 views.", "pays less than {min} per 1,000 views."],
-  budget_low: ["have less than {left} left.", "has less than {left} left."],
   budget_gone: ["have almost no money left.", "has almost no money left."],
   not_your_places: ["don't pay for the places you post.", "doesn't pay for the places you post."],
   apply: ["want you to apply first.", "wants you to apply first."],
@@ -460,13 +459,26 @@ const SKIP_WORDS: Record<string, [string, string]> = {
   hidden: ["you said Not for me.", "you said Not for me."],
   own: ["are in your campaigns already.", "is in your campaigns already."],
 };
-const LEFT_WORDS: Record<number, string> = { 25: "a quarter of the money", 50: "half the money", 75: "three quarters of the money" };
+/** "Why not more?" for each "Money left" choice ("Any", 0, never refuses): [plural, singular]. */
+const LEFT_SKIP: Record<number, [string, string]> = {
+  25: ["have only a little money left.", "has only a little money left."],
+  50: ["have less than half the money left.", "has less than half the money left."],
+  75: ["have less money left than you want.", "has less money left than you want."],
+};
+/** How much of the money is left, in plain words (words.left_line): the bands are the "Money left" choices. */
+export function leftLine(left: number): string {
+  if (left >= 100) return "All the money is left.";
+  if (left >= 75) return "Most of the money is left.";
+  if (left >= 50) return "Half or more of the money is left.";
+  if (left >= 25) return "Some of the money is left.";
+  return "A little money is left.";
+}
 /** Ties keep the order of §41.3's `skipped` words. */
 const SKIP_ORDER = ["low_pay", "budget_low", "budget_gone", "not_your_places", "apply", "other_pay", "cant_make", "topic", "language", "hidden", "own"];
 
 function skipText(code: string, n: number, want: FinderWant): string {
-  const [many, one] = SKIP_WORDS[code]!;
-  const fill = (t: string) => t.replace("{min}", usd(want.minPer1kCents)).replace("{left}", LEFT_WORDS[want.minLeftPct] ?? "a quarter of the money");
+  const [many, one] = code === "budget_low" ? (LEFT_SKIP[want.minLeftPct] ?? LEFT_SKIP[25]!) : SKIP_WORDS[code]!;
+  const fill = (t: string) => t.replace("{min}", usd(want.minPer1kCents));
   return n === 1 ? `1 campaign ${fill(one)}` : `${n} ${fill(many)}`;
 }
 
@@ -574,7 +586,7 @@ export function find(
               ? `Pays ${usd(counted[0]?.perPostCents ?? 0)} for each approved post`
               : "Pays in its own way";
     const left = c.budget.usedBps === null ? null : 100 - Math.ceil(c.budget.usedBps / 100);
-    const why = `${pay} on ${places(counted.map((r) => r.platform))}.${topicName ? ` ${topicName}.` : ""}${left === null ? "" : ` ${left}% of the money left.`} ${c.access === "open" ? "Open to join." : "You apply first."}`;
+    const why = `${pay} on ${places(counted.map((r) => r.platform))}.${topicName ? ` ${topicName}.` : ""}${left === null ? "" : ` ${leftLine(left)}`} ${c.access === "open" ? "Anyone can join." : "You apply first."}`;
     const payRows: FinderPay[] = PLATFORM_ORDER.flatMap((x) => mine.filter((r) => r.platform === x)).map((r) => ({
       platform: r.platform,
       line: payLine(c, r),
@@ -745,6 +757,8 @@ export interface FinderMock {
 
 const bad = (field: string) => new ApiError(400, "bad_request", "Pick one of the choices shown.", field);
 const goneMatch = () => new ApiError(404, "not_found", "That campaign isn't in your matches any more. Tap Look again now.");
+/** The add's public read failed and no copy of the page is fresh enough (§41.5 Add): the read's own 503 stands. */
+const readDown = () => new ApiError(503, "platform_down", "Content Rewards didn't answer. Try again in a minute.");
 
 /** The want checks of §41.5. */
 export function checkWant(w: Record<string, unknown>): Partial<FinderWant> {
@@ -996,7 +1010,8 @@ export function finderMockApi(deps: FinderMockDeps): FinderMock {
       guard();
       const item = known(campaignId);
       const cat = catalogOf(campaignId, deps.rules);
-      if (!cat) throw goneMatch();
+      // Still his match, but no copy of its page to add it from: the same button can try again (never a 404).
+      if (!cat) throw readDown();
       const signed = deps.signedIn();
       const listed = signed && state.joinedOnCr.includes(campaignId);
       const said = cat.access === "application" ? ("applied" as const) : !signed ? ("joined_by_hand" as const) : undefined;

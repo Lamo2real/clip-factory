@@ -39,14 +39,16 @@ export const PAY_CHOICES: { value: FinderWant["minPer1kCents"]; label: string }[
   { value: 200, label: "$2" },
   { value: 300, label: "$3" },
 ];
+/** An open campaign: anyone can join it with one tap on Content Rewards (no application). */
+export const ANYONE_CAN_JOIN = "Anyone can join";
 export const LEFT_CHOICES: { value: FinderWant["minLeftPct"]; label: string }[] = [
   { value: 0, label: "Any" },
-  { value: 25, label: "A quarter" },
-  { value: 50, label: "Half" },
-  { value: 75, label: "Most" },
+  { value: 25, label: "Some left" },
+  { value: 50, label: "Half or more" },
+  { value: 75, label: "Most left" },
 ];
 export const ACCESS_CHOICES: { value: FinderWant["access"]; label: string }[] = [
-  { value: "open", label: "Open to join" },
+  { value: "open", label: ANYONE_CAN_JOIN },
   { value: "any", label: "Also ones I apply to" },
 ];
 export const LANGUAGE_CHOICES: { value: FinderLanguage; label: string }[] = [
@@ -245,19 +247,19 @@ export function toggleIn<T extends string>(list: readonly T[], id: T): T[] {
 
 const LEFT_SUMMARY: Record<FinderWant["minLeftPct"], string> = {
   0: "Any money left",
-  25: "At least a quarter of the money left",
-  50: "At least half the money left",
+  25: "Some money left",
+  50: "Half or more of the money left",
   75: "Most of the money left",
 };
 
-/** The folded card's one line: "At least $1 per 1,000 views · YouTube, Instagram · At least a quarter of the money left · Open to join". */
+/** The folded card's one line: "At least $1 per 1,000 views · YouTube, Instagram · Some money left · Anyone can join". */
 export function wantSummary(want: FinderWant, places: readonly Platform[], categories: readonly { id: string; name: string }[] = []): string {
   const pay = PAY_CHOICES.find((c) => c.value === want.minPer1kCents)?.label ?? "$1";
   const parts = [`At least ${pay} per 1,000 views`];
   const names = PLATFORM_ORDER.filter((p) => places.includes(p)).map((p) => PLATFORM_LABEL[p]);
   if (names.length) parts.push(names.join(", "));
   parts.push(LEFT_SUMMARY[want.minLeftPct] ?? LEFT_SUMMARY[25]);
-  parts.push(want.access === "any" ? "Also ones I apply to" : "Open to join");
+  parts.push(want.access === "any" ? "Also ones I apply to" : ANYONE_CAN_JOIN);
   const topics = want.categories.map((id) => categories.find((c) => c.id === id)?.name ?? id).filter(Boolean);
   if (topics.length) parts.push(topics.join(", "));
   const langs = LANGUAGE_CHOICES.filter((l) => want.languages.includes(l.value)).map((l) => l.label);

@@ -92,7 +92,7 @@ def match(uuid: str = UUID, name: str = "Fundingpips", **fields: Any) -> dict[st
             "tag": "Content Rewards' numbers",
         },
         "categories": [],
-        "why": "Pays $6.00 per 1,000 views on YouTube and Instagram. 41% of the money left. Open to join.",
+        "why": "Pays $6.00 per 1,000 views on YouTube and Instagram. Some of the money is left. Anyone can join.",
         "notes": ["It has 4 rules you see once you join."],
         "headsUp": [],
         "cantTell": [],

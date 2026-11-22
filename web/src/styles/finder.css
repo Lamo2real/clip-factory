@@ -470,6 +470,19 @@
   .finder-chip {
     min-height: 48px;
   }
+  /* The pinned vermilion rides over its card, so the page keeps its lane free: room at the bottom equal to the
+     pinned bar (its height, 12 px over it, the home bar), so every line scrolls up above it, and focus and scrolls
+     stop above it too (a focused control is never under it). */
+  .finder-page:has(.cr-pin) {
+    padding-bottom: calc(var(--finder-pin-h) + 12px + env(safe-area-inset-bottom));
+  }
+  html:has(.finder-page .cr-pin) {
+    scroll-padding-bottom: calc(var(--tabbar-h, 66px) + env(safe-area-inset-bottom) + 22px + var(--finder-pin-h) + 12px);
+  }
+}
+:root {
+  /* The pinned bar's height on phones: one big button (56 px, system.css), 60 when its label takes two lines (320 px). */
+  --finder-pin-h: 60px;
 }
 
 @media (prefers-reduced-motion: reduce) {

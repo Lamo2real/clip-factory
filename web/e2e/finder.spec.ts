@@ -142,8 +142,8 @@ for (const [name, use] of [
       const want = page.locator("[data-help='cr-finder-want']");
       await expect(want).toContainText("What you want");
       await expect(want.getByRole("radio", { name: "$1", exact: true })).toBeChecked();
-      await expect(want.getByRole("radio", { name: "A quarter" })).toBeChecked();
-      await expect(want.getByRole("radio", { name: "Open to join" })).toBeChecked();
+      await expect(want.getByRole("radio", { name: "Some left" })).toBeChecked();
+      await expect(want.getByRole("radio", { name: "Anyone can join" })).toBeChecked();
       await expect(want).toContainText("The places you set up.");
       await expect(want.getByRole("button", { name: /TikTok/ })).toHaveAttribute("aria-disabled", "true");
       await expect(want).toContainText("TikTok: not yet.");
@@ -161,7 +161,7 @@ for (const [name, use] of [
       await expect(page.locator(".finder-match").getByRole("link", { name: /Open on Content Rewards/ })).toHaveCount(6);
       await expect(tomatoes(page)).toHaveCount(1);
       await expect(tomatoes(page)).toHaveText(/Open on Content Rewards/);
-      await expect(page.locator(".finder-match").first()).toContainText("Pays $6.00 per 1,000 views on YouTube and Instagram. 41% of the money left. Open to join.");
+      await expect(page.locator(".finder-match").first()).toContainText("Pays $6.00 per 1,000 views on YouTube and Instagram. Some of the money is left. Anyone can join.");
       await expect(page.locator(".finder-match").first()).toContainText("Content Rewards' numbers");
       // Tapping another head opens it and folds the rest; the vermilion moves with it.
       await page.locator(".finder-match").nth(2).locator(".finder-match__head").click();
@@ -213,7 +213,7 @@ for (const [name, use] of [
       await expect(page.locator(".finder-match").nth(5)).toContainText("You apply first");
       expect(await calls(page, "crPatchFinder")).toBeGreaterThanOrEqual(2);
       await page.locator("[data-help='cr-finder-want']").getByRole("button", { name: "Done" }).click();
-      await expect(page.locator("[data-help='cr-finder-want']")).toContainText("At least $1 per 1,000 views · YouTube, Instagram, Facebook, X · At least a quarter of the money left · Also ones I apply to");
+      await expect(page.locator("[data-help='cr-finder-want']")).toContainText("At least $1 per 1,000 views · YouTube, Instagram, Facebook, X · Some money left · Also ones I apply to");
     });
   });
 }
@@ -605,6 +605,112 @@ for (const scheme of ["light", "dark"] as const)
         expect(failures, failures.join("\n")).toEqual([]);
       });
     });
+
+/**
+ * The pinned vermilion rides over its card at the bottom right, so on a phone it is over some lines while he scrolls.
+ * What the page owes him (§41.1): every line of the open match comes up above the pinned bar at some point of the
+ * scroll, a control he focuses is never under it, and the page ends with room for it (so its last lines clear it).
+ */
+async function pinProblems(page: Page, label: string): Promise<string[]> {
+  return page.evaluate(async (label) => {
+    const out: string[] = [];
+    const tick = () => new Promise((r) => requestAnimationFrame(() => r(null)));
+    const go = async (y: number) => {
+      window.scrollTo({ top: y, behavior: "instant" });
+      await tick();
+    };
+    const pinEl = () => document.querySelector<HTMLElement>(".finder-match.is-open .cr-pin");
+    if (!pinEl()) return [`${label}: no pinned vermilion`];
+    const over = (a: DOMRect, b: DOMRect) => Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)) * (a.right > b.left && a.left < b.right ? 1 : 0);
+    const floor = () => Math.min(innerHeight, document.querySelector<HTMLElement>(".tabbar")?.getBoundingClientRect().top ?? innerHeight);
+    // 1. Every line of text in the open match, line by line.
+    const body = document.querySelector<HTMLElement>(".finder-match.is-open .finder-match__body")!;
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => (n.textContent!.trim() && !n.parentElement!.closest(".cr-pin, .sr-only") && n.parentElement!.getClientRects().length ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
+    });
+    const texts: Text[] = [];
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) texts.push(n as Text);
+    const lines = (t: Text) => {
+      const r = document.createRange();
+      r.selectNodeContents(t);
+      return [...r.getClientRects()].filter((b) => b.width > 1 && b.height > 1);
+    };
+    const seen = texts.map((t) => lines(t).map(() => false));
+    const max = document.documentElement.scrollHeight - innerHeight;
+    for (let y = 0; y <= max + 8; y += 8) {
+      await go(Math.min(y, max));
+      const pin = pinEl()!.getBoundingClientRect();
+      const low = floor();
+      texts.forEach((t, i) => {
+        lines(t).forEach((b, j) => {
+          if (seen[i]![j] === undefined || seen[i]![j]) return;
+          if (b.top >= 0 && b.bottom <= low && !over(b, pin)) seen[i]![j] = true;
+        });
+      });
+    }
+    texts.forEach((t, i) => seen[i]!.forEach((ok, j) => ok || out.push(`${label}: line ${j + 1} of "${t.textContent!.trim().slice(0, 40)}" never clears the pinned bar`)));
+    // 2. A control he focuses is never under the pinned bar (WCAG 2.4.11): the page keeps the bar's lane free.
+    const controls = [...body.querySelectorAll<HTMLElement>("a, button, summary, textarea, input")].filter((e) => !e.closest(".cr-pin") && e.getClientRects().length);
+    for (const e of controls)
+      for (let y = 0; y <= max; y += 160) {
+        await go(y);
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        e.focus();
+        await tick();
+        const b = e.getBoundingClientRect();
+        const hidden = over(b, pinEl()!.getBoundingClientRect());
+        // A text box scrolls only its caret's line into view: most of it shows, the line he types on included.
+        const field = e.tagName === "TEXTAREA" || e.tagName === "INPUT";
+        if (hidden > (field ? b.height / 2 : Math.max(2, b.height * 0.2))) {
+          out.push(`${label}: "${(e.textContent || e.getAttribute("aria-label") || e.tagName).trim().slice(0, 30)}" focused at ${y} is ${Math.round(hidden)} px under the pinned bar`);
+          break;
+        }
+      }
+    // 3. Room at the end for the pinned bar (its height and 12 px), and the last line clears its lane.
+    const pageEl = document.querySelector<HTMLElement>(".finder-page")!;
+    const pin = pinEl()!;
+    const room = parseFloat(getComputedStyle(pageEl).paddingBottom);
+    if (room < pin.getBoundingClientRect().height + 12 - 0.5) out.push(`${label}: only ${room} px of room under the page for a ${Math.round(pin.getBoundingClientRect().height)} px pinned bar`);
+    await go(max);
+    const lane = innerHeight - parseFloat(getComputedStyle(pin).bottom) - pin.getBoundingClientRect().height;
+    const last = [...pageEl.querySelectorAll<HTMLElement>("*")].filter((e) => !e.children.length && e.getClientRects().length).pop()!;
+    if (last.getBoundingClientRect().bottom > lane) out.push(`${label}: the page's last line (${Math.round(last.getBoundingClientRect().bottom)}) is in the pinned bar's lane (${Math.round(lane)})`);
+    await go(0);
+    return out;
+  }, label);
+}
+
+for (const [width, height] of [
+  [320, 568],
+  [375, 812],
+  [430, 932],
+] as const)
+  test.describe(`phone ${width} px: the pinned vermilion never hides a line`, () => {
+    test.use({ viewport: { width, height }, hasTouch: true, isMobile: true });
+
+    test("before Open, after Open signed in, and after Open by hand with the rules pasted", async ({ page, context }) => {
+      test.setTimeout(150_000);
+      await start(page);
+      await fourPlaces(page);
+      await knob(page, "finder", "signedIn", false);
+      await firstLook(page);
+      await settle(page);
+      const failures: string[] = [];
+      failures.push(...(await pinProblems(page, "before Open")));
+      const first = page.locator(".finder-match").first();
+      const popup = context.waitForEvent("page");
+      await first.getByRole("link", { name: /Open on Content Rewards/ }).click();
+      await (await popup).close();
+      await first.getByLabel("The campaign's rules").fill("Clips 20 to 60 seconds. Use #Funding in every caption.");
+      await expect(tomatoes(page)).toHaveText(/I joined: add it/);
+      await first.locator("summary", { hasText: "If you see…" }).click();
+      failures.push(...(await pinProblems(page, "by hand, rules pasted")));
+      await knob(page, "finder", "signedIn", true);
+      await expect(first).toContainText("Does the big button now say Submit clip? Then tap I joined: add it.");
+      failures.push(...(await pinProblems(page, "signed in, opened")));
+      expect(failures, failures.join("\n")).toEqual([]);
+    });
+  });
 
 test("no sideways scroll from 320 to 1920 on the Find page", async ({ page }) => {
   test.setTimeout(120_000);

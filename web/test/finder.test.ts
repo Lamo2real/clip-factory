@@ -1,6 +1,8 @@
 // lib/finder.ts (docs/CONTRACTS.md §41): the 404 / 503 rule, the debounced What you want saves, the `places: null`
 // rule, `finderHref` (§41.6 change 2), the visit's frozen "New" set and "You're in!" rows, the words the web makes,
 // and the mock's copy of the server's matching and words, checked against §41.3's golden cases.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/api/errors.ts";
 import type { Api, CampaignSummary, Finder, FinderWant, Platform, SetupOverview } from "../src/api/types.ts";
@@ -9,7 +11,7 @@ const current: Partial<Api> = {};
 vi.mock("../src/api/index.ts", async (orig) => ({ ...(await orig<object>()), api: () => current as Api }));
 
 const lib = await import("../src/lib/finder.ts");
-const { CARDS, FINDER_IDS, find, checkWant } = await import("../src/api/mock/finder.ts");
+const { CARDS, FINDER_IDS, find, checkWant, finderMockApi, leftLine } = await import("../src/api/mock/finder.ts");
 const { findAnother, payLine } = await import("../src/lib/contentRewards.ts");
 
 const {
@@ -114,7 +116,7 @@ describe("What you want", () => {
   });
 
   it("the folded card's one line", () => {
-    expect(wantSummary(WANT_DEFAULTS, ["youtube", "instagram"])).toBe("At least $1 per 1,000 views · YouTube, Instagram · At least a quarter of the money left · Open to join");
+    expect(wantSummary(WANT_DEFAULTS, ["youtube", "instagram"])).toBe("At least $1 per 1,000 views · YouTube, Instagram · Some money left · Anyone can join");
     expect(wantSummary({ ...WANT_DEFAULTS, minPer1kCents: 50, minLeftPct: 0, access: "any", categories: ["gaming"], languages: ["es"] }, ["x"], [{ id: "gaming", name: "Gaming" }])).toBe(
       "At least $0.50 per 1,000 views · X · Any money left · Also ones I apply to · Gaming · Spanish",
     );
@@ -228,6 +230,99 @@ describe("the words the web makes", () => {
   });
 });
 
+describe("the money left, in plain words (no percent, no quarter)", () => {
+  it("the Money left choices", () => {
+    expect(lib.LEFT_CHOICES.map((c) => [c.value, c.label])).toEqual([
+      [0, "Any"],
+      [25, "Some left"],
+      [50, "Half or more"],
+      [75, "Most left"],
+    ]);
+    expect(lib.ACCESS_CHOICES.map((c) => c.label)).toEqual(["Anyone can join", "Also ones I apply to"]);
+    expect([25, 50, 75].map((minLeftPct) => wantSummary({ ...WANT_DEFAULTS, minLeftPct: minLeftPct as FinderWant["minLeftPct"] }, []))).toEqual([
+      "At least $1 per 1,000 views · Some money left · Anyone can join",
+      "At least $1 per 1,000 views · Half or more of the money left · Anyone can join",
+      "At least $1 per 1,000 views · Most of the money left · Anyone can join",
+    ]);
+  });
+
+  it("the mock says the server's bands (words.left_line)", () => {
+    expect([100, 99, 75, 74, 50, 49, 25, 24, 5].map(leftLine)).toEqual([
+      "All the money is left.",
+      "Most of the money is left.",
+      "Most of the money is left.",
+      "Half or more of the money is left.",
+      "Half or more of the money is left.",
+      "Some of the money is left.",
+      "Some of the money is left.",
+      "A little money is left.",
+      "A little money is left.",
+    ]);
+  });
+
+  it("Why not more? for each choice", () => {
+    const low = (minLeftPct: FinderWant["minLeftPct"]) =>
+      find(CARDS, { ...WANT_DEFAULTS, minLeftPct, access: "any", otherPay: true }, { places: ["youtube", "instagram", "facebook", "x"], tiktokOk: false, own: new Set(), hidden: new Set(), asOf: "2026-11-21T12:00:00Z" })
+        .skipped.filter((s) => s.code === "budget_low")
+        .map((s) => s.text.replace(/^\d+ (campaign )?/, ""));
+    expect(low(0)).toEqual([]);
+    expect(low(25)).toEqual(["has only a little money left."]);
+    expect(low(50)[0]).toMatch(/^(has|have) less than half the money left\.$/);
+    expect(low(75)[0]).toMatch(/^(has|have) less money left than you want\.$/);
+  });
+
+  it("every why line of the server's golden cases, word for word", () => {
+    type Golden = { cases: { name: string; want: Partial<FinderWant>; places: Platform[]; tiktokOk: boolean; own: string[]; hidden: string[]; expect: { lines: Record<string, { why: string }> } }[] };
+    const golden = JSON.parse(readFileSync(join(import.meta.dirname, "..", "..", "api", "tests", "fixtures", "finder", "match_cases.json"), "utf8")) as Golden;
+    let n = 0;
+    for (const c of golden.cases) {
+      // The resolved places (§41.3): what he picked, of the places set up.
+      const places = c.want.places ? c.places.filter((p) => c.want.places!.includes(p)) : c.places;
+      const r = find(CARDS, { ...WANT_DEFAULTS, ...c.want }, { places, tiktokOk: c.tiktokOk, own: new Set(c.own), hidden: new Set(c.hidden), asOf: "2026-11-21T12:00:00Z" });
+      for (const [uuid, line] of Object.entries(c.expect.lines ?? {})) {
+        const got = r.matches.find((m) => m.campaignId === uuid);
+        if (!got) continue;
+        expect(got.why, `${c.name} ${uuid}`).toBe(line.why);
+        expect(line.why).not.toMatch(/%|quarter|Open to join/);
+        n++;
+      }
+    }
+    expect(n).toBeGreaterThan(10);
+  });
+});
+
+describe("the mock's add answers what the server does", () => {
+  it("a match it has no copy of the page for: 503 platform_down, never 404 (the same button tries again)", async () => {
+    const gone = "00000000-0000-4000-8000-000000000001";
+    sessionStorage.setItem(
+      "cf-mock-finder",
+      JSON.stringify({
+        item: { want: WANT_DEFAULTS, createdAt: "2026-11-21T10:00:00Z", hidden: [], opened: { [gone]: new Date().toISOString() }, added: {}, matches: [], shown: {}, skipped: [], looked: 0 },
+        joinedOnCr: [],
+      }),
+    );
+    const mock = finderMockApi({
+      setup: () => setup(["youtube"]),
+      publish: () => undefined,
+      guard: () => undefined,
+      signedIn: () => false,
+      setSignedIn: () => undefined,
+      ownIds: () => [],
+      add: () => {
+        throw new Error("never added");
+      },
+      rules: (partial) => partial as never,
+    });
+    const err = await mock.api.crFinderAdd(gone).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect([(err as ApiError).status, (err as ApiError).code, (err as ApiError).message]).toEqual([503, "platform_down", "Content Rewards didn't answer. Try again in a minute."]);
+    // Not his match at all: still the 404.
+    const other = await mock.api.crFinderAdd("00000000-0000-4000-8000-000000000002").catch((e: unknown) => e);
+    expect((other as ApiError).status).toBe(404);
+    sessionStorage.removeItem("cf-mock-finder");
+  });
+});
+
 describe("the mock's matching and words match §41.3's golden cases", () => {
   const PLACES: Platform[] = ["youtube", "instagram", "facebook", "x"];
   const run = (want: Partial<FinderWant> = {}, opts: { places?: Platform[]; tiktokOk?: boolean; own?: string[]; hidden?: string[] } = {}) => {
@@ -241,15 +336,15 @@ describe("the mock's matching and words match §41.3's golden cases", () => {
     const r = run();
     expect(order(r)).toEqual([I.fundingpips, I.cod, I.pickleball, I.santacruz, I.energy, I.lanco]);
     const [fp, cod, pb, sc, en, la] = r.matches;
-    expect(fp!.why).toBe("Pays $6.00 per 1,000 views on YouTube and Instagram. 41% of the money left. Open to join.");
+    expect(fp!.why).toBe("Pays $6.00 per 1,000 views on YouTube and Instagram. Some of the money is left. Anyone can join.");
     expect(fp!.notes).toEqual(["It has 4 rules you see once you join.", "Also pays on TikTok, once TikTok checks Clip Factory."]);
-    expect(cod!.why).toBe("Pays $1.50 per 1,000 views on Instagram. 46% of the money left. Open to join.");
-    expect(pb!.why).toBe("Pays $1.50 per 1,000 views on YouTube and Instagram. 96% of the money left. Open to join.");
-    expect(sc!.why).toBe("Pays $1.00 per 1,000 views on YouTube and Instagram. 44% of the money left. Open to join.");
-    expect(en!.why).toBe("Pays $1.00 per 1,000 views on YouTube, Instagram and X. 98% of the money left. Open to join.");
+    expect(cod!.why).toBe("Pays $1.50 per 1,000 views on Instagram. Some of the money is left. Anyone can join.");
+    expect(pb!.why).toBe("Pays $1.50 per 1,000 views on YouTube and Instagram. Most of the money is left. Anyone can join.");
+    expect(sc!.why).toBe("Pays $1.00 per 1,000 views on YouTube and Instagram. Some of the money is left. Anyone can join.");
+    expect(en!.why).toBe("Pays $1.00 per 1,000 views on YouTube, Instagram and X. Most of the money is left. Anyone can join.");
     expect(en!.headsUp).toEqual(["This brand only counts viewers from some countries. Check where yours are first."]);
     expect(en!.notes[0]).toBe("It has 1 rule you see once you join.");
-    expect(la!.why).toBe("Pays $1.00 per 1,000 views on Instagram. 99% of the money left. Open to join.");
+    expect(la!.why).toBe("Pays $1.00 per 1,000 views on Instagram. Most of the money is left. Anyone can join.");
     expect(la!.headsUp).toEqual(["It may need its own sound. Clip Factory can't add one."]);
     expect(r.skipped.map((s) => [s.code, s.count])).toEqual([
       ["cant_make", 4],
@@ -259,7 +354,7 @@ describe("the mock's matching and words match §41.3's golden cases", () => {
       ["other_pay", 1],
     ]);
     expect(r.skipped.find((s) => s.code === "apply")!.text).toBe("2 want you to apply first.");
-    expect(r.skipped.find((s) => s.code === "budget_low")!.text).toBe("1 campaign has less than a quarter of the money left.");
+    expect(r.skipped.find((s) => s.code === "budget_low")!.text).toBe("1 campaign has only a little money left.");
     expect(r.looked).toBe(15);
     expect(fp!.budget.line).toBe("$1,668.79 left of $4,000");
     expect(fp!.pay.map((p) => p.line)).toEqual(["$6.00 per 1,000 views · up to $100 a clip", "$6.00 per 1,000 views · up to $100 a clip"]);
@@ -268,8 +363,8 @@ describe("the mock's matching and words match §41.3's golden cases", () => {
   it("also apply", () => {
     const r = run({ access: "any" });
     expect(order(r)).toEqual([I.fundingpips, I.cod, I.pickleball, I.santacruz, I.hablando, I.ungodly, I.energy, I.lanco]);
-    expect(r.matches[4]!.why).toBe("Pays $1.00 per 1,000 views on Instagram. 29% of the money left. You apply first.");
-    expect(r.matches[5]!.why).toBe("Pays $1.75 per 1,000 views on YouTube. 95% of the money left. You apply first.");
+    expect(r.matches[4]!.why).toBe("Pays $1.00 per 1,000 views on Instagram. Some of the money is left. You apply first.");
+    expect(r.matches[5]!.why).toBe("Pays $1.75 per 1,000 views on YouTube. Most of the money is left. You apply first.");
   });
 
   it("gaming", () => {
@@ -282,7 +377,7 @@ describe("the mock's matching and words match §41.3's golden cases", () => {
     const r = run({ otherPay: true, minLeftPct: 0 });
     expect(order(r)).toEqual([I.fundingpips, I.cod, I.pickleball, I.santacruz, I.kai, I.splitscreen, I.energy, I.lanco]);
     expect(r.matches[4]!.why).toMatch(/^Shares the prize money on YouTube, Instagram and X\./);
-    expect(r.matches[5]!.why).toBe("Pays up to $3.00 per 1,000 views on YouTube, Instagram and X. 21% of the money left. Open to join.");
+    expect(r.matches[5]!.why).toBe("Pays up to $3.00 per 1,000 views on YouTube, Instagram and X. A little money is left. Anyone can join.");
   });
 
   it("$2 and up", () => {
