@@ -318,6 +318,35 @@ module "money" {
   permissions_boundary_arn = var.role_permissions_boundary_arn
 }
 
+# Auto-posting (docs/CONTRACTS.md §46, ADR-81): cf-prod-autopost every hour on the hour (cf-prod-autopost-hourly);
+# each owner's run happens only when his X hours are up, and sends the oldest clips in Review through Upload's own
+# code. Additive: a new function, role, log group, rule and the rule's hourly failed-invocations alarm; cf-prod-api,
+# the table and every existing rule and alarm are not touched (run-now test actions run inline in cf-prod-api with
+# Upload's existing grants).
+module "autopost" {
+  source          = "../../modules/autopost"
+  name            = local.name
+  lambda_zip_path = var.lambda_zip_path
+  table_name      = module.data.table_name
+  table_arn       = module.data.table_arn
+  media_bucket    = module.storage.media_bucket
+  # Each clip starts its publish execution on the clip flow's live alias (§46.7), as Upload does.
+  clip_flow_alias_arn  = module.flows.clip_flow_alias_arn
+  clip_flow_arn_prefix = module.flows.function_arns["clip-flow"]
+  # §46.5 rule 4: SECRET_PREFIX only builds the Content Rewards deps the campaign fit check runs on. The fit check
+  # reads only the table, so the role gets no secret grant.
+  secret_prefix = module.hooks.secret_prefix
+  # §38.12: campaign clips are only ever taken while the switch is on.
+  content_rewards_enabled = var.content_rewards_enabled
+
+  # The hourly rule's failed invocations alarm on the same topic as every other alarm (modules/autopost: monitoring's
+  # 15-minute schedule alarm cannot fire for a rule that runs once an hour).
+  alarm_topic_arn = module.monitoring.alarm_topic_arn
+
+  # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
+  permissions_boundary_arn = var.role_permissions_boundary_arn
+}
+
 module "api" {
   source               = "../../modules/api"
   name                 = local.name
@@ -532,11 +561,13 @@ module "monitoring" {
     module.hooks.function_names,
     module.stats.function_names,
     module.money.function_names,
+    module.autopost.function_names,
     module.ask.function_names,
     module.notify.function_names,
     module.contentrewards.function_names,
     module.stories_api.function_names,
   )
+  # Not module.autopost.schedule_rule_names: its hourly rule has its own hourly alarm (modules/autopost).
   schedule_rule_names    = merge(module.stats.schedule_rule_names, module.money.schedule_rule_names)
   durable_function_names = module.flows.durable_function_names
   stream_consumer_name   = module.realtime.broadcast_function_name
