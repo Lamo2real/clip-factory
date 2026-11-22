@@ -387,6 +387,64 @@ def test_instagram_video_url_fallback() -> None:
     assert saved[-1]["uploaded"] is True
 
 
+@pytest.mark.parametrize("status", [400, 408, 503])
+def test_instagram_upload_400_and_408_fall_back_to_video_url_too(
+    status: int, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Seen in prod on 22 Nov 2026 (an auto-posting run): rupload answered 400 ProcessingFailedError for a clip whose
+    # YouTube and Facebook posts went up; Instagram took the same app's other clips minutes earlier.
+    http = FakeHttp(
+        (200, "publish/instagram_limit"),
+        (200, "publish/instagram_container"),
+        (
+            status,
+            {
+                "debug_info": {
+                    "retriable": False,
+                    "type": "ProcessingFailedError",
+                    "message": "Request processing failed",
+                }
+            },
+        ),
+        (200, {"id": "17900000000000002"}),
+    )
+    job, saved, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    progress = InstagramPublisher().start(job)
+    assert progress.state == "processing"
+    retry = form(http.calls[3])
+    assert retry["video_url"][0].startswith("https://cf-prod-media-123.s3.")
+    assert saved[-1] == {"container": "17900000000000002", "containerAt": "2026-11-15T12:00:00.000Z", "uploaded": True}
+    line = next(json.loads(x) for x in capsys.readouterr().out.splitlines() if "instagram_upload_fallback" in x)
+    assert line["status"] == status
+    assert line["type"] == "ProcessingFailedError"
+    assert line["retriable"] == "false"
+    assert "Request processing failed" not in json.dumps(line)  # Meta's raw message never goes to the logs
+
+
+@pytest.mark.parametrize("status", [401, 403, 429])
+def test_instagram_upload_token_and_slow_down_answers_do_not_fall_back(status: int) -> None:
+    http = FakeHttp(
+        (200, "publish/instagram_limit"),
+        (200, "publish/instagram_container"),
+        (status, {"debug_info": {"retriable": status == 429, "type": "AuthError" if status != 429 else "RateLimit"}}),
+    )
+    job, _, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    with pytest.raises(PublishError):
+        InstagramPublisher().start(job)
+    assert len(http.calls) == 3  # no second container
+
+
+def test_rupload_detail_reads_only_type_and_retriable() -> None:
+    assert errors.rupload_detail(
+        {"debug_info": {"type": "ProcessingFailedError", "retriable": True, "message": "x"}}
+    ) == {
+        "type": "ProcessingFailedError",
+        "retriable": "true",
+    }
+    assert errors.rupload_detail({"error": {"code": 1}}) == {}
+    assert errors.rupload_detail("not json") == {}
+
+
 def test_instagram_upload_5xx_falls_back_to_video_url() -> None:
     # Seen in prod on 21 Nov 2026: rupload answered 500 three times for a good file. Instagram fetches it instead.
     http = FakeHttp(
@@ -525,13 +583,19 @@ def test_instagram_failed_publish_that_did_not_post_keeps_its_error() -> None:
 
 
 def test_instagram_upload_failure_with_debug_info() -> None:
+    # Since 22 Nov 2026 a 400 from rupload first lets Instagram fetch the file (the fallback above); when that
+    # container can't be made either, the post fails with the plain sentence and the first container stays saved.
     http = FakeHttp(
-        (200, "publish/instagram_limit"), (200, "publish/instagram_container"), (400, "publish/instagram_upload_failed")
+        (200, "publish/instagram_limit"),
+        (200, "publish/instagram_container"),
+        (400, "publish/instagram_upload_failed"),
+        (400, {"error": {"message": "Invalid parameter", "type": "OAuthException", "code": 100}}),
     )
     job, saved, _ = make_job("instagram", http, data={"igUserId": "1784"})
     with pytest.raises(PublishError, match="Posting to Instagram did not work"):
         InstagramPublisher().start(job)
     assert saved == [{"container": "17889455560051444", "containerAt": "2026-11-15T12:00:00.000Z"}]  # kept for a replay
+    assert form(http.calls[3])["video_url"][0].startswith("https://cf-prod-media-123.s3.")
 
 
 @pytest.mark.parametrize(

@@ -231,14 +231,28 @@ class ReconnectProblem(ReconnectNeededError):
         self.problem = problem
 
 
+def rupload_detail(body: Any) -> dict[str, str]:
+    """rupload.facebook.com's own error shape, ``{"debug_info": {"type", "retriable", "message"}}``: its type and
+    whether Meta calls it retriable, for the logs (never the message, never a token)."""
+    parsed = _body(body)
+    info = parsed.get("debug_info") if isinstance(parsed, dict) else None
+    if not isinstance(info, dict):
+        return {}
+    out = {"type": str(info["type"])[:80]} if info.get("type") not in (None, "") else {}
+    if isinstance(info.get("retriable"), bool):
+        out["retriable"] = "true" if info["retriable"] else "false"
+    return out
+
+
 def _meta_detail(platform: str, body: Any) -> dict[str, str]:
-    """Meta's subcode, type, user title and fbtrace_id for the logs (never the token, never the raw message)."""
+    """Meta's subcode, type, user title and fbtrace_id for the logs (never the token, never the raw message); for an
+    answer from rupload.facebook.com, its ``debug_info`` type instead."""
     if platform not in {"instagram", "facebook"}:
         return {}
     parsed = _body(body)
     error = parsed.get("error") if isinstance(parsed, dict) else None
     if not isinstance(error, dict):
-        return {}
+        return rupload_detail(body)
     keys = {"subcode": "error_subcode", "type": "type", "userTitle": "error_user_title", "fbtraceId": "fbtrace_id"}
     return {k: str(error[v])[:200] for k, v in keys.items() if error.get(v) not in (None, "")}
 
