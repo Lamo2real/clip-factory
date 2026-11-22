@@ -1132,11 +1132,15 @@ store, a fake Lambda client for the clip flow's start and fake publishers. No AW
 - **Web units** (Vitest, `web/test/autopost.test.ts`): the result line for every pair of 1 to 5 clips × 1 to 24 hours
   ("1 clip every 24 hours = 1 clip a day per platform.", "1 clip every 5 hours = about 5 clips a day per platform.",
   "2 clips every 7 hours = about 7 clips a day per platform."), the warning over 5 a day and YouTube's line over 100,
-  the time words (weekday and 24-hour time, never "Today" or "Tomorrow"), and the mock's rules
-  (`web/src/api/mock/autopost.ts`, with a fake clock the e2e tests move).
+  the time words (weekday and 24-hour time, never "Today" or "Tomorrow"), the left-out lines (TikTok's "TikTok: turn
+  on Your Mac posts TikTok to post there.", and "TikTok: your Mac posts it once another place is set up." while the
+  switch is on with nothing else set up), and the mock's rules (`web/src/api/mock/autopost.ts`, with a fake clock the
+  e2e tests move).
 - **Playwright** (mock mode, `web/e2e/autopost.spec.ts`, at 390×844 and 1440×900): the switch and its line, both
-  controls saving ("Saved."), the result line and the warning, Next up with **Throw away** and **Undo**, Didn't work
-  with **Try again**, Recent, **Practice run now**, **Private test run**, the Review card's line and the Home hint.
+  controls saving ("Saved."), the result line and the warning, Where they go with TikTok's **Turn on**, Next up with
+  **Throw away** and **Undo**, Didn't work with **Try again**, no `#auto-post-tiktok`, Recent, **Practice run now**,
+  **Private test run**, the Review card's line and the Home hint; at 1440×900, Where they go says "TikTok: your Mac
+  posts it." once **Turn on** led to the switch and it was turned on.
   Run it on a port of its own: `CF_E2E_PORT=4730 npx playwright test e2e/autopost.spec.ts`.
 - **Infrastructure** (`infra/modules/autopost/tests/autopost.tftest.hcl`, mock provider): the names, the cron
   `cron(0 * * * ? *)`, the rule ENABLED, retries 2 and event age 3,300 s, the target is the function, the permission's
@@ -1144,8 +1148,8 @@ store, a fake Lambda client for the clip flow's start and fake publishers. No AW
   Manager action (the campaign fit check reads only the table), and the only invoke grant is the clip flow.
   `scripts/test-check-plan-deletes.sh` is unchanged and still passes.
 - **Help**: the guides `autopost-turn-on` and `autopost-waits-failed` in `web/src/features/help/helpKb.json` (where the
-  page is, each control, why TikTok and campaign clips wait, Practice and the Private test run; Didn't work with Try
-  again, Waits for you with Open in Review). Their page `/settings/posting/auto` exists only with the web part's
+  page is, each control, how TikTok goes through the Mac and why campaign clips wait, Practice and the Private test
+  run; Didn't work with Try again, Waits for you with Open in Review). Their page `/settings/posting/auto` exists only with the web part's
   `auto` branch in `web/src/lib/settingsTree.ts`, so on the docs branch alone `test/helpCorpus.test.ts` and both
   `--check` runs fail; the docs part merges after the server, infrastructure and web parts. Then, in `web/`,
   `node scripts/help-corpus.mjs --write-docs` (it also rewrites the routes table in
@@ -1156,6 +1160,33 @@ store, a fake Lambda client for the clip flow's start and fake publishers. No AW
   `node scripts/ask-knowledge.mjs --check` pass (every route a real page, every highlight a real `data-help` anchor).
 - **Live checks, not done here** ([§46.14](CONTRACTS.md#4614-not-verified-live)): see step 17 of
   [Manual checks after the first deploy](#manual-checks-after-the-first-deploy).
+
+### Your Mac posts TikTok, with no manual sheet (CONTRACTS §42, §47, ADR-85)
+From [CONTRACTS.md §42.4](CONTRACTS.md#424-tests) and [§47.5](CONTRACTS.md#475-tests-offline-fakes-only). Offline,
+fakes only; Playwright runs headless (no window on screen).
+
+- **API** (pytest, `api/tests/test_tiktok_mac.py`, `test_http.py`, `test_tiktok_yourself.py`): every §47.5 case, plus
+  `now`: a send with `now: true` makes `macSource: "upload"` and the queue puts it first, one without stays `sent`; a
+  retry with `now` turns `sent` and `auto` into `upload`; `now` must be a boolean (400), unknown keys still 400, the
+  switch off still 409 `MAC_OFF`. The `…/tiktok/posted` and `…/file` routes are unchanged.
+- **Web units** (Vitest): `web/test/tiktokMac.test.ts` (`tiktokRow`'s states and words in their order, Turn on when the
+  switch is off, the Mac never checked in or was not seen for 30 minutes, the next-at times for `upload`, `auto` and
+  `sent`, the pressed words chosen by `pressedAt`, and the mock's rules); `web/test/tiktokMacNow.test.ts` (the mock's
+  `now` rules, the HTTP bodies with each key only when true); `web/test/tiktokYourself.test.ts` (the helpers left and
+  the mock's posted, Undo and file rules); `web/test/metrics.test.ts` (`calmCopy` for Mac posts and the public-account
+  refusal); `web/test/autopost.test.ts` (TikTok's left-out lines).
+- **Playwright** (mock mode): `web/e2e/tiktok-mac.spec.ts` (Library's row: waiting with its next-at time, Posting…,
+  Didn't work with **Try again**, posted, Not on TikTok yet with **Post with my Mac**, the switch off and a Mac not
+  seen for 30 minutes with **Turn on**; the clip page and Review's lines; the Settings branch);
+  `web/e2e/tiktok-yourself.spec.ts` (the inline Add link with a link and with an empty box, and no **Post it
+  yourself**, **I posted it**, **AirDrop** or **Open TikTok** control on Library, the clip page or Review);
+  `web/e2e/autopost.spec.ts` (Where they go with the switch off and on). `web/test/postYourselfCaption.test.tsx` went
+  with the sheet.
+- **Help**: the guides `autopost-turn-on` and `tiktok-mac` in `web/src/features/help/helpKb.json` say the row states
+  (Waiting for your Mac · next at, Posting…, Posted by your Mac, Didn't work with Try again, Not on TikTok yet with Post
+  with my Mac, Turn on) and never Post it yourself. After the web parts merge, in `web/`, `node
+  scripts/help-corpus.mjs --write-docs` and `node scripts/ask-knowledge.mjs` regenerate the corpus and the Ask
+  knowledge, then `npm run help-corpus:check` passes.
 
 ### Get paid (CONTRACTS §40)
 From [CONTRACTS.md §40.8](CONTRACTS.md#408-changes-to-earlier-sections-who-builds-what-tests-not-verified-live).
@@ -1649,7 +1680,8 @@ The list is CONTRACTS §45.19. Three checks matter most, because the owner put p
      gate passes and `scripts/check-plan-clips-unchanged.sh` has nothing to report.
    - With auto-posting still off, open Settings › Posting › Auto-posting: "Off. Nothing posts by itself.", Next up
      lists the clips in Review oldest first under "Would go first", and Where they go names the ready places with
-     "TikTok: you post it yourself (TikTok's rule). Each clip gets Post it yourself."
+     "TikTok: turn on Your Mac posts TikTok to post there." and **Turn on** (or "TikTok: your Mac posts it." while
+     the switch is on)
    - Open **Test it first** and tap **Practice run now**: within 30 seconds Recent shows "Practice: would post “hook”
      to YouTube, Instagram and Facebook."; the clip stays in Review and nothing reaches any platform. Tap it again at
      once: "A test run just started. Wait a minute."
@@ -1662,7 +1694,9 @@ The list is CONTRACTS §45.19. Three checks matter most, because the owner put p
      you see: this is the unverified part); on Instagram nothing is published. Library says "Private test · only
      you", "Private test · draft on your Page" and "Private test · checked, not published", with no numbers.
    - Only then turn **Practice** off. The first live run posts the oldest clip at the time the page showed; its posts
-     say "· by auto-posting" with **Open** links, and the clip is under **Post these on TikTok yourself**.
+     say "· by auto-posting" with **Open** links. With **Your Mac posts TikTok** on, its TikTok row in Library goes
+     "Waiting for your Mac · next at …", "Posting…", then "Posted by your Mac · Everyone" with **Open**; the page has
+     no TikTok list of its own (ADR-85).
 
 19. **Get paid** ([CONTRACTS §40.8](CONTRACTS.md#408-changes-to-earlier-sections-who-builds-what-tests-not-verified-live),
    "Not verified live"): not checked live when built. Do them at the owner's first use; each failure becomes "not

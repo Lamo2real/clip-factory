@@ -1554,7 +1554,8 @@ yourself and the campaign rules work as before.
   or it is a campaign clip Content Rewards can't take from Clip Factory by itself yet. A clip another run planned in
   the last 15 minutes is skipped.
 * **Places and options.** Every place whose setup is ready except TikTok (TikTok's rules want the creator's own pick
-  for each post; each auto-posted clip keeps Post it yourself), in STATS_ORDER, with My settings
+  for each post; while Your Mac posts TikTok is on, a live run's normal clip also gets a TikTok post his Mac posts,
+  CONTRACTS §47, and since ADR-85 there is no Post it yourself), in STATS_ORDER, with My settings
   (`post_preset.upload_options`: never made for kids); a campaign clip gets the campaign versions, exactly as Upload
   builds them.
 * **Never twice.** The claim is one `TransactWriteItems`: Put `AUTORUN#{runId}` (`state: "planned"`, its clips) on
@@ -2107,9 +2108,11 @@ only switch is `CF_DEEP=off` (Terraform `deep_analysis_enabled = false`), which 
   and Google deletes OAuth clients unused for 6 months; X charges per post.
 - **Clips kept before a platform was connected** are not posted automatically after Connect
   ([roadmap](ROADMAP.md#phase-2-social-integrations)).
-- **Auto-posting never posts to TikTok** (TikTok's rules want the creator's own pick of who can see each post; he
-  uses **Post it yourself**), and campaign clips wait for his Upload while Content Rewards can't take clips from Clip
-  Factory by itself. A run fires on whole hours only, so a save counts from the next full hour. YouTube takes at most
+- **Auto-posting never posts to TikTok through TikTok's API** (TikTok's rules want the creator's own pick of who can
+  see each post): while **Your Mac posts TikTok** is on, his own Mac posts each clip's TikTok (CONTRACTS §47). The
+  manual **Post it yourself** sheet is gone (ADR-85), so with the switch off nothing goes to TikTok until he taps
+  **Turn on**. Campaign clips never go to the Mac, and they wait for his Upload while Content Rewards can't take clips
+  from Clip Factory by itself. A run fires on whole hours only, so a save counts from the next full hour. YouTube takes at most
   100 uploads a day (its `videos.insert` bucket); the page warns past 100 clips a day. That a Facebook draft Reel stays
   hidden from everyone but the Page's admins, and that the hourly rule fires within the first minute, are checked at
   the first private test run and the first hours of practice

@@ -2,8 +2,8 @@
 import type { AnyExtra, PerfStatus, Platform, PlatformPerformance, PostMetrics } from "../api/types.ts";
 import type { IconName } from "../components/Icon.tsx";
 import { PLATFORM_LABEL, PLATFORM_ORDER, relative, timecode } from "./format.ts";
-import { postError, TIKTOK_PRIVATE_ONLY } from "./tiktokYourself.ts";
-import { macRowWords } from "./tiktokMac.ts";
+import { failedForPublicAccount, postError } from "./tiktokYourself.ts";
+import { macChip, shortReason, type TikTokRow } from "./tiktokMac.ts";
 
 /** Platform order on the performance page and in This week: the app-wide PLATFORM_ORDER. */
 export const STATS_ORDER: readonly Platform[] = PLATFORM_ORDER;
@@ -246,24 +246,39 @@ export const STATUS_LABEL: Record<PerfStatus, string> = {
   mac: "Waiting for your Mac",
 };
 
+const PRIVATE_UPLOAD = "Uploaded privately. TikTok shows numbers after the app is approved.";
+
 export interface CalmCopy {
   text: string;
   link?: { href: string; label: string };
   spinner?: boolean;
 }
 
-/** The one plain line (and link) a stack shows instead of numbers. Null when it has numbers to show. */
+/**
+ * The one plain line (and link) a stack shows instead of numbers. Null when it has numbers to show. `row`: TikTok's row
+ * (lib/tiktokMac.ts tiktokRow) while the clip page shows its one button: the stack then says the row's words, with no
+ * link (Try again, Post with my Mac, Turn on or Add link is on the page itself).
+ */
 export function calmCopy(
   p: Pick<PlatformPerformance, "platform" | "status" | "metrics" | "error"> & Partial<Pick<PlatformPerformance, "by" | "url" | "mac" | "via">>,
+  row?: TikTokRow | null,
 ): CalmCopy | null {
   const name = PLATFORM_LABEL[p.platform];
+  if (p.platform === "tiktok" && row && row.kind !== "posted" && row.kind !== "posted_you") {
+    // A private upload keeps saying so (only he sees it); the row adds why the Mac can't post it for everyone yet.
+    if (p.status === "posted_private") return { text: row.kind === "not_ready" ? `${PRIVATE_UPLOAD} ${row.words}.` : PRIVATE_UPLOAD };
+    return row.spinner ? { text: row.words, spinner: true } : { text: row.words };
+  }
   switch (p.status) {
     case "mac": {
-      // His Mac posts it on TikTok (§47.4): what it is doing; a stop is fixed in Library (Try again, or post it yourself).
+      // His Mac posts it on TikTok (§47.4): what it is doing. Try again is on the page, so no link.
       if (!p.mac) return { text: "Waiting for your Mac." };
-      const words = macRowWords(p.mac);
-      if (p.mac.state === "stopped") return { text: words, link: { href: "/library", label: "Go to Library" } };
-      return { text: words, spinner: p.mac.state === "working" };
+      if (p.mac.state === "working") return { text: macChip(p.mac), spinner: true };
+      if (p.mac.state === "stopped") {
+        const why = shortReason(p.mac.reason);
+        return { text: why ? `Didn't work: ${why}` : "Didn't work" };
+      }
+      return { text: macChip(p.mac) };
     }
     case "waiting_for_connection":
       return {
@@ -278,21 +293,21 @@ export function calmCopy(
     case "posting":
       return { text: "Posting now…", spinner: true };
     case "posted_private":
-      return { text: "Uploaded privately. TikTok shows numbers after the app is approved." };
+      return { text: PRIVATE_UPLOAD };
     case "failed": {
-      // TikTok refused it because the account is public (§42): post it yourself, not Try again.
-      if (p.platform === "tiktok" && p.error && postError(p.error) === TIKTOK_PRIVATE_ONLY)
-        return { text: "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Go to Library and tap Post it yourself.", link: { href: "/library", label: "Go to Library" } };
+      // TikTok refused it because the account is public (§42): his Mac posts it, not Try again.
+      if (failedForPublicAccount({ platform: p.platform, status: "failed", error: p.error })) return { text: postError(p.error!) };
       const why = (p.error ?? "something went wrong").replace(/[.!\s]+$/, "");
       return { text: `${why}. Go to Library and tap Try again.`, link: { href: "/library", label: "Go to Library" } };
     }
     case "posted":
-      // Posted on TikTok by the owner himself (§42): only its link lets Clip Factory find its numbers.
-      if (p.by === "you" && !p.url)
-        return {
-          text: p.via === "mac" ? "Posted by your Mac. Add its TikTok link in Library to count views." : "Posted by you. Add its TikTok link in Library to count views.",
-          link: { href: "/library", label: "Go to Library" },
-        };
+      // Posted on TikTok by the owner or his Mac (§42, §47): only its link lets Clip Factory find its numbers.
+      if (p.by === "you" && !p.url) {
+        const who = p.via === "mac" ? "Posted by your Mac." : "Posted by you.";
+        return row?.button === "add_link"
+          ? { text: `${who} Add its TikTok link to count views.` }
+          : { text: `${who} Add its TikTok link in Library to count views.`, link: { href: "/library", label: "Go to Library" } };
+      }
       return p.metrics ? null : { text: "Numbers are on the way. Check back in a few minutes." };
   }
 }

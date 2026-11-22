@@ -441,8 +441,10 @@ export interface AutoPostStatus {
   runs: AutoRun[];
   /** At most 20, newest first: auto-posted posts that did not go up. */
   failed: { postId: string; clipId: string; hook: string; platform: Platform; error: string; at: string }[];
-  /** At most 10: auto-posted clips (not private tests) not on TikTok for everyone yet. */
-  /** `mac`: his Mac's post, listed while Your Mac posts TikTok is off (it waits or stopped): Post it yourself instead (§47.2). */
+  /**
+   * At most 10: auto-posted clips (not private tests) not on TikTok for everyone yet. `mac`: his Mac's post, listed
+   * while Your Mac posts TikTok is off (it waits or stopped). Still served, no longer shown by the web (ADR-85).
+   */
   tiktokYourself: { clipId: string; hook: string; coverUrl?: string; mac?: true }[];
 }
 
@@ -2224,7 +2226,7 @@ export interface Api {
   clipFile(clipId: string): Promise<ClipFile>;
   /** POST /v1/clips/{clipId}/tiktok/posted: the owner posted it on TikTok himself; `link` gives its views (§42). */
   markTikTokPosted(clipId: string, link?: string, since?: string): Promise<TikTokMarked>;
-  /** DELETE /v1/clips/{clipId}/tiktok/posted: Undo of "I posted it" (§42). */
+  /** DELETE /v1/clips/{clipId}/tiktok/posted: undoes markTikTokPosted (§42). Kept; the web no longer calls it (ADR-85). */
   undoTikTokPosted(clipId: string): Promise<TikTokMarked>;
   /** GET /v1/skills: built-ins first, then the owner's, by name (§18.3). */
   listSkills(): Promise<Skill[]>;
@@ -2449,10 +2451,17 @@ export interface Api {
   tiktokMacStatus(): Promise<TikTokMacStatus>;
   /** §47.8: Change TikTok login / Forget TikTok login on the owner's Mac. */
   tiktokMacLogin(action: MacLoginAction): Promise<MacHelper | null>;
-  /** POST /v1/tiktok/mac/send `{ clipIds }` (1–25): Send these to my Mac; one result per clip, in order. */
-  sendToMac(clipIds: string[]): Promise<MacSendResult[]>;
-  /** POST /v1/clips/{clipId}/tiktok/mac/retry: Try again on a stopped Mac post; `notOnTikTok` after it pressed Post. */
-  retryMac(clipId: string, notOnTikTok?: boolean): Promise<{ clip: Clip; posts: Post[] }>;
-  /** DELETE /v1/clips/{clipId}/tiktok/mac: Take it back from the Mac (Post it yourself instead). */
+  /**
+   * POST /v1/tiktok/mac/send `{ clipIds, now? }` (1–25): one result per clip, in order. Without `now` (Settings' Send
+   * these to my Mac) a clip waits as the backlog (source `sent`, one after each auto-posting run); with `now` (a row's
+   * Post with my Mac) the Mac posts it at once and first, as an Upload tap (source `upload`).
+   */
+  sendToMac(clipIds: string[], now?: boolean): Promise<MacSendResult[]>;
+  /**
+   * POST /v1/clips/{clipId}/tiktok/mac/retry `{ notOnTikTok?, now? }`: Try again on a stopped Mac post; `notOnTikTok`
+   * after it pressed Post; `now` makes it an Upload tap's (source `upload`), so the Mac posts it at once.
+   */
+  retryMac(clipId: string, notOnTikTok?: boolean, now?: boolean): Promise<{ clip: Clip; posts: Post[] }>;
+  /** DELETE /v1/clips/{clipId}/tiktok/mac: take it back from the Mac (§47.3). Kept; the web no longer calls it (ADR-85). */
   takeBackFromMac(clipId: string): Promise<{ clip: Clip; posts: Post[] }>;
 }

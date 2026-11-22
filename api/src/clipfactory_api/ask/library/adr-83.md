@@ -33,3 +33,7 @@
   compares 24-hour views with his phone posts before night runs post by themselves for long. The switch stops it at
   once: no claim, and no step before Post, while it is off. The helper (Chrome profile, LaunchAgent, notifications) is
   its own PR.
+- **Amended by [ADR-85](#adr-85-no-manual-tiktok-sheet-the-mac-is-the-only-way-to-tiktok-until-tiktok-approves-the-app) (2026-11-22).** Post it yourself instead, I posted it and "It's not
+  on TikTok, try again" are gone from the web: a stopped row has only Try again, which sends `now: true` (and
+  `notOnTikTok` once Post was pressed, after the row told him to look on his TikTok first). Take it back stays in the
+  API, unused by the web.

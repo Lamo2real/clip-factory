@@ -20,7 +20,8 @@ auto-posting, the oldest clips in Review going up by themselves every X hours, w
 seven questions asked before building (BR-29, BR-08 AC1 and BR-26 AC1 updates, NFR-02 AC1 update), and his request for
 a payout setup per place in the same system as the posting setup, a status that says whether money can reach him, and
 the money sent to his bank per place (BR-30, NFR-20, UX-20), and, for what really reached his bank, his choice of
-option A, Enable Banking, on 22 Nov 2026 (BR-31, NFR-21, UX-21).
+option A, Enable Banking, on 22 Nov 2026 (BR-31, NFR-21, UX-21), and his request the same day to remove the "Post it
+yourself" pop-up because his Mac's TikTok automation covers it (BR-32, BR-29 AC4 and AC10 updates, I-65).
 Every requirement below traces back to one of them. Where
 the brief was open or unclear, the interpretation we chose is stated in [Interpretations and open questions](#interpretations-and-open-questions).
 
@@ -547,9 +548,11 @@ Built by §46 (its four parts, §46.16). It ships off for everyone: nothing post
   run with nothing in Review does nothing but still counts, so the gaps stay even.
 - AC4: **Every place, his settings, never TikTok.** Each clip goes, in the same run, to every place that is set up and
   ready (YouTube, Instagram and Facebook; X once it is set up, never for clips posted before), with **My settings**:
-  public, most reach, never made for kids (answer 1). TikTok is never part of a run (answer 2): TikTok's rules want
-  his own pick of who can see each post, so each auto-posted clip keeps **Post it yourself**, and the page lists them
-  under **Post these on TikTok yourself**.
+  public, most reach, never made for kids (answer 1). TikTok is never one of a run's places (answer 2): TikTok's
+  rules want his own pick of who can see each post. Amended 22 Nov 2026: while **Your Mac posts TikTok** is on, his
+  own Mac posts each auto-posted clip's TikTok for everyone (ADR-83), and there is no **Post it yourself** any more
+  (BR-32, ADR-85). While the switch is off, **Where they go** says "TikTok: turn on Your Mac posts TikTok to post
+  there." with **Turn on**.
 - AC5: **What waits for him.** Campaign clips wait for his **Upload** while Content Rewards can't take clips from Clip
   Factory by itself; once it can, they go too, the campaign way (answer 3). A clip with a failed important check
   waits too (answer 4), and so does a clip still being made or with its video missing. Each is listed under **Waits
@@ -570,8 +573,9 @@ Built by §46 (its four parts, §46.16). It ships off for everyone: nothing post
   (Library, the clip page, and **Open** in **Recent**); an auto-posted post's row adds "· by auto-posting" after its
   state.
 - AC10: **What he sees.** "Whether auto-posting is on, when the next run is, and which clips post next": the page
-  shows the switch's line, **Next up** (up to 10, each with its time), **Waits for you**, **Didn't work**, **Post these
-  on TikTok yourself** and **Recent** (the last 10 runs, each place with ✓ or ✗). While it is on, a Review card says
+  shows the switch's line, **Next up** (up to 10, each with its time), **Waits for you**, **Didn't work** and
+  **Recent** (the last 10 runs, each place with ✓ or ✗). (Its **Post these on TikTok yourself** list went on 22 Nov
+  2026, BR-32.) While it is on, a Review card says
   "Goes up by itself {Sun 15:00}. Throw it away to stop it." and Home says "Auto-posting is on: your clips go up by
   themselves every {h} hour(s), oldest first."
 - AC11: **Test it with nothing public.** In the fold **Test it first**: **Practice** (runs pick the clips on time but
@@ -583,8 +587,8 @@ Built by §46 (its four parts, §46.16). It ships off for everyone: nothing post
   and one small Lambda (`cf-prod-autopost`) with its own least-privilege role
   ([SECURITY.md](SECURITY.md#auto-posting-contracts-46)). No table, index, secret,
   bucket, Cognito or `cf-prod-api` infrastructure change; existing settings, clips and posts read exactly as before;
-  the deploy needs no step from the owner. Upload, Use my settings, TikTok's rules, Post it yourself and the campaign
-  rules are unchanged.
+  the deploy needs no step from the owner. Upload, Use my settings, TikTok's rules and the campaign rules are
+  unchanged. (Post it yourself, also unchanged then, was removed later: BR-32.)
 
 ### BR-30 Get paid: set up each place's payout, see if money can reach you, and what was sent to your bank
 "I want the same system that we had for setting them up. I want that for setting the payment up so I can get paid
@@ -651,6 +655,27 @@ steps in [SETUP_POSTING.md](SETUP_POSTING.md#your-bank))
 - AC5: Enable Banking's free terms are kept: his own account and app, only his own personal accounts (business
   accounts are dropped), only the owner. The optional first step holds a ready email that asks Enable Banking whether
   his app money counts as personal use; sending it is his choice.
+
+### BR-32 No "Post it yourself": the Mac covers TikTok
+Shown the **Post it yourself** sheet (Save the video, Open TikTok, Send to my iPhone (AirDrop), the caption, the TikTok
+link, Not now, I posted it), the owner said on 22 Nov 2026: "i dont think these options are necessary becasue they are
+not gonna be used, the automation will cover it, so might wannna remove this popup". The automation is **Your Mac
+posts TikTok** (Settings › Posting): his Mac posts each TikTok clip out of sight, at auto-posting runs and on Upload
+taps, and records "Posted by your Mac · Everyone" with the link.
+([CONTRACTS.md §42.1](CONTRACTS.md#421-what-the-owner-sees), [§47.4](CONTRACTS.md#474-what-the-owner-sees-web),
+[ADR-85](DECISIONS.md#adr-85-no-manual-tiktok-sheet-the-mac-is-the-only-way-to-tiktok-until-tiktok-approves-the-app))
+- AC1: **The sheet is gone.** No **Post it yourself**, **Post it yourself instead**, **I posted it**, **Save the
+  video**, **Open TikTok** or **AirDrop** control on Library, the clip page, Review or Auto-posting, and nothing opens
+  by itself after Upload. Auto-posting has no **Post these on TikTok yourself** list.
+- AC2: **Each TikTok row says what his Mac is doing**, with at most one button: "Waiting for your Mac · next at
+  14:05"; "Posting…"; "Posted by your Mac · Everyone" with **Open**; "Didn't work: {short reason}" with **Try
+  again** (it goes back to his Mac at once); "Not on TikTok yet" with **Post with my Mac** (to his Mac at once, like
+  an Upload tap). Switch off, or his Mac not seen for 30 minutes or more: the row says so, with **Turn on** (to
+  Settings › Posting › Your Mac posts TikTok).
+- AC3: **Nothing stored breaks.** A clip he posted himself before keeps "Posted by you · Everyone"; with no link yet it
+  gets only an inline link box with **Save the link**, no sheet. Every API route stays, and the only API change is an
+  optional `now: true` on two routes, so older apps work as before.
+- AC4: Plain words, every control with its hover state, the arrow as the only cursor.
 
 ---
 
@@ -1165,7 +1190,7 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 | I-48 | "Track how much i earn from all platforms including contentrewards" | One "All your money" card: the money each place reports for the same 30 days and one total per currency. TikTok, Instagram and X report no money to apps, so they say "Not available" with where to look; Facebook waits until its numbers are checked; what left Content Rewards for Whop and the bank is not in its tools (BR-27). | Is 30 days the right period for the total? |
 | I-49 | "Know if the content i upload is compatible with the content rewards campaigns … instead of me selecting the content rewards way of uploading but arent compatible" | A fit check on every campaign clip before Upload, refused on the server when it can't earn, and a quiet "could earn" line on normal clips that fit a joined campaign. A normal clip is not turned into a campaign clip in place: it lacks the logo and "Paid partnership" on the video that briefs ask for, so a copy is made with them ([ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-in-the-api-a-new-copy-instead-of-turning-a-normal-clip-into-a-campaign-clip-one-30-day-total-that-includes-content-rewards)) (BR-28). | Is a copy below the original acceptable? |
 | I-50 | "Will I be able to find campaigns and join them based on some requirements that I set if the MCP and my connection to content rewards through Clip Factory gets accepted?" | Finding, yes; joining stays his own tap. Content Rewards' tools have no way to browse Discover or to join or apply, joining also accepts the brand's terms (his call), and a robot on Content Rewards' site would break Whop's no-bots terms. So a campaign finder ([CONTRACTS.md §41](CONTRACTS.md#41-campaign-finder-campaigns-that-match-what-you-want-owner-request-2026-11-21), [ADR-65](DECISIONS.md#adr-65-campaign-finder-content-rewards-public-pages-read-politely-joining-stays-the-owners-own-tap)): he sets once what he wants (at least a pay per 1,000 views, the places he posts to, how much money is left, open to join or also apply, topics, language), Clip Factory reads Content Rewards' public campaign pages 4 times a day, skips what it can't make clips for, tells him "3 new campaigns match", and gives each match "Open on Content Rewards". He taps **Join Campaign** there; "I joined: add it" adds it with no link to copy or paste (until Content Rewards' sign-in yes, he still copies the rules once), and once Content Rewards' sign-in yes has arrived Clip Factory adds it by itself when he comes back. Open campaigns hide their rules until he joins, so the finder matches on what the public page shows and the rules are read right after. A signed-in "Ask Content Rewards" asks them for an official way. | Waiting for Content Rewards' sign-in yes, and for whether Content Rewards adds official search and join tools. |
-| I-51 | "Each clip goes to all my connected accounts on every platform in the same run" | Every place that is set up and ready, in one run, with My settings (public, most reach, never made for kids; answer 1). TikTok is never part of a run (answer 2): Clip Factory's TikTok uploads fail on his public account until TikTok approves the app, and TikTok's rules want the creator's own pick of who can see each post, so a post nobody tapped can't be a TikTok post even after approval. Each auto-posted clip keeps **Post it yourself**. X is used once it is set up (BR-29 AC4). | No. |
+| I-51 | "Each clip goes to all my connected accounts on every platform in the same run" | Every place that is set up and ready, in one run, with My settings (public, most reach, never made for kids; answer 1). TikTok is never part of a run (answer 2): Clip Factory's TikTok uploads fail on his public account until TikTok approves the app, and TikTok's rules want the creator's own pick of who can see each post, so a post nobody tapped can't be a TikTok post even after approval. While **Your Mac posts TikTok** is on, his Mac posts each auto-posted clip's TikTok (ADR-83); **Post it yourself** is gone (BR-32). X is used once it is set up (BR-29 AC4). | No. |
 | I-52 | "Clips in review post automatically, without my approval" | Every clip in Review, oldest first, including those already there when he turns it on (answer 5). Campaign clips wait for his Upload while Content Rewards can't take clips from Clip Factory by itself (it only takes a clip in its first 30 minutes, and his account can't connect apps yet; answer 3), and so does a clip with a failed important check (answer 4) or one still being made. Each waiting clip shows its reason (BR-29 AC5). | Campaign clips go too once Content Rewards can take them. |
 | I-53 | "If posting fails on one platform, retry once, record the error, and still post to the other platforms" | Upload's own retries stay (answer 6): up to 3 tries when a platform does not answer, and no blind retry where one would fail the same way or could post twice (X's post, Instagram's publish). Every error is saved and the other platforms still post (BR-29 AC8). | No. |
 | I-54 | "Post every X hours" on EventBridge, serverless only, with "even gaps between runs, including across midnight", and "Changes take effect immediately when I save, without a redeploy" | One EventBridge rule fires every hour on the hour, and a run happens only when his X hours are up (answer 7), so runs are exactly X hours apart on whole hours. A schedule the app rewrites would need a permission the deploy boundary forbids and could not say when the next run is ([ADR-81](DECISIONS.md#adr-81-auto-posting-an-hourly-eventbridge-rule-a-due-check-and-uploads-own-code)). A save is stored at once and counts from the next full hour. | No. |
@@ -1179,6 +1204,7 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 | I-62 | "In total for each of those platforms … all of them" | One "Reached your bank" line per place and per money type, plus a total per money type, never added across money types or converted. Meta pays Instagram and Facebook in one payment, so that money is "Instagram and Facebook together" (it shows on both pages) instead of a split Clip Factory would have to guess. A payout whose bank text names no app can't be told apart from his other money, so that place says "Nothing from Instagram reached your bank yet." until a new word is added; TikTok, Instagram, Facebook and X tell apps nothing, so only the bank's text and his taps can name them (BR-31 AC2, AC3). | Checked at his first payments ([CONTRACTS.md §40.5.14](CONTRACTS.md#40514-not-verified-live-each-is-checked-at-his-first-connect-a-failure-becomes-a-plain-sentence-never-a-number)). |
 | I-63 | His rule that the bank's private key lives only in Secrets Manager, never in the browser, and a paste or upload box like the TikTok file box (asked for in the build task) | The main way makes the bank key inside Clip Factory, so the private key never touches his browser. If he already let Enable Banking make the key, step 5 has a folded box that takes its .pem file once, straight into Secrets Manager, and then asks him to delete the file: the one place the private key passes through his browser ([SECURITY.md](SECURITY.md#your-bank-contracts-405)). | **Yes: keep the .pem box, or remove it?** (a one-file change) |
 | I-64 | "A: bank connection", offered with the risk that Enable Banking's free terms say "personal use of private individuals" and no "commercial purpose" | Creator income on his own personal account, read once a day, is a grey area. It was built switched off, with an optional ready email that asks Enable Banking, as little reading as possible, and a way back: "Stop reading" on each bank, then the switch. The switch PR #172 turned it on (22 Nov 2026). The switch, `bank_reading_enabled`, sets `BANK_READING` on both `cf-prod-api` and `cf-prod-money`, so setting it back to `false` (one line in `infra/envs/prod/variables.tf`, applied by `deploy.yml`) hides the screens and routes and stops every bank read, the daily one and Check now; stored deposits, payers, links and secrets stay. Only `cf-prod-hooks`' callback doesn't read it, so a connect already on its way back from BankID can still save its link, which nothing reads while the switch is off (BR-31 AC5, NFR-21 AC5). | Enable Banking's answer, if he sends the email. The spec's question ([CONTRACTS.md §40.5.11](CONTRACTS.md#40511-data-secrets-live-notifications-infra-the-switch-and-mock-mode)), whether the switch should also reach `cf-prod-money`, is settled: the reader (#158) set it there from the same variable. |
+| I-65 | "i dont think these options are necessary becasue they are not gonna be used, the automation will cover it, so might wannna remove this popup" | The **Post it yourself** sheet and every button that opens it are gone; each TikTok row says what his Mac is doing, with one button at most (BR-32). Campaign clips can't go to his Mac (Branded content, their first 30 minutes), so their row says "Campaign clip: post it in the TikTok app" and offers only the link box. After his Mac pressed Post but could not confirm it, Try again could make a second copy, so the row tells him to look on his TikTok first. | Campaign clips on the Mac would need a helper change. |
 
 ## Out of scope for this phase
 

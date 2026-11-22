@@ -511,9 +511,11 @@ Built by §46 (its four parts, §46.16). It ships off for everyone: nothing post
   run with nothing in Review does nothing but still counts, so the gaps stay even.
 - AC4: **Every place, his settings, never TikTok.** Each clip goes, in the same run, to every place that is set up and
   ready (YouTube, Instagram and Facebook; X once it is set up, never for clips posted before), with **My settings**:
-  public, most reach, never made for kids (answer 1). TikTok is never part of a run (answer 2): TikTok's rules want
-  his own pick of who can see each post, so each auto-posted clip keeps **Post it yourself**, and the page lists them
-  under **Post these on TikTok yourself**.
+  public, most reach, never made for kids (answer 1). TikTok is never one of a run's places (answer 2): TikTok's
+  rules want his own pick of who can see each post. Amended 22 Nov 2026: while **Your Mac posts TikTok** is on, his
+  own Mac posts each auto-posted clip's TikTok for everyone (ADR-83), and there is no **Post it yourself** any more
+  (BR-32, ADR-85). While the switch is off, **Where they go** says "TikTok: turn on Your Mac posts TikTok to post
+  there." with **Turn on**.
 - AC5: **What waits for him.** Campaign clips wait for his **Upload** while Content Rewards can't take clips from Clip
   Factory by itself; once it can, they go too, the campaign way (answer 3). A clip with a failed important check
   waits too (answer 4), and so does a clip still being made or with its video missing. Each is listed under **Waits
@@ -534,8 +536,9 @@ Built by §46 (its four parts, §46.16). It ships off for everyone: nothing post
   (Library, the clip page, and **Open** in **Recent**); an auto-posted post's row adds "· by auto-posting" after its
   state.
 - AC10: **What he sees.** "Whether auto-posting is on, when the next run is, and which clips post next": the page
-  shows the switch's line, **Next up** (up to 10, each with its time), **Waits for you**, **Didn't work**, **Post these
-  on TikTok yourself** and **Recent** (the last 10 runs, each place with ✓ or ✗). While it is on, a Review card says
+  shows the switch's line, **Next up** (up to 10, each with its time), **Waits for you**, **Didn't work** and
+  **Recent** (the last 10 runs, each place with ✓ or ✗). (Its **Post these on TikTok yourself** list went on 22 Nov
+  2026, BR-32.) While it is on, a Review card says
   "Goes up by itself {Sun 15:00}. Throw it away to stop it." and Home says "Auto-posting is on: your clips go up by
   themselves every {h} hour(s), oldest first."
 - AC11: **Test it with nothing public.** In the fold **Test it first**: **Practice** (runs pick the clips on time but
@@ -547,8 +550,8 @@ Built by §46 (its four parts, §46.16). It ships off for everyone: nothing post
   and one small Lambda (`cf-prod-autopost`) with its own least-privilege role
   ([SECURITY.md](SECURITY.md#auto-posting-contracts-46)). No table, index, secret,
   bucket, Cognito or `cf-prod-api` infrastructure change; existing settings, clips and posts read exactly as before;
-  the deploy needs no step from the owner. Upload, Use my settings, TikTok's rules, Post it yourself and the campaign
-  rules are unchanged.
+  the deploy needs no step from the owner. Upload, Use my settings, TikTok's rules and the campaign rules are
+  unchanged. (Post it yourself, also unchanged then, was removed later: BR-32.)
 
 ### BR-30 Get paid: set up each place's payout, see if money can reach you, and what was sent to your bank
 "I want the same system that we had for setting them up. I want that for setting the payment up so I can get paid
@@ -615,5 +618,26 @@ steps in [SETUP_POSTING.md](SETUP_POSTING.md#your-bank))
 - AC5: Enable Banking's free terms are kept: his own account and app, only his own personal accounts (business
   accounts are dropped), only the owner. The optional first step holds a ready email that asks Enable Banking whether
   his app money counts as personal use; sending it is his choice.
+
+### BR-32 No "Post it yourself": the Mac covers TikTok
+Shown the **Post it yourself** sheet (Save the video, Open TikTok, Send to my iPhone (AirDrop), the caption, the TikTok
+link, Not now, I posted it), the owner said on 22 Nov 2026: "i dont think these options are necessary becasue they are
+not gonna be used, the automation will cover it, so might wannna remove this popup". The automation is **Your Mac
+posts TikTok** (Settings › Posting): his Mac posts each TikTok clip out of sight, at auto-posting runs and on Upload
+taps, and records "Posted by your Mac · Everyone" with the link.
+([CONTRACTS.md §42.1](CONTRACTS.md#421-what-the-owner-sees), [§47.4](CONTRACTS.md#474-what-the-owner-sees-web),
+[ADR-85](DECISIONS.md#adr-85-no-manual-tiktok-sheet-the-mac-is-the-only-way-to-tiktok-until-tiktok-approves-the-app))
+- AC1: **The sheet is gone.** No **Post it yourself**, **Post it yourself instead**, **I posted it**, **Save the
+  video**, **Open TikTok** or **AirDrop** control on Library, the clip page, Review or Auto-posting, and nothing opens
+  by itself after Upload. Auto-posting has no **Post these on TikTok yourself** list.
+- AC2: **Each TikTok row says what his Mac is doing**, with at most one button: "Waiting for your Mac · next at
+  14:05"; "Posting…"; "Posted by your Mac · Everyone" with **Open**; "Didn't work: {short reason}" with **Try
+  again** (it goes back to his Mac at once); "Not on TikTok yet" with **Post with my Mac** (to his Mac at once, like
+  an Upload tap). Switch off, or his Mac not seen for 30 minutes or more: the row says so, with **Turn on** (to
+  Settings › Posting › Your Mac posts TikTok).
+- AC3: **Nothing stored breaks.** A clip he posted himself before keeps "Posted by you · Everyone"; with no link yet it
+  gets only an inline link box with **Save the link**, no sheet. Every API route stays, and the only API change is an
+  optional `now: true` on two routes, so older apps work as before.
+- AC4: Plain words, every control with its hover state, the arrow as the only cursor.
 
 ---

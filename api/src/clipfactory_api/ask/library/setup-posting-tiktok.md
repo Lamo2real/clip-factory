@@ -6,12 +6,17 @@ About 40 minutes, plus the time TikTok takes to check your app · Free · Steps 
 post is **"Only me"**. TikTok often says no to apps that only one person uses. If it says no, Clip Factory still posts
 to TikTok, but only you can see those posts, and TikTok gives no numbers for them.
 
-**Want everyone to see it now? Post it yourself** (docs/CONTRACTS.md §42). On any uploaded clip in Library, or on its
-page, tap **Post it yourself**. Clip Factory copies the caption and saves the video to your phone (or your computer).
-You post it in TikTok and pick **Everyone**, then tap **I posted it**, and Clip Factory finds the post and counts its
-views. **Everyone** needs a public TikTok account. While your account is public, TikTok will not let Clip Factory upload
-there for you (its rule for apps it has not approved). That upload then says to tap **Post it yourself**, and the
-button is right there. Keep your account public.
+**Want everyone to see it now? Your Mac posts it** (docs/CONTRACTS.md §47). Turn on **Settings › Posting › Your Mac
+posts TikTok** and set up the helper on your Mac ([mac/tiktok-helper](../mac/tiktok-helper/README.md)). Then **Upload**
+and auto-posting give TikTok to your Mac, and it posts each clip for **Everyone**, out of sight. Each clip's TikTok row
+in Library says what your Mac is doing: **Waiting for your Mac · next at 14:05**, **Posting…**, then **Posted by your
+Mac · Everyone** with **Open**. **Didn't work**? Tap **Try again**. **Not on TikTok yet**? Tap **Post with my Mac**. The
+row says your Mac is off or hasn't checked in? Tap **Turn on**. **Everyone** needs a public TikTok account. While your
+account is public, TikTok will not let Clip Factory upload there for you (its rule for apps it has not approved), so
+your Mac does it. Keep your account public. There is no "Post it yourself" any more (it went on 22 Nov 2026,
+[ADR-85](DECISIONS.md#adr-85-no-manual-tiktok-sheet-the-mac-is-the-only-way-to-tiktok-until-tiktok-approves-the-app)). A
+clip you posted in TikTok yourself earlier keeps **Posted by you · Everyone**; with no link yet, type or paste it in the
+row and tap **Save the link** (an empty box makes Clip Factory look for it on your TikTok).
 
 | # | Step | Part |
 |---|---|---|
@@ -273,7 +278,7 @@ The answers, word for word. They are all true today: do not change them to sound
 | "The key does not work. Copy the Client key and secret again (step 15)." | Do step 15 again (in the Sandbox: step 19). |
 | "The return address does not match. Copy it again in step 10." | Do step 10 again with the **Copy** button. |
 | "A permission box was not ticked. Connect again and tick every box." | Do step 12, then connect again and leave every switch on. |
-| "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone." | Tap **Post it yourself** on the clip and post it in TikTok, picking **Everyone**. Keep your account public. |
+| "TikTok only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone." | Tap **Post with my Mac** on the clip's TikTok row (it says **Turn on** first while **Your Mac posts TikTok** is off). Keep your account public. |
 | "TikTok did not answer. Try again in a few minutes." | Wait, then press **Connect TikTok**. |
 | "Finish the TikTok review steps to post outside the Sandbox." | Do steps 21 to 23. |
 

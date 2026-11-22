@@ -11,7 +11,7 @@ import { MOMENT_LABEL, PLATFORM_ORDER, plural, timecode } from "../../lib/format
 import { ACT_REWIND_MS, useAction } from "../../lib/motion.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents } from "../../lib/live.ts";
-import { applyClipEvent, withMedia } from "../../lib/liveCache.ts";
+import { applyClipEvent, applyPostEvent, withMedia } from "../../lib/liveCache.ts";
 import { SimilarClips } from "../../components/SimilarClips.tsx";
 import { defaultUploadTo, readUploadTo, saveUploadTo, STILL_WORKING, uploadClip, uploadedMessage, uploadLabel } from "../../lib/upload.ts";
 import { useSetup } from "../settings/setup/useSetup.ts";
@@ -32,11 +32,10 @@ import { canMacFetch } from "../../lib/macFetch.ts";
 import { TikTokLegal } from "./TikTokCommercial.tsx";
 import { TikTokSheet } from "./TikTokSheet.tsx";
 import { useUnsaved } from "../../features/help/unsaved.ts";
-import { offerAfterUpload, TIKTOK_PUBLIC_HINT, tiktokAudited } from "../../lib/tiktokYourself.ts";
-import { PostYourself, PostYourselfButton } from "../library/PostYourself.tsx";
+import { TIKTOK_PUBLIC_HINT, tiktokAudited } from "../../lib/tiktokYourself.ts";
 import { useAutoPost } from "../settings/AutoPostBranch.tsx";
-import { useTikTokMac } from "../settings/TikTokMacBranch.tsx";
-import { MAC_HINT, MAC_POSTED, macOn, macRowWords } from "../../lib/tiktokMac.ts";
+import { TikTokRowAction, useTikTokRowContext } from "../library/MacButtons.tsx";
+import { lastLiveRunAt, MAC_HINT, macOn, rowNeedsMac, rowNeedsRuns, tiktokFacts, tiktokRow } from "../../lib/tiktokMac.ts";
 import { autoPostOf, reviewLede, reviewLine, sentFirstLine } from "../../lib/autopost.ts";
 
 /** Video and cover links are presigned for an hour (docs/CONTRACTS.md §5); fetch new ones a little before that. */
@@ -161,44 +160,32 @@ export function Review({ jobId }: { jobId: string | null }) {
       : null;
   // Clips uploaded on this visit: each gets a "See how it does" link once its card has left the list.
   const [justKept, setJustKept] = useState<Clip[]>([]);
-  // Uploaded without TikTok while TikTok keeps Clip Factory's uploads Only me: offer Post it yourself (§42.1).
-  const [tiktokYourself, setTikTokYourself] = useState<ReadonlySet<string>>(() => new Set());
-  const [handOff, setHandOff] = useState<Clip | null>(null);
-  // Uploaded here with TikTok going to the owner's Mac (§47.4): its line in Uploaded just now follows the Mac live.
-  const [macPosts, setMacPosts] = useState<Readonly<Record<string, Post>>>({});
-  const macStatus = useTikTokMac(Object.values(macPosts).some((p) => p.status === "mac"));
+  // Their posts: each one's TikTok line says what the owner's Mac is doing (§47.4), live, with its one button.
+  const [keptPosts, setKeptPosts] = useState<Readonly<Record<string, Post[]>>>({});
   useLiveEvents(
     (e) => {
-      if (e.type !== "post" || e.op !== "upsert" || !e.item || e.item.platform !== "tiktok") return;
-      const item = e.item;
-      setMacPosts((m) => (m[item.clipId] ? { ...m, [item.clipId]: item } : m));
+      if (e.type !== "post") return;
+      setKeptPosts((all) => {
+        const clipId = e.item?.clipId ?? Object.keys(all).find((id) => all[id]!.some((p) => p.postId === e.id));
+        return clipId && all[clipId] ? { ...all, [clipId]: applyPostEvent(all[clipId], e) } : all;
+      });
     },
     () => undefined,
   );
-  const macLine = (p: Post | undefined): string | null => {
-    if (!p) return null;
-    if (p.via === "mac") return `TikTok: ${MAC_POSTED}`;
-    if (p.status !== "mac" || !p.mac) return null;
-    return `TikTok: ${macRowWords(p.mac, { helper: macStatus.status ? macStatus.status.helper : undefined })}`;
-  };
+  const keptFacts = justKept.map((c) => tiktokFacts(c, keptPosts[c.clipId] ?? []));
+  const macCtx = useTikTokRowContext({
+    audited: tiktokAudited(setup.data?.platforms),
+    needsMac: keptFacts.some(rowNeedsMac),
+    needsRuns: keptFacts.some((f) => rowNeedsRuns(f, auto.on)),
+    // Auto-posting's own status, read here anyway while it is on.
+    runs: autopost.status ? { nextRunAt: autopost.status.nextRunAt, lastRunAt: lastLiveRunAt(autopost.status.runs) } : null,
+  });
   const kept = (clip: Clip, posts: Post[] = []) => {
     setJustKept((k) => [clip, ...k.filter((c) => c.clipId !== clip.clipId)].slice(0, 5));
-    const tiktok = posts.find((p) => p.platform === "tiktok" && p.status === "mac");
-    if (tiktok) setMacPosts((m) => ({ ...m, [clip.clipId]: tiktok }));
-    // With Your Mac posts TikTok on, the Post it yourself sheet never opens by itself (§47.4).
-    const after = offerAfterUpload(posts, setup.data?.platforms, macOn(me?.settings));
-    if (after.offer) setTikTokYourself((s) => new Set(s).add(clip.clipId));
-    // Not for a campaign clip: Content Rewards takes its TikTok post through the campaign's own places (§38).
-    if (after.open && !clip.campaignId) setHandOff(clip);
+    setKeptPosts((all) => ({ ...all, [clip.clipId]: posts }));
   };
-  // I posted it hides the offer; its Undo brings it back.
-  const markedYourself = (clipId: string, out?: { posts: Post[] }) =>
-    setTikTokYourself((s) => {
-      const next = new Set(s);
-      if (out && !out.posts.some((p) => p.platform === "tiktok" && p.by === "you")) next.add(clipId);
-      else next.delete(clipId);
-      return next;
-    });
+  // Try again or Post with my Mac went through: the clip's posts as they are now (its card already left the list).
+  const keptAgain = (clip: Clip, posts: Post[]) => setKeptPosts((all) => (all[clip.clipId] ? { ...all, [clip.clipId]: posts } : all));
   // Where focus goes when a card leaves while it holds focus: the next card's title (or the one before, or the empty
   // state's Make clips), so keyboard and screen reader users keep their place (§12.4).
   const focusNext = useRef<string | null>(null);
@@ -290,20 +277,24 @@ export function Review({ jobId }: { jobId: string | null }) {
             Uploaded just now
           </h2>
           <ul className="kept-now__list">
-            {justKept.map((c) => (
-              <li key={c.clipId} className="kept-now__item">
-                <span className="kept-now__hook clamp-2 user-text">{c.hook}</span>
-                {macLine(macPosts[c.clipId]) ? (
-                  <span className="kept-now__mac small" data-mac="kept">
-                    {macLine(macPosts[c.clipId])}
-                  </span>
-                ) : null}
-                <LinkButton href={`/clips/${c.clipId}`} size="sm" icon="chart" iconAfter="chevronRight">
-                  See how it does
-                </LinkButton>
-                {tiktokYourself.has(c.clipId) ? <PostYourselfButton clip={c} onMarked={(out) => markedYourself(c.clipId, out)} /> : null}
-              </li>
-            ))}
+            {justKept.map((c, i) => {
+              const tiktok = tiktokRow(keptFacts[i]!, macCtx);
+              return (
+                <li key={c.clipId} className="kept-now__item">
+                  <span className="kept-now__hook clamp-2 user-text">{c.hook}</span>
+                  {tiktok ? (
+                    <span className="kept-now__mac small" data-mac="kept">
+                      {`TikTok: ${tiktok.words}`}
+                    </span>
+                  ) : null}
+                  <LinkButton href={`/clips/${c.clipId}`} size="sm" icon="chart" iconAfter="chevronRight">
+                    See how it does
+                  </LinkButton>
+                  {/* Try again, Post with my Mac or Turn on; the link box stays in Library and on the clip page. */}
+                  <TikTokRowAction clip={c} row={tiktok} mac={keptFacts[i]!.post?.mac} onKept={keptAgain} links={false} />
+                </li>
+              );
+            })}
           </ul>
         </section>
       ) : null}
@@ -352,14 +343,6 @@ export function Review({ jobId }: { jobId: string | null }) {
           </ol>
         </>
       ) : null}
-      {handOff ? (
-        <PostYourself
-          key={handOff.clipId}
-          clip={handOff}
-          onMarked={(out) => markedYourself(handOff.clipId, out)}
-          onClose={() => setHandOff(null)}
-        />
-      ) : null}
     </div>
   );
 }
@@ -400,7 +383,7 @@ function ReviewCard({
   clip: Clip;
   /** Auto-posting's one quiet line (§46.2), only while it is on. */
   autoLine?: string | null;
-  /** TikTok approved Clip Factory's own public uploads (§42); until then a ticked TikTok points to Post it yourself. */
+  /** TikTok approved Clip Factory's own public uploads (§42); until then a ticked TikTok goes to the Mac (§47). */
   tiktokApproved?: boolean;
   /** A campaign copy of this clip waits right below it (§39.3). */
   copyHere?: boolean;
@@ -1155,7 +1138,7 @@ function ReviewCard({
           </p>
         ) : null}
         {/* Above TikTok's Music Usage line, which stays right above Upload (§17.8). */}
-        {/* With Your Mac posts TikTok on (§47.4), his Mac posts it for everyone: no need to untick TikTok. */}
+        {/* With Your Mac posts TikTok on (§47.4) his Mac posts it for everyone; off, the line says to turn it on (ADR-85). */}
         {placesReady && !noneReady && tiktokOn && !tiktokApproved && !keepFailed ? (
           <p className="tt-yourself-hint">{macOn(me?.settings) ? MAC_HINT : TIKTOK_PUBLIC_HINT}</p>
         ) : null}

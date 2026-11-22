@@ -307,8 +307,8 @@ export const TREES: Tree[] = [
           {
             id: "auto-post-where",
             name: "Where they go",
-            leaf: "Every place that is set up, with My settings. TikTok waits for your own tap.",
-            words: ["platforms", "YouTube", "Instagram", "Facebook", "X", "TikTok", "places", "my settings"],
+            leaf: "Every place that is set up, with My settings. TikTok goes through your Mac.",
+            words: ["platforms", "YouTube", "Instagram", "Facebook", "X", "TikTok", "places", "my settings", "Mac"],
           },
           {
             id: "auto-post-next",
@@ -327,12 +327,6 @@ export const TREES: Tree[] = [
             name: "Didn't work",
             leaf: "Posts that did not go up, with what went wrong.",
             words: ["failed", "error", "try again", "retry"],
-          },
-          {
-            id: "auto-post-tiktok",
-            name: "Post these on TikTok yourself",
-            leaf: "TikTok wants your own tap on each clip.",
-            words: ["TikTok", "post it yourself", "yourself"],
           },
           {
             id: "auto-post-recent",
@@ -370,8 +364,8 @@ export const TREES: Tree[] = [
           {
             id: "tiktok-mac-send",
             name: "Send these to my Mac",
-            leaf: "Clips that show Post it yourself can go to your Mac too.",
-            words: ["send", "post it yourself", "waiting", "old clips", "all", "TikTok"],
+            leaf: "Clips that aren't on TikTok yet can go to your Mac, one after each auto-posting run.",
+            words: ["send", "not on TikTok yet", "waiting", "old clips", "all", "TikTok", "backlog"],
           },
           {
             id: "tiktok-mac-login",

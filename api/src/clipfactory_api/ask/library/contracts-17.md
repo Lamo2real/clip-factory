@@ -542,7 +542,10 @@ and the rest wait for Post now or the next release.
 "…Press Try again tomorrow."); TikTok `spam_risk_user_banned_from_posting` → "TikTok is not letting this account post
 right now."; `unaudited_client_can_only_post_to_private_accounts` → "TikTok only takes Clip Factory's uploads on a private
 account until it approves the app. Tap Post it yourself to post it for everyone." (§42; it said "Make your TikTok
-account private (Setup step 3), then press Try again." before the owner's account went public on 2026-11-21); `reached_active_user_cap` → "TikTok's daily limit for your app is reached. Try tomorrow.";
+account private (Setup step 3), then press Try again." before the owner's account went public on 2026-11-21; both are
+stored and matched word for word, so they never change, and since ADR-85 the web shows its own words for them, "TikTok
+only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone.", web
+`postError`); `reached_active_user_cap` → "TikTok's daily limit for your app is reached. Try tomorrow.";
 YouTube `forbidden`/`uploadLimitExceeded` channel → "YouTube did not accept the upload. Check your channel in YouTube
 Studio."; file checks (`file_format_check_failed`, `duration_check_failed`, Meta 2207026 …) → "{Platform} did not like
 this video file."; X 402 or a `CreditsDepleted`/"credits" problem → gate `credits` `action`, "Your X credits ran out.

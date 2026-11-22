@@ -1,5 +1,6 @@
 // Mock mode's "Your Mac posts it on TikTok" (docs/CONTRACTS.md §47): the same rules as the API's tiktok_mac.py and
-// routes/tiktok_mac.py. The owner's routes (status, send, retry, Take it back) answer the app; the Mac helper's own
+// routes/tiktok_mac.py. The owner's routes (status, send, retry, Take it back) answer the app (send and retry with
+// `now` make the post an Upload tap's, source "upload", which the Mac posts at once); the Mac helper's own
 // routes (ping, claim, step, done, stopped) are test knobs (window.__cfMock.mac), so e2e can move a Mac post along
 // waiting → working → posted by your Mac, or stopped. Only bundled into mock builds.
 import { ApiError } from "../errors.ts";
@@ -15,6 +16,11 @@ const conflict = (msg: string) => new ApiError(409, "conflict", msg);
 const bad = (msg: string) => new ApiError(400, "bad_request", msg);
 const notFound = () => new ApiError(404, "not_found", "We could not find that clip.");
 const iso = (t: number) => new Date(t).toISOString();
+/** The API's validate.boolean on the optional `now` key (absent counts as false). */
+function nowKey(now: unknown): boolean {
+  if (typeof now !== "boolean") throw bad("now must be true or false.");
+  return now;
+}
 
 /** A crashed helper's claim (working, never pressed Post) may be taken again after this long without a step. */
 export const MAC_STALE_CLAIM_MS = 15 * 60_000;
@@ -282,10 +288,14 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       loginRequest = { action, at: iso(deps.now()) };
       return structuredClone(publicHelper());
     },
-    /** POST /v1/tiktok/mac/send: each clip once, in order; one TikTok post per clip, always. */
-    send(clipIds: unknown): MacSendResult[] {
+    /**
+     * POST /v1/tiktok/mac/send: each clip once, in order; one TikTok post per clip, always. Without `now` a clip is
+     * the backlog (source "sent"); with `now` (a row's Post with my Mac) it is an Upload tap's ("upload").
+     */
+    send(clipIds: unknown, now: unknown = false): MacSendResult[] {
       if (!Array.isArray(clipIds) || !clipIds.length || clipIds.length > MAC_SEND_MAX || !clipIds.every((x) => typeof x === "string"))
         throw bad(`clipIds must list 1 to ${MAC_SEND_MAX} clips.`);
+      const source: MacSource = nowKey(now) ? "upload" : "sent";
       const out: MacSendResult[] = [];
       for (const clipId of [...new Set(clipIds as string[])]) {
         const c = deps.clips().find((x) => x.clipId === clipId);
@@ -297,7 +307,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
         const p = tiktokOf(clipId);
         const choices = presetChoices(deps.settings());
         if (!p) {
-          const made: Post = { postId: ulid(), clipId, platform: "tiktok", ...macFields("sent") };
+          const made: Post = { postId: ulid(), clipId, platform: "tiktok", ...macFields(source) };
           deps.posts().push(made);
           madeForMac.add(made.postId);
           deps.options.set(made.postId, choices);
@@ -307,7 +317,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
           before.set(p.postId, structuredClone(p));
           beforeOptions.set(p.postId, deps.options.get(p.postId));
           for (const k of ["url", "postedAt", "perfCheckAt", "privacy", "error", "metrics", "nextRefreshAt"] as const) delete p[k];
-          Object.assign(p, macFields("sent"));
+          Object.assign(p, macFields(source));
           deps.options.set(p.postId, choices);
           deps.publishPost(p);
         }
@@ -316,15 +326,20 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       }
       return out;
     },
-    /** POST /v1/clips/{clipId}/tiktok/mac/retry: a stopped Mac post waits again. */
-    retry(clipId: string, notOnTikTok: boolean): { clip: Clip; posts: Post[] } {
+    /**
+     * POST /v1/clips/{clipId}/tiktok/mac/retry: a stopped Mac post waits again, keeping its place (since). With `now`
+     * it becomes an Upload tap's (source "upload"), also an auto-posting run's while auto-posting is off: he tapped it.
+     * A waiting post is answered as it is.
+     */
+    retry(clipId: string, notOnTikTok: boolean, now: unknown = false): { clip: Clip; posts: Post[] } {
+      const tapped = nowKey(now);
       const c = clip(clipId);
       const p = macOf(clipId);
       if (p.mac.state === "working") throw conflict(MAC_WORKING);
       if (p.mac.state === "stopped") {
         if (p.mac.pressedAt && !notOnTikTok) throw conflict(MAC_MAY_HAVE_POSTED);
         const { step: _s, claimedAt: _c, stoppedAt: _t, reason: _r, pressedAt, ...rest } = p.mac;
-        p.mac = { ...rest, state: "waiting", ...(pressedAt && !notOnTikTok ? { pressedAt } : {}) };
+        p.mac = { ...rest, state: "waiting", ...(tapped ? { source: "upload" as const } : {}), ...(pressedAt && !notOnTikTok ? { pressedAt } : {}) };
         if (helper?.state === "needs_you") helper = { seenAt: helper.seenAt, state: "ok", device: helper.device, ...(helper.version ? { version: helper.version } : {}) };
         deps.publishPost(p);
       }
@@ -376,7 +391,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     const posts = postsOf(c.clipId);
     if (c.status === "review" || c.status === "declined") return "Upload this clip first.";
     if (!posts.length) return "This clip is still starting to upload. Try again in a minute.";
-    if (c.campaignId) return "Campaign clips go on TikTok by hand. Tap Post it yourself.";
+    if (c.campaignId) return "Campaign clips go on TikTok by hand. Post it in the TikTok app, then add the link.";
     if (c.auto?.test === "private") return "This was a Private test, so it stays off TikTok.";
     const state = tiktokState(posts);
     if (state === "mac") return "Your Mac already has this clip.";

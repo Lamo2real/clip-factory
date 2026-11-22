@@ -28,6 +28,8 @@ Asked before building, he answered "Yes, all your picks" (2026-11-22). They are 
    for his Mac (`source: "auto"`, My settings' Everyone with Comment, Duet and Stitch on), written in the same
    transaction as its other posts. Practice, Private test runs and campaign clips never get one. Clips already
    waiting go too when he sends them ("Send them too": oldest first, one every 30 minutes, after the trial).
+   **Amended again 2026-11-22 (ADR-85):** there is no Post it yourself any more. While Your Mac posts TikTok is off, a
+   run still leaves TikTok out, and Where they go (§46.2 item 3) says how to turn the Mac on.
 3. **Campaign clips wait for his Upload** while Content Rewards can't take them from Clip Factory by itself (it only
    takes a clip in its first 30 minutes, §38.6; his account can't connect apps yet). Once it can (§46.5 rule 4) they go
    too, the campaign way (§38.14).
@@ -59,10 +61,12 @@ toast "Saved.":
    day on each platform." and when `d > 100` also "YouTube takes at most 100 uploads a day, so some would wait until
    the next day." (videos.insert has its own bucket of 100 a day, checked 2026-11-22).
 3. **Where they go**: "Goes to YouTube, Instagram and Facebook." (the run's places, §46.6, in STATS_ORDER), then one
-   line per place left out: "TikTok: you post it yourself (TikTok's rule). Each clip gets Post it yourself."; "X: not
-   set up yet." (with "Set up X" → `/settings/posting/setup/x`). With nothing set up: "Nothing is set up to post to.
-   Set up a place first." and runs post nothing. While Your Mac posts TikTok is on (§47) the TikTok line is
-   "TikTok: your Mac posts it." instead (`macPlaces`, and `leftOut` leaves TikTok out).
+   line per place left out: "TikTok: turn on Your Mac posts TikTok to post there." (`leftOut` reason
+   `tiktok_yourself`, with **Turn on** → `/settings/posting/tiktok-mac`, ADR-85); "X: not set up yet." (with "Set up
+   X" → `/settings/posting/setup/x`). With nothing set up: "Nothing is set up to post to. Set up a place first." and
+   runs post nothing. While Your Mac posts TikTok is on (§47) the TikTok line is "TikTok: your Mac posts it." instead
+   (`macPlaces`, and `leftOut` leaves TikTok out); on, but with no other place set up (TikTok back in `leftOut`, a run
+   sends nothing, §46.6), it is "TikTok: your Mac posts it once another place is set up." with no Turn on.
 4. **Next up** (`autopost.nextUp`, at most 10): cover, hook, and its time ("Sun 15:00"; with it off, no times and the
    title "Would go first"; a clip with no `runAt` shows no time), each with **Throw away** (the Review card's own
    decline with its Undo, §20.7, accessible name "Throw away, {hook}"). Empty: "Nothing in Review. New clips join the
@@ -78,9 +82,11 @@ toast "Saved.":
 6. **Didn't work** (`autopost.failed`): one row per failed auto-posted post: place mark and name, hook, the saved
    friendly error (§17.6), **Try again** (the Library's per-place Try again: `confirm` with `platforms: [p]`, accessible
    name "Try again, {place}"). Hidden when empty.
-7. **Post these on TikTok yourself** (`autopost.tiktokYourself`): auto-posted clips not on TikTok yet, each with **Post
-   it yourself** (§42's `PostYourselfButton`). Hidden when empty. While Your Mac posts TikTok is on, also **Send these
-   to my Mac** (§47.4); clips the Mac has (any state) or posted are not listed.
+7. *Removed 2026-11-22 (ADR-85).* **Post these on TikTok yourself** listed auto-posted clips not on TikTok yet, each
+   with Post it yourself (and Send these to my Mac while the Mac was on). The page no longer has the list
+   (`#auto-post-tiktok` and its settings-tree apple are gone): each clip's TikTok row in Library says what his Mac is
+   doing (§47.4), and Settings › Posting › Your Mac posts TikTok keeps **Send these to my Mac**.
+   `autopost.tiktokYourself` stays in the API (§46.9), unused by the web. Items 8 and 9 keep their numbers.
 8. **Recent** (`autopost.runs`, newest first, 10): "Sun 10:00 · “hook”: YouTube ✓ Instagram ✓ Facebook ✗", each
    posted place with **Open** (its live `url`); a run with nothing: "Sun 05:00 · Nothing in Review, so nothing posted.";
    practice: "Sun 05:00 · Practice: would post “hook” to YouTube, Instagram and Facebook."; private test: "Private test
@@ -293,7 +299,8 @@ interface AutoRun {
 ```
 * `failed`: the owner's posts with `autoRun` and `status: "failed"`, newest first; `at` is the post's `createdAt`
   (the run's time: a post stores no failure time). `tiktokYourself`: clips with `auto`
-  (not `test`) whose TikTok is not out for everyone (`tiktok_self` rules, §42.1). `runs[].clips[].posts`: read by the
+  (not `test`) whose TikTok is not out for everyone (`tiktok_self` rules, §42.1); still served and still in the types
+  and the mock, but the web no longer shows it (ADR-85, §46.2 item 7). `runs[].clips[].posts`: read by the
   clip's `postIds` (strongly consistent BatchGet).
 * POST: unknown keys 400; `kind` missing or other → 400 "Pick practice or private.". A second run-now within 60 s →
   409 "A test run just started. Wait a minute." `private` with no taken clip → 200 with the run's note "Nothing in
@@ -368,7 +375,8 @@ back on. `onAt` and the `AUTOPOSTOWNERS` registry work as in §46.3.
 ### 46.12 Words
 
 As written in §46.2 and §46.5 to §46.9. "Auto-posting" (one word, hyphenated) everywhere; "Throw away", "Upload", "Try
-again", "Post it yourself" keep their meaning. Ask (§19, §28) learns it from this section and the help guide
+again" keep their meaning; TikTok's line has **Turn on** (ADR-85: no Post it yourself). Ask (§19, §28) learns it
+from this section and the help guide
 "Turn on auto-posting" (`helpKb.json`): where the page is, what each control does, why TikTok and campaign clips wait,
 how to test with Practice and the Private test run.
 
@@ -435,9 +443,11 @@ run and the first hours of practice.
 * Upload's existing tests (`test_upload_to.py`, `test_campaign_posting.py`, `test_clips.py`, `test_release.py`) pass
   unchanged after the refactor.
 * Web: `web/test/autopost.test.ts` (the result line for every pair 1..5 × 1..24, the warnings, time words, the
-  mock's rules), `web/e2e/autopost.spec.ts` (switch, both controls save, result line and warning, Next up with Throw
-  away and Undo, Didn't work Try again, Recent, Practice run now, Private test run, the Review line and the Home hint;
-  at 390×844 and 1440×900).
+  left-out lines with TikTok's "turn on Your Mac posts TikTok" words, the mock's rules), `web/e2e/autopost.spec.ts`
+  (switch, both controls save, result line and warning, Where they go with TikTok's **Turn on**, Next up with Throw
+  away and Undo, Didn't work Try again, no `#auto-post-tiktok`, Recent, Practice run now, Private test run, the Review
+  line and the Home hint; at 390×844 and 1440×900; and, at 1440×900, Where they go saying "TikTok: your Mac posts it."
+  once the switch is on through **Turn on**).
 * Infra: `autopost.tftest.hcl` (§46.11); `scripts/test-check-plan-deletes.sh` unchanged.
 
 ### 46.16 Who builds what (parallel builders; each stays inside its files)

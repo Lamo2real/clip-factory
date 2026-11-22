@@ -1048,7 +1048,7 @@ def test_send_refuses_with_plain_sentences(call: Call, store: db.Store, table: F
         (False, "This clip is still uploading to TikTok. Wait until it is done, then try again."),
         (False, "You already posted this one on TikTok."),
         (False, "This clip is already on TikTok for everyone."),
-        (False, "Campaign clips go on TikTok by hand. Tap Post it yourself."),
+        (False, "Campaign clips go on TikTok by hand. Post it in the TikTok app, then add the link."),
         (False, "We could not find that clip."),
         (False, "We could not find that clip."),
     ]
@@ -1064,6 +1064,138 @@ def test_sent_clips_go_after_uploads_oldest_clip_first(call: Call, store: db.Sto
     queue = call("GET", "/v1/tiktok/mac")[1]["queue"]
     assert [j["clipId"] for j in queue] == [upload["clipId"], older["clipId"], newer["clipId"]]
     assert {j["source"] for j in queue[1:]} == {"sent"}
+
+
+# --- now: a row's Post with my Mac and Try again go at once, as an Upload tap (§47.2) ------------------------------
+
+
+def _retry(call: Call, clip_id: str, body: dict[str, Any]) -> tuple[int, Any]:
+    return call("POST", f"/v1/clips/{clip_id}/tiktok/mac/retry", body)
+
+
+def test_send_with_now_makes_an_upload_mac_post_that_goes_first(call: Call, store: db.Store, table: FakeTable) -> None:
+    _mac_on(call)
+    backlog = _uploaded(store, decidedAt="2026-11-14T10:00:00.000Z")
+    tapped = _uploaded(store, decidedAt="2026-11-15T10:00:00.000Z")
+    status, body = call("POST", "/v1/tiktok/mac/send", {"clipIds": [backlog["clipId"]], "now": False})
+    assert (status, body) == (200, {"results": [{"clipId": backlog["clipId"], "sent": True}]})
+    status, body = call("POST", "/v1/tiktok/mac/send", {"clipIds": [tapped["clipId"]], "now": True})
+    assert (status, body) == (200, {"results": [{"clipId": tapped["clipId"], "sent": True}]})
+    assert (_raw_tiktok(table, backlog["clipId"]) or {})["macSource"] == "sent"  # without now: as before
+    raw = _raw_tiktok(table, tapped["clipId"]) or {}
+    assert (raw["status"], raw["macState"], raw["macSource"], raw["madeForMac"], raw["postOptions"]) == (
+        "mac",
+        "waiting",
+        "upload",
+        True,
+        MINE,
+    )
+    # The helper posts upload first and at once (mac/tiktok-helper/src/plan.js), so the queue puts it first.
+    queue = call("GET", "/v1/tiktok/mac")[1]["queue"]
+    assert [(j["clipId"], j["source"]) for j in queue] == [(tapped["clipId"], "upload"), (backlog["clipId"], "sent")]
+
+
+def test_send_with_now_hands_over_clip_factorys_own_post_as_an_upload(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    _mac_on(call)
+    clip = _uploaded(store, status="failed")
+    old = _post(store, clip, "tiktok", status="failed", error="TikTok said no.", postOptions=TIKTOK)
+    status, body = call("POST", "/v1/tiktok/mac/send", {"clipIds": [clip["clipId"]], "now": True})
+    assert (status, body["results"]) == (200, [{"clipId": clip["clipId"], "sent": True}])
+    raw = table.raw(PK, db.post_sk(old["postId"])) or {}
+    assert (raw["status"], raw["macSource"], raw["beforeMac"]["status"]) == ("mac", "upload", "failed")
+
+
+def test_send_with_now_keeps_every_refusal_and_the_switch(call: Call, store: db.Store, table: FakeTable) -> None:
+    clip = _uploaded(store)
+    status, body = call("POST", "/v1/tiktok/mac/send", {"clipIds": [clip["clipId"]], "now": True})
+    assert (status, _message(body)) == (409, tiktok_mac.MAC_OFF)
+    _mac_on(call)
+    yours = _uploaded(store)
+    _post(store, yours, "tiktok", status="posted", by="you", privacy="public")
+    put_campaign(store, platformsPaid=["tiktok"])
+    paid = campaign_clip(store, status="posted", postsCreated=True, postIds=[])
+    test_clip = _uploaded(store, autoRun="r#private_now", autoTest="private")
+    ids = [yours["clipId"], paid["clipId"], test_clip["clipId"]]
+    status, body = call("POST", "/v1/tiktok/mac/send", {"clipIds": ids, "now": True})
+    assert status == 200
+    assert [(r["sent"], r.get("reason")) for r in body["results"]] == [
+        (False, tiktok_mac.SEND_YOURS),
+        (False, tiktok_mac.SEND_CAMPAIGN),
+        (False, tiktok_mac.SEND_TEST),
+    ]
+    assert not [i for i in table.all() if i.get("status") == "mac"]
+
+
+@pytest.mark.parametrize("now", ["yes", 1, 0, None, [], {}])
+def test_now_must_be_true_or_false(call: Call, store: db.Store, now: Any) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store, macState="stopped", macStoppedAt=iso(NOW), macReason="Timed out.")
+    other = _uploaded(store)
+    status, body = call("POST", "/v1/tiktok/mac/send", {"clipIds": [other["clipId"]], "now": now})
+    assert (status, _message(body)) == (400, "now must be true or false.")
+    status, body = _retry(call, clip["clipId"], {"now": now})
+    assert (status, _message(body)) == (400, "now must be true or false.")
+    assert _raw_post(store, clip["clipId"])["macState"] == "stopped"
+    assert posts.posts_for_clip(store, USER, other["clipId"], consistent=True) == []
+
+
+def test_unknown_keys_are_still_refused_next_to_now(call: Call, store: db.Store) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store, macState="stopped", macStoppedAt=iso(NOW), macReason="Timed out.")
+    status, body = call("POST", "/v1/tiktok/mac/send", {"clipIds": [clip["clipId"]], "now": True, "later": True})
+    assert (status, _message(body)) == (400, "Unknown field: later.")
+    status, body = _retry(call, clip["clipId"], {"now": True, "soon": True})
+    assert (status, _message(body)) == (400, "Unknown field: soon.")
+
+
+@pytest.mark.parametrize("source", ["sent", "auto", "upload"])
+def test_try_again_with_now_makes_it_an_upload_tap(call: Call, store: db.Store, source: str) -> None:
+    # Auto-posting stays off: the owner tapped it himself, so an auto-posting run's post goes at once too.
+    _mac_on(call)
+    earlier = _mac_clip(store, source="sent", macSince="2026-11-15T08:00:00.000Z")
+    clip = _mac_clip(store, source=source, macState="stopped", macStoppedAt=iso(NOW), macReason="Timed out.")
+    status, body = _retry(call, clip["clipId"], {"now": True})
+    assert status == 200
+    # Keeps its place (since), and goes first: an Upload tap's.
+    assert _tiktok(body)["mac"] == {"state": "waiting", "since": "2026-11-15T11:00:00.000Z", "source": "upload"}
+    queue = call("GET", "/v1/tiktok/mac")[1]["queue"]
+    assert [j["clipId"] for j in queue] == [clip["clipId"], earlier["clipId"]]
+    assert _claim(call, clip["clipId"])[0] == 200
+
+
+def test_try_again_without_now_keeps_its_source(call: Call, store: db.Store) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store, source="auto", macState="stopped", macStoppedAt=iso(NOW), macReason="Timed out.")
+    status, body = _retry(call, clip["clipId"], {"now": False})
+    assert (status, _tiktok(body)["mac"]["source"]) == (200, "auto")
+    status, body = _claim(call, clip["clipId"])
+    assert (status, _message(body)) == (409, tiktok_mac.AUTO_OFF)  # auto-posting is off, so it waits
+
+
+def test_try_again_with_now_leaves_a_waiting_post_as_it_is(call: Call, store: db.Store) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store, source="sent")
+    status, body = _retry(call, clip["clipId"], {"now": True})
+    assert (status, _tiktok(body)["mac"]["source"]) == (200, "sent")
+    assert _raw_post(store, clip["clipId"])["macSource"] == "sent"
+
+
+def test_try_again_with_now_keeps_the_working_and_pressed_refusals(call: Call, store: db.Store) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store, source="sent")
+    _claim(call, clip["clipId"])
+    status, body = _retry(call, clip["clipId"], {"now": True})
+    assert (status, _message(body)) == (409, tiktok_self.MAC_WORKING)
+    _step(call, clip["clipId"], "pressing")
+    call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/stopped", {"device": DEVICE, "reason": "?"})
+    status, body = _retry(call, clip["clipId"], {"now": True})
+    assert (status, _message(body)) == (409, tiktok_mac.MAY_HAVE_POSTED)
+    assert _raw_post(store, clip["clipId"])["macSource"] == "sent"
+    status, body = _retry(call, clip["clipId"], {"now": True, "notOnTikTok": True})
+    assert status == 200
+    assert _tiktok(body)["mac"] == {"state": "waiting", "since": "2026-11-15T11:00:00.000Z", "source": "upload"}
 
 
 # --- the clip page (§16.2) ---------------------------------------------------------------------------------------------------

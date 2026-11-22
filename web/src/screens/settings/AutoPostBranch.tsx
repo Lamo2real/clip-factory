@@ -1,8 +1,10 @@
 // Settings › Posting › Auto-posting (docs/CONTRACTS.md §46.2): the oldest clips in Review go up by themselves, every
 // few hours, through Upload's own code. Top to bottom: the switch and its line, how often with the result line, where
-// they go, Next up, what waits for him, what did not work, TikTok's own taps, the recent runs, and a closed Test it
-// first. Every control saves the moment it changes (like My settings, §36.2). GET /v1/autopost on open, on focus,
-// every 60 s while open and after every change, and every 3 s for 30 s after a test run.
+// they go (TikTok: his Mac, or Turn on while Your Mac posts TikTok is off, §47), Next up, what waits for him, what did
+// not work, the recent runs, and a closed Test it first. TikTok has no list of its own here (ADR-85): each clip's
+// TikTok row in Library says what his Mac is doing. Every control saves the moment it changes (like My settings,
+// §36.2). GET /v1/autopost on open, on focus, every 60 s while open and after every change, and every 3 s for 30 s
+// after a test run.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
@@ -36,11 +38,8 @@ import { postError } from "../../lib/tiktokYourself.ts";
 import { settingsPath } from "../../lib/settingsTree.ts";
 import { onClipBack, throwAwayWithUndo, useThrownAway } from "../../lib/throwAways.ts";
 import { UploadAgain } from "../library/Library.tsx";
-import { PostYourself, PostYourselfButton } from "../library/PostYourself.tsx";
-import { PostYourselfInstead } from "../library/MacButtons.tsx";
 import { Apple, AppleSwitch, Panel } from "./parts.tsx";
 import { MAC_WHERE_LINE, macOn } from "../../lib/tiktokMac.ts";
-import { SendToMac } from "./TikTokMacBranch.tsx";
 import "../../styles/autopost.css";
 
 /** How often the page reads the status while open, and after a test run (every 3 s for 30 s). */
@@ -119,8 +118,8 @@ export function useAutoPost(active: boolean): AutoPostData {
 const stillPosting = (c: Clip) => c.status === "confirmed" || c.status === "publishing";
 
 /**
- * The clips the actions need (Try again, Post it yourself), read once each; one still posting its places is read again
- * with each new status (`version`), so its Try again shows once they are done.
+ * The clips Didn't work's Try again needs, read once each; one still posting its places is read again with each new
+ * status (`version`), so its Try again shows once they are done.
  */
 function useClips(ids: readonly string[], version: unknown) {
   const [clips, setClips] = useState<ReadonlyMap<string, Clip>>(() => new Map());
@@ -155,10 +154,9 @@ export function AutoPostBranch() {
   const toast = useToast();
   const { status, error, reload, burst } = useAutoPost(true);
   const thrown = useThrownAway();
-  const actions = useClips([...(status?.failed.map((f) => f.clipId) ?? []), ...(status?.tiktokYourself.map((c) => c.clipId) ?? [])], status);
+  // Only Didn't work needs its clips. `status.tiktokYourself` stays in the API but the page no longer lists it (ADR-85).
+  const actions = useClips(status?.failed.map((f) => f.clipId) ?? [], status);
   const [running, setRunning] = useState<"practice" | "private" | null>(null);
-  // Post it yourself instead (§47.2): taken back from his Mac, the §42 sheet opens here, so it outlives the row.
-  const [instead, setInstead] = useState<Clip | null>(null);
 
   // Thrown away from Next up: the focus goes to the next row's Throw away (or, after the last one, to Next up itself);
   // Undo brings it back.
@@ -213,6 +211,7 @@ export function AutoPostBranch() {
   }
 
   const warnings = dayWarnings(a.perRun, a.everyHours);
+  const macIsOn = macOn(me.settings);
   const nextUp = status?.nextUp.filter((c) => !thrown.has(c.clipId)) ?? [];
   const loading = !status && !error ? <Skeleton className="line-skel" /> : null;
 
@@ -285,10 +284,15 @@ export function AutoPostBranch() {
                   {status.leftOut.map((l) => (
                     <li key={l.platform} className="autopost__left-row">
                       <PlatformMark platform={l.platform} size={18} title={PLATFORM_LABEL[l.platform]} />
-                      <span className="autopost__left-text">{leftOutLine(l.platform, l.reason)}</span>
+                      <span className="autopost__left-text">{leftOutLine(l.platform, l.reason, macIsOn)}</span>
                       {l.reason === "not_set_up" ? (
                         <LinkButton href={settingsPath("posting", "setup") + `/${l.platform}`} size="sm" iconAfter="chevronRight">
                           Set up {PLATFORM_LABEL[l.platform]}
+                        </LinkButton>
+                      ) : l.reason === "tiktok_yourself" && !macIsOn ? (
+                        // TikTok goes only through his Mac (ADR-85): Your Mac posts TikTok is off, so one way to turn it on.
+                        <LinkButton href={settingsPath("posting", "tiktok-mac")} size="sm" iconAfter="chevronRight">
+                          Turn on
                         </LinkButton>
                       ) : null}
                     </li>
@@ -338,7 +342,7 @@ export function AutoPostBranch() {
           )}
         </Apple>
 
-        {/* Always on the page (§46.2 hides only items 6 and 7 when empty): with nothing waiting, its leaf alone. */}
+        {/* Always on the page (§46.2 hides only item 6 when empty): with nothing waiting, its leaf alone. */}
         <Apple id="auto-post-waiting" wide>
           {status ? (
             status.waiting.length ? (
@@ -363,100 +367,45 @@ export function AutoPostBranch() {
         </Apple>
       </Panel>
 
-      {status?.failed.length || status?.tiktokYourself.length ? (
+      {status?.failed.length ? (
         <Panel>
-          {status.failed.length ? (
-            <Apple id="auto-post-failed" wide>
-              <ul className="autopost__list">
-                {status.failed.map((f) => {
-                  const clip = actions.clips.get(f.clipId);
-                  return (
-                    <li key={f.postId} className="autopost__row is-failed">
-                      <span className="autopost__mark" title={PLATFORM_LABEL[f.platform]}>
-                        <PlatformMark platform={f.platform} size={18} />
-                      </span>
-                      <span className="autopost__text">
-                        <span className="autopost__name">{PLATFORM_LABEL[f.platform]}</span>
-                        <span className="autopost__hook clamp-2 user-text">{f.hook}</span>
-                        <span className="autopost__why">{postError(f.error)}</span>
-                      </span>
-                      {/* The Library's own Try again for this place, once the clip's other places are done (§33). */}
-                      {!clip ? (
-                        <Skeleton className="autopost__wait" />
-                      ) : canTryPlaceAgain(clip, { platform: f.platform, status: "failed", error: f.error }) ? (
-                        <UploadAgain
-                          clip={clip}
-                          posts={[]}
-                          platform={f.platform}
-                          onKept={(c) => {
-                            actions.put(c);
-                            void reload();
-                          }}
-                        />
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            </Apple>
-          ) : null}
-          {status.tiktokYourself.length ? (
-            <Apple id="auto-post-tiktok" wide>
-              {/* §47.4: while his Mac posts TikTok, these can go to the Mac too (never a campaign clip). */}
-              {macOn(me.settings) ? (
-                <div className="autopost__send">
-                  <SendToMac
-                    clipIds={status.tiktokYourself.map((c) => c.clipId).filter((id) => !actions.clips.get(id)?.campaignId)}
-                    onSent={() => void reload()}
-                  />
-                </div>
-              ) : null}
-              <ul className="autopost__list">
-                {status.tiktokYourself.map((c) => {
-                  const clip = actions.clips.get(c.clipId);
-                  return (
-                    <li key={c.clipId} className="autopost__row">
-                      <Cover url={c.coverUrl} />
-                      <span className="autopost__text">
-                        <span className="autopost__hook clamp-2 user-text">{c.hook}</span>
-                      </span>
-                      {clip && c.mac ? (
-                        // His Mac's post while the switch is off (§47.2): take it back, then the §42 sheet.
-                        <PostYourselfInstead clip={clip} onTaken={(out) => setInstead(out.clip)} />
-                      ) : clip ? (
-                        <PostYourselfButton
-                          clip={clip}
-                          onMarked={(out) => {
-                            actions.put(out.clip);
-                            void reload();
-                          }}
-                        />
-                      ) : (
-                        <Skeleton className="autopost__wait" />
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </Apple>
-          ) : null}
+          <Apple id="auto-post-failed" wide>
+            <ul className="autopost__list">
+              {status.failed.map((f) => {
+                const clip = actions.clips.get(f.clipId);
+                return (
+                  <li key={f.postId} className="autopost__row is-failed">
+                    <span className="autopost__mark" title={PLATFORM_LABEL[f.platform]}>
+                      <PlatformMark platform={f.platform} size={18} />
+                    </span>
+                    <span className="autopost__text">
+                      <span className="autopost__name">{PLATFORM_LABEL[f.platform]}</span>
+                      <span className="autopost__hook clamp-2 user-text">{f.hook}</span>
+                      <span className="autopost__why">{postError(f.error)}</span>
+                    </span>
+                    {/* The Library's own Try again for this place, once the clip's other places are done (§33). */}
+                    {!clip ? (
+                      <Skeleton className="autopost__wait" />
+                    ) : canTryPlaceAgain(clip, { platform: f.platform, status: "failed", error: f.error }) ? (
+                      <UploadAgain
+                        clip={clip}
+                        posts={[]}
+                        platform={f.platform}
+                        onKept={(c) => {
+                          actions.put(c);
+                          void reload();
+                        }}
+                      />
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </Apple>
         </Panel>
       ) : null}
-      {instead ? (
-        <PostYourself
-          clip={instead}
-          onMarked={(out) => {
-            actions.put(out.clip);
-            void reload();
-          }}
-          onClose={() => {
-            setInstead(null);
-            void reload();
-          }}
-        />
-      ) : null}
 
-      {/* Always on the page (§46.2 hides only items 6 and 7 when empty): before the first run, its leaf alone. */}
+      {/* Always on the page (§46.2 hides only item 6 when empty): before the first run, its leaf alone. */}
       <Panel>
         <Apple id="auto-post-recent" wide>
           {status ? (

@@ -1504,13 +1504,13 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       await delay();
       return mac.loginRequest(action);
     },
-    async sendToMac(clipIds) {
+    async sendToMac(clipIds, now) {
       await delay();
-      return mac.send(clipIds);
+      return mac.send(clipIds, now);
     },
-    async retryMac(clipId, notOnTikTok) {
+    async retryMac(clipId, notOnTikTok, now) {
       await delay();
-      return mac.retry(clipId, notOnTikTok === true);
+      return mac.retry(clipId, notOnTikTok === true, now);
     },
     async takeBackFromMac(clipId) {
       await delay();

@@ -127,10 +127,13 @@ test.describe("Upload to many places", () => {
     await page.goto("/");
     await settle(page);
     // Instagram and TikTok were connected on an earlier visit: the clips waiting for them are older than that.
+    // TikTok approved the app: its own Post now row and picker show (§42). Before that, the Mac's row takes the
+    // TikTok side ("Not on TikTok yet" with Post with my Mac, tiktok-mac.spec).
     await page.evaluate(() => {
       const s = (window as MockWindow).__cfMock!.setup;
       s.finish("instagram");
       s.finish("tiktok");
+      s.setAudit(true);
     });
     await page.goto("/library");
     await settle(page);
