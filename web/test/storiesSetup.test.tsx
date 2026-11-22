@@ -143,7 +143,7 @@ describe("step 1: set up the AI", () => {
     // Not the states from before the check: Sonnet answered, and nothing was loaded again by hand.
     expect(line("Claude Sonnet 5.5")).toContain("Works: it answered.");
     expect(line("Claude Sonnet 5.5")).not.toContain("Not checked yet");
-    expect(line("Quick One")).toContain("Amazon · Added by you · ");
+    expect(line("Quick One")).toContain("Amazon on Amazon Bedrock · Added by you · ");
     expect(line("Claude Opus 5.5")).not.toContain("Added by you");
   });
 });

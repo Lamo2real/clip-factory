@@ -56,6 +56,8 @@ interface ModelEntry {
   key: string;
   label: string;
   provider: string;
+  /** who runs it (§45.35 D8) */
+  host?: string;
   modelId: string;
   efforts: Effort[];
   defaultEffort: Effort | null;
@@ -75,13 +77,14 @@ export const MOCK_MODELS: ModelEntry[] = [
     key: m.key,
     label: m.label,
     provider: m.provider,
+    host: m.host ?? "Amazon Bedrock",
     modelId: m.modelId,
     efforts: [...m.efforts],
     defaultEffort: m.defaultEffort,
     vision: m.vision,
     pricing: m.pricing ? { ...m.pricing } : null,
   })),
-  { key: "nova-pro", label: "Amazon Nova Pro", provider: "Amazon Bedrock", modelId: "amazon.nova-pro-v1:0", efforts: [], defaultEffort: null, vision: true, pricing: null },
+  { key: "nova-pro", label: "Amazon Nova Pro", provider: "Amazon", host: "Amazon Bedrock", modelId: "amazon.nova-pro-v1:0", efforts: [], defaultEffort: null, vision: true, pricing: null },
 ];
 
 export const FILE_DEFAULT_MODEL: string = modelsFile.defaultModel;
@@ -342,6 +345,7 @@ function modelInfo(store: MockStore, m: ModelEntry): ModelInfo {
     key: m.key,
     label: m.label,
     provider: m.provider,
+    host: m.host ?? "Amazon Bedrock",
     modelId: m.modelId,
     efforts: [...m.efforts],
     defaultEffort: m.defaultEffort,

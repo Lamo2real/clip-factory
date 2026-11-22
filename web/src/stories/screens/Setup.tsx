@@ -21,6 +21,7 @@ import { storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
 import { EFFORT_LABEL, type Effort, type ModelInfo, type Onboarding, type OnboardStep, type Platform, type SocialAccount, type StoriesAiConfig, type StoriesConfig } from "../api/types.ts";
 import { aiBody } from "../settings/data.ts";
+import { providerWords } from "../chat/models.ts";
 import {
   celebrate,
   centerOf,
@@ -96,7 +97,7 @@ function Foot({ step, busy, onBack, onSkip, children }: { step: OnboardStep; bus
 type Ai = { ai: StoriesAiConfig; models: ModelInfo[] };
 
 function modelLine(m: ModelInfo): string {
-  const who = `${m.provider}${m.custom ? " · Added by you" : ""}`;
+  const who = `${providerWords(m) ?? m.provider}${m.custom ? " · Added by you" : ""}`;
   if (m.status === "ok") return `${who} · Works: it answered.`;
   if (m.status === "not_checked") return `${who} · Not checked yet.`;
   return `${who} · ${m.statusLine}`;
