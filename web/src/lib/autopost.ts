@@ -1,8 +1,9 @@
 // Auto-posting's words (docs/CONTRACTS.md §46.2, §46.12): the result line under the controls and its warnings, the
 // local "Sun 15:00" times, where the clips go, the Recent lines, the Review card's line, Home's hint and the post-row
 // words in Library and on the clip page. Pure: no screen, no api.
-import type { AutoPostSettings, AutoRun, PerfStatus, Platform, Post } from "../api/types.ts";
+import type { AutoPostSettings, AutoRun, Clip, PerfStatus, Platform, Post } from "../api/types.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER, plural } from "./format.ts";
+import { failedForPublicAccount } from "./tiktokYourself.ts";
 
 /** What an owner who never saved it reads (§46.3): nothing changes for anyone until he turns it on. */
 export const AUTO_POST_DEFAULTS: AutoPostSettings = { on: false, everyHours: 5, perRun: 1, practice: false };
@@ -124,6 +125,14 @@ export const PRIVATE_TEST_PLACE: Partial<Record<Platform, string>> = {
   instagram: "checked, not published",
 };
 
+/** A Private test's places in the order §46.2 says them (YouTube, Facebook, Instagram), any other after. */
+const PRIVATE_TEST_ORDER: readonly Platform[] = [
+  "youtube",
+  "facebook",
+  "instagram",
+  ...PLATFORM_ORDER.filter((p) => p !== "youtube" && p !== "facebook" && p !== "instagram"),
+];
+
 export interface RunLine {
   /** Unique inside the run. */
   key: string;
@@ -151,7 +160,7 @@ export function runLines(run: AutoRun): RunLine[] {
       const where = c.places.length ? ` to ${placeNames(c.places)}` : "";
       return { key, text: `${lead} · Practice: would post ${quoted(c.hook)}${where}.`, opens: [] };
     }
-    const posts = PLATFORM_ORDER.flatMap((p) => c.posts.filter((x) => x.platform === p));
+    const posts = (run.mode === "private" ? PRIVATE_TEST_ORDER : PLATFORM_ORDER).flatMap((p) => c.posts.filter((x) => x.platform === p));
     const opens = posts.filter((p) => p.status === "posted" && p.url).map((p) => ({ platform: p.platform, url: p.url! }));
     if (run.mode === "private") {
       const parts = posts.map((p) =>
@@ -201,12 +210,22 @@ export const PRIVATE_TEST_LABEL: Partial<Record<Platform, string>> = {
 
 /**
  * A post row's state words: an auto-posted post adds "· by auto-posting" after its state; a Private test post that went
- * up says where it waits ("Private test · only you") instead of "Uploaded". Everything else keeps `label`.
+ * up says where it waits ("Private test · only you") instead of "Uploaded". A Private test post that did not go up (yet)
+ * is an auto-posted post like any other ("Didn't work · by auto-posting"). Everything else keeps `label`.
  */
 export function autoPostLabel(p: Pick<Post, "platform" | "status" | "auto" | "test" | "by">, label: string): string {
   if (p.by === "you") return label;
-  if (p.test === "private") return p.status === "posted" ? (PRIVATE_TEST_LABEL[p.platform] ?? label) : label;
-  return p.auto ? `${label} · by auto-posting` : label;
+  if (p.test === "private" && p.status === "posted") return PRIVATE_TEST_LABEL[p.platform] ?? label;
+  return p.auto || p.test === "private" ? `${label} · by auto-posting` : label;
+}
+
+/**
+ * Didn't work's Try again for one place (§46.2 item 6) follows the Library's own rule (§33): only once the clip's other
+ * places are done. While the clip is still posting them, a retry does nothing (the server answers with the clip as it
+ * is). A clip whose every place failed may try one place again too (the server's Try again takes it with `platforms`).
+ */
+export function canTryPlaceAgain(clip: Pick<Clip, "status">, post: Pick<Post, "platform" | "status" | "error">): boolean {
+  return post.status === "failed" && (clip.status === "posted" || clip.status === "failed") && !failedForPublicAccount(post);
 }
 
 /** The clip page's chip, from the clip's `auto` (its stacks carry no post fields). */

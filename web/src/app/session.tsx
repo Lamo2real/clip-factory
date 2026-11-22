@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "../api/index.ts";
 import { friendlyMessage } from "../api/errors.ts";
-import type { Me, Settings } from "../api/types.ts";
+import type { Me, Settings, SettingsPut } from "../api/types.ts";
 import { auth } from "../lib/auth.ts";
 import { config } from "../lib/config.ts";
 import { startLive, stopLive, useLiveEvents, useLivePoll, type SocketLike } from "../lib/live.ts";
@@ -16,11 +16,22 @@ import { useToast } from "../components/Toasts.tsx";
  */
 export type SettingsPatch = Partial<Settings> | ((now: Settings) => Partial<Settings>);
 
+/** How a save goes out, when it is not simply the change itself. */
+export interface SaveOptions {
+  /**
+   * What PUT sends, when it is less than what the screen shows: only the keys that changed of a setting the server
+   * merges key by key (auto-posting, §46.3), so a copy read earlier can never send another key back.
+   */
+  send?: SettingsPut;
+  /** Waits for the save before it (of any `inOrder` save), so quick taps reach the server in the order they were made. */
+  inOrder?: boolean;
+}
+
 interface Session {
   me: Me | null;
   refresh: () => Promise<void>;
   /** Saves settings on the server; sound (and which sounds) and motion also apply on this device straight away. */
-  saveSettings: (patch: SettingsPatch) => Promise<Settings | null>;
+  saveSettings: (patch: SettingsPatch, opts?: SaveOptions) => Promise<Settings | null>;
   signOut: () => void;
 }
 
@@ -122,8 +133,11 @@ export function SessionProvider({ children, onSignOut }: { children: ReactNode; 
   // Keeps the review badge and running count fresh; quicker while a job is working (every 30 s while live).
   useLivePoll(refresh, true, me && me.counts.running > 0 ? 10_000 : 30_000);
 
+  // The saves asked to go out one after another (SaveOptions.inOrder).
+  const order = useRef<Promise<unknown>>(Promise.resolve());
+
   const saveSettings = useCallback(
-    async (change: SettingsPatch) => {
+    async (change: SettingsPatch, opts: SaveOptions = {}) => {
       // An updater reads the settings as they are this instant: `shown` already holds every save made before it.
       if (typeof change === "function" && !shown.current) return null;
       const patch = typeof change === "function" ? change(shown.current!) : change;
@@ -135,7 +149,13 @@ export function SessionProvider({ children, onSignOut }: { children: ReactNode; 
       if (shown.current) shown.current = { ...shown.current, ...patch };
       setMe((m) => (m ? { ...m, settings: { ...m.settings, ...patch } } : m));
       try {
-        const settings = withSoundDefaults(await api().putSettings(patch));
+        const put = () => api().putSettings(opts.send ?? patch);
+        let sent: Promise<Settings>;
+        if (opts.inOrder) {
+          sent = order.current.then(put, put);
+          order.current = sent.catch(() => undefined);
+        } else sent = put();
+        const settings = withSoundDefaults(await sent);
         // Quick taps send several saves; only the newest answer may replace what is on screen, so an older
         // answer arriving late cannot flip a choice back.
         if (edit === settingsEdit.current) {

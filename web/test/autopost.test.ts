@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { ApiError } from "../src/api/errors.ts";
 import { autoPostMock, CR_CANT_TAKE, NOTE_ALL_WAITING, NOTE_NO_PLACES, NOTE_NOTHING, NOTE_NOTHING_TO_TEST, PICK_CLIPS, PICK_HOURS, PICK_KIND, STILL_BEING_MADE, THREW_AWAY, UNKNOWN_SETTING, UPLOADED_YOURSELF, VIDEO_MISSING, WAIT_A_MINUTE, type AutoPostDeps } from "../src/api/mock/autopost.ts";
 import { mockApi } from "../src/api/mock/index.ts";
+import { TIKTOK_PRIVATE_ONLY } from "../src/lib/tiktokYourself.ts";
 import { seed } from "../src/api/mock/fixtures.ts";
 import type { AutoRun, Clip, ClipPostOptions, Job, Platform, Post, Settings } from "../src/api/types.ts";
 import {
@@ -12,6 +13,7 @@ import {
   autoPerfLabel,
   autoPostLabel,
   autoPostOf,
+  canTryPlaceAgain,
   dayWarnings,
   EVERY_HOURS,
   floorHour,
@@ -114,8 +116,10 @@ describe("time words (§46.2)", () => {
     expect(OFF_LINE).toBe("Off. Nothing posts by itself.");
     expect(switchLine({ on: true, practice: false }, new Date(local(15)).toISOString())).toBe("On. Next: Sun 15:00.");
     expect(switchLine({ on: true, practice: true }, new Date(local(15)).toISOString())).toBe("On, practising. Next practice: Sun 15:00. Nothing gets sent.");
-    // The status not read yet: the next full hour.
-    expect(switchLine({ on: true, practice: false }, null, local(14, 20))).toBe("On. Next: Sun 15:00.");
+    // The status not read yet: the next full hour (a whole UTC hour, so 14:30 in a half-hour time zone).
+    const t = local(14, 20);
+    expect(switchLine({ on: true, practice: false }, null, t)).toBe(`On. Next: ${timeWords(nextFullHour(t))}.`);
+    expect(switchLine({ on: true, practice: false }, null, Date.UTC(2026, 10, 22, 14, 20))).toBe(`On. Next: ${timeWords(Date.UTC(2026, 10, 22, 15))}.`);
   });
 });
 
@@ -197,7 +201,8 @@ describe("Recent (§46.2 item 8)", () => {
         ],
       }),
     );
-    expect(test[0]!.text).toBe("Private test · “hook”: YouTube (only you) · Instagram (checked, not published) · Facebook (draft)");
+    // In §46.2's own order: YouTube, Facebook, Instagram (as the Private test run's line says them).
+    expect(test[0]!.text).toBe("Private test · “hook”: YouTube (only you) · Facebook (draft) · Instagram (checked, not published)");
     expect(test[0]!.opens).toEqual([{ platform: "youtube", url: "https://y/2" }]);
     expect(runLines(run({ kind: "private_now", mode: "private", note: NOTE_NOTHING_TO_TEST }))[0]!.text).toBe("Private test · Nothing in Review to test with.");
   });
@@ -232,7 +237,9 @@ describe("post words in Library and on the clip page (§46.2)", () => {
     expect(autoPostLabel(p({ auto: true, test: "private" }), "Uploaded privately")).toBe("Private test · only you");
     expect(autoPostLabel(p({ auto: true, test: "private", platform: "facebook" }), "Uploaded privately")).toBe("Private test · draft on your Page");
     expect(autoPostLabel(p({ auto: true, test: "private", platform: "instagram" }), "Uploaded privately")).toBe("Private test · checked, not published");
-    expect(autoPostLabel(p({ auto: true, test: "private", status: "failed" }), "Didn't work")).toBe("Didn't work");
+    // A Private test post that did not go up (yet) is still auto-posted: it keeps the mark.
+    expect(autoPostLabel(p({ auto: true, test: "private", status: "failed" }), "Didn't work")).toBe("Didn't work · by auto-posting");
+    expect(autoPostLabel(p({ auto: true, test: "private", status: "queued" }), "Uploading…")).toBe("Uploading… · by auto-posting");
     expect(autoPostLabel(p({ platform: "tiktok", by: "you" }), "Uploaded")).toBe("Uploaded");
   });
   it("the clip page reads the clip's auto; a Private test stack has no numbers", () => {
@@ -242,9 +249,24 @@ describe("post words in Library and on the clip page (§46.2)", () => {
     expect(autoPerfLabel("not_posted", "tiktok", {}, undefined, "Not posted")).toBe("Not posted");
     expect(autoPerfLabel("posted", "tiktok", {}, "you", "Uploaded")).toBe("Uploaded");
     expect(autoPerfLabel("posted_private", "facebook", { test: "private" }, undefined, "Uploaded privately")).toBe("Private test · draft on your Page");
+    expect(autoPerfLabel("failed", "instagram", { test: "private" }, undefined, "Didn't work")).toBe("Didn't work · by auto-posting");
     expect(isPrivateTest("posted_private", { test: "private" }, undefined)).toBe(true);
     expect(isPrivateTest("posted", {}, undefined)).toBe(false);
     expect(isPrivateTest("failed", { test: "private" }, undefined)).toBe(false);
+  });
+});
+
+describe("Didn't work's Try again (§46.2 item 6)", () => {
+  const failed = { platform: "facebook" as Platform, status: "failed" as Post["status"], error: "Facebook said no." };
+  it("only once the clip's other places are done, like the Library's", () => {
+    expect(canTryPlaceAgain({ status: "posted" }, failed)).toBe(true);
+    expect(canTryPlaceAgain({ status: "failed" }, failed)).toBe(true);
+    // Still posting its other places: a retry would do nothing.
+    expect(canTryPlaceAgain({ status: "publishing" }, failed)).toBe(false);
+    expect(canTryPlaceAgain({ status: "confirmed" }, failed)).toBe(false);
+    expect(canTryPlaceAgain({ status: "posted" }, { ...failed, status: "posted" })).toBe(false);
+    // A public TikTok account: he posts it himself (§42), Try again would fail again.
+    expect(canTryPlaceAgain({ status: "posted" }, { platform: "tiktok", status: "failed", error: TIKTOK_PRIVATE_ONLY })).toBe(false);
   });
 });
 
@@ -532,7 +554,12 @@ describe("the mock api (wired like the other mock modules)", () => {
     const a = mockApi(seed(), { keepStopsAfterSave: 0, resumeAfterMs: 60_000 });
     const s = await a.getSettings();
     expect(s.autoPost).toEqual({ on: false, everyHours: 5, perRun: 1, practice: false });
-    await expect(a.putSettings({ autoPost: { everyHours: 30 } as never })).rejects.toMatchObject({ status: 400, message: PICK_HOURS });
+    await expect(a.putSettings({ autoPost: { everyHours: 30 } })).rejects.toMatchObject({ status: 400, message: PICK_HOURS });
+    // One key at a time, merged over the stored value: a frequency change never sends (or changes) the switch.
+    await a.putSettings({ autoPost: { on: true } });
+    expect((await a.putSettings({ autoPost: { perRun: 3 } })).autoPost).toMatchObject({ on: true, everyHours: 5, perRun: 3, practice: false });
+    expect((await a.putSettings({ autoPost: { on: false } })).autoPost).toMatchObject({ on: false, perRun: 3 });
+    expect((await a.putSettings({ autoPost: { everyHours: 2 } })).autoPost).toMatchObject({ on: false, everyHours: 2, perRun: 3 });
     const status = await a.autoPostStatus();
     expect(status.nextRunAt).toBeNull();
     // Nothing is set up in a fresh mock: the places are empty and every place is left out.

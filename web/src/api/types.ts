@@ -283,6 +283,9 @@ export interface AutoPostSettings {
 /** What PUT /v1/settings may send for auto-posting: never `onAt` (§46.3). */
 export type AutoPostPatch = Partial<Omit<AutoPostSettings, "onAt">>;
 
+/** What PUT /v1/settings takes: any settings, and of auto-posting only the keys that change (merged by the server, §46.3). */
+export type SettingsPut = Omit<Partial<Settings>, "autoPost"> & { autoPost?: AutoPostPatch };
+
 export type AutoRunKind = "scheduled" | "practice_now" | "private_now";
 export type AutoRunMode = "live" | "practice" | "private";
 
@@ -1826,7 +1829,7 @@ export interface Api {
   createSkill(body: { skillId: string; key: string }): Promise<Skill>;
   deleteSkill(skillId: string): Promise<void>;
   getSettings(): Promise<Settings>;
-  putSettings(patch: Partial<Settings>): Promise<Settings>;
+  putSettings(patch: SettingsPut): Promise<Settings>;
   // Notifications (§32.3)
   /** GET /v1/push/key: the public key for `pushManager.subscribe`. 503 until the deploy made one. */
   pushKey(): Promise<string>;

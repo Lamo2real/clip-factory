@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
-import type { AutoPostSettings, AutoPostStatus, Clip } from "../../api/types.ts";
+import type { AutoPostPatch, AutoPostStatus, Clip } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Dropdown } from "../../components/Dropdown.tsx";
 import { Icon } from "../../components/Icon.tsx";
@@ -15,6 +15,7 @@ import { useToast } from "../../components/Toasts.tsx";
 import { Button, ErrorPanel, LinkButton, Segmented, Skeleton, Toggle } from "../../components/ui.tsx";
 import {
   autoPostOf,
+  canTryPlaceAgain,
   dayWarnings,
   EVERY_HOURS,
   hoursWords,
@@ -110,15 +111,21 @@ export function useAutoPost(active: boolean): AutoPostData {
   return { status: active ? status : null, error, reload, burst };
 }
 
-/** What PUT /v1/settings may send: never onAt (§46.3). */
-const writable = ({ on, everyHours, perRun, practice }: AutoPostSettings) => ({ on, everyHours, perRun, practice });
+/** A clip whose places are still going up: its Try again waits until they are done. */
+const stillPosting = (c: Clip) => c.status === "confirmed" || c.status === "publishing";
 
-/** The clips the actions need (Try again, Post it yourself), read once each. */
-function useClips(ids: readonly string[]) {
+/**
+ * The clips the actions need (Try again, Post it yourself), read once each; one still posting its places is read again
+ * with each new status (`version`), so its Try again shows once they are done.
+ */
+function useClips(ids: readonly string[], version: unknown) {
   const [clips, setClips] = useState<ReadonlyMap<string, Clip>>(() => new Map());
   const key = ids.join(",");
   useEffect(() => {
-    const missing = ids.filter((id) => !clips.has(id));
+    const missing = ids.filter((id) => {
+      const c = clips.get(id);
+      return !c || stillPosting(c);
+    });
     if (!missing.length) return;
     let gone = false;
     void Promise.all(missing.map((id) => api().getClip(id).catch(() => null))).then((found) => {
@@ -132,22 +139,23 @@ function useClips(ids: readonly string[]) {
     return () => {
       gone = true;
     };
-    // Only when the list changes; a clip read once is kept (its actions refresh it).
+    // Only when the list or the status changes; a clip read once that is done is kept (its actions refresh it).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, version]);
   const put = useCallback((c: Clip) => setClips((m) => new Map(m).set(c.clipId, c)), []);
   return { clips, put };
 }
 
 export function AutoPostBranch() {
-  const { me, saveSettings } = useSession();
+  const { me, refresh, saveSettings } = useSession();
   const toast = useToast();
   const { status, error, reload, burst } = useAutoPost(true);
   const thrown = useThrownAway();
-  const actions = useClips([...(status?.failed.map((f) => f.clipId) ?? []), ...(status?.tiktokYourself.map((c) => c.clipId) ?? [])]);
+  const actions = useClips([...(status?.failed.map((f) => f.clipId) ?? []), ...(status?.tiktokYourself.map((c) => c.clipId) ?? [])], status);
   const [running, setRunning] = useState<"practice" | "private" | null>(null);
 
-  // Thrown away from Next up: the focus goes to the next row's Throw away (or the list's heading); Undo brings it back.
+  // Thrown away from Next up: the focus goes to the next row's Throw away (or, after the last one, to Next up itself);
+  // Undo brings it back.
   const focusNext = useRef<string | null>(null);
   useEffect(() => {
     const target = focusNext.current;
@@ -156,6 +164,12 @@ export function AutoPostBranch() {
     document.getElementById(target)?.focus();
   });
   useEffect(() => onClipBack(() => void reload()), [reload]);
+  // Changed on another device: back on this one, the settings are read again too, so the switch shows what is saved.
+  useEffect(() => {
+    const again = () => void refresh().catch(() => undefined);
+    window.addEventListener("focus", again);
+    return () => window.removeEventListener("focus", again);
+  }, [refresh]);
 
   if (!me)
     return (
@@ -165,8 +179,10 @@ export function AutoPostBranch() {
     );
 
   const a = autoPostOf(me.settings.autoPost);
-  const save = async (patch: Partial<AutoPostSettings>) => {
-    const saved = await saveSettings((now) => ({ autoPost: { ...writable(autoPostOf(now.autoPost)), ...patch } }));
+  // The screen shows the whole setting at once; the server gets only the key that changed (it merges each one, §46.3),
+  // so a copy read before a change on another device never sends "on" back. The saves go out in the order of the taps.
+  const save = async (patch: AutoPostPatch) => {
+    const saved = await saveSettings((now) => ({ autoPost: { ...autoPostOf(now.autoPost), ...patch } }), { send: { autoPost: patch }, inOrder: true });
     if (!saved) return;
     toast.success("Saved.", { group: "autopost" });
     void reload();
@@ -195,7 +211,7 @@ export function AutoPostBranch() {
   function throwAway(item: AutoPostStatus["nextUp"][number]) {
     const at = nextUp.findIndex((c) => c.clipId === item.clipId);
     const after = nextUp[at + 1] ?? nextUp[at - 1];
-    if (document.activeElement?.closest(`[data-clip="${item.clipId}"]`)) focusNext.current = after ? `auto-throw-${after.clipId}` : "auto-post-next-name";
+    if (document.activeElement?.closest(`[data-clip="${item.clipId}"]`)) focusNext.current = after ? `auto-throw-${after.clipId}` : "auto-post-next";
     // The clip itself is only named here: the decline sends its id (the Review card's own Undo, §20.7).
     throwAwayWithUndo({ clipId: item.clipId, jobId: item.jobId, hook: item.hook } as Clip, toast, () => void reload());
   }
@@ -307,24 +323,29 @@ export function AutoPostBranch() {
           )}
         </Apple>
 
-        {status?.waiting.length ? (
-          <Apple id="auto-post-waiting" wide>
-            <ul className="autopost__list">
-              {status.waiting.map((c) => (
-                <li key={c.clipId} className="autopost__row">
-                  <Cover url={c.coverUrl} />
-                  <span className="autopost__text">
-                    <span className="autopost__hook clamp-2 user-text">{c.hook}</span>
-                    <span className="autopost__why">{c.reason}</span>
-                  </span>
-                  <LinkButton href={`/review#clip-${c.clipId}`} size="sm" iconAfter="chevronRight" aria-label={`Open in Review, ${c.hook}`}>
-                    Open in Review
-                  </LinkButton>
-                </li>
-              ))}
-            </ul>
-          </Apple>
-        ) : null}
+        {/* Always on the page (§46.2 hides only items 6 and 7 when empty): with nothing waiting, its leaf alone. */}
+        <Apple id="auto-post-waiting" wide>
+          {status ? (
+            status.waiting.length ? (
+              <ul className="autopost__list">
+                {status.waiting.map((c) => (
+                  <li key={c.clipId} className="autopost__row">
+                    <Cover url={c.coverUrl} />
+                    <span className="autopost__text">
+                      <span className="autopost__hook clamp-2 user-text">{c.hook}</span>
+                      <span className="autopost__why">{c.reason}</span>
+                    </span>
+                    <LinkButton href={`/review#clip-${c.clipId}`} size="sm" iconAfter="chevronRight" aria-label={`Open in Review, ${c.hook}`}>
+                      Open in Review
+                    </LinkButton>
+                  </li>
+                ))}
+              </ul>
+            ) : null
+          ) : (
+            loading
+          )}
+        </Apple>
       </Panel>
 
       {status?.failed.length || status?.tiktokYourself.length ? (
@@ -344,7 +365,10 @@ export function AutoPostBranch() {
                         <span className="autopost__hook clamp-2 user-text">{f.hook}</span>
                         <span className="autopost__why">{postError(f.error)}</span>
                       </span>
-                      {clip ? (
+                      {/* The Library's own Try again for this place, once the clip's other places are done (§33). */}
+                      {!clip ? (
+                        <Skeleton className="autopost__wait" />
+                      ) : canTryPlaceAgain(clip, { platform: f.platform, status: "failed", error: f.error }) ? (
                         <UploadAgain
                           clip={clip}
                           posts={[]}
@@ -354,9 +378,7 @@ export function AutoPostBranch() {
                             void reload();
                           }}
                         />
-                      ) : (
-                        <Skeleton className="autopost__wait" />
-                      )}
+                      ) : null}
                     </li>
                   );
                 })}
@@ -394,42 +416,48 @@ export function AutoPostBranch() {
         </Panel>
       ) : null}
 
-      {status?.runs.length ? (
-        <Panel>
-          <Apple id="auto-post-recent" wide>
-            <ul className="autopost__list">
-              {status.runs.flatMap((run) =>
-                runLines(run).map((line) => (
-                  <li key={line.key} className="autopost__run">
-                    <span className="autopost__run-text user-text">{line.text}</span>
-                    {line.opens.length ? (
-                      <span className="autopost__opens">
-                        {line.opens.map((o) => (
-                          <LinkButton
-                            key={o.platform}
-                            href={o.url}
-                            size="sm"
-                            iconAfter="external"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            aria-label={`Open the ${PLATFORM_LABEL[o.platform]} post`}
-                          >
-                            {/* Which place each Open goes to, at a glance (the name is said by its label). */}
-                            <PlatformMark platform={o.platform} size={16} />
-                            Open
-                          </LinkButton>
-                        ))}
-                      </span>
-                    ) : null}
-                  </li>
-                )),
-              )}
-            </ul>
-          </Apple>
-        </Panel>
-      ) : null}
+      {/* Always on the page (§46.2 hides only items 6 and 7 when empty): before the first run, its leaf alone. */}
+      <Panel>
+        <Apple id="auto-post-recent" wide>
+          {status ? (
+            status.runs.length ? (
+              <ul className="autopost__list">
+                {status.runs.flatMap((run) =>
+                  runLines(run).map((line) => (
+                    <li key={line.key} className="autopost__run">
+                      <span className="autopost__run-text user-text">{line.text}</span>
+                      {line.opens.length ? (
+                        <span className="autopost__opens">
+                          {line.opens.map((o) => (
+                            <LinkButton
+                              key={o.platform}
+                              href={o.url}
+                              size="sm"
+                              iconAfter="external"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label={`Open the ${PLATFORM_LABEL[o.platform]} post`}
+                            >
+                              {/* Which place each Open goes to, at a glance (the name is said by its label). */}
+                              <PlatformMark platform={o.platform} size={16} />
+                              Open
+                            </LinkButton>
+                          ))}
+                        </span>
+                      ) : null}
+                    </li>
+                  )),
+                )}
+              </ul>
+            ) : null
+          ) : (
+            loading
+          )}
+        </Apple>
+      </Panel>
 
-      <details className="apple-panel glass autopost__test" id="auto-post-test" data-help="auto-post-test">
+      {/* Found with "Find a setting": the branch page opens it and can focus it. */}
+      <details className="apple-panel glass autopost__test" id="auto-post-test" data-help="auto-post-test" tabIndex={-1}>
         <summary className="cr-fold__q" data-help="auto-post-test-open">
           <Icon name="sliders" size={18} />
           <span>Test it first</span>

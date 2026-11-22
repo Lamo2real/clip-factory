@@ -11,7 +11,11 @@ type Post = { postId: string; platform: string; status: string };
 type MockWindow = Window & {
   __cfMock?: {
     setup: { finish(p: string): void; setAudit(passed: boolean): void };
-    posting: { posts(clipId: string): Post[]; settleWithOneFailed(clipId: string, platform: string, reason?: string): void };
+    posting: {
+      posts(clipId: string): Post[];
+      settleWithOneFailed(clipId: string, platform: string, reason?: string): void;
+      failWhilePosting(clipId: string, platform: string, reason?: string): void;
+    };
     autopost: { set(at: string): void; advance(ms: number): Promise<string[]>; runs(): { runId: string; clips: { clipId: string }[] }[] };
   };
 };
@@ -172,19 +176,28 @@ for (const size of SIZES) {
       await expect(recent.first()).toHaveText(`Sun 11:00 · “${hook}”: YouTube … Instagram … Facebook …`);
       await expect(page.locator(".autopost__state")).toHaveText("On. Next: Sun 16:00.");
 
-      // Facebook does not work; the others go up.
+      // Facebook does not work while YouTube and Instagram are still going up: no Try again yet (it would do nothing).
       const clipId = await page.evaluate(() => (window as MockWindow).__cfMock!.autopost.runs()[0]!.clips[0]!.clipId);
-      await page.evaluate((id) => (window as MockWindow).__cfMock!.posting.settleWithOneFailed(id, "facebook", "Facebook said the video was too long for a Reel."), clipId);
+      const reason = "Facebook said the video was too long for a Reel.";
+      await page.evaluate(([id, why]) => (window as MockWindow).__cfMock!.posting.failWhilePosting(id!, "facebook", why), [clipId, reason]);
+      await page.evaluate(() => dispatchEvent(new Event("focus")));
+      const failed = page.locator("#auto-post-failed .autopost__row");
+      await expect(failed).toHaveCount(1);
+      await expect(failed).toContainText(reason);
+      await expect(failed.locator(".autopost__wait")).toHaveCount(0);
+      await expect(failed.getByRole("button", { name: "Try again, Facebook" })).toHaveCount(0);
+
+      // The others go up: now Facebook gets its own Try again.
+      await page.evaluate(([id, why]) => (window as MockWindow).__cfMock!.posting.settleWithOneFailed(id!, "facebook", why), [clipId, reason]);
       await page.evaluate(() => dispatchEvent(new Event("focus")));
       await expect(recent.first().locator(".autopost__run-text")).toHaveText(`Sun 11:00 · “${hook}”: YouTube ✓ Instagram ✓ Facebook ✗`);
       await expect(recent.first().getByRole("link", { name: "Open the YouTube post" })).toHaveAttribute("target", "_blank");
       await expect(recent.first().getByRole("link", { name: "Open the Instagram post" })).toBeVisible();
 
-      const failed = page.locator("#auto-post-failed .autopost__row");
       await expect(failed).toHaveCount(1);
       await expect(failed).toContainText("Facebook");
       await expect(failed).toContainText(hook);
-      await expect(failed).toContainText("Facebook said the video was too long for a Reel.");
+      await expect(failed).toContainText(reason);
       // TikTok is never part of a run: it waits for his own tap.
       await expect(page.locator("#auto-post-tiktok .autopost__row", { hasText: hook }).getByRole("button", { name: "Post it on TikTok yourself" })).toBeVisible();
 
@@ -219,7 +232,7 @@ for (const size of SIZES) {
       );
       await page.getByRole("button", { name: "Private test run" }).click();
       await expect(recent.first().locator(".autopost__run-text")).toHaveText(
-        `Private test · “${hook}”: YouTube (only you) · Instagram (checked, not published) · Facebook (draft)`,
+        `Private test · “${hook}”: YouTube (only you) · Facebook (draft) · Instagram (checked, not published)`,
       );
       await expect(recent.first().getByRole("link", { name: "Open the YouTube post" })).toBeVisible();
       // It left Review, and never moved the schedule.
@@ -232,6 +245,52 @@ for (const size of SIZES) {
       await expect(lib.locator(".post", { hasText: "YouTube" }).locator(".post__status")).toHaveText("Private test · only you");
       await expect(lib.locator(".post", { hasText: "Facebook" }).locator(".post__status")).toHaveText("Private test · draft on your Page");
       await expect(lib.locator(".post", { hasText: "Instagram" }).locator(".post__status")).toHaveText("Private test · checked, not published");
+    });
+
+    test("Throw away from the keyboard: the focus goes to the next row, and after the last to Next up", async ({ page }) => {
+      await open(page);
+      const rows = page.locator("#auto-post-next .autopost__row");
+      const count = await rows.count();
+      expect(count).toBeGreaterThan(1);
+      await rows.first().getByRole("button", { name: /^Throw away, / }).focus();
+      for (let left = count; left > 1; left--) {
+        await page.keyboard.press("Enter");
+        await expect(rows).toHaveCount(left - 1);
+        await expect(rows.first().getByRole("button", { name: /^Throw away, / })).toBeFocused();
+      }
+      await page.keyboard.press("Enter");
+      await expect(rows).toHaveCount(0);
+      await expect(page.locator("#auto-post-next")).toBeFocused();
+      // Waits for you and Recent stay on the page, empty or not (only Didn't work and TikTok's hide when empty).
+      await expect(page.locator("#auto-post-waiting")).toBeVisible();
+      await expect(page.locator("#auto-post-recent")).toBeVisible();
+    });
+
+    test("Find a setting: a list that draws once the status is read, and the Test it first fold", async ({ page }) => {
+      await open(page);
+      await turnOn(page);
+      await page.evaluate(async () => (window as MockWindow).__cfMock!.autopost.advance(3_600_000));
+      const clipId = await page.evaluate(() => (window as MockWindow).__cfMock!.autopost.runs()[0]!.clips[0]!.clipId);
+      await page.evaluate((id) => (window as MockWindow).__cfMock!.posting.settleWithOneFailed(id, "facebook"), clipId);
+
+      // Away and back with #auto-post-failed: Didn't work only draws after GET /v1/autopost (slow here, well after the
+      // page's first look for it), and is still found.
+      await go(page, "/settings/posting");
+      await page.evaluate(() => ((window as unknown as { __cfMockFaults: { latencyMs?: number } }).__cfMockFaults.latencyMs = 700));
+      await go(page, "/settings/posting/auto#auto-post-failed");
+      const found = page.locator("#auto-post-failed");
+      await expect(found).toBeFocused();
+      await expect(found).toHaveClass(/is-found/);
+      await expect(found).toBeInViewport();
+      await page.evaluate(() => delete (window as unknown as { __cfMockFaults: { latencyMs?: number } }).__cfMockFaults.latencyMs);
+
+      // The fold opens by itself and takes the focus.
+      await go(page, "/settings/posting");
+      await go(page, "/settings/posting/auto#auto-post-test");
+      const fold = page.locator("#auto-post-test");
+      await expect(fold).toHaveAttribute("open", "");
+      await expect(fold).toBeFocused();
+      await expect(page.getByRole("button", { name: "Practice run now" })).toBeInViewport();
     });
   });
 }

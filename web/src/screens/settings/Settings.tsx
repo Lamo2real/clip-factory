@@ -353,6 +353,8 @@ function TreePage({ tree }: { tree: Tree }) {
 /** The found apple lights up for 2 seconds, once the page has had a moment to draw. */
 const SHOW_AFTER_MS = 120;
 const FOUND_MS = 2000;
+/** How long an apple that draws once its data has loaded is waited for. */
+const WAIT_FOR_MS = 10_000;
 
 function BranchPage({ tree, branch }: { tree: Tree; branch: Branch }) {
   const hash = useHash();
@@ -363,9 +365,15 @@ function BranchPage({ tree, branch }: { tree: Tree; branch: Branch }) {
   useEffect(() => {
     if (!hash) return;
     let el: HTMLElement | null = null;
-    const show = setTimeout(() => {
-      el = document.getElementById(hash);
-      if (!el || !body.current?.contains(el)) return;
+    let fade: ReturnType<typeof setTimeout> | undefined;
+    let watch: MutationObserver | undefined;
+    let giveUp: ReturnType<typeof setTimeout> | undefined;
+    const jump = (): boolean => {
+      const found = document.getElementById(hash);
+      if (!found || !body.current?.contains(found)) return false;
+      el = found;
+      // A fold (Auto-posting's Test it first) opens, so what was found is on screen.
+      if (el instanceof HTMLDetailsElement) el.open = true;
       // A tall apple (a grid of 30 sound cards) goes to the top, so its name and leaf stay on screen; a short one
       // sits in the middle.
       const tall = el.getBoundingClientRect().height > window.innerHeight * 0.6;
@@ -374,11 +382,32 @@ function BranchPage({ tree, branch }: { tree: Tree; branch: Branch }) {
       void el.offsetWidth;
       el.classList.add("is-found");
       el.focus({ preventScroll: true });
+      fade = setTimeout(() => el?.classList.remove("is-found"), FOUND_MS);
+      return true;
+    };
+    const stop = () => {
+      watch?.disconnect();
+      watch = undefined;
+      clearTimeout(giveUp);
+      window.removeEventListener("pointerdown", stop);
+      window.removeEventListener("keydown", stop);
+    };
+    const show = setTimeout(() => {
+      if (jump() || !body.current) return;
+      // An apple that only draws once its list has loaded (Auto-posting's Didn't work): found as soon as it appears,
+      // for a few seconds, unless he has started doing something else on the page.
+      watch = new MutationObserver(() => {
+        if (jump()) stop();
+      });
+      watch.observe(body.current, { childList: true, subtree: true });
+      giveUp = setTimeout(stop, WAIT_FOR_MS);
+      window.addEventListener("pointerdown", stop);
+      window.addEventListener("keydown", stop);
     }, SHOW_AFTER_MS);
-    const fade = setTimeout(() => el?.classList.remove("is-found"), SHOW_AFTER_MS + FOUND_MS);
     return () => {
       clearTimeout(show);
       clearTimeout(fade);
+      stop();
       el?.classList.remove("is-found");
     };
   }, [hash, branch.slug]);

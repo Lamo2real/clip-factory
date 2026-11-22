@@ -270,6 +270,19 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       c.status = "posted";
       publishClip(c);
     },
+    /**
+     * §46.2 item 6: one place did not work while the clip still posts its other places (publishing, §17.6), so no
+     * Try again yet: the retry would do nothing until they are done.
+     */
+    failWhilePosting(clipId: string, platform: Platform, reason = "X said no this time. Press Try again."): void {
+      const c = clip(clipId);
+      const p = store.posts.find((x) => x.clipId === clipId && x.platform === platform);
+      if (!p) throw new Error(`no ${platform} post`);
+      Object.assign(p, { status: "failed", error: reason });
+      publishPost(p);
+      c.status = "publishing";
+      publishClip(c);
+    },
     /** The clip's posts, as the server holds them. */
     posts(clipId: string): Post[] {
       return clone(store.posts.filter((p) => p.clipId === clipId));
@@ -1163,7 +1176,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     },
     async putSettings(patch) {
       await delay(100, 240);
-      const next: Settings = { ...store.settings, ...patch, hasYoutubeCookies: store.settings.hasYoutubeCookies };
+      const { autoPost: autoPatch, ...rest } = patch;
+      const next: Settings = { ...store.settings, ...rest, hasYoutubeCookies: store.settings.hasYoutubeCookies };
       if (next.clipMin < 1 || next.clipMin > 10) throw bad("The smallest number of clips must be between 1 and 10.");
       if (next.clipMax < next.clipMin || next.clipMax > 10) throw bad("The largest number of clips must be between the smallest and 10.");
       if (next.maxSourceHours < 1 || next.maxSourceHours > 12) throw bad("Source length must be between 1 and 12 hours.");
@@ -1218,7 +1232,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         next.postPreset = presetOf(patch.postPreset);
       }
       // §46.3: each of on, everyHours, perRun and practice merged over the stored value; on writes onAt.
-      if (patch.autoPost !== undefined) next.autoPost = autopost.merge(store.settings.autoPost, patch.autoPost);
+      if (autoPatch !== undefined) next.autoPost = autopost.merge(store.settings.autoPost, autoPatch);
       if (next.backgroundColours !== undefined) {
         const c = next.backgroundColours;
         if (!Array.isArray(c) || c.length < 1 || c.length > MAX_COLOURS || !c.every(isHexColour)) throw bad("Pick 1 to 3 colours.");
