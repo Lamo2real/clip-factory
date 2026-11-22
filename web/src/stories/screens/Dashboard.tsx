@@ -5,7 +5,13 @@
 // setup is finished, a card above the tiles shows its ring ("4 of 11 done") and what is left (§45.29). Above both,
 // "Continue: {name}" opens the idea, video, character or reference video the owner had open last (§45.34, request 2
 // §2 "Each application should remember its own ... Open projects"), hidden once it is gone.
-import { useEffect, useState } from "react";
+//
+// The look (styles/st-dashboard.css, the liquid-glass contract styles/GLASS-CONTRACT.md): every tile a smoky glass
+// card (.st-glass), the counts as big light numerals with a small unit (StatNumeral), one solid cream card among them
+// with an orange toggle (the next video's music, saved in the workspace's settings like Settings › Video does), the
+// videos being made as media rows, the setup's progress on an arc with a white knob (ArcDial), and pills to pick what
+// "What happened lately" shows (on the sliding highlight).
+import { useEffect, useId, useState } from "react";
 import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -13,6 +19,8 @@ import { A } from "../../components/ui.tsx";
 import { count, relative } from "../../lib/format.ts";
 import { storiesApi } from "../api/client.ts";
 import { STEP_LABEL, type ProjectRef, type StoriesApi, type StoriesDashboard, type StoryStatus } from "../api/types.ts";
+import { ArcDial, CreamCard, GlassToggle, MediaRow, StatNumeral } from "../glass/index.ts";
+import { useWorkspaceConfig } from "../settings/data.ts";
 import { currentChoice, rememberProject } from "../workspace.ts";
 import {
   celebrate,
@@ -27,7 +35,7 @@ import {
   StLoading,
   StMascot,
   StPageHead,
-  StRing,
+  StPick,
   useDashboard,
   useOnboarding,
   type StIconName,
@@ -52,22 +60,34 @@ const ACTIVITY: Record<StoriesDashboard["activity"][number]["kind"], { icon: StI
   failed: { icon: "alert", words: "Stopped" },
 };
 
+/** "1.5K" → a big "1.5" and a small "K": the numeral and its unit (plain counts have no unit). */
+export function splitCount(n: number): { num: string; unit?: string } {
+  const s = count(n);
+  const m = /^([\d.,]+)\s*([^\d\s.,]+)$/.exec(s);
+  return m ? { num: m[1]!, unit: m[2]! } : { num: s };
+}
+
 function Stat({ value, label, tone, icon, href }: { value: number; label: string; tone: StTone; icon: StIconName; href?: string }) {
+  const n = splitCount(value);
   const body = (
     <>
-      <span className={`st-stat__icon st-stat__icon--${tone}`} aria-hidden="true">
-        <StIcon name={icon} size={24} />
+      <span className={`st-dash-stat__icon st-dash-stat__icon--${tone}`} aria-hidden="true">
+        <StIcon name={icon} size={22} />
       </span>
-      <span className="st-stat__value">{count(value)}</span>
-      <span className="st-stat__label">{label}</span>
+      <StatNumeral value={n.num} unit={n.unit} label={label} className="st-dash-stat__figure" />
+      {href ? (
+        <span className="st-dash-stat__go" aria-hidden="true">
+          <StIcon name="chevron" size={18} />
+        </span>
+      ) : null}
     </>
   );
   return href ? (
-    <A href={href} className={`st-tile st-stat st-stat--${tone} st-stat--link`}>
+    <A href={href} className={`st-tile st-glass st-dash-stat st-dash-stat--${tone} st-dash-stat--link`}>
       {body}
     </A>
   ) : (
-    <div className={`st-tile st-stat st-stat--${tone}`}>{body}</div>
+    <div className={`st-tile st-glass st-dash-stat st-dash-stat--${tone}`}>{body}</div>
   );
 }
 
@@ -88,8 +108,8 @@ function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou
     }
   };
   return (
-    <section className="st-tile st-tile--wide st-tile--needs" aria-labelledby="st-dash-needs">
-      <h2 className="st-tile__title" id="st-dash-needs">
+    <section className="st-tile st-glass st-tile--wide st-tile--needs" aria-labelledby="st-dash-needs">
+      <h2 className="st-tile__title st-display" id="st-dash-needs">
         <StIcon name="alert" size={22} />
         Needs you
         {items.length ? <span className="st-tile__count">{items.length}</span> : null}
@@ -119,9 +139,11 @@ function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou
               <div className="st-needs-list__actions">
                 {n.publishingJobId ? (
                   <StButton
-                    disabled={busy === n.publishingJobId}
                     aria-disabled={busy === n.publishingJobId || undefined}
-                    onClick={(e) => void retry(n.publishingJobId!, e.currentTarget)}
+                    onClick={(e) => {
+                      // Kid-proof: never disabled; a second tap while it is trying says no (the deny sound).
+                      if (busy !== n.publishingJobId) void retry(n.publishingJobId!, e.currentTarget);
+                    }}
                   >
                     <StIcon name="retry" size={18} />
                     Try again
@@ -141,8 +163,8 @@ function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou
 
 function Producing({ items }: { items: StoriesDashboard["producing"] }) {
   return (
-    <section className="st-tile st-tile--wide" aria-labelledby="st-dash-making">
-      <h2 className="st-tile__title" id="st-dash-making">
+    <section className="st-tile st-glass st-tile--wide" aria-labelledby="st-dash-making">
+      <h2 className="st-tile__title st-display" id="st-dash-making">
         <StIcon name="clapper" size={22} />
         Being made now
         <span className="st-tile__count">{items.length}</span>
@@ -157,10 +179,16 @@ function Producing({ items }: { items: StoriesDashboard["producing"] }) {
           {items.map((p) => (
             <li key={p.storyId}>
               <A href={`/stories/production/${encodeURIComponent(p.storyId)}`} className="st-making__row">
-                <span className="st-making__title">{p.title}</span>
-                <span className="st-making__step">{STEP_LABEL[p.step]}</span>
-                <span className="st-bar" role="progressbar" aria-label={`${p.title}: ${STEP_LABEL[p.step]}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p.progress * 100)}>
-                  <span className="st-bar__fill" style={{ width: `${Math.max(4, Math.round(p.progress * 100))}%` }} />
+                <MediaRow
+                  thumb={<StIcon name="clapper" size={28} />}
+                  title={<span className="st-making__title">{p.title}</span>}
+                  meta={<span className="st-making__step">{STEP_LABEL[p.step]}</span>}
+                  progress={p.progress}
+                  progressLabel={`${p.title}: ${STEP_LABEL[p.step]}`}
+                  progressText={`${Math.round(p.progress * 100)}%`}
+                />
+                <span className="st-making__go" aria-hidden="true">
+                  <StIcon name="chevron" size={18} />
                 </span>
               </A>
             </li>
@@ -174,13 +202,13 @@ function Producing({ items }: { items: StoriesDashboard["producing"] }) {
 function Accounts({ items }: { items: StoriesDashboard["accounts"] }) {
   const connected = items.filter((a) => a.status === "connected").length;
   return (
-    <section className="st-tile" aria-labelledby="st-dash-accounts">
-      <h2 className="st-tile__title" id="st-dash-accounts">
+    <section className="st-tile st-glass" aria-labelledby="st-dash-accounts">
+      <h2 className="st-tile__title st-display" id="st-dash-accounts">
         <StIcon name="plug" size={22} />
         Connected accounts
       </h2>
-      <p className="st-tile__big">
-        {connected} <span>of {items.length || 5}</span>
+      <p className="st-tile__big st-stat__value">
+        <span className="st-stat__num">{connected}</span> <span className="st-stat__unit">of {items.length || 5}</span>
       </p>
       <ul className="st-accounts">
         {items.map((a) => (
@@ -210,8 +238,8 @@ function Performance({ perf }: { perf: StoriesDashboard["performance"] }) {
     { icon: "share", label: "Shares", value: perf.shares },
   ];
   return (
-    <section className="st-tile" aria-labelledby="st-dash-perf">
-      <h2 className="st-tile__title" id="st-dash-perf">
+    <section className="st-tile st-glass" aria-labelledby="st-dash-perf">
+      <h2 className="st-tile__title st-display" id="st-dash-perf">
         <StIcon name="star" size={22} />
         How the videos do
       </h2>
@@ -219,13 +247,17 @@ function Performance({ perf }: { perf: StoriesDashboard["performance"] }) {
         <p className="st-tile__note">No numbers yet. They show up after the first post.</p>
       ) : (
         <ul className="st-perf">
-          {nums.map((n) => (
-            <li key={n.label} className="st-perf__item">
-              <StIcon name={n.icon} size={20} />
-              <span className="st-perf__value">{count(n.value)}</span>
-              <span className="st-perf__label">{n.label}</span>
-            </li>
-          ))}
+          {nums.map((n) => {
+            const v = splitCount(n.value);
+            return (
+              <li key={n.label} className="st-perf__item">
+                <span className="st-perf__icon" aria-hidden="true">
+                  <StIcon name={n.icon} size={18} />
+                </span>
+                <StatNumeral value={v.num} unit={v.unit} label={n.label} className="st-perf__figure" />
+              </li>
+            );
+          })}
         </ul>
       )}
       <p className="st-tile__note">
@@ -237,18 +269,40 @@ function Performance({ perf }: { perf: StoriesDashboard["performance"] }) {
   );
 }
 
+type ActivityKind = StoriesDashboard["activity"][number]["kind"];
+type ActivityShow = ActivityKind | "all";
+const ACTIVITY_ORDER: readonly ActivityKind[] = ["made", "approved", "changes", "rejected", "posted", "failed"];
+
+/** The pills of "What happened lately": All, then only the kinds that are in the list (never an empty choice). */
+export function activityPills(items: StoriesDashboard["activity"]): { value: ActivityShow; label: string }[] {
+  const kinds = ACTIVITY_ORDER.filter((k) => items.some((a) => a.kind === k));
+  return kinds.length < 2 ? [] : [{ value: "all", label: "All" }, ...kinds.map((k) => ({ value: k, label: ACTIVITY[k].words }))];
+}
+
 function Activity({ items }: { items: StoriesDashboard["activity"] }) {
+  const [pick, setPick] = useState<ActivityShow>("all");
+  const pills = activityPills(items);
+  // A kind that left the list (the poll brought new lines) shows everything again.
+  const show: ActivityShow = pick !== "all" && pills.some((p) => p.value === pick) ? pick : "all";
+  const shown = show === "all" ? items : items.filter((a) => a.kind === show);
   return (
-    <section className="st-tile st-tile--wide" aria-labelledby="st-dash-activity">
-      <h2 className="st-tile__title" id="st-dash-activity">
-        <StIcon name="clock" size={22} />
-        What happened lately
-      </h2>
+    <section className="st-tile st-glass st-tile--wide" aria-labelledby="st-dash-activity">
+      <div className="st-tile__head">
+        <h2 className="st-tile__title st-display" id="st-dash-activity">
+          <StIcon name="clock" size={22} />
+          What happened lately
+        </h2>
+        {pills.length ? (
+          <div className="st-dash-pills">
+            <StPick label="What happened lately" value={show} options={pills} onChange={setPick} />
+          </div>
+        ) : null}
+      </div>
       {items.length === 0 ? (
         <p className="st-tile__note">Nothing yet. Your first video shows up here.</p>
       ) : (
         <ol className="st-activity">
-          {items.map((a, i) => (
+          {shown.map((a, i) => (
             <li key={`${a.at}-${a.storyId}-${a.kind}-${i}`}>
               <A href={`/stories/review/${encodeURIComponent(a.storyId)}`} className={`st-activity__row st-activity__row--${a.kind}`}>
                 <span className="st-activity__icon" aria-hidden="true">
@@ -265,6 +319,39 @@ function Activity({ items }: { items: StoriesDashboard["activity"] }) {
         </ol>
       )}
     </section>
+  );
+}
+
+// ---------- The next video: the one cream card, with an orange toggle ----------
+
+/**
+ * The settings the next video starts from (the workspace's own, as Settings › Video saves them): its length, and its
+ * music on an orange toggle. Shown once the workspace has loaded; nothing when it could not load.
+ */
+function NextVideo({ ws }: { ws: string }) {
+  const { workspace, config, save } = useWorkspaceConfig(ws);
+  const id = useId();
+  if (!workspace.data) return null;
+  const music = config.musicOn !== false;
+  return (
+    <CreamCard
+      className="st-dash-next"
+      title="Next video"
+      headingLevel={2}
+      footer={
+        <>
+          <label className="st-dash-next__label" htmlFor={`${id}-music`}>
+            <StIcon name="music" size={18} />
+            Music
+          </label>
+          <GlassToggle id={`${id}-music`} label="Music" checked={music} onChange={(v) => save({ musicOn: v })} />
+        </>
+      }
+    >
+      <p className="st-dash-next__len">
+        <span className="st-dash-next__num">{config.defaultDurationSec}</span> <span className="st-dash-next__unit">seconds</span>
+      </p>
+    </CreamCard>
   );
 }
 
@@ -340,7 +427,7 @@ function ContinueCard({ ws }: { ws: string }) {
   if (!open) return null;
   const words = PROJECT_WORDS[open.kind];
   return (
-    <A href={open.href} className="st-continue" data-kind={open.kind}>
+    <A href={open.href} className="st-continue st-glass st-glass--hero st-lens" data-kind={open.kind}>
       <span className="st-continue__icon" aria-hidden="true">
         <StIcon name={words.icon} size={24} />
       </span>
@@ -358,12 +445,12 @@ function ContinueCard({ ws }: { ws: string }) {
 /** The steps still left after Finish (skipped ones), as a short list with a way back to them (§45.36 E15). */
 function SetupLeft({ left }: { left: { step: string; label: string }[] }) {
   return (
-    <section className="st-setupcard st-setupcard--left" aria-labelledby="st-setupleft-title">
+    <section className="st-setupcard st-setupcard--left st-glass" aria-labelledby="st-setupleft-title">
       <span className="st-setupcard__mark" aria-hidden="true">
         <StIcon name="bulb" size={24} />
       </span>
       <div className="st-setupcard__text">
-        <h2 className="st-setupcard__title" id="st-setupleft-title">
+        <h2 className="st-setupcard__title st-display" id="st-setupleft-title">
           Finish setting up: {left.length} left
         </h2>
         <ul className="st-setupcard__list" aria-label="Still to do">
@@ -390,10 +477,15 @@ function SetupCard({ ws }: { ws: string }) {
   const left = data.steps.filter((s) => s.state !== "done" && s.step !== "done");
   if (data.finishedAt) return left.length ? <SetupLeft left={left} /> : null;
   return (
-    <section className="st-setupcard" aria-labelledby="st-setupcard-title">
-      <StRing done={data.done} total={data.total} size={88} />
+    <section className="st-setupcard st-glass st-glass--hero st-lens" aria-labelledby="st-setupcard-title">
+      <ArcDial value={data.done} max={Math.max(1, data.total)} label="Setup" valueText={`${data.done} of ${data.total} done`} className="st-setupcard__dial">
+        <span className="st-dial__value">{data.done}</span>
+        <span className="st-setupcard__of">
+          of {data.total}
+        </span>
+      </ArcDial>
       <div className="st-setupcard__text">
-        <h2 className="st-setupcard__title" id="st-setupcard-title">
+        <h2 className="st-setupcard__title st-display" id="st-setupcard-title">
           Set up Lamo Stories: {data.done} of {data.total} done
         </h2>
         {left.length ? (
@@ -444,8 +536,9 @@ export function DashboardScreen({ ws }: StoriesScreenProps) {
           <StEmpty title="Your studio is ready" action={<StLinkButton href="/stories/production/new" main>Make your first video</StLinkButton>}>
             Pick an idea and a character, and Lamo Stories makes the cartoon.
           </StEmpty>
-          <div className="st-tiles">
+          <div className="st-tiles st-tiles--start">
             <Accounts items={data.accounts} />
+            <NextVideo ws={ws} />
           </div>
         </>
       ) : (
@@ -454,6 +547,7 @@ export function DashboardScreen({ ws }: StoriesScreenProps) {
           <Stat value={data.counts.made} label="Animations made" tone="mint" icon="film" href="/stories/library?kind=videos" />
           <Stat value={data.counts.review + data.counts.needsCheck} label="Waiting for review" tone="sun" icon="screen" href="/stories/review" />
           <Stat value={data.counts.published} label="Published" tone="sky" icon="share" href="/stories/library" />
+          <NextVideo ws={ws} />
           <Producing items={data.producing} />
           <Accounts items={data.accounts} />
           <Performance perf={data.performance} />
