@@ -29,6 +29,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import re
+import time
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -44,6 +45,7 @@ from ..oauth.providers import AppKeys, Linked
 from ..platforms import errors as platform_errors
 from ..platforms.base import NotConnectedError, ReconnectNeededError, RetryablePublishError, obj
 from . import apps
+from . import secrets as ws_secrets
 from . import types as ws
 from .apps import CLIPS, OWN, AppNotReady, CallbackOff, ChosenApp
 from .secrets import WorkspaceSecrets
@@ -547,18 +549,74 @@ def public_of(scope: Scope, platform: str, now: datetime) -> Item:
     """The public account, checked against the chosen app's current keys (a key change → ``needs_reconnect``). A
     status worked out here is also stored (``settle``), so every reader of ``SOCIAL#`` (the dashboard too) sees
     what the Social accounts page shows."""
-    item = scope.account(platform)
-    client_id: str | Keep | None = KEEP
-    if item is not None and item.get("connectionStatus") in (*POSTABLE, "needs_reconnect"):
-        chosen = apps.app_keys(scope.store, scope.secrets, scope.user_id, scope.workspace_id, platform, account=item)
+    return _public_of(scope.store, scope.secrets, scope.user_id, scope.workspace_id, platform, now=now)
+
+
+def _public_of(
+    store: db.Store,
+    secrets: WorkspaceSecrets | None,
+    user_id: str,
+    workspace_id: str,
+    platform: str,
+    *,
+    now: datetime,
+) -> Item:
+    item = account_item(store, user_id, workspace_id, platform)
+    client_id: str | Keep | None = KEEP  # no secrets wrapper (posting not switched on): the keys are not checked
+    if secrets is not None and item is not None and item.get("connectionStatus") in (*POSTABLE, "needs_reconnect"):
+        chosen = apps.app_keys(store, secrets, user_id, workspace_id, platform, account=item)
         client_id = chosen.client_id if chosen is not None else None
     clips = None
     if item is not None and item.get("connectionStatus") in ("connected", "same_as_clips"):  # every platform (§45.34)
-        clips = clips_identity(scope.store, scope.user_id, platform)
-    shown = public_account(item, scope.workspace_id, platform, app_client_id=client_id, now=now, clips=clips)
+        clips = clips_identity(store, user_id, platform)
+    shown = public_account(item, workspace_id, platform, app_client_id=client_id, now=now, clips=clips)
     if item is not None:
-        settle(scope.store, scope.user_id, scope.workspace_id, platform, item, shown=shown, now=now)
+        settle(store, user_id, workspace_id, platform, item, shown=shown, now=now)
     return shown
+
+
+# the dashboard reads app keys only while one more worst-case secret read still leaves this much of the 29 s request
+DASHBOARD_REQUEST_SECONDS: Final = 29.0
+DASHBOARD_SPARE_SECONDS: Final = 4.0
+
+
+def _time_for_keys(started: float | None) -> bool:
+    if started is None:
+        return True
+    left = DASHBOARD_REQUEST_SECONDS - (time.monotonic() - started)
+    return left >= ws_secrets.WORST_READ_SECONDS + DASHBOARD_SPARE_SECONDS
+
+
+def accounts_shown(
+    store: db.Store,
+    secrets: WorkspaceSecrets | None,
+    user_id: str,
+    workspace_id: str,
+    now: datetime,
+    *,
+    started: float | None = None,
+) -> list[Item]:
+    """Every platform's account as the Social accounts page shows it (and settled the same way), for the dashboard
+    (§45.35 D11). ``secrets`` is None while posting is not switched on: the app keys are then not checked, Lamo Clips'
+    identity still is. A secret that cannot be read just now never breaks or stalls the dashboard: after the first
+    one that fails, and once the request (``started``, its ``time.monotonic()`` on arrival) has no room left for one
+    more slow read, the remaining platforms are shown without the key check (the Social accounts page says the
+    rest)."""
+    out: list[Item] = []
+    keys = secrets
+    for platform in ws.PLATFORMS:
+        if keys is not None and not _time_for_keys(started):
+            log("warning", "ws_social.dashboard_keys_skipped", platform=platform)
+            keys = None
+        try:
+            out.append(_public_of(store, keys, user_id, workspace_id, platform, now=now))
+        except Exception as e:
+            if keys is None:
+                raise
+            log("warning", "ws_social.dashboard_keys_unread", platform=platform, error=type(e).__name__)
+            keys = None  # Secrets Manager is failing or slow just now: no more waits on it for this answer
+            out.append(_public_of(store, None, user_id, workspace_id, platform, now=now))
+    return out
 
 
 def settle(

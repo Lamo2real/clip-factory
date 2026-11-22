@@ -103,8 +103,9 @@ def test_study_only_clears_a_studied_videos_file_and_frames_and_keeps_its_study(
     assert f"{prefix()}references/{REF_B}/source.mp4" in s3_client.objects
     assert f"{prefix()}references/{REF_C}/source.mp4" in s3_client.objects
     item = table.raw(pk(), f"REFVID#{REF_A}")
-    # the same marker Lamo Stories' agent writes after a job (one attribute for both)
-    assert item["sourceRemovedAt"] == "2026-11-15T12:00:00.000Z"
+    # the same marker Lamo Stories' agent writes after a job (one attribute for both, §45.35 D9)
+    assert item["fileRemovedAt"] == "2026-11-15T12:00:00.000Z"
+    assert "sourceRemovedAt" not in item  # the earlier name is only read, never written
     assert item["note"] == "The video was removed to save space. Its study stays."
     assert (item["status"], item["title"]) == ("analyzed", "Skid")
     # the page shows the study without the video, and studying it again is refused with the same words
@@ -113,7 +114,9 @@ def test_study_only_clears_a_studied_videos_file_and_frames_and_keeps_its_study(
     assert "url" not in got["reference"]
     assert got["reference"]["status"] == "analyzed"
     assert (got["reference"]["fileRemoved"], got["reference"]["bytes"]) == (True, 0)
-    assert wcall("GET", f"{BASE}/references/{REF_B}")[1]["reference"]["fileRemoved"] is False
+    assert got["reference"]["studyKept"] is True  # "Its study stays." (§45.35 D9)
+    kept = wcall("GET", f"{BASE}/references/{REF_B}")[1]["reference"]
+    assert (kept["fileRemoved"], kept["studyKept"]) == (False, False)
     assert leaked([got]) == []
     status, refused = wcall("POST", f"{BASE}/references/{REF_A}/analyze", {})
     assert (status, refused["error"]["message"]) == (409, "The video was removed to save space. Its study stays.")
@@ -249,11 +252,11 @@ def test_cleanup_is_a_lamo_stories_route_with_no_body(wcall: WsCall) -> None:
 def test_a_reference_the_agent_cleared_is_shown_cleared_and_never_counted_again(
     wcall: WsCall, store: db.Store, s3_client: FakeS3
 ) -> None:
-    """Lamo Stories' agent clears a reference after a job with ``sourceRemovedAt`` and ``note``: no link to the file
-    that is gone, nothing in storage, Analyze says why, and the API's cleanup does not count it again."""
+    """Lamo Stories' agent clears a reference after a job with ``fileRemovedAt`` and ``note`` (§45.35 D9): no link
+    to the file that is gone, nothing in storage, Analyze says why, and the API's cleanup does not count it again."""
     _keep(store, keepReferences="study_only")
     _reference(
-        store, s3_client, REF_A, sourceRemovedAt=AGENT_AT, note="The video was removed to save space. Its study stays."
+        store, s3_client, REF_A, fileRemovedAt=AGENT_AT, note="The video was removed to save space. Its study stays."
     )
     folder = f"{prefix()}references/{REF_A}/"
     for key in (f"{folder}source.mp4", f"{folder}frames/0001.jpg", f"{folder}frames/0002.jpg"):
@@ -271,6 +274,40 @@ def test_a_reference_the_agent_cleared_is_shown_cleared_and_never_counted_again(
     assert leaked([got, listed]) == []
 
 
+def test_an_older_reference_cleared_under_the_earlier_mark_name_still_reads_cleared(
+    wcall: WsCall, store: db.Store, s3_client: FakeS3
+) -> None:
+    """Round 3's API wrote ``sourceRemovedAt``: such an item still reads as cleared (no migration, §45.35 D9)."""
+    _reference(store, s3_client, REF_A, sourceRemovedAt=AGENT_AT)
+    shown = wcall("GET", f"{BASE}/references/{REF_A}")[1]["reference"]
+    assert (shown["fileRemoved"], shown["studyKept"], "url" in shown) == (True, True, False)
+
+
+def test_a_never_studied_video_cleared_by_age_keeps_no_study_and_says_so(
+    wcall: WsCall, store: db.Store, s3_client: FakeS3, table: FakeTable
+) -> None:
+    """``days_30`` also clears a reference that was never studied (``ready`` or ``failed``): it is stored with the
+    plain note, answers ``studyKept: false`` (the page says only "The video was removed to save space."), and
+    Analyze says the same, never "Its study stays." (§45.35 D9)."""
+    _keep(store, keepReferences="days_30")
+    _reference(store, s3_client, REF_A, created=OLD, status="ready", analysisKey=None)
+    _reference(store, s3_client, REF_B, created=OLD, status="failed", analysisKey=None)
+    _reference(store, s3_client, REF_C, created=OLD)  # studied: its study stays
+    assert _cleanup(wcall)["files"] == 9
+    for ref_id, kept in ((REF_A, False), (REF_B, False), (REF_C, True)):
+        item = table.raw(pk(), f"REFVID#{ref_id}")
+        assert item["fileRemovedAt"] == "2026-11-15T12:00:00.000Z"
+        assert item["note"] == (
+            "The video was removed to save space. Its study stays." if kept else "The video was removed to save space."
+        )
+        shown = wcall("GET", f"{BASE}/references/{ref_id}")[1]["reference"]
+        assert (shown["fileRemoved"], shown["studyKept"]) == (True, kept), ref_id
+    status, refused = wcall("POST", f"{BASE}/references/{REF_A}/analyze", {})
+    assert (status, refused["error"]["message"]) == (409, "The video was removed to save space.")
+    status, refused = wcall("POST", f"{BASE}/references/{REF_C}/analyze", {})
+    assert (status, refused["error"]["message"]) == (409, "The video was removed to save space. Its study stays.")
+
+
 def test_cleanup_marks_a_reference_before_deleting_its_file(
     wcall: WsCall, store: db.Store, s3_client: FakeS3, table: FakeTable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -280,7 +317,7 @@ def test_cleanup_marks_a_reference_before_deleting_its_file(
     monkeypatch.setattr(retention, "_ref_due", lambda item, keep, now: True)
     assert _cleanup(wcall) == {"files": 0, "bytes": 0}
     assert f"{prefix()}references/{REF_A}/source.mp4" in s3_client.objects
-    assert "sourceRemovedAt" not in table.raw(pk(), f"REFVID#{REF_A}")
+    assert not {"fileRemovedAt", "sourceRemovedAt"} & set(table.raw(pk(), f"REFVID#{REF_A}"))
     monkeypatch.undo()
     # S3 refuses the delete: the mark is taken back, so the next cleanup tries again
     _reference(store, s3_client, REF_B)
@@ -292,21 +329,22 @@ def test_cleanup_marks_a_reference_before_deleting_its_file(
     s3_client.delete_object = refuse  # type: ignore[method-assign]
     status, _ = wcall("POST", f"{BASE}/storage/cleanup", {})
     assert status >= 500
-    assert "sourceRemovedAt" not in table.raw(pk(), f"REFVID#{REF_B}")
+    assert not {"fileRemovedAt", "sourceRemovedAt", "note"} & set(table.raw(pk(), f"REFVID#{REF_B}"))
     assert "url" in wcall("GET", f"{BASE}/references/{REF_B}")[1]["reference"]
     s3_client.delete_object = real  # type: ignore[method-assign]
     assert _cleanup(wcall) == {"files": 3, "bytes": 5000}
 
 
+@pytest.mark.parametrize("mark", ["fileRemovedAt", "sourceRemovedAt"])  # the name both write, and the earlier one
 def test_analyze_never_starts_on_a_file_a_cleanup_marked_meanwhile(
-    wcall: WsCall, store: db.Store, s3_client: FakeS3, table: FakeTable, monkeypatch: pytest.MonkeyPatch
+    wcall: WsCall, store: db.Store, s3_client: FakeS3, table: FakeTable, monkeypatch: pytest.MonkeyPatch, mark: str
 ) -> None:
     """The cleanup's mark lands between Analyze's read and its write: the write's condition refuses it."""
     from clipfactory_api.workspaces import references
 
-    _reference(store, s3_client, REF_A, sourceRemovedAt=AGENT_AT)
+    _reference(store, s3_client, REF_A, **{mark: AGENT_AT})
     monkeypatch.setattr(references, "settle", lambda app, item, now: {k: v for k, v in item.items()
-                                                                       if k != "sourceRemovedAt"})  # fmt: skip
+                                                                       if k != mark})  # fmt: skip
     status, body = wcall("POST", f"{BASE}/references/{REF_A}/analyze", {})
     assert (status, body["error"]["message"]) == (409, "The video was removed to save space. Its study stays.")
     assert not [i for i in table.all() if i["sk"].startswith("PJOB#")]

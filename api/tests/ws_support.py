@@ -541,7 +541,27 @@ INTERNAL = (
     "fileRemovedAt",
     "sourceRemovedAt",
     "picturesRemovedAt",
+    # §45.35: the "Try it" lock (``CHECKLOCK#``) is never returned
+    "checkJobId",
 )
+
+
+def model_status_problems(value: Any) -> list[str]:
+    """``MODELSTATUS#.by`` (who wrote a model's status: ``"check"`` for Check models, §45.35 D7) is internal. A plain
+    ``"by"`` cannot join the text-based list (a Library item's ``meta.by`` is public), so this looks at the shapes a
+    model status reaches: a ``ModelInfo`` (it has ``statusLine``) and a model entry of a Check models result (``status``
+    with ``checkedAt``)."""
+    found: list[str] = []
+    if isinstance(value, dict):
+        status_shaped = "statusLine" in value or ("status" in value and "checkedAt" in value)
+        if status_shaped and "by" in value:
+            found.append("field by (MODELSTATUS#)")
+        for v in value.values():
+            found += model_status_problems(v)
+    elif isinstance(value, list):
+        for v in value:
+            found += model_status_problems(v)
+    return found
 
 
 def leaked(responses: Iterable[Any]) -> list[str]:
@@ -551,6 +571,7 @@ def leaked(responses: Iterable[Any]) -> list[str]:
     for body in responses:
         text = json.dumps(body)
         found += [f"field {name}" for name in INTERNAL if f'"{name}"' in text]
+        found += model_status_problems(body)
         found += ["a raw ws/ key"] if '"ws/' in text else []
         found += ["USER#"] if "USER#" in text else []
     return found

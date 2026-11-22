@@ -338,6 +338,22 @@ def test_get_answers_the_analysis_job_so_the_page_shows_each_step_and_the_reason
     assert wcall("GET", f"{BASE}/references/{ref['refId']}")[1]["job"]["jobId"] == again["job"]["jobId"]
 
 
+def test_an_analysis_jobs_model_records_are_the_same_as_a_storys(
+    wcall: WsCall, s3_client: FakeS3, table: FakeTable
+) -> None:
+    """§45.35 D5: a reference analysis job's ``meta.models`` carries the same exact records (the model id and Region
+    really called, the task, ``failed``), and nothing else the agent may keep beside them."""
+    ref = _upload(wcall, s3_client)
+    _, started = wcall("POST", f"{BASE}/references/{ref['refId']}/analyze", {})
+    record = {"step": "look", "agentId": "video_analysis", "task": "reference_analysis", "model": "opus-5-5",
+              "modelId": "global.anthropic.claude-opus-5-5", "region": "eu-north-1", "effort": "high",
+              "effortApplied": False, "failed": True}  # fmt: skip
+    table.items[(pk(), f"PJOB#{started['job']['jobId']}")]["meta"] = {"models": [{**record, "secret": "x"}, "junk"]}
+    got = wcall("GET", f"{BASE}/references/{ref['refId']}")[1]
+    assert got["job"]["meta"]["models"] == [record]
+    assert leaked([got]) == []
+
+
 def test_another_references_or_a_storys_job_is_never_answered(
     wcall: WsCall, s3_client: FakeS3, table: FakeTable
 ) -> None:

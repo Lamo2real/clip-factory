@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
+import json
+import time
+from datetime import timedelta
+from typing import Any
+
 import pytest
 
+import ws_social_support as sup
 from clipfactory_api import db
 from clipfactory_api.app import App
-from conftest import OTHER, Call
-from fakes import FakeS3
-from ws_support import BASE, caller, install, pk, seed_item, seed_job, seed_story
+from clipfactory_api.workspaces import apps, sentences, social
+from clipfactory_api.workspaces import secrets as ws_secrets
+from conftest import OTHER, USER, Call, Clock
+from fakes import FakeS3, FakeSecretsManager
+from test_oauth_state_formats import GOOD
+from ws_support import BASE, caller, install, pk, seed_character, seed_item, seed_job, seed_story
 
 
 @pytest.fixture
@@ -198,3 +207,171 @@ def test_the_dashboard_is_a_lamo_stories_page(call: Call) -> None:
     status, body = call("GET", "/v1/workspaces/clips/dashboard")
     assert status == 409
     assert body["error"]["message"] == "That is a Lamo Stories page. Switch to Lamo Stories first."
+
+
+# --- §45.35 D11: the accounts as Social accounts shows them, Fix it for an account problem --------------------
+
+
+def test_the_dashboards_accounts_are_the_ones_social_accounts_shows(
+    app: App, call: Call, store: db.Store, secrets_client: FakeSecretsManager
+) -> None:
+    """Lamo Clips connected the same YouTube channel later (nobody shared it) and TikTok's app keys changed: the
+    stored ``SOCIAL#`` items still say ``connected``. The dashboard works both out like the Social accounts page
+    (``social.public_of``) and stores them, so every screen says the same."""
+    sup.install(app, secrets_client)
+    sup.social(store, secrets_client, "youtube", identity="UC-same")
+    sup.social(store, secrets_client, "tiktok")
+    sup.social(store, secrets_client, "x")
+    sup.clips_account(store, None, "youtube", accountId="UC-same")
+    new = {**GOOD["tiktok"], "clientId": "awproductionkeys12345"}
+    secrets_client.values["cf-prod/platforms/tiktok/app"] = json.dumps(new)
+    d = call("GET", f"{BASE}/dashboard")[1]["dashboard"]
+    accounts = {a["platform"]: a for a in d["accounts"]}
+    assert accounts["youtube"] == {
+        "platform": "youtube",
+        "status": "same_as_clips",
+        "accountName": "Lamo Stories youtube",
+    }
+    assert accounts["tiktok"]["status"] == "needs_reconnect"
+    assert accounts["x"]["status"] == "connected"
+    # settled: the stored items now say what the page shows
+    assert store.get(pk(), "SOCIAL#youtube")["connectionStatus"] == "same_as_clips"
+    assert (store.get(pk(), "SOCIAL#tiktok")["connectionStatus"], store.get(pk(), "SOCIAL#tiktok")["reason"]) == (
+        "needs_reconnect",
+        "keys_changed",
+    )
+    you = [n for n in d["needsYou"] if n["platform"] == "tiktok"]
+    assert [(n["href"], n["sentence"]) for n in you] == [
+        ("/stories/connections", "Lamo Stories' TikTok (Lamo Stories tiktok) needs connecting again. Open Social "
+                                 "accounts and tap Connect."),
+    ]  # fmt: skip
+    # the same as the Social accounts page itself
+    page = {a["platform"]: a["connectionStatus"] for a in sup.ws_call(app)("GET", f"{BASE}/social")[1]["accounts"]}
+    assert {p: a["status"] for p, a in accounts.items()} == page
+
+
+def test_a_secret_that_cannot_be_read_never_breaks_the_dashboard(
+    app: App, call: Call, store: db.Store, secrets_client: FakeSecretsManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sup.install(app, secrets_client)
+    sup.social(store, secrets_client, "youtube")
+
+    def down(*_a: object, **_k: object) -> None:
+        raise RuntimeError("Secrets Manager is down")
+
+    monkeypatch.setattr(apps, "app_keys", down)
+    status, body = call("GET", f"{BASE}/dashboard")
+    assert status == 200
+    assert {a["platform"]: a["status"] for a in body["dashboard"]["accounts"]}["youtube"] == "connected"
+
+
+class _SlowClock:
+    """``time.monotonic`` for ``workspaces.social``: every secret read moves it on by ``step`` seconds."""
+
+    def __init__(self) -> None:
+        self.start = time.monotonic()
+        self.waited = 0.0
+
+    def monotonic(self) -> float:
+        return self.start + self.waited
+
+
+@pytest.mark.parametrize("answers", [False, True])
+def test_a_slow_secrets_manager_never_holds_the_dashboard_past_its_29_seconds(
+    app: App,
+    call: Call,
+    store: db.Store,
+    secrets_client: FakeSecretsManager,
+    monkeypatch: pytest.MonkeyPatch,
+    answers: bool,
+) -> None:
+    """Every platform connected and each key read slow: failing ones after the worst wait (both attempts time out),
+    or answering ones after 6 s each. The dashboard stops waiting on Secrets Manager after the first failure, and
+    before one more slow read could pass the request's 29 s; every account is still shown."""
+    sup.install(app, secrets_client)
+    for platform in ("youtube", "tiktok", "instagram", "facebook", "x"):
+        sup.social(store, secrets_client, platform)
+    clock = _SlowClock()
+    monkeypatch.setattr(social, "time", clock)
+    real = apps.app_keys
+    reads: list[str] = []
+
+    def slow(*a: Any, **k: Any) -> Any:
+        reads.append(str(a[4]))
+        if not answers:
+            clock.waited += ws_secrets.WORST_READ_SECONDS
+            raise TimeoutError("Secrets Manager did not answer")
+        clock.waited += 6.0
+        return real(*a, **k)
+
+    monkeypatch.setattr(apps, "app_keys", slow)
+    status, body = call("GET", f"{BASE}/dashboard")
+    assert status == 200, body
+    assert {a["status"] for a in body["dashboard"]["accounts"]} == {"connected"}
+    assert len(reads) == (1 if not answers else 2)  # never one read per platform
+    assert clock.waited + social.DASHBOARD_SPARE_SECONDS <= social.DASHBOARD_REQUEST_SECONDS
+
+
+def test_without_posting_switched_on_the_dashboard_still_compares_with_lamo_clips(call: Call, store: db.Store) -> None:
+    """No secrets wrapper (``WS_SECRET_PREFIX`` unset): the app keys are not checked, Lamo Clips' identity is."""
+    seed_item(store, "SOCIAL#youtube", "ws_social", platform="youtube", connectionStatus="connected",
+              externalAccountId="UC-same", accountName="Lamo Stories Channel", updatedAt="2026-11-15T10:00:00.000Z")  # fmt: skip
+    store.put({"pk": f"USER#{USER}", "sk": "ACCOUNT#youtube", "platform": "youtube", "status": "connected",
+               "accountId": "UC-same"})  # fmt: skip
+    d = call("GET", f"{BASE}/dashboard")[1]["dashboard"]
+    assert {a["platform"]: a["status"] for a in d["accounts"]}["youtube"] == "same_as_clips"
+
+
+@pytest.mark.parametrize(
+    ("kind", "href"),
+    [
+        ("reconnect", "/stories/connections"),
+        ("token_dead", "/stories/connections"),
+        ("not_connected", "/stories/connections"),
+        ("keys_changed", "/stories/connections"),
+        ("same_as_clips", "/stories/connections"),
+        ("private", "review"),
+        ("daily", "review"),
+        ("clips_unknown", "review"),  # Try again on the video checks the account first
+        ("down", "review"),
+    ],
+)
+def test_fix_it_opens_social_accounts_for_an_account_problem(
+    call: Call, store: db.Store, s3_client: FakeS3, kind: str, href: str
+) -> None:
+    story = seed_story(store, s3_client, status="approved", title="Out")
+    sentence = sentences.story_sentence("tiktok", kind, "Lamo Stories")
+    seed_item(store, "PUBJOB#01J0000000000000000000PJ1", "ws_pubjob", publishingJobId="01J0000000000000000000PJ1",
+              contentId=story["storyId"], platform="tiktok", publishingStatus="needs_attention", error=sentence,
+              createdAt="2026-11-15T10:20:00.000Z")  # fmt: skip
+    (shown,) = call("GET", f"{BASE}/dashboard")[1]["dashboard"]["needsYou"]
+    assert shown["sentence"] == sentence
+    assert shown["href"] == (f"/stories/review/{story['storyId']}" if href == "review" else href)
+
+
+def test_a_job_the_api_fails_itself_shows_in_recent_activity(
+    call: Call, store: db.Store, s3_client: FakeS3, clock: Clock
+) -> None:
+    """§45.35 D11: the stale-heartbeat fence and a start that did not happen fail the video like the agent does,
+    and like the agent they write a ``failed`` activity in the same transaction."""
+    making = seed_story(store, s3_client, status="producing", made=False, title="Ice")
+    job = seed_job(store, making, status="running", heartbeatAt="2026-11-15T11:00:00.000Z")
+    store.update(making["pk"], making["sk"], {"currentJobId": job["jobId"]})
+    d = call("GET", f"{BASE}/dashboard")[1]["dashboard"]
+    assert d["counts"]["producing"] == 0
+    assert d["activity"][0] == {"at": "2026-11-15T12:00:00.000Z", "kind": "failed", "storyId": making["storyId"],
+                                "title": "Ice"}  # fmt: skip
+    # read again: the fenced job is not failed (or written) twice
+    again = call("GET", f"{BASE}/dashboard")[1]["dashboard"]
+    assert [a["kind"] for a in again["activity"]].count("failed") == 1
+    # a start that did not happen (the video maker not switched on) is written too
+    hero = seed_character(store, name="Lamo")
+    brief = {"title": "Snow", "logline": "Snow on the road.", "category": "comedy"}
+    clock.now += timedelta(minutes=1)
+    status, body = call("POST", f"{BASE}/stories", {"brief": brief, "characterIds": [hero["characterId"]]})
+    assert (status, body["job"]["status"]) == (201, "failed")
+    latest = call("GET", f"{BASE}/dashboard")[1]["dashboard"]["activity"][0]
+    assert (latest["kind"], latest["storyId"], latest["title"]) == ("failed", body["story"]["storyId"], "Snow")
+    assert [i for i in store.query_all(pk(), "ACT#") if i.get("kind") == "failed"] == [
+        i for i in store.query_all(pk(), "ACT#") if i.get("userId") == USER and i.get("kind") == "failed"
+    ]

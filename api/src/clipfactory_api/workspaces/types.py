@@ -61,6 +61,7 @@ PROVCRED_SK: Final = "PROVCRED#"
 ONBOARD_SK: Final = "ONBOARD"  # an exact sort key
 AICONFIG_SK: Final = "AICONFIG"  # an exact sort key
 MODELDEF_SK: Final = "MODELDEF#"  # MODELDEF#{key}: a reasoning model the owner added (§45.34 "Adding models")
+CHECKLOCK_SK: Final = "CHECKLOCK#"  # CHECKLOCK#{providerId}: the one "Try it" running (``checkJobId``, §45.35 D2)
 ITEM_PREFIXES: Final = (
     IDEA_SK,
     CHAR_SK,
@@ -84,6 +85,7 @@ ITEM_PREFIXES: Final = (
     ONBOARD_SK,
     AICONFIG_SK,
     MODELDEF_SK,
+    CHECKLOCK_SK,
 )
 
 # Item `type` values (never "job", "clip", "post", "account", "setup": Lamo Clips readers filter on those).
@@ -110,6 +112,7 @@ TYPE_PROVCRED: Final = "ws_provcred"
 TYPE_ONBOARD: Final = "ws_onboard"
 TYPE_AICONFIG: Final = "ws_aiconfig"
 TYPE_MODELDEF: Final = "ws_modeldef"
+TYPE_CHECKLOCK: Final = "ws_checklock"
 
 
 def registry_pk(user_id: str) -> str:

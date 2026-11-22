@@ -24,6 +24,7 @@ STEP_LABEL: Final = {
     "assemble": "Put it together",
     "preview": "Ready to watch",
     "portrait": "Draw the picture",
+    "check": "Try it",  # a provider_check job's one step (§45.35 D2)
 }
 STORY_STATUSES: Final = ("draft", "producing", "needs_check", "review", "approved", "rejected", "published", "failed")
 CATEGORIES: Final = ("driving_safety", "everyday_skills", "comedy", "explainer")
@@ -38,6 +39,7 @@ ASSET_KINDS: Final = (
     "audio",
     "captions",
     "design_ref",  # a picture for "Design with AI" (§45.5); the Library hides it
+    "video",  # a WebM or MOV copy of a final video (§45.34 "Output formats"; the Library's Videos tab, §45.35 D10)
 )
 LIBRARY_HIDDEN: Final = frozenset({"design_ref"})
 SAFETY_STATUSES: Final = ("pending", "ok", "problems", "skipped")
@@ -348,8 +350,28 @@ def _step(raw: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _models(value: Any) -> list[dict[str, Any]]:
-    """``meta.models`` (§45.25 "Recorded"): per step, the model, effort and whether the effort was really sent."""
+def _text_or_none(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+CALL_FIELDS: Final = ("modelId", "region", "task")
+
+
+def call_record(item: Mapping[str, Any]) -> dict[str, Any]:
+    """What a model call really used, as the agent recorded it (§45.35 D5, on ``meta.models`` entries, ``TASK#`` and
+    assistant ``MSG#``): ``modelId`` (the Bedrock model id or inference profile really called), ``region``, the
+    ``task`` and ``failed: true`` when the call failed. Each is left out when the agent did not record it (an older
+    item, or a call that never started)."""
+    out: dict[str, Any] = {name: item[name] for name in CALL_FIELDS if _text_or_none(item.get(name))}
+    if item.get("failed") is True:
+        out["failed"] = True
+    return out
+
+
+def model_records(value: Any) -> list[dict[str, Any]]:
+    """``meta.models`` (§45.25 "Recorded", §45.34, §45.35 D5): per step, the model, its Bedrock id and Region, the
+    effort and whether it was really sent, the task, and ``failed: true`` for a step that stopped on its model. An
+    older entry without them still shows (without those keys)."""
     out = []
     for entry in value if isinstance(value, list) else []:
         if not isinstance(entry, Mapping) or not isinstance(entry.get("model"), str):
@@ -362,9 +384,13 @@ def _models(value: Any) -> list[dict[str, Any]]:
                 "model": str(entry["model"]),
                 "effort": effort if isinstance(effort, str) else None,
                 "effortApplied": bool(entry.get("effortApplied")),
+                **call_record(entry),
             }
         )
     return out
+
+
+_models = model_records
 
 
 def public_job(item: Mapping[str, Any]) -> dict[str, Any]:

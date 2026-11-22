@@ -53,6 +53,8 @@ NOVA: dict[str, Any] = {
     "vision": False,
     "maxOutputTokens": 10000,
     "price": {"inputPer1M": 2.5, "outputPer1M": 12.5, "currency": "USD"},
+    # an Amazon model takes no effort unless the owner says how (§45.35 D1); these tests list efforts
+    "effortField": "output_config",
 }
 
 
@@ -100,8 +102,13 @@ def test_an_added_model_is_listed_after_the_bundled_ones_and_not_checked_yet(wca
         "checkedAt": None,
         "price": None,
         "custom": True,
+        "host": "Amazon Bedrock",  # who runs it; ``provider`` is who makes it (§45.35 D8)
         "region": "us-east-1",
         "maxOutputTokens": 8192,
+        # how it is called (§45.35 D1): a Meta model takes no effort, no tool use and no prompt cache by default
+        "effortField": "none",
+        "tools": False,
+        "cache": False,
     }
     item = table.raw(pk(), "MODELDEF#custom-llama")
     assert item is not None
@@ -181,6 +188,12 @@ def first_time_plus_one() -> Any:
         ("custom-x", {"provider": None}, "Say who makes the model"),
         ("custom-x", {"price": {"inputPer1M": -1, "outputPer1M": 1, "currency": "USD"}}, "inputPer1M must be"),
         ("custom-x", {"temperature": 1}, "Unknown field: temperature."),
+        # how it is called (§45.35 D1): a Meta model takes no effort, so it lists none
+        ("custom-x", {"efforts": ["low"]}, "This model has no effort setting (effortField none)"),
+        ("custom-x", {"efforts": ["low"], "effortField": "none"}, "This model has no effort setting"),
+        ("custom-x", {"effortField": "reasoning_effort"}, "Say how the model takes an effort"),
+        ("custom-x", {"tools": "yes"}, "Say whether the model takes tool use"),
+        ("custom-x", {"cache": 1}, "Say whether the model takes Bedrock's prompt cache"),
     ],
 )
 def test_a_model_def_is_checked_with_the_owners_sentence(
@@ -534,3 +547,103 @@ def test_model_status_is_read_by_its_model_attribute(wcall: WsCall, store: db.St
     assert by["opus-5-5"]["status"] == "ok"  # an older item's ``modelKey`` still counts
     statuses = ai_config.model_status_items(store, USER, "stories")
     assert set(statuses) >= {"custom-llama", "opus-5-5"}
+
+
+# --- how an added model is called (§45.35 D1), who runs it (D8), and a re-pointed model (D6) --------------------
+
+CLAUDE: dict[str, Any] = {
+    **LLAMA,
+    "label": "Claude Opus 5.5 in Ireland",
+    "provider": "Anthropic",
+    "modelId": "eu.anthropic.claude-opus-5-5",
+    "region": "eu-west-1",
+    "efforts": ["low", "high"],
+    "defaultEffort": "high",
+}
+
+
+# an Amazon model with no word on how it is called: no effort, no tool use, the prompt cache on
+NOVA_PLAIN: dict[str, Any] = {**{k: v for k, v in NOVA.items() if k != "effortField"}, "efforts": [],
+                              "defaultEffort": None}  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("body", "how"),
+    [
+        (CLAUDE, {"effortField": "output_config", "tools": True, "cache": True}),
+        (NOVA_PLAIN, {"effortField": "none", "tools": False, "cache": True}),
+        (LLAMA, {"effortField": "none", "tools": False, "cache": False}),
+        ({**LLAMA, "provider": " anthropic "}, {"effortField": "output_config", "tools": True, "cache": True}),
+        ({**CLAUDE, "tools": False, "cache": False}, {"effortField": "output_config", "tools": False, "cache": False}),
+        ({**LLAMA, "tools": True, "cache": True}, {"effortField": "none", "tools": True, "cache": True}),
+        (NOVA, {"effortField": "output_config", "tools": False, "cache": True}),
+    ],
+)
+def test_how_an_added_model_is_called_comes_from_its_maker_unless_said(
+    wcall: WsCall, store: db.Store, table: FakeTable, body: dict[str, Any], how: dict[str, Any]
+) -> None:
+    """``effortField`` (default output_config for Anthropic, else none), ``tools`` (default on for Anthropic) and
+    ``cache`` (default on for Anthropic and Amazon): kept on the item for the agent, shown in Settings › AI."""
+    model = _add(wcall, "custom-x", body)
+    assert {k: model[k] for k in how} == how
+    assert model["host"] == "Amazon Bedrock"
+    item = table.raw(pk(), "MODELDEF#custom-x")
+    assert {k: item[k] for k in how} == how
+    entry = next(m for m in model_defs.load(store, USER, "stories") if m["key"] == "custom-x")
+    assert {k: entry[k] for k in how} == how  # what the resolver (and the agent) merges
+    assert entry["host"] == "Amazon Bedrock"
+
+
+def test_a_model_saved_before_the_calling_fields_reads_with_its_makers_defaults(wcall: WsCall, store: db.Store) -> None:
+    """An item from before §45.35 has no ``effortField``, ``tools`` or ``cache``: they read as the maker's defaults,
+    and a non-Anthropic model that listed efforts lists none (no effort would be sent to it)."""
+    base = {k: v for k, v in LLAMA.items() if k not in ("efforts", "defaultEffort")}
+    seed(store, "MODELDEF#custom-old", ws.TYPE_MODELDEF, key="custom-old", **base, efforts=["low", "high"],
+         defaultEffort="high", createdAt=AT, updatedAt=AT)  # fmt: skip
+    seed(store, "MODELDEF#custom-claude", ws.TYPE_MODELDEF, key="custom-claude", **CLAUDE, createdAt=AT,
+         updatedAt=AT)  # fmt: skip
+    by = {m["key"]: m for m in _ai(wcall)["models"]}
+    old, claude = by["custom-old"], by["custom-claude"]
+    assert (old["effortField"], old["tools"], old["cache"], old["efforts"], old["defaultEffort"]) == (
+        "none", False, False, [], None
+    )  # fmt: skip
+    assert (claude["effortField"], claude["tools"], claude["cache"], claude["efforts"]) == (
+        "output_config", True, True, ["low", "high"]
+    )  # fmt: skip
+    assert {m["host"] for m in by.values()} == {"Amazon Bedrock"}
+    assert (old["provider"], claude["provider"]) == ("Meta", "Anthropic")
+    # an effort picked with the old one is refused with its sentence, never sent
+    body = {"defaultModel": "opus-5-5", "defaultEffort": "high", "version": 0,
+            "tasks": {"chat": {"model": "custom-old", "effort": "high"}}}  # fmt: skip
+    status, got = wcall("PUT", f"{BASE}/ai", body)
+    assert (status, got["error"]["message"]) == (400, "Chat: Llama 4 Maverick has no effort setting; it runs at its "
+                                                      "own level.")  # fmt: skip
+
+
+def test_changing_an_added_models_id_or_region_clears_its_status(
+    wcall: WsCall, store: db.Store, table: FakeTable
+) -> None:
+    """§45.35 D6: another model id or Region is another model, so its old "Works" goes and it reads "Not checked
+    yet"; a new name, price or pictures setting keeps the status."""
+    _add(wcall)
+    checked = {"model": "custom-llama", "status": "ok", "checkedAt": AT, "by": "check"}
+    seed(store, "MODELSTATUS#custom-llama", ws.TYPE_MODELSTATUS, **checked)
+    assert _add(wcall, body={**LLAMA, "label": "Llama 4", "vision": False})["status"] == "ok"
+    assert table.raw(pk(), "MODELSTATUS#custom-llama") is not None
+    changed = _add(wcall, body={**LLAMA, "modelId": "us.meta.llama4-scout-17b-instruct-v1:0"})
+    assert (changed["status"], changed["statusLine"], changed["checkedAt"]) == (
+        "not_checked", "Not checked yet. Tap Check models to try it.", None
+    )  # fmt: skip
+    assert table.raw(pk(), "MODELSTATUS#custom-llama") is None
+    assert next(m for m in _ai(wcall)["models"] if m["key"] == "custom-llama")["status"] == "not_checked"
+    # a status kept under an older sort key (read by its ``model`` attribute) goes too, and so does a Region change
+    seed(store, "MODELSTATUS#legacy-llama", ws.TYPE_MODELSTATUS, **checked)
+    seed(store, "MODELSTATUS#opus-5-5", ws.TYPE_MODELSTATUS, model="opus-5-5", status="ok", checkedAt=AT)
+    assert _add(wcall, body={**LLAMA, "modelId": changed["modelId"], "region": "us-west-2"})["status"] == "not_checked"
+    assert table.raw(pk(), "MODELSTATUS#legacy-llama") is None
+    assert table.raw(pk(), "MODELSTATUS#opus-5-5") is not None  # another model's status is never touched
+    # another owner's status item at the same key is never deleted
+    store.put({"pk": pk(), "sk": "MODELSTATUS#custom-llama", "type": ws.TYPE_MODELSTATUS, "userId": OTHER,
+               "workspaceId": "stories", "model": "custom-llama", "status": "ok", "checkedAt": AT})  # fmt: skip
+    _add(wcall, body={**LLAMA, "region": "us-east-2"})
+    assert table.raw(pk(), "MODELSTATUS#custom-llama") is not None

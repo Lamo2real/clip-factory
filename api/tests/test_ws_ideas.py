@@ -175,6 +175,16 @@ def test_finished_drafts_are_checked_like_typed_ideas(call: Call, store: db.Stor
     done = body["task"]
     assert done["status"] == "done"
     assert (done["model"], done["effort"], done["effortApplied"]) == ("opus-5-5", "medium", True)
+    assert not {"modelId", "region", "task", "failed"} & set(done)  # not recorded by this agent: left out
+    # §45.35 D5: what the call really used, as the agent records it, is passed through
+    store.update(pk(), f"TASK#{task['taskId']}", {"modelId": "global.anthropic.claude-opus-5-5",
+                                                  "region": "eu-north-1", "task": "brainstorm"})  # fmt: skip
+    exact = call("GET", f"{BASE}/tasks/{task['taskId']}")[1]["task"]
+    assert (exact["modelId"], exact["region"], exact["task"]) == (
+        "global.anthropic.claude-opus-5-5",
+        "eu-north-1",
+        "brainstorm",
+    )
     assert done["result"]["drafts"] == [
         {
             "title": "Oops, the toast",
