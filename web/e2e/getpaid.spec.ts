@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { visibleEdges } from "./edges.ts";
 import { tap } from "./flows.ts";
-import { findOverflow, launcherSettled, settle } from "./helpers.ts";
+import { findOverflow, launcherSettled, settle, stillBackdrop } from "./helpers.ts";
 
 // Get paid (docs/CONTRACTS.md §40, §40.8 tests), in mock mode: Clip Factory's own taps per place equal §40.1's CF
 // counts (YouTube 15, TikTok 4, Instagram 4, Facebook 4 and 2 after Instagram, X 5, Content Rewards 5 or 3 with
@@ -360,12 +360,25 @@ for (const [name, use] of [
 
     if (!phone)
       test("computer, first visit: the first step not done is brought into view, so the one vermilion is on screen", async ({ page }) => {
+        // The step comes into view with a smooth scroll 160 ms after its card arrives. On the CI runner, which paints
+        // without a GPU, the living backdrop made that scroll start late (the vermilion still at 1391 of 900 after a
+        // fixed 900 ms), so the backdrop holds still and the check waits for the scroll to arrive. A step that is
+        // never brought into view still fails.
+        await stillBackdrop(page);
         for (const [place, finish] of [
           ["youtube", ["youtube"]],
           ["facebook", ["facebook"]],
         ] as const) {
           await start(page, `/settings/posting/getpaid/${place}`, "fresh", [...finish]);
-          await page.waitForTimeout(900);
+          await expect
+            .poll(
+              async () => {
+                const box = await tomato(page).boundingBox();
+                return !!box && box.y >= 0 && box.y + box.height <= 900;
+              },
+              { message: `${place}: brought into view`, timeout: 10_000 },
+            )
+            .toBe(true);
           const b = await tomato(page).boundingBox();
           expect(b, `${place}: one vermilion`).not.toBeNull();
           expect(b!.y, `${place}: on screen`).toBeGreaterThanOrEqual(0);
