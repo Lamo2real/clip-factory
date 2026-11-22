@@ -7,7 +7,8 @@ others still run; the invocation then fails, so Lambda's retry (the same event) 
 finished run answers ``done``. Anything else → log ``autopost.bad_event``.
 
 Env: ``TABLE_NAME``, ``MEDIA_BUCKET``, ``CLIP_FLOW_ARN`` (the clip flow's ``live`` alias), ``SECRET_PREFIX`` and
-``CONTENT_REWARDS`` (the campaign fit check, §39.3), ``AUTOPOST_TIME_BUDGET_SECONDS`` (240).
+``CONTENT_REWARDS`` and ``CR_REMAKE`` (the campaign fit check, §39.3; the same switches as cf-prod-api),
+``AUTOPOST_TIME_BUDGET_SECONDS`` (240).
 """
 
 from __future__ import annotations

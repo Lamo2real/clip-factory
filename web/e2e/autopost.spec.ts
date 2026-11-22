@@ -170,7 +170,7 @@ for (const size of SIZES) {
       await turnOn(page);
       const hook = (await page.locator("#auto-post-next .autopost__hook").first().innerText()).trim();
       const ran = await page.evaluate(async () => (await (window as MockWindow).__cfMock!.autopost.advance(3_600_000)).filter((r) => r.includes("#")));
-      expect(ran).toEqual(["2026-11-22T11:00:00Z#scheduled"]);
+      expect(ran).toEqual(["2026-11-22T11:00:00.000Z#scheduled"]);
       await page.evaluate(() => dispatchEvent(new Event("focus")));
       const recent = page.locator("#auto-post-recent .autopost__run");
       await expect(recent.first()).toHaveText(`Sun 11:00 · “${hook}”: YouTube … Instagram … Facebook …`);

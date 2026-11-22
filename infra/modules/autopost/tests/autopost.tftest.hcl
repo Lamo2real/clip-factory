@@ -37,6 +37,7 @@ variables {
   secret_prefix            = "cf-test/platforms/"
   alarm_topic_arn          = "arn:aws:sns:eu-north-1:123456789012:cf-test-alarms"
   content_rewards_enabled  = true
+  cr_remake_enabled        = true
   permissions_boundary_arn = "arn:aws:iam::123456789012:policy/cf-test-role-boundary"
 }
 
@@ -69,9 +70,10 @@ run "the_function" {
       CLIP_FLOW_ARN                = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:live"
       SECRET_PREFIX                = "cf-test/platforms/"
       CONTENT_REWARDS              = "on"
+      CR_REMAKE                    = "on"
       AUTOPOST_TIME_BUDGET_SECONDS = "240"
     })
-    error_message = "The env is exactly TABLE_NAME, MEDIA_BUCKET, CLIP_FLOW_ARN (the clip flow's live alias), SECRET_PREFIX, CONTENT_REWARDS and AUTOPOST_TIME_BUDGET_SECONDS=240."
+    error_message = "The env is exactly TABLE_NAME, MEDIA_BUCKET, CLIP_FLOW_ARN (the clip flow's live alias), SECRET_PREFIX, CONTENT_REWARDS, CR_REMAKE and AUTOPOST_TIME_BUDGET_SECONDS=240."
   }
 
   assert {
@@ -92,11 +94,12 @@ run "content_rewards_off" {
 
   variables {
     content_rewards_enabled = false
+    cr_remake_enabled       = false
   }
 
   assert {
-    condition     = aws_lambda_function.autopost.environment[0].variables.CONTENT_REWARDS == "off"
-    error_message = "With Content Rewards off the run gets CONTENT_REWARDS=off (every campaign clip waits)."
+    condition     = aws_lambda_function.autopost.environment[0].variables.CONTENT_REWARDS == "off" && aws_lambda_function.autopost.environment[0].variables.CR_REMAKE == "off"
+    error_message = "With Content Rewards off the run gets CONTENT_REWARDS=off (every campaign clip waits), and CR_REMAKE follows its own switch."
   }
 }
 

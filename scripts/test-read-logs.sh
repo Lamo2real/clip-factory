@@ -75,6 +75,9 @@ results cf-prod-clip-flow \
   '{"level": "info", "event": "cr.sent", "ts": "2026-11-21T17:17:00+00:00", "postId": "post-secret-77", "platform": "youtube"}'
 results cf-prod-stats '{"level": "info", "event": "cr.tick", "ts": "2026-11-21T17:20:00+00:00", "owners": 1}'
 results cf-prod-campaigns '{"level": "info", "event": "campaigns.read", "ts": "2026-11-21T17:21:00+00:00", "rules": 3}'
+results cf-prod-autopost \
+  '{"level": "info", "event": "autopost.planned", "ts": "2026-11-22T10:00:01+00:00", "runId": "2026-11-22T10:00:00.000Z#scheduled", "mode": "live", "clips": 1, "note": ""}' \
+  '{"level": "error", "event": "autopost.owner_failed", "ts": "2026-11-22T10:00:02+00:00", "userId": "user-secret-42", "slot": "2026-11-22T10:00:00.000Z", "error": "Boom"}'
 
 # Three CRCONN items: the pilot case (refused, email sent, steps as a string set), a connected one (steps as a list,
 # sign-in date far ahead) and a connected one past its sign-in date (the setup page says sign in again).
@@ -115,11 +118,11 @@ fi
 
 # 2. cf-prod-campaigns and cf-prod-stats are read, next to the groups read before.
 missing=""
-for fn in cf-prod-job-flow cf-prod-api cf-prod-clip-flow cf-prod-hooks cf-prod-campaigns cf-prod-stats; do
+for fn in cf-prod-job-flow cf-prod-api cf-prod-clip-flow cf-prod-hooks cf-prod-campaigns cf-prod-stats cf-prod-autopost; do
   [ -f "${work}/queries/q-${fn}" ] || missing="${missing} ${fn}"
 done
 if [ -z "$missing" ]; then
-  ok "the Lambda log groups read include cf-prod-campaigns and cf-prod-stats"
+  ok "the Lambda log groups read include cf-prod-campaigns, cf-prod-stats and cf-prod-autopost"
 else
   not_ok "no query for:${missing}"
 fi
@@ -134,6 +137,8 @@ for q in "${work}"/queries/q-cf-prod-*; do
     || ! matches "$re" '{"level":"info","event":"cr.tick","owners":1}' \
     || ! matches "$re" '{"message": "{\"level\": \"info\", \"event\": \"cr.refreshed\"}"}' \
     || ! matches "$re" '{"level": "info", "event": "campaigns.read", "rules": 3}' \
+    || ! matches "$re" '{"level": "info", "event": "autopost.planned", "runId": "x#scheduled"}' \
+    || ! matches "$re" '{"message": "{\"level\": \"info\", \"event\": \"autopost.tick\"}"}' \
     || matches "$re" '{"level": "info", "event": "stats.polled", "note": "ocr.done", "descr.": 1}'; then
     bad="${bad} $(basename "$q")"
   fi
@@ -154,6 +159,16 @@ if grep -q '"event":"cr.connected","result":"not_allowed"' "$log" \
   ok "cr.* and campaigns.* lines are printed (result, code, platform, owners, rules, signedIn, membership)"
 else
   not_ok "Content Rewards lines missing: $(cat "$log")"
+fi
+
+# 4b. Auto-posting lines (CONTRACTS §46) are printed with the run, its mode, how many clips and the slot, never the
+# owner's id.
+if grep -q '"event":"autopost.planned","runId":"2026-11-22T10:00:00.000Z#scheduled","mode":"live","clips":1,"note":""' "$log" \
+  && grep -q '"level":"error","event":"autopost.owner_failed","error":"Boom","slot":"2026-11-22T10:00:00.000Z"' "$log" \
+  && ! grep -q 'user-secret-42' "$log"; then
+  ok "autopost.* lines are printed (runId, mode, clips, note, slot, error) without the owner's id"
+else
+  not_ok "auto-posting lines missing or carrying the owner's id: $(grep -n autopost "$log" || true)"
 fi
 
 # 5. The CRCONN summary: status, last result, whether the pilot email was sent, steps done, Connect and sign-in dates,

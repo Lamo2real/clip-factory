@@ -625,6 +625,7 @@ run "autopost_is_wired" {
         "\n  clip_flow_arn_prefix = module.flows.function_arns[\"clip-flow\"]\n",
         "\n  secret_prefix = module.hooks.secret_prefix\n",
         "\n  content_rewards_enabled = var.content_rewards_enabled\n",
+        "\n  cr_remake_enabled = var.cr_remake_enabled\n",
         "\n  alarm_topic_arn = module.monitoring.alarm_topic_arn\n",
         "\n  permissions_boundary_arn = var.role_permissions_boundary_arn\n",
         "\n  table_arn       = module.data.table_arn\n",

@@ -93,6 +93,7 @@ resource "aws_lambda_function" "autopost" {
       SECRET_PREFIX = var.secret_prefix
       # §38.12, §46.5 rule 4: campaign clips are only ever taken while this is "on".
       CONTENT_REWARDS              = var.content_rewards_enabled ? "on" : "off"
+      CR_REMAKE                    = var.cr_remake_enabled ? "on" : "off" # §39.3: the fit check's copy offer, as on cf-prod-api
       AUTOPOST_TIME_BUDGET_SECONDS = "240"
     }
   }

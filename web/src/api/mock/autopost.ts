@@ -29,13 +29,13 @@ export const UPLOADED_YOURSELF = "You uploaded it yourself.";
 export const WAIT_A_MINUTE = "A test run just started. Wait a minute.";
 export const PICK_KIND = "Pick practice or private.";
 export const UNKNOWN_SETTING = "autoPost has a setting Clip Factory does not know.";
+export const NOT_AN_OBJECT = "autoPost must be a JSON object.";
 export const PICK_HOURS = "Pick 1 to 24 hours.";
 export const PICK_CLIPS = "Pick 1 to 5 clips.";
 
 const bad = (msg: string) => new ApiError(400, "bad_request", msg);
 const iso = (t: number) => new Date(t).toISOString();
 /** A run id's slot: ISO UTC to the second (the API's `{slot}#{kind}`). */
-const isoSecond = (t: number) => iso(Math.floor(t / 1000) * 1000).replace(".000Z", "Z");
 
 export interface AutoPostDeps {
   clips(): Clip[];
@@ -151,7 +151,8 @@ export function autoPostMock(deps: AutoPostDeps) {
   /** §46.7: one run. Scheduled runs check on and due first; run-now runs whatever the switch says. */
   async function runOnce(kind: AutoRunKind, slot: number): Promise<AutoRun | "off" | "not_due" | "done"> {
     const s = settingsNow();
-    const runId = `${isoSecond(slot)}#${kind}`;
+    // The server's runId: the slot as its iso() writes it, milliseconds kept ("…T10:00:00.000Z#scheduled").
+    const runId = `${iso(Math.floor(slot / 1000) * 1000)}#${kind}`;
     // The same event twice (a retry, two deliveries): the run item is there, so the second resumes it (here: done).
     if (runs.some((r) => r.runId === runId)) return "done";
     if (kind === "scheduled") {
@@ -164,14 +165,15 @@ export function autoPostMock(deps: AutoPostDeps) {
     let places = placesNow();
     // X has no private posts (§46.8).
     if (mode === "private") places = places.filter((p) => p !== "x");
-    const plan = places.length ? picked.taken.slice(0, kind === "private_now" ? 1 : s.perRun) : [];
+    // A Private test run never takes a campaign clip (its post would go to Content Rewards, §46.8).
+    const taken = mode === "private" ? picked.taken.filter((c) => !c.campaignId) : picked.taken;
+    // The note in the server's order (autopost/run.py _plan).
     let note: string | undefined;
-    if (!plan.length) {
-      if (mode === "private" && places.length) note = NOTE_NOTHING_TO_TEST;
-      else if (!picked.candidates) note = NOTE_NOTHING;
-      else if (!picked.taken.length) note = NOTE_ALL_WAITING;
-      else note = NOTE_NO_PLACES;
-    }
+    if (mode === "private" && !taken.length) note = NOTE_NOTHING_TO_TEST;
+    else if (mode !== "private" && !picked.candidates) note = NOTE_NOTHING;
+    else if (!places.length) note = NOTE_NO_PLACES;
+    else if (!taken.length) note = NOTE_ALL_WAITING;
+    const plan = note ? [] : taken.slice(0, kind === "private_now" ? 1 : s.perRun);
     // Claim: a scheduled run moves lastRunAt to its slot (a run that finds nothing counts too, §46.4).
     if (kind === "scheduled") lastRunAt = Math.max(lastRunAt ?? slot, slot);
     const run: StoredRun = {
@@ -279,7 +281,7 @@ export function autoPostMock(deps: AutoPostDeps) {
      * Switching on writes onAt; on while already on keeps it.
      */
     merge(stored: Partial<AutoPostSettings> | undefined, raw: unknown): AutoPostSettings {
-      if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw bad(UNKNOWN_SETTING);
+      if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw bad(NOT_AN_OBJECT);
       const patch = raw as Record<string, unknown>;
       if (Object.keys(patch).some((k) => !["on", "everyHours", "perRun", "practice"].includes(k))) throw bad(UNKNOWN_SETTING);
       const whole = (v: unknown, lo: number, hi: number) => typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi;

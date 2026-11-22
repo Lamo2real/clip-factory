@@ -3,7 +3,7 @@
 // and the mock's schedule, pick, runs and run-now limits on a fake clock.
 import { beforeEach, describe, expect, it } from "vitest";
 import { ApiError } from "../src/api/errors.ts";
-import { autoPostMock, CR_CANT_TAKE, NOTE_ALL_WAITING, NOTE_NO_PLACES, NOTE_NOTHING, NOTE_NOTHING_TO_TEST, PICK_CLIPS, PICK_HOURS, PICK_KIND, STILL_BEING_MADE, THREW_AWAY, UNKNOWN_SETTING, UPLOADED_YOURSELF, VIDEO_MISSING, WAIT_A_MINUTE, type AutoPostDeps } from "../src/api/mock/autopost.ts";
+import { autoPostMock, CR_CANT_TAKE, NOTE_ALL_WAITING, NOTE_NO_PLACES, NOTE_NOTHING, NOTE_NOTHING_TO_TEST, PICK_CLIPS, PICK_HOURS, PICK_KIND, STILL_BEING_MADE, THREW_AWAY, NOT_AN_OBJECT, UNKNOWN_SETTING, UPLOADED_YOURSELF, VIDEO_MISSING, WAIT_A_MINUTE, type AutoPostDeps } from "../src/api/mock/autopost.ts";
 import { mockApi } from "../src/api/mock/index.ts";
 import { TIKTOK_PRIVATE_ONLY } from "../src/lib/tiktokYourself.ts";
 import { seed } from "../src/api/mock/fixtures.ts";
@@ -283,6 +283,8 @@ function world(
     during?: (clips: Clip[]) => void;
     /** Upload refuses these clips with their sentence (the campaign way, §46.7 step 4). */
     refuse?: Record<string, string>;
+    /** Campaign clips are taken (Content Rewards can take them by itself), going to these places. */
+    campaignTakes?: Platform[];
   } = {},
 ) {
   const now = new Date().toISOString();
@@ -299,7 +301,7 @@ function world(
     posts: () => posts,
     settings: () => settings,
     ready: () => opts.ready ?? ["youtube", "tiktok", "instagram", "facebook"],
-    campaign: () => ({ wait: CR_CANT_TAKE, places: [] }),
+    campaign: () => (opts.campaignTakes ? { wait: null, places: opts.campaignTakes } : { wait: CR_CANT_TAKE, places: [] }),
     async send(c, places, options, auto) {
       const during = opts.during;
       opts.during = undefined;
@@ -331,7 +333,7 @@ describe("the mock's schedule (§46.4)", () => {
     expect(w.settings.autoPost!.onAt).toMatch(/^2026-11-22T23:20:00\./);
     expect((await w.m.status()).nextRunAt).toBe("2026-11-23T00:00:00.000Z");
     const ran = (await w.m.controls.advance(11 * HOUR)).filter((r) => r.includes("#"));
-    expect(ran).toEqual(["2026-11-23T00:00:00Z#scheduled", "2026-11-23T05:00:00Z#scheduled", "2026-11-23T10:00:00Z#scheduled"]);
+    expect(ran).toEqual(["2026-11-23T00:00:00.000Z#scheduled", "2026-11-23T05:00:00.000Z#scheduled", "2026-11-23T10:00:00.000Z#scheduled"]);
     expect(w.sent.map((s) => s.clipId)).toEqual(["C00", "C01", "C02"]);
     expect((await w.m.status()).nextRunAt).toBe("2026-11-23T15:00:00.000Z");
   });
@@ -354,7 +356,7 @@ describe("the mock's schedule (§46.4)", () => {
     w.m.controls.set("2026-11-22T10:20:00.000Z");
     w.turnOn();
     expect(await w.m.controls.tick("2026-11-22T10:59:00.000Z")).toBe("not_due");
-    expect(await w.m.controls.tick("2026-11-22T11:00:00.000Z")).toBe("2026-11-22T11:00:00Z#scheduled");
+    expect(await w.m.controls.tick("2026-11-22T11:00:00.000Z")).toBe("2026-11-22T11:00:00.000Z#scheduled");
     // A retry of the same delivery (a late one inside its hour too) resumes it: never a second run.
     expect(await w.m.controls.tick("2026-11-22T11:40:00.000Z")).toBe("done");
     expect(await w.m.controls.tick("2026-11-22T12:00:00.000Z")).toBe("not_due");
@@ -453,6 +455,42 @@ describe("the mock's pick and runs (§46.5–§46.8)", () => {
     expect(nowhere.sent).toEqual([]);
   });
 
+  it("notes follow the server's order (autopost/run.py _plan), and a Private test never takes a campaign clip", async () => {
+    // Nothing set up and every clip waiting: the server says nothing is set up first.
+    const both = world({ ready: [], clips: [{ clipId: "C", jobId: "J1", rank: 1, hook: "c", campaignId: "x" }] });
+    both.m.controls.set("2026-11-22T10:20:00.000Z");
+    both.turnOn();
+    await both.m.controls.advance(HOUR);
+    expect(both.m.controls.runs()[0]!.note).toBe(NOTE_NO_PLACES);
+
+    // A Private test with nothing set up and nothing in Review: nothing to test with.
+    const bare = world({ ready: [], clips: [] });
+    bare.m.controls.set("2026-11-22T10:20:00.000Z");
+    expect(await bare.m.runNow("private")).toMatchObject({ note: NOTE_NOTHING_TO_TEST, clips: [] });
+
+    // A campaign clip that could go first: a scheduled run takes it, a Private test skips to the normal clip.
+    const clips = [
+      { clipId: "A", jobId: "J1", rank: 1, hook: "a", campaignId: "camp" },
+      { clipId: "B", jobId: "J1", rank: 2, hook: "b" },
+    ];
+    const test = world({ ready: ["youtube", "instagram", "facebook"], clips, campaignTakes: ["youtube"] });
+    test.m.controls.set("2026-11-22T10:20:00.000Z");
+    const run = await test.m.runNow("private");
+    expect(run.clips.map((c) => c.clipId)).toEqual(["B"]);
+    expect(test.sent.map((x) => x.clipId)).toEqual(["B"]);
+
+    const live = world({ ready: ["youtube", "instagram", "facebook"], clips, campaignTakes: ["youtube"] });
+    live.m.controls.set("2026-11-22T10:20:00.000Z");
+    live.turnOn();
+    await live.m.controls.advance(HOUR);
+    expect(live.m.controls.runs()[0]!.clips.map((c) => [c.clipId, c.places])).toEqual([["A", ["youtube"]]]);
+
+    // Only campaign clips in Review: a Private test has nothing to test with.
+    const onlyCampaign = world({ ready: ["youtube"], clips: [clips[0]!], campaignTakes: ["youtube"] });
+    onlyCampaign.m.controls.set("2026-11-22T10:20:00.000Z");
+    expect(await onlyCampaign.m.runNow("private")).toMatchObject({ note: NOTE_NOTHING_TO_TEST, clips: [] });
+  });
+
   it("practice picks on time and sends nothing; the clips stay in Review", async () => {
     const w = world();
     w.m.controls.set("2026-11-22T10:20:00.000Z");
@@ -502,7 +540,7 @@ describe("the mock's pick and runs (§46.5–§46.8)", () => {
     w.m.controls.set("2026-11-22T10:20:00.000Z");
     await expect(w.m.runNow("live")).rejects.toMatchObject({ status: 400, message: PICK_KIND });
     const practice = await w.m.runNow("practice");
-    expect(practice).toMatchObject({ kind: "practice_now", mode: "practice", runId: "2026-11-22T10:20:00Z#practice_now", clips: [{ clipId: "A", outcome: "would_send" }] });
+    expect(practice).toMatchObject({ kind: "practice_now", mode: "practice", runId: "2026-11-22T10:20:00.000Z#practice_now", clips: [{ clipId: "A", outcome: "would_send" }] });
     await expect(w.m.runNow("private")).rejects.toMatchObject({ status: 409, message: WAIT_A_MINUTE });
     await w.m.controls.advance(61_000);
     const test = await w.m.runNow("private");
@@ -531,7 +569,8 @@ describe("the mock's pick and runs (§46.5–§46.8)", () => {
     };
     bad({ onAt: "x" }, UNKNOWN_SETTING);
     bad({ often: 3 }, UNKNOWN_SETTING);
-    bad([], UNKNOWN_SETTING);
+    bad([], NOT_AN_OBJECT);
+    bad("on", NOT_AN_OBJECT);
     bad({ everyHours: 0 }, PICK_HOURS);
     bad({ everyHours: 25 }, PICK_HOURS);
     bad({ everyHours: 2.5 }, PICK_HOURS);

@@ -13465,13 +13465,17 @@ everyHours h` (no `runAt` while off). `waiting` lists the waiting ones (not rule
 `run_once(deps, user_id, kind, slot)`; `kind` is `scheduled`, `practice_now` or `private_now`; `mode` is `live`,
 `practice` (scheduled with `practice: true`, or `practice_now`) or `private` (`private_now`). `runId =
 "{slot}#{kind}"` (slot = ISO UTC to the second for run-now).
-1. **Scheduled only:** settings off → return `off`; `slot < nextRunAt` → `not_due`.
-2. **Plan:** pick (§46.5) the first `perRun` taken clips (`private_now`: 1), each with its places and options.
+1. **Scheduled only:** settings off → return `off`; this slot's own `AUTORUN#{runId}` already there (a retried
+   delivery, or an overlapping invocation) → **resume** it (step 3), before any due check (the claim moved
+   `lastRunAt` to this slot, so the slot is no longer due); `slot < nextRunAt` → `not_due`.
+2. **Plan:** pick (§46.5) the first `perRun` taken clips (`private_now`: 1, never a campaign clip), each with its
+   places and options.
 3. **Claim** (scheduled): one `TransactWriteItems`: Put `AUTORUN#{runId}` (`state: "planned"`, `mode`, `clips:
    [{clipId, hook, places}]`, `note?`) on `attribute_not_exists(pk)`, and Update `AUTOPOST` `SET lastRunAt = :slot` on
    `attribute_not_exists(lastRunAt) OR lastRunAt < :slot`. Cancelled because the run item exists → **resume**: read it;
    `done` → return `done`; `planned` → continue at 4 with its own clips (never a new pick). Cancelled only on `AUTOPOST`
-   → return `not_due`. Run-now: a Put of `AUTORUN#{runId}` alone, after `AUTOPOST.lastNowAt` moved on the condition
+   (a later slot already moved `lastRunAt`) → return `not_due`; cancelled for another reason (a conflict, throttling)
+   → claim again, at most a few times. Run-now: a Put of `AUTORUN#{runId}` alone, after `AUTOPOST.lastNowAt` moved on the condition
    that it is absent or ≥ 60 s old (else 409, §46.9).
 4. **Send each planned clip** (`live` and `private`) through **Upload's own code**: `uploads.upload_review_clip(...)`,
    the review branch of `routes/clips.confirm` moved into one function the route now calls (Upload's behaviour,
@@ -13479,12 +13483,18 @@ everyHours h` (no `runAt` while off). `waiting` lists the waiting ones (not rule
    `auto = {runId, at, test?}`. It writes `confirmed` and the posts in one transaction conditional on `status = review`
    and `attribute_not_exists(postsCreated)` (§14.5), then starts `clip-{clipId}-{flowRun}`. Outcomes: `sent`; the
    condition failed → read the clip: its `autoRun` is this run → `sent` (and when its `publishState` is `pending`,
-   finish the start, §14.5); else `skipped` with "You threw it away first." (`declined`), "You uploaded it yourself."
-   (any other status) or the campaign/fit refusal's sentence. `practice`: no write, outcome `would_send`.
+   finish the start, §14.5); another run's `autoRun` → `skipped` "Another auto-posting run sent it first."; else
+   `skipped` with "You threw it away first." (`declined`, or the clip is gone), "You uploaded it yourself." (any other
+   status), "It changed while it was being sent. It goes next run." (Upload's own race answer) or the campaign/fit
+   refusal's sentence. `practice`: no write, outcome `would_send`.
 5. Update `AUTORUN#{runId}`: `state: "done"`, each clip's `outcome`/`reason`. Out of time (`AUTOPOST_TIME_BUDGET_SECONDS`
    240, a new clip only starts with ≥ 30 s left) → the rest `skipped` "Out of time. It goes next run." (still in
-   Review). Notes: no candidates → "Nothing in Review, so nothing posted."; candidates but none taken → "Every clip in
-   Review is waiting for you."; no places → "Nothing is set up to post to.".
+   Review). Notes, in this order: a Private test with no normal clip taken → "Nothing in Review to test with."; no
+   candidates → "Nothing in Review, so nothing posted."; no places → "Nothing is set up to post to."; candidates but
+   none taken → "Every clip in Review is waiting for you.".
+6. **The hourly Lambda** runs every owner; one owner's failure is logged (`autopost.owner_failed`) and the others still
+   run, then the invocation fails, so Lambda's retry (the same event, the same slot) resumes that owner's run while
+   every finished run answers `done`.
 
 The clip flow then posts each place one after another (§17.6), so one place failing never stops the others.
 
@@ -13493,8 +13503,8 @@ The clip flow then posts each place one after another (§17.6), so one place fai
 * **Practice** (`autoPost.practice`): scheduled runs plan, claim and record as usual and send nothing (`would_send`);
   clips stay in Review, so the next practice run may pick the same ones.
 * **Practice run now** (`POST /v1/autopost/run {"kind": "practice"}`): one practice run now, inline in cf-prod-api.
-* **Private test run** (`{"kind": "private"}`): one live run now, inline, of the first taken clip, with `auto.test =
-  "private"`. Every post of it carries the internal `postOptions.test = "private"`, which only this run sets (no route
+* **Private test run** (`{"kind": "private"}`): one live run now, inline, of the first taken clip that is not a
+  campaign clip (a campaign post would be sent to Content Rewards), with `auto.test = "private"`. Every post of it carries the internal `postOptions.test = "private"`, which only this run sets (no route
   body can: `post_preset.clip_options` keeps refusing unknown keys). Its places are the normal ones minus X (X has no
   private posts). Publishers:
   * YouTube: `privacyStatus: "private"` whatever the options say, `notifySubscribers=false`; url as usual (he can open
@@ -13537,7 +13547,8 @@ interface AutoRun {
 // Additions to existing shapes: Clip.auto?: { runId: string; at: string; test?: "private" };
 // Post.auto?: true; Post.test?: "private"; Settings.autoPost (§46.3).
 ```
-* `failed`: the owner's posts with `autoRun` and `status: "failed"`, newest first. `tiktokYourself`: clips with `auto`
+* `failed`: the owner's posts with `autoRun` and `status: "failed"`, newest first; `at` is the post's `createdAt`
+  (the run's time: a post stores no failure time). `tiktokYourself`: clips with `auto`
   (not `test`) whose TikTok is not out for everyone (`tiktok_self` rules, §42.1). `runs[].clips[].posts`: read by the
   clip's `postIds` (strongly consistent BatchGet).
 * POST: unknown keys 400; `kind` missing or other → 400 "Pick practice or private.". A second run-now within 60 s →
@@ -13562,22 +13573,24 @@ deleted except by TTL.
 
 * `cf-prod-autopost`: the shared zip, `clipfactory_api.autopost.handler.handler`, python3.13 arm64, 256 MB, timeout
   300 s, X-Ray, JSON logs to `/aws/lambda/cf-prod-autopost` (retention as the others). Env: `TABLE_NAME`,
-  `MEDIA_BUCKET`, `CLIP_FLOW_ARN` (the clip flow's `live` alias), `SECRET_PREFIX`, `CONTENT_REWARDS`,
-  `AUTOPOST_TIME_BUDGET_SECONDS=240`. Event: EventBridge (`source == "aws.events"`) → every owner in `AUTOPOSTOWNERS`
+  `MEDIA_BUCKET`, `CLIP_FLOW_ARN` (the clip flow's `live` alias), `SECRET_PREFIX`, `CONTENT_REWARDS`, `CR_REMAKE`
+  (cf-prod-api's switch, so a fit refusal reads the same words), `AUTOPOST_TIME_BUDGET_SECONDS=240`. Event: EventBridge (`source == "aws.events"`) → every owner in `AUTOPOSTOWNERS`
   (one Query), `run_once(..., "scheduled", slot)`, one owner's failure logged and skipped.
 * Role `cf-prod-fn-autopost` with the deploy boundary, exactly what the code calls: DynamoDB `GetItem`, `PutItem`,
   `UpdateItem`, `Query`, `BatchGetItem`, `TransactWriteItems`, `ConditionCheckItem` on the table and `index/*` (never
-  `DeleteItem` or `Scan`); `lambda:InvokeFunction` on `${clip_flow_arn_prefix}:*` (start executions on the alias);
-  and, for the campaign fit check only, the clip flow's Content Rewards secret grants (`PlatformSecretsRead`,
-  `PlatformTokens`). No S3 (a run reads no files and signs no links), nothing else. Logs and X-Ray as the money module.
+  `DeleteItem` or `Scan`); `lambda:InvokeFunction` on `${clip_flow_arn_prefix}:*` (start executions on the alias).
+  No Secrets Manager (the campaign fit check reads only the table; `SECRET_PREFIX` only builds its deps) and no S3 (a
+  run reads no files and signs no links), nothing else. Logs and X-Ray as the money module.
 * `aws_lambda_function_event_invoke_config`: `maximum_retry_attempts = 2`, `maximum_event_age_in_seconds = 3300`
   (before the next tick); a retry is the same event, so it resumes its own run (§46.7 step 3).
 * `aws_cloudwatch_event_rule` `${name}-autopost-hourly` `cron(0 * * * ? *)` ENABLED, its target (unqualified ARN,
   `retry_policy { maximum_event_age_in_seconds = 3300, maximum_retry_attempts = 2 }`) and `aws_lambda_permission`
   (`events.amazonaws.com`, the rule's ARN).
+* The rule's own alarm `${name}-autopost-hourly-failed-invocations` (in the module, on `alarm_topic_arn`: two failed
+  ticks in a row; monitoring's 15-minute schedule alarm can't fire for a rule that runs once an hour).
 * `envs/prod/main.tf`: `module "autopost"` (inputs from `module.data`, `module.storage`, `module.flows`,
-  `module.hooks`, `var.content_rewards_enabled`, the boundary); monitoring gets `module.autopost.function_names` and
-  `module.autopost.schedule_rule_names` (their alarms are new, additive).
+  `module.hooks`, `module.monitoring.alarm_topic_arn`, `var.content_rewards_enabled`, `var.cr_remake_enabled`, the
+  boundary); monitoring gets `module.autopost.function_names` (its errors alarm). Both alarms are new, additive.
 * **Not changed:** cf-prod-api's function, role and policy (run-now runs inline with Upload's existing grants), the
   table, every existing rule and alarm. The plan adds only `module.autopost.*` and the two new alarms; 0 to destroy.
   `scripts/check-plan-clips-unchanged.sh` has nothing to report.

@@ -62,6 +62,12 @@ variable "content_rewards_enabled" {
   description = "§38.16, §46.5 rule 4: CONTENT_REWARDS on/off. Off: every campaign clip waits for the owner's Upload."
 }
 
+variable "cr_remake_enabled" {
+  type        = bool
+  default     = false
+  description = "§39.3, §46.5 rule 4: CR_REMAKE on/off, the same switch cf-prod-api has, so a campaign clip's fit-check refusal reads the same words in a run as on Upload."
+}
+
 variable "log_retention_days" {
   type    = number
   default = 30

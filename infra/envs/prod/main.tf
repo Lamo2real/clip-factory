@@ -338,6 +338,8 @@ module "autopost" {
   secret_prefix = module.hooks.secret_prefix
   # §38.12: campaign clips are only ever taken while the switch is on.
   content_rewards_enabled = var.content_rewards_enabled
+  # §39.3: the fit check's words match cf-prod-api's (CR_REMAKE).
+  cr_remake_enabled = var.cr_remake_enabled
 
   # The hourly rule's failed invocations alarm on the same topic as every other alarm (modules/autopost: monitoring's
   # 15-minute schedule alarm cannot fire for a rule that runs once an hour).
