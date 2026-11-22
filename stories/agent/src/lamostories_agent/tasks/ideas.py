@@ -64,13 +64,14 @@ def workspace_config(svc: Any, user_id: str, workspace_id: str) -> dict[str, Any
 
 
 def shape_of(configuration: dict[str, Any], story: dict[str, Any] | None = None) -> str:
-    """The video's shape: the story's own ``format`` when there is a story, else the workspace's default
+    """The video's shape: the story's own ``format`` when there is a story (a story made before formats has none
+    and is 9:16, as the API shows it and its storyboard is), else the workspace's default
     (``configuration.video.aspect``, or the shape of its ``resolution``), else 9:16 (§45.34 "Video size and shape")."""
     if story is not None:
         fmt = story.get("format")
         if isinstance(fmt, dict) and fmt.get("aspect") in writer.SHAPES:
             return str(fmt["aspect"])
-        return writer.SIZES.get(writer.size_of(story, configuration), "9:16")
+        return writer.SIZES.get(writer.size_of(story, {}), "9:16")  # its own size, never the workspace default
     video = as_dict(configuration.get("video"))
     if video.get("aspect") in writer.SHAPES:
         return str(video["aspect"])

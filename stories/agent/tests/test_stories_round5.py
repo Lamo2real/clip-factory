@@ -9,7 +9,7 @@ import asyncio
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from botocore.exceptions import ClientError
@@ -133,12 +133,62 @@ def test_the_chat_plans_for_the_workspace_s_shape_or_the_story_s_own(tmp_path: P
     text = model.texts(0)
     assert "A square 1:1 cartoon" in text and "A wide 16:9 cartoon" not in text and "about this story" in text
 
+    # a story made before stories had a format is 9:16 (as the API shows it), never the workspace's wide default
+    model = FakeModel(reply("Here is one."))
+    svc, db, _ = services(tmp_path / "o", model)
+    registry(db, wide)
+    db.seed({"pk": TPK, "sk": "STORY#ST2", "userId": TUSER, "workspaceId": TWS, "storyId": "ST2", "title": "Old pie",
+             "status": "review"})  # fmt: skip
+    seed(db, conversation=conv(projectRef={"kind": "story", "id": "ST2"}))
+    assert run_chat(svc) == "done"
+    text = model.texts(0)
+    assert "A vertical 9:16 cartoon" in text and "A wide 16:9 cartoon" not in text and "about this story" in text
+
 
 def test_the_creative_director_s_own_instructions_are_not_only_for_vertical_videos() -> None:
     director = next(a for a in config.agents()["agents"] if a["agentId"] == "creative_director")
     words = director["instructions"]
     assert "short vertical cartoons (9:16" not in words
     assert "square 1:1" in words and "wide 16:9" in words and "usually vertical 9:16" in words
+
+
+def test_an_agent_still_holding_an_earlier_default_gets_today_s_and_edited_words_stay() -> None:
+    from lamostories_agent import agents
+
+    base = agents.default_agents()
+    director = base["creative_director"]
+    (old,) = director["formerInstructions"]
+    assert "short vertical cartoons (9:16" in old  # what the API copied into AGENT# before round 5
+    stored = item(keys.agent_sk("creative_director"), agentId="creative_director", instructions=old, active=True,
+                  skillIds=[], version=1)  # fmt: skip
+    m, runtime, _ = bedrock([converse_reply("Hi")], stored)
+    m.complete(CTX, task="chat", messages=HELLO)
+    system = " ".join(str(b.get("text") or "") for b in runtime.requests[0]["system"])
+    assert "short vertical cartoons (9:16" not in system and director["instructions"] in system
+    assert (
+        agents.profile_from("creative_director", {"instructions": f"  {old.replace(' ', '  ')}\n"}).instructions
+        == (director["instructions"])
+    )  # the same words with other spacing are still untouched
+    mine = old + " Always add a dog."
+    assert agents.profile_from("creative_director", {"instructions": mine}).instructions == mine  # the owner's own
+    storyboard = base["storyboard"]  # its first default (before the cast rule of §45.35 D15) gets today's too
+    assert (
+        agents.profile_from("storyboard", {"instructions": storyboard["formerInstructions"][0]}).instructions
+        == (storyboard["instructions"])
+    )
+    for a in base.values():
+        assert a["instructions"] not in a.get("formerInstructions", [])
+
+
+def test_the_hooks_skill_and_the_reference_study_are_for_every_shape() -> None:
+    from lamostories_agent.reference import study
+
+    skill = (REPO / "stories" / "skills" / "vertical-short-hooks" / "SKILL.md").read_text("utf-8")
+    assert "square 1:1" in skill and "wide 16:9" in skill and "**Every shape works.**" in skill
+    assert "**Keep the subject in the middle third**" not in skill  # the vertical-only rule is one shape's now
+    assert "vertical cartoons" not in study.MERGE_BRIEF and "short cartoons (vertical, square or wide)" in (
+        study.MERGE_BRIEF
+    )
 
 
 # --- E6: tools in Check models, and Bedrock's tool-use refusal in its own words -------------------------------------
@@ -196,7 +246,7 @@ def test_a_tool_use_refusal_is_its_own_sentence_naming_the_switch_and_the_model_
     sentence = models.TOOLS_REFUSED.format(label="Meta Llama 4 Maverick")
     assert isinstance(e.value, models.ToolsUnavailable) and str(e.value) == sentence
     assert sentence.startswith("Meta Llama 4 Maverick does not accept tool use here")
-    assert "Turn off Tools in Lamo Stories › Settings › AI › its row." in sentence
+    assert 'Tap Edit on its row in Lamo Stories › Settings › AI and turn off "It can use tools".' in sentence
     assert (e.value.status, e.value.model, getattr(e.value, "sent", None)) == ("error", "custom-llama", True)
     assert getattr(e.value, "model_id", None) == "meta.llama4-maverick-17b-instruct-v1:0"  # what was asked (D5)
     assert runtime.ops == ["converse_stream"] and "toolConfig" in runtime.requests[0]
@@ -399,13 +449,114 @@ def test_a_job_that_does_not_write_and_has_no_recorded_writer_names_none(tmp_pat
     assert "writer" not in made and made["animation"] == "builtin-2d"
     job.meta["models"] = [{"step": "storyboard", "agentId": "storyboard", "task": "captions", "model": "opus-5-5"},
                           {"step": "storyboard", "agentId": "storyboard", "task": "storyboard",
-                           "model": "custom-llama", "failed": True}]  # fmt: skip
-    assert "writer" not in job._made_with()  # the captions call and a failed writer call are not the writer
-    job.meta["models"].append({"step": "safety", "agentId": "storyboard", "task": "storyboard", "model": "opus-5-5"})
-    assert "writer" not in job._made_with()
-    job.meta["models"].append({"step": "storyboard", "agentId": "storyboard", "task": "storyboard",
-                               "model": "opus-5-5"})  # fmt: skip
-    assert job._made_with()["writer"] == "bedrock-claude"
+                           "model": "custom-llama", "failed": True},
+                          {"step": "storyboard", "agentId": "storyboard", "task": "storyboard",
+                           "model": "opus-5-5"}]  # fmt: skip
+    assert "writer" not in job._made_with()  # calls are not the writer: only a saved storyboard names one
+
+
+def test_a_writer_call_whose_script_was_never_saved_is_never_the_writer(tmp_path: Path) -> None:
+    from test_stories_pipeline import answers
+    from test_stories_round4 import story_job
+
+    # Claude wrote the storyboard on screen; the safety step's rewrite by the Llama answered but failed its checks
+    job = story_job(tmp_path, Llama(answers()))
+    job.todo, job.steps = ["safety"], [{"key": "safety", "status": "running"}]
+    job.assets = [{"kind": "storyboard", "version": 2, "meta": {"by": "writer", "writer": "bedrock-claude"}},
+                  {"kind": "storyboard", "version": 3, "meta": {"by": "owner"}}]  # fmt: skip
+    asyncio.run(job.ask(step="storyboard", agent_id="storyboard", task="storyboard", messages=HELLO))
+    assert job._last_writer == "bedrock-model:custom-llama"  # it answered...
+    assert job._made_with()["writer"] == "bedrock-claude"  # ...but nothing it wrote was kept
+
+
+def _world(tmp_path: Path, fake: Any) -> tuple[Services, FakeTable, Any]:
+    from ls_fakes import ENGINE_DIR, data
+    from test_stories_pipeline import character, job_item, story_item, workspace
+
+    table = FakeTable()
+    table.seed(workspace())
+    table.seed(character())
+    table.seed(story_item())
+    table.seed(job_item("J1", "S1", run=["storyboard"]))
+    d, store = data(table)
+    svc = Services(data=d, work_root=tmp_path / "work", models=fake, engine_dir=ENGINE_DIR,
+                   config_dir=REPO / "stories" / "config", heartbeat_seconds=0.2, flush_seconds=0.05)  # fmt: skip
+    return svc, table, store
+
+
+@needs_deno
+def test_a_writer_that_refuses_tools_is_never_named_by_the_failed_job(tmp_path: Path) -> None:
+    from test_stories_pipeline import answers
+    from test_stories_rerenders import again
+
+    sentence = models.TOOLS_REFUSED.format(label="Meta Llama 4 Maverick")
+    refused = models.ToolsUnavailable(sentence, model="custom-llama", status="error")
+
+    # a first story with no storyboard yet: the Llama is about to write it, then refuses the tools
+    svc, table, _ = _world(tmp_path, Llama(answers(storyboard=refused), planned=("custom-llama", "meta")))
+    job = table.items[(PK, "PJOB#J1")]
+    table.seed({**job, "meta": {"providers": {"writer": "bedrock-claude", "images": "builtin-rig"}}})  # the API's
+    assert asyncio.run(_job(svc, "J1", "S1").run()) == "failed"
+    failed = table.item("PJOB#J1")
+    assert failed is not None and failed["error"] == sentence
+    assert "writer" not in failed["meta"]["providers"]  # neither the API's guess nor the model that refused
+    assert failed["meta"]["models"][-1]["model"] == "custom-llama" and failed["meta"]["models"][-1]["failed"]
+
+    # Claude wrote v1; a remake with the Llama that refuses tools still names Claude, whose storyboard is on screen
+    svc, table, _ = _world(tmp_path / "two", FakeModels(answers()))
+    assert asyncio.run(_job(svc, "J1", "S1").run()) == "ready"
+    again(table, "J2", "S2", ["storyboard"])
+    svc.models = Llama(answers(storyboard=refused), planned=("custom-llama", "meta"))
+    assert asyncio.run(_job(svc, "J2", "S2").run()) == "failed"
+    failed = table.item("PJOB#J2")
+    assert failed is not None and failed["meta"]["providers"]["writer"] == "bedrock-claude"
+
+
+class Maker(FakeModels):
+    """Knows who makes each model as the workspace's own list says (the Bedrock client's ``maker_of``)."""
+
+    makers: ClassVar[dict[str, str]] = {"custom-claude": "anthropic", "custom-llama": "meta"}
+
+    def maker_of(self, ctx: CallContext, model_key: str) -> str:
+        return self.makers.get(model_key, "")
+
+
+@pytest.mark.parametrize(
+    ("calls", "named"),
+    [
+        ([{"step": "storyboard", "agentId": "storyboard", "task": "storyboard", "model": "custom-claude"},
+          {"step": "storyboard", "agentId": "storyboard", "task": "captions", "model": "custom-llama"}],
+         "bedrock-claude"),  # an added Claude model (its maker from the workspace's list); the captions call is not it
+        ([{"step": "storyboard", "agentId": "storyboard", "task": "storyboard", "model": "custom-claude"},
+          {"step": "storyboard", "agentId": "storyboard", "task": "storyboard", "model": "custom-llama"}],
+         "bedrock-model:custom-llama"),  # the job's last writer call wrote it
+        ([{"step": "storyboard", "agentId": "storyboard", "task": "storyboard", "model": "custom-llama",
+           "failed": True}], None),  # a failed call never wrote it
+    ],
+)  # fmt: skip
+def test_a_storyboard_saved_before_round_5_is_named_by_the_job_that_wrote_it(
+    tmp_path: Path, calls: list[dict[str, Any]], named: str | None
+) -> None:
+    from test_stories_pipeline import PREFIX, job_item
+    from test_stories_round4 import story_job
+
+    job = story_job(tmp_path, Maker({}))
+    table, store = job.data.store.table, job.data.store  # type: ignore[attr-defined]
+    table.seed({**job_item("J0", "S0"), "status": "ready", "meta": {"writerModel": None, "models": calls}})
+    asyncio.run(store.put_bytes(PREFIX + "script/v1.writer.json", json.dumps({"by": "writer", "jobId": "J0"}).encode(),
+                                "application/json"))  # fmt: skip
+    job.assets = [{"kind": "storyboard", "version": 1, "key": PREFIX + "script/v1.json", "meta": {"by": "writer"}}]
+    job.todo, job.steps = ["assemble"], [{"key": "assemble", "status": "pending"}]
+    asyncio.run(job._read_older_writer())
+    assert job._made_with().get("writer") == named
+
+
+def test_the_bedrock_client_says_who_makes_a_model_from_the_workspace_s_own_list() -> None:
+    m, runtime, _ = bedrock([converse_reply("never")], added("custom-claude", "Anthropic", "anthropic.claude-x-v1"),
+                            added("custom-llama", "Meta", "meta.llama-v1"))  # fmt: skip
+    assert m.maker_of(CTX, "custom-claude") == "anthropic" and m.maker_of(CTX, "custom-llama") == "meta"
+    assert m.maker_of(CTX, "opus-5-5") == "anthropic" and m.maker_of(CTX, "custom-gone") == ""
+    assert runtime.requests == []
 
 
 # --- E13: one name for the other app --------------------------------------------------------------------------------

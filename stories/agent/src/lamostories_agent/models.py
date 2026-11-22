@@ -215,11 +215,11 @@ EFFORT_REFUSED = (
     "{label} does not accept {effort} effort here (Amazon Bedrock refused it). Pick another level in Lamo Stories › "
     "Settings › AI."
 )
-# Bedrock refused the request's tools for this model (§45.36 E6): an added model's Tools switch is the fix; a bundled
-# model has no switch, so another model is.
+# Bedrock refused the request's tools for this model (§45.36 E6): an added model's "It can use tools" switch (in the
+# form its row's Edit opens) is the fix; a bundled model has no switch, so another model is.
 TOOLS_REFUSED = (
-    "{label} does not accept tool use here (Amazon Bedrock refused it). Turn off Tools in Lamo Stories › Settings › "
-    "AI › its row."
+    "{label} does not accept tool use here (Amazon Bedrock refused it). Tap Edit on its row in Lamo Stories › "
+    'Settings › AI and turn off "It can use tools".'
 )
 TOOLS_REFUSED_BUNDLED = (
     "{label} does not accept tool use here (Amazon Bedrock refused it). Pick another model in Lamo Stories › "
@@ -670,6 +670,12 @@ class BedrockModels:
         except EffortUnavailable as e:  # the effort is the problem, not the model: the model is still the one
             choice_model = str(e.model)
         return choice_model, config.maker(config.model(choice_model, catalog) or {})
+
+    def maker_of(self, ctx: CallContext, model_key: str) -> str:
+        """Who makes ``model_key`` (lower case), from ``ctx``'s workspace list (a model the owner added) or the
+        bundled one; "" when it is in neither. Nothing is sent. A job names an older storyboard's writer with it
+        (§45.36 E7)."""
+        return config.maker(config.model(model_key, self.workspace(ctx).models()) or {})
 
     def called_as(self, info: dict[str, Any]) -> tuple[str, str | None]:
         """The Bedrock model id or inference profile a call to this model is sent to, and the Region (the model's own

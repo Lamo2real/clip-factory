@@ -67,6 +67,17 @@ def agent_for_task(task: str) -> str | None:
     return None
 
 
+def _words(text: str) -> str:
+    return " ".join(text.split())
+
+
+def untouched(base: dict[str, Any], instructions: str) -> bool:
+    """Whether stored instructions are an earlier default of the file (``formerInstructions``), copied into the
+    workspace when the agent was first made and never edited: such an agent gets today's default (§45.36 E5)."""
+    former = base.get("formerInstructions")
+    return isinstance(former, list) and _words(instructions) in {_words(str(f)) for f in former if isinstance(f, str)}
+
+
 def profile_from(agent_id: str, item: dict[str, Any] | None) -> AgentProfile:
     base = default_agents().get(agent_id)
     if base is None:
@@ -79,7 +90,9 @@ def profile_from(agent_id: str, item: dict[str, Any] | None) -> AgentProfile:
     skill_ids = item.get("skillIds")
     if not isinstance(skill_ids, list):
         skill_ids = base.get("skills") or []
-    instructions = str(pick("instructions", "") or "").strip() or str(base.get("instructions") or "")
+    instructions = str(pick("instructions", "") or "").strip()
+    if not instructions or untouched(base, instructions):
+        instructions = str(base.get("instructions") or "")
     return AgentProfile(
         agent_id=agent_id,
         name=str(base.get("name") or agent_id),
