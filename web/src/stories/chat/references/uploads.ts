@@ -90,7 +90,7 @@ async function run(job: Running, onDone?: (ref: ReferenceVideo) => void): Promis
       // Half an upload is no use to anyone: take the reference away again (best effort).
       try {
         void storiesApi()
-          .deleteReference(ws, refId)
+          .deleteReferenceVideo(ws, refId)
           .catch(() => undefined);
       } catch {
         // The app is going away: nothing left to tidy here.

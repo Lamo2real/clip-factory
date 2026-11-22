@@ -232,6 +232,18 @@ INTERNAL = (
     "sk",
     "userId",
     "ttl",
+    # §45.34's internal attributes, and the ones round 3 added
+    "pickedAt",
+    "providersPickedAt",
+    "notClipsConfirmed",
+    "ownerEdits",
+    "staleScenes",
+    "lastJobId",
+    "checkStatus",
+    "lastLook",
+    "fileRemovedAt",
+    "sourceRemovedAt",
+    "picturesRemovedAt",
 )
 
 

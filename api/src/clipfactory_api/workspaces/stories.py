@@ -32,6 +32,8 @@ DEFAULT_MOOD: Final = {
     "comedy": "comedic",
     "explainer": "wonder",
 }
+ASPECTS: Final = shapes.ASPECTS
+FORMAT_SET: Final = "The video's size is set once it is made. Make a new video for another size."
 MAX_SECONDS = 89.5  # Facebook Reels' 90 s limit, with room for the audio tail (§45.9)
 MAX_REFERENCES = 3  # reference videos per story (§45.28)
 MAX_CAPTIONS = 40
@@ -41,6 +43,7 @@ STALE_CAPTIONS: Final = ("captions", "assemble", "preview", "safety")
 STALE_SOUND: Final = ("sound", "assemble", "preview")
 STALE_LENGTH: Final = ("animation", "sound", "captions", "assemble", "preview")
 STALE_POST: Final = ("safety",)
+STALE_FORMAT: Final = ("scenes", "animation", "captions", "assemble", "preview")
 
 NOT_YET = "Your changes aren't in the video yet. Tap Remake first."
 CHANGED = "This story changed meanwhile. Reload it and try again."
@@ -74,6 +77,24 @@ def reference_ids(value: Any) -> list[str]:
     return ids
 
 
+format_of = shapes.format_of
+stored_format = shapes.stored_format
+
+
+def video_format(value: Any, field: str = "format") -> dict[str, Any]:
+    """A story's ``format`` (§45.34): ``{aspect, width, height}``, one of the six sizes, the size matching the shape."""
+    body = validate.obj(value, field)
+    validate.only_keys(body, {"aspect", "width", "height"})
+    aspect = body.get("aspect")
+    if aspect not in ASPECTS:
+        raise bad_request("Pick a shape: 9:16 (tall), 1:1 (square) or 16:9 (wide).", field)
+    size = f"{validate.whole_number(body.get('width'))}x{validate.whole_number(body.get('height'))}"
+    if size not in ASPECTS[str(aspect)]:
+        sizes = " or ".join(s.replace("x", " by ") for s in ASPECTS[str(aspect)])
+        raise bad_request(f"A {aspect} video is {sizes}.", field)
+    return format_of(aspect, size)
+
+
 STORY_KEYS: Final = (
     "ideaId",
     "brief",
@@ -85,6 +106,7 @@ STORY_KEYS: Final = (
     "referenceIds",
     "ai",
     "override",
+    "format",
 )
 
 
@@ -127,6 +149,8 @@ def story_input(body: Mapping[str, Any]) -> dict[str, Any]:
     out["referenceIds"] = reference_ids(body["referenceIds"]) if body.get("referenceIds") is not None else []
     out["ai"] = overrides.ai_setting(body["ai"]) if body.get("ai") is not None else overrides.empty_setting()
     out["override"] = overrides.model_override(body.get("override"))
+    if body.get("format") is not None:
+        out["format"] = video_format(body["format"])
     return out
 
 
@@ -265,8 +289,12 @@ def approve_problem(story: Mapping[str, Any]) -> str | None:
         return NOT_YET
     if safety.get("status") == "ok" and safety.get("checkedScriptVersion") == story.get("scriptVersion"):
         return None
-    if safety.get("status") == "skipped" and story.get("category") != "driving_safety":
-        return None  # the quality agent is off ("Quality check is off", §45.33); never for driving safety
+    if (
+        safety.get("status") == "skipped"
+        and story.get("category") != "driving_safety"
+        and not story.get("safetyTopicId")
+    ):
+        return None  # the quality agent is off ("Quality check is off", §45.33); never for driving content (§45.34)
     return _facts(story) or NOT_YET
 
 
@@ -333,7 +361,18 @@ def patch_input(body: Mapping[str, Any]) -> dict[str, Any]:
     """StoryPatch (§45.6), checked."""
     validate.only_keys(
         body,
-        {"version", "title", "postCaptions", "captions", "musicMood", "captionsOn", "scenes", "ai", "referenceIds"},
+        {
+            "version",
+            "title",
+            "postCaptions",
+            "captions",
+            "musicMood",
+            "captionsOn",
+            "scenes",
+            "ai",
+            "referenceIds",
+            "format",
+        },
     )
     out: dict[str, Any] = {"version": validate.integer(body.get("version"), "version", lo=1, hi=10**9)}
     if "title" in body:
@@ -344,6 +383,8 @@ def patch_input(body: Mapping[str, Any]) -> dict[str, Any]:
         out["ai"] = overrides.ai_setting(body["ai"]) if body["ai"] is not None else overrides.empty_setting()
     if "referenceIds" in body:
         out["referenceIds"] = reference_ids(body["referenceIds"] if body["referenceIds"] is not None else [])
+    if "format" in body:
+        out["format"] = video_format(body["format"])
     if "captions" in body:
         raw = body["captions"]
         if not isinstance(raw, list) or len(raw) > MAX_CAPTIONS:
@@ -399,6 +440,16 @@ def touches_script(patch: Mapping[str, Any]) -> bool:
     return any(k in patch for k in SCRIPT_FIELDS)
 
 
+def resizes(story: Mapping[str, Any], patch: Mapping[str, Any]) -> bool:
+    """A new size for a story that has a storyboard: the storyboard is written again in that size (§45.34)."""
+    changed = "format" in patch and patch["format"] != stored_format(story)
+    return changed and has_script(story) and not story.get("videoKey")  # a made video's size is set (FORMAT_SET)
+
+
+def needs_script(story: Mapping[str, Any], patch: Mapping[str, Any]) -> bool:
+    return touches_script(patch) or resizes(story, patch)
+
+
 def _remap(t: float, old: list[tuple[float, float]], new: list[tuple[float, float]]) -> float:
     """A whole-video time after scene lengths changed: same scene, same share of it."""
     for (o_start, o_len), (n_start, n_len) in zip(old, new, strict=True):
@@ -423,6 +474,7 @@ class _Edit:
     sets: dict[str, Any] = field(default_factory=dict)
     stale: set[str] = field(default_factory=set)
     stale_scenes: set[str] = field(default_factory=set)
+    format_stale: set[str] = field(default_factory=set)  # a new size: every picture is redone, the script stays
     owner: dict[str, list[str]] = field(
         default_factory=lambda: {"captions": [], "sceneCaptions": [], "postCaptions": []}
     )
@@ -435,6 +487,12 @@ def _story_fields(edit: _Edit, story: Mapping[str, Any], patch: Mapping[str, Any
         edit.sets["ai"] = patch["ai"]  # for the next jobs only: nothing in the video changes
     if "referenceIds" in patch and patch["referenceIds"] != list(story.get("referenceIds") or []):
         edit.sets["referenceIds"] = patch["referenceIds"]  # read by the next storyboard: nothing becomes stale
+    if "format" in patch and patch["format"] != stored_format(story):
+        if story.get("videoKey"):  # the first run finished: the size is set (§45.34)
+            raise conflict(FORMAT_SET)
+        edit.sets["format"] = patch["format"]
+        if has_script(story):  # positions are shares of the frame: a new storyboard version in the new size, and
+            edit.format_stale.update(STALE_FORMAT)  # every picture is redone (§45.34: the script's size is it)
     if "postCaptions" in patch:
         merged = captions.merged(story.get("postCaptions"), patch["postCaptions"])
         if merged != captions.merged(story.get("postCaptions"), {}):
@@ -522,11 +580,14 @@ def apply_patch(
     whose animation is stale, the owner's edited text ids)."""
     edit = _Edit()
     _story_fields(edit, story, patch)
-    if not touches_script(patch):
-        return None, edit.sets, edit.stale, edit.stale_scenes, edit.owner
+    resize = "format" in edit.sets and has_script(story)
+    if not touches_script(patch) and not resize:
+        return None, edit.sets, edit.stale | edit.format_stale, edit.stale_scenes, edit.owner
     if script is None:
         raise conflict(NO_SCRIPT)
     new = copy.deepcopy(dict(script))
+    if resize:  # the agent sizes every picture, the captions and the video from the script (StoryScript.width)
+        new["width"], new["height"] = edit.sets["format"]["width"], edit.sets["format"]["height"]
     _switches(edit, new, patch)
     scenes = [dict(s) for s in new.get("scenes") or [] if isinstance(s, Mapping)]
     by_id = {str(s.get("sceneId")): s for s in scenes}
@@ -545,10 +606,21 @@ def apply_patch(
     new["scenes"] = scenes
     if "captions" in patch:
         _captions(edit, new, patch["captions"], total)
-    if not edit.stale - set(STALE_POST) and not set(edit.sets) - {"title", "postCaptions", "ai", "referenceIds"}:
-        return None, edit.sets, edit.stale, edit.stale_scenes, edit.owner
+    if (
+        not resize
+        and not edit.stale - set(STALE_POST)
+        and not set(edit.sets)
+        - {
+            "title",
+            "postCaptions",
+            "ai",
+            "referenceIds",
+            "format",
+        }
+    ):
+        return None, edit.sets, edit.stale | edit.format_stale, edit.stale_scenes, edit.owner
     edit.sets["scenes"] = [
         {"sceneId": str(s.get("sceneId")), "title": str(s.get("title") or ""), "durationSec": s.get("durationSec")}
         for s in scenes
     ]
-    return new, edit.sets, edit.stale, edit.stale_scenes, edit.owner
+    return new, edit.sets, edit.stale | edit.format_stale, edit.stale_scenes, edit.owner

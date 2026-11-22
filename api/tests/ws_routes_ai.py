@@ -11,6 +11,8 @@ EXPECTED: set[tuple[str, str]] = {
     ("PUT", f"{_B}/ai"),
     ("POST", f"{_B}/ai/check-models"),
     ("PUT", f"{_B}/ai/prices/opus-5-5"),
+    ("PUT", f"{_B}/ai/models/opus-5-5"),
+    ("DELETE", f"{_B}/ai/models/opus-5-5"),
     ("GET", f"{_B}/usage"),
     ("GET", f"{_B}/agents/creative_director"),
     ("PATCH", f"{_B}/agents/creative_director"),
@@ -45,4 +47,5 @@ EXPECTED: set[tuple[str, str]] = {
     ("PUT", f"{_B}/providers/runway/key"),
     ("DELETE", f"{_B}/providers/runway/key"),
     ("GET", f"{_B}/storage"),
+    ("POST", f"{_B}/storage/cleanup"),
 }

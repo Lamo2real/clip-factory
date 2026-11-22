@@ -1288,8 +1288,9 @@ understand how to navigate it", from setup to joining, to "Am I in?", to getting
   part say "Content Rewards is coming soon to Clip Factory." The fit block, the "could earn" line and All your money
   stay hidden while their routes answer 404 (the old campaign strip stays), and the copy has its own switch. Both
   switches are on in prod (PR #88 and PR #93); these states show only if one is turned off again. The campaign
-  finder has its own switch too, off until all its parts have merged: on 404 or 503 its card, chips and the "Find
-  another campaign" mapping are hidden and `/campaigns/find` says "Find campaigns is coming soon to Clip Factory."
+  finder has its own switch too, on in prod since PR #136 (22 Nov 2026); only if it is turned off again, on 404 or 503
+  its card, chips and the "Find another campaign" mapping are hidden and `/campaigns/find` says "Find campaigns is
+  coming soon to Clip Factory."
 
 ### The two ways
 

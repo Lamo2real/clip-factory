@@ -110,13 +110,18 @@ def public_conversation(conv: Mapping[str, Any], eff: dict[str, Any]) -> dict[st
     }
 
 
-def public_message(app: Any, item: Mapping[str, Any]) -> dict[str, Any]:
+def public_message(app: Any, item: Mapping[str, Any], pictures_before: datetime | None = None) -> dict[str, Any]:
     """``Message`` (§45.6): pictures as presigned links; ``sessionId``, ``heartbeatAt``, ``requested`` and the keys
-    stay inside."""
+    stay inside. ``pictures_before``: the chat pictures of a message older than that are gone under the workspace's
+    ``keepChatPictures`` (§45.34; the agent clears them after each job), so no link is made to a file that is gone."""
     prefix = ws.s3_prefix(str(item.get("userId")), str(item.get("workspaceId")))
+    made = parse(item.get("createdAt"))
+    cleared = pictures_before is not None and made is not None and made < pictures_before
     pictures = []
     for a in item.get("attachments") or []:
         if not isinstance(a, Mapping) or not str(a.get("key") or "").startswith(prefix):
+            continue
+        if cleared and str(a["key"]).startswith(f"{prefix}chat/"):
             continue
         pictures.append(
             {
@@ -194,6 +199,7 @@ def get(
     *,
     now: datetime,
     before: str | None = None,
+    pictures_before: datetime | None = None,
 ) -> dict[str, Any]:
     """The conversation and its messages, oldest first: the newest ``SHOWN``; with ``after`` (the web's poll) only
     the newer ones; with ``before`` the ``SHOWN`` older ones, so the whole history stays readable."""
@@ -231,7 +237,7 @@ def get(
     items = [settle(app, m, now) if m.get("role") == "assistant" else m for m in items]
     return {
         "conversation": conversation(store, user_id, workspace_id, conv),
-        "messages": [public_message(app, m) for m in items],
+        "messages": [public_message(app, m, pictures_before) for m in items],
     }
 
 
@@ -363,6 +369,7 @@ def _title(value: Any) -> str:
 def _check_setting(store: db.Store, user_id: str, workspace_id: str, model: str | None, effort: str | None) -> None:
     ai, agent = _context(store, user_id, workspace_id)
     try:
+        res.check_pair(model, effort)  # the conversation's own model and effort together (§45.34)
         res.resolve(task="chat", agent=agent, ai=ai, conversation={"model": model, "effort": effort})
     except res.ResolveError as e:
         raise bad_request(e.message, "effort" if e.kind == "effort" else "model") from e

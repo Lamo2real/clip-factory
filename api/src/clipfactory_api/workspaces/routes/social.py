@@ -27,6 +27,7 @@ from ...workspaces import flow as ws_flow
 from ...workspaces import guard, publish, social, social_callback
 from ...workspaces import secrets as ws_secrets
 from ...workspaces import types as ws
+from .scope import scoped
 
 WS = "/v1/workspaces/{ws}"
 CALLBACK_PATH = "/v1/stories-oauth/{platform}/callback"
@@ -198,7 +199,7 @@ def retry_publishing(app: App, req: Request) -> Response:
 
 def oauth_callback(app: App, req: Request) -> Response:
     """Public: the signed single-use ``w1.`` state is the only authorization. Always ``302`` to Lamo Stories'
-    Connections page with a listed code; nothing from the request is reflected."""
+    Social accounts page with a listed code; nothing from the request is reflected."""
     platform = str(req.params.get("platform") or "")
     env = app.oauth
     result, workspace_id = "error", None
@@ -230,4 +231,4 @@ ROUTES = [
 ]
 
 # Public (no JWT). Not in ROUTES: see the module docstring.
-CALLBACK_ROUTES = [route("GET", CALLBACK_PATH, oauth_callback, public=True)]
+CALLBACK_ROUTES = [scoped(route("GET", CALLBACK_PATH, oauth_callback, public=True))]

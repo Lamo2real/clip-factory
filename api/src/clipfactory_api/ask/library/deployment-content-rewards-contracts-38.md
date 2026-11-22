@@ -61,21 +61,23 @@ Campaigns on Content Rewards that match what the owner wants
 [ARCHITECTURE.md flow 22](ARCHITECTURE.md#22-campaign-finder-contracts-41-adr-65)). Nothing to set up in AWS, GitHub
 or on Content Rewards by hand.
 
-**Switched off until every part has merged.** `infra/envs/prod` has `variable "cr_finder_enabled"` (bool, **default
-`false`**). It sets `CR_FINDER` (`"on"` or `"off"`) on `cf-prod-api`, `cf-prod-stats` and `cf-prod-campaigns`; the
-modules default to `false` too, and an unset value is off. Off, every `/v1/contentrewards/finder…` route answers 503
-`unavailable` ("Coming soon."), the overview has no `finder`, the `cf-prod-stats` tick never starts a look and
-`cf-prod-campaigns` answers `{"action": "find", "outcome": "off"}`; the web hides the Campaigns entry card and Home's
-chips, and `/campaigns/find` says "Find campaigns is coming soon to Clip Factory." The parts are built in parallel
+**Switched on (PR #136).** `infra/envs/prod` has `variable "cr_finder_enabled"` (bool, **default `true`**). It sets
+`CR_FINDER` (`"on"` or `"off"`) on `cf-prod-api`, `cf-prod-stats` and `cf-prod-campaigns`; the modules default to
+`false`, and an unset value is off. It shipped with default `false` while the parts were built in parallel
 (CONTRACTS §41.6: P the reader, Q the routes, R infra, S web, T docs and help), each merging in any order and passing
-CI alone (T after S).
+CI alone (T after S). Off (`CR_FINDER = "off"`), every `/v1/contentrewards/finder…` route answers 503 `unavailable`
+("Coming soon."), the overview has no `finder`, the `cf-prod-stats` tick never starts a look and `cf-prod-campaigns`
+answers `{"action": "find", "outcome": "off"}`; the web hides the Campaigns entry card and Home's chips, and
+`/campaigns/find` says "Find campaigns is coming soon to Clip Factory."
 
-**The switch PR.** After P, Q, R, S and T have merged, one last pull request (owner: R) changes `envs/prod`'s default
-to `true` and updates `wiring.tftest.hcl`'s expectation. Its plan changes three env vars in place
-(`CR_FINDER = "on"` on the three Lambdas) and nothing else; the deploy's delete gate must still print "Delete gate:
-the plan deletes or replaces nothing that holds the owner's data." From then on the `cf-prod-stats` tick starts a look
-every 6 hours, the owner's first "Find campaigns for me" starts one at once, and the first full read of Content
-Rewards' campaign pages takes 3 to 5 days.
+**The switch PR.** After P, Q, R, S and T had merged, one last pull request (#136, owner: R, merged 22 Nov 2026)
+changed `envs/prod`'s default to `true` and updated `wiring.tftest.hcl`'s expectation. Its deploy (run 44984165179)
+planned "Plan: 0 to add, 4 to change, 0 to destroy.": `CR_FINDER` `"off"` → `"on"` in place on the three Lambdas,
+plus the usual per-deploy `VERSION` update (the new commit) on `cf-prod-api` and on another function,
+`cf-prod-stories-api`. Nothing was added, deleted or replaced, and the delete gate printed "Delete gate: the plan
+deletes or replaces nothing that holds the owner's data." From then on the `cf-prod-stats` tick starts a look every 6
+hours, the owner's first "Find campaigns for me" starts one at once, and the first full read of Content Rewards'
+campaign pages takes 3 to 5 days.
 
 **Turning it off the same day if Content Rewards or Whop asks.** If Content Rewards or Whop asks Clip Factory to stop
 reading its pages, set the default back to `false` (revert the switch PR's one line) in a pull request that day; its

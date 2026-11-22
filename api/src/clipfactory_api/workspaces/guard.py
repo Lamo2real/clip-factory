@@ -76,7 +76,13 @@ def require_workspace(
     store: db.Store, user_id: str, workspace_id: str, *, stories: bool = True, now: datetime | None = None
 ) -> dict[str, Any]:
     """The caller's workspace, else 404; with ``stories`` (the routes marked **S**), a Lamo Clips id is a 409.
-    The first Lamo Stories workspace (``stories``) is made on first use when ``now`` is given (§45.3)."""
+    The first Lamo Stories workspace (``stories``) is made on first use when ``now`` is given (§45.3).
+
+    It also binds this request's models to this workspace: the models the owner added here (``MODELDEF#``) join the
+    resolver's list for this request only, and nothing of another workspace's ever does (§45.34)."""
+    from . import ai_resolve, model_defs
+
+    ai_resolve.unbind()
     item = find_workspace(store, user_id, workspace_id)
     if item is None and workspace_id == ws.FIRST_STORIES_ID and now is not None:
         item = ensure_first_stories(store, user_id, now)
@@ -84,6 +90,8 @@ def require_workspace(
         raise not_found(NOT_FOUND)
     if stories and item.get("workspaceType") != ws.STORIES:
         raise ApiError(409, "conflict", NOT_STORIES)
+    if item.get("workspaceType") == ws.STORIES:
+        model_defs.bind(store, user_id, str(item["workspaceId"]))
     return item
 
 

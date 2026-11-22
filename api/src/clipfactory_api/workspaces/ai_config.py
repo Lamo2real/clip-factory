@@ -9,8 +9,10 @@ Stories' agent after a real call; a model is never shown as available because it
 ``TASK#`` of kind ``check_models`` and asks Lamo Stories' own runtime (never Clip Factory's) to make one tiny call per
 model.
 
-``configSavedAt`` is set only by a save of the configuration itself (PUT ``…/ai``), never by a price alone, so the
-setup's steps 1–3 (§45.33) tick only when the owner really saved his AI settings.
+``configSavedAt`` is set only by a save of the configuration itself (PUT ``…/ai``), never by a price alone. The
+setup's steps 1–3 (§45.34) tick from ``pickedAt`` (``{environment?, model?, effort?}``, each the time a PUT named it in
+``picked``); an item saved before ``pickedAt`` existed carries its ``configSavedAt`` into all three on its next save,
+so no step goes backwards. Both stay inside (never returned).
 
 The runtime helpers at the end (``runtime``, ``new_session``, ``stop_quietly``, ``stops_last``) are shared by the chat
 and the reference analysis; they reach Lamo Stories' runtime only through ``workspaces.deps.of(app).agent``. A
@@ -38,10 +40,14 @@ from . import ai_resolve as res
 from . import deps, guard
 from . import types as ws
 
-# Provider ids (§45.6 says prices are "by model key or provider id"), refused for now: ``Price`` is per million
-# tokens and has no per-picture or per-second field, so a typed provider price could never be applied (contractIssues).
-PRICE_PROVIDERS: Final = ("nova-canvas", "nova-reel")
-NO_PROVIDER_PRICE: Final = "Prices can be typed for AI models only. Video and picture makers have no price to type yet."
+# Provider ids with a price the owner may type (§45.34 "Provider usage and cost"): per picture or per second of video,
+# saved through PUT …/ai ``prices`` by provider id with ``inputPer1M`` and ``outputPer1M`` 0 and ``perUnit`` set.
+PRICE_PROVIDERS: Final = {"nova-canvas": "image", "nova-reel": "second"}
+PROVIDER_LABEL: Final = {"nova-canvas": "Amazon Nova Canvas", "nova-reel": "Amazon Nova Reel"}
+UNIT_WORD: Final = {"image": "picture", "second": "second of video"}
+UNITS: Final = ("image", "second")
+# What the setup's steps 1–3 record (§45.34 "Setup steps 1–3"): ``PUT …/ai`` ``picked``, stamped on ``pickedAt``.
+PICKED: Final = ("environment", "model", "effort")
 CURRENCY: Final = re.compile(r"^[A-Z]{3}$")
 MAX_PRICE: Final = 100_000.0
 STALE: Final = "Your AI settings were changed somewhere else. Load them again, then save."
@@ -122,6 +128,7 @@ def clean_override(value: Any) -> dict[str, str] | None:
     out: dict[str, str] = {}
     model = optional_model(body.get("model"), "override")
     effort = optional_effort(body.get("effort"), "override")
+    check_pair(model, effort, "override")
     if model:
         out["model"] = model
     if effort:
@@ -130,17 +137,22 @@ def clean_override(value: Any) -> dict[str, str] | None:
 
 
 def clean_setting(value: Any, field: str = "ai") -> dict[str, str | None]:
-    """A project's own setting (``{model, effort}``, each null for "default"), as kept on a story or a reference."""
+    """A project's own setting (``{model, effort}``, each null for "default"), as kept on a story or a reference.
+    Both given: the model must take that effort (a model with no effort setting takes none, §45.34)."""
     body = validate.obj(value, field)
     validate.only_keys(body, ("model", "effort"))
     model = optional_model(body.get("model"), field)
     effort = optional_effort(body.get("effort"), field)
-    if model and effort:
-        try:
-            res.check_effort_for(model, effort)
-        except res.ResolveError as e:
-            raise bad_request(e.message, field) from e
+    check_pair(model, effort, field)
     return {"model": model, "effort": effort}
+
+
+def check_pair(model: str | None, effort: str | None, field: str | None) -> None:
+    """400 with the owner's sentence when one setting names a model and an effort it does not take."""
+    try:
+        res.check_pair(model, effort)
+    except res.ResolveError as e:
+        raise bad_request(e.message, field) from e
 
 
 # --- the AI configuration -------------------------------------------------------------------------------------
@@ -185,7 +197,10 @@ def public(item: Mapping[str, Any] | None) -> dict[str, Any]:
 
 
 def public_price(value: Mapping[str, Any]) -> dict[str, Any]:
+    """``Price`` (§45.6, §45.34): per million tokens for a model; ``perUnit`` and ``unit`` (``image`` or ``second``)
+    for a picture or video maker, null for a model."""
     long_context = value.get("longContext") if isinstance(value.get("longContext"), Mapping) else None
+    unit = value.get("unit")
     return {
         "inputPer1M": float(value.get("inputPer1M") or 0),
         "outputPer1M": float(value.get("outputPer1M") or 0),
@@ -203,6 +218,8 @@ def public_price(value: Mapping[str, Any]) -> dict[str, Any]:
         "currency": str(value.get("currency") or "USD"),
         "source": str(value.get("source") or "owner"),
         "note": str(value.get("note") or ""),
+        "perUnit": _num_or_none(value.get("perUnit")) if unit in UNITS else None,
+        "unit": unit if unit in UNITS else None,
     }
 
 
@@ -213,8 +230,8 @@ def _num_or_none(value: Any) -> float | None:
 
 
 def clean_price(value: Any, field: str = "price", *, short: bool = False) -> dict[str, Any]:
-    """The owner's ``Price`` (source ``owner``). ``short``: only ``{inputPer1M, outputPer1M, currency}`` (the price
-    route's body)."""
+    """The owner's ``Price`` of a model (source ``owner``). ``short``: only ``{inputPer1M, outputPer1M, currency}``
+    (the price route's body). A model's price is per million tokens: ``perUnit`` and ``unit`` stay null."""
     body = validate.obj(value, field)
     if short:
         validate.only_keys(body, ("inputPer1M", "outputPer1M", "currency"))
@@ -230,8 +247,12 @@ def clean_price(value: Any, field: str = "price", *, short: bool = False) -> dic
                 "currency",
                 "source",
                 "note",
+                "perUnit",
+                "unit",
             ),
         )
+        if body.get("perUnit") is not None or body.get("unit") is not None:
+            raise bad_request("A model's price is per million tokens. Leave perUnit and unit empty.", field)
     price: dict[str, Any] = {
         "inputPer1M": number(body.get("inputPer1M"), "inputPer1M"),
         "outputPer1M": number(body.get("outputPer1M"), "outputPer1M"),
@@ -256,7 +277,57 @@ def clean_price(value: Any, field: str = "price", *, short: bool = False) -> dic
     note = body.get("note")
     if note is not None:
         price["note"] = validate.string(body, "note", required=False, max_len=200) or OWNER_PRICE_NOTE
+    price.update(perUnit=None, unit=None)
     return price
+
+
+def clean_provider_price(provider_id: str, value: Any, field: str) -> dict[str, Any]:
+    """The owner's price of a picture or video maker (§45.34): ``perUnit`` per picture (Nova Canvas) or per second of
+    video (Nova Reel), with ``inputPer1M`` and ``outputPer1M`` 0."""
+    unit = PRICE_PROVIDERS[provider_id]
+    body = validate.obj(value, field)
+    validate.only_keys(
+        body,
+        ("inputPer1M", "outputPer1M", "cacheReadPer1M", "cacheWritePer1M", "longContext", "currency", "source",
+         "note", "perUnit", "unit"),
+    )  # fmt: skip
+    sentence = (
+        f"{PROVIDER_LABEL[provider_id]} is priced per {UNIT_WORD[unit]}: type the price of one {UNIT_WORD[unit]} "
+        "(perUnit), with inputPer1M and outputPer1M 0."
+    )
+    for name in ("inputPer1M", "outputPer1M"):
+        if body.get(name) not in (None, 0, 0.0) or isinstance(body.get(name), bool):
+            raise bad_request(sentence, field)
+    if any(body.get(name) is not None for name in ("cacheReadPer1M", "cacheWritePer1M", "longContext")):
+        raise bad_request(sentence, field)
+    if body.get("unit") not in (None, unit):
+        raise bad_request(sentence, field)
+    if body.get("perUnit") is None:
+        raise bad_request(sentence, field)
+    price: dict[str, Any] = {
+        "inputPer1M": 0.0,
+        "outputPer1M": 0.0,
+        "cacheReadPer1M": None,
+        "cacheWritePer1M": None,
+        "longContext": None,
+        "currency": _currency(body.get("currency")),
+        "source": "owner",
+        "note": OWNER_PRICE_NOTE,
+        "perUnit": number(body.get("perUnit"), "perUnit"),
+        "unit": unit,
+    }
+    if body.get("note") is not None:
+        price["note"] = validate.string(body, "note", required=False, max_len=200) or OWNER_PRICE_NOTE
+    return price
+
+
+def clean_picked(value: Any) -> list[str]:
+    """``picked`` (§45.34): which of the setup's first three steps this save is."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or any(p not in PICKED for p in value):
+        raise bad_request("picked must list environment, model or effort.", "picked")
+    return [p for p in PICKED if p in value]
 
 
 def _currency(value: Any) -> str:
@@ -270,7 +341,7 @@ def clean_config(
 ) -> dict[str, Any]:
     """A PUT body (``StoriesAiConfig & {version}``) checked against ``stories/config/models.json``; missing
     ``tasks`` or ``prices`` keep the saved ones."""
-    validate.only_keys(body, ("defaultModel", "defaultEffort", "tasks", "prices", "version"))
+    validate.only_keys(body, ("defaultModel", "defaultEffort", "tasks", "prices", "version", "picked"))
     version = validate.whole_number(body.get("version"))
     if version is None or version < 0:
         raise bad_request("version is required.", "version")
@@ -303,6 +374,10 @@ def clean_config(
                 )
                 if v
             }
+            try:
+                res.check_pair(cleaned.get("model"), cleaned.get("effort"))
+            except res.ResolveError as e:
+                raise bad_request(f"{res.TASK_LABEL[kind]}: {e.message}", "tasks") from e
             if cleaned:
                 tasks[kind] = cleaned
     prices: dict[str, Any] = dict(current_ai.get("prices") or {})
@@ -311,7 +386,8 @@ def clean_config(
         prices = {}
         for key, value in raw_prices.items():
             if key in PRICE_PROVIDERS:
-                raise bad_request(NO_PROVIDER_PRICE, "prices")
+                prices[key] = clean_provider_price(key, value, f"prices.{key}")
+                continue
             if res.model(key) is None:
                 raise bad_request(f"There is no model called '{key}' to set a price for.", "prices")
             prices[key] = clean_price(value, f"prices.{key}")
@@ -321,6 +397,7 @@ def clean_config(
         "tasks": tasks,
         "prices": prices,
         "version": version,
+        "picked": clean_picked(body.get("picked")),
     }
     for kind in res.TASK_KINDS:  # every task must still be usable with the new settings and its agent's own
         agent_id = res.agent_for_task(kind)
@@ -331,18 +408,40 @@ def clean_config(
     return out
 
 
+def picked_at(item: Mapping[str, Any] | None) -> dict[str, str] | None:
+    """``AICONFIG.pickedAt``: when the setup's steps 1–3 were picked; None for an item saved before it existed."""
+    raw = (item or {}).get("pickedAt")
+    if not isinstance(raw, Mapping):
+        return None
+    return {str(k): str(v) for k, v in raw.items() if k in PICKED and isinstance(v, str) and v}
+
+
+def _stamps(item: Mapping[str, Any] | None, picked: list[str], at: str) -> dict[str, str]:
+    """The new ``pickedAt``: the stored stamps (an older item's ``configSavedAt`` for all three, so nothing that was
+    ticked goes back) and ``at`` for each step this save picks."""
+    stamps = picked_at(item)
+    if stamps is None:
+        saved = (item or {}).get("configSavedAt")
+        stamps = dict.fromkeys(PICKED, saved) if isinstance(saved, str) and saved else {}
+    for p in picked:
+        stamps[p] = at
+    return stamps
+
+
 def save(store: db.Store, user_id: str, workspace_id: str, cleaned: Mapping[str, Any], now: datetime) -> dict[str, Any]:
     """Saves the configuration on its version: version 0 makes the item (a conditional put), any other updates it
     only while the stored version is the same. A stale version is a 409."""
     at = iso(now)
     version = int(cleaned["version"])
     fields = {k: cleaned[k] for k in ("defaultModel", "defaultEffort", "tasks", "prices")}
+    picked = [str(p) for p in cleaned.get("picked") or []]
     if version == 0:
         item = {
             **base_item(user_id, workspace_id, ws.AICONFIG_SK, ws.TYPE_AICONFIG),
             **fields,
             "version": 1,
             "configSavedAt": at,
+            "pickedAt": _stamps(None, picked, at),
             "createdAt": at,
             "updatedAt": at,
         }
@@ -351,11 +450,12 @@ def save(store: db.Store, user_id: str, workspace_id: str, cleaned: Mapping[str,
         except db.ConditionFailed as e:
             raise conflict(STALE) from e
         return public(item)
+    stamps = _stamps(read(store, user_id, workspace_id), picked, at)  # the write below is on the version read
     try:
         item = store.update_expr(
             pk(user_id, workspace_id),
             ws.AICONFIG_SK,
-            "SET #dm = :dm, #de = :de, #t = :t, #p = :p, #u = :u, #cs = :u, #v = :nv",
+            "SET #dm = :dm, #de = :de, #t = :t, #p = :p, #u = :u, #cs = :u, #pa = :pa, #v = :nv",
             condition="attribute_exists(pk) AND #v = :v AND #uid = :uid AND #wid = :wid",
             names={
                 "#dm": "defaultModel",
@@ -364,6 +464,7 @@ def save(store: db.Store, user_id: str, workspace_id: str, cleaned: Mapping[str,
                 "#p": "prices",
                 "#u": "updatedAt",
                 "#cs": "configSavedAt",
+                "#pa": "pickedAt",
                 "#v": "version",
                 "#uid": "userId",
                 "#wid": "workspaceId",
@@ -373,6 +474,7 @@ def save(store: db.Store, user_id: str, workspace_id: str, cleaned: Mapping[str,
                 ":de": fields["defaultEffort"],
                 ":t": fields["tasks"],
                 ":p": fields["prices"],
+                ":pa": stamps,
                 ":u": at,
                 ":nv": version + 1,
                 ":v": version,
@@ -432,9 +534,21 @@ def set_price(
 # --- models, their status and price ---------------------------------------------------------------------------
 
 
+def status_model(item: Mapping[str, Any]) -> str:
+    """The model a ``MODELSTATUS#`` item is about: its ``model`` attribute (§45.34; an older item's ``modelKey``),
+    else the key in its sort key."""
+    for name in ("model", "modelKey"):
+        if isinstance(item.get(name), str) and item[name]:
+            return str(item[name])
+    return str(item.get("sk") or "")[len(ws.MODELSTATUS_SK) :]
+
+
 def model_status_items(store: db.Store, user_id: str, workspace_id: str) -> dict[str, dict[str, Any]]:
     items = query_owned(store, user_id, workspace_id, ws.MODELSTATUS_SK)
-    return {str(i["sk"])[len(ws.MODELSTATUS_SK) :]: i for i in items}
+    out: dict[str, dict[str, Any]] = {}
+    for item in sorted(items, key=lambda i: str(i.get("checkedAt") or "")):  # the newest wins
+        out[status_model(item)] = item
+    return out
 
 
 def model_info(m: Mapping[str, Any], status: Mapping[str, Any] | None, ai: Mapping[str, Any]) -> dict[str, Any]:
@@ -447,7 +561,7 @@ def model_info(m: Mapping[str, Any], status: Mapping[str, Any] | None, ai: Mappi
     if state not in MODEL_STATUSES:
         state = "error"
     checked = (status or {}).get("checkedAt")
-    return {
+    out: dict[str, Any] = {
         "key": key,
         "label": str(m.get("label") or key),
         "provider": str(m.get("provider") or ""),
@@ -459,7 +573,12 @@ def model_info(m: Mapping[str, Any], status: Mapping[str, Any] | None, ai: Mappi
         "statusLine": str((status or {}).get("line") or STATUS_LINE[state]),
         "checkedAt": str(checked) if isinstance(checked, str) and checked else None,
         "price": price,
+        "custom": bool(m.get("custom")),
     }
+    if out["custom"]:  # what the owner typed, so Settings › AI can show and change it (§45.34)
+        out["region"] = str(m.get("region") or "")
+        out["maxOutputTokens"] = int(m.get("maxOutputTokens") or 0) or None
+    return out
 
 
 def model_infos(store: db.Store, user_id: str, workspace_id: str, ai: Mapping[str, Any]) -> list[dict[str, Any]]:

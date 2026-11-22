@@ -1,7 +1,9 @@
 // Lamo Stories › Library (docs/CONTRACTS.md §45.12, §45.16.7): only this workspace's files, never Lamo Clips' (that
 // Library reads CLIP# items only). Tabs: Projects (the stories themselves; one opens its files grouped by kind and a
 // Details panel with its production metadata), Videos, Storyboards, Characters, Pictures, Sounds, Scenes. Every item
-// shows its story or character and has Download. The address keeps the tab (`?kind=`) and the project (`?story=`).
+// shows its story or character and has Download (a video's MP4, or its WebM or MOV copy, by name). The address keeps
+// the tab (`?kind=`) and the project (`?story=`). Projects pages with the API's cursor (Show more, §45.34 "All
+// projects"), and a `?story=` that is not in the pages loaded so far is fetched by itself before "could not find".
 import { useMemo, useState } from "react";
 import { friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
@@ -11,7 +13,9 @@ import { bytes, relative, shortDate } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { navigate } from "../../lib/router.ts";
 import { storiesApi } from "../api/client.ts";
-import { STEP_LABEL, type AssetKind, type Character, type LibraryItem, type ProductionJob, type Story } from "../api/types.ts";
+import { STEP_LABEL, type AssetKind, type Character, type DownloadFormat, type LibraryItem, type ProductionJob, type StepKey, type Story } from "../api/types.ts";
+import { stoppedOn } from "../studio/ai.tsx";
+import { usePaged } from "../studio/hooks.ts";
 import { storiesHref } from "../routes.ts";
 import { STATUS_WORDS, StButton, StEmpty, StError, StIcon, StLinkButton, StLoading, StPageHead, type MascotMood, type StIconName, type StTone } from "../ui.tsx";
 import type { StoriesScreenProps } from "./types.ts";
@@ -59,6 +63,7 @@ export const KIND_LABEL: Record<AssetKind, string> = {
   audio: "Sound mix",
   captions: "Captions",
   design_ref: "Design picture",
+  video: "Video copy",
 };
 
 const KIND_ICON: Record<AssetKind, StIconName> = {
@@ -72,6 +77,7 @@ const KIND_ICON: Record<AssetKind, StIconName> = {
   audio: "music",
   captions: "comment",
   design_ref: "picture",
+  video: "film",
 };
 
 const IMAGE = (i: LibraryItem) => i.contentType.startsWith("image/");
@@ -84,7 +90,7 @@ export function tabFor(kind: string | null): LibraryTab {
 }
 
 function fileName(i: LibraryItem): string {
-  const ext: Record<string, string> = { "video/mp4": "mp4", "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "audio/mp4": "m4a", "application/json": "json", "text/x-ssa": "ass" };
+  const ext: Record<string, string> = { "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov", "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "audio/mp4": "m4a", "application/json": "json", "text/x-ssa": "ass" };
   const slug =
     i.title
       .toLowerCase()
@@ -111,17 +117,19 @@ function DownloadButton({ ws, item, stories }: { ws: string; item: LibraryItem; 
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const story = item.storyId ? stories?.find((s) => s.storyId === item.storyId) : undefined;
-  const named = item.kind === "final_video" && item.meta.current !== 0 && (story?.status === "approved" || story?.status === "published");
+  const named = (item.kind === "final_video" || item.kind === "video") && item.meta.current !== 0 && (story?.status === "approved" || story?.status === "published");
+  // A video's extra copy (WebM, MOV) is asked for by its own name (§45.34).
+  const format = item.meta.format === "webm" || item.meta.format === "mov" ? (item.meta.format as DownloadFormat) : null;
   return (
     <StButton
       className="st-file__download"
       disabled={busy}
-      aria-label={`Download ${KIND_LABEL[item.kind].toLowerCase()} of ${item.title}`}
+      aria-label={`Download ${KIND_LABEL[item.kind].toLowerCase()}${format ? ` (${format === "webm" ? "WebM" : "MOV"})` : ""} of ${item.title}`}
       onClick={async () => {
         if (!named || !item.storyId) return saveFile(item.url, fileName(item));
         setBusy(true);
         try {
-          const { url, filename } = await storiesApi().download(ws, item.storyId);
+          const { url, filename } = format ? await storiesApi().download(ws, item.storyId, { format }) : await storiesApi().download(ws, item.storyId);
           saveFile(url, filename);
         } catch (e) {
           // The file link the Library already has still works (it is the same video).
@@ -142,7 +150,7 @@ function Thumb({ item, pictures }: { item: LibraryItem; pictures: Map<string, st
   const still =
     IMAGE(item)
       ? item.url
-      : item.kind === "final_video" && item.storyId
+      : (item.kind === "final_video" || item.kind === "video") && item.storyId
         ? pictures.get(`cover:${item.storyId}`)
         : item.kind === "scene_clip" && item.storyId
           ? pictures.get(`still:${item.storyId}:${String(item.meta.sceneId ?? "")}`)
@@ -151,7 +159,7 @@ function Thumb({ item, pictures }: { item: LibraryItem; pictures: Map<string, st
     <span className={`st-file__thumb st-file__thumb--${item.kind}`}>
       {still ? <img src={still} alt="" loading="lazy" decoding="async" /> : null}
       <span className="st-file__badge" aria-hidden="true">
-        <StIcon name={item.kind === "final_video" || item.kind === "scene_clip" ? "play" : KIND_ICON[item.kind]} size={item.kind === "final_video" || item.kind === "scene_clip" ? 26 : 30} />
+        <StIcon name={item.kind === "final_video" || item.kind === "video" || item.kind === "scene_clip" ? "play" : KIND_ICON[item.kind]} size={item.kind === "final_video" || item.kind === "video" || item.kind === "scene_clip" ? 26 : 30} />
       </span>
     </span>
   );
@@ -166,6 +174,7 @@ function FileCard({ ws, item, pictures, stories }: { ws: string; item: LibraryIt
         <span className="st-file__kind">
           <StIcon name={KIND_ICON[item.kind]} size={16} />
           {KIND_LABEL[item.kind]}
+          {item.meta.format === "webm" ? " · WebM" : item.meta.format === "mov" ? " · MOV" : ""}
           {typeof item.meta.sceneId === "string" ? ` · scene ${item.meta.sceneId.replace(/^s/, "")}` : ""}
         </span>
         {owner ? (
@@ -416,7 +425,8 @@ function Details({ ws, story }: { ws: string; story: Story }) {
                     <dt>{STEP_WORDS[m.step] ?? m.step}</dt>
                     <dd>
                       {modelName(m.model)}
-                      {m.effort ? ` · ${EFFORT_WORDS[m.effort] ?? m.effort}${m.effortApplied ? "" : " (not offered)"}` : ""}
+                      {m.effort ? ` · ${EFFORT_WORDS[m.effort] ?? m.effort}${stoppedOn(job, m) || m.effortApplied ? "" : " (not offered)"}` : ""}
+                      {stoppedOn(job, m) ? " (stopped)" : ""}
                     </dd>
                   </div>
                 ))}
@@ -425,7 +435,7 @@ function Details({ ws, story }: { ws: string; story: Story }) {
                 {job.steps.map((s) => (
                   <li key={s.key} className={`st-run__step is-${s.status}`}>
                     <span className="st-run__dot" aria-hidden="true" />
-                    <span>{s.key === "portrait" ? s.label : STEP_LABEL[s.key]}</span>
+                    <span>{STEP_LABEL[s.key as StepKey] ?? s.label}</span>
                     <span className="st-run__time">{s.status === "done" ? seconds(s) : s.status === "skipped" ? "skipped" : s.status === "failed" ? "stopped" : s.status === "running" ? "now" : ""}</span>
                   </li>
                 ))}
@@ -439,7 +449,7 @@ function Details({ ws, story }: { ws: string; story: Story }) {
 }
 
 const GROUPS: { kinds: AssetKind[]; title: string }[] = [
-  { kinds: ["final_video", "cover"], title: "The video" },
+  { kinds: ["final_video", "video", "cover"], title: "The video" },
   { kinds: ["storyboard", "captions"], title: "Story and captions" },
   { kinds: ["scene_still", "scene_clip"], title: "Scenes" },
   { kinds: ["audio"], title: "Sound" },
@@ -526,18 +536,29 @@ function Project({ ws, story, cast, stories }: { ws: string; story: Story; cast:
   );
 }
 
-function Projects({ ws, storyId, stories, cast }: { ws: string; storyId: string | null; stories: ReturnType<typeof useLoad<Story[]>>; cast: Character[] | null }) {
+type StoryPages = ReturnType<typeof usePaged<Story>>;
+
+/** A project that is not in the pages loaded so far: it is fetched by itself before "could not find" (§45.34). */
+function ProjectById({ ws, storyId, cast, stories }: { ws: string; storyId: string; cast: Character[] | null; stories: Story[] }) {
+  const one = useLoad(async () => (await storiesApi().getStory(ws, storyId)).story, `${ws}|${storyId}`, "st-library-one");
+  if (one.data) return <Project ws={ws} story={one.data} cast={cast} stories={[one.data, ...stories]} />;
+  if (one.error && !one.missing) return <StError message={one.error} onRetry={() => void one.reload()} />;
+  if (one.missing)
+    return (
+      <StEmpty mood="think" tone="sky" title="We could not find that project" action={<StLinkButton href="/stories/library" main>See every project</StLinkButton>}>
+        It may have been deleted.
+      </StEmpty>
+    );
+  return <StLoading label="Opening the project…" />;
+}
+
+function Projects({ ws, storyId, stories, cast }: { ws: string; storyId: string | null; stories: StoryPages; cast: Character[] | null }) {
   const covers = usePictures(ws, null, true);
   if (stories.error && !stories.data) return <StError message={stories.error} onRetry={() => void stories.reload()} />;
   if (!stories.data) return <StLoading label="Opening the boxes…" />;
   if (storyId) {
     const story = stories.data.find((s) => s.storyId === storyId);
-    if (!story)
-      return (
-        <StEmpty mood="think" tone="sky" title="We could not find that project" action={<StLinkButton href="/stories/library" main>See every project</StLinkButton>}>
-          It may have been deleted.
-        </StEmpty>
-      );
+    if (!story) return <ProjectById key={storyId} ws={ws} storyId={storyId} cast={cast} stories={stories.data} />;
     return <Project ws={ws} story={story} cast={cast} stories={stories.data} />;
   }
   if (stories.data.length === 0)
@@ -547,11 +568,21 @@ function Projects({ ws, storyId, stories, cast }: { ws: string; storyId: string 
       </StEmpty>
     );
   return (
-    <ul className="st-projects">
-      {stories.data.map((s) => (
-        <ProjectCard key={s.storyId} story={s} cover={covers.get(`cover:${s.storyId}`)} cast={cast} />
-      ))}
-    </ul>
+    <>
+      <ul className="st-projects">
+        {stories.data.map((s) => (
+          <ProjectCard key={s.storyId} story={s} cover={covers.get(`cover:${s.storyId}`)} cast={cast} />
+        ))}
+      </ul>
+      {stories.problem ? <StError message={stories.problem} onRetry={() => void stories.more()} /> : null}
+      {stories.hasMore ? (
+        <div className="st-more-row">
+          <StButton aria-disabled={stories.busy || undefined} onClick={() => !stories.busy && void stories.more()}>
+            {stories.busy ? "Getting more projects…" : "Show more"}
+          </StButton>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -559,7 +590,15 @@ export function LibraryScreen({ ws, page }: StoriesScreenProps) {
   const kind = page.name === "library" ? page.kind : null;
   const storyId = page.name === "library" ? page.storyId : null;
   const tab = tabFor(kind);
-  const stories = useLoad(async () => (await storiesApi().listStories(ws, { status: "all", limit: 50 })).stories, ws, "st-library-stories");
+  const stories = usePaged(
+    async (cursor) => {
+      const r = await storiesApi().listStories(ws, cursor ? { status: "all", limit: 50, cursor } : { status: "all", limit: 50 });
+      return { items: r.stories, nextCursor: r.nextCursor };
+    },
+    ws,
+    "st-library-story-pages",
+    (s) => s.storyId,
+  );
   const cast = useLoad(() => storiesApi().listCharacters(ws), ws, "st-library-cast");
   const go = (next: LibraryTab, story: string | null = storyId) => {
     const q = new URLSearchParams();

@@ -107,8 +107,34 @@ def test_the_first_put_makes_the_item_and_later_ones_need_the_version(wcall: WsC
         ({"prices": {"gpt-9": {"inputPer1M": 1, "outputPer1M": 2, "currency": "USD"}}}, "There is no model"),
         (
             {"prices": {"nova-reel": {"inputPer1M": 1, "outputPer1M": 2, "currency": "USD"}}},
-            "Prices can be typed for AI models only. Video and picture makers have no price to type yet.",
+            "Amazon Nova Reel is priced per second of video: type the price of one second of video (perUnit), with "
+            "inputPer1M and outputPer1M 0.",
         ),
+        (
+            {"prices": {"nova-canvas": {"inputPer1M": 0, "outputPer1M": 0, "currency": "USD"}}},
+            "Amazon Nova Canvas is priced per picture",
+        ),
+        (
+            {
+                "prices": {
+                    "nova-canvas": {
+                        "inputPer1M": 0,
+                        "outputPer1M": 0,
+                        "perUnit": 0.04,
+                        "unit": "second",
+                        "currency": "USD",
+                    }
+                }
+            },
+            "Amazon Nova Canvas is priced per picture",
+        ),
+        ({"prices": {"nova-canvas": {"perUnit": -1, "currency": "USD"}}}, "perUnit must be"),
+        ({"prices": {"builtin-rig": {"perUnit": 1, "currency": "USD"}}}, "There is no model called 'builtin-rig'"),
+        (
+            {"prices": {"opus-5-5": {"inputPer1M": 1, "outputPer1M": 2, "perUnit": 1, "currency": "USD"}}},
+            "A model's price is per million tokens.",
+        ),
+        ({"picked": ["everything"]}, "picked must list environment, model or effort."),
         ({"prices": {"opus-5-5": {"inputPer1M": -1, "outputPer1M": 2, "currency": "USD"}}}, "inputPer1M must be"),
         ({"prices": {"opus-5-5": {"inputPer1M": 1, "outputPer1M": 2, "currency": "dollars"}}}, "currency must be"),
         ({"colour": "red"}, "Unknown field: colour."),
@@ -201,7 +227,10 @@ def test_the_owners_price_replaces_the_list_price_and_can_be_cleared(wcall: WsCa
         "currency": "EUR",
         "source": "owner",
         "note": "Your own price.",
+        "perUnit": None,  # a model's price is per million tokens (§45.34)
+        "unit": None,
     }
+    assert body["model"]["custom"] is False
     _, got = wcall("GET", f"{BASE}/ai")
     assert got["ai"]["version"] == 1
     assert got["ai"]["prices"]["opus-5-5"]["inputPer1M"] == 4.5
@@ -290,3 +319,28 @@ def test_the_stories_effective_values_for_the_story_routes(wcall: WsCall, store:
     assert got["from"] == "default"
     with pytest.raises(res.ResolveError):
         ai_config.effective_for(store, USER, "stories", "chat", request={"model": "gpt-9"})
+
+
+def test_a_picture_or_video_maker_is_priced_per_unit(wcall: WsCall, table: FakeTable) -> None:
+    """§45.34 "Provider usage and cost": Nova Canvas per picture and Nova Reel per second of video, saved through
+    PUT …/ai ``prices`` by provider id with ``inputPer1M`` and ``outputPer1M`` 0 and ``perUnit`` set."""
+    prices = {
+        "nova-canvas": {"inputPer1M": 0, "outputPer1M": 0, "perUnit": 0.04, "currency": "usd"},
+        "nova-reel": {"inputPer1M": 0, "outputPer1M": 0, "perUnit": 0.08, "unit": "second", "currency": "USD"},
+        "opus-5-5": {"inputPer1M": 5, "outputPer1M": 25, "currency": "USD"},
+    }
+    status, body = _put(wcall, prices=prices)
+    assert status == 200, body
+    canvas, reel = body["ai"]["prices"]["nova-canvas"], body["ai"]["prices"]["nova-reel"]
+    assert (canvas["perUnit"], canvas["unit"], canvas["currency"], canvas["source"]) == (0.04, "image", "USD", "owner")
+    assert (canvas["inputPer1M"], canvas["outputPer1M"]) == (0.0, 0.0)
+    assert (reel["perUnit"], reel["unit"]) == (0.08, "second")
+    assert (body["ai"]["prices"]["opus-5-5"]["perUnit"], body["ai"]["prices"]["opus-5-5"]["unit"]) == (None, None)
+    stored = table.raw(pk(), "AICONFIG")["prices"]
+    assert stored["nova-canvas"]["unit"] == "image"
+    _, got = wcall("GET", f"{BASE}/ai")
+    assert got["ai"]["prices"]["nova-reel"]["perUnit"] == 0.08
+    # model rows never carry a provider id
+    assert not [m for m in got["models"] if m["key"].startswith("nova-")]
+    # the price route stays for models only
+    assert wcall("PUT", f"{BASE}/ai/prices/nova-reel", {"inputPer1M": 0, "outputPer1M": 0, "currency": "USD"})[0] == 404

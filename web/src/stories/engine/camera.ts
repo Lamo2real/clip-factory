@@ -1,12 +1,12 @@
 // Lamo Stories engine: cameras. A camera is a centre, a zoom, a little roll and a shake, applied as one transform to
-// every prim of a layer. Layers further away (depth < 1) move and zoom less: light parallax.
+// every prim of a layer. Layers further away (depth < 1) move and zoom less: light parallax. Everything is in the
+// frame's design px (frame.ts), so each shape frames its shots the same way: a close shot's face is about 40% of
+// the short side in every shape.
 
+import { F } from "./frame.ts";
 import { clamp, clamp01, ease, lerp, noise } from "./math.ts";
 import type { Mat } from "./pen.ts";
 import type { CameraId } from "./types.ts";
-
-const W = 1080;
-const H = 1920;
 
 export interface Cam {
   cx: number;
@@ -39,6 +39,8 @@ function keep(c: number, half: number, lo: number, hi: number): number {
 }
 
 export function cameraAt(id: CameraId, t: number, dur: number, focus: Focus, seed: number, impacts: number[]): Cam {
+  const W = F.w;
+  const H = F.h;
   const box = focus.box ?? { x0: W * 0.3, y0: H * 0.45, x1: W * 0.7, y1: H * 0.75 };
   const bx = (box.x0 + box.x1) / 2;
   const by = (box.y0 + box.y1) / 2;
@@ -59,7 +61,7 @@ export function cameraAt(id: CameraId, t: number, dur: number, focus: Focus, see
       cy = by + (0.5 - 0.45) * (H / zoom);
       break;
     case "close": {
-      // the face fills about 40% of the width
+      // the face fills about 40% of the short side
       const f = focus.face ?? { x: bx, y: box.y0 + bh * 0.25, r: 110 };
       zoom = clamp(225 / Math.max(20, f.r), 1.6, 3.4);
       cx = f.x;
@@ -112,6 +114,8 @@ export function cameraAt(id: CameraId, t: number, dur: number, focus: Focus, see
 
 /** The transform for a layer at `depth` (0 = fixed to the screen, 1 = the ground the actors stand on). */
 export function layerMatrix(c: Cam, depth: number): Mat {
+  const W = F.w;
+  const H = F.h;
   const z = 1 + (c.zoom - 1) * depth;
   const cx = W / 2 + (c.cx - W / 2) * depth;
   const cy = H / 2 + (c.cy - H / 2) * depth;
@@ -126,8 +130,8 @@ export function layerMatrix(c: Cam, depth: number): Mat {
 
 /** The world rectangle the camera sees at depth 1 (a little generous for the roll and shake). */
 export function visibleBox(c: Cam): Box {
-  const halfW = W / (2 * c.zoom) + 60;
-  const halfH = H / (2 * c.zoom) + 60;
+  const halfW = F.w / (2 * c.zoom) + 60;
+  const halfH = F.h / (2 * c.zoom) + 60;
   return { x0: c.cx - halfW, x1: c.cx + halfW, y0: c.cy - halfH, y1: c.cy + halfH };
 }
 

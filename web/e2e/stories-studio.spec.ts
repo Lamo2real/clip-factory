@@ -12,9 +12,11 @@ import { visibleEdges } from "./edges.ts";
 import { findOverflow } from "./helpers.ts";
 
 /** The mock's seeded ids (SEED_IDS in src/stories/api/mock/stories.ts; test/storiesStudioMock.test.tsx keeps them equal). */
-const S = { review: "01JSTST0000000000000000001", needsCheck: "01JSTST0000000000000000002", approved: "01JSTST0000000000000000003", failed: "01JSTST0000000000000000007" };
-const I = { deer: "01JSTDE0000000000000000008" };
-const C = { pip: "01JSTCH0000000000000000001" };
+const S = { review: "01JSTST0000000000000000001", needsCheck: "01JSTST0000000000000000002", approved: "01JSTST0000000000000000003", published: "01JSTST0000000000000000004", failed: "01JSTST0000000000000000007" };
+const I = { deer: "01JSTDE0000000000000000008", skid: "01JSTDE0000000000000000001", sandwich: "01JSTDE0000000000000000004" };
+const C = { pip: "01JSTCH0000000000000000001", bolt: "01JSTCH0000000000000000002" };
+/** A seeded, analyzed reference video (SEED_IDS in src/stories/api/mock/references.ts). */
+const REF = { analyzed: "01JSTRF0000000000000000001" };
 
 const PAGES: [string, string][] = [
   ["Ideas", "/stories/ideas"],
@@ -24,6 +26,7 @@ const PAGES: [string, string][] = [
   ["A character", `/stories/characters/${C.pip}`],
   ["Production", "/stories/production"],
   ["New video", `/stories/production/new?idea=${I.deer}`],
+  ["New video from the chat", `/stories/production/new?idea=${I.sandwich}&ref=${REF.analyzed}&cast=${C.pip}&cast=${C.bolt}&sec=40`],
   ["A stopped video", `/stories/production/${S.failed}`],
   ["Review", "/stories/review"],
   ["Review: facts to check", `/stories/review/${S.needsCheck}`],
@@ -318,4 +321,187 @@ test("the whole flow: idea, character, production, review, approve and the publi
   await expect(page.getByRole("dialog", { name: /Sending your video|Posted!/ })).toBeVisible();
   await expect(page.locator(".st-s-sheet .st-s-post")).toHaveCount(1);
   await ctx.close();
+});
+
+// ---------- Round 3 (§45.34) ----------
+
+/** Lets the sliding highlights reach the new choice before the page is measured. */
+const settle = (page: Page) => page.waitForTimeout(700);
+
+/** Lamo Stories' mock store as these tests change it (inside the page). */
+type R3Window = Window & {
+  __cfStoriesMock?: { store?: { knobs: Record<string, unknown>; social: { platform: string; connectionStatus: string; reason: string | null; externalAccountId: string | null }[] } };
+};
+
+test("round 3, Production › New: the hand-over keys, the idea's own length, and the shape picker", async ({ browser }) => {
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    const page = await ctx.newPage();
+    await open(page, `/stories/production/new?idea=${I.sandwich}&ref=${REF.analyzed}&cast=${C.pip}&cast=${C.bolt}&sec=40`);
+    await expect(page.locator('.st-s-casttile[aria-pressed="true"]')).toHaveCount(2);
+    await expect(page.locator('input[type="range"]').first()).toHaveValue("40");
+    await expect(page.locator('.st-s-reftile[aria-pressed="true"]')).toHaveCount(1);
+    await expect(page.getByText("From Settings › Video.")).toBeVisible();
+    await page.locator(".st-s-shapepick .st-s-pick__opt", { hasText: "Wide" }).click();
+    await expect(page.getByText("Just for this video. Settings › Video stays the same.")).toBeVisible();
+    await settle(page);
+    expect(await audit(page, `New video with a wide shape ${w}`, touch && w < 768)).toEqual([]);
+    await page.getByRole("button", { name: "Make the video" }).click();
+    await expect(page).toHaveURL(/\/stories\/production\/[0-9A-Z]{26}$/);
+    await page.locator(".st-s-details__sum", { hasText: "Production details" }).click();
+    await expect(page.locator(".st-s-facts")).toContainText("Wide (16:9), 1920 × 1080");
+    await expect(page.locator(".st-s-facts")).toContainText("Next run: Claude");
+    await ctx.close();
+  }
+  // A saved idea's full idea gives the starting length.
+  const ctx = await context(browser, 1280, 800, false);
+  const page = await ctx.newPage();
+  await open(page, `/stories/production/new?idea=${I.skid}`);
+  await expect(page.getByText(/The full idea was written for \d+ seconds\./)).toBeVisible();
+  // Reference videos from the address that are not in the list (deleted since) are dropped: they never use up the 3
+  // picks, so a real one can still be picked.
+  await go(page, `/stories/production/new?idea=${I.sandwich}&ref=01JSTRFGONE000000000000001&ref=01JSTRFGONE000000000000002&ref=01JSTRFGONE000000000000003`);
+  const tile = page.locator(".st-s-reftile", { hasText: "Penguin on the ice rink" });
+  await expect(tile).toBeVisible();
+  await expect(page.locator('.st-s-reftile[aria-pressed="true"]')).toHaveCount(0);
+  await expect(tile).not.toHaveAttribute("aria-disabled", "true");
+  await tile.click();
+  await expect(tile).toHaveAttribute("aria-pressed", "true");
+  await ctx.close();
+});
+
+test("round 3, Review: Next run, Write them again beside the saved words, the place sounds, and extra copies", async ({ browser }) => {
+  test.setTimeout(90_000);
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    await ctx.addInitScript(() => ((window as unknown as { __cfStoriesMock?: unknown }).__cfStoriesMock = { knobs: { extraFormats: ["webm"], taskSeconds: 1 } }));
+    const page = await ctx.newPage();
+    await open(page, `/stories/review/${S.review}`);
+    await expect(page.locator(".st-s-decide .st-s-nextrun")).toHaveText(/^Next run: Claude .+ · .+$/);
+    // The place's own sounds, labelled, from each scene's start.
+    await expect(page.locator(".st-s-sfx__row.is-place").first()).toContainText("Sound (whole scene)");
+    // Write them again: the draft beside the saved words, saved only by Use these.
+    await page.locator(".st-s-captions").first().waitFor();
+    await page.locator("#st-captions-title").scrollIntoViewIfNeeded();
+    await page.locator(".st-s-pick__opt", { hasText: "With the post" }).click();
+    await page.getByRole("button", { name: "Write them again" }).click();
+    const draft = page.locator(".st-s-draftcaps");
+    await expect(draft).toBeVisible({ timeout: 20_000 });
+    await expect(draft.locator(".st-s-draftcaps__row").first()).toContainText("Saved");
+    await expect(draft.locator(".st-s-draftcaps__row").first()).toContainText("New");
+    await settle(page);
+    expect(await audit(page, `Review with new post words ${w}`, touch && w < 768)).toEqual([]);
+    await draft.getByRole("button", { name: "Use these" }).click();
+    await expect(page.getByText("Saved. Tap Remake to put it in the video.")).toBeVisible();
+    await expect(page.locator(".st-s-draftcaps")).toHaveCount(0);
+    // An approved video with a WebM copy offers it by name.
+    await go(page, `/stories/review/${S.approved}`);
+    await expect(page.getByRole("button", { name: "Download WebM" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Download MP4" })).toBeVisible();
+    await settle(page);
+    expect(await audit(page, `Review with copies ${w}`, touch && w < 768)).toEqual([]);
+    await page.getByRole("button", { name: "Download WebM" }).click();
+    await expect(page.getByText("Downloading the WebM copy.")).toBeVisible();
+    await ctx.close();
+  }
+});
+
+test("round 3, Ideas and Characters: Edit an idea card; a redesign shows what changes before Use this", async ({ browser }) => {
+  test.setTimeout(90_000);
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    await ctx.addInitScript(() => ((window as unknown as { __cfStoriesMock?: unknown }).__cfStoriesMock = { knobs: { taskSeconds: 1 } }));
+    const page = await ctx.newPage();
+    await open(page, "/stories/ideas");
+    const card = page.locator(`[data-idea="${I.skid}"]`);
+    await card.getByRole("button", { name: /^Edit / }).click();
+    const form = page.getByRole("form", { name: /^Edit / });
+    await expect(form.getByRole("group", { name: "The full idea" })).toBeVisible();
+    await settle(page);
+    expect(await audit(page, `Edit an idea ${w}`, touch && w < 768)).toEqual([]);
+    await form.getByLabel("Title").fill("Calm hands on black ice");
+    await form.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByText("Saved “Calm hands on black ice”.")).toBeVisible();
+    await expect(card).toContainText("Calm hands on black ice");
+
+    await go(page, `/stories/characters/${C.pip}`);
+    await page.getByRole("button", { name: "Design with AI" }).click();
+    await page.getByLabel("What should Pip look like?").fill("Curly hair and a blue jumper");
+    await page.getByRole("button", { name: "Design it" }).click();
+    const compare = page.locator(".st-s-redesign");
+    await expect(compare).toBeVisible({ timeout: 20_000 });
+    await expect(compare).toContainText("What changes:");
+    await expect(compare).toContainText("Stays the same:");
+    await settle(page);
+    expect(await audit(page, `A redesign ${w}`, touch && w < 768)).toEqual([]);
+    await compare.getByRole("button", { name: "Use this" }).click();
+    await expect(page.getByText("The new version of Pip is in the editor.")).toBeVisible();
+    // With AI pictures off, the way to turn them on.
+    await expect(page.getByRole("link", { name: "Settings › Video › Picture maker" })).toHaveAttribute("href", "/stories/settings/video");
+    await ctx.close();
+  }
+});
+
+test("round 3, Post to {name}?: the publish sheet and Posts' Try again ask about the account the API names", async ({ browser }) => {
+  test.setTimeout(90_000);
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    const page = await ctx.newPage();
+    await open(page, `/stories/review/${S.approved}`);
+    // Lamo Stories' TikTok is connected, and Lamo Stories cannot tell it from Lamo Clips' own (TikTok's own ids).
+    await page.evaluate(() => {
+      const st = (window as R3Window).__cfStoriesMock?.store;
+      const t = st?.social.find((a) => a.platform === "tiktok");
+      if (st && t) {
+        t.connectionStatus = "connected";
+        t.reason = null;
+        st.knobs.tiktokUnsure = true;
+      }
+    });
+    await page.getByRole("button", { name: "Post it", exact: true }).click();
+    const sheet = page.getByRole("dialog", { name: "Post it" });
+    await sheet.locator("button.st-s-place", { hasText: "TikTok" }).click();
+    await sheet.getByRole("button", { name: "Use my settings" }).click();
+    // This TikTok account only allows "Only me" until TikTok approves the app: picked from TikTok's own choices.
+    await sheet.locator(".st-s-tiktok [aria-haspopup=listbox]").click();
+    await page.getByRole("option", { name: "Only me" }).click();
+    await expect(sheet.locator(".st-s-sheet__actions .st-btn--main")).not.toHaveAttribute("aria-disabled", "true", { timeout: 10_000 });
+    await sheet.locator(".st-s-sheet__actions .st-btn--main").click();
+    const ask = await sheetRules(page, w, /^Post to Lamo Stories\?$/);
+    await expect(ask).toContainText("Lamo Stories cannot tell if");
+    await expect(ask.locator(".st-s-dest--ask")).toContainText("Account id");
+    await ask.getByRole("button", { name: /^Yes, post to / }).click();
+    await expect(page.getByRole("dialog", { name: /Sending your video|Posted!/ })).toBeVisible();
+    await page.getByRole("dialog", { name: /Sending your video|Posted!/ }).locator(".st-s-sheet__actions .st-btn--main").click();
+    // Posts' Try again on the posted video's stopped TikTok post: the API names the account, the owner says yes.
+    await go(page, `/stories/review/${S.published}`);
+    await page.evaluate(() => {
+      const st = (window as R3Window).__cfStoriesMock?.store;
+      const t = st?.social.find((a) => a.platform === "tiktok");
+      if (st && t) {
+        t.externalAccountId = "-000another-open-id";
+        st.knobs.tiktokUnsure = false;
+      }
+    });
+    const row = page.locator(".st-s-post", { hasText: "TikTok" });
+    await row.getByRole("button", { name: "Try again" }).click();
+    const again = await sheetRules(page, w, /^Post to Lamo Stories\?$/);
+    await expect(again).toContainText("a different account now");
+    await again.getByRole("button", { name: /^Yes, post to / }).click();
+    await expect(row).toContainText(/Waiting|Sending|Posted/);
+    await expect(row).toContainText("Account id -000another-open-id");
+    await ctx.close();
+  }
 });

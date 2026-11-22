@@ -57,10 +57,7 @@ export function mockStoriesApi(): StoriesApi {
     }
   const fallbacks = { ...library.shellFallbacks(store), ...onboarding.shellFallbacks(store) };
   for (const [key, fn] of Object.entries(fallbacks)) if (!joined[key] || isNotBuilt(joined[key])) joined[key] = fn;
-  // One name, two routes (§45.5): a character's reference picture (three ids, the characters part) or a reference
-  // video (two ids, the references part). Both parts list it, so the call goes by its arguments.
-  const forPicture = characters.api(store).deleteReference as (...a: unknown[]) => Promise<unknown>;
-  const forVideo = references.api(store).deleteReference as (...a: unknown[]) => Promise<unknown>;
-  joined.deleteReference = (...a: unknown[]) => (a.length >= 3 && a[2] !== undefined ? forPicture(...a) : forVideo(...a));
+  // A character's reference picture is deleteReference (the characters part); a reference video is
+  // deleteReferenceVideo (the references part), the rename of CONTRACTS §45.34.
   return joined as unknown as StoriesApi;
 }

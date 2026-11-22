@@ -1,13 +1,55 @@
 // Lamo Stories engine: where on-screen text goes and how it breaks into lines (captions, scene teaching text, the
 // safety end card). Text is never cut: a caption that does not fit its lines at the smallest size gets one more line,
 // and the end card shortens the publishers' names before it would ever lose "Check your local road rules.".
+// Each shape has its own places (design px, frame.ts), all inside that shape's safe area.
 
-/** Captions sit in the platforms' safe area: above the bottom bar of names and buttons, away from the right column. */
-export const CAPTION = { x: 520, y: 1400, maxW: 840, sizes: [64, 58, 52, 46, 40], color: "#fff6e5", maxLines: 2 };
-/** Scene teaching text: under the platforms' top tabs. */
-export const HEADER = { x: 520, y: 330, maxW: 840, sizes: [60, 54, 48, 42, 40], color: "#ffc94a", maxLines: 2 };
-/** The safety end card: high up, over the background, so it never covers a face. */
-export const ENDCARD = { x: 540, y: 420, maxW: 860, sizes: [52, 48, 44, 40], color: "#fff6e5", seconds: 2.5, maxLines: 4 };
+import { F } from "./frame.ts";
+import type { VideoAspect } from "./types.ts";
+
+export interface TextBox {
+  /** the block's centre (design px) */
+  x: number;
+  y: number;
+  /** the widest a line may be */
+  maxW: number;
+  /** the sizes tried, biggest first */
+  sizes: number[];
+  color: string;
+  maxLines: number;
+}
+
+// The 9:16 boxes keep every block, its panel included (half a size to each side, 0.28 of a size above and below),
+// inside the platforms' safe area (frame.ts: x 80..910, y 260..1440), centred across it (x 495).
+/** Captions sit in the platforms' safe area: above the bottom bar of names and buttons, away from the right column
+ * (two lines at 64 px reach down to y 1438.4). */
+export const CAPTION = { x: 495, y: 1345, maxW: 760, sizes: [64, 58, 52, 46, 40], color: "#fff6e5", maxLines: 2 };
+/** Scene teaching text: under the platforms' top tabs (two lines at 60 px reach up to y 262.4). */
+export const HEADER = { x: 495, y: 350, maxW: 760, sizes: [60, 54, 48, 42, 40], color: "#ffc94a", maxLines: 2 };
+/** The safety end card: high up, over the background, so it never covers a face (four lines at 52 px reach up to
+ * y 282.7). */
+export const ENDCARD = { x: 495, y: 420, maxW: 770, sizes: [52, 48, 44, 40], color: "#fff6e5", seconds: 2.5, maxLines: 4 };
+
+/** Where text goes in each shape (CONTRACTS §45.34). 9:16 keeps inside the platforms' safe area, clear of their tabs,
+ * bottom bar and right-hand buttons (the boxes above); 1:1 and 16:9 use centred bands: captions low down, teaching
+ * text and the end card at the top, above the heads of the characters standing on the ground. */
+export const TEXT_BOXES: Record<VideoAspect, { caption: TextBox; header: TextBox; endcard: TextBox }> = {
+  "9:16": { caption: CAPTION, header: HEADER, endcard: ENDCARD },
+  "1:1": {
+    caption: { ...CAPTION, x: 540, y: 925, maxW: 900 },
+    header: { ...HEADER, x: 540, y: 145, maxW: 900 },
+    endcard: { ...ENDCARD, x: 540, y: 195, maxW: 920 },
+  },
+  "16:9": {
+    caption: { ...CAPTION, x: 960, y: 925, maxW: 1200 },
+    header: { ...HEADER, x: 960, y: 145, maxW: 1200 },
+    endcard: { ...ENDCARD, x: 960, y: 195, maxW: 1300 },
+  },
+};
+
+/** The text boxes of the frame being drawn. */
+export function textBoxes(): { caption: TextBox; header: TextBox; endcard: TextBox } {
+  return TEXT_BOXES[F.aspect];
+}
 /** When, in the last scene, the end card starts: its last 2.5 s (a scene lasts at least 2 s, so the card never
  * reaches into the scene before, and each scene's frames depend on that scene alone). */
 export function endCardFrom(lastSceneSec: number): number {
@@ -144,34 +186,34 @@ function credits(who: string[]): string[] {
 }
 
 /** Each sentence of the end card starts on its own line ("Check your local road rules." stands alone). */
-function sentenceLines(text: string): { lines: string[]; size: number } | null {
+function sentenceLines(text: string, box: TextBox): { lines: string[]; size: number } | null {
   const sentences = text.split(/(?<=\.)\s+/).filter(Boolean);
-  for (const size of ENDCARD.sizes) {
-    const lines = sentences.flatMap((t) => wrapText(t, size, ENDCARD.maxW));
-    if (lines.length <= ENDCARD.maxLines && lines.every((l) => textWidth(l, size) <= ENDCARD.maxW)) return { lines, size };
+  for (const size of box.sizes) {
+    const lines = sentences.flatMap((t) => wrapText(t, size, box.maxW));
+    if (lines.length <= box.maxLines && lines.every((l) => textWidth(l, size) <= box.maxW)) return { lines, size };
   }
   return null;
 }
 
 /** "Based on {publisher} advice. Check your local road rules." with the cited publishers, shortened: three or more
  * become "{first}, {second} and other road safety"; when that needs more than four lines, "{first} and other road
- * safety"; with no publisher, "checked road safety". */
-export function endCardText(publishers: string[]): string {
+ * safety"; with no publisher, "checked road safety". `box` is the shape's end card (9:16 when not given). */
+export function endCardText(publishers: string[], box: TextBox = ENDCARD): string {
   for (const who of credits(names(publishers))) {
     const text = sentence(who);
-    if (sentenceLines(text)) return text;
+    if (sentenceLines(text, box)) return text;
   }
   return sentence("checked road safety");
 }
 
 /** The end card's lines and size: never a word dropped. */
-export function endCardLines(text: string): { lines: string[]; size: number } {
-  return sentenceLines(text) ?? fitText(text, ENDCARD.sizes, ENDCARD.maxW, ENDCARD.maxLines);
+export function endCardLines(text: string, box: TextBox = ENDCARD): { lines: string[]; size: number } {
+  return sentenceLines(text, box) ?? fitText(text, box.sizes, box.maxW, box.maxLines);
 }
 
-/** The end card's block: its lines, size, and how far it reaches down the frame (px). */
-export function endCardLayout(publishers: string[]): { text: string; lines: string[]; size: number; bottom: number } {
-  const text = endCardText(publishers);
-  const { lines, size } = endCardLines(text);
-  return { text, lines, size, bottom: ENDCARD.y + (lines.length * size * LINE_HEIGHT) / 2 };
+/** The end card's block: its lines, size, and how far it reaches down the frame (design px). */
+export function endCardLayout(publishers: string[], box: TextBox = ENDCARD): { text: string; lines: string[]; size: number; bottom: number } {
+  const text = endCardText(publishers, box);
+  const { lines, size } = endCardLines(text, box);
+  return { text, lines, size, bottom: box.y + (lines.length * size * LINE_HEIGHT) / 2 };
 }

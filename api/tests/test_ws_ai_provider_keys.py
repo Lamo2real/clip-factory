@@ -77,6 +77,8 @@ def test_a_key_is_stored_only_in_secrets_manager(
         "label": "Runway (test only)",
         "state": "needs_setup",  # saved is not working: only a real call turns it on
         "line": "Key saved · ends 4f2a. It is checked on its first real call.",
+        # §45.34: a provider that takes a key says whether one is saved (never the key itself)
+        "key": {"saved": True, "hint": "4f2a", "savedAt": "2026-11-15T12:00:00.000Z"},
     }
     assert secrets_client.json(NAME) == {"key": KEY}
     assert secrets_client.tags[NAME] == [
@@ -124,3 +126,28 @@ def test_the_secret_name_never_leaves_the_workspace_prefix() -> None:
         ws.provider_secret_name("cf-prod/workspaces/", "clips", "runway")
     with pytest.raises(ValueError, match="platforms"):
         ws.provider_secret_name("cf-prod/platforms/", "stories", "runway")
+
+
+def test_the_providers_list_shows_each_keyed_providers_key_state(
+    wcall: WsCall, keyed: provider_keys.KeyedProvider, secrets_client: FakeSecretsManager
+) -> None:
+    """``ProviderStatus.key`` (§45.34): present only for a provider that takes a key; the key card offers "Remove
+    the saved key" only while ``saved``."""
+    _, body = wcall("GET", f"{BASE}/providers")
+    by = {p["id"]: p for p in body["providers"]}
+    assert by["runway"]["key"] == {"saved": False, "hint": None, "savedAt": None}
+    assert by["runway"]["state"] == "needs_setup"
+    assert all("key" not in p for i, p in by.items() if i != "runway")  # the others take no key
+    wcall("PUT", f"{BASE}/providers/runway/key", {"key": KEY})
+    _, body = wcall("GET", f"{BASE}/providers")
+    shown = next(p for p in body["providers"] if p["id"] == "runway")
+    assert shown["key"] == {"saved": True, "hint": "4f2a", "savedAt": "2026-11-15T12:00:00.000Z"}
+    assert KEY not in json.dumps(body)
+    wcall("DELETE", f"{BASE}/providers/runway/key")
+    _, body = wcall("GET", f"{BASE}/providers")
+    assert next(p for p in body["providers"] if p["id"] == "runway")["key"]["saved"] is False
+
+
+def test_without_a_keyed_provider_the_list_is_the_registry_only(wcall: WsCall) -> None:
+    _, body = wcall("GET", f"{BASE}/providers")
+    assert all("key" not in p for p in body["providers"])

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from clipfactory_api import db
@@ -112,7 +114,14 @@ def test_patch_merges_the_configuration_with_a_version(call: Call) -> None:
         "audio": "builtin-synth",
     }
     assert w["configuration"]["video"] == {"resolution": "1080x1920", "aspect": "9:16", "quality": "best", "fps": 30}
-    assert w["configuration"]["production"] == {"burnCaptions": True, "scenesAtOnce": 3, "keepVersions": 4}
+    assert w["configuration"]["production"] == {
+        "burnCaptions": True,
+        "scenesAtOnce": 3,
+        "keepVersions": 4,
+        "extraFormats": [],  # §45.34: MP4 only by default, every file kept
+        "keepReferences": "all",
+        "keepChatPictures": "all",
+    }
     assert w["configuration"]["xMonthlyLimitUsd"] == 12.5
     assert w["configuration"]["captionsOn"] is True
     again = call(
@@ -120,7 +129,14 @@ def test_patch_merges_the_configuration_with_a_version(call: Call) -> None:
         BASE,
         {"version": w["version"], "configuration": {"production": {"keepVersions": "all"}, "xMonthlyLimitUsd": None}},
     )[1]["workspace"]["configuration"]
-    assert again["production"] == {"burnCaptions": True, "scenesAtOnce": 3, "keepVersions": "all"}
+    assert again["production"] == {
+        "burnCaptions": True,
+        "scenesAtOnce": 3,
+        "keepVersions": "all",
+        "extraFormats": [],
+        "keepReferences": "all",
+        "keepChatPictures": "all",
+    }
     assert again["xMonthlyLimitUsd"] is None
     stale = call("PATCH", BASE, {"version": version, "configuration": {"musicOn": False}})
     assert stale[0] == 409
@@ -143,6 +159,14 @@ def test_patch_merges_the_configuration_with_a_version(call: Call) -> None:
         {"production": {"scenesAtOnce": 4}},
         {"production": {"keepVersions": 11}},
         {"production": {"burnCaptions": "yes"}},
+        {"production": {"extraFormats": ["avi"]}},
+        {"production": {"extraFormats": "webm"}},
+        {"production": {"keepReferences": "days_7"}},
+        {"production": {"keepReferences": None}},
+        {"production": {"keepChatPictures": "study_only"}},
+        {"video": {"aspect": "1:1"}},  # a square video is never 1080 by 1920
+        {"video": {"aspect": "4:3", "resolution": "1440x1080"}},
+        {"video": {"aspect": "16:9", "resolution": "1080x1920"}},
         {"xMonthlyLimitUsd": -1},
         {"xMonthlyLimitUsd": "50"},
         {"youtubeCategory": "20"},
@@ -167,3 +191,66 @@ def test_rename_cannot_take_another_workspaces_name(call: Call) -> None:
     version = call("GET", BASE)[1]["workspace"]["version"]
     assert call("PATCH", BASE, {"version": version, "workspaceName": "LAMO CARS"})[0] == 409
     assert call("PATCH", BASE, {"version": version, "workspaceName": "Lamo Stories"})[0] == 200
+
+
+@pytest.mark.parametrize(
+    ("aspect", "resolution"),
+    [
+        ("9:16", "1080x1920"),
+        ("9:16", "720x1280"),
+        ("1:1", "1080x1080"),
+        ("1:1", "720x720"),
+        ("16:9", "1920x1080"),
+        ("16:9", "1280x720"),
+    ],
+)
+def test_every_shape_and_its_sizes_can_be_the_default(call: Call, aspect: str, resolution: str) -> None:
+    """§45.34 "Video size and shape": the resolution must match the aspect; 9:16 at 1080 by 1920 stays the default."""
+    version = call("GET", BASE)[1]["workspace"]["version"]
+    body = {"version": version, "configuration": {"video": {"aspect": aspect, "resolution": resolution}}}
+    status, out = call("PATCH", BASE, body)
+    assert status == 200, out
+    assert out["workspace"]["configuration"]["video"] == {
+        "resolution": resolution,
+        "aspect": aspect,
+        "quality": "high",
+        "fps": 30,
+    }
+
+
+def test_a_size_that_does_not_fit_the_shape_says_which_sizes_do(call: Call) -> None:
+    version = call("GET", BASE)[1]["workspace"]["version"]
+    status, body = call("PATCH", BASE, {"version": version, "configuration": {"video": {"aspect": "16:9"}}})
+    assert (status, body["error"]["message"]) == (400, "A 16:9 video is 1920 by 1080 or 1280 by 720.")
+
+
+def test_extra_formats_and_keep_settings_are_saved(call: Call) -> None:
+    version = call("GET", BASE)[1]["workspace"]["version"]
+    production = {"extraFormats": ["mov", "webm", "mov"], "keepReferences": "study_only", "keepChatPictures": "days_30"}
+    status, body = call("PATCH", BASE, {"version": version, "configuration": {"production": production}})
+    assert status == 200, body
+    got = body["workspace"]["configuration"]["production"]
+    assert (got["extraFormats"], got["keepReferences"], got["keepChatPictures"]) == (
+        ["webm", "mov"],
+        "study_only",
+        "days_30",
+    )
+
+
+def test_new_workspaces_start_with_the_default_shape_and_keep_everything(call: Call) -> None:
+    config = call("GET", BASE)[1]["workspace"]["configuration"]
+    assert (config["video"]["aspect"], config["video"]["resolution"]) == ("9:16", "1080x1920")
+    assert config["production"]["extraFormats"] == []
+    assert (config["production"]["keepReferences"], config["production"]["keepChatPictures"]) == ("all", "all")
+
+
+def test_patching_the_providers_stamps_the_pick_even_unchanged(call: Call, table: FakeTable) -> None:
+    """§45.34 "Onboarding step 4": ``providersPickedAt`` (internal) whenever the body carries
+    ``configuration.providers``."""
+    w = call("GET", BASE)[1]["workspace"]
+    providers = w["configuration"]["providers"]
+    status, body = call("PATCH", BASE, {"version": w["version"], "configuration": {"providers": providers}})
+    assert status == 200
+    assert "providersPickedAt" not in json.dumps(body)
+    stored = table.items[(ws.registry_pk(USER), ws.workspace_sk("stories"))]
+    assert stored["providersPickedAt"] == "2026-11-15T12:00:00.000Z"

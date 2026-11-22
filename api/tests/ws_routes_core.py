@@ -47,6 +47,7 @@ EXPECTED: set[tuple[str, str]] = {
     ("POST", f"{STORY}/changes"),
     ("POST", f"{STORY}/captions"),
     ("GET", f"{STORY}/download"),
+    ("POST", f"{STORY}/download"),
     ("GET", f"{W}/library"),
     ("GET", f"{W}/providers"),
     ("GET", f"{W}/guidance"),

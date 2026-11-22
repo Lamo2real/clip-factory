@@ -1,7 +1,7 @@
 // A character's reference pictures (docs/CONTRACTS.md §45.8, §45.5): up to 8 pictures of the look the owner is aiming
 // for, kept with the character and shown next to the rig (they never change the rig). Each goes straight to storage
 // with a presigned PUT and a progress bar; the server then checks its size and type. Also the AI picture button,
-// shown only when AI pictures are on in Lamo Stories › Settings.
+// shown only when AI pictures are on in Lamo Stories › Settings › Video › Picture maker (§45.34).
 import { useEffect, useRef, useState } from "react";
 import { putFile } from "../../api/upload.ts";
 import { A } from "../../components/ui.tsx";
@@ -163,7 +163,7 @@ export function Portrait({ ws, character, aiOn, onChange }: { ws: string; charac
         </>
       ) : (
         <p className="st-s-refs__lede">
-          AI pictures are off. You can turn them on in <A href={storiesHref({ name: "settings", section: "ai" })}>Settings</A>.
+          AI pictures are off. You can turn them on in <A href={storiesHref({ name: "settings", section: "video" })}>Settings › Video › Picture maker</A>.
         </p>
       )}
       {problem ? <Notice tone="bad">{problem}</Notice> : null}

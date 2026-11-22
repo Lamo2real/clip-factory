@@ -1,12 +1,17 @@
-// One conversation with the creative director (docs/CONTRACTS.md §45.27): the messages, the project it is about,
-// the model and effort line above the box, pictures, Send and Stop. A sent message shows at once; the answer arrives
-// as it is written (the page asks every second while one is being written); its buttons wait for the owner's tap.
+// One conversation with the creative director (docs/CONTRACTS.md §45.27, §45.34): the messages (the newest 500, and
+// "Show earlier messages" for the ones before), the project it is about, the model and effort line above the box,
+// pictures, Send and Stop. A sent message shows at once; the answer arrives as it is written (the page asks every
+// second while one is being written); its buttons wait for the owner's tap. A failed answer keeps the model and effort
+// it was sent with, and Try again sends it with the same "just this message" choice (unless the owner picked another
+// since). The director's "Remake these scenes" and "Analyze this reference video" buttons start from the choice that
+// message was sent with.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { A } from "../../components/ui.tsx";
 import { usePoll } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
 import type { Conversation, Message, ModelOverride, ProjectRef } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
+import type { AiInfo } from "../studio/ai.tsx";
 import { ActionCard } from "./actions.tsx";
 import { AiLine, AiSheet, DEFAULT } from "./ai.tsx";
 import { rememberConversation } from "./device.ts";
@@ -15,6 +20,7 @@ import { Btn, Chip, Director, Empty, Icon, Progress, sentence, Waiting } from ".
 import { afterId, askedBefore, inFlight, LOCAL, mergeMessages } from "./messages.ts";
 import { effortLabel, effortProblem, findModel, modelLabel, useModels, withOverride } from "./models.ts";
 import { ProjectChip } from "./ProjectChip.tsx";
+import { forgetSentWithVisit, rememberSentWith, sentWith } from "./sentWith.ts";
 import { ChatText } from "./text.tsx";
 import { pictureProblem, PICTURES_PER_MESSAGE, putPicture } from "./upload.ts";
 
@@ -32,6 +38,14 @@ const localFiles = new Map<string, File>();
 
 /** Try again on an answer whose question had pictures, after a reload (the files are no longer here). */
 export const ADD_AGAIN = "Add the pictures again, then tap Send.";
+
+/** How many messages one read answers (the API's SHOWN): a full page may have more before it. */
+export const PAGE = 500;
+
+/** Test hook: forget this visit's copy of the choices answers were asked with (sentWith.ts keeps them on the device). */
+export function forgetSentWith(): void {
+  forgetSentWithVisit();
+}
 
 interface Attached {
   key: string;
@@ -96,6 +110,11 @@ export function ConversationView({
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameProblem, setRenameProblem] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
+  /** A full first page: there may be older messages ("Show earlier messages"). */
+  const [older, setOlder] = useState(false);
+  const [earlier, setEarlier] = useState<{ busy: boolean; problem: string | null }>({ busy: false, problem: null });
+  /** The page height before older messages went in on top, so the owner keeps reading the same place. */
+  const keepPlace = useRef<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
   const end = useRef<HTMLDivElement>(null);
@@ -117,6 +136,7 @@ export function ConversationView({
         if (!live) return;
         show(r.conversation);
         setMessages(r.messages);
+        setOlder(r.messages.length >= PAGE);
         rememberConversation(convId);
         stick.current = true;
       })
@@ -141,8 +161,15 @@ export function ConversationView({
     [],
   );
 
-  // Keep the newest words in view while they arrive, unless the owner scrolled up to read.
+  // Keep the newest words in view while they arrive, unless the owner scrolled up to read. Older messages put in on
+  // top keep the place the owner was reading.
   useLayoutEffect(() => {
+    if (keepPlace.current !== null) {
+      const grew = document.documentElement.scrollHeight - keepPlace.current;
+      keepPlace.current = null;
+      if (grew > 0) window.scrollBy?.(0, grew);
+      return;
+    }
     if (stick.current) end.current?.scrollIntoView?.({ block: "end" });
   }, [messages]);
   useEffect(() => {
@@ -157,13 +184,31 @@ export function ConversationView({
 
   usePoll(
     async () => {
-      const r = await storiesApi().getConversation(ws, convId, afterId(messages));
+      const after = afterId(messages);
+      const r = await storiesApi().getConversation(ws, convId, after ? { after } : undefined);
       show(r.conversation);
       setMessages((prev) => mergeMessages(prev, r.messages));
     },
     !!writing,
     1000,
   );
+
+  /** "Show earlier messages": the PAGE messages before the first one shown. */
+  async function showEarlier() {
+    const first = messages.find((m) => !m.msgId.startsWith(LOCAL));
+    if (!first || earlier.busy) return;
+    setEarlier({ busy: true, problem: null });
+    try {
+      const r = await storiesApi().getConversation(ws, convId, { before: first.msgId });
+      stick.current = false;
+      keepPlace.current = document.documentElement.scrollHeight;
+      setMessages((prev) => [...r.messages.filter((m) => !prev.some((p) => p.msgId === m.msgId)), ...prev]);
+      setOlder(r.messages.length >= PAGE);
+      setEarlier({ busy: false, problem: null });
+    } catch (e) {
+      setEarlier({ busy: false, problem: sentence(e, "The earlier messages did not load. Try again.") });
+    }
+  }
 
   if (loadProblem)
     return (
@@ -226,10 +271,11 @@ export function ConversationView({
       if (attachmentIds.length) body.attachments = attachmentIds.map((assetId) => ({ assetId }));
       if (once && (once.model || once.effort)) body.override = { ...(once.model ? { model: once.model } : {}), ...(once.effort ? { effort: once.effort } : {}) };
       const r = await storiesApi().sendMessage(ws, conv.convId, body);
+      if (body.override) rememberSentWith(ws, r.assistant.msgId, body.override);
       setMessages((prev) => [...prev.filter((m) => m.msgId !== temp.msgId), r.user, r.assistant]);
       setOverride(null);
       void storiesApi()
-        .getConversation(ws, conv.convId, r.assistant.msgId)
+        .getConversation(ws, conv.convId, { after: r.assistant.msgId })
         .then((c) => show(c.conversation))
         .catch(() => undefined);
     } catch (e) {
@@ -247,11 +293,15 @@ export function ConversationView({
     void send(f.text, f.attachments, f.override, f.tray);
   }
 
-  /** Try again on a failed answer: the same words and, uploaded once more, the same pictures. */
-  async function askAgain(asked: Message) {
+  /**
+   * Try again on a failed answer: the same words, the same "just this message" choice it was sent with (§45.34; a
+   * choice picked since wins, e.g. another model after a refusal) and, uploaded once more, the same pictures.
+   */
+  async function askAgain(asked: Message, failedId: string) {
     if (!conv || sending || writing) return;
+    const once = override && (override.model || override.effort) ? override : sentWith(ws, failedId);
     const ids = asked.attachments.map((a) => a.assetId);
-    if (!ids.length) return send(asked.text, [], override);
+    if (!ids.length) return send(asked.text, [], once);
     const files = ids.map((id) => localFiles.get(id) ?? null);
     if (files.some((f) => !f)) {
       setText(asked.text);
@@ -283,7 +333,7 @@ export function ConversationView({
     void send(
       asked.text,
       fresh.map((p) => p.assetId!),
-      override,
+      once,
       fresh,
     );
   }
@@ -404,6 +454,8 @@ export function ConversationView({
   }
 
   const chatSuggested = models.tasks?.find((t) => t.kind === "chat")?.suggestedEffort ?? null;
+  // The studio's model menu on the director's buttons reads the same list (it is known once the server answered).
+  const aiInfo: AiInfo = { models: models.models, tasks: models.tasks ?? [], live: !!models.tasks };
   const sheetValues =
     sheet?.scope === "once"
       ? { model: current.model, effort: current.effort }
@@ -481,22 +533,40 @@ export function ConversationView({
           </div>
         </div>
       ) : (
-        <ol className="st-chat-msgs" aria-label="Messages">
-          {messages.map((m) => (
-            <MessageItem
-              key={m.msgId}
-              ws={ws}
-              m={m}
-              models={models.models}
-              failedSend={failedSend?.localId === m.msgId}
-              onRetry={() => {
-                const asked = askedBefore(messages, m.msgId);
-                if (asked) void askAgain(asked);
-              }}
-              onPickModel={() => openSheet("model", true)}
-            />
-          ))}
-        </ol>
+        <>
+          {older || earlier.problem ? (
+            <div className="st-chat-earlier">
+              {older ? (
+                <Btn className="st-chat-earlier__btn" off={earlier.busy} onClick={() => void showEarlier()}>
+                  {earlier.busy ? "Getting earlier messages…" : "Show earlier messages"}
+                </Btn>
+              ) : null}
+              {earlier.problem ? (
+                <p className="st-chat-note st-chat-note--bad" role="alert">
+                  {earlier.problem}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          <ol className="st-chat-msgs" aria-label="Messages">
+            {messages.map((m) => (
+              <MessageItem
+                key={m.msgId}
+                ws={ws}
+                m={m}
+                models={models.models}
+                info={aiInfo}
+                once={m.role === "assistant" ? sentWith(ws, m.msgId) : null}
+                failedSend={failedSend?.localId === m.msgId}
+                onRetry={() => {
+                  const asked = askedBefore(messages, m.msgId);
+                  if (asked) void askAgain(asked, m.msgId);
+                }}
+                onPickModel={() => openSheet("model", true)}
+              />
+            ))}
+          </ol>
+        </>
       )}
       <p className="sr-only" role="status" aria-live="polite">
         {writing ? (writing.status === "pending" ? "The director is thinking." : "The director is writing.") : ""}
@@ -614,7 +684,7 @@ export function ConversationView({
           onScope={(scope) => {
             setSheetProblem(null);
             setSheetSaved(null);
-            setSheet({ scope });
+            setSheet({ scope: scope === "once" ? "once" : "chat" });
           }}
           values={sheetValues}
           effortModel={sheetModel}
@@ -640,6 +710,8 @@ function MessageItem({
   ws,
   m,
   models,
+  info,
+  once,
   failedSend,
   onRetry,
   onPickModel,
@@ -647,6 +719,9 @@ function MessageItem({
   ws: string;
   m: Message;
   models: ReturnType<typeof useModels>["models"];
+  info: AiInfo;
+  /** the "just this message" choice this answer was asked with (this visit) */
+  once: ModelOverride | null;
   failedSend: boolean;
   onRetry: () => void;
   onPickModel: () => void;
@@ -711,13 +786,19 @@ function MessageItem({
         {m.status === "done" && m.actions.length ? (
           <div className="st-chat-actions">
             {m.actions.map((a, i) => (
-              <ActionCard key={`${m.msgId}:${i}`} id={`${m.msgId}:${i}`} ws={ws} action={a} />
+              <ActionCard key={`${m.msgId}:${i}`} id={`${m.msgId}:${i}`} ws={ws} action={a} info={info} once={once} />
             ))}
           </div>
         ) : null}
         {m.model && m.status !== "pending" ? (
           <span className="st-chat-msg__meta">
             {modelLabel(models, m.model)} · {m.effortApplied === false ? "no effort setting" : effortLabel(m.effort)}
+          </span>
+        ) : m.status === "failed" && once?.model ? (
+          // The server did not keep the model this answer was asked with: the choice sent with it still says it.
+          <span className="st-chat-msg__meta">
+            Asked {modelLabel(models, once.model)}
+            {once.effort ? ` · ${effortLabel(once.effort)}` : ""}
           </span>
         ) : null}
       </div>

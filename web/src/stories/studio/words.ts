@@ -1,7 +1,7 @@
 // The plain words the Lamo Stories studio screens show (docs/CONTRACTS.md §45.16.5, §45.16.6). Kid-proof: short
 // sentences, everyday words, one name for each thing.
 import { ApiError } from "../../api/errors.ts";
-import type { IdeaCategory, Platform, PublishingJob, StepKey, StoryStatus, VideoConcept } from "../api/types.ts";
+import type { ErrorAccount, IdeaCategory, Platform, PublishingJob, StepKey, StoryStatus, VideoConcept } from "../api/types.ts";
 
 export const CATEGORY_LABEL: Record<IdeaCategory, string> = {
   driving_safety: "Driving safety",
@@ -100,6 +100,24 @@ export function say(e: unknown, fallback = "Something went wrong. Try again in a
 /** True when the server said the thing changed meanwhile (409). */
 export function isConflict(e: unknown): boolean {
   return e instanceof ApiError && e.code === "conflict";
+}
+
+/**
+ * The account a publishing 409 names (`error.account`, CONTRACTS §45.34: the account changed, or Lamo Stories cannot
+ * tell this TikTok from Lamo Clips' own), which Lamo Stories' client keeps on its ApiError; null for any other error.
+ */
+export function accountOf(e: unknown): ErrorAccount | null {
+  if (!(e instanceof ApiError) || e.code !== "conflict") return null;
+  const a = (e as ApiError & { account?: Partial<ErrorAccount> }).account;
+  if (!a || typeof a.externalAccountId !== "string" || !a.externalAccountId) return null;
+  return { externalAccountId: a.externalAccountId, accountName: typeof a.accountName === "string" ? a.accountName : null, handle: typeof a.handle === "string" ? a.handle : null };
+}
+
+/** "Lamo Stories (@lamo.stories)": an account's name and handle, as the owner reads them. */
+export function accountWords(a: Pick<ErrorAccount, "accountName" | "handle" | "externalAccountId">): string {
+  const name = a.accountName || a.handle || a.externalAccountId;
+  const handle = a.handle && a.handle !== name ? ` (${a.handle.startsWith("@") ? a.handle : `@${a.handle}`})` : "";
+  return `${name}${handle}`;
 }
 
 /** "45 seconds", "1 minute 5 seconds". */

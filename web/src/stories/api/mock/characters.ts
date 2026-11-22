@@ -232,6 +232,50 @@ export function designFromWords(words: string, withPicture: boolean, salt: numbe
   };
 }
 
+/** The sentence for a portrait while AI pictures are off (CONTRACTS §45.34: it names Settings › Video › Picture maker). */
+export const PICTURES_OFF = "AI pictures are off. Turn them on in Lamo Stories › Settings › Video › Picture maker.";
+
+/**
+ * The practice character agent redesigning a saved character (§45.34): it starts from the character as it is (CURRENT),
+ * keeps its name, and changes only the parts the owner's words are about; words about none of them give a new outfit.
+ */
+export function redesign(current: CharacterInput, fresh: CharacterInput, words: string): CharacterInput {
+  const t = words.trim();
+  const next = structuredClone(current);
+  const said = (re: RegExp) => re.test(t);
+  let changed = false;
+  if (said(/\b(tall|lanky|round|chubby|plump|square|boxy|robot)\b/i)) {
+    next.look = { ...next.look, body: fresh.look.body, height: fresh.look.height, width: fresh.look.width };
+    changed = true;
+  }
+  if (said(/\b(bald|no hair|curly|spiky|long hair|bun|cap|hat)\b|\bhair\b/i)) {
+    next.look = { ...next.look, hair: { ...fresh.look.hair } };
+    changed = true;
+  }
+  if (said(/\b(glasses|specs|scarf|bow ?tie|helmet|headphones)\b/i)) {
+    next.look = { ...next.look, accessory: fresh.look.accessory };
+    changed = true;
+  }
+  if (COLOR_WORDS.some(([re]) => re.test(t)) || said(/\b(stripe|stripes|dots|spotty|spots|jumper|shirt|outfit|clothes)\b/i)) {
+    next.look = { ...next.look, outfit: { ...fresh.look.outfit } };
+    changed = true;
+  }
+  if (said(/\b(clumsy|wobbly|silly|fast|quick|speedy|zippy|rush|calm|slow|wise|gentle|heavy|strong|bouncy)\b/i)) {
+    next.movementStyle = fresh.movementStyle;
+    changed = true;
+  }
+  if (said(/\b(sound|sounds|voice|noise|noises|hum|beep)\b/i)) {
+    next.voice = structuredClone(fresh.voice);
+    changed = true;
+  }
+  if (said(/\b(face|faces|smile|frown|expression)\b/i)) {
+    next.expressions = [...fresh.expressions];
+    changed = true;
+  }
+  if (!changed) next.look = { ...next.look, outfit: { ...fresh.look.outfit, top: fresh.look.outfit.top === current.look.outfit.top ? "#8b6cff" : fresh.look.outfit.top } };
+  return { ...next, name: current.name };
+}
+
 export function seed(store: MockStore): void {
   const ws = "stories";
   const at = iso(Date.now() - 12 * 86_400_000);
@@ -370,28 +414,21 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       addAsset(store, c, assetId, "character_ref", url, up.contentType, up.size);
       return out(store, c);
     },
-    // Two routes share this name in StoriesApi: a character's reference picture (ws, characterId, assetId) and a
-    // reference video (ws, refId; builder H's part answers that one when it is built).
-    deleteReference: (async (ws: string, id: string, assetId?: string) => {
+    // A character's reference picture (a reference video is deleteReferenceVideo, the references part: §45.34).
+    async deleteReference(ws, id, assetId) {
       guardWs(store, ws);
-      if (assetId === undefined) {
-        await delay(120);
-        if (!store.references.some((r) => r.refId === id)) fail(404, "not_found", "We could not find that reference video.");
-        store.references = store.references.filter((r) => r.refId !== id);
-        return undefined;
-      }
       const c = find(store, ws, id);
       await delay(120);
       if (!c.references.some((r) => r.assetId === assetId)) fail(404, "not_found", "That picture is already gone.");
       c.references = c.references.filter((r) => r.assetId !== assetId);
       store.assets = store.assets.filter((a) => a.assetId !== assetId);
       return out(store, c);
-    }) as StoriesApi["deleteReference"],
+    },
     async makePortrait(ws, id) {
       guardWs(store, ws);
       const c = find(store, ws, id);
       if ((config(store, ws).providers?.images ?? "builtin-rig") !== "nova-canvas")
-        fail(409, "conflict", "AI pictures are off. Turn them on in Lamo Stories › Settings.");
+        fail(409, "conflict", PICTURES_OFF);
       await delay(160);
       const at = iso();
       const job: ProductionJob = {
@@ -432,10 +469,15 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         const charRef = store.assets.some((a) => a.assetId === ref && a.kind === "character_ref" && store.characters.some((c) => c.workspaceId === ws && c.characterId === a.characterId));
         if (!(design && design.ws === ws) && !charRef) fail(404, "not_found", "We could not find that picture. Add it again.");
       }
+      // A redesign (§45.34): that character is the agent's CURRENT; it keeps its name and only what was asked changes.
+      const current = body.characterId !== undefined ? find(store, ws, body.characterId) : null;
       await delay(160);
       const salt = store.characters.length + store.tasks.length;
       // The character agent's suggestion; nothing is saved until the owner taps Save.
-      return startMockTask(store, ws, "character_design", body.override, () => ({ character: designFromWords(words, !!ref, salt) }));
+      return startMockTask(store, ws, "character_design", body.override, () => {
+        const fresh = designFromWords(words, !!ref, salt);
+        return { character: current ? redesign(input(current), fresh, words) : fresh };
+      });
     },
   };
 }

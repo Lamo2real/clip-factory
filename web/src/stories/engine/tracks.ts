@@ -1,20 +1,33 @@
 // Lamo Stories engine: the text track (captions, bubble symbols, the safety end card) and the audio track (every
-// effect of the scenes' lists and every character noise at its absolute time). The text layout is text.ts.
+// effect of the scenes' lists and every character noise at its absolute time). The text layout is text.ts; each
+// shape has its own places, and the track is in output pixels of the script's size.
 
 import { BED_ID, bedPan } from "./ambience.ts";
 import { BUBBLE_SYMBOL, symbolSpan } from "./bubbles.ts";
+import { F, inFrame } from "./frame.ts";
 import { clamp } from "./math.ts";
 import { actorPath, STYLES } from "./motion.ts";
 import { prepare } from "./scene.ts";
-import { CAPTION, ENDCARD, endCardFrom, endCardLayout, fitText, HEADER } from "./text.ts";
+import { endCardFrom, endCardLayout, fitText, textBoxes } from "./text.ts";
 import type { AudioEvent, Beat, Scene, SfxId, StoryScript, TextEvent } from "./types.ts";
 
-export { CAPTION, ENDCARD, endCardLines, endCardText, fitText, HEADER, shortPublisher, textWidth, wrapText } from "./text.ts";
+export { CAPTION, ENDCARD, endCardLines, endCardText, fitText, HEADER, shortPublisher, TEXT_BOXES, textWidth, wrapText } from "./text.ts";
 
 const norm = (v: string) => v.trim().toLowerCase().replace(/\s+/g, " ");
 const round3 = (v: number) => Math.round(v * 1000) / 1000;
 
+/** Captions, bubble symbols and the safety end card, placed for the script's shape, in its output pixels. */
 export function textTrack(s: StoryScript): TextEvent[] {
+  return inFrame(s, () => {
+    const k = F.k;
+    // design px to output px (the 720 sizes are the 1080 ones scaled down)
+    const out = k === 1 ? (v: number) => v : (v: number) => Math.round(v * k * 10) / 10;
+    return textTrackNow(s).map((e) => (k === 1 ? e : { ...e, x: out(e.x), y: out(e.y), size: out(e.size) }));
+  });
+}
+
+function textTrackNow(s: StoryScript): TextEvent[] {
+  const { caption: CAPTION, header: HEADER, endcard: ENDCARD } = textBoxes();
   const prep = prepare(s);
   const total = prep.total;
   const out: TextEvent[] = [];
@@ -47,7 +60,7 @@ export function textTrack(s: StoryScript): TextEvent[] {
     out.push({ start: round3(start), end: round3(end), kind: "bubble", text: sym.text, x: Math.round(b.x), y: Math.round(b.y - (b.kind === "idea" ? 6 : 0)), size: sym.size, color: sym.color });
   }
   if (s.safety) {
-    const { lines, size } = endCardLayout((s.safety.citations ?? []).map((c) => c.publisher));
+    const { lines, size } = endCardLayout((s.safety.citations ?? []).map((c) => c.publisher), ENDCARD);
     out.push({ start: round3(cardAt), end: round3(total), kind: "endcard", text: lines.join("\n"), x: ENDCARD.x, y: ENDCARD.y, size, color: ENDCARD.color });
   }
   return out.sort((a, b) => a.start - b.start || order(a.kind) - order(b.kind));
@@ -57,11 +70,9 @@ function order(k: TextEvent["kind"]): number {
   return k === "caption" ? 0 : k === "bubble" ? 1 : 2;
 }
 
-/** An AudioEvent with the character's voice style on its noises (an additive field; CONTRACTS §45.6 AudioEvent has
- * no name for it yet): "hum" is a closed-mouth hum, "babble" the open voice. */
-export interface VoicedAudioEvent extends AudioEvent {
-  voice?: "babble" | "hum";
-}
+/** The same as AudioEvent, whose `voice` (CONTRACTS §45.34) now carries the character's voice style on its noises;
+ * kept as a name for older imports. */
+export type VoicedAudioEvent = AudioEvent;
 
 const LOOPS: Set<SfxId> = new Set(["engine", "wind", "rain"]);
 const REPEATS: Set<SfxId> = new Set(["footsteps", "heartbeat", "tick", "snow_crunch"]);
@@ -98,8 +109,12 @@ function matchBeat(scene: Scene, at: number, sfx: SfxId): Beat | undefined {
  * owner removes in Review is gone from the sound too. A noise carries its character's voice style ("babble" or
  * "hum"); a character with no voice makes none. */
 export function audioTrack(s: StoryScript): AudioEvent[] {
+  return inFrame(s, () => audioTrackNow(s));
+}
+
+function audioTrackNow(s: StoryScript): AudioEvent[] {
   const prep = prepare(s);
-  const out: VoicedAudioEvent[] = [];
+  const out: AudioEvent[] = [];
   s.scenes.forEach((scene, i) => {
     const start = prep.starts[i]!;
     const sfxEvent = (at: number, id: SfxId, volume: number, pan: number, beatDur: number | undefined) => {

@@ -46,6 +46,30 @@ STEP_DONE: Final = frozenset({"done", "skipped"})
 
 Presign = Callable[[str], str]
 
+# Video size and shape (§45.34): each aspect's resolutions; 9:16 at 1080 by 1920 is the default.
+ASPECTS: Final = {
+    "9:16": ("1080x1920", "720x1280"),
+    "1:1": ("1080x1080", "720x720"),
+    "16:9": ("1920x1080", "1280x720"),
+}
+DEFAULT_FORMAT: Final = {"aspect": "9:16", "width": 1080, "height": 1920}
+
+
+def format_of(aspect: Any, resolution: Any) -> dict[str, Any]:
+    """``{aspect, width, height}`` of an aspect and a ``WxH`` resolution (the default when it is not a known pair)."""
+    if aspect in ASPECTS and resolution in ASPECTS[str(aspect)]:
+        width, height = (int(n) for n in str(resolution).split("x"))
+        return {"aspect": str(aspect), "width": width, "height": height}
+    return dict(DEFAULT_FORMAT)
+
+
+def stored_format(story: Mapping[str, Any]) -> dict[str, Any]:
+    """A story's ``format`` as stored; an older story without one is 9:16 at 1080 by 1920."""
+    found = story.get("format") if isinstance(story.get("format"), Mapping) else None
+    if not found:
+        return dict(DEFAULT_FORMAT)
+    return format_of(found.get("aspect"), f"{found.get('width')}x{found.get('height')}")
+
 
 def ordered_steps(steps: Iterable[str]) -> list[str]:
     """Step keys once each, in step order (unknown keys dropped)."""
@@ -241,6 +265,7 @@ def public_story(item: Mapping[str, Any], presign: Presign, user_id: str, bucket
         "currentJobId": item.get("currentJobId") or None,
         "ai": ai_setting(item.get("ai")),
         "referenceIds": [str(r) for r in item.get("referenceIds") or [] if isinstance(r, str)],
+        "format": stored_format(item),
         "posted": posted,
         "version": int(item.get("version") or 1),
         "createdAt": str(item.get("createdAt") or ""),

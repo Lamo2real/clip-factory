@@ -12,7 +12,7 @@ import { visibleEdges } from "./edges.ts";
 import { findOverflow } from "./helpers.ts";
 
 /** The mock's seeded ids (SEED_IDS in src/stories/api/mock/chat.ts and references.ts). */
-const CONV = { winter: "01JSTCV0000000000000000001", hooks: "01JSTCV0000000000000000002" };
+const CONV = { winter: "01JSTCV0000000000000000001", hooks: "01JSTCV0000000000000000002", long: "01JSTCV0000000000000000003" };
 const REF = { analyzed: "01JSTRF0000000000000000001", ready: "01JSTRF0000000000000000002" };
 
 const PAGES: [string, string][] = [
@@ -383,10 +383,12 @@ test("a reference video: upload in parts, analyze with a per-run model, the anal
   await sheet.getByRole("radio", { name: /^Medium/ }).click();
   await sheet.getByRole("button", { name: "Done" }).click();
   await expect(line).toHaveText("Model: Claude Haiku 5.5 · Effort: Medium");
+  await knobs(page, { refSeconds: 6 });
   await page.getByRole("button", { name: "Analyze it" }).click();
   await expect(page.locator(".st-ref-track__step")).toHaveCount(3);
-  // The contract's answer has no job: the steps with a moving bar (never a bar stuck at nothing).
-  await expect(page.locator(".st-ref-busybar")).toBeVisible();
+  // The answer carries the analysis job (§45.34): each step's own state and the job's own progress.
+  await expect(page.locator(".st-ref-card2 .st-chat-progress")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".st-ref-track__step.is-done, .st-ref-track__step.is-running").first()).toBeVisible();
   await expect(page.locator(".st-ref-track")).toContainText("Look at it");
   await expect(page.locator(".st-ref-track")).toContainText("Listen");
   await expect(page.locator(".st-ref-track")).toContainText("Write it up");
@@ -423,5 +425,165 @@ test("a reference video: upload in parts, analyze with a per-run model, the anal
   await expect(page.locator(".st-ref-card", { hasText: "My favourite clip" })).toHaveCount(0);
   await page.getByRole("button", { name: "Undo" }).click();
   await expect(page.locator(".st-ref-card", { hasText: "My favourite clip" })).toBeVisible();
+  await ctx.close();
+});
+
+// ---------- Round 3 (§45.34) ----------
+
+/** Lets the sliding highlights reach the new choice before the page is measured. */
+const settle = (page: Page) => page.waitForTimeout(700);
+
+test("round 3: the provider beside the line, Show earlier messages, and a failed answer keeps its model and Try again's choice", async ({ browser }) => {
+  test.setTimeout(90_000);
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    await ctx.addInitScript(() => ((window as StoriesWindow).__cfStoriesMock = { knobs: { longChat: 530 } } as never));
+    const page = await ctx.newPage();
+    await open(page, `/stories/chat/${CONV.long}`);
+    await expect(page.locator(".st-chat-ai__provider")).toHaveText("From Amazon Bedrock");
+    await expect(page.locator(".st-chat-msg")).toHaveCount(500);
+    const earlier = page.getByRole("button", { name: "Show earlier messages" });
+    await expect(earlier).toBeVisible();
+    await settle(page);
+    expect(await audit(page, `a long chat ${w}`, touch && w < 768)).toEqual([]);
+    await earlier.click();
+    await expect(page.locator(".st-chat-msg")).toHaveCount(530);
+    await expect(page.locator(".st-chat-msg").first()).toContainText("Question number 1");
+    await expect(earlier).toHaveCount(0);
+    await ctx.close();
+  }
+
+  const ctx = await context(browser, 1280, 800, false);
+  const page = await ctx.newPage();
+  await open(page, `/stories/chat/${CONV.winter}`);
+  await knobs(page, { chatChunkMs: 20, chatThinkMs: 50 });
+  await page.getByRole("button", { name: "Just for this message" }).click();
+  const sheet = page.getByRole("dialog", { name: "Model and effort" });
+  await expect(sheet).toContainText("Amazon Bedrock.");
+  await sheet.getByRole("radio", { name: /Claude Fable 5\.1/ }).click();
+  await sheet.getByRole("radio", { name: /^Low/ }).click();
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await knobs(page, { chatFail: "The director could not answer this time. Try again." });
+  await page.getByRole("textbox", { name: "Your message" }).fill("Ideas about rain");
+  await page.getByRole("button", { name: "Send" }).click();
+  const failed = page.locator(".st-chat-msg--assistant.is-failed");
+  await expect(failed).toBeVisible({ timeout: 20_000 });
+  await expect(failed.locator(".st-chat-msg__meta")).toHaveText("Claude Fable 5.1 · Low");
+  await failed.getByRole("button", { name: "Try again" }).click();
+  // Sent again with the same choice: the new answer names it.
+  await expect(page.locator(".st-chat-msg--assistant").last().locator(".st-chat-msg__meta")).toHaveText("Claude Fable 5.1 · Low", { timeout: 20_000 });
+  await expect(page.locator(".st-chat-msg--assistant").last()).not.toHaveClass(/is-failed/);
+  await ctx.close();
+});
+
+test("round 3: Analyze this reference video carries the model menu, starting from the message's own choice", async ({ browser }) => {
+  test.setTimeout(90_000);
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    const page = await ctx.newPage();
+    await open(page, `/stories/chat/${CONV.winter}`);
+    await knobs(page, { chatChunkMs: 20, chatThinkMs: 50, refSeconds: 2 });
+    await page.getByRole("button", { name: "Just for this message" }).click();
+    const sheet = page.getByRole("dialog", { name: "Model and effort" });
+    await sheet.getByRole("radio", { name: /Claude Sonnet 5\.5/ }).click();
+    await sheet.getByRole("button", { name: "Done" }).click();
+    await page.getByRole("textbox", { name: "Your message" }).fill("Can you analyze my reference video?");
+    await page.getByRole("button", { name: "Send" }).click();
+    const card = page.locator(".st-chat-action--analyze_reference");
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    const menu = card.getByRole("button", { name: /^Model and effort for this analysis: Claude Sonnet 5\.5/ });
+    await expect(menu).toBeVisible();
+    await settle(page);
+    expect(await audit(page, `the analyze card ${w}`, touch && w < 768)).toEqual([]);
+    await menu.click();
+    const own = page.getByRole("dialog", { name: "Model and effort for this analysis" });
+    await expect(own).toContainText("Just for this run.");
+    await own.locator(".st-s-pick__opt", { hasText: "Claude Haiku 5.5" }).click();
+    await own.getByRole("button", { name: "Done" }).click();
+    await card.getByRole("button", { name: "Analyze this reference video" }).click();
+    await expect(card).toContainText("Looking at the video now!");
+    await card.getByRole("link", { name: "Open the reference video" }).click();
+    await expect(page).toHaveURL(new RegExp(`/stories/references/${REF.ready}$`));
+    await expect(page.locator(".st-ref-with")).toHaveText("Analyzed with Claude Haiku 5.5 · High", { timeout: 20_000 });
+    await ctx.close();
+  }
+});
+
+test("round 3: a reference video keeps its own model and effort, and a stopped analysis shows each step and its reason", async ({ browser }) => {
+  test.setTimeout(90_000);
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    const page = await ctx.newPage();
+    await open(page, `/stories/references/${REF.ready}`);
+    await page.getByRole("button", { name: "Just for this run" }).click();
+    const sheet = page.getByRole("dialog", { name: /Model and effort for this (run|video)/ });
+    await sheet.getByRole("radio", { name: "Keep with this video" }).click();
+    await expect(sheet).toContainText("Kept with this video. Every analysis of it uses it.");
+    await settle(page);
+    expect(await audit(page, `keep with this video ${w}`, touch && w < 768, ".st-chat-sheet")).toEqual([]);
+    await sheet.getByRole("radio", { name: /Claude Sonnet 5\.5/ }).click();
+    await expect(sheet.getByRole("status")).toHaveText("Kept with this video.");
+    await sheet.getByRole("button", { name: "Done" }).click();
+    await expect(page.locator(".st-chat-ai__line")).toHaveText(/^Model: Claude Sonnet 5\.5 · Effort: /);
+    await expect(page.getByText("Kept with this video (its own setting).")).toBeVisible();
+    await knobs(page, { refFail: "Claude Sonnet 5.5 isn't available right now: no access. Pick another model in Lamo Stories › Settings › AI, or try again.", refSeconds: 2 });
+    await page.getByRole("button", { name: "Analyze it" }).click();
+    const failed = page.locator(".st-ref-failed");
+    await expect(failed).toContainText("no access", { timeout: 20_000 });
+    await expect(page.locator(".st-ref-track--stopped .st-ref-track__step.is-failed")).toContainText("Listen");
+    await settle(page);
+    expect(await audit(page, `a stopped analysis ${w}`, touch && w < 768)).toEqual([]);
+    await ctx.close();
+  }
+});
+
+test("round 3: a reference video whose file was cleared says so and keeps its study; quick Keep taps build on each other", async ({ browser }) => {
+  test.setTimeout(90_000);
+  const removed = "The video was removed to save space. Its study stays.";
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    await ctx.addInitScript((id) => ((window as StoriesWindow).__cfStoriesMock = { knobs: { refFileRemoved: [id] } } as never), REF.analyzed);
+    const page = await ctx.newPage();
+    await open(page, `/stories/references/${REF.analyzed}`);
+    await expect(page.locator(".st-ref-player__none")).toHaveText(removed);
+    await expect(page.locator(".st-ref-removed")).toHaveText("The video file is gone, so it cannot be analyzed again.");
+    await expect(page.getByRole("heading", { name: "What happens", exact: true })).toBeVisible();
+    await settle(page);
+    expect(await audit(page, `a cleared video ${w}`, touch && w < 768)).toEqual([]);
+    await expect(page.getByRole("button", { name: "Analyze again" })).toHaveAttribute("aria-disabled", "true");
+    await page.getByRole("button", { name: "Analyze again" }).click({ force: true });
+    await page.waitForTimeout(500);
+    await expect(page.locator(".st-ref-track")).toHaveCount(0);
+    await expect(page.locator(".st-ref__meta")).not.toContainText("Analyzing");
+    // The study still goes into a new video.
+    await page.getByRole("button", { name: "Use in a video" }).click();
+    await expect(page).toHaveURL(new RegExp(`/stories/production/new\\?ref=${REF.analyzed}$`));
+    await ctx.close();
+  }
+
+  // Keep with this video: the model, then the effort, at once; both stay.
+  const ctx = await context(browser, 1280, 800, false);
+  const page = await ctx.newPage();
+  await open(page, `/stories/references/${REF.ready}`);
+  await page.getByRole("button", { name: "Just for this run" }).click();
+  const sheet = page.getByRole("dialog", { name: /Model and effort for this (run|video)/ });
+  await sheet.getByRole("radio", { name: "Keep with this video" }).click();
+  await sheet.getByRole("radio", { name: /Claude Sonnet 5\.5/ }).click();
+  await sheet.getByRole("radio", { name: /^Low/ }).click();
+  await expect(sheet.getByRole("status")).toHaveText("Kept with this video.");
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(page.locator(".st-chat-ai__line")).toHaveText("Model: Claude Sonnet 5.5 · Effort: Low");
   await ctx.close();
 });

@@ -352,6 +352,25 @@ export interface StoryInput {
   referenceIds?: string[];
   /** this video's own model and effort, kept with it */
   ai?: AiSetting;
+  /** this video's own shape (CONTRACTS §45.34): the workspace's video default when left out */
+  format?: StoryFormat;
+}
+
+/** A video's shape and size (CONTRACTS §45.34 "Video size and shape"); the size matches the aspect. */
+export interface StoryFormat {
+  aspect: "9:16" | "1:1" | "16:9";
+  width: number;
+  height: number;
+}
+
+/** The extra copies a video can have besides its MP4 (CONTRACTS §45.34 "Output formats"). */
+export type DownloadFormat = "mp4" | "webm" | "mov";
+
+/** A finished "Write them again" task's result (CONTRACTS §45.34): a draft, never saved by itself. */
+export interface CaptionsResult {
+  storyId: string;
+  scriptVersion: number;
+  postCaptions: Captions;
 }
 
 export interface Captions {
@@ -410,6 +429,10 @@ export interface Story {
   safetyTopicId: string | null;
   safety: StorySafety | null;
   ai: AiSetting;
+  /** what the next run of this video uses for the task `storyboard` (CONTRACTS §45.34, §45.25's precedence) */
+  effective?: Effective;
+  /** this video's shape (CONTRACTS §45.34); 9:16 at 1080 × 1920 when the API leaves it out */
+  format?: StoryFormat;
   referenceIds: string[];
   reviewNote: string | null;
   currentJobId: string | null;
@@ -421,9 +444,14 @@ export interface Story {
   publishedAt?: string;
 }
 
+/** A reference analysis job's own steps (CONTRACTS §45.34): Look at it, Listen, Write it up. */
+export type RefStepKey = "look" | "listen" | "write";
+export const REF_STEP_ORDER: RefStepKey[] = ["look", "listen", "write"];
+export const REF_STEP_LABEL: Record<RefStepKey, string> = { look: "Look at it", listen: "Listen", write: "Write it up" };
+
 export interface StoryStep {
-  /** a portrait job has one step of its own: { key: "portrait", label: "Draw the picture" } */
-  key: StepKey | "portrait";
+  /** a portrait job has one step of its own: { key: "portrait", label: "Draw the picture" }; a reference analysis has look, listen, write */
+  key: StepKey | "portrait" | RefStepKey;
   label: string;
   status: "pending" | "running" | "done" | "failed" | "skipped";
   message?: string;
@@ -443,7 +471,7 @@ export interface ProductionJob {
   status: "queued" | "running" | "ready" | "needs_check" | "failed" | "canceled";
   steps: StoryStep[];
   progress: number;
-  configuration: { run: (StepKey | "portrait")[]; from: StepKey | null; sceneIds: string[] | null; note: string | null };
+  configuration: { run: (StepKey | "portrait" | RefStepKey)[]; from: StepKey | null; sceneIds: string[] | null; note: string | null };
   meta: {
     writerModel: string | null;
     engineVersion: number | null;
@@ -453,7 +481,8 @@ export interface ProductionJob {
     actualSec: number | null;
     safetyTopicId: string | null;
     providers: Record<string, string>;
-    models: { step: string; agentId: string; model: string; effort: Effort | null; effortApplied: boolean }[];
+    /** `failed`: the step stopped on this model; model and effort are what was asked (§45.34), no answer came */
+    models: { step: string; agentId: string; model: string; effort: Effort | null; effortApplied: boolean; failed?: boolean }[];
   };
   error?: string;
   createdAt: string;
@@ -492,7 +521,9 @@ export type AssetKind =
   | "audio"
   | "captions"
   /** a picture for "Design with AI"; the Library hides it */
-  | "design_ref";
+  | "design_ref"
+  /** a video's extra copy (WebM or MOV, `meta.format`), made beside its MP4 (CONTRACTS §45.34 "Output formats") */
+  | "video";
 
 export interface LibraryItem {
   assetId: string;
@@ -586,6 +617,15 @@ export interface PublishTarget {
   platform: Platform;
   socialAccountId: string;
   options?: PublishOptions;
+  /** the externalAccountId the owner saw and said yes to (CONTRACTS §45.34), sent again after a 409 that named it */
+  confirmAccount?: string;
+}
+
+/** The account a publishing 409 names (`error.account`, CONTRACTS §45.34): where the post would go now. */
+export interface ErrorAccount {
+  externalAccountId: string;
+  accountName: string | null;
+  handle: string | null;
 }
 
 export interface PublishingJob {
@@ -596,6 +636,9 @@ export interface PublishingJob {
   platform: Platform;
   publishingStatus: "queued" | "publishing" | "posted" | "failed" | "needs_attention";
   accountName: string | null;
+  /** the exact account the post goes to (CONTRACTS §45.34) */
+  handle?: string | null;
+  externalAccountId?: string | null;
   url?: string;
   postedAt?: string;
   error?: string;
@@ -668,8 +711,8 @@ export interface StoriesApi {
   makePortrait(ws: string, characterId: string): Promise<ProductionJob>;
   /** a picture for "Design with AI" (an ASSET# of kind design_ref) */
   designUpload(ws: string, file: { filename: string; contentType: string; size: number }): Promise<Upload>;
-  /** the character agent's suggested CharacterInput in result.character (a draft) */
-  designCharacter(ws: string, body: { description?: string; referenceAssetId?: string; override?: ModelOverride }): Promise<AiTask>;
+  /** the character agent's suggested CharacterInput in result.character (a draft); with characterId it redesigns that character (CONTRACTS §45.34) */
+  designCharacter(ws: string, body: { description?: string; referenceAssetId?: string; characterId?: string; override?: ModelOverride }): Promise<AiTask>;
 
   listStories(ws: string, q?: { status?: StoryStatus | "all"; limit?: number; cursor?: string }): Promise<{ stories: Story[]; nextCursor: string | null }>;
   createStory(ws: string, body: StoryInput): Promise<{ story: Story; job: ProductionJob }>;
@@ -684,7 +727,10 @@ export interface StoriesApi {
   reject(ws: string, storyId: string, reason?: string): Promise<Story>;
   /** a note, scene ids or both; scene ids without a note is "Remake this scene" (a new take). override: this job only */
   requestChanges(ws: string, storyId: string, body: { note?: string; sceneIds?: string[]; override?: ModelOverride }): Promise<{ story: Story; job: ProductionJob }>;
-  download(ws: string, storyId: string): Promise<{ url: string; filename: string }>;
+  /** "Write them again" (CONTRACTS §45.34): a captions task whose result is a CaptionsResult draft; 409 while there is no storyboard */
+  writeCaptions(ws: string, storyId: string, body?: { override?: ModelOverride }): Promise<AiTask>;
+  /** the MP4, or one of the extra copies the video has (CONTRACTS §45.34 "Output formats") */
+  download(ws: string, storyId: string, body?: { format?: DownloadFormat }): Promise<{ url: string; filename: string }>;
 
   library(ws: string, q?: { kind?: AssetKind | "all"; storyId?: string; characterId?: string; limit?: number; cursor?: string }): Promise<{ items: LibraryItem[]; nextCursor: string | null }>;
   providers(ws: string): Promise<ProviderStatus[]>;
@@ -722,7 +768,8 @@ export interface StoriesApi {
 
   listConversations(ws: string): Promise<Conversation[]>;
   createConversation(ws: string, body: { title?: string; projectRef?: ProjectRef; model?: string | null; effort?: Effort | null }): Promise<Conversation>;
-  getConversation(ws: string, convId: string, after?: string): Promise<{ conversation: Conversation; messages: Message[] }>;
+  /** the newest 500 messages; `after` only the newer ones (the poll), `before` the 500 older ones ("Show earlier messages") */
+  getConversation(ws: string, convId: string, q?: { after?: string; before?: string }): Promise<{ conversation: Conversation; messages: Message[] }>;
   patchConversation(ws: string, convId: string, patch: { title?: string; model?: string | null; effort?: Effort | null; projectRef?: ProjectRef | null }): Promise<Conversation>;
   deleteConversation(ws: string, convId: string): Promise<void>;
   sendMessage(ws: string, convId: string, body: { text: string; attachments?: { assetId: string }[]; override?: ModelOverride }): Promise<{ user: Message; assistant: Message }>;
@@ -738,9 +785,12 @@ export interface StoriesApi {
   createReference(ws: string, body: { filename: string; contentType: string; size: number; title: string }): Promise<{ reference: ReferenceVideo; upload: { uploadId: string; parts: { partNumber: number; url: string }[] } }>;
   completeReference(ws: string, refId: string, parts: { partNumber: number; etag: string }[]): Promise<ReferenceVideo>;
   analyzeReference(ws: string, refId: string, override?: ModelOverride): Promise<{ reference: ReferenceVideo; job: ProductionJob }>;
-  getReference(ws: string, refId: string): Promise<{ reference: ReferenceVideo; analysis: ReferenceAnalysis | null }>;
-  patchReference(ws: string, refId: string, title: string): Promise<ReferenceVideo>;
-  deleteReference(ws: string, refId: string): Promise<void>;
+  /** `job`: the analysis job of currentJobId, else the latest one (CONTRACTS §45.34) */
+  getReference(ws: string, refId: string): Promise<{ reference: ReferenceVideo; analysis: ReferenceAnalysis | null; job: ProductionJob | null }>;
+  /** the title, and the video's own model and effort (`ai`, §45.25 level 2: "Keep with this video") */
+  patchReference(ws: string, refId: string, patch: { title?: string; ai?: AiSetting }): Promise<ReferenceVideo>;
+  /** a reference video (renamed from deleteReference(ws, refId), CONTRACTS §45.34; deleteReference is a character's picture) */
+  deleteReferenceVideo(ws: string, refId: string): Promise<void>;
 
   getOnboarding(ws: string): Promise<Onboarding>;
   patchOnboarding(ws: string, body: { step: OnboardStep; done?: boolean; skipped?: boolean } | { finish: true }): Promise<Onboarding>;

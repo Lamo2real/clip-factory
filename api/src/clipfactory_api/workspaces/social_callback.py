@@ -101,7 +101,7 @@ def handle(
             return "error", workspace_id
         scope = social.Scope(store, secrets, user_id, workspace_id)
         result = _result(platform, query, scope, env, saved, nonce=nonce, key=key, base=base)
-    except Exception as e:  # the owner always lands on Lamo Stories' Connections page with a plain sentence
+    except Exception as e:  # the owner always lands on Lamo Stories' Social accounts page with a plain sentence
         log("error", "ws_callback.failed", platform=platform, error=type(e).__name__)
         return "error", workspace_id
     log("info", "ws_callback", platform=platform, result=result)

@@ -7,7 +7,11 @@
 //
 // Test knobs (store.knobs, also window.__cfStoriesMock.store.knobs): chatChunkMs (time per streamed piece, default
 // 350), chatThinkMs (before the first words, default 700), chatFail (the next answer fails with this sentence),
-// chatDenied (model keys whose calls are refused: the answer fails with the model's sentence, never another model).
+// chatDenied (model keys whose calls are refused: the answer fails with the model's sentence, never another model),
+// longChat (a number: a third chat with that many messages, to page back with "Show earlier messages").
+//
+// GET …/chat/{convId} answers the newest SHOWN (500) messages, oldest first, as the API does (§45.34): `after` only the
+// newer ones (the poll), `before` the SHOWN older ones.
 import modelsFile from "../../../../../stories/config/models.json";
 import { ApiError } from "../../../api/errors.ts";
 import type {
@@ -171,11 +175,14 @@ function state(store: MockStore): ChatState {
 // ---------- Seed ----------
 
 export const SEED_IDS = {
-  conversations: { winter: "01JSTCV0000000000000000001", hooks: "01JSTCV0000000000000000002" },
+  conversations: { winter: "01JSTCV0000000000000000001", hooks: "01JSTCV0000000000000000002", long: "01JSTCV0000000000000000003" },
   messages: { ask: "01JSTMS0000000000000000001", answer: "01JSTMS0000000000000000002", ask2: "01JSTMS0000000000000000003", answer2: "01JSTMS0000000000000000004" },
 };
 
 const HOUR = 3600_000;
+
+/** How many messages one GET answers (the API's SHOWN). */
+export const SHOWN = 500;
 
 export function seed(store: MockStore): void {
   const s = state(store);
@@ -238,6 +245,44 @@ export function seed(store: MockStore): void {
   );
   store.knobs.chatChunkMs = store.knobs.chatChunkMs ?? 350;
   store.knobs.chatThinkMs = store.knobs.chatThinkMs ?? 700;
+  const long = Number(store.knobs.longChat);
+  if (Number.isInteger(long) && long > 0) seedLongChat(store, Math.min(long, 2000), now);
+}
+
+/** A chat longer than one GET answers (knob longChat), so "Show earlier messages" has something to show. */
+function seedLongChat(store: MockStore, n: number, now: number): void {
+  const at0 = now - 50 * HOUR;
+  const conv: Conversation = {
+    convId: SEED_IDS.conversations.long,
+    title: "A very long chat",
+    model: null,
+    effort: null,
+    effective: { model: "opus-5-5", effort: "high", effortApplied: true, from: "default" },
+    projectRef: null,
+    lastMessageAt: iso(at0 + n * 60_000),
+    createdAt: iso(at0),
+    updatedAt: iso(at0 + n * 60_000),
+  };
+  store.conversations.push(conv);
+  state(store).owner.set(conv.convId, "stories");
+  for (let i = 0; i < n; i += 1) {
+    const at = at0 + i * 60_000;
+    const user = i % 2 === 0;
+    store.messages.push({
+      msgId: newId(at),
+      convId: conv.convId,
+      role: user ? "user" : "assistant",
+      text: user ? `Question number ${i + 1}` : `Answer number ${i + 1}`,
+      attachments: [],
+      status: "done",
+      model: user ? null : "opus-5-5",
+      effort: user ? null : "high",
+      effortApplied: user ? null : true,
+      usage: user ? null : { input: 120, output: 40 },
+      actions: [],
+      createdAt: iso(at),
+    });
+  }
 }
 
 // ---------- The pretend creative director ----------
@@ -429,14 +474,26 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       return shape(store, conv);
     },
 
-    async getConversation(ws, convId, after) {
+    async getConversation(ws, convId, page) {
       await delay(90);
       const conv = find(store, ws, convId);
       advance(store);
+      const after = page?.after;
+      const before = page?.before;
       const all = store.messages.filter((m) => m.convId === convId);
-      const i = after ? all.findIndex((m) => m.msgId === after) : -1;
-      const messages = (i >= 0 ? all.slice(i + 1) : after ? all.filter((m) => m.msgId > after) : all).map((m) => structuredClone(m));
-      return { conversation: shape(store, conv), messages };
+      let list: Message[];
+      if (after) {
+        const i = all.findIndex((m) => m.msgId === after);
+        list = (i >= 0 ? all.slice(i + 1) : all.filter((m) => m.msgId > after)).slice(0, SHOWN);
+      } else {
+        let end = all.length;
+        if (before) {
+          end = all.findIndex((m) => m.msgId === before);
+          if (end < 0) throw new ApiError(404, "not_found", "We could not find that message.");
+        }
+        list = all.slice(Math.max(0, end - SHOWN), end);
+      }
+      return { conversation: shape(store, conv), messages: list.map((m) => structuredClone(m)) };
     },
 
     async patchConversation(ws, convId, patch) {

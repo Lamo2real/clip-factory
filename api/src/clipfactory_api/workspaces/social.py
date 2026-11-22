@@ -61,7 +61,7 @@ YOUTUBE_PROMPT: Final = "select_account consent"
 STATUSES: Final = ("not_connected", "connected", "choose_account", "needs_reconnect", "same_as_clips")
 POSTABLE: Final = ("connected", "same_as_clips")
 NOT_ON: Final = "Posting setup is not switched on for this app yet."
-TIKTOK_NOT_CONNECTED: Final = "Lamo Stories' TikTok is not connected. Connect it in Lamo Stories › Connections."
+TIKTOK_NOT_CONNECTED: Final = "Lamo Stories' TikTok is not connected. Connect it in Lamo Stories › Social accounts."
 LIST_TOO_OLD: Final = "That list is too old. Tap Connect again."
 X_CREDITS: Final = "X has no credits left. Buy more in console.x.com › Billing › Credits."
 # TikTok gives every developer app its own open_id for the same person (§45.13.4, ``clips_unknown``).
@@ -71,6 +71,17 @@ TIKTOK_UNSURE: Final = (
 )
 # The only attributes of Clip Factory's ACCOUNT# items Lamo Stories may read (§45.15: an attribute-limited GetItem).
 CLIPS_ACCOUNT_ATTRIBUTES: Final = ("pk", "sk", "platform", "status", "accountId")
+
+
+def shared_for(account: Mapping[str, Any], identity: str) -> bool:
+    """The owner said "Use it for both" for this very identity (§45.13.4)."""
+    return account.get("sharedWithClips") is True and account.get("sharedExternalAccountId") == identity
+
+
+def same_as_clips(account: Mapping[str, Any], clips: str) -> bool:
+    """The account is Lamo Clips' own destination (``clips``, its ``accountId``) and was not shared on purpose."""
+    identity = str(account.get("externalAccountId") or "")
+    return bool(identity) and identity == clips and not shared_for(account, identity)
 
 
 def keys_changed_sentence(platform: str) -> str:
@@ -478,6 +489,10 @@ def public_account(
             ]
         else:
             status, reason = "not_connected", "expired"
+    if status == "connected" and clips and same_as_clips(item, clips):
+        status = "same_as_clips"  # Lamo Clips connected this very account later, and nobody shared it (§45.34)
+    elif status == "same_as_clips" and clips is not None and not same_as_clips(item, clips):
+        status = "connected"  # Lamo Clips let go of this account (or moved to another): it is Lamo Stories' own now
     identity = status not in ("not_connected", "choose_account")
     app = public_app(platform, item)
     warning = _text(item.get("warning"))
@@ -531,14 +546,14 @@ def list_accounts(scope: Scope, now: datetime) -> Item:
 def public_of(scope: Scope, platform: str, now: datetime) -> Item:
     """The public account, checked against the chosen app's current keys (a key change → ``needs_reconnect``). A
     status worked out here is also stored (``settle``), so every reader of ``SOCIAL#`` (the dashboard too) sees
-    what the Connections page shows."""
+    what the Social accounts page shows."""
     item = scope.account(platform)
     client_id: str | Keep | None = KEEP
     if item is not None and item.get("connectionStatus") in (*POSTABLE, "needs_reconnect"):
         chosen = apps.app_keys(scope.store, scope.secrets, scope.user_id, scope.workspace_id, platform, account=item)
         client_id = chosen.client_id if chosen is not None else None
     clips = None
-    if item is not None and platform == "tiktok" and item.get("connectionStatus") == "connected":
+    if item is not None and item.get("connectionStatus") in ("connected", "same_as_clips"):  # every platform (§45.34)
         clips = clips_identity(scope.store, scope.user_id, platform)
     shown = public_account(item, scope.workspace_id, platform, app_client_id=client_id, now=now, clips=clips)
     if item is not None:
@@ -556,10 +571,11 @@ def settle(
     shown: Mapping[str, Any],
     now: datetime,
 ) -> None:
-    """Stores the two statuses a read works out on its own: the chosen app's keys changed → ``needs_reconnect``
-    (``keys_changed``), and a list of Pages older than 30 minutes → ``not_connected`` (``expired``, the choices
-    removed). Conditional on the very item read (status and ``updatedAt``), so a connect that landed meanwhile is
-    never undone; best effort (the response is right either way)."""
+    """Stores the three statuses a read works out on its own: the chosen app's keys changed → ``needs_reconnect``
+    (``keys_changed``), a list of Pages older than 30 minutes → ``not_connected`` (``expired``, the choices
+    removed), a connected account that Lamo Clips connected too, later, with nobody sharing it →
+    ``same_as_clips`` (§45.34), and back to ``connected`` once Lamo Clips no longer has it. Conditional on the very item read (status and ``updatedAt``), so a connect that
+    landed meanwhile is never undone; best effort (the response is right either way)."""
     stored = item.get("connectionStatus")
     status, reason = shown.get("connectionStatus"), shown.get("reason")
     updated_at = item.get("updatedAt")
@@ -570,8 +586,13 @@ def settle(
         pass
     elif (status, reason) == ("not_connected", "expired") and stored == "choose_account":
         remove = ["choices", "choicesExpireAt"]
+    elif (status, stored) in (("same_as_clips", "connected"), ("connected", "same_as_clips")):
+        pass
     else:
         return
+    fields: Item = {"connectionStatus": status}
+    if reason is not None:
+        fields["reason"] = reason
     try:
         mark_account(
             store,
@@ -581,8 +602,7 @@ def settle(
             now,
             remove=remove,
             expect_in={"connectionStatus": [stored], "updatedAt": [updated_at]},
-            connectionStatus=status,
-            reason=reason,
+            **fields,
         )
     except Exception as e:
         log("warning", "ws_social.settle_failed", platform=platform, error=type(e).__name__)
@@ -841,12 +861,15 @@ def check(scope: Scope, env: OAuthEnv, platform: str, now: datetime) -> Item:
         return scope.mark(platform, now, lastCheckedAt=iso(now)) or dict(item)
     fields: Item = {"lastCheckedAt": iso(now)}
     remove: list[str] = []
-    if item.get("connectionStatus") == "needs_reconnect":
-        clips = clips_identity(store, user_id, platform)
-        identity = str(item.get("externalAccountId") or "")
-        shared = bool(item.get("sharedWithClips")) and item.get("sharedExternalAccountId") == identity
-        fields["connectionStatus"] = "same_as_clips" if identity == clips and not shared else "connected"
+    stored = item.get("connectionStatus")
+    clips = clips_identity(store, user_id, platform)
+    if stored == "needs_reconnect":
+        fields["connectionStatus"] = "same_as_clips" if same_as_clips(item, clips) else "connected"
         remove.append("reason")
+    elif stored == "connected" and same_as_clips(item, clips):
+        fields["connectionStatus"] = "same_as_clips"  # Lamo Clips connected this account later (§45.34)
+    elif stored == "same_as_clips" and not same_as_clips(item, clips):
+        fields["connectionStatus"] = "connected"  # Lamo Clips no longer has this account
     if verdict == "credits_empty":
         fields["warning"] = X_CREDITS
     elif item.get("warning"):

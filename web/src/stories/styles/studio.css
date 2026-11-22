@@ -2784,3 +2784,269 @@ button.st-s-place:hover {
 .reduce-motion .st-s-sheet {
   animation: none;
 }
+
+/* ---------- Round 3 (CONTRACTS §45.34): Next run, Show more, shape, new post words, copies, redesign, idea edit ---------- */
+.st-s-nextrun {
+  margin: 0;
+  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.st-s-actionbar > .st-s-nextrun {
+  flex: 1 1 100%;
+}
+
+.st-s-more-row {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* The shape picker: a small filled frame of each shape beside its words. */
+.st-s-pick__art {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  margin-right: 10px;
+}
+
+.st-s-shape {
+  display: grid;
+  gap: 12px;
+}
+
+.st-s-shape__art {
+  display: block;
+  border-radius: 5px;
+  background: rgba(255, 246, 229, 0.55);
+  box-shadow: 0 4px 10px rgba(8, 6, 30, 0.35);
+}
+
+.st-s-pick__opt.is-on .st-s-shape__art {
+  background: #1c1842;
+}
+
+.st-s-shape__art--tall {
+  width: 18px;
+  height: 32px;
+}
+
+.st-s-shape__art--square {
+  width: 26px;
+  height: 26px;
+}
+
+.st-s-shape__art--wide {
+  width: 32px;
+  height: 18px;
+}
+
+.st-s-shapepick .st-s-pick__opt {
+  flex-direction: row;
+  align-items: center;
+}
+
+/* Write them again: the new post words beside the saved ones. */
+.st-s-rewrite {
+  justify-self: start;
+}
+
+.st-s-draftcaps {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--r-md);
+  background: rgba(98, 198, 255, 0.12);
+}
+
+.st-s-draftcaps__title {
+  margin: 0;
+  font: 800 1.05rem / 1.2 var(--st-font, system-ui);
+  color: var(--st-sun, #ffc94a);
+}
+
+.st-s-draftcaps__list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-s-draftcaps__row {
+  display: grid;
+  gap: 6px;
+}
+
+.st-s-draftcaps__place {
+  font-weight: 800;
+}
+
+.st-s-draftcaps__pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 8px;
+}
+
+.st-s-draftcaps__was,
+.st-s-draftcaps__new {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: rgba(255, 246, 229, 0.06);
+}
+
+.st-s-draftcaps__new {
+  background: rgba(71, 214, 160, 0.16);
+}
+
+.st-s-draftcaps__row.is-same .st-s-draftcaps__new {
+  background: rgba(255, 246, 229, 0.06);
+}
+
+.st-s-draftcaps__tag {
+  font: 800 0.8rem / 1.2 var(--st-font, system-ui);
+  color: var(--st-sun, #ffc94a);
+}
+
+.st-s-draftcaps__words {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+/* Download: the MP4 and each extra copy. */
+.st-s-downloads {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* The account a post would go to, asked about before it is sent. */
+.st-s-dest--ask {
+  grid-template-columns: 1fr;
+  margin-left: 0;
+}
+
+.st-s-post__id {
+  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
+/* A place's own sounds (whole scene): a cooler fill than the owner's effects. */
+.st-s-timeline__mark.is-place {
+  background: var(--st-mint, #47d6a0);
+  color: #1c1842;
+}
+
+.st-s-sfx__row.is-place {
+  background: rgba(71, 214, 160, 0.1);
+  border-radius: var(--r-md);
+}
+
+/* A redesign beside the character as it is. */
+.st-s-redesign {
+  display: grid;
+  gap: 12px;
+  padding: clamp(14px, 0.8rem + 1vw, 22px);
+  border-radius: var(--r-lg);
+  background: rgba(255, 201, 74, 0.1);
+  box-shadow: var(--st-s-soft);
+}
+
+.st-s-redesign__pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.st-s-redesign__fig {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 10px;
+  border-radius: var(--r-md);
+  background: rgba(255, 246, 229, 0.06);
+}
+
+.st-s-redesign__cap {
+  font-weight: 800;
+}
+
+.st-s-redesign__lede {
+  margin: 0;
+  font-weight: 700;
+}
+
+.st-s-redesign__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-s-redesign__item {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.st-s-redesign__detail {
+  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+
+/* Edit an idea. */
+.st-s-idea.is-editing:hover {
+  transform: none;
+}
+
+.st-s-ideaedit {
+  display: grid;
+  gap: 14px;
+}
+
+.st-s-lines__list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-s-lines__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.st-s-lines > .st-btn {
+  justify-self: start;
+}
+
+@media (max-width: 420px) {
+  .st-s-lines__row {
+    grid-template-columns: 1fr;
+  }
+
+  .st-s-lines__row > .st-btn {
+    justify-self: end;
+  }
+}
