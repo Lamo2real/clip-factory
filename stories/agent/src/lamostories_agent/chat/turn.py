@@ -139,6 +139,8 @@ class Turn:
         self.usage = {"input": 0, "output": 0}
         self.reply: models.Reply | None = None
         self.earlier: list[dict[str, Any]] = []  # this conversation's earlier messages (whatever is summarized)
+        self._about: tuple[str, dict[str, Any]] | None = None  # the conversation's project (kind, item), read once
+        self._about_read = False
 
     # --- the conversation ----------------------------------------------------------------------------------------
 
@@ -193,15 +195,31 @@ class Turn:
         log("info", "stories.conversation_compacted", conv=self.conv_id, kept=len(recent))
         return recent, new_summary
 
+    def _project_item(self) -> tuple[str, dict[str, Any]] | None:
+        """The idea, story, character or reference this conversation is about (its own partition only), read once."""
+        if not self._about_read:
+            self._about_read = True
+            ref = self.conv.get("projectRef")
+            if isinstance(ref, dict) and ref.get("kind") in ("idea", "story", "character", "reference"):
+                kind = str(ref["kind"])
+                prefix = {"idea": "IDEA#", "story": "STORY#", "character": "CHAR#", "reference": "REFVID#"}[kind]
+                item = self.svc.store.get(self.pk, f"{prefix}{ref.get('id')}")
+                if item and owned(item, self.user_id, self.workspace_id):
+                    self._about = (kind, item)
+        return self._about
+
+    def _shape(self) -> str:
+        """The video's shape the chat plans for (§45.36 E5): the story's own format when the conversation is about a
+        story, else the workspace's default from Settings › Video."""
+        about = self._project_item()
+        cfg = ideas.workspace_config(self.svc, self.user_id, self.workspace_id)
+        return ideas.shape_of(cfg, about[1] if about and about[0] == "story" else None)
+
     def _project(self) -> str:
-        ref = self.conv.get("projectRef")
-        if not isinstance(ref, dict) or ref.get("kind") not in ("idea", "story", "character", "reference"):
+        about = self._project_item()
+        if about is None:
             return ""
-        kind = str(ref["kind"])
-        prefix = {"idea": "IDEA#", "story": "STORY#", "character": "CHAR#", "reference": "REFVID#"}[kind]
-        item = self.svc.store.get(self.pk, f"{prefix}{ref.get('id')}")
-        if not item or not owned(item, self.user_id, self.workspace_id):
-            return ""
+        kind, item = about
         keep = (
             "ideaId",
             "storyId",
@@ -214,8 +232,8 @@ class Turn:
             "status",
             "personality",
         )
-        about = {k: v for k, v in public(item).items() if k in keep}
-        return f"This conversation is about this {kind} (read it with your tools for more): {about}"
+        shown = {k: v for k, v in public(item).items() if k in keep}
+        return f"This conversation is about this {kind} (read it with your tools for more): {shown}"
 
     # --- the answer ----------------------------------------------------------------------------------------------
 
@@ -232,7 +250,7 @@ class Turn:
             user_id=self.user_id,
             workspace_id=self.workspace_id,
             conv_id=self.conv_id,
-            preface=[ideas.HOUSE_BRIEF, CHAT_BRIEF, self._project()],
+            preface=[ideas.house_brief(self._shape()), CHAT_BRIEF, self._project()],
             summary=summary,
         )
         specs = tools.specs()

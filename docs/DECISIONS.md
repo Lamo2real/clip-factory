@@ -1845,8 +1845,8 @@ button there. Numbers come from the post found on the connected account (`video/
 - **Decision.** (CONTRACTS §45.3) Option 3. Ownership is in the key (built from the JWT's `sub`), checked again on
   every item's `userId` and `workspaceId`. The workspace registry holds `workspaceType` (`clips` built in, `stories`),
   so a later brand is a new workspace or one new type. In the web, `/stories/…` is Lamo Stories and every other path is
-  today's shell; the choice persists on the device and in the URL. A web switch, `STORIES_ON`, keeps it hidden until
-  all of it has merged.
+  today's shell; the choice persists on the device and in the URL. A web switch, `STORIES_ON`, kept it hidden until
+  all of it had merged and the final check passed; it was turned on on 2026-11-22 (CONTRACTS §45.36).
 - **Consequences.** No Lamo Clips item, query, stream, index or screen changes; nothing is migrated. Lamo Stories
   screens poll instead of using the WebSocket (no stream filter change). A user's data now spans more than one
   partition, so a future "delete everything" must walk the registry too (none exists today).

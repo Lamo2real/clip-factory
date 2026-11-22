@@ -157,6 +157,7 @@ class Reply:
     region: str | None = None  # the Region it was called in
     tools_off: bool = False  # the caller gave tools, but this model takes none: they were not sent (§45.35 D1)
     task: str | None = None  # the task the call was for (§45.35 D5)
+    maker: str | None = None  # who makes the model, lower case ("anthropic", "meta", ...), §45.36 E7
 
 
 class ModelClient(Protocol):
@@ -214,6 +215,16 @@ EFFORT_REFUSED = (
     "{label} does not accept {effort} effort here (Amazon Bedrock refused it). Pick another level in Lamo Stories › "
     "Settings › AI."
 )
+# Bedrock refused the request's tools for this model (§45.36 E6): an added model's "It can use tools" switch (in the
+# form its row's Edit opens) is the fix; a bundled model has no switch, so another model is.
+TOOLS_REFUSED = (
+    "{label} does not accept tool use here (Amazon Bedrock refused it). Tap Edit on its row in Lamo Stories › "
+    'Settings › AI and turn off "It can use tools".'
+)
+TOOLS_REFUSED_BUNDLED = (
+    "{label} does not accept tool use here (Amazon Bedrock refused it). Pick another model in Lamo Stories › "
+    "Settings › AI."
+)
 CHECK_TASK = "check_models"  # Check models: one bare request per model (§45.25, §45.34)
 STATUS_LINES = {
     "ok": "It answered.",
@@ -232,9 +243,22 @@ _MODEL_ID_PHRASES = (
     "end of its life",
 )
 _MODEL_SAID = "model returned the following errors"  # Bedrock's wrapper of the model's own request errors
+# What Bedrock says when a model takes no tools, or none while streaming ("This model doesn't support tool use in
+# streaming mode."); a tool phrase and a word that says it is not supported, so a malformed schema is not one.
+_TOOL_PHRASES = ("tool use", "tool_use", "tooluse", "toolconfig", "tool config", "tool calling", "function calling",
+                 "toolchoice", "tool choice", "support tools", "support the tools")  # fmt: skip
+_NOT_SUPPORTED = ("support", "not available", "not enabled")
 NOT_RUN = f"Not run. {ANSWER_NUDGE}"
 CALL_ATTEMPTS = 3
 READ_TIMEOUT = 15 * 60  # a long structured answer with adaptive thinking can take minutes
+
+
+class ToolsUnavailable(ModelUnavailable):
+    """Amazon Bedrock refused the request's tools for this model (§45.36 E6). The message is the owner's sentence
+    (``TOOLS_REFUSED``); the request reached Bedrock (``sent``), and the model's status is ``error``. Known by the
+    name of its base too, so every caller that stops on ``ModelUnavailable`` stops on it with the same sentence."""
+
+    sent = True
 
 
 class AgentOff(Exception):
@@ -294,6 +318,21 @@ def effort_refused(e: BaseException) -> bool:
         return False
     msg = _message(e).lower()
     return "effort" in msg or "output_config" in msg
+
+
+def tools_refused(e: BaseException) -> bool:
+    """Bedrock refused the request because the model takes no tools (or none while streaming), §45.36 E6."""
+    if _code(e) != "ValidationException":
+        return False
+    msg = " ".join(_message(e).lower().split())
+    return any(p in msg for p in _TOOL_PHRASES) and any(w in msg for w in _NOT_SUPPORTED)
+
+
+def tools_sentence(info: dict[str, Any], model_key: str) -> str:
+    """The owner's sentence for a model whose tools Bedrock refused: turn off its Tools switch (a model he added),
+    or pick another model (a bundled one has no switch)."""
+    label = str(info.get("label") or model_key)
+    return (TOOLS_REFUSED if info.get("custom") else TOOLS_REFUSED_BUNDLED).format(label=label)
 
 
 def unavailable(e: BaseException) -> tuple[str, str] | None:
@@ -604,8 +643,39 @@ class BedrockModels:
                 region=region,
                 tools_off=tools_off,
                 task=task,
+                maker=config.maker(info) or None,
             )
         raise AssertionError("unreachable")
+
+    def planned(self, ctx: CallContext, *, task: str) -> tuple[str, str]:
+        """The model a call for ``ctx``'s agent and ``task`` would go to now, and who makes it (lower case), resolved
+        exactly as ``complete`` resolves it; nothing is sent or written. A job names its writer with it while the
+        writer has not answered yet (§45.36 E7)."""
+        ws = self.workspace(ctx)
+        catalog = ws.models()
+        profile = ws.agent(ctx.agent_id)
+        stored, conversation, project = ws.levels(
+            job_id=ctx.job_id, task_id=ctx.task_id, conv_id=ctx.conv_id, msg_id=ctx.msg_id
+        )
+        try:
+            choice_model = resolve(
+                task=task,
+                agent={"model": profile.model, "effort": profile.effort},
+                ai=ws.ai(),
+                override=stored,
+                conversation=conversation,
+                project=project,
+                catalog=catalog,
+            ).model
+        except EffortUnavailable as e:  # the effort is the problem, not the model: the model is still the one
+            choice_model = str(e.model)
+        return choice_model, config.maker(config.model(choice_model, catalog) or {})
+
+    def maker_of(self, ctx: CallContext, model_key: str) -> str:
+        """Who makes ``model_key`` (lower case), from ``ctx``'s workspace list (a model the owner added) or the
+        bundled one; "" when it is in neither. Nothing is sent. A job names an older storyboard's writer with it
+        (§45.36 E7)."""
+        return config.maker(config.model(model_key, self.workspace(ctx).models()) or {})
 
     def called_as(self, info: dict[str, Any]) -> tuple[str, str | None]:
         """The Bedrock model id or inference profile a call to this model is sent to, and the Region (the model's own
@@ -704,6 +774,13 @@ class BedrockModels:
                     raise EffortUnavailable(
                         line, model=choice.model, effort=choice.effort, sent=True, status="error"
                     ) from e
+                if "toolConfig" in body and tools_refused(e):
+                    # The model takes no tools here (some only while streaming, as the chat calls them): the owner
+                    # is told so, with the switch that fixes it, never "The answer stopped" (§45.36 E6).
+                    line = tools_sentence(info, choice.model)
+                    if record:
+                        self._model_status(ctx, choice.model, "error", line)
+                    raise ToolsUnavailable(line, model=choice.model, effort=choice.effort, status="error") from e
                 found = unavailable(e)
                 status = found[0] if found else "error"
                 if record:

@@ -2,7 +2,7 @@
 
 Everything here belongs to builder E2's packages (``chat``, ``memory``, ``reference``, ``tasks``); builder E's own
 helpers are not imported, so the two can change independently. Keys follow docs/CONTRACTS.md §45.3: every item lives
-in its workspace's partition ``USER#{userId}#WS#{workspaceId}`` (never ``USER#{userId}`` itself, which is Lamo Clips').
+in its workspace's partition ``USER#{userId}#WS#{workspaceId}`` (never ``USER#{userId}`` itself, which is Clip Factory's).
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from decimal import Decimal
 from typing import Any
 
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-WORKSPACE_ID = re.compile(r"^(stories|[0-9A-HJKMNP-TV-Z]{26})$")  # never "clips": Lamo Clips has no partition
+WORKSPACE_ID = re.compile(r"^(stories|[0-9A-HJKMNP-TV-Z]{26})$")  # never "clips": Clip Factory has no partition
 SAFE_ID = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._-]{0,79}$")
 _PRESIGNED = re.compile(r"https://[^\s\"']*(X-Amz-Signature|X-Amz-Credential|Signature=)[^\s\"']*")
 
