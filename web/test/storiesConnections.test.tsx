@@ -236,11 +236,14 @@ describe("round 3 on the Social accounts page (§45.34)", () => {
     expect(document.body.textContent).toContain("Great! Lamo Stories posts to lamo.stories on Instagram.");
   });
 
-  it("Clip Factory's own account picked from the list is not asked about: its card says it is Clip Factory's", async () => {
+  it("Clip Factory's own account in the list is never picked: the tap says why and sends nothing (§45.37 G8)", async () => {
     await render({ platform: null, result: null });
-    await click(button(card("instagram").querySelector<HTMLElement>(".st-choose")!, /Clip Factory uses this/));
+    const own = button(card("instagram").querySelector<HTMLElement>(".st-choose")!, /Clip Factory's own/)!;
+    expect(own.getAttribute("aria-disabled")).toBe("true");
+    await click(own);
+    expect(calls).not.toContain("chooseSocial");
     expect(card("instagram").querySelector(".st-intended")).toBeNull();
-    expect(card("instagram").textContent).toContain("Same as Clip Factory");
+    expect(document.body.textContent).toContain("This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.");
   });
 
   it("a connect that also warns about Lamo Clips' Meta connection (clips_meta_check) asks too", async () => {

@@ -116,10 +116,42 @@ export function References({ ws, character, onChange }: { ws: string; character:
   );
 }
 
-/** The AI picture of a character (only when AI pictures are on). It waits for the picture, checking every 2 s. */
-export function Portrait({ ws, character, aiOn, onChange }: { ws: string; character: Character; aiOn: boolean; onChange: (c: Character) => void }) {
+/**
+ * The AI picture of a character (only when AI pictures are on). It waits for the picture, checking every 2 s. An older
+ * pick of Amazon Nova Canvas (`ended`, §45.37 G7) says Amazon ended it, with one tap to Stability AI's pictures
+ * (`onReplace`); nothing switches by itself.
+ */
+export function Portrait({
+  ws,
+  character,
+  aiOn,
+  ended = false,
+  onReplace,
+  onChange,
+}: {
+  ws: string;
+  character: Character;
+  aiOn: boolean;
+  ended?: boolean;
+  onReplace?: () => Promise<void>;
+  onChange: (c: Character) => void;
+}) {
   const [waiting, setWaiting] = useState<{ since: number; was: string | null } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [replacing, setReplacing] = useState(false);
+
+  async function replaceMaker() {
+    if (!onReplace || replacing) return;
+    setProblem(null);
+    setReplacing(true);
+    try {
+      await onReplace();
+    } catch (e) {
+      setProblem(say(e));
+    } finally {
+      setReplacing(false);
+    }
+  }
 
   usePoll(
     async () => {
@@ -160,6 +192,21 @@ export function Portrait({ ws, character, aiOn, onChange }: { ws: string; charac
           <button type="button" className="st-btn" aria-disabled={waiting !== null || undefined} onClick={() => waiting === null && void make()}>
             {waiting ? "Drawing the picture…" : character.portrait ? "Make a new AI picture" : "Make an AI picture"}
           </button>
+        </>
+      ) : ended ? (
+        <>
+          <p className="st-s-refs__lede" role="status">
+            Amazon Nova Canvas: Ended by Amazon on 30 Sep 2026. It cannot make AI pictures any more, and nothing switches by itself. Stability AI
+            pictures run in the US (Oregon).
+          </p>
+          {onReplace ? (
+            <button type="button" className="st-btn" aria-disabled={replacing || undefined} onClick={() => void replaceMaker()}>
+              {replacing ? "Switching…" : "Use Stability AI pictures"}
+            </button>
+          ) : null}
+          <p className="st-s-refs__lede">
+            Or pick another in <A href={storiesHref({ name: "settings", section: "video" })}>Settings › Video › Picture maker</A>.
+          </p>
         </>
       ) : (
         <p className="st-s-refs__lede">

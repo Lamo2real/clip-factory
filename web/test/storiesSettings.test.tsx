@@ -32,6 +32,8 @@ let host: HTMLElement;
 let store: MockStore;
 let workspace: Workspace;
 let providers: ProviderStatus[];
+/** A test where no maker takes a key (the ElevenLabs row is left out). */
+let noKeyedMakers = false;
 let calls: { name: string; args: unknown[] }[];
 /** Holds the next answers of a route until the test lets them go (a slow connection). */
 const gates = new Map<string, Promise<void>>();
@@ -47,24 +49,31 @@ function hold(name: string): () => void {
   };
 }
 
-/** The makers as the API sends them (§45.11.6): Nova Canvas off until picked, Nova Reel needs its US bucket. */
+/** The API's Luma AI Ray2 sentence, word for word (§45.37). */
+const LUMA_NOT_READY =
+  "Luma AI Ray2 is not ready yet: it needs a storage bucket in the United States (Oregon), which is switched off, and Luma AI Ray2 turned on for your account. Pick Built-in animation in Settings › Video, or finish its setup.";
+
+/**
+ * The makers as the API sends them (§45.11.6, §45.37): Stability AI off until picked, Luma AI Ray2 needs its Oregon
+ * bucket, Amazon's Nova Canvas and Nova Reel ended (each naming its replacement), Amazon Polly off unless picked.
+ */
 function makers(): ProviderStatus[] {
   const c = workspace.configuration as StoriesConfig;
   return [
     { kind: "writer", id: "bedrock-claude", label: "Claude in Amazon Bedrock", state: "on", line: "Writes the stories." },
     { kind: "animation", id: "builtin-2d", label: "Built-in animation", state: "on", line: "Animates every scene." },
-    {
-      kind: "animation",
-      id: "nova-reel",
-      label: "Amazon Nova Reel",
-      state: c.providers.video === "nova-reel" ? "needs_setup" : "off",
-      line: "Needs a storage place in the USA (N. Virginia), switched on by the owner.",
-    },
+    { kind: "animation", id: "luma-ray", label: "Luma AI Ray2 (AI video)", state: c.providers.video === "luma-ray" ? "needs_setup" : "off", line: LUMA_NOT_READY },
+    { kind: "animation", id: "nova-reel", label: "Amazon Nova Reel", state: "ended", line: "Ended by Amazon on 30 Sep 2026.", endedAt: "2026-09-30", replacement: "luma-ray" },
     { kind: "images", id: "builtin-rig", label: "Built-in characters", state: "on", line: "Draws every character." },
-    c.providers.images === "nova-canvas"
-      ? { kind: "images", id: "nova-canvas", label: "Amazon Nova Canvas", state: "needs_setup", line: "Make one portrait to check it works." }
-      : { kind: "images", id: "nova-canvas", label: "Amazon Nova Canvas", state: "off", line: "Off." },
+    c.providers.images === "stability"
+      ? { kind: "images", id: "stability", label: "Stability AI pictures", state: "needs_setup", line: "Make one portrait to check it works." }
+      : { kind: "images", id: "stability", label: "Stability AI pictures", state: "off", line: "Off." },
+    { kind: "images", id: "nova-canvas", label: "Amazon Nova Canvas", state: "ended", line: "Ended by Amazon on 30 Sep 2026.", endedAt: "2026-09-30", replacement: "stability" },
     { kind: "audio", id: "builtin-synth", label: "Built-in sounds", state: "on", line: "Makes every sound." },
+    ...(noKeyedMakers
+      ? []
+      : [{ kind: "audio", id: "elevenlabs", label: "ElevenLabs", state: c.providers.audio === "elevenlabs" ? "needs_setup" : "off", line: "Paste your ElevenLabs key to use it.", key: { saved: false, hint: null, savedAt: null } } satisfies ProviderStatus]),
+    { kind: "audio", id: "polly", label: "A spoken voice (Amazon Polly)", state: c.providers.audio === "polly" ? "needs_setup" : "off", line: "Adds words spoken aloud." },
   ];
 }
 
@@ -80,7 +89,13 @@ function fakeApi(): StoriesApi {
     getWorkspace: async () => structuredClone(workspace),
     patchWorkspace: async (_ws, patch) => {
       if (patch.version !== workspace.version) throw Object.assign(new Error("stale"), { code: "conflict" });
-      workspace = { ...workspace, configuration: { ...(workspace.configuration as StoriesConfig), ...patch.configuration }, version: workspace.version + 1 };
+      // As the API: each part merged onto the stored one; a new maker without its model in the body starts from its first.
+      const before = workspace.configuration as StoriesConfig;
+      const body = patch.configuration ?? {};
+      const providers = { ...before.providers, ...(body.providers ?? {}) };
+      for (const [maker, model] of [["images", "imageModel"], ["video", "videoModel"], ["audio", "audioModel"]] as const)
+        if (body.providers?.[maker] !== undefined && body.providers[maker] !== before.providers[maker] && !(model in body.providers)) providers[model] = null;
+      workspace = { ...workspace, configuration: { ...before, ...body, providers } as StoriesConfig, version: workspace.version + 1 };
       return structuredClone(workspace);
     },
     providers: async () => structuredClone([...makers(), ...providers]),
@@ -105,6 +120,7 @@ function fakeApi(): StoriesApi {
 
 beforeEach(() => {
   calls = [];
+  noKeyedMakers = false;
   gates.clear();
   failures.clear();
   forgetLoaded();
@@ -277,7 +293,14 @@ describe("AI", () => {
   it("sets each agent's and each task's model and effort, with Workspace default, the suggestion and what it uses now", async () => {
     await open("ai");
     const rows = $$(".st-stg-assign__row");
-    expect(rows).toHaveLength(5 + 11);
+    // 5 agents and 13 tasks: §45.37 G5 adds the small word changes (Low) and the animation planning (High).
+    expect(rows).toHaveLength(5 + 13);
+    const words = rows.find((r) => r.querySelector(".st-stg-assign__title")?.textContent === "Small word changes")!;
+    expect(words.textContent).toContain("Suggested: Low");
+    expect(words.textContent).toContain("Creative director agent");
+    const plan = rows.find((r) => r.querySelector(".st-stg-assign__title")?.textContent === "Plan the animation")!;
+    expect(plan.textContent).toContain("Suggested: High");
+    expect(plan.textContent).toContain("Storyboard agent");
     const director = rows.find((r) => r.textContent?.includes("Creative director"))!;
     const pick = director.querySelector<HTMLSelectElement>("select")!;
     expect(pick.options[0]?.textContent).toBe("Workspace default");
@@ -329,8 +352,10 @@ describe("AI", () => {
     store.knobs.keyedProviders = [{ kind: "animation", id: "acme-motion", label: "Acme Motion" }];
     await open("ai");
     const card_ = card("Providers");
-    expect(byText(".st-stg-provider", /Amazon Nova Reel/, card_).textContent).toContain("Off");
-    expect($$(".st-stg-keyrow", card_).map((r) => r.querySelector(".st-stg-keyrow__name")?.textContent)).toEqual(["Acme Motion"]);
+    expect(byText(".st-stg-provider", /Luma AI Ray2/, card_).textContent).toContain("Off");
+    // Amazon ended Nova Reel (§45.37): its row says so, never "Off" or working.
+    expect(byText(".st-stg-provider", /Amazon Nova Reel/, card_).textContent).toContain("Ended by Amazon");
+    expect($$(".st-stg-keyrow", card_).map((r) => r.querySelector(".st-stg-keyrow__name")?.textContent)).toEqual(["ElevenLabs", "Acme Motion"]);
     const row = byText(".st-stg-keyrow", /Acme Motion/, card_);
     expect(row.textContent).toContain("Paste your Acme Motion key to use it.");
     expect(row.textContent).toContain("Not ready yet");
@@ -349,7 +374,33 @@ describe("AI", () => {
     expect(byText(".st-stg-keyrow", /Acme Motion/, card("Providers")).textContent).toContain("Paste your Acme Motion key to use it.");
   });
 
+  it("takes the Anthropic API's and an OpenAI-compatible API's keys, showing only the hint, never the key (§45.37 G4)", async () => {
+    providers.push(aiPart.keyedHostStatus(store, "anthropic"), aiPart.keyedHostStatus(store, "openai_compatible"));
+    await open("ai");
+    const names = () => $$(".st-stg-keyrow", card("Providers")).map((r) => r.querySelector(".st-stg-keyrow__name")?.textContent);
+    expect(names()).toEqual(["ElevenLabs", "Anthropic API", "OpenAI-compatible API"]);
+    for (const [label, id, key] of [
+      ["Anthropic API", "anthropic", "sk-ant-api03-0123456789abcdefWXYZ"],
+      ["OpenAI-compatible API", "openai_compatible", "sk-proj-0123456789abcdef9k2q"],
+    ] as const) {
+      const row = byText(".st-stg-keyrow", new RegExp(label), card("Providers"));
+      expect(row.textContent).toContain(`Paste your ${label} key to use it.`);
+      await click(byText("button", "Paste a key", row));
+      setValue(row.querySelector("input")!, key);
+      expect(row.querySelector("input")!.type).toBe("password");
+      await act(async () => row.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+      await settle(8);
+      expect(called("setProviderKey").at(-1)?.args).toEqual(["stories", id, key]);
+      const after = byText(".st-stg-keyrow", new RegExp(label), card("Providers"));
+      expect(after.textContent).toContain(`Key saved · ends ${key.slice(-4)}.`);
+      expect(after.querySelector("input")).toBeNull();
+      expect(host.innerHTML).not.toContain(key);
+      expect(host.innerHTML).not.toContain("0123456789abcdef");
+    }
+  });
+
   it("says plainly when no provider needs a key", async () => {
+    noKeyedMakers = true;
     await open("ai");
     expect(card("Providers").textContent).toContain("None of these providers needs a key");
   });
@@ -518,24 +569,101 @@ describe("Memory", () => {
 describe("Video", () => {
   it("picks the makers apart from the AI models, each with its real state and what it still needs", async () => {
     await open("video");
-    expect($$("[role=radio]", group("Video maker")).map((r) => r.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["Built-in animator", "Amazon Nova Reel 1.1"]);
-    const reel = byText("[role=radio]", /Nova Reel/);
-    // Nova Reel is built (§45.11.6): it can be picked, and it says it is not ready until its US bucket is on.
-    expect(reel.getAttribute("aria-disabled")).toBeNull();
-    expect(reel.textContent).toContain("Needs a storage place in the USA (N. Virginia), switched on by the owner.");
-    await click(reel);
+    const labels = (g: string) => $$("[role=radio]", group(g)).map((r) => r.querySelector(".st-stg-pick__label")?.textContent);
+    expect(labels("Video maker")).toEqual(["Built-in animator", "Luma AI Ray2", "Your own video model", "Amazon Nova Reel"]);
+    // Amazon ended Nova Reel (§45.37): it reads ended and cannot be picked again.
+    const reel = byText("[role=radio]", /Nova Reel/, group("Video maker"));
+    expect(reel.getAttribute("aria-disabled")).toBe("true");
+    expect(reel.textContent).toContain("Ended by Amazon on 30 Sep 2026.");
+    // The owner's own video maker waits for one of his models.
+    expect(byText("[role=radio]", /Your own video model/, group("Video maker")).textContent).toContain("Add your own video model below first.");
+    const luma = byText("[role=radio]", /Luma AI Ray2/, group("Video maker"));
+    expect(luma.getAttribute("aria-disabled")).toBeNull();
+    expect(luma.textContent).toContain("Runs in the US (Oregon)");
+    await click(luma);
     await settle();
-    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { providers: { images: "builtin-rig", video: "nova-reel", audio: "builtin-synth" } }, version: 3 });
-    expect(byText("[role=radio]", /Nova Reel/).textContent).toContain("Not ready yet");
-    expect(card("Video maker").querySelector("[role=status]")?.textContent).toBe("Amazon Nova Reel is not ready yet. Needs a storage place in the USA (N. Virginia), switched on by the owner.");
+    // Only this card's two fields (§45.37 G1): the API checks only what the body names.
+    expect(called("patchWorkspace").at(-1)?.args[1]).toEqual({ configuration: { providers: { video: "luma-ray", videoModel: null } }, version: 3 });
+    expect(byText("[role=radio]", /Luma AI Ray2/, group("Video maker")).textContent).toContain("Not ready yet");
+    // Its one model, with who makes it, where it runs and that no price is known; and the API's not-ready sentence once.
+    const details = $<HTMLElement>('[data-maker-model="luma-ray2"]', card("Video maker"))!;
+    expect(details.textContent).toContain("Luma AI Ray2");
+    expect(details.textContent).toContain("Luma AI on Amazon Bedrock · Runs in the US (Oregon)");
+    expect(details.textContent).toContain("No price known.");
+    expect($$("[role=status]", card("Video maker")).map((n) => n.textContent)).toContain(LUMA_NOT_READY);
     await click(byText("[role=radio]", /Built-in animator/));
     await settle();
-    expect(card("Video maker").querySelector("[role=status]")).toBeNull();
-    await click(byText("[role=radio]", /Nova Canvas/));
+    expect($$(".st-stg-note[role=status]", card("Video maker")).filter((n) => n.textContent?.includes("not ready"))).toHaveLength(0);
+
+    expect(labels("Picture maker")).toEqual(["Built-in drawings", "Also AI portraits (Stability AI)", "Also AI portraits (your own picture model)", "Amazon Nova Canvas"]);
+    expect(byText("[role=radio]", /Nova Canvas/, group("Picture maker")).getAttribute("aria-disabled")).toBe("true");
+    await click(byText("[role=radio]", /Stability AI/, group("Picture maker")));
     await settle();
-    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { providers: { images: "nova-canvas", video: "builtin-2d", audio: "builtin-synth" } }, version: 5 });
-    expect(host.textContent).toContain("Amazon Nova Canvas (amazon.nova-canvas-v1:0)");
-    expect(card("Picture maker").querySelector("[role=status]")?.textContent).toContain("Make one portrait to check it works.");
+    expect(called("patchWorkspace").at(-1)?.args[1]).toEqual({ configuration: { providers: { images: "stability", imageModel: null } }, version: 5 });
+    // Stability AI has three models: the first is used until the owner picks another, each with its price line and status.
+    const models = $$("[role=radio]", group("Picture maker's model"));
+    expect(models.map((r) => r.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["Stable Image Core", "Stable Image Ultra", "Stable Diffusion 3.5 Large"]);
+    expect(models[0]!.getAttribute("aria-checked")).toBe("true");
+    expect(models[1]!.textContent).toContain("Stability AI on Amazon Bedrock · Runs in the US (Oregon) · No price known");
+    expect(models[1]!.textContent).toContain("Not checked yet");
+    await click(models[1]!);
+    await settle();
+    expect(called("patchWorkspace").at(-1)?.args[1]).toEqual({ configuration: { providers: { imageModel: "stable-image-ultra" } }, version: 6 });
+    expect((workspace.configuration as StoriesConfig).providers).toMatchObject({ images: "stability", imageModel: "stable-image-ultra", video: "builtin-2d", audio: "builtin-synth" });
+    expect($('[data-maker-model="stable-image-ultra"]', card("Picture maker"))?.textContent).toContain("Stable Image Ultra");
+    expect(card("Picture maker").textContent).toContain("Make one portrait to check it works.");
+  });
+
+  it("the Sound maker saves (§45.37 G3): no voice unless the owner picks Amazon Polly, ElevenLabs makes effects and music", async () => {
+    await open("video");
+    const sound = () => card("Sound maker");
+    expect(sound().textContent).toContain("No voice-over unless you pick a spoken voice.");
+    const options = $$("[role=radio]", group("Sound maker"));
+    expect(options.map((r) => r.querySelector(".st-stg-pick__label")?.textContent)).toEqual([
+      "Built-in sounds and music",
+      "ElevenLabs sound effects and music",
+      "Your own sound model",
+      "A spoken voice (Amazon Polly)",
+    ]);
+    // The built-in sounds are the default; the voice is last and never picked by itself.
+    expect(options[0]!.getAttribute("aria-checked")).toBe("true");
+    expect(options[3]!.textContent).toContain("Adds words spoken aloud. Your videos are made without a voice unless you pick this.");
+    await click(byText("[role=radio]", /ElevenLabs/, group("Sound maker")));
+    await settle();
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { providers: { audio: "elevenlabs", audioModel: null } } });
+    // Both of its models are used: the effects and the music bed, never its voices.
+    const list = $<HTMLElement>('[aria-label="ElevenLabs models"]', sound())!;
+    expect($$("[data-maker-model]", list).map((m) => m.getAttribute("data-maker-model"))).toEqual(["elevenlabs-effects", "elevenlabs-music"]);
+    expect(sound().textContent).not.toContain("Your videos now have a spoken voice.");
+    await click(byText("[role=radio]", /Amazon Polly/, group("Sound maker")));
+    await settle();
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { providers: { audio: "polly", audioModel: null } } });
+    expect(sound().textContent).toContain("Your videos now have a spoken voice. To make them without one, pick Built-in sounds and music.");
+    expect(sound().textContent).toContain("Runs in Europe (Ireland)");
+    await click(byText("[role=radio]", /Built-in sounds and music/, group("Sound maker")));
+    await settle();
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { providers: { audio: "builtin-synth" } } });
+    expect(sound().textContent).not.toContain("spoken voice. To make");
+    // A sound maker's change never re-sends the picture or video picks (an older stored pick never blocks it).
+    for (const c of called("patchWorkspace")) expect(Object.keys((c.args[1] as { configuration: { providers: object } }).configuration.providers).sort()).toEqual(["audio", "audioModel"]);
+  });
+
+  it("an older pick of an ended maker says so, with a one-tap replacement; nothing swaps by itself (§45.37)", async () => {
+    workspace.configuration = { ...(workspace.configuration as StoriesConfig), providers: { images: "nova-canvas", video: "nova-reel", audio: "builtin-synth" } };
+    await open("video");
+    const video = card("Video maker");
+    expect(video.textContent).toContain("Ended by Amazon on 30 Sep 2026.");
+    expect(video.textContent).toContain("new videos stop until you pick another video maker");
+    expect(called("patchWorkspace")).toHaveLength(0);
+    // Try it is Luma AI Ray2's now, never Nova Reel's.
+    expect($('[data-provider="nova-reel"]')).toBeNull();
+    expect($('[data-provider="luma-ray"]')).not.toBeNull();
+    await click(byText("button", "Use Luma AI Ray2", video));
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { providers: { video: "luma-ray", videoModel: null } } });
+    const pictures = card("Picture maker");
+    expect(pictures.textContent).toContain("AI portraits stop until you pick another picture maker");
+    await click(byText("button", "Use Built-in drawings", pictures));
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { providers: { images: "builtin-rig", imageModel: null } } });
   });
 
   it("takes the owner's price for the AI makers, kept in the AI settings as a price for one unit (§45.34)", async () => {

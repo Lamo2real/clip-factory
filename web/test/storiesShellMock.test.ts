@@ -37,9 +37,9 @@ describe("workspaces", () => {
 
   it("saves settings on top of the version it was given, and refuses a stale one or a bad value", async () => {
     const w = await api.getWorkspace("stories");
-    const next = await api.patchWorkspace("stories", { configuration: { defaultDurationSec: 60, providers: { images: "nova-canvas", video: "builtin-2d", audio: "builtin-synth" } }, version: w.version });
+    const next = await api.patchWorkspace("stories", { configuration: { defaultDurationSec: 60, providers: { images: "stability", video: "builtin-2d", audio: "builtin-synth" } }, version: w.version });
     expect(next.version).toBe(w.version + 1);
-    expect(next.configuration).toMatchObject({ defaultDurationSec: 60, captionsOn: true, providers: { images: "nova-canvas" }, video: { quality: "high", fps: 30 } });
+    expect(next.configuration).toMatchObject({ defaultDurationSec: 60, captionsOn: true, providers: { images: "stability" }, video: { quality: "high", fps: 30 } });
     await expect(api.patchWorkspace("stories", { configuration: { captionsOn: false }, version: w.version })).rejects.toMatchObject({ code: "conflict" });
     await expect(api.patchWorkspace("stories", { configuration: { defaultDurationSec: 10 }, version: next.version })).rejects.toMatchObject({ field: "defaultDurationSec" });
     await expect(api.patchWorkspace("stories", { configuration: { video: { quality: "ultra" as never, resolution: "1080x1920", aspect: "9:16", fps: 30 } }, version: next.version })).rejects.toMatchObject({ field: "video" });
@@ -54,15 +54,18 @@ describe("workspaces", () => {
     expect(store.workspaces.find((w) => w.workspaceId === "stories")?.configuration).toEqual(file);
   });
 
-  it("shows a provider as working only after a real call: Nova Canvas needs a check once picked", async () => {
+  it("shows a provider as working only after a real call: Stability AI and Luma AI Ray2 need a check once picked", async () => {
     const before = await api.providers("stories");
-    expect(before.find((p) => p.id === "nova-canvas")?.state).toBe("off");
-    expect(before.find((p) => p.id === "nova-reel")?.state).toBe("off");
+    expect(before.find((p) => p.id === "stability")?.state).toBe("off");
+    expect(before.find((p) => p.id === "luma-ray")?.state).toBe("off");
+    // Amazon ended Nova Canvas and Nova Reel (§45.37): they read ended, never off or on.
+    expect(before.find((p) => p.id === "nova-canvas")?.state).toBe("ended");
+    expect(before.find((p) => p.id === "nova-reel")?.state).toBe("ended");
     const w = await api.getWorkspace("stories");
-    await api.patchWorkspace("stories", { configuration: { providers: { images: "nova-canvas", video: "nova-reel", audio: "builtin-synth" } }, version: w.version });
+    await api.patchWorkspace("stories", { configuration: { providers: { images: "stability", video: "luma-ray", audio: "builtin-synth" } }, version: w.version });
     const after = await api.providers("stories");
-    expect(after.find((p) => p.id === "nova-canvas")?.state).toBe("needs_setup");
-    expect(after.find((p) => p.id === "nova-reel")?.state).toBe("needs_setup");
+    expect(after.find((p) => p.id === "stability")?.state).toBe("needs_setup");
+    expect(after.find((p) => p.id === "luma-ray")?.state).toBe("needs_setup");
   });
 
   it("serves the checked guidance list with each step's shown flag and resolved citations", async () => {
@@ -101,13 +104,15 @@ describe("social accounts", () => {
     expect(byStatus((await api.social("stories")).accounts).facebook).toBe("connected");
   });
 
-  it("picking Lamo Clips' own Page is held as same as Lamo Clips until the owner says use it for both", async () => {
+  it("picking Clip Factory's own Page is held as Clip Factory's, and nothing can share it (§45.37 G8)", async () => {
     const insta = (await api.social("stories")).accounts.find((a) => a.platform === "instagram")!;
     const clipsOwn = insta.choices!.find((c) => c.usedByClips)!;
     const picked = await api.chooseSocial("stories", "instagram", clipsOwn.id);
     expect(picked.connectionStatus).toBe("same_as_clips");
-    const shared = await api.shareWithClips("stories", "instagram");
-    expect(shared).toMatchObject({ connectionStatus: "connected", sharedWithClips: true });
+    expect(picked).not.toHaveProperty("sharedWithClips");
+    // There is no "Use it for both": no such call, and the account stays Clip Factory's.
+    expect((api as unknown as Record<string, unknown>).shareWithClips).toBeUndefined();
+    expect((await api.social("stories")).accounts.find((a) => a.platform === "instagram")?.connectionStatus).toBe("same_as_clips");
     await expect(api.chooseSocial("stories", "youtube", "x")).rejects.toMatchObject({ status: 400 });
   });
 
@@ -247,8 +252,9 @@ describe("the onboarding (§45.29)", () => {
   it("does not count a platform held as Lamo Clips' own (same_as_clips): it ticks once Lamo Stories' own is connected (§45.34)", async () => {
     // The seed's X is same_as_clips: nothing can be posted there, so the step stays to do.
     expect((await api.getOnboarding("stories")).steps.find((s) => s.step === "x")?.state).toBe("todo");
-    // Use it for both, on purpose: then it is connected, and the step ticks.
-    await api.shareWithClips("stories", "x");
+    // Signing in with a separate account made for Clip Factory Stories (never "use it for both", §45.37 G8): it ticks.
+    await api.connectSocial("stories", "x");
+    expect((await api.social("stories")).accounts.find((a) => a.platform === "x")).toMatchObject({ connectionStatus: "connected", handle: "@lamostories" });
     expect((await api.getOnboarding("stories")).steps.find((s) => s.step === "x")?.state).toBe("done");
   });
 
@@ -262,7 +268,7 @@ describe("the onboarding (§45.29)", () => {
     expect(await keepDefault()).toBe("todo");
     // Another video maker is a pick by itself.
     let w = await api.getWorkspace("stories");
-    await api.patchWorkspace("stories", { configuration: { providers: { ...w.configuration.providers, video: "nova-reel" } }, version: w.version });
+    await api.patchWorkspace("stories", { configuration: { providers: { ...w.configuration.providers, video: "luma-ray" } }, version: w.version });
     expect((await api.getOnboarding("stories")).steps.find((s) => s.step === "video")?.state).toBe("done");
     w = await api.getWorkspace("stories");
     await api.patchWorkspace("stories", { configuration: { providers: { ...w.configuration.providers, video: "builtin-2d" } }, version: w.version });

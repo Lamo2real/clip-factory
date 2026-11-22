@@ -72,7 +72,12 @@ describe("AI configuration", () => {
     expect(models.some((m) => m.efforts.length === 0)).toBe(true);
     expect(ai).toMatchObject({ defaultModel: storiesModels.defaultModel, defaultEffort: storiesModels.defaultEffort, version: 0 });
     expect(agents.map((a) => a.agentId)).toEqual(agentsFile.agents.map((a) => a.agentId));
-    expect(new Set(tasks.map((t) => t.kind)).size).toBe(11);
+    // 13 tasks since §45.37 G5: the small word changes (Low) and the animation planning (High) joined them.
+    expect(new Set(tasks.map((t) => t.kind)).size).toBe(13);
+    expect(tasks.find((t) => t.kind === "text_edit")).toMatchObject({ agentId: "creative_director", suggestedEffort: "low" });
+    expect(tasks.find((t) => t.kind === "animation_plan")).toMatchObject({ agentId: "storyboard", suggestedEffort: "high" });
+    expect(agents.find((a) => a.agentId === "creative_director")?.tasks).toContain("text_edit");
+    expect(agents.find((a) => a.agentId === "storyboard")?.tasks).toContain("animation_plan");
     for (const t of tasks) expect(t.effective.model).toBeTruthy();
   });
 
@@ -322,7 +327,7 @@ describe("round 3 (§45.34)", () => {
     await expect(api.putAi("stories", { ...ai, tasks: { storyboard: { model: "custom-nova-premier", effort: "max" } } })).rejects.toMatchObject({ status: 400, message: "Nova Premier does not offer Maximum. Pick another level." });
     await api.putAi("stories", { ...ai, tasks: { storyboard: { model: "custom-nova-premier", effort: "low" } } });
     expect((await api.getAi("stories")).tasks.find((t) => t.kind === "storyboard")?.effective).toMatchObject({ model: "custom-nova-premier", effort: "low", from: "task" });
-    expect(tasks.length).toBe(11);
+    expect(tasks.length).toBe(13);
     // Changing it keeps its key; a new id has to be checked again.
     const changed = await api.putAiModel("stories", "custom-nova-premier", { ...def, label: "Nova Premier 2", price: { inputPer1M: 2.5, outputPer1M: 12.5, cacheReadPer1M: null, cacheWritePer1M: null, longContext: null, currency: "USD", source: "owner", note: "x" } });
     expect(changed).toMatchObject({ label: "Nova Premier 2", price: { inputPer1M: 2.5, outputPer1M: 12.5, source: "owner" } });

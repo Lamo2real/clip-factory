@@ -123,7 +123,6 @@ function makeApi(): StoriesApi {
     social: async () => ({ accounts: structuredClone(store.social), clips: [] }),
     connectSocial: async () => ({ authorizeUrl: "/", expiresAt: now }),
     chooseSocial: async () => store.social[0]!,
-    shareWithClips: async () => store.social[0]!,
     tiktokCreatorInfo: async () => CREATOR,
     disconnectSocial: async () => undefined,
     publish: async (ws, storyId, targets) => {

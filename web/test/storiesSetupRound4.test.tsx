@@ -80,9 +80,9 @@ describe("step 4 (§45.35 D21)", () => {
     const builtin = $$("[role=radio]").find((r) => r.textContent?.includes("Built-in animation"))!;
     expect(builtin.textContent).toContain(BUILTIN_LINE);
     expect(builtin.textContent).not.toContain("9:16");
-    // Nova Reel not ready yet: the note says how to make it ready (Try it, §45.35 D2).
-    await click($$("[role=radio]").find((r) => r.textContent?.includes("Amazon Nova Reel"))!);
-    expect(host.textContent).toContain("To make it ready, tap Try it in Settings › Video: it makes one 6-second test shot.");
+    // Luma AI Ray2 (Nova Reel's place since Amazon ended it, §45.37 G7) not ready yet: the note says how to make it ready (Try it, §45.35 D2).
+    await click($$("[role=radio]").find((r) => r.textContent?.includes("Luma AI Ray2"))!);
+    expect(host.textContent).toContain("To make it ready, tap Try it in Settings › Video: it makes one 5-second test shot.");
   });
 });
 
@@ -115,7 +115,8 @@ describe("Lamo Clips' own account (§45.35 D11)", () => {
 
   it("an account that is Lamo Stories' own says nothing of the kind", async () => {
     await start({}, (s) => {
-      Object.assign(s.social.find((a) => a.platform === "x")!, { connectionStatus: "connected", sharedWithClips: false, externalAccountId: "1600000000000000002" });
+      // Its own id and its own handle (§45.37 G8: a matching handle alone would make it Clip Factory's).
+      Object.assign(s.social.find((a) => a.platform === "x")!, { connectionStatus: "connected", sharedWithClips: false, externalAccountId: "1600000000000000002", accountName: "Lamo Stories", handle: "@lamostories" });
     });
     expect(host.querySelector(".st-left__why")).toBeNull();
     expect($$(".st-steps__item").find((b) => b.textContent?.includes("Connect X"))!.className).toContain("is-done");
