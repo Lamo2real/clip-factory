@@ -37,6 +37,9 @@ import { CampaignsPage } from "../screens/campaigns/CampaignsPage.tsx";
 import { CampaignPage } from "../screens/campaigns/CampaignPage.tsx";
 import { FindPage } from "../screens/campaigns/FindPage.tsx";
 import { CrSendNow } from "../components/CrSendNow.tsx";
+import { BankDone, MockBankPage } from "../screens/getpaid/bank/BankDone.tsx";
+import { BANK_DONE_PATH } from "../getpaid/bank.ts";
+import { resetBank } from "../lib/bank.ts";
 import { GUIDES } from "../setup/index.ts";
 import { AskClipFactory } from "../features/help/HelpLauncher.tsx";
 import { AskMemoryProvider } from "../features/help/askMemory.tsx";
@@ -76,6 +79,7 @@ const TITLES: Record<Route["name"], string> = {
   mock_cr_consent: "Pretend Content Rewards",
   cr_setup: "Content Rewards setup · Settings",
   getpaid: "Get paid · Settings",
+  "getpaid-bank": "Your bank · Get paid · Settings",
   campaigns: "Your campaigns",
   campaigns_find: "Find campaigns",
   campaign: "Campaign",
@@ -99,8 +103,12 @@ export function titleFor(route: Route): string {
   return TITLES[route.name];
 }
 
+/** BankID's way back (§40.5.2): /bank-done is shown before the sign-in gate. */
+export const isBankDone = (pathname: string) => (pathname.replace(/\/+$/, "") || "/") === BANK_DONE_PATH;
+
 export function App() {
   const [boot, setBoot] = useState<Boot>({ state: "loading" });
+  const [bankDone] = useState(() => typeof location !== "undefined" && isBankDone(location.pathname));
   const prefs = usePrefs();
 
   const start = useCallback(async () => {
@@ -125,6 +133,7 @@ export function App() {
         forgetLoaded();
         resetCr();
         resetGetPaid();
+        resetBank();
         resetFinder();
         setBoot({ state: "signed_out", note: "Your sign-in on this device has ended. Please sign in again." });
       }),
@@ -142,6 +151,7 @@ export function App() {
     forgetLoaded();
     resetCr();
     resetGetPaid();
+    resetBank();
     resetFinder();
     setBoot({ state: "signed_out", note: null });
   }, []);
@@ -153,7 +163,10 @@ export function App() {
       {/* The desktop window's title bar band (macOS, §11.1): invisible, and only there when look.ts set
           data-titlebar="overlay". Pressing it moves the window, and a double click zooms it, like a title bar. */}
       <div className="titlebar-drag" data-tauri-drag-region="" aria-hidden="true" />
-      {boot.state === "loading" ? (
+      {/* BankID's way back (§40.5.2): a public page, before the sign-in gate, with no API call and no data. */}
+      {bankDone ? (
+        <BankDone boot={boot.state} />
+      ) : boot.state === "loading" ? (
         <div className="boot" role="status" aria-label="Loading Clip Factory">
           <span className="brand__mark brand__mark--boot" aria-hidden="true">
             C<span className="brand__dot" />
@@ -173,7 +186,7 @@ export function App() {
           <AskMemoryProvider>{storiesEnabled() ? <BothApps /> : <Shell />}</AskMemoryProvider>
         </SessionProvider>
       )}
-      {boot.state === "ready" || boot.state === "signed_out" ? <UpdateBar /> : null}
+      {!bankDone && (boot.state === "ready" || boot.state === "signed_out") ? <UpdateBar /> : null}
     </ToastProvider>
   );
 }
@@ -271,6 +284,8 @@ function Shell() {
   // Mock mode's pretend consent pages stand alone, like the platform's real page would.
   if (route.name === "mock_oauth") return <MockConsent platform={route.platform} />;
   if (route.name === "mock_cr_consent") return <MockCrConsent />;
+  // Mock builds only: the pretend bank page a connect goes to (§40.5.11). It is a whole page load, so the address says.
+  if (import.meta.env.VITE_MOCK === "1" && location.pathname === "/mock-bank") return <MockBankPage />;
 
   return (
     <div className="app">
@@ -331,6 +346,8 @@ function Screen({ route }: { route: Route }) {
       return <Settings tree="posting" branch="setup" contentRewards />;
     case "getpaid":
       return <Settings tree="posting" branch="getpaid" getPaid={route.place} />;
+    case "getpaid-bank":
+      return <Settings tree="posting" branch="getpaid" bank />;
     case "campaigns":
       return <CampaignsPage />;
     case "campaigns_find":

@@ -115,10 +115,13 @@ describe("no money guesses (§25, ADR-47)", () => {
   // §40.4: Get paid's screens show what Google or Whop reported, only formatted: never added, converted or guessed,
   // and never typed in (the mock's copy of the server is the one exception).
   it("Get paid only formats: no amount or cents worked out on its screens, no money field to type", () => {
-    const screens = ["lib/getPaid.ts", "screens/money/GetPaidCard.tsx", ...readdirSync(join(SRC, "screens/getpaid")).map((f) => `screens/getpaid/${f}`), ...readdirSync(join(SRC, "getpaid")).map((f) => `getpaid/${f}`)];
-    expect(screens.length).toBeGreaterThan(8);
+    // Every file under screens/getpaid (Your bank's folder too) and getpaid/. Your bank's two fixed promises name an
+    // account number and an IBAN only to say Clip Factory never has one (§40.5.2): they are taken out first.
+    const screens = ["lib/getPaid.ts", "lib/bank.ts", "screens/money/GetPaidCard.tsx", ...files(join(SRC, "screens/getpaid")).map(rel), ...files(join(SRC, "getpaid")).map(rel)];
+    expect(screens.length).toBeGreaterThan(16);
+    const promises = (t: string) => t.replace(/Never your account number, your name or any other payment\./g, "").replace(/^export const BANK_NEVER = .*$/m, "");
     for (const f of screens) {
-      const text = code(join(SRC, f));
+      const text = promises(code(join(SRC, f)));
       expect(text, f).not.toMatch(/amountMicros\s*[-+*/]|[-+*/]=?\s*[\w.]*amountMicros\b/);
       expect(text, f).not.toMatch(/Cents\b\s*[-+*/]|[-+*/]\s*[\w.]*Cents\b/);
       expect(text, f).not.toMatch(/\.reduce\(/);
@@ -126,6 +129,23 @@ describe("no money guesses (§25, ADR-47)", () => {
       expect(text, f).not.toMatch(/type="number"|inputMode="(decimal|numeric)"|iban|account number|card number|tax number/i);
     }
     expect(read(join(SRC, "screens/getpaid/SentRows.tsx"))).toContain("formatMoney(");
+  });
+
+  // §40.5.9: what reached his bank is the server's sums, per place and per currency. Your bank's screens only format
+  // them: nothing added, converted or estimated, no box to type an amount, and every answer is a tap. The mock's copy
+  // of the server (api/mock/bank.ts) is the one place that adds, like the other mocks.
+  it("Your bank only formats: no amount worked out on its screens, nothing typed, amounts only through formatMoney", () => {
+    const bank = [...files(join(SRC, "screens/getpaid/bank")), join(SRC, "getpaid/bank.ts"), join(SRC, "lib/bank.ts")];
+    expect(bank.length).toBeGreaterThanOrEqual(10);
+    for (const f of bank) {
+      const text = code(f);
+      expect(text, rel(f)).not.toMatch(/amount(Micros|Minor)\s*[-+*/]|[-+*/]=?\s*[\w.]*amount(Micros|Minor)\b/);
+      expect(text, rel(f)).not.toMatch(/\.reduce\(|\bexponent\b|toFixed\(/);
+      expect(text, rel(f)).not.toMatch(/type="number"|inputMode="(decimal|numeric)"|parseFloat\(|Number\(\s*\w*[Aa]mount/);
+    }
+    const money = read(join(SRC, "screens/getpaid/bank/BankMoney.tsx"));
+    expect(money).toContain("formatMoney(");
+    expect(read(join(SRC, "screens/getpaid/bank/BankAsks.tsx"))).toContain("formatMoney(ask.amountMicros, ask.currency)");
   });
 
   // §41: the campaign finder shows only Content Rewards' own published numbers (pay per 1,000 views, the most a clip

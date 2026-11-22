@@ -54,10 +54,10 @@ export function backoffDelay(attempt: number, random: () => number = Math.random
   return Math.round(base * (0.8 + 0.4 * random()));
 }
 
-const TYPES: readonly LiveItemType[] = ["job", "clip", "post", "learning", "week", "setup", "follow", "jobLive", "contentrewards", "getpaid"];
+const TYPES: readonly LiveItemType[] = ["job", "clip", "post", "learning", "week", "setup", "follow", "jobLive", "contentrewards", "getpaid", "bank"];
 
-/** Partial news only some screens refetch themselves: setup (GET /v1/setup), Content Rewards (§38.11), Get paid (§40.7). */
-const OWN_REFETCH: readonly LiveItemType[] = ["setup", "contentrewards", "getpaid"];
+/** Partial news only some screens refetch themselves: setup (GET /v1/setup), Content Rewards (§38.11), Get paid (§40.7), Your bank (§40.5.11). */
+const OWN_REFETCH: readonly LiveItemType[] = ["setup", "contentrewards", "getpaid", "bank"];
 
 /** Reads one server message. Pongs, errors and anything malformed give null (they change nothing on screen). */
 export function parseLiveMessage(data: unknown): LiveEvent | null {

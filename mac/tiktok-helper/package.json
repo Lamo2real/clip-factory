@@ -1,0 +1,19 @@
+{
+  "name": "clip-factory-tiktok-helper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Posts the owner's Clip Factory clips on TikTok from his Mac, in a background Chrome profile (docs/CONTRACTS.md §47).",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "run-once": "node src/cli.js run",
+    "setup": "node src/cli.js setup",
+    "status": "node src/cli.js status"
+  },
+  "dependencies": {
+    "playwright-core": "1.65.1"
+  }
+}

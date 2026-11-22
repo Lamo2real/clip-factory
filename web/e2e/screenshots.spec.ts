@@ -797,5 +797,26 @@ for (const size of [
         await page.screenshot({ path: join(dir, `${name}${suffix}.png`) });
       }
     });
+
+    // Your bank (§40.5.13): nothing set up, a bank connected, its questions, and Money's Reached your bank, so far.
+    test("screenshot your bank", async ({ page }) => {
+      await page.goto("/");
+      await settle(page);
+      await page.waitForFunction(() => !!(window as unknown as { __cfMock?: { bank?: unknown } }).__cfMock?.bank);
+      const scenario = (n: string) => page.evaluate((x) => (window as unknown as { __cfMock: { bank: { scenario(n: string): void } } }).__cfMock.bank.scenario(x), n);
+      for (const [name, start, path, at] of [
+        ["getpaid-bank", "fresh", "/settings/posting/getpaid/bank", null],
+        ["getpaid-bank-connected", "connected", "/settings/posting/getpaid/bank", "[data-help='bank-links']"],
+        ["getpaid-bank-asks", "connected", "/settings/posting/getpaid/bank", "#bank-asks"],
+        ["money-reached", "connected", "/money", "[data-help='money-reached']"],
+      ] as const) {
+        await scenario(start);
+        await page.goto(path);
+        await settle(page);
+        if (at) await page.locator(at).evaluate((el) => el.scrollIntoView({ block: "start" }));
+        await page.waitForTimeout(500);
+        await page.screenshot({ path: join(dir, `${name}${suffix}.png`) });
+      }
+    });
   });
 }
