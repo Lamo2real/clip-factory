@@ -279,6 +279,69 @@ export const TREES: Tree[] = [
         ],
       },
       {
+        // Auto-posting (docs/CONTRACTS.md §46.2): the oldest clips in Review go up by themselves, every few hours.
+        slug: "auto",
+        name: "Auto-posting",
+        line: "The oldest clips in Review go up by themselves, every few hours.",
+        icon: "clock",
+        apples: [
+          {
+            id: "auto-post-on",
+            name: "Post my clips by themselves",
+            leaf: "Clips in Review go up without your tap. Throw one away to stop it.",
+            words: ["auto", "autopost", "auto-post", "automatic", "schedule", "by itself", "without approval", "on", "off"],
+          },
+          {
+            id: "auto-post-every",
+            name: "How often",
+            leaf: "Post every few hours, a few clips each time. Even gaps, also across midnight.",
+            words: ["hours", "every", "how many", "clips each time", "per day", "a day", "interval", "frequency", "timer"],
+          },
+          {
+            id: "auto-post-where",
+            name: "Where they go",
+            leaf: "Every place that is set up, with My settings. TikTok waits for your own tap.",
+            words: ["platforms", "YouTube", "Instagram", "Facebook", "X", "TikTok", "places", "my settings"],
+          },
+          {
+            id: "auto-post-next",
+            name: "Next up",
+            leaf: "The oldest clips in Review go first.",
+            words: ["queue", "line", "order", "oldest", "next", "throw away", "decline"],
+          },
+          {
+            id: "auto-post-waiting",
+            name: "Waits for you",
+            leaf: "Clips auto-posting skips, and why. Upload them yourself.",
+            words: ["skipped", "campaign", "check", "waiting", "missing"],
+          },
+          {
+            id: "auto-post-failed",
+            name: "Didn't work",
+            leaf: "Posts that did not go up, with what went wrong.",
+            words: ["failed", "error", "try again", "retry"],
+          },
+          {
+            id: "auto-post-tiktok",
+            name: "Post these on TikTok yourself",
+            leaf: "TikTok wants your own tap on each clip.",
+            words: ["TikTok", "post it yourself", "yourself"],
+          },
+          {
+            id: "auto-post-recent",
+            name: "Recent",
+            leaf: "The last runs, newest first.",
+            words: ["history", "runs", "log", "posted", "open"],
+          },
+          {
+            id: "auto-post-test",
+            name: "Test it first",
+            leaf: "Practice, or a private test run. Nothing public.",
+            words: ["practice", "test", "private", "try", "dry run", "only me", "draft"],
+          },
+        ],
+      },
+      {
         slug: "money",
         name: "Money",
         line: "How close you are to getting paid, and real money each app reports.",

@@ -75,7 +75,8 @@ jobs:
             | if ($j | type) == "object"
               then ($j | {level, event, job, jobId, step, index, what, kind, error, errorType, timedOut, outcome, status,
                           code, platform, result, reason, starts, sent, type, stopped, started, superseded, seconds, free, height, estBytes,
-                          owners, days, rules, jsonrpc, signedIn, membership,
+                          owners, days, rules, jsonrpc, signedIn, membership, runId, slot, mode, clips, note, ran,
+                          clipId, clipIds,
                           detail: ((.detail // null) | if . then .[0:300] else null end)} | with_entries(select(.value != null)) | tojson)
               else ($m | gsub("\n"; " ") | .[0:400]) end'
 
@@ -115,15 +116,17 @@ jobs:
           done
 
           # Content Rewards (CONTRACTS §38/§39): cr.* events come from cf-prod-api, cf-prod-clip-flow and cf-prod-stats,
-          # campaigns.* from cf-prod-campaigns. The regex matches the JSON "event" value, also when Lambda wraps the line.
-          for fn in cf-prod-job-flow cf-prod-api cf-prod-clip-flow cf-prod-hooks cf-prod-campaigns cf-prod-stats; do
-            echo "::group::/aws/lambda/$fn: job, posting, connect and Content Rewards events, errors, timeouts"
+          # campaigns.* from cf-prod-campaigns. Auto-posting (§46): autopost.* from cf-prod-autopost (the hourly run) and
+          # cf-prod-api (Practice run now, Private test run). The regex matches the JSON "event" value, also when Lambda
+          # wraps the line.
+          for fn in cf-prod-job-flow cf-prod-api cf-prod-clip-flow cf-prod-hooks cf-prod-campaigns cf-prod-stats cf-prod-autopost; do
+            echo "::group::/aws/lambda/$fn: job, posting, connect, Content Rewards and auto-posting events, errors, timeouts"
             if [ -z "$(aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/$fn" \
                   --query "logGroups[?logGroupName=='/aws/lambda/$fn'].logGroupName" --output text)" ]; then
               echo "no log group /aws/lambda/$fn"; echo "::endgroup::"; continue
             fi
             query "/aws/lambda/$fn" "fields @timestamp, @logStream, @message
-              | filter @message like /(?i)error|exception|traceback|timeout|timed out|job_flow\\.|clip_flow\\.|publish\\.|oauth\\.|hooks\\.|secrets\\.|callback|heartbeat|retry|event\\W{1,8}(cr|campaigns)\\./
+              | filter @message like /(?i)error|exception|traceback|timeout|timed out|job_flow\\.|clip_flow\\.|publish\\.|oauth\\.|hooks\\.|secrets\\.|callback|heartbeat|retry|event\\W{1,8}(cr|campaigns|autopost)\\./
               $job_filter
               | sort @timestamp asc | limit 2000"
             echo "::endgroup::"
