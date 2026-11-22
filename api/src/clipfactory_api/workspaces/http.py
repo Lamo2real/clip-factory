@@ -1,7 +1,9 @@
 """``cf-prod-stories-api``: Lamo Stories' own Lambda (docs/CONTRACTS.md §45.5, §45.24, ADR-76).
 
-API Gateway sends ``ANY /v1/workspaces`` and ``ANY /v1/workspaces/{proxy+}`` here; every other path still goes to
-``cf-prod-api``, whose route table (``routes.ROUTES``) does not include these routes. The request handling, JWT claims
+API Gateway sends ``ANY /v1/workspaces``, ``ANY /v1/workspaces/{proxy+}`` and the public
+``GET /v1/stories-oauth/{platform}/callback`` (§45.13.3) here; every other path still goes to ``cf-prod-api``, whose
+route table (``routes.ROUTES``) does not include these routes. The callback is in ``routes.social.CALLBACK_ROUTES``,
+kept apart from the JWT table ``routes.ROUTES``. The request handling, JWT claims
 and error envelopes are the shared ``http.dispatch`` (used read-only).
 """
 
@@ -26,5 +28,6 @@ def _get_app() -> App:
 
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     from .routes import ROUTES
+    from .routes.social import CALLBACK_ROUTES
 
-    return dispatch(event, _get_app, ROUTES)
+    return dispatch(event, _get_app, [*ROUTES, *CALLBACK_ROUTES])
