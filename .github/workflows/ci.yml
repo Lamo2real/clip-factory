@@ -49,6 +49,29 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      # Lamo Stories stays out of Clip Factory's first download (CONTRACTS §45.17): the page loads one script and one
+      # stylesheet (index.html), and neither carries Lamo Stories' look (.stories-app, --st-*, st- classes), its shell
+      # (StoriesApp) or its animation engine; they come in their own chunks, only when a /stories page opens. The
+      # markers are first proven to be in the build at all, so the check can never pass by looking for nothing.
+      - name: Lamo Stories is not in the main bundle
+        run: |
+          set -euo pipefail
+          js=$(grep -oE '<script[^>]+src="/assets/[^"]+\.js"' dist/index.html | sed -E 's/.*src="\/([^"]+)".*/\1/')
+          css=$(grep -oE '<link[^>]+href="/assets/[^"]+\.css"' dist/index.html | sed -E 's/.*href="\/([^"]+)".*/\1/')
+          extra=$(grep -oE '<link[^>]+rel="modulepreload"[^>]+href="/assets/[^"]+"' dist/index.html | sed -E 's/.*href="\/([^"]+)".*/\1/' || true)
+          [ -n "$js" ] && [ -n "$css" ] || { echo "index.html names no main script or stylesheet"; exit 1; }
+          markers_js='stories-app|st-rail|st-tabbar|st-frame|steer_left|tyre_burst|facepalm'
+          markers_css='stories-app|--st-|\.st-[a-z]'
+          grep -lqE "$markers_js" dist/assets/*.js || { echo "no Lamo Stories chunk found: the markers are stale"; exit 1; }
+          grep -lqE "$markers_css" dist/assets/*.css || { echo "no Lamo Stories stylesheet found: the markers are stale"; exit 1; }
+          bad=0
+          for f in $js $extra; do
+            case "$f" in *.js) if grep -qE "$markers_js" "dist/$f"; then echo "::error::$f (loaded by index.html) carries Lamo Stories code: $(grep -oE "$markers_js" "dist/$f" | sort -u | tr '\n' ' ')"; bad=1; fi ;; esac
+          done
+          for f in $css; do
+            if grep -qE "$markers_css" "dist/$f"; then echo "::error::$f (loaded by index.html) carries Lamo Stories styles: $(grep -oE "$markers_css" "dist/$f" | sort -u | head -5 | tr '\n' ' ')"; bad=1; fi
+          done
+          [ "$bad" = 0 ] && echo "Main bundle: $js $css $extra: no Lamo Stories code or styles."
 
   # About 760 Playwright tests at many widths took 32 to 40 minutes as one job. Playwright splits them evenly
   # over the shards below (fullyParallel, so it splits test by test); each shard builds the mock app once and

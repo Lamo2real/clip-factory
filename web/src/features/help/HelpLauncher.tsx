@@ -3,11 +3,11 @@
 // tab bar or the update bar. It keeps that one spot and never moves; once the page is still, if it would make a
 // control under it hard to tap, it fades out in place, and back in when the spot is clear (dodge.ts). Green glass,
 // never vermilion.
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AskMark } from "../../components/AskMark.tsx";
 import { useMedia } from "../../lib/hooks.ts";
 import { useRoute } from "../../lib/router.ts";
-import { chatReducer, initialChat, useRevokeDropped } from "./chatState.ts";
+import { useAskMemory } from "./askMemory.tsx";
 import { HELP_EVENT } from "./context.ts";
 import { useDodge } from "./dodge.ts";
 import { defaultHelpClient, type HelpClient } from "./helpApi.ts";
@@ -32,7 +32,10 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
   const sw = useHelpSwitch();
   const phone = useMedia("(max-width: 767px)");
   const [client, setClient] = useState<HelpClient | null>(given ?? null);
-  const [open, setOpen] = useState(false);
+  // The conversation and the open panel live in Ask's memory (askMemory.tsx), in memory only (§19.2, §19.8), so
+  // closing the panel (on phones, an answer button closes it) and opening it again shows the last answer, and so
+  // does switching to Lamo Stories and back (§45.16.1). Start over clears it; nothing is ever stored.
+  const { chat, dispatch, generation, open, setOpen } = useAskMemory();
   const [question, setQuestion] = useState<string | null>(null);
   /** Files dropped on the launcher (§28.7): the panel opens with them in the tray. */
   const [dropped, setDropped] = useState<File[] | null>(null);
@@ -43,12 +46,6 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
   const launcher = useRef<HTMLButtonElement>(null);
   const opener = useRef<HTMLElement | null>(null);
   const { hidden, reason } = useDodge(launcher, open || focused, open);
-  // The conversation lives here, in memory only (§19.2, §19.8), so closing the panel (on phones, an answer button
-  // closes it) and opening it again shows the last answer. Start over clears it; nothing is ever stored.
-  const [chat, dispatch] = useReducer(chatReducer, initialChat);
-  const generation = useRef(0);
-  // Pictures are object URLs: each is let go when it leaves the chat, and all of them when Ask goes (sign-out).
-  useRevokeDropped(chat);
 
   // A file dropped anywhere no drop zone took it must never replace the app (the Mac app hands drops to the page
   // since Ask takes pictures, §26): the drop is ignored.
@@ -105,7 +102,7 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
     if (opts.returnFocus === false) return;
     const back = opener.current && opener.current.isConnected ? opener.current : launcher.current;
     requestAnimationFrame(() => (back ?? launcher.current)?.focus({ preventScroll: true }));
-  }, []);
+  }, [setOpen]);
 
   // Open from anywhere: window.dispatchEvent(new CustomEvent("cf:help", { detail: { question } })).
   useEffect(() => {
@@ -119,14 +116,14 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
     };
     window.addEventListener(HELP_EVENT, onOpen);
     return () => window.removeEventListener(HELP_EVENT, onOpen);
-  }, []);
+  }, [setOpen]);
 
   // Turned off while open: the panel says so once, then closes.
   useEffect(() => {
     if (sw !== "off" || !open) return;
     const t = setTimeout(() => setOpen(false), OFF_CLOSE_MS);
     return () => clearTimeout(t);
-  }, [sw, open]);
+  }, [sw, open, setOpen]);
 
   const takeQuestion = useCallback(() => setQuestion(null), []);
   const takeFiles = useCallback(() => setDropped(null), []);

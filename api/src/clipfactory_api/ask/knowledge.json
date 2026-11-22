@@ -1,5 +1,5 @@
 {
- "version": "1c063afe1d72",
+ "version": "4b5eb11fcfb4",
  "parts": [
   {
    "id": "app-map",
@@ -813,7 +813,7 @@
    "id": "deployment-desktop-downloads",
    "title": "DEPLOYMENT: Desktop downloads",
    "line": "The Mac .dmg and Windows .exe offered by Get the app are built by the desktop job in",
-   "chars": 6245
+   "chars": 6633
   },
   {
    "id": "deployment-clip-numbers-and-their-limits",
