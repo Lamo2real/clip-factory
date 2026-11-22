@@ -45,6 +45,10 @@ HELPER_STATES = ("ok", "needs_you", "paused")
 HELPER_SK = "MACHELPER"
 # A claim whose helper sent no step for this long, and that never pressed Post, belongs to a helper that crashed.
 STALE_CLAIM = timedelta(minutes=15)
+# §47.8: the TikTok login the helper keeps in the Mac's Keychain, and what the owner can ask it to do with it.
+LOGIN_STATES = ("saved", "none")
+LOGIN_ACTIONS = ("change", "forget")
+NO_HELPER = "Set up your Mac first. Then it can keep your TikTok login."
 QUEUE_MAX = 50
 SEND_MAX = 25
 REASON_MAX = 200
@@ -168,6 +172,10 @@ def public_helper(item: Mapping[str, Any] | None) -> Item | None:
     for key in ("reason", "version"):
         if item.get(key):
             out[key] = str(item[key])
+    if item.get("login") in LOGIN_STATES:
+        out["login"] = str(item["login"])
+    if item.get("loginRequestAction") in LOGIN_ACTIONS and item.get("loginRequestAt"):
+        out["loginRequest"] = {"action": str(item["loginRequestAction"]), "at": str(item["loginRequestAt"])}
     return out
 
 
@@ -242,23 +250,53 @@ def _write(store: db.Store, row: Mapping[str, Any], request: Mapping[str, Any]) 
 
 
 def ping(
-    store: db.Store, user_id: str, *, state: str, device: str, reason: str | None, version: str | None, now: datetime
+    store: db.Store,
+    user_id: str,
+    *,
+    state: str,
+    device: str,
+    reason: str | None,
+    version: str | None,
+    now: datetime,
+    login: str | None = None,
+    login_done: str | None = None,
 ) -> None:
-    """The helper checks in: the ``MACHELPER`` item says when, how it is (``ok``, ``needs_you``, ``paused``) and why."""
-    item: Item = {
-        "pk": db.user_pk(user_id),
-        "sk": HELPER_SK,
-        "type": "machelper",
-        "userId": user_id,
-        "seenAt": iso(now),
-        "state": state,
-        "device": device,
-    }
+    """The helper checks in: the ``MACHELPER`` item says when, how it is (``ok``, ``needs_you``, ``paused``) and why,
+    and whether a TikTok login is kept in the Mac's Keychain (``login``: ``saved`` | ``none``, §47.8). The owner's
+    pending request (``loginRequestAction``/``loginRequestAt``) stays until the helper says it handled that one
+    (``login_done`` = its ``at``)."""
+    current = helper_item(store, user_id)
+    fields: Item = {"type": "machelper", "userId": user_id, "seenAt": iso(now), "state": state, "device": device}
     if reason:
-        item["reason"] = _reason(reason)
+        fields["reason"] = _reason(reason)
     if version:
-        item["version"] = version
-    store.put(item)
+        fields["version"] = version
+    if login in LOGIN_STATES:
+        fields["login"] = login
+    if current is None:
+        store.put({"pk": db.user_pk(user_id), "sk": HELPER_SK, **fields})
+    else:
+        store.update(
+            db.user_pk(user_id), HELPER_SK, fields, remove=["reason"] if not reason and "reason" in current else []
+        )
+    if login_done:
+        with contextlib.suppress(db.ConditionFailed):  # a newer request came meanwhile: it stays
+            store.update_expr(
+                db.user_pk(user_id),
+                HELPER_SK,
+                "REMOVE #la, #lt",
+                condition="#lt = :done",
+                names={"#la": "loginRequestAction", "#lt": "loginRequestAt"},
+                values={":done": login_done},
+            )
+
+
+def login_request(store: db.Store, user_id: str, action: str, now: datetime) -> Item:
+    """The owner's Change TikTok login / Forget TikTok login (§47.8): the helper does it the next time it checks in.
+    Returns the helper item. Refused when no Mac ever checked in."""
+    if helper_item(store, user_id) is None:
+        raise Refused(NO_HELPER)
+    return store.update(db.user_pk(user_id), HELPER_SK, {"loginRequestAction": action, "loginRequestAt": iso(now)})
 
 
 def claim(store: db.Store, clip: Mapping[str, Any], device: str, now: datetime, settings: Mapping[str, Any]) -> Item:

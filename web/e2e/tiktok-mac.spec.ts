@@ -13,6 +13,7 @@ type MockWindow = Window & {
     posting: { posts(clipId: string): { postId: string; platform: string; status: string }[] };
     mac: {
       ping(state?: string, reason?: string): { on: boolean };
+      login(login: "saved" | "none", done?: boolean): void;
       claim(clipId: string): Job;
       step(clipId: string, step: string): Job;
       done(clipId: string, link?: string): unknown;
@@ -52,6 +53,8 @@ const mac = {
   done: (page: Page, clipId: string, link?: string) =>
     page.evaluate(([id, l]) => void (window as MockWindow).__cfMock!.mac.done(id, l), [clipId, link] as const),
   queue: (page: Page) => page.evaluate(() => (window as MockWindow).__cfMock!.mac.queue()),
+  login: (page: Page, login: "saved" | "none", done?: boolean) =>
+    page.evaluate(([l, d]) => (window as MockWindow).__cfMock!.mac.login(l, d), [login, done] as const),
 };
 
 /** Settings › Posting › Your Mac posts TikTok, switched on. */
@@ -122,6 +125,37 @@ test("settings: the switch, the Mac's check-in and Send these to my Mac", async 
   await page.getByRole("switch", { name: "My Mac posts my TikTok clips" }).click();
   await expect(page.getByText("Off. TikTok works as before: Post it yourself.")).toBeVisible();
   await expect.poll(async () => (await mac.queue(page)).length).toBe(0);
+});
+
+test("settings: the TikTok login on the Mac, Change and Forget (§47.8)", async ({ page }) => {
+  await page.goto("/");
+  await settle(page);
+  await go(page, "/settings/posting/tiktok-mac");
+  // No Mac yet: nothing to change.
+  await expect(page.getByRole("button", { name: "Change TikTok login" })).toHaveCount(0);
+  await mac.ping(page);
+  await mac.login(page, "saved");
+  await refocus(page);
+  await expect(page.getByText("Your TikTok login is kept in your Mac's Keychain, so your Mac logs back in to TikTok by itself.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Change TikTok login" }).click();
+  await expect(page.getByText("Your Mac asks for the new login the next time it checks in, within a minute.")).toBeVisible();
+
+  // Forget asks first; Not now leaves it.
+  await page.getByRole("button", { name: "Forget TikTok login" }).click();
+  await expect(page.getByText("Forget it? Then your Mac can't log back in to TikTok by itself.")).toBeVisible();
+  await page.getByRole("button", { name: "Not now" }).click();
+  await page.getByRole("button", { name: "Forget TikTok login" }).click();
+  await page.getByRole("button", { name: "Yes, forget it" }).click();
+  await expect(page.getByText("Your Mac forgets the login the next time it checks in, within a minute.")).toBeVisible();
+
+  // The Mac did it: no login kept, so there is nothing to forget.
+  await mac.login(page, "none", true);
+  await refocus(page);
+  await expect(page.getByText("No TikTok login is kept on your Mac. If TikTok logs your Mac out, you log in again on the Mac.")).toBeVisible();
+  await expect(page.getByText(/the next time it checks in/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Forget TikTok login" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Change TikTok login" })).toBeVisible();
 });
 
 test("library: the TikTok row as the Mac waits, works, stops, tries again and posts it", async ({ page }) => {

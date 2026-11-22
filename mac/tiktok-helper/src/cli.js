@@ -6,15 +6,20 @@
 //   node src/cli.js status        what the helper sees
 //   node src/cli.js off | on      pause or resume on this Mac (the switch in Clip Factory is the main one)
 //   node src/cli.js trial <n|none>  posts before the trial pause (none = no limit)
+//   node src/cli.js login          ON THE OWNER'S COMMAND: two Mac dialogs ask for the TikTok login once and keep it
+//                                 in the Keychain, so the helper can log back in by itself (yellow frame meanwhile)
+//   node src/cli.js forget-login   deletes the saved TikTok login from the Keychain
 //   node src/cli.js probe <clipId>  a check run in the hidden Chrome: fills in TikTok Studio for that clip exactly as
 //                                 for a post, reads every setting back, then stops before Post (nothing is posted,
 //                                 nothing is claimed). Saves a picture of the filled-in page as probe.png.
 import { client } from "./api.js";
+import { frame, yourTurn } from "./frame.js";
+import { askAndSaveLogin, forgetLogin, hasLogin } from "./login.js";
 import { accessToken, appConfig, readRefreshToken, saveRefreshToken } from "./auth.js";
 import * as chrome from "./chrome.js";
 import { event, log } from "./notify.js";
 import { APP_URL, BASE } from "./paths.js";
-import { loadSettings, loadState, saveSettings } from "./store.js";
+import { loadSettings, loadState, saveSettings, saveState } from "./store.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -91,11 +96,24 @@ async function probe(clipId) {
   if (!res.ok) throw new Error(`The video did not download (${res.status}).`);
   const file = path.join(DOWNLOADS, freeName(filename, (n) => fs.existsSync(path.join(DOWNLOADS, n))));
   fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+  const fr = frame();
+  if (!(await fr.on(`Check run: filling in TikTok for “${job.hook}” (nothing is posted)`))) {
+    fs.rmSync(file, { force: true });
+    throw new Error("The red frame couldn't be shown, so the check didn't run.");
+  }
   const { browser, page } = await chrome.open();
+  let ok = false;
   try {
     const steps = [];
-    const result = await post(page, job, file, async (s) => steps.push(s), { dryRun: true });
+    const result = await post(page, job, file, async (s) => { steps.push(s); await fr.step(`Check run: ${s}`); }, { dryRun: true });
+    ok = true;
     await page.screenshot({ path: path.join(BASE, "probe.png"), fullPage: true }).catch(() => {});
+    // A second picture with the settings in view: who can see it, Comment, Reuse of content.
+    const heading = page.getByText(/^(Who can see this post|Who can watch this video)$/).first();
+    await heading.scrollIntoViewIfNeeded().catch(() => {});
+    await page.mouse.wheel(0, 200).catch(() => {});
+    await new Promise((r) => setTimeout(r, 600));
+    await page.screenshot({ path: path.join(BASE, "probe-settings.png") }).catch(() => {});
     console.log(JSON.stringify({ ok: true, steps, ...result, baseline: undefined }, null, 2));
   } catch (e) {
     await page.screenshot({ path: path.join(BASE, "probe.png"), fullPage: true }).catch(() => {});
@@ -103,6 +121,8 @@ async function probe(clipId) {
   } finally {
     await chrome.quit(browser);
     fs.rmSync(file, { force: true });
+    if (ok) await fr.done("Check run done: nothing was posted");
+    else await fr.off();
   }
 }
 
@@ -141,6 +161,21 @@ try {
   } else if (cmd === "off" || cmd === "on") {
     saveSettings({ paused: cmd === "off" });
     console.log(cmd === "off" ? "Paused on this Mac." : "Running on this Mac.");
+  } else if (cmd === "login") {
+    const saved = await yourTurn("Type your TikTok login in the two Mac dialogs (kept only in your Keychain)", () => askAndSaveLogin());
+    if (saved) {
+      const state = loadState();
+      delete state.loginRefused; // a new login may be tried again
+      state.loginTries = [];
+      saveState(state);
+      event("login_saved", {});
+    }
+    console.log(saved ? "Saved in the Keychain." : "Not saved (cancelled or no answer).");
+    process.exitCode = saved ? 0 : 1;
+  } else if (cmd === "forget-login") {
+    await forgetLogin();
+    event("login_forgotten", {});
+    console.log((await hasLogin()) ? "Still there?" : "Forgotten.");
   } else if (cmd === "probe") {
     if (!arg) throw new Error("probe takes a clip id");
     await probe(arg);
@@ -150,7 +185,7 @@ try {
     saveSettings({ trialLimit: n });
     console.log(`Trial limit: ${n === null ? "none" : n}.`);
   } else {
-    console.log("Commands: run, setup, status, off, on, trial <n|none>, probe <clipId>");
+    console.log("Commands: run, setup, login, forget-login, status, off, on, trial <n|none>, probe <clipId>");
     process.exitCode = 2;
   }
 } catch (e) {

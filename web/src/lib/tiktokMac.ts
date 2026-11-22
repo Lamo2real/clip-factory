@@ -141,6 +141,26 @@ export function helperLine(helper: MacHelper | null, now: number = Date.now()): 
   return `Your Mac checked in ${timeWords(helper.seenAt, now)}.`;
 }
 
+// §47.8: the TikTok login on the owner's Mac (kept in its Keychain; never in Clip Factory).
+export const MAC_LOGIN_SAVED = "Your TikTok login is kept in your Mac's Keychain, so your Mac logs back in to TikTok by itself.";
+export const MAC_LOGIN_NONE = "No TikTok login is kept on your Mac. If TikTok logs your Mac out, you log in again on the Mac.";
+export const MAC_LOGIN_FORGET_CONFIRM = "Forget it? Then your Mac can't log back in to TikTok by itself.";
+
+/** The login line, or null for a Mac helper from before it said (§47.8). */
+export function loginLine(helper: MacHelper | null): string | null {
+  if (!helper?.login) return null;
+  return helper.login === "saved" ? MAC_LOGIN_SAVED : MAC_LOGIN_NONE;
+}
+
+/** What happens next after Change or Forget. */
+export function loginRequestLine(helper: MacHelper | null): string | null {
+  const req = helper?.loginRequest;
+  if (!req) return null;
+  return req.action === "change"
+    ? "Your Mac asks for the new login the next time it checks in, within a minute."
+    : "Your Mac forgets the login the next time it checks in, within a minute.";
+}
+
 /** "{n} waiting for your Mac". */
 export function waitingLine(n: number): string {
   return `${n} waiting for your Mac`;

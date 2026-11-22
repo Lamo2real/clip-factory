@@ -66,7 +66,7 @@ def status(app: App, req: Request) -> Response:
 def ping(app: App, req: Request) -> Response:
     """``POST /v1/tiktok/mac/ping`` ``{state, reason?, version?, device}`` → ``{on}``."""
     body = req.json()
-    validate.only_keys(body, {"state", "reason", "version", "device"})
+    validate.only_keys(body, {"state", "reason", "version", "device", "login", "loginDone"})
     state = body.get("state")
     if state not in tiktok_mac.HELPER_STATES:
         raise bad_request("state must be ok, needs_you or paused.")
@@ -75,8 +75,37 @@ def ping(app: App, req: Request) -> Response:
         raise bad_request("reason must be text.")
     version = validate.string(body, "version", required=False, max_len=VERSION_MAX)
     device = _device(body)
-    tiktok_mac.ping(app.store, req.user_id, state=state, device=device, reason=reason, version=version, now=app.clock())
+    login = body.get("login")
+    if login is not None and login not in tiktok_mac.LOGIN_STATES:
+        raise bad_request("login must be saved or none.")
+    login_done = validate.string(body, "loginDone", required=False, max_len=40)
+    tiktok_mac.ping(
+        app.store,
+        req.user_id,
+        state=state,
+        device=device,
+        reason=reason,
+        version=version,
+        now=app.clock(),
+        login=login,
+        login_done=login_done,
+    )
     return ok({"on": tiktok_mac.is_on(settings.load(app.store, req.user_id))})
+
+
+def login(app: App, req: Request) -> Response:
+    """``POST /v1/tiktok/mac/login`` ``{action: "change" | "forget"}`` → ``{helper}`` (§47.8)."""
+    body = req.json()
+    validate.only_keys(body, {"action"})
+    action = body.get("action")
+    if action not in tiktok_mac.LOGIN_ACTIONS:
+        raise bad_request("Pick change or forget.")
+    try:
+        item = tiktok_mac.login_request(app.store, req.user_id, str(action), app.clock())
+    except tiktok_self.Refused as e:
+        raise _refused(e) from None
+    log("info", "tiktok_mac.login_request", action=action)
+    return ok({"helper": tiktok_mac.public_helper(item)})
 
 
 def send(app: App, req: Request) -> Response:

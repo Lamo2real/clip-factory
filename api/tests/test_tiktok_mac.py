@@ -503,6 +503,49 @@ def test_the_queue_holds_at_most_fifty(call: Call, store: db.Store) -> None:
     assert len(call("GET", "/v1/tiktok/mac")[1]["queue"]) == tiktok_mac.QUEUE_MAX
 
 
+def test_the_tiktok_login_on_the_mac_change_and_forget(call: Call, table: FakeTable, clock: Clock) -> None:
+    """§47.6: the helper says whether a TikTok login is kept in the Mac's Keychain; the owner's Change or Forget waits
+    on the helper item until the helper says it handled that request. The login itself never reaches the server."""
+    status, body = call("POST", "/v1/tiktok/mac/login", {"action": "forget"})
+    assert (status, _message(body)) == (409, "Set up your Mac first. Then it can keep your TikTok login.")
+    ping = {"state": "ok", "device": DEVICE, "login": "saved"}
+    assert call("POST", "/v1/tiktok/mac/ping", ping)[0] == 200
+    assert call("GET", "/v1/tiktok/mac")[1]["helper"]["login"] == "saved"
+    status, body = call("POST", "/v1/tiktok/mac/login", {"action": "change"})
+    assert status == 200
+    request = body["helper"]["loginRequest"]
+    assert request == {"action": "change", "at": iso(NOW)}
+    # Check-ins keep it until the helper did it.
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "ok", "device": DEVICE})[0] == 200
+    helper = call("GET", "/v1/tiktok/mac")[1]["helper"]
+    assert helper["loginRequest"] == request
+    assert helper["login"] == "saved"  # a ping without login keeps what the Mac said before
+    # A newer request is not cleared by an older one's done.
+    assert call("POST", "/v1/tiktok/mac/ping", {**ping, "loginDone": "2026-11-15T09:00:00.000Z"})[0] == 200
+    assert call("GET", "/v1/tiktok/mac")[1]["helper"]["loginRequest"] == request
+    assert call("POST", "/v1/tiktok/mac/ping", {**ping, "login": "none", "loginDone": request["at"]})[0] == 200
+    helper = call("GET", "/v1/tiktok/mac")[1]["helper"]
+    assert "loginRequest" not in helper
+    assert helper["login"] == "none"
+    raw = table.raw(PK, "MACHELPER")
+    assert raw is not None
+    assert not {"password", "username"} & set(raw)
+
+
+def test_the_login_routes_refuse_what_they_do_not_know(call: Call) -> None:
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "ok", "device": DEVICE})[0] == 200
+    assert call("POST", "/v1/tiktok/mac/login", {"action": "show"})[0] == 400
+    assert call("POST", "/v1/tiktok/mac/login", {"action": "forget", "password": "x"})[0] == 400
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "ok", "device": DEVICE, "login": "maybe"})[0] == 400
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "ok", "device": DEVICE, "password": "x"})[0] == 400
+
+
+def test_a_ping_without_a_reason_clears_the_old_one(call: Call) -> None:
+    call("POST", "/v1/tiktok/mac/ping", {"state": "paused", "reason": "Paused on your Mac.", "device": DEVICE})
+    call("POST", "/v1/tiktok/mac/ping", {"state": "ok", "device": DEVICE})
+    assert "reason" not in call("GET", "/v1/tiktok/mac")[1]["helper"]
+
+
 def test_ping_writes_the_helper_item_and_answers_on(call: Call, table: FakeTable, clock: Clock) -> None:
     status, body = call("POST", "/v1/tiktok/mac/ping", {"state": "ok", "device": DEVICE, "version": "1.0.0"})
     assert (status, body) == (200, {"on": False})

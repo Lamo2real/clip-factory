@@ -13,6 +13,8 @@ import {
   macInsteadOk,
   macMayBeOnTikTok,
   helperLine,
+  loginLine,
+  loginRequestLine,
   MAC_MAY_HAVE_POSTED,
   MAC_NOT_POSTING,
   MAC_PRESSED_REASON,
@@ -337,5 +339,33 @@ describe("the mock follows the API", () => {
     delete c.campaignId;
     c.auto = { runId: "r", at: "2026-11-22T10:00:00.000Z", test: "private" };
     expect((await api.sendToMac([c.clipId]))[0]).toMatchObject({ sent: false, reason: "This was a Private test, so it stays off TikTok." });
+  });
+});
+
+describe("the TikTok login on the Mac (§47.8)", () => {
+  const seen: MacHelper = { seenAt: "2026-11-22T18:00:00.000Z", state: "ok" };
+  it("says whether the Mac keeps a login, and nothing for a helper from before it said", () => {
+    expect(loginLine(null)).toBeNull();
+    expect(loginLine(seen)).toBeNull();
+    expect(loginLine({ ...seen, login: "saved" })).toBe(
+      "Your TikTok login is kept in your Mac's Keychain, so your Mac logs back in to TikTok by itself.",
+    );
+    expect(loginLine({ ...seen, login: "none" })).toBe(
+      "No TikTok login is kept on your Mac. If TikTok logs your Mac out, you log in again on the Mac.",
+    );
+  });
+  it("says what happens next after Change or Forget", () => {
+    expect(loginRequestLine(seen)).toBeNull();
+    expect(loginRequestLine({ ...seen, loginRequest: { action: "change", at: seen.seenAt } })).toBe(
+      "Your Mac asks for the new login the next time it checks in, within a minute.",
+    );
+    expect(loginRequestLine({ ...seen, loginRequest: { action: "forget", at: seen.seenAt } })).toBe(
+      "Your Mac forgets the login the next time it checks in, within a minute.",
+    );
+  });
+  it("the mock asks the Mac only once one checked in, and never takes a login", async () => {
+    const api = mockApi();
+    await expect(api.tiktokMacLogin("forget")).rejects.toThrow("Set up your Mac first. Then it can keep your TikTok login.");
+    await expect(api.tiktokMacLogin("show" as never)).rejects.toThrow("Pick change or forget.");
   });
 });

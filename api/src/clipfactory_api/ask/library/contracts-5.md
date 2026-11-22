@@ -38,8 +38,9 @@ try again in a minute, §17.4), `internal`.
 | POST `/v1/clips/{clipId}/tiktok/posted` | `{ "link"?: string }` | `{ "clip", "posts", "note"? }` (posted on TikTok by the owner himself, §42) |
 | DELETE `/v1/clips/{clipId}/tiktok/posted` | – | `{ "clip", "posts" }` (Undo of the above, §42; a post the owner's Mac made → 409, §47) |
 | GET `/v1/tiktok/mac` | – | `{ "on", "helper": MacHelper \| null, "queue": MacJob[] }` (the Mac helper's queue, §47) |
-| POST `/v1/tiktok/mac/ping` | `{ "state", "reason"?, "version"?, "device" }` | `{ "on" }` (the Mac helper checks in, §47) |
+| POST `/v1/tiktok/mac/ping` | `{ "state", "reason"?, "version"?, "device", "login"?, "loginDone"? }` | `{ "on" }` (the Mac helper checks in, §47; `login` and `loginDone` §47.8) |
 | POST `/v1/tiktok/mac/send` | `{ "clipIds": string[] (1–25) }` | `{ "results": [{ "clipId", "sent", "reason"? }] }` (Send these to my Mac, §47; in order, each id once) |
+| POST `/v1/tiktok/mac/login` | `{ "action": "change" \| "forget" }` | `{ "helper": MacHelper }` (Change or Forget the TikTok login kept on the Mac; the Mac does it when it next checks in, §47.8) |
 | POST `/v1/clips/{clipId}/tiktok/mac/claim` | `{ "device" }` | `{ "job": MacJob }` (§47) |
 | POST `/v1/clips/{clipId}/tiktok/mac/step` | `{ "device", "step" }` | `{ "job": MacJob }` (§47) |
 | POST `/v1/clips/{clipId}/tiktok/mac/done` | `{ "device", "link"? }` | `{ "clip", "posts", "note"? }` (the Mac posted it, §47) |
