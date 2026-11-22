@@ -1,8 +1,10 @@
 """Who makes what: a registry of providers per kind (docs/CONTRACTS.md §45.11.6, §45.31, ADR-75, ADR-80).
 
 The pipeline only ever calls ``REGISTRY[kind][providerId]`` (the workspace's ``configuration.providers``: ``images``,
-``video`` for the animation kind, ``audio``; the writer is always ``bedrock-claude``, on the model the owner picked
-for the task, §45.25), so a new provider is one class and one registry line. Each kind has one Protocol:
+``video`` for the animation kind, ``audio``; the writer provider is always ``bedrock-claude``, on the model the owner
+picked for the task, §45.25), so a new provider is one class and one registry line. A job's ``meta.providers.writer``
+names who really wrote: ``bedrock-claude`` only for an Anthropic model, ``bedrock-model:{key}`` for any other
+(``writer_id``, §45.36 E7). Each kind has one Protocol:
 
 * ``Writer.write(brief) -> dict``: a raw script (it always goes through normalize, validate and fit);
 * ``ImageProvider.image(prompt, width, height, seed, refs) -> bytes``: a PNG;
@@ -34,7 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Protocol
 
-from . import audio, keys, proc, writer
+from . import audio, config, keys, proc, writer
 from .engine import Engine, frame_count, write_json
 from .models import unavailable
 from .retry import retry
@@ -44,6 +46,7 @@ KINDS = ("writer", "images", "animation", "audio")
 DEFAULTS = {"images": "builtin-rig", "animation": "builtin-2d", "audio": "builtin-synth"}
 CONFIG_KEYS = {"images": "images", "animation": "video", "audio": "audio"}  # StoriesConfig.providers' names
 WRITER_ID = "bedrock-claude"
+OTHER_WRITER = "bedrock-model:"  # + the model's key: a storyboard written by a model that is not Anthropic's (E7)
 CANVAS_NOT_ENABLED = "Bedrock says Nova Canvas is not enabled for this account in Europe (Ireland)."
 CANVAS_SETUP = (
     "AI pictures are not set up yet. Turn on Amazon Nova Canvas in the Bedrock console, Region Europe (Ireland), "
@@ -623,6 +626,17 @@ def chosen(configuration: dict[str, Any] | None) -> dict[str, str]:
             if isinstance(pid, str) and pid in REGISTRY[kind]:
                 picked[kind] = pid
     return {"writer": WRITER_ID, **picked}
+
+
+def writer_id(model_key: str, maker: str | None = None) -> str:
+    """``meta.providers.writer`` for a storyboard written by ``model_key`` (§45.36 E7): ``bedrock-claude`` only when
+    an Anthropic model wrote it, else ``bedrock-model:{key}`` (the screens name it from the model's label and maker).
+    ``maker`` is who makes the model, lower case, as its reply says; without it a bundled model's own entry is read
+    (an added model unknown here is never called Claude)."""
+    if maker is None:
+        info = config.model(model_key)
+        maker = config.maker(info) if info else ""
+    return WRITER_ID if maker.strip().lower() == "anthropic" else f"{OTHER_WRITER}{model_key}"
 
 
 def has_actors(scene: dict[str, Any]) -> bool:

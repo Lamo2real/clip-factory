@@ -9,6 +9,9 @@ own: this check writes exactly one item per model, with the key attribute ``mode
 (setup step 1 ticks from it, §45.35 D7; a later call's own status keeps it). The models the owner
 added (``MODELDEF#``) are checked like the bundled ones. The check runs whichever agents are switched on (the
 client's ``allow_inactive`` when it has one), and a failure that sent nothing to the model never changes a status.
+Each check has the shape a real call to that model has (§45.35 D1): a model that takes tools gets one tiny tool with
+automatic choice, streamed as the chat calls it, so a model Bedrock refuses tools for shows the client's sentence
+("… does not accept tool use here …", §45.36 E6) instead of "Works".
 """
 
 from __future__ import annotations
@@ -29,6 +32,17 @@ NOT_SENT = "Checking the models did not finish. Tap Try again."
 NOT_A_CALL = frozenset({"AgentOff", "EffortUnavailable", "TaskFailed"})
 REFUSALS = frozenset({"ModelRefused"})
 PROMPT = "This is an availability check from Lamo Stories. Reply with the one word: ok"
+# A model that takes tools is checked with one tiny tool (automatic choice), streamed as the chat calls it, so a model
+# Bedrock refuses tools for (some only while streaming) shows that sentence here, never "Works" (§45.36 E6).
+CHECK_TOOL = {
+    "name": "say_ok",
+    "description": "Not needed for this check: just reply with the word ok.",
+    "input_schema": {"type": "object", "properties": {}},
+}
+
+
+def _quiet(_text: str) -> None:
+    """The check streams like the chat, but nobody reads its text while it comes."""
 
 
 def _chain(e: BaseException) -> Iterator[BaseException]:
@@ -150,9 +164,12 @@ def check_models(env: TaskEnv) -> Outcome:
         override: dict[str, Any] = {"model": key}
         if efforts:
             override["effort"] = "low" if "low" in efforts else efforts[0]
+        shape: dict[str, Any] = dict(extra)
+        if config.call_shape(info)[1]:  # the same shape a real call has: its tools, streamed like the chat (D1, E6)
+            shape.update(tools=[CHECK_TOOL], on_text=_quiet)
         try:
             reply = client.complete(
-                env.ctx, task=models.CHECK_TASK, messages=[user(PROMPT)], override=override, max_tokens=512, **extra
+                env.ctx, task=models.CHECK_TASK, messages=[user(PROMPT)], override=override, max_tokens=512, **shape
             )
             status, line = "ok", OK_LINE
             usage = usage_of(reply)
