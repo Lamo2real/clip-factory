@@ -58,8 +58,9 @@ const PRIVACY: { value: StoriesConfig["youtubePrivacy"]; label: string; line: st
 export const KEEP_REFERENCES: { value: KeepReferences; label: string; line: string }[] = [
   { value: "all", label: "Keep them all", line: "Nothing is cleared" },
   { value: "study_only", label: "Keep only the study", line: "The video goes once it is studied" },
-  { value: "days_30", label: "30 days", line: "Then the video goes; its study stays" },
-  { value: "days_90", label: "90 days", line: "Then the video goes; its study stays" },
+  // By age a video that was never studied goes too, so only a study that exists stays (§45.35 D9).
+  { value: "days_30", label: "30 days", line: "Then the video goes; its study stays if it was studied" },
+  { value: "days_90", label: "90 days", line: "Then the video goes; its study stays if it was studied" },
 ];
 
 /** How long pictures added in the chat are kept (§45.34). */

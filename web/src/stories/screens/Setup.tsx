@@ -20,6 +20,7 @@ import { useLoad } from "../../lib/hooks.ts";
 import { storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
 import { EFFORT_LABEL, type Effort, type ModelInfo, type Onboarding, type OnboardStep, type Platform, type SocialAccount, type StoriesAiConfig, type StoriesConfig } from "../api/types.ts";
+import { madeBy } from "../settings/bits.tsx";
 import { aiBody } from "../settings/data.ts";
 import {
   celebrate,
@@ -95,8 +96,9 @@ function Foot({ step, busy, onBack, onSkip, children }: { step: OnboardStep; bus
 
 type Ai = { ai: StoriesAiConfig; models: ModelInfo[] };
 
-function modelLine(m: ModelInfo): string {
-  const who = `${m.provider}${m.custom ? " · Added by you" : ""}`;
+export function modelLine(m: ModelInfo): string {
+  // Who makes it and who runs it ("Anthropic on Amazon Bedrock", §45.35 D8).
+  const who = `${madeBy(m)}${m.custom ? " · Added by you" : ""}`;
   if (m.status === "ok") return `${who} · Works: it answered.`;
   if (m.status === "not_checked") return `${who} · Not checked yet.`;
   return `${who} · ${m.statusLine}`;
@@ -376,6 +378,9 @@ function SaveBar({ busy, label, onSave, off = false }: { busy: boolean; label: s
   );
 }
 
+/** Step 4's line for the built-in animator: it makes every shape (§45.34 "Video size and shape", §45.35 D21). */
+export const BUILTIN_LINE = "On. Cartoons drawn right here, tall, square or wide, 30 frames a second.";
+
 /** Step 4: how videos are made (the video provider, §45.31), saved in the workspace's own settings. */
 function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => void; busy: boolean; setBusy: (b: boolean) => void }) {
   const toast = useToast();
@@ -398,7 +403,7 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
         stack
         value={value}
         options={[
-          { value: "builtin-2d", label: "Built-in animation", line: "On. Cartoons drawn right here, 9:16, 30 frames a second." },
+          { value: "builtin-2d", label: "Built-in animation", line: BUILTIN_LINE },
           { value: "nova-reel", label: "Amazon Nova Reel (AI video)", line: reel?.line ?? "AI cut-aways (scenes with no character). It needs a storage place in the USA first." },
         ]}
         onChange={setPick}
@@ -407,7 +412,8 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
         <p className="st-note st-note--sun" role="note">
           <StIcon name="alert" size={18} />
           Nova Reel is not ready yet. Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in
-          animation by itself. Pick Built-in animation to keep making videos. Posts made with Nova Reel get the platforms' AI labels.
+          animation by itself. Pick Built-in animation to keep making videos. To make it ready, tap Try it in Settings › Video: it makes one 6-second
+          test shot. Posts made with Nova Reel get the platforms' AI labels.
         </p>
       ) : null}
       <SaveBar
@@ -466,8 +472,12 @@ function AgentsStep({ ws }: { ws: string }) {
   );
 }
 
-/** Steps 6 to 10: the platform's card, the same as on Social accounts (its app choice, keys and Connect). */
-function ConnectStep({ ws, platform }: { ws: string; platform: Platform }) {
+/**
+ * Steps 6 to 10: the platform's card, the same as on Social accounts (its app choice, keys and Connect). `line`: the
+ * onboarding's own reason the step stays to do (the account is Lamo Clips' own, §45.35 D11), said instead of the
+ * page's own sentence for it.
+ */
+function ConnectStep({ ws, platform, line }: { ws: string; platform: Platform; line?: string | undefined }) {
   const social = useSocial(ws);
   // The developer app the account used, for the right sentence after a Disconnect (§45.34).
   const [gone, setGone] = useState<{ choice: SocialAccount["app"]["choice"] } | null>(null);
@@ -487,6 +497,11 @@ function ConnectStep({ ws, platform }: { ws: string; platform: Platform }) {
           <StIcon name="alert" size={18} />
           This is Clip Factory's own {PLACE[platform]}, so this step stays to do. Tap Pick another {PLACE[platform]} below, or Use it for both if you really want
           both apps to post there.
+        </p>
+      ) : line ? (
+        <p className="st-note st-note--coral" role="note">
+          <StIcon name="alert" size={18} />
+          {line}
         </p>
       ) : null}
       <ul className="st-conns st-conns--one">
@@ -712,7 +727,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
       );
       break;
     default:
-      body = <ConnectStep ws={ws} platform={step as Platform} />;
+      body = <ConnectStep ws={ws} platform={step as Platform} line={data.steps.find((s) => s.step === step)?.line} />;
       foot = <NextButton onClick={() => go(nextStep(step))} main={state === "done"} />;
   }
 
@@ -792,6 +807,19 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
               </li>
             ))}
           </ul>
+          {/* A platform held because its account is Lamo Clips' own says why, in the server's words (§45.35 D11). */}
+          {left.some((s) => s.line) ? (
+            <ul className="st-left__why">
+              {left
+                .filter((s) => s.line)
+                .map((s) => (
+                  <li key={s.step} className="st-note st-note--coral">
+                    <StIcon name="alert" size={18} />
+                    {s.line}
+                  </li>
+                ))}
+            </ul>
+          ) : null}
         </section>
       ) : null}
     </section>

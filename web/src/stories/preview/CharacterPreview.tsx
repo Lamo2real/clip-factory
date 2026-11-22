@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { previewCharacter } from "../engine/engine.ts";
 import type { ActionId, CharacterLook, Expression, MovementStyle } from "../engine/types.ts";
+import { useAppActive } from "../pane.tsx";
 import { storiesReduceMotion } from "../prefs.ts";
 import { drawPrims } from "./draw.ts";
 
@@ -20,13 +21,16 @@ export interface CharacterPreviewProps {
 
 export function CharacterPreview({ look, movementStyle, expression = "neutral", action = "idle", size, playing = true, label }: CharacterPreviewProps) {
   const ref = useRef<HTMLCanvasElement | null>(null);
+  // Lamo Stories kept hidden behind Clip Factory: no painting at all (the last frame stays), again once it is back.
+  const active = useAppActive();
   useEffect(() => {
     const canvas = ref.current;
     const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
+    if (!canvas || !ctx || !active) return;
     const dpr = typeof window !== "undefined" ? Math.min(2, window.devicePixelRatio || 1) : 1;
-    canvas.width = Math.round(size * dpr);
-    canvas.height = Math.round(size * dpr);
+    // Set only when it changes: setting a canvas's size clears it, and the picture would blink on coming back.
+    if (canvas.width !== Math.round(size * dpr)) canvas.width = Math.round(size * dpr);
+    if (canvas.height !== Math.round(size * dpr)) canvas.height = Math.round(size * dpr);
     const still = !playing || storiesReduceMotion();
     let raf = 0;
     let last = -1;
@@ -43,6 +47,6 @@ export function CharacterPreview({ look, movementStyle, expression = "neutral", 
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [look, movementStyle, expression, action, size, playing]);
+  }, [look, movementStyle, expression, action, size, playing, active]);
   return <canvas ref={ref} className="st-character-preview" style={{ width: size, height: size }} role="img" aria-label={label} />;
 }

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { ApiError } from "../api/errors.ts";
 import { MacFetchHost } from "../app/MacFetchHost.tsx";
 import { CrSendNow } from "../components/CrSendNow.tsx";
+import { useToast } from "../components/Toasts.tsx";
 import { Glide } from "../components/Glide.tsx";
 import { WorkspaceSwitch } from "../components/Nav.tsx";
 import { A } from "../components/ui.tsx";
@@ -22,7 +23,7 @@ import { AppBadge } from "../lib/badge.ts";
 import { navigate, useHash } from "../lib/router.ts";
 import { loadStoriesApi, setStoriesApi } from "./api/client.ts";
 import { GlideCalm } from "../components/Glide.tsx";
-import { takeParkedStoriesGo, useAppPane } from "./pane.tsx";
+import { AWAY_RAN_OUT, takeParkedStoriesAway, takeParkedStoriesGo, useAppPane } from "./pane.tsx";
 import { followStoriesClicks, storiesReduceMotion } from "./prefs.ts";
 import type { StoriesApi, Workspace } from "./api/types.ts";
 import { storiesHref, type StoriesPage } from "./routes.ts";
@@ -279,6 +280,60 @@ function ReviewCountFor({ ws }: { ws: string }) {
   );
 }
 
+/** Below this width the sheets sit at the bottom of the screen, where the toasts are too. */
+const PHONE_MAX = 767;
+/** The action bars of Lamo Stories' sheets (the studio's and the chat's). */
+const SHEET_BARS = ".st-s-sheet__actions, .st-chat-sheet__actions";
+
+/**
+ * How far above the bottom of the window the toasts go so they clear an open sheet's buttons on a phone (its action
+ * bar's top, plus 8 px of air); 0 when no sheet is open, on wider screens, or for a bar that is not on screen.
+ */
+export function toastLift(bar: Pick<HTMLElement, "getBoundingClientRect"> | null, width: number, height: number): number {
+  if (!bar || width > PHONE_MAX) return 0;
+  const r = bar.getBoundingClientRect();
+  if (r.height <= 0 || r.top >= height) return 0;
+  return Math.max(0, Math.round(height - r.top + 8));
+}
+
+/**
+ * While Lamo Stories is on screen: the page's toasts (global, Clip Factory's own stack) are lifted above an open
+ * sheet's action bar on phones. It sets `st-toasts-up` and `--st-toast-lift` on the page's body, which only Lamo
+ * Stories' own stylesheet reads, and takes both away when the sheet closes or Lamo Stories is hidden.
+ */
+function useToastLift(root: { current: HTMLElement | null }, active: boolean): void {
+  useEffect(() => {
+    const box = root.current;
+    if (!active || !box || typeof window === "undefined") return;
+    const body = document.body;
+    let frame = 0;
+    const measure = () => {
+      const lift = toastLift(box.querySelector<HTMLElement>(SHEET_BARS), window.innerWidth, window.innerHeight);
+      body.classList.toggle("st-toasts-up", lift > 0);
+      if (lift > 0) body.style.setProperty("--st-toast-lift", `${lift}px`);
+      else body.style.removeProperty("--st-toast-lift");
+    };
+    const soon = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    measure();
+    const mo = new MutationObserver(soon);
+    mo.observe(box, { childList: true, subtree: true });
+    window.addEventListener("resize", soon);
+    // A sheet rises into place: measured again once it is there.
+    box.addEventListener("animationend", soon);
+    return () => {
+      cancelAnimationFrame(frame);
+      mo.disconnect();
+      window.removeEventListener("resize", soon);
+      box.removeEventListener("animationend", soon);
+      body.classList.remove("st-toasts-up");
+      body.style.removeProperty("--st-toast-lift");
+    };
+  }, [root, active]);
+}
+
 /** The workspace the switcher's list already names (null until the server answered this visit). */
 function quickWorkspace(fromAddress: string | null): string | null {
   const list = serverWorkspaces();
@@ -305,8 +360,10 @@ function StoriesShell({ page }: { page: StoriesPage }) {
   const [alone, setAlone] = useState(false);
   const tried = useRef<Set<string>>(new Set());
   const main = useRef<HTMLElement>(null);
+  const root = useRef<HTMLDivElement>(null);
   const first = useRef(true);
   const hash = useHash();
+  const toast = useToast();
   const pageKey = JSON.stringify(page);
 
   const check = useCallback(
@@ -432,10 +489,18 @@ function StoriesShell({ page }: { page: StoriesPage }) {
   // Clicks follow Lamo Stories' own sound setting while it is on screen.
   useEffect(() => (active ? followStoriesClicks() : undefined), [active]);
 
-  // Back on screen: a page change that waited while Clip Factory was shown happens now (stories/pane.tsx
-  // storiesGoLater), else the page opens where the window was when the owner switched away.
+  // Back on screen: a move to another site that waited while Clip Factory was shown goes now (Connect's sign-in page,
+  // stories/pane.tsx storiesAwayLater), a page change that waited happens now (storiesGoLater), else the page opens
+  // where the window was when the owner switched away.
   useEffect(() => {
     if (!active) return;
+    const away = takeParkedStoriesAway();
+    if (away && !away.expired) {
+      location.assign(away.url);
+      return;
+    }
+    // Its sign-in state ran out while Clip Factory was on screen: opening it would only end in a refusal.
+    if (away) toast.info(AWAY_RAN_OUT);
     const at = location.pathname + location.search + location.hash;
     const to = takeParkedStoriesGo();
     if (to) {
@@ -445,14 +510,17 @@ function StoriesShell({ page }: { page: StoriesPage }) {
     }
     const y = takeStoriesScroll(at);
     return y === null ? undefined : restoreScroll(y);
-  }, [active]);
+  }, [active, toast]);
+
+  // On phones the toasts sit above an open sheet's buttons, never over them (§45.35 D21).
+  useToastLift(root, active);
 
   const on = (item: NavItem) => item.match.includes(page.name);
   const moreOn = MORE.some(on);
   const solo = alone && page.name === "setup";
 
   return (
-    <div className={`stories-app${solo ? " is-alone" : ""}`} data-ws={ws ?? undefined}>
+    <div ref={root} className={`stories-app${solo ? " is-alone" : ""}`} data-ws={ws ?? undefined}>
       <a className="st-skip" href="#main">
         Skip to content
       </a>

@@ -197,6 +197,7 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
       return { items: r.items, nextCursor: r.nextCursor ?? null };
     },
     providers: async (ws) => (await call<{ providers: ProviderStatus[] }>("GET", w(ws, "/providers"))).providers,
+    tryNovaReel: async (ws) => (await call<{ job: ProductionJob }>("POST", w(ws, "/providers/nova-reel/check"))).job,
     guidance: (ws) => call<{ topics: GuidanceTopic[]; checkedAt: string }>("GET", w(ws, "/guidance")),
 
     social: (ws) => call<{ accounts: SocialAccount[]; clips: ClipsDestination[] }>("GET", w(ws, "/social")),

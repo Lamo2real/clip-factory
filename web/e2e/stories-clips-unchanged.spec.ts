@@ -6,7 +6,8 @@ import { settle } from "./helpers.ts";
 // and every /stories address is Lamo Clips' own "page does not exist". Switched on (cf.storiesPreview = 1) the six
 // items, their boxes and the tab bar are identical to the switched-off page, and the switcher sits only in space that
 // was empty at every size: the sidebar foot (or a round toggle beside the live dot, or a slim one between the menu and
-// the foot) and the phone top bar, never covering or pushing anything. Pixel before/after shots against main are taken by the lead on one machine (web/scripts/clips-unchanged.sh).
+// the foot, or, in a folded sidebar too short for that, a slim one beside the fold button) and the phone top bar,
+// never covering or pushing anything. Pixel before/after shots against main are taken by the lead on one machine (web/scripts/clips-unchanged.sh).
 
 const ITEMS = [
   ["home", "/", "Home"],
@@ -25,6 +26,8 @@ interface Layout {
   foot: Record<string, Box | null>;
   top: Record<string, Box | null>;
   mainTop: number;
+  /** the page's own box (beside the sidebar) */
+  page: Box | null;
   switcher: { mode: string | null; box: Box | null; place: string }[];
 }
 
@@ -41,6 +44,8 @@ const SIZES: { w: number; h: number; folded?: boolean }[] = [
   { w: 1000, h: 720, folded: true },
   { w: 1440, h: 900 },
   { w: 1440, h: 900, folded: true },
+  // A short window with the sidebar folded: no room in the foot, so a slim toggle sits beside the fold button (§45.35 D19).
+  { w: 1000, h: 560, folded: true },
 ];
 
 async function open(browser: Browser, size: (typeof SIZES)[number], on: boolean, path = "/"): Promise<Page> {
@@ -91,10 +96,11 @@ async function layout(page: Page): Promise<Layout> {
       },
       top: { brand: box(document.querySelector(".topbar .brand")), live: box(document.querySelector(".topbar .live-dot")), bar: box(document.querySelector(".topbar")) },
       mainTop: Math.round(document.querySelector("main")!.getBoundingClientRect().top),
+      page: box(document.querySelector(".shell > .main")),
       switcher: Array.from(document.querySelectorAll(".ws-switch-host")).map((el) => ({
         mode: el.getAttribute("data-ws-switch"),
         box: box(el),
-        place: el.classList.contains("ws-switch-host--topbar") ? "topbar" : "sidebar",
+        place: el.classList.contains("ws-switch-host--topbar") ? "topbar" : el.classList.contains("ws-switch-host--sidebar-top") ? "sidebar-top" : "sidebar",
       })),
     };
   }, ITEMS.map(([k]) => k));
@@ -190,7 +196,15 @@ test.describe("with Lamo Stories switched on", () => {
       expect(after.top).toEqual(before.top);
       expect(after.mainTop).toBe(before.mainTop);
 
-      const here = after.switcher.find((s) => s.place === (phone ? "topbar" : "sidebar"))!;
+      // A folded sidebar in a window under about 570 px tall has no room in its foot: then the way across is the slim
+      // toggle beside the fold button (§45.35 D19), and the foot holds none; everywhere else that one is not there.
+      const short = !phone && !!size.folded && size.h < 570;
+      const foot = after.switcher.find((s) => s.place === "sidebar")!;
+      const beside = after.switcher.find((s) => s.place === "sidebar-top");
+      if (!phone) expect(beside, "the toggle beside the fold button, in the page while switched on").toBeTruthy();
+      if (short) expect(foot.mode, "the foot of a short folded sidebar").toBe("none");
+      else if (beside) expect(beside.mode, "beside the fold button").toBe("none");
+      const here = short ? beside! : after.switcher.find((s) => s.place === (phone ? "topbar" : "sidebar"))!;
       expect(here, "a switcher host in the shell").toBeTruthy();
       const others = [...after.items, ...after.tabs, ...Object.values(after.foot), after.top.brand, after.top.live].filter((b): b is Box => !!b);
       // There is a way across at every size (§45.16.1): never missing, never covering or moving anything.
@@ -208,6 +222,16 @@ test.describe("with Lamo Stories switched on", () => {
         expect(box.height).toBeGreaterThanOrEqual(48);
         // A full 48 px target from about 340 px; below that, a slim one cut to the gap (at least 28 px across).
         expect(box.width).toBeGreaterThanOrEqual(here.mode === "slim" ? 28 : 48);
+      } else if (short) {
+        // Right of the fold button with 4 px of air, as tall as it is, and short of the page with 4 px of air.
+        const toggle = after.foot.toggle!;
+        expect(box.x).toBeGreaterThanOrEqual(toggle.x + toggle.width + 3.5);
+        expect(box.y).toBeGreaterThanOrEqual(toggle.y - 0.5);
+        expect(box.y + box.height).toBeLessThanOrEqual(toggle.y + toggle.height + 0.5);
+        if (after.page && after.page.y < box.y + box.height) expect(box.x + box.width).toBeLessThanOrEqual(after.page.x - 3.5);
+        expect(box.width).toBeGreaterThanOrEqual(28);
+        expect(box.height).toBeGreaterThanOrEqual(28);
+        expect(here.mode).toBe("slim");
       } else {
         const sidebar = await on.locator("nav.sidebar").boundingBox();
         expect(box.x).toBeGreaterThanOrEqual(sidebar!.x);
@@ -224,7 +248,7 @@ test.describe("with Lamo Stories switched on", () => {
       // from 360 px (a pill with the name where it is roomy); at 320 px the brand and the live dot leave about 38 px,
       // so a slim icon-only toggle fills it with 4 px of air on each side.
       if (!phone && !size.folded) expect(here.mode, "sidebar open").toBe(size.h >= 650 ? "bar" : "corner");
-      if (!phone && size.folded) expect(here.mode, "sidebar folded").toBe(size.h >= 650 ? "round" : "slim");
+      if (!phone && size.folded && !short) expect(here.mode, "sidebar folded").toBe(size.h >= 650 ? "round" : "slim");
       if (phone && size.w >= 360) expect(["label", "stack"], `phone at ${size.w}`).toContain(here.mode);
       if (phone && size.w < 340) expect(here.mode, `phone at ${size.w}`).toBe("slim");
       await on.context().close();
