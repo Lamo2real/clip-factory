@@ -61,6 +61,10 @@ def test_the_house_brief_says_the_shape_and_is_never_a_fixed_vertical_frame() ->
     assert ideas.house_brief("9:16").splitlines()[1].startswith("1. A vertical 9:16 cartoon")
     assert ideas.house_brief("4:3") == ideas.house_brief("9:16")  # an unknown shape is the default one
     assert not hasattr(ideas, "HOUSE_BRIEF")  # no fixed brief left to send by mistake
+    # instructions the owner edited from an earlier vertical-only default (or a skill, or a memory) may still say
+    # "vertical 9:16": the picked shape wins over them
+    first_rule = ideas.house_brief("1:1").splitlines()[1]
+    assert first_rule.endswith("This shape wins over any other shape named in your instructions, skills or notes.")
     source = (REPO / "stories/agent/src/lamostories_agent/tasks/ideas.py").read_text()
     assert "1. A vertical 9:16" not in source and "A vertical 9:16 cartoon" not in source
 
@@ -246,7 +250,9 @@ def test_a_tool_use_refusal_is_its_own_sentence_naming_the_switch_and_the_model_
     sentence = models.TOOLS_REFUSED.format(label="Meta Llama 4 Maverick")
     assert isinstance(e.value, models.ToolsUnavailable) and str(e.value) == sentence
     assert sentence.startswith("Meta Llama 4 Maverick does not accept tool use here")
-    assert 'Tap Edit on its row in Lamo Stories › Settings › AI and turn off "It can use tools".' in sentence
+    assert sentence.endswith(
+        'Tap Edit on its row in Lamo Stories › Settings › AI and turn off "It can use tools", then tap Check models.'
+    )  # saving the switch keeps the old status (D6), so the sentence names the step that clears it
     assert (e.value.status, e.value.model, getattr(e.value, "sent", None)) == ("error", "custom-llama", True)
     assert getattr(e.value, "model_id", None) == "meta.llama4-maverick-17b-instruct-v1:0"  # what was asked (D5)
     assert runtime.ops == ["converse_stream"] and "toolConfig" in runtime.requests[0]
