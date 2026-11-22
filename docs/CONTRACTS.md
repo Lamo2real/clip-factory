@@ -13510,6 +13510,103 @@ is already built and only written down here.
 * **Approving a driving-safety story** (api): approve refuses a `safety.status` of `skipped` whenever the story has a
   `safetyTopicId`, whatever its category (a second guard; the agent never skips it).
 
+**From the final audit of both requests** (every numbered point checked against main; these are owner-requested
+behaviours an earlier step narrowed or left out)
+
+* **Adding models without a release** (request 2 §3: "support adding new models and providers without rebuilding
+  the application"; api, agent, infra, web): the owner can add a reasoning model hosted on Amazon Bedrock from
+  Settings › AI › "Add a model". `PUT /v1/workspaces/{ws}/ai/models/{key}` with `ModelDef { label, provider (who makes
+  it, e.g. "Anthropic", "Amazon", "Meta", "Mistral"), modelId (a Bedrock model id or inference profile id or ARN),
+  region, efforts: Effort[] (may be empty), defaultEffort: Effort | null, vision: boolean, maxOutputTokens: number,
+  price: Price | null }` → `{ model: ModelInfo }`; `DELETE …/ai/models/{key}` → `204` (`409` naming the setting while
+  any saved setting uses it). Keys match `^custom-[a-z0-9-]{1,40}$` and never shadow a bundled key; at most 20.
+  Stored as `MODELDEF#{key}` in the workspace partition. `ModelInfo` gains `custom: boolean`. The API's resolver and
+  the agent (per call, never cached across workspaces) merge them over `stories/config/models.json`. Effort is sent
+  only for the efforts the owner listed. "Check models" checks them like any other; a model Bedrock refuses shows
+  Bedrock's sentence, nothing is swapped. Lamo Stories' runtime role may invoke any Bedrock foundation model and any
+  inference profile of the account (`infra/modules/stories_agent`), so a new model works after Check models with no
+  deploy.
+* **Video size and shape** (request 2 §6E: "Default resolution. Default aspect ratio."; engine, agent, api, web):
+  `StoriesConfig.video` is `{ aspect: "9:16" | "1:1" | "16:9"; resolution: "1080x1920" | "720x1280" | "1080x1080" |
+  "720x720" | "1920x1080" | "1280x720"; quality; fps: 30 }`, where the resolution must match the aspect. A story
+  gets `format: { aspect, width, height }` from the workspace default at create (Production › New can change it for
+  one video; `PATCH` may change it until the first run finishes). `StoryScript.width` and `height` are that size; the
+  engine lays out sets, characters, cameras, bubbles, captions and the end card for each shape (positions stay 0..1
+  of the frame, safe areas per shape), and the rasterizer, the ASS writer and ffmpeg use the script's size. 9:16
+  stays the default; the Settings cards say Shorts, Reels and TikTok want 9:16.
+* **Output formats** (request 2 §6F; agent, api, web): every video is MP4 (H.264, AAC, faststart), which posting needs.
+  `StoriesConfig.production.extraFormats: ("webm" | "mov")[]` (default none) also makes `final/v{n}.webm` (VP9, Opus)
+  and `final/v{n}.mov` (ProRes 422 Proxy, PCM) after assembly, each an `ASSET#` of kind `video` with
+  `meta.format`. `POST …/stories/{storyId}/download` takes `{ format?: "mp4" | "webm" | "mov" }`.
+* **Keeping and clearing files** (request 2 §6F: "Media storage. Reference-video storage. Asset retention."; api,
+  agent, web): `StoriesConfig.production` gains `keepReferences: "all" | "study_only" | "days_30" | "days_90"`
+  (`study_only` deletes a reference video's file and frames once its study is written and keeps the study) and
+  `keepChatPictures: "all" | "days_30" | "days_90"` (defaults `all`). The agent applies them after each job; `POST
+  /v1/workspaces/{ws}/storage/cleanup` → `{ removed: { files, bytes } }` applies them (and `keepVersions`) now.
+  `StorageSummary` gains `location: { region: string; folder: string }` ("Lamo Stories' own folder in Clip Factory's
+  media storage"), and storyboards and captions count under `scenes`. A reference video whose file was cleared shows
+  "The video was removed to save space. Its study stays."
+* **Each character keeps its own faces and noises** (request 1 §5.C "Facial expressions", "look and behave
+  consistently"; engine, agent): `CastMember` gains `expressions: Expression[]`; `validateScript` refuses a beat whose
+  `face` is not in that character's list, or whose `noise` is not in its `voice.noises`; the writer's rules say so;
+  after one retry the pipeline swaps a stray face for `neutral` and drops a stray noise (logged).
+* **Redesigning a character** (api, agent, web): `POST …/characters/design` takes `characterId?`; the character
+  agent then gets that character as CURRENT, keeps its name (not in TAKEN) and changes only what the owner asked; the
+  web shows which parts changed before "Use this".
+* **Music** (agent): only `story.musicMood` decides (`none` = no music); the workspace's music default is applied
+  once, at create.
+* **Captions off in the picture** (agent): with `burnCaptions` off only the caption words are left out; the speech
+  bubbles' symbols and the driving-safety end card are always burned in. The Storage card says so.
+* **Remaking one scene** (agent): the writer's answer must name exactly the asked scene ids (an enum in its schema);
+  a missing one gets one retry, then the job fails with the writer's sentence, never "ready" with nothing changed.
+* **Memory** (agent): the chat's limit is 50 notes, the API's ("Memory is full (50 notes). Delete one first.").
+* **Make the video from the chat with a reference** (agent): `offer_make_video` takes `referenceIds` (≤ 3 analyzed
+  references of this workspace).
+* **A failed model call still shows what was asked** (agent, web): a chat answer that fails before any reply keeps
+  the model and effort it was sent with; a job step that fails on its model adds `{ step, agentId, model, effort,
+  effortApplied: false, failed: true }` to `meta.models`; Try again reuses the same override.
+* **An effort Bedrock refuses** (agent): a `ValidationException` about the effort field raises `EffortUnavailable`
+  ("{Model} does not accept {effort} effort here (Amazon Bedrock refused it). Pick another level in Lamo Stories ›
+  Settings › AI."), written to `MODELSTATUS#`; nothing is retried without the effort.
+* **Model choice for what the chat starts** (web): the chat's "Remake these scenes" and "Analyze this reference
+  video" cards carry a model menu (the usual choice for `scene_rewrite` or `reference_analysis`, prefilled with the
+  message's own override) and send it as the run's `override`. The chat's model picker names each model's provider.
+* **A reference video's own setting** (web): `StoriesApi.patchReference(ws, refId, patch: { title?: string; ai?:
+  AiSetting })`; the reference page's model sheet has "Keep with this video".
+* **Long conversations** (web): `getConversation(ws, convId, q?: { after?: string; before?: string })`; the chat has
+  "Show earlier messages".
+* **Clip Factory stays exactly as it was left** (request 2 §2: "When I return to Clip Factory, I should see the
+  existing application exactly as I left it"; web): once each app has been shown, both stay mounted; the one not shown
+  is `hidden` and `inert`, its title and key handlers stay quiet, and switching shows the other at once (the
+  StoriesApp chunk is fetched while idle once the switcher is on, and the workspace list the switcher already read is
+  used without waiting). While Lamo Stories is off nothing of this runs.
+* **"Open projects"** (web): Lamo Stories' dashboard shows "Continue: {name}" for the last opened idea, story,
+  character or reference (hidden when it is gone).
+* **Lamo Stories' own device preferences** (request 2 §9; web): Settings › Storage and production has "Sounds and
+  motion" (click sounds on or off, reduced motion), kept in `cf.stories.prefs`; Lamo Stories' screens read them
+  first and fall back to Clip Factory's only while unset. Clip Factory's preferences never change Lamo Stories' once set.
+* **Setup steps 1–3** (api, web): `PUT …/ai` takes `picked?: ("environment" | "model" | "effort")[]`, stamped on
+  `AICONFIG.pickedAt`; step 1 ticks after "Check models" ran or the owner tapped "These look right" on step 1 (which
+  shows the models and their state), step 2 when the default model was picked, step 3 when the default effort was
+  picked. Step 2 never saves an effort the owner did not pick.
+* **Ideas can be edited** (web): an idea card has "Edit" (title, line, kind, and an expanded concept's parts).
+* **Production › New uses the idea's length**: a picked idea's `concept.durationSec` is the starting length.
+* **All projects** (web): the Library's Projects, the Production list and each Review group page with `nextCursor`
+  ("Show more"); a `?story=` outside the loaded pages is fetched by itself before "could not find".
+* **Sound effects list** (web): the place's own sounds are in the list from each scene's start and can be moved or
+  removed; they are labelled "(whole scene)".
+* **Social accounts wording** (api, web): every sentence names the page "Social accounts", never "Connections".
+* **Lamo Clips' account found later** (api): when Lamo Clips connects the same account after Lamo Stories did,
+  `public_of` and Check it show `same_as_clips` on every platform, so the card offers Pick another and Use it for
+  both; onboarding ticks a platform only when it is `connected`.
+* **Meta redirect addresses** (web): both Meta cards show both redirect URIs (Instagram's and Facebook's) to add in
+  Facebook Login; also in the saved state.
+* **The intended account** (web): after a connect the page says "Connected as {name} ({handle})" and asks "Is this
+  your Lamo Stories {place}?" with Yes and "Pick another".
+* **Disconnect** (web): for an own developer app the after-disconnect line says "To remove Lamo Stories completely,
+  remove your Lamo Stories app in the account's own settings. Lamo Clips is not affected."; the shared-app line stays.
+* **AI pictures off** (api, web): the line and its link point to Settings › Video › Picture maker.
+
 **Agent**
 
 * **The writer and the fact checker get the engine's rules** (agent): the storyboard, scene-rewrite, fix and
