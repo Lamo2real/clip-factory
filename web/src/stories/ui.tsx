@@ -51,6 +51,34 @@ export function StChip({ children, tone }: { children: ReactNode; tone?: StTone 
   return <span className={`st-chip${tone ? ` st-chip--${tone}` : ""}`}>{children}</span>;
 }
 
+/**
+ * "Technical details" (§45.36 E14): developer-app words (redirect URIs, Login configuration, App Review, Sandbox,
+ * inference profiles, ARNs) and raw ids (account ids, model ids, app ids) folded away under a plain first line, one
+ * tap away. Closed to start.
+ */
+export function StTech({ children, className = "", label = "Technical details" }: { children: ReactNode; className?: string; label?: string }) {
+  return (
+    <details className={`st-tech-fold${className ? ` ${className}` : ""}`}>
+      <summary className="st-tech-fold__sum">
+        <StIcon name="chevron" size={16} className="st-tech-fold__mark" />
+        {label}
+      </summary>
+      <div className="st-tech-fold__body">{children}</div>
+    </details>
+  );
+}
+
+/** Developer-app words a 6-8 year old would not follow: a line that has one goes behind "Technical details". */
+export const TECH_WORDS = /\b(sandbox|app review|development mode|oauth|login configuration|redirect uri|inference profile|arn|client id|config(uration)? id)\b/i;
+
+/** A list of sentences split into the plain ones (shown) and the technical ones (folded away, §45.36 E14). */
+export function plainFirst(lines: readonly string[]): { plain: string[]; tech: string[] } {
+  const plain: string[] = [];
+  const tech: string[] = [];
+  for (const l of lines) (TECH_WORDS.test(l) ? tech : plain).push(l);
+  return { plain, tech };
+}
+
 /** A page's heading row: the title, one plain line under it, and its main actions. */
 export function StPageHead({ title, lede, actions }: { title: ReactNode; lede?: ReactNode; actions?: ReactNode }) {
   return (

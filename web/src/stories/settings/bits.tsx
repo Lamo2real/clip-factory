@@ -4,11 +4,11 @@
 // words and number formats the sections share. Builder F2 owns this folder. Click and deny sounds come from the app's
 // global click handler (web/src/lib/sound.ts): a control that cannot be used is aria-disabled (it plays the deny
 // sound), never `disabled` (that would swallow the click and its sound).
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { Glide } from "../../components/Glide.tsx";
 import { storiesBehind, storiesReduceMotion, storiesSound } from "../prefs.ts";
 import type { Effort, ModelInfo, ProviderStatus } from "../api/types.ts";
-import { EFFORT_LABEL } from "../api/types.ts";
+import { EFFORT_LABEL, MODEL_STATUS_WORDS } from "../api/types.ts";
 
 // ---------- Icons: Lamo Stories' chunky round strokes (no generic AI sparkle anywhere) ----------
 
@@ -460,12 +460,41 @@ export function Failed({ message, onRetry }: { message: string; onRetry?: () => 
 
 // ---------- Words ----------
 
+/** The Settings page on screen, by the name sentences use for it ("AI", "Video", …); null outside Settings. */
+export type SettingsPageName = "AI" | "Agents" | "Skills" | "Memory" | "Video" | "Storage";
+const SettingsPage = createContext<SettingsPageName | null>(null);
+export const SettingsPageProvider = SettingsPage.Provider;
+
+const escape = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * A sentence shown on the page it sends the owner to, without the trip (§45.36 E17): "Pick Built-in animation in
+ * Settings › Video, or finish its setup." on Settings › Video reads "Pick Built-in animation above, or finish its
+ * setup."; "turn off Tools in Settings › AI › its row" on Settings › AI reads "turn off Tools in its row above". Any
+ * other page's name stays as it is.
+ */
+export function onThisPage(text: string, page: SettingsPageName | null, word = "above"): string {
+  if (!page || !text) return text;
+  const re = new RegExp(`\\s+(?:in|on)\\s+(?:Lamo Stories\\s*›\\s*)?Settings\\s*›\\s*${escape(page)}(?![A-Za-z])((?:\\s*›\\s*[^.,;:!?›]+)?)`, "g");
+  return text.replace(re, (_all, rest: string) => {
+    const where = rest.replace(/^\s*›\s*/, "").trim();
+    return where ? ` in ${where} ${word}` : ` ${word}`;
+  });
+}
+
+/** onThisPage for the Settings page on screen. */
+export function useOnThisPage(): (text: string, word?: string) => string {
+  const page = useContext(SettingsPage);
+  return useCallback((text: string, word?: string) => onThisPage(text, page, word), [page]);
+}
+
+/** A model's state: the one set of words every screen uses (MODEL_STATUS_WORDS, §45.36 E17), with its tone. */
 export const MODEL_STATUS: Record<ModelInfo["status"], { label: string; tone: Tone }> = {
-  ok: { label: "Works", tone: "mint" },
-  not_checked: { label: "Not checked yet", tone: "sky" },
-  denied: { label: "No access", tone: "coral" },
-  not_found: { label: "Not found", tone: "coral" },
-  error: { label: "Had a problem", tone: "sun" },
+  ok: { label: MODEL_STATUS_WORDS.ok, tone: "mint" },
+  not_checked: { label: MODEL_STATUS_WORDS.not_checked, tone: "sky" },
+  denied: { label: MODEL_STATUS_WORDS.denied, tone: "coral" },
+  not_found: { label: MODEL_STATUS_WORDS.not_found, tone: "coral" },
+  error: { label: MODEL_STATUS_WORDS.error, tone: "sun" },
 };
 
 export const PROVIDER_STATE: Record<ProviderStatus["state"], { label: string; tone: Tone }> = {

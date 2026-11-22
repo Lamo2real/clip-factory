@@ -332,7 +332,9 @@
     gap: 14px;
     width: var(--st-rail-w);
     padding: 14px 12px;
-    overflow-y: auto;
+    /* The brand and the switcher at its foot always stay in view; only the list of pages scrolls in a short window
+       (§45.36 E16), so going to Clip Factory is one click at every height. */
+    overflow: hidden;
     border-radius: var(--r-xl);
     background: linear-gradient(180deg, rgba(50, 42, 115, 0.86), rgba(38, 32, 90, 0.9));
     -webkit-backdrop-filter: blur(20px) saturate(1.3);
@@ -340,7 +342,21 @@
     box-shadow: 0 20px 44px -18px rgba(8, 6, 30, 0.85);
   }
   .st-rail .st-brand {
+    flex: none;
     padding: 0 8px;
+  }
+  .st-rail .st-rail__list {
+    flex: 0 1 auto;
+    min-height: 0;
+    /* Its scroll box reaches the rail's own edges, so the highlight's glow and focus rings are not cut short. */
+    margin: -6px -12px;
+    padding: 6px 12px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+  .st-rail .st-rail__foot {
+    flex: none;
   }
 }
 
@@ -1605,6 +1621,18 @@ a.st-file__title:hover {
   gap: 16px;
   align-items: start;
 }
+/* Social accounts' five cards flow by their own height (§45.36 E18): a tall card (Instagram with its Meta box) never
+   leaves a hole beside a short one, as a row of a grid would. */
+.st-conns:not(.st-conns--one) {
+  display: block;
+  columns: 340px;
+  column-gap: 16px;
+}
+.st-conns:not(.st-conns--one) > .st-conn {
+  margin-bottom: 16px;
+  -webkit-column-break-inside: avoid;
+  break-inside: avoid;
+}
 .st-conn {
   display: grid;
   gap: 12px;
@@ -1714,6 +1742,60 @@ a.st-file__title:hover {
 }
 .st-note--wide {
   align-items: center;
+}
+
+/* "Technical details" (§45.36 E14): developer words and raw ids, folded under a plain first line. */
+.st-tech-fold {
+  min-width: 0;
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  background: rgba(13, 11, 38, 0.22);
+}
+.st-tech-fold__sum {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--st-ink-soft);
+  font-size: 0.9rem;
+  font-weight: 800;
+  list-style: none;
+  border-radius: var(--r-sm);
+  transition: color 160ms ease;
+}
+.st-tech-fold__sum::-webkit-details-marker {
+  display: none;
+}
+.st-tech-fold__sum:hover {
+  color: var(--st-sun);
+}
+.st-tech-fold__mark {
+  flex: none;
+  transition: transform 200ms ease;
+}
+.st-tech-fold[open] > .st-tech-fold__sum {
+  color: var(--st-ink);
+}
+.st-tech-fold[open] > .st-tech-fold__sum .st-tech-fold__mark {
+  transform: rotate(90deg);
+}
+.st-tech-fold__body {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 10px;
+  color: var(--st-ink-soft);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.st-tech-fold__body ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+.st-tech-fold__body code {
+  color: var(--st-sky-ink);
+  overflow-wrap: anywhere;
 }
 .st-note__close {
   display: grid;
@@ -2591,6 +2673,42 @@ a.st-file__title:hover {
 }
 .st-setupcard__go {
   margin-left: auto;
+}
+/* After Finish with steps skipped: a smaller card listing them (§45.36 E15). */
+.st-setupcard--left {
+  padding: 12px 16px;
+  background: var(--st-panel);
+}
+.st-setupcard__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--st-on-sun, #1c1842);
+  background: var(--st-sun);
+}
+.st-setupcard--left .st-setupcard__title {
+  font-size: 1.02rem;
+}
+.st-setupcard__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.st-setupcard__list > li {
+  min-width: 0;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  color: var(--st-ink);
+  font-size: 0.88rem;
+  font-weight: 700;
+  background: var(--st-panel-strong);
+  overflow-wrap: anywhere;
 }
 
 /* "Continue: {name}": the idea, video, character or reference video opened last (§45.34), one tap back to it. */

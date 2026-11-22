@@ -214,7 +214,7 @@ test.describe("AI: add a model (§45.34)", () => {
     const form = page.getByRole("form", { name: "Add a model" });
     await form.getByLabel("Name").fill("Nova Premier");
     await form.getByRole("radiogroup", { name: "Who makes it" }).getByRole("radio", { name: "Amazon" }).click();
-    await form.getByLabel("Bedrock model ID or inference profile").fill("eu.amazon.nova-premier-v1:0");
+    await form.getByLabel("Model ID", { exact: true }).fill("eu.amazon.nova-premier-v1:0");
     await form.getByLabel("AWS Region").selectOption("eu-west-1");
     // How it is called (§45.35 D1): an Amazon model starts with no effort levels and no tools, the prompt cache on.
     await expect(form.getByRole("switch", { name: "It has effort levels" })).toHaveAttribute("aria-checked", "false");
@@ -391,7 +391,9 @@ test.describe("Video and storage", () => {
     await expect(reel).toHaveAttribute("aria-checked", "true");
     // The API's own sentence (§45.34): it says what to do, and nothing switches to the built-in animation by itself.
     await expect(card(page, "Video maker").getByRole("status")).toContainText("Amazon Nova Reel is not ready yet: ");
-    await expect(card(page, "Video maker").getByRole("status")).toContainText("Pick Built-in animation in Settings › Video, or finish its setup.");
+    // Said on Settings › Video itself, it never sends the owner here again (§45.36 E17).
+    await expect(card(page, "Video maker").getByRole("status")).toContainText("Pick Built-in animation above, or finish its setup.");
+    await expect(card(page, "Video maker")).not.toContainText("in Settings › Video");
     // Said once, though the API's label (Amazon Nova Reel 1.1 (AI video)) is not the name its sentence uses.
     await expect(card(page, "Video maker").getByRole("status")).toHaveText(/^Amazon Nova Reel is not ready yet: /);
     await expect(card(page, "Video maker").getByRole("status")).not.toContainText("(AI video) is not ready yet");
@@ -563,7 +565,7 @@ test.describe("round 4 (§45.35)", () => {
     const form = page.getByRole("form", { name: "Add a model" });
     await form.getByLabel("Name").fill("Mistral Large");
     await form.getByRole("radiogroup", { name: "Who makes it" }).getByRole("radio", { name: "Mistral" }).click();
-    await form.getByLabel("Bedrock model ID or inference profile").fill("mistral.mistral-large-2407-v1:0");
+    await form.getByLabel("Model ID", { exact: true }).fill("mistral.mistral-large-2407-v1:0");
     await form.getByLabel("AWS Region").selectOption("eu-west-3");
     await form.getByRole("button", { name: "Add the model" }).click();
     const row = add.locator(".st-stg-own").filter({ hasText: "Mistral Large" });

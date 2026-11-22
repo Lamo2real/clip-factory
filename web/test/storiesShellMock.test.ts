@@ -123,7 +123,7 @@ describe("social accounts", () => {
     store.knobs.noAppKeys = "x";
     const e = await api.connectSocial("stories", "x").catch((x: unknown) => x);
     expect(e).toBeInstanceOf(ApiError);
-    expect((e as ApiError).message).toMatch(/^Lamo Clips has no X app keys yet\./);
+    expect((e as ApiError).message).toMatch(/^Clip Factory has no X app keys yet\./);
   });
 
   it("Check now records when the account was last checked; a dead sign-in turns it to connect again", async () => {
@@ -346,7 +346,7 @@ describe("the dashboard", () => {
     // A stuck post, an account to connect again, an account warning, a story that needs a check.
     expect(d.needsYou.some((n) => n.publishingJobId && n.href.startsWith("/stories/review/"))).toBe(true);
     expect(d.needsYou.some((n) => !n.publishingJobId && n.platform === "tiktok" && n.href === "/stories/connections")).toBe(true);
-    expect(d.needsYou.some((n) => n.platform === "instagram" && /Lamo Clips may have lost Instagram/.test(n.sentence))).toBe(true);
+    expect(d.needsYou.some((n) => n.platform === "instagram" && /Clip Factory may have lost Instagram/.test(n.sentence))).toBe(true);
     expect(d.needsYou.some((n) => n.storyId && !n.platform && /needs a check/.test(n.sentence))).toBe(true);
     for (const n of d.needsYou) expect(n.sentence.length).toBeGreaterThan(10);
     expect(d.accounts.map((a) => a.platform)).toEqual(STORIES_PLATFORMS);

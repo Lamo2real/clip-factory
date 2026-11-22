@@ -11,7 +11,7 @@ import { usePoll } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
 import { useAppActive } from "../pane.tsx";
 import type { ProductionJob, ProviderStatus } from "../api/types.ts";
-import { Btn, cheer, Chip, Note, Progress, SIcon, whenText } from "./bits.tsx";
+import { Btn, cheer, Chip, Note, Progress, SIcon, useOnThisPage, whenText } from "./bits.tsx";
 
 /** How often the row asks how the try is going (the shot takes a minute or two). */
 export const TRY_POLL_MS = 2500;
@@ -39,6 +39,7 @@ export function ReelTry({ ws, p, reload }: { ws: string; p: ProviderStatus | und
   const [started, setStarted] = useState<ProductionJob | null>(null);
   const [asking, setAsking] = useState(false);
   const anchor = useRef<HTMLElement | null>(null);
+  const here = useOnThisPage();
   const job = shownTry(started, p?.check);
   const running = tryRunning(job);
   // Followed while it runs and Lamo Stories is on screen (behind Clip Factory it rests, and catches up when back).
@@ -52,10 +53,12 @@ export function ReelTry({ ws, p, reload }: { ws: string; p: ProviderStatus | und
     if (done.status === "ready") {
       cheer(anchor.current);
       toast.success("It works! Nova Reel made its test shot.");
-    } else toast.error(tryProblem(done, p) ?? TRY_STOPPED);
-  }, [done, p, toast]);
+    } else toast.error(here(tryProblem(done, p) ?? TRY_STOPPED));
+  }, [done, p, toast, here]);
 
-  const problem = tryProblem(job, p);
+  // Said on this page, so it never sends the owner here again (§45.36 E17).
+  const found = tryProblem(job, p);
+  const problem = found ? here(found) : null;
   return (
     <div className="st-stg-try" data-provider="nova-reel" aria-label="Try Amazon Nova Reel" role="group">
       <div className="st-stg-try__head">

@@ -61,7 +61,7 @@ const COUNTS_CONNECTED: SocialAccount["connectionStatus"][] = ["connected"];
 
 /** Why a platform's step stays to do while its account is Lamo Clips' own (the API's same_as_clips_line, word for word). */
 export function sameAsClipsLine(step: OnboardStep): string {
-  return `This is Lamo Clips' ${SOCIAL_LABEL[step] ?? step} account. Pick another in Social accounts, or tap Use it for both.`;
+  return `This is Clip Factory's ${SOCIAL_LABEL[step] ?? step} account. Pick another in Social accounts, or tap Use it for both.`;
 }
 
 /** The platform's Lamo Stories account in this workspace when it is Lamo Clips' own (stored so, or found later, D11). */

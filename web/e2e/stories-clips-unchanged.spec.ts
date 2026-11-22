@@ -7,7 +7,8 @@ import { settle } from "./helpers.ts";
 // items, their boxes and the tab bar are identical to the switched-off page, and the switcher sits only in space that
 // was empty at every size: the sidebar foot (or a round toggle beside the live dot, or a slim one between the menu and
 // the foot, or, in a folded sidebar too short for that, a slim one beside the fold button) and the phone top bar,
-// never covering or pushing anything. Pixel before/after shots against main are taken by the lead on one machine (web/scripts/clips-unchanged.sh).
+// never covering or pushing anything (on the smallest phones, 320 px, the brand drops its name so the switch keeps a full
+// 48 px, §45.36 E16). Pixel before/after shots against main are taken by the lead on one machine (web/scripts/clips-unchanged.sh).
 
 const ITEMS = [
   ["home", "/", "Home"],
@@ -28,7 +29,7 @@ interface Layout {
   mainTop: number;
   /** the page's own box (beside the sidebar) */
   page: Box | null;
-  switcher: { mode: string | null; box: Box | null; place: string }[];
+  switcher: { mode: string | null; box: Box | null; place: string; squeeze: boolean }[];
 }
 
 const SIZES: { w: number; h: number; folded?: boolean }[] = [
@@ -99,6 +100,7 @@ async function layout(page: Page): Promise<Layout> {
       page: box(document.querySelector(".shell > .main")),
       switcher: Array.from(document.querySelectorAll(".ws-switch-host")).map((el) => ({
         mode: el.getAttribute("data-ws-switch"),
+        squeeze: el.hasAttribute("data-ws-squeeze"),
         box: box(el),
         place: el.classList.contains("ws-switch-host--topbar") ? "topbar" : el.classList.contains("ws-switch-host--sidebar-top") ? "sidebar-top" : "sidebar",
       })),
@@ -195,7 +197,15 @@ test.describe("with Lamo Stories switched on", () => {
       expect(after.tabs).toEqual(before.tabs);
       expect(after.tabbar).toEqual(before.tabbar);
       expect(after.foot).toEqual(before.foot);
-      expect(after.top).toEqual(before.top);
+      // On the smallest phones (320 px) the brand drops its name so the switch stays a full 48 px (§45.36 E16): its
+      // mark stays where it was; the live dot and the bar do not move. Everywhere else the top bar is as before.
+      const squeezed = after.switcher.some((sw) => sw.place === "topbar" && sw.squeeze);
+      if (squeezed) {
+        expect(phone && size.w < 340, "the brand drops its name only below 340 px").toBe(true);
+        expect({ ...after.top, brand: null }).toEqual({ ...before.top, brand: null });
+        expect({ x: after.top.brand!.x, y: after.top.brand!.y, height: after.top.brand!.height }).toEqual({ x: before.top.brand!.x, y: before.top.brand!.y, height: before.top.brand!.height });
+        expect(after.top.brand!.width).toBeGreaterThanOrEqual(44);
+      } else expect(after.top).toEqual(before.top);
       expect(after.mainTop).toBe(before.mainTop);
 
       // A folded sidebar in a window under about 570 px tall has no room in its foot: then the way across is the slim
@@ -222,8 +232,8 @@ test.describe("with Lamo Stories switched on", () => {
         expect(box.x).toBeGreaterThanOrEqual(after.top.brand!.x + after.top.brand!.width + 3.5);
         if (after.top.live) expect(box.x + box.width).toBeLessThanOrEqual(after.top.live.x - 3.5);
         expect(box.height).toBeGreaterThanOrEqual(48);
-        // A full 48 px target from about 340 px; below that, a slim one cut to the gap (at least 28 px across).
-        expect(box.width).toBeGreaterThanOrEqual(here.mode === "slim" ? 28 : 48);
+        // A full finger's target at every width: 48 px, or a slim one of at least 44 px (§45.36 E16).
+        expect(box.width).toBeGreaterThanOrEqual(here.mode === "slim" ? 44 : 48);
       } else if (short) {
         // Right of the fold button with 4 px of air, as tall as it is, and short of the page with 4 px of air.
         const toggle = after.foot.toggle!;
@@ -247,12 +257,14 @@ test.describe("with Lamo Stories switched on", () => {
       // Where there is room it is there in its largest form: the bar from about 650 px tall with the sidebar open, a
       // round toggle beside the live dot below that; folded, a round toggle, and in a short folded window (600 px
       // tall, 36 px between the menu and the foot) a slim one over that gap. On phones the icon over the short name
-      // from 360 px (a pill with the name where it is roomy); at 320 px the brand and the live dot leave about 38 px,
-      // so a slim icon-only toggle fills it with 4 px of air on each side.
+      // from 360 px (a pill with the name where it is roomy); at 340 px a slim icon-only toggle of 48 px fills the gap
+      // with 4 px of air on each side; at 320 px the brand and the live dot leave about 38 px, so the brand drops its
+      // name and the toggle is the round 48 px one (§45.36 E16).
       if (!phone && !size.folded) expect(here.mode, "sidebar open").toBe(size.h >= 650 ? "bar" : "corner");
       if (!phone && size.folded && !short) expect(here.mode, "sidebar folded").toBe(size.h >= 650 ? "round" : "slim");
       if (phone && size.w >= 360) expect(["label", "stack"], `phone at ${size.w}`).toContain(here.mode);
-      if (phone && size.w < 340) expect(here.mode, `phone at ${size.w}`).toBe("slim");
+      if (phone && size.w === 340) expect(here.mode, `phone at ${size.w}`).toBe("slim");
+      if (phone && size.w < 340) expect([here.mode, here.squeeze], `phone at ${size.w}`).toEqual(["round", true]);
       await on.context().close();
     });
 

@@ -8,8 +8,10 @@ import type { Workspace } from "../stories/api/types.ts";
 import { prefetchStoriesApp, useAppActive } from "../stories/pane.tsx";
 import {
   currentChoice,
+  followReading,
   knownWorkspaces,
   onWorkspacesChange,
+  readingPlace,
   rememberClipsPath,
   restoreScroll,
   saveClipsScroll,
@@ -211,7 +213,8 @@ export type SwitchPlace = "sidebar" | "topbar" | "stories-rail" | "stories-top" 
  * icon and the short name; stack: the icon over the short name; slim: an icon-only toggle cut to the empty gap.
  */
 type Mode = "bar" | "round" | "corner" | "label" | "stack" | "slim" | "none";
-type Measured = { mode: Mode; style?: CSSProperties };
+/** squeeze: the phone top bar's brand drops its name so the toggle keeps its full 48 px (§45.36 E16). */
+type Measured = { mode: Mode; style?: CSSProperties; squeeze?: boolean };
 
 /** The bar's choices are 44 px tall inside 4 px of padding; the round toggle is 44 px (48 px on phones). */
 const OPT_H = 44;
@@ -331,12 +334,18 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
 
   // Back from Lamo Stories: the Clip Factory page opens where the owner left it (its lists may still be loading, so
   // it waits for the page to grow, and lets go as soon as the owner scrolls himself). Also when Clip Factory stayed
-  // mounted behind Lamo Stories and comes back on screen.
+  // mounted behind Lamo Stories and comes back on screen. From whichever of Clip Factory's switchers is mounted (the
+  // sidebar's and the phone top bar's; the kept place is read once, so only the first one restores it, §45.36 E1).
   useEffect(() => {
-    if (place !== "sidebar" || !active) return;
+    if ((place !== "sidebar" && place !== "topbar") || !active) return;
     const y = takeClipsScroll(here());
     return y === null ? undefined : restoreScroll(y);
   }, [place, active]);
+
+  // On a phone the top bar scrolls away with the page: where the owner was reading is followed, so a switch he
+  // scrolled up to reach keeps that place (§45.36 E1).
+  const shownInTopbar = place === "topbar" && measured.mode !== "none";
+  useEffect(() => (shownInTopbar && active ? followReading(here) : undefined), [shownInTopbar, active]);
 
   // Measure the room in Lamo Clips' shell and pick the largest form that fits without moving or covering anything.
   useLayoutEffect(() => {
@@ -348,7 +357,7 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
     let frame = 0;
     const measure = () => {
       const next = place === "sidebar" ? sidebarMode(anchor, collapsed, count) : place === "sidebar-top" ? sidebarTopMode(anchor, collapsed, count) : topbarMode(anchor, nameOnPhone);
-      setMeasured((m) => (m.mode === next.mode && JSON.stringify(m.style) === JSON.stringify(next.style) ? m : next));
+      setMeasured((m) => (m.mode === next.mode && m.squeeze === next.squeeze && JSON.stringify(m.style) === JSON.stringify(next.style) ? m : next));
     };
     // Again on the next frame too: a late font or a child that just arrived settles its size only after layout.
     const soon = () => {
@@ -398,7 +407,7 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
     // opens the page the kept screen shows. Leaving Lamo Stories: its own, which StoriesApp puts back when it is on
     // screen again.
     if (inClips) {
-      saveClipsScroll(from, window.scrollY);
+      saveClipsScroll(from, place === "topbar" ? readingPlace(from, window.scrollY, Date.now()) : window.scrollY);
       rememberClipsPath(from);
     } else saveStoriesScroll(from, window.scrollY);
     const to = switchTarget(w);
@@ -414,7 +423,7 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
     return c.lastStoriesWorkspaceId === null || c.lastStoriesWorkspaceId === w.workspaceId ? c.lastStoriesPath : "/stories";
   };
   const here_ = list.find((w) => w.workspaceId === current) ?? list[0]!;
-  const { mode, style } = measured;
+  const { mode, style, squeeze } = measured;
   // The toggle beside the fold button is a slim toggle of the sidebar's (glide.css styles it as the foot's slim one).
   const cls = `ws-switch-host ${place === "sidebar-top" ? "ws-switch-host--sidebar ws-switch-host--sidebar-top" : `ws-switch-host--${place}`}${collapsed ? " is-collapsed" : ""}`;
 
@@ -449,7 +458,7 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
   const kind = `ws-round${big ? " ws-round--phone" : ""}${mode === "label" ? " ws-round--label" : ""}${mode === "stack" ? " ws-round--stack" : ""}${mode === "slim" ? " ws-round--slim" : ""}`;
   const markSize = mode === "slim" ? 20 : mode === "stack" ? 22 : mode === "label" ? 24 : big ? 26 : 24;
   return (
-    <div ref={ref} className={cls} data-ws-switch={mode} style={style}>
+    <div ref={ref} className={cls} data-ws-switch={mode} data-ws-squeeze={squeeze ? "" : undefined} style={style}>
       {target ? (
         <a
           href={hrefFor(target)}
@@ -650,8 +659,10 @@ function textWidth(text: string, rem: number, family: string): number | null {
 /**
  * The phone top bar: the room left between the brand and the live dot. A pill with the icon and the short name when
  * it fits, else the icon over the name, else the round toggle (48 px), each with the bar's gap on its left and 4 px of
- * air on its right (glide.css pulls it 8 px towards the live dot); else (from 320 px, where the brand and the live dot
- * leave about 38 px) a slim icon-only toggle cut to that gap, with 4 px of air on each side. Nothing moves or shrinks.
+ * air on its right (glide.css pulls it 8 px towards the live dot); else a slim icon-only toggle cut to that gap, with
+ * 4 px of air on each side, while it is at least 44 px across. Narrower than that (320 px, where the brand and the live
+ * dot leave about 38 px) the brand drops its name (its mark stays) so the toggle is a full 48 px round one (§45.36
+ * E16). Nothing else moves or shrinks.
  */
 export function topbarMode(anchor: HTMLElement, name = ""): Measured {
   const bar = anchor.closest<HTMLElement>(".topbar");
@@ -662,25 +673,40 @@ export function topbarMode(anchor: HTMLElement, name = ""): Measured {
   // is not its own (the answer must never depend on itself). Hidden and shown again before anything is painted.
   const shown = anchor.style.display;
   anchor.style.display = "none";
+  // The brand's name too, as it is without this toggle (a squeeze drops it, which must not count as room).
+  const squeezed = anchor.hasAttribute("data-ws-squeeze");
+  if (squeezed) anchor.removeAttribute("data-ws-squeeze");
   const kids = Array.from(bar.children).filter((el): el is HTMLElement => el instanceof HTMLElement && el !== anchor && getComputedStyle(el).display !== "none");
   // Layout widths, never the painted box: the live dot and the brand pop in with a little scale, which a measured
   // box would count as room (offsetWidth is rounded, so half a pixel more each, to be safe).
   const used = kids.reduce((n, el) => n + el.offsetWidth + 0.5, 0) + gap * Math.max(0, kids.length - 1);
   const free = bar.clientWidth - px(s.paddingLeft) - px(s.paddingRight) - used;
+  // What dropping the brand's name gives back: its width and the gap before it.
+  const brandName = bar.querySelector<HTMLElement>(".brand .brand__name");
+  const brand = brandName?.parentElement;
+  const nameRoom = brandName && brand && getComputedStyle(brandName).display !== "none" ? brandName.offsetWidth + (px(getComputedStyle(brand).columnGap) || 0) : 0;
   anchor.style.display = shown;
+  if (squeezed) anchor.setAttribute("data-ws-squeeze", "");
   const before = kids.some((el) => el.compareDocumentPosition(anchor) & Node.DOCUMENT_POSITION_FOLLOWING);
   const after = kids.some((el) => anchor.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
   // What the toggle adds to the row: its width and a gap on each side that has a neighbour (the right one pulled in
   // to `right`), less the one gap between the brand and the live dot it now sits in.
   const takes = (w: number, left: number, right: number) => w + (before ? left : 0) + (after ? right : 0) - (before && after ? gap : 0);
-  const fits = (w: number) => free >= takes(w, gap, after ? Math.max(AIR, gap - 8) : 0);
+  const fits = (w: number, room = free) => room >= takes(w, gap, after ? Math.max(AIR, gap - 8) : 0);
   const family = getComputedStyle(bar).fontFamily;
   const text = name ? textWidth(name, LABEL_REM, family) : null;
   if (text !== null && fits(text + LABEL_SIDES)) return { mode: "label" };
   if (text !== null && fits(Math.max(PHONE, text + STACK_SIDES))) return { mode: "stack" };
   if (fits(PHONE)) return { mode: "round" };
-  // Slim: the whole gap less 4 px of air on each side (its margins pull it into the bar's gaps).
-  const w = Math.floor(Math.min(PHONE, free - takes(0, AIR, AIR)));
-  if (w >= SLIM_MIN) return { mode: "slim", style: { width: w, marginLeft: before ? AIR - gap : 0, marginRight: after ? AIR - gap : 0 } };
+  // Slim: the whole gap less 4 px of air on each side (its margins pull it into the bar's gaps), while that is still a
+  // full finger's width (44 px, the owner's phone minimum).
+  const slim = (room: number) => Math.floor(Math.min(PHONE, room - takes(0, AIR, AIR)));
+  const margins = { marginLeft: before ? AIR - gap : 0, marginRight: after ? AIR - gap : 0 };
+  if (slim(free) >= ROUND) return { mode: "slim", style: { width: slim(free), ...margins } };
+  // The smallest phones (320 px): the brand keeps its mark and drops its name before the toggle gets any narrower
+  // than that (§45.36 E16).
+  if (nameRoom > 0 && fits(PHONE, free + nameRoom)) return { mode: "round", squeeze: true };
+  const w = slim(free + nameRoom);
+  if (w >= SLIM_MIN) return { mode: "slim", squeeze: nameRoom > 0 ? true : undefined, style: { width: w, ...margins } };
   return { mode: "none" };
 }

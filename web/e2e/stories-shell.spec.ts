@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { asMacWindow } from "./desktopWindow.ts";
 import { visibleEdges } from "./edges.ts";
 import { findOverflow, settle, WIDTHS } from "./helpers.ts";
 
@@ -69,15 +70,39 @@ test.describe("switching", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Social accounts" })).toBeVisible();
   });
 
-  test("on the smallest phone (320 px) a slim toggle in the top bar still switches in one tap", async ({ page }) => {
+  test("on the smallest phone (320 px) the top bar's toggle is a full 48 px one (the brand keeps its mark, drops its name) and switches in one tap", async ({ page }) => {
     await on(page);
     await page.setViewportSize({ width: 320, height: 700 });
     await page.goto("/review");
     await settle(page);
-    await expect(page.locator(".topbar .ws-switch-host")).toHaveAttribute("data-ws-switch", "slim");
+    const host = page.locator(".topbar .ws-switch-host");
+    await expect(host).toHaveAttribute("data-ws-switch", "round");
+    await expect(host).toHaveAttribute("data-ws-squeeze", "");
+    const toggle = (await page.locator(".topbar").getByRole("link", { name: "Go to Lamo Stories" }).boundingBox())!;
+    expect(toggle.width).toBeGreaterThanOrEqual(44);
+    expect(toggle.height).toBeGreaterThanOrEqual(44);
+    await expect(page.locator(".topbar .brand__name")).toBeHidden();
+    await expect(page.locator(".topbar .brand__mark")).toBeVisible();
+    await expect(page.locator(".topbar").getByRole("link", { name: "Clip Factory home" })).toBeVisible();
     await page.locator(".topbar").getByRole("link", { name: "Go to Lamo Stories" }).click();
     await expect(page).toHaveURL(/\/stories$/);
     await storiesReady(page);
+  });
+
+  test("E16: from 340 px up the brand keeps its name, and every phone width has a toggle of 44 px or more both ways", async ({ page }) => {
+    await on(page);
+    for (const width of [320, 340, 360, 390, 430]) {
+      await page.setViewportSize({ width, height: 760 });
+      await page.goto("/review");
+      await settle(page);
+      await page.waitForTimeout(150);
+      const toggle = (await page.locator(".topbar").getByRole("link", { name: "Go to Lamo Stories" }).boundingBox())!;
+      expect(toggle.width, `${width} px wide`).toBeGreaterThanOrEqual(44);
+      expect(toggle.height, `${width} px wide`).toBeGreaterThanOrEqual(44);
+      if (width >= 340) await expect(page.locator(".topbar .brand__name"), `${width} px wide`).toBeVisible();
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+      expect(overflow, `${width} px wide`).toBeLessThanOrEqual(0);
+    }
   });
 
   test("a switch held by Leave without saving: Keep editing stays and the device still says Clip Factory; Leave switches", async ({ page }) => {
@@ -168,6 +193,41 @@ test.describe("switching", () => {
     await page.locator(".st-rail .ws-switch__opt", { hasText: "Clip Factory" }).click();
     await expect(page).toHaveURL(/\/library$/);
     await expect.poll(() => page.evaluate(() => Math.round(scrollY)), { timeout: 6000 }).toBe(kept);
+  });
+
+  test("E1: on a phone (390x844) too, coming back to Clip Factory opens its Library where it was scrolled to", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/library");
+    await settle(page);
+    const room = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+    expect(room, "the Library is taller than the phone's window").toBeGreaterThan(300);
+    await page.evaluate((to) => window.scrollTo(0, to), Math.min(874, Math.round(room * 0.6)));
+    // He reads there a moment; the tap below first scrolls the page up to the top bar, as his thumb does.
+    await page.waitForTimeout(1800);
+    const kept = await page.evaluate(() => Math.round(scrollY));
+    expect(kept).toBeGreaterThan(200);
+    await page.locator(".topbar").getByRole("link", { name: "Go to Lamo Stories" }).click();
+    await expect(page).toHaveURL(/\/stories$/);
+    await storiesReady(page);
+    await page.locator(".st-top").getByRole("link", { name: "Go to Clip Factory" }).click();
+    await expect(page).toHaveURL(/\/library$/);
+    await expect.poll(() => page.evaluate(() => Math.round(scrollY)), { timeout: 6000 }).toBe(kept);
+    // A second round trip keeps it as well.
+    await page.waitForTimeout(1800);
+    await page.locator(".topbar").getByRole("link", { name: "Go to Lamo Stories" }).click();
+    await storiesReady(page);
+    await page.locator(".st-top").getByRole("link", { name: "Go to Clip Factory" }).click();
+    await expect.poll(() => page.evaluate(() => Math.round(scrollY)), { timeout: 6000 }).toBe(kept);
+    // Scrolled up to the top and resting there before the switch: the top is where he left it.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(1800);
+    await page.locator(".topbar").getByRole("link", { name: "Go to Lamo Stories" }).click();
+    await storiesReady(page);
+    await page.locator(".st-top").getByRole("link", { name: "Go to Clip Factory" }).click();
+    await expect(page).toHaveURL(/\/library$/);
+    await page.waitForTimeout(600);
+    expect(await page.evaluate(() => Math.round(scrollY))).toBe(0);
   });
 
   test("ask, switch to Lamo Stories while the answer streams, switch back: the answer is there", async ({ page }) => {
@@ -704,7 +764,7 @@ test.describe("the pages", () => {
     await page.goto("/stories/connections");
     await storiesReady(page);
     const x = page.locator(".st-conn").filter({ has: page.getByRole("heading", { name: "X" }) });
-    await expect(x).toContainText("This is the same account Lamo Clips posts to.");
+    await expect(x).toContainText("This is the same account Clip Factory posts to.");
     await x.getByRole("button", { name: "Use it for both" }).click();
     await expect(x.getByRole("group", { name: "Are you sure?" })).toBeVisible();
     await x.getByRole("button", { name: "No, keep it as it is" }).click();
@@ -967,6 +1027,52 @@ test.describe("round 4: the two apps stay apart and quiet (§45.35)", () => {
     await storiesReady(page);
     await expect(card).toHaveCount(0);
     await expect(page.locator(".stories-app")).toBeVisible();
+  });
+
+  for (const [width, height, mac] of [
+    [1280, 600, false],
+    [1280, 650, false],
+    [1280, 520, false],
+    [1280, 650, true],
+    [1000, 600, true],
+  ] as const)
+    test(`E16: at ${width}x${height}${mac ? " in the Mac window" : ""} Lamo Stories' own switcher is in view and takes one click, with no scrolling`, async ({ page }) => {
+      if (mac) await asMacWindow(page);
+      await on(page);
+      await page.setViewportSize({ width, height });
+      await page.goto("/stories/library");
+      await storiesReady(page);
+      const opt = page.locator(".st-rail .ws-switch__opt", { hasText: "Clip Factory" });
+      const hit = await opt.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const rail = el.closest(".st-rail")!.getBoundingClientRect();
+        const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return { same: !!at && (at === el || el.contains(at)), bottom: r.bottom, railBottom: rail.bottom, top: r.top, inner: innerHeight };
+      });
+      expect(hit.same, "the switcher's Clip Factory choice is what is under its own centre").toBe(true);
+      expect(hit.bottom).toBeLessThanOrEqual(hit.railBottom);
+      expect(hit.bottom).toBeLessThanOrEqual(hit.inner);
+      // The brand stays at the top too; only the list of pages scrolls, inside the rail.
+      await expect(page.locator(".st-rail .st-brand")).toBeInViewport();
+      expect(await page.locator(".st-rail").evaluate((el) => el.scrollTop)).toBe(0);
+      // A real click at that spot, with nothing scrolled first: Clip Factory.
+      const box = (await opt.boundingBox())!;
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(page).not.toHaveURL(/\/stories/);
+      await settle(page);
+    });
+
+  test("E16: in a short window every page of the rail can still be reached (the list scrolls inside the rail)", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 1280, height: 520 });
+    await page.goto("/stories");
+    await storiesReady(page);
+    const last = page.locator(".st-rail .st-rail__item").last();
+    await last.scrollIntoViewIfNeeded();
+    await expect(last).toBeInViewport();
+    await last.click();
+    await expect(page).toHaveURL(/\/stories\/settings/);
+    await expect(page.locator(".st-rail .ws-switch__opt", { hasText: "Clip Factory" })).toBeInViewport();
   });
 
   test("D19: in a short window with the sidebar folded, the slim toggle beside the fold button switches in one click", async ({ page }) => {

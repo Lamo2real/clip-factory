@@ -105,7 +105,7 @@ describe("one toast per pick (§45.35 D21)", () => {
     const ask = card("instagram").querySelector<HTMLElement>(".st-intended")!;
     expect(ask.textContent).toContain("Is this your Lamo Stories account?");
     await click(button(ask, "Yes, that's it"));
-    expect(toasts()).toEqual(["Great! Lamo Stories posts to lamo.stories on Instagram."]);
+    expect(toasts()).toEqual(["Great! Lamo Stories posts to this Instagram account (lamo.stories)."]);
   });
 
   it("picking Lamo Clips' own place still says so (there is no question then)", async () => {
@@ -149,7 +149,7 @@ describe("Lamo Clips' account found later (§45.35 D11)", () => {
     expect(sameAsClips(x)).toBe(true);
     const o = await api.getOnboarding("stories");
     expect(o.steps.find((s) => s.step === "x")).toEqual({ step: "x", label: "Connect X", state: "todo", line: sameAsClipsLine("x") });
-    expect(sameAsClipsLine("x")).toBe("This is Lamo Clips' X account. Pick another in Social accounts, or tap Use it for both.");
+    expect(sameAsClipsLine("x")).toBe("This is Clip Factory's X account. Pick another in Social accounts, or tap Use it for both.");
     const fresh = await api.social("stories");
     expect(fresh.accounts.find((a) => a.platform === "x")?.connectionStatus).toBe("same_as_clips");
     // Used for both on purpose: connected, and the step ticks.

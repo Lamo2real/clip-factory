@@ -24,12 +24,12 @@ export const LIMITS: Record<Platform, string[]> = {
   ],
   instagram: [
     "It needs its own professional account (Business or Creator), linked to a Facebook Page.",
-    "Facebook asks which Pages the app may use for your whole Facebook login. If you untick Lamo Clips' Page there, Lamo Clips loses it.",
-    "Lamo Stories checks Lamo Clips afterwards and tells you if something went wrong.",
+    "Facebook asks which Pages the app may use for your whole Facebook login. If you untick Clip Factory's Page there, Clip Factory loses it.",
+    "Lamo Stories checks Clip Factory afterwards and tells you if something went wrong.",
   ],
   facebook: [
     "It needs its own Facebook Page, run by the same Facebook login.",
-    "When Facebook asks which Pages, keep Lamo Clips' Page ticked too.",
+    "When Facebook asks which Pages, keep Clip Factory's Page ticked too.",
   ],
   tiktok: [
     "While TikTok is still checking the app, only test accounts added in TikTok's Sandbox can connect.",
@@ -38,7 +38,7 @@ export const LIMITS: Record<Platform, string[]> = {
   ],
   x: [
     "It needs its own X account. X connects the account that is signed in on x.com.",
-    "Posts use the same X app and the same monthly X limit as Lamo Clips.",
+    "Posts use the same X app and the same monthly X limit as Clip Factory.",
   ],
 };
 
@@ -51,12 +51,12 @@ export const LIMITS_OWN: Record<Platform, string[]> = {
   ],
   instagram: [
     "It needs its own professional account (Business or Creator), linked to a Facebook Page.",
-    "Lamo Stories uses its own Meta app, so Lamo Clips' Meta connection is never touched.",
+    "Lamo Stories uses its own Meta app, so Clip Factory's Meta connection is never touched.",
     "While the Meta app is in Development mode, only you (its admin) can connect. Going Live needs Meta's App Review.",
   ],
   facebook: [
     "It needs its own Facebook Page, run by the same Facebook login.",
-    "Lamo Stories uses its own Meta app, so Lamo Clips' Pages stay as they are. Tick only the Lamo Stories Page.",
+    "Lamo Stories uses its own Meta app, so Clip Factory's Pages stay as they are. Tick only the Lamo Stories Page.",
   ],
   tiktok: [
     "A new TikTok app starts in Sandbox: only test accounts added there can connect, and they must be private.",
@@ -170,13 +170,15 @@ function connectedAs(a: SocialAccount, who: { id: string; name: string; handle: 
     reconnectBy: null,
     choices: null,
     missing: [],
+    // A fresh sign-in clears the old warning (the keys-changed one included), as the API's connect does (§45.36 E18).
+    warning: null,
   };
 }
 
 /** The API's warning while an account is needs_reconnect because the chosen app's keys changed. */
 export const keysChangedSentence = (p: Platform) => `The ${PLATFORM_NAME[p]} app keys changed. Connect again.`;
 
-const META_WARNING = (p: Platform) => `Lamo Clips may have lost ${PLATFORM_NAME[p]}. Connect it again in Lamo Clips, keeping its Page ticked.`;
+const META_WARNING = (p: Platform) => `Clip Factory may have lost ${PLATFORM_NAME[p]}. Connect it again in Clip Factory, keeping its Page ticked.`;
 
 /** A Meta app's keys as the seed saved them (the same app for Instagram and Facebook). */
 const SEED_META = { clientId: "1234567890123456", clientSecret: "0123456789abcdef0123456789abcdef", configId: "9876543210987654" };
@@ -277,7 +279,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         throw new ApiError(
           409,
           "conflict",
-          `Lamo Clips has no ${PLATFORM_NAME[platform]} app keys yet. Set up ${PLATFORM_NAME[platform]} in Lamo Clips first (Settings › Posting › Set up posting, up to the keys step).`,
+          `Clip Factory has no ${PLATFORM_NAME[platform]} app keys yet. Set up ${PLATFORM_NAME[platform]} in Clip Factory first (Settings › Posting › Set up posting, up to the keys step).`,
         );
       // A test can pick what the pretend platform answers; otherwise each platform does what it does for real.
       const forced = typeof store.knobs.connectResult === "string" ? (store.knobs.connectResult as string) : null;
@@ -319,7 +321,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
     async shareWithClips(ws, platform) {
       await delay(200);
       const a = account(store, ws, platform);
-      if (a.connectionStatus !== "same_as_clips") throw new ApiError(409, "conflict", "This account is not the one Lamo Clips posts to.");
+      if (a.connectionStatus !== "same_as_clips") throw new ApiError(409, "conflict", "This account is not the one Clip Factory posts to.");
       return replace(store, { ...a, connectionStatus: "connected", sharedWithClips: true });
     },
     async checkSocial(ws, platform) {
@@ -358,7 +360,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const name = PLATFORM_NAME[platform];
       if (body.choice === "clips") {
         if (!SHARED_APP_PLATFORMS.includes(platform))
-          throw new ApiError(400, "bad_request", `${name} always uses Lamo Stories' own Meta app, so Lamo Clips' Meta connection is never touched.`);
+          throw new ApiError(400, "bad_request", `${name} always uses Lamo Stories' own Meta app, so Clip Factory's Meta connection is never touched.`);
         const changed = a.app.choice !== "clips";
         const next = changed ? base(ws, platform, CLIPS_APP) : a;
         return replace(store, { ...next, app: CLIPS_APP, limits: limitsFor(platform, "clips") });

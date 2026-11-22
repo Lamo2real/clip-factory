@@ -14,7 +14,7 @@ import { useLoad, usePoll } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
 import type { Agent, AgentId, AiPicked, AiTask, Effort, ModelInfo, Price, ProviderStatus, StoriesAiConfig, TaskInfo, TaskKind } from "../api/types.ts";
 import { EFFORT_LABEL } from "../api/types.ts";
-import { Btn, cheer, Chip, effortWord, Failed, Loading, madeBy, MODEL_STATUS, money, Note, Progress, refusedLine, SavedMark, SetCard, SetPick, SetSelect, SIcon, statusSuffix, useSaved, whenText } from "./bits.tsx";
+import { Btn, cheer, Chip, effortWord, Failed, Loading, madeBy, MODEL_STATUS, money, Note, Progress, refusedLine, SavedMark, SetCard, SetPick, SetSelect, SIcon, statusSuffix, useOnThisPage, useSaved, whenText } from "./bits.tsx";
 import { useAi, type AiData } from "./data.ts";
 import { OwnModels } from "./OwnModels.tsx";
 import { keepName, ProviderKeys, ProviderRow } from "./ProviderKeys.tsx";
@@ -145,9 +145,10 @@ export function CheckModels({ ws, count, onDone, only }: { ws: string; count: nu
 // ---------- Default model and effort ----------
 
 function ModelOptionLine({ m }: { m: ModelInfo }) {
+  const here = useOnThisPage();
   return (
     <>
-      {madeBy(m)} · {m.statusLine}
+      {madeBy(m)} · {here(m.statusLine)}
       {m.checkedAt ? ` (${whenText(m.checkedAt)})` : ""}
     </>
   );
@@ -156,7 +157,9 @@ function ModelOptionLine({ m }: { m: ModelInfo }) {
 function DefaultModel({ data, pending, onPick, ws, reload }: { data: AiData; pending: string | null; onPick: (key: string) => void; ws: string; reload: () => Promise<void> }) {
   const shown = pending ?? data.ai.defaultModel;
   const picked = modelOf(data.models, shown);
-  const refused = refusedLine(picked);
+  const here = useOnThisPage();
+  const found = refusedLine(picked);
+  const refused = found ? here(found) : null;
   return (
     <SetCard
       title="Default model"
@@ -178,10 +181,10 @@ function DefaultModel({ data, pending, onPick, ws, reload }: { data: AiData; pen
           value: m.key,
           label: m.label,
           chip: (
-            <>
+            <span className="st-stg-chips">
               {m.custom ? <Chip tone="sky">Added by you</Chip> : null}
               <Chip tone={MODEL_STATUS[m.status].tone}>{MODEL_STATUS[m.status].label}</Chip>
-            </>
+            </span>
           ),
           line: <ModelOptionLine m={m} />,
         }))}
@@ -283,7 +286,9 @@ function AssignRow({
   const needsEffort = !!draft;
   const effortBroken = !draft && usesModel && usesEffort && usesModel.efforts.length > 0 && !usesModel.efforts.includes(usesEffort);
   // The refusal is spelled out where the model is picked; rows that only inherit it get a short chip.
-  const refused = draft || model ? refusedLine(draft ? modelOf(models, draft.model) : usesModel) : null;
+  const here = useOnThisPage();
+  const said = draft || model ? refusedLine(draft ? modelOf(models, draft.model) : usesModel) : null;
+  const refused = said ? here(said) : null;
   const inheritedNo = !refused && usesModel && usesModel.status !== "ok" && usesModel.status !== "not_checked" ? MODEL_STATUS[usesModel.status] : null;
   return (
     <li className="st-stg-assign__row" data-row={rowId}>
@@ -478,6 +483,7 @@ function PriceRow({ ws, m, onSaved }: { ws: string; m: ModelInfo; onSaved: (m: M
   const [currency, setCurrency] = useState(m.price?.currency ?? "USD");
   const [busy, setBusy] = useState(false);
   const owner = m.price?.source === "owner";
+  const here = useOnThisPage();
   const save = async (el: HTMLElement | null) => {
     const i = Number(input.replace(",", "."));
     const o = Number(output.replace(",", "."));
@@ -515,7 +521,7 @@ function PriceRow({ ws, m, onSaved }: { ws: string; m: ModelInfo; onSaved: (m: M
         {m.price ? <Chip tone={owner ? "sky" : "mint"}>{owner ? "Your price" : "List price"}</Chip> : <Chip tone="sun">No price set.</Chip>}
       </div>
       {m.price ? <p className="st-stg-price__text">{priceText(m.price)}</p> : <p className="st-stg-price__text">Tokens are counted, but no cost is worked out until you type its price.</p>}
-      {m.price && !owner ? <p className="st-stg-small">{m.price.note}</p> : null}
+      {m.price && !owner ? <p className="st-stg-small">{here(m.price.note, "here")}</p> : null}
       {open ? (
         <form
           className="st-stg-price__form"

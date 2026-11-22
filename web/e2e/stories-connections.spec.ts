@@ -96,7 +96,7 @@ test("after Disconnect, an own Meta app gets the Lamo Stories line, Clip Factory
   await fb.getByRole("group", { name: "Is this your Lamo Stories Page?" }).getByRole("button", { name: "Yes, that's it" }).click();
   await fb.getByRole("button", { name: "Disconnect" }).click();
   await fb.getByRole("button", { name: "Yes, disconnect" }).click();
-  await expect(page.getByText("To remove Lamo Stories completely, remove your Lamo Stories app in the account's own settings. Lamo Clips is not affected.")).toBeVisible();
+  await expect(page.getByText("To remove Lamo Stories completely, remove your Lamo Stories app in the account's own settings. Clip Factory is not affected.")).toBeVisible();
   await page.getByRole("button", { name: "Hide this note" }).click();
   const yt = cardOf(page, "YouTube");
   await yt.getByRole("button", { name: "Disconnect" }).click();

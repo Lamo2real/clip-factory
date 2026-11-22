@@ -204,7 +204,7 @@ describe("step 4 and the connect steps", () => {
     await click($$("[role=radio]").find((r) => r.textContent?.includes("Amazon Nova Reel"))!);
     // Every create, remake and change stops while it is not ready (§45.34 "A provider that is not ready"), whatever the scenes.
     expect(document.body.textContent).toContain("Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in animation by itself.");
-    expect(document.body.textContent).toContain("Pick Built-in animation to keep making videos.");
+    expect(document.body.textContent).toContain("Pick Built-in animation above to keep making videos.");
     expect(document.body.textContent).not.toMatch(/a scene without characters stops/);
     expect(document.body.textContent).not.toMatch(/keep using the built-in animation/);
   });

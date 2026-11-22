@@ -164,6 +164,14 @@
 .topbar > .ws-switch-host--topbar:last-child {
   margin-right: 0;
 }
+/* The smallest phones (320 px): the brand keeps its mark and drops its name, so the toggle stays a full 48 px round
+   one (§45.36 E16). Only while the switcher asks for it; with Lamo Stories off it is never there. */
+.topbar:has(> .ws-switch-host--topbar[data-ws-squeeze]) .brand__name {
+  display: none;
+}
+.topbar:has(> .ws-switch-host--topbar[data-ws-squeeze]) .brand {
+  min-width: 44px;
+}
 .ws-switch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

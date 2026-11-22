@@ -11,7 +11,7 @@ import { storiesApi } from "../api/client.ts";
 import { storiesReduceMotion } from "../prefs.ts";
 import { RESOLUTIONS, type ProviderStatus, type StoriesConfig, type VideoAspect, type VideoResolution } from "../api/types.ts";
 import modelsFile from "../../../../stories/config/models.json";
-import { Chip, Failed, Loading, Note, PROVIDER_STATE, SavedMark, SetCard, SetPick, SetSwitch, useSaved } from "./bits.tsx";
+import { Chip, Failed, Loading, Note, PROVIDER_STATE, SavedMark, SetCard, SetPick, SetSwitch, useOnThisPage, useSaved } from "./bits.tsx";
 import { useAi, useWorkspaceConfig } from "./data.ts";
 import { keepName, ProviderKeys } from "./ProviderKeys.tsx";
 import { MakerPrices } from "./ProviderPrices.tsx";
@@ -58,15 +58,15 @@ function stateOf(providers: ProviderStatus[] | null, id: string): ProviderStatus
   return providers?.find((p) => p.id === id);
 }
 
-function makerOption<T extends string>(providers: ProviderStatus[] | null, id: T) {
+function makerOption<T extends string>(providers: ProviderStatus[] | null, id: T, here: (text: string) => string = (t) => t) {
   const p = stateOf(providers, id);
   const s = p ? PROVIDER_STATE[p.state] : null;
   return {
     value: id,
     label: MAKERS[id]?.label ?? p?.label ?? id,
-    line: p?.line ?? MAKERS[id]?.line,
+    line: p?.line ? here(p.line) : MAKERS[id]?.line,
     chip: s ? <Chip tone={s.tone}>{s.label}</Chip> : undefined,
-    off: p?.state === "unavailable" ? p.line || "Not available yet." : undefined,
+    off: p?.state === "unavailable" ? here(p.line) || "Not available yet." : undefined,
   };
 }
 
@@ -77,6 +77,7 @@ export function notReadyLine(p: Pick<ProviderStatus, "label" | "line">): string 
 
 function ModelLine({ providers, id }: { providers: ProviderStatus[] | null; id: string }) {
   const p = stateOf(providers, id);
+  const here = useOnThisPage();
   return (
     <>
       <p className="st-stg-active">
@@ -88,8 +89,8 @@ function ModelLine({ providers, id }: { providers: ProviderStatus[] | null; id: 
       {p && (p.state === "needs_setup" || p.state === "unavailable") ? (
         <Note tone="sun" role="status">
           {/* The API's line may already say it is not ready (§45.34's sentence, with the maker's short name): then it is said once. */}
-          {notReadyLine(p)}
-          {p.lastError && p.lastError !== p.line ? ` Last problem: ${p.lastError}` : ""}
+          {here(notReadyLine(p))}
+          {p.lastError && p.lastError !== p.line ? ` Last problem: ${here(p.lastError)}` : ""}
         </Note>
       ) : null}
     </>
@@ -157,6 +158,7 @@ export function VideoSection({ ws }: { ws: string }) {
   const ai = useAi(ws);
   const { saved, flash } = useSaved();
   const [priceOpen, setPriceOpen] = useState<string | null>(null);
+  const here = useOnThisPage();
   const reloadProviders = providers.reload;
   // A saved change shows "Saved" and asks the makers again (a newly picked one may need a check).
   useEffect(() => {
@@ -175,17 +177,17 @@ export function VideoSection({ ws }: { ws: string }) {
         <SavedMark saved={saved} busy={busy} />
       </div>
       <SetCard title="Video maker" icon="film" lede="What turns each story into moving pictures.">
-        <SetPick<VideoMaker> label="Video maker" stack value={c.providers.video} options={[makerOption(p, "builtin-2d"), makerOption(p, "nova-reel")]} onChange={(v) => save({ providers: { ...c.providers, video: v } })} />
+        <SetPick<VideoMaker> label="Video maker" stack value={c.providers.video} options={[makerOption(p, "builtin-2d", here), makerOption(p, "nova-reel", here)]} onChange={(v) => save({ providers: { ...c.providers, video: v } })} />
         <ModelLine providers={p} id={c.providers.video} />
         {/* Nova Reel's own row: Try it, one 6-second test shot, so it can become ready before any video (§45.35 D2). */}
         {p?.some((x) => x.id === "nova-reel") ? <ReelTry ws={ws} p={stateOf(p, "nova-reel")} reload={providers.reload} /> : null}
       </SetCard>
       <SetCard title="Picture maker" icon="brush" id="picture-maker" lede="How the characters are drawn.">
-        <SetPick<PictureMaker> label="Picture maker" stack value={c.providers.images} options={[makerOption(p, "builtin-rig"), makerOption(p, "nova-canvas")]} onChange={(v) => save({ providers: { ...c.providers, images: v } })} />
+        <SetPick<PictureMaker> label="Picture maker" stack value={c.providers.images} options={[makerOption(p, "builtin-rig", here), makerOption(p, "nova-canvas", here)]} onChange={(v) => save({ providers: { ...c.providers, images: v } })} />
         <ModelLine providers={p} id={c.providers.images} />
       </SetCard>
       <SetCard title="Sound maker" icon="sound" lede="Sound effects, character noises and music. No voice-over.">
-        <SetPick label="Sound maker" stack value={c.providers.audio} options={[makerOption(p, "builtin-synth")]} onChange={() => undefined} />
+        <SetPick label="Sound maker" stack value={c.providers.audio} options={[makerOption(p, "builtin-synth", here)]} onChange={() => undefined} />
         <ModelLine providers={p} id={c.providers.audio} />
       </SetCard>
       {providers.error && !p ? <Note tone="sun">{providers.error}</Note> : null}

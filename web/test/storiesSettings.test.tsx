@@ -709,11 +709,11 @@ describe("AI: models the owner adds (§45.34)", () => {
     expect(form.querySelector("[role=alert]")?.textContent).toBe("Give the model a name, like Nova Premier.");
     fill(form, "Name", "Nova Premier");
     await click(byText("[role=radio]", "Amazon", form));
-    fill(form, "Bedrock model ID or inference profile", "eu.amazon.nova premier");
+    fill(form, "Model ID", "eu.amazon.nova premier");
     await submit(form);
     expect(called("putAiModel")).toHaveLength(0);
     expect(form.querySelector("[role=alert]")?.textContent).toContain("does not look like a Bedrock model ID");
-    fill(form, "Bedrock model ID or inference profile", "eu.amazon.nova-premier-v1:0");
+    fill(form, "Model ID", "eu.amazon.nova-premier-v1:0");
     fill(form, "AWS Region", "eu-west-1");
     // How it is called (§45.35 D1): an Amazon model starts with no effort levels, no tools and the prompt cache on;
     // the levels show once the owner says it has them.
@@ -805,7 +805,7 @@ describe("AI: models the owner adds (§45.34)", () => {
     await click(byText("button", "Remove", byText(".st-stg-own", /Mistral Large 2/)));
     await click(byText("button", "Yes, remove it"));
     expect(called("deleteAiModel").at(-1)?.args).toEqual(["stories", "custom-mistral"]);
-    expect(byText(".st-stg-own", /Mistral Large 2/).querySelector("[role=alert]")?.textContent).toBe("Mistral Large 2 is still used by the task Write the story in Settings › AI. Pick another model there first.");
+    expect(byText(".st-stg-own", /Mistral Large 2/).querySelector("[role=alert]")?.textContent).toBe("Mistral Large 2 is still used by the task Write the story above. Pick another model there first.");
     // Once nothing uses it, it goes.
     setValue($$(".st-stg-assign__row").find((r) => r.querySelector(".st-stg-assign__title")?.textContent === "Write the story")!.querySelectorAll<HTMLSelectElement>("select")[0]!, "");
     await settle();

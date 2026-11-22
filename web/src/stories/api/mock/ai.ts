@@ -30,7 +30,7 @@ import type {
   TaskKind,
   UsageSummary,
 } from "../types.ts";
-import { callingFor, CUSTOM_MODEL_KEY, EFFORT_LABEL, MAX_CUSTOM_MODELS, type ModelCalling } from "../types.ts";
+import { callingFor, CUSTOM_MODEL_KEY, EFFORT_LABEL, MAX_CUSTOM_MODELS, modelRegionProblem, type ModelCalling } from "../types.ts";
 import { delay, type MockStore } from "./store.ts";
 
 export const KEYS = [
@@ -512,6 +512,9 @@ function cleanDef(store: MockStore, key: string, value: unknown): ModelDef {
   if (!modelId || modelId.length > 200 || !MODEL_ID.test(modelId)) throw bad("Paste the model ID or inference profile from Amazon Bedrock, like eu.amazon.nova-premier-v1:0.", "modelId");
   const region = typeof v.region === "string" ? v.region.trim() : "";
   if (!REGION.test(region)) throw bad("Pick the AWS Region the model runs in.", "region");
+  // Its Region must be the one its ARN names, or in the part of the world its profile runs in (§45.36 E4).
+  const misfit = modelRegionProblem(modelId, region);
+  if (misfit) throw bad(misfit, "region");
   if (!Array.isArray(v.efforts) || v.efforts.some((e) => !EFFORTS.includes(e as Effort)) || new Set(v.efforts).size !== v.efforts.length) throw bad("Pick each effort level once.", "efforts");
   const efforts = EFFORTS.filter((e) => (v.efforts as Effort[]).includes(e));
   const defaultEffort = v.defaultEffort ?? null;
