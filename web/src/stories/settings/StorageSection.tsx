@@ -249,6 +249,7 @@ function SoundsAndMotion() {
           Hear it
         </button>
       </div>
+      <p className="st-stg-small">Lamo Stories' own click sound.</p>
       <SetSelect
         label="Error sound"
         value={String(deny)}
