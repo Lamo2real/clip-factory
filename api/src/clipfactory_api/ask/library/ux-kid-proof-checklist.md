@@ -29,6 +29,10 @@ changes one is checked against this list.
   | Submission, submit | Clip, send, "Sent ✓" |
   | CPM | per 1,000 views |
   | MCP, OAuth, token, scope, API | sign in, allow (the jargon is never on screen) |
+  | KYC | ID check |
+  | EFT | bank transfer |
+  | Live, Connected, Verified (for a payout) | "Can get paid ✓ (YouTube says)" or "Can get paid (you said it's done)" |
+  | Not connected, disconnected (for a payout) | "Clip Factory can't check" or "Not set up yet" |
 
   Skills are the one place that says **Delete**, because a skill is the owner's own writing, not a clip
   ([Skill pages](#skill-pages)).

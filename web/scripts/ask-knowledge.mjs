@@ -325,7 +325,9 @@ export async function build() {
   const hash = createHash("sha256");
   hash.update(JSON.stringify(body));
   for (const e of lib) hash.update(e.text);
-  const version = hash.digest("hex").slice(0, 12);
+  let version = hash.digest("hex").slice(0, 12);
+  // Twelve digits in a row look like an AWS account id, so the server's redact() would hide the version.
+  if (/^\d+$/.test(version)) version = `a${version.slice(1)}`;
   const pack = { version, ...body };
   return { pack, lib };
 }

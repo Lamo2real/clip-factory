@@ -193,12 +193,20 @@ Contract: [CONTRACTS.md §39.2](CONTRACTS.md#392-all-your-money-in-one-place),
   again"), never a number or $0 for a place that doesn't report one, and at most one glass button at the row's right
   end (so on phones nothing tappable sits in the top-left third). Under Content Rewards, its small lines in money's
   time order: "Right now (Content Rewards says, 2:10 pm): Still earning … · Ready to move to Whop … · On its way to
-  Whop …", "Earned so far, since you started: …", "Paid out to your bank: not available from Content Rewards. Look on
-  Whop: **Balances**." and a glass "See it all" (to `#content-rewards`) only while the row has no button of its own.
+  Whop …", "Earned so far, since you started: …", "Sent to your bank: not available from Content Rewards. Look on
+  Whop: **Balances**." (since §40.4 every row's `sent` line; it was "Paid out to your bank") and a glass "See it all" (to `#content-rewards`) only while the row has no button of its own.
 - **The total**: "Total: $24.80" (the biggest number on the page; it never counts up), "YouTube + Content Rewards · 30
   days up to Sat 16 Nov", the tag line "YouTube's estimate + Content Rewards' numbers"; two currencies give one line
   each and "Different money, like dollars and euros, is never added together."; then "Not in the total: TikTok,
   Instagram and X (not available) · Facebook (coming soon)." With nothing to add: "Nothing to add up yet." and no total.
+- **Sent to your bank** ([CONTRACTS.md §40.4](CONTRACTS.md#404-money-sent-toward-his-bank-per-place-and-in-total)):
+  under each row, in any state, one small grey line from the row's `sent` ("Sent to your bank by Google: kr 2 468,00
+  so far · YouTube says", or the place's not-available line). Under the total, the block **Sent to your bank, so
+  far**: one line per currency with its places ("$210.00 · Whop (all your Whop money, Content Rewards too)"), "Google
+  and Whop say they sent it.", "Different money, like dollars and kronor, is never added together.", "Not in this:
+  TikTok, Instagram, Facebook and X (not available)." and "Clip Factory can't see your bank. Look in your bank's app
+  to see what arrived."; only with no sent rows: "Nothing sent to your bank yet." It is never added to the total
+  above (a different thing over a different time), and it is never on the Get paid card.
 - **Numbers.** Amounts are only formatted (`tabular-nums`); all adding is on the server.
 
 ### Campaign finder

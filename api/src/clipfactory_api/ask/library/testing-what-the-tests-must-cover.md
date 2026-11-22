@@ -840,6 +840,103 @@ store, a fake Lambda client for the clip flow's start and fake publishers. No AW
 - **Live checks, not done here** ([§46.14](CONTRACTS.md#4614-not-verified-live)): see step 17 of
   [Manual checks after the first deploy](#manual-checks-after-the-first-deploy).
 
+### Get paid (CONTRACTS §40)
+From [CONTRACTS.md §40.8](CONTRACTS.md#408-changes-to-earlier-sections-who-builds-what-tests-not-verified-live).
+Offline, fakes only: no AWS, Google, Whop, platform or network. The bank part (§40.5) is not built, so it has no
+tests. Merge order: the api (K) and the collector (L) in any order, the web (M) after the api, the help and docs (N)
+after the web. Each part passes on its own: before L the api finds no `PAYSTATE#` or `PAYOUT#`; before K the
+collector finds no `PAYCONN#`; L's and M's tests read K's golden files when they are there.
+
+- **API, the status and the money** (pytest, `api/tests/test_getpaid_status.py` and `test_getpaid_sent.py`; the cases
+  are written by `api/tests/getpaid_cases.py` to `api/tests/fixtures/{getpaid_status_cases.json,
+  getpaid_sent_cases.json, getpaid_steps.json, getpaid_items.json}`): every place × every status and both kinds of
+  "not set up", in the table's order (a fresh hold beats all; YouTube's `not_yet` beats his ticks, and with every goal
+  reached says "You reached YouTube's goals…" with `next` `yt-join`; a goal not reached has `next: null`); TikTok in
+  Sweden is `not_started` with the Creator Rewards line, never `not_allowed`; Instagram's and X's `not_allowed` are
+  `knownBy "rules"` ("Instagram says you have 312." / "X says you have 120."); X's Premium never says no and
+  `x-premium` as `next` has `vermilion: false`; a fresh Whop "no method" beats his ticks, Whop's ID check `pending` is
+  `checking`, and Whop's `can_get_paid` needs a ready method and Content Rewards linked to Whop; Content Rewards money
+  with no bank step and YouTube `in_program` with no payout tick are "Not set up yet", never red; `NEEDS_ATTENTION`
+  and `CLOSED` are red with their `HOLD_FIX`, and every `HOLD_FIX` row; **freshness**: just connected with every step
+  ticked is `checking`, never "YouTube says there's no hold"; after "Stop payment reading", after `needs_reconnect` and
+  with `lastCheckedAt` over 48 hours old nothing comes from `PAYSTATE#`, while sent rows still tick the payout steps
+  ("Can get paid (Google sent money on 23 Oct)"); `checking` ends after 26 hours or on `lastError`; one `meta-payout`
+  tick alone makes Instagram and Facebook `not_started` ("You said Meta knows where to pay you. Next: …"), never
+  `you_said_done`; nothing at all is `not_started` or `not_connected`, never "Live"; the ring never counts
+  `yt-reading`; the summary's sentences; the autos. Sent: the amount parser's golden texts ("kr 1 234,56 SEK", "SEK
+  1,234.56", "1 234,56 kr" and "$1,234.57" unread, "€87.65", "£87.65", "¥1,235 JPY", "1.234,56 €"), unread amounts
+  never added, only unread rows give `notAdded` and never "Nothing sent to your bank yet.", totals per currency in the
+  places' order with `names`, Whop's statuses and `destination_amount` over `net_amount`, a `reversed` row stops
+  counting, `gone` rows, two AdSense accounts paying on the same day stay two rows, never $0.
+- **API, routes and grants** (`test_getpaid_routes.py`, `test_getpaid_grants.py`, and updates to
+  `test_oauth_callback.py`, `test_hooks.py`, `test_setup_routes.py`, `test_money_grant.py`): PATCH ids, `yt-reading`
+  refused, Content Rewards' ids refused, 80 ticks; 503 for the Whop routes while `WHOP_CONNECT` is off; no secret or
+  trace code in any answer. `save_payments_grant` posts the code to Google's token URL itself (a fake
+  `providers.exchange` that raises is never called), checks only `adsense.readonly`, writes nothing on deny, a
+  missing permission, no AdSense (200 with no accounts, or another 403) or the API off (`accessNotConfigured` and
+  `SERVICE_DISABLED`), stores `clientId`, and never touches `ACCOUNT#youtube`, the YouTube token, `SETUP#` or
+  `MONEYSTATE#`; the authorize URL has the AdSense permission only and no `include_granted_scopes`;
+  `DELETE /v1/getpaid/connections/adsense` deletes the secret and makes **no** call to Google's revoke URL; Whop's
+  PKCE, the public-client exchange, the `Api-Version-Date` header and the refusal of missing permissions; a reused
+  state writes nothing; `whop` is refused on `/hooks/{platform}`.
+- **API, earlier sections** (updates): `money_everywhere_cases.json` and `money_summary_cases.json` (X's new where
+  line, the `sent` lines and block), `test_money_rules.py` (the three config fixes of §40.3 and their official hosts),
+  `test_money.py` (X's `"None"` → "X didn't share this."), `test_realtime.py` (the four prefixes → `getpaid`, partial),
+  `test_settings_and_system.py` (`notify.getPaid` defaults to true). `web/test/allMoney.test.tsx` compares the web
+  mock with `money_everywhere_cases.json` in the api's PR.
+- **API, the collector** (pytest, `test_payouts_adsense.py`, `test_payouts_whop.py`, `test_payouts_collect.py`,
+  `test_notify_getpaid.py`): AdSense fakes (accounts, alerts with HTML, payments with `youtube-` and plain names, two
+  accounts) → the §40.7 items with the publisher suffix; a changed amount sets `revisedAt`, a vanished payment
+  `goneAt`; 429 and 5xx → `lastError`, rows kept; `invalid_grant` → `token_dead`; a changed `clientId`,
+  `invalid_client` or `unauthorized_client` → `keys_changed`; nothing deleted; the first read is quiet. Whop fakes
+  (each refuses a call without `Api-Version-Date: 2026-11-20`): `users/me`, methods with `bank_verification_state`,
+  payouts paging with the watermark, `completed` → `reversed`, a `canceled` payout is never a hold, the rotating
+  refresh under the lease (two runs at once refresh once), `invalid_grant`. `collect.run` raising never stops the
+  money run or another source; the time budget skip. Notify: each event once, none on the first read, none with
+  `getPaid` off, the message words.
+- **Infrastructure** (`terraform test`): the realtime and notify stream filters (changed in place, +4 prefixes and
+  `PAYSTATE#`), `whop_connect_enabled` default `false` → `WHOP_CONNECT = "off"`, `true` → `"on"`, nothing replaced.
+- **Web units** (Vitest, `web/test/getpaid.test.tsx`, `getpaidGuides.test.ts` and updates to `allMoney.test.tsx`,
+  `backLink.test.ts`, `noGuesses.test.ts`, `money.test.tsx`, `settingsTree.test.ts`): each guide's ids and roles equal
+  `getpaid_steps.json` (when present); every step has a title of 6 words or fewer, lines of 26 words or fewer, https
+  Opens, and bold only for other sites' labels; the YouTube Copy chip equals `platforms.json` `paymentScopes`; the
+  pill words, tones and icons for every status (never colour alone; "Not set up yet" never red); no pill, line or
+  summary says "Live", "Not connected" or "disconnected" (**LIVE Gifts** and **LIVE rewards** are the only "LIVE");
+  **one vermilion per screen and status** (the list none; Money's card none; the place page exactly one when `next`
+  names a step, pinned bottom right on a phone at page open, exactly one in the status block when `next.stepId` is
+  `null`, none when `next` is `null` or `vermilion` is `false`; §38.7's money steps and "Connect Whop" glass there);
+  the ring excludes `yt-reading` and shows the reading chip; phone steps on a computer have no Open; ticks send the
+  PATCH and fold with "You said it's done"; autos say who said so; the Money card's row buttons per status; the result
+  sentences of §40.6 word for word; All your money's sent lines and block per currency, `notAdded`, "Nothing sent to
+  your bank yet." only with no sent rows, never $0; no Notifications switch and no `getPaid` in the PATCH when the API
+  doesn't send `notify.getPaid`; `lib/getPaid.ts` refetches on `getpaid`, `setup` and `contentrewards` events and
+  after a Content Rewards step PATCH; `noGuesses` over the new files; the setup to-do list still has exactly five
+  rows and the setup ring still says "of 5" with every Get paid tick set. Settings › Posting is `["setup", "getpaid",
+  "where", "my-settings", "money"]`.
+- **Playwright** (mock mode, `web/e2e/getpaid.spec.ts` and updates to `all-money.spec.ts`, `money-dashboard.spec.ts`,
+  `screenshots.spec.ts`; 375×812 and 1440×900; the `tap()` counter of `web/e2e/flows.ts`): Clip Factory's taps per
+  place equal §40.1's counts (YouTube 15, TikTok 4, Instagram 4, Facebook 4 or 2 after Instagram, X 5, Content Rewards
+  5 or 3, Connect Whop 6); the ways in (4 taps from Settings, 2 from Money); "Allow payment reading"'s result
+  sentences; Connect Whop on and off; the Whop key paste. Every new screen: no sideways scroll at 320 to 1920, no
+  edges, targets ≥ 44 px (48 on phones), the arrow cursor only, axe contrast light and dark, reduced motion, phone
+  controls at the bottom right, Ask never over the main button. `screenshots.spec.ts` adds `getpaid-list`,
+  `getpaid-youtube`, `getpaid-contentrewards` and `money-getpaid` at 375 and 1440. Run each on a port of its own, such
+  as `CF_E2E_PORT=4784 npx playwright test e2e/getpaid.spec.ts`.
+- **Help and docs**: the guides `getpaid-setup`, `getpaid-status`, `getpaid-sent`, `getpaid-youtube`,
+  `getpaid-tiktok-sweden`, `getpaid-x-clips` and `getpaid-whop` each have one question in `helpEvals.json` that both
+  retrievers rank first (`web/test/helpRetrieve.test.ts`, `api/tests/test_help_evals.py`), and the money questions
+  that were there keep their guides ("where do I add my bank account" and "how do I get my money out of TikTok" find
+  `money-payouts`, "What is Whop?" finds `cr-whop`). The guides light up only the web's anchors (`getpaid-list`,
+  `getpaid-place`, `getpaid-status`, `getpaid-sent`, `getpaid-card`, `getpaid-whop`); `node scripts/help-corpus.mjs
+  --check` fails on a highlight of an anchor that doesn't exist and on a route that isn't a page, so the help part
+  goes in after the web part. `node scripts/ask-knowledge.mjs --check` passes after running both without `--check`.
+  `web/test/setup-docs.test.ts` still finds every setup and Content Rewards step title under its own heading with the
+  new `## Get paid` section in `docs/SETUP_POSTING.md`.
+- **Live checks, not done here** (§40.8 "Not verified live"): whether AdSense lists an account that only has AdSense
+  for YouTube, how Google writes SEK amounts, the alert types of each hold, the Meta and TikTok payout screens in
+  Sweden, X's Stripe button, and whether Whop lets a personal user make an app and read payouts. Each is checked at
+  the owner's first use; a failure becomes "not available" or "can't check", never a number.
+
 ### Agent (pytest)
 - Prior learnings (`tests/test_learnings.py`): the exact heading `Prior learnings`, only active unexpired lessons for
   this job's creator keys and then "all creators" (trial, off, deleted, expired and other creators' lessons left out),

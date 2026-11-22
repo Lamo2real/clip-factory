@@ -197,3 +197,16 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
   never takes the vermilion from Upload. A verdict is never colour alone (a mark and words).
 - AC10: All your money is a glass card with no vermilion button; each row has at most one glass button, at its right
   end, so nothing tappable sits in a phone's top-left third.
+
+### UX-20 Get paid that a child can follow
+([UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md#get-paid), [CONTRACTS.md §40.1](CONTRACTS.md#401-what-the-owner-sees))
+- AC1: The step cards look and work like Set up posting's: a number, a short title, short lines, Open, Copy, "If you
+  see…" and a green answer in the step's own words; **bold** is the other site's exact label.
+- AC2: One vermilion button per screen, the next step (pinned at the bottom right on phones); the list and Money's card
+  have none; a step that costs money (X Premium) is never it.
+- AC3: Plain words: "ID check" (never KYC), "bank transfer" (never EFT), "AdSense for YouTube" (never "AdSense"
+  alone), "Whop key"; never "OAuth", "token", "scope" or "API" on screen.
+- AC4: A status is never colour alone (an icon and words), "Not set up yet" is never red, and every tone is AA.
+- AC5: Every Undo is an 8-second toast; every connection result is one calm sentence that names the button to tap.
+- AC6: No edges, no `cursor` changes, `<Glide>` for pick-one bars, reduced motion respected, nothing overflows from
+  320 to 1920 px, targets at least 44 px (48 on phones), and Ask never covers the main button.
