@@ -1,5 +1,5 @@
 {
- "version": "edc9959fd42b",
+ "version": "01a57b5797e3",
  "parts": [
   {
    "id": "app-map",
@@ -57,7 +57,7 @@
    "id": "contracts-5",
    "title": "CONTRACTS: 5. HTTP API (API Gateway HTTP API v2 → Lambda `cf-prod-api`)",
    "line": "Base: ${apiUrl}/v1. JSON in and out, camelCase. Every route requires the JWT except GET /v1/health.",
-   "chars": 14305
+   "chars": 15021
   },
   {
    "id": "contracts-6",

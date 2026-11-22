@@ -1,0 +1,222 @@
+// The Lamo Stories HTTP client (docs/CONTRACTS.md §45.5): every StoriesApi method calls its own route under
+// /v1/workspaces with the owner's token, unwraps the answer, retries once after a 401 with a fresh token, turns the
+// error envelope into an ApiError with the server's sentence, and announces a sign-in that is really gone.
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../src/api/errors.ts";
+import { onSignedOut } from "../src/lib/auth.ts";
+import { httpStoriesApi } from "../src/stories/api/http.ts";
+import type { StoriesApi } from "../src/stories/api/types.ts";
+
+interface Call {
+  method: string;
+  url: string;
+  body: unknown;
+  auth: string | null;
+}
+
+function fake(answer: (c: Call) => { status: number; body?: unknown } = () => ({ status: 200, body: {} })) {
+  const calls: Call[] = [];
+  const fetcher = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    const call: Call = { method: init?.method ?? "GET", url: String(url), body: init?.body ? JSON.parse(String(init.body)) : undefined, auth: headers.authorization ?? null };
+    calls.push(call);
+    const a = answer(call);
+    return new Response(a.status === 204 ? null : JSON.stringify(a.body ?? {}), { status: a.status, headers: { "content-type": "application/json" } });
+  });
+  const tokens = { accessToken: vi.fn(async (fresh?: boolean) => (fresh ? "fresh-token" : "old-token")) };
+  const api = httpStoriesApi({ baseUrl: "https://api.example/", auth: tokens, fetcher: fetcher as unknown as typeof fetch });
+  return { api, calls, tokens };
+}
+
+const B = "https://api.example/v1/workspaces";
+
+type Case = [keyof StoriesApi, (api: StoriesApi) => Promise<unknown>, string, string, unknown, unknown, unknown];
+
+/** [method name, the call, HTTP method, URL, body sent, server answer, what the method returns] */
+const CASES: Case[] = [
+  ["listWorkspaces", (a) => a.listWorkspaces(), "GET", B, undefined, { workspaces: [1] }, [1]],
+  ["getWorkspace", (a) => a.getWorkspace("stories"), "GET", `${B}/stories`, undefined, { workspace: 2 }, 2],
+  ["patchWorkspace", (a) => a.patchWorkspace("stories", { configuration: { captionsOn: false }, version: 3 }), "PATCH", `${B}/stories`, { configuration: { captionsOn: false }, version: 3 }, { workspace: 4 }, 4],
+  ["dashboard", (a) => a.dashboard("stories"), "GET", `${B}/stories/dashboard`, undefined, { dashboard: 5 }, 5],
+  ["listIdeas", (a) => a.listIdeas("stories", "saved"), "GET", `${B}/stories/ideas?status=saved`, undefined, { ideas: [6] }, [6]],
+  ["createIdea", (a) => a.createIdea("stories", { title: "t", logline: "l", category: "comedy" }), "POST", `${B}/stories/ideas`, { title: "t", logline: "l", category: "comedy" }, { idea: 7 }, 7],
+  ["patchIdea", (a) => a.patchIdea("stories", "i1", { title: "u" }), "PATCH", `${B}/stories/ideas/i1`, { title: "u" }, { idea: 8 }, 8],
+  ["deleteIdea", (a) => a.deleteIdea("stories", "i1"), "DELETE", `${B}/stories/ideas/i1`, undefined, null, undefined],
+  ["generateIdeas", (a) => a.generateIdeas("stories", { topic: "ice", count: 2, override: { effort: "low" } }), "POST", `${B}/stories/ideas/generate`, { topic: "ice", count: 2, override: { effort: "low" } }, { task: 9 }, 9],
+  ["expandIdea", (a) => a.expandIdea("stories", "i1", { durationSec: 45 }), "POST", `${B}/stories/ideas/i1/expand`, { durationSec: 45 }, { task: 10 }, 10],
+  ["ideaVariations", (a) => a.ideaVariations("stories", "i1"), "POST", `${B}/stories/ideas/i1/variations`, {}, { task: 11 }, 11],
+  ["getTask", (a) => a.getTask("stories", "t1"), "GET", `${B}/stories/tasks/t1`, undefined, { task: 111 }, 111],
+  ["listCharacters", (a) => a.listCharacters("stories"), "GET", `${B}/stories/characters`, undefined, { characters: [12] }, [12]],
+  ["createCharacter", (a) => a.createCharacter("stories", { name: "Pip" } as never), "POST", `${B}/stories/characters`, { name: "Pip" }, { character: 13 }, 13],
+  ["getCharacter", (a) => a.getCharacter("stories", "c1"), "GET", `${B}/stories/characters/c1`, undefined, { character: 14 }, 14],
+  ["putCharacter", (a) => a.putCharacter("stories", "c1", { name: "Pip", version: 2 } as never), "PUT", `${B}/stories/characters/c1`, { name: "Pip", version: 2 }, { character: 15 }, 15],
+  ["deleteCharacter", (a) => a.deleteCharacter("stories", "c1"), "DELETE", `${B}/stories/characters/c1`, undefined, null, undefined],
+  ["referenceUpload", (a) => a.referenceUpload("stories", "c1", { filename: "a.png", contentType: "image/png", size: 10 }), "POST", `${B}/stories/characters/c1/references`, { filename: "a.png", contentType: "image/png", size: 10 }, { assetId: "a", uploadUrl: "u", headers: {} }, { assetId: "a", uploadUrl: "u", headers: {} }],
+  ["referenceComplete", (a) => a.referenceComplete("stories", "c1", "a1"), "POST", `${B}/stories/characters/c1/references/a1/complete`, undefined, { character: 16 }, 16],
+  ["deleteReference", (a) => a.deleteReference("stories", "c1", "a1"), "DELETE", `${B}/stories/characters/c1/references/a1`, undefined, { character: 17 }, 17],
+  ["makePortrait", (a) => a.makePortrait("stories", "c1"), "POST", `${B}/stories/characters/c1/portrait`, undefined, { job: 18 }, 18],
+  ["designUpload", (a) => a.designUpload("stories", { filename: "d.jpg", contentType: "image/jpeg", size: 9 }), "POST", `${B}/stories/characters/design/uploads`, { filename: "d.jpg", contentType: "image/jpeg", size: 9 }, { assetId: "d", uploadUrl: "u", headers: {} }, { assetId: "d", uploadUrl: "u", headers: {} }],
+  ["designCharacter", (a) => a.designCharacter("stories", { description: "a bean", referenceAssetId: "d" }), "POST", `${B}/stories/characters/design`, { description: "a bean", referenceAssetId: "d" }, { task: 181 }, 181],
+  ["listStories", (a) => a.listStories("stories", { status: "all", limit: 50, cursor: "x" }), "GET", `${B}/stories/stories?status=all&limit=50&cursor=x`, undefined, { stories: [19] }, { stories: [19], nextCursor: null }],
+  ["createStory", (a) => a.createStory("stories", { characterIds: ["c1"] }), "POST", `${B}/stories/stories`, { characterIds: ["c1"] }, { story: 1, job: 2 }, { story: 1, job: 2 }],
+  ["getStory", (a) => a.getStory("stories", "s1"), "GET", `${B}/stories/stories/s1`, undefined, { story: 20 }, { story: 20, job: null, script: null }],
+  ["storyJobs", (a) => a.storyJobs("stories", "s1"), "GET", `${B}/stories/stories/s1/jobs`, undefined, { jobs: [21] }, [21]],
+  ["patchStory", (a) => a.patchStory("stories", "s1", { version: 3, title: "t" }), "PATCH", `${B}/stories/stories/s1`, { version: 3, title: "t" }, { story: 22, script: 23 }, { story: 22, script: 23 }],
+  ["deleteStory", (a) => a.deleteStory("stories", "s1"), "DELETE", `${B}/stories/stories/s1`, undefined, null, undefined],
+  ["produce", (a) => a.produce("stories", "s1", { from: "scenes", sceneIds: ["a"] }), "POST", `${B}/stories/stories/s1/produce`, { from: "scenes", sceneIds: ["a"] }, { story: 1, job: 2 }, { story: 1, job: 2 }],
+  ["cancelStory", (a) => a.cancelStory("stories", "s1"), "POST", `${B}/stories/stories/s1/cancel`, undefined, { story: 24 }, { story: 24, job: null }],
+  ["approve", (a) => a.approve("stories", "s1", 7), "POST", `${B}/stories/stories/s1/approve`, { version: 7 }, { story: 25 }, 25],
+  ["reject", (a) => a.reject("stories", "s1", "no"), "POST", `${B}/stories/stories/s1/reject`, { reason: "no" }, { story: 26 }, 26],
+  ["requestChanges", (a) => a.requestChanges("stories", "s1", { note: "more", sceneIds: ["a"] }), "POST", `${B}/stories/stories/s1/changes`, { note: "more", sceneIds: ["a"] }, { story: 1, job: 2 }, { story: 1, job: 2 }],
+  ["download", (a) => a.download("stories", "s1"), "GET", `${B}/stories/stories/s1/download`, undefined, { url: "u", filename: "f.mp4" }, { url: "u", filename: "f.mp4" }],
+  ["library", (a) => a.library("stories", { kind: "cover", storyId: "s1", limit: 10 }), "GET", `${B}/stories/library?kind=cover&storyId=s1&limit=10`, undefined, { items: [27], nextCursor: "n" }, { items: [27], nextCursor: "n" }],
+  ["providers", (a) => a.providers("stories"), "GET", `${B}/stories/providers`, undefined, { providers: [28] }, [28]],
+  ["guidance", (a) => a.guidance("stories"), "GET", `${B}/stories/guidance`, undefined, { topics: [], checkedAt: "c" }, { topics: [], checkedAt: "c" }],
+  ["social", (a) => a.social("stories"), "GET", `${B}/stories/social`, undefined, { accounts: [], clips: [] }, { accounts: [], clips: [] }],
+  ["connectSocial", (a) => a.connectSocial("stories", "youtube"), "POST", `${B}/stories/social/youtube/connect`, undefined, { authorizeUrl: "https://a", expiresAt: "e" }, { authorizeUrl: "https://a", expiresAt: "e" }],
+  ["chooseSocial", (a) => a.chooseSocial("stories", "instagram", "p1"), "POST", `${B}/stories/social/instagram/choose`, { choiceId: "p1" }, { account: 29 }, 29],
+  ["shareWithClips", (a) => a.shareWithClips("stories", "x"), "POST", `${B}/stories/social/x/share`, { confirm: true }, { account: 30 }, 30],
+  ["checkSocial", (a) => a.checkSocial("stories", "tiktok"), "POST", `${B}/stories/social/tiktok/check`, undefined, { account: 31 }, 31],
+  ["tiktokCreatorInfo", (a) => a.tiktokCreatorInfo("stories"), "GET", `${B}/stories/social/tiktok/creator-info`, undefined, { creator: 32 }, 32],
+  ["disconnectSocial", (a) => a.disconnectSocial("stories", "facebook"), "DELETE", `${B}/stories/social/facebook`, undefined, null, undefined],
+  ["setSocialApp", (a) => a.setSocialApp("stories", "youtube", { choice: "clips" }), "PUT", `${B}/stories/social/youtube/app`, { choice: "clips" }, { account: 41 }, 41],
+  ["checkSocialApp", (a) => a.checkSocialApp("stories", "instagram"), "POST", `${B}/stories/social/instagram/app/check`, undefined, { check: 42 }, 42],
+  ["deleteSocialApp", (a) => a.deleteSocialApp("stories", "x"), "DELETE", `${B}/stories/social/x/app`, undefined, null, undefined],
+
+  ["getAi", (a) => a.getAi("stories"), "GET", `${B}/stories/ai`, undefined, { ai: 1, models: [], agents: [], tasks: [] }, { ai: 1, models: [], agents: [], tasks: [] }],
+  ["putAi", (a) => a.putAi("stories", { defaultModel: "opus-5-5", defaultEffort: "high", tasks: {}, prices: {}, version: 2 }), "PUT", `${B}/stories/ai`, { defaultModel: "opus-5-5", defaultEffort: "high", tasks: {}, prices: {}, version: 2 }, { ai: 43 }, 43],
+  ["checkModels", (a) => a.checkModels("stories", ["opus-5-5"]), "POST", `${B}/stories/ai/check-models`, { models: ["opus-5-5"] }, { task: 44 }, 44],
+  ["setModelPrice", (a) => a.setModelPrice("stories", "opus-5-5", null), "PUT", `${B}/stories/ai/prices/opus-5-5`, {}, { model: 45 }, 45],
+  ["usage", (a) => a.usage("stories", 30), "GET", `${B}/stories/usage?days=30`, undefined, { usage: 46 }, 46],
+  ["getAgent", (a) => a.getAgent("stories", "storyboard"), "GET", `${B}/stories/agents/storyboard`, undefined, { agent: 47 }, 47],
+  ["patchAgent", (a) => a.patchAgent("stories", "character", { reset: true }), "PATCH", `${B}/stories/agents/character`, { reset: true }, { agent: 48 }, 48],
+
+  ["listSkills", (a) => a.listSkills("stories"), "GET", `${B}/stories/skills`, undefined, { skills: [49] }, [49]],
+  ["skillUpload", (a) => a.skillUpload("stories", { filename: "SKILL.md" }), "POST", `${B}/stories/skills/uploads`, { filename: "SKILL.md" }, { skillId: "k", key: "y", uploadUrl: "u", headers: {} }, { skillId: "k", key: "y", uploadUrl: "u", headers: {} }],
+  ["createSkill", (a) => a.createSkill("stories", { title: "t", description: "d", instructions: "i" }), "POST", `${B}/stories/skills`, { title: "t", description: "d", instructions: "i" }, { skill: 50 }, 50],
+  ["getSkill", (a) => a.getSkill("stories", "k1"), "GET", `${B}/stories/skills/k1`, undefined, { skill: { skillId: "k1" }, content: "# Hi" }, { skillId: "k1", content: "# Hi" }],
+  ["putSkill", (a) => a.putSkill("stories", "k1", { version: 2, enabled: false }), "PUT", `${B}/stories/skills/k1`, { version: 2, enabled: false }, { skill: 51 }, 51],
+  ["deleteSkill", (a) => a.deleteSkill("stories", "k1"), "DELETE", `${B}/stories/skills/k1`, undefined, null, undefined],
+  ["restoreSkill", (a) => a.restoreSkill("stories", "k1", "r2"), "POST", `${B}/stories/skills/k1/restore`, { revisionId: "r2" }, { skill: 52 }, 52],
+
+  ["listConversations", (a) => a.listConversations("stories"), "GET", `${B}/stories/chat`, undefined, { conversations: [53] }, [53]],
+  ["createConversation", (a) => a.createConversation("stories", { title: "Ice", model: null, effort: "high" }), "POST", `${B}/stories/chat`, { title: "Ice", model: null, effort: "high" }, { conversation: 54 }, 54],
+  ["getConversation", (a) => a.getConversation("stories", "v1", "m9"), "GET", `${B}/stories/chat/v1?after=m9`, undefined, { conversation: 55, messages: [] }, { conversation: 55, messages: [] }],
+  ["patchConversation", (a) => a.patchConversation("stories", "v1", { model: "fable-5-2" }), "PATCH", `${B}/stories/chat/v1`, { model: "fable-5-2" }, { conversation: 56 }, 56],
+  ["deleteConversation", (a) => a.deleteConversation("stories", "v1"), "DELETE", `${B}/stories/chat/v1`, undefined, null, undefined],
+  ["sendMessage", (a) => a.sendMessage("stories", "v1", { text: "hi", override: { model: "haiku-5-5" } }), "POST", `${B}/stories/chat/v1/messages`, { text: "hi", override: { model: "haiku-5-5" } }, { user: 1, assistant: 2 }, { user: 1, assistant: 2 }],
+  ["chatAttachment", (a) => a.chatAttachment("stories", "v1", { filename: "p.png", contentType: "image/png", size: 3 }), "POST", `${B}/stories/chat/v1/attachments`, { filename: "p.png", contentType: "image/png", size: 3 }, { assetId: "p", uploadUrl: "u", headers: {} }, { assetId: "p", uploadUrl: "u", headers: {} }],
+  ["stopMessage", (a) => a.stopMessage("stories", "v1", "m2"), "POST", `${B}/stories/chat/v1/messages/m2/stop`, undefined, { message: 57 }, 57],
+
+  ["listMemory", (a) => a.listMemory("stories"), "GET", `${B}/stories/memory`, undefined, { memory: [58] }, [58]],
+  ["addMemory", (a) => a.addMemory("stories", "Likes slapstick"), "POST", `${B}/stories/memory`, { text: "Likes slapstick" }, { item: 59 }, 59],
+  ["patchMemory", (a) => a.patchMemory("stories", "e1", "Loves it"), "PATCH", `${B}/stories/memory/e1`, { text: "Loves it" }, { item: 60 }, 60],
+  ["deleteMemory", (a) => a.deleteMemory("stories", "e1"), "DELETE", `${B}/stories/memory/e1`, undefined, null, undefined],
+
+  ["listReferences", (a) => a.listReferences("stories"), "GET", `${B}/stories/references`, undefined, { references: [61] }, [61]],
+  ["createReference", (a) => a.createReference("stories", { filename: "r.mp4", contentType: "video/mp4", size: 5, title: "Ref" }), "POST", `${B}/stories/references`, { filename: "r.mp4", contentType: "video/mp4", size: 5, title: "Ref" }, { reference: 1, upload: 2 }, { reference: 1, upload: 2 }],
+  ["completeReference", (a) => a.completeReference("stories", "r1", [{ partNumber: 1, etag: "e" }]), "POST", `${B}/stories/references/r1/complete`, { parts: [{ partNumber: 1, etag: "e" }] }, { reference: 62 }, 62],
+  ["analyzeReference", (a) => a.analyzeReference("stories", "r1", { effort: "max" }), "POST", `${B}/stories/references/r1/analyze`, { override: { effort: "max" } }, { reference: 1, job: 2 }, { reference: 1, job: 2 }],
+  ["getReference", (a) => a.getReference("stories", "r1"), "GET", `${B}/stories/references/r1`, undefined, { reference: 63 }, { reference: 63, analysis: null }],
+  ["patchReference", (a) => a.patchReference("stories", "r1", "New"), "PATCH", `${B}/stories/references/r1`, { title: "New" }, { reference: 64 }, 64],
+
+  ["getOnboarding", (a) => a.getOnboarding("stories"), "GET", `${B}/stories/onboarding`, undefined, { onboarding: 65 }, 65],
+  ["patchOnboarding", (a) => a.patchOnboarding("stories", { step: "tiktok", skipped: true }), "PATCH", `${B}/stories/onboarding`, { step: "tiktok", skipped: true }, { onboarding: 66 }, 66],
+  ["setProviderKey", (a) => a.setProviderKey("stories", "acme", "k-123"), "PUT", `${B}/stories/providers/acme/key`, { key: "k-123" }, { provider: 67 }, 67],
+  ["deleteProviderKey", (a) => a.deleteProviderKey("stories", "acme"), "DELETE", `${B}/stories/providers/acme/key`, undefined, null, undefined],
+  ["storage", (a) => a.storage("stories"), "GET", `${B}/stories/storage`, undefined, { storage: 68 }, 68],
+  ["publish", (a) => a.publish("stories", "s1", [{ platform: "youtube", socialAccountId: "stories.youtube" }]), "POST", `${B}/stories/stories/s1/publish`, { targets: [{ platform: "youtube", socialAccountId: "stories.youtube" }] }, { publishingJobs: [33] }, [33]],
+  ["listPublishing", (a) => a.listPublishing("stories", "s1"), "GET", `${B}/stories/publishing?storyId=s1`, undefined, { publishingJobs: [34] }, [34]],
+  ["retryPublishing", (a) => a.retryPublishing("stories", "p1", { confirmAccount: "UC1" }), "POST", `${B}/stories/publishing/p1/retry`, { confirmAccount: "UC1" }, { publishingJob: 35 }, 35],
+];
+
+describe("every Lamo Stories route", () => {
+  it("covers every method of StoriesApi", () => {
+    const { api } = fake();
+    expect(CASES.map((c) => c[0]).sort()).toEqual(Object.keys(api).sort());
+  });
+
+  for (const [name, run, method, url, body, answer, result] of CASES)
+    it(`${name}: ${method} ${url.replace(B, "/v1/workspaces")}`, async () => {
+      const { api, calls } = fake(() => (answer === null ? { status: 204 } : { status: 200, body: answer }));
+      await expect(run(api)).resolves.toEqual(result);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toEqual({ method, url, body, auth: "Bearer old-token" });
+    });
+
+  it("deleteReference: three ids are a character's picture, two a reference video (one name, two routes)", async () => {
+    const { api, calls } = fake((c) => (c.method === "DELETE" && c.url.endsWith("/references/r1") ? { status: 204 } : { status: 200, body: { character: 17 } }));
+    await expect(api.deleteReference("stories", "c1", "a1")).resolves.toBe(17);
+    await expect(api.deleteReference("stories", "r1")).resolves.toBeUndefined();
+    expect(calls.map((c) => [c.method, c.url])).toEqual([
+      ["DELETE", `${B}/stories/characters/c1/references/a1`],
+      ["DELETE", `${B}/stories/references/r1`],
+    ]);
+  });
+
+  it("sends developer-app keys once and never puts them in the address", async () => {
+    const { api, calls } = fake(() => ({ status: 200, body: { account: 1 } }));
+    await api.setSocialApp("stories", "facebook", { choice: "own", clientId: "1234567890", clientSecret: "s3cr3t-value-0123456789abcdef01", configId: "9876543210" });
+    expect(calls[0]!.url).toBe(`${B}/stories/social/facebook/app`);
+    expect(calls[0]!.url).not.toMatch(/s3cr3t/);
+    expect(calls[0]!.body).toEqual({ choice: "own", clientId: "1234567890", clientSecret: "s3cr3t-value-0123456789abcdef01", configId: "9876543210" });
+  });
+
+  it("escapes ids in the path, so an id can never reach another route", async () => {
+    const { api, calls } = fake(() => ({ status: 200, body: { idea: 1 } }));
+    await api.patchIdea("stories", "a/../b?x", {});
+    expect(calls[0]!.url).toBe(`${B}/stories/ideas/a%2F..%2Fb%3Fx`);
+  });
+});
+
+describe("sign-in and errors", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("retries once with a fresh token after a 401", async () => {
+    const { api, calls, tokens } = fake((c) => (c.auth === "Bearer old-token" ? { status: 401, body: {} } : { status: 200, body: { dashboard: 1 } }));
+    await expect(api.dashboard("stories")).resolves.toBe(1);
+    expect(calls.map((c) => c.auth)).toEqual(["Bearer old-token", "Bearer fresh-token"]);
+    expect(tokens.accessToken).toHaveBeenLastCalledWith(true);
+  });
+
+  it("announces a sign-in that is really gone (401 after the retry)", async () => {
+    const gone = vi.fn();
+    const off = onSignedOut(gone);
+    const { api } = fake(() => ({ status: 401, body: { error: { code: "unauthorized", message: "Your sign-in has ended." } } }));
+    await expect(api.listWorkspaces()).rejects.toMatchObject({ status: 401, code: "unauthorized" });
+    expect(gone).toHaveBeenCalledTimes(1);
+    off();
+  });
+
+  it("passes the server's own sentence on (the contract's error envelope)", async () => {
+    const { api } = fake(() => ({ status: 409, body: { error: { code: "conflict", message: "That is a Lamo Stories page. Switch to Lamo Stories first." } } }));
+    const e = await api.dashboard("clips").catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(ApiError);
+    expect(e).toMatchObject({ status: 409, code: "conflict", message: "That is a Lamo Stories page. Switch to Lamo Stories first." });
+  });
+
+  it("says the app cannot be reached when the network fails", async () => {
+    const api = httpStoriesApi({
+      baseUrl: "https://api.example",
+      auth: { accessToken: async () => "t" },
+      fetcher: (async () => {
+        throw new TypeError("Failed to fetch");
+      }) as unknown as typeof fetch,
+    });
+    await expect(api.social("stories")).rejects.toMatchObject({ code: "network" });
+  });
+
+  it("never sends a body or a token it does not have", async () => {
+    const calls: Call[] = [];
+    const api = httpStoriesApi({
+      baseUrl: "https://api.example",
+      auth: { accessToken: async () => null },
+      fetcher: (async (url: RequestInfo | URL, init?: RequestInit) => {
+        calls.push({ method: init?.method ?? "GET", url: String(url), body: init?.body, auth: (init?.headers as Record<string, string>).authorization ?? null });
+        return new Response(JSON.stringify({ providers: [] }), { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    await api.providers("stories");
+    expect(calls[0]).toEqual({ method: "GET", url: `${B}/stories/providers`, body: undefined, auth: null });
+  });
+});

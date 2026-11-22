@@ -13,7 +13,7 @@ import { resetGetPaid } from "../lib/getPaid.ts";
 import { resetFinder } from "../lib/finder.ts";
 import { sounds } from "../lib/sounds.ts";
 import { Backdrop, GlassFilter } from "../components/Backdrop.tsx";
-import { Sidebar, TabBar } from "../components/Nav.tsx";
+import { Sidebar, TabBar, WorkspaceSwitch } from "../components/Nav.tsx";
 import { ToastProvider } from "../components/Toasts.tsx";
 import { UpdateBar } from "../components/UpdateBar.tsx";
 import { GetAppPanel } from "../components/GetApp.tsx";
@@ -39,10 +39,12 @@ import { FindPage } from "../screens/campaigns/FindPage.tsx";
 import { CrSendNow } from "../components/CrSendNow.tsx";
 import { GUIDES } from "../setup/index.ts";
 import { AskClipFactory } from "../features/help/HelpLauncher.tsx";
+import { AskMemoryProvider } from "../features/help/askMemory.tsx";
 import { SetupTodo } from "../components/SetupTodo.tsx";
 import { AppBadge } from "../lib/badge.ts";
 import { MacFetchHost } from "./MacFetchHost.tsx";
 import { forgetDevice } from "../lib/push.ts";
+import { redirectAtStart, storiesTitle } from "../stories/workspace.ts";
 /**
  * The motion gallery (§20.10): mock builds only. Tested on import.meta.env directly (not isMock) so a real build
  * drops the import and does not even carry the code.
@@ -52,6 +54,10 @@ const MotionGallery = import.meta.env.VITE_MOCK === "1" ? lazy(() => import("../
 /** Lamo Stories (docs/CONTRACTS.md §45.16.2) loads only when it is opened, so Lamo Clips' own bundle and styles stay as
  * they were. */
 const StoriesApp = lazy(() => import("../stories/StoriesApp.tsx").then((m) => ({ default: m.StoriesApp })));
+
+// Opening the app at "/" when Lamo Stories was the last choice goes to the last Lamo Stories page (§45.16.1), before
+// the first screen draws. Nothing happens while Lamo Stories is switched off.
+redirectAtStart();
 
 type Boot = { state: "loading" } | { state: "signed_out"; note: string | null } | { state: "ready" } | { state: "broken" };
 
@@ -89,6 +95,7 @@ export function titleFor(route: Route): string {
   }
   if (route.name === "skill") return `${route.mode === "new" ? "Write a skill" : route.mode === "edit" ? "Change a skill" : "Skill"} · Settings`;
   if (route.name === "library" && route.view === "week") return `${weekTitle(route.week)} · Library`;
+  if (route.name === "stories") return storiesTitle(route.page);
   return TITLES[route.name];
 }
 
@@ -161,7 +168,10 @@ export function App() {
         <SignIn note={boot.note} onDone={() => setBoot({ state: "ready" })} />
       ) : (
         <SessionProvider onSignOut={signOut}>
-          <Shell />
+          {/* Ask's conversation sits above the Clip Factory / Lamo Stories branch, so a switch keeps it (§45.16.1). */}
+          <AskMemoryProvider>
+            <Shell />
+          </AskMemoryProvider>
         </SessionProvider>
       )}
       {boot.state === "ready" || boot.state === "signed_out" ? <UpdateBar /> : null}
@@ -220,6 +230,7 @@ function Shell() {
               Clip <em>Factory</em>
             </span>
           </A>
+          <WorkspaceSwitch place="topbar" />
           <LiveDot />
         </header>
         <main className="main" id="main" ref={main} tabIndex={-1}>
