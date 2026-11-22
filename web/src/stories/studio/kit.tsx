@@ -10,6 +10,7 @@ import { Glide } from "../../components/Glide.tsx";
 import { trapTab } from "../../components/Sheet.tsx";
 import { centerOf, starBurst } from "../ui.tsx";
 import { storiesSound } from "../prefs.ts";
+import { Stepper } from "../glass/index.ts";
 
 export interface PickOption<T extends string> {
   value: T;
@@ -218,7 +219,7 @@ export function Switch({
   );
 }
 
-/** A slider with its label and the value in words. */
+/** A slider with its label and the value in words (with `stepper`, the words sit between the white − and + squares). */
 export function Slider({
   label,
   value,
@@ -228,6 +229,7 @@ export function Slider({
   onChange,
   words,
   marks,
+  stepper = false,
 }: {
   label: string;
   value: number;
@@ -239,6 +241,8 @@ export function Slider({
   words: string;
   /** A highlighted part of the track, e.g. the best length (30 to 60 s). */
   marks?: { from: number; to: number; label: string };
+  /** The contract's Stepper beside the slider: one step less or more a tap (a tap past the end says no: aria-disabled). */
+  stepper?: boolean;
 }) {
   const id = useId();
   const pct = (n: number) => ((n - min) / (max - min)) * 100;
@@ -248,9 +252,13 @@ export function Slider({
         <label className="st-s-field__label" htmlFor={id}>
           {label}
         </label>
-        <output className="st-s-slider__value" htmlFor={id}>
-          {words}
-        </output>
+        {stepper ? (
+          <Stepper className="st-s-slider__stepper" label={label} value={value} min={min} max={max} step={step} onChange={onChange} format={() => words} />
+        ) : (
+          <output className="st-s-slider__value" htmlFor={id}>
+            {words}
+          </output>
+        )}
       </span>
       <span className="st-s-slider__track">
         {marks ? (

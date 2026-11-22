@@ -355,8 +355,8 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
     <section className="st-page st-studio">
       <header className="st-s-head">
         <div className="st-plate">
-          <A href={storiesHref({ name: "production" })} className="st-s-back">
-            ‹ Production
+          <A href={storiesHref({ name: "production" })} className="st-s-back st-s-back--orb">
+            <span className="st-s-back__orb">‹</span> Production
           </A>
           <h1 className="st-s-head__title">Make a new video</h1>
           <p className="st-s-head__lede">A few quick picks, then Lamo Stories writes, draws, animates and puts it all together.</p>
@@ -443,7 +443,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
             <h2 className="st-s-panel__title" id="st-nv-3">
               <span className="st-s-num">3</span> How long
             </h2>
-            <Slider label="Length" min={15} max={90} step={5} value={lengthSec} onChange={setLength} words={seconds(lengthSec)} marks={{ from: 30, to: 60, label: "30 to 60 seconds works best." }} />
+            <Slider label="Length" min={15} max={90} step={5} value={lengthSec} onChange={setLength} words={seconds(lengthSec)} marks={{ from: 30, to: 60, label: "30 to 60 seconds works best." }} stepper />
             {length === null && ideaLength ? <p className="st-s-field__hint">The full idea was written for {seconds(ideaLength)}.</p> : null}
           </section>
 
@@ -454,7 +454,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
             <ShapePicker value={format} usual={usualShape} onChange={setShape} usualKnown={!!workspace} picked={shape !== null} />
           </section>
 
-          <section className="st-s-panel st-glass" aria-labelledby="st-nv-4">
+          <section className="st-s-panel st-glass st-s-words" aria-labelledby="st-nv-4">
             <h2 className="st-s-panel__title" id="st-nv-4">
               <span className="st-s-num">5</span> Words and music
             </h2>
@@ -741,8 +741,8 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
     <section className="st-page st-studio">
       <header className="st-s-head">
         <div className="st-plate">
-          <A href={storiesHref({ name: "production" })} className="st-s-back">
-            ‹ Production
+          <A href={storiesHref({ name: "production" })} className="st-s-back st-s-back--orb">
+            <span className="st-s-back__orb">‹</span> Production
           </A>
           <h1 className="st-s-head__title">{story.title}</h1>
           <p className="st-s-head__lede">
@@ -754,35 +754,38 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
       <Preview
         story={story}
         job={job}
-        action={
-          watch ? (
-            <A href={storiesHref({ name: "review_story", storyId })} className="st-btn st-btn--main">
-              {story.status === "needs_check" ? "Check it in Review" : "Watch it in Review"}
-            </A>
+        notice={problem ? <Notice tone="bad">{problem}</Notice> : null}
+        actions={
+          watch || live || canTryAgain ? (
+            <div className="st-s-actionbar">
+              {canTryAgain && !pick ? <NextRun info={info} story={story} /> : null}
+              {watch ? (
+                // One orange main action in the row: a remake waiting to be made (Try again) wins over watching.
+                <A href={storiesHref({ name: "review_story", storyId })} className={`st-btn${canTryAgain ? "" : " st-btn--main"}`}>
+                  {story.status === "needs_check" ? "Check it in Review" : "Watch it in Review"}
+                </A>
+              ) : null}
+              {live ? (
+                <button type="button" className="st-btn" aria-disabled={busy !== "none" || undefined} onClick={() => busy === "none" && void cancel()}>
+                  {busy === "cancel" ? "Stopping…" : "Cancel"}
+                </button>
+              ) : null}
+              {canTryAgain ? (
+                <>
+                  <ModelMenu info={info} usual={usual} value={pick} onChange={setPick} note="Just for this run. This video's own setting and yours stay the same." />
+                  <button type="button" className="st-btn st-btn--main" aria-disabled={busy !== "none" || undefined} onClick={() => busy === "none" && void again()}>
+                    {busy === "again" ? "Starting…" : story.status === "draft" && story.stale.length === STEP_ORDER.length ? "Make the video" : firstStale ? `Try again from “${STEP_LABEL[firstStale]}”` : "Try again"}
+                  </button>
+                  {job?.status === "failed" ? <SettingsFix sentence={job.error} /> : null}
+                </>
+              ) : null}
+            </div>
           ) : null
         }
       />
 
       <section className="st-s-panel st-glass" aria-label="The steps">
         <StepTrack job={job} story={story} label={`Making ${story.title}`} bar={false} line={false} />
-        {problem ? <Notice tone="bad">{problem}</Notice> : null}
-        <div className="st-s-actionbar">
-          {live ? (
-            <button type="button" className="st-btn" aria-disabled={busy !== "none" || undefined} onClick={() => busy === "none" && void cancel()}>
-              {busy === "cancel" ? "Stopping…" : "Cancel"}
-            </button>
-          ) : null}
-          {canTryAgain && !pick ? <NextRun info={info} story={story} /> : null}
-          {canTryAgain ? (
-            <>
-              <ModelMenu info={info} usual={usual} value={pick} onChange={setPick} note="Just for this run. This video's own setting and yours stay the same." />
-              <button type="button" className="st-btn st-btn--main" aria-disabled={busy !== "none" || undefined} onClick={() => busy === "none" && void again()}>
-                {busy === "again" ? "Starting…" : story.status === "draft" && story.stale.length === STEP_ORDER.length ? "Make the video" : firstStale ? `Try again from “${STEP_LABEL[firstStale]}”` : "Try again"}
-              </button>
-              {job?.status === "failed" ? <SettingsFix sentence={job.error} /> : null}
-            </>
-          ) : null}
-        </div>
         {asking ? (
           <UnusableSheet
             info={info}
@@ -896,32 +899,39 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
 
 /**
  * The video's preview (hero glass): the render progress as the ArcDial (a big light numeral and the step it is on, or
- * the video's status), beside the video's MediaRow (its cover, what is happening now, and the bar of the step working
- * through its scenes), with the page's main action (Watch it in Review) in the row's controls. The dial is this page's
- * progress bar and the row its "now" line: the step track under it shows the steps only.
+ * the video's status), beside the video's MediaRow: its cover, what is happening now and the video's kind and length,
+ * a bar (the step working through its scenes, else the whole video) with its percent, and the page's actions in the
+ * row's controls (Watch it in Review, Cancel, Try again with its model and effort). A problem with them shows under the
+ * row. The step track under the preview shows the steps only.
  */
-function Preview({ story, job, action }: { story: Story; job: ProductionJob | null; action: ReactNode }) {
+function Preview({ story, job, actions, notice }: { story: Story; job: ProductionJob | null; actions: ReactNode; notice: ReactNode }) {
   const steps = stepsOf(job, story);
   const progress = job ? job.progress : steps.filter((s) => s.status === "done" || s.status === "skipped").length / steps.length;
   const pct = Math.round(Math.max(0, Math.min(1, progress)) * 100);
   const now = currentStep(steps);
   const line = nowLine(job, steps);
   const cover = story.coverUrl ?? story.scenes.find((sc) => sc.stillUrl)?.stillUrl ?? null;
-  // The step working through the scenes ("scene 3 of 6"): its own bar in the row.
+  // The step working through the scenes ("scene 3 of 6") has its own bar in the row; otherwise the row's bar is the video's.
   const sceneBar = now?.status === "running" && now.n && now.n > 1 ? Math.min(1, (now.i ?? 0) / now.n) : null;
+  const bar = sceneBar ?? Math.max(0, Math.min(1, progress));
   return (
     <div className={`st-s-preview st-glass st-glass--hero st-lens${job?.status === "failed" ? " is-bad" : ""}`}>
       <ArcDial value={progress} label={`Making ${story.title}`} valueText={`${pct}% done`} className="st-s-preview__dial">
         <StatNumeral value={pct} unit="%" label={now ? now.label : STATUS_LABEL[story.status]} />
       </ArcDial>
-      <MediaRow
-        className="st-s-preview__row"
-        thumb={cover ?? <span className="st-s-preview__blank" />}
-        title={line || STATUS_LABEL[story.status]}
-        progress={sceneBar}
-        progressLabel={now?.label}
-        controls={action}
-      />
+      <div className="st-s-preview__main">
+        <MediaRow
+          className="st-s-preview__row"
+          thumb={cover ?? <span className="st-s-preview__blank" />}
+          title={line || STATUS_LABEL[story.status]}
+          meta={`${CATEGORY_LABEL[story.category]} · ${seconds(story.actualDurationSec ?? story.durationSec)}`}
+          progress={bar}
+          progressLabel={sceneBar !== null && now ? now.label : `Making ${story.title}`}
+          progressText={`${Math.round(bar * 100)}%`}
+          controls={actions}
+        />
+        {notice}
+      </div>
     </div>
   );
 }

@@ -122,6 +122,44 @@
   box-shadow: var(--st-focus-ring);
 }
 
+/* Back with its round glass button (the produce screens): the ‹ in a round glass orb, the word beside it on the
+   head's plate. The whole link is the target; hover lights the orb. */
+.st-s-back--orb {
+  gap: var(--st-space-2);
+  padding: 0 var(--st-space-3) 0 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: var(--st-fs-small);
+}
+
+.st-s-back--orb:hover {
+  background: transparent;
+}
+
+.st-s-back__orb {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--st-tap);
+  height: var(--st-tap);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
+  color: var(--st-text-strong);
+  font-family: var(--st-font-caps);
+  font-size: 1.625rem;
+  font-weight: 500;
+  line-height: 1;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-s-back--orb:hover .st-s-back__orb {
+  background: var(--st-fill-control-hover);
+  box-shadow: var(--st-sheen-control), var(--st-depth-2);
+}
+
 /* A section title loose on the page (it sits on a .st-plate in the markup, hugging its words). */
 .st-s-section {
   margin: 8px 0 0;
@@ -802,6 +840,37 @@
   font-variant-numeric: lining-nums tabular-nums;
 }
 
+/* With the contract's Stepper (a new video's length): the words between the white − and + squares, at the right;
+   on a narrow phone they wrap under the label and the words wrap between the squares. */
+.st-s-slider__top:has(.st-s-slider__stepper) {
+  align-items: center;
+}
+
+.st-s-slider__stepper.st-stepper {
+  max-width: 100%;
+  margin-inline-start: auto;
+  gap: var(--st-space-2);
+}
+
+/* The − and + in Jost, sturdy and centred (Playfair's are hairline at this size). */
+.st-s-slider__stepper .st-stepper__btn {
+  flex: none;
+  font-family: var(--st-font-caps);
+  font-size: 1.625rem;
+  font-weight: 500;
+}
+
+.st-s-slider__stepper .st-stepper__value {
+  flex: 0 1 auto;
+  width: 9.5em;
+  min-width: 0;
+  color: var(--st-text-amber);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 .st-s-slider__track {
   position: relative;
   display: block;
@@ -983,13 +1052,36 @@
   gap: 12px;
 }
 
+/* The eight steps always fill whole rows: 1, 2, 4 or 8 a row by the track's own width (never 7 and 1 alone). */
+.st-s-track:not(.st-s-track--compact) {
+  container-type: inline-size;
+}
+
 .st-s-track__steps {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 128px), 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+@container (min-width: 280px) {
+  .st-s-track__steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 600px) {
+  .st-s-track__steps {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 1180px) {
+  .st-s-track__steps {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
 }
 
 /* A step: a small glass tile (radius control) with its round mark. */

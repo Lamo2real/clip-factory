@@ -40,6 +40,18 @@
     height: 48px;
   }
 
+  /* The switch, the length's − and + and the back orb grow with the rest on a touch screen of any width. */
+  .st-s-switch.st-toggle {
+    height: var(--st-tap-phone);
+    min-height: var(--st-tap-phone);
+  }
+
+  .st-s-slider__stepper .st-stepper__btn,
+  .st-s-back__orb {
+    width: var(--st-tap-phone);
+    height: var(--st-tap-phone);
+  }
+
   .st-s-head__actions,
   .st-s-idea__actions,
   .st-s-decide__more,
@@ -153,7 +165,7 @@
 
 .st-s-shape__art {
   display: block;
-  border-radius: 5px;
+  border-radius: var(--st-r-tiny);
   background: rgb(var(--st-cream-rgb) / 0.6);
   box-shadow: 0 4px 10px rgb(var(--st-shadow-rgb) / 0.35);
 }
@@ -293,20 +305,34 @@
   border-radius: var(--st-r-inner);
 }
 
-/* A redesign beside the character as it is. */
+/* A redesign beside the character as it is: amber-tinted glass (the markup adds .st-glass .st-glass--tinted), the
+   amber cut to --st-tint-cut over the tinted veil. The tint is written out here: --st-tint-tinted is worked out on
+   .stories-app, so a --st-tone-rgb set on the card alone would not reach it. Each figure is a glass control tile. */
 .st-s-redesign {
+  --st-tone-rgb: var(--st-amber-rgb);
   display: grid;
-  gap: 12px;
-  padding: clamp(14px, 0.8rem + 1vw, 22px);
-  border-radius: var(--r-lg);
-  background: rgba(255, 201, 74, 0.1);
-  box-shadow: var(--st-s-soft);
+  gap: var(--st-space-3);
+  padding: var(--st-inset);
+  border-radius: var(--st-r-surface);
+}
+
+.st-s-redesign.st-glass,
+.st-s-redesign:not(.st-glass) {
+  background:
+    linear-gradient(rgb(var(--st-amber-rgb) / var(--st-tint-cut)), rgb(var(--st-amber-rgb) / var(--st-tint-cut))),
+    rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
+}
+
+.st-s-redesign:not(.st-glass) {
+  -webkit-backdrop-filter: var(--st-filter-glass);
+  backdrop-filter: var(--st-filter-glass);
+  box-shadow: var(--st-sheen), var(--st-depth-1);
 }
 
 .st-s-redesign__pair {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--st-space-3);
 }
 
 .st-s-redesign__fig {
@@ -314,24 +340,27 @@
   justify-items: center;
   gap: 6px;
   margin: 0;
-  padding: 10px;
-  border-radius: var(--r-md);
-  background: rgba(255, 246, 229, 0.06);
+  padding: var(--st-bezel-pad);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
 }
 
 .st-s-redesign__cap {
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-redesign__lede {
   margin: 0;
-  font-weight: 700;
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
 }
 
 .st-s-redesign__list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--st-space-2);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -346,8 +375,8 @@
 }
 
 .st-s-redesign__detail {
-  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
-  font-size: 0.92rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
 

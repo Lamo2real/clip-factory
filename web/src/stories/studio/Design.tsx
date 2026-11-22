@@ -118,7 +118,7 @@ export function RedesignCompare({ now, next, onUse, onDrop }: { now: CharacterIn
     </figure>
   );
   return (
-    <section className="st-s-redesign" aria-labelledby="st-redesign-title">
+    <section className="st-s-redesign st-glass st-glass--tinted" aria-labelledby="st-redesign-title">
       <h2 className="st-s-design__title" id="st-redesign-title">
         The new {now.name}
       </h2>

@@ -122,6 +122,38 @@
   gap: var(--st-s-gap);
 }
 
+/* Words and music: Captions is the page's one small solid cream card among the glass (the reference's highlighted
+   card), espresso words and the orange toggle; off, its track is a soft copper well on the cream. */
+.st-s-words .st-s-switch-row {
+  padding: var(--st-space-3) var(--st-space-3) var(--st-space-3) var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: var(--st-tint-cream);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1);
+  color: var(--st-on-cream);
+}
+
+.st-s-words .st-s-switch-row__label {
+  color: var(--st-on-cream);
+}
+
+.st-s-words .st-s-switch-row__line {
+  color: var(--st-on-cream-soft);
+}
+
+.st-s-words .st-s-switch-row .st-toggle:not([aria-checked="true"]) .st-toggle__track {
+  background: rgb(var(--st-copper-rgb) / 0.28);
+}
+
+.st-s-words .st-s-switch-row .st-toggle:not([aria-checked="true"]):hover .st-toggle__track {
+  background: rgb(var(--st-copper-rgb) / 0.4);
+}
+
+/* On the cream the cream part of the focus ring would vanish: the ring is the darker orange (6.3:1 on cream). */
+.st-s-words .st-s-switch-row .st-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--st-on-cream-orange);
+}
+
 .st-s-castpick {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 132px), 1fr));
@@ -214,24 +246,55 @@
   --st-dial-size: clamp(144px, 34vw, 184px);
 }
 
+/* The StatNumeral inside the dial: everything it needs is set here, on this page's own selectors, so no other
+   screen's .st-stat rules (the Dashboard's tiles) reach it: a big light numeral, a sturdy small unit, a 15 px label. */
 .st-s-preview__dial .st-stat {
+  grid-column: auto;
   justify-items: center;
+  gap: var(--st-space-1);
+  padding: 0;
+  color: var(--st-text-strong);
 }
 
 .st-s-preview__dial .st-stat__value {
   font-size: clamp(2.25rem, 1.9rem + 1vw, 2.875rem);
+  font-weight: var(--st-weight-num);
+  line-height: 1;
+  animation: none;
+}
+
+/* The % in Jost at body size (Playfair's is a small high-set glyph that reads as a smudge at this size). */
+.st-s-preview__dial .st-stat__unit {
+  font-family: var(--st-font-caps);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-body);
+  font-variation-settings: normal;
+  letter-spacing: 0;
 }
 
 .st-s-preview__dial .st-stat__label {
   max-width: 11ch;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
   text-align: center;
   line-height: 1.25;
 }
 
-/* The video's own row: a deeper inner surface with the cover, what is happening now and the current step's bar. */
-.st-s-preview__row {
+/* The row and anything said about its actions, in one column beside the dial. */
+.st-s-preview__main {
+  display: grid;
+  gap: var(--st-space-3);
   justify-self: stretch;
-  border-radius: var(--st-r-surface);
+  min-width: 0;
+}
+
+/* The video's own row: a deeper inner surface (radius control) with the cover (the row's radius less its 6 px gap),
+   what is happening now, the video's kind and length, its bar and percent, and the page's actions under them. */
+.st-s-preview__row.st-media {
+  grid-template-columns: var(--st-thumb) minmax(0, 1fr);
+  grid-template-areas: "thumb text" "thumb bar" "controls controls";
+  border-radius: var(--st-r-control);
   background: rgb(var(--st-well-rgb) / 0.3);
   box-shadow: var(--st-sheen-control);
 }
@@ -255,18 +318,23 @@
 
 .st-s-preview__row .st-media__thumb {
   align-self: start;
+  border-radius: calc(var(--st-r-control) - 6px);
   box-shadow: var(--st-depth-1);
 }
 
-/* With no step bar, its words sit in the middle beside the cover. */
-.st-s-preview__row:not(:has(.st-media__bar)) .st-media__text {
-  grid-row: 1 / span 2;
-  align-self: center;
+.st-s-preview__row .st-media__time {
+  min-width: 4ch;
+  text-align: end;
 }
 
-/* The main action rides at the row's right (on a phone, under it at the right, where the thumb is). */
+/* The actions ride under the bar, at the row's right (where the thumb is). */
 .st-s-preview__row .st-media__controls {
   justify-content: flex-end;
+  padding-top: var(--st-space-1);
+}
+
+.st-s-preview__row .st-s-actionbar {
+  flex: 1 1 auto;
 }
 
 .st-s-preview__blank {

@@ -444,8 +444,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     <section className="st-page st-studio">
       <header className="st-s-head">
         <div className="st-plate">
-          <A href={storiesHref({ name: "review" })} className="st-s-back">
-            ‹ Review
+          <A href={storiesHref({ name: "review" })} className="st-s-back st-s-back--orb">
+            <span className="st-s-back__orb">‹</span> Review
           </A>
           <h1 className="st-s-head__title">{story.title}</h1>
           <p className="st-s-head__lede">
