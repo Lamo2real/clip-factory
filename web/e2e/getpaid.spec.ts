@@ -102,6 +102,11 @@ for (const [name, use] of [
   const phone = name === "phone";
   test.describe(`${name}`, () => {
     test.use(use);
+    // WebKit on Linux paints without a GPU, so every click waits on slow frames and the 15-tap YouTube walk ran out
+    // of its 2 minutes (1.4 to 2.0 min on green runs). Hold the living backdrop still, as the Ask checks do.
+    test.beforeEach(async ({ page, browserName }) => {
+      if (browserName === "webkit") await stillBackdrop(page);
+    });
 
     test("the ways in: 4 taps from Settings, 2 from Money, 1 from a setup page", async ({ page }) => {
       await start(page, "/", "owner");
