@@ -578,8 +578,18 @@ def accounts_shown(
 ) -> list[Item]:
     """Every platform's account as the Social accounts page shows it (and settled the same way), for the dashboard
     (§45.35 D11). ``secrets`` is None while posting is not switched on: the app keys are then not checked, Lamo Clips'
-    identity still is."""
-    return [_public_of(store, secrets, user_id, workspace_id, p, now=now) for p in ws.PLATFORMS]
+    identity still is. A secret that cannot be read just now never breaks the dashboard: that platform is shown
+    without the key check (the Social accounts page says the rest)."""
+    out: list[Item] = []
+    for platform in ws.PLATFORMS:
+        try:
+            out.append(_public_of(store, secrets, user_id, workspace_id, platform, now=now))
+        except Exception as e:
+            if secrets is None:
+                raise
+            log("warning", "ws_social.dashboard_keys_unread", platform=platform, error=type(e).__name__)
+            out.append(_public_of(store, None, user_id, workspace_id, platform, now=now))
+    return out
 
 
 def settle(

@@ -10,7 +10,7 @@ import pytest
 import ws_social_support as sup
 from clipfactory_api import db
 from clipfactory_api.app import App
-from clipfactory_api.workspaces import sentences
+from clipfactory_api.workspaces import apps, sentences
 from conftest import OTHER, USER, Call, Clock
 from fakes import FakeS3, FakeSecretsManager
 from test_oauth_state_formats import GOOD
@@ -245,6 +245,21 @@ def test_the_dashboards_accounts_are_the_ones_social_accounts_shows(
     # the same as the Social accounts page itself
     page = {a["platform"]: a["connectionStatus"] for a in sup.ws_call(app)("GET", f"{BASE}/social")[1]["accounts"]}
     assert {p: a["status"] for p, a in accounts.items()} == page
+
+
+def test_a_secret_that_cannot_be_read_never_breaks_the_dashboard(
+    app: App, call: Call, store: db.Store, secrets_client: FakeSecretsManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sup.install(app, secrets_client)
+    sup.social(store, secrets_client, "youtube")
+
+    def down(*_a: object, **_k: object) -> None:
+        raise RuntimeError("Secrets Manager is down")
+
+    monkeypatch.setattr(apps, "app_keys", down)
+    status, body = call("GET", f"{BASE}/dashboard")
+    assert status == 200
+    assert {a["platform"]: a["status"] for a in body["dashboard"]["accounts"]}["youtube"] == "connected"
 
 
 def test_without_posting_switched_on_the_dashboard_still_compares_with_lamo_clips(call: Call, store: db.Store) -> None:
