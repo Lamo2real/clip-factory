@@ -1,14 +1,23 @@
-// Lamo Stories › Settings › Storage and production (docs/CONTRACTS.md §45.29): the space Lamo Stories' own files use
-// (videos, scenes, sounds, reference videos, skills; from its ASSET# and REFVID# sizes, under its own ws/ folder, apart
-// from Clip Factory's), the output format (MP4, H.264 and AAC, +faststart), captions burned into the picture or not,
-// how many scenes are drawn at a time (1 to 3), how many old versions each video keeps (all, or the last 1 to 10), and
-// how YouTube posts are filed and who sees them (§45.16.7).
-import { useEffect } from "react";
+// Lamo Stories › Settings › Storage and production (docs/CONTRACTS.md §45.29, §45.34; request 2 §6F "Media storage.
+// Reference-video storage. Output formats. Production settings. Rendering configuration. Asset retention." and §9):
+// where Lamo Stories keeps its files (its own folder in Clip Factory's media storage, apart from Clip Factory's) and
+// the space each kind uses (videos, scenes and storyboards, sounds, reference videos, skills; from its ASSET# and
+// REFVID# sizes), the finished file (MP4, H.264 and AAC, +faststart, always; WebM and MOV besides it if the owner
+// wants), captions burned into the picture or not (only the caption words are left out; the bubbles and the safety
+// end card always stay), how many scenes are drawn at a time (1 to 3), how long reference videos, chat pictures and
+// old versions are kept, Clean up now (applies those choices at once), how YouTube posts are filed (§45.16.7), and
+// this device's own sounds and motion for Lamo Stories (cf.stories.prefs, apart from Clip Factory's).
+import { useEffect, useState } from "react";
+import { friendlyMessage } from "../../api/errors.ts";
+import { useToast } from "../../components/Toasts.tsx";
 import { useLoad } from "../../lib/hooks.ts";
+import { prefersReducedMotion, usePrefs } from "../../lib/prefs.ts";
 import { storiesApi } from "../api/client.ts";
-import type { StorageSummary, StoriesConfig } from "../api/types.ts";
-import { Btn, Empty, Failed, Loading, SavedMark, SetCard, SetPick, SetSwitch, sizeText, useSaved } from "./bits.tsx";
+import type { ExtraFormat, KeepChatPictures, KeepReferences, StorageSummary, StoriesConfig } from "../api/types.ts";
+import { setStoriesDevicePref, useStoriesDevicePref, type StoriesDeviceKey } from "../prefs.ts";
+import { Btn, cheer, Empty, Failed, Loading, Note, SavedMark, SetCard, SetPick, SetSwitch, sizeText, useSaved } from "./bits.tsx";
 import { useWorkspaceConfig } from "./data.ts";
+import { sizeWords } from "./VideoSection.tsx";
 
 export const STORAGE_KINDS: { key: keyof StorageSummary["bytes"]; label: string; sw: string }[] = [
   { key: "videos", label: "Finished videos", sw: "st-stg-sw--sun" },
@@ -18,6 +27,16 @@ export const STORAGE_KINDS: { key: keyof StorageSummary["bytes"]; label: string;
   { key: "skills", label: "Skills", sw: "st-stg-sw--lilac" },
   { key: "other", label: "Character pictures and the rest", sw: "st-stg-sw--cream" },
 ];
+
+/** AWS Regions by their place's name, for the storage line. */
+const PLACES: Record<string, string> = {
+  "eu-north-1": "Europe (Stockholm)",
+  "eu-west-1": "Europe (Ireland)",
+  "eu-central-1": "Europe (Frankfurt)",
+  "us-east-1": "US East (N. Virginia)",
+};
+
+export const LOCATION_WORDS = "Lamo Stories' own folder in Clip Factory's media storage";
 
 const CATEGORIES: { value: StoriesConfig["youtubeCategory"]; label: string }[] = [
   { value: "27", label: "Education" },
@@ -32,6 +51,34 @@ const PRIVACY: { value: StoriesConfig["youtubePrivacy"]; label: string; line: st
   { value: "unlisted", label: "Only with the link", line: "Unlisted" },
   { value: "private", label: "Only me", line: "Private" },
 ];
+
+/** How long reference videos are kept (§45.34), in plain words. */
+export const KEEP_REFERENCES: { value: KeepReferences; label: string; line: string }[] = [
+  { value: "all", label: "Keep them all", line: "Nothing is cleared" },
+  { value: "study_only", label: "Keep only the study", line: "The video goes once it is studied" },
+  { value: "days_30", label: "30 days", line: "Then the video and its study go" },
+  { value: "days_90", label: "90 days", line: "Then the video and its study go" },
+];
+
+/** How long pictures added in the chat are kept (§45.34). */
+export const KEEP_CHAT_PICTURES: { value: KeepChatPictures; label: string; line: string }[] = [
+  { value: "all", label: "Keep them all", line: "Nothing is cleared" },
+  { value: "days_30", label: "30 days", line: "Then they go" },
+  { value: "days_90", label: "90 days", line: "Then they go" },
+];
+
+/** The files made besides the MP4, in plain words (§45.34). */
+export const EXTRA_FORMATS: { value: ExtraFormat; label: string; description: string }[] = [
+  { value: "webm", label: "Also make a WebM file", description: "A small file for web pages (VP9 picture, Opus sound)." },
+  { value: "mov", label: "Also make a MOV file", description: "A big file for editing apps like Final Cut or Premiere (ProRes 422 Proxy picture, PCM sound)." },
+];
+
+/** The burned-in captions switch's words (§45.34: only the caption words are left out). */
+export function burnWords(on: boolean): string {
+  return on
+    ? "The words are part of the video, so they show everywhere."
+    : "Only the caption words are left out of the picture. The speech bubbles and the safety end card always stay in.";
+}
 
 function Used({ storage }: { storage: StorageSummary }) {
   const total = STORAGE_KINDS.reduce((a, k) => a + storage.bytes[k.key], 0);
@@ -60,6 +107,121 @@ function Used({ storage }: { storage: StorageSummary }) {
   );
 }
 
+/** Where the files are: the place's name and the folder, from StorageSummary.location. */
+function Where({ storage }: { storage: StorageSummary | null }) {
+  const loc = storage?.location;
+  return (
+    <p className="st-stg-where">
+      <span className="st-stg-active__word">Where</span>
+      <span>
+        {LOCATION_WORDS}
+        {loc ? (
+          <>
+            {" "}
+            in {PLACES[loc.region] ?? loc.region}: <code className="st-stg-code">{loc.folder}</code>
+          </>
+        ) : (
+          ", apart from Clip Factory's files."
+        )}
+      </span>
+    </p>
+  );
+}
+
+/** Clean up now (POST …/storage/cleanup): applies the keep choices at once, after an "Are you sure?". */
+function Cleanup({ ws, onDone }: { ws: string; onDone: () => Promise<void> }) {
+  const toast = useToast();
+  const [sure, setSure] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const run = async (el: HTMLElement) => {
+    setBusy(true);
+    try {
+      const { removed } = await storiesApi().storageCleanup(ws);
+      setSure(false);
+      const text = removed.files
+        ? `Cleared ${removed.files.toLocaleString("en-GB")} ${removed.files === 1 ? "file" : "files"} (${sizeText(removed.bytes)}). The rest is kept.`
+        : "Nothing to clear: every file is still one you keep.";
+      setResult(text);
+      if (removed.files) {
+        cheer(el);
+        toast.success(text);
+      } else toast.info(text);
+      await onDone();
+    } catch (e) {
+      toast.error(friendlyMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="st-stg-cleanup">
+      {result ? (
+        <Note tone="mint" role="status">
+          {result}
+        </Note>
+      ) : null}
+      {sure ? (
+        <div className="st-stg-confirm" role="group" aria-label="Are you sure?">
+          <p>
+            <strong>Clear old files now?</strong> Files older than your choices above are deleted. Clip Factory's files are never touched.
+          </p>
+          <div className="st-stg-actions">
+            <Btn main danger off={busy ? "Clearing…" : undefined} onClick={(e) => void run(e.currentTarget)}>
+              {busy ? "Clearing…" : "Yes, clear them"}
+            </Btn>
+            <Btn quiet onClick={() => setSure(false)}>
+              No, not now
+            </Btn>
+          </div>
+        </div>
+      ) : (
+        <Btn
+          onClick={() => {
+            setResult(null);
+            setSure(true);
+          }}
+        >
+          Clean up now
+        </Btn>
+      )}
+    </div>
+  );
+}
+
+/** One of this device's own sounds and motion choices: Lamo Stories' own once set, Clip Factory's until then. */
+function DeviceSwitch({ k, label, description, fallback, off }: { k: StoriesDeviceKey; label: string; description: string; fallback: boolean; off?: string }) {
+  const own = useStoriesDevicePref(k);
+  return <SetSwitch label={label} description={`${description}${own === null ? " Follows Clip Factory's setting until you change it." : ""}`} checked={own ?? fallback} off={off} onChange={(v) => setStoriesDevicePref(k, v)} />;
+}
+
+/** Settings › Storage and production › Sounds and motion: this device's own choices for Lamo Stories (§45.34). */
+function SoundsAndMotion() {
+  const cf = usePrefs();
+  const sound = useStoriesDevicePref("sound.enabled");
+  const click = useStoriesDevicePref("sound.click");
+  const motion = useStoriesDevicePref("motion.reduce");
+  const soundOn = sound ?? cf.soundEnabled;
+  const anySet = sound !== null || click !== null || motion !== null;
+  return (
+    <SetCard title="Sounds and motion" icon="sound" id="sounds-and-motion" lede="For Lamo Stories on this device. Clip Factory's sounds and motion stay as they are.">
+      <DeviceSwitch k="sound.enabled" label="Sounds" description="Cheers and clicks while you work." fallback={cf.soundEnabled} />
+      <DeviceSwitch k="sound.click" label="Click sounds" description="A little tap on every button." fallback={cf.soundEnabled} off={soundOn ? undefined : "Turn Sounds on first"} />
+      <DeviceSwitch k="motion.reduce" label="Less motion" description="Fewer things slide, bounce and burst on the screen." fallback={prefersReducedMotion()} />
+      {anySet ? (
+        <Btn
+          quiet
+          onClick={() => {
+            for (const k of ["sound.enabled", "sound.click", "motion.reduce"] as const) setStoriesDevicePref(k, null);
+          }}
+        >
+          Use Clip Factory's settings again
+        </Btn>
+      ) : null}
+    </SetCard>
+  );
+}
+
 export function StorageSection({ ws }: { ws: string }) {
   const { workspace, config: c, save, saved: savedCount, busy } = useWorkspaceConfig(ws);
   const storage = useLoad(() => storiesApi().storage(ws), ws, "st-settings-storage");
@@ -69,8 +231,10 @@ export function StorageSection({ ws }: { ws: string }) {
   }, [savedCount, flash]);
 
   if (!workspace.data) return workspace.error ? <Failed message={workspace.error} onRetry={() => void workspace.reload()} /> : <Loading label="Opening the storage settings…" />;
-  const keep = c.production.keepVersions;
+  const prod = c.production;
+  const keep = prod.keepVersions;
   const keepN = keep === "all" ? 3 : keep;
+  const extra = prod.extraFormats ?? [];
 
   return (
     <div className="st-stg-cards">
@@ -79,10 +243,11 @@ export function StorageSection({ ws }: { ws: string }) {
         <SavedMark saved={saved} busy={busy} />
       </div>
       <SetCard title="Space used" icon="box" lede="Everything Lamo Stories has made and kept.">
+        <Where storage={storage.data} />
         {storage.data ? <Used storage={storage.data} /> : storage.error ? <Failed message={storage.error} onRetry={() => void storage.reload()} /> : <Loading label="Adding it up…" />}
       </SetCard>
 
-      <SetCard title="The finished file" icon="film" lede="Every platform takes this file as it is.">
+      <SetCard title="The finished file" icon="film" lede="Every video is an MP4, which every platform takes. You can have other files made too.">
         <dl className="st-stg-facts">
           <div>
             <dt>Format</dt>
@@ -90,22 +255,34 @@ export function StorageSection({ ws }: { ws: string }) {
           </div>
           <div>
             <dt>Size</dt>
-            <dd>1080 × 1920 at 30 fps</dd>
+            <dd>
+              {sizeWords(c.video.resolution)} ({c.video.aspect}) at 30 fps
+            </dd>
           </div>
         </dl>
         <SetSwitch
           label="Put the captions into the picture"
-          description={c.production.burnCaptions ? "The words are part of the video, so they show everywhere." : "The words are left out of the picture."}
-          checked={c.production.burnCaptions}
-          onChange={(v) => save({ production: { ...c.production, burnCaptions: v } })}
+          description={burnWords(prod.burnCaptions)}
+          checked={prod.burnCaptions}
+          onChange={(v) => save({ production: { ...prod, burnCaptions: v } })}
         />
+        <h4 className="st-stg-subhead">Other files, besides the MP4</h4>
+        {EXTRA_FORMATS.map((f) => (
+          <SetSwitch
+            key={f.value}
+            label={f.label}
+            description={f.description}
+            checked={extra.includes(f.value)}
+            onChange={(v) => save({ production: { ...prod, extraFormats: (["webm", "mov"] as const).filter((x) => (x === f.value ? v : extra.includes(x))) } })}
+          />
+        ))}
       </SetCard>
 
       <SetCard title="Making the scenes" icon="clock" lede="More at a time is quicker; fewer is gentler when lots is going on.">
         <SetPick<"1" | "2" | "3">
           label="Scenes drawn at a time"
-          value={String(c.production.scenesAtOnce) as "1" | "2" | "3"}
-          onChange={(v) => save({ production: { ...c.production, scenesAtOnce: Number(v) as 1 | 2 | 3 } })}
+          value={String(prod.scenesAtOnce) as "1" | "2" | "3"}
+          onChange={(v) => save({ production: { ...prod, scenesAtOnce: Number(v) as 1 | 2 | 3 } })}
           options={[
             { value: "1", label: "One at a time", line: "Slowest" },
             { value: "2", label: "Two at a time", line: "The usual" },
@@ -118,7 +295,7 @@ export function StorageSection({ ws }: { ws: string }) {
         <SetPick<"all" | "some">
           label="Keep old versions"
           value={keep === "all" ? "all" : "some"}
-          onChange={(v) => save({ production: { ...c.production, keepVersions: v === "all" ? "all" : keepN } })}
+          onChange={(v) => save({ production: { ...prod, keepVersions: v === "all" ? "all" : keepN } })}
           options={[
             { value: "all", label: "Keep them all" },
             { value: "some", label: "Keep only the last few" },
@@ -126,18 +303,28 @@ export function StorageSection({ ws }: { ws: string }) {
         />
         {keep !== "all" ? (
           <div className="st-stg-stepper" role="group" aria-label="How many versions each video keeps">
-            <Btn label="Keep one fewer" off={keep <= 1 ? "One is the fewest" : undefined} onClick={() => save({ production: { ...c.production, keepVersions: keep - 1 } })}>
+            <Btn label="Keep one fewer" off={keep <= 1 ? "One is the fewest" : undefined} onClick={() => save({ production: { ...prod, keepVersions: keep - 1 } })}>
               <span aria-hidden="true">−</span>
             </Btn>
             <span className="st-stg-stepper__value" aria-live="polite">
               The last <strong>{keep}</strong> {keep === 1 ? "version" : "versions"}
             </span>
-            <Btn label="Keep one more" off={keep >= 10 ? "Ten is the most" : undefined} onClick={() => save({ production: { ...c.production, keepVersions: keep + 1 } })}>
+            <Btn label="Keep one more" off={keep >= 10 ? "Ten is the most" : undefined} onClick={() => save({ production: { ...prod, keepVersions: keep + 1 } })}>
               <span aria-hidden="true">+</span>
             </Btn>
           </div>
         ) : null}
         <p className="st-stg-small">{keep === "all" ? "Nothing is ever cleared away." : "When a new version is made, the files of older ones are deleted. The video's history stays."}</p>
+      </SetCard>
+
+      <SetCard title="Keeping other files" icon="clock" id="keeping" lede="Reference videos and chat pictures can be cleared after a while to save space.">
+        <p className="st-stg-label">Reference videos</p>
+        <SetPick<KeepReferences> label="Keep reference videos" stack value={prod.keepReferences ?? "all"} options={KEEP_REFERENCES} onChange={(v) => save({ production: { ...prod, keepReferences: v } })} />
+        {(prod.keepReferences ?? "all") === "study_only" ? <p className="st-stg-small">Lamo Stories still learns from each study after its video is gone.</p> : null}
+        <p className="st-stg-label">Pictures added in the chat</p>
+        <SetPick<KeepChatPictures> label="Keep chat pictures" value={prod.keepChatPictures ?? "all"} options={KEEP_CHAT_PICTURES} onChange={(v) => save({ production: { ...prod, keepChatPictures: v } })} />
+        <p className="st-stg-small">These choices and Old versions are applied after each video. Clean up now applies them at once.</p>
+        <Cleanup ws={ws} onDone={() => storage.reload()} />
       </SetCard>
 
       <SetCard title="YouTube posts" icon="film" lede="Lamo Stories' own YouTube choices, never made for kids. Clip Factory's YouTube settings are not used here.">
@@ -146,6 +333,8 @@ export function StorageSection({ ws }: { ws: string }) {
         <p className="st-stg-label">Who can see the videos</p>
         <SetPick label="Who can see the videos on YouTube" value={c.youtubePrivacy} options={PRIVACY} onChange={(v) => save({ youtubePrivacy: v })} />
       </SetCard>
+
+      <SoundsAndMotion />
     </div>
   );
 }

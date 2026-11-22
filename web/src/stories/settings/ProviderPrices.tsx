@@ -1,10 +1,8 @@
-// Prices for the picture and video makers (docs/CONTRACTS.md §45.6 StoriesAiConfig.prices "by model key or provider
-// id", §45.29 Video "provider cost where known", §45.33 "Provider usage (Nova Canvas images, Nova Reel seconds) …
-// priced only when a price is known"). Neither has a known list price (stories/config/models.json: pricing null), so
-// each starts at "No price set" with a form. The price is saved in the AI configuration (PUT …/ai, on its version)
-// the way the usage is counted: a provider's units (pictures, seconds) are its `input`, so a price for one unit is
-// kept as `inputPer1M` = that price × 1,000,000 and `outputPer1M` 0, and cost = units × inputPer1M / 1,000,000, the
-// same sum as a model's.
+// Prices for the picture and video makers (docs/CONTRACTS.md §45.34 "Provider usage and cost", §45.29 Video
+// "provider cost where known"). Neither has a known list price (stories/config/models.json: pricing null), so each
+// starts at "No price set" with a form. The price is the owner's price for one unit, saved in the AI configuration
+// (PUT …/ai `prices`, by provider id, on its version) as a Price with `perUnit` and its `unit` (Nova Canvas by the
+// picture, Nova Reel by the second of video) and the token prices 0; the usage card's cost is units × perUnit.
 import { useState } from "react";
 import { useToast } from "../../components/Toasts.tsx";
 import type { Price } from "../api/types.ts";
@@ -13,40 +11,42 @@ import { Btn, cheer, Chip, money, SetSelect } from "./bits.tsx";
 import type { useAi } from "./data.ts";
 
 /** The makers that can carry a price, with the unit their use is counted in. */
-export const PRICED_MAKERS: { id: "nova-canvas" | "nova-reel"; label: string; unit: string; units: string; example: string }[] = [
-  { id: "nova-canvas", label: modelsFile.imageModel.label, unit: "a picture", units: "picture", example: "0.04" },
-  { id: "nova-reel", label: modelsFile.videoModel.label, unit: "a second of video", units: "second", example: "0.08" },
+export const PRICED_MAKERS: { id: "nova-canvas" | "nova-reel"; label: string; unit: "image" | "second"; per: string; units: string; example: string }[] = [
+  { id: "nova-canvas", label: modelsFile.imageModel.label, unit: "image", per: "a picture", units: "picture", example: "0.04" },
+  { id: "nova-reel", label: modelsFile.videoModel.label, unit: "second", per: "a second of video", units: "second", example: "0.08" },
 ];
 
-/** The API takes at most 100,000 for a million units, so at most 0.10 for one (Nova's prices are a few cents). */
-export const MAX_UNIT = 0.1;
+/** The highest price for one picture or one second the form takes (Nova's prices are a few cents). */
+export const MAX_UNIT = 100;
 
-/** The price of one unit (one picture, one second) from a stored price. */
+/** The price of one unit (one picture, one second) from a stored price (an older one kept it per million units). */
 export function unitPrice(p: Price): number {
+  if (typeof p.perUnit === "number") return p.perUnit;
   return Math.round(p.inputPer1M) / 1_000_000;
 }
 
-/** The stored price for one unit (see the top of this file). */
-export function makerPrice(perUnit: number, currency: string, unit: string): Price {
+/** The stored price for one unit (§45.34): perUnit and its unit, the token prices 0. */
+export function makerPrice(perUnit: number, currency: string, unit: "image" | "second", per: string): Price {
   return {
-    inputPer1M: Math.round(perUnit * 1_000_000),
+    inputPer1M: 0,
     outputPer1M: 0,
     cacheReadPer1M: null,
     cacheWritePer1M: null,
     longContext: null,
     currency,
     source: "owner",
-    note: `Your price for ${unit}.`,
+    note: `Your price for ${per}.`,
+    perUnit,
+    unit,
   };
 }
 
 type Ai = ReturnType<typeof useAi>;
 
-function MakerPriceRow({ maker, ai }: { maker: (typeof PRICED_MAKERS)[number]; ai: Ai }) {
+function MakerPriceRow({ maker, ai, open, setOpen }: { maker: (typeof PRICED_MAKERS)[number]; ai: Ai; open: boolean; setOpen: (open: boolean) => void }) {
   const toast = useToast();
   const data = ai.data!;
   const price = data.ai.prices[maker.id] ?? null;
-  const [open, setOpen] = useState(false);
   const [text, setText] = useState(price ? String(unitPrice(price)) : "");
   const [currency, setCurrency] = useState(price?.currency ?? "USD");
   const [busy, setBusy] = useState(false);
@@ -63,13 +63,13 @@ function MakerPriceRow({ maker, ai }: { maker: (typeof PRICED_MAKERS)[number]; a
     if (busy) return;
     const n = Number(text.replace(",", "."));
     if (!text.trim() || !Number.isFinite(n) || n < 0 || n > MAX_UNIT) {
-      toast.error(`Type the price for ${maker.unit} as a number from 0 to 0.10, like ${maker.example}.`);
+      toast.error(`Type the price for ${maker.per} as a number, like ${maker.example}.`);
       return;
     }
-    if (await put({ ...data.ai.prices, [maker.id]: makerPrice(n, currency, maker.unit) })) {
+    if (await put({ ...data.ai.prices, [maker.id]: makerPrice(n, currency, maker.unit, maker.per) })) {
       setOpen(false);
       cheer(el);
-      toast.success(`${maker.label}'s price is saved.`);
+      toast.success(`${maker.label}'s price is saved. Its cost shows in Use and costs.`);
     }
   };
   const clear = async () => {
@@ -78,12 +78,12 @@ function MakerPriceRow({ maker, ai }: { maker: (typeof PRICED_MAKERS)[number]; a
     if (await put(rest)) toast.info(`Your price for ${maker.label} is removed.`);
   };
   return (
-    <li className="st-stg-price">
+    <li className="st-stg-price" id={`price-${maker.id}`}>
       <div className="st-stg-price__head">
         <span className="st-stg-price__name">{maker.label}</span>
         {price ? <Chip tone="sky">Your price</Chip> : <Chip tone="sun">No price set.</Chip>}
       </div>
-      <p className="st-stg-price__text">{price ? `${money(unitPrice(price), price.currency)} for ${maker.unit}` : `No cost is worked out for it until you type its price for ${maker.unit}.`}</p>
+      <p className="st-stg-price__text">{price ? `${money(unitPrice(price), price.currency)} for ${maker.per}` : `No cost is worked out for it until you type its price for ${maker.per}.`}</p>
       {open ? (
         <form
           className="st-stg-price__form"
@@ -124,13 +124,13 @@ function MakerPriceRow({ maker, ai }: { maker: (typeof PRICED_MAKERS)[number]; a
   );
 }
 
-/** Each maker that can carry a price, with its form. */
-export function MakerPrices({ ai }: { ai: Ai }) {
+/** Each maker that can carry a price, with its form; `open` is the maker whose form is open (the usage card opens one). */
+export function MakerPrices({ ai, open, setOpen }: { ai: Ai; open: string | null; setOpen: (id: string | null) => void }) {
   if (!ai.data) return ai.error ? <p className="st-stg-small">{ai.error}</p> : null;
   return (
     <ul className="st-stg-prices" aria-label="Each maker's price">
       {PRICED_MAKERS.map((m) => (
-        <MakerPriceRow key={m.id} maker={m} ai={ai} />
+        <MakerPriceRow key={m.id} maker={m} ai={ai} open={open === m.id} setOpen={(v) => setOpen(v ? m.id : null)} />
       ))}
     </ul>
   );

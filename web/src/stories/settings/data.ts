@@ -7,7 +7,7 @@ import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad, type Loaded } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
-import type { Agent, AgentId, Effort, ModelInfo, StoriesAiConfig, StoriesConfig, TaskInfo, Workspace } from "../api/types.ts";
+import type { Agent, AgentId, AiPicked, Effort, ModelInfo, StoriesAiConfig, StoriesConfig, TaskInfo, Workspace } from "../api/types.ts";
 import workspaceDefaults from "../../../../stories/config/workspace-defaults.json";
 
 export type AiData = { ai: StoriesAiConfig; models: ModelInfo[]; agents: Agent[]; tasks: TaskInfo[] };
@@ -30,6 +30,22 @@ export function configOf(w: Workspace | null): StoriesConfig {
   };
 }
 
+/**
+ * The body of PUT …/ai: exactly the configuration's own keys (anything else the API sends back, now or later, is
+ * never echoed into a save, where it would be refused as unknown), with `picked` only when the owner picked
+ * something on purpose (§45.34: setup steps 1 to 3).
+ */
+export function aiBody(ai: Omit<StoriesAiConfig, "version">, version: number, picked: readonly AiPicked[] = []): StoriesAiConfig & { picked?: AiPicked[] } {
+  return {
+    defaultModel: ai.defaultModel,
+    defaultEffort: ai.defaultEffort,
+    tasks: ai.tasks,
+    prices: ai.prices,
+    version,
+    ...(picked.length ? { picked: [...new Set(picked)] } : {}),
+  };
+}
+
 /** What the owner changed that the API has not confirmed yet, shown over what the API last said. */
 interface AiOver {
   ai: Omit<StoriesAiConfig, "version"> | null;
@@ -48,7 +64,8 @@ export function withOver(d: AiData | null, over: AiOver): AiData | null {
 
 /** The AI settings: the configuration, the models with their last result, the agents and the tasks table. */
 export function useAi(ws: string): Loaded<AiData> & {
-  saveAi: (next: Omit<StoriesAiConfig, "version">) => Promise<boolean>;
+  /** `picked`: what this change picks on purpose (the default model or effort), sent with it (§45.34) */
+  saveAi: (next: Omit<StoriesAiConfig, "version">, picked?: AiPicked[]) => Promise<boolean>;
   saveAgent: (agentId: AgentId, patch: AgentPatch | { reset: true }) => Promise<Agent | null>;
   busy: boolean;
 } {
@@ -60,6 +77,8 @@ export function useAi(ws: string): Loaded<AiData> & {
   const agentVersions = useRef(new Map<AgentId, number>());
   for (const a of loaded.data?.agents ?? []) if ((agentVersions.current.get(a.agentId) ?? -1) < a.version) agentVersions.current.set(a.agentId, a.version);
   const wanted = useRef<Omit<StoriesAiConfig, "version"> | null>(null);
+  // Picks waiting with the wanted change: a change that replaces another before it is sent keeps the other's picks.
+  const wantedPicked = useRef<AiPicked[]>([]);
   const running = useRef<Promise<boolean> | null>(null);
   const [over, setOver] = useState<AiOver>({ ai: null, agents: {} });
   const [runs, setRuns] = useState(0);
@@ -93,8 +112,9 @@ export function useAi(ws: string): Loaded<AiData> & {
   );
 
   const saveAi = useCallback(
-    (next: Omit<StoriesAiConfig, "version">): Promise<boolean> => {
+    (next: Omit<StoriesAiConfig, "version">, picked: AiPicked[] = []): Promise<boolean> => {
       wanted.current = next;
+      wantedPicked.current = [...new Set([...wantedPicked.current, ...picked])];
       // Shown at once; the save follows.
       setOver((o) => ({ ...o, ai: next }));
       if (running.current) return running.current;
@@ -105,9 +125,11 @@ export function useAi(ws: string): Loaded<AiData> & {
           for (;;) {
             while (wanted.current && aiVersion.current !== null) {
               const body = wanted.current;
+              const picks = wantedPicked.current;
               wanted.current = null;
+              wantedPicked.current = [];
               try {
-                const saved = await storiesApi().putAi(ws, { ...body, version: aiVersion.current });
+                const saved = await storiesApi().putAi(ws, aiBody(body, aiVersion.current, picks));
                 aiVersion.current = saved.version;
               } catch (e) {
                 ok = false;

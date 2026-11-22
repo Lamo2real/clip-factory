@@ -1,8 +1,10 @@
-// Provider keys (docs/CONTRACTS.md §45.29 AI and Video, §45.31): a provider that needs an API key gets a key form.
-// The key goes to Secrets Manager through PUT …/providers/{id}/key and never comes back: what the page shows of it is
-// the provider's own line from the API ("Key saved · ends 4f2a."). Which providers need no key is in the contract's
-// provider tables (§45.11.6, §45.31): the built-in makers, Claude, Nova Canvas and Nova Reel use Lamo Stories' own AWS
-// access. Any other provider the API lists takes a key; none does today, so the card says so and the form waits.
+// Provider keys (docs/CONTRACTS.md §45.29 AI and Video, §45.31, §45.34): a provider that needs an API key gets a key
+// form. The key goes to Secrets Manager through PUT …/providers/{id}/key and never comes back: what the page shows of
+// it is ProviderStatus.key (saved or not, its last four, when) and the provider's own line ("Key saved · ends 4f2a.").
+// "Remove the saved key" shows only while a key is saved. ProviderStatus.key is present only for a provider that takes
+// a key; for an API that does not send it yet, the contract's provider tables say which need none (§45.11.6, §45.31:
+// the built-in makers, Claude, Nova Canvas and Nova Reel use Lamo Stories' own AWS access). None takes a key today, so
+// the card says so and the form waits.
 import { useState } from "react";
 import { friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
@@ -14,13 +16,22 @@ import { Btn, cheer, Chip, Note, PROVIDER_STATE, SIcon, whenText } from "./bits.
 export const NO_KEY: ReadonlySet<string> = new Set(["bedrock-claude", "builtin-rig", "nova-canvas", "builtin-2d", "nova-reel", "builtin-synth"]);
 
 export function takesKey(p: ProviderStatus): boolean {
+  if (p.key) return true;
+  if (p.key === null) return false;
   return !NO_KEY.has(p.id);
 }
 
-/** A key route's answer for a provider in the list: its new state and line, under the name the list shows. */
+/** A key route's answer for a provider in the list: its new state, line and key, under the name the list shows. */
 export function keepName(old: ProviderStatus, next: ProviderStatus): ProviderStatus {
-  const { checkedAt: _c, lastError: _e, ...rest } = old;
-  return { ...rest, state: next.state, line: next.line, ...(next.checkedAt ? { checkedAt: next.checkedAt } : {}), ...(next.lastError ? { lastError: next.lastError } : {}) };
+  const { checkedAt: _c, lastError: _e, key: _k, ...rest } = old;
+  return {
+    ...rest,
+    state: next.state,
+    line: next.line,
+    ...(next.checkedAt ? { checkedAt: next.checkedAt } : {}),
+    ...(next.lastError ? { lastError: next.lastError } : {}),
+    ...(next.key !== undefined ? { key: next.key } : old.key !== undefined ? { key: old.key } : {}),
+  };
 }
 
 function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStatus; onSaved: (p: ProviderStatus) => void }) {
@@ -54,7 +65,7 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
     setBusy(true);
     try {
       await storiesApi().deleteProviderKey(ws, provider.id);
-      onSaved({ ...provider, state: "needs_setup", line: `Paste your ${provider.label} key to use it.` });
+      onSaved({ ...provider, state: "needs_setup", line: `Paste your ${provider.label} key to use it.`, key: { saved: false, hint: null, savedAt: null } });
       toast.info(`${provider.label} has no saved key now.`);
     } catch (e) {
       toast.error(friendlyMessage(e));
@@ -72,6 +83,12 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
         <Chip tone={s.tone}>{s.label}</Chip>
       </div>
       <p className="st-stg-small">{provider.line}</p>
+      {provider.key?.saved && !provider.line.includes("Key saved") ? (
+        <p className="st-stg-small">
+          Key saved{provider.key.hint ? ` · ends ${provider.key.hint}` : ""}
+          {provider.key.savedAt ? ` · ${whenText(provider.key.savedAt)}` : ""}.
+        </p>
+      ) : null}
       {provider.checkedAt ? <p className="st-stg-small">Last checked {whenText(provider.checkedAt)}.</p> : null}
       {open ? (
         <form
@@ -106,12 +123,14 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
         </form>
       ) : (
         <div className="st-stg-actions">
-          <Btn main onClick={() => setOpen(true)} label={`Paste a key for ${provider.label}`}>
-            Paste a key
+          <Btn main onClick={() => setOpen(true)} label={`${provider.key?.saved ? "Paste a new key" : "Paste a key"} for ${provider.label}`}>
+            {provider.key?.saved ? "Paste a new key" : "Paste a key"}
           </Btn>
-          <Btn quiet danger off={busy ? "Working…" : undefined} onClick={() => void remove()} label={`Remove the saved key of ${provider.label}`}>
-            Remove the saved key
-          </Btn>
+          {provider.key?.saved ? (
+            <Btn quiet danger off={busy ? "Working…" : undefined} onClick={() => void remove()} label={`Remove the saved key of ${provider.label}`}>
+              Remove the saved key
+            </Btn>
+          ) : null}
         </div>
       )}
     </li>

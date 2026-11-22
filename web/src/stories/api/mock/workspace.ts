@@ -5,7 +5,7 @@
 import defaultsFile from "../../../../../stories/config/workspace-defaults.json";
 import guidanceFile from "../../../../../stories/config/guidance.json";
 import { ApiError } from "../../../api/errors.ts";
-import type { GuidanceTopic, ProviderStatus, StoriesApi, StoriesConfig, Workspace } from "../types.ts";
+import { RESOLUTIONS, type GuidanceTopic, type ProviderStatus, type StoriesApi, type StoriesConfig, type VideoAspect, type Workspace } from "../types.ts";
 import { CLIPS_WORKSPACE_ID, delay, DAY, FIRST_STORIES_WORKSPACE_ID, ago, type MockStore } from "./store.ts";
 
 export const KEYS = ["listWorkspaces", "getWorkspace", "patchWorkspace", "providers", "guidance"] as const;
@@ -49,6 +49,9 @@ const PRIVACY = ["public", "unlisted", "private"];
 const IMAGES = ["builtin-rig", "nova-canvas"];
 const VIDEO = ["builtin-2d", "nova-reel"];
 const QUALITY = ["standard", "high", "best"];
+const KEEP_REFERENCES = ["all", "study_only", "days_30", "days_90"];
+const KEEP_CHAT_PICTURES = ["all", "days_30", "days_90"];
+const EXTRA_FORMATS = ["webm", "mov"];
 
 function checkConfig(c: Partial<StoriesConfig>): void {
   const bad = (field: string, message: string) => new ApiError(400, "bad_request", message, field);
@@ -60,7 +63,16 @@ function checkConfig(c: Partial<StoriesConfig>): void {
   if (c.providers?.video !== undefined && !VIDEO.includes(c.providers.video)) throw bad("providers", "Pick how videos are made.");
   if (c.providers?.audio !== undefined && c.providers.audio !== "builtin-synth") throw bad("providers", "Pick how sounds are made.");
   if (c.video?.quality !== undefined && !QUALITY.includes(c.video.quality)) throw bad("video", "Pick a picture quality.");
+  // The shape and its size (§45.34): the resolution must be one of that shape's; 30 fps is the only rate.
+  if (c.video?.aspect !== undefined && !(c.video.aspect in RESOLUTIONS)) throw bad("video", "Pick 9:16, 1:1 or 16:9.");
+  if (c.video?.fps !== undefined && c.video.fps !== 30) throw bad("video", "Videos are made at 30 frames a second.");
   if (c.production?.scenesAtOnce !== undefined && ![1, 2, 3].includes(c.production.scenesAtOnce)) throw bad("production", "Pick 1, 2 or 3 scenes at a time.");
+  if (c.production?.keepReferences !== undefined && !KEEP_REFERENCES.includes(c.production.keepReferences)) throw bad("production", "Pick how long reference videos are kept.");
+  if (c.production?.keepChatPictures !== undefined && !KEEP_CHAT_PICTURES.includes(c.production.keepChatPictures)) throw bad("production", "Pick how long chat pictures are kept.");
+  if (c.production?.extraFormats !== undefined) {
+    const f = c.production.extraFormats;
+    if (!Array.isArray(f) || f.some((x) => !EXTRA_FORMATS.includes(x)) || new Set(f).size !== f.length) throw bad("production", "Pick WebM, MOV or both, each once.");
+  }
   if (c.xMonthlyLimitUsd !== undefined && c.xMonthlyLimitUsd !== null && !(c.xMonthlyLimitUsd >= 0)) throw bad("xMonthlyLimitUsd", "Type an amount of 0 or more.");
 }
 
@@ -88,7 +100,8 @@ function providersFor(store: MockStore, config: StoriesConfig): ProviderStatus[]
       id: "nova-reel",
       label: "Amazon Nova Reel",
       state: config.providers.video === "nova-reel" ? "needs_setup" : "off",
-      line: "Needs a storage place in the USA (N. Virginia), switched on by the owner. Until then videos use the built-in animation.",
+      // The API's own sentence (§45.34): nothing switches to the built-in animation by itself.
+      line: "Amazon Nova Reel is not ready yet: its storage place in the USA (N. Virginia) is not switched on. Pick Built-in animation in Settings › Video, or finish its setup.",
     },
     { kind: "audio", id: "builtin-synth", label: "Built-in sounds and music", state: "on", line: "Makes every sound effect, noise and tune. It is built in." },
   ];
@@ -161,11 +174,14 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (patch.configuration) {
         checkConfig(patch.configuration);
         const { providers, video, production, ...rest } = patch.configuration;
+        const nextVideo = { ...w.configuration.video, ...(video ?? {}) };
+        if (!(RESOLUTIONS[nextVideo.aspect as VideoAspect] ?? []).includes(nextVideo.resolution))
+          throw new ApiError(400, "bad_request", "That size does not fit that shape. Pick one of its sizes.", "video");
         w.configuration = {
           ...w.configuration,
           ...rest,
           providers: { ...w.configuration.providers, ...(providers ?? {}) },
-          video: { ...w.configuration.video, ...(video ?? {}) },
+          video: nextVideo,
           production: { ...w.configuration.production, ...(production ?? {}) },
         };
         // Onboarding step 4 ("Pick how videos are made") comes from real state: the workspace's providersPickedAt,

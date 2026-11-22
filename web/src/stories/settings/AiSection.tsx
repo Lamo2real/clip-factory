@@ -3,17 +3,20 @@
 // (only the levels the picked model offers; "This model has no effort setting" where it has none), Check models (one
 // tiny real call per model, through Lamo Stories' agent), each agent's and each task's model and effort ("Workspace
 // default" otherwise, the suggested effort as a hint, what it uses now as the API worked it out), usage and cost for
-// 30 days, prices for models with no known price, and the providers with their state and keys. Nothing is ever
-// swapped for something else: an effort a model does not offer is refused with the sentence, never changed silently.
+// 30 days, prices for models with no known price, the providers with their state and keys, and the owner's own Bedrock
+// models (Add a model, §45.34). Picking the default model or effort here says so to the API (`picked`, which ticks
+// setup steps 2 and 3). Nothing is ever swapped for something else: an effort a model does not offer is refused with
+// the sentence, never changed silently.
 import { useCallback, useRef, useState } from "react";
 import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad, usePoll } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
-import type { Agent, AgentId, AiTask, Effort, ModelInfo, Price, ProviderStatus, StoriesAiConfig, TaskInfo, TaskKind } from "../api/types.ts";
+import type { Agent, AgentId, AiPicked, AiTask, Effort, ModelInfo, Price, ProviderStatus, StoriesAiConfig, TaskInfo, TaskKind } from "../api/types.ts";
 import { EFFORT_LABEL } from "../api/types.ts";
 import { Btn, cheer, Chip, effortWord, Failed, Loading, MODEL_STATUS, money, Note, Progress, refusedLine, SavedMark, SetCard, SetPick, SetSelect, SIcon, statusSuffix, useSaved, whenText } from "./bits.tsx";
 import { useAi, type AiData } from "./data.ts";
+import { OwnModels } from "./OwnModels.tsx";
 import { keepName, ProviderKeys, ProviderRow } from "./ProviderKeys.tsx";
 import { UsageCard } from "./UsageCard.tsx";
 
@@ -59,7 +62,8 @@ export const CHECK_GIVE_UP_MS = 120_000;
 export const CHECK_MISSES = 3;
 const CHECK_STOPPED = "The check stopped before it finished. Try again.";
 
-function CheckModels({ ws, count, onDone }: { ws: string; count: number; onDone: () => Promise<void> }) {
+/** Check models: one tiny real call per model (or only `only`), followed until it finishes. */
+export function CheckModels({ ws, count, onDone, only }: { ws: string; count: number; onDone: () => Promise<void>; only?: string[] }) {
   const toast = useToast();
   const [task, setTask] = useState<AiTask | null>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -98,7 +102,15 @@ function CheckModels({ ws, count, onDone }: { ws: string; count: number; onDone:
       const works = results.filter((r) => r.status === "ok").length;
       const no = results.length - works;
       cheer(anchor);
-      toast.success(results.length ? `Checked ${results.length} models: ${works} work${no ? `, ${no} said no` : ""}.` : "All checked.");
+      toast.success(
+        results.length === 1
+          ? works
+            ? "Checked it: it works!"
+            : "Checked it: Amazon Bedrock said no. Its card says why."
+          : results.length
+            ? `Checked ${results.length} models: ${works} work${no ? `, ${no} said no` : ""}.`
+            : "All checked.",
+      );
     } else if (next.status === "failed") {
       await onDone();
       toast.error(next.error ?? CHECK_STOPPED);
@@ -116,7 +128,7 @@ function CheckModels({ ws, count, onDone }: { ws: string; count: number; onDone:
           started.current = Date.now();
           misses.current = 0;
           void storiesApi()
-            .checkModels(ws)
+            .checkModels(ws, only)
             .then(setTask)
             .catch((err: unknown) => toast.error(friendlyMessage(err)));
         }}
@@ -124,7 +136,7 @@ function CheckModels({ ws, count, onDone }: { ws: string; count: number; onDone:
         <SIcon name="retry" size={20} />
         {running ? "Checking…" : "Check models"}
       </Btn>
-      {running ? <Progress value={null} label={`Checking ${count} models`} /> : null}
+      {running ? <Progress value={null} label={only ? `Checking ${only.length === 1 ? "the model" : `${only.length} models`}` : `Checking ${count} models`} /> : null}
       {running ? <span className="st-stg-small">One tiny real call to each model. It takes a few seconds.</span> : null}
     </div>
   );
@@ -165,7 +177,12 @@ function DefaultModel({ data, pending, onPick, ws, reload }: { data: AiData; pen
         options={data.models.map((m) => ({
           value: m.key,
           label: m.label,
-          chip: <Chip tone={MODEL_STATUS[m.status].tone}>{MODEL_STATUS[m.status].label}</Chip>,
+          chip: (
+            <>
+              {m.custom ? <Chip tone="sky">Added by you</Chip> : null}
+              <Chip tone={MODEL_STATUS[m.status].tone}>{MODEL_STATUS[m.status].label}</Chip>
+            </>
+          ),
           line: <ModelOptionLine m={m} />,
         }))}
       />
@@ -326,7 +343,14 @@ function AssignRow({
 }
 
 function Assignments({ data, saveAi, saveAgent }: { data: AiData; saveAi: (next: Omit<StoriesAiConfig, "version">) => Promise<boolean>; saveAgent: (id: AgentId, patch: { model?: string | null; effort?: Effort | null }) => Promise<Agent | null> }) {
+  const toast = useToast();
   const [draft, setDraft] = useState<RowDraft | null>(null);
+  // A model with no effort setting takes no effort in the same setting (the API refuses the pair, §45.34): picking
+  // one for a row that has its own effort saves the model alone and says why.
+  const noLevels = (key: string | null) => {
+    const m = key ? modelOf(models, key) : undefined;
+    return m && !m.efforts.length ? m : null;
+  };
   const { ai, models, agents, tasks } = data;
   const defText = "Workspace default";
   const defEffort = "Workspace default";
@@ -354,7 +378,9 @@ function Assignments({ data, saveAi, saveAgent }: { data: AiData; saveAi: (next:
           const next = modelOf(models, v ?? ai.defaultModel);
           if (a.effort && next && !offers(next, a.effort)) return setDraft({ row, raw: v, model: v ?? ai.defaultModel });
           setDraft(null);
-          void saveAgent(a.agentId, { model: v });
+          const plain = a.effort ? noLevels(v) : null;
+          if (plain) toast.info(`${plain.label} has no effort setting; it runs at its own level. ${a.name}'s own effort is cleared.`);
+          void saveAgent(a.agentId, plain ? { model: v, effort: null } : { model: v });
         }}
         onEffort={(v) => {
           const pend = draft?.row === row ? draft : null;
@@ -400,7 +426,9 @@ function Assignments({ data, saveAi, saveAgent }: { data: AiData; saveAi: (next:
           const next = modelOf(models, v ?? inheritKey);
           if (set.effort && next && !offers(next, set.effort)) return setDraft({ row, raw: v, model: v ?? inheritKey });
           setDraft(null);
-          setTask(t.kind, { ...(v ? { model: v } : {}), ...(set.effort ? { effort: set.effort } : {}) });
+          const plain = set.effort ? noLevels(v) : null;
+          if (plain) toast.info(`${plain.label} has no effort setting; it runs at its own level. ${t.label}'s own effort is cleared.`);
+          setTask(t.kind, { ...(v ? { model: v } : {}), ...(set.effort && !plain ? { effort: set.effort } : {}) });
         }}
         onEffort={(v) => {
           const pend = draft?.row === row ? draft : null;
@@ -580,8 +608,8 @@ export function AiSection({ ws }: { ws: string }) {
 
   if (!data) return ai.error ? <Failed message={ai.error} onRetry={() => void ai.reload()} /> : <Loading label="Opening the AI settings…" />;
 
-  const save = async (next: Omit<StoriesAiConfig, "version">) => {
-    if (await saveAi(next)) flash();
+  const save = async (next: Omit<StoriesAiConfig, "version">, picked: AiPicked[]) => {
+    if (await saveAi(next, picked)) flash();
   };
   const pickModel = (key: string) => {
     const m = modelOf(data.models, key);
@@ -592,12 +620,13 @@ export function AiSection({ ws }: { ws: string }) {
       return;
     }
     setPending(null);
-    void save({ ...data.ai, defaultModel: key });
+    void save({ ...data.ai, defaultModel: key }, ["model"]);
   };
   const pickEffort = (e: Effort) => {
     const model = pending ?? data.ai.defaultModel;
+    const both = pending !== null;
     setPending(null);
-    void save({ ...data.ai, defaultModel: model, defaultEffort: e });
+    void save({ ...data.ai, defaultModel: model, defaultEffort: e }, both ? ["model", "effort"] : ["effort"]);
   };
 
   return (
@@ -608,6 +637,7 @@ export function AiSection({ ws }: { ws: string }) {
       </div>
       <DefaultModel data={data} pending={pending} onPick={pickModel} ws={ws} reload={ai.reload} />
       <DefaultEffort data={data} pending={pending} onPick={pickEffort} />
+      <OwnModels ws={ws} models={data.models} onChanged={ai.reload} check={(key) => <CheckModels ws={ws} count={1} only={[key]} onDone={ai.reload} />} />
       <Assignments
         data={data}
         saveAi={async (next) => {

@@ -1549,3 +1549,129 @@
     animation: none;
   }
 }
+
+/* ---------- Round 3 (builder W3c): Add a model, makers' use, storage, sounds and motion ---------- */
+
+/* Effort levels a model accepts: toggles (more than one can be on), never a pick-one bar. */
+.st-stg-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.st-stg-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 6px 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  color: var(--st-ink-soft);
+  background: rgba(13, 11, 38, 0.42);
+  font: 800 0.95rem/1.2 var(--st-font);
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@media (min-width: 768px) {
+  .st-stg-toggle {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+.st-stg-toggle:hover {
+  color: var(--st-ink);
+  background: var(--st-panel-strong);
+}
+.st-stg-toggle:active {
+  transform: scale(0.96);
+}
+.st-stg-toggle.is-on {
+  color: var(--st-on-sun);
+  background: var(--st-sun);
+}
+.st-stg-toggle.is-on:hover {
+  background: var(--st-sun-hover, #ffd56e);
+}
+.st-stg-modelform {
+  padding: 14px;
+  border-radius: var(--r-md);
+  background: rgba(13, 11, 38, 0.26);
+}
+.st-stg-owns {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.st-stg-own {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: rgba(13, 11, 38, 0.26);
+}
+.st-stg-own .st-stg-modelform {
+  padding: 0;
+  background: transparent;
+}
+.st-stg-own__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.st-stg-own__name {
+  min-width: 0;
+  color: var(--st-ink);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.st-stg-code {
+  color: var(--st-sky-ink, #c9ebff);
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+.st-stg-input--code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.95rem;
+}
+.st-stg-suggest {
+  display: grid;
+  gap: 10px;
+}
+.st-stg-where {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin: 0 0 8px;
+  color: var(--st-ink);
+  overflow-wrap: anywhere;
+}
+.st-stg-cleanup {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+.st-stg-usage__free {
+  color: var(--st-mint-ink, #b8f3dd);
+  font-weight: 700;
+  text-align: right;
+}
+.st-stg-usage__noprice {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px 6px;
+  color: var(--st-sun-ink, #ffe3a1);
+}
+.st-stg-chart--render .st-stg-chart__part {
+  min-height: 2px;
+}

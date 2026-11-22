@@ -86,6 +86,8 @@ const CASES: Case[] = [
 
   ["getAi", (a) => a.getAi("stories"), "GET", `${B}/stories/ai`, undefined, { ai: 1, models: [], agents: [], tasks: [] }, { ai: 1, models: [], agents: [], tasks: [] }],
   ["putAi", (a) => a.putAi("stories", { defaultModel: "opus-5-5", defaultEffort: "high", tasks: {}, prices: {}, version: 2 }), "PUT", `${B}/stories/ai`, { defaultModel: "opus-5-5", defaultEffort: "high", tasks: {}, prices: {}, version: 2 }, { ai: 43 }, 43],
+  ["putAiModel", (a) => a.putAiModel("stories", "custom-nova-premier", { label: "Nova Premier", provider: "Amazon", modelId: "eu.amazon.nova-premier-v1:0", region: "eu-west-1", efforts: [], defaultEffort: null, vision: true, maxOutputTokens: 8000, price: null }), "PUT", `${B}/stories/ai/models/custom-nova-premier`, { label: "Nova Premier", provider: "Amazon", modelId: "eu.amazon.nova-premier-v1:0", region: "eu-west-1", efforts: [], defaultEffort: null, vision: true, maxOutputTokens: 8000, price: null }, { model: 431 }, 431],
+  ["deleteAiModel", (a) => a.deleteAiModel("stories", "custom-nova-premier"), "DELETE", `${B}/stories/ai/models/custom-nova-premier`, undefined, null, undefined],
   ["checkModels", (a) => a.checkModels("stories", ["opus-5-5"]), "POST", `${B}/stories/ai/check-models`, { models: ["opus-5-5"] }, { task: 44 }, 44],
   ["setModelPrice", (a) => a.setModelPrice("stories", "opus-5-5", null), "PUT", `${B}/stories/ai/prices/opus-5-5`, {}, { model: 45 }, 45],
   ["usage", (a) => a.usage("stories", 30), "GET", `${B}/stories/usage?days=30`, undefined, { usage: 46 }, 46],
@@ -127,6 +129,7 @@ const CASES: Case[] = [
   ["setProviderKey", (a) => a.setProviderKey("stories", "acme", "k-123"), "PUT", `${B}/stories/providers/acme/key`, { key: "k-123" }, { provider: 67 }, 67],
   ["deleteProviderKey", (a) => a.deleteProviderKey("stories", "acme"), "DELETE", `${B}/stories/providers/acme/key`, undefined, null, undefined],
   ["storage", (a) => a.storage("stories"), "GET", `${B}/stories/storage`, undefined, { storage: 68 }, 68],
+  ["storageCleanup", (a) => a.storageCleanup("stories"), "POST", `${B}/stories/storage/cleanup`, undefined, { removed: { files: 3, bytes: 900 } }, { removed: { files: 3, bytes: 900 } }],
   ["publish", (a) => a.publish("stories", "s1", [{ platform: "youtube", socialAccountId: "stories.youtube" }]), "POST", `${B}/stories/stories/s1/publish`, { targets: [{ platform: "youtube", socialAccountId: "stories.youtube" }] }, { publishingJobs: [33] }, [33]],
   ["listPublishing", (a) => a.listPublishing("stories", "s1"), "GET", `${B}/stories/publishing?storyId=s1`, undefined, { publishingJobs: [34] }, [34]],
   ["retryPublishing", (a) => a.retryPublishing("stories", "p1", { confirmAccount: "UC1" }), "POST", `${B}/stories/publishing/p1/retry`, { confirmAccount: "UC1" }, { publishingJob: 35 }, 35],

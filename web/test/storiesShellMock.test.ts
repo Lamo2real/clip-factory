@@ -206,18 +206,22 @@ describe("the onboarding (§45.29)", () => {
     const o = await api.getOnboarding("stories");
     expect(o.steps.map((s) => s.step)).toEqual(["ai", "model", "effort", "video", "agents", "instagram", "tiktok", "youtube", "facebook", "x", "done"]);
     expect(o.total).toBe(11);
-    // X is held as Lamo Clips' own (same_as_clips): that counts as connected, as the API counts it.
-    expect(o.steps.filter((s) => s.state === "done").map((s) => s.step)).toEqual(["agents", "youtube", "x"]);
-    expect(o.done).toBe(3);
-    // A saved AI configuration ticks 1 to 3; a picked video provider ticks 4; a connection ticks its platform.
+    // X is held as Lamo Clips' own (same_as_clips): only a connected account ticks its platform (§45.34).
+    expect(o.steps.filter((s) => s.state === "done").map((s) => s.step)).toEqual(["agents", "youtube"]);
+    expect(o.done).toBe(2);
+    // A save alone ticks nothing of 1 to 3 (§45.34): only what the owner picked on purpose does.
     const { ai } = await api.getAi("stories");
-    await api.putAi("stories", { ...ai, defaultModel: "fable-5-2" });
+    const plain = await api.putAi("stories", { ...ai, defaultModel: "fable-5-2" });
+    expect((await api.getOnboarding("stories")).steps.filter((s) => ["ai", "model", "effort"].includes(s.step)).map((s) => s.state)).toEqual(["todo", "todo", "todo"]);
+    // "These look right" ticks 1, the default model 2, the default effort 3; a picked video provider ticks 4; a
+    // connection ticks its platform.
+    await api.putAi("stories", { ...plain, picked: ["environment", "model", "effort"] });
     const w = await api.getWorkspace("stories");
     await api.patchWorkspace("stories", { configuration: { providers: { images: "builtin-rig", video: "builtin-2d", audio: "builtin-synth" } }, version: w.version });
     store.knobs.connectResult = "connected";
     await api.connectSocial("stories", "facebook");
     const after = await api.getOnboarding("stories");
-    expect(after.steps.filter((s) => s.state === "done").map((s) => s.step)).toEqual(["ai", "model", "effort", "video", "agents", "youtube", "facebook", "x"]);
+    expect(after.steps.filter((s) => s.state === "done").map((s) => s.step)).toEqual(["ai", "model", "effort", "video", "agents", "youtube", "facebook"]);
   });
 
   it("every step can be skipped and done later; only agents and done are ticked by hand", async () => {
@@ -240,8 +244,11 @@ describe("the onboarding (§45.29)", () => {
     expect(o.steps.find((s) => s.step === "done")?.state).toBe("done");
   });
 
-  it("counts a platform held as Lamo Clips' own (same_as_clips) as connected, as the API does", async () => {
-    // The seed's X is same_as_clips.
+  it("does not count a platform held as Lamo Clips' own (same_as_clips): it ticks once Lamo Stories' own is connected (§45.34)", async () => {
+    // The seed's X is same_as_clips: nothing can be posted there, so the step stays to do.
+    expect((await api.getOnboarding("stories")).steps.find((s) => s.step === "x")?.state).toBe("todo");
+    // Use it for both, on purpose: then it is connected, and the step ticks.
+    await api.shareWithClips("stories", "x");
     expect((await api.getOnboarding("stories")).steps.find((s) => s.step === "x")?.state).toBe("done");
   });
 
