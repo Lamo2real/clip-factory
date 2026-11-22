@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { visibleEdges } from "./edges.ts";
@@ -496,5 +498,33 @@ test("reduced motion: nothing on a Get paid page keeps moving", async ({ browser
         .map((t) => t.className).length,
   );
   expect(running).toBe(0);
+  await ctx.close();
+});
+
+// The server's link to the Finance question (getpaid/status.py's FINANCE, as its golden cases have it) lands on the
+// page's own question on a phone: arriving on it, and each tap on "Answer: do you see Finance?", bring it into view.
+const GOLDEN = join(import.meta.dirname, "..", "..", "api", "tests", "fixtures", "getpaid_status_cases.json");
+test("the server's Finance link brings the question into view at 390x844", async ({ browser }) => {
+  const cards = (JSON.parse(readFileSync(GOLDEN, "utf8")) as { cards: { expect: { next: { label: string; href: string } | null } }[] }).cards;
+  const href = cards.map((c) => c.expect.next).find((n) => n?.label === "Answer: do you see Finance?")!.href;
+  expect(href.split("#")[0]).toBe("/settings/posting/getpaid/contentrewards");
+  const ctx = await ctxFor(browser, 390, 844, true, "light");
+  const page = await ctx.newPage();
+  const question = page.getByRole("radiogroup", { name: "Do you see Finance in the Content Rewards menu?" });
+  const top = () => page.evaluate(() => window.scrollTo(0, 0));
+  await start(page, href);
+  await expect(question).toBeInViewport({ ratio: 1 });
+  // The button the server sends (the pretend app sends the same): each tap, from the top of the page where the
+  // question is off screen, and the address left as it is.
+  await page.goto("/settings/posting/getpaid/contentrewards");
+  await settle(page);
+  const button = page.getByRole("button", { name: "Answer: do you see Finance?" });
+  for (let i = 0; i < 2; i++) {
+    await top();
+    await expect(question).not.toBeInViewport();
+    await button.click();
+    await expect(question).toBeInViewport({ ratio: 1 });
+  }
+  expect(new URL(page.url()).hash).toBe("");
   await ctx.close();
 });

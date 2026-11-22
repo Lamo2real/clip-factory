@@ -262,6 +262,8 @@ def test_content_rewards_from_ticks() -> None:
     question = card("contentrewards: money and no Finance answer is Not set up yet, next the Finance question")
     assert question["next"]["label"] == "Answer: do you see Finance?"
     assert question["next"]["vermilion"] is False
+    # The page's own id for the question (web GetPaidPage's ``#cr-finance``), so the link brings it into view.
+    assert question["next"]["href"] == "/settings/posting/getpaid/contentrewards#cr-finance"
     linked = card("contentrewards: a move to Whop ticks Link your Whop account by itself")
     assert next(s for s in linked["steps"] if s["id"] == "move-whop")["by"] == "auto"
     assert card("contentrewards: you said every step is done")["line"] == (

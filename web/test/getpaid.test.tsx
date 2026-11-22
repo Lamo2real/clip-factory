@@ -3,6 +3,8 @@
 // status; the ring without the reading step and its chip; phone steps on a computer; ticks and autos; the Money card's
 // buttons; the result sentences word for word; notify.getPaid only when the API knows it; the live refetch; and Set up
 // posting still exactly five rows, "of 5", with every Get paid tick set.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,7 +30,7 @@ vi.mock("../src/app/session.tsx", () => ({ useSession: () => ({ me, saveSettings
 
 const { getPaidMockApi, scenarioState } = await import("../src/api/mock/getpaid.ts");
 const { GetPaidList } = await import("../src/screens/getpaid/GetPaidList.tsx");
-const { GetPaidPage, READING_GONE } = await import("../src/screens/getpaid/GetPaidPage.tsx");
+const { CR_FINANCE, GetPaidPage, READING_GONE } = await import("../src/screens/getpaid/GetPaidPage.tsx");
 const { StatusPill } = await import("../src/screens/getpaid/StatusPill.tsx");
 const { GetPaidCard: MoneyCard } = await import("../src/screens/money/GetPaidCard.tsx");
 const { SentRows } = await import("../src/screens/getpaid/SentRows.tsx");
@@ -547,6 +549,69 @@ describe("the place page's steps", () => {
     const stop = [...host.querySelectorAll<HTMLButtonElement>(".gp-done button")].find((b) => b.textContent?.includes("Stop payment reading"));
     expect(stop).toBeDefined();
     expect(stop!.classList.contains("btn--primary")).toBe(false);
+  });
+});
+
+// ---------- the Finance question's link (§40.2) ----------
+
+describe("the Finance question's link: the server's, and it lands on the question", () => {
+  type Golden = { cards: { name: string; place: string; expect: GetPaidCard }[] };
+  const golden = (JSON.parse(readFileSync(join(import.meta.dirname, "..", "..", "api", "tests", "fixtures", "getpaid_status_cases.json"), "utf8")) as Golden).cards;
+  const asked = golden.filter((c) => c.expect.next?.label === "Answer: do you see Finance?");
+  const server = asked[0]!.expect;
+  const spy = () => {
+    const seen: { id: string; block?: ScrollLogicalPosition }[] = [];
+    const before = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element, o?: boolean | ScrollIntoViewOptions) {
+      seen.push({ id: this.id, block: typeof o === "object" ? o.block : undefined });
+    };
+    return { seen, done: () => (Element.prototype.scrollIntoView = before) };
+  };
+
+  it("the pretend app sends exactly the server's next (same href, words and vermilion) and line", async () => {
+    expect(asked.length).toBeGreaterThan(0);
+    for (const c of asked) expect(c.expect.next, c.name).toEqual(server.next);
+    const money = golden.find((c) => c.name.startsWith("contentrewards: money and no Finance answer"))!.expect;
+    const mine = await cardOf("contentrewards");
+    expect(mine.next).toEqual(server.next);
+    expect([mine.status, mine.pill, mine.tone, mine.line]).toEqual([money.status, money.pill, money.tone, money.line]);
+  });
+
+  it("the server's href ends in the page's own id for the question", async () => {
+    const [path, hash] = server.next!.href.split("#");
+    expect(path).toBe("/settings/posting/getpaid/contentrewards");
+    expect(hash).toBe(CR_FINANCE);
+    await draw(<GetPaidPage place="contentrewards" />);
+    expect(host.querySelector(`#${hash}`)!.textContent).toContain("Do you see Finance in the Content Rewards menu?");
+  });
+
+  it("arriving on the server's href brings the question into view", async () => {
+    const s = spy();
+    try {
+      history.replaceState(null, "", server.next!.href);
+      window.dispatchEvent(new HashChangeEvent("hashchange")); // the app's router reads the address on its events
+      await draw(<GetPaidPage place="contentrewards" />);
+      await act(async () => await new Promise((r) => setTimeout(r, 220)));
+      expect(s.seen).toContainEqual({ id: CR_FINANCE, block: "center" });
+    } finally {
+      s.done();
+    }
+  });
+
+  it("tapping Answer: do you see Finance? brings the question into view on every tap, the address untouched", async () => {
+    history.replaceState(null, "", "/settings/posting/getpaid/contentrewards?back=/money");
+    await draw(<GetPaidPage place="contentrewards" />);
+    await act(async () => await new Promise((r) => setTimeout(r, 220)));
+    const s = spy();
+    try {
+      const button = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.includes("Answer: do you see Finance?"))!;
+      expect(button.classList.contains("btn--primary")).toBe(false);
+      for (let i = 0; i < 2; i++) await act(async () => button.click());
+      expect(s.seen.filter((x) => x.id === CR_FINANCE)).toHaveLength(2);
+      expect(location.pathname + location.search + location.hash).toBe("/settings/posting/getpaid/contentrewards?back=/money");
+    } finally {
+      s.done();
+    }
   });
 });
 

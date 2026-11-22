@@ -47,7 +47,7 @@ STUDIO_URL = "https://studio.youtube.com/"
 WHOP_URL = "https://whop.com/"
 YT_READING = "/settings/posting/getpaid/youtube#yt-reading"
 WHOP_CARD = "/settings/posting/getpaid/contentrewards#whop"
-FINANCE = "/settings/posting/getpaid/contentrewards#finance"
+FINANCE = "/settings/posting/getpaid/contentrewards#cr-finance"
 X_WARNING = (
     "X doesn't pay for posts an app made or posted, or clips copied from other sites. Your Clip Factory clips "
     "probably won't earn on X."
