@@ -79,7 +79,8 @@ export function backLabel(back: BackLink, campaignName?: string | null): string 
     case "money":
       return "Back to Money";
     case "getpaid":
-      return "Back to Get paid";
+      // Your bank's own page says where it really goes (§40.5.2); Get paid's list and place pages say Get paid.
+      return back.href === "/settings/posting/getpaid/bank" ? "Back to Your bank" : "Back to Get paid";
     case "setup":
       return `Back to ${back.placeName ?? "the"} setup`;
   }

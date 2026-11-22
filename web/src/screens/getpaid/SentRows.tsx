@@ -6,7 +6,7 @@
 // that tells apps nothing says so, never $0.
 import type { GetPaidCard, GetPaidPlace, PayoutRow, SentLine } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
-import { LinkButton } from "../../components/ui.tsx";
+import { LinkButton, Skeleton } from "../../components/ui.tsx";
 import { isGetPaidPlace } from "../../getpaid/index.ts";
 import { bankView, useBank } from "../../lib/bank.ts";
 import { BANK_TEXT } from "../../lib/getPaid.ts";
@@ -101,8 +101,11 @@ export function placeOf(here: string | undefined): GetPaidPlace | undefined {
 export function SentRows({ sent, rows, unpaid, here }: { sent: SentLine; rows: readonly PayoutRow[]; unpaid?: GetPaidCard["unpaid"]; here?: string }) {
   const shown = rows.slice(0, 36);
   const place = placeOf(here);
-  const bank = bankView(useBank());
+  const bankLoad = useBank();
+  const bank = bankView(bankLoad);
   const line = bank && place ? bank.places[place] : undefined;
+  // Your bank not read yet: no bank line for a moment, rather than "can't see your bank" before it turns out it can.
+  const waiting = bankLoad.state === "loading" && !!place;
   return (
     <section className="gp-sent glass" data-help="getpaid-sent" aria-labelledby="gp-sent-title">
       <h2 className="gp-section__title" id="gp-sent-title">
@@ -137,6 +140,8 @@ export function SentRows({ sent, rows, unpaid, here }: { sent: SentLine; rows: r
       ) : null}
       {line ? (
         <PlaceReached line={line} />
+      ) : waiting ? (
+        <Skeleton className="line-skel" />
       ) : (
         <p className="gp-bank-line">
           <Icon name="info" size={18} />

@@ -206,15 +206,16 @@ describe("one vermilion per screen (§40.5.2)", () => {
     for (const b of host.querySelectorAll(".gstep__done")) expect(b.className).toContain("btn--leaf");
   });
 
-  it("a reconnect is the status block's vermilion; the link card's Reconnect is glass; on phones it is pinned", async () => {
+  it("a reconnect is the status block's vermilion, on screen once; another link's card Reconnect is glass; on phones it is pinned", async () => {
     start("ending");
     await draw(<BankPage />);
     const status = host.querySelector<HTMLElement>("[data-help='bank-status']")!;
     expect(status.querySelector(".gp-pill")!.textContent).toBe("Link ends in 9 days");
     expect(vermilion().map((b) => b.textContent?.trim())).toEqual(["Reconnect Swedbank"]);
     expect(status.contains(vermilion()[0]!)).toBe(true);
-    const card = host.querySelector<HTMLElement>("[data-bank='reconnect-card']")!;
-    expect(card.className).toContain("btn--glass");
+    // The same Reconnect is not on the link card a second time.
+    expect(host.querySelector("[data-bank='reconnect-card']")).toBeNull();
+    expect([...host.querySelectorAll("button")].filter((b) => b.textContent?.trim() === "Reconnect Swedbank")).toHaveLength(1);
     // No Check now on a link card; When it's done has it (glass), with Connect another bank and Forget my bank.
     expect(host.querySelector(".bank-link")!.textContent).not.toContain("Check now");
     const done = host.querySelector<HTMLElement>(".gp-done")!;
@@ -226,6 +227,18 @@ describe("one vermilion per screen (§40.5.2)", () => {
     expect(vermilion()).toHaveLength(1);
     expect(vermilion()[0]!.closest(".gp-pin")).not.toBeNull();
     expect(host.querySelector("[data-help='bank-status'] .btn--primary")).toBeNull();
+    // A second bank that needs a reconnect too: its own card's Reconnect is glass (the vermilion is the first's).
+    act(() => root.unmount());
+    root = createRoot(host);
+    phone(false);
+    bank.resetBank();
+    start("ending", (s) => {
+      s.links.push({ ...s.links[0]!, linkId: "f6e5d4c3b2a1", bank: "SEB", connectedAt: new Date(Date.now() - 175 * 86_400_000).toISOString(), consentUntil: new Date(Date.now() + 5 * 86_400_000).toISOString() });
+    });
+    await draw(<BankPage />);
+    expect(vermilion().map((b) => b.textContent?.trim())).toEqual(["Reconnect SEB"]);
+    const cards = [...host.querySelectorAll<HTMLElement>("[data-bank='reconnect-card']")];
+    expect(cards.map((c) => [c.textContent?.trim(), /btn--glass/.test(c.className)])).toEqual([["Reconnect Swedbank", true]]);
   });
 
   it("on a phone the next step's main action is pinned at the bottom right from page open, and not in its card", async () => {
@@ -252,8 +265,14 @@ describe("one vermilion per screen (§40.5.2)", () => {
     await draw(<BankPage />);
     expect(host.querySelector("[data-bank='fold']")).toBeNull();
     expect(host.querySelector("#step-bank-appid")).not.toBeNull();
-    // Check again is the main once an app ID is saved; Save is glass then.
+    // Check again is the main once an app ID is saved; Save (glass) shows only once he pastes a new one.
     expect(vermilion().map((b) => b.textContent?.trim())).toEqual(["Check again"]);
+    expect(host.querySelector("[data-bank='save']")).toBeNull();
+    const box = host.querySelector<HTMLTextAreaElement>("#step-bank-appid textarea")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(box, UUID);
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    });
     expect(host.querySelector<HTMLElement>("[data-bank='save']")!.className).toContain("btn--glass");
     expect(host.querySelector("[data-help='bank-status']")!.textContent).toContain(CHECK_TEXT.key_wrong.replace(/\*\*/g, ""));
   });
@@ -587,7 +606,7 @@ describe("Is this from an app? (§40.5.2)", () => {
     await draw(<BankPage />);
     await tap([...host.querySelectorAll<HTMLElement>(".bank-ask[data-suggested='x'] button")].find((b) => b.textContent === "No, another app"));
     await tap(document.querySelector<HTMLElement>("[role='dialog'] [data-place='not_sure']")!);
-    expect(toasts()).toContain("Saved.");
+    expect(toasts()).toContain("Saved: not sure yet.");
     expect(host.querySelector(".bank-asks__fold")!.textContent).toBe("Not sure yet (1)");
     expect(calls.some((c) => c.includes("not_sure"))).toBe(false);
     await act(async () => void window.dispatchEvent(new Event("pagehide")));
@@ -650,14 +669,17 @@ describe("Reached your bank (§40.5.9)", () => {
     expect(nb(r.querySelector(".bank-reached__total")!.textContent)).toBe("In total:SEK 2,146.96");
     expect(r.textContent).toContain("Your bank says. Clip Factory matched each one to an app.");
     expect(r.textContent).toContain("Counted from 3 Aug 2026, as far back as your bank shows.");
-    expect([...r.querySelectorAll(".bank-row__how")].map((x) => x.textContent)).toEqual(["matches Google's payment of 21 Oct", "from a payer you said is Instagram and Facebook"]);
+    expect([...r.querySelectorAll(".bank-row__how")].map((x) => x.textContent)).toEqual(["matches Google's payment of 23 Oct", "from a payer you said is Instagram and Facebook"]);
     expect(nb(r.textContent)).not.toMatch(/\$0|SEK 0\.00/);
     act(() => root.unmount());
     root = createRoot(host);
     bank.resetBank();
     start("none_yet");
     await draw(<BankPage />);
-    expect(host.querySelector("[data-help='bank-reached']")!.textContent).toContain("Nothing from an app reached your bank yet.");
+    const empty = host.querySelector<HTMLElement>("[data-help='bank-reached']")!;
+    expect(empty.textContent).toContain("Nothing from an app reached your bank yet.");
+    // Said once: not again as "No money from YouTube, TikTok, … reached your bank yet."
+    expect(empty.textContent).not.toContain("No money from");
   });
 
   it("Money: the block under Sent to your bank, its moneyLine for the bank line, Answer them; never in the 30-day total", async () => {
@@ -768,6 +790,266 @@ describe("the bank page's words", () => {
       expect(t.replace(/API applications/g, "")).not.toMatch(/\bAPI\b/);
       expect(t.replace(/(Public certificate in PEM format|import public certificate)/g, "")).not.toMatch(/certificate|\bRSA\b|\bJWT\b/i);
     });
+});
+
+// ---------- the review's fixes ----------
+
+const typeInto = async (box: HTMLTextAreaElement, v: string) =>
+  act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(box, v);
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+describe("the next tap after an Open (§40.5.2: one vermilion, the right one)", () => {
+  it("desktop: once Open Enable Banking is tapped it turns glass; the green I'm in is the step's tap, and nothing is vermilion", async () => {
+    await draw(<BankPage />);
+    const open = host.querySelector<HTMLAnchorElement>("#step-bank-account a[href='https://enablebanking.com/sign-in/']")!;
+    expect(open.className).toContain("btn--primary");
+    open.addEventListener("click", (e) => e.preventDefault());
+    await tap(open);
+    expect(host.querySelector<HTMLElement>("#step-bank-account a[href='https://enablebanking.com/sign-in/']")!.className).toContain("btn--glass");
+    expect(vermilion()).toHaveLength(0);
+    const answer = host.querySelector<HTMLElement>("#step-bank-account [data-bank='answer']")!;
+    expect([answer.textContent?.trim(), /btn--leaf/.test(answer.className)]).toEqual(["I'm in", true]);
+    await tap(answer);
+    expect(vermilion().map((b) => b.textContent?.trim())).toEqual(["Make my bank key"]);
+  });
+
+  it("phone: after the Open, the pin holds the green answer (I'm in, then I did this, then I linked them), never the Open again", async () => {
+    phone(true);
+    await draw(<BankPage />);
+    const pin = () => host.querySelector<HTMLElement>(".gp-pin")!;
+    expect(pin().textContent).toContain("Open Enable Banking");
+    const open = pin().querySelector<HTMLAnchorElement>("a")!;
+    open.addEventListener("click", (e) => e.preventDefault());
+    await tap(open);
+    expect(pin().querySelector(".btn--primary")).toBeNull();
+    const answer = pin().querySelector<HTMLElement>("[data-bank='answer']")!;
+    expect([answer.textContent?.trim(), /btn--leaf/.test(answer.className)]).toEqual(["I'm in", true]);
+    // Not twice: the card leaves its own out while the pin has it.
+    expect(host.querySelector("#step-bank-account [data-bank='answer']")).toBeNull();
+    expect(host.querySelector<HTMLElement>("#step-bank-account a[href='https://enablebanking.com/sign-in/']")!.className).toContain("btn--glass");
+    await tap(answer);
+    expect(calls).toContain(`bankStep ${JSON.stringify(["bank-account", true])}`);
+    expect(pin().textContent).toContain("Make my bank key");
+  });
+
+  it("step 6: after its Open, I linked them is the pinned tap on a phone and runs the check", async () => {
+    phone(true);
+    start("fresh", (s) => {
+      s.stepsDone = ["bank-account", "bank-app", "bank-details"];
+      s.key = { source: "clipfactory", appId: UUID, pemReminder: false };
+      s.check = { code: "not_active", at: new Date().toISOString() };
+    });
+    await draw(<BankPage />);
+    const open = host.querySelector<HTMLAnchorElement>(".gp-pin a")!;
+    expect(open.textContent).toContain("Open your Enable Banking apps");
+    open.addEventListener("click", (e) => e.preventDefault());
+    await tap(open);
+    const answer = host.querySelector<HTMLElement>(".gp-pin [data-bank='answer']")!;
+    expect(answer.textContent?.trim()).toBe("I linked them");
+    await tap(answer);
+    expect(calls).toContain("bankCheckApp");
+    expect(host.querySelector<HTMLElement>("#step-bank-link")!.getAttribute("data-done")).toBe("true");
+  });
+});
+
+describe("the status block says what to tap, right there", () => {
+  for (const name of ["cant_read", "look_in_bank"] as const)
+    it(`${name}: Check now (glass) sits in the status block; When it's done doesn't have a second one`, async () => {
+      start(name);
+      await draw(<BankPage />);
+      const status = host.querySelector<HTMLElement>("[data-help='bank-status']")!;
+      expect(status.textContent).toContain("Check now.");
+      const here = status.querySelector<HTMLElement>("[data-bank='check-now']")!;
+      expect([here.textContent?.trim(), /btn--glass/.test(here.className)]).toEqual(["Check now", true]);
+      expect(host.querySelector(".gp-done")!.textContent).not.toContain("Check now");
+      // cant_read for 4 days: Reconnect is the vermilion, beside it.
+      if (name === "cant_read") expect(status.querySelector(".btn--primary")!.textContent?.trim()).toBe("Reconnect Swedbank");
+      else expect(vermilion()).toHaveLength(0);
+      await tap(here);
+      expect(calls).toContain("bankCheckNow");
+    });
+
+  it("questions waiting: the server's count and a glass Answer them that brings them into view", async () => {
+    start("connected");
+    await draw(<BankPage />);
+    const need = host.querySelector<HTMLElement>("[data-bank='need-you']")!;
+    expect(need.textContent).toContain("2 bank payments need you.");
+    const go = need.querySelector<HTMLElement>("button")!;
+    expect([go.textContent?.trim(), /btn--glass/.test(go.className)]).toEqual(["Answer them", true]);
+    await tap(go);
+    expect(document.activeElement?.id).toBe("bank-asks");
+    expect(vermilion()).toHaveLength(0);
+  });
+});
+
+describe("step 5 after Save", () => {
+  it("says no more Then tap Save, and shows Save again only once a new app ID is pasted", async () => {
+    start("fresh", (s) => {
+      s.stepsDone = ["bank-account", "bank-app", "bank-details"];
+      s.key = { source: "clipfactory", appId: null, pemReminder: false };
+    });
+    await draw(<BankPage />);
+    const card = () => host.querySelector<HTMLElement>("#step-bank-appid")!;
+    expect(card().textContent).toContain("Paste the message from step 4 here. Then tap Save.");
+    await typeInto(card().querySelector("textarea")!, UUID);
+    await tap(button("Save"));
+    expect(card().textContent).toContain(CHECK_TEXT.not_active);
+    expect(card().textContent).not.toContain("Then tap Save.");
+    expect(card().querySelector("[data-bank='save']")).toBeNull();
+    expect(card().querySelector("[data-bank='check-again']")).not.toBeNull();
+    await typeInto(card().querySelector("textarea")!, "1f8c2a4e-9b1d-4c6e-8a3f-5d7b9e1c2a41");
+    expect(card().querySelector("[data-bank='save']")).not.toBeNull();
+  });
+
+  it("the check line's icon and data-check come from the same answer as its words (a down answer is never green)", async () => {
+    start("fresh", (s) => {
+      s.stepsDone = ["bank-account", "bank-app", "bank-details"];
+      s.key = { source: "clipfactory", appId: UUID, pemReminder: false };
+      s.check = { code: "ok", at: new Date().toISOString() };
+      s.links = [];
+    });
+    install({
+      bankCheckApp: async () => ({ view: mock.view(), check: { code: "down", text: CHECK_TEXT.down, at: new Date().toISOString() } }),
+    });
+    await draw(<BankPage />);
+    await tap(host.querySelector<HTMLElement>("#step-bank-appid .gstep__head"));
+    expect(host.querySelector(".bank-key__check")!.getAttribute("data-check")).toBe("ok");
+    const green = host.querySelector(".bank-key__check path")!.getAttribute("d");
+    await tap(host.querySelector<HTMLElement>("[data-bank='check-again']"));
+    const line = host.querySelector<HTMLElement>(".bank-key__check")!;
+    expect([line.getAttribute("data-check"), line.textContent]).toEqual(["down", CHECK_TEXT.down]);
+    // Not the green tick any more: the info mark, like every answer that isn't ok or not_active.
+    expect(line.querySelector("path")!.getAttribute("d")).not.toBe(green);
+  });
+
+  it("a bank key chip before step 2: Do step 2 first, never Loading… for ever", async () => {
+    await draw(<BankPage />);
+    await tap(host.querySelector<HTMLElement>("#step-bank-app .gstep__head"));
+    expect(host.querySelector("[data-copy='publicKeyPem'] .copy-chip__value")!.textContent).toBe("Do step 2 first");
+    expect(host.textContent).not.toContain("Loading…");
+  });
+});
+
+describe("an answer's Undo puts the question back as it was", () => {
+  it("Yes then Undo: the same question and green yes come back; that yes then sends the place", async () => {
+    start("connected");
+    await draw(<BankPage />);
+    const before = host.querySelector<HTMLElement>(".bank-ask[data-suggested='youtube']")!;
+    const was = [before.querySelector("h3")!.textContent, before.querySelector(".bank-ask__line")!.textContent];
+    await tap(before.querySelector<HTMLElement>(".btn--leaf")!);
+    expect(host.querySelector(".bank-ask[data-deposit='d0google000000000000000000000002']")).toBeNull();
+    await tap(document.querySelector<HTMLElement>(".toast__undo")!);
+    const back = host.querySelector<HTMLElement>(".bank-ask[data-deposit='d0google000000000000000000000002']")!;
+    expect([back.querySelector("h3")!.textContent, back.querySelector(".bank-ask__line")!.textContent]).toEqual(was);
+    expect(back.textContent).not.toContain("names no app");
+    const yes = back.querySelector<HTMLElement>(".btn--leaf")!;
+    expect(yes.textContent?.trim()).toBe("Yes, it's YouTube");
+    calls = [];
+    await tap(yes);
+    expect(calls).toContain(`bankAnswer ${JSON.stringify(["d0google000000000000000000000002", { answer: "place", place: "youtube" }])}`);
+  });
+
+  it("one answer toast at a time: a second answer's takes the first's place, and the first is sent then", async () => {
+    start("connected");
+    await draw(<BankPage />);
+    await tap(host.querySelector<HTMLElement>(".bank-ask[data-suggested='x'] .btn--ghost"));
+    expect(toasts()).toEqual(["Saved: not money from an app."]);
+    expect(calls.some((c) => c.includes("not_income"))).toBe(false);
+    await tap(host.querySelector<HTMLElement>(".bank-ask[data-suggested='youtube'] .btn--leaf"));
+    expect(toasts()).toEqual(["Saved for YouTube."]);
+    expect(calls).toContain(`bankAnswer ${JSON.stringify(["d0stripe000000000000000000000003", { answer: "not_income" }])}`);
+  });
+});
+
+describe("true words while loading, and the same numbers everywhere", () => {
+  it("the card, a place page and Money never say can't see your bank before the view is read", async () => {
+    let answer: (v: BankView) => void = () => undefined;
+    install({ getBank: () => new Promise<BankView>((r) => (answer = r)) });
+    await draw(<GetPaidList />);
+    const card = host.querySelector<HTMLElement>("[data-help='getpaid-bank-card']")!;
+    expect(card.getAttribute("data-bank")).toBe("loading");
+    expect(card.textContent).not.toContain(BANK_TEXT);
+    await draw(<SentRows sent={{ state: "none_yet", headline: "Nothing sent to your bank yet.", amounts: [] }} rows={[]} here="/settings/posting/getpaid/youtube" />);
+    expect(host.textContent).not.toContain(BANK_TEXT);
+    await draw(<AllMoney load={{ state: "ok", data: everywhere(), reload: () => undefined }} />);
+    expect(host.querySelector(".cr-all__bank")).toBeNull();
+    await act(async () => answer(view()));
+    await settle();
+    expect(host.querySelector(".cr-all__bank")!.textContent).toBe("What reached your bank is below.");
+  });
+
+  it("the card's count is the server's needYou number (Not sure ones never counted)", async () => {
+    const v = view();
+    install({ getBank: async () => ({ ...v, asks: [...v.asks, { ...v.asks[0]!, depositId: "d0extra0000000000000000000000009", notSure: true }], asksMore: 4, reached: { ...v.reached, needYou: "3 bank payments need you." } }) });
+    await draw(<GetPaidList />);
+    expect(host.querySelector("a[data-help='getpaid-bank-card']")!.textContent).toContain("3 payments need you");
+  });
+
+  it("a read already on its way when he changed something never puts the older view back", async () => {
+    start("connected");
+    await draw(<BankPage />);
+    let late: (v: BankView) => void = () => undefined;
+    const old = view();
+    const answered = { ...old, asks: old.asks.slice(1) };
+    let reads = 0;
+    install({ getBank: () => (++reads === 1 ? new Promise<BankView>((r) => (late = r)) : Promise.resolve(answered)) });
+    const reading = bank.reloadBank();
+    // His answer lands (the server's view without that question) while the read above is still on its way.
+    bank.putBank(answered);
+    await act(async () => {
+      late(old);
+      await reading;
+    });
+    await settle();
+    // The older answer was dropped, and a fresh read gave the last word: the answered question never comes back.
+    expect(reads).toBe(2);
+    expect(bank.bankNow().view!.asks).toHaveLength(1);
+  });
+});
+
+describe("the rings say what they show", () => {
+  it("a link stopped at the bank shows 0 and says it ended; the card's small ring says days", async () => {
+    start("stopped_at_bank");
+    await draw(<BankPage />);
+    expect(host.querySelector(".bank-link [role='progressbar']")!.getAttribute("aria-label")).toBe("Swedbank: the link ended");
+    act(() => root.unmount());
+    root = createRoot(host);
+    bank.resetBank();
+    start("connected");
+    await draw(<GetPaidList />);
+    const ring = host.querySelector<HTMLElement>("a[data-help='getpaid-bank-card'] .bank-ring")!;
+    expect(ring.querySelector(".bank-ring__n")!.textContent).toBe("143");
+    expect(ring.querySelector(".bank-ring__unit")!.textContent).toBe("days");
+  });
+
+  it("About 25 minutes · Free shows only before every step is done", async () => {
+    await draw(<BankPage />);
+    expect(host.querySelector(".setup-head__meta")!.textContent).toBe("About 25 minutes · Free");
+    act(() => root.unmount());
+    root = createRoot(host);
+    bank.resetBank();
+    start("connected");
+    await draw(<BankPage />);
+    expect(host.querySelector(".setup-head__meta")).toBeNull();
+  });
+});
+
+describe("Connect waits for Enable Banking's page", () => {
+  it("a focus before the page opened never stops the wait, and the other Reconnect stays off meanwhile", async () => {
+    start("ending", (s) => {
+      s.links.push({ ...s.links[0]!, linkId: "f6e5d4c3b2a1", bank: "SEB", connectedAt: new Date(Date.now() - 175 * 86_400_000).toISOString(), consentUntil: new Date(Date.now() + 5 * 86_400_000).toISOString() });
+    });
+    install({ bankConnect: () => new Promise(() => undefined) });
+    await draw(<BankPage />);
+    await tap(vermilion()[0]);
+    await act(async () => await new Promise((r) => setTimeout(r, 450)));
+    await act(async () => void window.dispatchEvent(new Event("focus")));
+    await settle();
+    expect(vermilion()[0]!.getAttribute("aria-busy")).toBe("true");
+    expect(host.querySelector<HTMLElement>("[data-bank='reconnect-card']")!.getAttribute("aria-disabled")).toBe("true");
+  });
 });
 
 export type { BankView };

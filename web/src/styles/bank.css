@@ -260,6 +260,24 @@
   color: var(--ink-2);
   text-align: center;
 }
+/* The Your bank card's small ring: "143" over "days" (the unit stays at the smallest size, --fs-xs). */
+.bank-ring.is-small .bank-ring__n {
+  font-size: 0.85rem;
+}
+.bank-ring.is-small .bank-ring__words {
+  line-height: 1;
+}
+
+/* ---------- The status block's own buttons (Check now, Answer them) ---------- */
+.bank-status__need {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.bank-status__need > p {
+  flex: 1 1 12rem;
+}
 
 /* ---------- Is this from an app? ---------- */
 .bank-ask {
@@ -592,12 +610,21 @@
   transition: none;
 }
 
-/* Phones: a card's answers sit at the right, under the thumb (the main button is pinned bottom right, §40.5.2). */
+/* Phones: every row of buttons sits at the right, under the thumb (the main button is pinned bottom right, §40.5.2):
+   a card's answers, a step's Open and green answer, the status block's, When it's done and a stopped bank's row. */
 @media (max-width: 767px) {
   .bank-ask__actions,
   .bank-link__actions,
-  .bank-reached__need {
+  .bank-reached__need,
+  .bank-page .gstep__actions,
+  .bank-page .gstep__done-row,
+  .bank-page .done-panel__actions,
+  .bank-status__need,
+  .bank-back {
     justify-content: flex-end;
+  }
+  .bank-link.is-stopped > .btn {
+    margin-left: auto;
   }
   .bank-ask__actions > .btn {
     flex: 0 1 auto;

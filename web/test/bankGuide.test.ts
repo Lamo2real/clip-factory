@@ -255,7 +255,9 @@ describe("the statuses' words (§40.5.9), as the pretend server makes them", () 
       ["youtube", "payout"],
       ["meta", "payer"],
     ]);
-    expect(v.rows[0]!.howText).toBe("matches Google's payment of 21 Oct");
+    // The same day as the pretend YouTube page's Google payment (SEK 1,234.56 on 23 Oct), so its pair line shows.
+    expect(v.rows[0]!.howText).toBe("matches Google's payment of 23 Oct");
+    expect(v.pairs).toEqual([{ place: "youtube", payoutDate: "2026-10-23", amountMicros: 1_234_560_000, currency: "SEK", reachedOn: "2026-10-28" }]);
     expect(v.asks.map((a) => [a.suggested, a.title, a.yesLabel])).toEqual([
       ["x", "Is this money from X?", "Yes, it's X"],
       ["youtube", "Is this money from YouTube?", "Yes, it's YouTube"],
@@ -268,5 +270,34 @@ describe("the statuses' words (§40.5.9), as the pretend server makes them", () 
     expect(ending.next).toMatchObject({ stepId: null, label: "Reconnect Swedbank", vermilion: true });
     expect(ending.pill).toBe("Link ends in 9 days");
     expect(bankViewOf(bankScenario("days90"), { country: "SE", crOn: true }).links[0]!.totalDays).toBe(90);
+  });
+
+  it("says nothing untrue: a stopped link was last read before it stopped; a first connect has no payer he named yet", () => {
+    const stopped = bankViewOf(bankScenario("stopped_at_bank"), { country: "SE", crOn: true });
+    expect(Date.parse(stopped.links[0]!.checkedAt!)).toBeLessThan(Date.now() - 86_400_000);
+    // A question brought back (Not from YouTube?) has no hint any more: the server's words, never "names no app".
+    const s = bankScenario("connected");
+    Object.assign(s.deposits[0]!, { state: "needs_you", place: undefined, how: undefined, suggested: null, hint: undefined, kind: "place" });
+    const back = bankViewOf(s, { country: "SE", crOn: true }).asks.find((a) => a.depositId === s.deposits[0]!.depositId)!;
+    expect([back.title, back.line]).toEqual(["Where is this money from?", "Pick where this money is from."]);
+  });
+});
+
+describe("BA's server view, read from its golden cases (api/tests/fixtures/bank_view_cases.json)", () => {
+  const CASES = join(REPO, "api", "tests", "fixtures", "bank_view_cases.json");
+  type Golden = { name: string; crOn: boolean; expect: { places?: Record<string, unknown>; asks?: { title: string; line: string }[] } };
+  const all = (): Golden[] => Object.values(JSON.parse(readFileSync(CASES, "utf8")) as Record<string, Golden[]>).flat();
+
+  it.skipIf(!existsSync(CASES))("names Content Rewards in places exactly while it is on (the sheet's row follows it)", () => {
+    const cases = all().filter((c) => c.expect.places);
+    expect(cases.length).toBeGreaterThan(3);
+    expect(cases.some((c) => c.crOn)).toBe(true);
+    for (const c of cases) expect("contentrewards" in c.expect.places!, c.name).toBe(c.crOn);
+  });
+
+  it.skipIf(!existsSync(CASES))("a question with no suggestion and no hint says Pick where this money is from., as the pretend server does", () => {
+    const lines = all().flatMap((c) => (c.expect.asks ?? []).filter((a) => a.title === "Where is this money from?").map((a) => a.line));
+    expect(lines).toContain("Pick where this money is from.");
+    expect(lines.join(" ")).not.toContain("names no app");
   });
 });

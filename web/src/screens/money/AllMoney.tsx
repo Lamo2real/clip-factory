@@ -190,9 +190,12 @@ function namesOf(m: MoneyEverywhere, ids: readonly string[]): string {
 
 export function AllMoney({ load }: { load: EverywhereLoad & { reload: () => void } }) {
   const id = useId();
-  const bank = bankView(useBank());
+  const bankLoad = useBank();
+  const bank = bankView(bankLoad);
   // Only once a bank was ever connected (`moneyLine`); before that, and while Your bank is off, today's bank line stays.
+  // While Your bank is still being read, no bank line at all for that moment (never "can't see your bank" first).
   const reached = bank?.moneyLine ? bank : null;
+  const bankLine = bankLoad.state === "loading" ? null : reached?.moneyLine;
   if (load.state === "off") return null;
   if (load.state === "loading") return <section className="cr-all glass is-loading" aria-hidden="true" data-help="money-everywhere" />;
   if (load.state === "error")
@@ -248,7 +251,7 @@ export function AllMoney({ load }: { load: EverywhereLoad & { reload: () => void
         {m.totals.length > 1 ? <p className="cr-all__why">{TWO_MONIES}</p> : null}
         {m.notCountedText ? <p className="cr-all__why">{m.notCountedText}</p> : null}
       </div>
-      {m.sent ? <SentSoFar sent={m.sent} bankLine={reached?.moneyLine} /> : null}
+      {m.sent ? <SentSoFar sent={m.sent} bankLine={bankLine} /> : null}
       {reached ? <ReachedBlock view={reached} /> : null}
     </section>
   );
@@ -260,7 +263,7 @@ export function AllMoney({ load }: { load: EverywhereLoad & { reload: () => void
  * sent rows at all. What reached the bank only the bank can say: the bank line says so (or, once Your bank read a
  * bank, `moneyLine`: "What reached your bank is below.").
  */
-export function SentSoFar({ sent, bankLine }: { sent: NonNullable<MoneyEverywhere["sent"]>; bankLine?: string }) {
+export function SentSoFar({ sent, bankLine }: { sent: NonNullable<MoneyEverywhere["sent"]>; /** null: Your bank is still being read, so no bank line yet. */ bankLine?: string | null }) {
   return (
     <div className="cr-all__sentsofar" data-help="money-sent" data-sent-total={sent.totals.length ? "yes" : "none"}>
       <h3 className="cr-all__sent-title">{SENT_TITLE}</h3>
@@ -279,7 +282,7 @@ export function SentSoFar({ sent, bankLine }: { sent: NonNullable<MoneyEverywher
       {sent.totals.length ? <p className="cr-all__why">{SENT_TWO_MONIES}</p> : null}
       {sent.notAdded ? <p className="cr-all__why">{sent.notAdded}</p> : null}
       {sent.notCountedText ? <p className="cr-all__why">{sent.notCountedText}</p> : null}
-      <p className="cr-all__why cr-all__bank">{bankLine ?? sent.bankText}</p>
+      {bankLine === null ? null : <p className="cr-all__why cr-all__bank">{bankLine ?? sent.bankText}</p>}
     </div>
   );
 }

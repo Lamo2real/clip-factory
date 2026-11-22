@@ -381,11 +381,11 @@ const WAIT_FOR_MS = 10_000;
 
 function BranchPage({ tree, branch }: { tree: Tree; branch: Branch }) {
   const hash = useHash();
-  // Your bank's "Pick my country" (§40.5.5) comes here with ?back= the bank page: its way back is offered at the end.
-  const back = useMemo(() => {
-    const b = typeof location === "undefined" ? null : backLink(location.search);
-    return b?.href === BANK_PATH ? b : null;
-  }, []);
+  // Your bank's "Pick my country" (§40.5.5) comes here with ?back= the bank page: its way back stays in view (pinned at
+  // the bottom right) for as long as that ?back= is in the address. Read on every draw, so another branch reached in
+  // the same tab never keeps it.
+  const asked = typeof location === "undefined" ? null : backLink(location.search);
+  const back = asked?.href === BANK_PATH ? asked : null;
   const body = useRef<HTMLDivElement>(null);
   const render = BRANCHES[`${tree.slug}/${branch.slug}`];
 
@@ -453,8 +453,8 @@ function BranchPage({ tree, branch }: { tree: Tree; branch: Branch }) {
         {render?.()}
       </div>
       {back ? (
-        <div className="branch-back">
-          <LinkButton href={back.href} variant="glass" icon="chevronLeft" data-gp="back">
+        <div className="branch-back gp-pin" data-gp="back-pin">
+          <LinkButton href={back.href} variant="glass" size="lg" icon="chevronLeft" data-gp="back" data-help-clear="">
             {backLabel(back)}
           </LinkButton>
         </div>

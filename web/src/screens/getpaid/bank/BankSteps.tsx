@@ -12,14 +12,21 @@ import { BANK_GUIDE, EACH_TIME_BEFORE, EACH_TIME_LOOK, bankStepNumber, copyValue
 import { useAction } from "../../../lib/motion.ts";
 import { Rich, copyText } from "../../settings/setup/bits.tsx";
 
+/** The bank key's two parts come from step 2: until it is done, their chips say so (never "Loading…" for ever). */
+export const KEY_FIRST = "Do step 2 first";
+const KEY_PARTS: readonly BankCopy["from"][] = ["publicKeyPem", "certificatePem"];
+
 /** A Copy chip: Enable Banking's label (bold) or Clip Factory's words; a long value shows its first line and "…". */
 export function BankCopyChip({ copy, view }: { copy: BankCopy; view: Pick<BankView, "values" | "key"> }) {
   const value = copyValue(copy.from, view);
+  const keyPart = KEY_PARTS.includes(copy.from);
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const act = useAction("copy");
   useEffect(() => () => clearTimeout(timer.current), []);
   const name = copy.label.replace(/\*\*/g, "");
+  // A key made from his own .pem file has no part to copy here (Enable Banking already has it): no chip at all.
+  if (value === null && keyPart && view.key.made) return null;
   async function go() {
     if (value === null) return;
     act.play();
@@ -35,7 +42,7 @@ export function BankCopyChip({ copy, view }: { copy: BankCopy; view: Pick<BankVi
         <span className="copy-chip__label">
           <Rich text={copy.label} />
         </span>
-        <code className="copy-chip__value">{value === null ? "Loading…" : copy.short ? firstLine(value) : value}</code>
+        <code className="copy-chip__value">{value === null ? (keyPart ? KEY_FIRST : "Loading…") : copy.short ? firstLine(value) : value}</code>
       </span>
       <button type="button" className="copy-chip__btn" onClick={() => void go()} aria-disabled={value === null || undefined} aria-label={state === "copied" ? `${name} copied` : `Copy ${name}`} data-act="copy">
         <ActGlyph act={act}>
@@ -57,6 +64,45 @@ export type StepState = BankView["steps"][number];
 /** Who said a done step is done: Clip Factory's own words for a step it saw, or "You said it's done". */
 export const whoSaid = (s: StepState) => (s.by === "auto" && s.auto ? s.auto : "You said it's done");
 
+/**
+ * A step's green answer ("I'm in", "I did this", "I linked them"): the normal way a step he does on Enable Banking
+ * gets done. Always green, never vermilion (§17.1). Once he tapped that step's Open, it is the step's main tap: on
+ * phones it is pinned at the bottom right in the Open's place (BankPage).
+ */
+export function StepAnswer({
+  step,
+  busy,
+  onTick,
+  onLinked,
+  pinned = false,
+}: {
+  step: BankStep;
+  busy: string | null;
+  onTick: (id: BankStepId, done: boolean) => unknown;
+  onLinked: () => unknown;
+  /** In the pin at the bottom right: Ask's launcher never sits on it. */
+  pinned?: boolean;
+}) {
+  return (
+    <Button
+      size="lg"
+      variant="glass"
+      icon="check"
+      act="tick"
+      className="btn--leaf gstep__done"
+      loading={busy === step.id}
+      onClick={() => (step.id === "bank-link" ? onLinked() : onTick(step.id, true))}
+      data-bank="answer"
+      data-help-clear={pinned ? "" : undefined}
+    >
+      {step.doneLabel ?? "I did this"}
+    </Button>
+  );
+}
+
+/** A step he answers himself (green "I'm in" / "I did this" / "I linked them"), not one only Clip Factory ticks. */
+export const hasAnswer = (step: BankStep) => step.id === "bank-link" || step.manual !== false;
+
 export function BankStepCard({
   step,
   view,
@@ -68,6 +114,8 @@ export function BankStepCard({
   onTick,
   onLinked,
   busy,
+  answerPinned = false,
+  quiet = false,
   children,
 }: {
   step: BankStep;
@@ -76,6 +124,10 @@ export function BankStepCard({
   open: boolean;
   current: boolean;
   onToggle: () => void;
+  /** Phones, after he tapped this step's Open: its green answer is pinned at the bottom right, so the card leaves it out. */
+  answerPinned?: boolean;
+  /** Step 5 once its app ID is saved and the box is empty: "Paste … Then tap Save." is said no more. */
+  quiet?: boolean;
   /** The step's main action (its Open or Clip Factory's own button), or null when it is pinned or has none. */
   main: ReactNode;
   onTick: (id: BankStepId, done: boolean) => unknown;
@@ -143,7 +195,7 @@ export function BankStepCard({
             <div className="gstep__actions">{main}</div>
           ) : null}
           <ul className="gstep__say">
-            {step.say.map((line, i) => (
+            {(quiet ? [] : step.say).map((line, i) => (
               <Fragment key={line}>
                 {i === copyAt ? <li className="gp-step__inline">{copies}</li> : null}
                 <li>
@@ -172,27 +224,25 @@ export function BankStepCard({
             </ul>
           ) : null}
           {step.id === "bank-link" ? (
-            state.done ? null : (
+            state.done || answerPinned ? null : (
               <div className="gstep__done-row">
-                <Button size="lg" variant="glass" icon="check" act="tick" className="btn--leaf gstep__done" loading={busy === step.id} onClick={onLinked}>
-                  {step.doneLabel}
-                </Button>
+                <StepAnswer step={step} busy={busy} onTick={onTick} onLinked={onLinked} />
               </div>
             )
           ) : manual ? (
-            <div className="gstep__done-row">
-              {state.done ? (
-                state.by === "auto" ? null : (
+            state.done ? (
+              state.by === "auto" ? null : (
+                <div className="gstep__done-row">
                   <Button size="sm" variant="ghost" icon="undo" act="undo" onClick={() => onTick(step.id, false)} loading={busy === step.id}>
                     Not done yet
                   </Button>
-                )
-              ) : (
-                <Button size="lg" variant="glass" icon="check" act="tick" className="btn--leaf gstep__done" onClick={() => onTick(step.id, true)} loading={busy === step.id}>
-                  {step.doneLabel ?? "I did this"}
-                </Button>
-              )}
-            </div>
+                </div>
+              )
+            ) : answerPinned ? null : (
+              <div className="gstep__done-row">
+                <StepAnswer step={step} busy={busy} onTick={onTick} onLinked={onLinked} />
+              </div>
+            )
           ) : null}
         </div>
       ) : null}
@@ -217,6 +267,8 @@ export function BankSteps({
   busy,
   keyBox,
   linkCheck,
+  answerPinned = null,
+  quietKey = false,
 }: {
   view: BankView;
   isOpen: (id: BankStepId) => boolean;
@@ -229,6 +281,10 @@ export function BankSteps({
   keyBox: ReactNode;
   /** Step 6's check sentence, after "I linked them". */
   linkCheck: string | null;
+  /** The step whose green answer is pinned at the bottom right (phones, after its Open), so its card leaves it out. */
+  answerPinned?: BankStepId | null;
+  /** Step 5 is done and its box is empty: its "Paste … Then tap Save." line is said no more. */
+  quietKey?: boolean;
 }) {
   const [unfold, setUnfold] = useState(false);
   const stateOf = (id: BankStepId): StepState => view.steps.find((s) => s.id === id) ?? { id, done: false, by: null };
@@ -246,6 +302,8 @@ export function BankSteps({
       onTick={onTick}
       onLinked={onLinked}
       busy={busy}
+      answerPinned={answerPinned === step.id}
+      quiet={step.id === "bank-appid" && quietKey}
     >
       {step.id === "bank-appid" ? keyBox : null}
       {step.id === "bank-link" && linkCheck ? (

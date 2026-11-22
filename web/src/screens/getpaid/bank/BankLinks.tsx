@@ -1,8 +1,8 @@
 // Your banks (docs/CONTRACTS.md §40.5.2): one glass card per bank link, newest first: the bank's name, how many
 // accounts, the pill and line, when Clip Factory last looked, and a small ring of the days left out of the link's
 // length (warn at 14 days or less, red once ended). A glass "Reconnect Swedbank" when the link needs it (always glass
-// here: when it is the page's next step, the vermilion copy is the one in the status block) and a quiet "Stop
-// reading Swedbank" with the 8 s Undo. No Check now here: the one in When it's done reads every bank. A stopped link
+// here; while the status block's vermilion is that same reconnect, the card leaves its own out, so it is on screen
+// once) and a quiet "Stop reading Swedbank" with the 8 s Undo. No Check now here: the one in When it's done reads every bank. A stopped link
 // stays as a quiet row with a glass "Connect Swedbank again".
 import { useState } from "react";
 import { api } from "../../../api/index.ts";
@@ -28,16 +28,18 @@ export function BankPill({ status, tone, pill }: Pick<BankLink, "tone" | "pill">
 
 /** The ring of a link's days: `daysLeft` out of `totalDays`, warn at 14 days or less, red once ended. */
 export function DaysRing({ link, size = 76 }: { link: Pick<BankLink, "daysLeft" | "totalDays" | "status" | "bank">; size?: number }) {
-  const left = link.daysLeft ?? 0;
   const total = link.totalDays || 1;
   const ended = link.status === "ended" || link.status === "stopped_at_bank" || link.status === "stopped";
+  // The number drawn is the number said: an ended link shows 0 and says it ended.
+  const left = ended ? 0 : (link.daysLeft ?? 0);
   const tone = ended ? "is-ended" : left <= 14 ? "is-warn" : "";
+  const label = ended ? `${link.bank}: the link ended` : `${link.bank}: ${plural(left, "day")} left of ${plural(total, "day")}`;
   return (
-    <ProgressRing value={ended ? 0 : left / total} size={size} stroke={6} label={`${link.bank}: ${plural(left, "day")} left of ${plural(total, "day")}`} className={`bank-ring ${tone}`}>
+    <ProgressRing value={left / total} size={size} stroke={6} label={label} className={`bank-ring ${tone}${size < 64 ? " is-small" : ""}`}>
       <span className="bank-ring__words" aria-hidden="true">
-        <span className="bank-ring__n">{ended ? 0 : left}</span>
-        {/* "143 days left" inside; a small ring (the Your bank card's) has room for the number only. */}
-        {size >= 64 ? <span className="bank-ring__unit">days left</span> : null}
+        <span className="bank-ring__n">{left}</span>
+        {/* "143 days left" inside; a small ring (the Your bank card's) has room for "days". */}
+        <span className="bank-ring__unit">{size >= 64 ? "days left" : left === 1 ? "day" : "days"}</span>
       </span>
     </ProgressRing>
   );
@@ -59,7 +61,19 @@ export function BankRing({ view, size }: { view: BankView; size: number }) {
   );
 }
 
-export function BankLinks({ view, onReconnect, connecting }: { view: BankView; onReconnect: (linkId: string) => void; connecting: string | null }) {
+export function BankLinks({
+  view,
+  onReconnect,
+  connecting,
+  mainLinkId,
+}: {
+  view: BankView;
+  onReconnect: (linkId: string) => void;
+  /** A connect on its way (its link, or "new"): every Reconnect waits for it, so one tap starts one. */
+  connecting: string | null;
+  /** The link whose Reconnect is the page's vermilion (status block or pinned): its card leaves its own out. */
+  mainLinkId?: string | null;
+}) {
   const toast = useToast();
   const hold = useHeld();
   const [stopping, setStopping] = useState<string[]>([]);
@@ -95,7 +109,7 @@ export function BankLinks({ view, onReconnect, connecting }: { view: BankView; o
             <li key={link.linkId} className="bank-link is-stopped" data-link={link.linkId} data-status="stopped">
               <Icon name="card" size={22} />
               <p className="bank-link__line">{link.line}</p>
-              <Button variant="glass" size="md" icon="link" act="connect" loading={connecting === link.linkId} onClick={() => onReconnect(link.linkId)}>
+              <Button variant="glass" size="md" icon="link" act="connect" loading={connecting === link.linkId} disabled={!!connecting && connecting !== link.linkId} onClick={() => onReconnect(link.linkId)}>
                 Connect {link.bank} again
               </Button>
             </li>
@@ -118,8 +132,8 @@ export function BankLinks({ view, onReconnect, connecting }: { view: BankView; o
                 {link.checkedAt ? <p className="bank-link__small">Checked {relative(link.checkedAt)}</p> : null}
               </div>
               <div className="bank-link__actions">
-                {link.reconnect ? (
-                  <Button variant="glass" size="md" icon="retry" act="connect" loading={connecting === link.linkId} onClick={() => onReconnect(link.linkId)} data-bank="reconnect-card">
+                {link.reconnect && link.linkId !== mainLinkId ? (
+                  <Button variant="glass" size="md" icon="retry" act="connect" loading={connecting === link.linkId} disabled={!!connecting && connecting !== link.linkId} onClick={() => onReconnect(link.linkId)} data-bank="reconnect-card">
                     Reconnect {link.bank}
                   </Button>
                 ) : null}

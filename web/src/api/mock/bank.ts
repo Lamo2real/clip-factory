@@ -117,13 +117,23 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const ago = (ms: number) => iso(Date.now() - ms);
 const ahead = (ms: number) => iso(Date.now() + ms);
 
-/** The pretend first read: a YouTube payout match, two questions (Google, Stripe) and a Meta payer match (§40.5.11). */
-function firstRows(linkId: string): MockDeposit[] {
+/** The payer the pretend owner said is Meta, some weeks before (the Meta row's "from a payer you said is…"). */
+const META_PAYER = { payer: "meta", place: "meta" } as const;
+
+/**
+ * The pretend first read (§40.5.11): a YouTube payout match (Google's pretend payment of 23 Oct, the same one the
+ * pretend YouTube page shows, so its "Reached your bank on 28 Oct" line can be seen), two questions (Google, Stripe)
+ * and a Meta row. The Meta row is a payer match only when he said before that this payer is Meta (`learned`); on a
+ * first connect nobody said so yet, so it is a question too.
+ */
+function firstRows(linkId: string, metaLearned: boolean): MockDeposit[] {
   return [
-    { depositId: "d0youtube00000000000000000000001", date: "2026-10-28", amountMicros: 1_234_560_000, currency: "SEK", linkId, state: "matched", place: "youtube", how: "payout", payoutDate: "2026-10-21" },
+    { depositId: "d0youtube00000000000000000000001", date: "2026-10-28", amountMicros: 1_234_560_000, currency: "SEK", linkId, state: "matched", place: "youtube", how: "payout", payoutDate: "2026-10-23" },
     { depositId: "d0google000000000000000000000002", date: "2026-11-04", amountMicros: 85_000_000, currency: "SEK", linkId, state: "needs_you", suggested: "youtube", kind: "place", hint: "google" },
     { depositId: "d0stripe000000000000000000000003", date: "2026-11-12", amountMicros: 321_700_000, currency: "SEK", linkId, state: "needs_you", suggested: "x", kind: "place", hint: "stripe" },
-    { depositId: "d0meta00000000000000000000000004", date: "2026-10-23", amountMicros: 912_400_000, currency: "SEK", linkId, state: "matched", place: "meta", how: "payer" },
+    metaLearned
+      ? { depositId: "d0meta00000000000000000000000004", date: "2026-10-23", amountMicros: 912_400_000, currency: "SEK", linkId, state: "matched", place: "meta", how: "payer" }
+      : { depositId: "d0meta00000000000000000000000004", date: "2026-10-23", amountMicros: 912_400_000, currency: "SEK", linkId, state: "needs_you", suggested: "meta", kind: "place", hint: "meta" },
   ];
 }
 
@@ -162,12 +172,15 @@ export function bankScenario(name: BankScenario): BankMockState {
   const link = swedbank();
   if (name === "ending") Object.assign(link, { connectedAt: ago(171 * DAY), consentUntil: ahead(9 * DAY - HOUR) });
   if (name === "ended") Object.assign(link, { status: "ended", reason: "consent_over", connectedAt: ago(182 * DAY), consentUntil: ago(2 * DAY), endedAt: ago(DAY) });
-  if (name === "stopped_at_bank") Object.assign(link, { status: "stopped_at_bank", endedAt: ago(DAY) });
+  // Stopped a day ago: Clip Factory last read it before that (never "Checked 3 h ago" on a link that can't be read).
+  if (name === "stopped_at_bank") Object.assign(link, { status: "stopped_at_bank", endedAt: ago(DAY), lastReadAt: ago(DAY + 3 * HOUR) });
   if (name === "cant_read") Object.assign(link, { failingSince: ago(4 * DAY), lastError: "Swedbank didn't answer. Clip Factory tries again tomorrow.", lastReadAt: ago(4 * DAY) });
   if (name === "look_in_bank") Object.assign(link, { reason: "psu_action" });
   if (name === "days90") Object.assign(link, { connectedAt: ago(37 * DAY), consentUntil: ahead(53 * DAY - HOUR) });
   s.links = [link];
-  s.deposits = name === "none_yet" ? [] : firstRows(link.linkId);
+  // 37 days in, he has answered before: the Meta payer is one he named.
+  s.learned = [{ ...META_PAYER }];
+  s.deposits = name === "none_yet" ? [] : firstRows(link.linkId, true);
   return s;
 }
 
@@ -292,7 +305,9 @@ const TITLE_OF: Partial<Record<BankPlace | "stripe", [string, string, string]>> 
 function askOf(d: MockDeposit, bank: string): BankAsk {
   const base = { depositId: d.depositId, date: d.date, amountMicros: d.amountMicros, currency: d.currency, bank, kind: d.kind ?? "place", suggested: d.suggested ?? null, notSure: !!d.notSure };
   if (d.kind === "own_move") return { ...base, title: "Did you move this from your PayPal?", line: "Clip Factory reads your PayPal too, so this money may already be counted there.", yesLabel: "Yes, I moved it" };
-  if (!d.suggested) return { ...base, title: "Where is this money from?", line: d.hint === "payoneer" ? "Your bank's text mentions Payoneer." : d.hint === "paypal" ? "Your bank's text mentions PayPal." : "Your bank's text names no app." };
+  // The server's words (bank/view.py): a hint it names, else "Pick where this money is from." (never "names no app":
+  // a question brought back by "Not from YouTube?" did have a hint once).
+  if (!d.suggested) return { ...base, title: "Where is this money from?", line: d.hint === "payoneer" ? "Your bank's text mentions Payoneer." : d.hint === "paypal" ? "Your bank's text mentions PayPal." : d.hint === "whop" ? "Your bank's text mentions Whop." : "Pick where this money is from." };
   const words = d.hint === "stripe" ? TITLE_OF.stripe! : (TITLE_OF[d.suggested] ?? [`Is this money from ${SHORT[d.suggested]}?`, `Your bank's text looks like ${SHORT[d.suggested]}.`, `Yes, it's ${SHORT[d.suggested]}`]);
   return { ...base, title: words[0], line: words[1], yesLabel: words[2] };
 }
@@ -579,7 +594,7 @@ export function bankMockApi(wait: () => Promise<void>, deps: BankMockDeps) {
       const l = s.links.find((x) => x.linkId === linkId);
       if (!l || l.firstReadDone || l.status !== "connected") return;
       Object.assign(l, { firstReadDone: true, connectedAt: ago(37 * DAY), consentUntil: ahead(143 * DAY - HOUR), lastReadAt: iso(Date.now()), historyFrom: "2026-08-03" });
-      if (!s.deposits.some((d) => d.linkId === linkId)) s.deposits.push(...firstRows(linkId));
+      if (!s.deposits.some((d) => d.linkId === linkId)) s.deposits.push(...firstRows(linkId, s.learned.some((x) => x.place === "meta")));
       save(s);
       deps.publish();
     }, firstReadMs);
@@ -727,8 +742,9 @@ export function bankMockApi(wait: () => Promise<void>, deps: BankMockDeps) {
             d.state = "not_income";
             return;
           case "not_this":
+            // As the server does (§40.5.8): back to a question with no suggestion and no hint (a match dropped both).
             if (d.state !== "matched") throw conflict("That one is answered already.");
-            Object.assign(d, { state: "needs_you", was: { place: d.place!, how: d.how! }, place: undefined, how: undefined, payoutDate: undefined, suggested: null, kind: "place", notSure: false });
+            Object.assign(d, { state: "needs_you", was: { place: d.place!, how: d.how! }, place: undefined, how: undefined, payoutDate: undefined, suggested: null, hint: undefined, kind: "place", notSure: false });
             return;
           default:
             throw bad("That answer isn't known.");

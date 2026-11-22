@@ -1,9 +1,11 @@
 // Is this from an app? (docs/CONTRACTS.md §40.5.2): one glass card per payment his bank booked that may be app money,
 // newest first, at most 20, then "and 3 more". Each shows the amount large (formatted, never typed), the day and the
 // bank, and the server's question. He only ever taps: a green yes, a glass "No, another app" (the sheet Where is it
-// from?), a quiet "Not money from an app". No answer changes an amount. "Saved for YouTube. Undo" sends `not_this`;
-// the other answers wait for their 8 s "Saved. Undo" before they are sent. "Not sure" folds a card into "Not sure yet".
-import { useState } from "react";
+// from?), a quiet "Not money from an app". No answer changes an amount. "Saved for YouTube. Undo" sends `not_this`
+// and puts the question back as it was (the same words and green yes); the other answers wait for their 8 s
+// "Saved: not money from an app. Undo" before they are sent. One answer's toast at a time: a newer answer's takes its
+// place (an answer still waiting is sent then). "Not sure" folds a card into "Not sure yet".
+import { useRef, useState } from "react";
 import { api } from "../../../api/index.ts";
 import { friendlyMessage } from "../../../api/errors.ts";
 import type { BankAnswer, BankAsk, BankPlace, BankView } from "../../../api/types.ts";
@@ -12,13 +14,19 @@ import { Sheet } from "../../../components/Sheet.tsx";
 import { useToast } from "../../../components/Toasts.tsx";
 import { Button } from "../../../components/ui.tsx";
 import { NOT_SURE, SHEET_PLACES, bankPlaceName } from "../../../getpaid/bank.ts";
-import { putBank, reloadBank, useHeld } from "../../../lib/bank.ts";
+import { asItWas, forgetUndone, putBank, reloadBank, rememberUndone, useHeld, type Held } from "../../../lib/bank.ts";
 import { formatMoney } from "../../../lib/money.ts";
 import { bankDay } from "./BankMoney.tsx";
 
 export const WHERE_FROM = "Where is it from?";
 export const NOT_APP_MONEY = "Not money from an app";
 export const savedFor = (place: BankPlace) => `Saved for ${bankPlaceName(place)}.`;
+/** The toast of an answer that names no place says what was saved, so the right one is undone. */
+export const SAVED_AS: Record<"not_sure" | "not_income" | "own_move", string> = {
+  not_sure: "Saved: not sure yet.",
+  not_income: "Saved: not money from an app.",
+  own_move: "Saved: you moved it.",
+};
 
 /** The places he can pick, in order; Content Rewards only while it is on. */
 export function sheetPlaces(crOn: boolean) {
@@ -119,8 +127,17 @@ export function BankAsks({ view, crOn }: { view: BankView; crOn: boolean }) {
   /** Answers waiting for their Undo: the card is gone (or folded into Not sure yet) at once. */
   const [waiting, setWaiting] = useState<Record<string, "gone" | "not_sure">>({});
   const [openSure, setOpenSure] = useState(false);
+  /** The answer toast on screen: a newer answer's replaces it (one still waiting is sent then). */
+  const last = useRef<{ held?: Held; stop?: AbortController } | null>(null);
+  function replaceLast() {
+    const was = last.current;
+    last.current = null;
+    was?.held?.flush();
+    was?.stop?.abort();
+  }
 
-  const shown = view.asks.filter((a) => waiting[a.depositId] !== "gone");
+  // A question he undid shows as it was until he answers it again (the server's copy has no suggestion any more).
+  const shown = view.asks.map(asItWas).filter((a) => waiting[a.depositId] !== "gone");
   const sure = shown.filter((a) => !a.notSure && waiting[a.depositId] !== "not_sure");
   const unsure = shown.filter((a) => a.notSure || waiting[a.depositId] === "not_sure");
 
@@ -137,23 +154,39 @@ export function BankAsks({ view, crOn }: { view: BankView; crOn: boolean }) {
 
   async function answer(ask: BankAsk, a: BankAnswer) {
     const place = a.answer === "yes" ? ask.suggested : a.answer === "place" ? a.place : null;
+    replaceLast();
     if (place) {
-      // A place is saved at once; its Undo sends not_this (the question comes back).
+      // A place is saved at once; its Undo sends not_this and the question comes back as it was. The green yes of a
+      // question put back that way names its place (the server's row has no suggestion of its own any more).
+      const own = view.asks.find((x) => x.depositId === ask.depositId);
+      const body: BankAnswer = a.answer === "yes" && !own?.suggested ? { answer: "place", place } : a;
       setBusy(ask.depositId);
-      const ok = await send(ask.depositId, a);
+      const ok = await send(ask.depositId, body);
       setBusy(null);
-      if (ok)
-        toast.undo(savedFor(place), {
-          icon: "check",
-          onUndo: () => void send(ask.depositId, { answer: "not_this" }),
-          onCommit: () => undefined,
-        });
+      if (!ok) return;
+      forgetUndone(ask.depositId);
+      const stop = new AbortController();
+      last.current = { stop };
+      toast.undo(savedFor(place), {
+        icon: "check",
+        signal: stop.signal,
+        onUndo: () => {
+          if (last.current?.stop === stop) last.current = null;
+          rememberUndone(ask);
+          void send(ask.depositId, { answer: "not_this" });
+        },
+        onCommit: () => {
+          if (last.current?.stop === stop) last.current = null;
+        },
+      });
       return;
     }
     // Not sure, not app money, I moved it: sent when the Undo runs out (or at once if the page goes).
     const id = ask.depositId;
+    const kind = a.answer === "not_sure" || a.answer === "own_move" ? a.answer : "not_income";
     setWaiting((w) => ({ ...w, [id]: a.answer === "not_sure" ? "not_sure" : "gone" }));
     const held = hold(() => {
+      forgetUndone(id);
       void send(id, a).finally(() =>
         setWaiting((w) => {
           const { [id]: _gone, ...rest } = w;
@@ -161,17 +194,22 @@ export function BankAsks({ view, crOn }: { view: BankView; crOn: boolean }) {
         }),
       );
     });
-    toast.undo("Saved.", {
+    last.current = { held };
+    toast.undo(SAVED_AS[kind], {
       icon: "check",
       signal: held.signal,
       onUndo: () => {
+        if (last.current?.held === held) last.current = null;
         held.drop();
         setWaiting((w) => {
           const { [id]: _gone, ...rest } = w;
           return rest;
         });
       },
-      onCommit: held.send,
+      onCommit: () => {
+        if (last.current?.held === held) last.current = null;
+        held.send();
+      },
     });
   }
 

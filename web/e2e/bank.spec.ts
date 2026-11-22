@@ -51,6 +51,14 @@ async function start(page: Page, path: string, scenario = "fresh", knobs: [strin
 }
 const tomato = (page: Page) => page.locator("main .btn--primary").filter({ visible: true });
 const step = (page: Page, id: string) => page.locator(`#step-${id}`);
+/** A step's green answer: in its card, or (phones, after its Open) pinned at the bottom right in the Open's place. */
+const answer = (page: Page, id: string) => page.locator(`#step-${id} [data-bank='answer'], .gp-pin [data-bank='answer']`).filter({ visible: true });
+/** After an Open: no vermilion, and the step's green answer is the next tap (pinned on phones). */
+async function afterOpen(page: Page, id: string, label: string) {
+  await expect(tomato(page)).toHaveCount(0);
+  await expect(answer(page, id)).toHaveText(label);
+  await expect(answer(page, id)).toHaveClass(/btn--leaf/);
+}
 const live = (page: Page) => page.waitForTimeout(1400);
 
 async function screenProblems(page: Page, phone: boolean, scope = "main"): Promise<string[]> {
@@ -96,7 +104,8 @@ async function walk(page: Page, email: boolean) {
   await expect(tomato(page)).toHaveCount(1);
   await expect(tomato(page)).toHaveText(/Open Enable Banking/);
   await t.tap(tomato(page));
-  await t.tap(step(page, "bank-account").getByRole("button", { name: "I'm in" }));
+  await afterOpen(page, "bank-account", "I'm in");
+  await t.tap(answer(page, "bank-account"));
   // 2: Make my bank key.
   await expect(tomato(page)).toHaveText("Make my bank key");
   await t.tap(tomato(page));
@@ -104,8 +113,9 @@ async function walk(page: Page, email: boolean) {
   // 3: Open your Enable Banking apps · Copy the bank key · I did this.
   await expect(tomato(page)).toHaveText(/Open your Enable Banking apps/);
   await t.tap(tomato(page));
+  await afterOpen(page, "bank-app", "I did this");
   await t.tap(step(page, "bank-app").getByRole("button", { name: "Copy Bank key" }));
-  await t.tap(step(page, "bank-app").getByRole("button", { name: "I did this" }));
+  await t.tap(answer(page, "bank-app"));
   // 4: five Copy chips · I did this (no vermilion: the page is already open).
   await expect(tomato(page)).toHaveCount(0);
   for (const label of ["Application name", "Allowed redirect URLs (one per line)", "Application description", "Privacy URL of the application", "Terms URL of the application"])
@@ -122,7 +132,8 @@ async function walk(page: Page, email: boolean) {
   // 6: Open your Enable Banking apps · I linked them.
   await expect(tomato(page)).toHaveText(/Open your Enable Banking apps/);
   await t.tap(tomato(page));
-  await t.tap(step(page, "bank-link").getByRole("button", { name: "I linked them" }));
+  await afterOpen(page, "bank-link", "I linked them");
+  await t.tap(answer(page, "bank-link"));
   await expect(step(page, "bank-link")).toHaveAttribute("data-done", "true");
   // 7: Connect your bank · his bank in the list; then the pretend bank's Allow (not Clip Factory's) and back.
   await expect(tomato(page)).toHaveText("Connect your bank");
@@ -157,7 +168,10 @@ for (const [name, use] of [
       await live(page);
       await expect(page.locator(".bank-link")).toContainText("Swedbank");
       await expect(page.locator(".bank-link [role='progressbar']")).toHaveAttribute("aria-label", "Swedbank: 143 days left of 180 days");
-      await expect(page.locator("[data-help='bank-reached']")).toContainText("matches Google's payment of 21 Oct");
+      await expect(page.locator("[data-help='bank-reached']")).toContainText("matches Google's payment of 23 Oct");
+      // A first connect: nobody said yet which app the Meta payer is, so it is a question, never "a payer you said is".
+      await expect(page.locator("[data-help='bank-reached']")).not.toContainText("you said is");
+      await expect(page.locator(".bank-ask[data-suggested='meta']")).toHaveCount(1);
       await expect(page.locator("[data-bank='fold']")).toHaveText("Set up ✓ (Enable Banking knows your app)");
       await expect(tomato(page)).toHaveCount(0);
     });
@@ -209,6 +223,63 @@ for (const [name, use] of [
       await expect(page.locator("[data-help='bank-reached']")).toContainText("TikTok");
     });
 
+    test("Undo puts the same question back, with its green yes", async ({ page }) => {
+      await start(page, BANK, "connected");
+      const card = page.locator(".bank-ask[data-deposit='d0google000000000000000000000002']");
+      await expect(card.locator("h3")).toHaveText("Is this money from YouTube?");
+      await card.getByRole("button", { name: "Yes, it's YouTube" }).click();
+      await expect(card).toHaveCount(0);
+      await page.locator(".toast").filter({ hasText: "Saved for YouTube." }).getByRole("button", { name: "Undo" }).click();
+      await expect(card.locator("h3")).toHaveText("Is this money from YouTube?");
+      await expect(card).toContainText("Your bank's text looks like Google.");
+      await expect(card.getByRole("button", { name: "Yes, it's YouTube" })).toHaveClass(/btn--leaf/);
+    });
+
+    test("can't read the bank: Check now sits in the status block, beside the line that names it", async ({ page }) => {
+      await start(page, BANK, "cant_read");
+      const status = page.locator("[data-help='bank-status']");
+      await expect(status).toContainText("Tap Check now.");
+      await expect(status.locator("[data-bank='check-now']")).toBeInViewport();
+      await expect(page.locator(".gp-done")).not.toContainText("Check now");
+    });
+
+    test("the pretend YouTube page: Google's payment says when it reached the bank", async ({ page }) => {
+      await start(page, "/", "connected");
+      await page.evaluate(() => (window as MockWin).__cfMock!.getpaid!.scenario!("owner"));
+      await page.goto("/settings/posting/getpaid/youtube");
+      await settle(page);
+      await expect(page.locator("[data-pair]").first()).toHaveText("Reached your bank on 28 Oct (Your bank says)");
+    });
+
+    test("Pick my country: the way back to Your bank stays in view on Money settings, and only there", async ({ page }) => {
+      await start(page, BANK, "setup", [["noCountry", [true]]]);
+      await page.getByRole("button", { name: "Connect your bank", exact: true }).click();
+      await page.locator(".bank-picker__error").getByRole("link", { name: "Pick my country" }).click();
+      await expect(page).toHaveURL(/\/settings\/posting\/money\?back=\/settings\/posting\/getpaid\/bank#money-country$/);
+      await settle(page);
+      const back = page.locator("[data-gp='back-pin'] a");
+      await expect(back).toHaveText("Back to Your bank");
+      await expect(back).toBeInViewport();
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await expect(back).toBeInViewport();
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await expect(back).toBeInViewport();
+      // At the right of the page's column (the window's right on a phone).
+      const box = (await back.boundingBox())!;
+      const column = (await page.locator(".settings-content").boundingBox())!;
+      expect(column.x + column.width - (box.x + box.width), "at the right").toBeLessThanOrEqual(40);
+      if (!phone) {
+        // Another branch in the same tab never keeps it.
+        await page.locator(".folders").getByRole("link", { name: "Get paid" }).click();
+        await expect(page).toHaveURL(/\/settings\/posting\/getpaid$/);
+        await expect(page.locator("[data-gp='back-pin']")).toHaveCount(0);
+      }
+      await page.goto(`/settings/posting/money?back=${BANK}`);
+      await settle(page);
+      await page.locator("[data-gp='back-pin'] a").click();
+      await expect(page).toHaveURL(new RegExp(`${BANK}$`));
+    });
+
     test("the reconnect at 9 days: the status block's vermilion (pinned on phones), the link card's glass", async ({ page }) => {
       await start(page, BANK, "ending");
       await expect(page.locator("[data-help='bank-status'] .gp-pill")).toHaveText("Link ends in 9 days");
@@ -216,7 +287,9 @@ for (const [name, use] of [
       await expect(tomato(page)).toHaveText("Reconnect Swedbank");
       if (phone) await expect(tomato(page).locator("xpath=ancestor::*[contains(@class,'gp-pin')]")).toHaveCount(1);
       else await expect(page.locator("[data-help='bank-status'] .btn--primary")).toHaveCount(1);
-      await expect(page.locator("[data-bank='reconnect-card']")).not.toHaveClass(/btn--primary/);
+      // On screen once: the link card leaves the same Reconnect out.
+      await expect(page.locator("[data-bank='reconnect-card']")).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Reconnect Swedbank" }).filter({ visible: true })).toHaveCount(1);
       const away = page.waitForURL(/\/mock-bank\?state=/);
       await tomato(page).click();
       await away;

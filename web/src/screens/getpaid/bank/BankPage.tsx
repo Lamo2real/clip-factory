@@ -6,11 +6,16 @@
 // The page's only vermilion is `next` (§40.5.9): while setting up, the next step's main action (its Open, or Clip
 // Factory's own button), pinned bottom right on phones from the moment the page opens; once every step is done,
 // "Reconnect Swedbank" in the status block when a link needs it. Otherwise none. The green answers stay green.
+// Once he tapped a step's Open (Enable Banking's page is open in another tab), opening it again is not the next tap:
+// the Open turns glass and the step's green answer ("I'm in", "I did this", "I linked them") is its main tap, pinned
+// bottom right on phones in the Open's place. While Clip Factory can't read a bank, or the bank wants him to do
+// something first, "Check now" (glass) sits in the status block beside the line that names it; when questions wait,
+// the status block says how many, with a glass "Answer them".
 import "../../../styles/getpaid.css";
 import "../../../styles/bank.css";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, friendlyMessage } from "../../../api/index.ts";
-import type { BankAnswer, BankResult, BankRow, BankStepId, BankTickId } from "../../../api/types.ts";
+import type { BankAnswer, BankAppCode, BankResult, BankRow, BankStepId, BankTickId } from "../../../api/types.ts";
 import { Icon } from "../../../components/Icon.tsx";
 import { useToast } from "../../../components/Toasts.tsx";
 import { Button, Empty, ErrorPanel, LinkButton, Skeleton } from "../../../components/ui.tsx";
@@ -45,9 +50,9 @@ import { Rich } from "../../settings/setup/bits.tsx";
 import { BankAsks } from "./BankAsks.tsx";
 import { BankKeyBox, KeyMain } from "./BankKeyBox.tsx";
 import { BankLinks, BankPill, BankRing } from "./BankLinks.tsx";
-import { BankKeeps, ReachedSection } from "./BankMoney.tsx";
+import { ANSWER_THEM, BankKeeps, ReachedSection } from "./BankMoney.tsx";
 import { BankPicker, type PickedBank } from "./BankPicker.tsx";
-import { BankSteps } from "./BankSteps.tsx";
+import { BankSteps, StepAnswer, hasAnswer } from "./BankSteps.tsx";
 
 /** A `?result=` read on arrival is shown from `lastConnect` only when it is this fresh (§40.5.2 Connect, step 5). */
 const FRESH_MS = 15 * 60_000;
@@ -94,10 +99,15 @@ export function BankPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [keyBusy, setKeyBusy] = useState<"save" | "check" | "pem" | null>(null);
   const [paste, setPaste] = useState("");
-  const [checkText, setCheckText] = useState<string | null>(null);
+  /** The check answered in this visit (Save, Check again): its words and its code go together (§40.5.4). */
+  const [check, setCheck] = useState<{ code: BankAppCode; text: string } | null>(null);
+  /** The steps whose Open he tapped in this visit: their green answer is the next tap now, not the Open again. */
+  const [tappedOpen, setTappedOpen] = useState<Set<BankStepId>>(new Set());
   const [linkCheck, setLinkCheck] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
   const [connecting, setConnecting] = useState<string | null>(null);
+  /** Enable Banking's page was opened (location.assign ran): only from then may coming back stop the wait. */
+  const [away, setAway] = useState(false);
   const [checking, setChecking] = useState(false);
   const [forgetting, setForgetting] = useState(false);
   const [card, setCard] = useState<{ result: BankResult; text: string } | null>(null);
@@ -135,9 +145,14 @@ export function BankPage() {
   }, [view?.lastConnect?.at, arrived]);
   // The Mac app opens Enable Banking in the system browser and this page waits (§17.1 useConnecting): the spinner
   // stops when he comes back to the window, or when the browser brings this page back with Back.
+  // Armed only once Enable Banking's page was opened: a blur and focus while POST /connect is still on its way never
+  // stops the wait early (the buttons stay off, so one tap starts one authorisation).
   useEffect(() => {
-    if (!connecting) return;
-    const stop = () => setConnecting(null);
+    if (!connecting || !away) return;
+    const stop = () => {
+      setConnecting(null);
+      setAway(false);
+    };
     const onShow = (e: PageTransitionEvent) => {
       if (e.persisted) stop();
     };
@@ -148,7 +163,7 @@ export function BankPage() {
       window.removeEventListener("focus", stop);
       window.removeEventListener("pageshow", onShow);
     };
-  }, [connecting]);
+  }, [connecting, away]);
   // A new link still waiting for its first read, within the hour after BankID: the first read is asked for once.
   useEffect(() => {
     const lc = view?.lastConnect;
@@ -162,8 +177,10 @@ export function BankPage() {
   const next = view?.next ?? null;
   const nextStep = next?.stepId ? bankStep(next.stepId) : null;
   const hasMain = !!nextStep && (nextStep.action !== undefined || (!!nextStep.open && !nextStep.mail));
-  const vermilion = !!next && next.vermilion;
-  const pinned = pinOn && vermilion && (next.stepId === null || hasMain);
+  // He opened Enable Banking for the next step already: its green answer is the next tap, never the Open again.
+  const nextAnswer = nextStep && !nextStep.action && tappedOpen.has(nextStep.id) && hasAnswer(nextStep) ? nextStep : null;
+  const vermilion = !!next && next.vermilion && !nextAnswer;
+  const pinned = pinOn && ((vermilion && (next.stepId === null || hasMain)) || !!nextAnswer);
   const anchor = hash?.startsWith("step-") || hash === "bank-asks" ? hash : null;
 
   useEffect(() => {
@@ -248,6 +265,9 @@ export function BankPage() {
     if (v) putBank(v);
     return !!v;
   }
+  function openedStep(id: BankStepId) {
+    setTappedOpen((s) => (s.has(id) ? s : new Set(s).add(id)));
+  }
   async function saveAppId() {
     const found = findAppId(paste);
     if (!found) {
@@ -259,7 +279,7 @@ export function BankPage() {
       const out = await api().bankSaveApp({ appId: found });
       keepOpen("bank-appid");
       putBank(out.view);
-      setCheckText(out.check.text);
+      setCheck(out.check);
       setPaste("");
       return true;
     } catch (e) {
@@ -276,7 +296,7 @@ export function BankPage() {
       const out = await api().bankCheckApp();
       keepOpen(which === "check" ? "bank-appid" : "bank-link");
       putBank(out.view);
-      if (which === "check") setCheckText(out.check.text);
+      if (which === "check") setCheck(out.check);
       else setLinkCheck(out.check.text);
       return true;
     } catch (e) {
@@ -294,7 +314,7 @@ export function BankPage() {
       const out = await api().bankSaveApp({ pem, ...(fileName ? { fileName } : {}), ...(appId ? { appId } : {}) });
       keepOpen("bank-appid");
       putBank(out.view);
-      setCheckText(out.check.text);
+      setCheck(out.check);
       setPaste("");
       return true;
     } catch (e) {
@@ -318,10 +338,12 @@ export function BankPage() {
       markConnectSent();
       setPicker(false);
       location.assign(authorizeUrl);
+      setAway(true);
       return true;
     } catch (e) {
       toast.error(friendlyMessage(e));
       setConnecting(null);
+      setAway(false);
       return false;
     }
   }
@@ -374,7 +396,8 @@ export function BankPage() {
       </span>
       <div className="setup-head__text">
         <h1 className="setup-head__title">Your bank</h1>
-        <p className="setup-head__meta">{BANK_TIME}</p>
+        {/* How long it takes and what it costs matter only before it is set up. */}
+        {view && view.ring.done === view.ring.total ? null : <p className="setup-head__meta">{BANK_TIME}</p>}
         <p className="setup-head__checked">
           <Icon name="checkCircle" size={16} />
           <span>
@@ -416,7 +439,7 @@ export function BankPage() {
       case "save_app_id":
         return <KeyMain saved={appIdSaved} primary={primary} busy={keyBusy === "pem" ? null : keyBusy} onSave={saveAppId} onCheck={() => checkApp("check")} />;
       default:
-        return step.open && !step.mail ? <OpenButton label={step.open.label} href={step.open.url} primary={primary} size="lg" /> : null;
+        return step.open && !step.mail ? <OpenButton label={step.open.label} href={step.open.url} primary={primary} size="lg" onOpen={() => openedStep(step.id)} /> : null;
     }
   }
   const mainOf = (step: BankStep): ReactNode => {
@@ -427,13 +450,38 @@ export function BankPage() {
   };
   const reconnectButton = (primary: boolean) =>
     reconnectLink ? (
-      <Button variant={primary ? "primary" : "glass"} size="lg" icon="retry" act="connect" loading={connecting === reconnectLink.linkId} onClick={() => connect({ linkId: reconnectLink.linkId })} data-help-clear={primary ? "" : undefined} data-bank="reconnect">
+      <Button
+        variant={primary ? "primary" : "glass"}
+        size="lg"
+        icon="retry"
+        act="connect"
+        loading={connecting === reconnectLink.linkId}
+        disabled={!!connecting && connecting !== reconnectLink.linkId}
+        onClick={() => connect({ linkId: reconnectLink.linkId })}
+        data-help-clear={primary ? "" : undefined}
+        data-bank="reconnect"
+      >
         {next!.label}
       </Button>
     ) : null;
 
   const lineHasNext = !!next?.text && view.line.includes(next.text.trim());
   const anyLink = view.links.length > 0;
+  // The status line says "Tap Check now": the button sits right there (glass), not five screens down.
+  const checkHere = anyLink && (view.status === "cant_read" || view.status === "look_in_bank");
+  const checkNowButton = (
+    <Button variant="glass" icon="retry" act="retry" loading={checking} onClick={checkNow} data-bank="check-now">
+      Check now
+    </Button>
+  );
+  const needYou = view.reached.needYou && view.asks.length ? view.reached.needYou : null;
+  const toAsks = () => {
+    const el = document.getElementById("bank-asks");
+    el?.scrollIntoView?.({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    el?.focus({ preventScroll: true });
+  };
+  const answerButton = (step: BankStep) => <StepAnswer step={step} busy={busy} onTick={tick} onLinked={() => checkApp("linked")} pinned />;
+  const appIdDone = !!stateOf("bank-appid")?.done;
   const keyStep = next?.stepId === "bank-appid";
   const checkingFirst = card?.result === "bank_connected" && view.links.some((l) => l.status === "checking");
 
@@ -450,7 +498,20 @@ export function BankPage() {
           <Rich text={view.line} />
         </p>
         {next?.stepId && next.text && !lineHasNext ? <p className="gp-status__next">{next.text}</p> : null}
-        {next && !next.stepId && reconnectLink && !pinned ? <div className="gstep__actions">{reconnectButton(next.vermilion)}</div> : null}
+        {(next && !next.stepId && reconnectLink && !pinned) || checkHere ? (
+          <div className="gstep__actions bank-status__actions">
+            {next && !next.stepId && reconnectLink && !pinned ? reconnectButton(next.vermilion) : null}
+            {checkHere ? checkNowButton : null}
+          </div>
+        ) : null}
+        {needYou ? (
+          <div className="bank-status__need" data-bank="need-you">
+            <p className="gp-status__small">{needYou}</p>
+            <Button variant="glass" size="sm" iconAfter="chevronDown" onClick={toAsks}>
+              {ANSWER_THEM}
+            </Button>
+          </div>
+        ) : null}
       </section>
 
       {card ? (
@@ -474,6 +535,8 @@ export function BankPage() {
         onLinked={() => checkApp("linked")}
         busy={busy}
         linkCheck={linkCheck}
+        answerPinned={pinned && nextAnswer ? nextAnswer.id : null}
+        quietKey={appIdDone && appIdSaved && !paste.trim()}
         keyBox={
           <BankKeyBox
             view={view}
@@ -486,12 +549,12 @@ export function BankPage() {
             onCheck={() => checkApp("check")}
             onPem={sendPem}
             onPemDeleted={pemDeleted}
-            checkText={checkText ?? view.key.check?.text ?? null}
+            check={check ?? (view.key.check ? { code: view.key.check.code, text: view.key.check.text } : null)}
           />
         }
       />
 
-      {anyLink ? <BankLinks view={view} onReconnect={(linkId) => void connect({ linkId })} connecting={connecting} /> : null}
+      {anyLink ? <BankLinks view={view} onReconnect={(linkId) => void connect({ linkId })} connecting={connecting} mainLinkId={next && !next.stepId && next.vermilion ? (next.linkId ?? null) : null} /> : null}
 
       <BankAsks view={view} crOn={crOn} />
 
@@ -505,13 +568,9 @@ export function BankPage() {
             When it&apos;s done
           </h2>
           <div className="done-panel__actions">
-            {anyLink ? (
-              <Button variant="glass" icon="retry" act="retry" loading={checking} onClick={checkNow}>
-                Check now
-              </Button>
-            ) : null}
+            {anyLink && !checkHere ? checkNowButton : null}
             {anyLink && view.canAddBank ? (
-              <Button variant="glass" icon="plus" loading={connecting === "new"} onClick={() => setPicker(true)}>
+              <Button variant="glass" icon="plus" loading={connecting === "new"} disabled={!!connecting && connecting !== "new"} onClick={() => setPicker(true)}>
                 Connect another bank
               </Button>
             ) : null}
@@ -538,7 +597,7 @@ export function BankPage() {
 
       {pinned ? (
         <div className="gp-pin" data-gp="pin">
-          {next.stepId ? mainButton(nextStep!, true) : reconnectButton(true)}
+          {nextAnswer ? answerButton(nextAnswer) : next?.stepId ? mainButton(nextStep!, true) : reconnectButton(true)}
         </div>
       ) : null}
 

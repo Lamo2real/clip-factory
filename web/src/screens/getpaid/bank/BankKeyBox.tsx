@@ -3,7 +3,7 @@
 // finds anywhere in what he pasted, shows it, and sends only that. The .pem's words are never kept in React state:
 // the boxes are emptied after the send and when the page closes, with no autocomplete or spellcheck.
 import { useEffect, useId, useRef, useState, type DragEvent } from "react";
-import type { BankView } from "../../../api/types.ts";
+import type { BankAppCode, BankView } from "../../../api/types.ts";
 import { Icon } from "../../../components/Icon.tsx";
 import { Button } from "../../../components/ui.tsx";
 import { BANK_GUIDE, NO_APP_ID, PEM_MAX_BYTES, PEM_SAVED, findAppId } from "../../../getpaid/bank.ts";
@@ -35,7 +35,7 @@ export function BankKeyBox({
   onCheck,
   onPem,
   onPemDeleted,
-  checkText,
+  check,
 }: {
   view: BankView;
   /** What he pasted in App ID (not secret: the page keeps it, so a pinned Save on a phone sends it). */
@@ -51,8 +51,11 @@ export function BankKeyBox({
   /** The .pem path: its words, and the file's name when it came as a file. */
   onPem: (pem: string, fileName?: string) => Promise<boolean>;
   onPemDeleted: () => unknown;
-  /** The latest check's sentence (Save's or Check again's answer, else the stored one). */
-  checkText: string | null;
+  /**
+   * The latest check (Save's or Check again's answer in this visit, else the stored one): its sentence, icon and
+   * `data-check` all come from the same answer, so a "down" answer never sits beside the stored check's green tick.
+   */
+  check: { code: BankAppCode; text: string } | null;
 }) {
   const id = useId();
   const saved = !!view.key.appIdHint;
@@ -103,11 +106,14 @@ export function BankKeyBox({
     if (f) void sendFile(f);
   }
 
-  const other = saved ? (
-    <Button variant="glass" size="md" icon="check" loading={busy === "save"} onClick={onSave} data-bank="save">
-      Save
-    </Button>
-  ) : null;
+  // Once an app ID is saved, Save is for a new one: it shows only once he has pasted something.
+  const other =
+    saved && paste.trim() ? (
+      <Button variant="glass" size="md" icon="check" loading={busy === "save"} onClick={onSave} data-bank="save">
+        Save
+      </Button>
+    ) : null;
+  const good = check?.code === "ok" || check?.code === "not_active";
 
   return (
     <div className="bank-key" data-bank="key-box">
@@ -147,11 +153,11 @@ export function BankKeyBox({
         {pinned ? null : <KeyMain saved={saved} primary={primary} busy={busy === "pem" ? null : busy} onSave={onSave} onCheck={onCheck} />}
         {other}
       </div>
-      {checkText ? (
-        <p className="gp-result bank-key__check" role="status" data-check={view.key.check?.code ?? ""}>
-          <Icon name={view.key.check?.code === "ok" || view.key.check?.code === "not_active" ? "checkCircle" : "info"} size={18} />
+      {check?.text ? (
+        <p className="gp-result bank-key__check" role="status" data-check={check.code}>
+          <Icon name={good ? "checkCircle" : "info"} size={18} />
           <span>
-            <Rich text={checkText} />
+            <Rich text={check.text} />
           </span>
         </p>
       ) : null}

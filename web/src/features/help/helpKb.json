@@ -3644,7 +3644,7 @@
         "whop sent",
         "what arrived"
       ],
-      "answer": "Google and Whop tell Clip Factory what they sent. On **Money**, **All your money** shows it under each place, and **Sent to your bank, so far** has one total for each money type. Dollars and kronor are never added together. TikTok, Instagram, Facebook and X don't tell apps, so they say **Not available**. What really reached your bank is in **Your bank**, once it is set up.",
+      "answer": "Google and Whop tell Clip Factory what they sent. On **Money**, **All your money** shows it under each place, and **Sent to your bank, so far** has one total for each money type, never added together. TikTok, Instagram, Facebook and X don't tell apps: **Not available**. To see what arrived, look in your bank's app, or in **Your bank** once it is set up.",
       "steps": [
         "Tap **Money**. Find **Sent to your bank, so far** under **All your money**.",
         "Under each place in **All your money**, a small line says what that place sent so far, like **Sent to your bank by Google**.",
@@ -3905,14 +3905,14 @@
         "what my bank got",
         "bank accounts total"
       ],
-      "answer": "Once **Your bank** is set up, Clip Factory reads what your bank booked, once a day. On **Money**, **Reached your bank, so far** shows what each app paid in, with one total for kronor, one for dollars, and so on. They are never added together. YouTube and Whop payments are matched to their own records. For the others you tap once to say which app paid.",
+      "answer": "Until **Your bank** is set up, look in your bank's app. Once it is, Clip Factory reads what your bank booked, once a day. On **Money**, **Reached your bank, so far** shows what each app paid in, one total for each money type, never added together. YouTube and Whop payments are matched to their own records. For the others you tap once to say which app paid.",
       "steps": [
         "Tap **Money**. Find **Reached your bank, so far** under **Sent to your bank, so far**.",
         "Each app has its own line, then **In total**.",
         "Instagram and Facebook can be one line: Meta pays them in one payment.",
         "Payments that need you: tap **Answer them**.",
         "Each app's page in **Get paid** also shows its own line.",
-        "Until this is switched on, Clip Factory can't see your bank."
+        "Until **Your bank** is set up, Clip Factory can't see your bank: look in your bank's app."
       ],
       "actions": [
         {

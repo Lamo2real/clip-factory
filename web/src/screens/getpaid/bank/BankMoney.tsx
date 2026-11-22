@@ -33,10 +33,13 @@ export function cardReachedLines(view: BankView): string[] {
   return view.reached.totals.slice(0, 2).map((t) => `${REACHED}: ${formatMoney(t.amountMicros, t.currency)} so far`);
 }
 
-/** "2 payments need you" (the card; the page and Money say the server's `needYou`). */
+/**
+ * "2 payments need you" (the card). Its number is the server's own, from `reached.needYou` ("2 bank payments need
+ * you."), so the card, the bank page and Money always say the same number; none when the server says none.
+ */
 export function needYouCard(view: BankView): string | null {
-  const n = view.asks.filter((a) => !a.notSure).length + (view.asksMore ?? 0);
-  return n ? `${n} ${n === 1 ? "payment needs" : "payments need"} you` : null;
+  const n = Number(/^(\d+)\b/.exec(view.reached.needYou ?? "")?.[1] ?? 0);
+  return n > 0 ? `${n} ${n === 1 ? "payment needs" : "payments need"} you` : null;
 }
 
 /** The line under a "Sent to your bank by Google/Whop" row the bank paired with (§40.5.9 `pairs`). */
@@ -112,7 +115,8 @@ function Words({ view, needYou }: { view: BankView; needYou?: ReactNode }) {
     <>
       {r.totals.length ? <p className="money-tag bank-reached__tag">{r.tag}</p> : null}
       {r.twoMonies ? <p className="bank-reached__small">{r.twoMonies}</p> : null}
-      {r.notYet ? <p className="bank-reached__small">{r.notYet}</p> : null}
+      {/* With nothing matched yet, `empty` already says it: "No money from YouTube, TikTok, … yet" would say it twice. */}
+      {r.notYet && r.totals.length ? <p className="bank-reached__small">{r.notYet}</p> : null}
       {r.since ? <p className="bank-reached__small">{r.since}</p> : null}
       {r.needYou ? (
         <div className="bank-reached__need">

@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { api } from "../api/index.ts";
 import { ApiError, friendlyMessage } from "../api/errors.ts";
-import type { BankView } from "../api/types.ts";
+import type { BankAsk, BankView } from "../api/types.ts";
 import { onLiveSignal } from "./live.ts";
 
 /** How long live news waits before GET /v1/getpaid/bank is read again (a run writes many items at once). */
@@ -21,6 +21,11 @@ export type BankLoad =
 let snapshot: BankLoad = { state: "loading", view: null };
 /** Bumped by resetBank: an answer to a read from before it (another user, a test) is dropped. */
 let generation = 0;
+/**
+ * Bumped by each of his own changes (putBank, patchBank): a read that was already on its way when he changed
+ * something answers with the view from before it, so that answer is dropped and read again (the last word is fresh).
+ */
+let writes = 0;
 let started = false;
 let inFlight: Promise<void> | null = null;
 let again = false;
@@ -45,13 +50,18 @@ export function reloadBank(): Promise<void> {
     return inFlight;
   }
   const mine = generation;
+  const wrote = writes;
   inFlight = (async () => {
     try {
       const view = await api().getBank();
-      if (mine === generation) set(view.on ? { state: "ok", view } : { state: "off", view: null });
+      if (mine !== generation) return;
+      // He changed something while this read was on its way: its view is older than his, so read once more.
+      if (wrote !== writes) again = true;
+      else set(view.on ? { state: "ok", view } : { state: "off", view: null });
     } catch (e) {
       if (mine !== generation) return;
-      if (e instanceof ApiError && e.status === 404) set({ state: "off", view: null });
+      if (wrote !== writes) again = true;
+      else if (e instanceof ApiError && e.status === 404) set({ state: "off", view: null });
       else set({ state: "error", view: snapshot.view, error: friendlyMessage(e) });
     } finally {
       if (mine === generation) inFlight = null;
@@ -95,12 +105,16 @@ function ensureStarted() {
 
 /** Puts the server's answer in the store (every bank route answers with the whole view). */
 export function putBank(view: BankView): void {
-  if (view.on) set({ state: "ok", view });
+  if (!view.on) return;
+  writes++;
+  set({ state: "ok", view });
 }
 
 /** A newer copy straight away (an answer's card leaving at once), before the server's answer. */
 export function patchBank(fn: (v: BankView) => BankView): void {
-  if (snapshot.view) set({ ...snapshot, view: fn(snapshot.view) } as BankLoad);
+  if (!snapshot.view) return;
+  writes++;
+  set({ ...snapshot, view: fn(snapshot.view) } as BankLoad);
 }
 
 /** The store as it is now (tests, and code outside React). */
@@ -120,6 +134,7 @@ export function resetBank(): void {
   again = false;
   connectSentAt = null;
   firstSent.clear();
+  undone.clear();
   snapshot = { state: "loading", view: null };
   for (const fn of listeners) fn();
 }
@@ -171,6 +186,28 @@ export function sendFirstRead(key: string): boolean {
   return true;
 }
 
+// ---------- An answer's Undo puts the question back as it was ----------
+
+/**
+ * The questions he answered with a place and then undid (memory only, this tab). The server's `not_this` brings a
+ * row back with no suggestion (§40.5.8), so the card would ask a harder question than the one he answered. Until he
+ * answers again, the card shows the question as it was: the same words and the same green yes, which then sends
+ * `place` with that suggestion (the row has none of its own any more).
+ */
+const undone = new Map<string, BankAsk>();
+export function rememberUndone(ask: BankAsk): void {
+  undone.set(ask.depositId, ask);
+}
+export function forgetUndone(depositId: string): void {
+  undone.delete(depositId);
+}
+/** The question as he first saw it, while the server's copy of it has no suggestion. */
+export function asItWas(ask: BankAsk): BankAsk {
+  const was = undone.get(ask.depositId);
+  if (!was || ask.suggested || ask.kind !== "place" || !was.suggested) return ask;
+  return { ...ask, suggested: was.suggested, title: was.title, line: was.line, ...(was.yesLabel ? { yesLabel: was.yesLabel } : {}) };
+}
+
 /** Every bank this view knows of (not stopped), for "Already here" and the reconnect. */
 export function liveLinks(view: BankView): BankView["links"] {
   return view.links.filter((l) => l.status !== "stopped");
@@ -185,6 +222,8 @@ export interface Held {
   send: () => void;
   /** Undo: never send it. */
   drop: () => void;
+  /** Send it now and take its toast away quietly (a newer answer's toast takes its place). */
+  flush: () => void;
 }
 
 /**
@@ -226,6 +265,11 @@ export function useHeld(): (run: () => void) => Held {
       },
       drop: () => {
         pending.current.delete(key);
+      },
+      flush: () => {
+        if (!pending.current.delete(key)) return;
+        abort.abort();
+        run();
       },
     };
   }, []);

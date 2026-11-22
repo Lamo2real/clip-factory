@@ -102,7 +102,24 @@ export function GetPaidList() {
  * need you" when there are questions. No vermilion.
  */
 export function YourBank() {
-  const view = bankView(useBank());
+  const load = useBank();
+  const view = bankView(load);
+  // Not read yet: the card's place and name, and a line still loading; never "Clip Factory can't see your bank" for
+  // a moment before it turns out it can.
+  if (load.state === "loading")
+    return (
+      <section className="gp-bank glass" aria-labelledby="gp-bank-title" data-bank="loading" data-help="getpaid-bank-card" aria-busy="true">
+        <span className="gp-bank__icon" aria-hidden="true">
+          <Icon name="card" size={26} />
+        </span>
+        <div className="gp-bank__text">
+          <h2 className="gp-section__title" id="gp-bank-title">
+            Your bank
+          </h2>
+          <Skeleton className="line-skel" />
+        </div>
+      </section>
+    );
   if (!view)
     return (
       <section className="gp-bank glass" aria-labelledby="gp-bank-title" data-bank="none" data-help="getpaid-bank-card">
