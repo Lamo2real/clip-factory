@@ -10,6 +10,8 @@ import { perfFromPost } from "../src/lib/liveCache.ts";
 import {
   canPostYourselfInstead,
   canSendToMac,
+  macInsteadOk,
+  macMayBeOnTikTok,
   helperLine,
   MAC_MAY_HAVE_POSTED,
   MAC_NOT_POSTING,
@@ -52,6 +54,9 @@ describe("the TikTok row's words", () => {
     expect(macRowWords(mac({ source: "auto" }), { helper: null, autoPostOn: true, now: NOW })).toBe("Waiting for your Mac · set up your Mac first");
     // Only an auto-posting run's post waits for auto-posting.
     expect(macRowWords(mac({ source: "sent" }), { helper: null, autoPostOn: false, now: NOW })).toBe("Waiting for your Mac · set up your Mac first");
+    // The switch is off: nothing goes to the Mac, whatever else is true.
+    expect(macRowWords(mac({ source: "auto" }), { helper: null, autoPostOn: false, macOn: false, now: NOW })).toBe("Waiting for your Mac · it's switched off");
+    expect(macRowWords(mac(), { helper: helper(new Date(NOW).toISOString()), macOn: true, now: NOW })).toBe("Waiting for your Mac");
   });
 
   it("working, with each step's words", () => {
@@ -106,6 +111,14 @@ describe("which buttons show", () => {
     expect(canPostYourselfInstead([youtube, macPost()])).toBe(true);
     expect(canPostYourselfInstead([macPost({ state: "stopped" })])).toBe(true);
     expect(canPostYourselfInstead([macPost({ state: "working" })])).toBe(false);
+    // Once the Mac pressed Post it may be on TikTok: never taken back; I posted it and Not on TikTok instead.
+    const pressed = { state: "stopped" as const, pressedAt: "2026-11-22T14:10:00.000Z" };
+    expect(canPostYourselfInstead([macPost(pressed)])).toBe(false);
+    expect(macInsteadOk(pressed)).toBe(false);
+    expect(macMayBeOnTikTok(pressed)).toBe(true);
+    expect(macMayBeOnTikTok({ state: "stopped" })).toBe(false);
+    expect(macMayBeOnTikTok({ state: "working", pressedAt: pressed.pressedAt })).toBe(false);
+    expect(macTryAgainLabel(pressed)).toBe("It's not on TikTok, try again");
     expect(canPostYourselfInstead([youtube])).toBe(false);
     expect(canPostYourselfHere(clip("posted"), { status: "mac" })).toBe(false);
     // Posted by his Mac: his own post (by: "you").
@@ -186,6 +199,34 @@ describe("the mock follows the API", () => {
     const status = await api.tiktokMacStatus();
     expect(status.helper).toBeNull();
     expect(status.queue.find((j) => j.clipId === second!.clipId)).toMatchObject({ source: "upload", state: "waiting", privacy: "PUBLIC_TO_EVERYONE", comment: true, duet: true, stitch: true });
+  });
+
+  it("an Upload whose sheet said Only me still asks the Mac for Everyone, and done says public", async () => {
+    const { store, api } = start();
+    for (const p of ["tiktok"]) knobs().setup.finish(p);
+    knobs().setup.setAudit(false);
+    await api.putSettings({ tiktokMac: { on: true } });
+    const c = store.clips.find((x) => x.status === "review" && !x.campaignId)!;
+    const onlyMe = { privacyLevel: "SELF_ONLY", disableComment: true, disableDuet: true, disableStitch: true, brandContent: false, brandOrganic: false };
+    await api.confirmClip(c.clipId, undefined, onlyMe, ["tiktok"]);
+    const job = (await api.tiktokMacStatus()).queue.find((j) => j.clipId === c.clipId)!;
+    expect(job).toMatchObject({ privacy: "PUBLIC_TO_EVERYONE", comment: true, duet: true, stitch: true, attempt: 0 });
+    expect(knobs().mac.claim(c.clipId).attempt).toBe(1);
+    expect(tiktokOf(knobs().mac.done(c.clipId))).toMatchObject({ via: "mac", privacy: "public" });
+  });
+
+  it("Take it back after the Mac pressed Post is refused; I posted it still works", async () => {
+    const { store, api } = start();
+    await api.putSettings({ tiktokMac: { on: true } });
+    const c = store.clips.find((x) => canSendToMac(x, store.posts.filter((p) => p.clipId === x.clipId)))!;
+    await api.sendToMac([c.clipId]);
+    const m = knobs().mac;
+    m.claim(c.clipId);
+    m.step(c.clipId, "pressing");
+    m.stopped(c.clipId, "Timed out.");
+    await expect(api.takeBackFromMac(c.clipId)).rejects.toThrow(MAC_MAY_HAVE_POSTED);
+    expect(m.post(c.clipId)?.status).toBe("mac");
+    expect(tiktokOf(await api.markTikTokPosted(c.clipId))).toMatchObject({ status: "posted", by: "you" });
   });
 
   it("claim, steps and done: posted by your Mac, through the one TikTok post", async () => {
@@ -270,6 +311,21 @@ describe("the mock follows the API", () => {
     await api.putSettings({ tiktokMac: { on: false } });
     expect((await api.tiktokMacStatus()).queue).toEqual([]);
     expect(() => knobs().mac.claim(c.clipId)).toThrow(ApiError);
+  });
+
+  it("while the switch is off, auto-posting lists his Mac's waiting and stopped posts for Post it yourself instead", async () => {
+    const { store, api } = start();
+    await api.putSettings({ tiktokMac: { on: true } });
+    const c = store.clips.find((x) => canSendToMac(x, store.posts.filter((p) => p.clipId === x.clipId)))!;
+    c.auto = { runId: "r#scheduled", at: "2026-11-22T13:00:00.000Z" };
+    await api.sendToMac([c.clipId]);
+    expect((await api.autoPostStatus()).tiktokYourself.map((t) => t.clipId)).not.toContain(c.clipId);
+    await api.putSettings({ tiktokMac: { on: false } });
+    expect((await api.autoPostStatus()).tiktokYourself.find((t) => t.clipId === c.clipId)).toMatchObject({ mac: true });
+    // Pressed Post: it may be on TikTok, so it is not offered.
+    const p = store.posts.find((x) => x.clipId === c.clipId && x.platform === "tiktok")!;
+    p.mac = { ...p.mac!, state: "stopped", pressedAt: "2026-11-22T13:05:00.000Z" };
+    expect((await api.autoPostStatus()).tiktokYourself.map((t) => t.clipId)).not.toContain(c.clipId);
   });
 
   it("a campaign clip or a Private test never goes to the Mac", async () => {

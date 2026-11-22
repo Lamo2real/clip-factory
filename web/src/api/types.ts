@@ -362,6 +362,8 @@ export interface MacJob {
   step?: MacStep;
   claimedAt?: string;
   pressedAt?: string;
+  /** How many claims the post had (the server's macAttempt); the helper may send it back with step, stopped and done. */
+  attempt: number;
 }
 
 /** GET /v1/tiktok/mac (§47.3). */
@@ -431,7 +433,8 @@ export interface AutoPostStatus {
   /** At most 20, newest first: auto-posted posts that did not go up. */
   failed: { postId: string; clipId: string; hook: string; platform: Platform; error: string; at: string }[];
   /** At most 10: auto-posted clips (not private tests) not on TikTok for everyone yet. */
-  tiktokYourself: { clipId: string; hook: string; coverUrl?: string }[];
+  /** `mac`: his Mac's post, listed while Your Mac posts TikTok is off (it waits or stopped): Post it yourself instead (§47.2). */
+  tiktokYourself: { clipId: string; hook: string; coverUrl?: string; mac?: true }[];
 }
 
 /** §32.3: "Clips ready", "It stopped" and "Picked up" are on by default; "Every step" is off (each one shows on the phone). */

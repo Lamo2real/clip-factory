@@ -9,7 +9,13 @@ import { autoPostOf, floorHour, nextFullHour, perDay } from "../../lib/autopost.
 import { PLATFORM_ORDER } from "../../lib/format.ts";
 import { campaignCardOptions, cardOptionsFrom, optionsFor, presetOf } from "../../lib/preset.ts";
 import { tiktokState } from "../../lib/tiktokYourself.ts";
-import { macOn } from "../../lib/tiktokMac.ts";
+import { macInsteadOk, macOn } from "../../lib/tiktokMac.ts";
+
+/** A Mac post he may take back now (waits or stopped, Post never pressed). */
+function macHandable(posts: readonly Post[]): boolean {
+  const mac = posts.find((p) => p.platform === "tiktok" && p.status === "mac")?.mac;
+  return !!mac && macInsteadOk(mac);
+}
 
 const HOUR = 3_600_000;
 const MINUTE = 60_000;
@@ -391,11 +397,24 @@ export function autoPostMock(deps: AutoPostDeps) {
           .map((p) => ({ postId: p.postId, clipId: p.clipId, hook: hookOf(p.clipId), platform: p.platform, error: p.error ?? "", at: clips.find((c) => c.clipId === p.clipId)?.auto?.at ?? "" }))
           .sort((a, b) => b.at.localeCompare(a.at) || b.postId.localeCompare(a.postId))
           .slice(0, 20),
+        // §47.2: while Your Mac posts TikTok is off, his Mac's posts that wait or stopped (never one it is posting or
+        // pressed Post on) are his to post again: Post it yourself instead (`mac: true`).
         tiktokYourself: clips
-          .filter((c) => c.auto && !c.auto.test && tiktokState(posts.filter((p) => p.clipId === c.clipId)) === "offer")
+          .filter((c) => {
+            if (!c.auto || c.auto.test) return false;
+            const own = posts.filter((p) => p.clipId === c.clipId);
+            const state = tiktokState(own);
+            if (state === "mac") return !macOn(deps.settings()) && macHandable(own);
+            return state === "offer";
+          })
           .sort((a, b) => b.auto!.at.localeCompare(a.auto!.at))
           .slice(0, 10)
-          .map((c) => ({ clipId: c.clipId, hook: c.hook, ...(c.coverUrl ? { coverUrl: c.coverUrl } : {}) })),
+          .map((c) => ({
+            clipId: c.clipId,
+            hook: c.hook,
+            ...(c.coverUrl ? { coverUrl: c.coverUrl } : {}),
+            ...(tiktokState(posts.filter((p) => p.clipId === c.clipId)) === "mac" ? { mac: true as const } : {}),
+          })),
       });
     },
     /** POST /v1/autopost/run (§46.9): one run now, inline, whatever the switch says; one a minute. */

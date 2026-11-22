@@ -746,7 +746,9 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         created.splice(PLATFORM_ORDER.filter((p) => p === "youtube" && created.some((x) => x.platform === p)).length, 0, made);
       }
       store.posts.push(...created);
-      for (const p of created) if (p.platform === "tiktok" && (p.status === "queued" || p.status === "mac") && tiktok) postOptions.set(p.postId, clone(tiktok));
+      for (const p of created) if (p.platform === "tiktok" && p.status === "queued" && tiktok) postOptions.set(p.postId, clone(tiktok));
+      // Every Mac post asks the Mac for My settings' choices (Everyone, all three on), whatever the sheet said (§47.1).
+      for (const p of created) if (p.platform === "tiktok" && p.status === "mac") postOptions.set(p.postId, presetChoices(store.settings));
       for (const p of created) {
         const own = options?.[p.platform as keyof ClipPostOptions];
         if (own) clipOptions.set(p.postId, clone(own));

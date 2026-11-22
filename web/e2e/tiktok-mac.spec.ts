@@ -159,6 +159,9 @@ test("library: the TikTok row as the Mac waits, works, stops, tries again and po
   await expect(row).toContainText("Your Mac is posting it · Posting");
   await mac.stopped(page, job.clipId, "Timed out.");
   await expect(row).toContainText(`Your Mac stopped: ${PRESSED}`);
+  // It may be on TikTok: never taken back. I posted it, or It's not on TikTok, try again.
+  await expect(row.getByRole("button", { name: "Post it on TikTok yourself instead" })).toHaveCount(0);
+  await expect(row.getByRole("button", { name: "I posted it on TikTok" })).toBeVisible();
   await row.getByRole("button", { name: "It's not on TikTok, try again" }).click();
   await expect(row.locator(".post__status")).toHaveText("Waiting for your Mac");
 
@@ -187,6 +190,38 @@ test("library: Post it yourself instead takes it back from the Mac and opens the
   await sheet.getByRole("button", { name: "I posted it" }).click();
   await expect(sheet).toHaveCount(0);
   await expect(tiktokRow(page, job.clipId)).toContainText("Posted by you · Everyone");
+});
+
+test("library: after the Mac pressed Post, I posted it marks it as his", async ({ page }) => {
+  await page.goto("/");
+  await settle(page);
+  const job = await sendAll(page);
+  await go(page, "/library");
+  await mac.claim(page, job.clipId);
+  await mac.step(page, job.clipId, "pressing");
+  await mac.stopped(page, job.clipId, "Timed out.");
+  const row = tiktokRow(page, job.clipId);
+  await row.getByRole("button", { name: "I posted it on TikTok" }).click();
+  const sheet = page.getByRole("dialog", { name: "Add the TikTok link" });
+  await expect(sheet).toBeVisible();
+  await sheet.getByRole("textbox").fill(LINK);
+  await sheet.getByRole("button", { name: "Save the link" }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(tiktokRow(page, job.clipId).locator(".post__status")).toHaveText(/^Posted by you · Everyone/);
+});
+
+test("library: with the switch off the row says so, and Post it yourself instead still works", async ({ page }) => {
+  await page.goto("/");
+  await settle(page);
+  const job = await sendAll(page);
+  const sw = page.getByRole("switch", { name: "My Mac posts my TikTok clips" });
+  await sw.click();
+  await expect(sw).toHaveAttribute("aria-checked", "false");
+  await go(page, "/library");
+  const row = tiktokRow(page, job.clipId);
+  await expect(row.locator(".post__status")).toHaveText("Waiting for your Mac · it's switched off");
+  await row.getByRole("button", { name: "Post it on TikTok yourself instead" }).click();
+  await expect(page.getByRole("dialog", { name: "Post it on TikTok yourself" })).toBeVisible();
 });
 
 test("review: the hint says the Mac posts it, and Uploaded just now follows the Mac", async ({ page }) => {

@@ -20,6 +20,8 @@ export const MAC_STOP_LINE = "To stop it, turn the switch off. Your Mac stops at
 /** What the server keeps as the reason once the Mac pressed Post but could not confirm it (§47.3). */
 export const MAC_PRESSED_REASON = "Your Mac pressed Post but couldn't confirm it. Check your TikTok: if it's there, tap I posted it.";
 export const MAC_POSTED = "Posted by your Mac · Everyone";
+/** A post the Mac set to anything but Everyone (never one of its own choices, §47.1; the server says so). */
+export const MAC_POSTED_PRIVATE = "Posted by your Mac · Only you";
 
 // The server's refusals (§47.2, §47.3), word for word.
 export const MAC_WORKING = "Your Mac is posting it right now. Wait a minute.";
@@ -64,20 +66,23 @@ export interface MacRowContext {
   helper?: MacHelper | null;
   /** Auto-posting is on (an auto-posting run's Mac post waits while it is off, §47.2). */
   autoPostOn?: boolean;
+  /** Your Mac posts TikTok is on: while it is off nothing goes to the Mac (§47.4). Unknown: no extra words. */
+  macOn?: boolean;
   now?: number;
 }
 
 /**
  * The TikTok row's words for a Mac post (§47.4). Waiting: "Waiting for your Mac", plus why it may wait longer (one
- * reason: auto-posting is off, else the Mac never checked in, else when it was last seen if that is 10 minutes ago or
- * more). Working: "Your Mac is posting it · {step}". Stopped: "Your Mac stopped: {reason}".
+ * reason: the switch is off, else auto-posting is off, else the Mac never checked in, else when it was last seen if
+ * that is 10 minutes ago or more). Working: "Your Mac is posting it · {step}". Stopped: "Your Mac stopped: {reason}".
  */
 export function macRowWords(mac: PostMac, ctx: MacRowContext = {}): string {
   const now = ctx.now ?? Date.now();
   if (mac.state === "working") return `Your Mac is posting it · ${MAC_STEP_WORDS[mac.step ?? "video"]}`;
   if (mac.state === "stopped") return mac.reason ? `Your Mac stopped: ${mac.reason}` : "Your Mac stopped.";
   let more = "";
-  if (mac.source === "auto" && ctx.autoPostOn === false) more = " · auto-posting is off";
+  if (ctx.macOn === false) more = " · it's switched off";
+  else if (mac.source === "auto" && ctx.autoPostOn === false) more = " · auto-posting is off";
   else if (ctx.helper === null) more = " · set up your Mac first";
   else if (ctx.helper && now - Date.parse(ctx.helper.seenAt) >= MAC_STALE_MS) more = ` · your Mac was last seen ${timeWords(ctx.helper.seenAt, now)}`;
   return `Waiting for your Mac${more}`;
@@ -93,10 +98,23 @@ export function macTryAgainLabel(mac: Pick<PostMac, "pressedAt">): string {
   return mac.pressedAt ? "It's not on TikTok, try again" : "Try again";
 }
 
-/** Post it yourself instead: on a Mac post that waits or stopped; hidden while the Mac works on it. */
+/**
+ * Post it yourself instead: on a Mac post that waits or stopped; hidden while the Mac works on it, and once it pressed
+ * Post (it may be on TikTok: then he says so with I posted it, or that it is not with "It's not on TikTok, try again").
+ */
 export function canPostYourselfInstead(posts: readonly Post[]): boolean {
   const p = macPost(posts);
-  return !!p && (p.mac.state === "waiting" || p.mac.state === "stopped");
+  return !!p && macInsteadOk(p.mac);
+}
+
+/** The same rule for one Mac post (the clip page reads `PlatformPerformance.mac`). */
+export function macInsteadOk(mac: Pick<PostMac, "state" | "pressedAt">): boolean {
+  return (mac.state === "waiting" || mac.state === "stopped") && !mac.pressedAt;
+}
+
+/** Stopped after the Mac pressed Post: offer I posted it (the §42 link box) beside "It's not on TikTok, try again". */
+export function macMayBeOnTikTok(mac: Pick<PostMac, "state" | "pressedAt">): boolean {
+  return mac.state === "stopped" && !!mac.pressedAt;
 }
 
 /**

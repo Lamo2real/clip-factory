@@ -67,6 +67,8 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
   let helper: (MacHelper & { device: string }) | null = null;
   // Internal per-post fields: who claimed it and its heartbeat, and what a converted post was before.
   const claims = new Map<string, { device: string; beatAt: number }>();
+  // How many claims each Mac post had (the API's macAttempt, MacJob.attempt).
+  const attempts = new Map<string, number>();
   const before = new Map<string, Post>();
   const beforeOptions = new Map<string, TikTokPostOptions | undefined>();
   const madeForMac = new Set<string>();
@@ -117,6 +119,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       ...(mac.step ? { step: mac.step } : {}),
       ...(mac.claimedAt ? { claimedAt: mac.claimedAt } : {}),
       ...(mac.pressedAt ? { pressedAt: mac.pressedAt } : {}),
+      attempt: attempts.get(p.postId) ?? 0,
     };
   }
 
@@ -171,6 +174,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       delete p.mac.stoppedAt;
       delete p.mac.reason;
       claims.set(p.postId, { device, beatAt: now });
+      attempts.set(p.postId, (attempts.get(p.postId) ?? 0) + 1);
       deps.publishPost(p);
       return job(p);
     },
@@ -196,6 +200,8 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       }
       const mac = macOf(clipId);
       fromDevice(mac, device, ["working", "stopped"]);
+      // What the Mac set: Everyone (every Mac post's choice), else only him (§47.3).
+      const everyone = (deps.options.get(mac.postId)?.privacyLevel ?? "PUBLIC_TO_EVERYONE") === "PUBLIC_TO_EVERYONE";
       claims.delete(mac.postId);
       before.delete(mac.postId);
       beforeOptions.delete(mac.postId);
@@ -207,7 +213,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
         status: "posted",
         by: "you",
         via: "mac",
-        privacy: "public",
+        privacy: everyone ? "public" : "private",
         postedAt: iso(now),
         perfCheckAt: iso(now + 48 * 3_600_000),
         url: link ?? `https://www.tiktok.com/@lamo.clips/video/77106448116021${String(now).slice(-5)}`,
@@ -291,6 +297,8 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       const c = clip(clipId);
       const p = macOf(clipId);
       if (p.mac.state === "working") throw conflict(MAC_WORKING);
+      // The Mac pressed Post: it may be on TikTok, so it is never taken back (I posted it, or not on TikTok, try again).
+      if (p.mac.pressedAt) throw conflict(MAC_MAY_HAVE_POSTED);
       claims.delete(p.postId);
       const was = before.get(p.postId);
       if (was) {

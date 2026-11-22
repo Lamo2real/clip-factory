@@ -25,10 +25,10 @@ import { ClipStatusPill } from "../jobs/JobDetail.tsx";
 import { useSetup } from "../settings/setup/useSetup.ts";
 import { canPostYourself, failedForPublicAccount, postError } from "../../lib/tiktokYourself.ts";
 import { PostYourself, PostYourselfButton } from "./PostYourself.tsx";
-import { canPostYourselfInstead, MAC_POSTED, macRowWords, type MacRowContext } from "../../lib/tiktokMac.ts";
+import { canPostYourselfInstead, MAC_POSTED, MAC_POSTED_PRIVATE, macMayBeOnTikTok, macOn, macRowWords, type MacRowContext } from "../../lib/tiktokMac.ts";
 import { useSession } from "../../app/session.tsx";
 import { useTikTokMac } from "../settings/TikTokMacBranch.tsx";
-import { MacTryAgain, PostYourselfInstead } from "./MacButtons.tsx";
+import { MacPostedIt, MacTryAgain, PostYourselfInstead } from "./MacButtons.tsx";
 
 interface LibraryData {
   clips: Clip[];
@@ -113,7 +113,11 @@ function AllClips() {
   // Your Mac posts TikTok (§47.4): a waiting Mac post says when the Mac was last seen, or that it never checked in.
   const { me } = useSession();
   const mac = useTikTokMac(!!data?.posts.some((p) => p.platform === "tiktok" && p.status === "mac"));
-  const macCtx: MacRowContext = { helper: mac.status ? mac.status.helper : undefined, autoPostOn: me?.settings.autoPost?.on === true };
+  const macCtx: MacRowContext = {
+    helper: mac.status ? mac.status.helper : undefined,
+    autoPostOn: me?.settings.autoPost?.on === true,
+    macOn: me ? macOn(me.settings) : undefined,
+  };
 
   // Live: kept clips arrive, posts change state and get their numbers, new learnings appear.
   useLiveEvents(
@@ -322,7 +326,10 @@ function LibraryCard({
   const onlyPublicTikTok = failedPosts.length > 0 && failedPosts.every(failedForPublicAccount);
   // A row's state words: posted by his Mac or by him (§42, §47), what his Mac is doing, or the post's own state.
   const rowWords = (p: Post): string => {
-    if (p.via === "mac") return p.url ? MAC_POSTED : `${MAC_POSTED} · add the link to count views`;
+    if (p.via === "mac") {
+      const words = p.privacy === "private" ? MAC_POSTED_PRIVATE : MAC_POSTED;
+      return p.url ? words : `${words} · add the link to count views`;
+    }
     if (p.by === "you") return p.url ? "Posted by you · Everyone" : "Posted by you · Everyone · add the link to count views";
     if (p.status === "mac" && p.mac) return macRowWords(p.mac, macCtx);
     if (canPostNow(p)) return "Ready to post";
@@ -347,6 +354,8 @@ function LibraryCard({
       {p.by === "you" && !p.url ? <PostYourselfButton clip={clip} onMarked={marked} linkOnly postedAt={p.postedAt} /> : null}
       {/* His Mac stopped (§47.4): Try again, or post it himself instead. Nothing while the Mac is posting it. */}
       {p.status === "mac" && p.mac?.state === "stopped" ? <MacTryAgain clip={clip} mac={p.mac} onKept={onKept} /> : null}
+      {/* It may be on TikTok (the Mac pressed Post): never taken back; he marks it as posted instead (§47.3). */}
+      {p.status === "mac" && p.mac && macMayBeOnTikTok(p.mac) ? <MacPostedIt clip={clip} mac={p.mac} onMarked={marked} /> : null}
       {p.platform === "tiktok" && instead ? (
         <PostYourselfInstead
           clip={clip}

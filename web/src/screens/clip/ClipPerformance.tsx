@@ -25,7 +25,8 @@ import { sendGroups, useSubmissions } from "../../lib/contentRewards.ts";
 import { CampaignsFold, ClipFit, useClipPageFit, useWaitingClip, WaitingClipFit } from "./ClipFit.tsx";
 import { canPostYourselfHere } from "../../lib/tiktokYourself.ts";
 import { PostYourself, PostYourselfButton } from "../library/PostYourself.tsx";
-import { PostYourselfInstead } from "../library/MacButtons.tsx";
+import { MacPostedIt, PostYourselfInstead } from "../library/MacButtons.tsx";
+import { macInsteadOk, macMayBeOnTikTok } from "../../lib/tiktokMac.ts";
 
 /** Re-renders every `ms` so "3 min ago" and "Next check in 4 min" stay true. */
 export function useNow(ms = 15_000): number {
@@ -433,7 +434,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
               <PostYourselfButton clip={perf.clip} onMarked={() => void load()} size="md" />
             ) : null}
             {/* His Mac posts it (§47.4): while it waits or stopped he can post it himself instead; not while it works. */}
-            {perf.posts.some((p) => p.platform === "tiktok" && p.status === "mac" && p.mac && p.mac.state !== "working") ? (
+            {perf.posts.some((p) => p.platform === "tiktok" && p.status === "mac" && p.mac && macInsteadOk(p.mac)) ? (
               <PostYourselfInstead
                 clip={perf.clip}
                 size="md"
@@ -443,6 +444,11 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
                 }}
               />
             ) : null}
+            {/* The Mac pressed Post but could not confirm it: I posted it, never taken back (§47.3). */}
+            {(() => {
+              const mac = perf.posts.find((p) => p.platform === "tiktok" && p.status === "mac")?.mac;
+              return mac && macMayBeOnTikTok(mac) ? <MacPostedIt clip={perf.clip} mac={mac} size="md" onMarked={() => void load().catch(() => undefined)} /> : null;
+            })()}
             {handOff ? <PostYourself clip={perf.clip} onMarked={() => void load().catch(() => undefined)} onClose={() => setHandOff(false)} /> : null}
             {/* Not a live region: the clock re-renders it every minute. New numbers are announced by the toast. */}
             {/* The span is what the window look tints (see-through, glass.css), so the tint hugs the words. */}
