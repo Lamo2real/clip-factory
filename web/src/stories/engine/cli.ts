@@ -8,10 +8,17 @@
 //   deno run --allow-read cli.ts text <script.json>            → TextEvent[]
 //   deno run --allow-read cli.ts audio <script.json>           → AudioEvent[]
 //   deno run --allow-read cli.ts catalog                       → {"engine": n, "catalog": CATALOG, "limits": {...},
-//                                                                 "rules": [{id, text}], "propStates": {...}}
+//                                                                 "rules": [{id, text}], "propStates": {...},
+//                                                                 "formats": [{aspect, resolution, width, height,
+//                                                                 label, safe}]} (the six sizes, the default first)
 //   deno run --allow-read cli.ts version                       → {"engine": n}
 //   deno run --allow-read cli.ts character <character.json>    → {"ok": true} | {"ok": false, "errors": [...]}
 //                                                               (the character agent's CharacterInput)
+//   deno run --allow-read cli.ts repair <script.json>          → {"script": ..., "changes": [ScriptRepair],
+//                                                                 "ok": true} | {..., "ok": false, "errors": [...]}
+//                                                               (after the writer's last try: a face a character
+//                                                               does not have becomes neutral, a noise it does not
+//                                                               make is left out; then the script is checked again)
 // It never reads the network and writes only to stdout (errors to stderr, exit code 2). The commands themselves are
 // commands.ts, so the web's tests run them too.
 

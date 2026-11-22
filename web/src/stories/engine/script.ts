@@ -1,14 +1,20 @@
 // Lamo Stories engine: the story script's rules (CONTRACTS §45.10). validateScript explains every problem in a
 // sentence the writer can act on; normalizeScript moves beat effects into the scene lists and fills seeds;
-// fitDuration lands the story on its target length without breaking any scene rule.
+// fitDuration lands the story on its target length without breaking any scene rule; repairScript swaps a face or
+// drops a noise a character does not have, after the writer's last try (CONTRACTS §45.34).
 
 import { sceneBeds } from "./ambience.ts";
 import { CATALOG, catalogIds } from "./catalog.ts";
+import { formatOf, formatsSentence } from "./frame.ts";
 import { clamp, hash, isHex } from "./math.ts";
-import type { CaptionCue, Scene, SfxCue, StoryScript, ValidateResult } from "./types.ts";
+import type { CaptionCue, Scene, ScriptRepair, SfxCue, StoryScript, ValidateResult } from "./types.ts";
 
+/** The default size (9:16); FORMATS (frame.ts) has all six. */
 export const WIDTH = 1080;
 export const HEIGHT = 1920;
+/** The first engine whose scripts may have another size than 1080 × 1920: a script written for an older engine was
+ * laid out for the tall frame only. */
+export const SIZES_FROM_ENGINE = 5;
 export const FPS = 30;
 /** Facebook Reels take at most 90 s; the audio tail needs a little room (CONTRACTS §45.9). */
 export const MAX_SECONDS = 89.5;
@@ -152,6 +158,37 @@ export function validateCharacter(input: unknown): { ok: true } | { ok: false; e
   return errors.length ? { ok: false, errors } : { ok: true };
 }
 
+/** The faces and noises a cast member keeps to (CONTRACTS §45.34), or null for a cast copied before characters
+ * carried their faces (old scripts): then any face and noise of the catalog goes. */
+interface Own {
+  name: string;
+  faces: string[];
+  noises: string[];
+}
+
+function ownOf(m: unknown): Own | null {
+  if (!isObj(m) || !Array.isArray(m.expressions)) return null;
+  const voice = isObj(m.voice) ? m.voice : {};
+  return {
+    name: typeof m.name === "string" && m.name.trim() ? m.name.trim() : "This character",
+    faces: m.expressions.filter((f): f is string => typeof f === "string"),
+    noises: Array.isArray(voice.noises) ? voice.noises.filter((n): n is string => typeof n === "string") : [],
+  };
+}
+
+const andList = (items: string[]): string => items.join(", ").replace(/, ([^,]*)$/, " and $1");
+
+/** The sentence for a face a character does not have. */
+function strayFace(where: string, who: string, own: Own, face: string): string {
+  return `${where}: ${own.name} (${who}) does not make the face "${face}"; ${own.name}'s own faces are ${andList(own.faces)}. Use one of those, or leave face out.`;
+}
+
+/** The sentence for a noise a character does not make. */
+function strayNoise(where: string, who: string, own: Own, noise: string): string {
+  const has = own.noises.length ? `${own.name}'s own noises are ${andList(own.noises)}. Use one of those, or leave noise out.` : `${own.name} makes no noises; leave noise out.`;
+  return `${where}: ${own.name} (${who}) does not make the noise "${noise}"; ${has}`;
+}
+
 function checkCast(cast: unknown, err: (m: string) => void): string[] {
   if (!isObj(cast) || Object.keys(cast).length === 0) {
     err("cast must list at least one character: { castId: { characterId, name, look, movementStyle, voice } }.");
@@ -172,11 +209,15 @@ function checkCast(cast: unknown, err: (m: string) => void): string[] {
     checkLook(m.look, where, err);
     if (!STYLES.has(m.movementStyle as string)) err(`${where}: movementStyle is ${show(m.movementStyle)}; use one of ${list([...STYLES])}.`);
     checkVoice(m.voice, where, err);
+    const faces = m.expressions;
+    if (faces !== undefined && (!Array.isArray(faces) || faces.length === 0 || faces.some((f) => !FACES.has(f as string)) || !faces.includes("neutral") || new Set(faces).size !== faces.length)) {
+      err(`${where}: expressions must be the character's own faces: different faces of ${list([...FACES], 14)}, with neutral among them. Copy them from the saved character.`);
+    }
   }
   return ids;
 }
 
-function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<string>, seenFx: Set<string>, err: (m: string) => void): Obj | null {
+function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<string>, seenFx: Set<string>, err: (m: string) => void, own: Map<string, Own>): Obj | null {
   if (!isObj(sc)) {
     err(`scene ${i + 1}: must be an object.`);
     return null;
@@ -285,8 +326,10 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
       if (!isNum(b.dur) || b.dur < 0.05) err(`${bw}: dur is ${show(b.dur)}; a beat lasts at least 0.05 s.`);
       else if (isNum(b.at) && isNum(d) && b.at + b.dur > dur + TOL) err(`${bw}: ends at ${round(b.at + b.dur)} s, after the scene ends (${dur} s). Shorten dur or start it earlier.`);
       if (b.face !== undefined && (!isActor || !FACES.has(b.face as string))) err(`${bw}: face ${show(b.face)} ${isActor ? `is not in the catalog; use one of ${list([...FACES], 14)}` : "is for characters only"}.`);
+      else if (b.face !== undefined && own.has(who) && !own.get(who)!.faces.includes(b.face as string)) err(strayFace(bw, who, own.get(who)!, b.face as string));
       if (b.bubble !== undefined && (!isActor || !BUBBLES.has(b.bubble as string))) err(`${bw}: bubble ${show(b.bubble)} ${isActor ? `is not in the catalog; use one of ${list([...BUBBLES])}` : "is for characters only"}.`);
       if (b.noise !== undefined && (!isActor || !NOISES.has(b.noise as string))) err(`${bw}: noise ${show(b.noise)} ${isActor ? `is not in the catalog; use one of ${list([...NOISES])}` : "is for characters only"}.`);
+      else if (b.noise !== undefined && own.has(who) && !own.get(who)!.noises.includes(b.noise as string)) err(strayNoise(bw, who, own.get(who)!, b.noise as string));
       if (b.sfx !== undefined && !SFX.has(b.sfx as string)) err(`${bw}: sfx ${show(b.sfx)} is not in the catalog; use one of ${list([...SFX], 23)}.`);
       if (b.dir !== undefined && b.dir !== "left" && b.dir !== "right") err(`${bw}: dir must be "left" or "right".`);
       if (b.to !== undefined) {
@@ -328,11 +371,22 @@ export function validateScript(input: unknown): ValidateResult {
   const s = input;
   if (!isInt(s.engine) || s.engine < 1) err(`engine is ${show(s.engine)}; it must be a whole number of 1 or more (the engine version).`);
   if (s.fps !== FPS) err(`fps is ${show(s.fps)}; it must be ${FPS}.`);
-  if (s.width !== WIDTH || s.height !== HEIGHT) err(`width × height is ${show(s.width)} × ${show(s.height)}; it must be ${WIDTH} × ${HEIGHT} (vertical 9:16).`);
+  if (s.width !== WIDTH || s.height !== HEIGHT) {
+    const sizes = formatsSentence();
+    if (!formatOf(s.width, s.height)) err(`width × height is ${show(s.width)} × ${show(s.height)}; use one of ${sizes}.`);
+    else if (!isInt(s.engine) || s.engine < SIZES_FROM_ENGINE) {
+      err(`width × height is ${show(s.width)} × ${show(s.height)}; a script for engine ${show(s.engine)} must be ${WIDTH} × ${HEIGHT} (vertical 9:16). Scripts for engine ${SIZES_FROM_ENGINE} and later may also be ${sizes}.`);
+    }
+  }
   if (!isNum(s.durationSec) || s.durationSec <= 0 || s.durationSec > LIMITS.totalSec) err(`durationSec is ${show(s.durationSec)}; use the story's length in seconds (fitDuration brings it to at most ${MAX_SECONDS}).`);
   if (typeof s.title !== "string" || !s.title.trim() || s.title.length > 100) err("title must be 1 to 100 characters.");
   if (!isInt(s.seed) || s.seed < 0 || s.seed > 0xffffffff) err(`seed is ${show(s.seed)}; it must be a whole number from 0 to 4294967295.`);
   const castIds = checkCast(s.cast, err);
+  const own = new Map<string, Own>();
+  if (isObj(s.cast)) for (const id of castIds) {
+    const o = ownOf(s.cast[id]);
+    if (o) own.set(id, o);
+  }
   if (s.music !== null && s.music !== undefined) {
     if (!isObj(s.music) || !MOODS.has(s.music.mood as string) || !isNum(s.music.volume) || s.music.volume < 0 || s.music.volume > 1) {
       err(`music must be null or { mood: one of ${list([...MOODS])}, volume: 0 to 1 }.`);
@@ -346,7 +400,7 @@ export function validateScript(input: unknown): ValidateResult {
     const seenScenes = new Set<string>();
     const seenFx = new Set<string>();
     s.scenes.forEach((sc, i) => {
-      checkScene(sc, i, castIds, seenScenes, seenFx, err);
+      checkScene(sc, i, castIds, seenScenes, seenFx, err, own);
       if (isObj(sc) && isNum(sc.durationSec)) total += sc.durationSec;
     });
     if (total > LIMITS.totalSec) err(`the scenes add up to ${round(total)} s; write at most ${LIMITS.totalSec} s (fitDuration then brings it to the target).`);
@@ -381,6 +435,48 @@ export function validateScript(input: unknown): ValidateResult {
   }
   if (errors.length) return { ok: false, errors };
   return { ok: true, script: withDefaults(s as unknown as StoryScript) };
+}
+
+/** After the writer's last try (CONTRACTS §45.34): every beat's face that its character does not have becomes
+ * neutral, and every noise it does not make is left out. Works on the raw script (anything else about it is left as
+ * it was, valid or not) and says what it changed; only cast members that carry their own faces are touched, the
+ * same ones validateScript holds to their lists. */
+export function repairScript(input: unknown): { script: unknown; changes: ScriptRepair[] } {
+  if (!isObj(input) || !isObj(input.cast) || !Array.isArray(input.scenes)) return { script: input, changes: [] };
+  const own = new Map<string, Own>();
+  for (const [id, m] of Object.entries(input.cast)) {
+    const o = ownOf(m);
+    if (o) own.set(id, o);
+  }
+  const changes: ScriptRepair[] = [];
+  const scenes = input.scenes.map((sc, i) => {
+    if (!isObj(sc) || !Array.isArray(sc.beats)) return sc;
+    const sceneId = typeof sc.sceneId === "string" ? sc.sceneId : `scene ${i + 1}`;
+    const where = `scene ${i + 1}${typeof sc.sceneId === "string" ? ` (${sc.sceneId})` : ""}`;
+    let changed = false;
+    const beats = sc.beats.map((b, j) => {
+      if (!isObj(b) || typeof b.who !== "string" || !own.has(b.who)) return b;
+      const o = own.get(b.who)!;
+      const next: Obj = { ...b };
+      const bw = `${where} beat ${j + 1}`;
+      const before = changes.length;
+      if (typeof b.face === "string" && !o.faces.includes(b.face)) {
+        const now = o.faces.includes("neutral") ? "neutral" : null;
+        if (now) next.face = now;
+        else delete next.face;
+        changes.push({ sceneId, beat: j, castId: b.who, field: "face", was: b.face, now, text: `${bw}: ${o.name}'s face "${b.face}" is now ${now ? `"${now}"` : "left out"} (${o.name}'s own faces are ${andList(o.faces)}).` });
+      }
+      if (typeof b.noise === "string" && !o.noises.includes(b.noise)) {
+        delete next.noise;
+        changes.push({ sceneId, beat: j, castId: b.who, field: "noise", was: b.noise, now: null, text: `${bw}: ${o.name}'s noise "${b.noise}" is left out (${o.noises.length ? `${o.name}'s own noises are ${andList(o.noises)}` : `${o.name} makes no noises`}).` });
+      }
+      if (changes.length === before) return b;
+      changed = true;
+      return next;
+    });
+    return changed ? { ...sc, beats } : sc;
+  });
+  return { script: changes.length ? { ...input, scenes } : input, changes };
 }
 
 /** Optional parts filled in, so the rest of the engine can rely on them. */

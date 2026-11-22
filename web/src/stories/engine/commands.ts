@@ -3,8 +3,9 @@
 
 import { CATALOG } from "./catalog.ts";
 import { drawFrame, ENGINE_VERSION } from "./engine.ts";
+import { FORMATS } from "./frame.ts";
 import { PROP_STATES, RULES } from "./rules.ts";
-import { fitDuration, frameCount, LIMITS, normalizeScript, SEATS, sceneList, validateCharacter, validateScript } from "./script.ts";
+import { fitDuration, frameCount, LIMITS, normalizeScript, repairScript, SEATS, sceneList, validateCharacter, validateScript } from "./script.ts";
 import { audioTrack, textTrack } from "./tracks.ts";
 import type { StoryScript } from "./types.ts";
 
@@ -22,9 +23,10 @@ function fail(message: string): never {
   throw new CliError(message);
 }
 
-/** What `catalog` prints: the vocabulary, the limits, and what the free words and numbers mean. */
-export function catalogOutput(): { engine: number; catalog: typeof CATALOG; limits: typeof LIMITS & { seats: typeof SEATS }; rules: typeof RULES; propStates: typeof PROP_STATES } {
-  return { engine: ENGINE_VERSION, catalog: CATALOG, limits: { ...LIMITS, seats: SEATS }, rules: RULES, propStates: PROP_STATES };
+/** What `catalog` prints: the vocabulary, the limits, what the free words and numbers mean, and the six sizes a video
+ * can have (`formats`, CONTRACTS §45.34; the first is the default). */
+export function catalogOutput(): { engine: number; catalog: typeof CATALOG; limits: typeof LIMITS & { seats: typeof SEATS }; rules: typeof RULES; propStates: typeof PROP_STATES; formats: typeof FORMATS } {
+  return { engine: ENGINE_VERSION, catalog: CATALOG, limits: { ...LIMITS, seats: SEATS }, rules: RULES, propStates: PROP_STATES, formats: FORMATS };
 }
 
 function readJson(io: CliIO, path: string | undefined, what: string): unknown {
@@ -98,11 +100,18 @@ export function runCommand(args: string[], io: CliIO): void {
     case "character":
       io.write(JSON.stringify(validateCharacter(readJson(io, rest[0], "character"))) + "\n");
       return;
+    case "repair": {
+      // after the writer's last try: stray faces become neutral, stray noises go; then the script is checked again
+      const { script, changes } = repairScript(readJson(io, rest[0], "script"));
+      const result = validateScript(script);
+      io.write(JSON.stringify({ script, changes, ...(result.ok ? { ok: true } : { ok: false, errors: result.errors }) }) + "\n");
+      return;
+    }
     case "version":
       io.write(JSON.stringify({ engine: ENGINE_VERSION }) + "\n");
       return;
     default:
-      fail("unknown command; use validate, normalize, fit, frames, scenes, text, audio, catalog, version or character");
+      fail("unknown command; use validate, normalize, fit, frames, scenes, text, audio, catalog, version, character or repair");
   }
 }
 

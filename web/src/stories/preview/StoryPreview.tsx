@@ -9,7 +9,8 @@ export interface StoryPreviewProps {
   script: StoryScript;
   /** only this scene (looping), else the whole story */
   sceneId?: string;
-  /** CSS pixels wide; the height is width × 16 / 9 (vertical 9:16) */
+  /** CSS pixels wide; the height follows the script's shape (width × 16 / 9 for 9:16, the same for 1:1, width × 9 / 16
+   * for 16:9; CONTRACTS §45.34) */
   width: number;
   playing?: boolean;
   loop?: boolean;
@@ -17,8 +18,16 @@ export interface StoryPreviewProps {
   label: string;
 }
 
+/** The CSS height of a preview `width` pixels wide, in the script's own shape. */
+export function previewHeight(script: Pick<StoryScript, "width" | "height">, width: number): number {
+  const w = script.width > 0 ? script.width : 1080;
+  const h = script.height > 0 ? script.height : 1920;
+  return Math.round((width * h) / w);
+}
+
 export function StoryPreview({ script, sceneId, width, playing = true, loop = true, onTime, label }: StoryPreviewProps) {
   const ref = useRef<HTMLCanvasElement | null>(null);
+  const height = previewHeight(script, width);
   // the latest callback, read on each frame: a new function from the parent must not restart the animation
   const onTimeRef = useRef(onTime);
   useEffect(() => {
@@ -31,7 +40,7 @@ export function StoryPreview({ script, sceneId, width, playing = true, loop = tr
     if (!canvas || !ctx) return;
     const dpr = typeof window !== "undefined" ? Math.min(2, window.devicePixelRatio || 1) : 1;
     canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(((width * 16) / 9) * dpr);
+    canvas.height = Math.round(height * dpr);
     const scale = canvas.width / script.width;
     const [from, to] = sceneId ? sceneFrames(script, sceneId) : [0, frameCount(script)];
     const still = !playing || (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches);
@@ -52,8 +61,6 @@ export function StoryPreview({ script, sceneId, width, playing = true, loop = tr
     };
     raf = requestAnimationFrame(paint);
     return () => cancelAnimationFrame(raf);
-  }, [script, sceneId, width, playing, loop, text]);
-  return (
-    <canvas ref={ref} className="st-story-preview" style={{ width, height: (width * 16) / 9 }} role="img" aria-label={label} />
-  );
+  }, [script, sceneId, width, height, playing, loop, text]);
+  return <canvas ref={ref} className="st-story-preview" style={{ width, height }} role="img" aria-label={label} />;
 }

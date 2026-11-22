@@ -3,31 +3,36 @@
 // (cli.ts) and rasterizes the draw lists into the final frames. Pure and deterministic: no DOM, no Date, no
 // Math.random (the seeded PRNG only), relative ".ts" imports only. engine/README.md describes the prims.
 //
-// The pieces: script.ts (validate, normalize, fit, frame maths), scene.ts (one frame of a scene), rig.ts and face.ts
-// (characters), motion.ts (actions and movement styles), props.ts, sets.ts, camera.ts, bubbles.ts, tracks.ts (text
-// and audio), ambience.ts (the place's sounds normalize lists), rules.ts (what the script's words mean, for the
-// writer), commands.ts and cli.ts (the command line), pen.ts (transforms into prims), math.ts.
+// The pieces: script.ts (validate, normalize, fit, repair, frame maths), frame.ts (the six sizes and shapes),
+// scene.ts (one frame of a scene), rig.ts and face.ts (characters), motion.ts (actions and movement styles),
+// props.ts, sets.ts, camera.ts, bubbles.ts, text.ts and tracks.ts (text and audio), ambience.ts (the place's sounds
+// normalize lists), rules.ts (what the script's words mean, for the writer), commands.ts and cli.ts (the command
+// line), pen.ts (transforms into prims), math.ts.
 
 import { CATALOG } from "./catalog.ts";
 import { FACES } from "./face.ts";
+import { DEFAULT_FORMAT, FORMATS, formatOf, sizeFor } from "./frame.ts";
 import { hash } from "./math.ts";
 import { actorState, restPose, STYLES } from "./motion.ts";
 import { Pen } from "./pen.ts";
 import { blendPose, drawCharacter, geometry } from "./rig.ts";
 import { drawExtras, drawSceneFrame } from "./scene.ts";
-import { fitDuration, FPS, frameCount, HEIGHT, LIMITS, locateFrame, MAX_SECONDS, normalizeScript, sceneFrames, sceneList, sceneShapes, SEATS, validateCharacter, validateScript, WIDTH } from "./script.ts";
+import { fitDuration, FPS, frameCount, HEIGHT, LIMITS, locateFrame, MAX_SECONDS, normalizeScript, repairScript, sceneFrames, sceneList, sceneShapes, SEATS, SIZES_FROM_ENGINE, validateCharacter, validateScript, WIDTH } from "./script.ts";
 import { audioTrack, textTrack } from "./tracks.ts";
 import type { ActionId, Beat, CharacterLook, Expression, MovementStyle, Prim, StoryScript } from "./types.ts";
 
 export { CATALOG };
 export type * from "./types.ts";
 export { prng } from "./math.ts";
-export { audioTrack, fitDuration, FPS, frameCount, HEIGHT, LIMITS, MAX_SECONDS, normalizeScript, sceneFrames, sceneList, sceneShapes, SEATS, textTrack, validateCharacter, validateScript, WIDTH };
+export { audioTrack, fitDuration, FPS, frameCount, HEIGHT, LIMITS, MAX_SECONDS, normalizeScript, repairScript, sceneFrames, sceneList, sceneShapes, SEATS, SIZES_FROM_ENGINE, textTrack, validateCharacter, validateScript, WIDTH };
+export { DEFAULT_FORMAT, FORMATS, formatOf, sizeFor };
 
 /** Bumps whenever drawing changes; stored on each job's meta (2: the full rig, sets, props and cameras; 3: a skid
  * slides the rear to its dir's side, cars turn smoothly, bubbles keep clear of the end card and use scene time; 4: a
- * side-view skid with a dir goes nose first, a humming voice keeps its lips closed, the place's sounds are listed). */
-export const ENGINE_VERSION = 4;
+ * side-view skid with a dir goes nose first, a humming voice keeps its lips closed, the place's sounds are listed;
+ * 5: six sizes, 9:16, 1:1 and 16:9 at 1080 or 720 (the 1080 × 1920 frames are drawn as before), and a character
+ * that carries its own faces shows only those, even the ones an action implies). */
+export const ENGINE_VERSION = 5;
 
 /** The draw list for one frame of the whole story (frames past the end show the last frame). */
 export function drawFrame(s: StoryScript, frame: number): Prim[] {

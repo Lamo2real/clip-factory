@@ -2,13 +2,11 @@
 // how a car moves). Prop actions (move, skid, spin, stop, bump, tyre_burst, appear, vanish, wobble, flash) change a
 // prop's state over time; cars leave skid marks and motion lines so a phone viewer can follow what happened.
 
+import { F } from "./frame.ts";
 import { DEG, TAU, clamp, clamp01, ease, hex, lerp, rand, shade, smoothstep } from "./math.ts";
 import type { Pen } from "./pen.ts";
 import { arcPts, heartPts, inflate, quadPts, roundRectPts, starPts } from "./pen.ts";
 import type { Beat, PropAction, PropKind, SceneProp } from "./types.ts";
-
-export const W = 1080;
-export const H = 1920;
 
 export const CARS: Set<PropKind> = new Set(["car", "truck"]);
 /** Flat things on the ground: drawn before anything that stands. */
@@ -101,14 +99,15 @@ function propPath(prop: SceneProp, beats: Beat[], view: "side" | "top", t: numbe
     if (!MOVERS.has(a)) continue;
     let to = b.to;
     if (!to && (a === "skid" || a === "spin") && view === "top") {
+      // a part of 1080 design px, the same distance in every shape
       const d = a === "skid" ? 0.12 : 0.08;
-      to = { x: x + Math.sin(heading * DEG) * d, y: y - Math.cos(heading * DEG) * d * (9 / 16) };
+      to = { x: x + Math.sin(heading * DEG) * (d * F.ux), y: y - Math.cos(heading * DEG) * d * F.uy };
     }
     if (!to) continue;
     // otherwise the way it travels is the way it faces (a skid with a dir still goes nose first)
     if (view === "side" && !(b.dir && FACERS.has(a)) && Math.abs(to.x - x) > 0.005) facing = to.x < x ? -1 : 1;
     const dx = to.x - x;
-    const dy = (to.y - y) * (16 / 9);
+    const dy = (to.y - y) * (F.h / F.w);
     if (view === "top" && Math.hypot(dx, dy) > 0.01) {
       // the car turns to its new direction over a moment instead of snapping round
       const target = Math.atan2(dx, -dy) / DEG;
@@ -125,7 +124,7 @@ function propPath(prop: SceneProp, beats: Beat[], view: "side" | "top", t: numbe
       const dk = (e(Math.min(1, p + 0.02)) - e(Math.max(0, p - 0.02))) / 0.04;
       speed = (Math.hypot(dx, dy) * dk) / Math.max(0.05, b.dur);
     } else speed = 0;
-    dist += Math.hypot(nx - x, (ny - y) * (16 / 9)) * W;
+    dist += Math.hypot(nx - x, (ny - y) * (F.h / F.w)) * F.w;
     x = nx;
     y = ny;
   }
@@ -191,7 +190,7 @@ export function propState(prop: SceneProp, beats: Beat[], view: "side" | "top", 
           if (marked) st.marks.push(skidMarks(prop, beats, b, Math.min(t, b.at + b.dur)));
         } else {
           if (on) st.rot += -1.2 * Math.sin(Math.PI * p) * Math.sin(tau * 24);
-          if (b.to) st.skidFrom = (propPath(prop, beats, view, b.at).x - path.x) * W;
+          if (b.to) st.skidFrom = (propPath(prop, beats, view, b.at).x - path.x) * F.w;
         }
         break;
       case "spin": {
@@ -261,8 +260,8 @@ function skidMarks(prop: SceneProp, beats: Beat[], beat: Beat, until: number): n
     if (beat.do === "spin") heading += side * 360 * ease.outCubic(p);
     const hx = Math.sin(heading * DEG);
     const hy = -Math.cos(heading * DEG);
-    const bx = path.x * W - hx * 108 * k;
-    const by = path.y * H - hy * 108 * k;
+    const bx = path.x * F.w - hx * 108 * k;
+    const by = path.y * F.h - hy * 108 * k;
     const ox = -hy * 72 * k;
     const oy = hx * 72 * k;
     pts.push(bx - ox, by - oy, bx + ox, by + oy);
@@ -296,8 +295,8 @@ export function drawProp(pen: Pen, st: PropState, view: "side" | "top", t: numbe
   const k = propBaseScale(st, view);
   pen.save();
   pen.fade(st.alpha);
-  const x = st.x * W;
-  const y = st.y * H;
+  const x = st.x * F.w;
+  const y = st.y * F.h;
   if (st.flash > 0.02) {
     pen.circle(x, y - (view === "side" && !OVERLAYS.has(kind) && !DECALS.has(kind) ? 120 * k : 0), 190 * k, "#ffc94a", 0.28 * st.flash);
   }
@@ -467,8 +466,8 @@ function drawCarTop(pen: Pen, st: PropState, k: number, t: number, truck: boolea
     const left: number[] = [];
     const right: number[] = [];
     for (let i = 0; i + 3 < m.length; i += 4) {
-      left.push(m[i]! - st.x * W, m[i + 1]! - st.y * H);
-      right.push(m[i + 2]! - st.x * W, m[i + 3]! - st.y * H);
+      left.push(m[i]! - st.x * F.w, m[i + 1]! - st.y * F.h);
+      right.push(m[i + 2]! - st.x * F.w, m[i + 3]! - st.y * F.h);
     }
     pen.line(left, 20 * k, "#1d1d26", 0.42);
     pen.line(right, 20 * k, "#1d1d26", 0.42);
@@ -551,7 +550,7 @@ function drawCarTop(pen: Pen, st: PropState, k: number, t: number, truck: boolea
 export function steerArrow(pen: Pen, st: PropState, side: number, strength: number): void {
   const k = propBaseScale(st, "top");
   pen.save();
-  pen.translate(st.x * W, st.y * H);
+  pen.translate(st.x * F.w, st.y * F.h);
   pen.rotate(st.rot);
   pen.scale(k);
   const a = clamp01(strength);
@@ -850,8 +849,11 @@ function drawDeer(pen: Pen, st: PropState, view: "side" | "top", t: number): voi
   pen.ellipse(-150, -210, 22, 16, -20, "#ffffff");
 }
 
-/** Full-screen weather in screen space: snow flakes, rain streaks and fog bands, split into a back and a front layer. */
+/** Full-screen weather in screen space: snow flakes, rain streaks and fog bands, split into a back and a front layer.
+ * The 1080 × 1920 counts cover any shape (they all have about the same area or less). */
 export function drawWeather(pen: Pen, kind: "snow" | "rain" | "fog", t: number, seed: number, layer: "back" | "front", amount: number): void {
+  const W = F.w;
+  const H = F.h;
   const n = Math.round(amount * (layer === "back" ? 22 : 14));
   if (kind === "snow") {
     for (let i = 0; i < n; i += 1) {
@@ -879,7 +881,7 @@ export function drawWeather(pen: Pen, kind: "snow" | "rain" | "fog", t: number, 
   const bands = layer === "back" ? 3 : 1;
   for (let i = 0; i < bands; i += 1) {
     const s = seed + 500;
-    const yy = layer === "back" ? 700 + i * 260 + rand(s, i) * 80 : 1500;
+    const yy = (layer === "back" ? 700 + i * 260 + rand(s, i) * 80 : 1500) * F.sy;
     const drift = ((t * (30 + i * 14) + rand(s, i + 9) * W) % (W * 2)) - W * 0.5;
     pen.ellipse(drift, yy, 900, 170, 0, "#f2f5f8", (layer === "back" ? 0.32 : 0.2) * amount);
     pen.ellipse(drift - W, yy + 60, 900, 150, 0, "#f2f5f8", (layer === "back" ? 0.26 : 0.16) * amount);

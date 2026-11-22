@@ -1,6 +1,7 @@
 // Lamo Stories engine: what the script's free words and numbers mean, in plain sentences for the story writer and the
-// fact checker (CONTRACTS §45.10, §45.11.2, §45.11.5). `cli.ts catalog` gives them next to the catalog and the limits,
-// so a writer never has to guess which way a skid slides. engine/README.md says the same at more length.
+// fact checker (CONTRACTS §45.10, §45.11.2, §45.11.5, §45.34). `cli.ts catalog` gives them next to the catalog, the
+// limits and the formats, so a writer never has to guess which way a skid slides, which faces a character has or
+// what shape the frame is. engine/README.md says the same at more length.
 
 import type { PropKind } from "./types.ts";
 
@@ -67,5 +68,24 @@ export const RULES: { id: string; text: string }[] = [
     text:
       "Wind, rain, traffic and a driving car's engine hum are added to each new scene's effects list for you; add " +
       "other effects with sfx on a beat. Bubbles hold symbols only, never words.",
+  },
+  {
+    id: "own_faces",
+    text:
+      "Each character keeps its own faces and noises: a cast member with an expressions list makes only those faces, " +
+      "and only the noises in its voice.noises. A beat's face and noise for that character must come from its own " +
+      "lists; any other is refused. Leave face out to keep the face it has, and leave noise out for silence.",
+  },
+  {
+    id: "frame_shape",
+    text:
+      "The request's format (aspect, width and height) says which shape this video is; with no format it is tall " +
+      "9:16 1080 × 1920. The shapes are tall 9:16 (1080 × 1920 or 720 × 1280), square 1:1 (1080 × 1080 or " +
+      "720 × 720) or wide 16:9 (1920 × 1080 or 1280 × 720). x and y are 0 to 1 of that frame in every shape, so the " +
+      "ground (y 0.62 to 0.85) and a top view's road (x 0.25 to 0.75) keep their numbers. Characters and things keep " +
+      "their size against the frame's short side: a standing character is about a quarter of a tall frame's height " +
+      "but about two fifths of a square or wide one's, so keep standing characters on the ground there. A wide frame " +
+      "has room for up to 4 characters side by side (x 0.15 to 0.85); a tall one fits 2 or 3. Captions, teaching " +
+      "text, bubbles and the end card are placed inside each shape's safe area for you.",
   },
 ];
