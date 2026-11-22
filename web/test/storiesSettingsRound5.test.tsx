@@ -232,6 +232,33 @@ describe("Add a model in plain words (§45.36 E14, E17)", () => {
   });
 });
 
+describe("Video and Storage in plain words (§45.36 E14)", () => {
+  /** What a card shows before any fold is opened. */
+  const shown = (el: HTMLElement) => {
+    const copy = el.cloneNode(true) as HTMLElement;
+    for (const d of Array.from(copy.querySelectorAll("details"))) for (const c of Array.from(d.children)) if (c.tagName !== "SUMMARY") c.remove();
+    return copy.textContent ?? "";
+  };
+
+  it("the storage folder, the file's codecs and the quality numbers are one tap away", async () => {
+    start();
+    await open("storage");
+    const used = card("Space used");
+    expect(shown(used)).toContain("Lamo Stories' own folder in Clip Factory's media storage in Europe (Stockholm).");
+    expect(shown(used)).not.toContain("ws/{you}/stories/");
+    expect(used.querySelector("details.st-tech-fold")?.textContent).toContain("ws/{you}/stories/");
+    const file = card("The finished file");
+    expect(shown(file)).toContain("An MP4, which every platform and phone plays");
+    expect(shown(file)).not.toMatch(/H\.264|VP9|ProRes|PCM|Opus/);
+    expect(file.textContent).toContain("MP4: H.264 picture and AAC sound");
+    expect(file.textContent).toContain("WebM: VP9 picture");
+    await open("video");
+    const quality = card("Quality");
+    expect(shown(quality)).not.toContain("CRF");
+    expect(quality.querySelector("details.st-tech-fold")?.textContent).toContain("Good 23, Better 20, Best 17");
+  });
+});
+
 describe("one set of status words (§45.36 E17)", () => {
   it("Works, Not checked yet, No access, Not found, Problem: Settings and Setup read the same set", async () => {
     expect(MODEL_STATUS_WORDS).toEqual({ ok: "Works", not_checked: "Not checked yet", denied: "No access", not_found: "Not found", error: "Problem" });

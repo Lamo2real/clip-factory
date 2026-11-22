@@ -1704,6 +1704,9 @@
   color: var(--st-ink);
   overflow-wrap: anywhere;
 }
+.st-stg-where__tech {
+  flex: 1 1 100%;
+}
 .st-stg-cleanup {
   display: grid;
   justify-items: start;

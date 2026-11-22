@@ -921,7 +921,9 @@ describe("Storage and production (§45.34)", () => {
   it("says where the files are, keeps reference videos and chat pictures as picked, and Clean up now says what it cleared", async () => {
     await open("storage");
     await settle(4);
-    expect(card("Space used").textContent).toContain("Lamo Stories' own folder in Clip Factory's media storage in Europe (Stockholm): ws/{you}/stories/");
+    // The place in words; the exact folder one tap away (§45.36 E14).
+    expect(card("Space used").textContent).toContain("Lamo Stories' own folder in Clip Factory's media storage in Europe (Stockholm).");
+    expect(card("Space used").querySelector("details.st-tech-fold")?.textContent).toContain("ws/{you}/stories/");
     const refs = group("Keep reference videos");
     expect($$("[role=radio]", refs).map((r) => r.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["Keep them all", "Keep only the study", "30 days", "90 days"]);
     // By age only the video goes: its study stays, as the API and the agent keep it (retention.py, fileRemovedAt).

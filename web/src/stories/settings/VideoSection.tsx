@@ -16,6 +16,7 @@ import { useAi, useWorkspaceConfig } from "./data.ts";
 import { keepName, ProviderKeys } from "./ProviderKeys.tsx";
 import { MakerPrices } from "./ProviderPrices.tsx";
 import { ReelTry } from "./ReelTry.tsx";
+import { StTech } from "../ui.tsx";
 import { VideoUsage } from "./VideoUsage.tsx";
 
 type VideoMaker = StoriesConfig["providers"]["video"];
@@ -31,9 +32,9 @@ export const MAKERS: Record<string, { label: string; model: string; line: string
 };
 
 const QUALITY: { value: StoriesConfig["video"]["quality"]; label: string; line: string }[] = [
-  { value: "standard", label: "Good", line: "Smaller files (CRF 23)" },
-  { value: "high", label: "Better", line: "The usual (CRF 20)" },
-  { value: "best", label: "Best", line: "Bigger files (CRF 17)" },
+  { value: "standard", label: "Good", line: "Smaller files" },
+  { value: "high", label: "Better", line: "The usual" },
+  { value: "best", label: "Best", line: "Sharpest, bigger files" },
 ];
 
 /** The three shapes, the one Shorts, Reels and TikTok want first (§45.34). */
@@ -226,6 +227,9 @@ export function VideoSection({ ws }: { ws: string }) {
 
       <SetCard title="Quality" icon="film" lede="Better quality makes bigger files that take a little longer to upload.">
         <SetPick label="Video quality" value={c.video.quality} options={QUALITY} onChange={(v) => save({ video: { ...c.video, quality: v } })} />
+        <StTech className="st-stg-tech">
+          <span>The H.264 quality number (CRF): Good 23, Better 20, Best 17. Lower is sharper.</span>
+        </StTech>
       </SetCard>
 
       <SetCard title="Words and music" icon="sound" lede="What new videos start with. You can still change it for one video.">

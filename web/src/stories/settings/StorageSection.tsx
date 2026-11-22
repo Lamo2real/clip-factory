@@ -19,6 +19,7 @@ import type { ExtraFormat, KeepChatPictures, KeepReferences, StorageSummary, Sto
 import { setStoriesDevicePref, storiesClickSound, storiesDeviceOwn, storiesMotionSetting, storiesReduceMotion, storiesSoundOn, useStoriesDevicePrefs } from "../prefs.ts";
 import { Btn, cheer, Empty, Failed, Loading, Note, SavedMark, SetCard, SetPick, SetSelect, SetSwitch, SIcon, sizeText, useSaved } from "./bits.tsx";
 import { useWorkspaceConfig } from "./data.ts";
+import { StTech } from "../ui.tsx";
 import { sizeWords } from "./VideoSection.tsx";
 
 export const STORAGE_KINDS: { key: keyof StorageSummary["bytes"]; label: string; sw: string }[] = [
@@ -72,8 +73,8 @@ export const KEEP_CHAT_PICTURES: { value: KeepChatPictures; label: string; line:
 
 /** The files made besides the MP4, in plain words (§45.34). */
 export const EXTRA_FORMATS: { value: ExtraFormat; label: string; description: string }[] = [
-  { value: "webm", label: "Also make a WebM file", description: "A small file for web pages (VP9 picture, Opus sound)." },
-  { value: "mov", label: "Also make a MOV file", description: "A big file for editing apps like Final Cut or Premiere (ProRes 422 Proxy picture, PCM sound)." },
+  { value: "webm", label: "Also make a WebM file", description: "A small file that plays on web pages." },
+  { value: "mov", label: "Also make a MOV file", description: "A big file for editing apps like Final Cut or Premiere." },
 ];
 
 /** The burned-in captions switch's words (§45.34: only the caption words are left out). */
@@ -114,20 +115,21 @@ function Used({ storage }: { storage: StorageSummary }) {
 function Where({ storage }: { storage: StorageSummary | null }) {
   const loc = storage?.location;
   return (
-    <p className="st-stg-where">
+    <div className="st-stg-where">
       <span className="st-stg-active__word">Where</span>
       <span>
         {LOCATION_WORDS}
-        {loc ? (
-          <>
-            {" "}
-            in {PLACES[loc.region] ?? loc.region}: <code className="st-stg-code">{loc.folder}</code>
-          </>
-        ) : (
-          ", apart from Clip Factory's files."
-        )}
+        {loc ? ` in ${PLACES[loc.region] ?? loc.region}.` : ", apart from Clip Factory's files."}
       </span>
-    </p>
+      {/* The exact folder, one tap away (§45.35 D21, §45.36 E14). */}
+      {loc ? (
+        <StTech className="st-stg-tech st-stg-where__tech">
+          <span>
+            Folder <code className="st-stg-code">{loc.folder}</code> in {loc.region}
+          </span>
+        </StTech>
+      ) : null}
+    </div>
   );
 }
 
@@ -302,7 +304,12 @@ export function StorageSection({ ws }: { ws: string }) {
         <dl className="st-stg-facts">
           <div>
             <dt>Format</dt>
-            <dd>MP4: H.264 picture and AAC sound, made to start playing fast (+faststart)</dd>
+            <dd>
+              An MP4, which every platform and phone plays, made to start playing fast.
+              <StTech className="st-stg-tech">
+                <span>MP4: H.264 picture and AAC sound (+faststart).</span>
+              </StTech>
+            </dd>
           </div>
           <div>
             <dt>Size</dt>
@@ -327,6 +334,9 @@ export function StorageSection({ ws }: { ws: string }) {
             onChange={(v) => save({ production: { ...prod, extraFormats: (["webm", "mov"] as const).filter((x) => (x === f.value ? v : extra.includes(x))) } })}
           />
         ))}
+        <StTech className="st-stg-tech">
+          <span>WebM: VP9 picture and Opus sound. MOV: ProRes 422 Proxy picture and PCM sound.</span>
+        </StTech>
       </SetCard>
 
       <SetCard title="Making the scenes" icon="clock" lede="More at a time is quicker; fewer is gentler when lots is going on.">
