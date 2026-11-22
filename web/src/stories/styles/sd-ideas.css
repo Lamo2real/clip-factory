@@ -46,134 +46,22 @@
   line-height: var(--st-lh-body);
 }
 
-/* ---------- Readable on every background, on the make screens ----------
-   The studio kit (sd-kit.css, sd-sheet.css) still draws a few things in the old way: Design with AI has no veil (its
-   words fall under 4.5:1 over a white desktop or photo), fields lighten what is under them (their hints fall to
-   3.4:1 there), group titles and slider values are the bright orange (the contract keeps it for shapes), and a
-   switched-off button's words are see-through. On the make screens they take the contract's glass, wells and words
-   here (every selector starts with .st-s-make, so the order of the files does not matter); once the kit does the
-   same, this block can go. */
-.st-s-make .st-s-design {
-  position: relative;
-  border-radius: var(--st-r-surface);
-  color: var(--st-text);
-  background: var(--st-tint-card);
-  box-shadow: var(--st-sheen), var(--st-depth-1), var(--st-glow-behind);
-  -webkit-backdrop-filter: var(--st-filter-glass);
-  backdrop-filter: var(--st-filter-glass);
-}
-
-.st-s-make .st-s-design::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  padding: var(--st-edge-width);
-  border-radius: inherit;
-  background: var(--st-edge);
-  pointer-events: none;
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#000 0 0) content-box exclude,
-    linear-gradient(#000 0 0);
-}
-
-.st-s-make .st-s-design__title {
-  color: var(--st-text-strong);
-}
-
-.st-s-make .st-s-design__lede {
-  color: var(--st-text-soft);
-}
-
-.st-s-make :is(.st-s-group__title, .st-s-slider__value) {
-  color: var(--st-text-amber);
-}
-
-.st-s-make .st-btn:not(.st-btn--main)[aria-disabled="true"] {
-  color: var(--st-text-soft);
-}
-
-.st-s-make .st-s-input {
-  background: var(--st-fill-well);
-}
-
-.st-s-make .st-s-input:hover {
-  background: var(--st-fill-well-hover);
-}
-
-.st-s-make .st-s-input::placeholder {
-  color: var(--st-text-muted);
-}
-
-.st-s-make .st-s-field.is-bad .st-s-input {
-  background:
-    linear-gradient(rgb(var(--st-coral-rgb) / 0.16), rgb(var(--st-coral-rgb) / 0.16)),
-    var(--st-fill-well);
-}
-
 /* ---------- Ideas ---------- */
 
-/* Show: All, Saved, Made into videos as pills. The chosen one is solid cream with espresso words (the sliding
-   highlight is the cream pill); the others are glass pills, each with its own veil, so they read over anything. */
+/* Show: All, Saved, Made into videos. The studio kit's Pick draws the pills (the chosen one solid cream with
+   espresso words, the others glass, the same as every pick-one in the studio); here only its place. */
 .st-s-filter {
   justify-self: start;
   max-width: 100%;
 }
 
-.st-s-filter .st-s-pick {
-  gap: var(--st-space-2);
-  padding: 0;
-  border-radius: var(--st-r-round);
-  background: none;
-}
-
-.st-s-filter .st-s-pick > .glide {
-  border-radius: var(--st-r-round);
-  background: var(--st-cream);
-  box-shadow: var(--st-sheen-cream), var(--st-depth-1);
-}
-
-.st-s-filter .st-s-pick__opt {
-  min-height: var(--st-tap);
-  padding: 0 var(--st-space-4);
-  border-radius: var(--st-r-round);
-  color: var(--st-text);
-  background: var(--st-fill-control);
-  box-shadow: var(--st-sheen-control);
-  font-family: var(--st-font);
-  font-size: var(--st-fs-chip);
-  font-weight: var(--st-weight-ui);
-  transition:
-    color var(--st-dur-hover) var(--st-ease-out),
-    background-color var(--st-dur-hover) var(--st-ease-out);
-}
-
-.st-s-filter .st-s-pick__opt:hover {
-  background: var(--st-fill-control-hover);
-}
-
-.st-s-filter .st-s-pick__opt.is-on {
-  color: var(--st-on-cream);
-  background: var(--st-cream);
-  box-shadow: none;
-}
-
-.st-s-filter .st-s-pick.has-glide > .st-s-pick__opt.is-on {
-  background: transparent;
-}
-
-.st-s-filter .st-s-pick__opt.is-on:hover {
-  background: var(--st-cream-hover);
-}
-
-/* The board: glass idea cards; the chosen one (its full idea open, or being edited) is the hero across the row. */
+/* The board: glass idea cards; the chosen one (its full idea open, or being edited) is the hero across the row. The
+   cards after it fill the gap it leaves in its old row (dense), so no row is left half empty. */
 .st-s-board {
   container-type: inline-size;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  grid-auto-flow: row dense;
   gap: var(--st-gap);
   margin: 0;
   padding: 0;
@@ -185,6 +73,8 @@
   flex-direction: column;
   gap: var(--st-space-4);
   padding: var(--st-inset);
+  /* Brought into view when it becomes the hero: clear of the page's edge and the phone's tab bar. */
+  scroll-margin-block: var(--st-space-6) calc(var(--st-tab-h) + var(--st-space-6));
 }
 
 .st-s-idea__main {
@@ -196,6 +86,7 @@
 
 .st-s-idea__top {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--st-space-2);
@@ -210,15 +101,20 @@
 }
 
 .st-s-idea__tags {
+  flex: 1 1 12rem;
   align-items: center;
+  min-width: 0;
   min-height: var(--st-tap);
 }
 
-/* Edit and Delete: round glass icon buttons at the card's top right. */
+/* Edit and Delete: glass pills with their words and a small icon at the card's top right (under the tags when the
+   card is narrow). */
 .st-s-idea__tools {
   display: flex;
   flex: none;
+  flex-wrap: wrap;
   gap: var(--st-space-2);
+  margin-inline-start: auto;
 }
 
 .st-s-idea__title,
@@ -245,8 +141,9 @@
   overflow-wrap: anywhere;
 }
 
-/* The checked advice: a deeper well inside the card with a little of its tone (the words keep their contrast over
-   a white desktop or photo: the well only ever darkens). */
+/* The checked advice: a piece of lighter glass inside the card with a little of its tone. --st-fill-control is light
+   smoky glass over Ember and a card's own veil in Picture and See-through, so over a white desktop or photo the
+   piece darkens and the words keep their contrast. */
 .st-s-idea__advice {
   margin: 0;
   padding: var(--st-space-3) var(--st-space-4);
@@ -254,7 +151,8 @@
   color: var(--st-mint-ink);
   background:
     linear-gradient(rgb(var(--st-mint-rgb) / var(--st-tint-cut)), rgb(var(--st-mint-rgb) / var(--st-tint-cut))),
-    rgb(var(--st-well-rgb) / 0.36);
+    var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
   font-size: var(--st-fs-small);
   line-height: 1.45;
 }
@@ -263,7 +161,7 @@
   color: var(--st-coral-ink);
   background:
     linear-gradient(rgb(var(--st-coral-rgb) / var(--st-tint-cut)), rgb(var(--st-coral-rgb) / var(--st-tint-cut))),
-    rgb(var(--st-well-rgb) / 0.36);
+    var(--st-fill-control);
 }
 
 /* The actions sit at the foot of every card, so a row of cards lines them up. */
@@ -275,7 +173,8 @@
   padding-top: var(--st-space-1);
 }
 
-/* The full idea: a reading well inside the hero. */
+/* The full idea: a reading panel of lighter glass inside the hero (the same --st-fill-control as the advice: light
+   over Ember, the card's veil again over a white desktop or photo). */
 .st-s-concept {
   display: grid;
   align-content: start;
@@ -283,8 +182,8 @@
   padding: var(--st-space-4) var(--st-space-5);
   border-radius: var(--st-r-control);
   color: var(--st-text);
-  background: rgb(var(--st-well-rgb) / 0.4);
-  box-shadow: inset 0 1px 12px -6px rgb(var(--st-shadow-rgb) / 0.6);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
   font-size: var(--st-fs-body);
   line-height: var(--st-lh-body);
 }
@@ -332,7 +231,7 @@
   margin-top: 0.1em;
   border-radius: var(--st-r-round);
   color: var(--st-text-amber);
-  background: rgb(var(--st-cream-rgb) / 0.1);
+  background: var(--st-fill-control-hover);
   box-shadow: var(--st-sheen-control);
   font-size: var(--st-fs-chip);
   font-variant-numeric: lining-nums tabular-nums;

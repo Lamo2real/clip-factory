@@ -12,7 +12,7 @@ import { useLoad } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
 import type { Character, CharacterInput, StoriesConfig } from "../api/types.ts";
 import { CATALOG } from "../engine/catalog.ts";
-import { Glass, RoundGlassButton } from "../glass/index.ts";
+import { Glass, GlassPill } from "../glass/index.ts";
 import { storiesGoLater } from "../pane.tsx";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { storiesHref } from "../routes.ts";
@@ -36,7 +36,7 @@ export function CharactersScreen({ ws, page }: StoriesScreenProps) {
 /** A character-shaped empty state: a friendly figure waiting to be made. */
 export function EmptyCast({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
   return (
-    <Glass className="st-s-empty st-s-make-empty">
+    <Glass lens className="st-s-empty st-s-make-empty">
       <CharacterPreview look={{ ...DEFAULT_LOOK, outfit: { ...DEFAULT_LOOK.outfit, top: "#62c6ff" } }} movementStyle="bouncy" expression="happy" action="wave" size={140} label="A friendly character waving" />
       <h2 className="st-s-empty__title">{title}</h2>
       <p className="st-s-empty__text">{children}</p>
@@ -45,14 +45,11 @@ export function EmptyCast({ title, children, action }: { title: string; children
   );
 }
 
-/** Back to the cast: a round glass arrow beside the word (the word stays, so a child can read where it goes). */
+/** Back to the cast: the studio kit's back link with its round glass orb (the same as Production's and Review's). */
 function BackToCast() {
   return (
-    <A href={storiesHref({ name: "characters" })} className="st-s-back st-s-castback">
-      <span className="st-s-castback__orb" aria-hidden="true">
-        <MakeIcon name="back" size={20} />
-      </span>
-      Characters
+    <A href={storiesHref({ name: "characters" })} className="st-s-back st-s-back--orb">
+      <span className="st-s-back__orb">‹</span> Characters
     </A>
   );
 }
@@ -89,7 +86,7 @@ function Gallery({ ws }: { ws: string }) {
         <ul className="st-s-cast">
           {list.data.map((c) => (
             <li key={c.characterId}>
-              <A href={storiesHref({ name: "character", characterId: c.characterId })} className="st-glass st-s-cast__card">
+              <A href={storiesHref({ name: "character", characterId: c.characterId })} className="st-glass st-lens st-s-cast__card">
                 <span className="st-s-cast__stage">
                   <CharacterPreview look={c.look} movementStyle={c.movementStyle} action="idle" expression={showFace(c)} size={132} label={`${c.name}, moving`} />
                 </span>
@@ -233,7 +230,7 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
 
   return (
     <section className="st-page st-studio st-s-make">
-      <header className="st-s-head st-s-head--tool">
+      <header className="st-s-head">
         <div className="st-plate st-s-head__text">
           <BackToCast />
           <h1 className="st-s-head__title">{c.name}</h1>
@@ -241,9 +238,9 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
             In {count(c.storyCount, "video")}. Changes show in new videos and in a Remake the whole video, never in one already made.
           </p>
         </div>
-        <RoundGlassButton label="Delete" className="st-s-head__tool" onClick={() => setAsking(true)}>
-          <MakeIcon name="delete" />
-        </RoundGlassButton>
+        <GlassPill icon={<MakeIcon name="delete" size={18} />} onClick={() => setAsking(true)}>
+          Delete
+        </GlassPill>
       </header>
       <DesignPanel
         ws={ws}

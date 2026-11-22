@@ -1,65 +1,8 @@
 /* ---------- Characters ---------- */
 
-/* Back to the cast: a round glass arrow beside the word. */
-.st-s-make .st-s-castback {
-  gap: var(--st-space-3);
-  min-height: var(--st-tap);
-  margin-bottom: var(--st-space-2);
-  padding: 0 var(--st-space-3) 0 0;
-  border-radius: var(--st-r-round);
-  color: var(--st-text);
-  font-family: var(--st-font);
-  font-size: var(--st-fs-small);
-  font-weight: var(--st-weight-ui);
-  text-decoration: none;
-}
-
-.st-s-make .st-s-castback:hover {
-  color: var(--st-text-strong);
-  text-decoration: none;
-}
-
-.st-s-castback__orb {
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  width: var(--st-tap);
-  height: var(--st-tap);
-  border-radius: var(--st-r-round);
-  background: var(--st-fill-control);
-  box-shadow: var(--st-sheen-control), var(--st-depth-1);
-  transition: background-color var(--st-dur-hover) var(--st-ease-out);
-}
-
-.st-s-castback:hover .st-s-castback__orb {
-  background: var(--st-fill-control-hover);
-}
-
-.st-s-castback:focus-visible {
-  outline: none;
-  box-shadow: var(--st-focus-ring);
-}
-
-/* A character's own page: Delete is a round glass button at the head's top right. */
-.st-s-make .st-s-head--tool {
-  position: relative;
-}
-
-.st-s-head--tool > .st-s-head__tool {
-  position: absolute;
-  top: 0;
-  right: 0;
-}
-
-/* Where the head has its plate (Picture, See-through), the button sits inside the plate's padding, beside the back
-   arrow, never on the plate's corner. */
-.stories-app:is([data-look="window"], [data-look="picture"]) .st-s-head--tool > .st-s-head__tool {
-  top: var(--st-space-3);
-  right: var(--st-space-3);
-}
-
-/* The cast: character cards on glass. Each figure stands on its own warm-lit stage that hugs the card's corners
-   (the card's radius less its 6 px gap); the name, a line and the tags sit under it. */
+/* The cast: character cards on glass (the first three on screen may bend their rim: .st-lens). Each figure stands on
+   its own warm-lit stage in a 10 px bezel (the card's radius less the bezel: inner 10), so the liquid rim stays in
+   the bezel and never reaches the words; the name, a line and the tags sit under it. */
 .st-s-cast {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
@@ -80,7 +23,7 @@
   align-content: start;
   gap: var(--st-space-2);
   height: 100%;
-  padding: var(--st-gap-surface) var(--st-gap-surface) var(--st-space-5);
+  padding: var(--st-bezel-pad) var(--st-bezel-pad) var(--st-space-5);
   text-align: center;
   text-decoration: none;
   color: var(--st-text);
@@ -100,6 +43,8 @@
   box-shadow: var(--st-focus-ring);
 }
 
+/* The stage is lighter glass with the amber light behind the figure: --st-fill-control is light smoky glass over
+   Ember and a card's veil in Picture and See-through (no words on it, so it only has to look right). */
 .st-s-cast__stage {
   display: grid;
   place-items: center;
@@ -107,15 +52,16 @@
   min-height: 160px;
   margin-bottom: var(--st-space-2);
   padding: var(--st-space-3);
-  border-radius: var(--st-r-control);
+  border-radius: var(--st-r-inner);
   background:
-    radial-gradient(62% 58% at 50% 60%, rgb(var(--st-amber-rgb) / 0.26), transparent 72%),
-    rgb(var(--st-well-rgb) / 0.3);
+    radial-gradient(62% 58% at 50% 62%, rgb(var(--st-amber-rgb) / 0.36), transparent 74%),
+    var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
   transition: background-color var(--st-dur-hover) var(--st-ease-out);
 }
 
 .st-s-cast__card:hover .st-s-cast__stage {
-  background-color: rgb(var(--st-well-rgb) / 0.18);
+  background-color: var(--st-fill-control-hover);
 }
 
 .st-s-cast__name,
@@ -157,7 +103,7 @@
     justify-items: start;
     align-items: start;
     column-gap: var(--st-space-4);
-    padding: var(--st-gap-surface) var(--st-space-4) var(--st-gap-surface) var(--st-gap-surface);
+    padding: var(--st-bezel-pad) var(--st-space-4) var(--st-bezel-pad) var(--st-bezel-pad);
     text-align: left;
   }
 
@@ -300,53 +246,6 @@
   line-height: var(--st-lh-body);
 }
 
-/* Make your character (Looks, Face, Moves, Sounds, Name) and Try a move: pills, the chosen one solid cream. */
-:is(.st-s-editor__parts, .st-s-moves) .st-s-pick {
-  gap: var(--st-space-2);
-  padding: 0;
-  border-radius: var(--st-r-round);
-  background: none;
-}
-
-:is(.st-s-editor__parts, .st-s-moves) .st-s-pick > .glide {
-  border-radius: var(--st-r-round);
-  background: var(--st-cream);
-  box-shadow: var(--st-sheen-cream), var(--st-depth-1);
-}
-
-:is(.st-s-editor__parts, .st-s-moves) .st-s-pick__opt {
-  min-height: var(--st-tap);
-  padding: 0 var(--st-space-4);
-  border-radius: var(--st-r-round);
-  color: var(--st-text);
-  background: var(--st-fill-control);
-  box-shadow: var(--st-sheen-control);
-  font-family: var(--st-font);
-  font-size: var(--st-fs-chip);
-  font-weight: var(--st-weight-ui);
-  transition:
-    color var(--st-dur-hover) var(--st-ease-out),
-    background-color var(--st-dur-hover) var(--st-ease-out);
-}
-
-:is(.st-s-editor__parts, .st-s-moves) .st-s-pick__opt:hover {
-  background: var(--st-fill-control-hover);
-}
-
-:is(.st-s-editor__parts, .st-s-moves) .st-s-pick__opt.is-on {
-  color: var(--st-on-cream);
-  background: var(--st-cream);
-  box-shadow: none;
-}
-
-:is(.st-s-editor__parts, .st-s-moves) .st-s-pick__opt.is-on:hover {
-  background: var(--st-cream-hover);
-}
-
-:is(.st-s-editor__parts, .st-s-moves) .st-s-pick.has-glide > .st-s-pick__opt.is-on {
-  background: transparent;
-}
-
 /* The faces: glass tiles; a face the character uses gets a little mint, the one being tried a little amber. */
 .st-s-faces {
   display: grid;
@@ -381,7 +280,7 @@
 .st-s-face.is-trying {
   background:
     linear-gradient(rgb(var(--st-amber-rgb) / 0.16), rgb(var(--st-amber-rgb) / 0.16)),
-    rgb(var(--st-well-rgb) / 0.3);
+    var(--st-fill-control);
   box-shadow: var(--st-sheen-control), var(--st-glow-behind);
 }
 
@@ -502,15 +401,6 @@
 
 /* ---------- Phones: every target 48 px ---------- */
 @media (max-width: 767px), (pointer: coarse) {
-  .st-s-make .st-s-castback {
-    min-height: var(--st-tap-phone);
-  }
-
-  .st-s-castback__orb {
-    width: var(--st-tap-phone);
-    height: var(--st-tap-phone);
-  }
-
   :is(.st-s-editor__parts, .st-s-moves) .st-s-pick__opt {
     min-height: var(--st-tap-phone);
   }

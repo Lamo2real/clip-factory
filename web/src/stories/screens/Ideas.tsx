@@ -14,7 +14,8 @@ import { useLoad } from "../../lib/hooks.ts";
 import { navigate } from "../../lib/router.ts";
 import { storiesApi } from "../api/client.ts";
 import type { AiTask, GuidanceTopic, Idea, IdeaCategory, IdeaInput, ModelOverride, StoriesConfig, VideoConcept } from "../api/types.ts";
-import { cx, Glass, RoundGlassButton, Stepper } from "../glass/index.ts";
+import { cx, Glass, GlassPill, Stepper } from "../glass/index.ts";
+import { storiesReduceMotion } from "../prefs.ts";
 import { storiesHref } from "../routes.ts";
 import { merged, ModelMenu, sendPick, TaskLine, useAiInfo, useAiTask, usualFor, type AiInfo } from "../studio/ai.tsx";
 import { useWorkspace } from "../studio/hooks.ts";
@@ -96,7 +97,7 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
 
   function showDrafts(set: DraftSet) {
     setDrafts(set);
-    requestAnimationFrame(() => draftsRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" }));
+    requestAnimationFrame(() => draftsRef.current?.scrollIntoView?.({ behavior: storiesReduceMotion() ? "auto" : "smooth", block: "nearest" }));
   }
 
   async function saveDraft(k: number) {
@@ -172,7 +173,7 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
       {open === "ask" ? <AskForIdeas ws={ws} info={info} onCancel={() => setOpen("none")} onDrafts={(list, from) => showDrafts({ from, drafts: list.map((input) => ({ input, saved: false, saving: false })) })} /> : null}
 
       {drafts ? (
-        <section className="st-glass st-s-drafts" ref={draftsRef} aria-labelledby="st-drafts-title">
+        <section className="st-glass st-lens st-s-drafts" ref={draftsRef} aria-labelledby="st-drafts-title">
           <div className="st-s-drafts__head">
             <h2 className="st-s-drafts__title" id="st-drafts-title">
               {drafts.from}
@@ -217,7 +218,7 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
       ) : !ideas.data ? (
         <Busy>Getting your ideas…</Busy>
       ) : shown.length === 0 ? (
-        <Glass className="st-s-empty st-s-make-empty">
+        <Glass lens className="st-s-empty st-s-make-empty">
           <span className="st-s-empty__bulb" aria-hidden="true" />
           <h2 className="st-s-empty__title">{filter === "all" ? "No ideas yet" : filter === "saved" ? "No saved ideas waiting" : "No ideas made into videos yet"}</h2>
           <p className="st-s-empty__text">Tap New idea to type one, or Ask for ideas to get a few to pick from.</p>
@@ -268,7 +269,7 @@ function NewIdeaForm({ onSave, onCancel }: { onSave: (i: IdeaInput) => Promise<v
 
   return (
     <form
-      className="st-glass st-s-panel st-s-make-panel"
+      className="st-glass st-lens st-s-panel st-s-make-panel"
       aria-label="New idea"
       onSubmit={(e) => {
         e.preventDefault();
@@ -463,7 +464,7 @@ function AskForIdeas({ ws, info, onDrafts, onCancel }: { ws: string; info: AiInf
 
   return (
     <form
-      className="st-glass st-s-panel st-s-make-panel"
+      className="st-glass st-lens st-s-panel st-s-make-panel"
       aria-label="Ask for ideas"
       onSubmit={(e) => {
         e.preventDefault();
@@ -513,6 +514,7 @@ function IdeaCard({
   const [editing, setEditing] = useState(false);
   const [expandPick, setExpandPick] = useState<ModelOverride | null>(null);
   const [morePick, setMorePick] = useState<ModelOverride | null>(null);
+  const cardRef = useRef<HTMLLIElement>(null);
   const advice = adviceLine(idea, topics);
   const blocked = idea.category === "driving_safety" && (idea.needsGuidance || !idea.safetyTopicId);
   const expanding = useAiTask(ws, (task) => {
@@ -554,9 +556,18 @@ function IdeaCard({
 
   const c = idea.concept;
   // The chosen idea (being edited, or its full idea open) is the board's hero: brighter glass across the whole row.
+  // Spanning the row can move it down a row, so it is brought into view (the board fills the gap it leaves).
+  const hero = !!c && showConcept;
+  const lifted = editing || hero;
+  useEffect(() => {
+    if (!lifted) return;
+    const card = cardRef.current;
+    requestAnimationFrame(() => card?.scrollIntoView?.({ behavior: storiesReduceMotion() ? "auto" : "smooth", block: "nearest" }));
+  }, [lifted]);
+
   if (editing)
     return (
-      <li className={cx("st-glass st-glass--hero st-lens", "st-s-idea", `st-s-idea--${idea.category}`, "is-hero is-editing")} data-idea={idea.ideaId}>
+      <li ref={cardRef} className={cx("st-glass st-glass--hero", "st-s-idea", `st-s-idea--${idea.category}`, "is-hero is-editing")} data-idea={idea.ideaId}>
         <h2 className="st-s-idea__title">Edit “{idea.title}”</h2>
         <EditIdeaForm
           idea={idea}
@@ -572,9 +583,9 @@ function IdeaCard({
         />
       </li>
     );
-  const hero = !!c && showConcept;
+  // Every card may bend its rim (.st-lens): the lens code gives it to the first three on screen that are small enough.
   return (
-    <li className={cx("st-glass", hero && "st-glass--hero st-lens", "st-s-idea", `st-s-idea--${idea.category}`, hero && "is-hero")} data-idea={idea.ideaId}>
+    <li ref={cardRef} className={cx("st-glass st-lens", hero && "st-glass--hero", "st-s-idea", `st-s-idea--${idea.category}`, hero && "is-hero")} data-idea={idea.ideaId}>
       <div className="st-s-idea__main">
         <div className="st-s-idea__top">
           <span className="st-s-idea__tags">
@@ -583,12 +594,12 @@ function IdeaCard({
             {blocked ? <Tag tone="coral">Needs checked advice</Tag> : null}
           </span>
           <span className="st-s-idea__tools">
-            <RoundGlassButton label={`Edit ${idea.title}`} aria-disabled={busy || undefined} onClick={() => !busy && setEditing(true)}>
-              <MakeIcon name="edit" />
-            </RoundGlassButton>
-            <RoundGlassButton label="Delete" onClick={onDelete}>
-              <MakeIcon name="delete" />
-            </RoundGlassButton>
+            <GlassPill icon={<MakeIcon name="edit" size={18} />} aria-label={`Edit ${idea.title}`} aria-disabled={busy || undefined} onClick={() => !busy && setEditing(true)}>
+              Edit
+            </GlassPill>
+            <GlassPill icon={<MakeIcon name="delete" size={18} />} aria-label={`Delete ${idea.title}`} onClick={onDelete}>
+              Delete
+            </GlassPill>
           </span>
         </div>
         <h2 className="st-s-idea__title">{idea.title}</h2>
@@ -668,10 +679,9 @@ function IdeaCard({
 const ICON_PATHS = {
   edit: "M4.5 19.5h4l10.2-10.2a2.4 2.4 0 0 0-4-4L4.5 15.5zM13.5 6.5l4 4",
   delete: "M5 7h14M10 7V4.8h4V7M7 7l.9 12.2a1.5 1.5 0 0 0 1.5 1.3h5.2a1.5 1.5 0 0 0 1.5-1.3L17 7M10.3 11v5.5M13.7 11v5.5",
-  back: "M14.5 5.5 8 12l6.5 6.5",
 } as const;
 
-/** The make screens' own small icons (round strokes, like Stories' StIcon): Edit, Delete and Back. */
+/** The make screens' own small icons (round strokes, like Stories' StIcon), beside the words Edit and Delete. */
 export function MakeIcon({ name, size = 22 }: { name: keyof typeof ICON_PATHS; size?: number }) {
   return (
     <svg className="st-s-makeicon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
