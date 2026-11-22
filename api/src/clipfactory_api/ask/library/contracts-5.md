@@ -136,4 +136,12 @@ live channel, except the sites' own pages (for example `twitch.tv/directory`, `/
 `kick.com/categories`, `/browse`, `/following`), which are refused on the spot with "That Twitch link goes to a Twitch
 page, not a video, clip or channel. Open the video or the channel and copy its link." (Kick the same).
 
+**Captions garbled on a Mac (owner report, 2026-11-22).** A Mac tool with no UTF-8 locale (`pbcopy`/`pbpaste` run
+from an app, for example) reads each UTF-8 byte as one Mac Roman letter, so 💀 becomes an Apple logo and `üíÄ`, é
+becomes `√©` and 日本 `Êó•Êú¨`. One TikTok caption was saved like that and copied into TikTok by Post it yourself (§42).
+The API repairs such runs (`api/src/clipfactory_api/mojibake.py`: 3- and 4-byte characters, and 2-byte ones after
+`√` or `¬`; real emoji, accents and other scripts stay exactly as written): in every `Clip` it returns, in
+`Partial<Captions>` it saves (PATCH, confirm, the campaign caption fix), and in what the publishers send. Stored items
+are never rewritten for it.
+
 `Performance` sums treat a `null` metric as 0. Ids are ULIDs (26 chars, time-sortable). Timestamps are ISO-8601 UTC strings.
