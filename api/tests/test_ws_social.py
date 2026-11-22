@@ -136,7 +136,7 @@ def test_connect_uses_the_chosen_app_and_its_redirect_with_a_workspace_state(
         (
             "tiktok",
             "clips_without_keys",
-            "Lamo Clips has no TikTok app keys yet. Set up TikTok in Lamo Clips first "
+            "Clip Factory has no TikTok app keys yet. Set up TikTok in Clip Factory first "
             "(Settings › Posting › Set up posting, up to the keys step).",
         ),
     ],
@@ -240,7 +240,7 @@ def test_list_shows_five_accounts_their_app_limits_and_lamo_clips_without_names(
     assert (x["connectionStatus"], x["externalAccountId"], x["accountName"]) == ("connected", "77", "Lamo Stories x")
     assert x["lastCheckedAt"] == "2026-11-15T10:00:00.000Z"
     assert x["app"] == {"choice": "clips", "saved": False}
-    assert any("shared with Lamo Clips" in line for line in x["limits"])
+    assert any("shared with Clip Factory" in line for line in x["limits"])
     assert instagram["app"]["choice"] == "own"
     assert instagram["app"]["saved"] is True
     assert set(instagram["app"]["hints"]) == {"clientId", "clientSecret", "configId"}
@@ -982,8 +982,100 @@ def test_onboarding_ticks_a_platform_only_when_it_is_lamo_stories_own(
     steps = {s["step"]: s for s in call("GET", "/v1/workspaces/stories/onboarding")[1]["onboarding"]["steps"]}
     assert steps["x"]["state"] == "todo"
     assert (
-        steps["x"]["line"] == "This is Lamo Clips' X account. Pick another in Social accounts, or tap Use it for both."
+        steps["x"]["line"]
+        == "This is Clip Factory's X account. Pick another in Social accounts, or tap Use it for both."
     )
+
+
+def _setup_steps(call: Call) -> dict[str, dict[str, Any]]:
+    status, body = call("GET", "/v1/workspaces/stories/onboarding")
+    assert status == 200, body
+    return {s["step"]: s for s in body["onboarding"]["steps"]}
+
+
+def test_setup_reads_each_account_as_social_accounts_shows_it(
+    call: Call, store: db.Store, secrets_client: FakeSecretsManager
+) -> None:
+    """Round 5 E3: Clip Factory's TikTok app keys changed (in Clip Factory's own Settings), so the stored
+    ``SOCIAL#tiktok`` still says ``connected`` with the old client id. Setup's Connect TikTok step works it out
+    like Social accounts (``social.accounts_shown``, with the workspace secrets): to do, and settled, so every
+    screen says the same."""
+    sup.social(store, secrets_client, "tiktok")
+    sup.social(store, secrets_client, "youtube")
+    assert (_setup_steps(call)["tiktok"]["state"], _setup_steps(call)["youtube"]["state"]) == ("done", "done")
+    secrets_client.values["cf-prod/platforms/tiktok/app"] = json.dumps(
+        {**GOOD["tiktok"], "clientId": "awproductionkeys12345", "userId": USER}
+    )
+    steps = _setup_steps(call)
+    assert (steps["tiktok"]["state"], steps["youtube"]["state"]) == ("todo", "done")
+    stored = store.get(sup.PK, "SOCIAL#tiktok")
+    assert (stored["connectionStatus"], stored["reason"]) == ("needs_reconnect", "keys_changed")
+    shown = accounts(call)
+    assert {p: steps[p]["state"] == "done" for p in ("tiktok", "youtube")} == {
+        p: shown[p]["connectionStatus"] == "connected" for p in ("tiktok", "youtube")
+    }
+    # a step the owner skipped stays skipped while its account needs connecting again
+    assert call("PATCH", "/v1/workspaces/stories/onboarding", {"step": "tiktok", "skipped": True})[0] == 200
+    assert _setup_steps(call)["tiktok"]["state"] == "skipped"
+    # the PATCH answers with the same settled state
+    status, body = call("PATCH", "/v1/workspaces/stories/onboarding", {"step": "tiktok", "skipped": False})
+    assert status == 200
+    assert {s["step"]: s["state"] for s in body["onboarding"]["steps"]}["tiktok"] == "todo"
+
+
+def test_setup_never_waits_on_a_secret_it_cannot_read(
+    call: Call, store: db.Store, secrets_client: FakeSecretsManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Secrets Manager that fails just now never breaks setup: the accounts are shown without the key check after
+    the first failed read (as the dashboard does), and the steps still come back."""
+    for platform in ("youtube", "tiktok", "x"):
+        sup.social(store, secrets_client, platform)
+    reads: list[str] = []
+
+    def down(*a: Any, **_k: Any) -> None:
+        reads.append(str(a[4]))
+        raise RuntimeError("Secrets Manager is down")
+
+    monkeypatch.setattr(apps, "app_keys", down)
+    steps = _setup_steps(call)
+    assert [steps[p]["state"] for p in ("youtube", "tiktok", "x")] == ["done"] * 3
+    assert len(reads) == 1
+
+
+def test_setup_stops_reading_app_keys_when_the_request_is_short_on_time(
+    call: Call, store: db.Store, secrets_client: FakeSecretsManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each key read takes 6 s: setup reads keys only while one more worst-case read still ends inside the
+    request's 29 s, like the dashboard, and still shows every step."""
+    import time
+
+    from clipfactory_api.workspaces import secrets as ws_secrets_mod
+
+    for platform in ("youtube", "tiktok", "instagram", "facebook", "x"):
+        sup.social(store, secrets_client, platform)
+
+    class Clock:
+        start = time.monotonic()
+        waited = 0.0
+
+        def monotonic(self) -> float:
+            return self.start + self.waited
+
+    clock = Clock()
+    monkeypatch.setattr(social, "time", clock)
+    real = apps.app_keys
+    reads: list[str] = []
+
+    def slow(*a: Any, **k: Any) -> Any:
+        reads.append(str(a[4]))
+        clock.waited += 6.0
+        return real(*a, **k)
+
+    monkeypatch.setattr(apps, "app_keys", slow)
+    steps = _setup_steps(call)
+    assert {steps[p]["state"] for p in ("youtube", "tiktok", "instagram", "facebook", "x")} == {"done"}
+    assert len(reads) == 2  # never one read per platform
+    assert clock.waited + ws_secrets_mod.WORST_READ_SECONDS <= social.DASHBOARD_REQUEST_SECONDS
 
 
 def test_no_sentence_names_the_old_connections_page() -> None:

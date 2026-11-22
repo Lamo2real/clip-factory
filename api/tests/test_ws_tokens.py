@@ -196,7 +196,7 @@ def test_a_dead_token_marks_only_the_workspace_account(
     with pytest.raises(ReconnectNeededError) as e:
         provider("tiktok")
     assert str(e.value) == (
-        "Lamo Stories' TikTok (Lamo Stories tiktok) needs connecting again. Open Lamo Stories › Social accounts, "
+        "This TikTok account (Lamo Stories tiktok) needs connecting again. Open Lamo Stories › Social accounts, "
         "then tap Try again."
     )
     item = table.raw(sup.PK, "SOCIAL#tiktok")

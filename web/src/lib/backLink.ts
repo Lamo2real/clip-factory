@@ -10,8 +10,8 @@ const isId = (v: string) => ULID.test(v) || UUID.test(v);
 
 export type BackKind = "campaign" | "campaigns" | "find" | "clip" | "money" | "getpaid" | "setup";
 
-/** Get paid's places (§40.1) and the setup pages' places (§17.1, §38.3), for the back shapes. */
-const GETPAID_PLACES = ["youtube", "tiktok", "instagram", "facebook", "x", "contentrewards"];
+/** Get paid's places (§40.1), its Your bank page (§40.5.2) and the setup pages' places (§17.1, §38.3), for the back shapes. */
+const GETPAID_PLACES = ["youtube", "tiktok", "instagram", "facebook", "x", "contentrewards", "bank"];
 const SETUP_NAMES: Record<string, string> = { youtube: "YouTube", tiktok: "TikTok", instagram: "Instagram", facebook: "Facebook", x: "X", contentrewards: "Content Rewards" };
 
 export interface BackLink {
@@ -79,7 +79,8 @@ export function backLabel(back: BackLink, campaignName?: string | null): string 
     case "money":
       return "Back to Money";
     case "getpaid":
-      return "Back to Get paid";
+      // Your bank's own page says where it really goes (§40.5.2); Get paid's list and place pages say Get paid.
+      return back.href === "/settings/posting/getpaid/bank" ? "Back to Your bank" : "Back to Get paid";
     case "setup":
       return `Back to ${back.placeName ?? "the"} setup`;
   }

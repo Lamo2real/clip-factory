@@ -82,7 +82,7 @@ def not_ready_sentence(platform: str, reason: str) -> str:
     name = label(platform)
     if reason == "clips_missing":
         return (
-            f"Lamo Clips has no {name} app keys yet. Set up {name} in Lamo Clips first "
+            f"Clip Factory has no {name} app keys yet. Set up {name} in Clip Factory first "
             "(Settings › Posting › Set up posting, up to the keys step)."
         )
     if reason == "no_choice" and platform in ws.SHARED_APP_PLATFORMS:

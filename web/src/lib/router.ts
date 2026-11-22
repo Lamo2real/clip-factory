@@ -38,6 +38,8 @@ export type Route =
   | { name: "cr_setup" }
   /** Posting › Get paid › one place (§40.1 item 2). */
   | { name: "getpaid"; place: GetPaidPlace }
+  /** Posting › Get paid › Your bank (§40.5.2): matched before `getpaid/{place}`. */
+  | { name: "getpaid-bank" }
   /** Your Content Rewards campaigns (§38.4), and one campaign's card. */
   | { name: "campaigns" }
   /** The campaign finder (§41.1): matched before `campaign`, whose pattern would otherwise take "find". */
@@ -98,6 +100,8 @@ export function match(pathname: string, search = ""): Route {
     const platform = setup[1] as Platform;
     return SETUP_PLATFORMS.includes(platform) ? { name: "settings", tree: "posting", branch: "setup", platform } : { name: "not_found" };
   }
+  // Your bank is not a place that pays him: its page is matched first (§40.5.2).
+  if (path === "/settings/posting/getpaid/bank") return { name: "getpaid-bank" };
   const getpaid = /^\/settings\/posting\/getpaid\/([a-z]{1,20})$/.exec(path);
   if (getpaid) return GETPAID_PLACES.includes(getpaid[1] as GetPaidPlace) ? { name: "getpaid", place: getpaid[1] as GetPaidPlace } : { name: "not_found" };
   const consent = /^\/mock-oauth\/([a-z]{1,20})$/.exec(path);
@@ -272,6 +276,7 @@ export function section(route: Route): "home" | "jobs" | "review" | "library" | 
       return null;
     case "cr_setup":
     case "getpaid":
+    case "getpaid-bank":
       return "settings";
     case "campaigns":
     case "campaigns_find":

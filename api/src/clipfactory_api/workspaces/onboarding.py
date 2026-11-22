@@ -11,11 +11,13 @@ real state and cannot be ticked by hand (§45.34 "Setup steps 1–3", "Onboardin
   ticking all three from ``configSavedAt``, so nothing goes backwards;
 * step 4 when ``PATCH …/workspaces/{ws}`` saved ``configuration.providers`` (``providersPickedAt``, even unchanged:
   keeping the built-in animator is a pick too) or a maker other than the built-in default is picked;
-* steps 6–10 when that platform's own Lamo Stories account is ``connected`` (Lamo Clips' own account,
-  ``same_as_clips``, is not: nothing can be posted there, so the step stays to do with a line saying why). A stored
-  ``connected`` whose account is Lamo Clips' own destination (Lamo Clips connected it later and nobody shared it)
-  counts as ``same_as_clips`` too (§45.35 D11), and a stored ``same_as_clips`` that Lamo Clips let go of counts as
-  ``connected``, as the Social accounts page shows them.
+* steps 6–10 when that platform's own Lamo Stories account is ``connected`` as the Social accounts page shows it
+  (``social.accounts_shown``, settled the same way, round 5 E3): Clip Factory's own account (``same_as_clips``) is
+  not, since nothing can be posted there, so the step stays to do with a line saying why; an account whose chosen
+  app's keys changed (``needs_reconnect``) is not either. A stored ``connected`` whose account is Clip Factory's own
+  destination (Clip Factory connected it later and nobody shared it) counts as ``same_as_clips`` (§45.35 D11), and a
+  stored ``same_as_clips`` that Clip Factory let go of counts as ``connected``. The app keys are read with the
+  workspace secrets only while the request has time for one more slow read, as the dashboard does.
 
 Only 5 and 11 are ticked by hand. The ``ONBOARD`` item keeps only the hand ticks, the skips and ``finishedAt``.
 """
@@ -32,6 +34,7 @@ from ..errors import bad_request, conflict
 from . import ai_config as cfg
 from . import guard, social
 from . import types as ws
+from .secrets import WorkspaceSecrets
 
 STEPS: Final = (
     ("ai", "Set up the AI"),
@@ -69,9 +72,9 @@ TICKS_ITSELF: Final = {
 
 
 def same_as_clips_line(platform: str) -> str:
-    """Why a platform's step is not done while its account is Lamo Clips' own (§45.34)."""
+    """Why a platform's step is not done while its account is Clip Factory's own (§45.34)."""
     return (
-        f"This is Lamo Clips' {PLATFORM_LABEL.get(platform, platform)} account. Pick another in Social accounts, "
+        f"This is Clip Factory's {PLATFORM_LABEL.get(platform, platform)} account. Pick another in Social accounts, "
         "or tap Use it for both."
     )
 
@@ -95,19 +98,6 @@ def ai_steps(store: db.Store, user_id: str, workspace_id: str) -> dict[str, bool
     return done
 
 
-def _platform_status(store: db.Store, user_id: str, platform: str, item: Mapping[str, Any] | None) -> str:
-    """The account's status as the Social accounts page works it out (``social.public_account``, §45.34, D11), both
-    ways: a stored ``connected`` that is Lamo Clips' own destination, not shared on purpose, is ``same_as_clips``;
-    a stored ``same_as_clips`` that Lamo Clips let go of (disconnected, or moved to another account) is
-    ``connected``, Lamo Stories' own."""
-    status = str((item or {}).get("connectionStatus") or "not_connected")
-    if item is None or status not in ("connected", "same_as_clips"):
-        return status
-    # ``social.clips_identity`` is the one read of Lamo Clips' ACCOUNT# (five attributes, §45.15)
-    clips = social.clips_identity(store, user_id, platform)
-    return "same_as_clips" if social.same_as_clips(item, clips) else "connected"
-
-
 def _item(store: db.Store, user_id: str, workspace_id: str) -> dict[str, Any] | None:
     return cfg.get_owned(store, user_id, workspace_id, ws.ONBOARD_SK)
 
@@ -122,17 +112,40 @@ def _video_picked(workspace: Mapping[str, Any]) -> bool:
     return any((chosen or {}).get(k) not in (None, defaults.get(k)) for k in ("video", "images"))
 
 
-def state(store: db.Store, user_id: str, workspace_id: str, workspace: Mapping[str, Any]) -> dict[str, Any]:
+def platform_statuses(
+    store: db.Store,
+    user_id: str,
+    workspace_id: str,
+    *,
+    now: datetime,
+    secrets: WorkspaceSecrets | None = None,
+    started: float | None = None,
+) -> dict[str, str]:
+    """Each platform's ``connectionStatus`` as the Social accounts page shows it (``social.accounts_shown``: the
+    chosen app's current keys, Clip Factory's identity, the 30-minute list; settled the same way). ``secrets`` is
+    None while posting is not switched on (the keys are then not checked); ``started`` is the request's
+    ``time.monotonic()`` on arrival, so a slow Secrets Manager never holds setup past its 29 s."""
+    shown = social.accounts_shown(store, secrets, user_id, workspace_id, now, started=started)
+    return {str(a["platform"]): str(a.get("connectionStatus") or "not_connected") for a in shown}
+
+
+def state(
+    store: db.Store,
+    user_id: str,
+    workspace_id: str,
+    workspace: Mapping[str, Any],
+    *,
+    now: datetime,
+    secrets: WorkspaceSecrets | None = None,
+    started: float | None = None,
+) -> dict[str, Any]:
     """``Onboarding`` (§45.6) from the real state and the stored ticks and skips."""
     item = _item(store, user_id, workspace_id) or {}
     hand = {str(s) for s in item.get("stepsDone") or []}
     skipped = {str(s) for s in item.get("skipped") or []}
     from_ai = ai_steps(store, user_id, workspace_id)
-    social = {
-        str(i.get("platform") or str(i["sk"])[len(ws.SOCIAL_SK) :]): i
-        for i in cfg.query_owned(store, user_id, workspace_id, ws.SOCIAL_SK)
-    }
-    platform_status = {p: _platform_status(store, user_id, p, social.get(p)) for p in PLATFORM_STEPS}
+    shown = platform_statuses(store, user_id, workspace_id, now=now, secrets=secrets, started=started)
+    platform_status = {p: shown.get(p, "not_connected") for p in PLATFORM_STEPS}
     done: dict[str, bool] = {}
     for key in STEP_KEYS:
         if key in FROM_AI:
@@ -168,6 +181,8 @@ def patch(
     body: Mapping[str, Any],
     *,
     now: datetime,
+    secrets: WorkspaceSecrets | None = None,
+    started: float | None = None,
 ) -> dict[str, Any]:
     """``{step, done?, skipped?}`` or ``{finish: true}``."""
     at = iso(now)
@@ -206,7 +221,7 @@ def patch(
         "updatedAt": at,
     }
     store.put(fresh)  # the whole small item: the owner's own ticks, nothing another writer keeps here
-    return state(store, user_id, workspace_id, workspace)
+    return state(store, user_id, workspace_id, workspace, now=now, secrets=secrets, started=started)
 
 
 def _with(values: list[str], value: str, present: bool) -> list[str]:

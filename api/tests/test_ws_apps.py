@@ -435,7 +435,10 @@ def test_an_own_tiktok_app_posts_only_after_the_owner_says_it_is_lamo_stories(
             "accountName": "Lamo Stories tiktok",
             "handle": "@lamostories",
         }
-        assert "cannot tell if Lamo Stories tiktok is Lamo Clips' TikTok" in body["error"]["message"]
+        assert (
+            "cannot tell if this TikTok account (Lamo Stories tiktok) is Clip Factory's TikTok"
+            in body["error"]["message"]
+        )
     assert not [i for i in table.all() if str(i["sk"]).startswith("PUBJOB#")]
     assert unsure.started == []
     status, body = call("POST", PUBLISH, {"targets": [{**TIKTOK_TARGET, "confirmAccount": OTHER_APP_ID}]})
@@ -445,6 +448,39 @@ def test_an_own_tiktok_app_posts_only_after_the_owner_says_it_is_lamo_stories(
     assert (table.raw(sup.PK, "SOCIAL#tiktok") or {})["notClipsConfirmed"] == OTHER_APP_ID
     validate_destination(store, secrets, USER, "stories", job)  # the flow's own check now passes
     assert sup.lamo_clips_items(table)[0]["accountId"] == "open-1"  # Lamo Clips' item is only read
+
+
+def test_the_tiktok_question_names_this_account_and_the_yes_button(
+    call: Call, store: db.Store, unsure: sup.FakeStarter
+) -> None:
+    """Round 5 E13: an account that is itself named "Lamo Stories" reads plainly ("this TikTok account (Lamo
+    Stories)"), the other app is "Clip Factory", and the sentence says the publish sheet's own button: Yes."""
+    store.update(sup.PK, "SOCIAL#tiktok", {"accountName": "Lamo Stories"})
+    status, body = call("POST", PUBLISH, {"targets": [TIKTOK_TARGET]})
+    assert status == 409, body
+    assert body["error"]["message"] == (
+        "Lamo Stories cannot tell if this TikTok account (Lamo Stories) is Clip Factory's TikTok. Tap Yes if it is "
+        "your Lamo Stories TikTok."
+    )
+    assert body["error"]["account"]["accountName"] == "Lamo Stories"
+    assert unsure.started == []
+
+
+def test_the_tiktok_question_never_puts_a_raw_open_id_in_its_sentence(
+    call: Call, store: db.Store, unsure: sup.FakeStarter
+) -> None:
+    """Round 5 E14: an account with no name and no handle is "this TikTok account"; its open_id stays in
+    ``error.account`` for the sheet's Technical details, never in the first line."""
+    store.update(sup.PK, "SOCIAL#tiktok", {"accountName": "", "handle": ""})
+    status, body = call("POST", PUBLISH, {"targets": [TIKTOK_TARGET]})
+    assert status == 409, body
+    assert body["error"]["message"] == (
+        "Lamo Stories cannot tell if this TikTok account is Clip Factory's TikTok. Tap Yes if it is your Lamo Stories "
+        "TikTok."
+    )
+    assert OTHER_APP_ID not in body["error"]["message"]
+    assert body["error"]["account"]["externalAccountId"] == OTHER_APP_ID
+    assert unsure.started == []
 
 
 def test_a_new_connect_asks_again(store: db.Store, secrets: WorkspaceSecrets, unsure: sup.FakeStarter) -> None:
@@ -485,4 +521,4 @@ def test_the_shared_tiktok_app_compares_open_ids_and_asks_nothing(
     store.delete(sup.PK, "PUBJOB#" + body["publishingJobs"][0]["publishingJobId"])
     status, body = call("POST", PUBLISH, {"targets": [TIKTOK_TARGET]})
     assert status == 409
-    assert "same place Lamo Clips posts to" in body["error"]["message"]
+    assert "same place Clip Factory posts to" in body["error"]["message"]

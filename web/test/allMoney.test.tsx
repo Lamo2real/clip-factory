@@ -245,6 +245,61 @@ describe("All your money's sent lines (§40.4)", () => {
   });
 });
 
+// ---------- §40.5.9: Reached your bank, so far (what the bank booked; never in the 30-day total or the sent block) ----------
+
+const { bankScenario, bankViewOf } = await import("../src/api/mock/bank.ts");
+const bankLib = await import("../src/lib/bank.ts");
+
+describe("All your money's Reached your bank, so far (§40.5.9)", () => {
+  const withSent = (): MoneyEverywhere => ({
+    ...card([{ ...ROWS[0]!, sent: SENT.youtube }], [{ currency: "USD", amountMicros: 12_400_000, places: ["youtube"], tag: "YouTube's estimate" }]),
+    sent: { totals: [{ currency: "SEK", amountMicros: 2_468_000_000, places: ["youtube"], names: "YouTube" }], tag: "Google and Whop say they sent it.", bankText: BANK },
+  });
+  const settleBank = () => act(async () => void (await bankLib.reloadBank()));
+  afterEach(() => {
+    bankLib.resetBank();
+    current = {};
+  });
+
+  it("once a bank was connected: the block per place and per currency, In total, and moneyLine for the bank line", async () => {
+    bankLib.resetBank();
+    current = { getBank: async () => bankViewOf(bankScenario("connected"), { country: "SE", crOn: true }) };
+    await draw(withSent());
+    await settleBank();
+    const block = host.querySelector<HTMLElement>("[data-help='money-reached']")!;
+    expect(block.querySelector("h3")!.textContent).toBe("Reached your bank, so far");
+    const places = [...block.querySelectorAll(".bank-reached__place")].map((p) => p.textContent!.replace(/\u00a0/g, " "));
+    expect(places[0]).toBe("YouTubeSEK 1,234.56");
+    expect(block.querySelector(".bank-reached__total")!.textContent!.replace(/\u00a0/g, " ")).toBe("In total:SEK 2,146.96");
+    expect(host.querySelector(".cr-all__bank")!.textContent).toBe("What reached your bank is below.");
+    // Never in the 30-day total, never one of the sent block's lines.
+    expect(host.querySelector(".cr-all__total-num")!.textContent).toBe("$12.40");
+    expect([...host.querySelectorAll(".cr-all__sentsofar li")].map((l) => l.textContent!.replace(/\u00a0/g, " "))).toEqual(["SEK 2,468.00 · YouTube"]);
+    expect(block.querySelector(".btn--primary")).toBeNull();
+  });
+
+  it("nothing matched yet: empty; never $0", async () => {
+    bankLib.resetBank();
+    current = { getBank: async () => bankViewOf(bankScenario("none_yet"), { country: "SE", crOn: true }) };
+    await draw(withSent());
+    await settleBank();
+    const block = host.querySelector<HTMLElement>("[data-help='money-reached']")!;
+    expect(block.textContent).toContain("Nothing from an app reached your bank yet.");
+    expect(block.textContent).not.toMatch(/\$0|SEK\s0\.00/);
+  });
+
+  it("before any link, while off, or on an API from before it: no block, and the bank line stays", async () => {
+    for (const getBank of [async () => bankViewOf(bankScenario("setup"), { country: "SE", crOn: true }), async () => ({ on: false as const })]) {
+      bankLib.resetBank();
+      current = { getBank };
+      await draw(withSent());
+      await settleBank();
+      expect(host.querySelector("[data-help='money-reached']")).toBeNull();
+      expect(host.querySelector(".cr-all__bank")!.textContent).toBe(BANK);
+    }
+  });
+});
+
 // ---------- the mock's numbers against the server's golden cases, when they are in the repo (G writes them) ----------
 
 const CASES = join(import.meta.dirname, "..", "..", "api", "tests", "fixtures", "money_everywhere_cases.json");

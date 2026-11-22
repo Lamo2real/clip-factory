@@ -2,7 +2,7 @@
 the numbers and recent activity, all from this workspace's partition.
 
 ``SOCIAL#`` and ``PUBJOB#`` items are builder B's and are only read here. The accounts are the public ones the Social
-accounts page shows (``social.accounts_shown``, settled the same way, §45.35 D11), so a key change or Lamo Clips
+accounts page shows (``social.accounts_shown``, settled the same way, §45.35 D11), so a key change or Clip Factory
 connecting the same account later shows here too. A post that stopped on an account problem (its sentence sends the
 owner to Social accounts) has its Fix it open Social accounts; Try again stays on the video's Review page.
 """
@@ -33,7 +33,7 @@ SOCIAL_ACCOUNTS: Final = "/stories/connections"  # Lamo Stories › Social accou
 
 def _post_href(job: Mapping[str, Any], story_id: str) -> str:
     """Fix it: Social accounts when the post stopped on an account problem (needs connecting again, not connected,
-    keys changed, Lamo Clips' own account: its sentence names that page), else the video's Review page."""
+    keys changed, Clip Factory's own account: its sentence names that page), else the video's Review page."""
     if sentences.CONNECTIONS in str(job.get("error") or ""):
         return SOCIAL_ACCOUNTS
     return f"/stories/review/{story_id}" if story_id else "/stories"
@@ -50,8 +50,10 @@ def _post_sentence(job: Mapping[str, Any]) -> str:
 def _account_sentence(account: Mapping[str, Any]) -> str | None:
     name = PLATFORM_NAMES.get(str(account.get("platform")), "an account")
     if account.get("connectionStatus") == "needs_reconnect":
-        who = f" ({account['accountName']})" if account.get("accountName") else ""
-        return f"Lamo Stories' {name}{who} needs connecting again. Open Social accounts and tap Connect."
+        if str(account.get("accountName") or "").strip():  # "this {Platform} account ({name})" (round 5 E13)
+            who = sentences.this_account(str(account.get("platform")), str(account["accountName"]), start=True)
+            return f"{who} needs connecting again. Open Social accounts and tap Connect."
+        return f"Lamo Stories' {name} needs connecting again. Open Social accounts and tap Connect."
     warning = account.get("warning")
     if account.get("reason") == "clips_unknown":
         return None  # nothing to do now: the first post shows the account to check (§45.34)

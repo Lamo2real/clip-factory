@@ -3636,18 +3636,15 @@
         "sent to your bank so far",
         "how much was sent",
         "money sent",
-        "reached my bank",
         "in my bank",
         "bank total",
         "total sent",
         "paid out",
         "google sent",
         "whop sent",
-        "what arrived",
-        "exact number",
-        "all my bank accounts"
+        "what arrived"
       ],
-      "answer": "Google and Whop tell Clip Factory what they sent. On **Money**, **All your money** shows it under each place, and **Sent to your bank, so far** has one total for each money type. Dollars and kronor are never added together. TikTok, Instagram, Facebook and X don't tell apps, so they say **Not available**. Clip Factory can't see your bank. Look in your bank's app to see what arrived.",
+      "answer": "Google and Whop tell Clip Factory what they sent. On **Money**, **All your money** shows it under each place, and **Sent to your bank, so far** has one total for each money type, never added together. TikTok, Instagram, Facebook and X don't tell apps: **Not available**. To see what arrived, look in your bank's app, or in **Your bank** once it is set up.",
       "steps": [
         "Tap **Money**. Find **Sent to your bank, so far** under **All your money**.",
         "Under each place in **All your money**, a small line says what that place sent so far, like **Sent to your bank by Google**.",
@@ -3837,6 +3834,254 @@
           "to": "/settings/posting/getpaid/contentrewards#whop",
           "highlight": [
             "getpaid-whop"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bank-setup",
+      "route": "/settings/posting/getpaid/bank",
+      "where": "Settings › Posting › Get paid › Your bank",
+      "title": "How do I see what reached my bank?",
+      "keywords": [
+        "see what reached my bank",
+        "what reached my bank",
+        "your bank",
+        "set up your bank",
+        "bank connection",
+        "connect your bank",
+        "connect my bank account",
+        "read my bank",
+        "link my bank",
+        "bankid",
+        "enable banking steps",
+        "make my bank key",
+        "app id",
+        "see my bank in clip factory"
+      ],
+      "answer": "Open **Get paid**, then **Your bank**. Do its steps once, in order: make a free Enable Banking account, tap **Make my bank key**, add Clip Factory there, give Clip Factory the app ID, link your accounts, then tap **Connect your bank** and use BankID. Clip Factory never sees your bank login. Until this is switched on, the card says Clip Factory can't see your bank.",
+      "steps": [
+        "Tap **Settings**, **Posting**, **Get paid**, then **Your bank**.",
+        "Tap the red button on each step. It opens Enable Banking, or does the step for you.",
+        "Step 2: tap **Make my bank key**. Step 3: copy it into Enable Banking.",
+        "Step 5: paste the app ID and tap **Save**.",
+        "Step 7: tap **Connect your bank**, pick your bank and use BankID.",
+        "It takes about 25 minutes, once, and it's free."
+      ],
+      "actions": [
+        {
+          "id": "bank-setup:page",
+          "label": "Open Your bank",
+          "to": "/settings/posting/getpaid/bank",
+          "highlight": [
+            "getpaid-bank",
+            "bank-steps"
+          ]
+        },
+        {
+          "id": "bank-setup:list",
+          "label": "Open Get paid",
+          "to": "/settings/posting/getpaid",
+          "highlight": [
+            "getpaid-bank-card"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bank-reached",
+      "route": "/money",
+      "where": "Money › All your money",
+      "title": "How much reached my bank?",
+      "keywords": [
+        "reached my bank",
+        "in my bank account",
+        "exact number",
+        "all my bank accounts",
+        "bank total",
+        "total for each platform",
+        "total per platform",
+        "your bank says",
+        "what my bank got",
+        "bank accounts total"
+      ],
+      "answer": "Until **Your bank** is set up, look in your bank's app. Once it is, Clip Factory reads what your bank booked, once a day. On **Money**, **Reached your bank, so far** shows what each app paid in, one total for each money type, never added together. YouTube and Whop payments are matched to their own records. For the others you tap once to say which app paid.",
+      "steps": [
+        "Tap **Money**. Find **Reached your bank, so far** under **Sent to your bank, so far**.",
+        "Each app has its own line, then **In total**.",
+        "Instagram and Facebook can be one line: Meta pays them in one payment.",
+        "Payments that need you: tap **Answer them**.",
+        "Each app's page in **Get paid** also shows its own line.",
+        "Until **Your bank** is set up, Clip Factory can't see your bank: look in your bank's app."
+      ],
+      "actions": [
+        {
+          "id": "bank-reached:money",
+          "label": "Open Money",
+          "to": "/money",
+          "highlight": [
+            "money-reached"
+          ]
+        },
+        {
+          "id": "bank-reached:page",
+          "label": "Open Your bank",
+          "to": "/settings/posting/getpaid/bank#bank-reached",
+          "highlight": [
+            "bank-reached"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bank-ask",
+      "route": "/settings/posting/getpaid/bank",
+      "hash": "bank-asks",
+      "where": "Settings › Posting › Get paid › Your bank",
+      "title": "Is this money from an app?",
+      "keywords": [
+        "is this money from an app",
+        "is this money from youtube",
+        "where is this money from",
+        "payments need you",
+        "payment needs you",
+        "answer them",
+        "not money from an app",
+        "not sure yet",
+        "did you move this from your paypal",
+        "which app paid",
+        "stripe payment",
+        "yes its youtube",
+        "no another app"
+      ],
+      "answer": "When your bank gets money that may be from an app, **Your bank** asks you. Tap the green answer, like **Yes, it's YouTube**. Another app? Tap **No, another app** and pick it. Not app money? Tap **Not money from an app**. You never type an amount. Clip Factory remembers a payer you confirm, so it asks less next time.",
+      "steps": [
+        "Tap **Settings**, **Posting**, **Get paid**, then **Your bank**.",
+        "Find **Is this from an app?**.",
+        "Tap the green answer, or **No, another app** and pick the app.",
+        "Stripe, PayPal and Payoneer pay for many apps, so Clip Factory asks each time.",
+        "Tapped the wrong one? Tap **Undo**, or **Not from YouTube?** under **Reached your bank**."
+      ],
+      "actions": [
+        {
+          "id": "bank-ask:page",
+          "label": "See the questions",
+          "to": "/settings/posting/getpaid/bank#bank-asks",
+          "highlight": [
+            "bank-asks"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bank-reconnect",
+      "route": "/settings/posting/getpaid/bank",
+      "where": "Settings › Posting › Get paid › Your bank",
+      "title": "Why does my bank link end?",
+      "keywords": [
+        "why does my bank link end",
+        "bank link ends",
+        "bank link ended",
+        "reconnect my bank",
+        "reconnect bank",
+        "link ended",
+        "link ends in",
+        "bankid again",
+        "bank link",
+        "stopped outside clip factory",
+        "cant read my bank",
+        "look in your bank app",
+        "stop reading my bank"
+      ],
+      "answer": "Your bank lets an app read it for 90 to 180 days. Then it asks for BankID again. Clip Factory tells you 7 days before. Tap **Reconnect** and use BankID at your bank. The money it found stays. A bank can also end a link early. Then **Your bank** says so and shows **Reconnect** too.",
+      "steps": [
+        "Tap **Settings**, **Posting**, **Get paid**, then **Your bank**.",
+        "Under **Your banks**, each bank shows how many days are left.",
+        "Tap the red **Reconnect** button. Use BankID at your bank.",
+        "**Stop reading** stops one bank. The money it found stays.",
+        "**Look in your bank app**: your bank wants you to do something there first."
+      ],
+      "actions": [
+        {
+          "id": "bank-reconnect:links",
+          "label": "See your banks",
+          "to": "/settings/posting/getpaid/bank",
+          "highlight": [
+            "bank-links",
+            "bank-status"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bank-keeps",
+      "route": "/settings/posting/getpaid/bank",
+      "where": "Settings › Posting › Get paid › Your bank",
+      "title": "What does Clip Factory keep from my bank?",
+      "keywords": [
+        "bank privacy",
+        "my bank data",
+        "account number",
+        "does clip factory see my bank login",
+        "bank login",
+        "forget my bank",
+        "delete my bank data",
+        "is my bank safe",
+        "bank details stored"
+      ],
+      "answer": "Only money from apps: the day, the amount and which app. Never your account number, your name or any other payment. Your bank and PayPal logins stay with them, and Clip Factory never sees them. Enable Banking forgets your bank's answer within a minute. **Forget my bank** removes every payment and bank link Clip Factory kept.",
+      "steps": [
+        "Tap **Settings**, **Posting**, **Get paid**, then **Your bank**.",
+        "Read **What Clip Factory keeps**.",
+        "Payments it asks you about stay until you answer, at most 180 days.",
+        "To remove it all, tap **Forget my bank**. You have 8 seconds to tap **Undo**."
+      ],
+      "actions": [
+        {
+          "id": "bank-keeps:page",
+          "label": "Open Your bank",
+          "to": "/settings/posting/getpaid/bank",
+          "highlight": [
+            "bank-keeps"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bank-enablebanking",
+      "route": "/settings/posting/getpaid/bank",
+      "hash": "step-bank-ask",
+      "where": "Settings › Posting › Get paid › Your bank",
+      "title": "Is Enable Banking free for me?",
+      "keywords": [
+        "is enable banking free",
+        "enable banking",
+        "enable banking free",
+        "enable banking cost",
+        "enable banking terms",
+        "personal use",
+        "who is enable banking",
+        "ask enable banking",
+        "ask enable banking first",
+        "restricted mode",
+        "enable banking account",
+        "request activation"
+      ],
+      "answer": "Yes, for your own private use. Enable Banking lets Clip Factory read your own bank with BankID. It's free for a private person's own accounts. Its terms don't allow business use, so it's your choice: the first step has a ready email that asks them if your app money counts. Never tap **Request activation**: that one costs money.",
+      "steps": [
+        "Tap **Settings**, **Posting**, **Get paid**, then **Your bank**.",
+        "Optional first step: tap **Open email**, then send it. Then tap **I asked**.",
+        "Use only your own private accounts. Pick **personal**.",
+        "Never tap **Request activation**, **Request unrestriction** or **Share**.",
+        "If they say no, tap **Forget my bank**. Your bank's app still shows what arrived."
+      ],
+      "actions": [
+        {
+          "id": "bank-enablebanking:ask",
+          "label": "Open the first step",
+          "to": "/settings/posting/getpaid/bank#step-bank-ask",
+          "highlight": [
+            "bank-steps"
           ]
         }
       ]

@@ -217,7 +217,89 @@ def test_a_model_def_is_checked_with_the_owners_sentence(
     ],
 )
 def test_bedrock_model_ids_profiles_and_arns_are_taken(wcall: WsCall, model_id: str) -> None:
-    assert _add(wcall, "custom-x", {**LLAMA, "modelId": model_id})["modelId"] == model_id
+    # an ARN carries its Region, and the model's Region must be that one (round 5 E4)
+    region = model_defs.arn_region(model_id) or LLAMA["region"]
+    added = _add(wcall, "custom-x", {**LLAMA, "modelId": model_id, "region": region})
+    assert (added["modelId"], added["region"]) == (model_id, region)
+
+
+@pytest.mark.parametrize(
+    ("model_id", "region", "sentence"),
+    [
+        (
+            "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-opus-5-5",
+            "eu-north-1",
+            "This ARN is in us-east-1, but the Region says eu-north-1. Type us-east-1 as the Region.",
+        ),
+        (
+            "arn:aws:bedrock:eu-north-1:123456789012:application-inference-profile/a1b2c3d4e5",
+            "us-east-1",
+            "This ARN is in eu-north-1, but the Region says us-east-1. Type eu-north-1 as the Region.",
+        ),
+        (
+            "eu.anthropic.claude-opus-5-5",
+            "us-east-1",
+            "This inference profile id starts with eu., so it runs in a Europe Region (like eu-north-1), not in "
+            "us-east-1. Type a Europe Region as the Region, or paste the us. profile id instead.",
+        ),
+        (
+            "us.meta.llama4-maverick-17b-instruct-v1:0",
+            "eu-north-1",
+            "This inference profile id starts with us., so it runs in a US Region (like us-east-1), not in "
+            "eu-north-1. Type a US Region as the Region, or paste the eu. profile id instead.",
+        ),
+        (
+            "apac.anthropic.claude-opus-5-5",
+            "eu-west-1",
+            "This inference profile id starts with apac., so it runs in an Asia Pacific Region (like "
+            "ap-southeast-2), not in eu-west-1. Type an Asia Pacific Region as the Region, or paste the eu. profile "
+            "id instead.",
+        ),
+        (
+            "us.meta.llama4-maverick-17b-instruct-v1:0",
+            "us-gov-west-1",
+            "This inference profile id starts with us., so it runs in a US Region (like us-east-1), not in "
+            "us-gov-west-1. Type a US Region as the Region, or paste the us-gov. profile id instead.",
+        ),
+        (
+            "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/us.amazon.nova-premier-v1:0",
+            "eu-north-1",
+            "This ARN's inference profile starts with us., so it runs in a US Region (like us-east-1), not in "
+            "eu-north-1. Paste the ARN of the eu. profile instead.",
+        ),
+    ],
+)
+def test_an_added_models_region_must_be_the_one_its_id_runs_in(
+    wcall: WsCall, table: FakeTable, model_id: str, region: str, sentence: str
+) -> None:
+    """Round 5 E4: every call to an added model goes to its own Region, so an ARN from another Region, or a
+    cross-Region profile of another area, would fail on every call. It is refused when saved, naming both."""
+    status, body = wcall("PUT", f"{BASE}/ai/models/custom-x", {**LLAMA, "modelId": model_id, "region": region})
+    assert status == 400, body
+    assert (body["error"]["message"], body["error"].get("field")) == (sentence, "region")
+    assert not [k for k in table.items if k[1].startswith("MODELDEF#")]
+
+
+@pytest.mark.parametrize(
+    ("model_id", "region"),
+    [
+        ("global.anthropic.claude-opus-5-5", "eu-north-1"),  # a global profile runs from any Region
+        ("global.anthropic.claude-opus-5-5", "us-west-2"),
+        ("eu.anthropic.claude-opus-5-5", "eu-west-3"),
+        ("us.meta.llama4-maverick-17b-instruct-v1:0", "us-west-2"),
+        ("us-gov.anthropic.claude-opus-5-5", "us-gov-west-1"),
+        ("apac.anthropic.claude-opus-5-5", "ap-northeast-1"),
+        ("jp.anthropic.claude-opus-5-5", "ap-northeast-3"),
+        ("au.anthropic.claude-opus-5-5", "ap-southeast-4"),
+        ("anthropic.claude-opus-5-5", "eu-north-1"),  # a plain model id runs where it is called
+        ("amazon.nova-pro-v1:0", "sa-east-1"),
+        ("us.amazon.nova-premier-v1:0", "ca-central-1"),  # a Region outside the known areas is never refused
+        ("arn:aws:bedrock:eu-north-1:123456789012:inference-profile/eu.amazon.nova-pro-v1:0", "eu-north-1"),
+    ],
+)
+def test_a_region_that_fits_its_id_is_taken(wcall: WsCall, model_id: str, region: str) -> None:
+    added = _add(wcall, "custom-x", {**LLAMA, "modelId": model_id, "region": region})
+    assert (added["modelId"], added["region"]) == (model_id, region)
 
 
 def test_an_added_key_never_shadows_a_bundled_model(wcall: WsCall, monkeypatch: pytest.MonkeyPatch) -> None:
