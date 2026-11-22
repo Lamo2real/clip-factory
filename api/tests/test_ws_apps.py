@@ -466,6 +466,23 @@ def test_the_tiktok_question_names_this_account_and_the_yes_button(
     assert unsure.started == []
 
 
+def test_the_tiktok_question_never_puts_a_raw_open_id_in_its_sentence(
+    call: Call, store: db.Store, unsure: sup.FakeStarter
+) -> None:
+    """Round 5 E14: an account with no name and no handle is "this TikTok account"; its open_id stays in
+    ``error.account`` for the sheet's Technical details, never in the first line."""
+    store.update(sup.PK, "SOCIAL#tiktok", {"accountName": "", "handle": ""})
+    status, body = call("POST", PUBLISH, {"targets": [TIKTOK_TARGET]})
+    assert status == 409, body
+    assert body["error"]["message"] == (
+        "Lamo Stories cannot tell if this TikTok account is Clip Factory's TikTok. Tap Yes if it is your Lamo Stories "
+        "TikTok."
+    )
+    assert OTHER_APP_ID not in body["error"]["message"]
+    assert body["error"]["account"]["externalAccountId"] == OTHER_APP_ID
+    assert unsure.started == []
+
+
 def test_a_new_connect_asks_again(store: db.Store, secrets: WorkspaceSecrets, unsure: sup.FakeStarter) -> None:
     from clipfactory_api.workspaces import social
     from conftest import NOW

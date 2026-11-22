@@ -487,6 +487,27 @@ def test_the_new_account_question_names_this_account_and_the_yes_button(
     assert starter.started == []
 
 
+def test_the_new_account_question_never_puts_a_raw_channel_id_in_its_sentence(
+    call: Call, store: db.Store, secrets_client: FakeSecretsManager, starter: sup.FakeStarter
+) -> None:
+    """Round 5 E14: a channel with no name and no handle is "this YouTube account"; its id stays in
+    ``error.account`` for the sheet's Technical details, never in the first line."""
+    store.update(sup.PK, STORY_SK, {"run": 1})
+    job = sup.pubjob(store, "youtube", publishingStatus="failed", error="YouTube did not answer.")
+    store.update(
+        sup.PK, "SOCIAL#youtube", {"externalAccountId": "UCnoNameChannel0000", "accountName": "", "handle": ""}
+    )
+    _token(channelId="UCnoNameChannel0000")(store, secrets_client, job)
+    status, body = call("POST", f"/v1/workspaces/stories/publishing/{job['publishingJobId']}/retry", {})
+    assert status == 409, body
+    assert body["error"]["message"] == (
+        "Lamo Stories' YouTube is a different account now: this YouTube account. Tap Yes if that is right."
+    )
+    assert "UCnoNameChannel0000" not in body["error"]["message"]
+    assert body["error"]["account"]["externalAccountId"] == "UCnoNameChannel0000"
+    assert starter.started == []
+
+
 def test_retry_to_the_same_account_needs_no_confirmation(call: Call, store: db.Store, starter: sup.FakeStarter) -> None:
     job = sup.pubjob(store, "x", publishingStatus="needs_attention", error="X has no credits left.")
     status, body = call("POST", f"/v1/workspaces/stories/publishing/{job['publishingJobId']}/retry", {})

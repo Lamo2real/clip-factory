@@ -382,8 +382,9 @@ def _targets(body: Mapping[str, Any]) -> list[Item]:
 
 def _changed_account(platform: str, destination: Destination) -> ApiError:
     """``409``: the account is not the one the owner saw; it names the account it would go to now ("this {Platform}
-    account ({name})", round 5 E13) and says the publish sheet's own button: Yes."""
-    name = destination.account_name or _handle(destination) or destination.external_account_id
+    account ({name})", round 5 E13) and says the publish sheet's own button: Yes. A raw channel id never goes in the
+    sentence (E14: "this {Platform} account" when it has no name or handle); it stays in ``error.account``."""
+    name = destination.account_name or _handle(destination)
     return ApiError(
         409,
         "conflict",
@@ -413,9 +414,10 @@ def _story(store: db.Store, user_id: str, workspace_id: str, story_id: str) -> I
 
 def _unsure_account(platform: str, problem: DestinationProblem) -> ApiError:
     """``409``: Lamo Stories cannot tell this TikTok from Clip Factory's own; it names the account ("this {Platform}
-    account ({name})", round 5 E13) for the owner's Yes, the publish sheet's own button."""
+    account ({name})", round 5 E13) for the owner's Yes, the publish sheet's own button. A raw open_id never goes in
+    the sentence (E14: "this {Platform} account" when it has no name or handle); it stays in ``error.account``."""
     account = problem.account or {}
-    name = account.get("accountName") or account.get("handle") or account.get("externalAccountId")
+    name = account.get("accountName") or account.get("handle")
     return ApiError(
         409,
         "conflict",

@@ -411,6 +411,48 @@ def test_a_change_in_the_video_with_new_post_words_still_says_remake(
     assert (status, body["error"]["message"]) == (409, "Your changes aren't in the video yet. Tap Remake first.")
 
 
+OUTDATED = "The facts were checked on an older version of the words. Tap Check again."
+CHECK_DUE = "The facts still need a check. Tap Check again."
+
+
+@pytest.mark.parametrize(
+    ("status", "safety", "said"),
+    [
+        # the check passed on older words (the web's own "Tap Check again" case, Review.tsx OUTDATED_CHECK)
+        ("review", {"status": "ok", "problems": [], "checkedScriptVersion": 0}, OUTDATED),
+        ("review", {"status": "pending", "problems": [], "checkedScriptVersion": None}, CHECK_DUE),
+        ("review", {"status": "failed", "problems": [], "checkedScriptVersion": 1}, CHECK_DUE),
+        # held for a check with nothing listed and nothing marked to make again
+        ("needs_check", {"status": "pending", "problems": [], "checkedScriptVersion": None}, CHECK_DUE),
+        ("needs_check", {"status": "problems", "problems": [], "checkedScriptVersion": 1}, CHECK_DUE),
+    ],
+)
+def test_only_a_due_fact_check_says_check_again_never_a_remake_that_has_nothing_to_make(
+    call: Call, store: db.Store, s3_client: FakeS3, status: str, safety: dict[str, Any], said: str
+) -> None:
+    """Round 5 E10 (review): nothing in the video is out of date, only the fact check, so Approve (its rule kept)
+    says Check again. Remake would have nothing to make; Check again (produce from "safety") runs."""
+    story = seed_story(store, s3_client, status=status, safety={"topicId": None, "citations": [], **safety})
+    sid = story["storyId"]
+    assert story["stale"] == []
+    got, body = call("POST", f"{BASE}/stories/{sid}/approve", {"version": story["version"]})
+    assert (got, body["error"]["message"]) == (409, said)
+    assert "Remake" not in body["error"]["message"]
+    got, body = call("POST", f"{BASE}/stories/{sid}/produce", {})  # what "Tap Remake" would do
+    assert (got, body["error"]["message"]) == (409, "Nothing to remake: the video already has every change.")
+    got, body = call("POST", f"{BASE}/stories/{sid}/produce", {"from": "safety"})  # Check again
+    assert got == 202, body
+    assert body["job"]["configuration"]["run"][0] == "safety"
+
+
+def test_a_held_story_with_video_changes_still_says_remake(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    """The Check again sentences never hide a video change: a held story with stale video steps says Remake."""
+    pending = {"topicId": None, "status": "pending", "problems": [], "checkedScriptVersion": None, "citations": []}
+    story = seed_story(store, s3_client, status="needs_check", safety=pending, stale=["sound", "assemble", "preview"])
+    status, body = call("POST", f"{BASE}/stories/{story['storyId']}/approve", {"version": story["version"]})
+    assert (status, body["error"]["message"]) == (409, "Your changes aren't in the video yet. Tap Remake first.")
+
+
 def _remake_and_finish(call: Call, store: db.Store, story_id: str, body: dict[str, Any] | None = None) -> Any:
     status, out = call("POST", f"{BASE}/stories/{story_id}/produce", body or {})
     assert status == 202, out
@@ -1081,7 +1123,7 @@ def test_approve_accepts_a_skipped_quality_check_except_for_driving_safety(
     )
     status, body = call("POST", f"{BASE}/stories/{safety_story['storyId']}/approve", {"version": 3})
     assert status == 409
-    assert body["error"]["message"] == "Your changes aren't in the video yet. Tap Remake first."
+    assert body["error"]["message"] == "The facts still need a check. Tap Check again."
 
 
 def test_each_steps_model_and_effort_show_on_the_job(call: Call, store: db.Store, s3_client: FakeS3) -> None:
