@@ -87,7 +87,7 @@ export const MOCK_MODELS: ModelEntry[] = [
     pricing: m.pricing ? { ...m.pricing } : null,
     ...(m.host ? { host: m.host } : {}),
   })),
-  { key: "nova-pro", label: "Amazon Nova Pro", provider: "Amazon Bedrock", modelId: "amazon.nova-pro-v1:0", efforts: [], defaultEffort: null, vision: true, pricing: null },
+  { key: "nova-pro", label: "Amazon Nova Pro", provider: "Amazon", modelId: "amazon.nova-pro-v1:0", efforts: [], defaultEffort: null, vision: true, pricing: null },
 ];
 
 export const FILE_DEFAULT_MODEL: string = modelsFile.defaultModel;

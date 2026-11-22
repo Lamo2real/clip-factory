@@ -170,6 +170,27 @@ describe("how an added model is called (§45.35 D1)", () => {
     expect(callingOf({ ...m, effortField: "none", efforts: [], tools: true, cache: true })).toEqual({ effortField: "none", tools: true, cache: true });
   });
 
+  it("an Anthropic model saved with no levels reads 'No effort levels' on both lines, and Edit saves a new name as it is", async () => {
+    expect(callingOf({ provider: "Anthropic", efforts: [], effortField: "output_config", tools: true, cache: true })).toEqual({ effortField: "none", tools: true, cache: true });
+    start();
+    // As a round-3 model reads back from the API: output_config (its maker's), with no levels ticked.
+    const def = { label: "Claude X", provider: "Anthropic", modelId: "eu.anthropic.claude-x-v1:0", region: "eu-north-1", efforts: [], defaultEffort: null, vision: false, maxOutputTokens: 4096, price: null };
+    expect(await api.putAiModel("stories", "custom-x", { ...def, effortField: "output_config" })).toMatchObject({ effortField: "output_config", efforts: [] });
+    await open("ai");
+    const row = byText(".st-stg-own", /Claude X/);
+    expect(row.textContent).toContain("No effort setting: it runs at its own level.");
+    expect(row.textContent).toContain("No effort levels · uses tools · prompt cache on.");
+    expect(row.textContent).not.toContain("Takes effort levels");
+    await click(byText("button", /^Edit/, row));
+    const form = $<HTMLElement>('form[aria-label="Change Claude X"]')!;
+    expect(checked(switchOf(form, /It has effort levels/))).toBe("false");
+    fill(form, "Name", "Claude X2");
+    await act(async () => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    await settle();
+    expect(form.textContent).not.toContain("Tick the effort levels it accepts");
+    expect(calls.filter((c) => c.name === "putAiModel").at(-1)?.args[2]).toMatchObject({ label: "Claude X2", efforts: [], defaultEffort: null, effortField: "none", tools: true, cache: true });
+  });
+
   it("the mock refuses levels on a model that takes none, as the API does", async () => {
     start();
     const base = { label: "Nova Lite", provider: "Amazon", modelId: "eu.amazon.nova-lite-v1:0", region: "eu-north-1", vision: false, maxOutputTokens: 4096, price: null };
@@ -224,6 +245,17 @@ describe("who makes a model, on who runs it (§45.35 D8)", () => {
     expect(byText("[role=radio]", /Quick One/).textContent).toContain("Amazon on Amazon Bedrock · Not checked yet.");
     // Every bundled model still names Amazon Bedrock (its maker comes from the model list).
     for (const r of $$("[role=radio]", byText(".st-stg-card", /^Default model/))) expect(r.textContent).toContain("Amazon Bedrock");
+    // The mock's own Amazon model is made by Amazon, on Amazon Bedrock, as the live list says it.
+    expect(byText("[role=radio]", /Amazon Nova Pro/).textContent).toContain("Amazon on Amazon Bedrock");
+  });
+
+  it("the mock names its models and its writer as the live app does (Amazon by Amazon; Claude on Amazon Bedrock)", async () => {
+    start();
+    const nova = (await api.getAi("stories")).models.find((m) => m.key === "nova-pro")!;
+    expect(nova).toMatchObject({ provider: "Amazon", host: "Amazon Bedrock" });
+    expect(madeBy(nova)).toBe("Amazon on Amazon Bedrock");
+    const writer = (await api.providers("stories")).find((p) => p.kind === "writer")!;
+    expect(writer.label).toBe("Claude on Amazon Bedrock");
   });
 });
 

@@ -76,24 +76,33 @@ export function takeParkedStoriesGo(): string | null {
   return to;
 }
 
-let parkedAway: string | null = null;
+let parkedAway: { url: string; expiresAt: string | null } | null = null;
 
 /**
  * A Lamo Stories move to another site that comes after a wait (Connect's sign-in page, once the server gave its
  * address): while Clip Factory is on screen it waits, and goes the moment Lamo Stories is back (StoriesApp), so the
- * owner is never taken out of Clip Factory.
+ * owner is never taken out of Clip Factory. `expiresAt` is when the address stops working (Connect's sign-in state is
+ * good for 10 minutes, §45.13.2): one that ran out while it waited is never opened.
  */
-export function storiesAwayLater(url: string, go: (url: string) => void = (u) => location.assign(u)): void {
-  if (storiesBehind()) parkedAway = url;
+export function storiesAwayLater(url: string, expiresAt: string | null = null, go: (url: string) => void = (u) => location.assign(u)): void {
+  if (storiesBehind()) parkedAway = { url, expiresAt };
   else go(url);
 }
 
-/** The move to another site that waited while Clip Factory was on screen (once), else null. */
-export function takeParkedStoriesAway(): string | null {
-  const to = parkedAway;
+/**
+ * The move to another site that waited while Clip Factory was on screen (once: it is forgotten as it is read), else
+ * null. `expired` is true when its address ran out while it waited (then it must not be opened).
+ */
+export function takeParkedStoriesAway(now: number = Date.now()): { url: string; expired: boolean } | null {
+  const held = parkedAway;
   parkedAway = null;
-  return to;
+  if (!held) return null;
+  const until = held.expiresAt ? Date.parse(held.expiresAt) : Number.NaN;
+  return { url: held.url, expired: Number.isFinite(until) && now >= until };
 }
+
+/** What Lamo Stories says when a held sign-in page ran out before it was back on screen. */
+export const AWAY_RAN_OUT = "That sign-in link ran out. Tap Connect again.";
 
 // ---------- Clip Factory's search, kept while it is hidden (§45.35 D18) ----------
 

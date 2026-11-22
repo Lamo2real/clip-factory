@@ -393,10 +393,14 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
     setMenu(false);
     if (w.workspaceId === current) return;
     const from = here();
-    // Leaving Clip Factory: its page's scroll position is kept for the way back (this tab only). Leaving Lamo Stories:
-    // its own, which StoriesApp puts back when it is on screen again.
-    if (inClips) saveClipsScroll(from, window.scrollY);
-    else saveStoriesScroll(from, window.scrollY);
+    // Leaving Clip Factory: its page's scroll position is kept for the way back (this tab only), and its address as it
+    // is right now (a page may have moved it without a page change, as Home's "Which campaign" does), so the way back
+    // opens the page the kept screen shows. Leaving Lamo Stories: its own, which StoriesApp puts back when it is on
+    // screen again.
+    if (inClips) {
+      saveClipsScroll(from, window.scrollY);
+      rememberClipsPath(from);
+    } else saveStoriesScroll(from, window.scrollY);
     const to = switchTarget(w);
     navigate(to);
     // The choice is recorded only once the page really changed: a page with unsaved typing may be asking "Leave
@@ -467,24 +471,34 @@ function Switcher({ place, collapsed, current }: { place: SwitchPlace; collapsed
           <WorkspaceMark type={here_.workspaceType} size={markSize} />
         </button>
       )}
-      {menu && !target ? <WorkspaceMenu list={list} current={current} hrefFor={hrefFor} go={go} close={() => setMenu(false)} /> : null}
+      {menu && !target ? (
+        <WorkspaceMenu list={list} current={current} hrefFor={hrefFor} go={go} close={() => setMenu(false)} below={place === "sidebar-top"} />
+      ) : null}
     </div>
   );
 }
 
-/** The short list a round toggle opens when there are more than two workspaces. */
+/** Where the list opens below its toggle (as glide.css's `.topbar .ws-menu`), left-aligned with it. */
+const BELOW = { top: "calc(100% + 8px)", bottom: "auto" } as const;
+
+/**
+ * The short list a round toggle opens when there are more than two workspaces: above the toggle, or below it for the
+ * toggle beside the fold button (`below`, at the top of the window, where there is no room above).
+ */
 function WorkspaceMenu({
   list,
   current,
   hrefFor,
   go,
   close,
+  below = false,
 }: {
   list: Workspace[];
   current: string;
   hrefFor: (w: Workspace) => string;
   go: (w: Workspace) => (e: MouseEvent) => void;
   close: () => void;
+  below?: boolean;
 }) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -500,7 +514,7 @@ function WorkspaceMenu({
     };
   }, [close]);
   return (
-    <div ref={box} className="ws-menu" role="dialog" aria-label="Pick a workspace">
+    <div ref={box} className="ws-menu" role="dialog" aria-label="Pick a workspace" style={below ? BELOW : undefined}>
       <div className="ws-switch ws-switch--stack" role="group" aria-label="Workspace">
         <Glide active=".ws-switch__opt.is-on" className="glide--ws" />
         {list.map((w) => (

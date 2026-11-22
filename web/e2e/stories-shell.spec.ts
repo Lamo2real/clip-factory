@@ -524,6 +524,40 @@ test.describe("Lamo Stories kept behind Clip Factory stays quiet (§45.34)", () 
     await expect(page.getByLabel("YouTube, Twitch or Kick link")).toHaveValue("https://www.youtube.com/watch?v=aqz-KE-bpKQ");
   });
 
+  test("Clip Factory's Home: another campaign picked in Which campaign is where switching back lands (§45.35 D18)", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const FAZE = "200ea21b-be80-4db8-b552-8e32b148604e";
+    // Two places set up, so two campaigns are ready for clips and Home shows its "Which campaign" bar.
+    await page.goto("/");
+    type Setup = { __cfMock?: { setup?: { finish?: (p: string) => void } } };
+    await page.waitForFunction(() => !!(window as unknown as Setup).__cfMock?.setup);
+    await page.evaluate(() => ["youtube", "instagram"].forEach((p) => (window as unknown as Setup).__cfMock!.setup!.finish!(p)));
+    await page.goto(`/?campaign=${FAZE}`);
+    await settle(page);
+    // Another campaign picked in "Which campaign" moves the address without a page change: the way back still opens
+    // the campaign the kept form shows, so the address and the form agree.
+    const which = page.locator(".cr-for .segmented__opt");
+    await expect(which).not.toHaveCount(0);
+    await expect(which).not.toHaveCount(1);
+    const other = page.locator(".cr-for .segmented__opt:not(.is-on)").first();
+    const otherName = (await other.innerText()).trim();
+    await other.click();
+    await expect(page).not.toHaveURL(new RegExp(`/\\?campaign=${FAZE}$`));
+    const picked = new URL(page.url()).search;
+    expect(picked).toMatch(/^\?campaign=/);
+    await toStories(page);
+    await storiesReady(page);
+    await toClips(page);
+    await settle(page);
+    expect(new URL(page.url()).search).toBe(picked);
+    await expect(page.locator(".cr-for").getByRole("radio", { name: otherName })).toBeChecked();
+    // A reload opens the same campaign: the address and the kept form said the same thing.
+    await page.reload();
+    await settle(page);
+    await expect(page.locator(".cr-for").getByRole("radio", { name: otherName })).toBeChecked();
+  });
+
   test("Clip Factory calm, Lamo Stories' own motion on: Lamo Stories' highlights slide and its confetti shows; Clip Factory's stay calm", async ({ page }) => {
     // Lamo Stories' own device choice: motion on (what its Settings card writes).
     await on(page, () => localStorage.setItem("cf.stories.prefs", JSON.stringify({ setupShown: ["stories"], more: { "motion.reduce": false } })));
@@ -962,6 +996,32 @@ test.describe("round 4: the two apps stay apart and quiet (§45.35)", () => {
     await page.locator(".sidebar__toggle").click();
     await expect(beside).toHaveAttribute("data-ws-switch", "none");
     await expect(page.locator(".sidebar__foot .ws-switch-host")).not.toHaveAttribute("data-ws-switch", "none");
+  });
+
+  test("D19: with more than two workspaces, the toggle beside the fold button opens its list below it, inside the window", async ({ page }) => {
+    await on(page, () => {
+      localStorage.setItem("cf.prefs", JSON.stringify({ sidebarCollapsed: true }));
+      (window as unknown as { __cfStoriesMock?: unknown }).__cfStoriesMock = { knobs: { moreStudios: 2 } };
+    });
+    await page.setViewportSize({ width: 1000, height: 560 });
+    await page.goto("/jobs");
+    await settle(page);
+    const beside = page.locator(".sidebar__top .ws-switch-host");
+    await expect(beside).toHaveAttribute("data-ws-switch", "slim");
+    const toggle = beside.getByRole("button", { name: "Pick a workspace (now Clip Factory)" });
+    await toggle.click();
+    const menu = beside.getByRole("dialog", { name: "Pick a workspace" });
+    await expect(menu.locator(".ws-switch__opt")).toHaveCount(4);
+    const box = (await menu.boundingBox())!;
+    const at = (await toggle.boundingBox())!;
+    // Below the toggle and wholly on screen: every choice can be reached.
+    expect(box.y).toBeGreaterThanOrEqual(at.y + at.height);
+    expect(box.y + box.height).toBeLessThanOrEqual(560);
+    expect(box.x + box.width).toBeLessThanOrEqual(1000);
+    await menu.locator(".ws-switch__opt", { hasText: "Studio 3" }).click();
+    await expect(page).toHaveURL(/\/stories$/);
+    await storiesReady(page);
+    await expect(page.locator(".stories-app")).toHaveAttribute("data-ws", "ws_studio_3");
   });
 
   test("D17: a Connect that answers while Clip Factory is on screen waits, and goes on once Lamo Stories is back", async ({ page }) => {

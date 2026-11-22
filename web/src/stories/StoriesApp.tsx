@@ -15,6 +15,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { ApiError } from "../api/errors.ts";
 import { MacFetchHost } from "../app/MacFetchHost.tsx";
 import { CrSendNow } from "../components/CrSendNow.tsx";
+import { useToast } from "../components/Toasts.tsx";
 import { Glide } from "../components/Glide.tsx";
 import { WorkspaceSwitch } from "../components/Nav.tsx";
 import { A } from "../components/ui.tsx";
@@ -22,7 +23,7 @@ import { AppBadge } from "../lib/badge.ts";
 import { navigate, useHash } from "../lib/router.ts";
 import { loadStoriesApi, setStoriesApi } from "./api/client.ts";
 import { GlideCalm } from "../components/Glide.tsx";
-import { takeParkedStoriesAway, takeParkedStoriesGo, useAppPane } from "./pane.tsx";
+import { AWAY_RAN_OUT, takeParkedStoriesAway, takeParkedStoriesGo, useAppPane } from "./pane.tsx";
 import { followStoriesClicks, storiesReduceMotion } from "./prefs.ts";
 import type { StoriesApi, Workspace } from "./api/types.ts";
 import { storiesHref, type StoriesPage } from "./routes.ts";
@@ -362,6 +363,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
   const root = useRef<HTMLDivElement>(null);
   const first = useRef(true);
   const hash = useHash();
+  const toast = useToast();
   const pageKey = JSON.stringify(page);
 
   const check = useCallback(
@@ -493,10 +495,12 @@ function StoriesShell({ page }: { page: StoriesPage }) {
   useEffect(() => {
     if (!active) return;
     const away = takeParkedStoriesAway();
-    if (away) {
-      location.assign(away);
+    if (away && !away.expired) {
+      location.assign(away.url);
       return;
     }
+    // Its sign-in state ran out while Clip Factory was on screen: opening it would only end in a refusal.
+    if (away) toast.info(AWAY_RAN_OUT);
     const at = location.pathname + location.search + location.hash;
     const to = takeParkedStoriesGo();
     if (to) {
@@ -506,7 +510,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
     }
     const y = takeStoriesScroll(at);
     return y === null ? undefined : restoreScroll(y);
-  }, [active]);
+  }, [active, toast]);
 
   // On phones the toasts sit above an open sheet's buttons, never over them (§45.35 D21).
   useToastLift(root, active);

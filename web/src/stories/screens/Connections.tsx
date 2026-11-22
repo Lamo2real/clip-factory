@@ -681,12 +681,12 @@ export function PlatformCard({
   const connect = async () => {
     setBusy("connect");
     try {
-      const { authorizeUrl } = await storiesApi().connectSocial(ws, p);
+      const { authorizeUrl, expiresAt } = await storiesApi().connectSocial(ws, p);
       const where = safeAuthorizeUrl(authorizeUrl);
       if (!where) throw new Error("bad authorize url");
       // The sign-in page comes after a wait: while Clip Factory is on screen it waits, and opens the moment Lamo
       // Stories is back (§45.35 D17), so the owner is never taken out of Clip Factory.
-      if (where === "away") storiesAwayLater(authorizeUrl);
+      if (where === "away") storiesAwayLater(authorizeUrl, expiresAt);
       else storiesGoLater(authorizeUrl);
     } catch (e) {
       toast.error(e instanceof Error && e.message === "bad authorize url" ? `${name} sent a link we do not trust. Try again in a minute.` : friendlyMessage(e));

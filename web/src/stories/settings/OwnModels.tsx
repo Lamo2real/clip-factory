@@ -114,11 +114,15 @@ interface Draft {
   currency: string;
 }
 
-/** How an added model is called: what it says itself, else what its maker's models take (a model with levels takes them). */
+/**
+ * How an added model is called: what it says itself, else what its maker's models take. A model with levels takes them;
+ * one with none ticked has no effort setting, whatever it was saved with (an Anthropic model saved before round 4 reads
+ * back as output_config with no levels: nothing is ever sent to it, so it shows, and saves again, as none).
+ */
 export function callingOf(m: Pick<ModelInfo, "provider" | "efforts" | "effortField" | "tools" | "cache">): ModelCalling {
   const usual = callingFor(m.provider);
   return {
-    effortField: m.effortField ?? (m.efforts.length ? "output_config" : usual.effortField),
+    effortField: m.efforts.length ? (m.effortField ?? "output_config") : "none",
     tools: m.tools ?? usual.tools,
     cache: m.cache ?? usual.cache,
   };

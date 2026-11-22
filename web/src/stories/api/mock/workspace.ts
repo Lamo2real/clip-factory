@@ -32,6 +32,20 @@ export function seed(store: MockStore): void {
       updatedAt: ago(2 * DAY),
     },
   ];
+  // Test knob: moreStudios (a number, 1 to 8) adds that many more Lamo Stories workspaces after the first, so the
+  // switchers show their short list (more than two workspaces).
+  const more = typeof store.knobs.moreStudios === "number" ? Math.min(8, Math.max(0, Math.floor(store.knobs.moreStudios))) : 0;
+  for (let i = 1; i <= more; i++)
+    store.workspaces.push({
+      workspaceId: `ws_studio_${i + 1}`,
+      workspaceName: `Studio ${i + 1}`,
+      workspaceType: "stories",
+      builtin: false,
+      configuration: structuredClone(DEFAULT_CONFIG),
+      version: 1,
+      createdAt: ago(DAY),
+      updatedAt: ago(DAY),
+    });
   // The image provider's last real call (the agent writes it after a portrait job, §45.11.6). None yet.
   store.knobs.novaCanvas = store.knobs.novaCanvas ?? null;
 }
@@ -117,7 +131,7 @@ function providersFor(store: MockStore, config: StoriesConfig): ProviderStatus[]
   const reel = (store.knobs.novaReel ?? null) as ReelRecord | null;
   const reelPicked = config.providers.video === "nova-reel";
   return [
-    { kind: "writer", id: "bedrock-claude", label: "Claude in Amazon Bedrock", state: "on", line: "Writes the stories. It is already set up." },
+    { kind: "writer", id: "bedrock-claude", label: "Claude on Amazon Bedrock", state: "on", line: "Writes the stories. It is already set up." },
     { kind: "images", id: "builtin-rig", label: "Built-in characters", state: "on", line: "Draws every character the same way in every video." },
     !novaOn
       ? { kind: "images", id: "nova-canvas", label: "Amazon Nova Canvas", state: "off", line: "Off. Turn on AI pictures to make character portraits." }

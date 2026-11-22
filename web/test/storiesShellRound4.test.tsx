@@ -20,7 +20,7 @@ import type { CharacterLook } from "../src/stories/engine/types.ts";
 vi.mock("../src/stories/StoriesApp.tsx", async (orig) => ({ ...(await orig<Record<string, unknown>>()), StoriesApp: () => null }));
 
 const pane = await import("../src/stories/pane.tsx");
-const { AppPanes, KeptSearchProvider, pauseMediaIn, StoriesPaneBoundary, storiesAwayLater, takeParkedStoriesAway, useAppActive, useKeptSearch } = pane;
+const { AppPanes, AWAY_RAN_OUT, KeptSearchProvider, pauseMediaIn, StoriesPaneBoundary, storiesAwayLater, takeParkedStoriesAway, useAppActive, useKeptSearch } = pane;
 const { chooseClips, currentChoice, rememberStoriesPath, resetWorkspaceMemory } = await import("../src/stories/workspace.ts");
 const { burst } = await import("../src/lib/confetti.ts");
 const { toastLift } = await import("../src/stories/StoriesApp.tsx");
@@ -241,20 +241,39 @@ describe("the hidden app is quiet (§45.35 D17)", () => {
     const go = vi.fn();
     localStorage.setItem("cf.storiesPreview", "1");
     history.replaceState(null, "", "/stories/connections");
-    storiesAwayLater("https://accounts.example/authorize?a=1", go);
+    const until = "2026-11-22T10:10:00.000Z";
+    storiesAwayLater("https://accounts.example/authorize?a=1", until, go);
     expect(go).toHaveBeenCalledWith("https://accounts.example/authorize?a=1");
     expect(takeParkedStoriesAway()).toBeNull();
     history.replaceState(null, "", "/library");
-    storiesAwayLater("https://accounts.example/authorize?a=2", go);
+    storiesAwayLater("https://accounts.example/authorize?a=2", until, go);
     expect(go).toHaveBeenCalledTimes(1);
-    expect(takeParkedStoriesAway()).toBe("https://accounts.example/authorize?a=2");
+    expect(takeParkedStoriesAway(Date.parse("2026-11-22T10:05:00.000Z"))).toEqual({ url: "https://accounts.example/authorize?a=2", expired: false });
     expect(takeParkedStoriesAway()).toBeNull();
     // StoriesApp takes it the moment it is on screen again (the same place a parked page change is taken).
-    expect(source("stories/StoriesApp.tsx")).toMatch(/const away = takeParkedStoriesAway\(\);\s*if \(away\) \{\s*location\.assign\(away\);/);
+    expect(source("stories/StoriesApp.tsx")).toMatch(/const away = takeParkedStoriesAway\(\);\s*if \(away && !away\.expired\) \{\s*location\.assign\(away\.url\);/);
     const connections = source("stories/screens/Connections.tsx");
-    expect(connections).toContain('if (where === "away") storiesAwayLater(authorizeUrl);');
+    expect(connections).toContain('if (where === "away") storiesAwayLater(authorizeUrl, expiresAt);');
     expect(connections).toContain("else storiesGoLater(authorizeUrl);");
     expect(connections).not.toContain("location.assign(authorizeUrl)");
+  });
+
+  it("a held sign-in page whose 10 minutes ran out before Lamo Stories was back is dropped, never opened", () => {
+    const go = vi.fn();
+    localStorage.setItem("cf.storiesPreview", "1");
+    history.replaceState(null, "", "/library");
+    storiesAwayLater("https://accounts.example/authorize?a=3", "2026-11-22T10:10:00.000Z", go);
+    // Twenty minutes later: it ran out while Clip Factory was on screen.
+    expect(takeParkedStoriesAway(Date.parse("2026-11-22T10:20:00.000Z"))).toEqual({ url: "https://accounts.example/authorize?a=3", expired: true });
+    expect(takeParkedStoriesAway()).toBeNull();
+    // Exactly at its end it has run out too; with no end given it never runs out.
+    storiesAwayLater("https://accounts.example/authorize?a=4", "2026-11-22T10:10:00.000Z", go);
+    expect(takeParkedStoriesAway(Date.parse("2026-11-22T10:10:00.000Z"))?.expired).toBe(true);
+    storiesAwayLater("https://accounts.example/authorize?a=5", null, go);
+    expect(takeParkedStoriesAway(Date.parse("2030-01-01T00:00:00.000Z"))?.expired).toBe(false);
+    expect(go).not.toHaveBeenCalled();
+    expect(AWAY_RAN_OUT).toBe("That sign-in link ran out. Tap Connect again.");
+    expect(source("stories/StoriesApp.tsx")).toContain("if (away) toast.info(AWAY_RAN_OUT);");
   });
 });
 
