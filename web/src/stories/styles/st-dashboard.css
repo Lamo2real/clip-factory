@@ -1,0 +1,332 @@
+/* ---------- Dashboard ---------- */
+
+.st-tiles {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+}
+.st-tile {
+  grid-column: span 12;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px;
+  border-radius: var(--r-lg);
+  background: var(--st-panel);
+  box-shadow: var(--st-shadow-soft);
+  animation: st-rise 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.st-tile__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.12rem;
+  font-weight: 800;
+}
+.st-tile__title .st-icon {
+  color: var(--st-sun);
+}
+.st-tile__count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  background: var(--st-panel-strong);
+  font-size: 0.875rem;
+}
+.st-tile--needs .st-tile__title .st-icon {
+  color: var(--st-coral);
+}
+.st-tile__note {
+  color: var(--st-ink-soft);
+  font-size: 0.92rem;
+}
+.st-tile__big {
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.st-tile__big span {
+  color: var(--st-ink-soft);
+  font-size: 1.1rem;
+}
+
+.st-stat {
+  grid-column: span 4;
+  justify-items: start;
+  gap: 6px;
+  color: var(--st-ink);
+  text-decoration: none;
+  transition:
+    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 200ms ease;
+}
+.st-stat--link:hover {
+  transform: translateY(-3px);
+  background: var(--st-panel-strong);
+}
+.st-stat__icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-md);
+  color: var(--st-on-sun);
+}
+.st-stat__icon--sun {
+  background: var(--st-sun);
+}
+.st-stat__icon--mint {
+  background: var(--st-mint);
+}
+.st-stat__icon--sky {
+  background: var(--st-sky);
+}
+.st-stat__icon--coral {
+  background: var(--st-coral);
+}
+.st-stat__value {
+  font-size: clamp(1.9rem, 1.5rem + 1.6vw, 2.7rem);
+  font-weight: 800;
+  line-height: 1;
+  animation: st-pop 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.st-stat__label {
+  color: var(--st-ink-soft);
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+@media (max-width: 599px) {
+  .st-tiles {
+    gap: 12px;
+  }
+  .st-tile {
+    padding: 16px;
+  }
+  .st-stat {
+    padding: 14px 10px;
+  }
+  .st-stat__icon {
+    width: 36px;
+    height: 36px;
+  }
+  .st-stat__label {
+    font-size: 0.82rem;
+  }
+}
+/* Three stats share a 320-359 px row (88 px tiles): a long first word ("Animations") stays inside its tile even with
+   a wider system font than SF (Linux, Windows). The column gap only sits between tiles side by side. */
+@media (max-width: 359px) {
+  .st-tiles {
+    column-gap: 8px;
+  }
+  .st-stat {
+    padding-inline: 7px;
+  }
+  .st-stat__label {
+    font-size: 0.78rem;
+  }
+}
+@media (min-width: 1000px) {
+  .st-tile--half {
+    grid-column: span 6;
+  }
+  .st-dash .st-tile:not(.st-tile--wide, .st-stat) {
+    grid-column: span 6;
+  }
+}
+
+.st-needs-list {
+  display: grid;
+  gap: 10px;
+}
+.st-needs-list__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: rgba(255, 111, 97, 0.12);
+}
+.st-needs-list__mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--st-panel-strong);
+  color: var(--st-ink);
+}
+.st-needs-list__text {
+  flex: 1 1 240px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.st-needs-list__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.st-making {
+  display: grid;
+  gap: 8px;
+}
+.st-making__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  align-items: center;
+  min-height: 48px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  color: var(--st-ink);
+  text-decoration: none;
+  transition: background-color 180ms ease;
+}
+.st-making__row:hover {
+  background: var(--st-panel);
+}
+.st-making__title {
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.st-making__step {
+  color: var(--st-sky-ink);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.st-bar {
+  grid-column: 1 / -1;
+  display: block;
+  height: 10px;
+  border-radius: var(--r-pill);
+  background: var(--st-panel-strong);
+  overflow: hidden;
+}
+.st-bar__fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--st-sky), var(--st-mint), var(--st-sun));
+  transition: width 900ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.st-accounts {
+  display: grid;
+  gap: 6px;
+}
+/* A long name takes two lines, and where the row is narrow (a phone) the chip goes under it on the right: nothing is
+   cut off (§45.35 D21). */
+.st-accounts__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: 36px;
+}
+.st-accounts__row > .st-chip {
+  margin-left: auto;
+}
+.st-accounts__mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--st-panel-strong);
+  color: var(--st-ink);
+}
+.st-accounts__name {
+  flex: 1 1 9rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.st-perf {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.st-perf__item {
+  display: grid;
+  gap: 2px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: var(--st-panel);
+}
+.st-perf__item .st-icon {
+  color: var(--st-sky);
+}
+.st-perf__value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.st-perf__label {
+  color: var(--st-ink-soft);
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.st-activity {
+  display: grid;
+  gap: 2px;
+}
+.st-activity__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 6px 10px;
+  border-radius: var(--r-md);
+  color: var(--st-ink);
+  text-decoration: none;
+  transition: background-color 180ms ease;
+}
+.st-activity__row:hover {
+  background: var(--st-panel);
+}
+.st-activity__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--st-on-sun);
+  background: var(--st-sky);
+}
+.st-activity__row--approved .st-activity__icon,
+.st-activity__row--posted .st-activity__icon {
+  background: var(--st-mint);
+}
+.st-activity__row--made .st-activity__icon {
+  background: var(--st-sun);
+}
+.st-activity__row--failed .st-activity__icon,
+.st-activity__row--rejected .st-activity__icon {
+  background: var(--st-coral);
+}
+.st-activity__text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.st-activity__when {
+  flex: none;
+  color: var(--st-ink-soft);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}

@@ -1,0 +1,45 @@
+/* ---------- Phones: every target at least 48 px (after the rules above, so it wins) ---------- */
+
+@media (max-width: 767px) {
+  .st-textlink,
+  .st-back,
+  a.st-file__title,
+  .st-left__item {
+    min-height: 48px;
+  }
+  .st-textlink,
+  a.st-file__title,
+  .st-note__close {
+    min-width: 48px;
+  }
+  .st-note__close {
+    height: 48px;
+  }
+}
+
+/* ---------- Motion: calm when asked ---------- */
+
+.reduce-motion .stories-app *,
+.reduce-motion .stories-app *::before,
+.reduce-motion .stories-app *::after {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .stories-app *,
+  .stories-app *::before,
+  .stories-app *::after {
+    animation: none !important;
+  }
+  .st-bar__fill {
+    transition: none;
+  }
+}
+
+/* ---------- Round 4 (CONTRACTS §45.35 D21): the toasts clear an open sheet's buttons on a phone ---------- */
+/* StoriesApp sets st-toasts-up and --st-toast-lift on the page's body while a Lamo Stories sheet is open on a phone
+   (the height of its action bar from the bottom of the window, plus 8 px of air), and takes both away after. */
+@media (max-width: 767px) {
+  .st-toasts-up .toasts {
+    bottom: var(--st-toast-lift, calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 24px));
+  }
+}

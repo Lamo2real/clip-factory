@@ -1,0 +1,188 @@
+/* ---------- Social accounts: authorization, the developer app, its keys ---------- */
+
+.st-auth {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 6px 14px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: rgba(13, 11, 38, 0.3);
+  font-size: 0.9rem;
+}
+.st-auth dt {
+  color: var(--st-ink-soft);
+  font-weight: 700;
+}
+.st-auth dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.st-app {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: rgba(98, 198, 255, 0.1);
+}
+.st-app__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--st-sky-ink);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+.st-app__now,
+.st-app__ask,
+.st-app__guide {
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+.st-app__guide {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  color: var(--st-ink-soft);
+}
+.st-app__now code,
+.st-app code {
+  color: var(--st-sky-ink);
+  overflow-wrap: anywhere;
+}
+.st-app__ask {
+  font-weight: 700;
+}
+.st-app__go {
+  display: grid;
+  gap: 10px;
+}
+.st-app__notes {
+  display: grid;
+  gap: 4px;
+  color: var(--st-ink-soft);
+  font-size: 0.9rem;
+}
+.st-app__notes li {
+  position: relative;
+  padding-left: 16px;
+}
+.st-app__notes li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.6em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--st-sun);
+}
+.st-app__warn {
+  color: var(--st-coral-ink);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.st-app__actions,
+.st-keys__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.st-note--mint {
+  color: var(--st-mint-ink);
+  background: rgba(71, 214, 160, 0.14);
+}
+.st-note__when {
+  color: var(--st-ink-soft);
+}
+.st-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 10px 10px 10px 12px;
+  border-radius: var(--r-md);
+  background: rgba(13, 11, 38, 0.4);
+}
+.st-copy__label {
+  grid-column: 1 / -1;
+  color: var(--st-ink-soft);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.st-copy__value {
+  min-width: 0;
+  color: var(--st-sun-ink);
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.st-keys {
+  display: grid;
+  gap: 10px;
+}
+.st-keys__ask {
+  font-weight: 800;
+}
+.st-keys__safe {
+  color: var(--st-ink-soft);
+  font-size: 0.85rem;
+}
+.st-field {
+  display: grid;
+  gap: 4px;
+}
+.st-field__label {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.st-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: rgba(13, 11, 38, 0.55);
+  color: var(--st-ink);
+  font: inherit;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.92rem;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+.st-input:hover {
+  background: rgba(13, 11, 38, 0.7);
+}
+.st-input:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.st-input[aria-invalid="true"] {
+  background: rgba(255, 111, 97, 0.2);
+}
+.st-field__problem {
+  color: var(--st-coral-ink);
+  font-size: 0.86rem;
+}
+.st-setupback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: var(--r-lg);
+  background: rgba(255, 201, 74, 0.12);
+  box-shadow: var(--st-shadow-soft);
+}
+.st-setupback__text {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.st-setupback__go {
+  margin-left: auto;
+}
+.st-conns--one {
+  grid-template-columns: minmax(0, 1fr);
+}

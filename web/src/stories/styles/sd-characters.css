@@ -1,0 +1,245 @@
+/* ---------- Characters ---------- */
+.st-s-cast {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: var(--st-s-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-s-cast__card {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 18px 14px;
+  border-radius: var(--r-lg);
+  text-align: center;
+  text-decoration: none;
+  color: var(--st-ink, #fff6e5);
+  background: radial-gradient(circle at 50% 35%, rgba(98, 198, 255, 0.16), transparent 65%), var(--st-s-fill);
+  box-shadow: var(--st-s-soft);
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+
+.st-s-cast__card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--st-s-lift);
+}
+
+.st-s-cast__name {
+  font: 800 1.2rem / 1.2 var(--st-font, system-ui);
+}
+
+.st-s-cast__line {
+  color: var(--st-s-ink-2);
+  font-size: 0.92rem;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.st-s-cast__tags {
+  justify-content: center;
+}
+
+.st-s-editor {
+  display: grid;
+  gap: var(--st-s-gap);
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .st-s-editor {
+    grid-template-columns: minmax(260px, 340px) 1fr;
+  }
+
+  .st-s-editor__stage {
+    position: sticky;
+    top: 16px;
+  }
+}
+
+.st-s-editor__stage {
+  display: grid;
+  gap: 14px;
+}
+
+.st-s-editor__preview {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 18px 12px;
+  border-radius: var(--r-lg);
+  background: radial-gradient(circle at 50% 40%, rgba(255, 201, 74, 0.2), transparent 62%), var(--st-s-fill);
+  box-shadow: var(--st-s-soft);
+}
+
+.st-s-editor__now {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  margin: 0;
+  text-align: center;
+}
+
+.st-s-editor__now strong {
+  font: 800 1.15rem / 1.2 var(--st-font, system-ui);
+  overflow-wrap: anywhere;
+}
+
+.st-s-editor__now span {
+  color: var(--st-s-ink-2);
+  font-weight: 700;
+}
+
+.st-s-editor__panel {
+  display: grid;
+  gap: 16px;
+  padding: clamp(14px, 0.8rem + 1vw, 22px);
+  border-radius: var(--r-lg);
+  background: var(--st-s-fill);
+  box-shadow: var(--st-s-soft);
+}
+
+.st-s-editor__part {
+  display: grid;
+  gap: 16px;
+}
+
+.st-s-editor__lede {
+  margin: 0;
+  color: var(--st-s-ink-2);
+  line-height: 1.45;
+}
+
+.st-s-faces {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-s-face {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 10px;
+  border-radius: var(--r-md);
+  background: rgba(255, 246, 229, 0.05);
+  transition: background-color 200ms ease;
+}
+
+.st-s-face:hover {
+  background: var(--st-s-fill-2);
+}
+
+.st-s-face.is-on {
+  background: rgba(71, 214, 160, 0.12);
+}
+
+.st-s-face.is-trying {
+  background: rgba(255, 201, 74, 0.18);
+}
+
+.st-s-face__name {
+  font-weight: 800;
+}
+
+.st-s-face__btns {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.st-s-moves .st-s-pick__opt {
+  padding: 8px 12px;
+  font-size: 0.92rem;
+}
+
+.st-s-trait-add {
+  display: flex;
+  gap: 8px;
+}
+
+.st-s-trait-add .st-s-input {
+  flex: 1 1 auto;
+}
+
+.st-s-refs,
+.st-s-portrait {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: var(--r-lg);
+  background: var(--st-s-fill);
+  box-shadow: var(--st-s-soft);
+}
+
+.st-s-refs__title {
+  margin: 0;
+  font: 800 1.05rem / 1.2 var(--st-font, system-ui);
+}
+
+.st-s-refs__lede {
+  margin: 0;
+  color: var(--st-s-ink-2);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.st-s-refs__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-s-refs__item {
+  position: relative;
+}
+
+.st-s-refs__item img,
+.st-s-portrait__img {
+  display: block;
+  width: 88px;
+  height: 88px;
+  object-fit: cover;
+  border-radius: var(--r-md);
+  box-shadow: 0 6px 16px rgba(8, 6, 30, 0.45);
+}
+
+.st-s-portrait__img {
+  width: 120px;
+  height: 120px;
+}
+
+.st-s-refs__remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  color: #1c1842;
+  background: var(--st-coral, #ff6f61);
+}
+
+.st-s-refs__remove:hover {
+  background: #ff8a7f;
+}
+
+.st-s-refs__sending {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.st-s-refs__add label {
+  justify-self: start;
+}

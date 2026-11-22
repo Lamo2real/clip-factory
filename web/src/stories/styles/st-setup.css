@@ -1,0 +1,454 @@
+/* ---------- The progress ring ---------- */
+
+.st-ring {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+}
+.st-ring svg {
+  display: block;
+}
+.st-ring__track {
+  stroke: rgba(255, 246, 229, 0.14);
+}
+.st-ring__arc {
+  stroke: var(--st-sun);
+  transition: stroke-dashoffset 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.st-ring.is-full .st-ring__arc {
+  stroke: var(--st-mint);
+}
+.st-ring__text {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  line-height: 1.05;
+}
+.st-ring__text strong {
+  font-size: 1.5em;
+  font-weight: 900;
+}
+.st-ring__text span {
+  color: var(--st-ink-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+/* ---------- The setup (onboarding) ---------- */
+
+.st-setup {
+  display: grid;
+  gap: 18px;
+}
+.st-setup__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 18px;
+}
+.st-setup__intro {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.st-setup__later {
+  margin-left: auto;
+}
+.st-setup__grid {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+.st-steps {
+  min-width: 0;
+}
+.st-steps__list {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  border-radius: var(--r-lg);
+  background: rgba(13, 11, 38, 0.35);
+}
+.st-steps__list > li:not(.glide) {
+  position: relative;
+  z-index: 1;
+}
+.st-steps__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 12px 6px 6px;
+  border-radius: var(--r-md);
+  color: var(--st-ink-soft);
+  font-weight: 700;
+  text-align: left;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
+}
+.st-steps__item:hover {
+  color: var(--st-ink);
+  background: var(--st-panel-strong);
+}
+.st-steps__item.is-on {
+  color: var(--st-on-sun);
+  background: var(--st-sun);
+}
+.has-glide > li > .st-steps__item.is-on {
+  background: transparent;
+}
+.st-steps__item.is-done {
+  color: var(--st-ink);
+}
+.st-steps__mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--st-panel-strong);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+.st-steps__item.is-done .st-steps__mark {
+  background: var(--st-mint);
+  color: var(--st-on-sun);
+}
+.st-steps__item.is-on .st-steps__mark {
+  background: rgba(28, 24, 66, 0.16);
+  color: var(--st-on-sun);
+}
+.st-steps__label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.st-steps__skipped {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 201, 74, 0.18);
+  color: var(--st-sun-ink);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.st-steps__item.is-on .st-steps__skipped {
+  background: rgba(28, 24, 66, 0.14);
+  color: var(--st-on-sun);
+}
+.stories-app .glide--st-steps {
+  border-radius: var(--r-md);
+  background: var(--st-sun);
+  box-shadow: 0 8px 18px -10px rgba(255, 201, 74, 0.7);
+}
+.st-setup__panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 20px;
+  border-radius: var(--r-xl);
+  background: var(--st-panel);
+  box-shadow: var(--st-shadow-soft);
+}
+.st-setup__panel:focus-visible {
+  outline: none;
+  box-shadow: var(--focus), var(--st-shadow-soft);
+}
+.st-setup__count {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--st-ink-soft);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+.st-setup__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.5rem;
+  font-weight: 900;
+}
+.st-setup__title .st-icon {
+  color: var(--st-sun);
+}
+.st-setup__lede {
+  color: var(--st-ink-soft);
+}
+.st-setup__body {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.st-setup__text {
+  max-width: 62ch;
+}
+.st-setup__facts {
+  display: grid;
+  gap: 8px;
+}
+.st-setup__facts li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: rgba(13, 11, 38, 0.3);
+}
+.st-setup__facts .st-icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--st-sun);
+}
+.st-setup__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.st-setup__hint {
+  color: var(--st-ink-soft);
+  font-size: 0.88rem;
+}
+.st-setup__save {
+  display: flex;
+  justify-content: flex-end;
+}
+.st-setup__foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+.st-setup__done {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+}
+.st-agents {
+  display: grid;
+  gap: 8px;
+}
+.st-agent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 8px 8px;
+  border-radius: var(--r-md);
+  background: rgba(13, 11, 38, 0.3);
+}
+.st-agent.is-off {
+  opacity: 0.75;
+}
+.st-agent__face {
+  flex: none;
+}
+.st-agent__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.st-agent__text span {
+  color: var(--st-ink-soft);
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+.st-left {
+  display: grid;
+  gap: 8px;
+}
+.st-left__title {
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+.st-left__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.st-left__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  background: var(--st-panel-strong);
+  font-weight: 700;
+  transition:
+    background-color 180ms ease,
+    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.st-left__item:hover {
+  background: var(--st-panel-hover);
+  transform: translateY(-1px);
+}
+.st-left__tag {
+  color: var(--st-sun-ink);
+  font-size: 0.8rem;
+}
+/* A platform held because its account is Lamo Clips' own: why, under the list (§45.35 D11). */
+.st-left__why {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+@media (min-width: 900px) {
+  .st-setup__grid {
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  }
+}
+/* Phones and narrow windows: the step itself first (its buttons at the bottom right), the list of steps under it. */
+@media (max-width: 899px) {
+  .st-setup__panel {
+    order: -1;
+  }
+}
+
+/* The dashboard's setup card, until the setup is finished. */
+.st-setupcard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 18px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border-radius: var(--r-xl);
+  background: linear-gradient(120deg, rgba(255, 201, 74, 0.16), rgba(98, 198, 255, 0.08) 70%), var(--st-panel);
+  box-shadow: var(--st-shadow-soft);
+  animation: st-rise 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.st-setupcard__text {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.st-setupcard__title {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+.st-setupcard__left {
+  color: var(--st-ink-soft);
+  overflow-wrap: anywhere;
+}
+.st-setupcard__go {
+  margin-left: auto;
+}
+/* After Finish with steps skipped: a smaller card listing them (§45.36 E15). */
+.st-setupcard--left {
+  padding: 12px 16px;
+  background: var(--st-panel);
+}
+.st-setupcard__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--st-on-sun, #1c1842);
+  background: var(--st-sun);
+}
+.st-setupcard--left .st-setupcard__title {
+  font-size: 1.02rem;
+}
+.st-setupcard__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.st-setupcard__list > li {
+  min-width: 0;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  color: var(--st-ink);
+  font-size: 0.88rem;
+  font-weight: 700;
+  background: var(--st-panel-strong);
+  overflow-wrap: anywhere;
+}
+
+/* "Continue: {name}": the idea, video, character or reference video opened last (§45.34), one tap back to it. */
+.st-continue {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 12px 16px;
+  border-radius: var(--r-xl);
+  background: linear-gradient(120deg, rgba(71, 214, 160, 0.16), rgba(98, 198, 255, 0.08) 70%), var(--st-panel);
+  box-shadow: var(--st-shadow-soft);
+  color: var(--st-ink);
+  text-decoration: none;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease;
+  animation: st-rise 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.st-continue:hover {
+  background-color: var(--st-panel-hover);
+  transform: translateY(-2px);
+}
+.st-continue__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-md);
+  background: var(--st-mint);
+  color: var(--st-on-sun);
+}
+.st-continue__text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+.st-continue__kind {
+  color: var(--st-ink-soft);
+  font-size: 0.9rem;
+}
+.st-continue__name {
+  font-size: 1.1rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.st-continue__go {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-pill);
+  background: var(--st-sun);
+  color: var(--st-on-sun);
+}
+
+/* The setup the first time: on its own, without the navigation (the brand stays on top). On a computer its page
+   keeps the left column free, where the shell's workspace switch and Live chip are in every app (§45.37). */
+.stories-app.is-alone .st-top {
+  display: flex;
+}
+.stories-app.is-alone .st-frame {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 36px);
+}
+@media (min-width: 768px) {
+  .stories-app.is-alone .st-frame {
+    padding-bottom: 48px;
+  }
+}

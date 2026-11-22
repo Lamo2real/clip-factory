@@ -1,0 +1,569 @@
+/* ---------- Phones: 48 px targets ---------- */
+@media (max-width: 767px), (pointer: coarse) {
+  .st-studio .st-btn,
+  .st-s-sheet .st-btn,
+  .st-s-chipbtn,
+  .st-s-pick__opt,
+  .st-s-back,
+  .st-s-run__title,
+  .st-s-details__sum,
+  .st-s-iconbtn,
+  .st-s-timeline__mark,
+  .st-s-range {
+    min-height: 48px;
+  }
+
+  .st-studio .st-btn,
+  .st-s-sheet .st-btn,
+  .st-s-iconbtn,
+  .st-s-timeline__mark {
+    min-width: 48px;
+  }
+
+  .st-s-iconbtn,
+  .st-s-timeline__mark {
+    width: 48px;
+    height: 48px;
+  }
+
+  .st-s-timeline__mark {
+    margin-left: -24px;
+    top: 15px;
+  }
+
+  .st-s-swatch {
+    width: 48px;
+    height: 48px;
+  }
+
+  .st-s-switch {
+    height: 48px;
+  }
+
+  .st-s-switch__thumb {
+    top: 12px;
+  }
+
+  .st-s-range {
+    height: 48px;
+  }
+
+  .st-s-head__actions,
+  .st-s-idea__actions,
+  .st-s-decide__more,
+  .st-s-presets {
+    justify-content: flex-end;
+  }
+
+  .st-s-decide__main .st-s-big,
+  .st-s-refs__add {
+    justify-self: end;
+  }
+
+  .st-s-head__actions {
+    width: 100%;
+  }
+}
+
+/* ---------- Less motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .st-s-idea,
+  .st-s-cast__card,
+  .st-s-qcard,
+  .st-s-casttile,
+  .st-s-chipbtn,
+  .st-s-swatch,
+  .st-s-place,
+  .st-s-progress__fill,
+  .st-s-switch__thumb,
+  .st-s-timeline__mark {
+    transition: none;
+  }
+
+  .st-s-busy__dot,
+  .st-s-track__spin,
+  .st-s-scrim,
+  .st-s-sheet {
+    animation: none;
+  }
+}
+
+.reduce-motion .st-s-busy__dot,
+.reduce-motion .st-s-track__spin,
+.reduce-motion .st-s-scrim,
+.reduce-motion .st-s-sheet {
+  animation: none;
+}
+
+/* ---------- Round 3 (CONTRACTS §45.34): Next run, Show more, shape, new post words, copies, redesign, idea edit ---------- */
+.st-s-nextrun {
+  margin: 0;
+  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.st-s-actionbar > .st-s-nextrun {
+  flex: 1 1 100%;
+}
+
+.st-s-more-row {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* The shape picker: a small filled frame of each shape beside its words. */
+.st-s-pick__art {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  margin-right: 10px;
+}
+
+.st-s-shape {
+  display: grid;
+  gap: 12px;
+}
+
+.st-s-shape__art {
+  display: block;
+  border-radius: 5px;
+  background: rgba(255, 246, 229, 0.55);
+  box-shadow: 0 4px 10px rgba(8, 6, 30, 0.35);
+}
+
+.st-s-pick__opt.is-on .st-s-shape__art {
+  background: #1c1842;
+}
+
+.st-s-shape__art--tall {
+  width: 18px;
+  height: 32px;
+}
+
+.st-s-shape__art--square {
+  width: 26px;
+  height: 26px;
+}
+
+.st-s-shape__art--wide {
+  width: 32px;
+  height: 18px;
+}
+
+.st-s-shapepick .st-s-pick__opt {
+  flex-direction: row;
+  align-items: center;
+}
+
+/* Write them again: the new post words beside the saved ones. */
+.st-s-rewrite {
+  justify-self: start;
+}
+
+.st-s-draftcaps {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--r-md);
+  background: rgba(98, 198, 255, 0.12);
+}
+
+.st-s-draftcaps__title {
+  margin: 0;
+  font: 800 1.05rem / 1.2 var(--st-font, system-ui);
+  color: var(--st-sun, #ffc94a);
+}
+
+.st-s-draftcaps__list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-s-draftcaps__row {
+  display: grid;
+  gap: 6px;
+}
+
+.st-s-draftcaps__place {
+  font-weight: 800;
+}
+
+.st-s-draftcaps__pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 8px;
+}
+
+.st-s-draftcaps__was,
+.st-s-draftcaps__new {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: rgba(255, 246, 229, 0.06);
+}
+
+.st-s-draftcaps__new {
+  background: rgba(71, 214, 160, 0.16);
+}
+
+.st-s-draftcaps__row.is-same .st-s-draftcaps__new {
+  background: rgba(255, 246, 229, 0.06);
+}
+
+.st-s-draftcaps__tag {
+  font: 800 0.8rem / 1.2 var(--st-font, system-ui);
+  color: var(--st-sun, #ffc94a);
+}
+
+.st-s-draftcaps__words {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+/* Download: the MP4 and each extra copy. */
+.st-s-downloads {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* The account a post would go to, asked about before it is sent. */
+.st-s-dest--ask {
+  grid-template-columns: 1fr;
+  margin-left: 0;
+}
+
+.st-s-post__id {
+  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
+/* A place's own sounds (whole scene): a cooler fill than the owner's effects. */
+.st-s-timeline__mark.is-place {
+  background: var(--st-mint, #47d6a0);
+  color: #1c1842;
+}
+
+.st-s-sfx__row.is-place {
+  background: rgba(71, 214, 160, 0.1);
+  border-radius: var(--r-md);
+}
+
+/* A redesign beside the character as it is. */
+.st-s-redesign {
+  display: grid;
+  gap: 12px;
+  padding: clamp(14px, 0.8rem + 1vw, 22px);
+  border-radius: var(--r-lg);
+  background: rgba(255, 201, 74, 0.1);
+  box-shadow: var(--st-s-soft);
+}
+
+.st-s-redesign__pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.st-s-redesign__fig {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 10px;
+  border-radius: var(--r-md);
+  background: rgba(255, 246, 229, 0.06);
+}
+
+.st-s-redesign__cap {
+  font-weight: 800;
+}
+
+.st-s-redesign__lede {
+  margin: 0;
+  font-weight: 700;
+}
+
+.st-s-redesign__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-s-redesign__item {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.st-s-redesign__detail {
+  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+
+/* Edit an idea. */
+.st-s-idea.is-editing:hover {
+  transform: none;
+}
+
+.st-s-ideaedit {
+  display: grid;
+  gap: 14px;
+}
+
+.st-s-lines__list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-s-lines__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.st-s-lines > .st-btn {
+  justify-self: start;
+}
+
+@media (max-width: 420px) {
+  .st-s-lines__row {
+    grid-template-columns: 1fr;
+  }
+
+  .st-s-lines__row > .st-btn {
+    justify-self: end;
+  }
+}
+
+/* ---------- Round 4 (§45.35 D5, D21) ---------- */
+
+/* "Not ready to post" in the publish sheet: the words always get the room; the link wraps, and on phones it has its
+   own row under them, at the right where the thumb is. */
+.st-s-place__text {
+  min-width: 0;
+}
+
+.st-s-place--off {
+  grid-template-columns: auto minmax(0, 1fr) fit-content(45%);
+}
+
+@media (max-width: 560px) {
+  .st-s-place--off {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .st-s-place--off > .st-btn {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+}
+
+/* The exact model a step called (a details line under it). */
+.st-s-used__id {
+  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+/* "Technical details": the folder, the seed, the versions and the model ids, folded away. */
+.st-s-tech {
+  margin-top: 12px;
+  padding: 0 12px 6px;
+  border-radius: var(--r-md);
+  background: rgba(255, 246, 229, 0.05);
+}
+
+.st-s-tech__sum {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
+  font-weight: 800;
+  border-radius: var(--r-sm);
+  transition: color 160ms ease;
+}
+
+.st-s-tech__sum:hover {
+  color: var(--st-sun, #ffc94a);
+}
+
+.st-s-tech[open] > .st-s-tech__sum {
+  color: var(--st-ink, #fff6e5);
+}
+
+.st-s-tech__body {
+  padding-bottom: 8px;
+  overflow-wrap: anywhere;
+}
+
+/* The Library's exact models of a run, one step a line. */
+.st-tech__ids {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+/* The fold's own list of names and values (apart from the page's .st-s-facts, which stays one list). */
+.st-s-techfacts {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.st-s-techfacts dt {
+  max-width: 15em;
+  font-weight: 800;
+}
+
+.st-s-techfacts dd {
+  margin: 0;
+  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .st-s-techfacts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .st-s-techfacts dd {
+    margin-bottom: 8px;
+  }
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .st-s-tech__sum {
+    min-height: 48px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-s-tech__sum {
+    transition: none;
+  }
+}
+
+/* ---------- Round 5 (§45.36 E8, E9, E12, E14, E18) ---------- */
+
+/* Square and wide thumbnails draw their caption low across the frame: the play badge sits in the top corner, smaller,
+   so it never covers the words (the whole thumbnail is the button). */
+.st-s-film--square .st-s-film__play,
+.st-s-film--wide .st-s-film__play {
+  top: 6px;
+  right: 6px;
+  bottom: auto;
+  width: 26px;
+  height: 26px;
+  font-size: 0.78rem;
+}
+
+/* Ids folded away in a post row and an account card: closer to the words they belong to. */
+.st-s-post__tech,
+.st-s-dest__tech {
+  margin-top: 4px;
+  padding: 0 10px 4px;
+}
+
+.st-s-dest__tech .st-s-dest__id {
+  margin: 0;
+}
+
+/* A model the studio knows cannot be used, on its chip: the status says why in the coral tone. */
+.st-s-ai-btn.is-bad {
+  background: rgba(255, 122, 107, 0.2);
+}
+
+.st-s-ai-btn.is-bad:hover {
+  background: rgba(255, 122, 107, 0.3);
+}
+
+.st-s-ai-btn__status {
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  color: #1c1842;
+  background: var(--st-coral, #ff7a6b);
+  font: 800 0.8rem / 1.2 var(--st-font, system-ui);
+  white-space: nowrap;
+}
+
+/* What made a finished AI task, and its exact model behind Technical details. */
+.st-s-taskmade {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.st-s-taskmade__line {
+  margin: 0;
+  color: var(--st-s-ink-2, rgba(255, 246, 229, 0.82));
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+
+.st-s-taskmade__tech {
+  margin-top: 2px;
+}
+
+/* Under a failed task's notice: what it was tried with. */
+.st-s-taskmade--failed {
+  margin-top: 6px;
+}
+
+/* The exact model of each step, one a line, in the Made with list's own fold. */
+.st-s-used__ids {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.st-s-used__idstep {
+  font-weight: 800;
+}
+
+/* The chip of a model with no access wraps on a narrow screen: its status goes under the name, never off it. */
+.st-s-ai-btn.is-bad {
+  flex-wrap: wrap;
+  max-width: 100%;
+  padding-block: 6px;
+  row-gap: 4px;
+}
+
+.st-s-ai-btn.is-bad .st-s-ai-btn__status,
+.st-s-ai-btn.is-bad .st-s-ai-btn__set {
+  flex: 0 0 auto;
+}
