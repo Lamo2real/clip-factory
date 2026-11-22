@@ -18,7 +18,8 @@ is ``live``, ``practice`` (a scheduled run while Practice is on, or ``practice_n
    start of every clip an earlier scheduled run confirmed whose clip flow never started (``publishState: pending``
    after all of that run's Lambda retries), with Upload's own ``release.start_flow``, while ``clip_seconds`` are
    left for that start and for each of its own planned clips (earlier ones left over wait for the next run).
-4. **Send** each planned clip through Upload's own code (``uploads.upload_review_clip``): the same conditional
+4. **Send** each planned clip through Upload's own code (``uploads.upload_review_clip``; with Your Mac posts TikTok
+   on, a live run's normal clip also gets a TikTok post for the owner's Mac, §47): the same conditional
    transaction (``status = review``, no live Throw away hold, posts created once) and idempotent flow start, so a clip
    is confirmed and its flow started only once, whichever run, retry or Upload gets there first. Practice sends
    nothing (``would_send``). A clip still in Review after its transaction was cancelled (nothing took it) is tried
@@ -39,7 +40,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
-from .. import clips, db, post_preset, release, settings, uploads
+from .. import clips, db, post_preset, release, settings, tiktok_mac, uploads
 from ..app import App
 from ..clock import iso
 from ..errors import ApiError, conflict
@@ -342,6 +343,9 @@ def _send_one(
                 platforms=places,
                 options=post_preset.upload_options(current, places, campaign=campaign),
                 auto=auto,
+                # §47: with Your Mac posts TikTok on, a live run's normal clip also gets a TikTok post for the Mac (in
+                # the same transaction; TikTok is still never one of the run's places). Never Practice or a Private test.
+                tiktok_mac=run.get("mode") == "live" and tiktok_mac.is_on(current),
             )
         except uploads.ClipTaken:
             # Another run, a Throw away (or its hold) or an Upload took it, or DynamoDB cancelled the transaction (a

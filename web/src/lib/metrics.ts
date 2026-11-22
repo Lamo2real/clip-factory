@@ -3,6 +3,7 @@ import type { AnyExtra, PerfStatus, Platform, PlatformPerformance, PostMetrics }
 import type { IconName } from "../components/Icon.tsx";
 import { PLATFORM_LABEL, PLATFORM_ORDER, relative, timecode } from "./format.ts";
 import { postError, TIKTOK_PRIVATE_ONLY } from "./tiktokYourself.ts";
+import { macRowWords } from "./tiktokMac.ts";
 
 /** Platform order on the performance page and in This week: the app-wide PLATFORM_ORDER. */
 export const STATS_ORDER: readonly Platform[] = PLATFORM_ORDER;
@@ -242,6 +243,7 @@ export const STATUS_LABEL: Record<PerfStatus, string> = {
   posting: "Uploading…",
   failed: "Didn't work",
   not_posted: "Not posted",
+  mac: "Waiting for your Mac",
 };
 
 export interface CalmCopy {
@@ -251,9 +253,18 @@ export interface CalmCopy {
 }
 
 /** The one plain line (and link) a stack shows instead of numbers. Null when it has numbers to show. */
-export function calmCopy(p: Pick<PlatformPerformance, "platform" | "status" | "metrics" | "error"> & Partial<Pick<PlatformPerformance, "by" | "url">>): CalmCopy | null {
+export function calmCopy(
+  p: Pick<PlatformPerformance, "platform" | "status" | "metrics" | "error"> & Partial<Pick<PlatformPerformance, "by" | "url" | "mac" | "via">>,
+): CalmCopy | null {
   const name = PLATFORM_LABEL[p.platform];
   switch (p.status) {
+    case "mac": {
+      // His Mac posts it on TikTok (§47.4): what it is doing; a stop is fixed in Library (Try again, or post it yourself).
+      if (!p.mac) return { text: "Waiting for your Mac." };
+      const words = macRowWords(p.mac);
+      if (p.mac.state === "stopped") return { text: words, link: { href: "/library", label: "Go to Library" } };
+      return { text: words, spinner: p.mac.state === "working" };
+    }
     case "waiting_for_connection":
       return {
         text: `Connect ${name} in Settings › Posting › Set up posting.`,
@@ -277,7 +288,11 @@ export function calmCopy(p: Pick<PlatformPerformance, "platform" | "status" | "m
     }
     case "posted":
       // Posted on TikTok by the owner himself (§42): only its link lets Clip Factory find its numbers.
-      if (p.by === "you" && !p.url) return { text: "Posted by you. Add its TikTok link in Library to count views.", link: { href: "/library", label: "Go to Library" } };
+      if (p.by === "you" && !p.url)
+        return {
+          text: p.via === "mac" ? "Posted by your Mac. Add its TikTok link in Library to count views." : "Posted by you. Add its TikTok link in Library to count views.",
+          link: { href: "/library", label: "Go to Library" },
+        };
       return p.metrics ? null : { text: "Numbers are on the way. Check back in a few minutes." };
   }
 }
@@ -294,6 +309,8 @@ export function perfStatus(post: { status: string; privacy?: string } | undefine
       return "failed";
     case "posted":
       return post.privacy === "private" ? "posted_private" : "posted";
+    case "mac":
+      return "mac";
     default:
       return "not_posted";
   }

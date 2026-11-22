@@ -48,6 +48,7 @@ import { SoundsBranch } from "./SoundsBranch.tsx";
 import { MoneyBranch } from "./MoneyBranch.tsx";
 import { MySettingsBranch } from "./MySettingsBranch.tsx";
 import { AutoPostBranch } from "./AutoPostBranch.tsx";
+import { TikTokMacBranch } from "./TikTokMacBranch.tsx";
 import { AskBranch } from "./AskBranch.tsx";
 import { NotifyBranch } from "./NotifyBranch.tsx";
 import { SetupList } from "./setup/SetupList.tsx";
@@ -68,6 +69,7 @@ const BRANCHES: Record<string, () => ReactNode> = {
   "posting/where": () => <WhereBranch />,
   "posting/my-settings": () => <MySettingsBranch />,
   "posting/auto": () => <AutoPostBranch />,
+  "posting/tiktok-mac": () => <TikTokMacBranch />,
   "posting/money": () => <MoneyBranch />,
   "look-and-feel/sounds": () => <SoundsBranch />,
   "look-and-feel/motion": () => <MotionBranch />,

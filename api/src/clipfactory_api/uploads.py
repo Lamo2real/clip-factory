@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from . import clips, db, posts, release, settings
+from . import tiktok_mac as mac_posts
 from .app import App
 from .clock import iso
 from .errors import bad_request
@@ -36,6 +37,7 @@ def upload_review_clip(
     tiktok: dict[str, Any] | None = None,
     captions_patch: Mapping[str, str] | None = None,
     auto: Mapping[str, Any] | None = None,
+    tiktok_mac: bool = False,
 ) -> tuple[Item, list[Item]]:
     """Uploads ``item`` (a clip in Review) and returns the confirmed clip (internal shape) and its posts. ``platforms``
     picks exactly where it goes; without it (older clients) Settings › Where clips go decides. ``options`` are the
@@ -47,7 +49,14 @@ def upload_review_clip(
     ``auto`` (``{runId, at, test?}``, only ever set by an auto-posting run, §46.7) marks the clip (internal
     ``autoRun``, ``autoAt``, ``autoTest``) and every post (``autoRun``); with ``test: "private"`` every post's
     ``postOptions`` also says ``test: "private"`` (§46.8). No request body can set these. With ``auto`` the clip's
-    write also needs no live Throw away hold (``holdUntil`` absent or past, §46.7); Upload by hand ignores the hold."""
+    write also needs no live Throw away hold (``holdUntil`` absent or past, §46.7); Upload by hand ignores the hold.
+
+    Your Mac posts it on TikTok (§47), only while ``settings.tiktokMac.on`` and never for a campaign clip: Upload by
+    hand with TikTok among ``platforms``, while TikTok has not approved Clip Factory's public uploads, writes the TikTok
+    post as a Mac post (``source: "upload"``) instead of ``queued`` (the sheet's choices are still required and
+    checked); an auto-posting run's live clip (``tiktok_mac=True``, never a Private test) also gets one (``source:
+    "auto"``), though TikTok is never one of its places. Every Mac post's options are My settings' TikTok choices. Both go through ``create_for_clip``'s explicit
+    ``tiktok_mac`` path, in the same transaction as the other posts. Otherwise TikTok's rule is exactly as before."""
     from .routes import clips as checks  # Upload's and Try again's shared checks (§33, §38.14)
 
     patch = dict(captions_patch or {})
@@ -94,6 +103,19 @@ def upload_review_clip(
         **{p: o for p, o in per_clip.items() if chosen is None or p in chosen},
         **({"tiktok": tiktok} if tiktok else {}),
     }
+    mac_source = _mac_source(
+        app,
+        user_id,
+        current_settings=current_settings,
+        is_campaign=campaign is not None,
+        chosen=chosen,
+        auto=auto,
+        asked=tiktok_mac,
+    )
+    if mac_source:
+        # Every Mac post asks the Mac for My settings' choices (Everyone, Comment, Duet and Stitch on), whatever the
+        # TikTok sheet said: before TikTok approves the app the sheet only offers Only me, and his Mac posts for everyone.
+        post_options["tiktok"] = mac_posts.preset_options(current_settings)
     post_fields: Item | None = None
     not_held: db.Condition | None = None
     if auto is not None:
@@ -120,6 +142,7 @@ def upload_review_clip(
             campaign_options=campaign.options if campaign else None,
             post_fields=post_fields,
             clip_condition=not_held,
+            tiktok_mac=mac_source,
         )
     except db.ConditionFailed as e:
         raise ClipTaken(str(item["clipId"])) from e
@@ -130,5 +153,26 @@ def upload_review_clip(
         clipId=item["clipId"],
         posts=len(created),
         **({"autoRun": auto["runId"]} if auto else {}),
+        **({"tiktokMac": mac_source} if mac_source else {}),
     )
     return confirmed, created
+
+
+def _mac_source(
+    app: App,
+    user_id: str,
+    *,
+    current_settings: Mapping[str, Any],
+    is_campaign: bool,
+    chosen: list[str] | None,
+    auto: Mapping[str, Any] | None,
+    asked: bool,
+) -> str | None:
+    """Whether this Upload hands TikTok to the owner's Mac (§47), and from where: ``"upload"``, ``"auto"`` or None."""
+    if is_campaign or not mac_posts.is_on(current_settings):
+        return None
+    if auto is None:
+        if chosen and "tiktok" in chosen and not mac_posts.tiktok_audited(app.store, user_id):
+            return "upload"
+        return None
+    return "auto" if asked and not auto.get("test") else None

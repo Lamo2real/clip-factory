@@ -28,6 +28,9 @@ import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../
 import { currentClipModel, isClipModel } from "../../lib/models.ts";
 import { autoPostMock, NOTE_NO_PLACES, CR_BY_HAND, CR_CANT_TAKE, type AutoPostControls } from "./autopost.ts";
 import { AUTO_ALREADY_SENT } from "../../lib/autopost.ts";
+import { tiktokMacMock, presetChoices, type TikTokMacControls } from "./tiktokMac.ts";
+import { MAC_UNDO_REFUSED, MAC_UNKNOWN_SETTING, macOn } from "../../lib/tiktokMac.ts";
+import { tiktokAudited } from "../../lib/tiktokYourself.ts";
 
 const STEP_MS = 3500;
 /** api settings.MAX_USD_PER_1000: the retired `earningsRates` (§21) are still validated, never read (§25.6). */
@@ -721,16 +724,31 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     // TikTok's rules: the owner picks who can see it before anything is posted there (§17.8).
     const tiktokGoing = chosen ? chosen.includes("tiktok") : store.settings.platforms.includes("tiktok") && connected.includes("tiktok");
     if (c.status === "review" && tiktokGoing && !tiktok?.privacyLevel) throw bad("Pick who can see it on TikTok.");
+    // Your Mac posts TikTok (§47.2): Upload's TikTok goes to the Mac while TikTok has not approved the app, and a live
+    // auto-posting run gives a normal clip a Mac post too (never a Private test run or a campaign clip).
+    const macUpload = !auto && !!chosen?.includes("tiktok") && macOn(store.settings) && !tiktokAudited(setup.overview().platforms) && !c.campaignId;
+    const macAuto = !!auto && !auto.test && macOn(store.settings) && !c.campaignId;
     const startPosting = () => {
       const have = new Set(store.posts.filter((p) => p.clipId === clipId).map((p) => p.platform));
       const targets = c.uploadTo ?? store.settings.platforms;
       const created: Post[] = targets
         .filter((platform) => !have.has(platform))
-        .map((platform) => ({ postId: ulid(), clipId, platform, status: connected.includes(platform) ? "queued" : "pending_integration" }));
+        .map((platform) =>
+          platform === "tiktok" && macUpload
+            ? { postId: ulid(), clipId, platform, ...mac.macFields("upload") }
+            : { postId: ulid(), clipId, platform, status: connected.includes(platform) ? "queued" : "pending_integration" },
+        );
       // Auto-posting's posts (§46.9); a Private test run's go up for him only, at once here (no flow in the mock).
       if (auto) for (const p of created) privateTest(Object.assign(p, { auto: true as const }), auto.test);
+      if (macAuto && !have.has("tiktok") && !targets.includes("tiktok")) {
+        const made: Post = { postId: ulid(), clipId, platform: "tiktok", ...mac.macFields("auto"), auto: true };
+        postOptions.set(made.postId, presetChoices(store.settings));
+        created.splice(PLATFORM_ORDER.filter((p) => p === "youtube" && created.some((x) => x.platform === p)).length, 0, made);
+      }
       store.posts.push(...created);
       for (const p of created) if (p.platform === "tiktok" && p.status === "queued" && tiktok) postOptions.set(p.postId, clone(tiktok));
+      // Every Mac post asks the Mac for My settings' choices (Everyone, all three on), whatever the sheet said (§47.1).
+      for (const p of created) if (p.platform === "tiktok" && p.status === "mac") postOptions.set(p.postId, presetChoices(store.settings));
       for (const p of created) {
         const own = options?.[p.platform as keyof ClipPostOptions];
         if (own) clipOptions.set(p.postId, clone(own));
@@ -810,6 +828,22 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   if (typeof window !== "undefined") {
     const w = window as unknown as { __cfMock?: Record<string, unknown> & { autopost?: AutoPostControls } };
     w.__cfMock = { ...(w.__cfMock ?? {}), autopost: autopost.controls };
+  }
+
+  // Your Mac posts TikTok (§47): its queue, Send these, Try again and Take it back; the helper's routes are test knobs.
+  const mac = tiktokMacMock({
+    clips: () => store.clips,
+    posts: () => store.posts,
+    settings: () => store.settings,
+    options: postOptions,
+    publishPost,
+    removePost: (p) => mockLive.publish({ type: "post", op: "delete", id: p.postId }),
+    publishClip,
+    now: () => Date.now(),
+  });
+  if (typeof window !== "undefined") {
+    const w = window as unknown as { __cfMock?: Record<string, unknown> & { mac?: TikTokMacControls } };
+    w.__cfMock = { ...(w.__cfMock ?? {}), mac: mac.controls };
   }
 
   const api: Api = {
@@ -1189,6 +1223,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         else note = "Saved. Clip Factory could not find it on your TikTok yet. Tap Add link in a minute.";
       }
       if (p?.status === "queued") throw conflict("This clip is still uploading to TikTok. Wait until it is done, then try again.");
+      // A Mac post (§47.3): his own post while it waits or stopped, never while the Mac is posting it.
+      mac.beforeMarked(p);
       if (p && p.by !== "you" && p.status === "posted" && p.privacy === "public") throw conflict("This clip is already on TikTok for everyone.");
       if (!p) {
         p = { postId: ulid(), clipId, platform: "tiktok", status: "posted" };
@@ -1203,6 +1239,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         delete p.metrics;
       }
       Object.assign(p, { status: "posted", by: "you", privacy: "public" });
+      mac.marked(p);
       if (video) p.url = `https://www.tiktok.com/@${video.handle}/video/${video.id}`;
       if (c.status === "failed" || (c.status === "confirmed" && !mine.some((x) => x.status === "queued"))) c.status = "posted";
       publishClip(c);
@@ -1214,6 +1251,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       const c = clip(clipId);
       const p = store.posts.find((x) => x.clipId === clipId && x.platform === "tiktok");
       if (!p || p.by !== "you") throw conflict("This clip was not marked as posted by you, so there is nothing to undo.");
+      if (p.via === "mac") throw conflict(MAC_UNDO_REFUSED);
       const before = byYou.get(p.postId);
       byYou.delete(p.postId);
       if (before) {
@@ -1267,7 +1305,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     },
     async putSettings(patch) {
       await delay(100, 240);
-      const { autoPost: autoPatch, ...rest } = patch;
+      const { autoPost: autoPatch, tiktokMac: macPatch, ...rest } = patch;
       const next: Settings = { ...store.settings, ...rest, hasYoutubeCookies: store.settings.hasYoutubeCookies };
       if (next.clipMin < 1 || next.clipMin > 10) throw bad("The smallest number of clips must be between 1 and 10.");
       if (next.clipMax < next.clipMin || next.clipMax > 10) throw bad("The largest number of clips must be between the smallest and 10.");
@@ -1324,6 +1362,14 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       }
       // §46.3: each of on, everyHours, perRun and practice merged over the stored value; on writes onAt.
       if (autoPatch !== undefined) next.autoPost = autopost.merge(store.settings.autoPost, autoPatch);
+      // §47.1: { on } merged over the stored value; anything else is refused.
+      if (macPatch !== undefined) {
+        const m = macPatch as unknown;
+        if (typeof m !== "object" || m === null || Array.isArray(m) || Object.keys(m).some((k) => k !== "on")) throw bad(MAC_UNKNOWN_SETTING);
+        const on = (m as { on?: unknown }).on;
+        if (on !== undefined && typeof on !== "boolean") throw bad("on must be true or false.");
+        next.tiktokMac = { on: on ?? macOn(store.settings) };
+      }
       if (next.backgroundColours !== undefined) {
         const c = next.backgroundColours;
         if (!Array.isArray(c) || c.length < 1 || c.length > MAX_COLOURS || !c.every(isHexColour)) throw bad("Pick 1 to 3 colours.");
@@ -1448,6 +1494,23 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     async autoPostRun(kind) {
       await delay();
       return autopost.runNow(kind);
+    },
+    // Your Mac posts TikTok (§47): the owner's routes; the Mac helper's are window.__cfMock.mac.
+    async tiktokMacStatus() {
+      await delay();
+      return mac.status();
+    },
+    async sendToMac(clipIds) {
+      await delay();
+      return mac.send(clipIds);
+    },
+    async retryMac(clipId, notOnTikTok) {
+      await delay();
+      return mac.retry(clipId, notOnTikTok === true);
+    },
+    async takeBackFromMac(clipId) {
+      await delay();
+      return mac.takeBack(clipId);
     },
   };
 

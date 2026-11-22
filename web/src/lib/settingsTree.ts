@@ -349,6 +349,33 @@ export const TREES: Tree[] = [
         ],
       },
       {
+        // Your Mac posts it on TikTok (docs/CONTRACTS.md §47): Upload and auto-posting hand TikTok to the owner's Mac.
+        slug: "tiktok-mac",
+        name: "Your Mac posts TikTok",
+        line: "Your Mac posts your TikTok clips for everyone, one at a time.",
+        icon: "monitor",
+        apples: [
+          {
+            id: "tiktok-mac-on",
+            name: "My Mac posts my TikTok clips",
+            leaf: "Upload and auto-posting give TikTok to your Mac. It posts each clip for everyone.",
+            words: ["TikTok", "Mac", "computer", "automation", "automatic", "by itself", "helper", "Chrome", "everyone", "public", "on", "off"],
+          },
+          {
+            id: "tiktok-mac-status",
+            name: "Your Mac",
+            leaf: "When your Mac last checked in, and how many clips wait for it.",
+            words: ["checked in", "last seen", "waiting", "queue", "needs you", "paused", "set up", "asleep"],
+          },
+          {
+            id: "tiktok-mac-send",
+            name: "Send these to my Mac",
+            leaf: "Clips that show Post it yourself can go to your Mac too.",
+            words: ["send", "post it yourself", "waiting", "old clips", "all", "TikTok"],
+          },
+        ],
+      },
+      {
         slug: "money",
         name: "Money",
         line: "How close you are to getting paid, and real money each app reports.",

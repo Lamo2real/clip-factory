@@ -24,7 +24,11 @@ import { TikTokSheet } from "../review/TikTokSheet.tsx";
 import { ClipStatusPill } from "../jobs/JobDetail.tsx";
 import { useSetup } from "../settings/setup/useSetup.ts";
 import { canPostYourself, failedForPublicAccount, postError } from "../../lib/tiktokYourself.ts";
-import { PostYourselfButton } from "./PostYourself.tsx";
+import { PostYourself, PostYourselfButton } from "./PostYourself.tsx";
+import { canPostYourselfInstead, MAC_POSTED, MAC_POSTED_PRIVATE, macMayBeOnTikTok, macOn, macRowWords, type MacRowContext } from "../../lib/tiktokMac.ts";
+import { useSession } from "../../app/session.tsx";
+import { useTikTokMac } from "../settings/TikTokMacBranch.tsx";
+import { MacPostedIt, MacTryAgain, PostYourselfInstead } from "./MacButtons.tsx";
 
 interface LibraryData {
   clips: Clip[];
@@ -106,6 +110,14 @@ function AllClips() {
   // for one of them gets its own Post now. Unknown (loading, or the check failed): every waiting post stays grouped.
   const setup = useSetup();
   const ready: Platform[] = setup.data ? setup.data.platforms.filter((p) => p.ready).map((p) => p.platform) : [];
+  // Your Mac posts TikTok (§47.4): a waiting Mac post says when the Mac was last seen, or that it never checked in.
+  const { me } = useSession();
+  const mac = useTikTokMac(!!data?.posts.some((p) => p.platform === "tiktok" && p.status === "mac"));
+  const macCtx: MacRowContext = {
+    helper: mac.status ? mac.status.helper : undefined,
+    autoPostOn: me?.settings.autoPost?.on === true,
+    macOn: me ? macOn(me.settings) : undefined,
+  };
 
   // Live: kept clips arrive, posts change state and get their numbers, new learnings appear.
   useLiveEvents(
@@ -218,6 +230,7 @@ function AllClips() {
                     clip={c}
                     posts={data.posts.filter((p) => p.clipId === c.clipId)}
                     ready={ready}
+                    macCtx={macCtx}
                     onKept={kept}
                     crSubs={cr.subs.filter((x) => x.clipId === c.clipId)}
                     onCrChange={cr.put}
@@ -276,12 +289,15 @@ function LibraryCard({
   clip,
   posts,
   ready = [],
+  macCtx = {},
   onKept,
   crSubs = [],
   onCrChange = () => undefined,
 }: {
   clip: Clip;
   posts: Post[];
+  /** What a waiting Mac post's row adds: the Mac's last check-in, and whether auto-posting is on (§47.4). */
+  macCtx?: MacRowContext;
   /** This clip's posts on Content Rewards (§38.6). */
   crSubs?: CrSubmission[];
   onCrChange?: (next: CrSubmission | null) => void;
@@ -303,8 +319,23 @@ function LibraryCard({
   const rest = ordered.filter(ownRow);
   const noTikTok = yourself && !posts.some((p) => p.platform === "tiktok");
   const marked = (out: { clip: Clip; posts: Post[] }) => onKept(out.clip, out.posts);
+  // Post it yourself instead (§47.4): taken back from the Mac, the sheet opens here, so it stays open while the row changes.
+  const [handOff, setHandOff] = useState(false);
+  const instead = canPostYourselfInstead(posts);
   const failedPosts = posts.filter((p) => p.status === "failed");
   const onlyPublicTikTok = failedPosts.length > 0 && failedPosts.every(failedForPublicAccount);
+  // A row's state words: posted by his Mac or by him (§42, §47), what his Mac is doing, or the post's own state.
+  const rowWords = (p: Post): string => {
+    if (p.via === "mac") {
+      const words = p.privacy === "private" ? MAC_POSTED_PRIVATE : MAC_POSTED;
+      return p.url ? words : `${words} · add the link to count views`;
+    }
+    if (p.by === "you") return p.url ? "Posted by you · Everyone" : "Posted by you · Everyone · add the link to count views";
+    if (p.status === "mac" && p.mac) return macRowWords(p.mac, macCtx);
+    if (canPostNow(p)) return "Ready to post";
+    if (p.status === "failed" && p.error) return `${autoPostLabel(p, postStatusLabel(p))}. ${postError(p.error)}`;
+    return autoPostLabel(p, postStatusLabel(p));
+  };
   const row = (p: Post) => (
     <li key={p.postId} className={`post is-${p.status}`}>
       <span className="post__mark" title={PLATFORM_LABEL[p.platform]}>
@@ -313,15 +344,7 @@ function LibraryCard({
       <span className="post__text">
         <span className="post__name">{PLATFORM_LABEL[p.platform]}</span>
         <span className="post__status clamp-2">
-          {p.by === "you"
-            ? p.url
-              ? "Posted by you · Everyone"
-              : "Posted by you · Everyone · add the link to count views"
-            : canPostNow(p)
-              ? "Ready to post"
-              : p.status === "failed" && p.error
-                ? `${autoPostLabel(p, postStatusLabel(p))}. ${postError(p.error)}`
-                : autoPostLabel(p, postStatusLabel(p))}
+          {rowWords(p)}
           {/* A Private test post has no numbers (§46.8). */}
           {(p.by === "you" && !p.url) || p.test ? "" : postNumbersNote(p, relative)}
         </span>
@@ -329,6 +352,19 @@ function LibraryCard({
       {/* TikTok only lets Clip Factory post Only me for now: the owner posts it there himself (§42). */}
       {yourself && p.platform === "tiktok" ? <PostYourselfButton clip={clip} onMarked={marked} /> : null}
       {p.by === "you" && !p.url ? <PostYourselfButton clip={clip} onMarked={marked} linkOnly postedAt={p.postedAt} /> : null}
+      {/* His Mac stopped (§47.4): Try again, or post it himself instead. Nothing while the Mac is posting it. */}
+      {p.status === "mac" && p.mac?.state === "stopped" ? <MacTryAgain clip={clip} mac={p.mac} onKept={onKept} /> : null}
+      {/* It may be on TikTok (the Mac pressed Post): never taken back; he marks it as posted instead (§47.3). */}
+      {p.status === "mac" && p.mac && macMayBeOnTikTok(p.mac) ? <MacPostedIt clip={clip} mac={p.mac} onMarked={marked} /> : null}
+      {p.platform === "tiktok" && instead ? (
+        <PostYourselfInstead
+          clip={clip}
+          onTaken={(out) => {
+            onKept(out.clip, out.posts);
+            setHandOff(true);
+          }}
+        />
+      ) : null}
       {/* One place did not work on an uploaded clip: Try again for that place only (§33). */}
       {p.status === "failed" && clip.status === "posted" && !failedForPublicAccount(p) ? (
         <UploadAgain clip={clip} posts={posts} platform={p.platform} onKept={onKept} />
@@ -429,6 +465,7 @@ function LibraryCard({
       {needsUploadAgain(clip, posts) || stuck || (clip.status === "failed" && !onlyPublicTikTok) ? <UploadAgain clip={clip} posts={posts} onKept={onKept} /> : null}
       {crSubs.length ? <CrPostLines subs={crSubs} onChange={onCrChange} compact /> : null}
       <SimilarClips clipId={clip.clipId} />
+      {handOff ? <PostYourself clip={clip} onMarked={marked} onClose={() => setHandOff(false)} /> : null}
     </article>
   );
 }

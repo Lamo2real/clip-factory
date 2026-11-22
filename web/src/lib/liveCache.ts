@@ -74,8 +74,13 @@ export function applyLearningEvent(learnings: Learning[], ev: LiveEvent): Learni
 /** One stack's data from a Post (the account state and the series come from elsewhere). */
 export function perfFromPost(post: Post, prev: PlatformPerformance): PlatformPerformance {
   const m = post.metrics ?? null;
+  // Who posted it and what the owner's Mac is doing with it (§42, §47) come from the post, never from the old stack.
+  const { by: _by, mac: _mac, via: _via, ...rest } = prev;
   return {
-    ...prev,
+    ...rest,
+    ...(post.by ? { by: post.by } : {}),
+    ...(post.mac ? { mac: post.mac } : {}),
+    ...(post.via ? { via: post.via } : {}),
     status: perfStatus(post),
     postId: post.postId,
     url: post.url,

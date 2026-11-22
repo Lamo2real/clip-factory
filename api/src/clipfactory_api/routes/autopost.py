@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from .. import clips, db, posts, release, settings, tiktok_self, validate
+from .. import clips, db, posts, release, settings, tiktok_mac, tiktok_self, validate
 from ..app import App
 from ..autopost import RUN_PREFIX, STATE_SK, pick, run, schedule
 from ..clock import iso
@@ -78,6 +78,8 @@ def public_run(item: Mapping[str, Any], by_id: Mapping[str, Item], found: Mappin
                 if post is None or post.get("autoRun") != item.get("runId"):
                     continue
                 row: Item = {"platform": post.get("platform"), "status": post.get("status")}
+                if post.get("status") == posts.MAC_STATUS and post.get("macState"):
+                    row["mac"] = str(post["macState"])  # §47: waiting, working or stopped, for Recent's words
                 for key in ("url", "error"):
                     if post.get(key):
                         row[key] = post[key]
@@ -89,19 +91,33 @@ def public_run(item: Mapping[str, Any], by_id: Mapping[str, Item], found: Mappin
     return out
 
 
-def _tiktok_not_out(clip: Mapping[str, Any], rows: list[Item]) -> bool:
+def _tiktok_not_out(clip: Mapping[str, Any], rows: list[Item], *, mac_on: bool) -> bool:
     """§42.1: an uploaded clip whose TikTok is not out for everyone (none, waiting, failed or uploaded privately), not
-    while Clip Factory is uploading it and not once the owner marked it."""
+    while Clip Factory is uploading it and not once the owner marked it. Not while the owner's Mac has it either (a
+    Mac post in any state, §47), nor once his Mac posted it (``by: "you"``, ``via: "mac"``), unless Your Mac posts
+    TikTok is switched off: then a Mac post that waits or stopped (never one the Mac is posting, nor one it pressed Post
+    on) is his to post again (Post it yourself instead)."""
     if clip.get("status") not in tiktok_self.DECIDED or not clip.get("postsCreated"):
         return False
     row = tiktok_self.tiktok_row(rows)
     if row is None:
         return True
+    if row.get("status") == posts.MAC_STATUS:
+        return not mac_on and _mac_handable(row)
     if row.get("by") == "you" or row.get("status") == "queued":
         return False
     if row.get("status") == "posted":
         return row.get("privacy") != "public"
     return row.get("status") in {"pending_integration", "failed"}
+
+
+def _is_mac(rows: list[Item]) -> bool:
+    row = tiktok_self.tiktok_row(rows)
+    return row is not None and row.get("status") == posts.MAC_STATUS
+
+
+def _mac_handable(row: Mapping[str, Any]) -> bool:
+    return row.get("macState") in {"waiting", "stopped"} and not row.get("macPressedAt")
 
 
 def status(app: App, req: Request) -> Response:
@@ -111,7 +127,9 @@ def status(app: App, req: Request) -> Response:
     store = app.store
     pk = db.user_pk(user_id)
     now = app.clock()
-    auto = settings.load(store, user_id)["autoPost"]
+    current = settings.load(store, user_id)
+    auto = current["autoPost"]
+    mac = tiktok_mac.is_on(current)
     state = store.get(pk, STATE_SK)
     every = clips.all_clips(store, user_id)
     by_id = {str(c.get("clipId")): c for c in every if c.get("type") == "clip"}
@@ -161,9 +179,15 @@ def status(app: App, req: Request) -> Response:
         reverse=True,
     )
     tiktok_yourself = [
-        {"clipId": c["clipId"], "hook": str(c.get("hook") or ""), **_cover(app, c)}
+        {
+            "clipId": c["clipId"],
+            "hook": str(c.get("hook") or ""),
+            **_cover(app, c),
+            # §47: his Mac's post, there while the switch is off: the page offers Post it yourself instead.
+            **({"mac": True} if _is_mac(by_clip.get(str(c["clipId"]), [])) else {}),
+        }
         for c in auto_clips
-        if _tiktok_not_out(c, by_clip.get(str(c["clipId"]), []))
+        if _tiktok_not_out(c, by_clip.get(str(c["clipId"]), []), mac_on=mac)
     ][:TIKTOK_SHOWN]
     return ok(
         {
@@ -171,7 +195,10 @@ def status(app: App, req: Request) -> Response:
             "nextRunAt": iso(next_at) if next_at is not None else None,
             "perDay": schedule.per_day(auto),
             "places": picked.places,
-            "leftOut": pick.left_out(picked.places),
+            "leftOut": pick.left_out(picked.places, mac=mac and bool(picked.places)),
+            # §47: the places the owner's Mac posts each auto-posted clip to (TikTok while Your Mac posts TikTok is on).
+            # With no other place set up a run sends nothing (§46.6), so the Mac gets nothing either.
+            "macPlaces": ["tiktok"] if mac and picked.places else [],
             "nextUp": next_up,
             "waiting": waiting,
             "runs": [public_run(r, by_id, run_posts) for r in runs],

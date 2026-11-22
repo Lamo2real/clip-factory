@@ -17,7 +17,7 @@ describe("the settings tree", () => {
     expect(TREES.map((t) => t.slug)).toEqual(["clip-making", "posting", "look-and-feel", "app"]);
     expect(TREES.map((t) => t.branches.map((b) => b.slug))).toEqual([
       ["clips", "skills", "learned", "streamers", "youtube"],
-      ["setup", "getpaid", "where", "my-settings", "auto", "money"],
+      ["setup", "getpaid", "where", "my-settings", "auto", "tiktok-mac", "money"],
       ["sounds", "motion", "background"],
       ["get-the-app", "notifications", "updates", "ask", "account"],
     ]);

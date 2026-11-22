@@ -36,8 +36,11 @@ import { postError } from "../../lib/tiktokYourself.ts";
 import { settingsPath } from "../../lib/settingsTree.ts";
 import { onClipBack, throwAwayWithUndo, useThrownAway } from "../../lib/throwAways.ts";
 import { UploadAgain } from "../library/Library.tsx";
-import { PostYourselfButton } from "../library/PostYourself.tsx";
+import { PostYourself, PostYourselfButton } from "../library/PostYourself.tsx";
+import { PostYourselfInstead } from "../library/MacButtons.tsx";
 import { Apple, AppleSwitch, Panel } from "./parts.tsx";
+import { MAC_WHERE_LINE, macOn } from "../../lib/tiktokMac.ts";
+import { SendToMac } from "./TikTokMacBranch.tsx";
 import "../../styles/autopost.css";
 
 /** How often the page reads the status while open, and after a test run (every 3 s for 30 s). */
@@ -154,6 +157,8 @@ export function AutoPostBranch() {
   const thrown = useThrownAway();
   const actions = useClips([...(status?.failed.map((f) => f.clipId) ?? []), ...(status?.tiktokYourself.map((c) => c.clipId) ?? [])], status);
   const [running, setRunning] = useState<"practice" | "private" | null>(null);
+  // Post it yourself instead (§47.2): taken back from his Mac, the §42 sheet opens here, so it outlives the row.
+  const [instead, setInstead] = useState<Clip | null>(null);
 
   // Thrown away from Next up: the focus goes to the next row's Throw away (or, after the last one, to Next up itself);
   // Undo brings it back.
@@ -268,6 +273,13 @@ export function AutoPostBranch() {
           {status ? (
             <div className="autopost__where">
               <p className="autopost__line">{placesLine(status.places)}</p>
+              {/* §47.2: while his Mac posts TikTok, each clip's TikTok goes to the Mac. */}
+              {status.macPlaces?.includes("tiktok") ? (
+                <p className="autopost__left-row" data-mac="where">
+                  <PlatformMark platform="tiktok" size={18} title={PLATFORM_LABEL.tiktok} />
+                  <span className="autopost__left-text">{MAC_WHERE_LINE}</span>
+                </p>
+              ) : null}
               {status.leftOut.length ? (
                 <ul className="autopost__left">
                   {status.leftOut.map((l) => (
@@ -390,6 +402,15 @@ export function AutoPostBranch() {
           ) : null}
           {status.tiktokYourself.length ? (
             <Apple id="auto-post-tiktok" wide>
+              {/* §47.4: while his Mac posts TikTok, these can go to the Mac too (never a campaign clip). */}
+              {macOn(me.settings) ? (
+                <div className="autopost__send">
+                  <SendToMac
+                    clipIds={status.tiktokYourself.map((c) => c.clipId).filter((id) => !actions.clips.get(id)?.campaignId)}
+                    onSent={() => void reload()}
+                  />
+                </div>
+              ) : null}
               <ul className="autopost__list">
                 {status.tiktokYourself.map((c) => {
                   const clip = actions.clips.get(c.clipId);
@@ -399,7 +420,10 @@ export function AutoPostBranch() {
                       <span className="autopost__text">
                         <span className="autopost__hook clamp-2 user-text">{c.hook}</span>
                       </span>
-                      {clip ? (
+                      {clip && c.mac ? (
+                        // His Mac's post while the switch is off (§47.2): take it back, then the §42 sheet.
+                        <PostYourselfInstead clip={clip} onTaken={(out) => setInstead(out.clip)} />
+                      ) : clip ? (
                         <PostYourselfButton
                           clip={clip}
                           onMarked={(out) => {
@@ -417,6 +441,19 @@ export function AutoPostBranch() {
             </Apple>
           ) : null}
         </Panel>
+      ) : null}
+      {instead ? (
+        <PostYourself
+          clip={instead}
+          onMarked={(out) => {
+            actions.put(out.clip);
+            void reload();
+          }}
+          onClose={() => {
+            setInstead(null);
+            void reload();
+          }}
+        />
       ) : null}
 
       {/* Always on the page (§46.2 hides only items 6 and 7 when empty): before the first run, its leaf alone. */}

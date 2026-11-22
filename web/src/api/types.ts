@@ -288,6 +288,13 @@ export interface Settings {
   postPreset?: PostPreset;
   /** Auto-posting (§46.3). Absent on old servers: off. */
   autoPost?: AutoPostSettings;
+  /** Your Mac posts TikTok (§47): Upload and auto-posting hand TikTok to the owner's Mac. Absent on old servers: off. */
+  tiktokMac?: TikTokMacSettings;
+}
+
+/** Your Mac posts TikTok (docs/CONTRACTS.md §47.1). PUT /v1/settings merges `{ on }`. */
+export interface TikTokMacSettings {
+  on: boolean;
 }
 
 /**
@@ -311,6 +318,68 @@ export type AutoPostPatch = Partial<Omit<AutoPostSettings, "onAt">>;
 /** What PUT /v1/settings takes: any settings, and of auto-posting only the keys that change (merged by the server, §46.3). */
 export type SettingsPut = Omit<Partial<Settings>, "autoPost"> & { autoPost?: AutoPostPatch };
 
+/** What the Mac is doing with a TikTok post right now (§47.1). */
+export type MacStep = "video" | "opening" | "uploading" | "settings" | "pressing" | "finding";
+/** Where a Mac post came from: Upload, an auto-posting run, or Send these to my Mac (§47.2). */
+export type MacSource = "upload" | "auto" | "sent";
+export type MacState = "waiting" | "working" | "stopped";
+
+/** A TikTok post the owner's Mac posts (`Post.status: "mac"`, §47.1). */
+export interface PostMac {
+  state: MacState;
+  step?: MacStep;
+  since: string;
+  source: MacSource;
+  claimedAt?: string;
+  /** The Mac pressed Post: it never presses it again by itself. */
+  pressedAt?: string;
+  stoppedAt?: string;
+  reason?: string;
+}
+
+/** The Mac helper's last check-in (§47.3). */
+export interface MacHelper {
+  seenAt: string;
+  state: "ok" | "needs_you" | "paused";
+  reason?: string;
+  version?: string;
+}
+
+/** One post in the Mac's queue (§47.3). */
+export interface MacJob {
+  clipId: string;
+  postId: string;
+  hook: string;
+  caption: string;
+  fileName: string;
+  privacy: string;
+  comment: boolean;
+  duet: boolean;
+  stitch: boolean;
+  source: MacSource;
+  since: string;
+  state: MacState;
+  step?: MacStep;
+  claimedAt?: string;
+  pressedAt?: string;
+  /** How many claims the post had (the server's macAttempt); the helper may send it back with step, stopped and done. */
+  attempt: number;
+}
+
+/** GET /v1/tiktok/mac (§47.3). */
+export interface TikTokMacStatus {
+  on: boolean;
+  helper: MacHelper | null;
+  queue: MacJob[];
+}
+
+/** POST /v1/tiktok/mac/send: one result per clip, in order (§47.2). */
+export interface MacSendResult {
+  clipId: string;
+  sent: boolean;
+  reason?: string;
+}
+
 export type AutoRunKind = "scheduled" | "practice_now" | "private_now";
 export type AutoRunMode = "live" | "practice" | "private";
 
@@ -321,6 +390,8 @@ export interface AutoRunPost {
   url?: string;
   error?: string;
   test?: "private";
+  /** §47: a Mac post's state (only with `status: "mac"`). */
+  mac?: "waiting" | "working" | "stopped";
 }
 
 export interface AutoRunClip {
@@ -353,6 +424,8 @@ export interface AutoPostStatus {
   /** A normal clip's places now (§46.6), in STATS_ORDER. */
   places: Platform[];
   leftOut: { platform: Platform; reason: "tiktok_yourself" | "not_set_up" }[];
+  /** Places the owner's Mac posts (§47.2): ["tiktok"] while Your Mac posts TikTok is on. Absent on old servers: none. */
+  macPlaces?: Platform[];
   /** At most 10, oldest first; `runAt` only while on. */
   nextUp: { clipId: string; jobId: string; hook: string; coverUrl?: string; runAt?: string }[];
   /** At most 20: clips in Review that runs skip, with the reason (§46.5). */
@@ -362,7 +435,8 @@ export interface AutoPostStatus {
   /** At most 20, newest first: auto-posted posts that did not go up. */
   failed: { postId: string; clipId: string; hook: string; platform: Platform; error: string; at: string }[];
   /** At most 10: auto-posted clips (not private tests) not on TikTok for everyone yet. */
-  tiktokYourself: { clipId: string; hook: string; coverUrl?: string }[];
+  /** `mac`: his Mac's post, listed while Your Mac posts TikTok is off (it waits or stopped): Post it yourself instead (§47.2). */
+  tiktokYourself: { clipId: string; hook: string; coverUrl?: string; mac?: true }[];
 }
 
 /** §32.3: "Clips ready", "It stopped" and "Picked up" are on by default; "Every step" is off (each one shows on the phone). */
@@ -641,7 +715,8 @@ export interface Post {
   postId: string;
   clipId: string;
   platform: Platform;
-  status: "pending_integration" | "queued" | "posted" | "failed";
+  /** "mac": the owner's Mac posts it on TikTok (§47); never sent through TikTok's API. */
+  status: "pending_integration" | "queued" | "posted" | "failed" | "mac";
   url?: string;
   postedAt?: string;
   perfCheckAt?: string;
@@ -659,6 +734,10 @@ export interface Post {
   paidLabel?: "not_set";
   /** "you": the owner posted it on TikTok himself (Post on TikTok yourself, §42). */
   by?: "you";
+  /** Only while `status` is "mac": what the owner's Mac is doing with it (§47.1). */
+  mac?: PostMac;
+  /** "mac": the owner's Mac posted it (with `by: "you"`, §47.1). */
+  via?: "mac";
   /** Sent by auto-posting (§46.9). */
   auto?: true;
   /** A Private test run's post (§46.8): only he can see it, and it gets no numbers. */
@@ -750,7 +829,7 @@ export interface LessonsView {
   checkedAt?: string;
 }
 
-export type PerfStatus = "posted" | "posted_private" | "waiting_for_connection" | "posting" | "failed" | "not_posted";
+export type PerfStatus = "posted" | "posted_private" | "waiting_for_connection" | "posting" | "failed" | "not_posted" | "mac";
 
 // ---------- Followers and subscribers (docs/CONTRACTS.md §43) ----------
 /** "subscribers" on YouTube, "followers" everywhere else. */
@@ -797,6 +876,10 @@ export interface PlatformPerformance {
   revenue?: ReportedMoney;
   /** "you": posted on TikTok by the owner himself (§42). */
   by?: "you";
+  /** Only while `status` is "mac": the owner's Mac posts it (§47). */
+  mac?: PostMac;
+  /** "mac": the owner's Mac posted it (§47). */
+  via?: "mac";
 }
 
 export interface SeriesPoint {
@@ -2354,4 +2437,13 @@ export interface Api {
   autoPostStatus(): Promise<AutoPostStatus>;
   /** POST /v1/autopost/run `{ kind }`: Practice run now or Private test run; 409 within a minute of the last one. */
   autoPostRun(kind: "practice" | "private"): Promise<AutoRun>;
+  // Your Mac posts TikTok (§47). An api from before it answers 404.
+  /** GET /v1/tiktok/mac: on or off, the Mac's last check-in, and what waits for it. */
+  tiktokMacStatus(): Promise<TikTokMacStatus>;
+  /** POST /v1/tiktok/mac/send `{ clipIds }` (1–25): Send these to my Mac; one result per clip, in order. */
+  sendToMac(clipIds: string[]): Promise<MacSendResult[]>;
+  /** POST /v1/clips/{clipId}/tiktok/mac/retry: Try again on a stopped Mac post; `notOnTikTok` after it pressed Post. */
+  retryMac(clipId: string, notOnTikTok?: boolean): Promise<{ clip: Clip; posts: Post[] }>;
+  /** DELETE /v1/clips/{clipId}/tiktok/mac: Take it back from the Mac (Post it yourself instead). */
+  takeBackFromMac(clipId: string): Promise<{ clip: Clip; posts: Post[] }>;
 }

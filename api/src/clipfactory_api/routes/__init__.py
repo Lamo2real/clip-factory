@@ -23,6 +23,7 @@ from . import (
     setup,
     skills,
     system,
+    tiktok_mac,
     weeks,
 )
 
@@ -53,6 +54,16 @@ ROUTES: list[Route] = [
     route("GET", "/v1/clips/{clipId}/file", clips.clip_file),
     route("POST", "/v1/clips/{clipId}/tiktok/posted", clips.tiktok_posted),
     route("DELETE", "/v1/clips/{clipId}/tiktok/posted", clips.tiktok_posted_undo),
+    # §47 Your Mac posts it on TikTok: the Mac helper's routes (it signs in as the owner) and the owner's.
+    route("GET", "/v1/tiktok/mac", tiktok_mac.status),
+    route("POST", "/v1/tiktok/mac/ping", tiktok_mac.ping),
+    route("POST", "/v1/tiktok/mac/send", tiktok_mac.send),
+    route("POST", "/v1/clips/{clipId}/tiktok/mac/claim", tiktok_mac.claim),
+    route("POST", "/v1/clips/{clipId}/tiktok/mac/step", tiktok_mac.step),
+    route("POST", "/v1/clips/{clipId}/tiktok/mac/done", tiktok_mac.done),
+    route("POST", "/v1/clips/{clipId}/tiktok/mac/stopped", tiktok_mac.stopped),
+    route("POST", "/v1/clips/{clipId}/tiktok/mac/retry", tiktok_mac.retry),
+    route("DELETE", "/v1/clips/{clipId}/tiktok/mac", tiktok_mac.take_back),
     route("GET", "/v1/clips/{clipId}/performance", performance.get_performance),
     route("POST", "/v1/clips/{clipId}/stats/refresh", performance.refresh),
     route("GET", "/v1/skills", skills.list_skills),

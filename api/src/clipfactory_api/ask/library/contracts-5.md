@@ -36,7 +36,16 @@ try again in a minute, §17.4), `internal`.
 | POST `/v1/clips/{clipId}/decline` | – | `{ "clip": Clip }` (video files and the clip's vector deleted) |
 | GET `/v1/clips/{clipId}/file` | – | `{ "url", "filename" }` (a 1-hour link that saves the video, §42) |
 | POST `/v1/clips/{clipId}/tiktok/posted` | `{ "link"?: string }` | `{ "clip", "posts", "note"? }` (posted on TikTok by the owner himself, §42) |
-| DELETE `/v1/clips/{clipId}/tiktok/posted` | – | `{ "clip", "posts" }` (Undo of the above, §42) |
+| DELETE `/v1/clips/{clipId}/tiktok/posted` | – | `{ "clip", "posts" }` (Undo of the above, §42; a post the owner's Mac made → 409, §47) |
+| GET `/v1/tiktok/mac` | – | `{ "on", "helper": MacHelper \| null, "queue": MacJob[] }` (the Mac helper's queue, §47) |
+| POST `/v1/tiktok/mac/ping` | `{ "state", "reason"?, "version"?, "device" }` | `{ "on" }` (the Mac helper checks in, §47) |
+| POST `/v1/tiktok/mac/send` | `{ "clipIds": string[] (1–25) }` | `{ "results": [{ "clipId", "sent", "reason"? }] }` (Send these to my Mac, §47; in order, each id once) |
+| POST `/v1/clips/{clipId}/tiktok/mac/claim` | `{ "device" }` | `{ "job": MacJob }` (§47) |
+| POST `/v1/clips/{clipId}/tiktok/mac/step` | `{ "device", "step" }` | `{ "job": MacJob }` (§47) |
+| POST `/v1/clips/{clipId}/tiktok/mac/done` | `{ "device", "link"? }` | `{ "clip", "posts", "note"? }` (the Mac posted it, §47) |
+| POST `/v1/clips/{clipId}/tiktok/mac/stopped` | `{ "device", "reason", "needsYou"? }` | `{ "job": MacJob }` (§47) |
+| POST `/v1/clips/{clipId}/tiktok/mac/retry` | `{ "notOnTikTok"?: true }` | `{ "clip", "posts" }` (the owner's Try again, §47) |
+| DELETE `/v1/clips/{clipId}/tiktok/mac` | – | `{ "clip", "posts" }` (Take it back, before Post it yourself instead, §47) |
 | GET `/v1/skills` | – | `{ "skills": Skill[] }` (§18.3: built-ins first, then the owner's by name; no `enabled`) |
 | GET `/v1/skills/{skillId}` | – | `SkillDetail` (§18.3) |
 | POST `/v1/skills/uploads` | `{ "filename", "skillId"? }` (`.md` ≤ 1 MB or `.zip` ≤ 20 MB; `skillId` = replace that skill's file, §18.4) | `{ "skillId", "key", "uploadUrl", "headers" }` (key per revision, §18.1) |
@@ -115,7 +124,8 @@ interface Settings { clipMin: number /* 1..10, default 5 */; clipMax: number /* 
 type Platform = "youtube" | "instagram" | "facebook" | "tiktok" | "x";
 // Account: superseded by §17.4 (adds "choose_account", name, avatarUrl, connectedAt, missing, reason, reconnectBy, choices)
 interface Account { platform: Platform; status: "not_connected" | "connected" | "needs_reconnect" | "choose_account"; handle?: string }
-interface Post { postId: string; clipId: string; platform: Platform; status: "pending_integration" | "queued" | "posted" | "failed";
+interface Post { postId: string; clipId: string; platform: Platform;
+                 status: "pending_integration" | "queued" | "posted" | "failed" | "mac" /* §47: waits for the owner's Mac */;
                  url?: string; postedAt?: string; perfCheckAt?: string;
                  metrics?: PostMetrics /* §16.3; views/likes/comments/shares may be null = "this platform does not say" */;
                  privacy?: "public" | "private" /* TikTok unaudited posts are private, §16.3 */;

@@ -347,6 +347,63 @@ def test_a_clip_posted_on_tiktok_by_hand_leaves_tiktok_yourself(
     assert call("GET", "/v1/autopost")[1]["tiktokYourself"] == []
 
 
+def test_while_the_mac_posts_tiktok_left_out_drops_it_and_mac_places_names_it(call: Call, store: db.Store) -> None:
+    # §47: the owner's go of 2026-11-22 ("Full auto, 3-post trial") changes §46.1 rule 2 while the switch is on.
+    ready(store, "youtube", "instagram")
+    body = call("GET", "/v1/autopost")[1]
+    assert body["macPlaces"] == []
+    assert {"platform": "tiktok", "reason": "tiktok_yourself"} in body["leftOut"]
+    assert call("PUT", "/v1/settings", {"tiktokMac": {"on": True}})[0] == 200
+    body = call("GET", "/v1/autopost")[1]
+    assert body["macPlaces"] == ["tiktok"]
+    assert body["places"] == ["youtube", "instagram"]
+    assert body["leftOut"] == [
+        {"platform": "facebook", "reason": "not_set_up"},
+        {"platform": "x", "reason": "not_set_up"},
+    ]
+
+
+def test_with_nowhere_else_to_post_the_mac_gets_nothing_either(call: Call, store: db.Store) -> None:
+    # A run with no place set up sends nothing (§46.6), so the page must not say "TikTok: your Mac posts it." then.
+    assert call("PUT", "/v1/settings", {"tiktokMac": {"on": True}})[0] == 200
+    body = call("GET", "/v1/autopost")[1]
+    assert body["places"] == []
+    assert body["macPlaces"] == []
+    assert {"platform": "tiktok", "reason": "tiktok_yourself"} in body["leftOut"]
+
+
+def test_recent_tells_a_mac_posts_state(app: Any, call: Call, store: db.Store, s3_client: FakeS3, clock: Clock) -> None:
+    ready(store, "youtube")
+    turn_on(store, tiktokMac={"on": True})
+    review_clip(store, s3_client)
+    clock.now = SLOT + timedelta(seconds=5)
+    run.run_once(deps(app), USER, "scheduled", SLOT)
+    posts_of_run = call("GET", "/v1/autopost")[1]["runs"][0]["clips"][0]["posts"]
+    assert {"platform": "tiktok", "status": "mac", "mac": "waiting"} in posts_of_run
+
+
+def test_tiktok_yourself_drops_clips_the_mac_has_or_posted(
+    app: Any, call: Call, store: db.Store, s3_client: FakeS3, clock: Clock
+) -> None:
+    ready(store, "youtube")
+    turn_on(store, per_run=3, tiktokMac={"on": True})
+    made = [review_clip(store, s3_client, made=f"2026-11-15T0{i}:00:00.000Z", hook=f"Clip {i}") for i in range(3)]
+    clock.now = SLOT + timedelta(seconds=5)
+    run.run_once(deps(app), USER, "scheduled", SLOT)
+    # Every auto-posted clip's TikTok post is the Mac's (waiting): none is listed to post yourself.
+    assert call("GET", "/v1/autopost")[1]["tiktokYourself"] == []
+    first, second, third = (c["clipId"] for c in made)
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "ok", "device": "mac-1"})[0] == 200
+    assert call("POST", f"/v1/clips/{first}/tiktok/mac/claim", {"device": "mac-1"})[0] == 200  # working
+    assert call("POST", f"/v1/clips/{second}/tiktok/mac/claim", {"device": "mac-1"})[0] == 200
+    assert call("POST", f"/v1/clips/{second}/tiktok/mac/stopped", {"device": "mac-1", "reason": "x"})[0] == 200
+    assert call("POST", f"/v1/clips/{first}/tiktok/mac/done", {"device": "mac-1"})[0] == 200  # posted via mac
+    assert call("GET", "/v1/autopost")[1]["tiktokYourself"] == []
+    # Taken back (Post it yourself instead): the clip is his to post again.
+    assert call("DELETE", f"/v1/clips/{third}/tiktok/mac")[0] == 200
+    assert [t["clipId"] for t in call("GET", "/v1/autopost")[1]["tiktokYourself"]] == [third]
+
+
 def test_recent_lists_only_the_posts_its_run_made(
     app: Any, call: Call, store: db.Store, s3_client: FakeS3, clock: Clock
 ) -> None:

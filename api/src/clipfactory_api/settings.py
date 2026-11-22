@@ -67,7 +67,11 @@ DEFAULTS: dict[str, Any] = {
     # §46.3 Auto-posting: off for every owner until he turns it on (then the oldest clips in Review go up by
     # themselves every everyHours, perRun at a time). ``onAt`` (read-only) is written by the server when it goes on.
     "autoPost": autopost.defaults(),
+    # §47 Your Mac posts it on TikTok: off for every owner until he turns it on (then Upload and auto-posting hand
+    # TikTok to his Mac instead of TikTok's API, which keeps unaudited apps' posts private).
+    "tiktokMac": {"on": False},
 }
+TIKTOK_MAC_UNKNOWN = "tiktokMac has a setting Clip Factory does not know."
 NOTIFY_KEYS = ("ready", "stopped", "resumed", "steps", "contentRewards", "getPaid")
 # The Clip Factory colours before the bottle-green look (ADR-43). An owner who never changed them has exactly this
 # trio stored; it reads back as today's default so the backdrop follows the new look. Read time only: no migration
@@ -126,6 +130,8 @@ def _check_field(field: str, value: Any) -> Any:
             return post_preset.check(value)
         case "autoPost":
             return autopost.stored(value)
+        case "tiktokMac":
+            return _tiktok_mac(None, value)
         case "clickSound" | "errorSound":
             return _sound_number(value, SOUND_LABELS[field])
         case "youtubePrivacy":
@@ -170,6 +176,16 @@ def _check_field(field: str, value: Any) -> Any:
             # Keep the canonical order and drop repeats so the UI shows a stable list.
             return [p for p in PLATFORMS if p in value]
     raise bad_request(f"Unknown setting: {field}.")
+
+
+def _tiktok_mac(current: Any, value: Any) -> dict[str, bool]:
+    """``tiktokMac`` (§47): ``{on}`` merged over the stored value; any other key → 400."""
+    if not isinstance(value, dict) or set(value) - {"on"}:
+        raise bad_request(TIKTOK_MAC_UNKNOWN)
+    out = {"on": bool(isinstance(current, Mapping) and current.get("on") is True)}
+    if "on" in value:
+        out["on"] = validate.boolean(value["on"], "on")
+    return out
 
 
 def _follow_number(value: Any, *, lo: int, hi: int, what: str, unit: str) -> int:
@@ -251,6 +267,9 @@ def merge_update(current: Mapping[str, Any], patch: Mapping[str, Any], *, now: s
             continue  # clients may echo the whole object back; read-only fields are ignored, not rejected
         if field == "autoPost":
             out[field] = autopost.merge(current.get("autoPost"), value, now or iso(utcnow()))
+            continue
+        if field == "tiktokMac":
+            out[field] = _tiktok_mac(current.get("tiktokMac"), value)  # merged like autoPost (§47)
             continue
         out[field] = _check_field(field, value)
     if out["clipMax"] < out["clipMin"]:

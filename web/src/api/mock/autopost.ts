@@ -9,6 +9,13 @@ import { autoPostOf, floorHour, nextFullHour, perDay } from "../../lib/autopost.
 import { PLATFORM_ORDER } from "../../lib/format.ts";
 import { campaignCardOptions, cardOptionsFrom, optionsFor, presetOf } from "../../lib/preset.ts";
 import { tiktokState } from "../../lib/tiktokYourself.ts";
+import { macInsteadOk, macOn } from "../../lib/tiktokMac.ts";
+
+/** A Mac post he may take back now (waits or stopped, Post never pressed). */
+function macHandable(posts: readonly Post[]): boolean {
+  const mac = posts.find((p) => p.platform === "tiktok" && p.status === "mac")?.mac;
+  return !!mac && macInsteadOk(mac);
+}
 
 const HOUR = 3_600_000;
 const MINUTE = 60_000;
@@ -265,7 +272,7 @@ export function autoPostMock(deps: AutoPostDeps) {
             ? PLATFORM_ORDER.flatMap((p) =>
                 posts
                   .filter((x) => x.clipId === c.clipId && x.platform === p && c.places.includes(p))
-                  .map((x) => ({ platform: x.platform, status: x.status, ...(x.url ? { url: x.url } : {}), ...(x.error ? { error: x.error } : {}), ...(x.test ? { test: x.test } : {}) })),
+                  .map((x) => ({ platform: x.platform, status: x.status, ...(x.url ? { url: x.url } : {}), ...(x.error ? { error: x.error } : {}), ...(x.test ? { test: x.test } : {}), ...(x.status === "mac" && x.mac ? { mac: x.mac.state } : {}) })),
               )
             : [],
       })),
@@ -370,7 +377,13 @@ export function autoPostMock(deps: AutoPostDeps) {
         nextRunAt: next === null ? null : iso(next),
         perDay: perDay(s.perRun, s.everyHours),
         places,
-        leftOut: PLATFORM_ORDER.filter((p) => !places.includes(p)).map((p) => ({ platform: p, reason: p === "tiktok" ? ("tiktok_yourself" as const) : ("not_set_up" as const) })),
+        // §47.2: while the owner's Mac posts TikTok, TikTok is not left out: it is the Mac's place (only when a run has
+        // another place to post to; with none it sends nothing, §46.6).
+        leftOut: PLATFORM_ORDER.filter((p) => !places.includes(p) && !(p === "tiktok" && macOn(deps.settings()) && places.length > 0)).map((p) => ({
+          platform: p,
+          reason: p === "tiktok" ? ("tiktok_yourself" as const) : ("not_set_up" as const),
+        })),
+        macPlaces: macOn(deps.settings()) && places.length > 0 ? (["tiktok"] as Platform[]) : [],
         nextUp: picked.taken.slice(0, 10).map((c, i) => ({
           clipId: c.clipId,
           jobId: c.jobId,
@@ -385,11 +398,24 @@ export function autoPostMock(deps: AutoPostDeps) {
           .map((p) => ({ postId: p.postId, clipId: p.clipId, hook: hookOf(p.clipId), platform: p.platform, error: p.error ?? "", at: clips.find((c) => c.clipId === p.clipId)?.auto?.at ?? "" }))
           .sort((a, b) => b.at.localeCompare(a.at) || b.postId.localeCompare(a.postId))
           .slice(0, 20),
+        // §47.2: while Your Mac posts TikTok is off, his Mac's posts that wait or stopped (never one it is posting or
+        // pressed Post on) are his to post again: Post it yourself instead (`mac: true`).
         tiktokYourself: clips
-          .filter((c) => c.auto && !c.auto.test && tiktokState(posts.filter((p) => p.clipId === c.clipId)) === "offer")
+          .filter((c) => {
+            if (!c.auto || c.auto.test) return false;
+            const own = posts.filter((p) => p.clipId === c.clipId);
+            const state = tiktokState(own);
+            if (state === "mac") return !macOn(deps.settings()) && macHandable(own);
+            return state === "offer";
+          })
           .sort((a, b) => b.auto!.at.localeCompare(a.auto!.at))
           .slice(0, 10)
-          .map((c) => ({ clipId: c.clipId, hook: c.hook, ...(c.coverUrl ? { coverUrl: c.coverUrl } : {}) })),
+          .map((c) => ({
+            clipId: c.clipId,
+            hook: c.hook,
+            ...(c.coverUrl ? { coverUrl: c.coverUrl } : {}),
+            ...(tiktokState(posts.filter((p) => p.clipId === c.clipId)) === "mac" ? { mac: true as const } : {}),
+          })),
       });
     },
     /** POST /v1/autopost/run (§46.9): one run now, inline, whatever the switch says; one a minute. */

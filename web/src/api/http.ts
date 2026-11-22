@@ -22,6 +22,7 @@ import type {
   Finder,
   Follow,
   Lesson,
+  MacSendResult,
   MacUploadParts,
   PlatformSetup,
   Post,
@@ -30,6 +31,7 @@ import type {
   Settings,
   SimilarClip,
   Skill,
+  TikTokMacStatus,
   SkillDetail,
   TikTokCreator,
   TikTokMarked,
@@ -293,5 +295,11 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     // §46.9: auto-posting's status, and the two test runs.
     autoPostStatus: () => call<AutoPostStatus>("GET", "/autopost"),
     autoPostRun: async (kind) => (await call<{ run: AutoRun }>("POST", "/autopost/run", { kind })).run,
+    // §47: Your Mac posts TikTok (the owner's side; the Mac helper's own routes are not called by the app).
+    tiktokMacStatus: () => call<TikTokMacStatus>("GET", "/tiktok/mac"),
+    sendToMac: async (clipIds) => (await call<{ results: MacSendResult[] }>("POST", "/tiktok/mac/send", { clipIds })).results,
+    retryMac: (clipId, notOnTikTok) =>
+      call<{ clip: Clip; posts: Post[] }>("POST", `/clips/${id(clipId)}/tiktok/mac/retry`, notOnTikTok ? { notOnTikTok: true } : {}),
+    takeBackFromMac: (clipId) => call<{ clip: Clip; posts: Post[] }>("DELETE", `/clips/${id(clipId)}/tiktok/mac`),
   };
 }
