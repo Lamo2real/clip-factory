@@ -155,6 +155,7 @@ class Workspace:
         self.workspace_id = workspace_id
         self.pk = keys.ws_pk(user_id, workspace_id)
         self._items: dict[str, dict[str, Any] | None] = {}
+        self._models: dict[str, Any] | None = None
 
     def item(self, sk: str) -> dict[str, Any] | None:
         if sk not in self._items:
@@ -188,6 +189,13 @@ class Workspace:
 
     def ai(self) -> dict[str, Any]:
         return self.item(keys.AICONFIG_SK) or {}
+
+    def models(self) -> dict[str, Any]:
+        """The bundled model list with this workspace's own models (``MODELDEF#``) merged over it, read once for this
+        call's view and never shared with another workspace (§45.34)."""
+        if self._models is None:
+            self._models = config.merged_models(self.query(config.MODELDEF_PREFIX))
+        return self._models
 
     def agent(self, agent_id: str) -> AgentProfile:
         return profile_from(agent_id, self.item(keys.agent_sk(agent_id)))

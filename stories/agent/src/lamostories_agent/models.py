@@ -33,11 +33,38 @@ EFFORT_WORDS = {"low": "Low", "medium": "Medium", "high": "High", "xhigh": "Extr
 
 
 class ModelUnavailable(Exception):
-    """The effective model cannot be used. The message is the owner's sentence; nothing runs on another model."""
+    """The effective model cannot be used. The message is the owner's sentence; nothing runs on another model.
+    ``model`` and ``effort`` are what the call was sent with (None when it was never resolved), so a failed answer or
+    job step still shows what was asked (§45.34); ``status`` is what Bedrock's refusal proved, when it was sent."""
+
+    def __init__(
+        self, message: str = "", *, model: str | None = None, effort: str | None = None, status: str | None = None
+    ) -> None:
+        super().__init__(message)
+        self.model = model
+        self.effort = effort
+        self.status = status
 
 
 class EffortUnavailable(Exception):
-    """The effective effort is not one the model offers. The message is the owner's sentence; it is never swapped."""
+    """The effective effort is not one the model offers. The message is the owner's sentence; it is never swapped.
+    ``sent`` is True when Amazon Bedrock itself refused the effort field (the request reached the model, §45.34),
+    False when the settings named an effort the model's list does not offer (nothing was sent)."""
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        model: str | None = None,
+        effort: str | None = None,
+        sent: bool = False,
+        status: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.model = model
+        self.effort = effort
+        self.sent = sent
+        self.status = status
 
 
 @dataclass(frozen=True)
@@ -56,10 +83,13 @@ def resolve(
     override: dict[str, Any] | None = None,
     conversation: dict[str, Any] | None = None,
     project: dict[str, Any] | None = None,
+    catalog: dict[str, Any] | None = None,
 ) -> Choice:
     """The effective model and effort for one call (§45.25). ``conversation`` applies to chat turns, ``project`` to a
-    story's or a reference's jobs; pass at most one of them."""
+    story's or a reference's jobs; pass at most one of them. ``catalog`` is the workspace's model list (the bundled
+    one with the owner's own models merged in, ``Workspace.models()``); the bundled list when not given."""
     ai = ai or {}
+    listed = catalog if catalog is not None else config.models()
     task_cfg = (ai.get("tasks") or {}).get(task) or {}
     levels: list[tuple[str, dict[str, Any]]] = [
         ("request", override or {}),
@@ -74,19 +104,25 @@ def resolve(
             model_key, source = str(cfg["model"]), name
             break
     if model_key is None:
-        model_key = str(ai.get("defaultModel") or config.models()["defaultModel"])
-    info = config.model(model_key)
-    if info is None:
-        raise ModelUnavailable(f"The model '{model_key}' is not in Lamo Stories' list. Pick another in Settings › AI.")
+        model_key = str(ai.get("defaultModel") or listed["defaultModel"])
+    info = config.model(model_key, listed)
     effort = next((str(cfg["effort"]) for _, cfg in levels if cfg.get("effort")), None)
     if effort is None:
-        effort = str(ai.get("defaultEffort") or config.models()["defaultEffort"])
+        effort = str(ai.get("defaultEffort") or listed["defaultEffort"])
+    if info is None:
+        raise ModelUnavailable(
+            f"The model '{model_key}' is not in Lamo Stories' list. Pick another in Settings › AI.",
+            model=model_key,
+            effort=effort,
+        )
     offered = list(info.get("efforts") or [])
     if not offered:
         return Choice(model_key, None, False, source)
     if effort not in offered:
         raise EffortUnavailable(
-            f"{info['label']} does not offer {EFFORT_WORDS.get(effort, effort)}. Pick another level."
+            f"{info['label']} does not offer {EFFORT_WORDS.get(effort, effort)}. Pick another level.",
+            model=model_key,
+            effort=effort,
         )
     return Choice(model_key, effort, True, source)
 
@@ -119,6 +155,9 @@ class Reply:
 
 
 class ModelClient(Protocol):
+    """The one model client (§45.33, §45.34). The creative packages reach it through
+    ``lamostories_agent.services.get().models``."""
+
     def complete(
         self,
         ctx: CallContext,
@@ -130,9 +169,15 @@ class ModelClient(Protocol):
         tools: list[dict[str, Any]] | None = None,
         max_tokens: int = 16000,
         on_text: Callable[[str], None] | None = None,
+        allow_inactive: bool = False,
     ) -> Reply:
         """Resolves the model and effort itself, builds the system blocks (the agent's instructions, its enabled skills,
-        the workspace memory), sends the request, writes MODELSTATUS# and USAGE#. Called from a worker thread."""
+        the workspace memory), sends the request, writes MODELSTATUS# and USAGE#. Called from a worker thread.
+
+        ``on_text`` receives the current call's whole text so far each time it grows (after a retried stream it
+        starts again from the beginning), never only the newest piece. ``allow_inactive`` lets a task run while its
+        agent is switched off (the quality agent's checks of driving content, Check models). ``task="check_models"``
+        is the tiny check of §45.25: no agent instructions, skills or memory, and the check writes MODELSTATUS#."""
         ...
 
 
@@ -149,6 +194,11 @@ REFUSED = (
     "Lamo Stories › Settings › AI."
 )
 AGENT_OFF = "{name} is switched off. Switch it on in Lamo Stories › Settings › Agents."
+EFFORT_REFUSED = (
+    "{label} does not accept {effort} effort here (Amazon Bedrock refused it). Pick another level in Lamo Stories › "
+    "Settings › AI."
+)
+CHECK_TASK = "check_models"  # Check models: one bare request per model (§45.25, §45.34)
 STATUS_LINES = {
     "ok": "It answered.",
     "denied": "Bedrock says this AWS account may not use it.",
@@ -178,13 +228,20 @@ class AgentOff(Exception):
 class ModelRefused(Exception):
     """The model declined the request (``stopReason`` refusal); no other model is tried (§45.25)."""
 
+    def __init__(self, message: str = "", *, model: str | None = None, effort: str | None = None) -> None:
+        super().__init__(message)
+        self.model = model
+        self.effort = effort
+
 
 class AnswerInvalid(Exception):
     """The answer did not fit the schema, also after being asked once more."""
 
-    def __init__(self, problems: list[str]) -> None:
+    def __init__(self, problems: list[str], *, model: str | None = None, effort: str | None = None) -> None:
         super().__init__("The answer did not fit: " + "; ".join(problems[:5]))
         self.problems = problems
+        self.model = model
+        self.effort = effort
 
 
 def _code(e: BaseException) -> str:
@@ -196,6 +253,14 @@ def _message(e: BaseException) -> str:
     response = getattr(e, "response", None)
     msg = ((response or {}).get("Error") or {}).get("Message") if isinstance(response, dict) else None
     return str(msg or e)
+
+
+def effort_refused(e: BaseException) -> bool:
+    """Bedrock refused the request because of its effort field (``output_config.effort``), §45.34."""
+    if _code(e) != "ValidationException":
+        return False
+    msg = _message(e).lower()
+    return "effort" in msg or "output_config" in msg
 
 
 def unavailable(e: BaseException) -> tuple[str, str] | None:
@@ -226,12 +291,13 @@ def status_line(found: tuple[str, str] | None) -> str:
     return reason[:1].upper() + reason[1:] + "."
 
 
-def price_of(model_key: str, ai: dict[str, Any]) -> dict[str, Any] | None:
-    """The owner's price for the model (Settings › AI) or else the list price in ``stories/config/models.json``."""
+def price_of(model_key: str, ai: dict[str, Any], catalog: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    """The owner's price for the model (Settings › AI) or else the list price in ``stories/config/models.json`` (or
+    the price the owner gave his own model)."""
     owner = (ai.get("prices") or {}).get(model_key)
     if isinstance(owner, dict) and owner.get("inputPer1M") is not None:
         return {**owner, "source": owner.get("source") or "owner"}
-    info = config.model(model_key) or {}
+    info = config.model(model_key, catalog) or {}
     pricing = info.get("pricing")
     return dict(pricing) if isinstance(pricing, dict) else None
 
@@ -307,12 +373,15 @@ class BedrockModels:
         client: Any = None,
         region: str | None = None,
         sleep: Callable[[float], None] | None = None,
+        client_factory: Callable[[str], Any] | None = None,
     ) -> None:
         self._table = table
         self._get_bytes = get_bytes
         self._client = client
         self._region = region
         self._sleep = sleep
+        self._factory = client_factory
+        self._clients: dict[str, Any] = {}
         self._local = threading.local()
         self._lock = threading.Lock()
         self.cache_points = True
@@ -329,6 +398,26 @@ class BedrockModels:
                 cfg = Config(read_timeout=READ_TIMEOUT, connect_timeout=10, retries={"max_attempts": 1})
                 self._client = boto3.client("bedrock-runtime", region_name=self._region, config=cfg)
             return self._client
+
+    def client_for(self, region: str | None) -> Any:
+        """The client of the Region a model is called in: this runtime's own for the bundled models, the model's own
+        for one the owner added with another Region (§45.34). A client given to the constructor (a test's) answers
+        for every Region unless a ``client_factory`` is given too."""
+        if not region or region == self._region or (self._client is not None and self._factory is None):
+            return self.client
+        with self._lock:
+            found = self._clients.get(region)
+            if found is None:
+                if self._factory is not None:
+                    found = self._factory(region)
+                else:
+                    import boto3
+                    from botocore.config import Config
+
+                    cfg = Config(read_timeout=READ_TIMEOUT, connect_timeout=10, retries={"max_attempts": 1})
+                    found = boto3.client("bedrock-runtime", region_name=region, config=cfg)
+                self._clients[region] = found
+            return found
 
     def table(self) -> Any:
         if not callable(self._table) or hasattr(self._table, "get_item"):
@@ -360,12 +449,17 @@ class BedrockModels:
         it streams (ConverseStream); without it the call is a plain Converse. ``allow_inactive`` lets the quality
         agent's fact check of a driving-safety story run while the agent is off (§45.26). With a ``schema`` and
         ``tools`` together, an answer that calls only the caller's tools comes back as it is (``data`` None, the
-        calls in ``tool_calls``): the caller runs them and calls again with their results."""
+        calls in ``tool_calls``): the caller runs them and calls again with their results.
+
+        ``task="check_models"`` (Check models) is one bare request: no agent instructions, skills or memory, no
+        agent switch, and no MODELSTATUS# of its own (the check writes the one item per model)."""
         ws = self.workspace(ctx)
+        bare = task == CHECK_TASK
+        catalog = ws.models()
         profile = ws.agent(ctx.agent_id)
-        if task not in profile.tasks:
+        if not bare and task not in profile.tasks:
             log("warn", "stories.task_agent_mismatch", task=task, agent=ctx.agent_id)
-        if not profile.active and not allow_inactive:
+        if not bare and not profile.active and not allow_inactive:
             raise AgentOff(AGENT_OFF.format(name=profile.name))
         stored, conversation, project = ws.levels(
             job_id=ctx.job_id, task_id=ctx.task_id, conv_id=ctx.conv_id, msg_id=ctx.msg_id
@@ -373,14 +467,18 @@ class BedrockModels:
         ai = ws.ai()
         choice = resolve(
             task=task,
-            agent={"model": profile.model, "effort": profile.effort},
+            agent={} if bare else {"model": profile.model, "effort": profile.effort},
             ai=ai,
             override=override if override is not None else stored,
             conversation=conversation,
             project=project,
+            catalog=catalog,
         )
-        info = config.model(choice.model) or {}
-        system = ws.system_blocks(profile)
+        info = config.model(choice.model, catalog) or {}
+        system = [] if bare else ws.system_blocks(profile)
+        limit = info.get("maxOutputTokens")
+        if isinstance(limit, int) and limit > 0:
+            max_tokens = min(int(max_tokens), limit)
         msgs = [dict(m) for m in messages]
         tool_list = [tool_spec(t) for t in tools or []]
         if schema is not None:
@@ -390,7 +488,9 @@ class BedrockModels:
             msgs = _nudge(msgs)
         total: dict[str, int] = {}
         for attempt in (1, 2):
-            answer = self._send(ctx, task, choice, info, system, msgs, tool_list, max_tokens, on_text, ai)
+            answer = self._send(
+                ctx, task, choice, info, system, msgs, tool_list, max_tokens, on_text, ai, catalog, record=not bare
+            )
             total = _add(total, answer.usage)
             text = "".join(str(b.get("text") or "") for b in answer.content if "text" in b)
             calls = [
@@ -399,7 +499,9 @@ class BedrockModels:
                 if "toolUse" in b
             ]
             if answer.stop_reason == "refusal":
-                raise ModelRefused(REFUSED.format(label=info.get("label") or choice.model))
+                raise ModelRefused(
+                    REFUSED.format(label=info.get("label") or choice.model), model=choice.model, effort=choice.effort
+                )
             data: dict[str, Any] | None = None
             use = next((c for c in calls if c["name"] == ANSWER_TOOL), None)
             wants_tools = use is None and any(c["name"] != ANSWER_TOOL for c in calls)
@@ -408,7 +510,7 @@ class BedrockModels:
                 problems = check(schema, value) if isinstance(value, dict) else [f"You did not call {ANSWER_TOOL}."]
                 if problems:
                     if attempt == 2 or answer.stop_reason == "max_tokens":
-                        raise AnswerInvalid(problems)
+                        raise AnswerInvalid(problems, model=choice.model, effort=choice.effort)
                     msgs = _ask_again(msgs, answer.content, problems)
                     continue
                 assert isinstance(value, dict)
@@ -464,15 +566,19 @@ class BedrockModels:
         max_tokens: int,
         on_text: Callable[[str], None] | None,
         ai: dict[str, Any],
+        catalog: dict[str, Any] | None = None,
+        *,
+        record: bool = True,
     ) -> _Answer:
         label = str(info.get("label") or choice.model)
+        client = self.client_for(info.get("region") if info.get("custom") else None)
         while True:
             body = self.request(choice, info, system, messages, tools, max_tokens)
             try:
                 send = (
-                    functools.partial(self._stream, body, on_text)
+                    functools.partial(self._stream, body, on_text, client)
                     if on_text
-                    else functools.partial(self._converse, body)
+                    else functools.partial(self._converse, body, client)
                 )
                 answer = retry_sync(
                     send,
@@ -486,25 +592,40 @@ class BedrockModels:
                     log("info", "stories.cache_points_off", model=choice.model)
                     self.cache_points = False
                     continue
+                log("warn", "stories.model_failed", model=choice.model, task=task, code=_code(e), detail=msg[:300])
+                if choice.effort_applied and choice.effort and effort_refused(e):
+                    # Bedrock refused the effort field itself: the owner is told it is the effort, and the call is
+                    # never sent again without it (that would pretend the setting was applied, §45.34).
+                    line = EFFORT_REFUSED.format(label=label, effort=EFFORT_WORDS.get(choice.effort, choice.effort))
+                    if record:
+                        self._model_status(ctx, choice.model, "error", line)
+                    raise EffortUnavailable(
+                        line, model=choice.model, effort=choice.effort, sent=True, status="error"
+                    ) from e
                 found = unavailable(e)
                 status = found[0] if found else "error"
-                line = status_line(found)
-                self._model_status(ctx, choice.model, status, line)
-                log("warn", "stories.model_failed", model=choice.model, task=task, code=_code(e), detail=msg[:300])
+                if record:
+                    self._model_status(ctx, choice.model, status, status_line(found))
                 if found:
-                    raise ModelUnavailable(UNAVAILABLE.format(label=label, reason=found[1])) from e
+                    raise ModelUnavailable(
+                        UNAVAILABLE.format(label=label, reason=found[1]),
+                        model=choice.model,
+                        effort=choice.effort,
+                        status=found[0],
+                    ) from e
                 raise
-            self._model_status(ctx, choice.model, "ok", STATUS_LINES["ok"])
-            self._usage(ctx, task, choice, answer.usage, ai)
+            if record:
+                self._model_status(ctx, choice.model, "ok", STATUS_LINES["ok"])
+            self._usage(ctx, task, choice, answer.usage, ai, info, catalog)
             return answer
 
-    def _converse(self, body: dict[str, Any]) -> _Answer:
-        r = self.client.converse(**body)
+    def _converse(self, body: dict[str, Any], client: Any = None) -> _Answer:
+        r = (client or self.client).converse(**body)
         content = list(((r.get("output") or {}).get("message") or {}).get("content") or [])
         return _Answer(content, str(r.get("stopReason") or ""), _usage(r.get("usage")))
 
-    def _stream(self, body: dict[str, Any], on_text: Callable[[str], None]) -> _Answer:
-        r = self.client.converse_stream(**body)
+    def _stream(self, body: dict[str, Any], on_text: Callable[[str], None], client: Any = None) -> _Answer:
+        r = (client or self.client).converse_stream(**body)
         blocks: dict[int, dict[str, Any]] = {}
         tool_json: dict[int, str] = {}
         text = ""
@@ -571,8 +692,17 @@ class BedrockModels:
             }
         )
 
-    def _usage(self, ctx: CallContext, task: str, choice: Choice, usage: dict[str, int], ai: dict[str, Any]) -> None:
-        price = price_of(choice.model, ai)
+    def _usage(
+        self,
+        ctx: CallContext,
+        task: str,
+        choice: Choice,
+        usage: dict[str, int],
+        ai: dict[str, Any],
+        info: dict[str, Any] | None = None,
+        catalog: dict[str, Any] | None = None,
+    ) -> None:
+        price = price_of(choice.model, ai, catalog)
         at, item_id = now_iso(), ulid()
         item: dict[str, Any] = {
             "pk": keys.ws_pk(ctx.user_id, ctx.workspace_id),
@@ -585,7 +715,7 @@ class BedrockModels:
             "day": at[:10],
             "at": at,
             "model": choice.model,
-            "modelId": str((config.model(choice.model) or {}).get("profile") or ""),
+            "modelId": str((info or config.model(choice.model, catalog) or {}).get("profile") or ""),
             "task": task,
             "agentId": ctx.agent_id,
             "input": usage.get("input", 0),

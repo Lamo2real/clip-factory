@@ -45,6 +45,7 @@ from lamostories_agent.tasks.store import Expr
 
 MAX_ACTIONS = 6
 MAX_LIST = 40
+MAX_REFS = 3  # reference videos one story may use (§45.28)
 ACTION_KINDS = ("make_video", "remake_scene", "analyze_reference", "save_character", "save_idea", "open")
 PAGES = {
     "dashboard": "/stories",
@@ -206,13 +207,20 @@ def specs() -> list[dict[str, Any]]:
         ),
         _spec(
             "offer_make_video",
-            "Offer a Make the video button: from a saved idea, or from a short brief, with 1 to 3 saved characters.",
+            "Offer a Make the video button: from a saved idea, or from a short brief, with 1 to 3 saved characters and "
+            "up to 3 analyzed reference videos whose study the writer should follow.",
             {
                 "ideaId": _STR,
                 "title": _STR,
                 "logline": _STR,
                 "category": {"type": "string", "enum": list(CATEGORIES)},
                 "characterIds": _IDS,
+                "referenceIds": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": MAX_REFS,
+                    "description": "up to 3 analyzed reference videos (list_references)",
+                },
                 "durationSec": {"type": "integer", "description": "15 to 90"},
             },
             ["characterIds"],
@@ -291,6 +299,26 @@ class Toolbox:
         if len(out) > 3 or (need and not out):
             raise ToolError("Pick 1 to 3 saved characters.")
         return out
+
+    def _references(self, ids: Any) -> list[str]:
+        """Up to 3 reference videos of this workspace that have been analyzed (their study is what the writer reads,
+        §45.28); anything else is a mistake the model can fix."""
+        if ids is None:
+            return []
+        wanted = list(dict.fromkeys(str(i) for i in ids)) if isinstance(ids, list) else None
+        if wanted is None or len(wanted) > MAX_REFS:
+            raise ToolError(f"Pick up to {MAX_REFS} reference videos.")
+        refs = {str(r["refId"]): r for r in self._list("REFVID#") if r.get("refId")}
+        unknown = [i for i in wanted if i not in refs]
+        if unknown:
+            raise ToolError(f"These are not reference videos here: {', '.join(unknown)}. Use list_references.")
+        waiting = [i for i in wanted if refs[i].get("status") != "analyzed" or not refs[i].get("analysisKey")]
+        if waiting:
+            raise ToolError(
+                f"These reference videos have not been analyzed yet: {', '.join(waiting)}. Offer the Analyze button "
+                "first."
+            )
+        return wanted
 
     def _idea_fields(self, args: dict[str, Any], *, partial: bool) -> dict[str, Any]:
         out: dict[str, Any] = {}
@@ -573,6 +601,9 @@ class Toolbox:
     def offer_make_video(self, args: dict[str, Any]) -> dict[str, Any]:
         cast = self._characters(args.get("characterIds"), need=True)
         story: dict[str, Any] = {"characterIds": cast}
+        refs = self._references(args.get("referenceIds"))
+        if refs:
+            story["referenceIds"] = refs
         if args.get("ideaId"):
             idea = self._get(f"IDEA#{args.get('ideaId')}", "There is no idea with that id.")
             if idea.get("needsGuidance"):

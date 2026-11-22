@@ -50,7 +50,10 @@ Report a problem for an item when:
 - it gives driving advice that is not in the checked steps or donts, contradicts them or their caveats, or shows a
   step that is not checked;
 - a caption's guidanceRef does not match what the caption says;
-- anything shows a dangerous act as fun or as something to copy (for every video, safety topic or not).
+- anything shows a dangerous act as fun or as something to copy (for every video, safety topic or not);
+- a beat's action does not match what it means in the engine's "rules" (given with the video): for example the
+  driver's steer_left or steer_right must match the skid's dir (a skid's dir is the side the car's rear slides to,
+  and steering into the skid is that same side).
 A mistake that the story clearly shows as a mistake, followed by the safe way, is fine. Jokes and feelings are fine.
 
 Each problem is one plain sentence a beginner understands, with the item's ref. Set ok to true only when there is no

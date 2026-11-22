@@ -159,7 +159,8 @@ class PortraitJob(Job):
                 await self.data.write(self.fence, puts=[self._provider_item(provider_id, e.state, e.last_error)])
             raise
         self.report(1, 1)
-        await self.provider_usage(provider_id, self.svc.image_model_id, images=1)
+        await self.provider_usage(provider_id, self.svc.image_model_id, provider=provider_id, units=1, unit="image",
+                                  images=1)  # fmt: skip
         rows = await self.data.assets(self.fence.user_id, self.fence.workspace_id, character_id=self.content_id)
         retired = [
             str(a["assetId"])

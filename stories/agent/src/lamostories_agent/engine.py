@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from . import config, proc
+from .util import log
 
 DEFAULT_ENGINE_DIR = Path("/app/stories-engine")
 CALL_SECONDS = 120.0
@@ -126,6 +127,24 @@ class Engine:
     async def audio(self, script_path: Path) -> list[dict[str, Any]]:
         got = await self._json("audio", str(script_path))
         return [e for e in got if isinstance(e, dict)] if isinstance(got, list) else []
+
+    async def repair(self, script_path: Path) -> tuple[dict[str, Any], list[str]] | None:
+        """The engine's repair helper (``cli.ts repair``: each stray face becomes ``neutral`` and each stray noise is
+        dropped, §45.34): the repaired script and what it changed, or None when this engine has no such command (the
+        agent then applies the same rule itself)."""
+        try:
+            got = await self._json("repair", str(script_path))
+        except EngineError as e:
+            log("info", "stories.engine_no_repair", detail=str(e)[:200])
+            return None
+        if isinstance(got, dict) and isinstance(got.get("script"), dict):
+            notes: list[Any] = next(
+                (got[k] for k in ("changes", "repaired", "fixed", "log") if isinstance(got.get(k), list)), []
+            )
+            return dict(got["script"]), [str(n) for n in notes]
+        if isinstance(got, dict) and isinstance(got.get("scenes"), list):
+            return got, []
+        return None
 
     @staticmethod
     def _dict(got: Any, what: str) -> dict[str, Any]:

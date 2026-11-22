@@ -50,10 +50,8 @@ CANVAS_SETUP = (
     "then tap Try again."
 )
 CANVAS_REFUSED = "Nova Canvas would not draw this character. Change the description a little, then tap Try again."
-REEL_NO_BUCKET = (
-    "Nova Reel needs a storage bucket in the USA (N. Virginia), which is switched off. Pick the built-in animator in "
-    "Lamo Stories › Settings › Video, then tap Try again."
-)
+REEL_NOT_READY = "Amazon Nova Reel is not ready yet: {missing}. Pick Built-in animation in Settings › Video, or finish its setup."  # §45.34: the agent's second guard, the API's own line
+REEL_NO_BUCKET = REEL_NOT_READY.format(missing="its storage in the USA (N. Virginia) is switched off")
 REEL_NOT_ENABLED = "Bedrock says Nova Reel is not enabled for this account in US East (N. Virginia)."
 REEL_SETUP = (
     "AI video is not set up yet. Turn on Amazon Nova Reel in the Bedrock console, Region US East (N. Virginia), or pick "
@@ -64,6 +62,7 @@ SCENE_SECONDS = 30 * 60
 REEL_SECONDS = 20 * 60  # Nova Reel takes about 90 s for a 6 s shot; give it room
 REEL_SHOT = 6
 REEL_POLL = 15.0
+REEL_SIZES = ((1280, 720),)  # what Nova Reel 1.1 makes; a shot is scaled and cropped into the story's own frame
 
 
 @dataclass(frozen=True)
@@ -202,7 +201,11 @@ class BedrockWriter(_Base):
             raise RuntimeError("the writer needs the job's model call")
         mode = str(brief.get("mode") or "full")
         schema = writer.storyboard_schema(
-            brief.get("catalog") or {}, brief.get("castIds") or [], brief.get("topicIds") or [], mode=mode
+            brief.get("catalog") or {},
+            brief.get("castIds") or [],
+            brief.get("topicIds") or [],
+            mode=mode,
+            scene_ids=brief.get("sceneIds") or None,
         )
         task = "scene_rewrite" if mode == "scenes" else "storyboard"
         prompt = (
@@ -360,8 +363,19 @@ class NovaCanvas(_Base):
 # --- animation ----------------------------------------------------------------------------------------------------
 
 
+def script_size(script_path: Path) -> tuple[int, int]:
+    """The script's own width and height (one of the engine's six sizes, §45.34)."""
+    try:
+        got = json.loads(script_path.read_text("utf-8"))
+        return int(got.get("width") or 1080), int(got.get("height") or 1920)
+    except (OSError, ValueError, TypeError, AttributeError):
+        return 1080, 1920
+
+
 async def render_still(engine: Engine, script_path: Path, frame: int, out: Path, work: Path) -> None:
-    spec = {"deno": engine.argv(), "script": str(script_path), "from": frame, "to": frame + 1, "out": str(out)}
+    width, height = script_size(script_path)
+    spec = {"deno": engine.argv(), "script": str(script_path), "from": frame, "to": frame + 1, "out": str(out),
+            "width": width, "height": height}  # fmt: skip
     spec_path = write_json(work / f"still-{out.stem}.json", spec)
     engine.deno_dir.mkdir(parents=True, exist_ok=True)
     await proc.run(
@@ -376,7 +390,7 @@ class Builtin2D(_Base):
 
     kind, id, label = "animation", "builtin-2d", "Built-in animator"
     state = "on"
-    line = "Built in: animates every scene at 1080 by 1920, 30 frames a second. Nothing to set up."
+    line = "Built in: animates every scene at the video's size, 30 frames a second. Nothing to set up."
     preset: ClassVar[str] = "fast"
 
     async def render_scene(
@@ -397,6 +411,8 @@ class Builtin2D(_Base):
             "assets": {k: str(v) for k, v in assets.items()},
             "preset": self.preset,
             "crf": self.ctx.crf,
+            "width": int(script.get("width") or 1080),
+            "height": int(script.get("height") or 1920),
         }
         spec_path = write_json(work / f"spec-{scene_id}.json", spec)
         total = end - first
@@ -472,7 +488,7 @@ class NovaReel(_Base):
             "videoGenerationConfig": {
                 "durationSeconds": REEL_SHOT,
                 "fps": 24,
-                "dimension": "1280x720",
+                "dimension": reel_dimension(int(script.get("width") or 1080), int(script.get("height") or 1920)),
                 "seed": int(scene.get("seed") or self.ctx.seed or 0) % 2147483646,
             },
         }
@@ -498,7 +514,8 @@ class NovaReel(_Base):
         s3 = self.ctx.us_s3()
         await asyncio.to_thread(s3.download_file, bucket, f"{key.rstrip('/')}/output.mp4", str(local))
         seconds = float(scene.get("durationSec") or REEL_SHOT)
-        await fit_shot(local, out, seconds, self.ctx.crf)
+        size = (int(script.get("width") or 1080), int(script.get("height") or 1920))
+        await fit_shot(local, out, seconds, self.ctx.crf, size)
         if self.ctx.on_progress:
             self.ctx.on_progress(1, 1)
         return SceneClip(out, None, seconds)
@@ -519,12 +536,20 @@ class NovaReel(_Base):
         raise ProviderFailed(REEL_FAILED)
 
 
-async def fit_shot(src: Path, out: Path, seconds: float, crf: int) -> None:
-    """A 16:9 shot as a 1080×1920 scene clip of ``seconds``: cropped to fill the frame, looped if it is shorter, 30 fps,
-    no sound (the story's own mix is added at assembly)."""
+def reel_dimension(width: int, height: int) -> str:
+    """The Nova Reel size nearest the story's frame (by shape, then by size): 1280x720, the one it makes."""
+    want = width / max(1, height)
+    w, h = min(REEL_SIZES, key=lambda s: (abs(s[0] / s[1] - want), abs(s[0] * s[1] - width * height)))
+    return f"{w}x{h}"
+
+
+async def fit_shot(src: Path, out: Path, seconds: float, crf: int, size: tuple[int, int] = (1080, 1920)) -> None:
+    """A Nova Reel shot as a scene clip of the story's own size (``size``) and ``seconds``: scaled and cropped to fill
+    the frame, looped if it is shorter, 30 fps, no sound (the story's own mix is added at assembly)."""
+    w, h = size
     await proc.run(
         ["ffmpeg", "-v", "error", "-y", "-stream_loop", "-1", "-i", str(src), "-t", f"{seconds:.3f}",
-         "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30", "-an",
+         "-vf", f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps=30", "-an",
          "-c:v", "libx264", "-preset", "fast", "-crf", str(crf), "-pix_fmt", "yuv420p", "-movflags", "+faststart",
          str(out)],
         time_limit=600,

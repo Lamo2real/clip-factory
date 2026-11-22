@@ -163,7 +163,6 @@ def test_a_refused_model_stops_with_the_owner_s_sentence_and_no_other_model_is_c
     "message",
     [
         "The model returned the following errors: messages: roles must alternate between user and assistant",
-        "The model returned the following errors: output_config.effort: Input should be 'low', 'medium' or 'high'",
         "Malformed input request: #/messages/0/content: expected type: JSONArray, found: String",
     ],
 )
@@ -179,6 +178,40 @@ def test_a_request_shape_error_is_a_plain_failure_never_an_unavailable_model(mes
     st = table.item(keys.modelstatus_sk("opus-5-5"))
     assert st is not None and st["status"] == "error" and st["line"] == "The last call failed."
     assert models.unavailable(client_error("ValidationException", message)) is None
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "The model returned the following errors: output_config.effort: Input should be 'low', 'medium' or 'high'",
+        "The model returned the following errors: output_config: Extra inputs are not permitted",
+    ],
+)
+def test_an_effort_bedrock_refuses_is_said_as_the_effort_and_never_sent_without_it(message: str) -> None:
+    """§45.34: a ValidationException about the effort field is the effort's problem, in the owner's words; the call
+    is not sent again without the effort (that would pretend it was applied), and MODELSTATUS# says so. (This message
+    was a plain failure before round 3.)"""
+    m, runtime, table, _ = client([client_error("ValidationException", message)])
+    with pytest.raises(EffortUnavailable) as e:
+        m.complete(CTX, task="chat", messages=HELLO)
+    sentence = (
+        "Claude Opus 5.5 does not accept High effort here (Amazon Bedrock refused it). Pick another level in Lamo "
+        "Stories › Settings › AI."
+    )
+    assert str(e.value) == sentence
+    assert (e.value.model, e.value.effort, e.value.sent) == ("opus-5-5", "high", True)
+    assert len(runtime.requests) == 1  # never retried, and never without the effort
+    assert runtime.requests[0]["additionalModelRequestFields"] == {"output_config": {"effort": "high"}}
+    st = table.item(keys.modelstatus_sk("opus-5-5"))
+    assert st is not None and st["status"] == "error" and st["line"] == sentence
+    assert models.unavailable(client_error("ValidationException", message)) is None
+
+
+def test_a_refused_model_carries_the_model_and_effort_it_was_sent_with() -> None:
+    m, _runtime, _table, _ = client([client_error("AccessDeniedException", "no access")])
+    with pytest.raises(ModelUnavailable) as e:
+        m.complete(CTX, task="chat", messages=HELLO, override={"model": "sonnet-5-5", "effort": "low"})
+    assert (e.value.model, e.value.effort, e.value.status) == ("sonnet-5-5", "low", "denied")
 
 
 def test_a_refusal_is_a_plain_sentence_and_never_retried_elsewhere() -> None:

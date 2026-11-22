@@ -32,6 +32,7 @@ NOT_BUILT = "Studying reference videos is not in this version of Lamo Stories ye
 FAILED = "Studying the video did not finish. Tap Try again."
 GONE = "This reference video no longer exists."
 UNREADABLE = "This file can't be played as a video. Upload an MP4 or MOV file."
+REMOVED = "The video was removed to save space. Its study stays. Upload it again to study it again."
 
 
 @dataclass
@@ -148,6 +149,8 @@ class ReferenceJob(Job):
         return got if got != keys.FAILED.get(key, "This step did not finish. Tap Try again.") else FAILED
 
     async def _source(self, ref: dict[str, Any]) -> tuple[Path, float]:
+        if ref.get("sourceRemovedAt"):  # cleared by keepReferences (§45.34)
+            raise StoryFailed(REMOVED)
         key = str(ref.get("key") or "")
         folder = keys.reference_prefix(self.fence.user_id, self.fence.workspace_id, self.content_id)
         if not key.startswith(folder):
