@@ -2104,42 +2104,62 @@ button there. Numbers come from the post found on the connected account (`video/
   * **Enable Banking restricted mode, on his own Control Panel account and his own app, linking only his own personal
     accounts.** Every authorisation asks for `psu_type: "personal"`, business (`ORGA`) accounts are dropped before
     they are read, and a `BANKOWNER` claim keeps it to Clip Factory's one owner. The steps tell him never to press
-    "Request activation" or "Share".
+    "Request activation", "Request unrestriction" or "Share".
   * **The key is made by Clip Factory** (RSA-4096 and a 10-year self-signed certificate in `cf-prod-api`), and the
     private key goes straight into `cf-prod/platforms/bank/app`. He copies only the public part into "Generate outside
-    the browser and import public certificate". If he already followed Enable Banking's default, an upload or paste
-    box takes the .pem once, over HTTPS, straight into the same secret; it is never kept in the browser or logged.
-  * **Each bank link's session** is its own runtime secret, `cf-prod/platforms/bank/token-{linkId}`. Both secret
-    names fit today's IAM, so nothing in IAM changes.
+    the browser and import public certificate". **One exception, kept for his OK:** the task asked for an upload or
+    paste box like the TikTok file box, so if he already followed Enable Banking's default, that box takes the .pem
+    once, over HTTPS, straight into the same secret. It is the one place the private key passes through his browser
+    (and his Downloads folder), against the rule that it never does. So the screen first says "Better: make a new app
+    with Generate outside the browser…", the paste box has no autocomplete or spellcheck and is emptied after the
+    send, nothing is logged, and a line stays until he taps "I deleted it" to remove the file from Downloads. Removing
+    the box is a one-file change in BW if he says no.
+  * **Each bank link's session** is its own runtime secret, `cf-prod/platforms/bank/token_{linkId}` (an underscore,
+    so the `*/token-*` write grant that money, clip-flow and stats hold for rotated platform tokens never matches it).
+    Both names fit today's Allow statements. Two in-place Deny statements keep `cf-prod-clip-flow` and `cf-prod-stats`,
+    which can read `cf-prod/platforms/*`, from reading `…/bank/*`. Every bank secret is read with the cache off, so a
+    reconnect or a new key is seen at once, and a read acts only on the session whose `connectedAt` matches its link.
   * **Least data.** Only booked credits are looked at, in memory, and only `CRDT` + `BOOK` rows with a platform word
     in the payer's text or a match to a payout record go on. Stored are only matched rows (day, amount in minor units,
-    currency, place, how it was matched, a keyed-HMAC id) and the rows waiting for his answer, which expire after 180
-    days. A "not app money" answer leaves only its id and day, for 400 days. Never stored: a name (not even the
-    payer's: a keyed hash and Clip Factory's own word instead), an account number or its last 4, an IBAN, a balance, a
-    debit, another transaction, the bank's text, his IP address or user agent (passed to Enable Banking for an
-    attended read only). Logs carry counts.
-  * **Matching** is one pure function: the exact amount and currency of a Google or Whop payout within 10 workdays;
-    Whop's trace code; a payer he confirmed; otherwise a question card. Google's tiny test deposit is dropped by
-    per-currency ceilings, which are Clip Factory's own numbers, never conversions. PayPal, Stripe and Payoneer carry
-    money from several places, so they are asked about every time, and money moved from his own linked PayPal is asked
-    about as a move so it isn't counted twice. Meta pays Instagram and Facebook in one payment, so it may be counted
-    as "Instagram and Facebook together". He only ever taps; nothing is typed, converted or estimated.
-  * **Reading** happens in `cf-prod-money`'s 06:00 UTC run after the payout reads, and on his Check now (an async
-    invoke carrying his IP and user agent for that read only). The first read uses `strategy=longest` within the hour
-    after BankID. At most 3 reads a day happen without him, and a bank's "too many" pauses reads for 6 hours.
+    currency, place, how it was matched, a keyed-HMAC id built from the bank's entry reference, day, amount and
+    currency, never from the account) and the rows waiting for his answer, which expire 180 days after the later of
+    their booking and the read. A "not app money" answer leaves only its id and day, for 400 days. Never stored: a
+    name (not even the payer's: a keyed hash of the payer's name and Clip Factory's own word instead), an account
+    number or its last 4, an IBAN, a balance, a debit, another transaction, the bank's text, his IP address or user
+    agent (passed to Enable Banking for an attended read only). Logs carry counts, and bank errors are typed so no
+    answer body reaches a log.
+  * **Matching** is one pure function, in this order: the exact amount and currency of a Google or Whop payout within
+    10 workdays (a candidate whose platform word fits wins a tie); Whop's trace code (10 or more characters, as whole
+    words); Google's tiny test deposit, dropped by per-currency ceilings that are Clip Factory's own numbers, never
+    conversions; his "not app money" payers; a payer he confirmed; otherwise a question card. The payout records come
+    first, so a "not app money" answer can never hide a real payout. Only a platform word in the bank's payer name is
+    ever learned: anyone can write "YOUTUBE" in a transfer's message, so a word found only there is asked about every
+    time. PayPal, Stripe and Payoneer carry money from several places, so they are asked about every time, and money
+    moved from his own linked PayPal is asked about as a move so it isn't counted twice. Meta pays Instagram and
+    Facebook in one payment, so it may be counted as "Instagram and Facebook together". He only ever taps; nothing is
+    typed, converted or estimated.
+  * **Reading** happens in `cf-prod-money`'s 06:00 UTC run after the payout reads, and on his own bank Check now (an
+    async invoke carrying his IP and user agent for that read only, dropped if the event waited more than 120 s);
+    Money's own Check now never reads the bank. His first read uses `strategy=longest` within the hour after BankID;
+    a first read without him uses 89 days. At most 3 reads in any rolling 24 hours happen without him, a bank's "too
+    many" pauses reads for 6 hours, and a lease keeps two reads (or a read and Forget) from meeting.
+  * **The way back from BankID** is a public page, `/bank-done`, that needs no sign-in and holds no data, so the Mac
+    app's system browser or another browser never lands on a sign-in page; the callback also writes the result on
+    `BANKCONN`, so the waiting bank page always learns it.
   * **"Reached your bank"** is shown per place and per currency, plus a total per currency, tagged "Your bank says",
     on the Get paid Your bank card, the bank page, each place page and Money. It is never added to "Sent to your bank"
     or the 30-day total.
   * **The terms risk** is handled by building behind `bank_reading_enabled` (default `false`, switched on by one PR
     after the four builders merge), an optional first step with a ready email for him to send, and the switch as the
     way back. B's file upload stays possible later through the deposit's `source`.
-- **Consequences.** Setup takes about 51 taps in one sitting (17 of them Clip Factory's), with BankID twice, because
-  Enable Banking's Control Panel link doesn't authorise the app; after that, BankID every 180 days (a notice 7 days
-  before) and one tap per new payer. A payout whose bank text names no platform is never seen, and the place says
+- **Consequences.** Setup takes about 64 taps in one sitting of about 25 minutes (18 of them Clip Factory's; 68 and
+  20 with the optional email), counting every switch between Clip Factory and Enable Banking, with BankID twice,
+  because Enable Banking's Control Panel link doesn't authorise the app; after that, BankID every 90 to 180 days, as
+  his bank sets (a notice 7 days before), and one tap per new payer. A payout whose bank text names no platform is never seen, and the place says
   "Nothing … reached your bank yet" rather than a number; the first deposits teach the hint list, and a missing word
   is a one-line PR. Totals start at the oldest day his bank shows (often 90 days, more within the first hour). If
   Enable Banking says creator income isn't personal use, or deactivates the app, setting the switch to `false` takes
   every screen back to "Clip Factory can't see your bank", and his stored records stay until he taps Forget my bank.
   Additive only: new sort keys `BANKCONN`, `BANKLINK#`, `DEPOSIT#`, `BANKPAYERS`, the `BANKOWNER` registry item, two
-  runtime secrets, two stream filters and one api env var changed in place; no new Lambda, table, index, role or IAM
-  statement, and nothing that holds his data or connections is replaced.
+  runtime secrets, two stream filters, two Deny statements and one api env var changed in place; no new Lambda,
+  table, index, role or Allow statement, and nothing that holds his data or connections is replaced.

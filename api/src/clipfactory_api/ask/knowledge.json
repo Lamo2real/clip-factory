@@ -1,5 +1,5 @@
 {
- "version": "664d4071edab",
+ "version": "23f313c93a78",
  "parts": [
   {
    "id": "app-map",
@@ -267,7 +267,7 @@
    "id": "contracts-40",
    "title": "CONTRACTS: 40. Get paid: set up payouts, see if you can get paid, and what reached your bank (owner request, 2026-11-21)",
    "line": "The owner's words: \"Does the application of Clip Factory show me exactly how much I get after or how much I earn in",
-   "chars": 198500
+   "chars": 223869
   },
   {
    "id": "contracts-41",
@@ -783,7 +783,7 @@
    "id": "adr-82",
    "title": "DECISIONS: ADR-82 Your bank: Enable Banking restricted mode, read once a day, keep only matched app money",
    "line": "Context. The owner asked (2026-11-21) for \"a total of my exact number that I've gotten into my bank account or",
-   "chars": 7342
+   "chars": 9613
   },
   {
    "id": "architecture-overview",
