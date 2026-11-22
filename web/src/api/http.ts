@@ -3,6 +3,8 @@ import { ApiError, errorFromResponse, networkError } from "./errors.ts";
 import type {
   Account,
   Api,
+  AutoPostStatus,
+  AutoRun,
   Campaign,
   CampaignSummary,
   Captions,
@@ -230,5 +232,8 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     crFitCaptions: async (body) => (await call<{ captions: Captions }>("POST", "/contentrewards/fit/captions", body)).captions,
     crRemake: async (campaignId, body) => (await call<{ job: Job }>("POST", `/contentrewards/campaigns/${id(campaignId)}/remake`, body)).job,
     getMoneyEverywhere: () => call("GET", "/money/everywhere"),
+    // §46.9: auto-posting's status, and the two test runs.
+    autoPostStatus: () => call<AutoPostStatus>("GET", "/autopost"),
+    autoPostRun: async (kind) => (await call<{ run: AutoRun }>("POST", "/autopost/run", { kind })).run,
   };
 }

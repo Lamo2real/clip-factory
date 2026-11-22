@@ -11,6 +11,8 @@ import { PlatformMark } from "./PlatformMark.tsx";
 import { Sparkline } from "./Sparkline.tsx";
 import { LinkButton, Pill, type Tone } from "./ui.tsx";
 import { formatMoney } from "../lib/money.ts";
+import { autoPerfLabel, isPrivateTest } from "../lib/autopost.ts";
+import type { Clip } from "../api/types.ts";
 
 const CHIP_TONE: Record<PlatformPerformance["status"], Tone> = {
   posted: "success",
@@ -51,6 +53,7 @@ export function PlatformStack({
   index,
   now,
   ref,
+  auto,
 }: {
   perf: PlatformPerformance;
   series?: SeriesPoint[];
@@ -58,11 +61,14 @@ export function PlatformStack({
   index: number;
   now: number;
   ref?: Ref<HTMLElement>;
+  /** The clip's `auto` (§46.9): its posts say "· by auto-posting"; a Private test one has no numbers (§46.8). */
+  auto?: Clip["auto"];
 }) {
   const name = PLATFORM_LABEL[perf.platform];
   const id = `stack-${perf.platform}`;
-  const calm = calmCopy(perf);
-  const groups = !calm && perf.metrics ? metricGroups(perf.platform, perf.metrics) : null;
+  const privateTest = isPrivateTest(perf.status, auto, perf.by);
+  const calm = privateTest ? null : calmCopy(perf);
+  const groups = !privateTest && !calm && perf.metrics ? metricGroups(perf.platform, perf.metrics) : null;
   const reactions = (perf.metrics?.extra as FacebookExtra | undefined)?.reactions;
   const wait = until(perf.nextAllowedAt, now);
 
@@ -90,7 +96,7 @@ export function PlatformStack({
         </header>
         <div className="pstack__chip">
           <Pill tone={CHIP_TONE[perf.status]} icon={perf.status === "failed" ? "alert" : perf.status === "posted" ? "checkCircle" : undefined}>
-            {STATUS_LABEL[perf.status]}
+            {autoPerfLabel(perf.status, perf.platform, auto, perf.by, STATUS_LABEL[perf.status])}
           </Pill>
         </div>
 

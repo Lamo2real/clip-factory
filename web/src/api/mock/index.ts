@@ -22,6 +22,7 @@ import { adFirst, hasItem, liveFit } from "../../lib/crFit.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
 import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../../lib/background.ts";
 import { currentClipModel, isClipModel } from "../../lib/models.ts";
+import { autoPostMock, NOTE_NO_PLACES, CR_BY_HAND, CR_CANT_TAKE, type AutoPostControls } from "./autopost.ts";
 
 const STEP_MS = 3500;
 /** api settings.MAX_USD_PER_1000: the retired `earningsRates` (§21) are still validated, never read (§25.6). */
@@ -267,6 +268,19 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         publishPost(x);
       }
       c.status = "posted";
+      publishClip(c);
+    },
+    /**
+     * §46.2 item 6: one place did not work while the clip still posts its other places (publishing, §17.6), so no
+     * Try again yet: the retry would do nothing until they are done.
+     */
+    failWhilePosting(clipId: string, platform: Platform, reason = "X said no this time. Press Try again."): void {
+      const c = clip(clipId);
+      const p = store.posts.find((x) => x.clipId === clipId && x.platform === platform);
+      if (!p) throw new Error(`no ${platform} post`);
+      Object.assign(p, { status: "failed", error: reason });
+      publishPost(p);
+      c.status = "publishing";
       publishClip(c);
     },
     /** The clip's posts, as the server holds them. */
@@ -595,6 +609,140 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     // Merge, never replace: posting (above) and setup (mock/setup.ts) keep their knobs on the same object.
     const w = window as unknown as { __cfMock?: Record<string, unknown> & Partial<MockSkillControls> };
     w.__cfMock = Object.assign(w.__cfMock ?? {}, skills.controls, { follows: follows.controls, money: money.controls });
+  }
+
+  /**
+   * Upload's own code (§14.5, §33): the api's confirmClip, and auto-posting's send (§46.7 step 4) with `auto`, which
+   * marks the clip and its new posts; a Private test run's posts are only his (§46.8).
+   */
+  async function confirmNow(
+    clipId: string,
+    captions?: Partial<Captions>,
+    tiktok?: TikTokPostOptions,
+    platforms?: Platform[],
+    options?: ClipPostOptions,
+    auto?: NonNullable<Clip["auto"]>,
+  ): Promise<{ clip: Clip; posts: Post[] }> {
+    if (options !== undefined) {
+      const wrong = clipOptionsProblem(options);
+      if (wrong) throw bad(wrong);
+    }
+    const c = clip(clipId);
+    const connected = setup.connected();
+    // The places picked on Upload (§33): known, each once, not empty, and each set up.
+    let chosen: Platform[] | undefined;
+    if (platforms !== undefined) {
+      if (!Array.isArray(platforms) || !platforms.length) throw bad("Pick at least one place to upload to.");
+      if (!platforms.every((p) => PLATFORMS.includes(p))) throw bad("One of the places to upload to is not one Clip Factory knows.");
+      const twice = platforms.find((p, i) => platforms.indexOf(p) !== i);
+      if (twice) throw bad(`${PLATFORM_LABEL[twice]} is in the list twice. Pick each place once.`);
+      chosen = PLATFORM_ORDER.filter((p) => platforms.includes(p));
+    }
+    if (c.status === "review" && chosen) {
+      const missing = chosen.find((p) => !connected.includes(p));
+      if (missing) throw bad(`${PLATFORM_LABEL[missing]} is not set up yet. Turn it off, then tap Upload.`);
+    }
+    // A campaign clip (§38.14): only the campaign's places, public, never made for kids, TikTok Branded content.
+    if (c.status === "review") await cr.confirmCheck(c, chosen, options, tiktok);
+    // §39.3: a campaign clip goes up the campaign way only when it can earn (the merged captions, the picked places).
+    if (c.status === "review" && c.campaignId) {
+      const own = fitOf({ ...c, captions: { ...c.captions, ...(captions ?? {}) } }).fits[0];
+      const now = own ? liveFit(own, { captions: { ...c.captions, ...(captions ?? {}) }, chosen: chosen ?? null, tiktok: chosen?.includes("tiktok") ? (tiktok ?? null) : null }) : null;
+      const refusal = now ? uploadRefusal(now) : null;
+      if (refusal) throw conflict(refusal);
+    }
+    // TikTok's rules: the owner picks who can see it before anything is posted there (§17.8).
+    const tiktokGoing = chosen ? chosen.includes("tiktok") : store.settings.platforms.includes("tiktok") && connected.includes("tiktok");
+    if (c.status === "review" && tiktokGoing && !tiktok?.privacyLevel) throw bad("Pick who can see it on TikTok.");
+    const startPosting = () => {
+      const have = new Set(store.posts.filter((p) => p.clipId === clipId).map((p) => p.platform));
+      const targets = c.uploadTo ?? store.settings.platforms;
+      const created: Post[] = targets
+        .filter((platform) => !have.has(platform))
+        .map((platform) => ({ postId: ulid(), clipId, platform, status: connected.includes(platform) ? "queued" : "pending_integration" }));
+      // Auto-posting's posts (§46.9); a Private test run's go up for him only, at once here (no flow in the mock).
+      if (auto) for (const p of created) privateTest(Object.assign(p, { auto: true as const }), auto.test);
+      store.posts.push(...created);
+      for (const p of created) if (p.platform === "tiktok" && p.status === "queued" && tiktok) postOptions.set(p.postId, clone(tiktok));
+      for (const p of created) {
+        const own = options?.[p.platform as keyof ClipPostOptions];
+        if (own) clipOptions.set(p.postId, clone(own));
+      }
+      cr.onPosts(c, created);
+      if (auto?.test && created.every((p) => p.status === "posted")) c.status = "posted";
+      publishClip(c);
+      for (const p of created) publishPost(p);
+      return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === clipId)) };
+    };
+    // Keep again on a kept clip whose posting never started: finished once the last try is old enough.
+    if (c.status === "confirmed" && !store.posts.some((p) => p.clipId === clipId)) {
+      const last = claimedAt.get(clipId) ?? Date.parse(c.decidedAt ?? "");
+      if (Number.isNaN(last) || Date.now() - last < faults.resumeAfterMs) throw conflict(ALREADY_DECIDED);
+      claimedAt.set(clipId, Date.now());
+      return startPosting();
+    }
+    if (c.status === "failed" || ((c.status === "posted" || c.status === "confirmed") && chosen)) return tryAgain(c, tiktok, chosen);
+    // A start that did not go through earlier (§14.5): Try again starts it.
+    if (c.startPending && c.status !== "review") {
+      started(c);
+      return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === clipId)) };
+    }
+    if (c.status !== "review") throw conflict(ALREADY_DECIDED);
+    if (captions) c.captions = { ...c.captions, ...captions };
+    if (chosen) c.uploadTo = chosen;
+    if (auto) c.auto = clone(auto);
+    c.status = "confirmed";
+    c.decidedAt = new Date().toISOString();
+    claimedAt.set(clipId, Date.now());
+    if (faults.keepStopsAfterSave > 0) {
+      faults.keepStopsAfterSave--;
+      throw networkError();
+    }
+    return startPosting();
+  }
+
+  /** A Private test run's post (§46.8): YouTube Only me with its link, Facebook a draft, Instagram checked only. */
+  function privateTest(p: Post, test: "private" | undefined) {
+    if (!test || p.status !== "queued") return;
+    Object.assign(p, { test, status: "posted", privacy: "private", postedAt: new Date().toISOString() });
+    if (p.platform === "youtube") p.url = `https://example.com/youtube/${p.postId}`;
+  }
+
+  // Auto-posting (§46.3–§46.9): Upload's own code sends, the places are the setups that are ready, minus TikTok.
+  const autopost = autoPostMock({
+    clips: () => store.clips,
+    jobs: () => store.jobs,
+    posts: () => store.posts,
+    settings: () => store.settings,
+    ready: () => setup.overview().platforms.filter((p) => p.ready).map((p) => p.platform),
+    campaign(c, places) {
+      // §46.5 rule 4: only while Content Rewards takes clips from Clip Factory by itself, the campaign way (§38.14).
+      try {
+        cr.guard();
+      } catch {
+        return { wait: CR_CANT_TAKE, places: [] };
+      }
+      if (cr.connection().status !== "connected") return { wait: CR_CANT_TAKE, places: [] };
+      const campaign = cr.served().find((x) => x.campaignId === c.campaignId);
+      if (!campaign) return { wait: "Add the campaign again on the Campaigns page.", places: [] };
+      if (campaign.membership === "manual") return { wait: CR_BY_HAND, places: [] };
+      if (campaign.membership !== "in") return { wait: campaign.nextStep.text, places: [] };
+      const stop = campaign.stops.find((x) => x.hard);
+      if (stop) return { wait: stop.text, places: [] };
+      const going = places.filter((p) => campaign.uploadPlaces.includes(p));
+      if (!going.length) return { wait: NOTE_NO_PLACES, places: [] };
+      const own = fitOf(c).fits[0];
+      const now = own ? liveFit(own, { captions: c.captions, chosen: going, tiktok: null }) : null;
+      const refusal = now ? uploadRefusal(now) : null;
+      return refusal ? { wait: refusal, places: [] } : { wait: null, places: going };
+    },
+    async send(c, places, options, auto) {
+      await confirmNow(c.clipId, undefined, undefined, places, options, auto);
+    },
+  });
+  if (typeof window !== "undefined") {
+    const w = window as unknown as { __cfMock?: Record<string, unknown> & { autopost?: AutoPostControls } };
+    w.__cfMock = { ...(w.__cfMock ?? {}), autopost: autopost.controls };
   }
 
   const api: Api = {
@@ -937,78 +1085,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     },
     async confirmClip(clipId, captions, tiktok, platforms, options) {
       await delay();
-      if (options !== undefined) {
-        const wrong = clipOptionsProblem(options);
-        if (wrong) throw bad(wrong);
-      }
-      const c = clip(clipId);
-      const connected = setup.connected();
-      // The places picked on Upload (§33): known, each once, not empty, and each set up.
-      let chosen: Platform[] | undefined;
-      if (platforms !== undefined) {
-        if (!Array.isArray(platforms) || !platforms.length) throw bad("Pick at least one place to upload to.");
-        if (!platforms.every((p) => PLATFORMS.includes(p))) throw bad("One of the places to upload to is not one Clip Factory knows.");
-        const twice = platforms.find((p, i) => platforms.indexOf(p) !== i);
-        if (twice) throw bad(`${PLATFORM_LABEL[twice]} is in the list twice. Pick each place once.`);
-        chosen = PLATFORM_ORDER.filter((p) => platforms.includes(p));
-      }
-      if (c.status === "review" && chosen) {
-        const missing = chosen.find((p) => !connected.includes(p));
-        if (missing) throw bad(`${PLATFORM_LABEL[missing]} is not set up yet. Turn it off, then tap Upload.`);
-      }
-      // A campaign clip (§38.14): only the campaign's places, public, never made for kids, TikTok Branded content.
-      if (c.status === "review") await cr.confirmCheck(c, chosen, options, tiktok);
-      // §39.3: a campaign clip goes up the campaign way only when it can earn (the merged captions, the picked places).
-      if (c.status === "review" && c.campaignId) {
-        const own = fitOf({ ...c, captions: { ...c.captions, ...(captions ?? {}) } }).fits[0];
-        const now = own ? liveFit(own, { captions: { ...c.captions, ...(captions ?? {}) }, chosen: chosen ?? null, tiktok: chosen?.includes("tiktok") ? (tiktok ?? null) : null }) : null;
-        const refusal = now ? uploadRefusal(now) : null;
-        if (refusal) throw conflict(refusal);
-      }
-      // TikTok's rules: the owner picks who can see it before anything is posted there (§17.8).
-      const tiktokGoing = chosen ? chosen.includes("tiktok") : store.settings.platforms.includes("tiktok") && connected.includes("tiktok");
-      if (c.status === "review" && tiktokGoing && !tiktok?.privacyLevel) throw bad("Pick who can see it on TikTok.");
-      const startPosting = () => {
-        const have = new Set(store.posts.filter((p) => p.clipId === clipId).map((p) => p.platform));
-        const targets = c.uploadTo ?? store.settings.platforms;
-        const created: Post[] = targets
-          .filter((platform) => !have.has(platform))
-          .map((platform) => ({ postId: ulid(), clipId, platform, status: connected.includes(platform) ? "queued" : "pending_integration" }));
-        store.posts.push(...created);
-        for (const p of created) if (p.platform === "tiktok" && p.status === "queued" && tiktok) postOptions.set(p.postId, clone(tiktok));
-        for (const p of created) {
-          const own = options?.[p.platform as keyof ClipPostOptions];
-          if (own) clipOptions.set(p.postId, clone(own));
-        }
-        cr.onPosts(c, created);
-        publishClip(c);
-        for (const p of created) publishPost(p);
-        return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === clipId)) };
-      };
-      // Keep again on a kept clip whose posting never started: finished once the last try is old enough.
-      if (c.status === "confirmed" && !store.posts.some((p) => p.clipId === clipId)) {
-        const last = claimedAt.get(clipId) ?? Date.parse(c.decidedAt ?? "");
-        if (Number.isNaN(last) || Date.now() - last < faults.resumeAfterMs) throw conflict(ALREADY_DECIDED);
-        claimedAt.set(clipId, Date.now());
-        return startPosting();
-      }
-      if (c.status === "failed" || ((c.status === "posted" || c.status === "confirmed") && chosen)) return tryAgain(c, tiktok, chosen);
-      // A start that did not go through earlier (§14.5): Try again starts it.
-      if (c.startPending && c.status !== "review") {
-        started(c);
-        return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === clipId)) };
-      }
-      if (c.status !== "review") throw conflict(ALREADY_DECIDED);
-      if (captions) c.captions = { ...c.captions, ...captions };
-      if (chosen) c.uploadTo = chosen;
-      c.status = "confirmed";
-      c.decidedAt = new Date().toISOString();
-      claimedAt.set(clipId, Date.now());
-      if (faults.keepStopsAfterSave > 0) {
-        faults.keepStopsAfterSave--;
-        throw networkError();
-      }
-      return startPosting();
+      return confirmNow(clipId, captions, tiktok, platforms, options);
     },
     // Post it on TikTok yourself (§42): the same rules as the API's tiktok_self.py.
     async clipFile(clipId) {
@@ -1099,7 +1176,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     },
     async putSettings(patch) {
       await delay(100, 240);
-      const next: Settings = { ...store.settings, ...patch, hasYoutubeCookies: store.settings.hasYoutubeCookies };
+      const { autoPost: autoPatch, ...rest } = patch;
+      const next: Settings = { ...store.settings, ...rest, hasYoutubeCookies: store.settings.hasYoutubeCookies };
       if (next.clipMin < 1 || next.clipMin > 10) throw bad("The smallest number of clips must be between 1 and 10.");
       if (next.clipMax < next.clipMin || next.clipMax > 10) throw bad("The largest number of clips must be between the smallest and 10.");
       if (next.maxSourceHours < 1 || next.maxSourceHours > 12) throw bad("Source length must be between 1 and 12 hours.");
@@ -1153,6 +1231,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         if (wrong) throw bad(wrong);
         next.postPreset = presetOf(patch.postPreset);
       }
+      // §46.3: each of on, everyHours, perRun and practice merged over the stored value; on writes onAt.
+      if (autoPatch !== undefined) next.autoPost = autopost.merge(store.settings.autoPost, autoPatch);
       if (next.backgroundColours !== undefined) {
         const c = next.backgroundColours;
         if (!Array.isArray(c) || c.length < 1 || c.length > MAX_COLOURS || !c.every(isHexColour)) throw bad("Pick 1 to 3 colours.");
@@ -1263,6 +1343,14 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     async saveWeekBest(week, body) {
       await delay(120, 260);
       return stats.saveBest(week, body);
+    },
+    async autoPostStatus() {
+      await delay();
+      return autopost.status();
+    },
+    async autoPostRun(kind) {
+      await delay();
+      return autopost.runNow(kind);
     },
   };
 

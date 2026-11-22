@@ -172,6 +172,8 @@ export interface Clip {
   /** Uploaded, but its posting has not started yet: the start after an Upload, Try again, Post now or connect did not go
    * through (§14.5). Confirm starts it. Absent otherwise. */
   startPending?: boolean;
+  /** Sent by auto-posting (§46.9): the run that sent it and when; `test` on a Private test run. Absent otherwise. */
+  auto?: { runId: string; at: string; test?: "private" };
 }
 
 /** One skill (docs/CONTRACTS.md §5, §18). Every skill is always used: there is no on/off switch. */
@@ -259,6 +261,83 @@ export interface Settings {
   notify?: NotifyChoices;
   /** My settings (§36): the owner's own post choices per platform. Absent on old servers: the defaults. */
   postPreset?: PostPreset;
+  /** Auto-posting (§46.3). Absent on old servers: off. */
+  autoPost?: AutoPostSettings;
+}
+
+/**
+ * Auto-posting (docs/CONTRACTS.md §46.3): the oldest clips in Review go up by themselves every `everyHours` hours,
+ * `perRun` at a time. Off for everyone until he turns it on. `onAt` is read-only (when it was last switched on).
+ */
+export interface AutoPostSettings {
+  on: boolean;
+  /** 1..24, default 5. */
+  everyHours: number;
+  /** 1..5, default 1. */
+  perRun: number;
+  /** Pick the clips on time, but send nothing (§46.8). */
+  practice: boolean;
+  onAt?: string;
+}
+
+/** What PUT /v1/settings may send for auto-posting: never `onAt` (§46.3). */
+export type AutoPostPatch = Partial<Omit<AutoPostSettings, "onAt">>;
+
+/** What PUT /v1/settings takes: any settings, and of auto-posting only the keys that change (merged by the server, §46.3). */
+export type SettingsPut = Omit<Partial<Settings>, "autoPost"> & { autoPost?: AutoPostPatch };
+
+export type AutoRunKind = "scheduled" | "practice_now" | "private_now";
+export type AutoRunMode = "live" | "practice" | "private";
+
+/** One post of a run's clip, read by the clip's posts (§46.9). */
+export interface AutoRunPost {
+  platform: Platform;
+  status: Post["status"];
+  url?: string;
+  error?: string;
+  test?: "private";
+}
+
+export interface AutoRunClip {
+  clipId: string;
+  hook: string;
+  places: Platform[];
+  outcome?: "sent" | "would_send" | "skipped";
+  reason?: string;
+  posts: AutoRunPost[];
+}
+
+/** One auto-posting run (§46.7, §46.9). */
+export interface AutoRun {
+  runId: string;
+  at: string;
+  kind: AutoRunKind;
+  mode: AutoRunMode;
+  state: "planned" | "done";
+  note?: string;
+  clips: AutoRunClip[];
+}
+
+/** GET /v1/autopost (§46.9). */
+export interface AutoPostStatus {
+  autoPost: AutoPostSettings;
+  /** null while off. */
+  nextRunAt: string | null;
+  /** perRun * 24 / everyHours, not rounded. */
+  perDay: number;
+  /** A normal clip's places now (§46.6), in STATS_ORDER. */
+  places: Platform[];
+  leftOut: { platform: Platform; reason: "tiktok_yourself" | "not_set_up" }[];
+  /** At most 10, oldest first; `runAt` only while on. */
+  nextUp: { clipId: string; jobId: string; hook: string; coverUrl?: string; runAt?: string }[];
+  /** At most 20: clips in Review that runs skip, with the reason (§46.5). */
+  waiting: { clipId: string; jobId: string; hook: string; coverUrl?: string; reason: string }[];
+  /** Newest first, at most 10. */
+  runs: AutoRun[];
+  /** At most 20, newest first: auto-posted posts that did not go up. */
+  failed: { postId: string; clipId: string; hook: string; platform: Platform; error: string; at: string }[];
+  /** At most 10: auto-posted clips (not private tests) not on TikTok for everyone yet. */
+  tiktokYourself: { clipId: string; hook: string; coverUrl?: string }[];
 }
 
 /** §32.3: "Clips ready", "It stopped" and "Picked up" are on by default; "Every step" is off (each one shows on the phone). */
@@ -555,6 +634,10 @@ export interface Post {
   paidLabel?: "not_set";
   /** "you": the owner posted it on TikTok himself (Post on TikTok yourself, §42). */
   by?: "you";
+  /** Sent by auto-posting (§46.9). */
+  auto?: true;
+  /** A Private test run's post (§46.8): only he can see it, and it gets no numbers. */
+  test?: "private";
 }
 
 /** GET /v1/clips/{clipId}/file: a 1-hour link that saves the clip's video (§42). */
@@ -1746,7 +1829,7 @@ export interface Api {
   createSkill(body: { skillId: string; key: string }): Promise<Skill>;
   deleteSkill(skillId: string): Promise<void>;
   getSettings(): Promise<Settings>;
-  putSettings(patch: Partial<Settings>): Promise<Settings>;
+  putSettings(patch: SettingsPut): Promise<Settings>;
   // Notifications (§32.3)
   /** GET /v1/push/key: the public key for `pushManager.subscribe`. 503 until the deploy made one. */
   pushKey(): Promise<string>;
@@ -1887,4 +1970,9 @@ export interface Api {
   crRemake(campaignId: string, body: CrRemakeBody): Promise<Job>;
   /** GET /v1/money/everywhere: All your money (§39.2). */
   getMoneyEverywhere(): Promise<MoneyEverywhere>;
+  // Auto-posting (§46.9). An api from before it answers 404.
+  /** GET /v1/autopost: on or off, the next run, the line, what waits, what did not work, the recent runs. */
+  autoPostStatus(): Promise<AutoPostStatus>;
+  /** POST /v1/autopost/run `{ kind }`: Practice run now or Private test run; 409 within a minute of the last one. */
+  autoPostRun(kind: "practice" | "private"): Promise<AutoRun>;
 }

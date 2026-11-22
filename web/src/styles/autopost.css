@@ -1,0 +1,154 @@
+/* ---------- Settings › Posting › Auto-posting (docs/CONTRACTS.md §46.2) ----------
+   Glass rows, no edges (ADR-45): a cover, the clip's words, then its one action on the right; the arrow cursor only
+   (§20). Every action is 44 px or taller (48 on phones, system.css). */
+.autopost__state {
+  margin-top: -6px;
+}
+/* The Post every list opens over the panels below it (each glass panel is its own layer), like a Review place row. */
+.autopost__above:has(.dropdown.is-open) {
+  z-index: 5;
+}
+.autopost__controls {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+.autopost__result,
+.autopost__line {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.autopost__where {
+  display: grid;
+  gap: 8px;
+}
+.autopost__left {
+  display: grid;
+  gap: 6px;
+}
+.autopost__left-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-height: 44px;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.autopost__left-text {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.autopost__list {
+  display: grid;
+  gap: 6px;
+}
+.autopost__row,
+.autopost__run {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 10px;
+  min-height: 48px;
+  padding: 6px 6px 6px 8px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+}
+.autopost__run {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+/* A phone: the action goes under the words, so nothing is squeezed. */
+@media (max-width: 479px) {
+  .autopost__row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .autopost__row > :last-child {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .autopost__run {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.autopost__cover,
+.autopost__mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  overflow: hidden;
+  border-radius: var(--r-xs);
+  background: var(--fill);
+}
+.autopost__cover {
+  height: 48px;
+  aspect-ratio: 9 / 16;
+  width: auto;
+}
+.autopost__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.autopost__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.autopost__hook,
+.autopost__name {
+  font-weight: 650;
+  font-size: 0.9rem;
+}
+.autopost__when,
+.autopost__why {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.autopost__row.is-failed .autopost__why {
+  color: var(--vermilion-ink);
+}
+.autopost__run-text {
+  min-width: 0;
+  font-size: var(--fs-small);
+  overflow-wrap: anywhere;
+}
+.autopost__opens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.autopost__wait {
+  width: 96px;
+  height: 44px;
+}
+/* Test it first: a glass panel of its own that folds open (closed to start). */
+.autopost__test > .cr-fold__q {
+  padding-inline: 0;
+}
+.autopost__test[open] > .cr-fold__q .cr-fold__chev {
+  transform: rotate(90deg);
+}
+.autopost__test > .cr-fold__body {
+  padding: 0 0 16px;
+}
+.autopost__runs {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+.autopost__run-now {
+  display: grid;
+  gap: 6px;
+}
+/* Review's one quiet line above its actions (§46.2) and Home's hint keep the card's own small type. */
+.autopost-line {
+  margin: 0;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
