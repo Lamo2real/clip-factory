@@ -10,6 +10,7 @@ import { A, Button, LinkButton } from "../../components/ui.tsx";
 import { herePath, withBack } from "../../lib/backLink.ts";
 import { campaignPath } from "../../lib/contentRewards.ts";
 import { checkLineText, checkPages, fitLines, fitMain, isChecked, isWait, safeFixHref, saveChecked, type CopyState } from "../../lib/crFit.ts";
+import { FIND_PATH, finderHref, useFinderSummary } from "../../lib/finder.ts";
 import { GreenButton, OpenButton } from "../campaigns/bits.tsx";
 import { Rich } from "../settings/setup/bits.tsx";
 
@@ -51,7 +52,10 @@ export function FitLine({ item, text }: { item: FitItem; text?: string }) {
 
 /** A fix's link: a setup page gets the way back here (§39.1); Content Rewards' pages open in a new tab. */
 function FixLink({ item, primary, label }: { item: FitItem; primary: boolean; label?: string }) {
-  const to = safeFixHref(item.fix);
+  // §41.6 change 2: while the finder is on, Content Rewards' Discover becomes the Find page (same tab).
+  const finderOn = !!useFinderSummary();
+  const safe = safeFixHref(item.fix);
+  const to = safe ? finderHref(safe.href, finderOn) : null;
   if (!to || !item.fix) return null;
   const text = label ?? item.fix.label;
   if (to.external) return <OpenButton label={text} href={to.href} primary={primary} size={primary ? "lg" : "md"} />;
@@ -61,7 +65,7 @@ function FixLink({ item, primary, label }: { item: FitItem; primary: boolean; la
       href={href}
       variant={primary ? "primary" : "glass"}
       size={primary ? "lg" : "md"}
-      icon={item.fix.kind === "new_clips" ? "scissors" : "chevronRight"}
+      icon={item.fix.kind === "new_clips" ? "scissors" : to.href === FIND_PATH ? "search" : "chevronRight"}
       data-help-clear={primary ? "" : undefined}
     >
       {text}

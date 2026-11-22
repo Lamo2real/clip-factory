@@ -8,7 +8,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ULID = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/i;
 const isId = (v: string) => ULID.test(v) || UUID.test(v);
 
-export type BackKind = "campaign" | "campaigns" | "clip" | "money";
+export type BackKind = "campaign" | "campaigns" | "find" | "clip" | "money";
 
 export interface BackLink {
   /** The page to go back to (always a same-origin path). */
@@ -26,7 +26,7 @@ export function backLink(search: string | URLSearchParams): BackLink | null {
   return parseBack(all[0]!);
 }
 
-/** One `back` value against the six shapes. */
+/** One `back` value against the seven shapes (§39.1, + `/campaigns/find` from §41.6 change 7). */
 export function parseBack(raw: string): BackLink | null {
   if (typeof raw !== "string" || raw.length > 200 || !raw.startsWith("/") || raw.startsWith("//") || /[\\\s#]/.test(raw)) return null;
   const at = raw.indexOf("?");
@@ -42,6 +42,7 @@ export function parseBack(raw: string): BackLink | null {
   }
   if (query !== null) return null;
   if (path === "/campaigns") return { href: "/campaigns", kind: "campaigns" };
+  if (path === "/campaigns/find") return { href: "/campaigns/find", kind: "find" };
   if (path === "/money") return { href: "/money", kind: "money" };
   const campaign = /^\/campaigns\/([^/]+)$/.exec(path);
   if (campaign && UUID.test(campaign[1]!)) {
@@ -60,6 +61,8 @@ export function backLabel(back: BackLink, campaignName?: string | null): string 
       return campaignName ? `Back to ${campaignName}` : "Back to your campaign";
     case "campaigns":
       return "Back to your campaigns";
+    case "find":
+      return "Back to Find campaigns";
     case "clip":
       return "Back to your clip";
     case "money":

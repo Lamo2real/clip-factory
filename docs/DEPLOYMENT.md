@@ -404,9 +404,12 @@ The Mac `.dmg` and Windows `.exe` offered by **Get the app** are built by the `d
 deploy's commit and reads the app address, bucket and CloudFront id that the deploy's `infra` job handed off in the
 artifact `desktop-handoff`). Only a push to `main` or a run by hand of deploy in this repository counts, never a
 fork's pull request, which could otherwise reach the signing keys. A deploy that ran `infra` but has no hand-off fails
-the desktop run (red), so installed apps never stop updating without a sign. One desktop run at a time
-(`desktop-prod`); a started run is never cancelled, and a newer deploy only replaces a run that is still waiting. It
-builds only if one of these is true; otherwise the job is skipped in seconds:
+the desktop run (red), so installed apps never stop updating without a sign. So does a hand-off that is not the only
+one made since the deploy's latest successful `infra` job started, and before it ended, since code that ran earlier in
+the deploy could have uploaded a fake one (an earlier attempt's, from before a re-run, is left out). The desktop run
+downloads that very hand-off, by id. Every other desktop job waits for that check and runs only when it passed. One
+desktop run at a time (`desktop-prod`); a started run is never cancelled, and a newer deploy only replaces a run that
+is still waiting. It builds only if one of these is true; otherwise the job is skipped in seconds:
 - something under `desktop/` changed,
 - the app icon changed,
 - a download is missing from `downloads/` in the web bucket (for example the first deploy),

@@ -49,6 +49,29 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      # Lamo Stories stays out of Clip Factory's first download (CONTRACTS §45.17): the page loads one script and one
+      # stylesheet (index.html), and neither carries Lamo Stories' look (.stories-app, --st-*, st- classes), its shell
+      # (StoriesApp) or its animation engine; they come in their own chunks, only when a /stories page opens. The
+      # markers are first proven to be in the build at all, so the check can never pass by looking for nothing.
+      - name: Lamo Stories is not in the main bundle
+        run: |
+          set -euo pipefail
+          js=$(grep -oE '<script[^>]+src="/assets/[^"]+\.js"' dist/index.html | sed -E 's/.*src="\/([^"]+)".*/\1/')
+          css=$(grep -oE '<link[^>]+href="/assets/[^"]+\.css"' dist/index.html | sed -E 's/.*href="\/([^"]+)".*/\1/')
+          extra=$(grep -oE '<link[^>]+rel="modulepreload"[^>]+href="/assets/[^"]+"' dist/index.html | sed -E 's/.*href="\/([^"]+)".*/\1/' || true)
+          [ -n "$js" ] && [ -n "$css" ] || { echo "index.html names no main script or stylesheet"; exit 1; }
+          markers_js='stories-app|st-rail|st-tabbar|st-frame|steer_left|tyre_burst|facepalm'
+          markers_css='stories-app|--st-|\.st-[a-z]'
+          grep -lqE "$markers_js" dist/assets/*.js || { echo "no Lamo Stories chunk found: the markers are stale"; exit 1; }
+          grep -lqE "$markers_css" dist/assets/*.css || { echo "no Lamo Stories stylesheet found: the markers are stale"; exit 1; }
+          bad=0
+          for f in $js $extra; do
+            case "$f" in *.js) if grep -qE "$markers_js" "dist/$f"; then echo "::error::$f (loaded by index.html) carries Lamo Stories code: $(grep -oE "$markers_js" "dist/$f" | sort -u | tr '\n' ' ')"; bad=1; fi ;; esac
+          done
+          for f in $css; do
+            if grep -qE "$markers_css" "dist/$f"; then echo "::error::$f (loaded by index.html) carries Lamo Stories styles: $(grep -oE "$markers_css" "dist/$f" | sort -u | head -5 | tr '\n' ' ')"; bad=1; fi
+          done
+          [ "$bad" = 0 ] && echo "Main bundle: $js $css $extra: no Lamo Stories code or styles."
 
   # About 760 Playwright tests at many widths took 32 to 40 minutes as one job. Playwright splits them evenly
   # over the shards below (fullyParallel, so it splits test by test); each shard builds the mock app once and
@@ -207,6 +230,46 @@ jobs:
           provenance: false
           cache-from: type=gha,scope=agent
           cache-to: type=gha,scope=agent,mode=max
+
+  # Lamo Stories' own AgentCore runtime (stories/agent, docs/CONTRACTS.md §45.11, ADR-76): its own project, tests and
+  # image, apart from Clip Factory's agent job above. Native ARM64 for the same Deno reason. ffmpeg comes from Ubuntu
+  # (with libass, like the image's Debian one), so the pipeline, captions and assembly tests run for real.
+  stories-agent:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: stories/agent/uv.lock
+      - name: ffmpeg with libass (the render, captions and assembly tests)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffmpeg -hide_banner -filters | grep -q " ass " || { echo "::error::ffmpeg has no libass."; exit 1; }
+      - name: lint, types and tests
+        working-directory: stories/agent
+        run: |
+          uv sync --frozen
+          uv run ruff check src tests
+          uv run ruff format --check src tests
+          uv run mypy
+          uv run pytest -q
+      # Built natively for ARM64 (AgentCore) and never pushed; its last steps run the engine under Deno and the
+      # self-check (one frame drawn, one sound mastered, one caption burned in), as the deployed image does.
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - name: build the Lamo Stories agent image (linux/arm64, not pushed)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: stories/agent/Dockerfile
+          platforms: linux/arm64
+          push: false
+          provenance: false
+          cache-from: type=gha,scope=stories-agent
+          cache-to: type=gha,scope=stories-agent,mode=max
 
   infra:
     runs-on: ubuntu-24.04

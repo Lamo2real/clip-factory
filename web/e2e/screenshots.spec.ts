@@ -540,6 +540,36 @@ for (const size of [
   });
 }
 
+// §41 (docs/CONTRACTS.md §41.6): the campaign finder with its matches (`finder`) and What you want open
+// (`finder-want`), at 375 and 1440 px.
+for (const size of [
+  { name: "phone", width: 375, height: 812, scale: 2, touch: true },
+  { name: "desktop", width: 1440, height: 900, scale: 1, touch: false },
+]) {
+  test.describe(`campaign finder ${size.name} ${size.width}x${size.height}`, () => {
+    test.use({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale, hasTouch: size.touch, isMobile: size.touch });
+    const suffix = `-${size.width}x${size.height}`;
+    test("screenshot campaign finder", async ({ page }) => {
+      await page.goto("/");
+      await settle(page);
+      await page.waitForFunction(() => !!(window as unknown as { __cfMock?: { finder?: unknown; setup?: unknown } }).__cfMock?.finder);
+      await page.evaluate(() => {
+        const m = (window as unknown as { __cfMock: { setup: { finish(p: string): void }; finder: { newMatches(n: number): void } } }).__cfMock;
+        for (const p of ["youtube", "instagram", "facebook", "x"]) m.setup.finish(p);
+        m.finder.newMatches(3);
+      });
+      await page.goto("/campaigns/find");
+      await settle(page);
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: join(dir, `finder${suffix}.png`) });
+      await page.getByRole("button", { name: "Change" }).click();
+      await page.locator("[data-help='cr-finder-want']").scrollIntoViewIfNeeded();
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: join(dir, `finder-want${suffix}.png`) });
+    });
+  });
+}
+
 // §39 (docs/CONTRACTS.md §39.5): a campaign clip's fit block on Review, and All your money on the Money page, at 375
 // and 1440 px. The campaign clip is the first card of a new FaZe Clips job (the campaign way), in the pretend app.
 for (const size of [
