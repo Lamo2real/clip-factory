@@ -33,5 +33,8 @@ export function client(apiUrl, token, fetchImpl = fetch) {
     stopped: (clipId, device, reason, needsYou = false) =>
       call("POST", `${clip(clipId)}/tiktok/mac/stopped`, { device, reason, ...(needsYou ? { needsYou: true } : {}) }),
     file: (clipId) => call("GET", `${clip(clipId)}/file`),
+    clip: (clipId) => call("GET", clip(clipId)),
+    settings: (patch) => call("PUT", "/settings", patch),
+    send: (clipIds) => call("POST", "/tiktok/mac/send", { clipIds }),
   };
 }
