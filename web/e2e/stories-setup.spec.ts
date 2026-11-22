@@ -48,7 +48,7 @@ test("round 4: step 4 says the built-in animator makes tall, square or wide vide
   await page.goto("/stories/setup");
   await ready(page);
   await page.getByRole("navigation", { name: "Setup steps" }).getByRole("button", { name: /Pick how videos are made/ }).click();
-  const builtin = page.getByRole("radiogroup", { name: "How videos are made" }).getByRole("radio", { name: /Built-in animation/ });
+  const builtin = page.getByRole("radiogroup", { name: "How videos are made" }).getByRole("radio", { name: /^Built-in animation/ });
   await expect(builtin).toContainText("On. Cartoons drawn right here, tall, square or wide, 30 frames a second.");
   await expect(builtin).not.toContainText("9:16");
   // The seed's X account is Lamo Clips' own: the step stays to do, and What is left says why in the server's words.
