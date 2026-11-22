@@ -14,11 +14,16 @@ platform** (publish, check, finish, numbers). All five rules hold, or nothing is
 4. the credentials are read from ``cf-prod/workspaces/{workspaceId}/{platform}/token`` only (built from the checked
    ids by ``workspaces.types.secret_name``), and the identity **inside the secret** equals the job's and the
    account's ``externalAccountId``; a missing secret or field is "not connected";
-5. that identity is not Lamo Clips' own destination (``ACCOUNT#{platform}.accountId``, read only), unless
-   ``sharedWithClips`` is true and ``sharedExternalAccountId`` equals it. With Lamo Stories' own TikTok app the
-   two can never be compared (TikTok gives each app its own ``open_id``, ``social.clips_unknown``): while Lamo Clips
-   has a TikTok, the owner must have said once that this account is Lamo Stories' (``confirmAccount`` at the tap,
-   then ``notClipsConfirmed`` on ``SOCIAL#tiktok``), or nothing is sent.
+5. the account is never Clip Factory's own, with no exception (§45.37 G8, the owner's hard rule): **any** identity
+   the platform gives (``social.same_account``: the id and, where the platform has one, the username, from the
+   account and from the token secret) matching Clip Factory's ``ACCOUNT#{platform}`` (``accountId``, ``handle``,
+   read only) stops the post, also when Clip Factory connected that account after Lamo Stories did, and so does any
+   identity Lamo Stories' own ``SOCIAL#`` remembers as Clip Factory's (``clipsMatched``: sticky, so Clip Factory
+   disconnecting that account, or its app keys changing, never makes it postable here). A match found here is
+   remembered too (``social.note_clips_now``, best effort). A stored ``sharedWithClips`` from before is ignored. With Lamo Stories' own TikTok app the open ids can never match (TikTok
+   gives each app its own ``open_id``), so the usernames decide; when either side has none
+   (``social.clips_unknown``) the owner must have said once that this account is a different one (``confirmAccount``
+   at the tap, then ``notClipsConfirmed`` on ``SOCIAL#tiktok``), or nothing is sent.
 
 There is no default account: no target, no post. A failure raises ``DestinationProblem`` with its kind and a plain
 Lamo Stories sentence; the caller stops that job (``needs_attention``) and sends nothing.
@@ -166,8 +171,10 @@ def validate_destination(
         raise _fail(4, "not_connected", platform, name)
     if inside != identity:
         raise _fail(4, "changed", platform, name)
-    # 5. never Lamo Clips' own place, unless the owner said "Use it for both" for exactly this identity
-    unsure = _rule_5(store, user_id, account, chosen, identity, confirm=confirm if at_tap else None)
+    # 5. never Clip Factory's own account, by any identity, with no exception (G8)
+    unsure = _rule_5(
+        store, user_id, account, chosen, identity, token=token, confirm=confirm if at_tap else None, now=now
+    )
     return Destination(
         workspace=workspace,
         story=story,
@@ -189,16 +196,19 @@ def _rule_5(
     chosen: apps.ChosenApp,
     identity: str,
     *,
+    token: Mapping[str, Any] | None = None,
     confirm: str | None,
+    now: datetime | None = None,
 ) -> bool:
     """Rule 5; True when it passed only because the owner just confirmed a TikTok Lamo Stories cannot compare."""
     platform = chosen.platform
     name = str(account.get("accountName")) if account.get("accountName") else None
     clips = social.clips_identity(store, user_id, platform)
-    if clips and clips == identity:
-        shared = account.get("sharedWithClips") is True and account.get("sharedExternalAccountId") == identity
-        if not shared:
-            raise _fail(5, "same_as_clips", platform, name)
+    inside = str((token or {}).get("username") or "").strip().lstrip("@")
+    seen = [account, *([{"externalAccountId": identity, "handle": f"@{inside}"}] if inside else [])]
+    if any(social.is_clips(platform, each, clips, account) for each in seen):
+        social.note_clips_now(store, account, seen, clips, now=now or utcnow())
+        raise _fail(5, "same_as_clips", platform, name)
     if not social.clips_unknown(platform, account, chosen.choice, clips):
         return False
     if confirm != identity:

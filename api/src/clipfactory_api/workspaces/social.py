@@ -15,13 +15,25 @@
 * ``SOCIAL#{platform}`` in the workspace partition holds only the public identity, the status, the scopes, the app
   choice and ``lastCheckedAt`` (set when a connect finishes and by Check); the token is
   ``cf-prod/workspaces/{workspaceId}/{platform}/token`` (``workspaces.secrets``).
-* "Same place as Lamo Clips" compares the identity with ``ACCOUNT#{platform}.accountId``. TikTok gives each developer
-  app its own ``open_id``, so with Lamo Stories' own TikTok app that comparison can never match: while Lamo Clips has
-  a TikTok, the account says so (``clips_unknown``) and its first post waits for the owner's yes (§45.13.4).
+* **Never Clip Factory's account** (§45.37 G8, the owner's hard rule: "I do not want videos generated in lamo stories
+  … uploaded to the same accounts as clip factory"): an account is Clip Factory's own when **any** stable identity
+  the platform gives matches Clip Factory's ``ACCOUNT#{platform}`` (``same_account``): YouTube the channel id,
+  Facebook the Page id, Instagram the account id or the username, TikTok the open id (equal only on the shared app)
+  or the username, X the user id or the handle. It is refused at connect (``same_as_clips``, "This is Clip Factory's
+  own account. …") and before every upload; when Clip Factory connects it later, Lamo Stories' connection is blocked
+  from posting (``clips_now``, "This is Clip Factory's account now. …"). Both are **sticky**: the identities found
+  to be Clip Factory's are kept on Lamo Stories' own ``SOCIAL#`` (``clipsMatched``, ids and usernames, kept across
+  connects and disconnects) and refused from then on, also once Clip Factory disconnects that account or its app keys
+  change (its ``ACCOUNT#`` then reads ``not_connected`` with no id); only a connect of a different account clears the
+  status. A connect that turns out to be Clip Factory's account stores no token at all (the old one is deleted too).
+  There is no way to share an account: a stored ``sharedWithClips`` from before is ignored and cleared. TikTok gives each developer app its own ``open_id``,
+  so with Lamo Stories' own TikTok app only the username can match: when either side has none, the account says so
+  (``clips_unknown``) and its first post waits for the owner's word that it is a different account.
 * One own Meta app serves Instagram and Facebook: its keys are saved, changed and deleted for both at once.
 * Nothing here writes ``ACCOUNT#``, ``SETUP#`` or a ``cf-prod/platforms/*`` secret, reads a Clip Factory token,
   releases Clip Factory posts or calls a platform's revoke endpoint (§45.13.6). Of Clip Factory's ``ACCOUNT#`` items
-  only five attributes are ever read (``pk, sk, platform, status, accountId``: the "same place" comparison, §45.15).
+  only six attributes are ever read (``pk, sk, platform, status, accountId, handle``: the "same account" comparison,
+  §45.15, §45.37 G8 b).
 """
 
 from __future__ import annotations
@@ -50,6 +62,7 @@ from . import types as ws
 from .apps import CLIPS, OWN, AppNotReady, CallbackOff, ChosenApp
 from .secrets import WorkspaceSecrets
 from .sentences import label
+from .shared_room import X_OVER_LIMIT
 
 Item = dict[str, Any]
 
@@ -71,19 +84,134 @@ TIKTOK_UNSURE: Final = (
     "Lamo Stories cannot tell if this is Clip Factory's TikTok, because TikTok gives each app its own id. Before the "
     "first post, Lamo Stories shows you the account to check."
 )
-# The only attributes of Clip Factory's ACCOUNT# items Lamo Stories may read (§45.15: an attribute-limited GetItem).
-CLIPS_ACCOUNT_ATTRIBUTES: Final = ("pk", "sk", "platform", "status", "accountId")
+# The only attributes of Clip Factory's ACCOUNT# items Lamo Stories may read (§45.15, §45.37 G8 b: an
+# attribute-limited GetItem). ``accountId`` is the channel, Page, Instagram, TikTok (open id) or X user id;
+# ``handle`` the username ("@name") where the platform has one.
+CLIPS_ACCOUNT_ATTRIBUTES: Final = ("pk", "sk", "platform", "status", "accountId", "handle")
+# What is compared per platform (§45.37 G8 b). Clip Factory stores no TikTok union_id, so TikTok compares the open id
+# (the same only on the shared app) and the username.
+COMPARED: Final = {
+    "youtube": ("id",),
+    "facebook": ("id",),
+    "instagram": ("id", "username"),
+    "tiktok": ("id", "username"),
+    "x": ("id", "username"),
+}
+SAME_AT_CONNECT: Final = (
+    "This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a "
+    "different one."
+)
+SAME_LATER: Final = "This is Clip Factory's account now. Connect a different account made for Clip Factory Stories."
+OWN_ACCOUNT: Final = "Use a new account made for Clip Factory Stories, not lamo.clips."
+SHARED_APP_FIRST: Final = "Clip Factory's posts always go first. Stories uses what's left."
+# Identities once found to be Clip Factory's own, on Lamo Stories' own SOCIAL# (§45.37 G8, sticky): never
+# Clip Factory's item, never cleared by a read, kept across connects and disconnects (at most MATCHED_MAX of each).
+MATCHED: Final = "clipsMatched"
+MATCHED_MAX: Final = 20
+SHARED_APP_ACCOUNT: Final = (
+    "Even with Clip Factory's app, sign in with a different account made for Clip Factory Stories."
+)
 
 
-def shared_for(account: Mapping[str, Any], identity: str) -> bool:
-    """The owner said "Use it for both" for this very identity (§45.13.4)."""
-    return account.get("sharedWithClips") is True and account.get("sharedExternalAccountId") == identity
+@dataclass(frozen=True)
+class ClipsAccount:
+    """Clip Factory's destination on one platform, as far as the six readable attributes tell (``account_id`` and
+    the normalised ``username``, "" when it has none). ``none`` when Clip Factory has no account there."""
+
+    account_id: str = ""
+    username: str = ""
+
+    @property
+    def none(self) -> bool:
+        return not (self.account_id or self.username)
+
+    def __bool__(self) -> bool:
+        return not self.none
 
 
-def same_as_clips(account: Mapping[str, Any], clips: str) -> bool:
-    """The account is Lamo Clips' own destination (``clips``, its ``accountId``) and was not shared on purpose."""
-    identity = str(account.get("externalAccountId") or "")
-    return bool(identity) and identity == clips and not shared_for(account, identity)
+NO_CLIPS: Final = ClipsAccount()
+
+
+def username(handle: Any) -> str:
+    """A platform username from a stored ``handle`` ("@Lamo.Clips" → "lamo.clips"); "" for a display name (no "@"),
+    which is never compared: two accounts may share a display name."""
+    if not isinstance(handle, str):
+        return ""
+    text = handle.strip()
+    if not text.startswith("@") or len(text) < 2:
+        return ""
+    return text[1:].lower()
+
+
+def same_account(platform: str, account: Mapping[str, Any], clips: ClipsAccount | str | None) -> bool:
+    """True when **any** identity the platform gives matches Clip Factory's account there (§45.37 G8 b)."""
+    if isinstance(clips, str):
+        clips = ClipsAccount(account_id=clips)
+    if clips is None or clips.none:
+        return False
+    identity = str(account.get("externalAccountId") or account.get("accountId") or "")
+    compared = COMPARED.get(platform, ("id",))
+    if "id" in compared and identity and identity == clips.account_id:
+        return True
+    name = username(account.get("handle"))
+    return "username" in compared and bool(name) and name == clips.username
+
+
+def remembered(item: Mapping[str, Any] | None) -> tuple[list[str], list[str]]:
+    """The ids and usernames Lamo Stories' ``SOCIAL#`` remembers as Clip Factory's own (``clipsMatched``)."""
+    raw = (item or {}).get(MATCHED)
+    if not isinstance(raw, Mapping):
+        return [], []
+    ids = [v for v in raw.get("ids") or [] if isinstance(v, str) and v]
+    names = [v.lower() for v in raw.get("usernames") or [] if isinstance(v, str) and v]
+    return ids, names
+
+
+def known_clips(platform: str, account: Mapping[str, Any], item: Mapping[str, Any] | None) -> bool:
+    """True when an identity of ``account`` is one ``item`` (Lamo Stories' own ``SOCIAL#``) remembers as Clip
+    Factory's: refused even when Clip Factory's ``ACCOUNT#`` no longer names it (§45.37 G8, sticky)."""
+    ids, names = remembered(item)
+    if not ids and not names:
+        return False
+    identity = str(account.get("externalAccountId") or account.get("accountId") or "")
+    if identity and identity in ids:
+        return True
+    name = username(account.get("handle"))
+    return "username" in COMPARED.get(platform, ("id",)) and bool(name) and name in names
+
+
+def is_clips(
+    platform: str, account: Mapping[str, Any], clips: ClipsAccount | str | None, item: Mapping[str, Any] | None
+) -> bool:
+    """Clip Factory's own account: by its ``ACCOUNT#`` now (``same_account``) or as remembered (``known_clips``)."""
+    return same_account(platform, account, clips) or known_clips(platform, account, item)
+
+
+def remember(item: Mapping[str, Any] | None, *accounts: Mapping[str, Any], clips: ClipsAccount | None = None) -> Item:
+    """``clipsMatched`` with the identities of ``accounts`` (found to be Clip Factory's) and of ``clips`` added."""
+    ids, names = remembered(item)
+    found: list[tuple[str, str]] = [
+        (str(a.get("externalAccountId") or a.get("accountId") or ""), username(a.get("handle"))) for a in accounts
+    ]
+    if clips is not None:
+        found.append((clips.account_id, clips.username))
+    for identity, name in found:
+        if identity and identity not in ids:
+            ids.append(identity)
+        if name and name not in names:
+            names.append(name)
+    return {"ids": ids[-MATCHED_MAX:], "usernames": names[-MATCHED_MAX:]}
+
+
+def same_as_clips(
+    account: Mapping[str, Any],
+    clips: ClipsAccount | str | None,
+    platform: str | None = None,
+    item: Mapping[str, Any] | None = None,
+) -> bool:
+    """The account is Clip Factory's own (``is_clips``; ``item`` defaults to ``account`` itself, the stored
+    ``SOCIAL#``). There is no exception: no account is ever shared."""
+    return is_clips(str(platform or account.get("platform") or ""), account, clips, account if item is None else item)
 
 
 def keys_changed_sentence(platform: str) -> str:
@@ -91,18 +219,21 @@ def keys_changed_sentence(platform: str) -> str:
     return f"The {label(platform)} app keys changed. Connect again."
 
 
-def clips_unknown(platform: str, account: Mapping[str, Any], choice: str | None, clips: str) -> bool:
-    """True while Lamo Stories cannot tell if this account is Lamo Clips' own (§45.13.4). TikTok gives every
-    developer app its own ``open_id`` for the same person, so with Lamo Stories' own TikTok app the ids never match,
-    even for Lamo Clips' own account. While Lamo Clips has a TikTok (``clips``, its ``accountId``), the owner says
-    once, on the publish sheet, that this is the Lamo Stories account (``confirmAccount``, stored as
-    ``notClipsConfirmed`` with the identity it was said for; every connect clears it). YouTube channel ids, Page ids,
-    Instagram ids and X user ids are the same in every app: those are always compared."""
+def clips_unknown(platform: str, account: Mapping[str, Any], choice: str | None, clips: ClipsAccount | str) -> bool:
+    """True while Lamo Stories cannot tell if this account is Clip Factory's own (§45.13.4, §45.37 G8 b). TikTok
+    gives every developer app its own ``open_id`` for the same person, so with Lamo Stories' own TikTok app the ids
+    never match, even for Clip Factory's own account; the usernames then decide. Only when either side has no
+    username, while Clip Factory has a TikTok, the owner says once, on the publish sheet, that this is a different
+    account (``confirmAccount``, stored as ``notClipsConfirmed`` with the identity it was said for; every connect
+    clears it). YouTube channel ids, Page ids, Instagram ids and X user ids are the same in every app: those are
+    always compared."""
+    if isinstance(clips, str):
+        clips = ClipsAccount(account_id=clips)
     identity = str(account.get("externalAccountId") or "")
-    if platform != "tiktok" or choice != OWN or not clips or not identity or clips == identity:
+    if platform != "tiktok" or choice != OWN or clips.none or not identity or same_account(platform, account, clips):
         return False
-    if account.get("sharedWithClips") is True and account.get("sharedExternalAccountId") == identity:
-        return False
+    if clips.username and username(account.get("handle")):
+        return False  # both have a username, and they differ: a different account
     return account.get("notClipsConfirmed") != identity
 
 
@@ -127,49 +258,64 @@ _META = (
     "A new Meta app in Development mode lets you, its admin, connect your own Pages. Going Live needs Meta's "
     "App Review.",
 )
+_PICK_APP: Final = f"First pick which app Lamo Stories uses: your own, or Share Clip Factory's app. {SHARED_APP_FIRST}"
+_SHARED: Final = (SHARED_APP_FIRST, SHARED_APP_ACCOUNT)
 _LIMITS: Final[dict[str, dict[str | None, tuple[str, ...]]]] = {
     "youtube": {
         CLIPS: (
+            OWN_ACCOUNT,
             *_YOUTUBE,
-            "Both channels share Clip Factory's Google project: about 6 uploads a day in all, counted together.",
+            *_SHARED,
+            "Stories uses only what is left of Clip Factory's Google project's uploads each day.",
         ),
-        OWN: (*_YOUTUBE, "Your own Google project has its own daily units: about 6 uploads a day."),
-        None: (*_YOUTUBE, "First pick which app Lamo Stories uses: your own, or Clip Factory's (quicker)."),
+        OWN: (OWN_ACCOUNT, *_YOUTUBE, "Your own Google project has its own daily uploads."),
+        None: (OWN_ACCOUNT, *_YOUTUBE, _PICK_APP),
     },
     "tiktok": {
         CLIPS: (
+            OWN_ACCOUNT,
+            *_SHARED,
             "While TikTok is still reviewing Clip Factory's app, only accounts added as Sandbox target users can connect.",
             "Until TikTok approves the app, the account must be private and posts stay Only me.",
             "When the app goes live with new keys, Lamo Stories asks you to connect again.",
             *_TIKTOK,
         ),
         OWN: (
+            OWN_ACCOUNT,
             "A new TikTok app needs TikTok's review, which can take days to weeks. Until then only Sandbox target "
             "users can connect, the account must be private and posts stay Only me.",
             *_TIKTOK,
-            "TikTok gives each app its own id, so Lamo Stories cannot tell if it is Clip Factory's TikTok. Before the "
-            "first post, check the account Lamo Stories shows you.",
+            "TikTok gives each app its own id, so Lamo Stories compares the usernames. When it cannot tell, it shows "
+            "you the account to check before the first post.",
         ),
-        None: (*_TIKTOK, "First pick which app Lamo Stories uses: your own, or Clip Factory's (quicker)."),
+        None: (OWN_ACCOUNT, *_TIKTOK, _PICK_APP),
     },
     "instagram": {
         OWN: (
+            OWN_ACCOUNT,
             "Use a separate professional (Business or Creator) Instagram account, linked to a Facebook Page.",
             *_META,
         ),
         None: (
+            OWN_ACCOUNT,
             "Use a separate professional (Business or Creator) Instagram account, linked to a Facebook Page.",
             *_META,
         ),
     },
     "facebook": {
-        OWN: ("Use a separate Facebook Page managed by the same Facebook login.", *_META),
-        None: ("Use a separate Facebook Page managed by the same Facebook login.", *_META),
+        OWN: (OWN_ACCOUNT, "Use a separate Facebook Page managed by the same Facebook login.", *_META),
+        None: (OWN_ACCOUNT, "Use a separate Facebook Page managed by the same Facebook login.", *_META),
     },
     "x": {
-        CLIPS: (*_X, "Posts use Clip Factory's X app credits and your one monthly X limit, shared with Clip Factory."),
-        OWN: (*_X, "Your own X app needs its own credits. Lamo Stories' own monthly X limit applies."),
-        None: (*_X, "First pick which app Lamo Stories uses: your own, or Clip Factory's (quicker)."),
+        CLIPS: (
+            OWN_ACCOUNT,
+            *_X,
+            *_SHARED,
+            "Stories uses only what Clip Factory's share of your monthly X limit leaves.",
+            X_OVER_LIMIT,
+        ),
+        OWN: (OWN_ACCOUNT, *_X, "Your own X app needs its own credits. Lamo Stories' own monthly X limit applies."),
+        None: (OWN_ACCOUNT, *_X, _PICK_APP),
     },
 }
 
@@ -236,8 +382,9 @@ def account_item(store: db.Store, user_id: str, workspace_id: str, platform: str
 
 
 def clips_account(store: db.Store, user_id: str, platform: str) -> Item | None:
-    """Clip Factory's ``ACCOUNT#{platform}``: read only, and only its five comparable attributes (an
-    attribute-limited GetItem, the one read of a Clip Factory item that Lamo Stories' roles allow, §45.15)."""
+    """Clip Factory's ``ACCOUNT#{platform}``: read only, and only its six comparable attributes (an
+    attribute-limited GetItem, the one read of a Clip Factory item that Lamo Stories' roles allow, §45.15, §45.37
+    G8 b)."""
     names = {f"#a{i}": name for i, name in enumerate(CLIPS_ACCOUNT_ATTRIBUTES)}
     table: Any = store._table
     out = table.get_item(
@@ -253,10 +400,13 @@ def clips_account(store: db.Store, user_id: str, platform: str) -> Item | None:
     return {k: v for k, v in found.items() if k in CLIPS_ACCOUNT_ATTRIBUTES}
 
 
-def clips_identity(store: db.Store, user_id: str, platform: str) -> str:
-    """Clip Factory's destination on this platform (its ``accountId``), or "" when it has none."""
+def clips_identity(store: db.Store, user_id: str, platform: str) -> ClipsAccount:
+    """Clip Factory's destination on this platform (its ``accountId`` and username), or ``NO_CLIPS`` when it has
+    none."""
     found = clips_account(store, user_id, platform) or {}
-    return str(found.get("accountId") or "") if found.get("status") != "not_connected" else ""
+    if not found or found.get("status") == "not_connected":
+        return NO_CLIPS
+    return ClipsAccount(account_id=str(found.get("accountId") or ""), username=username(found.get("handle")))
 
 
 def put_account(
@@ -271,10 +421,12 @@ def put_account(
     previous: Mapping[str, Any] | None = None,
 ) -> Item:
     """Replaces the workspace's ``SOCIAL#{platform}`` with a whole new connection state (connect, choose,
-    disconnect). The app choice (``app``) is the owner's setting, not part of a connection: it is always kept."""
+    disconnect). The app choice (``app``) is the owner's setting, not part of a connection: it is always kept, and so
+    are the identities remembered as Clip Factory's (``clipsMatched``, §45.37 G8)."""
     if status not in STATUSES:
         raise ValueError(f"unknown status: {status}")
     kept = (previous or {}).get("app")
+    matched = (previous or {}).get(MATCHED)
     item: Item = {
         "pk": ws.workspace_pk(user_id, workspace_id),
         "sk": social_sk(platform),
@@ -284,10 +436,11 @@ def put_account(
         "socialAccountId": ws.social_account_id(workspace_id, platform),
         "platform": platform,
         "connectionStatus": status,
-        "sharedWithClips": False,
+        "sharedWithClips": False,  # no account is ever shared with Clip Factory (§45.37 G8): always false
         "createdAt": str((previous or {}).get("createdAt") or iso(now)),
         "updatedAt": iso(now),
         **({"app": dict(kept)} if isinstance(kept, Mapping) and kept else {}),
+        **({MATCHED: dict(matched)} if isinstance(matched, Mapping) and matched else {}),  # sticky (G8)
         **{k: v for k, v in (fields or {}).items() if v not in (None, "")},
     }
     store.put(item)
@@ -456,13 +609,18 @@ def public_account(
     *,
     app_client_id: str | Keep | None = KEEP,
     now: datetime | None = None,
-    clips: str | None = None,
+    clips: ClipsAccount | str | None = None,
 ) -> Item:
     """``SocialAccount`` (§45.6). Never the token, the lease, ``appClientId`` or ``sharedExternalAccountId``.
     ``app_client_id`` is the chosen app's current client id (None: no app is set up any more): an account connected
     with other keys is ``needs_reconnect``, its ``warning`` "The {Platform} app keys changed. Connect again.".
-    ``clips`` is Lamo Clips' identity on this platform when the caller read it: a TikTok that Lamo Stories cannot
-    tell apart from it (``clips_unknown``) has ``reason`` ``clips_unknown`` and the ``TIKTOK_UNSURE`` warning."""
+    ``clips`` is Clip Factory's account on this platform when the caller read it: an account that is Clip Factory's
+    own, now or as remembered (``clipsMatched``), is ``same_as_clips`` (``SAME_AT_CONNECT``; ``clips_now`` and
+    ``SAME_LATER`` when Clip Factory connected it after Lamo Stories did). That is sticky: a stored ``same_as_clips``
+    never turns back into ``connected`` here, whatever Clip Factory's ``ACCOUNT#`` says now. A TikTok that Lamo Stories cannot tell apart from it (``clips_unknown``) has
+    ``reason`` ``clips_unknown`` and the ``TIKTOK_UNSURE`` warning. ``sharedWithClips`` is always false (§45.37 G8)."""
+    if isinstance(clips, str):
+        clips = ClipsAccount(account_id=clips)
     item = item or {}
     status = str(item.get("connectionStatus") or "not_connected")
     if status not in STATUSES:
@@ -491,15 +649,18 @@ def public_account(
             ]
         else:
             status, reason = "not_connected", "expired"
-    if status == "connected" and clips and same_as_clips(item, clips):
-        status = "same_as_clips"  # Lamo Clips connected this very account later, and nobody shared it (§45.34)
-    elif status == "same_as_clips" and clips is not None and not same_as_clips(item, clips):
-        status = "connected"  # Lamo Clips let go of this account (or moved to another): it is Lamo Stories' own now
+    if status == "connected" and same_as_clips(item, clips, platform):
+        status, reason = "same_as_clips", "clips_now"  # Clip Factory connected this very account later (G8)
+    # a stored ``same_as_clips`` stays so, also once Clip Factory lets go of the account (sticky, §45.37 G8)
     identity = status not in ("not_connected", "choose_account")
     app = public_app(platform, item)
     warning = _text(item.get("warning"))
+    if warning in (SAME_AT_CONNECT, SAME_LATER) and status != "same_as_clips":
+        warning = None
     if status == "needs_reconnect" and reason == "keys_changed":
         warning = warning or keys_changed_sentence(platform)
+    elif status == "same_as_clips":
+        warning = SAME_LATER if reason == "clips_now" else SAME_AT_CONNECT
     elif status == "connected" and clips is not None and clips_unknown(platform, item, app["choice"], clips):
         reason, warning = reason or "clips_unknown", warning or TIKTOK_UNSURE
     return {
@@ -513,7 +674,7 @@ def public_account(
         "accountName": _text(item.get("accountName")) if identity else None,
         "handle": _text(item.get("handle")) if identity else None,
         "avatarUrl": _text(item.get("avatarUrl")) if identity else None,
-        "sharedWithClips": bool(item.get("sharedWithClips")) and status == "connected",
+        "sharedWithClips": False,  # §45.37 G8: never shared; a stored flag from before is ignored (and cleared)
         "connectedAt": _text(item.get("connectedAt")) if identity else None,
         "missing": [str(m) for m in item.get("missing") or [] if m],
         "reason": reason,
@@ -629,28 +790,43 @@ def settle(
     shown: Mapping[str, Any],
     now: datetime,
 ) -> None:
-    """Stores the three statuses a read works out on its own: the chosen app's keys changed → ``needs_reconnect``
+    """Stores the statuses a read works out on its own: the chosen app's keys changed → ``needs_reconnect``
     (``keys_changed``), a list of Pages older than 30 minutes → ``not_connected`` (``expired``, the choices
-    removed), a connected account that Lamo Clips connected too, later, with nobody sharing it →
-    ``same_as_clips`` (§45.34), and back to ``connected`` once Lamo Clips no longer has it. Conditional on the very item read (status and ``updatedAt``), so a connect that
-    landed meanwhile is never undone; best effort (the response is right either way)."""
+    removed), and a connected account that Clip Factory connected too, later → ``same_as_clips`` (``clips_now``,
+    §45.34, §45.37 G8), its identities remembered (``clipsMatched``). Never back to ``connected``: that is sticky,
+    also once Clip Factory no longer has it. It also clears an old "Use it for both"
+    (``sharedWithClips``, ``sharedExternalAccountId``): no account is ever shared. Conditional on the very item read
+    (status and ``updatedAt``), so a connect that landed meanwhile is never undone; best effort (the response is right
+    either way)."""
     stored = item.get("connectionStatus")
     status, reason = shown.get("connectionStatus"), shown.get("reason")
     updated_at = item.get("updatedAt")
-    if (status, reason) == (stored, item.get("reason")) or not isinstance(updated_at, str):
+    if not isinstance(updated_at, str):
         return
-    remove: list[str] = []
-    if (status, reason) == ("needs_reconnect", "keys_changed"):
+    shared = item.get("sharedWithClips") is True or "sharedExternalAccountId" in item
+    remove: list[str] = ["sharedExternalAccountId"] if "sharedExternalAccountId" in item else []
+    fields: Item = {"sharedWithClips": False} if shared else {}
+    same = (status, reason) == (stored, item.get("reason"))
+    if status == "same_as_clips" and stored == "same_as_clips" and not known_clips(platform, item, item):
+        fields[MATCHED] = remember(item, item)  # stored before identities were remembered: sticky from now on
+    if same:
         pass
+    elif (status, reason) == ("needs_reconnect", "keys_changed"):
+        fields.update(connectionStatus=status, reason=reason)
     elif (status, reason) == ("not_connected", "expired") and stored == "choose_account":
-        remove = ["choices", "choicesExpireAt"]
-    elif (status, stored) in (("same_as_clips", "connected"), ("connected", "same_as_clips")):
-        pass
-    else:
+        fields.update(connectionStatus=status, reason=reason)
+        remove += ["choices", "choicesExpireAt"]
+    elif status == "same_as_clips" and stored in ("connected", "same_as_clips"):
+        fields["connectionStatus"] = status
+        fields[MATCHED] = remember(item, item)  # sticky from now on (§45.37 G8)
+        if reason is not None:
+            fields["reason"] = reason
+        elif item.get("reason") is not None:
+            remove.append("reason")
+    elif not shared and not fields:
         return
-    fields: Item = {"connectionStatus": status}
-    if reason is not None:
-        fields["reason"] = reason
+    if not fields and not remove:
+        return
     try:
         mark_account(
             store,
@@ -665,7 +841,44 @@ def settle(
     except Exception as e:
         log("warning", "ws_social.settle_failed", platform=platform, error=type(e).__name__)
         return
-    log("info", "ws_social.settled", platform=platform, status=status, reason=reason)
+    log("info", "ws_social.settled", platform=platform, status=status, reason=reason, unshared=shared)
+
+
+def note_clips_now(
+    store: db.Store,
+    item: Mapping[str, Any],
+    seen: Iterable[Mapping[str, Any]],
+    clips: ClipsAccount,
+    *,
+    now: datetime,
+) -> None:
+    """``validate_destination`` found the account is Clip Factory's (rule 5): stored as ``same_as_clips``
+    (``clips_now``) with its identities remembered (``clipsMatched``), conditional on the item read; best effort (the
+    post is refused either way)."""
+    user_id, workspace_id = str(item.get("userId") or ""), str(item.get("workspaceId") or "")
+    platform = str(item.get("platform") or "")
+    updated_at = item.get("updatedAt")
+    if not (user_id and workspace_id and platform and isinstance(updated_at, str)):
+        return
+    if item.get("connectionStatus") not in ("connected", "same_as_clips"):
+        return
+    fields: Item = {"connectionStatus": "same_as_clips", MATCHED: remember(item, *seen, clips=clips if clips else None)}
+    if item.get("connectionStatus") == "connected":
+        fields["reason"] = "clips_now"
+    try:
+        mark_account(
+            store,
+            user_id,
+            workspace_id,
+            platform,
+            now,
+            expect_in={"connectionStatus": [item.get("connectionStatus")], "updatedAt": [updated_at]},
+            **fields,
+        )
+    except Exception as e:
+        log("warning", "ws_social.clips_now_unsaved", platform=platform, error=type(e).__name__)
+        return
+    log("info", "ws_social.clips_now", platform=platform)
 
 
 def note_keys_changed(
@@ -764,12 +977,13 @@ def save_choose(scope: Scope, platform: str, linked: Linked, *, app_client_id: s
     (a ``choose_account`` account fails rule 3 of ``validate_destination``), the owner's choice overwrites it
     (``save_connected``) and Disconnect deletes it."""
     clips = clips_identity(scope.store, scope.user_id, platform)
+    previous = scope.account(platform)
     choices = [
         {
             "id": str(c.get("id")),
             "name": str(c.get("name") or c.get("id")),
             **({"avatarUrl": c["avatarUrl"]} if isinstance(c.get("avatarUrl"), str) else {}),
-            "usedByClips": bool(clips) and str(c.get("id")) == clips,
+            "usedByClips": is_clips(platform, {"accountId": c.get("id"), "handle": c.get("name")}, clips, previous),
         }
         for c in linked.choices
         if c.get("id")
@@ -789,16 +1003,26 @@ def save_choose(scope: Scope, platform: str, linked: Linked, *, app_client_id: s
 
 
 def save_connected(scope: Scope, platform: str, linked: Linked, *, app_client_id: str, now: datetime) -> Item:
-    """The workspace token secret first, then ``SOCIAL#{platform}``: ``connected``, or ``same_as_clips`` when the
-    identity is Clip Factory's own. Clears ``sharedWithClips`` and ``sharedExternalAccountId`` (every connect and
-    choose does, §45.13.4) and sets ``lastCheckedAt``."""
+    """The workspace token secret first, then ``SOCIAL#{platform}``: ``connected``, or ``same_as_clips`` when any of
+    its identities (the account's and the username inside its token) is Clip Factory's own, now or as remembered
+    (§45.37 G8: it can never post). Clip Factory's account gets **no** token here: the workspace token secret is
+    deleted instead (Lamo Stories' own, never Clip Factory's), and its identities are remembered (``clipsMatched``).
+    Clears ``sharedWithClips`` and ``sharedExternalAccountId`` (every connect and choose does) and sets
+    ``lastCheckedAt``."""
     identity = str(linked.account.get("accountId") or "")
     inside = str(linked.token.get(ws.SECRET_IDENTITY[platform]) or "")
     if not identity or identity != inside:
         raise SaveRefused("the identity does not match its token")
-    scope.secrets.write(scope.workspace_id, platform, "token", linked.token)
+    previous = scope.account(platform)
+    clips = clips_identity(scope.store, scope.user_id, platform)
+    token_name = str(linked.token.get("username") or "").strip().lstrip("@")
+    seen = [linked.account, *([{"accountId": identity, "handle": f"@{token_name}"}] if token_name else [])]
+    same = any(is_clips(platform, each, clips, previous) for each in seen)
+    if same:
+        scope.secrets.delete(scope.workspace_id, platform, "token")  # never keep a way into Clip Factory's account
+    else:
+        scope.secrets.write(scope.workspace_id, platform, "token", linked.token)
     scope.secrets.delete(scope.workspace_id, platform, "pending")
-    same = identity == clips_identity(scope.store, scope.user_id, platform)
     fields: Item = {
         "externalAccountId": identity,
         "accountName": linked.account.get("name") or linked.account.get("handle"),
@@ -811,10 +1035,12 @@ def save_connected(scope: Scope, platform: str, linked: Linked, *, app_client_id
         "reconnectBy": linked.account.get("reconnectBy"),
         "reason": linked.account.get("reason"),
     }
+    if same:
+        fields[MATCHED] = remember(previous, *seen, clips=clips if clips else None)
     return scope.put(platform, "same_as_clips" if same else "connected", now, fields)
 
 
-# --- choose, share, check, disconnect, creator info ------------------------------------------------------
+# --- choose, check, disconnect, creator info (no "share": an account is never Clip Factory's too, §45.37 G8) ----
 
 
 def choose(scope: Scope, env: OAuthEnv, platform: str, choice_id: str, now: datetime) -> Item:
@@ -842,34 +1068,6 @@ def choose(scope: Scope, env: OAuthEnv, platform: str, choice_id: str, now: date
     return saved
 
 
-def share(scope: Scope, platform: str, now: datetime) -> Item:
-    """The owner's explicit "Use it for both" (§45.13.4): ``connected`` with ``sharedWithClips`` and the identity
-    it was shared for. Only from ``same_as_clips``."""
-    item = scope.account(platform)
-    if item is not None and item.get("connectionStatus") == "connected" and item.get("sharedWithClips"):
-        return item
-    if item is None or item.get("connectionStatus") != "same_as_clips":
-        raise conflict(f"There is nothing to share. Connect Lamo Stories' {label(platform)} first.")
-    identity = str(item.get("externalAccountId") or "")
-    if not identity:
-        raise conflict(f"There is nothing to share. Connect Lamo Stories' {label(platform)} first.")
-    shared = identity == clips_identity(scope.store, scope.user_id, platform)
-    fields: Item = {"connectionStatus": "connected", "sharedWithClips": shared}
-    if shared:
-        fields["sharedExternalAccountId"] = identity
-    updated = scope.mark(
-        platform,
-        now,
-        remove=[] if shared else ["sharedExternalAccountId"],
-        expect_in={"connectionStatus": ["same_as_clips"], "externalAccountId": [identity]},
-        **fields,
-    )
-    if updated is None:
-        raise conflict(f"Lamo Stories' {label(platform)} changed. Look at it again.")
-    log("info", "ws_social.shared", platform=platform, shared=shared)
-    return updated
-
-
 def disconnect(scope: Scope, platform: str, now: datetime) -> None:
     """Deletes only this workspace's token and pending secrets and sets the account ``not_connected`` (its app
     choice stays). Never a platform revoke call (§45.13.6): Google's and TikTok's revoke end the app's whole grant
@@ -887,13 +1085,17 @@ def _down(platform: str) -> ApiError:
 
 def check(scope: Scope, env: OAuthEnv, platform: str, now: datetime) -> Item:
     """A live profile call with the workspace token and the chosen app: ``token_dead`` → ``needs_reconnect``; a
-    working token brings a ``needs_reconnect`` account back. Sets ``lastCheckedAt`` whenever the platform answered."""
+    working token brings a ``needs_reconnect`` account back (as ``same_as_clips`` when it is Clip Factory's). Sets
+    ``lastCheckedAt`` whenever the platform answered. A ``same_as_clips`` account is never checked and never turns
+    back into ``connected`` (sticky, §45.37 G8): only connecting a different account does that."""
     from .tokens import WorkspaceTokenProvider
 
     store, secrets, user_id, workspace_id = scope.store, scope.secrets, scope.user_id, scope.workspace_id
     item = scope.account(platform)
     if item is None or item.get("connectionStatus") not in (*POSTABLE, "needs_reconnect"):
         raise conflict(f"Connect Lamo Stories' {label(platform)} first.")
+    if item.get("connectionStatus") == "same_as_clips":
+        return dict(item)  # Clip Factory's account: nothing to check, it stays so (sticky, §45.37 G8)
     chosen = apps.app_keys(store, secrets, user_id, workspace_id, platform, account=item)
     if chosen is None or chosen.client_id != item.get("appClientId"):
         marked = scope.mark(platform, now, connectionStatus="needs_reconnect", reason="keys_changed")
@@ -919,20 +1121,43 @@ def check(scope: Scope, env: OAuthEnv, platform: str, now: datetime) -> Item:
         return scope.mark(platform, now, lastCheckedAt=iso(now)) or dict(item)
     fields: Item = {"lastCheckedAt": iso(now)}
     remove: list[str] = []
-    stored = item.get("connectionStatus")
-    clips = clips_identity(store, user_id, platform)
-    if stored == "needs_reconnect":
-        fields["connectionStatus"] = "same_as_clips" if same_as_clips(item, clips) else "connected"
-        remove.append("reason")
-    elif stored == "connected" and same_as_clips(item, clips):
-        fields["connectionStatus"] = "same_as_clips"  # Lamo Clips connected this account later (§45.34)
-    elif stored == "same_as_clips" and not same_as_clips(item, clips):
-        fields["connectionStatus"] = "connected"  # Lamo Clips no longer has this account
+    _check_clips(scope, platform, item, creds.data, fields=fields, remove=remove)
+    if item.get("sharedWithClips") is True or "sharedExternalAccountId" in item:
+        fields["sharedWithClips"] = False  # §45.37 G8: an old "Use it for both" is cleared, never honoured
+        if "sharedExternalAccountId" in item:
+            remove.append("sharedExternalAccountId")
     if verdict == "credits_empty":
         fields["warning"] = X_CREDITS
     elif item.get("warning"):
         remove.append("warning")
     return scope.mark(platform, now, remove=remove, **fields) or dict(item)
+
+
+def _check_clips(
+    scope: Scope, platform: str, item: Mapping[str, Any], token: Mapping[str, Any], *, fields: Item, remove: list[str]
+) -> None:
+    """Check it's part of the same-account rule (§45.34, §45.37 G8): an account (or the username inside its token)
+    that is Clip Factory's, now or as remembered, becomes ``same_as_clips`` (``clips_now``) with its identities
+    remembered; a ``needs_reconnect`` account whose token works again comes back as ``connected`` otherwise."""
+    stored = item.get("connectionStatus")
+    clips = clips_identity(scope.store, scope.user_id, platform)
+    token_name = str(token.get("username") or "").strip().lstrip("@")
+    seen = [
+        item,
+        *([{"externalAccountId": item.get("externalAccountId"), "handle": f"@{token_name}"}] if token_name else []),
+    ]
+    clips_own = any(same_as_clips(each, clips, platform, item) for each in seen)
+    if clips_own:
+        fields[MATCHED] = remember(item, *seen, clips=clips if clips else None)  # sticky from now on (G8)
+    if stored == "needs_reconnect":
+        fields["connectionStatus"] = "same_as_clips" if clips_own else "connected"
+        if clips_own:
+            fields["reason"] = "clips_now"
+        else:
+            remove.append("reason")
+    elif stored == "connected" and clips_own:
+        fields["connectionStatus"] = "same_as_clips"  # Clip Factory connected this account later (§45.34, G8)
+        fields["reason"] = "clips_now"
 
 
 def creator_info(scope: Scope, env: OAuthEnv) -> Item:

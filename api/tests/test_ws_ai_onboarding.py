@@ -80,7 +80,8 @@ def test_done_states_come_from_the_real_state(wcall: WsCall, store: db.Store) ->
     assert got["onboarding"]["done"] == 3
     tiktok = next(s for s in got["onboarding"]["steps"] if s["step"] == "tiktok")
     assert tiktok["line"] == (
-        "This is Clip Factory's TikTok account. Pick another in Social accounts, or tap Use it for both."
+        "This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a "
+        "different one."
     )
     assert "line" not in next(s for s in got["onboarding"]["steps"] if s["step"] == "youtube")
     # a step that ticks itself cannot be ticked by hand
@@ -176,20 +177,21 @@ def test_a_connected_account_that_lamo_clips_has_too_is_not_a_done_step(
     steps = {s["step"]: s for s in got["onboarding"]["steps"]}
     assert steps["youtube"]["state"] == "todo"
     assert steps["youtube"]["line"] == (
-        "This is Clip Factory's YouTube account. Pick another in Social accounts, or tap Use it for both."
+        "This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a "
+        "different one."
     )
     assert (steps["x"]["state"], "line" in steps["x"]) == ("done", False)  # another X account: Lamo Stories' own
-    # "Use it for both" for this very channel makes it a Lamo Stories connection again
+    # an old "Use it for both" for this very channel no longer counts (§45.37 G8): the step stays to do
     store.update(pk(), f"{ws.SOCIAL_SK}youtube", {"sharedWithClips": True, "sharedExternalAccountId": "UC-owner"})
-    assert _states(wcall)["youtube"] == "done"
+    assert _states(wcall)["youtube"] == "todo"
     # setup only reads: nothing of Lamo Clips' changed
     assert table.raw(f"USER#{USER}", "ACCOUNT#youtube") == clips
 
 
-def test_an_account_lamo_clips_let_go_of_is_a_done_step(wcall: WsCall, store: db.Store) -> None:
-    """The reverse of the case above, as ``social.public_account`` works it out: Social accounts stored
-    ``same_as_clips`` while Lamo Clips had this channel; Lamo Clips then disconnected it (or moved to another one).
-    The account is Lamo Stories' own now, so setup shows the step done, with no line, before anything re-reads it."""
+def test_an_account_clip_factory_let_go_of_stays_a_step_to_do(wcall: WsCall, store: db.Store) -> None:
+    """§45.37 G8 (the owner's hard rule): Social accounts stored ``same_as_clips`` while Clip Factory had this channel;
+    Clip Factory then disconnected it (or moved to another one). It stays Clip Factory's for Lamo Stories (sticky), so
+    setup keeps the step to do, with its line, and never ticks it."""
     for platform, identity in (("youtube", "UC-owner"), ("tiktok", "tt-owner")):
         seed(store, f"{ws.SOCIAL_SK}{platform}", ws.TYPE_SOCIAL, platform=platform, connectionStatus="same_as_clips",
              externalAccountId=identity, socialAccountId=ws.social_account_id(WS, platform))  # fmt: skip
@@ -199,14 +201,15 @@ def test_an_account_lamo_clips_let_go_of_is_a_done_step(wcall: WsCall, store: db
     store.put({**clips, "sk": "ACCOUNT#tiktok", "platform": "tiktok", "status": "connected", "accountId": "tt-other"})
     _, got = wcall("GET", f"{BASE}/onboarding")
     steps = {s["step"]: s for s in got["onboarding"]["steps"]}
-    assert (steps["youtube"]["state"], "line" in steps["youtube"]) == ("done", False)  # Lamo Clips disconnected it
-    assert (steps["tiktok"]["state"], "line" in steps["tiktok"]) == ("done", False)  # Lamo Clips moved to another
-    # Lamo Clips still on this very account: the step stays to do, with its line
+    for platform in ("youtube", "tiktok"):  # Clip Factory disconnected it; moved to another
+        assert steps[platform]["state"] == "todo"
+        assert steps[platform]["line"].startswith("This is Clip Factory's own account.")
+    # Clip Factory still on this very account: the same
     store.put({**clips, "status": "connected"})
     _, got = wcall("GET", f"{BASE}/onboarding")
     steps = {s["step"]: s for s in got["onboarding"]["steps"]}
     assert steps["youtube"]["state"] == "todo"
-    assert steps["youtube"]["line"].startswith("This is Clip Factory's YouTube account.")
+    assert steps["youtube"]["line"].startswith("This is Clip Factory's own account.")
 
 
 def test_a_model_status_never_returns_who_wrote_it(wcall: WsCall, store: db.Store) -> None:

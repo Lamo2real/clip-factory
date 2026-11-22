@@ -23,7 +23,10 @@
   publish, it refuses while another job of the story is being posted to that platform or is already posted there.
 * A job still ``queued`` or ``publishing`` ``STUCK_AFTER`` its last write lost its story flow (a crash, a timeout,
   a start that never ran): every read of the jobs (the list, publish, retry) fails it with a plain sentence
-  (``settle_stuck``, conditional on what was read), so Try again works. The raised ``run`` fences the old flow.
+  (``settle_stuck``, conditional on what was read), so Try again works. The raised ``run`` fences the old flow. A job
+  **waiting** for room on Clip Factory's shared app (§45.37 G6: ``waitUntil`` and the line "Waiting: Clip Factory's
+  posts go first. Posts at …", shown as ``waitingUntil`` and ``waiting``) is not stuck: it counts from its
+  ``waitUntil``.
 """
 
 from __future__ import annotations
@@ -108,7 +111,9 @@ def pubjob_sk(publishing_job_id: str) -> str:
 
 # --- AI labels (§45.14) -----------------------------------------------------------------------------------------
 
-REALISTIC: Final = frozenset({"nova-reel"})  # generators whose footage looks real: the post must say it is AI
+# Generators whose footage looks real: the post must say it is AI (§45.14; §45.37 G7: Luma AI Ray2 and the owner's
+# own video models too).
+REALISTIC: Final = frozenset({"nova-reel", "luma-ray", "own-video"})
 
 
 class LabelledYouTubePublisher(YouTubePublisher):
@@ -227,6 +232,9 @@ def public_job(item: Mapping[str, Any]) -> Item:
         out[key] = value
     if out.get("publishingStatus") not in STATUSES:
         out["publishingStatus"] = "failed"
+    waiting = item.get("waiting") if out.get("publishingStatus") in IN_FLIGHT else None
+    out["waitingUntil"] = str(item["waitUntil"]) if waiting and isinstance(item.get("waitUntil"), str) else None
+    out["waiting"] = str(waiting) if isinstance(waiting, str) and waiting else None
     metrics = item.get("metrics")
     if isinstance(metrics, Mapping):
         out["metrics"] = {
@@ -261,9 +269,13 @@ def list_jobs(store: db.Store, user_id: str, workspace_id: str, story_id: str | 
 
 
 def stuck(job: Mapping[str, Any], now: datetime) -> bool:
+    """In flight ``STUCK_AFTER`` its last write, or after the end of its wait for room (G6): the flow is gone."""
     if job.get("publishingStatus") not in IN_FLIGHT:
         return False
     at = parse(job.get("updatedAt"))
+    waits = parse(job.get("waitUntil"))
+    if at is not None and waits is not None and waits > at:
+        at = waits
     return at is not None and now - at >= STUCK_AFTER
 
 
@@ -614,7 +626,7 @@ def retry(
         job["pk"],
         job["sk"],
         fields,
-        remove=["error", "publishHandle"],
+        remove=["error", "publishHandle", "waitUntil", "waiting"],
         expect_in={"publishingStatus": list(RETRYABLE), "flowRun": [job.get("flowRun")]},
     )
     confirmed = [confirm_not_clips_update(destination, now)] if destination.confirms_not_clips else []

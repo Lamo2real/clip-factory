@@ -13,6 +13,8 @@ EXPECTED: set[tuple[str, str]] = {
     ("PUT", f"{_B}/ai/prices/opus-5-5"),
     ("PUT", f"{_B}/ai/models/opus-5-5"),
     ("DELETE", f"{_B}/ai/models/opus-5-5"),
+    ("PUT", f"{_B}/makers/models/opus-5-5"),  # §45.37 G2: the picture, video and sound models the owner adds
+    ("DELETE", f"{_B}/makers/models/opus-5-5"),
     ("GET", f"{_B}/usage"),
     ("GET", f"{_B}/agents/creative_director"),
     ("PATCH", f"{_B}/agents/creative_director"),
