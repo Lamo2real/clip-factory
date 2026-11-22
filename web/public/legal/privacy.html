@@ -18,7 +18,7 @@
       </nav>
       <main>
         <h1>Privacy Policy</h1>
-        <p class="muted">Last updated: 18 November 2026</p>
+        <p class="muted">Last updated: 22 November 2026</p>
         <div class="card">
           <p>
             Clip Factory ("the app") is a private app used only by its owner, one creator. It has no other users and
@@ -47,16 +47,20 @@
           <h2>How it is used</h2>
           <p>
             This information is used only to show which accounts are connected, to upload clips the owner has watched
-            and approved with Upload, to show the owner how each clip did, and to show the owner how close they are to each
-            platform's paid program and what the platform says they earned. The app does not read private messages,
-            followers or other people's data, and does not use any data for advertising, profiling or selling.
+            and approved with Upload, to show the owner how each clip did, to show the owner how close they are to each
+            platform's paid program and what the platform says they earned, and, only if the owner sets up
+            <a href="#bank">Your bank</a>, which money from the apps reached the owner's bank. Apart from the money
+            coming into the owner's bank (each payment's payer name, message and amount, which are looked at only in
+            memory and dropped unless it is money from an app), the app does not read private messages, followers or
+            other people's data, and does not use any data for advertising, profiling or selling.
           </p>
 
           <h2>YouTube API Services</h2>
           <p>
             Clip Factory uses YouTube API Services to upload the owner's clips to their YouTube channel, to read the
             numbers of those videos and the channel's totals, and, once the owner allows it, to read the estimated
-            revenue YouTube reports for the channel. The app never sees or stores bank or payment details. By using Clip Factory with YouTube, you agree to be bound by the
+            revenue YouTube reports for the channel. Through YouTube API Services the app never sees or stores bank or payment
+            details. By using Clip Factory with YouTube, you agree to be bound by the
             <a href="https://www.youtube.com/t/terms" rel="noopener noreferrer">YouTube Terms of Service</a>. Google's
             handling of data is described in the
             <a href="http://www.google.com/policies/privacy" rel="noopener noreferrer">Google Privacy Policy</a>.
@@ -76,13 +80,68 @@
               account's name and picture link.
             </li>
             <li>The clips themselves are stored in the owner's own storage until they are posted or thrown away.</li>
+            <li>From the owner's bank, only the payments described under <a href="#bank">Your bank</a>.</li>
           </ul>
 
           <h2>Sharing</h2>
           <p>
             Data is not sold, shared or given to anyone. The app only talks to the platforms' own official APIs
-            (Google/YouTube, TikTok, Meta/Instagram/Facebook and X) to log in, post clips and read their numbers.
+            (Google/YouTube, TikTok, Meta/Instagram/Facebook and X) to log in, post clips and read their numbers, and,
+            only if the owner sets up Your bank, to Enable Banking to read the money coming into the owner's own bank.
           </p>
+
+          <h2 id="bank">Your bank (only if the owner sets it up)</h2>
+          <p>
+            The owner can let Clip Factory see which money from the apps reached his own bank. Clip Factory reads it
+            through <a href="https://enablebanking.com/" rel="noopener noreferrer">Enable Banking</a>, a company allowed
+            to read bank accounts under EU rules and supervised by Finland's Financial Supervisory Authority. The owner
+            links only his own private accounts, using BankID on Enable Banking's page and his bank's own page.
+            <strong>Clip Factory never asks for, sees or stores a bank login or password.</strong>
+          </p>
+          <ul>
+            <li>
+              <strong>What it looks at.</strong> Once a day, and when the owner taps <strong>Check now</strong>, Enable
+              Banking passes the booked payments of the linked accounts to Clip Factory. Of each payment, only whether it
+              is booked and coming in, the payer's name, the message, the amount, the day and the bank's reference number
+              are looked at, in the computer's memory only, for other people's payments too. Everything that isn't money
+              coming in from an app is dropped straight away. When the owner connects a bank, Enable Banking also sends
+              the account holder's name, the account number (IBAN) and address; Clip Factory drops them at once.
+            </li>
+            <li>
+              <strong>What it keeps.</strong> Only payments from apps: the day, the amount, the money type, which app it
+              came from, how Clip Factory knows (and the Google or Whop payout it matched), which bank link it came
+              through, and a coded number made from the payment with a secret key, so it can't be turned back into the
+              payment. A payment Clip Factory asks the owner about is kept the same way until he answers, and about 180
+              days at most. When he says a payment isn't from an app, only its coded number, day and bank link stay, for
+              400 days, and a coded form of that payer's name is kept until he taps <strong>Forget my bank</strong>, so it
+              isn't asked about again. For payments it asks about or matched by payer, it keeps a coded form of the
+              payer's name, never the name.
+            </li>
+            <li>
+              <strong>What it never keeps.</strong> Account numbers or IBANs, names (the owner's, or the names of people
+              who paid him), addresses, balances, money going out, any other payment, and the bank's own text.
+            </li>
+            <li>
+              <strong>The bank link.</strong> Clip Factory's private key for Enable Banking and each bank link's access
+              (its session with Enable Banking) are kept only in AWS Secrets Manager, never in the database or in logs.
+              Clip Factory makes that private key itself, so it never reaches the browser; only if the owner uploads a
+              key file that Enable Banking's own page made does it pass through his browser, once, straight into Secrets
+              Manager. The
+              database keeps only each bank link's state: the bank's name and country, how many accounts it shared,
+              when the link ends and how its reads went.
+            </li>
+            <li>
+              <strong>Check now.</strong> When the owner taps Check now, his IP address, browser name and language are
+              passed to Enable Banking for that one read, when his bank asks for them. Clip Factory never stores a Check
+              now's IP address, browser name or language.
+            </li>
+            <li>
+              <strong>What Enable Banking keeps.</strong> Its own privacy notice says it keeps the bank's answer for at
+              most 60 seconds, the bank link for up to 180 days, and the IP address and browser name for 30 days, inside
+              the EEA. See
+              <a href="https://tilisy.enablebanking.com/terms" rel="noopener noreferrer">Enable Banking's privacy notice</a>.
+            </li>
+          </ul>
 
           <h2>Cookies and analytics</h2>
           <p>These pages use no cookies and no analytics. The app has no analytics or advertising.</p>
@@ -100,6 +159,12 @@
               <a href="https://security.google.com/settings/security/permissions" rel="noopener noreferrer">security.google.com/settings/security/permissions</a>;
               TikTok in Settings and privacy › Security and permissions › Apps and services; Instagram and Facebook in
               Settings › Apps and websites (Business integrations); X in Settings › Security and account access › Apps and sessions.
+            </li>
+            <li>
+              Your bank: in Settings › Posting › Get paid › Your bank, tap <strong>Stop reading</strong> on a bank to end
+              that bank link at Enable Banking (the payments it found stay), or <strong>Forget my bank</strong> to delete
+              every payment, coded payer name and bank link Clip Factory kept. A bank link can also be ended in the bank's own app, and the
+              owner can delete his app on Enable Banking's own pages.
             </li>
             <li>
               To have everything deleted (tokens, keys, post ids and numbers), ask through the

@@ -1521,8 +1521,9 @@ state)` builds each place's line; `sent_totals(lines)` sums per currency on the 
 across currencies and never converted. Whop's amount is its own `destination_amount` in `destination_currency` (else
 `net_amount` in `currency`), turned into micros on write (a unit change); `requested`, `in_review` and `processing`
 are "on its way", `failed`, `canceled` and `denied` "didn't go through", `reversed` "came back". These are "Sent to
-your bank by Google/Whop", never "Reached your bank", which is kept for bank-booked credits (§40.5, not built). The
-web only formats.
+your bank by Google/Whop", never "Reached your bank", which is kept for bank-booked credits
+([flow 25](#25-your-bank-the-connect-flow-through-bank-done-and-the-daily-read-contracts-405-adr-82)). The web only
+formats.
 
 **The reads** (`payouts/collect.py`, in `cf-prod-money`; no new schedule). After the five platforms, the daily run
 and Check now call `payouts.collect.run(deps, user_id, now)` inside its own try, so it can never stop the money run,
@@ -1563,5 +1564,162 @@ see why." and "Money sent to your bank: …" once each, only after the first rea
 
 Nothing deletes a `PAYOUT#` or `PAYSTATE#` item (the money role has no DeleteItem); a stopped connection keeps them.
 The prod plan stays 0 to destroy and 0 to replace; nothing that holds the owner's data or connections changes. The
-bank part ([§40.5](CONTRACTS.md#405-your-bank-waits-for-the-owners-choice)) has a defined shape but no code until the
-owner chooses a source.
+bank part, what really reached his bank, is [flow 25](#25-your-bank-the-connect-flow-through-bank-done-and-the-daily-read-contracts-405-adr-82).
+
+### 25. Your bank: the connect flow through /bank-done and the daily read (CONTRACTS §40.5, ADR-82)
+
+The last part of the owner's Get paid ask, "a total of my exact number that I've gotten into my bank account or
+accounts, but in total for each of those platforms", can only come from his bank. He chose option A on 22 Nov 2026:
+Enable Banking's free restricted mode, on his own Control Panel app and his own personal accounts, with BankID
+([CONTRACTS.md §40.5](CONTRACTS.md#405-your-bank-what-really-reached-it-read-through-enable-banking-owners-choice-a-2026-11-22),
+[ADR-82](DECISIONS.md#adr-82-your-bank-enable-banking-restricted-mode-read-once-a-day-keep-only-matched-app-money),
+the owner's steps in [SETUP_POSTING.md](SETUP_POSTING.md#your-bank), the protections in
+[SECURITY.md](SECURITY.md#your-bank-contracts-405)). No new Lambda, table, index, bucket, role, route on the public API
+or Terraform-made secret: eleven routes under `/v1/getpaid/bank` in `cf-prod-api`, `bank` on the existing callback in
+`cf-prod-hooks`, the read inside `cf-prod-money`, new sort keys, two runtime secrets, two Deny statements, two stream
+filters changed in place and one api setting, `BANK_READING` (Terraform `bank_reading_enabled`, default `false`).
+While it is off, `GET /v1/getpaid/bank` answers `{"on": false}`, the other routes 503, and every screen keeps "Clip
+Factory can't see your bank. Look in your bank's app to see what arrived." Only the api reads it: `cf-prod-money`'s
+daily read and `cf-prod-hooks`' callback don't (see the end of this flow).
+
+The code is split by side, so the api and the reader meet only through items, secrets and golden files: `bank/`
+(`keys.py`, `eb.py`, `grants.py`, `view.py`, `answers.py`) and `routes/bank.py` for setup, connect, the view and his
+answers; `bankread/` (`client.py`, `filter.py`, `match.py`, `collect.py`) for reading. Both sign the same JWT (RS256,
+`kid` = his app ID, one hour) with the private key in `cf-prod/platforms/bank/app`, read fresh each time, and call only
+`https://api.enablebanking.com`.
+
+**Setup.** "Make my bank key" (`POST /v1/getpaid/bank/key`) claims `BANKOWNER` (the first owner only; anyone else
+gets 403) and makes an RSA-4096 key pair, a 10-year self-signed certificate and, once, a 32-byte `hashKey`, straight
+into the secret; `BANKCONN.app` gets `status "key_made"`. He pastes the public part into a new Production app on
+Enable Banking, then the app ID into Clip Factory (`PUT /v1/getpaid/bank/app`; the .pem upload is the one exception,
+[SECURITY.md](SECURITY.md#your-bank-contracts-405)). The check (`POST /v1/getpaid/bank/app/check`, also run by Save and
+"I linked them") calls `GET /application` and stores `BANKCONN.app.check` (`ok`, `not_active`, `redirect_missing`,
+`sandbox`, `key_wrong`, `not_found`); a `down` answer sets only `app.downAt`, so an outage never un-ticks a step. The
+steps tick from stored items only (`BANKCONN.stepsDone` for his green answers, the check, any `BANKLINK#`), and
+`bank/view.py` picks `next`, the page's one vermilion.
+
+**Connect** (once per bank, up to 4, and again every 90 to 180 days):
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant O as Owner (web app)
+  participant A as cf-prod-api
+  participant SM as Secrets Manager
+  participant D as DynamoDB
+  participant EB as Enable Banking (api.enablebanking.com and its pages)
+  participant B as His bank (BankID)
+  participant H as cf-prod-hooks (REST GET /oauth/bank/callback)
+  O->>A: GET /v1/getpaid/bank/banks
+  A->>EB: GET /aspsps?country=SE&psu_type=personal&service=AIS (cached 1 h)
+  O->>A: POST /v1/getpaid/bank/connect {bank} (or {linkId} to reconnect)
+  A->>SM: read cf-prod/platforms/bank/app (fresh), sign the JWT
+  A->>D: OAUTH#{nonce} (platform bank, linkId, reconnect, bank, country, maxDays, psuHeaders, history)
+  A->>EB: POST /auth {access: valid_until ≤ 180 days, balances false}, psu_type personal, state, redirect_url
+  A-->>O: authorizeUrl (https only)
+  O->>EB: same tab (the Mac app: the system browser)
+  EB->>B: his bank's page, BankID
+  B->>EB: allowed
+  EB->>H: 302 ?code&state (or ?error)
+  H->>D: verify and consume OAUTH#{nonce} once
+  H->>SM: read cf-prod/platforms/bank/app (fresh), sign
+  H->>EB: POST /sessions {code}
+  H->>H: keep uid and identification_hash of each non-ORGA account, drop the rest in memory
+  H->>SM: create or put cf-prod/platforms/bank/token_{linkId}
+  H->>D: BANKLINK#{linkId} connected (one at for connectedAt), BANKCONN.lastConnect
+  H-->>O: 302 {APP_URL}/bank-done?result=bank_connected (no-store, no-referrer)
+  O->>O: /bank-done is public and makes no API call, signed in it forwards to /settings/posting/getpaid/bank?result=…
+  O->>A: POST /v1/getpaid/bank/check {first: true} (once per link)
+```
+
+* **The way back.** BankID can bring him back in another browser, or in the Mac app's system browser, so the callback
+  never depends on a cookie and always lands on the public page `/bank-done?result={code}` (`BankDone.tsx`, shown by
+  `App.tsx` before the sign-in gate). Signed in, it forwards to the bank page with `?result`, which the page removes
+  at once; not signed in, it says "Done! Go back to Clip Factory. You can close this tab." (or that the bank didn't
+  connect), with no button, link or data. Every result once the state was read also lands on
+  `BANKCONN.lastConnect {result, linkId, bank, reconnect, at}`, so a waiting bank page reads the view again on focus or
+  on the live `bank` event and shows what happened.
+* **Results.** `bank_connected`, `bank_denied`, `bank_no_accounts`, `bank_business_only` (only `ORGA` accounts:
+  the session is closed and nothing is written), `bank_expired` (a bad, old or reused state writes nothing),
+  `bank_key_wrong`, `bank_error`. The callback has a 25 s deadline (`POST /sessions` gets `min(15 s, remaining − 3
+  s)`) and always answers the 302, `bank_error` when time ran out.
+* **A reconnect** keeps the link's id: the new session's secret carries the old session id in `closeLater`, and the
+  next `GET /v1/getpaid/bank` closes it at Enable Banking (at most 5 s) before answering, so a slow close can never
+  push the callback past its deadline.
+
+**The read** (`bankread.collect.run`, in `cf-prod-money`):
+
+```mermaid
+flowchart LR
+  daily["cf-prod-money 06:00 UTC<br/>run_user(…, bank=True), after the payout reads"] --> lease
+  now["POST /v1/getpaid/bank/check (his Check now:<br/>15 min, 12 a day) → AsyncInvoker.bank_check<br/>{action: bank, psu: ip, ua, lang, at}"] --> drop{"event older<br/>than 120 s?"}
+  drop -- "yes: unattended, psu dropped" --> lease
+  drop -- "no: attended" --> lease
+  lease["claim BANKCONN.readLease (300 s)"] --> link["each BANKLINK# connected, no limitUntil<br/>secrets fresh, connectedAt must match"]
+  link --> eb["GET /sessions/{id}<br/>GET /accounts/{uid}/transactions?transaction_status=BOOK<br/>(PSU headers all or none; ≤ 3 unattended in 24 h)"]
+  eb --> filter["filter.py (memory): CRDT + BOOK, amount in minor units,<br/>hint, hintFrom, payerKey and depositId (HMAC with hashKey)"]
+  filter --> match["match.py: payout record › Whop trace code › Google test (drop)<br/>› not app money (drop) › learned payer › own PayPal move › ask › drop"]
+  payouts[("PAYOUT#youtube#…, PAYOUT#contentrewards#…<br/>BANKPAYERS")] --> match
+  match --> dep[("DEPOSIT#{date}#{depositId}<br/>matched / needs_you (ttl 180 d)")]
+  match --> state[("BANKLINK#: readThrough, reads, lastError,<br/>failingSince, ends; BANKCONN.lastNotice")]
+  dep -- "stream: BANKCONN, BANKLINK#, DEPOSIT#, BANKPAYERS" --> live["cf-prod-broadcast → one bank event per owner<br/>cf-prod-notify → reached / ask / expiring / ended"]
+  dep --> view["bank/view.py → GET /v1/getpaid/bank<br/>Reached your bank per place and per currency"]
+```
+
+* **When.** Only the daily run (`bank=True`, in its own try, skipped with less than 20 s left) and his bank Check now
+  (`{"action": "bank"}`, 240 s) read the bank. Money's own Check now (`{"action": "refresh"}`) never does, because
+  each tap there would spend one of the bank's unattended reads. A link's first read is `strategy=longest` from today
+  − 400 days only when it is his own (the bank page sends it right after BankID, while banks still give full history);
+  a first read without him uses `default` from today − 89 days. Later reads
+  use `default` from `readThrough` − 10 days; the overlap gives the same `depositId`s, so nothing counts twice. Short
+  on time, a read stops after a whole page and keeps `resume` for the next run.
+* **Least data.** Only seven fields of each transaction are looked at, in memory, and the rest of the page is gone
+  when it is done. Only `matched` rows and the rows waiting for his tap are written; "not app money" keeps only its id
+  and day. No name, account number, IBAN, balance, debit or bank text is stored ([SECURITY.md](SECURITY.md#your-bank-contracts-405)).
+* **Matching** is pure and ordered: a Google or Whop payout with the same currency and exact amount within 10
+  workdays (a candidate whose hint fits wins a tie; one payout pairs with one deposit), Whop's trace code (10 or more
+  characters, as whole words, 15 workdays, any amount), Google's tiny test payment dropped by per-currency ceilings,
+  his "not app money" payers, a payer he confirmed, money moved from his own linked PayPal, then a question card for
+  any other hint. Stored `needs_you` rows are matched again each run, on the condition that he hasn't answered
+  meanwhile. Only a platform word in the bank's payer name is ever learned.
+* **Ends and errors** come from Enable Banking's `error` code: an expired session ends the link (`consent_over` or
+  `ended_early`), a revoked one is `stopped_at_bank`, a bank's "too many" pauses it 6 hours, and every unknown answer
+  sets `lastError` and `failingSince` (shown as "Can't read Swedbank" after 26 hours). Every write to a `BANKLINK#` is
+  conditional on `status "connected"` and the `connectedAt` the read started with, so a Stop or a reconnect during a
+  read wins; Forget re-checks `BANKCONN.forgottenAt` before each batch of writes. The reader deletes nothing.
+* **The numbers.** `bank/view.py` (pure, golden cases) sums `matched` rows per place and per currency, plus "In total"
+  per currency; nothing is added across currencies or converted, a place with nothing is named in `notYet`, and
+  `meta` ("Instagram and Facebook together") is its own place, also shown in Instagram's and Facebook's lines. It is
+  never added to "Sent to your bank" (flow 24) or the 30-day total.
+
+**Stop and Forget.** "Stop reading Swedbank" (`DELETE /v1/getpaid/bank/links/{linkId}`) closes the session at Enable
+Banking and deletes `token_{linkId}`, or keeps it with `closePending` when the close failed; the link becomes `stopped`
+and its deposits stay. "Forget my bank" (`DELETE /v1/getpaid/bank`) claims the read lease, stops every link, deletes
+every `DEPOSIT#`, `BANKPAYERS` and every `BANKLINK#` whose session is closed, and keeps the bank key, the app ID and `BANKCONN.app`, so
+Connect works again without the Enable Banking steps.
+
+**Live and notifications.** `cf-prod-broadcast`'s `TYPES` gain `BANKCONN`, `BANKLINK#`, `DEPOSIT#` and `BANKPAYERS`,
+each sent as `{type: "bank", op: "upsert", id: "bank", partial: true}`, folded to one message per owner and kind, so a
+run's many deposits send one event; the web's `lib/bank.ts` reads the view again (debounced 1 s). At the end of a run
+with news the reader writes `BANKCONN.lastNotice`, and `cf-prod-notify` (stream filter + `BANKCONN`, MODIFY only)
+sends each message once under `notify.getPaid`: money reached your bank, a payment may be from an app, a link ends in 7
+days, a link ended. None for a link's first read (`quiet`).
+
+**Data** (additive only, [CONTRACTS.md §40.5.11](CONTRACTS.md#40511-data-secrets-live-notifications-infra-the-switch-and-mock-mode)):
+
+| Item | Written by |
+|---|---|
+| `BANKOWNER` (its own partition, conditional put) | api (the first key) |
+| `BANKCONN` (`stepsDone`, `app`, `manual`, `lastConnect`, `readLease`, `lastNotice`, …) | api; hooks (`lastConnect` only); money (`readLease`, `lastNotice`, `lastRunAt` only) |
+| `BANKLINK#{linkId}` | hooks (connect), api (stop, forget, closing, the first-read claim), money (read state, ends) |
+| `DEPOSIT#{yyyy-mm-dd}#{depositId}` | money (new rows, matches again), api (his answers, forget) |
+| `BANKPAYERS` (`rules`, `notIncome`: keyed hashes to places) | api (his answers only) |
+| Secrets `cf-prod/platforms/bank/app`, `cf-prod/platforms/bank/token_{linkId}` (runtime, never Terraform) | api; hooks (the callback) |
+| `NoBankSecrets` Deny on `cf-prod-clip-flow` and `cf-prod-stats`; the realtime and notify stream filters | Terraform, in place |
+| api env `BANK_READING` from `bank_reading_enabled` (default `false`) | Terraform, in place |
+
+The prod plan stays 0 to destroy and 0 to replace: role policies, two stream filters and one environment variable
+change in place, and nothing that holds the owner's data or connections is touched. The switch is an api setting
+only: the daily read in `cf-prod-money` reads whatever `BANKLINK#` is still `connected`, and the callback in
+`cf-prod-hooks` still saves a connect that was started before it went off. So he taps "Stop reading" on each bank
+before it goes off (the money found stays).

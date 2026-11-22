@@ -210,3 +210,12 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 - AC5: Every Undo is an 8-second toast; every connection result is one calm sentence that names the button to tap.
 - AC6: No edges, no `cursor` changes, `<Glide>` for pick-one bars, reduced motion respected, nothing overflows from
   320 to 1920 px, targets at least 44 px (48 on phones), and Ask never covers the main button.
+
+### UX-21 Your bank that a child can follow
+([CONTRACTS.md §40.5.2](CONTRACTS.md#4052-what-he-sees))
+- AC1: Plain words: "bank key", "app ID", "bank link"; never "consent", "session", "token", "PSD2" or "AISP", and
+  "API", "certificate" or "PEM" only inside Enable Banking's own bold labels. No account number is ever on screen.
+- AC2: One vermilion per screen: the next step's main button, or "Reconnect Swedbank" in the status block once set up;
+  the green answers stay green; pinned at the bottom right on phones. Get paid's card and Money's block have none.
+- AC3: Every status says how it is known ("Clip Factory can see it (Your bank says)"), never "Connected", "Not
+  connected" or "disconnected", and coming back from BankID never lands on a sign-in page.

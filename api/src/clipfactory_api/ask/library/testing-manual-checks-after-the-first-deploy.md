@@ -183,3 +183,28 @@
    - Whop (only after the `whop_connect_enabled` PR): whether a personal user can make an app and grant the four
      permissions, whether `GET /users/me` and `GET /payouts` accept his sign-in, whether Content Rewards pays into his
      own or a business balance, and the units of `destination_amount`.
+
+20. **Your bank** ([CONTRACTS §40.5.14](CONTRACTS.md#40514-not-verified-live-each-is-checked-at-his-first-connect-a-failure-becomes-a-plain-sentence-never-a-number),
+   "Not verified live"): the plan lines at each deploy, the rest only after the switch PR (`bank_reading_enabled =
+   true`), at the owner's first connect. Each failure becomes a plain sentence, never a number.
+   - BR's merge, in the deploy log: the plan changes only the two stream filters, the `NoBankSecrets` statements of
+     `cf-prod-clip-flow` and `cf-prod-stats` and the api's environment (`BANK_READING` set to `off`), all in place,
+     with 0 to destroy and 0 to replace.
+   - The switch PR, in the deploy log: the plan changes only `cf-prod-api`'s `BANK_READING`, `off` to `on`, in place,
+     and the PR says "Delete gate: the plan deletes or replaces nothing that holds the owner's data."
+   - Enable Banking: whether **Public certificate in PEM format** takes the bare public key or wants the certificate
+     (the "Other bank key" chip); where the app ID shows on **API applications** once the **New application … has been
+     added.** message is gone; what `GET /application`'s `countries` holds for a restricted app; which errors a wrong
+     app ID and a wrong key give (`not_found` or `key_wrong`); the sign-in page's button words and Enable Banking's own
+     page before the bank; whether the redirect address is compared exactly. Note whether the owner sent the optional
+     email, and Enable Banking's answer.
+   - His bank: which bank and accounts get his payouts, whether PayPal is one, whether any of them is a business
+     account (it is dropped), whether `transactions_extended_history` adds a second BankID, how far back the first read
+     went ("Counted from …"), and whether another app reading the same bank ends the link early.
+   - The first payments: the payer names and texts his bank shows for AdSense for YouTube, Meta, TikTok (or PayPal),
+     Stripe (X) and Whop, and whether Whop's trace code shows in the text. A payout whose text names no platform is
+     never seen; the fix is a new hint word in `bankread/filter.py` with a golden case, in a later PR. How Google writes
+     a SEK amount, on which the exact payout match depends.
+   - Logs: `/aws/lambda/cf-prod-money` shows only counts (`bank.read`) and Enable Banking's error codes, never an
+     amount, a name, an IBAN, an IP address or a text; the item `DEPOSIT#…` in the table holds only §40.5.7's
+     attributes.
