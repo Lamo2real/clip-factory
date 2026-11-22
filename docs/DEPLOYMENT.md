@@ -368,6 +368,19 @@ Triggered by a push to `main` ([deploy.yml](../.github/workflows/deploy.yml)) or
    retention like every other log group (created if the service has not made it yet). `cf-prod-api` gets the `HELP_*` settings (`HELP_ENABLED = "true"`, the EU Haiku profile from
    `config/models.json`, the cap and rate limits) and permission to call only that model. No extra deploy job is needed for them:
    they all come from the same Lambda zip and the same `terraform apply`.
+   **Lamo Stories** (CONTRACTS §45.15, §45.34): once its runtime `cf_prod_story_agent` is live, its own image
+   (`stories/agent/Dockerfile`) is built and pushed between `terraform init` and `plan`; a failed build shows an
+   `::error` line, keeps the live tag (output `stories_agent_image_tag`) and still ships Clip Factory. After the delete
+   gate, the **Clip Factory check** (Lamo Stories changes nothing of Clip Factory) reads the plan whenever Lamo Stories
+   work that feeds it is in the deploy (first-parent commits since the live release, `cf-prod-api`'s `VERSION`). It
+   fails when the plan changes Clip Factory's agent, `cf-prod-api`, `cf-prod-hooks` (other than
+   `STORIES_OAUTH_CALLBACK`), the HTTP API's settings, JWT authorizer, Lambda permission or stage (other than Lamo
+   Stories' own `route_settings`), or any Clip Factory route. A Clip Factory pull request that changes those and
+   lands in the same unapplied range as Lamo Stories infra work stops the deploy by design: check that the findings
+   are that pull request's, then rerun from Actions → deploy → Run workflow with **Clip Factory changes on purpose**
+   (`allow_clip_factory_change`) ticked, which turns the findings into warnings. It never lets a Lamo Stories route
+   take a Clip Factory path. A change only to `config/*.json`, `skills/` or `agent/` by a Clip Factory pull request
+   changes Clip Factory's agent tag (`module.agent.terraform_data.image` is replaced) and passes the check.
 6. **Web**: [scripts/write-web-config.sh](../scripts/write-web-config.sh) writes `config.json` from the Terraform
    outputs, including `wsUrl` from `ws_url` and `oauthCallbackBase` from `oauth_callback_base` (both required; the
    script stops if one is missing); the build is synced to the web bucket (the sync never deletes TikTok's
