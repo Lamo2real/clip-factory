@@ -110,5 +110,20 @@ test("with reduced motion the covers still deal in and fan out at once", async (
   await page.waitForTimeout(200);
   expect(await turn(page)).toBeCloseTo(7, 1);
   await hover(page);
-  await expect.poll(() => turn(page), { timeout: 1000 }).toBeCloseTo(10, 1);
+  // Read after two drawn frames: an engine starts a transition on the frame after the hover and its clock moves only
+  // when it draws, so even a 1 ms one shows its first pose until then. Linux WebKit in CI draws without a GPU and can
+  // take over a second a frame here.
+  const afterTwoFrames = () =>
+    page.evaluate(
+      () =>
+        new Promise<number>((done) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              const m = new DOMMatrix(getComputedStyle(document.querySelectorAll(".cover-stack__item")[2]!).transform);
+              done((Math.atan2(m.b, m.a) * 180) / Math.PI);
+            }),
+          ),
+        ),
+    );
+  await expect.poll(afterTwoFrames, { timeout: 5000 }).toBeCloseTo(10, 1);
 });
