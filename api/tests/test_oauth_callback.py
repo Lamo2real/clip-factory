@@ -552,6 +552,42 @@ def test_get_paid_results_land_on_their_own_fixed_pages() -> None:
     assert not set(callback.WHOP_RESULTS) & set(callback.RESULTS)
 
 
+def test_your_bank_lands_on_the_public_bank_done_page() -> None:
+    """§40.5.5: every bank result goes to ``/bank-done`` (no sign-in, no data); anything else is ``bank_error``."""
+    from clipfactory_api.bank import RESULTS as BANK_RESULTS
+
+    for result in BANK_RESULTS:
+        assert callback.location(APP_URL, "bank", result) == f"{APP_URL}/bank-done?result={result}"
+    for other in ("connected", "expired", "error", "whop_connected", "<script>"):
+        assert callback.location(APP_URL, "bank", other) == f"{APP_URL}/bank-done?result=bank_error"
+    assert not set(BANK_RESULTS) & set(callback.RESULTS)
+
+
+def test_a_state_for_one_place_never_works_for_another(
+    call: Call, hooks_deps: hooks.HooksDeps, http: FakeHttp, store: db.Store, oauth_env: OAuthEnv
+) -> None:
+    """A YouTube state on the bank callback is ``bank_expired`` (signed for another platform), and a bank state on
+    the YouTube callback is ``expired``: the bank hand-off has its own state check and never runs ``save``."""
+    youtube = start(call, "youtube")
+    nonce = youtube.split(".")[1]
+    event = {
+        "httpMethod": "GET",
+        "resource": "/oauth/{platform}/callback",
+        "path": "/oauth/bank/callback",
+        "pathParameters": {"platform": "bank"},
+        "queryStringParameters": {"code": "C", "state": youtube},
+        "headers": {},
+        "requestContext": {"requestId": "rest-9", "stage": "v1"},
+    }
+    out = hooks.handle(event, hooks_deps)
+    assert out["headers"]["location"] == f"{APP_URL}/bank-done?result=bank_expired"
+    assert store.get(f"OAUTH#{nonce}", "STATE") is not None  # never consumed by the wrong callback
+    exp = int(oauth_env.clock().timestamp()) + 600
+    bank_state = state.sign(STATE_KEY.encode(), "bank", state.new_nonce(), exp)
+    assert back(hooks_deps, "youtube", {"code": "C", "state": bank_state}) == "expired"
+    assert account(store, "youtube") is None
+
+
 def test_a_payments_grant_never_goes_through_save(
     call: Call, hooks_deps: hooks.HooksDeps, http: FakeHttp, store: db.Store, monkeypatch: pytest.MonkeyPatch
 ) -> None:

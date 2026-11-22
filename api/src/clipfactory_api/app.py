@@ -173,6 +173,12 @@ class App:
     contentrewards: Any = None
     # Get paid (§40.6): "Connect Whop" and its routes answer 503 "Coming soon." unless WHOP_CONNECT is "on".
     whop_connect: bool = False
+    # Your bank (§40.5): every /v1/getpaid/bank route answers 503 "Coming soon." (GET: {"on": false}) unless
+    # BANK_READING is "on". ``bank_http`` is Enable Banking's transport (None: urllib, its host only, with each call's
+    # own timeout); ``bank_monotonic`` times the route deadlines. Tests set both.
+    bank_reading: bool = False
+    bank_http: Callable[..., Any] | None = None
+    bank_monotonic: Callable[[], float] | None = None
     _builtin_cache: list[BuiltinSkill] | None = field(default=None, repr=False)
 
     def builtin_skills(self) -> list[BuiltinSkill]:
@@ -271,6 +277,7 @@ def from_env() -> App:
         push=_push_from_env(env, reg),
         contentrewards=_content_rewards(env, store, media, invoker),
         whop_connect=env.get("WHOP_CONNECT", "off").strip().lower() == "on",
+        bank_reading=env.get("BANK_READING", "off").strip().lower() == "on",
     )
 
 

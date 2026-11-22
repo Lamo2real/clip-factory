@@ -39,6 +39,10 @@ class Request:
     request_id: str
     params: dict[str, str] = field(default_factory=dict)
     started: float = field(default_factory=time.monotonic)  # when the request arrived (time.monotonic)
+    # §40.5.6: Your bank's Check now passes the caller's IP address, User-Agent and Accept-Language to Enable Banking
+    # for that one read (never stored, never logged). Header names are lower-cased.
+    headers: dict[str, str] = field(default_factory=dict)
+    source_ip: str = ""
 
     def json(self, max_bytes: int = MAX_BODY_BYTES) -> JsonBody:
         if not self.raw_body.strip():
@@ -184,6 +188,8 @@ def dispatch(event: Mapping[str, Any], app: App | Callable[[], App], routes: lis
             token=_bearer(event),
             request_id=request_id,
             params=params,
+            headers={str(k).lower(): str(v) for k, v in (event.get("headers") or {}).items()},
+            source_ip=str((context.get("http") or {}).get("sourceIp") or ""),
         )
         resolved = app if isinstance(app, App) else app()
         response = chosen.handler(resolved, request)

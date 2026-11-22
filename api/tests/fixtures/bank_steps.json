@@ -1,0 +1,58 @@
+[
+ {
+  "id": "bank-ask",
+  "number": null,
+  "role": "reading",
+  "manual": true,
+  "auto": false
+ },
+ {
+  "id": "bank-account",
+  "number": 1,
+  "role": "reading",
+  "manual": true,
+  "auto": true
+ },
+ {
+  "id": "bank-key",
+  "number": 2,
+  "role": "reading",
+  "manual": false,
+  "auto": true
+ },
+ {
+  "id": "bank-app",
+  "number": 3,
+  "role": "reading",
+  "manual": true,
+  "auto": true
+ },
+ {
+  "id": "bank-details",
+  "number": 4,
+  "role": "reading",
+  "manual": true,
+  "auto": true
+ },
+ {
+  "id": "bank-appid",
+  "number": 5,
+  "role": "reading",
+  "manual": false,
+  "auto": true
+ },
+ {
+  "id": "bank-link",
+  "number": 6,
+  "role": "reading",
+  "manual": false,
+  "auto": true
+ },
+ {
+  "id": "bank-connect",
+  "number": 7,
+  "role": "reading",
+  "manual": false,
+  "auto": true
+ }
+]

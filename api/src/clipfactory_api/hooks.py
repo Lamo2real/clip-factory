@@ -10,7 +10,8 @@
 * ``GET /oauth/{platform}/callback``: the OAuth callback of §17.5 (``oauth.callback``). It always answers ``302`` to
   ``{APP_URL}/settings/posting/setup/{platform}?result={code}`` (a fixed path and a listed code: no open redirect).
   Get paid (§40.6) also comes back here: YouTube's "Allow payment reading" and ``whop`` ("Connect Whop", served on
-  this callback only, never on ``/hooks/whop``), each to its fixed Get paid page.
+  this callback only, never on ``/hooks/whop``), each to its fixed Get paid page. So does Your bank (§40.5.5):
+  ``bank``, served on this callback only, always to the public page ``{APP_URL}/bank-done?result={code}``.
   On ``connected`` the clips waiting for that place go out (``release``, §17.6): it starts the clip flow on the alias
   in ``CLIP_FLOW_ARN``. A Lamo Stories state (``w1.``, §45.13.3) is not handled here: it is forwarded, before
   anything else, with ``302`` to Lamo Stories' own callback (``STORIES_OAUTH_CALLBACK``, from configuration) with the
@@ -56,7 +57,8 @@ META = frozenset({"instagram", "facebook"})
 # have no OAuth callback, and every delivery must be signed.
 FOLLOW_HOOKS = ("twitch", "kick")
 # §40.6: Connect Whop comes back on the OAuth callback only; Whop never sends webhooks here (/hooks/whop is a 404).
-CALLBACK_ONLY = ("whop",)
+# §40.5.5: so does Your bank's BankID return (/oauth/bank/callback → /bank-done; /hooks/bank is a 404).
+CALLBACK_ONLY = ("whop", "bank")
 STORIES_STATE = "w1."  # §45.13.3: a Lamo Stories OAuth state; its callback is Lamo Stories' own
 HOOK_PLATFORMS: tuple[str, ...] = PLATFORMS + FOLLOW_HOOKS + CALLBACK_ONLY
 KEPT_HEADERS = (
@@ -97,6 +99,9 @@ class HooksDeps:
     flows: ClipFlowStarter | None = None  # §17.6: starts the clip flow for posts released on connect; None: none
     # §45.13.3: Lamo Stories' callback base (STORIES_OAUTH_CALLBACK); a w1. state is only forwarded there
     stories_oauth_callback: str = ""
+    # §40.5.5: Enable Banking's transport for the bank callback (None: urllib) and the clock of its 25 s deadline
+    bank_http: Callable[..., Any] | None = None
+    bank_monotonic: Callable[[], float] | None = None
 
 
 def ssm_token_reader(client: Any, name: str, now: Callable[[], float] = time.time) -> Callable[[], str]:
@@ -195,7 +200,15 @@ def _oauth_callback(platform: str, event: Mapping[str, Any], deps: HooksDeps) ->
     result = "error"
     if deps.oauth is not None:
         try:
-            result = callback.handle_callback(platform, _query(event), deps.store, deps.oauth, deps.flows)
+            result = callback.handle_callback(
+                platform,
+                _query(event),
+                deps.store,
+                deps.oauth,
+                deps.flows,
+                bank_http=deps.bank_http,
+                bank_monotonic=deps.bank_monotonic,
+            )
         except Exception as e:  # the owner always lands on the setup page with a plain sentence
             log("error", "hooks.oauth_failed", platform=platform, error=type(e).__name__)
             result = "error"

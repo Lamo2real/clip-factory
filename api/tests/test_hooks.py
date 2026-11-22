@@ -258,3 +258,22 @@ def test_whop_is_served_on_the_oauth_callback_only(deps: hooks.HooksDeps, table:
     assert out["headers"]["referrer-policy"] == "no-referrer"
     assert "whop" in hooks.HOOK_PLATFORMS
     assert "whop" not in hooks.PLATFORMS
+
+
+def test_bank_is_served_on_the_oauth_callback_only(deps: hooks.HooksDeps, table: FakeTable) -> None:
+    """§40.5.5: BankID comes back on ``/oauth/bank/callback``, always to the public page ``/bank-done``;
+    ``/hooks/bank`` does not exist."""
+    for method in ("GET", "POST"):
+        out = hooks.handle(_event(method, "/hooks/{platform}", "bank", body="{}"), deps)
+        assert out["statusCode"] == 404
+        assert _body(out)["error"]["code"] == "not_found"
+    assert table.items == {}
+    out = hooks.handle(_event("GET", "/oauth/{platform}/callback", "bank", query={"code": "C", "state": "S"}), deps)
+    assert out["statusCode"] == 302  # without secrets: the public page and a listed code
+    assert out["headers"]["location"] == f"{APP_URL}/bank-done?result=bank_error"
+    assert out["headers"]["referrer-policy"] == "no-referrer"
+    assert out["headers"]["cache-control"] == "no-store"
+    assert table.items == {}
+    assert "bank" in hooks.HOOK_PLATFORMS
+    assert "bank" in hooks.CALLBACK_ONLY
+    assert "bank" not in hooks.PLATFORMS
