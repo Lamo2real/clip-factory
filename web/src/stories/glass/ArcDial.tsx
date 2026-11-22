@@ -1,6 +1,6 @@
 // An arc with a white knob at the value (the Setup progress ring, the studio's render progress). It is a progress
 // bar to assistive tech (role="progressbar" with its value and words); the arc itself is decorative.
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { cx } from "./cx.ts";
 
 export interface ArcDialProps {
@@ -36,6 +36,8 @@ export function knobAt(fraction: number, sweep = 240): { x: number; y: number } 
 }
 
 export function ArcDial({ value, max = 1, label, valueText, size, sweep = 240, children, className }: ArcDialProps) {
+  // An id that is safe inside url(#…) whatever React's useId looks like.
+  const id = `st-dial-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const f = dialFraction(value, max);
   const pct = Math.round(f * 100);
   const start = 90 + (360 - sweep) / 2;
@@ -53,8 +55,16 @@ export function ArcDial({ value, max = 1, label, valueText, size, sweep = 240, c
       style={style}
     >
       <svg className="st-dial__svg" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+        <defs>
+          {/* warm light along the arc: amber where it starts, the orange accent at the knob */}
+          <linearGradient id={`${id}-arc`} x1="0" y1="1" x2="1" y2="0">
+            <stop className="st-dial__stop-a" offset="0" />
+            <stop className="st-dial__stop-b" offset="1" />
+          </linearGradient>
+        </defs>
         <circle className="st-dial__groove" cx="50" cy="50" r={R} pathLength={360} strokeDasharray={`${sweep} 360`} transform={`rotate(${start} 50 50)`} />
-        <circle className="st-dial__arc" cx="50" cy="50" r={R} pathLength={360} strokeDasharray={`${sweep * f} 360`} transform={`rotate(${start} 50 50)`} />
+        <circle className="st-dial__arc" cx="50" cy="50" r={R} pathLength={360} strokeDasharray={`${sweep * f} 360`} transform={`rotate(${start} 50 50)`} stroke={`url(#${id}-arc)`} />
+        <circle className="st-dial__knob-shade" cx={knob.x} cy={knob.y + 1.2} r="7" />
         <circle className="st-dial__knob" cx={knob.x} cy={knob.y} r="6" />
       </svg>
       <div className="st-dial__centre">{children ?? <span className="st-dial__value">{pct}%</span>}</div>

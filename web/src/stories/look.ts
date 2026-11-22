@@ -13,12 +13,13 @@
 // The veils: the least smoky tint that keeps every word at 4.5:1 over the lightest pixel each look can show. Over a
 // desktop or a picture that is white (the worst case of any photo or busy desktop), so the measured numbers hold
 // (tiles 0.74, tinted tiles 0.80 with the colour cut to 0.12, hero 0.76, rail 0.78, Frosted 0.30 + 0.89). Over the
-// colours they are worked out here from exactly what the stage draws (meshSpots), the way Clip Factory's
+// colours they are worked out here from exactly what the stage draws (stageAt over STAGE_WINDOWS), the way Clip Factory's
 // lib/background.ts does for its own. StoriesApp calls useStoriesBackground(root, active) once: it puts the result on
 // .stories-app (data-look, data-strength, data-glass, the --st-veil-* numbers and the stage colours), and
 // glass.css paints .stories-app::before from them. Stories depends on nothing of Clip Factory's here: the two small
 // readers below are Stories' own copies.
-import { useLayoutEffect, useSyncExternalStore, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useSyncExternalStore, type RefObject } from "react";
+import { LENS_BUDGET, watchLenses } from "./glass/lens.ts";
 import { onStoriesPrefs, setStoriesPref, storiesPrefs } from "./workspace.ts";
 
 /** The desktop app's real window glass (its wrapper says which in window.__CF_GLASS__); "none" anywhere else. */
@@ -53,11 +54,11 @@ export const LOOK_KEYS = { mode: "look.mode", strength: "look.strength", colours
 export const PICTURE_KEY = "cf.stories.picture";
 
 /** Ember: the owner's warm reference (espresso, copper light, amber light). The default of the whole Look. */
-export const EMBER: readonly string[] = ["#1c130e", "#e0763a", "#ffa852"];
+export const EMBER: readonly string[] = ["#1c130e", "#e2621f", "#ff9a45"];
 export const PRESETS: readonly { id: string; name: string; colours: readonly string[] }[] = [
   { id: "ember", name: "Ember", colours: EMBER },
-  { id: "rose", name: "Rose", colours: ["#21121a", "#c8546a", "#ffae86"] },
-  { id: "lagoon", name: "Lagoon", colours: ["#0d1a1b", "#2c8a86", "#f0b064"] },
+  { id: "rose", name: "Rose", colours: ["#21121a", "#c8546a", "#f59a7a"] },
+  { id: "lagoon", name: "Lagoon", colours: ["#0d1a1b", "#2c8a86", "#e8a65a"] },
 ];
 export const DEFAULT_MODE: LookMode = "colours";
 export const DEFAULT_STRENGTH: GlassStrength = "clear";
@@ -125,21 +126,122 @@ export function minVeil(under: Rgb, inks: readonly Rgb[] = INK_RGB, target = AA)
   return 1;
 }
 
-/** How strong the stage's two soft lights are (glass-tokens.css --st-stage-a2, --st-stage-a3). */
-export const GLOW_ALPHA = { second: 0.3, third: 0.3 } as const;
+/** How strong the stage's two main lights are (glass-tokens.css --st-stage-a2 copper, --st-stage-a3 amber). */
+export const GLOW_ALPHA = { second: 0.46, third: 0.3 } as const;
 /** What a bar's backdrop-filter can do to the colours under it (none, and the bar's saturate). */
 export const SATURATIONS: readonly number[] = [1, 1.35];
 
+export type ViewUnit = "vmax" | "vmin" | "vw" | "vh";
 /**
- * Every colour the colours stage can show (glass.css .st-backdrop__colours): the base, each light over it, and both
- * lights over each other (they can meet in the middle of a small window), each through every saturation.
+ * One soft light of the stage: `radial-gradient(rx ry at x% y%, rgb(tone / alpha), transparent stop)`. glass.css
+ * .stories-app::before draws exactly these, in this order (the first on top), over the first colour; the test
+ * (storiesGlass.test.tsx) holds the two together. `tone` 2 and 3 are the owner's second and third colours.
  */
-export function meshSpots(colours: readonly string[], saturations: readonly number[] = [1]): Rgb[] {
+export interface StageLight {
+  tone: 2 | 3 | "shadow";
+  alpha: number;
+  rx: number;
+  ry: number;
+  ux?: ViewUnit;
+  uy?: ViewUnit;
+  /** where its middle is, in % of the window */
+  x: number;
+  y: number;
+  /** where it has faded to nothing, 0..1 of its size (0.7 when left out) */
+  stop?: number;
+}
+/** The warm room of the owner's reference: a lamp's light strip at the right edge, amber high on the right, copper
+ *  low on the left, a darker corner behind the page heads, and a warm haze over everything. */
+export const STAGE_LIGHTS: readonly StageLight[] = [
+  { tone: 3, alpha: 0.34, rx: 7, ux: "vw", ry: 34, uy: "vh", x: 100, y: 48 },
+  { tone: 3, alpha: GLOW_ALPHA.third, rx: 46, ry: 36, x: 92, y: 2 },
+  { tone: 2, alpha: GLOW_ALPHA.second, rx: 50, ry: 40, x: 0, y: 104 },
+  { tone: "shadow", alpha: 0.5, rx: 56, ry: 40, x: 10, y: 8 },
+  { tone: 2, alpha: 0.24, rx: 90, ry: 64, x: 56, y: 46, stop: 1 },
+];
+const SHADOW: Rgb = [10, 6, 3];
+/** The windows the stage is worked out over: phones (short and tall), tablets, laptops, desktops, ultrawide, square. */
+export const STAGE_WINDOWS: readonly (readonly [number, number])[] = [
+  [320, 568],
+  [375, 812],
+  [320, 900],
+  [768, 1024],
+  [1024, 768],
+  [1440, 900],
+  [1920, 1080],
+  [2560, 1440],
+  [3440, 900],
+  [900, 900],
+];
+
+/** The stage of these colours as a function: the colour it draws at (x, y) of a w × h window (CSS's gradients,
+ *  composited in sRGB, exactly). */
+function stageOf(colours: readonly string[], lights: readonly StageLight[] = STAGE_LIGHTS): (x: number, y: number, w: number, h: number) => Rgb {
   const [c1, c2 = c1, c3 = c2] = colours.map(hexToRgb) as Rgb[];
-  const base = c1!;
-  const two = mix(c2!, base, GLOW_ALPHA.second);
-  const spots = [base, two, mix(c3!, base, GLOW_ALPHA.third), mix(c3!, two, GLOW_ALPHA.third)];
-  return spots.flatMap((s) => saturations.map((k) => saturateRgb(s, k)));
+  const tones = { 2: c2!, 3: c3!, shadow: SHADOW };
+  const ls = [...lights].reverse().map((l) => ({ ...l, rgb: tones[l.tone], stop: l.stop ?? 0.7, ux: l.ux ?? "vmax", uy: l.uy ?? "vmax" }));
+  return (x, y, w, h) => {
+    const unit = { vmax: Math.max(w, h) / 100, vmin: Math.min(w, h) / 100, vw: w / 100, vh: h / 100 };
+    let r = c1![0],
+      g = c1![1],
+      b = c1![2];
+    for (const l of ls) {
+      const dx = (x - (l.x / 100) * w) / (l.rx * unit[l.ux]);
+      const dy = (y - (l.y / 100) * h) / (l.ry * unit[l.uy]);
+      const a = l.alpha * (1 - Math.sqrt(dx * dx + dy * dy) / l.stop);
+      if (a <= 0) continue;
+      r = l.rgb[0] * a + r * (1 - a);
+      g = l.rgb[1] * a + g * (1 - a);
+      b = l.rgb[2] * a + b * (1 - a);
+    }
+    return [r, g, b];
+  };
+}
+/** The colour the stage draws at (x, y) of a w × h window. */
+export function stageAt(colours: readonly string[], x: number, y: number, w: number, h: number, lights: readonly StageLight[] = STAGE_LIGHTS): Rgb {
+  return stageOf(colours, lights)(x, y, w, h);
+}
+
+const spotCache = new Map<string, Rgb[]>();
+/** 0..w in steps, always ending on the edge itself (where the lights at the edge are brightest). */
+const steps = (from: number, to: number, by: number) => {
+  const out: number[] = [];
+  for (let v = from; v < to; v += by) out.push(v);
+  out.push(to);
+  return out;
+};
+/**
+ * The lightest colours the stage can show, worked out from exactly what it draws over every window in
+ * STAGE_WINDOWS: per window and saturation, the lightest pixel (a 32 px grid, then 4 px around the best).
+ */
+export function stageSpots(colours: readonly string[], saturations: readonly number[] = SATURATIONS): Rgb[] {
+  const key = `${colours.join()}|${saturations.join()}`;
+  const hit = spotCache.get(key);
+  if (hit) return hit;
+  const out: Rgb[] = [];
+  const at = stageOf(colours);
+  for (const [w, h] of STAGE_WINDOWS) {
+    for (const s of saturations) {
+      let best = { l: -1, x: 0, y: 0, c: [0, 0, 0] as Rgb };
+      const look = (x: number, y: number) => {
+        const c = at(x, y, w, h);
+        const l = luminance(s === 1 ? c : saturateRgb(c, s));
+        if (l > best.l) best = { l, x, y, c };
+      };
+      for (const y of steps(0, h, 32)) for (const x of steps(0, w, 32)) look(x, y);
+      const { x: bx, y: by } = best;
+      for (const y of steps(Math.max(0, by - 32), Math.min(h, by + 32), 4)) for (const x of steps(Math.max(0, bx - 32), Math.min(w, bx + 32), 4)) look(x, y);
+      out.push(best.c);
+    }
+  }
+  if (spotCache.size > 32) spotCache.clear();
+  spotCache.set(key, out);
+  return out;
+}
+
+/** Every colour the stage can show at its lightest, through each saturation (kept for the old name's readers). */
+export function meshSpots(colours: readonly string[], saturations: readonly number[] = [1]): Rgb[] {
+  return stageSpots(colours).flatMap((s) => saturations.map((k) => saturateRgb(s, k)));
 }
 const lightest = (spots: readonly Rgb[]): Rgb => spots.reduce((a, b) => (luminance(b) > luminance(a) ? b : a));
 
@@ -185,11 +287,12 @@ export function veilsFor(look: StoriesLook, glass: string = nativeGlass()): Veil
   if (kind === "window") return look.strength === "frosted" ? { ...FROSTED } : { ...MEASURED };
   if (kind === "picture") return { ...MEASURED };
   const colours = stageColours(look);
+  const spots = stageSpots(colours);
   // Loose words on the page: the page veil keeps them readable over the lightest spot (Frosted adds its frost).
-  const loose = minVeil(lightest(meshSpots(colours)));
+  const loose = minVeil(lightest(spots));
   const page = Math.max(loose, look.mode === "see-through" && look.strength === "frosted" ? FROST_PAGE : 0);
-  // Under the glass: the page veil, then each glass over the lightest spot a bar's saturate can make.
-  const under = mix(VEIL, lightest(meshSpots(colours, SATURATIONS)), page);
+  // Under the glass: the page veil, then each glass over the lightest spot a bar's saturate can make of it.
+  const under = lightest(spots.flatMap((s) => SATURATIONS.map((k) => saturateRgb(mix(VEIL, s, page), k))));
   const need = minVeil(under);
   const out = { ...COLOUR_FLOORS, page };
   for (const k of ["card", "tinted", "hero", "rail", "bar", "float"] as const) out[k] = Math.max(COLOUR_FLOORS[k], need);
@@ -328,8 +431,8 @@ export function glassTier(env: GlassEnv, chosen: unknown = storiesPrefs().more[L
   return env.refract && !env.lowPower ? "liquid" : "simple";
 }
 
-/** At most this many liquid rims on one screen (WebView2's budget); the rest keep the plain CSS light. */
-export const LENS_BUDGET = 3;
+/** At most this many liquid rims on one screen (WebView2's budget); the rest keep the plain CSS light (glass/lens.ts). */
+export { LENS_BUDGET };
 
 // ---------- Putting it on the page ----------
 
@@ -396,5 +499,12 @@ export function useStoriesBackground(root: RefObject<HTMLElement | null>, active
     holdWindowGlass(active && kind === "window");
   }, [root, value, active]);
   useLayoutEffect(() => () => holdWindowGlass(false), []);
+  // The liquid rim (glass/lens.ts): only while Stories is on screen, only where the glass is "liquid" (Chromium on a
+  // capable device; the layout effect above has just put data-glass on the root).
+  useEffect(() => {
+    const el = root.current;
+    if (!el || !active || el.dataset.glass !== "liquid") return;
+    return watchLenses(el);
+  }, [root, value, active]);
   return value;
 }

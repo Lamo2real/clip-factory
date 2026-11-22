@@ -1,6 +1,15 @@
 // White rounded-square − and + around a value. Never disabled (a tap at the end says no with the deny sound,
-// through onLimit); the value is read out when it changes.
+// through onLimit); the value is read out when it changes. The signs are drawn (round, chunky strokes), so they are
+// the same size and weight in every font.
 import { cx } from "./cx.ts";
+
+function Sign({ plus }: { plus: boolean }) {
+  return (
+    <svg className="st-stepper__sign" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+      <path d={plus ? "M5 12h14M12 5v14" : "M5 12h14"} />
+    </svg>
+  );
+}
 
 export interface StepperProps {
   value: number;
@@ -31,13 +40,13 @@ export function Stepper({ value, onChange, label, min = -Infinity, max = Infinit
   return (
     <div className={cx("st-stepper", className)} role="group" aria-label={label}>
       <button type="button" className="st-stepper__btn" aria-label={`${decreaseLabel}: ${label}`} aria-disabled={value - step < min ? true : undefined} onClick={() => go(-1)}>
-        <span aria-hidden="true">−</span>
+        <Sign plus={false} />
       </button>
       <output className="st-stepper__value" aria-live="polite">
         {format(value)}
       </output>
       <button type="button" className="st-stepper__btn" aria-label={`${increaseLabel}: ${label}`} aria-disabled={value + step > max ? true : undefined} onClick={() => go(1)}>
-        <span aria-hidden="true">+</span>
+        <Sign plus />
       </button>
     </div>
   );

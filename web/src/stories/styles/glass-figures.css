@@ -113,6 +113,7 @@ a.st-pill.is-on:hover {
   font-size: var(--st-fs-num);
   font-weight: var(--st-weight-num);
   font-variation-settings: "opsz" var(--st-opsz-num);
+  font-stretch: var(--st-wdth-display);
   font-variant-numeric: lining-nums tabular-nums;
   line-height: 1;
   letter-spacing: -0.02em;
@@ -154,19 +155,32 @@ a.st-pill.is-on:hover {
   stroke-width: var(--st-dial-track);
 }
 .st-dial__groove {
-  stroke: rgb(var(--st-cream-rgb) / 0.18);
+  stroke: rgb(var(--st-well-rgb) / 0.55);
 }
 .st-dial__arc {
-  stroke: var(--st-accent);
+  stroke: var(--st-accent); /* the gradient below where SVG paints it (stroke="url(#…)") */
   transition: stroke-dasharray var(--st-dur-progress) var(--st-ease-progress);
+}
+.st-dial__stop-a {
+  stop-color: var(--st-action-top);
+}
+.st-dial__stop-b {
+  stop-color: var(--st-accent);
+}
+/* The white knob: a soft shade under it, and the accent ring (3:1 or more on the groove and on any glass) */
+.st-dial__knob,
+.st-dial__knob-shade {
+  transition:
+    cx var(--st-dur-progress) var(--st-ease-progress),
+    cy var(--st-dur-progress) var(--st-ease-progress);
 }
 .st-dial__knob {
   fill: var(--st-knob);
   stroke: var(--st-accent);
-  stroke-width: 3;
-  transition:
-    cx var(--st-dur-progress) var(--st-ease-progress),
-    cy var(--st-dur-progress) var(--st-ease-progress);
+  stroke-width: 2.5;
+}
+.st-dial__knob-shade {
+  fill: rgb(var(--st-shadow-rgb) / 0.4);
 }
 .st-dial__centre {
   position: relative;
@@ -209,6 +223,12 @@ a.st-pill.is-on:hover {
 .st-stepper__btn:hover {
   background: var(--st-cream-hover);
   box-shadow: var(--st-sheen-cream), var(--st-depth-2);
+}
+.st-stepper__sign {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
 }
 .st-stepper__btn[aria-disabled="true"] {
   background: var(--st-cream-2);

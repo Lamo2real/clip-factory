@@ -152,6 +152,23 @@ describe("the figures", () => {
     expect($("[role=progressbar]")).toBeNull();
   });
 
+  it("Stepper: its − and + are drawn signs (the same in every font), named for screen readers", () => {
+    render(<Stepper value={2} label="Scenes at a time" onChange={() => undefined} />);
+    const btns = Array.from(host.querySelectorAll<HTMLButtonElement>(".st-stepper__btn"));
+    expect(btns.map((b) => b.querySelector("svg.st-stepper__sign")?.getAttribute("aria-hidden"))).toEqual(["true", "true"]);
+    expect(btns.map((b) => b.textContent)).toEqual(["", ""]);
+    expect(btns.map((b) => b.getAttribute("aria-label"))).toEqual(["Less: Scenes at a time", "More: Scenes at a time"]);
+  });
+
+  it("ArcDial: a warm gradient along the arc under an id that is safe in url(#…), and a shaded white knob", () => {
+    render(<ArcDial value={0.4} label="Making the video" />);
+    const grad = $("linearGradient")!;
+    expect(grad.id).toMatch(/^st-dial-[A-Za-z0-9_-]+-arc$/);
+    expect($(".st-dial__arc")?.getAttribute("stroke")).toBe(`url(#${grad.id})`);
+    expect($(".st-dial__knob-shade")).not.toBeNull();
+    expect($(".st-dial__knob")?.getAttribute("cx")).toBe(String(knobAt(0.4).x));
+  });
+
   it("PhoneTabHighlight: the round highlight, decorative", () => {
     render(<PhoneTabHighlight />);
     expect($(".st-tab-orb")?.getAttribute("aria-hidden")).toBe("true");
@@ -226,6 +243,28 @@ describe("the background is Stories' own", () => {
     expect(host.querySelector("[disabled]")).toBeNull();
     for (const bar of Array.from(host.querySelectorAll("[role=radiogroup]"))) expect(bar.querySelector(":scope > .glide")).not.toBeNull();
   });
+
+  it("Settings › Look shows what each choice gives, Ember first among the colours, a picture row in Picture", () => {
+    setStoriesLook({ mode: "colours", colours: [...EMBER] });
+    render(<LookSection />);
+    const art = Array.from(host.querySelectorAll(".st-look__art"));
+    expect(art.map((a) => a.className.replace("st-look__art ", ""))).toEqual(["st-look__art--window", "st-look__art--picture", "st-look__art--colours"]);
+    expect(art.every((a) => a.getAttribute("aria-hidden") === "true")).toBe(true);
+    // Colours (the default): the presets, Ember chosen, each with its three swatches
+    const presets = Array.from(host.querySelectorAll<HTMLButtonElement>('[aria-label="Colours"] [role=radio]'));
+    expect(presets.map((p) => p.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["Ember", "Rose", "Lagoon"]);
+    expect(presets[0]!.getAttribute("aria-checked")).toBe("true");
+    expect(presets[0]!.querySelectorAll(".st-look__swatch")).toHaveLength(3);
+    act(() => presets[1]!.click());
+    expect(storiesLook().colours).toEqual(["#21121a", "#c8546a", "#f59a7a"]);
+    // Picture: until one is chosen, a preview of Ember and the button to choose one (never disabled)
+    act(() => host.querySelectorAll<HTMLButtonElement>('[aria-label="Background"] [role=radio]')[1]!.click());
+    expect(storiesLook().mode).toBe("picture");
+    expect($(".st-look__thumb")).not.toBeNull();
+    expect(host.textContent).toContain("Choose a picture");
+    expect(host.querySelector("[disabled]")).toBeNull();
+    expect(localStorage.getItem("cf.prefs")).toBeNull();
+  });
 });
 
 describe("every word stays readable", () => {
@@ -263,6 +302,13 @@ describe("the tokens", () => {
     expect(px("--st-r-surface") - px("--st-bezel-pad")).toBe(px("--st-r-inner"));
     expect(px("--st-r-surface") / 26).toBeLessThan(0.8);
     expect(px("--st-r-control") / 18).toBeLessThan(0.8);
+  });
+
+  it("set headings in Playfair's display optical size, a little condensed, and numerals light", () => {
+    const glass = readFileSync(join(import.meta.dirname, "..", "src", "stories", "styles", "glass.css"), "utf8");
+    expect(/\.st-display \{[^}]*font-variation-settings: "opsz" var\(--st-opsz-display\)/.test(glass)).toBe(true);
+    expect(css).toMatch(/--st-fs-min: 0\.8125rem/);
+    expect(css).toMatch(/--st-weight-num: 300/);
   });
 
   it("define the four logo tokens and the warm palette", () => {

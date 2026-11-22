@@ -28,21 +28,21 @@
   --st-base: #1c130e; /* espresso: the page and the glass tint */
   --st-base-2: #2a1c14; /* smoky brown: the lightest base stop */
   --st-base-3: #0f0a07; /* roast: the far corner */
-  --st-glow-copper: #e0763a; /* Ember's second colour: the copper light low on the left */
-  --st-glow-amber: #ffa852; /* Ember's third colour: the amber light high on the right */
+  --st-glow-copper: #e2621f; /* Ember's second colour: the copper light low on the left (and the warm haze) */
+  --st-glow-amber: #ff9a45; /* Ember's third colour: the amber light high on the right and the light strip */
   /* What the stage draws (look.ts sets the owner's colours here, inline on .stories-app). */
   --st-stage-c1: #1c130e;
-  --st-stage-c2-rgb: 224 118 58;
-  --st-stage-c3-rgb: 255 168 82;
-  --st-stage-a2: 0.3; /* how strong each light is (stories/look.ts GLOW_ALPHA) */
-  --st-stage-a3: 0.3;
+  --st-stage-c2-rgb: 226 98 31;
+  --st-stage-c3-rgb: 255 154 69;
+  --st-stage-a2: 0.46; /* how strong the copper light is (stories/look.ts GLOW_ALPHA, STAGE_LIGHTS) */
+  --st-stage-a3: 0.3; /* how strong the amber light is */
   --st-picture: none; /* Picture: url(the owner's picture), set by look.ts */
   /* Old names (screens read them until they move over; never add new uses) */
   --st-stage: #2a1c14;
   --st-stage-2: #1c130e;
   --st-stage-3: #0f0a07;
-  --st-stage-copper: #e0763a;
-  --st-stage-amber: #ffa852;
+  --st-stage-copper: #e2621f;
+  --st-stage-amber: #ff9a45;
 
   /* ========== 2. Words: light on glass, dark only on cream, the action and the status fills ========== */
   --st-text-strong: #fffaf2; /* headings and the big numerals */
@@ -100,7 +100,7 @@
   --st-accent-rgb: 255 138 61;
   --st-action-rgb: 255 154 69;
   --st-amber-rgb: 255 176 84;
-  --st-copper-rgb: 224 118 58;
+  --st-copper-rgb: 226 98 31;
   --st-coral-rgb: 255 127 106;
   --st-mint-rgb: 111 217 164;
   --st-sky-rgb: 124 198 230;
@@ -122,6 +122,8 @@
   --st-veil-float: 0.76; /* .st-glass--float: sheets, menus, toasts */
   --st-veil-plate: 0; /* .st-plate: behind loose words (0 over Ember, measured over a desktop or picture) */
   --st-veil-solid: 0.96; /* reduced transparency */
+  --st-veil-lens-rim: 0.4; /* a liquid hero's own tint: its filter lays the rest of --st-veil-hero under the words, so
+                              only the rim band (inside the padding, no words) is this thin and shows the bend */
   --st-tint-cut: 0.12;
 
   /* ========== 5. The glass recipe ==========
@@ -131,6 +133,7 @@
   --st-tint-card: linear-gradient(165deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-card) + 0.05)), rgb(var(--st-veil-rgb) / var(--st-veil-card)));
   --st-tint-tinted: linear-gradient(rgb(var(--st-tone-rgb, var(--st-action-rgb)) / var(--st-tint-cut)), rgb(var(--st-tone-rgb, var(--st-action-rgb)) / var(--st-tint-cut))), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
   --st-tint-hero: linear-gradient(160deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-hero) + 0.04)), rgb(var(--st-veil-rgb) / var(--st-veil-hero)));
+  --st-tint-lens: linear-gradient(160deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-lens-rim) + 0.04)), rgb(var(--st-veil-rgb) / var(--st-veil-lens-rim)));
   --st-tint-rail: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-rail) + 0.04)), rgb(var(--st-veil-rgb) / var(--st-veil-rail)));
   --st-tint-bar: rgb(var(--st-veil-rgb) / var(--st-veil-bar));
   --st-tint-float: rgb(var(--st-veil-rgb) / var(--st-veil-float));
@@ -188,7 +191,7 @@
      WebKit (the Mac app, Safari, iPhone) ignores url() there: it gets the plain CSS light (edge-hero, sheen-hero). */
   --st-lens-url: none;
   --st-lens-band: 26px; /* how wide the bending rim is: inside the hero's padding, so it never reaches words */
-  --st-lens-depth: 22px; /* how far light moves at the rim */
+  --st-lens-depth: 12px; /* how far light moves at the very rim (at most 0.48 of the band, so it never folds) */
   --st-saturate-lens: 1.5;
 
   /* ========== 7. Radius: ONE scale, by kind (never by size), about 30 % less round, concentric ==========
@@ -262,7 +265,7 @@
   --st-opsz-display: 600;
   --st-opsz-num: 900;
   --st-wdth-display: 92%; /* headings a little condensed, like the owner's sample */
-  --st-weight-display: 600;
+  --st-weight-display: 500; /* Womack is a regular weight: high contrast, not bold */
   --st-weight-num: 300;
   --st-weight-body: 450;
   --st-weight-ui: 650; /* buttons, labels, rail rows */
@@ -334,6 +337,7 @@
     --st-veil-bar: var(--st-veil-solid);
     --st-veil-float: var(--st-veil-solid);
     --st-veil-plate: var(--st-veil-solid);
+    --st-veil-lens-rim: var(--st-veil-solid);
     --st-panel: rgb(var(--st-veil-rgb) / var(--st-veil-solid));
     --st-filter-glass: none;
     --st-filter-bar: none;
@@ -348,6 +352,7 @@
   --st-veil-bar: var(--st-veil-solid);
   --st-veil-float: var(--st-veil-solid);
   --st-veil-plate: var(--st-veil-solid);
+  --st-veil-lens-rim: var(--st-veil-solid);
   --st-panel: rgb(var(--st-veil-rgb) / var(--st-veil-solid));
   --st-filter-glass: none;
   --st-filter-bar: none;
