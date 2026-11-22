@@ -1,0 +1,42 @@
+[
+ {
+  "id": "bank-ask",
+  "role": "optional",
+  "auto": null
+ },
+ {
+  "id": "bank-account",
+  "role": "reading",
+  "auto": "app_known"
+ },
+ {
+  "id": "bank-key",
+  "role": "reading",
+  "auto": "key_made"
+ },
+ {
+  "id": "bank-app",
+  "role": "reading",
+  "auto": "app_known"
+ },
+ {
+  "id": "bank-details",
+  "role": "reading",
+  "auto": "app_known"
+ },
+ {
+  "id": "bank-appid",
+  "role": "reading",
+  "auto": "app_known"
+ },
+ {
+  "id": "bank-link",
+  "role": "reading",
+  "auto": "app_active"
+ },
+ {
+  "id": "bank-connect",
+  "role": "reading",
+  "auto": "bank_connected"
+ }
+]

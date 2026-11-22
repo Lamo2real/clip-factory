@@ -215,6 +215,18 @@ def test_every_contract_route_is_registered() -> None:
         ("POST", "/v1/getpaid/whop/connect"),
         ("DELETE", "/v1/getpaid/connections/adsense"),
         ("DELETE", "/v1/getpaid/connections/whop"),
+        # §40.5.10: Your bank
+        ("GET", "/v1/getpaid/bank"),
+        ("DELETE", "/v1/getpaid/bank"),
+        ("POST", "/v1/getpaid/bank/key"),
+        ("PUT", "/v1/getpaid/bank/app"),
+        ("POST", "/v1/getpaid/bank/app/check"),
+        ("PATCH", "/v1/getpaid/bank/steps"),
+        ("GET", "/v1/getpaid/bank/banks"),
+        ("POST", "/v1/getpaid/bank/connect"),
+        ("POST", "/v1/getpaid/bank/check"),
+        ("PATCH", "/v1/getpaid/bank/deposits/X"),
+        ("DELETE", "/v1/getpaid/bank/links/X"),
         # §43: follower counts
         ("GET", "/v1/followers"),
         # §19.6: Ask Clip Factory

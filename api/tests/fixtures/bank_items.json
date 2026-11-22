@@ -1,0 +1,81 @@
+[
+ {
+  "sk": "BANKOWNER",
+  "pk": "BANKOWNER",
+  "skPattern": "^BANKOWNER$",
+  "writtenBy": ["cf-prod-api"],
+  "attributes": ["type", "userId", "claimedAt"],
+  "example": {"type": "bankowner", "userId": "u1", "claimedAt": "2026-11-01T09:00:00.000Z"}
+ },
+ {
+  "sk": "BANKCONN",
+  "skPattern": "^BANKCONN$",
+  "writtenBy": ["cf-prod-api", "cf-prod-hooks", "cf-prod-money"],
+  "attributes": ["type", "stepsDone", "app", "lastManualAt", "manual", "forgottenAt", "updatedAt", "lastConnect", "readLease", "lastNotice", "lastRunAt"],
+  "app": ["status", "source", "keyMadeAt", "savedAt", "appIdHint", "active", "environment", "check", "downAt"],
+  "readLease": {"until": "an ISO time (UTC, ms, Z); claimed when absent or past, released by its holder"},
+  "byWriter": {"cf-prod-hooks": ["type", "lastConnect"], "cf-prod-money": ["readLease", "lastNotice", "lastRunAt", "app.check"]},
+  "example": {"type": "bankconn", "updatedAt": "2026-11-01T09:00:00.000Z", "lastManualAt": "2026-11-22T11:00:00.000Z", "manual": {"day": "2026-11-22", "n": 1}, "lastConnect": {"result": "bank_connected", "linkId": "a1b2c3d4e5f6", "bank": "Swedbank", "reconnect": false, "at": "2026-11-01T09:00:00.000Z"}, "stepsDone": ["bank-account", "bank-app", "bank-details"], "app": {"status": "saved", "source": "clipfactory", "keyMadeAt": "2026-11-01T09:00:00.000Z", "savedAt": "2026-11-01T09:00:00.000Z", "appIdHint": "0f6e1d2c…", "check": {"code": "ok", "at": "2026-11-01T09:00:00.000Z"}, "active": true, "environment": "PRODUCTION"}}
+ },
+ {
+  "sk": "BANKLINK#{linkId}",
+  "skPattern": "^BANKLINK#[0-9a-f]{12}$",
+  "writtenBy": ["cf-prod-hooks", "cf-prod-api", "cf-prod-money"],
+  "attributes": ["type", "linkId", "bank", "country", "status", "reason", "consentUntil", "connectedAt", "firstConnectedAt", "accountCount", "psuHeaders", "historyWanted", "firstReadDone", "firstReadStartedAt", "historyFrom", "readThrough", "lastReadAt", "lastError", "failingSince", "limitUntil", "reads", "resume", "warnedFor", "endedAt", "stoppedAt", "closePending", "updatedAt"],
+  "statuses": ["connected", "ended", "stopped_at_bank", "stopped"],
+  "reasons": ["consent_over", "ended_early", "psu_action"],
+  "bare": ["type", "linkId", "bank", "status", "stoppedAt", "closePending"],
+  "example": {"type": "banklink", "linkId": "a1b2c3d4e5f6", "bank": "Swedbank", "country": "SE", "status": "connected", "consentUntil": "2027-04-30T09:00:00.000Z", "connectedAt": "2026-11-01T09:00:00.000Z", "firstConnectedAt": "2026-11-01T09:00:00.000Z", "accountCount": 2, "psuHeaders": ["psu-ip-address", "psu-user-agent"], "firstReadDone": true, "updatedAt": "2026-11-01T09:00:00.000Z", "lastReadAt": "2026-11-22T06:00:00.000Z", "readThrough": "2026-11-22", "historyFrom": "2026-08-03", "historyWanted": true}
+ },
+ {
+  "sk": "DEPOSIT#{yyyy-mm-dd}#{depositId}",
+  "skPattern": "^DEPOSIT#\\d{4}-\\d{2}-\\d{2}#[0-9a-f]{32}$",
+  "state": "matched",
+  "writtenBy": ["cf-prod-money", "cf-prod-api"],
+  "attributes": ["type", "depositId", "state", "date", "amountMinor", "exponent", "currency", "place", "how", "payoutRef", "payoutDate", "payerKey", "hintFrom", "shared", "notPayout", "linkId", "source", "fetchedAt", "confirmedAt", "quiet"],
+  "places": ["youtube", "tiktok", "instagram", "facebook", "meta", "x", "contentrewards"],
+  "hows": ["payout", "payer", "you"],
+  "example": {"type": "deposit", "sk": "DEPOSIT#2026-10-28#0123456789abcdef0123456789abcdef", "depositId": "0123456789abcdef0123456789abcdef", "state": "matched", "date": "2026-10-28", "amountMinor": 123456, "exponent": 2, "currency": "SEK", "linkId": "a1b2c3d4e5f6", "source": "enable_banking", "fetchedAt": "2026-11-22T06:00:00.000Z", "place": "youtube", "how": "payout", "payoutRef": "PAYOUT#youtube#2026-10-21#p1", "payoutDate": "2026-10-21"}
+ },
+ {
+  "sk": "DEPOSIT#{yyyy-mm-dd}#{depositId}",
+  "skPattern": "^DEPOSIT#\\d{4}-\\d{2}-\\d{2}#[0-9a-f]{32}$",
+  "state": "needs_you",
+  "writtenBy": ["cf-prod-money", "cf-prod-api"],
+  "attributes": ["type", "depositId", "state", "date", "amountMinor", "exponent", "currency", "payerKey", "notPayout", "linkId", "source", "fetchedAt", "quiet", "suggested", "kind", "hint", "hintFrom", "shared", "notSure", "ttl"],
+  "kinds": ["place", "own_move"],
+  "hints": ["whop", "tiktok", "instagram", "facebook", "meta", "youtube", "x", "stripe", "payoneer", "paypal"],
+  "example": {"type": "deposit", "sk": "DEPOSIT#2026-11-18#fedcba9876543210fedcba9876543210", "depositId": "fedcba9876543210fedcba9876543210", "state": "needs_you", "date": "2026-11-18", "amountMinor": 8500, "exponent": 2, "currency": "SEK", "linkId": "a1b2c3d4e5f6", "source": "enable_banking", "fetchedAt": "2026-11-22T06:00:00.000Z", "suggested": "youtube", "hint": "youtube", "hintFrom": "payer", "payerKey": "0123456789abcdef0123456789abcdef", "shared": false, "kind": "place", "ttl": 1810857600}
+ },
+ {
+  "sk": "DEPOSIT#{yyyy-mm-dd}#{depositId}",
+  "skPattern": "^DEPOSIT#\\d{4}-\\d{2}-\\d{2}#[0-9a-f]{32}$",
+  "state": "not_income",
+  "writtenBy": ["cf-prod-api"],
+  "attributes": ["type", "depositId", "state", "date", "linkId", "why", "ttl"],
+  "whys": ["you", "own_move"],
+  "example": {"type": "deposit", "depositId": "00112233445566778899aabbccddeeff", "state": "not_income", "date": "2026-11-11", "linkId": "a1b2c3d4e5f6", "why": "you", "ttl": 1828915200}
+ },
+ {
+  "sk": "BANKPAYERS",
+  "skPattern": "^BANKPAYERS$",
+  "writtenBy": ["cf-prod-api"],
+  "attributes": ["type", "rules", "notIncome", "updatedAt"],
+  "example": {"type": "bankpayers", "rules": {"0123456789abcdef0123456789abcdef": {"place": "meta", "learnedAt": "2026-11-01T09:00:00.000Z"}}, "notIncome": ["fedcba9876543210fedcba9876543210"], "updatedAt": "2026-11-01T09:00:00.000Z"}
+ },
+ {
+  "secret": "cf-prod/platforms/bank/app",
+  "writtenBy": ["cf-prod-api"],
+  "readBy": ["cf-prod-api", "cf-prod-hooks", "cf-prod-money"],
+  "attributes": ["privateKeyPem", "publicKeyPem", "certificatePem", "hashKey", "appId", "source", "keyMadeAt"],
+  "example": {"privateKeyPem": "-----BEGIN PRIVATE KEY-----\n…\n-----END PRIVATE KEY-----\n", "publicKeyPem": "-----BEGIN PUBLIC KEY-----\n…\n-----END PUBLIC KEY-----\n", "certificatePem": "-----BEGIN CERTIFICATE-----\n…\n-----END CERTIFICATE-----\n", "hashKey": "base64 of 32 random bytes", "appId": "0f6e1d2c-3b4a-4c5d-8e9f-a0b1c2d3e4f5", "source": "clipfactory", "keyMadeAt": "2026-11-01T09:00:00.000Z"}
+ },
+ {
+  "secret": "cf-prod/platforms/bank/token_{linkId}",
+  "writtenBy": ["cf-prod-hooks", "cf-prod-api"],
+  "readBy": ["cf-prod-money", "cf-prod-api"],
+  "attributes": ["sessionId", "accounts", "validUntil", "bank", "country", "connectedAt", "closeLater"],
+  "accounts": ["uid", "idHash"],
+  "example": {"sessionId": "sess-1", "accounts": [{"uid": "uid-1", "idHash": "idhash-1"}], "validUntil": "2027-04-30T08:50:00.000Z", "bank": "Swedbank", "country": "SE", "connectedAt": "2026-11-01T09:00:00.000Z", "closeLater": []}
+ }
+]

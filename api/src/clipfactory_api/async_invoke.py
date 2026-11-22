@@ -1,5 +1,5 @@
 """Asynchronous Invokes of ``cf-prod-stats`` (manual refresh), ``cf-prod-learn`` (weekly best), §16.2,
-``cf-prod-money`` (Check now, §25.5) and, for Content Rewards (§38), ``cf-prod-campaigns`` (rules read, logo link,
+``cf-prod-money`` (Check now, §25.5, and Your bank's Check now, §40.5.6) and, for Content Rewards (§38), ``cf-prod-campaigns`` (rules read, logo link,
 brand picture and, since §41, the campaign finder's ``find``) and ``cf-prod-stats`` (``{"action": "contentrewards"}``).
 
 Both are plain functions (not durable), invoked on their unqualified ARN with ``InvocationType="Event"``: Lambda
@@ -39,6 +39,11 @@ class AsyncInvoker:
     def refresh_money(self, user_id: str) -> None:
         """``cf-prod-money`` reads every connected platform for this owner now (§25.5 Check now)."""
         self._invoke(self.money_arn, {"action": "refresh", "userId": user_id})
+
+    def bank_check(self, user_id: str, first: bool, psu: dict[str, str], at: str) -> None:
+        """``cf-prod-money`` reads this owner's bank now (§40.5.6 Check now). ``psu`` (his IP address, User-Agent and
+        Accept-Language) goes to Enable Banking for that one read only: never stored, never logged."""
+        self._invoke(self.money_arn, {"action": "bank", "userId": user_id, "first": first, "psu": psu, "at": at})
 
     def read_campaign(self, user_id: str, campaign_id: str) -> None:
         """``cf-prod-campaigns`` reads the campaign's rules from the item (§38.10)."""

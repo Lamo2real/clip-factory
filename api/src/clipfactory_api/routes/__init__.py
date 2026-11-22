@@ -6,6 +6,7 @@ from ..http import Route, route
 from . import (
     ask,
     autopost,
+    bank,
     clips,
     contentrewards,
     finder,
@@ -114,6 +115,19 @@ ROUTES: list[Route] = [
     route("POST", "/v1/getpaid/whop/connect", getpaid.connect_whop),
     route("DELETE", "/v1/getpaid/connections/adsense", getpaid.stop_adsense),
     route("DELETE", "/v1/getpaid/connections/whop", getpaid.stop_whop),
+    # §40.5: Your bank (Enable Banking). 503 "Coming soon." on every one (GET: {"on": false}) until BANK_READING=on.
+    # Before "/v1/getpaid/{place}" so "bank" never reads as a place.
+    route("GET", "/v1/getpaid/bank", bank.get_bank),
+    route("DELETE", "/v1/getpaid/bank", bank.forget),
+    route("POST", "/v1/getpaid/bank/key", bank.make_key),
+    route("PUT", "/v1/getpaid/bank/app", bank.put_app),
+    route("POST", "/v1/getpaid/bank/app/check", bank.check_app),
+    route("PATCH", "/v1/getpaid/bank/steps", bank.patch_steps),
+    route("GET", "/v1/getpaid/bank/banks", bank.get_banks),
+    route("POST", "/v1/getpaid/bank/connect", bank.connect),
+    route("POST", "/v1/getpaid/bank/check", bank.check_now),
+    route("PATCH", "/v1/getpaid/bank/deposits/{depositId}", bank.patch_deposit),
+    route("DELETE", "/v1/getpaid/bank/links/{linkId}", bank.stop_link),
     route("GET", "/v1/getpaid/{place}", getpaid.get_place),
     # §43: follower counts, read from the snapshots the daily money run already stores.
     route("GET", "/v1/followers", followers.get_followers),
