@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { blocks, CONTROLS, DODGE_HOLD_MS, DODGE_SETTLE_MS, type Box } from "../src/features/help/dodge.ts";
 import { SPOT_ARRIVE_CAP_MS } from "../src/features/help/spotlight.ts";
 import { animationsDone, findOverflow, launcherSettled, settle } from "./helpers.ts";
+import { watchFor } from "./motionHelpers.ts";
 
 // These cover Ask's §19/§26 path (plain answers, pictures inline): the mock's assistant (§28) is turned off here.
 // e2e/ask-assistant.spec.ts and e2e/ask-markup.spec.ts cover the assistant.
@@ -287,9 +288,10 @@ for (const size of SIZES) {
       // Tap the plane: it flies, and the question shows straight away (it does not wait for the flight).
       await box.fill("What does Keep do?");
       await expect(send).not.toHaveAttribute("aria-disabled", "true");
+      // The flight lasts ACT_MS.send: watch for it, trail and all, from before the tap: a busy machine cannot hide it.
+      const flew = await watchFor(send, ".fly.is-flying > .fly__trail");
       await send.click();
-      await expect(send.locator(".fly")).toHaveClass(/is-flying/);
-      await expect(send.locator(".fly__trail")).toHaveCount(1);
+      await expect.poll(flew).toBe(true);
       await expect(p.locator(".help-msg--me")).toHaveText(["What does Keep do?"]);
       await expect(box).toHaveValue("");
       await expect(send.locator(".fly")).not.toHaveClass(/is-flying/, { timeout: 2000 });
