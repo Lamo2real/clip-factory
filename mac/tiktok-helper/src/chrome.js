@@ -67,6 +67,8 @@ export async function quit(browser) {
   } catch {
     // disconnected
   }
+  // Wait until it has really gone, so the next open (maybe visible, for a login) starts a fresh window.
+  for (let i = 0; i < 40 && (await cdpUp()); i++) await sleep(250);
 }
 
 export async function running() {

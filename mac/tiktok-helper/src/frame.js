@@ -6,7 +6,7 @@
 // and quits on off. The helper turns it red before it touches anything, names each step in a notification, and
 // turns it green at the end or takes it down on a stop. No frame, no post: if the frame can't be shown, the clip
 // waits (frameReady). When a Claude session had the frame up before (its own control), that state comes back after.
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -54,6 +54,27 @@ async function notifyStep(step) {
     await run(tool, ["-e", script], { timeout: 10_000 });
   } catch {
     // the frame is the sign; a missed notification never stops anything
+  }
+}
+
+/** The yellow frame and a pop-up that asks the owner for something (say.sh ask: it waits for OK in the background,
+ * then the frame goes back to red). Never waited for: the helper carries on as soon as what it needs is there. */
+export function ask(message) {
+  const say = path.join(CONTROL, "say.sh");
+  if (!fs.existsSync(say)) return () => {};
+  try {
+    const child = spawn("/bin/sh", [say, "ask", message], { detached: true, stdio: "ignore" });
+    child.unref();
+    // Closes the pop-up (its whole process group) so it can't turn the frame red again later.
+    return () => {
+      try {
+        process.kill(-child.pid, "SIGTERM");
+      } catch {
+        // already answered
+      }
+    };
+  } catch {
+    return () => {};
   }
 }
 

@@ -6,20 +6,20 @@ import path from "node:path";
 import { ApiError, client } from "./api.js";
 import { SignInNeeded, accessToken, appConfig } from "./auth.js";
 import * as chrome from "./chrome.js";
-import { frame, frameAvailable } from "./frame.js";
+import { ask, frame, frameAvailable } from "./frame.js";
 import { freeName } from "./match.js";
 import { event, log, notify } from "./notify.js";
 import { DOWNLOADS, LOCK, VERSION } from "./paths.js";
 import { nextAction } from "./plan.js";
 import { loadSettings, loadState, remember, saveState } from "./store.js";
-import { Stop, find, post } from "./tiktok.js";
+import { REASONS, Stop, find, loggedIn, post } from "./tiktok.js";
 
 // What the notification says at each step (the red frame stays up the whole time).
 const STEP_WORDS = {
   video: "Saving the video to Downloads",
   opening: "Opening TikTok Studio",
   uploading: "Uploading the video to TikTok",
-  settings: "Caption, Everyone, Comment, Duet and Stitch",
+  settings: "Caption, Everyone, Comment and Reuse of content",
   pressing: "Pressing Post",
   finding: "Finding the new post's link",
 };
@@ -52,7 +52,16 @@ function dropLock() {
   fs.rmSync(LOCK, { recursive: true, force: true });
 }
 
-async function download(api, job) {
+/** A file the helper may reuse or delete: one it wrote itself, in Downloads, named clip-factory-….mp4. */
+export function ownFile(file) {
+  if (!file) return false;
+  return path.resolve(path.dirname(file)) === path.resolve(DOWNLOADS) && /^clip-factory-.*\.mp4$/i.test(path.basename(file));
+}
+
+/** The video for this post: the file kept from an earlier try when it is still there, else a fresh download. */
+async function videoFile(api, state, job) {
+  const kept = state.ledger[job.clipId]?.file;
+  if (ownFile(kept) && fs.existsSync(kept) && fs.statSync(kept).size > 0) return kept;
   const { url, filename } = await api.file(job.clipId);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`The video did not download (${res.status}).`);
@@ -60,7 +69,16 @@ async function download(api, job) {
   const name = freeName(filename || job.fileName, (n) => fs.existsSync(path.join(DOWNLOADS, n)));
   const file = path.join(DOWNLOADS, name);
   fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+  remember(state, job.clipId, { file });
   return file;
+}
+
+/** The owner's rule (22 Nov): the video leaves Downloads only once TikTok has the post (its link found), and only
+ * the file the helper itself saved for it. Nothing else in Downloads is ever touched. */
+function deleteVideo(state, clipId) {
+  const file = state.ledger[clipId]?.file;
+  if (ownFile(file)) fs.rmSync(file, { force: true });
+  if (file) remember(state, clipId, { file: null });
 }
 
 /** Keeps the Mac from idle-sleeping while a post runs (not through a lid close). */
@@ -85,30 +103,66 @@ async function stopped(api, state, job, reason, needsYou) {
   await notify("TikTok: your Mac stopped", `${job.hook ? `“${job.hook}”: ` : ""}${reason}`);
 }
 
+/** TikTok has it (its link was found): tell Clip Factory, then delete the helper's own video file. */
 async function finished(api, state, job, link, { counted }) {
-  const answer = await api.done(job.clipId, state.device, link || undefined, job.attempt);
-  remember(state, job.clipId, { step: "done", link: link || null });
+  const answer = await api.done(job.clipId, state.device, link, job.attempt);
+  remember(state, job.clipId, { step: "done", link });
   if (counted) {
-    state.posted.push({ clipId: job.clipId, hook: job.hook, link: link || null, at: new Date().toISOString() });
+    state.posted.push({ clipId: job.clipId, hook: job.hook, link, at: new Date().toISOString() });
     saveState(state);
   }
-  event("posted", { clipId: job.clipId, hook: job.hook, link: link || null, note: answer?.note });
+  deleteVideo(state, job.clipId);
+  event("posted", { clipId: job.clipId, hook: job.hook, link, note: answer?.note });
   await notify("On TikTok ✓", job.hook ? `“${job.hook}” is on TikTok for everyone.` : "Your clip is on TikTok for everyone.");
 }
 
-async function doPost(api, state, job, { fresh = false, fr } = {}) {
+const LOGIN_WAIT_MS = 20 * 60_000;
+export const LOGIN_ASK = "TikTok logged the helper out: log in again in the helper window";
+
+/**
+ * TikTok logged the helper's Chrome out: the yellow frame and a pop-up ask him to log in again, the helper's window
+ * opens on TikTok's login, and the post waits (still this Mac's). Once he is logged in, the frame goes red again and
+ * the helper carries on. Returns false when no login came within 20 minutes.
+ */
+async function relogin(fr) {
+  const closeAsk = ask(LOGIN_ASK);
+  event("login_needed", {});
+  await notify("TikTok: log in again", LOGIN_ASK);
+  const { browser, page } = await chrome.open({ visible: true });
+  try {
+    if (!(await loggedIn(page))) await page.goto("https://www.tiktok.com/login?lang=en").catch(() => {});
+    const until = Date.now() + LOGIN_WAIT_MS;
+    while (Date.now() < until) {
+      if (await loggedIn(page).catch(() => false)) {
+        closeAsk();
+        event("setup", { part: "tiktok", again: true });
+        await fr.step("Logged in to TikTok again, carrying on");
+        return true;
+      }
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+    closeAsk();
+    return false;
+  } finally {
+    await chrome.quit(browser);
+  }
+}
+
+const isLogin = (e) => e instanceof Stop && e.reason === REASONS.login;
+
+async function doPost(api, state, job, { fresh = false, fr, relogged = false } = {}) {
   const mine = state.ledger[job.clipId] || {};
   // A fresh claim starts counting again; a resumed try counts on.
   const tries = (fresh ? 0 : mine.tries || 0) + 1;
   remember(state, job.clipId, { device: state.device, step: "claimed", tries });
-  let file = null;
   let browser = null;
   let posted = false;
+  let handedOn = false;
   const awake = stayAwake();
   try {
     await fr.step(`${STEP_WORDS.video}${quoteHook(job)}`);
     await api.step(job.clipId, state.device, "video", job.attempt);
-    file = await download(api, job);
+    const file = await videoFile(api, state, job);
     const opened = await chrome.open();
     browser = opened.browser;
     const onStep = async (step, extra = {}) => {
@@ -124,18 +178,27 @@ async function doPost(api, state, job, { fresh = false, fr } = {}) {
       await fr.step(STEP_WORDS[step] || step);
     };
     const result = await post(opened.page, job, file, onStep);
-    if (result.link || result.sure) {
+    if (result.link) {
       await finished(api, state, job, result.link, { counted: !result.existing });
       posted = true;
     } else {
-      // Pressed, but no proof yet: later ticks only look for it in Studio › Posts (never press again), and after
-      // 30 minutes without it the owner is asked "Did it post?".
+      // Pressed, but its link isn't in Studio › Posts yet: later ticks only look for it (never press again) and the
+      // video stays in Downloads until it is found; after 30 minutes without it the owner is asked "Did it post?".
       remember(state, job.clipId, { step: "finding" });
-      log("post.unconfirmed", { clipId: job.clipId });
+      log("post.unconfirmed", { clipId: job.clipId, said: result.sure });
     }
   } catch (e) {
     const pressed = state.ledger[job.clipId]?.step === "pressing" || state.ledger[job.clipId]?.step === "finding";
-    if (e instanceof Stop) {
+    if (isLogin(e) && !pressed && !relogged) {
+      // Logged out: hold this post, ask him to log in, then carry on with it.
+      if (browser) await chrome.quit(browser);
+      browser = null;
+      if (await relogin(fr)) {
+        handedOn = true;
+        return await doPost(api, state, job, { fr, relogged: true });
+      }
+      await stopped(api, state, job, e.reason, true);
+    } else if (e instanceof Stop) {
       await stopped(api, state, job, e.reason, e.needsYou);
     } else if (!pressed && e instanceof ApiError && e.status === 409) {
       // Clip Factory said wait (its switch or auto-posting went off, or another try has it): nothing was pressed, so
@@ -150,23 +213,24 @@ async function doPost(api, state, job, { fresh = false, fr } = {}) {
       log("post.error", { clipId: job.clipId, error: String(e.stack || e) });
       await stopped(api, state, job, "Your Mac's helper ran into a problem three times. Post it yourself for now.", false);
     } else {
-      // Before the press: try again on a later tick (the post stays with this Mac).
+      // Before the press: try again on a later tick (the post stays with this Mac, and so does its video).
       log("post.retry_later", { clipId: job.clipId, tries, error: String(e.message || e) });
     }
   } finally {
     if (browser) await chrome.quit(browser);
     awake();
-    if (file) fs.rmSync(file, { force: true }); // the owner's rule: the video leaves Downloads after every try
-    if (posted) await fr.done(`On TikTok ✓${quoteHook(job)}`);
-    else await fr.off();
+    if (!handedOn) {
+      if (posted) await fr.done(`On TikTok ✓${quoteHook(job)}`);
+      else await fr.off();
+    }
   }
 }
 
-async function doFind(api, state, job) {
+async function doFind(api, state, job, { relogged = false, fr = frame() } = {}) {
   let browser = null;
   let found = false;
-  const fr = frame();
-  if (!(await fr.on(`Looking for${quoteHook(job)} on TikTok`))) return log("frame.missing", { clipId: job.clipId });
+  let handedOn = false;
+  if (!fr.shown && !(await fr.on(`Looking for${quoteHook(job)} on TikTok`))) return log("frame.missing", { clipId: job.clipId });
   try {
     const opened = await chrome.open();
     browser = opened.browser;
@@ -180,12 +244,38 @@ async function doFind(api, state, job) {
       await stopped(api, state, job, "Your Mac pressed Post but couldn't confirm it.", false);
     }
   } catch (e) {
-    if (e instanceof Stop) await stopped(api, state, job, e.reason, e.needsYou);
+    if (isLogin(e) && !relogged) {
+      if (browser) await chrome.quit(browser);
+      browser = null;
+      if (await relogin(fr)) {
+        handedOn = true;
+        return await doFind(api, state, job, { relogged: true, fr });
+      }
+      await stopped(api, state, job, e.reason, true);
+    } else if (e instanceof Stop) await stopped(api, state, job, e.reason, e.needsYou);
     else log("find.error", { clipId: job.clipId, error: String(e.message || e) });
   } finally {
     if (browser) await chrome.quit(browser);
-    if (found) await fr.done(`On TikTok ✓${quoteHook(job)}`);
-    else await fr.off();
+    if (!handedOn) {
+      if (found) await fr.done(`On TikTok ✓${quoteHook(job)}`);
+      else await fr.off();
+    }
+  }
+}
+
+/** A video kept from a try that stopped: once that clip is on TikTok anyway (he posted it himself, or a later try),
+ * the helper's own file leaves Downloads. */
+async function tidy(api, state, queue) {
+  const busy = new Set(queue.map((j) => j.clipId));
+  for (const [clipId, entry] of Object.entries(state.ledger)) {
+    if (!entry.file || busy.has(clipId)) continue;
+    try {
+      const { posts = [] } = (await api.posts(clipId)) || {};
+      const tiktok = posts.find((p) => p.platform === "tiktok");
+      if (tiktok && tiktok.status === "posted" && tiktok.privacy === "public") deleteVideo(state, clipId);
+    } catch (e) {
+      log("tidy.error", { clipId, error: String(e.message || e) });
+    }
   }
 }
 
@@ -249,6 +339,8 @@ export async function tick() {
       await doPost(api, state, job, { fresh: action.action === "post", fr });
     } else if (action.action === "find") {
       await doFind(api, state, action.job);
+    } else {
+      await tidy(api, state, queue);
     }
     return action;
   } finally {

@@ -44,6 +44,7 @@ export function client(apiUrl, token, fetchImpl = fetch) {
       }),
     file: (clipId) => call("GET", `${clip(clipId)}/file`),
     clip: (clipId) => call("GET", clip(clipId)),
+    posts: (clipId) => call("GET", `/posts?clipId=${encodeURIComponent(clipId)}`),
     settings: (patch) => call("PUT", "/settings", patch),
     send: (clipIds) => call("POST", "/tiktok/mac/send", { clipIds }),
   };
