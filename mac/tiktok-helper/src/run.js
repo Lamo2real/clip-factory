@@ -11,7 +11,7 @@ import { freeName } from "./match.js";
 import { event, log } from "./notify.js";
 import { DOWNLOADS, LOCK, VERSION } from "./paths.js";
 import { nextAction } from "./plan.js";
-import { loadSettings, loadState, remember, saveState } from "./store.js";
+import { loadSettings, loadState, remember, saveSettings, saveState } from "./store.js";
 import { askAndSaveLogin, countTry, forgetLogin, hasLogin, passwordAllowed, readLogin } from "./login.js";
 import { LOGIN_URL, REASONS, Stop, find, loggedIn, passwordLogin, post } from "./tiktok.js";
 
@@ -101,6 +101,12 @@ async function stopped(api, state, job, reason, needsYou) {
   }
   remember(state, job.clipId, { step: pressed ? "finding" : "stopped", reason });
   event("stopped", { clipId: job.clipId, hook: job.hook, reason, needsYou, pressed });
+  // The owner's one-time batch (22 Nov): "If TikTok shows a limit, a warning or a puzzle, stop at once, hold the
+  // rest". Any stop during a batch pauses this Mac (cli.js on resumes it); the rest wait on the server.
+  if (loadSettings().backfill?.haltOnStop) {
+    saveSettings({ paused: true });
+    event("batch_halted", { clipId: job.clipId, reason });
+  }
   // On screen only when he is truly needed (yellow frame, one pop-up); otherwise the clip's row says it.
   if (needsYou) ask(`${job.hook ? `“${job.hook}”: ` : ""}${reason}`);
 }
@@ -207,8 +213,16 @@ async function doPost(api, state, job, { fresh = false, fr, relogged = false } =
         // On disk first, then the server: if either fails, Post is not pressed. The ids already in Studio › Posts
         // are kept, so a later look finds only the new post.
         state.lastPressedAt = new Date().toISOString();
-        // One backlog clip per auto-posting run (plan.js): remember when the last one went.
-        if (job.source !== "upload" && job.source !== "auto") state.lastBacklogAt = state.lastPressedAt;
+        // One backlog clip per auto-posting run, or the backfill's pace (plan.js): remember when each kind went.
+        if (job.source !== "upload" && job.source !== "auto") {
+          state.lastBacklogAt = state.lastPressedAt;
+          if (loadSettings().backfill) {
+            const keep = (state.backfillPosts || []).filter((t) => Date.now() - Date.parse(t) < 48 * 3_600_000);
+            state.backfillPosts = [...keep, state.lastPressedAt];
+          }
+        } else {
+          state.lastRunPressAt = state.lastPressedAt;
+        }
         remember(state, job.clipId, { step: "pressing", pressedAt: state.lastPressedAt, baseline: extra.baseline || [] });
       } else {
         remember(state, job.clipId, { step });
@@ -239,6 +253,7 @@ async function doPost(api, state, job, { fresh = false, fr, relogged = false } =
       }
       await stopped(api, state, job, e.reason, true);
     } else if (e instanceof Stop) {
+      if (e.detail) log("post.stop_detail", { clipId: job.clipId, ...e.detail });
       await stopped(api, state, job, e.reason, e.needsYou);
     } else if (!pressed && e instanceof ApiError && e.status === 409) {
       // Clip Factory said wait (its switch or auto-posting went off, or another try has it): nothing was pressed, so
@@ -394,7 +409,13 @@ export async function tick() {
       if (!(e instanceof ApiError && e.status === 400)) throw e;
       await api.ping(checkIn);
     }
-    log("tick", { action: action.action, clipId: action.job?.clipId, waiting: queue.length, reason: action.reason });
+    log("tick", { action: action.action, clipId: action.job?.clipId, waiting: queue.length, reason: action.reason, until: action.until });
+    // The one-time backfill ends by itself once no backlog clip is left (then the owner's rule again: runs and Uploads).
+    // Only when the switch is on (an off switch reads as an empty queue) and the read really holds no backlog clip.
+    if (settings.backfill && on === true && !queue.some((j) => j.source !== "upload" && j.source !== "auto")) {
+      saveSettings({ backfill: null });
+      event("backfill_done", {});
+    }
     if (action.action === "post" || action.action === "resume") {
       // The red frame goes up before anything is claimed or driven; if it can't be shown, nothing happens.
       const fr = frame();
