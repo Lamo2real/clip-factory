@@ -41,3 +41,22 @@ test("after Check models in step 1, step 2 starts from the models' fresh states"
   expect(o.page, "the page scrolls sideways").toBeLessThanOrEqual(o.viewport);
   expect(o.items).toEqual([]);
 });
+
+test("round 4: step 4 says the built-in animator makes tall, square or wide videos; a platform that is Lamo Clips' own says why (§45.35 D11, D21)", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("cf.storiesPreview", "1"));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/stories/setup");
+  await ready(page);
+  await page.getByRole("navigation", { name: "Setup steps" }).getByRole("button", { name: /Pick how videos are made/ }).click();
+  const builtin = page.getByRole("radiogroup", { name: "How videos are made" }).getByRole("radio", { name: /Built-in animation/ });
+  await expect(builtin).toContainText("On. Cartoons drawn right here, tall, square or wide, 30 frames a second.");
+  await expect(builtin).not.toContainText("9:16");
+  // The seed's X account is Lamo Clips' own: the step stays to do, and What is left says why in the server's words.
+  const why = page.locator(".st-left__why");
+  await expect(why).toContainText("This is Lamo Clips' X account. Pick another in Social accounts, or tap Use it for both.");
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.waitForTimeout(250);
+  const o = await findOverflow(page);
+  expect(o.page).toBeLessThanOrEqual(o.viewport);
+  expect(o.items).toEqual([]);
+});

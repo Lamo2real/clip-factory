@@ -2704,3 +2704,30 @@ a.st-file__title:hover {
     bottom: var(--st-toast-lift, calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 24px));
   }
 }
+
+/* ---------- Round 4 (CONTRACTS §45.35 D2): Settings › Video › Nova Reel's own row, with Try it ---------- */
+.st-stg-try {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 4px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: rgba(13, 11, 38, 0.26);
+}
+.st-stg-try__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.st-stg-try__name {
+  min-width: 0;
+  color: var(--st-ink);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.st-stg-try__run {
+  display: grid;
+  gap: 6px;
+}

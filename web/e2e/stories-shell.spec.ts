@@ -487,7 +487,7 @@ test.describe("Lamo Stories kept behind Clip Factory stays quiet (§45.34)", () 
     await expect(page.locator(".st-chat-row", { hasText: "What makes a good hook" })).toBeVisible();
   });
 
-  test("Clip Factory's Home opened for a campaign opens fresh after a round trip (never half kept), on the way the owner was on", async ({ page }) => {
+  test("Clip Factory's Home opened for a campaign is kept across a round trip, typing included, on the way the owner was on (§45.35 D18)", async ({ page }) => {
     await on(page);
     await page.setViewportSize({ width: 1440, height: 900 });
     const FAZE = "200ea21b-be80-4db8-b552-8e32b148604e";
@@ -501,13 +501,14 @@ test.describe("Lamo Stories kept behind Clip Factory stays quiet (§45.34)", () 
 
     await toStories(page);
     await storiesReady(page);
-    // Let go at once: it never draws behind Lamo Stories on Lamo Stories' address.
-    await expect(page.locator('[data-app-pane="clips"]')).toHaveCount(0);
+    // Kept behind Lamo Stories (hidden and inert), still on its own way: Lamo Stories' address never reaches it.
+    await expect(page.locator('[data-app-pane="clips"]')).toHaveAttribute("inert", "");
+    await expect(page.locator('[data-app-pane="clips"]').getByRole("form", { name: "Make campaign clips", includeHidden: true })).toHaveCount(1);
     await toClips(page);
     await settle(page);
     await expect(page).toHaveURL(new RegExp(`/\\?campaign=${FAZE}$`));
     await expect(campaignForm).toBeVisible();
-    await expect(link).toHaveValue("");
+    await expect(link).toHaveValue("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
     expect((await shows(page)).filter((t) => t.startsWith("toast")), "no upload or form was stopped behind Lamo Stories").toEqual([]);
 
     // The normal way of Home is where switching back lands once the owner went there.
@@ -900,5 +901,155 @@ test.describe("every page keeps the owner's rules", () => {
       expect(after, sel).not.toBe(before);
       await page.mouse.move(0, 0);
     }
+  });
+});
+
+test.describe("round 4: the two apps stay apart and quiet (§45.35)", () => {
+  test("D16: Lamo Stories breaking shows its own card; Clip Factory stays as it was; Try again brings Lamo Stories back", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    // Lamo Stories' own code cannot load (a network hiccup): its chunk fails, in the idle fetch and on the switch.
+    const chunk = /\/assets\/StoriesApp-[^/]+\.js$/;
+    await page.route(chunk, (r) => r.abort());
+    await page.goto("/library?view=week");
+    await settle(page);
+    await toStories(page);
+    const card = page.locator('[data-app-pane="stories"] [data-stories-problem]');
+    await expect(card).toBeVisible();
+    await expect(card.getByRole("heading", { name: "Lamo Stories had a problem." })).toBeVisible();
+    // Clip Factory is untouched behind it: kept, hidden and inert, never its own "Something went wrong".
+    await expect(page.locator('[data-app-pane="clips"]')).toHaveAttribute("inert", "");
+    await expect(page.getByText("Tap Reload to start Clip Factory again.")).toHaveCount(0);
+    await card.getByRole("button", { name: "Go to Clip Factory" }).click();
+    await expect(page).toHaveURL(/\/library\?view=week$/);
+    await expect(page.locator('[data-app-pane="clips"]')).not.toHaveAttribute("inert");
+    await expect(page.locator("nav.sidebar .sidebar__item.is-active")).toHaveAttribute("data-help", "nav-library");
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("cf.workspace") ?? "{}").workspaceId)).toBe("clips");
+    // Once the code can load: Try again makes a fresh Lamo Stories.
+    await page.unroute(chunk);
+    await toStories(page);
+    await expect(card).toBeVisible();
+    await card.getByRole("button", { name: "Try again" }).click();
+    await storiesReady(page);
+    await expect(card).toHaveCount(0);
+    await expect(page.locator(".stories-app")).toBeVisible();
+  });
+
+  test("D19: in a short window with the sidebar folded, the slim toggle beside the fold button switches in one click", async ({ page }) => {
+    await on(page, () => localStorage.setItem("cf.prefs", JSON.stringify({ sidebarCollapsed: true })));
+    await page.setViewportSize({ width: 1000, height: 560 });
+    await page.goto("/jobs");
+    await settle(page);
+    const beside = page.locator(".sidebar__top .ws-switch-host");
+    await expect(beside).toHaveAttribute("data-ws-switch", "slim");
+    await expect(page.locator(".sidebar__foot .ws-switch-host")).toHaveAttribute("data-ws-switch", "none");
+    const fold = (await page.locator(".sidebar__toggle").boundingBox())!;
+    const slim = (await beside.boundingBox())!;
+    expect(slim.x).toBeGreaterThanOrEqual(fold.x + fold.width + 3.5);
+    expect(slim.width).toBeGreaterThanOrEqual(28);
+    expect(slim.height).toBeGreaterThanOrEqual(28);
+    const go = beside.getByRole("link", { name: "Go to Lamo Stories" });
+    // It answers a hover, as every control does.
+    const rest = await go.evaluate((el) => getComputedStyle(el).backgroundColor);
+    await go.hover();
+    await expect.poll(() => go.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(rest);
+    await go.click();
+    await expect(page).toHaveURL(/\/stories$/);
+    await storiesReady(page);
+    await toClips(page);
+    await expect(page).toHaveURL(/\/jobs$/);
+    // Unfolded, the foot has room again and the toggle beside the fold button is gone.
+    await page.locator(".sidebar__toggle").click();
+    await expect(beside).toHaveAttribute("data-ws-switch", "none");
+    await expect(page.locator(".sidebar__foot .ws-switch-host")).not.toHaveAttribute("data-ws-switch", "none");
+  });
+
+  test("D17: a Connect that answers while Clip Factory is on screen waits, and goes on once Lamo Stories is back", async ({ page }) => {
+    await on(page, () => {
+      (window as unknown as { __cfStoriesMock?: unknown }).__cfStoriesMock = { knobs: { connectMs: 1500, connectResult: "connected" } };
+    });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/library");
+    await settle(page);
+    await toStories(page);
+    await storiesReady(page);
+    await page.locator(".st-rail").getByRole("link", { name: "Social accounts" }).click();
+    await storiesReady(page);
+    const fb = page.locator('.st-conn[data-platform="facebook"]');
+    await fb.getByRole("button", { name: "Connect Facebook" }).click();
+    await toClips(page);
+    await settle(page);
+    await page.waitForTimeout(2500);
+    // The answer came behind Clip Factory: nothing moved.
+    await expect(page).toHaveURL(/\/library$/);
+    await expect(page.locator('[data-app-pane="clips"]')).toBeVisible();
+    await toStories(page);
+    await expect(page.locator(".toast__text").filter({ hasText: "Connected as Lamo Stories" })).toBeVisible({ timeout: 8000 });
+    await expect(page).toHaveURL(/\/stories\/connections$/);
+  });
+
+  test("D17: a video playing in Clip Factory is paused when Lamo Stories is opened", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/review");
+    await settle(page);
+    // A playing clip (the mock's clip has no real video, so the page's own element is made to play).
+    const playing = await page.evaluate(() => {
+      const v = document.querySelector<HTMLVideoElement>('[data-app-pane="clips"] video') ?? document.querySelector('[data-app-pane="clips"] main')!.appendChild(document.createElement("video"));
+      let paused = false;
+      Object.defineProperty(v, "paused", { configurable: true, get: () => paused });
+      Object.defineProperty(v, "pause", { configurable: true, value: () => void (paused = true) });
+      (window as unknown as { __clip: HTMLVideoElement }).__clip = v;
+      return !v.paused;
+    });
+    expect(playing).toBe(true);
+    await toStories(page);
+    await storiesReady(page);
+    expect(await page.evaluate(() => (window as unknown as { __clip: HTMLVideoElement }).__clip.paused)).toBe(true);
+  });
+
+  test("D21: on a phone the toasts sit above an open sheet's buttons, and go back when it closes", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/stories/review/01JSTST0000000000000000003");
+    await storiesReady(page);
+    await page.getByRole("button", { name: "Post it", exact: true }).click();
+    const bar = page.locator(".st-s-sheet__actions");
+    await expect(bar).toBeVisible();
+    await page.waitForTimeout(600);
+    await expect(page.locator("body")).toHaveClass(/(^|\s)st-toasts-up(\s|$)/);
+    const barTop = await bar.evaluate((el) => el.getBoundingClientRect().top);
+    const stackBottom = await page.locator(".toasts").evaluate((el) => el.getBoundingClientRect().bottom);
+    expect(stackBottom, "the toasts end above the sheet's buttons").toBeLessThanOrEqual(barTop - 7);
+    await page.keyboard.press("Escape");
+    await expect(page.locator("body")).not.toHaveClass(/(^|\s)st-toasts-up(\s|$)/);
+    // On a computer they stay where they always are.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.getByRole("button", { name: "Post it", exact: true }).click();
+    await expect(bar).toBeVisible();
+    await page.waitForTimeout(400);
+    await expect(page.locator("body")).not.toHaveClass(/(^|\s)st-toasts-up(\s|$)/);
+  });
+
+  test("D21: the dashboard's connected accounts are never cut off at 320 px", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto("/stories");
+    await storiesReady(page);
+    const rows = page.locator(".st-accounts__row");
+    await expect(rows).toHaveCount(5);
+    const cut = await rows.evaluateAll((els) =>
+      els.flatMap((row) => {
+        const r = row.getBoundingClientRect();
+        const out: string[] = [];
+        for (const el of Array.from(row.querySelectorAll<HTMLElement>(".st-accounts__name, .st-chip"))) {
+          const b = el.getBoundingClientRect();
+          if (el.scrollWidth > el.clientWidth + 1) out.push(`${el.textContent}: cut (${el.scrollWidth} > ${el.clientWidth})`);
+          if (b.right > r.right + 0.5 || b.left < r.left - 0.5) out.push(`${el.textContent}: outside its row`);
+        }
+        return out;
+      }),
+    );
+    expect(cut).toEqual([]);
   });
 });

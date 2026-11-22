@@ -80,6 +80,9 @@ describe("step 4 (§45.35 D21)", () => {
     const builtin = $$("[role=radio]").find((r) => r.textContent?.includes("Built-in animation"))!;
     expect(builtin.textContent).toContain(BUILTIN_LINE);
     expect(builtin.textContent).not.toContain("9:16");
+    // Nova Reel not ready yet: the note says how to make it ready (Try it, §45.35 D2).
+    await click($$("[role=radio]").find((r) => r.textContent?.includes("Amazon Nova Reel"))!);
+    expect(host.textContent).toContain("To make it ready, tap Try it in Settings › Video: it makes one 6-second test shot.");
   });
 });
 

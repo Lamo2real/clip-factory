@@ -233,7 +233,8 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
       const efforts = x.efforts.includes(e) ? x.efforts.filter((y) => y !== e) : EFFORTS.filter((y) => y === e || x.efforts.includes(y));
       // Its own level stays one of the levels it accepts: the first one ticked, until the owner picks another.
       const defaultEffort = x.defaultEffort && efforts.includes(x.defaultEffort) ? x.defaultEffort : (efforts[0] ?? null);
-      return { ...x, efforts, defaultEffort };
+      // Ticking its levels is saying how it is called: a later maker change no longer moves the three switches.
+      return { ...x, efforts, defaultEffort, ownCalling: true };
     });
   const save = async (el: HTMLElement | null) => {
     if (busy) return;

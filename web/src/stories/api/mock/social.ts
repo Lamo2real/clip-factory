@@ -267,7 +267,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       return { accounts: structuredClone(accounts), clips: structuredClone(store.clips) };
     },
     async connectSocial(ws, platform) {
-      await delay(220);
+      // Knob `connectMs`: a slow answer (a test switches away while it is on its way).
+      await delay(typeof store.knobs.connectMs === "number" ? store.knobs.connectMs : 220);
       const a = account(store, ws, platform);
       // One helper picks the keys (§45.30): no choice asks, own keys must be saved, Clip Factory's must exist.
       if (a.app.choice === null) throw new ApiError(409, "conflict", `Pick which ${PLATFORM_NAME[platform]} app Lamo Stories uses first.`);

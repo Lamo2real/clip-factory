@@ -412,7 +412,8 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
         <p className="st-note st-note--sun" role="note">
           <StIcon name="alert" size={18} />
           Nova Reel is not ready yet. Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in
-          animation by itself. Pick Built-in animation to keep making videos. Posts made with Nova Reel get the platforms' AI labels.
+          animation by itself. Pick Built-in animation to keep making videos. To make it ready, tap Try it in Settings › Video: it makes one 6-second
+          test shot. Posts made with Nova Reel get the platforms' AI labels.
         </p>
       ) : null}
       <SaveBar

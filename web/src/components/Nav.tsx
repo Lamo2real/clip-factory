@@ -602,12 +602,13 @@ export function sidebarTopMode(anchor: HTMLElement, collapsed: boolean, count: n
   const w = Math.floor(Math.min(ROUND, right - AIR - left));
   const h = Math.floor(Math.min(ROUND, t.height));
   if (w < SLIM_MIN || h < SLIM_MIN) return { mode: "none" };
+  // Placed from the sidebar's padding box (inside its 1 px edge), where an absolute child starts.
   return {
     mode: "slim",
     style: {
       position: "absolute",
-      top: Math.round(t.top + (t.height - h) / 2 - sb.top),
-      left: Math.round(left - sb.left),
+      top: t.top + (t.height - h) / 2 - (sb.top + sidebar.clientTop),
+      left: left - (sb.left + sidebar.clientLeft),
       width: w,
       height: h,
       zIndex: 1,

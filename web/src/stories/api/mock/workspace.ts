@@ -140,7 +140,7 @@ function providersFor(store: MockStore, config: StoriesConfig): ProviderStatus[]
       // On only after a real call worked (a story's cut-away, or Try it, §45.35 D2).
       state: reelPicked ? (reel?.state === "on" ? "on" : "needs_setup") : "off",
       // The API's own sentence (§45.34): nothing switches to the built-in animation by itself.
-      line: reelPicked && reel?.state === "on" ? "Makes 6-second AI shots for scenes with no characters (cut-aways). It worked when you tried it." : (reel?.lastError ?? REEL_NOT_READY),
+      line: reel?.state === "on" ? "Makes 6-second AI shots for scenes with no characters (cut-aways). It worked when you tried it." : (reel?.lastError ?? REEL_NOT_READY),
       ...(reel ? { checkedAt: reel.checkedAt, ...(reel.lastError ? { lastError: reel.lastError } : {}) } : {}),
       // Its newest "Try it" job, so Settings › Video shows how it went (the API's `check`).
       check: check ? structuredClone(check) : null,

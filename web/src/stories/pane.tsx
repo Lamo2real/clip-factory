@@ -271,11 +271,14 @@ export class StoriesPaneBoundary extends Component<StoriesBoundaryProps, { faile
   }
 }
 
+/** Centred in the window, as Clip Factory's start-up card is (its own box, so nothing waits for a "boot" to end). */
+const PROBLEM_BOX: CSSProperties = { display: "grid", placeItems: "center", minHeight: "100dvh", padding: 24 };
+
 /** Lamo Stories' own card when it broke (the page's main landmark only while its pane is on screen). */
 function StoriesProblem({ onRetry, onClips }: { onRetry: () => void; onClips: () => void }) {
   const active = useAppActive();
   return (
-    <main className="boot" id={active ? "main" : undefined} data-stories-problem="">
+    <main style={PROBLEM_BOX} id={active ? "main" : undefined} data-stories-problem="">
       <h1 className="sr-only">Lamo Stories had a problem</h1>
       <Empty
         icon="alert"
