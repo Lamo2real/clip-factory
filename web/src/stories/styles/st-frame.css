@@ -1,29 +1,36 @@
-/* Lamo Stories: its own look, "an animation studio" (docs/CONTRACTS.md §45.16.2): a night-indigo stage with soft
-   spotlight glows, warm cream words, sunshine for every main action, coral, mint and sky for status and characters,
-   rounded type, frosted panels and character-shaped empty states. Everything is scoped under .stories-app (or starts
-   st-), so nothing here reaches a Lamo Clips screen, and there is no :root, html or body rule. It lives outside
-   web/src/styles on purpose: the tests there police Lamo Clips' own palette. The owner's rules still hold here and
-   test/storiesStyles.test.ts checks them over web/src/stories/styles: no cursor CSS, no visible borders (shadows and
-   fills instead), radii from var(--r-*), type no smaller than 0.78rem, light only (no dark-scheme rules), AA contrast
-   for the --st-* text colours on the stage and the panels. Builder F owns this file; builder G styles its screens
-   in web/src/stories/styles/studio.css with these tokens. */
+/* Clip Factory Stories · the frame (the shell builder's file): the base of .stories-app, the rail on a computer, the
+   phone top bar, the phone glass tab bar with its round active highlight, and the More sheet.
+   "Ember Glass" (styles/GLASS-CONTRACT.md): smoky warm glass over a warm espresso room, cream solids, an orange accent
+   for shapes only. Every --st-* token is defined in glass-tokens.css; this file only uses them. Everything is scoped
+   under .stories-app (or starts st-), so nothing here reaches a Clip Factory screen, and there is no :root, html or
+   body rule. The shell's workspace switch with its Live chip (app/WorkspaceDock.tsx) is drawn outside .stories-app;
+   the rail's foot and the top bar keep its box free exactly as before (--ws-dock-room). The owner's rules hold here
+   and test/storiesStyles.test.ts checks them: no cursor CSS, light never a border (the thin glass edge is the glass
+   classes' masked ring), radii from the --st-r-* scale (concentric), no text under the floor, AA contrast. */
 
 .stories-app {
-  /* Every --st-* token lives in glass-tokens.css (imported first by stories.css); this file only uses them. */
   position: relative;
   isolation: isolate;
   min-height: 100vh;
   min-height: 100dvh;
-  background-color: var(--st-stage);
-  color: var(--st-ink);
+  background-color: var(--st-base);
+  color: var(--st-text);
   font-family: var(--st-font);
-  line-height: 1.5;
+  font-optical-sizing: auto;
+  /* No weight here: the shell's switch in the phone top bar inherits it and must look the same in both apps. */
+  line-height: var(--st-lh-body);
+  caret-color: var(--st-accent);
+  scrollbar-color: rgb(var(--st-cream-rgb) / 0.32) transparent;
 }
 
 /* The stage behind the glass is .stories-app::before in glass.css (the background the Look setting picks). */
 
 .stories-app :focus-visible {
-  outline-color: var(--st-sun);
+  outline-color: var(--st-accent);
+}
+.stories-app ::selection {
+  background: var(--st-cream);
+  color: var(--st-on-cream);
 }
 
 /* Native controls start clean here: no frames, the stage's words. (`:where` keeps this below every class.) */
@@ -43,8 +50,16 @@
 .stories-app h3 {
   margin: 0;
   font-family: var(--st-font);
-  line-height: 1.15;
+  line-height: var(--st-lh-head);
   letter-spacing: -0.01em;
+}
+/* Headings at the display weight with optical sizes on (a class of a screen's own still wins). */
+:where(.stories-app) h1,
+:where(.stories-app) h2,
+:where(.stories-app) h3 {
+  font-weight: var(--st-weight-display);
+  font-optical-sizing: auto;
+  text-wrap: balance;
 }
 .stories-app p {
   margin: 0;
@@ -66,12 +81,16 @@
   z-index: 80;
   left: 16px;
   top: -80px;
-  padding: 12px 18px;
-  border-radius: var(--r-pill);
-  background: var(--st-sun);
-  color: var(--st-on-sun);
-  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--st-tap);
+  padding: 0 var(--st-space-5);
+  border-radius: var(--st-r-control);
+  background: var(--st-cream);
+  color: var(--st-on-cream);
+  font-weight: var(--st-weight-ui);
   text-decoration: none;
+  box-shadow: var(--st-depth-2);
 }
 .st-skip:focus-visible {
   top: calc(var(--top-line) + 4px);
@@ -94,41 +113,65 @@
   box-shadow: none;
 }
 
+/* The brand (its mark and name are drawn by the rename branch; only the box and its hover are styled here). */
 .st-brand {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   min-height: 48px;
   min-width: 0;
-  color: var(--st-ink);
+  color: var(--st-wordmark);
   text-decoration: none;
-  border-radius: var(--r-md);
-  transition: transform 200ms ease;
+  border-radius: var(--st-r-control);
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
 }
 .st-brand:hover {
-  transform: rotate(-2deg) scale(1.02);
+  background-color: var(--st-fill-control);
+}
+/* The frame's rows and tabs always sit on its own glass (the rail, the top bar's plate, the tab bar, the More sheet),
+   which carries the measured veil over a picture or the desktop: their hover is a light glass there too, never a second
+   veil (that would be a dark hole). Their words over a white picture: 5.9:1 or more
+   (test/storiesShellGlass.test.tsx). */
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-brand, .st-rail__item:not(.is-active), .st-tabbar__item:not(.is-active):not(.is-open)):hover {
+  background-color: rgb(var(--st-cream-rgb) / 0.12);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-more__item:not(.is-active):hover {
+  background-color: rgb(var(--st-cream-rgb) / 0.16);
 }
 .st-brand__mark {
   flex: none;
-  filter: drop-shadow(0 6px 10px rgba(255, 201, 74, 0.28));
+  filter: drop-shadow(0 6px 10px rgb(var(--st-amber-rgb) / 0.3));
 }
 .st-brand__name {
-  font-size: 1.32rem;
-  font-weight: 800;
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
 .st-brand__name em {
   font-style: normal;
-  color: var(--st-sun);
+  color: var(--st-text-amber);
 }
 
+/* The phone top bar: the brand at the left, the shell's switch at the right. It is a backing plate for its words
+   (.st-plate: nothing over Ember; a glass plate in Picture and See-through). The plate grows outwards by the
+   surface gap, so its content box, and the shell's switch in it, stay exactly where they always are. */
 .st-top {
+  /* Its own layer above the page (below the tab bar, the More sheet and the shell's dock): the shell's workspace menu
+     opens from the switch in it, and the plate's backdrop filter makes the bar a stacking context, so without this the
+     page's glass after it would paint over that menu. */
+  position: relative;
+  z-index: calc(var(--st-z-nav) - 1);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-top.st-plate {
+  padding: var(--st-gap-surface);
+  margin: calc(-1 * var(--st-gap-surface)) calc(-1 * var(--st-gap-surface)) calc(14px - var(--st-gap-surface));
 }
 /* The smallest phones: the brand keeps its mark and drops its name, so the shell's toggle keeps its place (§45.37). */
 .st-top:has(> .ws-switch-host--topbar[data-ws-squeeze]) .st-brand__name {
@@ -139,19 +182,20 @@
   display: none;
 }
 
+/* The phone tab bar: one glass bar (.st-glass.st-glass--bar, heavy blur in every look) with round tabs; the round
+   active highlight (.st-tab-orb on the bar's <Glide>) slides between them and the chosen icon gets an orange dot. */
 .st-tabbar {
   position: fixed;
-  z-index: 40;
+  z-index: var(--st-z-nav);
   left: max(12px, env(safe-area-inset-left));
   right: max(12px, env(safe-area-inset-right));
   bottom: calc(env(safe-area-inset-bottom) + 10px);
+  max-width: 560px;
   height: var(--st-tab-h);
-  padding: 6px;
-  border-radius: var(--r-lg);
-  background: rgba(38, 32, 90, 0.9);
-  -webkit-backdrop-filter: blur(22px) saturate(1.3);
-  backdrop-filter: blur(22px) saturate(1.3);
-  box-shadow: 0 18px 40px -14px rgba(8, 6, 30, 0.8);
+  margin-inline: auto;
+  padding: var(--st-gap-surface);
+  border-radius: var(--st-r-surface);
+  box-shadow: var(--st-sheen), var(--st-depth-3), var(--st-glow-behind);
 }
 @media (max-width: 359px) {
   .st-tabbar {
@@ -179,40 +223,64 @@
   place-items: center;
   width: 54px;
   max-width: 100%;
-  min-width: 48px;
-  height: 54px;
-  border-radius: var(--r-md);
-  color: var(--st-ink-soft);
+  min-width: var(--st-tap-phone);
+  aspect-ratio: 1;
+  border-radius: var(--st-r-round);
+  color: var(--st-text-soft);
   text-decoration: none;
   transition:
-    background-color 220ms ease,
-    color 220ms ease,
-    transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out),
+    transform var(--st-dur-tap) var(--st-ease-spring);
 }
 .st-tabbar__item:hover {
-  color: var(--st-ink);
-  background: var(--st-panel-strong);
+  color: var(--st-text);
+  background-color: var(--st-fill-control);
 }
 .st-tabbar__item:active {
-  transform: scale(0.88);
+  transform: scale(0.9);
 }
 .st-tabbar__item.is-active,
 .st-tabbar__item.is-open {
-  color: var(--st-stage);
-  background: var(--st-ink);
+  color: var(--st-text-strong);
+  background-color: rgb(var(--st-cream-rgb) / 0.16);
 }
 .has-glide .st-tabbar__item.is-active {
-  background: transparent;
+  background-color: transparent;
+}
+/* The orange active dot under the chosen icon (a shape, never words). */
+.st-tabbar__item::after {
+  content: "";
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: var(--st-r-round);
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
+  opacity: 0;
+  transition: opacity var(--st-dur-hover) var(--st-ease-out);
+}
+.st-tabbar__item.is-active::after,
+.st-tabbar__item.is-open::after {
+  opacity: 1;
+}
+.st-tabbar__item .st-icon {
+  transform: translateY(-2px);
 }
 .st-tabbar__item .st-count {
   position: absolute;
-  top: 3px;
-  right: 2px;
+  top: 1px;
+  right: 0;
 }
+/* The round highlight that slides (the figure .st-tab-orb; <Glide>'s own base paints the shell's colours, so its
+   fill, round shape and light are said again here). */
 .stories-app .glide--st-tab {
-  border-radius: var(--r-md);
-  background: var(--st-ink);
-  box-shadow: 0 8px 18px -10px rgba(255, 246, 229, 0.5);
+  border-radius: var(--st-r-round);
+  background: rgb(var(--st-cream-rgb) / 0.16);
+  box-shadow: var(--st-sheen-control), var(--st-glow-behind);
 }
 
 .st-count {
@@ -221,57 +289,65 @@
   min-width: 22px;
   height: 22px;
   padding: 0 6px;
-  border-radius: var(--r-pill);
+  border-radius: var(--st-r-round);
   background: var(--st-coral);
-  color: var(--st-on-sun);
-  font-size: 0.78rem;
-  font-weight: 800;
+  color: var(--st-on-cream);
+  font-size: var(--st-fs-min);
+  font-weight: var(--st-weight-ui);
+  font-variant-numeric: lining-nums tabular-nums;
   line-height: 1;
 }
 
-/* More (phones): a sheet from the bottom with the other pages. */
+/* More (phones): a floating glass sheet (.st-glass.st-glass--float) from the bottom with the other pages. */
 .st-more {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: var(--st-z-float);
 }
 .st-more__shade {
   position: absolute;
   inset: 0;
   width: 100%;
-  background: rgba(13, 11, 38, 0.6);
+  background: rgb(var(--st-shadow-rgb) / 0.55);
 }
 .st-more__sheet {
   position: absolute;
   left: max(12px, env(safe-area-inset-left));
   right: max(12px, env(safe-area-inset-right));
   bottom: calc(env(safe-area-inset-bottom) + var(--st-tab-h) + 20px);
+  max-width: 560px;
+  margin-inline: auto;
   display: grid;
-  gap: 6px;
-  padding: 10px;
-  border-radius: var(--r-lg);
-  background: var(--st-stage-2);
-  box-shadow: var(--st-shadow);
-  animation: st-rise 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  gap: var(--st-gap-control);
+  padding: var(--st-gap-surface);
+  animation: st-rise var(--st-dur-enter) var(--st-ease-out) both;
 }
 .st-more__item {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 14px;
   min-height: 52px;
   padding: 0 16px;
-  border-radius: var(--r-md);
-  color: var(--st-ink);
-  font-weight: 700;
+  border-radius: var(--st-r-control);
+  color: var(--st-text);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
   text-decoration: none;
-  transition: background-color 200ms ease;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out);
 }
 .st-more__item:hover {
-  background: var(--st-panel-strong);
+  background-color: var(--st-fill-control-hover);
 }
 .st-more__item.is-active {
-  background: var(--st-ink);
-  color: var(--st-stage);
+  background-color: var(--st-selected);
+  color: var(--st-on-cream);
+}
+.st-more__item.is-active .st-icon {
+  color: var(--st-on-cream-orange);
 }
 
 @media (min-width: 768px) {
@@ -283,9 +359,11 @@
   .st-frame {
     padding: var(--top-line) max(var(--gutter), env(safe-area-inset-right)) 48px calc(var(--st-rail-w) + 14px + var(--gutter));
   }
+  /* The rail: a glass surface (.st-glass with the rail's own veil). Its rows sit the surface gap from its sides, so
+     their control radius is concentric with its surface radius (20 - 6 = 14). */
   .st-rail {
     position: fixed;
-    z-index: 40;
+    z-index: var(--st-z-nav);
     top: var(--top-line);
     bottom: 14px;
     left: max(14px, env(safe-area-inset-left));
@@ -293,26 +371,24 @@
     flex-direction: column;
     gap: 14px;
     width: var(--st-rail-w);
-    padding: 14px 12px;
+    padding: 14px var(--st-gap-surface);
     /* The brand and the switcher at its foot always stay in view; only the list of pages scrolls in a short window
        (§45.36 E16), so going to Clip Factory is one click at every height. */
     overflow: hidden;
-    border-radius: var(--r-xl);
-    background: linear-gradient(180deg, rgba(50, 42, 115, 0.86), rgba(38, 32, 90, 0.9));
-    -webkit-backdrop-filter: blur(20px) saturate(1.3);
-    backdrop-filter: blur(20px) saturate(1.3);
-    box-shadow: 0 20px 44px -18px rgba(8, 6, 30, 0.85);
+    border-radius: var(--st-r-surface);
+    background: var(--st-tint-rail);
+    box-shadow: var(--st-sheen), var(--st-depth-2), var(--st-glow-behind);
   }
   .st-rail .st-brand {
     flex: none;
-    padding: 0 8px;
+    padding: 0 14px;
   }
   .st-rail .st-rail__list {
     flex: 0 1 auto;
     min-height: 0;
     /* Its scroll box reaches the rail's own edges, so the highlight's glow and focus rings are not cut short. */
-    margin: -6px -12px;
-    padding: 6px 12px;
+    margin: -6px calc(-1 * var(--st-gap-surface));
+    padding: 6px var(--st-gap-surface);
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
@@ -336,7 +412,7 @@
   position: relative;
   isolation: isolate;
   display: grid;
-  gap: 4px;
+  gap: var(--st-gap-control);
 }
 .st-rail__list > li:not(.glide) {
   position: relative;
@@ -345,35 +421,51 @@
 .st-rail__item {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-height: 48px;
   padding: 8px 14px;
-  border-radius: var(--r-md);
-  color: var(--st-ink-soft);
-  font-weight: 700;
+  border-radius: var(--st-r-control);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
   text-decoration: none;
   white-space: nowrap;
   transition:
-    background-color 220ms ease,
-    color 220ms ease,
-    transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out),
+    transform var(--st-dur-tap) var(--st-ease-spring);
 }
 .st-rail__item:hover {
-  color: var(--st-ink);
-  background: var(--st-panel);
+  color: var(--st-text);
+  background-color: var(--st-fill-control);
 }
 .st-rail__item:active {
   transform: scale(0.97);
 }
+/* The chosen page: the cream highlight with espresso words, its icon in the dark orange, and an orange dot. */
 .st-rail__item.is-active {
-  color: var(--st-stage);
-  background: var(--st-ink);
+  color: var(--st-on-cream);
+  background-color: var(--st-selected);
 }
 .has-glide .st-rail__item.is-active {
-  background: transparent;
+  background-color: transparent;
 }
 .st-rail__item.is-active .st-icon {
-  color: var(--st-coral);
+  color: var(--st-on-cream-orange);
+}
+.st-rail__item::after {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--st-r-round);
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
+  opacity: 0;
+  transition: opacity var(--st-dur-hover) var(--st-ease-out);
+}
+.st-rail__item.is-active::after {
+  opacity: 1;
 }
 .st-rail__label {
   flex: 1;
@@ -381,12 +473,18 @@
   text-overflow: ellipsis;
 }
 .stories-app .glide--st-rail {
-  border-radius: var(--r-md);
-  background: var(--st-ink);
-  box-shadow: 0 10px 22px -12px rgba(255, 246, 229, 0.55);
+  border-radius: var(--st-r-control);
+  background: var(--st-selected);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1), var(--st-glow-behind);
 }
 .st-rail__foot {
   margin-top: auto;
   display: grid;
   gap: 6px;
+}
+
+/* Keyboard focus on the frame's controls: the cream and orange ring (light, never an outline). */
+:is(.st-rail__item, .st-tabbar__item, .st-more__item, .st-brand, .st-skip):focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
 }

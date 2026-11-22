@@ -137,7 +137,7 @@ describe("kept behind Clip Factory", () => {
       await inPanes("stories");
       await act(async () => await vi.advanceTimersByTimeAsync(10));
       expect(document.title).toBe("Dashboard · Lamo Stories · Clip Factory");
-      expect(meta.content.toLowerCase()).toBe("#1c1842");
+      expect(meta.content.toLowerCase()).toBe("#1c130e");
       expect(host.querySelectorAll("#main")).toHaveLength(1);
       expect(host.querySelector("#main")?.classList.contains("st-main")).toBe(true);
 
@@ -160,7 +160,7 @@ describe("kept behind Clip Factory", () => {
       await inPanes("stories");
       await act(async () => await vi.advanceTimersByTimeAsync(10));
       expect(document.title).toBe("Dashboard · Lamo Stories · Clip Factory");
-      expect(meta.content.toLowerCase()).toBe("#1c1842");
+      expect(meta.content.toLowerCase()).toBe("#1c130e");
       expect(vi.mocked(fake.listWorkspaces!).mock.calls.length).toBeGreaterThan(lists);
       expect(vi.mocked(fake.dashboard!).mock.calls.length).toBeGreaterThan(dashboards);
     } finally {

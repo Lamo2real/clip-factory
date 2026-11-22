@@ -5,24 +5,28 @@
   .st-back,
   a.st-file__title,
   .st-left__item {
-    min-height: 48px;
+    min-height: var(--st-tap-phone);
   }
   .st-textlink,
   a.st-file__title,
   .st-note__close {
-    min-width: 48px;
+    min-width: var(--st-tap-phone);
   }
   .st-note__close {
-    height: 48px;
+    height: var(--st-tap-phone);
   }
 }
 
-/* ---------- Motion: calm when asked ---------- */
+/* ---------- Motion: calm when asked (Stories' own calm-motion switch puts html.reduce-motion while it is on screen,
+   and the device's reduced motion): things still change, they just do not travel or bounce ---------- */
 
 .reduce-motion .stories-app *,
 .reduce-motion .stories-app *::before,
 .reduce-motion .stories-app *::after {
   animation: none !important;
+}
+.reduce-motion .stories-app :is(.st-btn, .st-rail__item, .st-tabbar__item, .st-pick__opt, .st-tabs__tab):active {
+  transform: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .stories-app *,
@@ -32,6 +36,9 @@
   }
   .st-bar__fill {
     transition: none;
+  }
+  .stories-app :is(.st-btn, .st-rail__item, .st-tabbar__item, .st-pick__opt, .st-tabs__tab):active {
+    transform: none;
   }
 }
 
