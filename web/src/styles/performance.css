@@ -1030,7 +1030,7 @@
   gap: 6px 10px;
 }
 
-/* ---------- New followers from this clip (docs/CONTRACTS.md §38) ---------- */
+/* ---------- New followers from this clip (docs/CONTRACTS.md §43) ---------- */
 .perf-followers {
   display: grid;
   gap: 12px;

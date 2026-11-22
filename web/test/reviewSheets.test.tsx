@@ -18,6 +18,7 @@ const { myTikTokChoices, NO_TIKTOK_CHOICES } = await import("../src/lib/tiktokCh
 const { cardOptionsFrom, clipOptionsProblem, DEFAULT_PRESET, optionsFor, presetOf, presetProblem } = await import("../src/lib/preset.ts");
 const { reviewCountForJob } = await import("../src/screens/review/Review.tsx");
 const { Sheet } = await import("../src/components/Sheet.tsx");
+const { Dropdown } = await import("../src/components/Dropdown.tsx");
 const { ALREADY_DECIDED, isThrownAway, onClipBack, resetThrownAway, throwAwayWithUndo } = await import("../src/lib/throwAways.ts");
 
 const creator: TikTokCreator = {
@@ -201,19 +202,101 @@ describe("Post to TikTok sheet", () => {
     expect(sw("Stitch").getAttribute("aria-disabled")).toBe("true");
   });
 
-  it("Branded content (paid partnership) takes Only me away and adds the Branded Content Policy line", async () => {
+  const switchNamed = (dialog: HTMLElement, name: string) =>
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="switch"]')).find((b) => document.getElementById(b.getAttribute("aria-labelledby")!)!.textContent === name)!;
+  const chip = (dialog: HTMLElement, name: string) =>
+    Array.from(dialog.querySelectorAll<HTMLInputElement>('.tt-sheet__brand input[type="checkbox"]')).find((i) => i.closest("label")!.textContent!.startsWith(name))!;
+  const legal = (dialog: HTMLElement) => dialog.querySelector(".tt-sheet__legal")!.textContent;
+  function optionState(dialog: HTMLElement) {
+    act(() => privacyButton(dialog).click());
+    const out = Array.from(dialog.querySelectorAll<HTMLElement>('[role="option"]')).map((o) => ({
+      name: o.querySelector(".dropdown__name")!.textContent,
+      off: o.getAttribute("aria-disabled") === "true",
+      line: o.querySelector(".dropdown__line")?.textContent ?? null,
+    }));
+    act(() => privacyButton(dialog).click());
+    return out;
+  }
+
+  it("Commercial content with nothing ticked: Upload is off with TikTok's own words, as hover text and as a line", async () => {
+    const { dialog } = await openSheet();
+    pickPrivacy(dialog, "Everyone");
+    expect(uploadButton(dialog).getAttribute("title")).toBeNull();
+    act(() => switchNamed(dialog, "Commercial content").click());
+    const words = "You need to indicate if your content promotes yourself, a third party, or both.";
+    expect(uploadButton(dialog).getAttribute("aria-disabled")).toBe("true");
+    expect(uploadButton(dialog).getAttribute("title")).toBe(words);
+    expect(dialog.querySelector(".tt-sheet__why")!.textContent).toBe(`${words} Pick Your brand or Branded content to turn on Upload.`);
+    expect(dialog.textContent).toContain("Pick Your brand, Branded content, or both.");
+    act(() => chip(dialog, "Your brand").click());
+    expect(uploadButton(dialog).getAttribute("title")).toBeNull();
+    expect(uploadButton(dialog).getAttribute("aria-disabled")).not.toBe("true");
+  });
+
+  it("says which label the video gets: Promotional content for Your brand, Paid partnership once Branded content is ticked", async () => {
+    const { dialog } = await openSheet();
+    pickPrivacy(dialog, "Everyone");
+    act(() => switchNamed(dialog, "Commercial content").click());
+    const line = () => Array.from(dialog.querySelectorAll(".tt-sheet__brand .field__hint")).map((p) => p.textContent);
+    expect(line()).toEqual(["Pick Your brand, Branded content, or both."]);
+    act(() => chip(dialog, "Your brand").click());
+    expect(line()).toEqual(["Your video will be labeled as 'Promotional content'."]);
+    act(() => chip(dialog, "Branded content").click());
+    expect(line()).toEqual(["Your video will be labeled as 'Paid partnership'."]);
+    act(() => chip(dialog, "Your brand").click());
+    expect(line()).toEqual(["Your video will be labeled as 'Paid partnership'."]);
+  });
+
+  it("the agreement line: Music Usage alone, then the Branded Content Policy first once Branded content is ticked", async () => {
+    const { dialog } = await openSheet();
+    pickPrivacy(dialog, "Everyone");
+    expect(legal(dialog)).toBe("By posting, you agree to TikTok's Music Usage Confirmation.");
+    act(() => switchNamed(dialog, "Commercial content").click());
+    act(() => chip(dialog, "Your brand").click());
+    expect(legal(dialog)).toBe("By posting, you agree to TikTok's Music Usage Confirmation.");
+    act(() => chip(dialog, "Branded content").click());
+    expect(legal(dialog)).toBe("By posting, you agree to TikTok's Branded Content Policy and Music Usage Confirmation.");
+    const links = Array.from(dialog.querySelectorAll<HTMLAnchorElement>(".tt-sheet__legal a")).map((a) => a.href);
+    expect(links).toEqual(["https://www.tiktok.com/legal/page/global/bc-policy/en", "https://www.tiktok.com/legal/page/global/music-usage-confirmation/en"]);
+  });
+
+  it("Branded content first: Only me and Followers show greyed with TikTok's line and cannot be picked", async () => {
+    current = { tiktokCreatorInfo: async () => ({ ...creator, privacyOptions: ["SELF_ONLY", "FOLLOWER_OF_CREATOR", "MUTUAL_FOLLOW_FRIENDS", "PUBLIC_TO_EVERYONE"] }) };
+    const { dialog } = await openSheet();
+    act(() => switchNamed(dialog, "Commercial content").click());
+    act(() => chip(dialog, "Branded content").click());
+    const greyed = "Branded content visibility cannot be set to private.";
+    expect(optionState(dialog)).toEqual([
+      { name: "Everyone", off: false, line: null },
+      { name: "Followers", off: true, line: greyed },
+      { name: "Friends", off: false, line: null },
+      { name: "Only me", off: true, line: greyed },
+    ]);
+    // A tap on a greyed choice does nothing: the list stays open and nothing is picked.
+    pickPrivacy(dialog, "Only me");
+    expect(dialog.querySelector('[role="listbox"]')).not.toBeNull();
+    expect(privacyOn(dialog)).toBeNull();
+    act(() => privacyButton(dialog).click());
+    pickPrivacy(dialog, "Friends");
+    expect(privacyOn(dialog)).toBe("Friends");
+    expect(uploadButton(dialog).getAttribute("aria-disabled")).not.toBe("true");
+  });
+
+  it("Only me first: Branded content is greyed with a line saying what to do, and nothing he picked is cleared", async () => {
     const { dialog } = await openSheet();
     pickPrivacy(dialog, "Only me");
-    const sw = Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="switch"]')).find((b) => document.getElementById(b.getAttribute("aria-labelledby")!)!.textContent === "Commercial content")!;
-    act(() => sw.click());
-    expect(uploadButton(dialog).getAttribute("aria-disabled")).toBe("true");
-    const branded = Array.from(dialog.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))[1]!;
+    act(() => switchNamed(dialog, "Commercial content").click());
+    const branded = chip(dialog, "Branded content");
+    expect(branded.disabled).toBe(true);
     expect(branded.closest("label")!.textContent).toContain("Paid partnership");
+    expect(dialog.textContent).toContain("Branded content can't be Only me. Pick Everyone or Friends first.");
     act(() => branded.click());
-    expect(privacyOn(dialog)).toBeNull();
-    expect(privacyNames(dialog)).toEqual(["Everyone"]);
+    expect(branded.checked).toBe(false);
+    expect(privacyOn(dialog)).toBe("Only me");
     pickPrivacy(dialog, "Everyone");
-    expect(dialog.textContent).toContain("Branded Content Policy");
+    expect(chip(dialog, "Branded content").disabled).toBe(false);
+    expect(dialog.textContent).not.toContain("Pick Everyone or Friends first.");
+    act(() => chip(dialog, "Branded content").click());
     expect(uploadButton(dialog).getAttribute("aria-disabled")).not.toBe("true");
   });
 
@@ -253,6 +336,31 @@ describe("Post to TikTok sheet", () => {
     await flush();
     expect(calls).toBe(2);
     expect(dialog.textContent).toContain("Posting as");
+  });
+});
+
+describe("Dropdown", () => {
+  it("skips greyed choices with the keys and on tap", () => {
+    const picked: string[] = [];
+    const options = [
+      { value: "a", label: "A" },
+      { value: "b", label: "B", disabled: true },
+      { value: "c", label: "C" },
+    ];
+    act(() => root.render(<Dropdown label="Pick" value="" placeholder="Pick one" options={options} onChange={(v) => picked.push(v)} />));
+    const button = host.querySelector<HTMLButtonElement>(".dropdown__button")!;
+    act(() => button.click());
+    const opts = () => Array.from(host.querySelectorAll<HTMLElement>('[role="option"]'));
+    expect(opts()[1]!.getAttribute("aria-disabled")).toBe("true");
+    act(() => opts()[1]!.click());
+    expect(picked).toEqual([]);
+    press("ArrowDown");
+    expect(opts()[2]!.className).toContain("is-at");
+    press("ArrowUp");
+    expect(opts()[0]!.className).toContain("is-at");
+    press("End");
+    press("Enter");
+    expect(picked).toEqual(["c"]);
   });
 });
 
@@ -348,6 +456,19 @@ describe("place rows (§36)", () => {
     const body = host.querySelector<HTMLElement>('[data-place="tiktok"] .place-row__body')!;
     expect(body.querySelector(".dropdown__button")!.textContent).toContain("Pick who can see it");
     expect(body.textContent).toContain("Commercial content");
+  });
+
+  it("the TikTok row says which label the video gets and greys Branded content while Followers is picked", async () => {
+    const all = { ...creator, privacyOptions: ["PUBLIC_TO_EVERYONE", "FOLLOWER_OF_CREATOR", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"] };
+    const choices = { ...NO_TIKTOK_CHOICES, privacy: "FOLLOWER_OF_CREATOR", commercial: true, yourBrand: true };
+    act(() => root.render(<Rows places={["tiktok"]} tiktok={{ creator: all, choices }} />));
+    act(() => host.querySelector<HTMLElement>('[data-place="tiktok"] summary')!.click());
+    await flush();
+    const body = host.querySelector<HTMLElement>('[data-place="tiktok"] .place-row__body')!;
+    expect(body.textContent).toContain("Your video will be labeled as 'Promotional content'.");
+    const branded = Array.from(body.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).find((i) => i.closest("label")!.textContent!.startsWith("Branded content"))!;
+    expect(branded.disabled).toBe(true);
+    expect(body.textContent).toContain("Branded content can't be Followers. Pick Everyone or Friends first.");
   });
 
   it("Upload's refusal opens the too-long row and focuses its box", () => {

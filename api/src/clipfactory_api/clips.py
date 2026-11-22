@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from . import db, s3
+from . import db, mojibake, s3
 from .errors import bad_request
 
 Item = dict[str, Any]
@@ -28,6 +28,8 @@ STATUS_GROUPS: dict[str, frozenset[str] | None] = {
 }
 # Internal fields never leave the API (docs/CONTRACTS.md §13, §14.5). publishState is "pending" from Confirm until
 # the durable cf-prod-clip-flow has started, then "started". publishClaimAt is gone but may linger on old items.
+# Public on purpose (§39.3): ``remakes`` (campaignId → {jobId, at}, the campaign copies made of this clip) and
+# ``remakeOf`` ({clipId, jobId}, on a copy: the clip it was made from).
 INTERNAL_FIELDS = (
     "videoKey",
     "coverKey",
@@ -43,6 +45,8 @@ INTERNAL_FIELDS = (
 )
 PUBLISH_PENDING = "pending"
 PUBLISH_STARTED = "started"
+# Uploaded clips whose flow start Confirm finishes when it is still pending (§14.5): the public ``startPending``.
+STARTABLE = ("confirmed", "publishing", "posted")
 
 
 def public_clip(
@@ -54,9 +58,15 @@ def public_clip(
 ) -> Item:
     """The Clip shape of §5. With ``media`` it carries 1-hour ``coverUrl`` (and, unless ``video=False``,
     ``videoUrl``) links; without (the live WebSocket events) it carries none, and the web keeps the links it already
-    has. With the clip's ``posts`` it carries ``totalViews`` (absent when nothing was measured)."""
+    has. With the clip's ``posts`` it carries ``totalViews`` (absent when nothing was measured). ``startPending: true``
+    when the clip was uploaded but its flow has not started (``publishState: pending``, §14.5)."""
     clip = db.strip_keys(item, INTERNAL_FIELDS)
     clip.pop("totalViews", None)
+    if "captions" in clip:
+        # A caption saved garbled from a Mac clipboard shows (and is copied) as it was written (mojibake.py).
+        clip["captions"] = mojibake.repair_captions(clip["captions"])
+    if item.get("publishState") == PUBLISH_PENDING and item.get("status") in STARTABLE:
+        clip["startPending"] = True  # uploaded, but its flow has not started yet: the Library offers Try again
     if media is not None and item.get("status") != "declined":
         if video and item.get("videoKey"):
             clip["videoUrl"] = media.presign_get(item["videoKey"])
@@ -86,7 +96,8 @@ def posts_by_clip(posts: list[Item]) -> dict[str, list[Item]]:
 
 
 def caption_patch(value: Any) -> dict[str, str]:
-    """Validates ``Partial<Captions>``. Empty text is allowed: the owner may clear a caption."""
+    """Validates ``Partial<Captions>``. Empty text is allowed: the owner may clear a caption. Text pasted garbled
+    from a Mac clipboard is saved repaired (mojibake.py)."""
     if not isinstance(value, dict):
         raise bad_request("captions must be an object.")
     out: dict[str, str] = {}
@@ -96,14 +107,15 @@ def caption_patch(value: Any) -> dict[str, str]:
             raise bad_request(f"Unknown caption: {field}.")
         if not isinstance(text, str):
             raise bad_request(f"The {field} caption must be text.")
-        if len(text) > limit:
+        fixed = mojibake.repair(text)
+        if len(fixed) > limit:
             raise bad_request(f"The {field} caption is too long (at most {limit} characters).")
-        out[field] = text
+        out[field] = fixed
     return out
 
 
 def merged_captions(current: Mapping[str, Any] | None, patch: Mapping[str, str]) -> dict[str, str]:
-    base = {k: str((current or {}).get(k, "")) for k in CAPTION_LIMITS}
+    base = {k: mojibake.repair(str((current or {}).get(k, ""))) for k in CAPTION_LIMITS}
     base.update(patch)
     return base
 

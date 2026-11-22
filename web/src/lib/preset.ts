@@ -104,3 +104,22 @@ export function presetProblem(raw: unknown): string | null {
 export function clipOptionsProblem(raw: unknown): string | null {
   return problem(CLIP_RULES, raw, false);
 }
+
+// ---- Campaign clips (docs/CONTRACTS.md §38.5) ----
+
+/** The words under the locked YouTube choices of a campaign clip. */
+export const CAMPAIGN_LOCKED = "Campaign clips are public, never made for kids, and marked as paid.";
+/** Meta's Reels have no paid-partnership switch for this kind of app (§38.14). */
+export const META_PAID_LINE = (name: "Instagram" | "Facebook") => `${name} doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers.`;
+
+/**
+ * "Use my settings" on a campaign clip: YouTube Everyone and never made for kids (shown locked, with Paid promotion
+ * on); Instagram as My settings; X as My settings (Paid partnership is on for every campaign post).
+ */
+export function campaignCardOptions(preset: PostPreset): CardOptions {
+  return {
+    youtube: { privacy: "public", category: preset.youtube.category, madeForKids: false, notifySubscribers: preset.youtube.notifySubscribers, embeddable: preset.youtube.embeddable },
+    instagram: { ...preset.instagram },
+    x: { ...preset.x },
+  };
+}

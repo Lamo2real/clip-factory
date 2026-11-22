@@ -49,6 +49,10 @@ Order everywhere: **YouTube, TikTok, Instagram, Facebook, X** (`SETUP_ORDER = ST
   motion), success sound, a big card "Connected as **@name**" with the avatar, ring fills, toast. Any other result →
   error sound, a calm card with the plain sentence for that result and the step to go back to (§17.5 table), no
   vermilion colour except its one action. The `?result` query is removed with `history.replaceState` after reading.
+  In the desktop app (§12.1) the platform opens in the system browser and this page stays, so the Connect spinner
+  (`useConnecting.ts`) stops by itself once the platform page has opened: when the account changes (live `setup`
+  event), when the owner comes back to the window, or when the page is shown again from the browser's cache (Back).
+  While the platform address is still being fetched only an error or an account change stops it.
 * **Choose** (Meta with several Pages / Instagram accounts): a picker of big avatar cards; tapping one connects it.
 * **Disconnect**: tapping shows an 8 s toast "Disconnecting YouTube… Undo"; the `DELETE` is sent only when the toast
   ends (§12.4: undo instead of a scary dialog). **Connect again** keeps the keys.
@@ -62,7 +66,7 @@ Order everywhere: **YouTube, TikTok, Instagram, Facebook, X** (`SETUP_ORDER = ST
 
 ```ts
 // web/src/setup/types.ts
-export interface SetupGuide { platform: Platform; name: string; checkedOn: string /* "YYYY-MM-DD"; TikTok "2026-11-19", the rest "2026-11-16" */; minutes: number;
+export interface SetupGuide { platform: Platform; name: string; checkedOn: string /* "YYYY-MM-DD"; TikTok "2026-11-21", the rest "2026-11-19" */; minutes: number;
   cost: string /* "Free" | "About 1.5 cents per clip" */; parts: GuidePart[] }
 export interface GuidePart { id: "ready" | "key" | "connect" | "public"; title: string; steps: GuideStep[] }
 export interface GuideStep {
@@ -120,9 +124,11 @@ with the link / Only me, shown inside the card; default Everyone; YouTube policy
 (Open button "Open Google's ask-for-more form" → Google's Audit and Quota Extension Form; not needed to start). Status
 line: "Works now. Your clips go up for everyone."
 
-**TikTok** (about 40 min + TikTok's review time, Free; `checkedOn` 2026-11-19, from what the owner met on TikTok for
+**TikTok** (about 40 min + TikTok's review time, Free; `checkedOn` 2026-11-21, from what the owner met on TikTok for
 Developers: the app page has one **Save** that stays off until **App review** has its text and a video; Display API is
-no longer a product, its scopes come with Login Kit's **Add scopes**; Platforms is Web only). Get ready:
+no longer a product, its scopes come with Login Kit's **Add scopes**; Platforms is Web only. Go public checked again on
+21 Nov 2026 against TikTok's Content Sharing Guidelines and applicants' reports of the Direct Post audit form: App
+review must say Live before **Apply** shows next to Direct Post). Get ready:
 | id | title | essentials |
 |---|---|---|
 | `ready-account` | Have your TikTok account | The account your clips go on. |
@@ -134,7 +140,7 @@ Make your TikTok key:
 | `key-signup` | Make a TikTok developer account | Open developers.tiktok.com/signup, **Sign up** (or **Log in**). Accept the terms. |
 | `key-org` | Make an organization | Open `/organizations`, **Add organization**, name `appName`, **Create**. |
 | `key-app` | Create the app | Profile icon › **Manage apps** › **Connect an app**. Pick your organization, **Confirm**. |
-| `key-details` | Fill in App details | Download the icon (`download`) and upload it. App name `appName`. Category: the closest one. Description `appDescription`. Terms of Service URL `termsUrl`, Privacy Policy URL `privacyUrl`. "Don't press **Save** yet. It stays off until **App review** has its text and a video (step `key-review`)." |
+| `key-details` | Fill in App details | Download the icon (`download`) and upload it. App name `appName`. Category: the closest one. Description: the literal `TIKTOK_APP_DESCRIPTION` in `tiktok.ts` (not the shared `appDescription`), the same facts as the audit answers: "My own clipping tool: cuts videos I pick (mine, other creators', paid campaigns) into clips; posts the ones I approve." Terms of Service URL `termsUrl`, Privacy Policy URL `privacyUrl`. "Don't press **Save** yet. It stays off until **App review** has its text and a video (step `key-review`)." |
 | `key-web` | Choose Web | Under Platforms tick **Web** only (not Desktop, Android or iOS). Website URL `websiteUrl`. |
 | `key-products` | Add 2 products | **Add products**: **Login Kit** and **Content Posting API**. Nothing else. There is no Display API to add now: its permissions come with Login Kit. |
 | `key-redirect` | Paste the return address | Login Kit settings › Redirect URI for Web: paste `redirectUri`. |
@@ -150,15 +156,15 @@ Connect:
 | `sandbox-user` | Add yourself as a test user | **Sandbox settings** › **Target users** › **Add account**, log in, accept. Can take up to an hour: refresh the page. |
 | `sandbox-verify` | Verify the website in Sandbox too | Same as `key-verify` with Sandbox picked; upload that file too. |
 | `sandbox-keys` | Use the Sandbox keys | If you see a different Client key in the Sandbox, paste those keys here for now. |
-| `connect` | Connect TikTok | Vermilion button (`auto: connected`). Log in, check it says Clip Factory, leave every switch on, **Authorize**. |
+| `connect` | Connect TikTok | Vermilion button (`auto: connected`). Log in, check it says Clip Factory, leave every switch on, **Continue**. |
 Go public (`gate: app_review`, `posting_audit`):
 | id | title | essentials |
 |---|---|---|
-| `public-demo` | Record the real demo video | Record your screen on Clip Factory, connected in the Sandbox: open Clip Factory, **Connect TikTok**, TikTok's **Authorize** screen, **Upload** on a clip with the **Post to TikTok** sheet, the post arriving on TikTok. Up to 5 videos, 50 MB each. |
+| `public-demo` | Record the real demo video | On a computer, connected in the Sandbox with the TikTok account still private, address bar in sight. Copy chip **Shot list** (`TIKTOK_DEMO_SHOTS` in `tiktok.ts`, 18 numbered shots in order): About page with Privacy and Terms › **Connect TikTok** › TikTok's screen with every scope, **Continue** › connected › the clip's source › Review card preview (no watermark) › the **TikTok** row: "Asking TikTok…", "Posting as" + picture › edit the TikTok caption › Upload held ("Pick who can see it on TikTok first.") and **Who can see it** with nothing picked › Comments, Duet, Stitch all off (grey "Turned off in your TikTok settings." when the creator turned one off) › **Commercial content** on ("Pick Your brand, Branded content, or both." under it; pick **Only me**, Upload still held: "Pick Your brand or Branded content on TikTok first.") › **Your brand** (its "Promotional content" tag) › **Branded content** ("Paid partnership", Branded Content Policy line above Upload, Who can see it now says "Branded content can't be Only me. Turn off Branded content.") › untick it, pick **Only me** by hand, Commercial content off › Music Usage Confirmation line above **Upload** › **Upload** and "TikTok can take a few minutes to process your clip." › **Library**: on its way, then Posted › the private post on TikTok as picked › **Money** (video.list, user.info.stats) › last, on another clip with nothing on, **Use my settings** (the owner's own tap) and the TikTok row with every option. About 1 min, MP4, under 50 MB (up to 5 videos). Hints: a shot-list line you can't find → tap the **TikTok** row (every line is in there or right above **Upload**); a secret or code on screen → cut it out. The same video goes to App review and the audit form. |
 | `public-review` | Ask TikTok to check the app | Switch to **Production**. **App review**: check `tiktokReviewText` is there (one line per scope), swap in the real demo video, **Save**, **Submit for review**. Then pick the status here: Draft / In review / Live / Not approved (`PATCH gate app_review`). Not approved: read **Review comments**, fix, submit again. |
 | `public-live-keys` | When it says Live | If the Production keys differ from the Sandbox ones, paste them and press **Connect again**. |
-| `public-audit` | Ask to post publicly | Open developers.tiktok.com/application/content-posting-api and fill in the form. Until it passes, every post is "Only me". TikTok may say no to a tool only you use; then posts stay private. |
-| `public-unprivate` | Make your account public again | Only after the audit: turn **Private account** off. |
+| `public-audit` | Ask to post publicly | Only after **App review** says **Live**: **Production** › **Content Posting API** › **Apply** next to **Direct Post** (Open button: developers.tiktok.com/application/content-posting-api). The form has 4 pages (General Information, API client information, Supporting documents, Review) and does not save: paste each answer into the box with the same name. Copy chips: Organization name `appName`, Organization website `websiteUrl`, Organization description `TIKTOK_AUDIT_DESCRIPTION`, How you use Direct Post `TIKTOK_AUDIT_DIRECT_POST`, How you got the number `TIKTOK_AUDIT_USAGE` (pick the smallest users choice), Data you store `TIKTOK_AUDIT_DATA` (all literal strings in `tiktok.ts`; every one literally true today: one creator's own clipping tool, invite-only, one user, other creators' streams and paid clipping campaigns said plainly, "There is no company. Clip Factory is the name of my tool, and I am one person.", no wide audience; Data you store lists only what the api keeps: follower count, and from recent videos only a views total and a count of long videos). Upload the demo video, read and tick the 3 boxes, **Next**. "TikTok's rules ask for apps that many people can use. Clip Factory is only for you. If it says no, posts stay private but still post." Hints: **Your full name** → type your own; app ID → the number after /app/ in the app page's address bar; no **Apply** → wait for Live; spinner after **Next** → the video is uploading (up to 2 min); **Under review** → done for now, often 1 to 3 weeks; a no with empty **Review comments** → ask TikTok support first. Until it passes, every post is "Only me". |
+| `public-unprivate` | Make your account public again | Only after the audit: turn **Private account** off. Posts from before stay private: change each to **Everyone** in the TikTok app. TikTok still allows about 15 posts a day. |
 Status lines: `posting_audit` limited → "Works now, but your TikTok posts stay private until TikTok says yes.";
 `app_review` draft/not approved → "Finish the TikTok review steps to post outside the Sandbox."; in review → "TikTok
 is checking your app. This can take days."
@@ -168,7 +174,7 @@ v27.0; system-user tokens are for Tech Providers only). Get ready:
 | id | title | essentials |
 |---|---|---|
 | `ready-pro` | Make Instagram a pro account | Instagram app › your picture › menu › **Account type and tools** › **Switch to professional account** › **Creator** or **Business**. Personal accounts cannot connect. |
-| `ready-page` | Link Instagram to a Facebook Page | In the Instagram app, tap **Edit profile**, then **Page** (under Public business information). Pick your Facebook Page, or press **Create a Facebook Page**. No Page yet? Make one first in the Facebook setup, step 1. If you see **Manage connection** on Facebook: already linked; check the name, close it, **I did this**, never **Disconnect**. Wrong Instagram there: **Disconnect**, then **Connect account**. |
+| `ready-page` | Link Instagram to a Facebook Page | In the Instagram app, tap **Edit profile**, then **Page** (under Public business information). Pick your Facebook Page, or press **Create a Facebook Page**. No Page yet? Make one first in the Facebook setup, step 1. Facebook shows a banner asking you to confirm who runs the Page (Page Publishing Authorization)? Do it now. If you see **Manage connection** on Facebook: already linked; check the name, close it, **I did this**, never **Disconnect**. Wrong Instagram there: **Disconnect**, then **Connect account**. |
 | `ready-computer` | Use a computer | Log in to facebook.com with the Facebook account that will own the app. Wrong account? Log out first. |
 | `ready-portfolio` | Business portfolio, if Meta asks | (optional since 19 Nov 2026: only if Meta asks or the Instagram is already in one) Open business.facebook.com, **Create a business portfolio** (name, your name, email), **Create**. **Settings** › **Accounts** › **Instagram accounts** › **Add**, log in to Instagram. Already in a portfolio? Use that one. |
 Make your Instagram key:
@@ -176,22 +182,26 @@ Make your Instagram key:
 |---|---|---|
 | `key-developer` | Become a Meta developer | Open developers.facebook.com/async/registration, **Next**, type the codes Meta sends, pick **Creator**. |
 | `key-app` | Create the app | developers.facebook.com/apps › **Create app**. App name `appName`, your email, **Next**. Use case **Manage messaging & content on Instagram**, **Next**. Pick your portfolio, or skip it. **Next** / **Go to dashboard**. Never ask for a review. |
-| `key-basic` | Fill in Basic settings | **App settings** › **Basic**: Privacy Policy URL `privacyUrl`, Terms of Service URL `termsUrl`, User data deletion › **Data deletion instructions URL** `dataDeletionUrl`, a Category. **Save changes**. |
-| `key-config` | Make the Instagram login setup | **Use cases** › **Customize** (Instagram) › open the tab **API setup with Facebook login**. Press **Create new configuration** (under Facebook Login for Business › Configurations). Token type: **User access token**, the longest expiry. Assets: your Page and Instagram account. **Edit permissions**: tick instagram_basic, instagram_manage_insights, instagram_content_publish, pages_show_list, pages_read_engagement (instagram_manage_insights is not ticked by default); untick the ad ones. **Use this configuration**. Redirect URL `redirectUri`, **Save**. |
+| `key-basic` | Fill in Basic settings | **App settings** › **Basic**: App domains `appDomain`, Privacy Policy URL `privacyUrl`, Terms of Service URL `termsUrl`, User data deletion › **Data deletion instructions URL** `dataDeletionUrl`, a Category, App icon (download), Contact email (already filled in). In the EU: Data Protection Officer = your name and email. **Save changes**. Meta needs all of this to make the app Live. |
+| `key-config` | Make the Instagram login setup | **Use cases** › **Customize** (Instagram) › open the tab **API setup with Facebook login**. Press **Create new configuration** (under Facebook Login for Business › Configurations). Token type: **User access token**, the longest expiry. Assets: your Page and Instagram account. **Edit permissions**: tick instagram_basic, instagram_manage_insights, instagram_content_publish, pages_show_list, pages_read_engagement (instagram_manage_insights is not ticked by default). Page in a business portfolio? Also tick ads_management and ads_read (Meta needs them when the Page role comes through Business Manager). **Use this configuration**. Redirect URL `redirectUri`, **Save**. |
 | `key-redirect-check` | Double-check the return address | If you see **Facebook Login for Business** › **Settings**: put `redirectUri` in **Valid OAuth Redirect URIs**, **Enforce HTTPS** on, **Save changes**. No such page: skip. (optional) |
 | `key-paste` | Paste the 3 values | **App ID**, **App secret** (**Show**, Facebook may ask your password), **Configuration ID** (or paste the whole **Login URL**: Clip Factory finds the ID). **Save keys** (`auto: keys`). |
 Connect: `connect` **Connect Instagram**: log in with the same Facebook account, tick your Page and your Instagram
 account, leave every switch on, confirm. Several accounts → pick in Clip Factory. Not listed → it is still personal
-(`ready-pro`), not linked to a Page (`ready-page`) or in another portfolio (`ready-portfolio`). Go public:
-`public-try` "Post one test clip" (Instagram may take a few minutes;
-numbers can take 2 days). Status: "Works now." If you see your Reels missing for other people: "Tell Clip Factory
-support; Meta may want the app Live." If Facebook asks to confirm who runs the Page (Page Publishing Authorization):
-"Do it. Instagram will not post until you do."
+(`ready-pro`), not linked to a Page (`ready-page`) or in another portfolio (`ready-portfolio`). Go public
+(`gate: app_live`, like Facebook: Development-mode posts are seen only by the app's role users): `public-live` "Make
+the app Live": "Until the app is Live, only you can see your Reels." Left menu **Publish**, check the list, **Go live**
+at the bottom right (no **Publish**: the **App Mode** switch → **Live**); press **I did this** when the top bar says
+**Live**. If you see **App Review** or **Advanced access**: "You do not need it for your own account. Skip it. Press
+**Go live**. Meta still says no? It lists what is missing. Go back to Fill in Basic settings." Then `public-try` "Post
+one test clip" (Instagram may take a few minutes; numbers can take 2 days). If you see your Reels missing for other
+people: "Do the step before: make the app Live." If Facebook asks to confirm who runs the Page (Page Publishing
+Authorization): "Do it. Instagram will not post until you do."
 
 **Facebook** (about 25 min, Free; Page Reels, Facebook Login for Business, Graph v27.0). Get ready:
 | id | title | essentials |
 |---|---|---|
-| `ready-page` | Have a Facebook Page | Open facebook.com/pages/?category=your_pages; none → **Create new Page**. Profiles cannot post Reels through apps. You need **Content** or **Full control** access on the Page. Tap your picture and switch back to your own profile; do not change Page settings. If you see **Manage connection** after **Edit profile**: Instagram is already linked, close it, never **Disconnect**. **People who help manage your Page**: leave as is. |
+| `ready-page` | Have a Facebook Page | Open facebook.com/pages/?category=your_pages; none → **Create new Page**. Profiles cannot post Reels through apps. You need **Content** or **Full control** access on the Page. Tap your picture and switch back to your own profile; do not change Page settings. If you see **Manage connection** after **Edit profile**: Instagram is already linked, close it, never **Disconnect**. **People who help manage your Page**: leave as is. Page in a business portfolio: keep your own access too (Page **Settings** › **Page access**, **Full control**). |
 | `ready-computer` | Use a computer | |
 Make your Facebook key:
 | id | title | essentials |
@@ -207,10 +217,11 @@ Make your Facebook key:
 | `key-paste` | Paste the 3 values | **App ID**, **App secret**, **Configuration ID**. **Save keys**. |
 Connect: `connect` **Connect Facebook**: **Continue**, tick your clip Page, leave every switch ON (one off and Facebook
 gives nothing), **Save**, **Got it**. Several Pages → pick in Clip Factory.
-Go public (`gate: app_live`): `public-live` "Make the app Live": left menu **Publish**, check the list, **Publish** at the bottom right (no
-**Publish**: the **App Mode** switch → **Live**). Missing info → back to `key-basic`. If Meta asks for **App Review** first: "Your Reels stay
-visible only to you for now. Tell Clip Factory support." Status before: "Works now, but only you can see your
-Facebook Reels until the app is Live."
+Go public (`gate: app_live`): `public-live` "Make the app Live": left menu **Publish**, check the list, **Go live** at the bottom right (no
+**Publish**: the **App Mode** switch → **Live**). Missing info → back to `key-basic`. Press **I did this** when the top bar says **Live**.
+If you see **App Review** or **Advanced access**: "You do not need it for your own Page. Skip it. Press **Go live**. Meta still says
+no? It lists what is missing. Go back to Fill in Basic settings." (A role-only app on Standard Access needs no App Review.) Status
+before: "Works now, but only you can see your Facebook Reels until the app is Live."
 
 **X** (about 15 min, **costs money**: $0.015 per clip, "about $1.50 for 100 clips"). Get ready:
 | id | title | essentials |
@@ -239,7 +250,7 @@ video.list, the money grant adds user.info.stats, and nothing asks for video.upl
 video.publish: post clips I approved with Upload straight to my own TikTok (Direct Post).
 video.upload: comes with Content Posting API. Clip Factory does not ask for it; it only uses Direct Post.
 video.list: show the views and likes of my own posts on my Clip Factory dashboard.
-user.info.stats: show my follower and like totals on my Clip Factory money tile, only after I say OK."
+user.info.stats: show my follower count on my Clip Factory Money page, only after I say OK."
 
 ### 17.3 Public pages for the platforms (web, static, no sign-in)
 
@@ -309,8 +320,8 @@ interface SetupValues { appName: string; websiteUrl: string; websitePrefix: stri
 Gates per platform: youtube `published_app` (`ok` when step `key-publish` is ticked, else `action`); tiktok
 `app_review` (owner-picked: draft / not_approved → `limited` (Sandbox only), in_review → `waiting`, live → `ok`) and
 `posting_audit` (from `creator_info.privacy_level_options`: only
-`SELF_ONLY` → `limited`, else `ok`; `unknown` before connect); instagram none; facebook `app_live` (`ok` when
-`public-live` is ticked, else `limited`); x `credits` (`action` after a credits error, `ok` after the next success).
+`SELF_ONLY` → `limited`, else `ok`; `unknown` before connect); instagram and facebook `app_live` (`ok` when
+`public-live` is ticked, else `limited`; the gate line names "Instagram Reels" / "Facebook Reels"); x `credits` (`action` after a credits error, `ok` after the next success).
 
 **Key formats** (trimmed; quotes and zero-width characters removed; same regexes in `oauth/formats.py` and
 `web/src/lib/keyFormats.ts`; friendly 400 messages say what the value looks like):
@@ -413,6 +424,10 @@ platform, partial: true }` (the web refetches `GET /v1/setup`). `LiveEvent` gain
 4. Write the token secret (or `pending` + SETUP `choices` for `choose`), then UpdateItem `ACCOUNT#{platform}`
    (`connected` or `choose_account`) and SETUP. Token endpoint 401/`invalid_client` → `keys_wrong`;
    `redirect_uri_mismatch`/"redirect_uri is not matched" → `redirect_wrong`; 5xx/network → `platform_down`.
+   On `connected`, release the owner's posts waiting for this place (§17.6 "Release"; `cf-prod-hooks` starts the clip
+   flow on `CLIP_FLOW_ARN`). A release failure is logged (`oauth.release_failed`) and never changes the result: the
+   owner still lands on `result=connected`. The Meta pick (`POST /v1/accounts/{platform}/choose`) and a Check it that
+   turns `needs_reconnect` back into `connected` (§17.4) release the same way in `cf-prod-api`.
 5. Always `302 Location: {APP_URL}/settings/posting/setup/{platform}?result={code}` (fixed path, code from the list
    below only; nothing else from the request is reflected; no open redirect), `Cache-Control: no-store`,
    `Referrer-Policy: no-referrer`. Never log `code`, `state`, tokens or the query.
@@ -472,11 +487,12 @@ something (conditional on `status = queued`), so a replay resumes instead of cre
 TikTok's `uploadUrl` once uploading is done).
 
 **Clip-flow steps per queued post** (names are contract; replaces §14.5 step 2):
-`publish-{platform}` (start) → while `processing`: `ctx.wait(Duration.from_seconds(check_after),
+`publish-{platform}` (start; first the step reads the post and stops unless it is `queued` and its `flowRun` is this
+run's or absent) → while `processing`: `ctx.wait(Duration.from_seconds(check_after),
 name=f"wait-{platform}-{n}")` + step `check-{platform}-{n}` (n = 1…`maxChecks`) → `ready_to_finish`: step
 `finish-{platform}` (then more checks if it returns `processing`) → `done`: `posts.mark_posted` in that step. Retries:
 3 attempts on `RetryablePublishError`/`TransientError`. `NotConnectedError` (no account) → post `pending_integration`
-as today; `ReconnectNeededError` → post `failed` "Connect {Platform} again in Settings › Posting › Set up posting, then
+(released once the place is connected, "Release" below); `ReconnectNeededError` → post `failed` "Connect {Platform} again in Settings › Posting › Set up posting, then
 press Try again."; `PublishError` → `failed` with the mapped sentence. Platforms run one after another (waits cost
 nothing). Over `maxChecks`: YouTube and TikTok are marked posted anyway (the platform finishes alone); the others
 fail with "{Platform} could not finish this video. Press Try again." An at-most-once step interrupted mid-call fails
@@ -487,29 +503,64 @@ internal `publishHandle` so a failed upload is started fresh, not resumed. Confi
 accepts the same `tiktok` options as §17.8 and replaces the TikTok post's `postOptions` (needed after "Pick who can see
 it on TikTok again, then press Try again.").
 
+**Release (waiting posts, added 2026-11-20).** The Library promises "Posts once these accounts are connected", so
+connecting keeps it. `release.release_waiting(store, flows, userId, platform, deadline=…)`
+(`clipfactory_api/release.py`, imported by both `cf-prod-api` and `cf-prod-hooks`) runs right after an Account becomes
+`connected`: the OAuth callback (§17.5), the Meta account pick and a Check it that reconnects (§17.4). Only when that
+Account is `connected` (a strongly consistent read: the caller wrote it a moment ago), it reads the owner's posts
+(`Query USER#`/`POST#`, strongly consistent) and, per clip whose status is `posted`, `confirmed` or `failed` (never
+`review`, `publishing` or `declined`), does exactly what Try again does (`release.restart`, shared with
+`routes/clips.py` `_try_again`): one transaction sets that place's `pending_integration` posts to `queued` with
+`flowRun: run + 1` (REMOVE `error`, `publishHandle`; each conditional on `status = pending_integration`) and the clip to
+`flowRun + 1`, `publishState: pending` (REMOVE `flowExecutionArn`; a `failed` clip becomes `confirmed`; conditional on
+the status and `flowRun` read), then starts `clip-{clipId}-{flowRun}` (`release.start_flow`, the same code Confirm
+uses; on success `publishState: started`). The new run sends only the posts tagged with its number, so a release or a
+second Post now while an earlier run is still uploading another place never sends a video twice (§14.5 step 2). When
+the clip's current run never started (`publishState: pending`), its `queued` posts move to the new run too (`flowRun`
+only, upload handles kept; the clip update is then also conditional on `publishState = pending`). A TikTok post with no
+`postOptions.privacyLevel` is never released on its own (TikTok's rules, §17.8): it waits for Post now, which opens the
+TikTok sheet. Safe to repeat: a second release finds nothing waiting and changes nothing; a clip of that place with a
+`queued` post and `publishState: pending` (an earlier start that failed) gets its start finished, so a failed Invoke
+stays retryable, and the Library shows such a clip's big Try again (`startPending`, §11). Per-clip errors are logged
+(`release.clip_failed`) and skipped, never raised; a read failure is `release.read_failed`. The owner waits for the
+answer, so `deadline` is `ANSWER_SECONDS` (25) after the request began (the callback's start, `Request.started` in the
+API; cf-prod-hooks stops at 28 s, API Gateway waits 29 s): a clip only starts while `CLIP_SECONDS` (18, one clip's
+worst case: two Invoke attempts of 2 s connect + 6 s read, plus its DynamoDB calls) are left (`release.out_of_time`),
+and the rest wait for Post now or the next release.
+
 | Platform | start | check | finish | ids / URL |
 |---|---|---|---|---|
 | youtube (start at-least-once) | POST `[hidden]` (`X-Upload-Content-Length`, `X-Upload-Content-Type: video/mp4`) body `{snippet:{title: youtubeTitle ≤ 100 chars no "<>", description ≤ 5000 bytes no "<>", categoryId: "20"}, status:{privacyStatus: settings.youtubePrivacy, selfDeclaredMadeForKids: false, containsSyntheticMedia: false}}` → save session URI; PUT bytes in 8 MB chunks (multiples of 256 KB, `Content-Range`); 308 continue; on resume `PUT Content-Range: bytes */{size}` | `GET /youtube/v3/videos?part=status,processingDetails&id=` until `uploadStatus` `processed` (`rejected`/`failed` → PublishError with reason); every 30 s, `maxChecks` 60 | – | `platformPostId = statsId = videoId`; `https://www.youtube.com/shorts/{id}` |
 | tiktok (start at-most-once) | `creator_info/query` (spam errors → PublishError; clip longer than `max_video_post_duration_sec` → PublishError); `POST /v2/post/publish/video/init/` `post_info {title: tiktok caption ≤ 2200, privacy_level: post options (must be in `privacy_level_options`), disable_comment/duet/stitch, brand_content_toggle, brand_organic_toggle, is_aigc: false}`, `source_info {source: "FILE_UPLOAD", video_size, chunk_size, total_chunk_count}` (≤ 64 MB: one chunk = size; else 10 MB chunks, `floor(size/chunk)`, last carries the rest) → save `publish_id`; PUT chunks to `upload_url` (`Content-Range`) | `POST /v2/post/publish/status/fetch/` every 15 s, `maxChecks` 80: `PUBLISH_COMPLETE` → done; `FAILED` → PublishError by `fail_reason` (`internal` retryable) | – | `platformPostId = publish_id`; private (`SELF_ONLY`) → `privacy "private"`, no statsId, url `https://www.tiktok.com/@{username}`; public → `statsId = publicaly_available_post_id[0]` when present, else a follow-up loop `tiktok-id-{n}` (wait 10 min, ≤ 12) sets it via `posts.set_stats_id`; url `https://www.tiktok.com/@{username}/video/{id}` |
-| instagram (start at-least-once) | `GET /{ig}/content_publishing_limit?fields=config,quota_usage` (full → PublishError "Instagram's daily limit is reached. Press Try again tomorrow."); `POST /{ig}/media media_type=REELS&upload_type=resumable&caption&share_to_feed=true` → save container id; `POST https://rupload.facebook.com/ig-api-upload/v27.0/{container}` (`Authorization: OAuth {token}`, `offset: 0`, `file_size`, binary body). Fallback `publish.source = "video_url"`: `video_url` = presigned GET | `GET /{container}?fields=status_code` every 60 s, `maxChecks` 15: `FINISHED` → ready_to_finish; `ERROR`/`EXPIRED` → PublishError | at-most-once: `POST /{ig}/media_publish creation_id` → media id; `GET /{id}?fields=permalink` | `platformPostId = statsId = media id`; `permalink` |
-| facebook (start at-least-once) | `POST /{pageId}/video_reels upload_phase=start` → save `video_id`; `POST https://rupload.facebook.com/video-upload/v27.0/{video_id}` (`Authorization: OAuth {pageToken}`, `offset: 0`, `file_size`, binary; resume from `bytes_transfered`). Fallback `file_url` header with a presigned GET | `GET /{video_id}?fields=status` every 30 s, `maxChecks` 40: uploading done → ready_to_finish; after finish wait for `publishing_phase.status=completed` and `video_status=ready`; `error`/`upload_failed`/`expired` → PublishError | at-least-once: `POST /{pageId}/video_reels upload_phase=finish&video_id&video_state=PUBLISHED&description` (if Meta rejects the value, retry once with `complete`) | `statsId = video_id`, `platformPostId = post_id` if returned else video_id; url `permalink_url` (absolute) else `https://www.facebook.com/reel/{video_id}` |
+| instagram (start at-least-once) | `GET /{ig}/content_publishing_limit?fields=config,quota_usage` (full → PublishError "Instagram's daily limit is reached. Press Try again tomorrow."); `POST /{ig}/media media_type=REELS&upload_type=resumable&caption&share_to_feed=true` → save container id; `POST https://rupload.facebook.com/ig-api-upload/v27.0/{container}` (`Authorization: OAuth {token}`, `offset: 0`, `file_size`, binary body). Fallback `publish.source = "video_url"`: `video_url` = presigned GET | `GET /{container}?fields=status_code,status` every 60 s, `maxChecks` 15: `FINISHED` → ready_to_finish; `ERROR` → "Instagram did not like this video file." (`status`, Meta's reason, is logged); `EXPIRED` → "Instagram waited too long for this upload. Press Try again." (Try again starts a fresh container); `PUBLISHED` (a cut-off finish) → never `media_publish` again: look up the Reel (below) → done | at-most-once: save `publishing: true`, then `POST /{ig}/media_publish creation_id` → media id; `GET /{id}?fields=permalink`. A finish that finds `publishing` set and no `mediaId`, or whose `media_publish` fails (timeout, 5xx, any Meta error), first reads `GET /{container}?fields=status_code`: `PUBLISHED` → look up the Reel, never publish twice. Look-up: `GET /{ig}/media?fields=id,permalink,timestamp,caption&limit=5`, the one row whose caption is the caption sent and whose `timestamp` is after the container's `containerAt` (2 min slack); none or several → "Instagram may have posted this already. Look on Instagram before you press Try again." (never a guess) | `platformPostId = statsId = media id`; `permalink` |
+| facebook (start at-least-once) | clip `durationSec` outside 3-90 s → "Facebook Reels must be 3 to 90 seconds long." before any call; `POST /{pageId}/video_reels upload_phase=start` → save `video_id`; `POST https://rupload.facebook.com/video-upload/v27.0/{video_id}` (`Authorization: OAuth {pageToken}`, `offset: 0`, `file_size`, binary; resume from `bytes_transfered`). Fallback `file_url` header with a presigned GET | `GET /{video_id}?fields=status` every 30 s, `maxChecks` 40: uploading done (`uploading_phase.status` `complete` or `completed`, or `video_status=upload_complete`) → ready_to_finish; after finish wait for `publishing_phase.status=completed` and `video_status=ready`; `error`/`upload_failed`/`expired` → PublishError (each phase's `error` object, or `errors` list, is logged) | at-least-once: `POST /{pageId}/video_reels upload_phase=finish&video_id&video_state=PUBLISHED&description` (one call; `video_state` takes only DRAFT, SCHEDULED or PUBLISHED) | `statsId = video_id`, `platformPostId = post_id` if returned else video_id; url `permalink_url` (absolute) else `https://www.facebook.com/reel/{video_id}` |
 | x (start at-least-once) | `POST /2/media/upload/initialize {media_type: "video/mp4", total_bytes, media_category: "tweet_video"}`; `POST /2/media/upload/{id}/append` multipart (`segment_index`, `media`, 4 MB); `POST /2/media/upload/{id}/finalize` → save media id | `GET /2/media/upload?command=STATUS&media_id=` after `check_after_secs` (≤ 60), `maxChecks` 20: `succeeded` → ready_to_finish; `failed` → PublishError | at-most-once: `POST /2/tweets {text: x caption with every URL removed, ≤ 280 chars cut at a word + "…", media:{media_ids}}` | `platformPostId = statsId = tweet id`; `https://x.com/{username}/status/{id}` |
 
 **Friendly errors** (`platforms/errors.py`, `friendly(platform, status, body) -> (retryable, sentence)`): quota/rate
 (YouTube `quotaExceeded`/`uploadLimitExceeded`, TikTok `rate_limit_exceeded`/`spam_risk_too_many_posts`, Meta 4/17/32/
 613/80001/80002, X 429) → "{Platform} says slow down. Clip Factory tries again later." (retryable except daily caps:
 "…Press Try again tomorrow."); TikTok `spam_risk_user_banned_from_posting` → "TikTok is not letting this account post
-right now."; `unaudited_client_can_only_post_to_private_accounts` → "Make your TikTok account private (Setup step 3),
-then press Try again."; `reached_active_user_cap` → "TikTok's daily limit for your app is reached. Try tomorrow.";
+right now."; `unaudited_client_can_only_post_to_private_accounts` → "TikTok only takes Clip Factory's uploads on a private
+account until it approves the app. Tap Post it yourself to post it for everyone." (§42; it said "Make your TikTok
+account private (Setup step 3), then press Try again." before the owner's account went public on 2026-11-21); `reached_active_user_cap` → "TikTok's daily limit for your app is reached. Try tomorrow.";
 YouTube `forbidden`/`uploadLimitExceeded` channel → "YouTube did not accept the upload. Check your channel in YouTube
 Studio."; file checks (`file_format_check_failed`, `duration_check_failed`, Meta 2207026 …) → "{Platform} did not like
 this video file."; X 402 or a `CreditsDepleted`/"credits" problem → gate `credits` `action`, "Your X credits ran out.
 Buy more in console.x.com › Billing › Credits, then press Try again."; X 403 duplicate → "X already has this post.";
-5xx/network → retryable "{Platform} did not answer.". Unknown → "Posting to {Platform} did not work. Press Try again."
+5xx/network → retryable "{Platform} did not answer.". Meta (`code/subcode` is `Problem.code`, e.g. `190/460`; subcode, `type`, `error_user_title` and `fbtrace_id`
+are logged): 190/492 → "Your Facebook account is no longer an admin of the Page. Make it an admin, then connect
+again.", other 190 → Connect again; 10 and 200-299 → "{Platform} is missing a permission. Connect {Platform} again in
+Settings › Posting › Set up posting and tick every box." (both `needs_reconnect`); 4/2207051 (spam) → "{Platform} is
+not letting this account post right now."; 25/2207050 → "Open the Instagram app and clear any warning. Then press Try
+again."; 368 → "Meta paused posting for now. Wait a day, then press Try again."; -1, -2, 1, 2, 9007 and subcodes
+2207001/2207003/2207008/2207027/2207032 → retryable "{Platform} did not answer."; 2207020/2207053 → "{Platform} lost
+this upload. Press Try again."; Facebook Reels specs 1363040/1363127/1363129 → bad file, 1363128 → "Facebook Reels
+must be 3 to 90 seconds long.". Unknown → "Posting to {Platform} did not work. Press Try again."
 Raw platform messages go to logs (no tokens), never to the owner.
 
 **Stats.** `cf-prod-stats` and the clip-flow `metrics` step use `SecretsTokenProvider`; `ReconnectNeededError` = skipped
-like `not_connected`. New handler event `{"action": "forget", "userId", "platform": "youtube"}` (sent async by
+like `not_connected`. A Meta stats read answered with code 190 sets the Account `needs_reconnect` (`reason: token_dead`)
+and skips like `not_connected` (Meta never says a token died), so Settings shows Connect again before the next Upload. New handler event `{"action": "forget", "userId", "platform": "youtube"}` (sent async by
 `DELETE /v1/accounts/youtube`): REMOVE `metrics` and gsi2 attributes from YouTube posts and delete their `STAT#` items
 (YouTube Developer Policies: delete API data after revocation).
 
@@ -538,8 +589,9 @@ On Upload, when TikTok is one of the chosen places (§33; an older client: in `s
 sheet opens before the confirm request: the creator nickname (`GET /v1/accounts/tiktok/creator-info`, fetched each
 time), a **Who can see it** dropdown (the app's own) with **no default** (below), switches Comments / Duet /
 Stitch (off by default, greyed when disabled by the creator), a **Commercial content** switch (off) with **Your brand** / **Branded content** (one required when on;
-label "Promotional content" / "Paid partnership"; branded cannot be "Only me"), the sentence "By posting, you agree to
-TikTok's Music Usage Confirmation" (+ "Branded Content Policy" when branded), a video preview and the editable
+label "Promotional content" / "Paid partnership"; branded is only Everyone or Friends), the sentence "By posting, you agree to
+TikTok's Music Usage Confirmation." (branded: "By posting, you agree to TikTok's Branded Content Policy and Music Usage
+Confirmation."), a video preview and the editable
 caption. Upload stays disabled until a privacy is chosen. Confirm body gains `"tiktok": { "privacyLevel", "disableComment",
 "disableDuet", "disableStitch", "brandContent", "brandOrganic" }` (validated; stored on the TikTok Post as internal
 `postOptions`); a `queued` TikTok post without it → 400 "Pick who can see it on TikTok.". After Upload the toast says
@@ -554,10 +606,26 @@ that the creator picks the privacy status himself **from a dropdown** with no de
 are shown and none is on by default; Commercial content is off until the creator turns it on. So:
 
 * **The app's own dropdown** (`components/Dropdown.tsx`, never the OS list) labelled "Who can see it": exactly
-  `privacyOptions` (minus Only me when branded), ordered Everyone, Followers, Friends, Only me, showing "Pick who can
-  see it" until the owner picks. When `SELF_ONLY` is the only option it is the one choice, and the line "TikTok keeps
-  posts private until it approves your app." shows under it. When Branded content leaves nothing: "Branded content
-  can't be Only me. Turn off Branded content." The sheet's hint reads "Pick who can see it to turn on Upload."
+  `privacyOptions`, ordered Everyone, Followers, Friends, Only me, showing "Pick who can see it" until the owner picks.
+  With Branded content ticked, Only me and Followers stay in the list greyed (`DropdownOption.disabled`: skipped by
+  the keys, a tap does nothing, `aria-disabled`) with TikTok's line "Branded content visibility cannot be set to
+  private." When `SELF_ONLY` is the only option it is the one choice, and the line "TikTok keeps posts private until it
+  approves your app." shows under it. When Branded content leaves nothing: "Branded content can't be Only me. Turn off
+  Branded content." The sheet's hint reads "Pick who can see it to turn on Upload."
+* **Commercial content (TikTok's audit rules, 2026-11-21).** Shared by the sheet and the TikTok row
+  (`screens/review/TikTokCommercial.tsx`). Under the two ticks one line says the label: nothing ticked "Pick Your
+  brand, Branded content, or both."; Your brand only "Your video will be labeled as 'Promotional content'."; Branded
+  content (alone or with Your brand) "Your video will be labeled as 'Paid partnership'.". Branded content (paid
+  partnership) is only for Everyone or Friends (`BRANDED_PRIVACY`): while Only me or Followers is picked the Branded
+  content tick is greyed with "Branded content can't be Only me. Pick Everyone or Friends first." (or "… can't be
+  Followers. …"); the privacy he picked is never cleared (TikTok's option A; a tick already on can always be
+  unticked). Commercial content on with nothing ticked keeps Upload off; TikTok's sentence "You need to indicate if
+  your content promotes yourself, a third party, or both." is Upload's hover text (`title`) and starts the line under
+  it, because phones have no hover: the sheet "… Pick Your brand or Branded content to turn on Upload.", the card
+  "… Pick Your brand or Branded content on TikTok first.". The API refuses branded content that is not Everyone or
+  Friends twice: the confirm body (400 "Branded content can only be seen by Everyone or Friends on TikTok. Pick who
+  can see it.") and `TikTokPublisher.post_info` (PublishError "Pick who can see it on TikTok again, then press Try
+  again.", before anything reaches TikTok).
 * **Use my settings** on the Review card (§36) is the owner's own action: one tap puts his saved TikTok choices on
   (within what TikTok offers him right now). Nothing is ever on before he taps it or picks in the TikTok row.
 * Commercial content (off) with Your brand / Branded content ("Paid partnership"), the Branded Content Policy line and
@@ -593,6 +661,10 @@ callout also has **Ask TikTok again**, which fetches the creator info again.
   (the `{platform}/token` secrets only; `-*` covers the random ARN suffix) (so the secret names are defined once). The
   hooks Lambda does not need `HOOKS_URL` (the callback uses the
   `redirectUri` saved at Connect). The REST resources are unchanged (callback route exists).
+  Release of waiting posts (§17.6, additive): env `CLIP_FLOW_ARN` (= `module.flows.clip_flow_alias_arn`); IAM
+  `ReleaseWaitingPosts` (`dynamodb:GetItem`, `Query`, `UpdateItem`, `TransactWriteItems` on the table, `USER#*` only)
+  and `StartClipFlow` (`lambda:InvokeFunction` on `{clip_flow_arn_prefix}:*`, like the API's `StartFlows`). New inputs
+  `clip_flow_alias_arn`, `clip_flow_arn_prefix` (from `module.flows`; flows reads only names from hooks: no cycle).
 * **api**: env `HOOKS_URL` (= `module.hooks.hooks_url`), `SECRET_PREFIX`, `OAUTH_STATE_SECRET`, `WEB_BUCKET`,
   `DISTRIBUTION_ID`; IAM: the secrets set above on the prefix, `GetSecretValue` on the state key,
   `s3:PutObject`/`s3:DeleteObject` on `${web_bucket_arn}/tiktok*`, `cloudfront:CreateInvalidation` on the distribution
@@ -612,7 +684,8 @@ callout also has **Ask TikTok again**, which fetches the creator info again.
   `/oauth`) from `oauth_callback_base`; `test-write-web-config.sh` covers it; `upload-web.sh` excludes `tiktok*.txt`
   from deletes. §4 config gains `"oauthCallbackBase"`; the web treats it as optional (mock mode) and uses it only
   until `GET /v1/setup` answers.
-* **Cost**: ≤ 16 secrets × $0.40/month.
+* **Cost**: ≤ 16 secrets × $0.40/month for this change (the state key and three per platform); about 22 in all today
+  (ADR-34).
 
 ### 17.10 Web mock mode (offline, `VITE_MOCK=1`)
 
@@ -663,7 +736,10 @@ Shared names: `oauth.state.sign(key, platform, nonce, exp)`, `oauth.state.verify
   `FakeDurableContext`: step and wait names `publish-/wait-/check-/finish-{platform}-{n}`, replay with `publishHandle`
   makes no second create, `maxChecks` outcomes, at-most-once interruption message, `ReconnectNeededError` → failed,
   TikTok private → no gsi2, TikTok id follow-up sets `statsId`; friendly error mapping table; X monthly cap; TikTok
-  confirm options required and validated; broadcast `ACCOUNT#`/`SETUP#` → `setup` partial; `config.load` §17.7 values.
+  confirm options required and validated; broadcast `ACCOUNT#`/`SETUP#` → `setup` partial; `config.load` §17.7 values;
+  `test_release.py`: release (released, not connected, `review`/`publishing` untouched, repeat no-op, failed start
+  retryable, one broken clip, time budget, TikTok waits for its choice), the callback, Meta pick and Check it release,
+  the callback stays `connected` when the release fails, Post now through Confirm.
 * **infra** (`terraform test`, mock providers): state-key secret uses `secret_string_wo` (no `secret_string`); IAM
   statements exactly §17.9 per role (no secrets access on api beyond the prefix and state key; none on job-flow,
   realtime, learn); hooks timeout 28; envs on api/hooks/flows/stats; ESM filter has seven prefixes; output
@@ -680,8 +756,8 @@ Shared names: `oauth.state.sign(key, platform, nonce, exp)`, `oauth.state.verify
   canvas, "Connected as", ring complete; Facebook/Instagram choose a page; **Cancel** → `denied` copy; reload resumes at
   the first not-done step; TikTok shows "Works now, but your TikTok posts stay private until TikTok says yes."; expired
   token → "Connect again" vermilion; Disconnect → Undo within 8 s keeps it, after 8 s it is gone; all five ready → the
-  floating setup list gone and "5 of 5 ready". `e2e/tiktok-sheet.spec.ts`: Keep disabled until privacy chosen, branded hides "Only
-  me"; **Try again** on a failed clip whose TikTok post needs new privacy choices opens the sheet first and sends
+  floating setup list gone and "5 of 5 ready". `e2e/tiktok-sheet.spec.ts`: Keep disabled until privacy chosen, branded greys "Only
+  me" and "Followers", Only me first greys Branded content; **Try again** on a failed clip whose TikTok post needs new privacy choices opens the sheet first and sends
   `tiktok` in the confirm body (mock `_try_again` replaces `postOptions`). `overflow.spec.ts` +
   `/settings/posting/setup`, each platform page, `/mock-oauth/youtube`, `/about.html`, the
   TikTok sheet at 320–1920; `screenshots.spec.ts` adds the list and the YouTube page at 375/1440, light and dark;

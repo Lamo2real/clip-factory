@@ -1,0 +1,401 @@
+{
+ "engine": 1,
+ "fps": 30,
+ "width": 1080,
+ "height": 1920,
+ "durationSec": 45,
+ "title": "A 45 second test",
+ "seed": 7,
+ "cast": {
+  "c1": {
+   "characterId": "ch1",
+   "name": "Lamo",
+   "look": {
+    "body": "bean",
+    "skin": "#f2c9a0",
+    "height": 1,
+    "width": 1,
+    "hair": {
+     "style": "short",
+     "color": "#3b2a1a"
+    },
+    "eyes": {
+     "shape": "round",
+     "color": "#1c1842"
+    },
+    "brows": "thick",
+    "nose": "button",
+    "mouth": "wide",
+    "outfit": {
+     "top": "#ff6f61",
+     "bottom": "#1c1842",
+     "accent": "#ffc94a",
+     "pattern": "plain"
+    },
+    "accessory": "none",
+    "outline": "#1c1842"
+   },
+   "movementStyle": "bouncy",
+   "voice": {
+    "style": "babble",
+    "pitch": 1.2,
+    "noises": [
+     "gasp",
+     "phew"
+    ],
+    "sfx": [
+     "boing"
+    ]
+   }
+  }
+ },
+ "scenes": [
+  {
+   "sceneId": "s1",
+   "title": "Scene 1",
+   "durationSec": 7.5,
+   "set": "icy_road",
+   "view": "side",
+   "camera": "wide",
+   "actors": [
+    {
+     "castId": "c1",
+     "x": 0.3,
+     "y": 0.7,
+     "facing": "left"
+    }
+   ],
+   "props": [
+    {
+     "propId": "car1",
+     "kind": "car",
+     "x": 0.6,
+     "y": 0.72,
+     "scale": 1,
+     "rot": 0
+    }
+   ],
+   "beats": [
+    {
+     "at": 0.5,
+     "dur": 2,
+     "who": "c1",
+     "do": "gasp",
+     "face": "surprised",
+     "noise": "whoa",
+     "sfx": "whoosh"
+    },
+    {
+     "at": 4,
+     "dur": 2,
+     "who": "c1",
+     "do": "nod",
+     "face": "happy",
+     "noise": "giggle"
+    }
+   ],
+   "sfx": [
+    {
+     "id": "s1.fx9",
+     "at": 6.0,
+     "sfx": "ding",
+     "volume": 0.7
+    }
+   ],
+   "caption": null,
+   "note": null
+  },
+  {
+   "sceneId": "s2",
+   "title": "Scene 2",
+   "durationSec": 7.5,
+   "set": "road_day",
+   "view": "side",
+   "camera": "medium",
+   "actors": [
+    {
+     "castId": "c1",
+     "x": 0.38,
+     "y": 0.7,
+     "facing": "right"
+    }
+   ],
+   "props": [
+    {
+     "propId": "car1",
+     "kind": "car",
+     "x": 0.6,
+     "y": 0.72,
+     "scale": 1,
+     "rot": 0
+    }
+   ],
+   "beats": [
+    {
+     "at": 0.5,
+     "dur": 2,
+     "who": "c1",
+     "do": "wave",
+     "face": "surprised",
+     "noise": "whoa",
+     "sfx": "whoosh"
+    },
+    {
+     "at": 4,
+     "dur": 2,
+     "who": "c1",
+     "do": "nod",
+     "face": "happy",
+     "noise": "giggle"
+    }
+   ],
+   "sfx": [
+    {
+     "id": "s2.fx9",
+     "at": 6.0,
+     "sfx": "ding",
+     "volume": 0.7
+    }
+   ],
+   "caption": null,
+   "note": null
+  },
+  {
+   "sceneId": "s3",
+   "title": "Scene 3",
+   "durationSec": 7.5,
+   "set": "snowy_road",
+   "view": "side",
+   "camera": "close",
+   "actors": [
+    {
+     "castId": "c1",
+     "x": 0.45999999999999996,
+     "y": 0.7,
+     "facing": "left"
+    }
+   ],
+   "props": [
+    {
+     "propId": "car1",
+     "kind": "car",
+     "x": 0.6,
+     "y": 0.72,
+     "scale": 1,
+     "rot": 0
+    }
+   ],
+   "beats": [
+    {
+     "at": 0.5,
+     "dur": 2,
+     "who": "c1",
+     "do": "brace",
+     "face": "surprised",
+     "noise": "whoa",
+     "sfx": "whoosh"
+    },
+    {
+     "at": 4,
+     "dur": 2,
+     "who": "c1",
+     "do": "nod",
+     "face": "happy",
+     "noise": "giggle"
+    }
+   ],
+   "sfx": [
+    {
+     "id": "s3.fx9",
+     "at": 6.0,
+     "sfx": "ding",
+     "volume": 0.7
+    }
+   ],
+   "caption": null,
+   "note": null
+  },
+  {
+   "sceneId": "s4",
+   "title": "Scene 4",
+   "durationSec": 7.5,
+   "set": "city_street",
+   "view": "side",
+   "camera": "pan_left",
+   "actors": [
+    {
+     "castId": "c1",
+     "x": 0.54,
+     "y": 0.7,
+     "facing": "right"
+    }
+   ],
+   "props": [],
+   "beats": [
+    {
+     "at": 0.5,
+     "dur": 2,
+     "who": "c1",
+     "do": "walk",
+     "face": "surprised",
+     "noise": "whoa",
+     "sfx": "whoosh"
+    },
+    {
+     "at": 4,
+     "dur": 2,
+     "who": "c1",
+     "do": "nod",
+     "face": "happy",
+     "noise": "giggle"
+    }
+   ],
+   "sfx": [
+    {
+     "id": "s4.fx9",
+     "at": 6.0,
+     "sfx": "ding",
+     "volume": 0.7
+    }
+   ],
+   "caption": null,
+   "note": null
+  },
+  {
+   "sceneId": "s5",
+   "title": "Scene 5",
+   "durationSec": 7.5,
+   "set": "park",
+   "view": "side",
+   "camera": "push_in",
+   "actors": [
+    {
+     "castId": "c1",
+     "x": 0.62,
+     "y": 0.7,
+     "facing": "left"
+    }
+   ],
+   "props": [],
+   "beats": [
+    {
+     "at": 0.5,
+     "dur": 2,
+     "who": "c1",
+     "do": "dance",
+     "face": "surprised",
+     "noise": "whoa",
+     "sfx": "whoosh"
+    },
+    {
+     "at": 4,
+     "dur": 2,
+     "who": "c1",
+     "do": "nod",
+     "face": "happy",
+     "noise": "giggle"
+    }
+   ],
+   "sfx": [
+    {
+     "id": "s5.fx9",
+     "at": 6.0,
+     "sfx": "ding",
+     "volume": 0.7
+    }
+   ],
+   "caption": null,
+   "note": null
+  },
+  {
+   "sceneId": "s6",
+   "title": "Scene 6",
+   "durationSec": 7.5,
+   "set": "studio",
+   "view": "side",
+   "camera": "wide",
+   "actors": [
+    {
+     "castId": "c1",
+     "x": 0.7,
+     "y": 0.7,
+     "facing": "right"
+    }
+   ],
+   "props": [],
+   "beats": [
+    {
+     "at": 0.5,
+     "dur": 2,
+     "who": "c1",
+     "do": "celebrate",
+     "face": "surprised",
+     "noise": "whoa",
+     "sfx": "whoosh"
+    },
+    {
+     "at": 4,
+     "dur": 2,
+     "who": "c1",
+     "do": "nod",
+     "face": "happy",
+     "noise": "giggle"
+    }
+   ],
+   "sfx": [
+    {
+     "id": "s6.fx9",
+     "at": 6.0,
+     "sfx": "ding",
+     "volume": 0.7
+    }
+   ],
+   "caption": null,
+   "note": null
+  }
+ ],
+ "music": {
+  "mood": "playful",
+  "volume": 0.4
+ },
+ "captionsOn": true,
+ "captions": [
+  {
+   "id": "cap1",
+   "at": 1.0,
+   "dur": 3,
+   "text": "Caption 1"
+  },
+  {
+   "id": "cap2",
+   "at": 8.5,
+   "dur": 3,
+   "text": "Caption 2"
+  },
+  {
+   "id": "cap3",
+   "at": 16.0,
+   "dur": 3,
+   "text": "Caption 3"
+  },
+  {
+   "id": "cap4",
+   "at": 23.5,
+   "dur": 3,
+   "text": "Caption 4"
+  },
+  {
+   "id": "cap5",
+   "at": 31.0,
+   "dur": 3,
+   "text": "Caption 5"
+  },
+  {
+   "id": "cap6",
+   "at": 38.5,
+   "dur": 3,
+   "text": "Caption 6"
+  }
+ ],
+ "safety": null
+}

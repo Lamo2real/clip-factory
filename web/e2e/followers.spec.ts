@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { CLIPS, findOverflow, openClip, settle } from "./helpers.ts";
 
-// Followers and subscribers (docs/CONTRACTS.md §38): Home's "Your followers" tile in each mock scenario, and the clip
+// Followers and subscribers (docs/CONTRACTS.md §43): Home's "Your followers" tile in each mock scenario, and the clip
 // page's "New followers from this clip" with a number only where the app reports one per video.
 
 async function scenario(page: Page, name: string, to = "/") {

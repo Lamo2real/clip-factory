@@ -208,8 +208,10 @@ run "functions_match_the_contract" {
       TABLE_NAME                = "cf-test-data"
       STATS_TIME_BUDGET_SECONDS = "240"
       SECRET_PREFIX             = "cf-test/platforms/"
+      CONTENT_REWARDS           = "off" # §38.16 module default
+      CR_FINDER                 = "off" # §41.6 module default
     })
-    error_message = "cf-prod-stats gets exactly TABLE_NAME, STATS_TIME_BUDGET_SECONDS = 240 and SECRET_PREFIX (§17.9)."
+    error_message = "cf-prod-stats gets exactly TABLE_NAME, STATS_TIME_BUDGET_SECONDS = 240, SECRET_PREFIX (§17.9), CONTENT_REWARDS off (§38.16) and CR_FINDER off (§41.6)."
   }
 
   assert {
@@ -479,4 +481,116 @@ run "hooks_url_must_be_https" {
   }
 
   expect_failures = [var.hooks_url]
+}
+
+# docs/CONTRACTS.md §38.16: Content Rewards checking rides the stats tick (no new schedule). Off by default; on with
+# the switch, and a changed brief may start a rules read on cf-prod-campaigns.
+run "content_rewards_switch_and_grant" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = true
+    campaigns_function_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"
+  }
+
+  assert {
+    condition = (one(aws_lambda_function.fn["stats"].environment).variables["CONTENT_REWARDS"] == "on" &&
+    one(aws_lambda_function.fn["stats"].environment).variables["CAMPAIGNS_FUNCTION_ARN"] == "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns")
+    error_message = "cf-prod-stats gets CONTENT_REWARDS on and CAMPAIGNS_FUNCTION_ARN."
+  }
+
+  assert {
+    condition = one([for s in jsondecode(aws_iam_role_policy.fn["stats"].policy).Statement : s if try(s.Sid, "") == "Campaigns"]) == {
+      Sid = "Campaigns", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"]
+    }
+    error_message = "cf-prod-stats may invoke cf-prod-campaigns (a rules read) and nothing else new."
+  }
+}
+
+# docs/CONTRACTS.md §41.5 and §41.6: the campaign finder's scheduled look rides this tick (no new schedule, no new
+# grant): with CR_FINDER=on and a look due, the tick starts cf-prod-campaigns through the same Campaigns grant. Off by
+# default and independent of CONTENT_REWARDS; only cf-prod-stats gets it.
+run "cr_finder_switch_rides_the_tick" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = true
+    cr_finder_enabled       = true
+    campaigns_function_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"
+  }
+
+  assert {
+    condition = one(aws_lambda_function.fn["stats"].environment).variables == tomap({
+      TABLE_NAME                = "cf-test-data"
+      STATS_TIME_BUDGET_SECONDS = "240"
+      SECRET_PREFIX             = "cf-test/platforms/"
+      CONTENT_REWARDS           = "on"
+      CR_FINDER                 = "on"
+      CAMPAIGNS_FUNCTION_ARN    = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"
+    })
+    error_message = "With cr_finder_enabled, cf-prod-stats gets CR_FINDER on and nothing else new."
+  }
+
+  assert {
+    condition = (!contains(keys(one(aws_lambda_function.fn["learn"].environment).variables), "CR_FINDER") &&
+    !contains(keys(one(aws_lambda_function.fn["follow-tick"].environment).variables), "CR_FINDER"))
+    error_message = "Only cf-prod-stats starts finder looks: cf-prod-learn and cf-prod-follow-tick never get CR_FINDER."
+  }
+
+  assert {
+    condition = one([for s in jsondecode(aws_iam_role_policy.fn["stats"].policy).Statement : s if try(s.Sid, "") == "Campaigns"]) == {
+      Sid = "Campaigns", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"]
+    }
+    error_message = "A scheduled look is started through the same cf-prod-campaigns invoke grant (InvocationType=Event)."
+  }
+
+  assert {
+    condition     = output.stats_tick_minutes <= 15 && output.schedule_rule_names == { stats = "cf-test-stats", follow-tick = "cf-test-follow-tick" }
+    error_message = "No new schedule: the finder rides the existing stats tick, at most 15 minutes apart (§41.2: a look is due every 6 h)."
+  }
+}
+
+run "cr_finder_off_with_content_rewards_on" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = true
+    campaigns_function_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"
+  }
+
+  assert {
+    condition     = one(aws_lambda_function.fn["stats"].environment).variables["CR_FINDER"] == "off"
+    error_message = "CR_FINDER has its own switch: Content Rewards on leaves the finder off."
+  }
+}
+
+# The finder switch reaches only the CR_FINDER env var: one use of var.cr_finder_enabled in this module, inside
+# cf-prod-stats' environment, so it can never add a grant, a schedule or replace anything.
+run "cr_finder_switch_only_sets_its_env_var" {
+  command = plan
+
+  assert {
+    condition = (one(aws_lambda_function.fn["stats"].environment).variables["CR_FINDER"] == "off" &&
+      length(regexall("var\\.cr_finder_enabled", file("main.tf"))) == 1 &&
+    length(regexall("(?m)^\\s+CR_FINDER\\s+=\\s+var\\.cr_finder_enabled \\? \"on\" : \"off\"$", file("main.tf"))) == 1)
+    error_message = "var.cr_finder_enabled is used once, as CR_FINDER = var.cr_finder_enabled ? \"on\" : \"off\"."
+  }
+}
+
+# docs/CONTRACTS.md §45.13.1, §45.15 and ADR-73: Lamo Clips' stats, learn and follow-tick roles cannot reach a Lamo
+# Stories workspace token. IAM patterns are checked as globs against the sample ARN: "*" becomes ".*" and "?" becomes
+# "." in an anchored regex, dots escaped.
+run "no_lamo_stories_secrets" {
+  command = plan
+
+  assert {
+    condition = alltrue(flatten([
+      for k, p in aws_iam_role_policy.fn : [
+        for s in jsondecode(p.policy).Statement : [
+          for r in flatten([s.Resource]) : !can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/stories/youtube/token-AbC123"))
+        ] if anytrue([for a in flatten([s.Action]) : startswith(a, "secretsmanager:") || a == "*"])
+      ]
+    ]))
+    error_message = "…:secret:<name>/workspaces/stories/youtube/token-AbC123 must match no stats, learn or follow-tick Secrets Manager resource."
+  }
 }

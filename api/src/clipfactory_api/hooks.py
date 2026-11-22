@@ -9,6 +9,12 @@
   stored once by message id, then the creator's live state changes (``follow.webhooks``).
 * ``GET /oauth/{platform}/callback``: the OAuth callback of §17.5 (``oauth.callback``). It always answers ``302`` to
   ``{APP_URL}/settings/posting/setup/{platform}?result={code}`` (a fixed path and a listed code: no open redirect).
+  Get paid (§40.6) also comes back here: YouTube's "Allow payment reading" and ``whop`` ("Connect Whop", served on
+  this callback only, never on ``/hooks/whop``), each to its fixed Get paid page.
+  On ``connected`` the clips waiting for that place go out (``release``, §17.6): it starts the clip flow on the alias
+  in ``CLIP_FLOW_ARN``. A Lamo Stories state (``w1.``, §45.13.3) is not handled here: it is forwarded, before
+  anything else, with ``302`` to Lamo Stories' own callback (``STORIES_OAUTH_CALLBACK``, from configuration) with the
+  query passed on unchanged.
 
 Query strings (OAuth ``code``/``state``, Meta's verify token) and bodies are never logged.
 """
@@ -26,6 +32,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Literal
+from urllib.parse import quote, urlencode
 
 from . import db
 from .clock import Clock, iso, utcnow
@@ -37,6 +44,7 @@ from .settings import PLATFORMS
 if TYPE_CHECKING:
     from .follow.platforms import FollowEnv
     from .follow.webhooks import KickKeys
+    from .release import ClipFlowStarter
 
 MAX_BODY_BYTES = 256 * 1024
 MAX_CHALLENGE_CHARS = 512
@@ -47,7 +55,10 @@ META = frozenset({"instagram", "facebook"})
 # §24: Twitch and Kick send Follow creators' webhooks. They are not posting platforms (never in settings.PLATFORMS),
 # have no OAuth callback, and every delivery must be signed.
 FOLLOW_HOOKS = ("twitch", "kick")
-HOOK_PLATFORMS: tuple[str, ...] = PLATFORMS + FOLLOW_HOOKS
+# §40.6: Connect Whop comes back on the OAuth callback only; Whop never sends webhooks here (/hooks/whop is a 404).
+CALLBACK_ONLY = ("whop",)
+STORIES_STATE = "w1."  # §45.13.3: a Lamo Stories OAuth state; its callback is Lamo Stories' own
+HOOK_PLATFORMS: tuple[str, ...] = PLATFORMS + FOLLOW_HOOKS + CALLBACK_ONLY
 KEPT_HEADERS = (
     "content-type",
     "user-agent",
@@ -83,6 +94,9 @@ class HooksDeps:
     oauth: OAuthEnv | None = None  # None: the callback answers result=error (secrets not configured)
     follow: FollowEnv | None = None  # §24: Twitch's EventSub secret; None: every Twitch delivery is a 401
     kick_keys: KickKeys | None = None  # §24: Kick's public key; None: every Kick delivery is a 401
+    flows: ClipFlowStarter | None = None  # §17.6: starts the clip flow for posts released on connect; None: none
+    # §45.13.3: Lamo Stories' callback base (STORIES_OAUTH_CALLBACK); a w1. state is only forwarded there
+    stories_oauth_callback: str = ""
 
 
 def ssm_token_reader(client: Any, name: str, now: Callable[[], float] = time.time) -> Callable[[], str]:
@@ -138,7 +152,11 @@ def handle(event: Mapping[str, Any], deps: HooksDeps) -> dict[str, Any]:
     params = event.get("pathParameters") or {}
     platform = str(params.get("platform") or "") if isinstance(params, Mapping) else ""
     request_id = str((event.get("requestContext") or {}).get("requestId") or "")
-    if platform not in HOOK_PLATFORMS or (platform in FOLLOW_HOOKS and resource != "/hooks/{platform}"):
+    if (
+        platform not in HOOK_PLATFORMS
+        or (platform in FOLLOW_HOOKS and resource != "/hooks/{platform}")
+        or (platform in CALLBACK_ONLY and resource != "/oauth/{platform}/callback")
+    ):
         log("info", "hooks.unknown_platform", method=method, resource=resource, requestId=request_id)
         return _error(404, "not_found", "We do not support that platform.")
     try:
@@ -172,15 +190,34 @@ def handle(event: Mapping[str, Any], deps: HooksDeps) -> dict[str, Any]:
 def _oauth_callback(platform: str, event: Mapping[str, Any], deps: HooksDeps) -> dict[str, Any]:
     from .oauth import callback
 
+    if str(_query(event).get("state") or "").startswith(STORIES_STATE):
+        return _forward_to_stories(platform, event, deps)
     result = "error"
     if deps.oauth is not None:
         try:
-            result = callback.handle_callback(platform, _query(event), deps.store, deps.oauth)
+            result = callback.handle_callback(platform, _query(event), deps.store, deps.oauth, deps.flows)
         except Exception as e:  # the owner always lands on the setup page with a plain sentence
             log("error", "hooks.oauth_failed", platform=platform, error=type(e).__name__)
             result = "error"
     headers = {"location": callback.location(deps.app_url, platform, result), "referrer-policy": "no-referrer"}
     return _response(302, headers=headers)
+
+
+def _forward_to_stories(platform: str, event: Mapping[str, Any], deps: HooksDeps) -> dict[str, Any]:
+    """§45.13.3: a ``w1.`` state is Lamo Stories': ``302`` to ``{STORIES_OAUTH_CALLBACK}/{platform}/callback`` with
+    every query parameter passed on as it came (the target is configuration, never the request). Nothing is read or
+    written here; without a configured target the owner lands on Lamo Stories' Connections page."""
+    base = deps.stories_oauth_callback.rstrip("/")
+    if base.startswith("https://"):
+        raw = event.get("multiValueQueryStringParameters")
+        if isinstance(raw, Mapping) and raw:
+            pairs = [(str(k), str(v)) for k, values in raw.items() for v in (values or [])]
+        else:
+            pairs = list(_query(event).items())
+        target = f"{base}/{platform}/callback?{urlencode(pairs, quote_via=quote)}"
+    else:
+        target = f"{deps.app_url.rstrip('/')}/stories/connections?platform={platform}&result=error"
+    return _response(302, headers={"location": target, "referrer-policy": "no-referrer"})
 
 
 def _challenge(query: Mapping[str, str]) -> str | None:
@@ -280,7 +317,7 @@ def _from_env() -> HooksDeps:
     from botocore.config import Config
 
     from .app import region, table
-    from .oauth import money_scopes_from_config, scopes_from_config
+    from .oauth import money_scopes_from_config, payment_scopes_from_config, scopes_from_config
     from .oauth.secrets import PREFIX, Secrets
     from .stats import config
 
@@ -302,6 +339,7 @@ def _from_env() -> HooksDeps:
             graph_version=config.load().graph_api_version,
             scopes=scopes_from_config(),
             money_scopes=money_scopes_from_config(),
+            payment_scopes=payment_scopes_from_config(),
         )
     from .follow.platforms import FollowEnv
     from .follow.webhooks import KickKeys
@@ -310,6 +348,11 @@ def _from_env() -> HooksDeps:
     follow_sm = boto3.client(
         "secretsmanager", region_name=region(), config=Config(retries={"mode": "standard"}, read_timeout=5)
     )
+    flows = None
+    if env.get("CLIP_FLOW_ARN"):
+        from .flow_client import FlowClient, make_client
+
+        flows = FlowClient(make_client(region()), "", env["CLIP_FLOW_ARN"])  # the clip flow only, never the job flow
     return HooksDeps(
         store=store,
         app_url=env["APP_URL"],
@@ -319,6 +362,8 @@ def _from_env() -> HooksDeps:
             secrets=Secrets(follow_sm, env.get("SECRET_PREFIX") or PREFIX), hooks_url=env.get("HOOKS_URL", "")
         ),
         kick_keys=KickKeys(urllib_client),
+        flows=flows,
+        stories_oauth_callback=env.get("STORIES_OAUTH_CALLBACK", ""),
     )
 
 

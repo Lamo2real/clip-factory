@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ACT_MS } from "../src/lib/motion.ts";
 import { animationsDone, settle } from "./helpers.ts";
-import { actTransforms, actWidths, MOTION_WIDTHS, noSideScroll, pauseActs, tapAct } from "./motionHelpers.ts";
+import { actTransforms, actWidths, MOTION_WIDTHS, noSideScroll, pauseActs, tapAct, tapUntilPhase } from "./motionHelpers.ts";
 
 // Action motion in Settings (docs/CONTRACTS.md §20.11 (c)): search, branches, sounds, skills and Set up posting.
 // Mock mode. Each check taps from inside the page (tapAct) so the motion's first frame can be read.
@@ -145,8 +145,8 @@ test.describe("motion in Settings (APPLY c)", () => {
     await open(page, "/settings/clip-making/skills/new");
     const save = page.getByRole("button", { name: "Save skill" });
     await expect(save).toHaveAttribute("data-act", "save");
-    await save.click();
-    await expect(save.locator(".act")).toHaveClass(/is-fail/);
+    // The shake is short, so wait for it inside the page: a polling check can miss it on a busy machine.
+    expect(await tapUntilPhase(save, "is-fail")).toBe(true);
     await expect(page.getByRole("button", { name: "Use the example" }).first()).toHaveAttribute("data-act", "paste");
   });
 

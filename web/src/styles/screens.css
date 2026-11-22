@@ -46,6 +46,8 @@
 
 /* ---------- Home: the Sorrel-style composition ---------- */
 .home {
+  /* Its rows lay out by the room Home has (the window less the sidebar and the open setup list). */
+  container: home / inline-size;
   display: grid;
   gap: clamp(18px, 2.6vw, 28px);
 }
@@ -98,10 +100,24 @@
   display: none;
 }
 @media (min-width: 1100px) {
+  /* The side column runs the hero's whole height: Working now on top, the fanned covers (their own 330 px, which is
+     also what fans them out on hover) centred in the room under it, so the hero holds no empty block under them. */
+  .hero__side {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+  }
   .cover-stack {
     position: relative;
     display: block;
+    flex: none;
     height: 330px;
+    margin-block: auto;
+  }
+  /* No covers to fan (nothing made yet, or Home could not load): Working now goes under the form, the whole width,
+     instead of a short card at the top of an empty column. */
+  .hero--bare {
+    grid-template-columns: minmax(0, 1fr);
   }
   .cover-stack__item {
     position: absolute;
@@ -304,10 +320,15 @@
   font-size: 0.93rem;
 }
 
+/* Home's rows (Ready for review, Your money, Your streamers, Your campaigns): the heading, its line and its button on
+   top, what the row shows under them, at every size. Nothing sits beside a tall heading column any more, so no card
+   is stretched to its height: every box is as tall as what is in it. The rows go by the width Home really has
+   (the `home` container), not the window's: the sidebar and the open setup list take their share first. */
 .home-row {
   display: grid;
-  gap: clamp(16px, 2.4vw, 24px);
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(12px, 1.6vw, 16px);
+  align-items: start;
 }
 .home-row__intro {
   display: grid;
@@ -317,23 +338,79 @@
 .home-row__intro .btn {
   justify-self: start;
 }
+/* Ready for review, from 640 px of room: the views total stands beside the heading block (no wider than its words
+   need, so "Ready for review." keeps one line), the clips run the whole width under both. The total sits on the
+   button's line (the block's bottom), so neither box grows to match. */
+@container home (min-width: 640px) {
+  .home-row--review {
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 260px);
+    grid-template-areas:
+      "intro stat"
+      "cards cards";
+  }
+  .home-row--review > .home-row__intro {
+    grid-area: intro;
+  }
+  .home-row--review > .home-row__cards {
+    grid-area: cards;
+  }
+  .home-row--review > .stat {
+    grid-area: stat;
+    align-self: end;
+  }
+}
+/* The clips waiting: one row of covers about 140 to 200 px wide, as many as the room holds (2 on a phone, up to 6 on a
+   big screen), never squeezed thin and never blown up. Home sends six at most; the ones past the row are not drawn
+   (a browser without container queries draws 2). With fewer clips than the row holds, each grows to the width it
+   would have with one column less (so one short of a full row still fills it), at most 240 px, from the left. */
 .home-row__cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr));
+  --cols: 2;
+  --grow-cols: max(2, var(--cols) - 1);
+  display: flex;
   gap: 12px;
 }
-/* Three teasers at most: from 600 px they always fill exactly three equal columns, so no empty column is left. */
-@media (min-width: 600px) {
-  .home-row__cards {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+.home-row__cards > * {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: min(240px, (100% - (var(--grow-cols) - 1) * 12px) / var(--grow-cols));
+}
+@container home (max-width: 419.98px) {
+  .home-row__cards > :nth-child(n + 3) {
+    display: none;
   }
 }
-@media (min-width: 1100px) {
-  .home-row {
-    grid-template-columns: minmax(200px, 0.9fr) minmax(0, 2.4fr) minmax(190px, 0.8fr);
-  }
+@container home (min-width: 420px) and (max-width: 639.98px) {
   .home-row__cards {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    --cols: 3;
+  }
+  .home-row__cards > :nth-child(n + 4) {
+    display: none;
+  }
+}
+@container home (min-width: 640px) and (max-width: 819.98px) {
+  .home-row__cards {
+    --cols: 4;
+  }
+  .home-row__cards > :nth-child(n + 5) {
+    display: none;
+  }
+}
+@container home (min-width: 820px) and (max-width: 1059.98px) {
+  .home-row__cards {
+    --cols: 5;
+  }
+  .home-row__cards > :nth-child(n + 6) {
+    display: none;
+  }
+}
+@container home (min-width: 1060px) {
+  .home-row__cards {
+    --cols: 6;
+  }
+}
+@supports not (container-type: inline-size) {
+  .home-row__cards > :nth-child(n + 3) {
+    display: none;
   }
 }
 
@@ -387,15 +464,20 @@
   text-overflow: ellipsis;
 }
 .teaser__body {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
-  align-content: start;
   padding: 10px 6px 6px;
 }
 .teaser__hook {
   font-weight: 650;
   font-size: 0.93rem;
   line-height: 1.3;
+}
+/* The time and score sit on the cover's bottom line: level across the row when one title takes two lines, and right
+   under the title when none does (no room kept for a line nobody needs). */
+.teaser__meta {
+  margin-top: auto;
 }
 .teaser__meta {
   display: flex;
@@ -410,19 +492,20 @@
   color: var(--vermilion-ink);
 }
 .teaser--empty {
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 8px;
-  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px var(--inset);
   color: var(--ink-2);
   font-weight: 600;
 }
 /* Nothing to review: the one "All done here." card spans the row instead of sitting in a third of it. So does the
    error with its Try again when Home could not load. */
 .home-row__cards > .teaser--empty:only-child,
-.home-row__error {
-  grid-column: 1 / -1;
+.home-row__cards > .home-row__error {
+  flex-basis: 100%;
+  max-width: none;
 }
 .working__failed {
   display: grid;
@@ -430,8 +513,14 @@
   justify-items: start;
 }
 .teaser-skel {
-  aspect-ratio: 4 / 6;
+  /* A loaded cover's shape: its 4/5 picture plus the title and time lines under it, so the row does not jump. */
+  padding-bottom: 75px;
   border-radius: var(--r-lg);
+}
+.teaser-skel::before {
+  content: "";
+  display: block;
+  aspect-ratio: 4 / 5;
 }
 
 .stat {
@@ -457,6 +546,23 @@
 .stat__dots {
   display: flex;
   gap: 5px;
+}
+/* Home's views total under the covers (below 640 px of room, the whole width): the number on the left and its two
+   lines beside it, a short card instead of a tall one with its right half empty. */
+@container home (max-width: 639.98px) {
+  .home-row--review > .stat {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: clamp(14px, 5cqi, 28px);
+    row-gap: 4px;
+  }
+  .home-row--review > .stat > .stat__value {
+    grid-row: 1 / span 3;
+    font-size: clamp(2.4rem, 16cqi, 5rem);
+  }
+  .home-row--review > .stat > :not(.stat__value) {
+    grid-column: 2;
+  }
 }
 .stat__dots span {
   width: 9px;
@@ -1423,6 +1529,12 @@
 .check-chip:active {
   transform: scale(0.95);
 }
+.check-chip:has(input:disabled) {
+  opacity: 0.5;
+}
+.check-chip:has(input:disabled):active {
+  transform: none;
+}
 .check-chip:has(input:focus-visible) {
   box-shadow: var(--focus);
 }
@@ -1814,11 +1926,6 @@
   gap: 14px;
   align-content: start;
   min-width: 0;
-}
-@media (min-width: 1100px) {
-  .streamers-row {
-    grid-template-columns: minmax(200px, 0.9fr) minmax(0, 3.2fr);
-  }
 }
 .streamer-chip {
   display: grid;
@@ -2219,6 +2326,9 @@
   background: var(--selected);
   color: var(--on-bone);
   text-shadow: none;
+}
+.dropdown__opt.is-disabled {
+  opacity: 0.5;
 }
 .dropdown__text {
   display: grid;

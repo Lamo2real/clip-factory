@@ -76,11 +76,16 @@ locals {
   # Only these item types reach the broadcaster; CONN#, HOOK#, SETTINGS, SKILL#, STAT# (stats snapshots), the
   # RATE# budgets and OAuth STATE items never do. WEEK# carries the weekly best picks and learning state (§16.6);
   # ACCOUNT# and SETUP# become { type: "setup" } events for Set up posting (§17.4; they hold no keys or tokens).
+  # CAMPAIGN#, CRCONN, CRSUB# and CRMONEY (§38.11) become { type: "contentrewards", partial: true }; CRSTATE# and
+  # CROWNERS never match. CRFIND (§41.5, the owner's campaign finder) becomes { type: "contentrewards", op: "upsert",
+  # id: "finder", partial: true }; the shared CRPUBLIC cache (CAMP#, PUB#, STATE) never matches. The mapping's filter
+  # is updated in place.
   # FOLLOW# (§24) becomes { type: "follow" }: a followed creator's name, picture and live badge. FOLLOWKEYS# never
   # matches (its prefix differs after "FOLLOW"). JOBLIVE# (§31) becomes { type: "jobLive" }: the one-line live status
-  # of a working job (allowed fields only; JOB# never matches it).
+  # of a working job (allowed fields only; JOB# never matches it). GETPAID, PAYCONN#, PAYSTATE# and PAYOUT# (§40.7)
+  # become { type: "getpaid", partial: true } (no item rides along; they hold no tokens or bank details).
   stream_filter = jsonencode({
-    dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }, { prefix = "ACCOUNT#" }, { prefix = "SETUP#" }, { prefix = "FOLLOW#" }, { prefix = "JOBLIVE#" }] } } }
+    dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }, { prefix = "ACCOUNT#" }, { prefix = "SETUP#" }, { prefix = "FOLLOW#" }, { prefix = "JOBLIVE#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRCONN" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRFIND" }, { prefix = "GETPAID" }, { prefix = "PAYCONN#" }, { prefix = "PAYSTATE#" }, { prefix = "PAYOUT#" }] } } }
   })
 }
 

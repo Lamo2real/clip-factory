@@ -1,4 +1,4 @@
-// Home › Your followers (docs/CONTRACTS.md §38): how many follow the owner on each app right now, as each app last
+// Home › Your followers (docs/CONTRACTS.md §43): how many follow the owner on each app right now, as each app last
 // reported it (the daily check). Apps that are not connected share one line. A failed load simply hides the tile.
 import { api } from "../../api/index.ts";
 import type { FollowersView } from "../../api/types.ts";

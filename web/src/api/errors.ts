@@ -7,7 +7,11 @@ export type ErrorCode =
   | "not_implemented"
   | "internal"
   | "network"
-  | "upload_failed";
+  | "upload_failed"
+  /** Switched off for this app (Content Rewards before its switch, §38.8). */
+  | "unavailable"
+  /** The other site did not answer (§38.8). */
+  | "platform_down";
 
 /** A failed call, already carrying a sentence the owner can read. */
 export class ApiError extends Error {
@@ -15,13 +19,16 @@ export class ApiError extends Error {
   readonly code: ErrorCode;
   /** Which form field the problem is in, when the server says (`error.field`, e.g. "title"). */
   readonly field?: string;
+  /** Seconds the server asks to wait before the same request again (`error.retryAfter`, §38.5). */
+  readonly retryAfter?: number;
 
-  constructor(status: number, code: ErrorCode, message: string, field?: string) {
+  constructor(status: number, code: ErrorCode, message: string, field?: string, retryAfter?: number) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     if (field) this.field = field;
+    if (retryAfter !== undefined) this.retryAfter = retryAfter;
   }
 }
 
@@ -35,6 +42,8 @@ const FALLBACK: Record<ErrorCode, string> = {
   internal: "Something went wrong on our side. Try again in a moment.",
   network: "Clip Factory cannot be reached. Check your connection and try again.",
   upload_failed: "The upload stopped before it finished. Try again.",
+  unavailable: "That is not switched on for this app yet.",
+  platform_down: "The other site didn't answer. Try again in a minute.",
 };
 
 const KNOWN = new Set<string>(Object.keys(FALLBACK));
@@ -54,13 +63,15 @@ function codeForStatus(status: number): ErrorCode {
  * The server's message is used when present because the contract makes it a plain sentence for the owner.
  */
 export function errorFromResponse(status: number, body: unknown): ApiError {
-  const envelope = (body as { error?: { code?: unknown; message?: unknown; field?: unknown } } | null)?.error;
+  const envelope = (body as { error?: { code?: unknown; message?: unknown; field?: unknown; retryAfter?: unknown } } | null)?.error;
   const rawCode = typeof envelope?.code === "string" ? envelope.code : "";
   const code: ErrorCode = KNOWN.has(rawCode) ? (rawCode as ErrorCode) : codeForStatus(status);
   const message =
     typeof envelope?.message === "string" && envelope.message.trim() ? envelope.message.trim() : FALLBACK[code];
   const field = typeof envelope?.field === "string" && /^[a-z]{1,40}$/i.test(envelope.field) ? envelope.field : undefined;
-  return new ApiError(status, code, message, field);
+  const wait = envelope?.retryAfter;
+  const retryAfter = typeof wait === "number" && Number.isFinite(wait) && wait >= 0 && wait <= 3600 ? wait : undefined;
+  return new ApiError(status, code, message, field, retryAfter);
 }
 
 export function networkError(): ApiError {

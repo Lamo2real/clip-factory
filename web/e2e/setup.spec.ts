@@ -236,7 +236,7 @@ for (const size of SIZES) {
             await expect(step(page, s.id)).toContainText("TikTok is checking your app. This can take days.");
           }
           if (s.id === "public-audit") await expect(step(page, s.id)).toContainText("Works now, but your TikTok posts stay private until TikTok says yes.");
-          if (s.id === "public-live") await expect(step(page, s.id)).toContainText("only you can see your Facebook Reels");
+          if (s.id === "public-live") await expect(step(page, s.id)).toContainText(`only you can see your ${guide.name} Reels`);
           if (s.id === "public-credits") await expect(step(page, s.id)).toContainText("Works now. Posts are public straight away.");
 
           await step(page, s.id).getByRole("button", { name: "I did this" }).click();
@@ -439,4 +439,41 @@ test("a #step-{id} link opens that step and brings it into view", async ({ page 
   await page.goto("/settings/posting/setup/facebook#step-key-config-nope");
   await settle(page);
   await expect(page.getByRole("heading", { level: 1, name: "Set up Facebook" })).toBeInViewport();
+});
+
+// The desktop app opens the platform in the system browser and the setup page stays (desktop/src-tauri/src/main.rs).
+// A 204 answer to the consent page does the same here: the page never leaves, so the spinner has to stop by itself.
+test("in the desktop app Connect stops spinning once connected, or when the owner comes back", async ({ page }) => {
+  await page.goto("/settings/posting/setup/instagram");
+  await settle(page);
+  await page.evaluate(() => {
+    const s = (window as MockWindow).__cfMock!.setup;
+    s.finish("instagram");
+    s.expireToken("instagram");
+  });
+  await page.reload();
+  await settle(page);
+  await page.route("**/mock-oauth/**", (route) => route.fulfill({ status: 204 }));
+  const again = page.locator(".done-panel").getByRole("button", { name: "Connect again" });
+
+  // Back from the browser, connected: the live setup event brings the account and the spinner stops.
+  await again.click();
+  await expect(again).toHaveAttribute("aria-busy", "true");
+  await page.waitForTimeout(600);
+  await expect(again, "still spinning until something changes").toHaveAttribute("aria-busy", "true");
+  await page.evaluate(() => (window as MockWindow).__cfMock!.setup.finish("instagram"));
+  await expect(page.locator(".done-panel")).toContainText("Ready. Clip Factory posts here by itself.");
+  await expect(again).not.toHaveAttribute("aria-busy", "true");
+
+  // Cancelled in the browser: nothing changes, and coming back to the window stops it.
+  await again.click();
+  await expect(again).toHaveAttribute("aria-busy", "true");
+  await page.waitForTimeout(600);
+  await expect(again, "still spinning until the owner comes back").toHaveAttribute("aria-busy", "true");
+  // Sent again until it lands: under load the focus listener may be armed a little later than 400 ms.
+  await expect(async () => {
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(again).not.toHaveAttribute("aria-busy", "true", { timeout: 250 });
+  }).toPass();
+  await expect(page).toHaveURL(/\/settings\/posting\/setup\/instagram$/);
 });

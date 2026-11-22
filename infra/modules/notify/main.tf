@@ -21,10 +21,14 @@ locals {
   tags          = { Component = "notify" }
   function_name = "${var.name}-notify"
   vapid_name    = "${var.name}/notify/vapid"
-  # Only job items, and only changes (a new job never needs a notification): filtered before Lambda runs.
+  # Only job items, the Content Rewards items (§38.11: CAMPAIGN#, CRSUB#, CRMONEY, CRCONN; §41.4: CRFIND, whose
+  # changed notice.key is "3 new campaigns match what you want.") and Get paid's PAYSTATE# (§40.7: money on hold,
+  # money sent to your bank), and only changes (a new item never needs a notification: CRSUB# is always created as
+  # "sending" first, a finder look never creates CRFIND, and a PAYSTATE# is made by its quiet first read): filtered
+  # before Lambda runs. One pattern with seven prefixes, updated in place.
   stream_filter = jsonencode({
     eventName = ["MODIFY"]
-    dynamodb  = { Keys = { sk = { S = [{ prefix = "JOB#" }] } } }
+    dynamodb  = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRCONN" }, { prefix = "CRFIND" }, { prefix = "PAYSTATE#" }] } } }
   })
 }
 

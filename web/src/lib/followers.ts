@@ -1,4 +1,4 @@
-// Followers and subscribers (docs/CONTRACTS.md §38): what each clip brought in, and the totals right now.
+// Followers and subscribers (docs/CONTRACTS.md §43): what each clip brought in, and the totals right now.
 // "Subscribers" on YouTube, "followers" everywhere else. Only numbers a platform reported: where a platform does not
 // share new followers per video, the line says so in plain words and never shows a guess.
 import type { AnyExtra, ClipPerformance, FollowerCount, FollowerWord, Platform } from "../api/types.ts";

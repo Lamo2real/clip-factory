@@ -21,6 +21,20 @@ provider "aws" {
   }
 }
 
+# Lamo Stories' Nova Reel bucket only (docs/CONTRACTS.md §45.31): Nova Reel writes its shots to a bucket in its own
+# Region. Nothing uses this provider while stories_video_us_bucket is false.
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+  default_tags {
+    tags = {
+      Project     = "clip-factory"
+      Environment = "prod"
+      ManagedBy   = "terraform"
+    }
+  }
+}
+
 data "aws_caller_identity" "me" {}
 
 locals {
@@ -99,6 +113,15 @@ locals {
     [local.watch_model_arn],
     [for r in local.watch_model.profileRegions : "arn:aws:bedrock:${r}::foundation-model/${local.watch_model.modelId}"],
   )
+
+  # Lamo Stories (docs/CONTRACTS.md §45.13.1, §45.15): its tokens, pending Meta choices, own app keys and provider keys
+  # live under a prefix of their own, which none of Clip Factory's grants reaches. Created at runtime by
+  # cf-prod-stories-api, never by Terraform. No "-" before the "*" in the token and provider patterns: a secret that
+  # does not exist is checked by its bare name, and the code needs "not found" there, not AccessDenied.
+  ws_secret_prefix               = "${local.name}/workspaces/"
+  workspace_secrets_arn          = "arn:aws:secretsmanager:${var.region}:${local.account_id}:secret:${local.ws_secret_prefix}*"
+  workspace_token_secrets_arn    = "arn:aws:secretsmanager:${var.region}:${local.account_id}:secret:${local.ws_secret_prefix}*/token*"
+  workspace_provider_secrets_arn = "arn:aws:secretsmanager:${var.region}:${local.account_id}:secret:${local.ws_secret_prefix}*/providers/*"
 }
 
 module "storage" {
@@ -204,6 +227,13 @@ module "flows" {
   secret_prefix              = module.hooks.secret_prefix
   platform_secrets_arn       = module.hooks.platform_secrets_arn
   platform_token_secrets_arn = module.hooks.platform_token_secrets_arn
+  # §45.15: cf-prod-story-flow posts with Lamo Stories' own tokens only.
+  ws_secret_prefix            = local.ws_secret_prefix
+  workspace_secrets_arn       = local.workspace_secrets_arn
+  workspace_token_secrets_arn = local.workspace_token_secrets_arn
+
+  # §38.12: campaign posts go to Content Rewards only while the switch is on.
+  content_rewards_enabled = var.content_rewards_enabled
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn
@@ -234,6 +264,37 @@ module "stats" {
   platform_token_secrets_arn = module.hooks.platform_token_secrets_arn
   # §24: the follow tick gives Twitch {hooks_url}/hooks/twitch as the webhook callback.
   hooks_url = module.hooks.hooks_url
+  # §38.12: Content Rewards checking rides the stats tick; a changed brief starts a rules read.
+  content_rewards_enabled = var.content_rewards_enabled
+  campaigns_function_arn  = module.contentrewards.campaigns_function_arn
+  # §41.5: the campaign finder's scheduled look rides the same tick (CR_FINDER), off until its switch PR.
+  cr_finder_enabled = var.cr_finder_enabled
+
+  # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
+  permissions_boundary_arn = var.role_permissions_boundary_arn
+}
+
+# Content Rewards campaigns (docs/CONTRACTS.md §38.16): cf-prod-campaigns reads a campaign's rules, fetches a logo
+# link and copies the brand's picture. Additive: a new function, role, policy and log group; no secret access at all,
+# and the CR secrets are made at runtime, never here. Off (CONTENT_REWARDS=off) until the switch PR. Since §41 its
+# "find" action reads Content Rewards' public campaign pages that robots.txt allows (never its API) for the campaign
+# finder, behind CR_FINDER (cr_finder_enabled).
+module "contentrewards" {
+  source                  = "../../modules/contentrewards"
+  name                    = local.name
+  region                  = var.region
+  account_id              = local.account_id
+  lambda_zip_path         = var.lambda_zip_path
+  table_name              = module.data.table_name
+  table_arn               = module.data.table_arn
+  media_bucket            = module.storage.media_bucket
+  media_bucket_arn        = module.storage.media_bucket_arn
+  model_id                = local.model_id
+  model_invoke_arns       = local.model_invoke_arns
+  app_url                 = module.frontend.app_url
+  content_rewards_enabled = var.content_rewards_enabled
+  # §41.2: the campaign finder's look (CR_FINDER), off until its switch PR.
+  cr_finder_enabled = var.cr_finder_enabled
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn
@@ -291,6 +352,11 @@ module "api" {
   web_bucket_arn          = module.storage.web_bucket_arn
   distribution_id         = module.frontend.distribution_id
   distribution_arn        = module.frontend.distribution_arn
+  # Lamo Stories (§45.15): ANY /v1/workspaces(/{proxy+}), their public OPTIONS and its OAuth callback reach
+  # cf-prod-stories-api. cf-prod-api's function, role and environment do not use these.
+  stories_routes_enabled    = true
+  stories_api_function_name = module.stories_api.function_name
+  stories_api_invoke_arn    = module.stories_api.invoke_arn
   # Ask Clip Factory (§19.9). The kill switch item in the table can still turn it off without a deploy.
   help_enabled           = var.help_enabled
   help_model_id          = local.help_model_id
@@ -305,6 +371,15 @@ module "api" {
   # Notifications (§32.3): read the VAPID key (its public half, "Send a test").
   vapid_secret_name = module.notify.vapid_secret_name
   vapid_secret_arn  = module.notify.vapid_secret_arn
+  # Content Rewards (§38.8, §38.16): 503 on every /v1/contentrewards route until the switch is on.
+  content_rewards_enabled = var.content_rewards_enabled
+  campaigns_function_arn  = module.contentrewards.campaigns_function_arn
+  # §39.3: the campaign copy of a clip (CR_REMAKE), on since its switch PR.
+  cr_remake_enabled = var.cr_remake_enabled
+  # §41.5: the campaign finder's seven routes (CR_FINDER), 503 "Coming soon." until its switch PR.
+  cr_finder_enabled = var.cr_finder_enabled
+  # §40.6: "Connect Whop" (WHOP_CONNECT), off until its switch PR; an in-place env change.
+  whop_connect_enabled = var.whop_connect_enabled
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn
@@ -321,6 +396,12 @@ module "hooks" {
   table_arn                  = module.data.table_arn
   app_url                    = module.frontend.app_url
   manage_api_gateway_account = var.manage_api_gateway_account
+  # §17.6: a connect releases the owner's waiting posts and starts the clip flow for them (flows → hooks reads only
+  # the hooks module's names, so there is no cycle).
+  clip_flow_alias_arn  = module.flows.clip_flow_alias_arn
+  clip_flow_arn_prefix = module.flows.function_arns["clip-flow"]
+  # §45.13.3: a w1. (Lamo Stories) state is forwarded to Lamo Stories' own callback; nothing else of Lamo Stories here.
+  stories_oauth_callback = module.api.stories_callback_base
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn
@@ -387,6 +468,58 @@ module "notify" {
   permissions_boundary_arn = var.role_permissions_boundary_arn
 }
 
+# Lamo Stories (docs/CONTRACTS.md §45, ADR-76): its own AgentCore runtime cf_prod_story_agent (its own image from
+# stories/agent/, ECR repository, role and log group) and its own API Lambda cf-prod-stories-api. Additive: new
+# resources and roles only; Clip Factory's agent, cf-prod-api and their roles are not touched. Its publisher,
+# cf-prod-story-flow, is in module.flows.
+module "stories_agent" {
+  source     = "../../modules/stories_agent"
+  name       = local.name
+  region     = var.region
+  account_id = local.account_id
+  image_tag  = var.stories_agent_image_tag
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
+  table_name                     = module.data.table_name
+  table_arn                      = module.data.table_arn
+  media_bucket                   = module.storage.media_bucket
+  media_bucket_arn               = module.storage.media_bucket_arn
+  workspace_provider_secrets_arn = local.workspace_provider_secrets_arn
+  # §45.31: Nova Reel's us-east-1 bucket, off until the owner allows it.
+  stories_video_us_bucket = var.stories_video_us_bucket
+
+  # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
+  permissions_boundary_arn = var.role_permissions_boundary_arn
+}
+
+module "stories_api" {
+  source                    = "../../modules/stories_api"
+  name                      = local.name
+  lambda_zip_path           = var.lambda_zip_path
+  app_version               = coalesce(var.app_version, var.agent_image_tag)
+  app_url                   = module.frontend.app_url
+  table_name                = module.data.table_name
+  table_arn                 = module.data.table_arn
+  media_bucket              = module.storage.media_bucket
+  media_bucket_arn          = module.storage.media_bucket_arn
+  stories_agent_runtime_arn = module.stories_agent.runtime_arn
+  story_flow_alias_arn      = module.flows.story_flow_alias_arn
+  ws_secret_prefix          = local.ws_secret_prefix
+  workspace_secrets_arn     = local.workspace_secrets_arn
+  # Clip Factory's YouTube, TikTok and X app keys (the owner's shared-app choice, read only) and the state key.
+  secret_prefix           = module.hooks.secret_prefix
+  platform_secrets_arn    = module.hooks.platform_secrets_arn
+  oauth_state_secret_name = module.hooks.oauth_state_secret_name
+  oauth_state_secret_arn  = module.hooks.oauth_state_secret_arn
+  hooks_url               = module.hooks.hooks_url
+  stories_oauth_callback  = module.api.stories_callback_base
+
+  # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
+  permissions_boundary_arn = var.role_permissions_boundary_arn
+}
+
 module "monitoring" {
   source      = "../../modules/monitoring"
   name        = local.name
@@ -401,6 +534,8 @@ module "monitoring" {
     module.money.function_names,
     module.ask.function_names,
     module.notify.function_names,
+    module.contentrewards.function_names,
+    module.stories_api.function_names,
   )
   schedule_rule_names    = merge(module.stats.schedule_rule_names, module.money.schedule_rule_names)
   durable_function_names = module.flows.durable_function_names
@@ -412,4 +547,7 @@ module "monitoring" {
   # §28.10, §28.11: Ask's model failures and its daily token use.
   ask_log_group_name         = module.ask.log_group_name
   ask_tokens_alarm_threshold = var.ask_tokens_alarm_threshold
+  # §45.15: Lamo Stories' agent runtime, watched for error lines in its own log group.
+  stories_agent_alarm_enabled  = true
+  stories_agent_log_group_name = module.stories_agent.log_group_name
 }

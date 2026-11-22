@@ -1,0 +1,1 @@
+{"error": {"message": "Invalid parameter", "type": "OAuthException", "code": 100, "error_subcode": 1363128, "is_transient": false, "error_user_title": "Video Duration Not Supported", "error_user_msg": "The video duration must be between 3 and 90 seconds.", "fbtrace_id": "G8sP2xDq5BrZ7uMf3Lh6eT1"}}

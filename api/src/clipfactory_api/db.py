@@ -107,6 +107,27 @@ def rate_pk(platform: str) -> str:
 RATE_SK = "BUDGET"
 STATS_GSI_PK = "STATS"
 
+# Content Rewards (docs/CONTRACTS.md §38.11): additive sort keys under the owner, and the poller's owner list.
+CRCONN_SK = "CRCONN"
+CRMONEY_SK = "CRMONEY"
+CAMPAIGN_PREFIX = "CAMPAIGN#"
+CRSUB_PREFIX = "CRSUB#"
+CROWNERS_PK = "CROWNERS"
+
+
+def crstate_sk(nonce: str) -> str:
+    """One Connect Content Rewards attempt (single use, 5 minutes)."""
+    return f"CRSTATE#{nonce}"
+
+
+def campaign_sk(uuid: str) -> str:
+    return f"{CAMPAIGN_PREFIX}{uuid}"
+
+
+def crsub_sk(post_id: str) -> str:
+    """What was sent to Content Rewards for one campaign post."""
+    return f"{CRSUB_PREFIX}{post_id}"
+
 
 # --- number conversion ----------------------------------------------------------------------------------------
 

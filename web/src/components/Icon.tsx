@@ -92,6 +92,10 @@ const PATHS = {
   expand: "M14 4.5h5.5V10M10 19.5H4.5V14M19.5 4.5l-6 6M4.5 19.5l6-6",
   shrink: "M19.5 4.5l-6 6M13.5 6v4.5H18M4.5 19.5l6-6M10.5 18v-4.5H6",
   square: "M7.5 7.5h9v9h-9z",
+  /** A raised hand: "Things you do" on a campaign card (§38.4). */
+  hand: "M8.5 12.5V6.2a1.3 1.3 0 0 1 2.6 0v5M11.1 11V4.8a1.3 1.3 0 0 1 2.6 0V11M13.7 11V6a1.3 1.3 0 0 1 2.6 0v6.5M16.3 9.5a1.3 1.3 0 0 1 2.6 0v4.2a6.8 6.8 0 0 1-6.8 6.8h-.6a6 6 0 0 1-5-2.7L4.3 14.4a1.4 1.4 0 0 1 2.2-1.6l2 2",
+  /** A question mark in a circle: "I couldn't tell" (§38.4). */
+  question: "M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17ZM9.6 9.4a2.5 2.5 0 0 1 4.8 1c0 1.7-2.4 2.1-2.4 3.6M12 16.9v.1",
 } as const;
 
 export type IconName = keyof typeof PATHS;

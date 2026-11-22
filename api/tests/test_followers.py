@@ -1,4 +1,4 @@
-"""Follower counts (docs/CONTRACTS.md §38): ``GET /v1/followers`` reads only what the daily money run stored."""
+"""Follower counts (docs/CONTRACTS.md §43): ``GET /v1/followers`` reads only what the daily money run stored."""
 
 from __future__ import annotations
 

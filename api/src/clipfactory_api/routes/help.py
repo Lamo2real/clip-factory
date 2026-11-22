@@ -42,8 +42,12 @@ BUDGET_S = 24.0  # of the API Lambda's 29 s; the model step needs 14 s of it lef
 DEVICES = frozenset({"phone", "tablet", "desktop"})
 OSES = frozenset({"mac", "windows", "linux", "chromeos", "ios", "android", "unknown"})
 # Every route name in web/src/lib/router.ts (HelpContext.page is Route["name"], §19.6; tests/test_help_pages.py checks
-# it). A skill page ranks like Settings (retrieve.boost_page); the two mock-only pages never reach a real API, the
-# client sends them as "not_found", and they are accepted here only so a page name can never be the reason Ask fails.
+# it). A skill page ranks like Settings (retrieve.boost_page); the mock-only pages (mock_oauth, motion_gallery,
+# mock_cr_consent) never reach a real API, the client sends them as "not_found", and they are accepted here only so a
+# page name can never be the reason Ask fails. The Content Rewards pages (cr_setup, campaigns, campaigns_find, campaign)
+# are §38/§41.
+# "stories" is every Lamo Stories page (§45.16): Ask is not shown there, so it is accepted only for the same reason.
+# "getpaid" is a Get paid place page (§40.1 item 2); the client sends it as "not_found" for now.
 PAGES = frozenset(
     {
         "home",
@@ -59,6 +63,13 @@ PAGES = frozenset(
         "get_app",
         "motion_gallery",
         "not_found",
+        "cr_setup",
+        "campaigns",
+        "campaigns_find",
+        "campaign",
+        "mock_cr_consent",
+        "stories",
+        "getpaid",
     }
 )
 

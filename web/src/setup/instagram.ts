@@ -35,6 +35,7 @@ export const instagram: SetupGuide = {
             "In the Instagram app, tap **Edit profile**, then **Page** (under Public business information).",
             "Pick your Facebook Page, or press **Create a Facebook Page**.",
             "No Page yet? Make one first in the Facebook setup, step 1.",
+            "Facebook shows a banner asking you to confirm who runs the Page? Do it now.",
           ],
           ifYouSee: [
             {
@@ -106,12 +107,14 @@ export const instagram: SetupGuide = {
           icon: "file",
           title: "Fill in Basic settings",
           say: [
-            "Open **App settings**, then **Basic**.",
-            "Paste the **Privacy Policy URL** and the **Terms of Service URL**.",
-            "Under **User data deletion**, paste the **Data deletion instructions URL**.",
-            "Pick a **Category**. Press **Save changes**.",
+            "Open **App settings**, then **Basic**. Paste the App domain, Privacy, Terms and **Data deletion instructions URL**.",
+            "Pick a **Category**. Upload the icon below as the **App icon**. Contact email: your email (already filled in).",
+            "In the EU: **Data Protection Officer** is your name and email.",
+            "Press **Save changes**. Meta needs all of this to make the app Live.",
           ],
+          download: { label: "Download the icon", href: "/brand/clip-factory-1024.png" },
           copy: [
+            { label: "App domains", value: { ref: "appDomain" } },
             { label: "Privacy Policy URL", value: { ref: "privacyUrl" } },
             { label: "Terms of Service URL", value: { ref: "termsUrl" } },
             { label: "Data deletion instructions URL", value: { ref: "dataDeletionUrl" } },
@@ -131,6 +134,10 @@ export const instagram: SetupGuide = {
           ifYouSee: [
             { see: "instagram_manage_insights not ticked", do: "Tick it. It is not ticked by itself." },
             { see: "instagram_manage_messages", do: "Leave it ticked." },
+            {
+              see: "your Page in a business portfolio",
+              do: "Also tick ads_management and ads_read. Meta needs them to post for a portfolio Page.",
+            },
           ],
         },
         {
@@ -189,6 +196,24 @@ export const instagram: SetupGuide = {
       title: "Go public",
       steps: [
         {
+          id: "public-live",
+          icon: "globe",
+          title: "Make the app Live",
+          say: [
+            "Until the app is Live, only you can see your Reels.",
+            "In the left menu, press **Publish**. Check the list. Press **Go live** at the bottom right.",
+            "No **Publish** in the menu? Flip the **App Mode** switch to **Live**.",
+            "Press I did this when the top bar says **Live**.",
+          ],
+          gate: "app_live",
+          ifYouSee: [
+            {
+              see: "**App Review** or **Advanced access**",
+              do: "You do not need it for your own account. Skip it. Press **Go live**. Meta still says no? It lists what is missing. Go back to Fill in Basic settings.",
+            },
+          ],
+        },
+        {
           id: "public-try",
           icon: "play",
           title: "Post one test clip",
@@ -197,7 +222,7 @@ export const instagram: SetupGuide = {
             "Instagram can take a few minutes to post. Numbers can take 2 days.",
           ],
           ifYouSee: [
-            { see: "your Reels missing for other people", do: "Tell Clip Factory support. Meta may want the app Live." },
+            { see: "your Reels missing for other people", do: "Do the step before: make the app Live." },
             {
               see: "Facebook asking you to confirm who runs the Page",
               do: "Do it. Instagram will not post until you do.",

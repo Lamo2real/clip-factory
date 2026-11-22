@@ -28,7 +28,9 @@ from the owner's "learn from its own results" request
 whose plan the owner approved on 2026-11-18; the statistics and the lesson life were decided by the build. ADR-42
 comes from the owner's request to pick the AI model for clip jobs in Settings
 ([CONTRACTS.md §23](CONTRACTS.md#23-ai-model-choice-for-clip-jobs-owner-request-2026-11-18)); the list of five was the
-owner's, the fallback and the IAM shape were decided by the build.
+owner's, the fallback and the IAM shape were decided by the build. ADR-70 to ADR-80 come from the owner's Lamo Stories requests
+([CONTRACTS.md §45](CONTRACTS.md#45-lamo-stories-a-second-separate-workspace-owner-request-2026-11-21)), whose spec the
+owner wrote; the mechanisms were decided by the build.
 
 ---
 
@@ -601,7 +603,12 @@ publisher, scheduler and perf-check are removed.
   reads posts; harder to audit). *SSM Parameter Store SecureStrings* (cheaper, but no `CreateSecret`-style lifecycle,
   lower throughput limits, and 4 KB values). *State in a cookie* (the callback is on another domain than the app).
   *An unsigned random state only in DynamoDB* (works, but a signature lets the callback reject junk without a read).
-- **Consequences.** At most about 16 secrets at $0.40 a month each. Only `cf-prod-api`, `cf-prod-hooks`,
+- **Consequences.** At most about 22 secrets in all at $0.40 a month each, about $9 (about 16 when this was decided):
+  two made by Terraform (the state key and the push key `cf-prod/notify/vapid`); 19 made at runtime by the app (an
+  app and a token secret for each of the five platforms, the short-lived pending choice of Instagram and Facebook,
+  Content Rewards' app and token, the four badge keys `cf-prod/platforms/{twitch/app, kick/app, youtube/readkey,
+  twitch/eventsub}` and Ask's search key); and the optional YouTube proxy the owner may add by hand. Only
+  `cf-prod-api`, `cf-prod-hooks`,
   `cf-prod-clip-flow` and `cf-prod-stats` may touch the `cf-prod/platforms/*` prefix, and the last two may write only
   the token secrets (`cf-prod/platforms/*/token-*`) ([SECURITY.md](SECURITY.md#platform-keys-and-tokens)). A lost race on a rotating refresh token cannot strand the
   account. Rotating the state key ends Connects that are in flight, nothing else.
@@ -1130,6 +1137,10 @@ logs its token counts (`bedrock.usage`), and this table is to be corrected from 
   counts need a TikTok review of `user.info.stats`; 30-day views need 30 days of snapshots. Google shows an
   "unverified app" screen for the monetary scope. The YouTube API policy's storage limits are not yet confirmed, so
   nothing is deleted automatically except on an explicit YouTube Disconnect (§25.6, §25.8).
+- **Amended by [ADR-64](#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner)
+  (2026-11-21).** Two APIs do report money sent toward the bank: AdSense `payments` (YouTube) and Whop `payouts`
+  (Content Rewards' money after Whop). They show as "Sent to your bank by Google/Whop", never "received" or "in your
+  bank"; the other places still link to their payout pages, and typed-in money stays forbidden.
 
 ## ADR-48 Ask pictures go inline, are read once into words, and are never stored
 
@@ -1544,3 +1555,479 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
   replay. The chat box finder can miss odd overlays (then there is no chat, which is safe). Bedrock cost under $0.05
   a job; the image grows by numpy. No infrastructure or owner data change.
 
+## ADR-62 Content Rewards: the official sign-in through the desktop app's loopback door, sending from the cloud, a reminder when it can't
+
+- **Context.** The owner joins paid clipping campaigns on Content Rewards (CR) and wants Clip Factory to follow each
+  campaign's rules and send every clip so it can earn, in 3 steps per campaign (5 at most), kid-proof from setup to
+  getting paid. A post earns only if it is sent within 30 minutes of going live, from an account linked inside CR,
+  and only once, to one campaign. The local app tried this with browser automation in a signed-in Chrome: 9 Shorts
+  posted on an $8,500 campaign, 0 of 7 links sent (a declined application it could not read, a pop-up over the page,
+  TikTok drafts with no public link). Whop's terms ban scrapers and CR's older clipper terms banned automated
+  posting. Since October 2026 CR has an official MCP server with a person's OAuth sign-in (a pilot) whose
+  `create_my_submission` sends your own post "the same as the creators app", but its OAuth server only takes
+  `http://localhost` / `127.0.0.1` redirects (no https), its refresh token is single use and rotates (a reuse more
+  than a few seconds later ends the connection), it lasts 30 days unused and 90 days at most, and any request with an
+  `Origin` header gets 403.
+- **Options.** (1) Browser automation of contentrewards.com (the local app's way): breaks on the first pop-up, can't
+  tell a declined application, against Whop's terms. (2) The undocumented public JSON for everything: read only, no
+  way to submit, robots.txt disallows `/api/` for crawlers. (3) CR's REST API: brand and agency keys only, not for a
+  clipper. (4) The official MCP sign-in, with the redirect landing on a one-shot `127.0.0.1` listener in the owner's
+  desktop app, the code exchanged and every token kept by the cloud, and every MCP call made by Lambda. (5) The same
+  sign-in run entirely on the Mac (tokens and calls in the desktop app): phone uploads could not send while the Mac
+  sleeps, and the 30-minute window would depend on the Mac being on. (6) No sign-in: after each post, remind the
+  owner to paste the link himself.
+- **Decision.** (CONTRACTS §38) Option 4 with option 6 as the fallback. Clip Factory registers itself with CR (RFC
+  7591, `client_name` "Clip Factory", five fixed loopback redirects `http://127.0.0.1:47811–47815/`, no secret); the
+  Mac app's narrow `cr_connect_*` commands (app origin only; macOS only, Windows answers `unsupported`) open the door
+  for at most 5 minutes, open CR's sign-in in the system browser, take only `?code&state` (+ `iss`; the state must
+  match the URL it opened), show "Done, go back to Clip Factory" and hand the code to its own page, which posts it to
+  the API at once (the code lives 60 s). The API exchanges it with PKCE S256 (the verifier derived from the signed
+  state, never stored) and keeps the token only in Secrets Manager (`cf-prod/platforms/contentrewards/token`, created
+  at runtime under the existing prefix and grants). Exactly one process ever uses a refresh token: the §17.6 lease
+  on `CRCONN`, taken only with 20 s of Lambda left, an immediate single retry of the same token when an answer is
+  lost, the secret read by the `VersionId` recorded on `CRCONN` (never a stale copy), put-only writes (a refresh can
+  never re-create a disconnected secret), and Connect and Disconnect under the same lease. The clip flow sends each
+  campaign post right after it is live and public (`idempotency_key` = the post id, frozen with the URL and campaign
+  id on the first try), retries every minute until 25 minutes after posting, then stops; these steps never fail the
+  clip flow. `cf-prod-stats` follows membership, reviews, views, proof reminders and money on its 15-minute tick
+  (money paged to the end with a watermark, so a total is always CR's whole number). When sending is not possible (no
+  sign-in, the pilot refused the write scope, an older campaign closed to apps, an error that isn't the owner's, or
+  the 25 minutes ran out) the owner gets a notification "Send this to Content Rewards now (N min left)" that opens the
+  clip with one "Copy and open" button. No browser automation anywhere; the public campaign JSON is read only when
+  the owner acts (add, Check now, opening a stale card, a job's start), never on a schedule, rate-limited and cached.
+  Claude turns the brief into rules (the local app's RULES_SCHEMA, ported) in `cf-prod-campaigns`, a Lambda with no
+  secret access; code checks every field (verbatim from the brief for anything that reaches a caption, the screen or
+  a link; fixed disclosure words; caps on tags; CR's own toggles can only add stops). Pay, budget, status and
+  platforms come only from CR's own fields; pure-code gates (the local `ruleCheck.js`) decide the stops. Campaign
+  clips go up public, never made for kids, with paid partnership on where the platform's API has it, the disclosure
+  ("#Ad") first in the caption, the required tags, "Paid partnership" on screen for 3 seconds and the logo in the
+  band above the picture. CR is a separate connection, never a sixth `Platform`, and money from CR is shown only as CR
+  reports it (§25 extended; "paid" is allowed only next to CR's paid payouts). The whole feature ships switched off
+  (`content_rewards_enabled = false`) and is turned on by one line once every part has merged (done: the switch PR
+  #88, 21 Nov 2026, so it is on).
+- **Consequences.** The owner signs in on the Mac once and again at least every 90 days (a week's warning); after
+  that everything runs in the cloud, so a phone upload is sent too. CR's pilot may refuse the write scope at first:
+  then Clip Factory reads campaigns and money and reminds him after each post (and every 3 days to try Connect
+  again), and the setup card offers the ready email to CR support; if CR refuses apps entirely he says "It says
+  Submit clip" and pastes the rules once per campaign. The alpha API can change: the client tolerates unknown fields
+  and values, a daily keep-alive refresh shows breakage early, and unexpected errors go to CR through
+  `send_feedback`. Previews of not-yet-joined campaigns can be up to an owner action old (the card says "as of").
+  TikTok campaign clips wait for TikTok's audit (private posts can't earn). Instagram and Facebook carry the
+  disclosure in the caption and on the video only. The existing platform-secret grants are wider than CR needs
+  (`cf-prod-money` and `cf-prod-hooks` can reach the CR token; written down in SECURITY.md). Additive only: new sort
+  keys (`CRCONN`, `CRSTATE#`, `CAMPAIGN#`, `CRSUB#`, `CRMONEY`, `CROWNERS`), new attributes, a new media prefix
+  `campaigns/`, runtime secrets, one new Lambda `cf-prod-campaigns`, two widened stream filters; nothing that holds
+  the owner's data is replaced. One signed desktop release ("Restart now").
+
+## ADR-63 Content Rewards follow-ups: one fit check in the API, a new copy instead of turning a normal clip into a campaign clip, one 30-day total that includes Content Rewards
+
+- **Context.** After approving §38 the owner asked (2026-11-21) for three things: the Connect steps checked so they are
+  very simple and in time order, with a pleasant choice between campaign clips and the normal clips he makes today;
+  all his money from every place, Content Rewards included, in one place; and to know before uploading whether a clip
+  can earn on a campaign he joined, so he never sends one that can't. Content Rewards (CR) checks a post when it is
+  sent: from an account added inside CR, never sent before, live for less than 30 minutes; a post belongs to one
+  campaign forever; rejections rest on the written brief; the same final clip in two campaigns is rejected as a
+  reused edit; CR's disclosure page wants "#Ad" first and a text on the video at the start. The brief is free text
+  that Claude reads into `CampaignRules`, with an `uncertain` list. Of the five platforms only YouTube (and Facebook,
+  once checked) report money to apps; TikTok, Instagram and X report none; CR reports its balance and payouts but not
+  what left the balance for Whop.
+- **Options.** Where the fit runs: (1) in the web (fast, but Confirm could not trust it, and the rules would live in two
+  languages); (2) in the agent at render time (it knows the video, but not later changes: membership, budget, places,
+  posts); (3) one pure function in the API over stored items, computed on every read, used by the Review card, Confirm,
+  Try again and the copy route, with the web re-checking only what changes while he types or taps; (4) results stored
+  on the clip (stale the moment a campaign or a connection changes). A normal clip that could earn: (a) turn it into a
+  campaign clip in place (posts with #Ad and the paid switch), which misses "Paid partnership" on the video and the
+  logo that briefs and CR's disclosure page ask for, so it would be rejected; (b) a new campaign clip of the same moment,
+  re-rendered with the campaign's rules, the original left as it is; (c) only "Make new clips for this campaign" (new
+  moments). A video from a channel whose name doesn't match the campaign's: (x) block it (the match is by name and can
+  be wrong, and §38.13 lets the owner decide); (y) "I couldn't check", with "no" only for exact facts (a link outside
+  the campaign's own videos, a ruled-out site). Money: (i) add CR's numbers into the MRR cards (they are platform
+  estimates by day; CR's are payouts in rounds); (ii) keep CR only in its own part (§38.7: two places to look); (iii)
+  one "All your money" card with one 30-day period: each platform's reported rows in those days and CR's paid payouts
+  dated in those days, one total per currency, and plain "Not available from …" rows.
+- **Decision.** (CONTRACTS §39) Option 3: `contentrewards/fit.py`, pure, from stored items only (never CR, the public
+  JSON or the network), each rule an item with a state (`ok`, `fix`, `remake`, `todo`, `no`, `check`, `note`), a verdict
+  (`fits`, `fixable`, `wait`, `doesnt_fit`, `cant_tell`) and `canUpload`/`canRemake`; uncertain rules are "I couldn't
+  check", never a pass; a held, paused or re-read campaign is "Wait a little", not "can't earn"; Confirm and Try again
+  refuse a campaign clip with a `no`, `remake` or `todo` item, with the item's words, and a campaign post waiting for a
+  reconnect is not released by itself (it waits for Post now and the same check). Option (y) for the channel. Option
+  (b) with (c) as its fallback: `POST …/campaigns/{id}/remake` reserves the copy on the original clip first (a double
+  tap makes one), then makes a one-clip campaign job from the same source and moment (A's campaign checks, rules
+  snapshot and logo copy), cut from the original's kept video when it is there; the agent skips finding moments for
+  it, and a moment can earn on one campaign only; the copy waits behind `cr_remake_enabled` (default off) until the
+  agent's part has merged (done: its switch PR #93 turned it on). Option (iii): `GET /v1/money/everywhere`, pure on the server, CR's paid payouts kept by day
+  (`CRMONEY.paidByDay`, filled once for older owners by a day scan that never changes the paid total); the card is the
+  first on the Money page with the biggest number, and the MRR cards stay platform-only and say so. The normal way is
+  frozen: Home's form at `/` and the Review card of a clip with no campaign keep origin/main's controls and taps (5 to
+  upload), enforced by click-count tests; the campaign way always starts from a campaign and is named "Make campaign
+  clips". The Connect steps keep their order (account, accounts added inside CR, Connect), each with its answer button
+  right under its Open button, a "Yes" shortcut for someone already set up, and a way back to the page he came from.
+- **Consequences.** The owner sees on every Review card whether a campaign clip can earn and fixes what Clip Factory can
+  fix in one tap (tags and #Ad are put back by the upload anyway); a clip that can't earn can't go up the campaign way.
+  A normal clip that could earn gets one quiet offer and a new copy in about 3 minutes, right below it on Review; he is
+  told to upload the copy (both on one channel could look like reused content, §39.6). Language and source checks are
+  only as good as the stored source fields (`sourceLanguage`, `channelKeys`); unknown or unmatched is "I couldn't
+  check", so a clip from a wrong channel can still be sent and turned down. "All your money" adds an estimate
+  (YouTube) and paid money (CR) over the same days, tagged as such, never across currencies; what left CR for Whop
+  stays "not available". A brief that asks for its own overlay becomes a hard stop (`overlay_needed`). Additive only:
+  new attributes on `JOB#`, `CLIP#` and `CRMONEY`, one api env var; no table, index, bucket, secret or Lambda changes.
+
+## ADR-64 Get paid: payout records count as "sent to your bank", statuses say how they are known, the bank waits for the owner
+
+- **Context.** The owner asked (2026-11-21) whether Clip Factory shows exactly what he earns on YouTube, TikTok,
+  Instagram, Facebook, X and Content Rewards; for a step-by-step payout setup per place, "the same system" as Set up
+  posting; for a status per place that tells him money can reach him, or that it can't although he is allowed to
+  earn; and for the exact total that reached his bank accounts, per place. He lives in Sweden. Research (273 claims,
+  skeptic-checked) found: YouTube's AdSense Management API (`adsense.readonly`) reports the account state, holds and
+  every payment Google sent, but nothing about the bank, tax, ID or PIN; Whop's API, with a user sign-in, reports
+  payout methods, the ID check and payouts Whop sent; Meta, TikTok and X report no payout status or payouts at all
+  (X pays through Stripe Express, which only X can read); TikTok's Creator Rewards isn't open in Sweden; X's Original
+  Content Rewards excludes automated and reuploaded posts; Meta's earnings metrics are undocumented in unit and
+  currency. Only a booked bank credit proves arrival, and the only free self-serve bank route for a private person in
+  Sweden (Enable Banking, restricted mode) has a grey area in its terms. ADR-47 says "payouts are only on the
+  platform's payout page" and forbids "paid" wording and typed-in money.
+- **Options.** Payouts: (a) keep ADR-47 as it is, links only; (b) show the payments AdSense and Whop report, worded
+  as what they are, "Sent to your bank by Google/Whop"; (c) also work out "sent" as paid minus balance (a
+  calculation, refused). The places with no API: (i) let him type his earnings and payouts, labelled "You typed
+  this"; (ii) keep "Not available from X" with where to look, and let the bank show what really arrived. Statuses: (x)
+  ticks only; (y) signals only (four places would say nothing); (z) signals where they exist, his ticks elsewhere,
+  each labelled with who said it, signals beating ticks. Where: inside Set up posting (it would change the five-row
+  to-do list and the "n of 5" ring) or its own Get paid area plus a card on Money. Storing ticks: `SETUP#.stepsDone`
+  (it would move the to-do rows) or a new `GETPAID` item. The bank: Enable Banking, a monthly bank file, payout emails,
+  or nothing new.
+- **Decision.** (CONTRACTS §40) (b): AdSense `payments` and Whop `completed` payouts are shown as "Sent to your bank
+  by Google" / "by Whop", tagged "YouTube says" / "Whop says", with when they should arrive; "Reached your bank" is
+  kept for bank-booked credits only; ADR-47's ban on "paid", "received" and "actual" next to an amount stays. (ii):
+  no typed-in money anywhere; Instagram, TikTok, X and Facebook say "Not available" with where to look; Facebook's
+  estimate stays "coming soon". (z): one pure status function on the server over stored items, eight statuses
+  (on hold, not allowed yet, can get paid ✓, not set up, checking, can get paid (you said it's done), Clip Factory
+  can't check, not started), never "Live" without a signal or a tick, a hold first, YouTube's own "not in the Partner
+  Program" above his ticks. "Not set up" is red only when a signal says a payout part is missing ("Not set up
+  (YouTube says)"); a missing tick gives the calmer "Not set up yet", because a creator who is already paid but hasn't
+  ticked must not be told money can't reach him. A payout reading counts only when it is fresh (connected, first read
+  done, checked within 48 hours), so a stopped or failing reading never keeps saying "YouTube says". The place page's
+  only vermilion is the one next step, and a step that costs money (X Premium) is never it. A Get paid branch in Settings › Posting with one card and one step page per place, in the setup
+  cards' look, and a status-only card on Money; Content Rewards reuses §38.7's steps and ticks; Get paid never joins
+  the setup ring or the to-do list; ticks live on a new `GETPAID` item. Two new, separate, optional read-only
+  connections: "Allow payment reading" for AdSense (its own token, because the AdSense Google account can be another
+  one; never merged into the YouTube connection) and "Connect Whop" through the owner's own Whop app (a public PKCE
+  client; rotating refresh tokens under a lease as Content Rewards' are; behind `whop_connect_enabled`, default off).
+  Both are read by `cf-prod-money`'s daily run and Check now; tokens in Secrets Manager under `cf-prod/platforms/*`,
+  made at runtime; no IAM, table or Lambda change. "Stop payment reading" deletes Clip Factory's AdSense token and
+  never calls Google's revoke, because Google's revoke ends every scope the user gave the app and would also end the
+  YouTube connection when it is the same Google account. The bank part is defined but not built: a source-agnostic deposit
+  shape, matching by payout records, learned payer names and his taps (never a typed number), least data, and the
+  consent states, waiting for the owner to choose Enable Banking or a bank file (or nothing). Facts fixed in
+  `config/monetization.json`: X's programme is Original Content Rewards in Creator Studio, Creator Rewards is not open
+  in Sweden, YouTube's 2027 rules cite answer 12843009; and X's `subscription_type` "None" now means "X didn't share
+  this", not "no Premium" (X's field doesn't know its newer plans).
+- **Consequences.** YouTube can show "Can get paid ✓ (YouTube says)" only after Google's first payment, and a hold the
+  day AdSense reports it; before that, and on every other platform, the status rests on his "I did this" and says so.
+  "Sent to your bank" can differ from what his bank books (fees, conversion, returns, days in transit), and Whop's
+  total covers all his Whop money, not only Content Rewards; the words say both. X's card warns that clips Clip
+  Factory posts probably won't earn there. Whop's part depends on Whop letting a personal user make an app and read
+  payouts (not live-tested); until the switch is on, Content Rewards' "sent" stays "not available". "Reached your
+  bank" stays unknown until the owner picks a bank source. Additive only: new sort keys `GETPAID`, `PAYCONN#`,
+  `PAYSTATE#`, `PAYOUT#`, new attributes, two stream filters updated in place, one api env var; nothing that holds his
+  connections or saved data changes.
+
+## ADR-65 Campaign finder: Content Rewards' public pages read politely, joining stays the owner's own tap
+
+- **Context.** The owner asked (2026-11-21) whether he can find campaigns and join them by requirements he sets, once
+  Content Rewards (CR) lets Clip Factory sign in. CR's official MCP server (23 tools, API version `2026-10-01`) lists
+  the campaigns he joined, sends his posts and reads his money, but has **no tool to browse Discover and none to join or
+  apply**; its REST API is for brands. Joining also accepts that campaign's terms, a choice only he can make. CR's
+  robots.txt allows crawlers everywhere except `/api/…` and a few account pages, and names a `sitemap.xml` that lists
+  every public campaign page with a `lastmod` (which is only the date the campaign was first listed: it never moves on
+  edits or status changes); each campaign page is server-rendered and carries the same campaign object as the
+  undocumented `/api/campaign/campaigns/{uuid}` JSON. The full Discover list comes only from
+  `/api/campaign/campaigns/discover` in the browser. CR's Terms say nothing on reading public pages; Whop's Terms forbid
+  automated access to Whop's own service, creators agree to Whop's terms through CR's (Creator Terms 3.2), and Whop's
+  guidelines can hold back the payouts of accounts that use bots, scrapers or crawlers; ADR-62 already rules out browser
+  automation and reading `/api/…` on a schedule.
+- **Options.** (1) Drive CR's site with a robot to search and join: against Whop's no-bots terms, it breaks on the first
+  pop-up, and it would accept a brand's terms for him. (2) Wait for an official search-and-join tool: nothing for him
+  today. (3) Read the `/api/…` Discover listing on a schedule: one request gives 50 campaigns, but robots.txt asks
+  crawlers not to, and ADR-62 says no. (4) Read only what robots.txt allows (the sitemap, then each campaign page), a
+  few times a day, one page at a time, capped, cached and backed off, from a Lambda with no secret; match his
+  requirements in pure code; he joins on CR with his own tap; Clip Factory adds the campaign in one tap, or by itself
+  once its sign-in sees the join in `list_my_campaigns`. (5) Only a link to CR's filtered Discover page: no match on his
+  places, money left or what Clip Factory can make, and nothing to tell him when a new one appears.
+- **Decision.** (CONTRACTS §41) Option 4, with option 5 kept as "Look on Content Rewards yourself" and option 2 asked
+  for: a signed-in owner can send CR one fixed feature request through MCP `send_feedback` with one tap. The finder
+  reads `robots.txt` once a day and honours it on every request, `sitemap.xml` once a look and at most 40 campaign pages
+  a look (at least 1 s apart, 100 s at most), every 6 hours plus a rate-limited "Look again now", never more than 6
+  reading looks a day (counted when a look starts, so a crash can't cause extra looks), with a 429/503/403 backoff and a
+  `blocked` state; it re-reads live campaigns every 2 days and the rest every 14 (the sitemap's `lastmod` can't say what
+  changed); it never reads `/api/…`, Discover, group, invite or Whop pages, images or other creators' data. Every read
+  is anonymous and can't be linked to his CR or Whop account: only from AWS, never his Mac, the desktop app or his
+  browser, a shared cache, `User-Agent: ClipFactory/1`, no cookies, no account id; if CR or Whop asks Clip Factory to
+  stop, the switch goes off the same day. It runs as a new action of `cf-prod-campaigns` (no secret, no CR API call),
+  started by the existing `cf-prod-stats` tick: no new Lambda, schedule, secret or grant. One pure function decides each
+  match from CR's public fields only (pay per 1,000 views with geo rates, places, money left, open or apply, category,
+  language) and refuses only what the public page shows (drafts first, its own sound, including a description that says
+  a sound must be used, its own overlay, slideshows, almost no money left); a brand that counts only some countries'
+  viewers gets a heads-up; whatever the page can't tell is said as "I can't tell…", never as a pass. Its defaults are
+  chosen for him: at least $1.00 per 1,000 views, the places he set up, at least a quarter of the money left (a percent,
+  so big campaigns with thousands of dollars left stay in), open to join. Rates and money left are CR's own numbers,
+  tagged so; nothing estimates what a clip would earn. At most one notification a day, and never right after he asked.
+  Joining stays his tap on **Join Campaign**, and the page says so plainly ("You join each campaign yourself on Content
+  Rewards."); "I joined: add it" uses §38's add with the link it already has, and while Clip Factory can't read an open
+  campaign's rules the same step takes his pasted rules; once signed in, a listed campaign he opened from the finder in
+  the last 48 hours is added by itself (never one he removed) and its "You're in!" comes as for any campaign. Every
+  match keeps its "Open on Content Rewards" button; only the open one is vermilion. It ships behind `cr_finder_enabled`
+  (default off) and is turned on by one line once every part has merged.
+- **Consequences.** From the Find page to making clips: 2 taps of his own once signed in (open it, then "Make clips for
+  this campaign" after the rules are read by themselves) plus CR's **Join Campaign**; 4 today, before CR's pilot yes
+  (open it, paste the rules he copied on CR, "I joined: add it", "Make clips for this campaign") plus **Join Campaign**
+  and the copy on CR; no search and no copied link. Open campaigns still hide their rules until he joins, so a match can
+  later meet a §38.4 stop; Clip Factory reads the rules right after the join and the fit check (§39.3) guards every
+  upload. The first full look takes 3 to 5 days (all 766 campaign pages at 40 a look, newest listings first); money left
+  can be up to 12 hours old ("as of" shown). The finder depends on CR's page format and on CR keeping these pages open
+  to crawlers: a format change shows "I can't read Content Rewards' campaign pages right now", a robots.txt change or a
+  block stops it by itself, and "Look on Content Rewards yourself" always works. Additive only: the owner item `CRFIND`,
+  the shared cache under pk `CRPUBLIC` (with TTL), one env var on three Lambdas and one stream-filter prefix; nothing
+  that holds the owner's data is replaced or destroyed.
+
+## ADR-66 TikTok for everyone: the owner posts it in TikTok himself, Clip Factory hands it over and counts it
+
+**Context.** TikTok's API keeps an unaudited app's posts "Only me" on a private account, and its review and Direct Post
+rules turn down personal tools ("Apps must not be for private or personal use"; "Not acceptable: A utility tool to help
+upload contents to the account(s) you or your team manages"). The owner wants public TikTok posts now. The TikTok API
+for Business would need a Business account, which Creator Rewards does not pay.
+
+**Decision.** A manual hand-off (§42): the share menu on a phone, the file and TikTok's own upload page on a computer,
+the caption copied on the same tap. The owner posts in TikTok, picking Everyone, then marks the clip posted, with the
+post's link when he has it; the link's video id puts the post on the normal stats poller. Review, Use my settings and
+TikTok's API row stay as they are, so the API path is ready if TikTok ever approves.
+
+**Consequences.** No TikTok rule is touched: TikTok's posting API is not used for these posts, and the owner posts with
+TikTok's own app. Everyone needs a public account, on which Clip Factory's own TikTok upload is refused until the audit,
+so that row fails with a sentence that points to Post it yourself (no "make it private", no Try again) and offers the
+button there. Numbers come from the post found on the connected account (`video/list`) or a pasted link, then
+`video/query` as for any public post.
+
+## ADR-67 New built-in skill parts are offered to the owner's copy, never written into it
+
+- **Context.** §37 added a Chat block to the built-in `viral-clip-editing`. An owner who had made his own copy of that
+  skill does not get it, and his rule is that his own edited text never changes without his say.
+- **Options.** (1) Do nothing: his copy never learns chat. (2) Rewrite his copy on deploy: changes his words. (3) A
+  three-way merge of his copy with the new built-in: heavy, and still edits text he did not see. (4) Version each
+  later part of a built-in, spot a copy that lacks one, offer it with a preview, add only that part on his tap, with
+  an exact Undo, and meanwhile give every model call the built-in's part as a separate note.
+- **Decision.** (CONTRACTS §44) Option 4. One pure module, the same file in the API and the agent, finds copies by
+  shared lines and places the part before "Skip these"; the item remembers what was added (for Undo) and Not now.
+- **Consequences.** Chat hype works before he taps Add. A heavily rewritten copy (under 30% of the built-in's lines)
+  is not seen as a copy and gets no offer or note; the built-in itself is always in the block anyway (§18.1). Each
+  future built-in part needs a `SECTIONS` entry. Additive item fields only; no infrastructure change.
+
+## ADR-70 Workspaces: Lamo Clips is the built-in workspace, new workspaces live in partitions of their own
+
+- **Context.** The owner asked (2026-11-21) for a second studio, Lamo Stories, inside the same app and sign-in, with
+  its own screens, content, jobs, settings and social accounts, and made protecting the existing app the highest
+  priority: no renamed tables, attributes or resources, no change to how Lamo Clips looks or works. Every Lamo Clips
+  item sits under `USER#{userId}`; the live-update and notification streams forward items by sort-key prefix; the
+  stats poller follows `gsi2`; `posts.account_items` reads every `ACCOUNT#` under the user.
+- **Options.** (1) Add a `workspaceId` attribute to every existing item and back-fill Lamo Clips' data (a migration of
+  owner data, and every existing query would need a filter); (2) store Lamo Stories items under `USER#{userId}` with new
+  sort-key prefixes (no migration, but every existing whole-partition read and the `ACCOUNT#` readers would see them,
+  and an unlucky prefix would reach the streams); (3) Lamo Clips is the built-in workspace `clips`, never written, its
+  data where it is; each other workspace gets a registry item in `USER#{userId}#WSREG` and its own partition
+  `USER#{userId}#WS#{workspaceId}`, with sort-key prefixes no stream forwards; (4) a second table (new infrastructure
+  the owner asked not to add without need).
+- **Decision.** (CONTRACTS §45.3) Option 3. Ownership is in the key (built from the JWT's `sub`), checked again on
+  every item's `userId` and `workspaceId`. The workspace registry holds `workspaceType` (`clips` built in, `stories`),
+  so a later brand is a new workspace or one new type. In the web, `/stories/…` is Lamo Stories and every other path is
+  today's shell; the choice persists on the device and in the URL. A web switch, `STORIES_ON`, keeps it hidden until
+  all of it has merged.
+- **Consequences.** No Lamo Clips item, query, stream, index or screen changes; nothing is migrated. Lamo Stories
+  screens poll instead of using the WebSocket (no stream filter change). A user's data now spans more than one
+  partition, so a future "delete everything" must walk the registry too (none exists today).
+
+## ADR-71 One animation engine in TypeScript, drawn by the browser and by the agent
+
+- **Context.** Lamo Stories needs 30–60 s vertical cartoons without voice-over, with recurring characters that must
+  look and move the same in every video, previews in the app, and a pipeline that works today. No image or video
+  generation model is set up in the account; Amazon Nova Canvas and Nova Reel are not offered in eu-north-1 (Ireland,
+  N. Virginia and Tokyo only), Reel writes to a bucket in its own Region, and generated frames or clips do not keep a
+  character the same from one shot to the next. ffmpeg, numpy and Deno are already in the agent image; Lambdas have
+  no ffmpeg.
+- **Options.** (1) AI video for every shot (not in-Region, inconsistent characters, realistic clips need AI labels);
+  (2) AI images per scene plus pan and zoom (inconsistent, slideshow-like); (3) a 2D rig engine in Python only, with
+  previews rendered by the agent (a cold start for every preview, and the browser could not animate the Characters
+  page); (4) the engine in the browser only, exporting the video there (the app would have to stay open, and Safari and
+  Chrome encode differently); (5) one dependency-free TypeScript engine that turns a story script into draw lists:
+  the browser draws them on a canvas for instant previews, the agent runs the same file with Deno and rasterizes the
+  lists with numpy into frames for ffmpeg.
+- **Decision.** (CONTRACTS §45.10, §45.11.3) Option 5. Characters are rigs (a few looks choices), copied into each
+  story's script, so consistency is by construction; the writer (Claude) only picks from the engine's catalog and names
+  characters by cast id; effects, character noises and music are synthesized with numpy, so there are no audio files
+  and no licences. AI images (Nova Canvas) can be added later behind the rigs (ADR-75).
+- **Consequences.** Previews and videos use the same draw lists (shared code; the rasterizer is tested on fixed draw
+  lists). The look is clean flat-shaded 2D, not painted or realistic; new actions, props or sets are code in one
+  folder. The engine folder is copied into Lamo Stories' own agent image (ADR-76), so that image's tag hash includes
+  it, and an engine change rebuilds only that image; Clip Factory's agent image never changes because of Lamo
+  Stories. Rendering 45 s
+  takes a few minutes on the agent.
+
+## ADR-72 Separate social connections: own tokens, one callback, the owner's choice of developer app
+
+- **Context.** The owner wants different accounts for Lamo Stories on every platform and no accidental posting to
+  Lamo Clips' destinations. He set up one developer app per platform (13 manual steps for YouTube) and asked never to
+  have to redo it. Each app has one registered redirect URI, `…/oauth/{platform}/callback`. Lamo Clips' tokens are
+  `cf-prod/platforms/{platform}/token`, one per platform, read by the clip flow, stats and money functions.
+- **Options.** (1) A second developer app per platform for Lamo Stories (hours of manual setup and platform reviews
+  again); (2) the same apps and the same callback, with the stored OAuth state telling the callback which workspace it
+  serves, tokens under a second Secrets Manager prefix; (3) nest Lamo Stories tokens under `cf-prod/platforms/` (no IAM
+  change, but every Lamo Clips function could read them).
+- **Decision.** (CONTRACTS §45.13) Option 2 for the callback and the tokens; which developer app each platform uses is
+  the owner's explicit choice, his own or Clip Factory's (ADR-79). A Lamo Stories connect uses its own state format
+  (`w1.` with the workspace id inside the signature) and its own state items (`OAUTH#ws.{nonce}`). Clip Factory's
+  callback only forwards a `w1.` state to Lamo Stories' own callback route on `cf-prod-stories-api` (Clip Factory's
+  registered apps are not edited, so their redirect URI stays the hooks one); `v1.` states run today's code
+  unchanged. Only Lamo Stories' Lambda writes `cf-prod/workspaces/{workspaceId}/{platform}/token` and `SOCIAL#`. One account per platform per
+  workspace. YouTube connects the one channel picked in Google's picker (`prompt=select_account consent`): a token
+  posts to exactly one channel, so there is no channel list to choose from; Meta lists Pages. An identity equal to
+  Lamo Clips' own is held as `same_as_clips` until the owner says "Use it for both". Disconnect never calls a
+  platform's revoke endpoint (Google's and TikTok's revoke end the app's whole grant for that account, which can be
+  Lamo Clips' too, as §40 found for AdSense).
+- **Consequences.** With Clip Factory's app (YouTube, TikTok, X), quotas, credits and the owner's monthly X limit are
+  shared (and counted together), and TikTok's Sandbox, private-account and review limits apply to both; a later key
+  change asks Lamo Stories to connect again. Meta always needs Lamo Stories' own app, so Clip Factory's Meta grant is
+  never touched.
+  A Disconnect leaves the grant at the platform; the page says where to remove it by hand. `hooks.py` gains one
+  forward, proven not to change the old path, and no IAM.
+
+## ADR-73 Publishing isolation: checked before every call, no default account, IAM as the last wall
+
+- **Context.** "A video created in Lamo Stories must only be published to Lamo Stories-connected accounts", every
+  publishing job must reference workspace, content, social account, platform and status, the relationships must be
+  validated before every operation, and a missing or ambiguous destination must stop and ask. The platform publishers
+  (§17.6) take their credentials and video in a `PublishJob` and touch no store.
+- **Options.** (1) Teach the clip flow about workspaces (changes Lamo Clips' most delicate code); (2) a new durable
+  function for Lamo Stories that reuses the publishers unchanged, with one validation function run by the API at the
+  tap and by the flow before each platform call, and its own IAM role.
+- **Decision.** (CONTRACTS §45.14, §45.15) Option 2: `cf-prod-story-flow`. A publishing job records the account's
+  identity at the tap; the flow re-checks the workspace, the story, the account (same partition, same platform,
+  connected, same identity, not Lamo Clips' own unless shared on purpose) and builds the secret name from the checked
+  ids only, and checks the identity inside the secret itself. Its role can read `cf-prod/workspaces/*` and the five
+  `…/app` secrets and nothing else, and can write DynamoDB only under `USER#*#WS#*` and the shared `RATE#*` budgets;
+  the Lamo Clips roles cannot read `cf-prod/workspaces/*`.
+- **Consequences.** A code mistake in either flow cannot reach the other workspace's tokens or Lamo Clips' items
+  (Terraform tests hold the policies). A reconnect to a different account stops queued jobs instead of sending them
+  somewhere new. Lamo Stories numbers are read by the flow at 1 h, 24 h, 72 h and 7 days, through the same rate
+  budgets as Lamo Clips, not by the 15-minute stats poller; the flow runs up to 9 days.
+
+## ADR-74 Safety videos only from checked guidance
+
+- **Context.** The owner: "Safety-related educational content must be based on verified guidance. Do not generate
+  potentially dangerous driving instructions without appropriate validation." Research on 2026-11-21 fetched road
+  authorities' pages (UK Highway Code, National Highways, RoSPA, NY, California and Ontario driver handbooks, Transport
+  Canada, Transport for NSW, Trafikverket) and found real disagreements (stay in the car or get out after a breakdown,
+  neutral in a skid, braking with or without ABS).
+- **Options.** (1) Trust the model; (2) a model check only; (3) a checked guidance list bundled with the app, the
+  writer allowed only its uncontradicted steps, then a separate checker (the quality agent), and stories with problems
+  held for the owner.
+- **Decision.** (CONTRACTS §45.11.5) Option 3, and a safety topic with no guidance cannot be produced. (This ADR first
+  also kept Clip Factory's skills block on Lamo Stories' calls; the owner's second request settled that the other way:
+  ADR-78.)
+- **Consequences.** Only 12 driving situations can be taught at first; adding one means adding checked sources. Some
+  advice differs by country, so contradicted steps are left out and the video points to local rules.
+
+## ADR-75 Providers behind a registry: built-in today, AI images off until a real call works
+
+- **Context.** The owner wants room for more image, video, animation and audio providers "without rebuilding", and no
+  integration shown as working when it is not. Only Claude (writing) is set up today; Nova Canvas needs a call to
+  eu-west-1; Nova Reel needs a bucket in us-east-1 and AI-realism labels the shared publishers do not set.
+- **Options.** (1) Hard-wire the built-in engine; (2) a registry per kind (writer, images, animation, audio) with
+  one interface each, the built-in providers on, Nova Canvas built and off, Nova Reel interface only.
+- **Decision.** (CONTRACTS §45.11.6) Option 2. A provider is `on` only after a real call answered (its state is
+  stored by the agent); the Providers list says in one sentence what each missing one needs. Nova Canvas makes
+  character portraits shown in the app only, never part of a posted video, because the shared publishers mark posts
+  as not AI-generated.
+- **Consequences.** The videos are fully built-in. Switching on Nova Canvas adds AI portraits; AI backgrounds in videos
+  and Nova Reel stay out until the posting labels are added (and, for Reel, a US bucket).
+
+## ADR-76 Lamo Stories is its own application: its own API Lambda, AgentCore runtime and IAM roles
+
+- **Context.** The owner's second request (2026-11-21): "Lamo Stories must be treated as an independent application
+  within the existing Clip Factory application shell … The only shared element should be the application shell",
+  with its own AgentCore environment, agents, skills, models, chat, memory, settings, OAuth credentials and data, "two
+  separate applications accessible through one desktop application", while shared AWS infrastructure is fine "where
+  appropriate" with "strict authorization and data boundaries". The first plan ran Lamo Stories' routes in
+  `cf-prod-api` and its videos as new actions of Clip Factory's agent runtime.
+- **Options.** (1) Keep the first plan (one API Lambda and one agent runtime, separated in code only); (2) separate
+  route modules in `cf-prod-api` but Lamo Stories' own runtime; (3) Lamo Stories' own Lambda (`cf-prod-stories-api`,
+  the same zip and HTTP API, its own routes and role) and its own AgentCore runtime (`cf_prod_story_agent`, its own
+  image from `stories/agent/`, role and sessions), each role allowed only Lamo Stories' keys, prefix and secrets;
+  (4) a second AWS account or a second app (duplicated sign-in and infrastructure, which the first request ruled out).
+- **Decision.** (CONTRACTS §45.24, §45.15) Option 3. Shared on purpose: the shell and Cognito sign-in, the HTTP API
+  (separate routes), the table, bucket and Secrets Manager (separate namespaces, enforced by IAM leading keys and
+  prefixes), Clip Factory's OAuth callback only as a forward of `w1.` states (its registered apps are not edited),
+  and the platform publisher library code.
+- **Consequences.** Clip Factory's API Lambda, its route table, its agent runtime, image and roles do not change at
+  all, and a Lamo Stories change never redeploys or drains them. Lamo Stories has its own image to build and its own
+  CI job. Code shared as a library (the publishers, `db`, `http.dispatch`) is used read-only; a change there is a
+  Clip Factory change and is reviewed as one.
+
+## ADR-77 Models and reasoning effort are the owner's, per workspace, agent, task and request, never substituted
+
+- **Context.** The owner wants complete control over which model powers Lamo Stories (examples "Sable 5.2, Sable 5.1,
+  Opus 5.5": the account's Claude Fable 5.2 / 5.1 and Opus 5.5), with a default, per-agent and per-task choices, a
+  per-request override from the chat, the active model visible, no silent substitution, and the reasoning effort set
+  separately and really sent where the model supports it. Fable 5.x, Opus 5.5, Sonnet 5.5 and Haiku 5.5 take
+  `output_config.effort` (low to max) with adaptive thinking; their default efforts differ (Opus 5.5 and Haiku 5.5
+  `medium`); they reject a thinking budget.
+- **Options.** (1) One model setting; (2) a model per agent only; (3) four levels (request, task, agent, workspace)
+  over a model list kept apart from Clip Factory's, each model listing the efforts it accepts, an availability check by
+  a real call, and the effective choice recorded on every job and message.
+- **Decision.** (CONTRACTS §45.25) Option 3, with `stories/config/models.json` as the list (IAM grants built from it),
+  no automatic fallback model (a refused or unavailable model stops the task with its reason and a way to pick
+  another), and usage and cost recorded per call, cost only where a price is known or the owner typed one.
+- **Consequences.** The owner can mix models per task; jobs are reproducible; a model the account cannot reach is
+  visible as such. A refusal is shown rather than retried on another model, so an occasional task needs the owner's
+  tap to continue.
+
+## ADR-78 Lamo Stories' own agents, skills, chat and memory live in its runtime; actions wait for the owner's tap
+
+- **Context.** The second request asks for its own agents and agent configuration, skills (upload, versions,
+  enable/disable, assign to agents), a creative chat with history and memory, and reference-video analysis; Clip
+  Factory's standing rule that every AI call gets all its skills belongs to Clip Factory.
+- **Options.** Memory: AgentCore Memory (a managed service resource) or items in the workspace partition the owner
+  can see and edit. Chat: an agent that acts on its own, or one that proposes and the owner taps. Skills: shared with
+  Clip Factory, or Lamo Stories' own.
+- **Decision.** (CONTRACTS §45.26–§45.28) Five built-in agents with editable instructions, models, efforts and
+  skills; Lamo Stories' own skills only (Clip Factory's are never read); memory as `MEM#` items; the creative
+  director's tools read and draft, and anything that costs a render or changes a video is a button the owner taps;
+  reference videos are uploaded files analyzed from frames and sound.
+- **Consequences.** The owner sees and edits everything the agents remember; nothing is published or rendered
+  without his tap; Clip Factory's skills rule is untouched. Reference links to other people's videos are not
+  downloaded (upload the file).
+
+## ADR-79 Developer apps: the owner picks Lamo Stories' own or Clip Factory's, per platform, never silently
+
+- **Context.** The second request: Lamo Stories' "own OAuth credentials", "Do not reuse Clip Factory OAuth tokens. Do
+  not modify existing OAuth authorizations." The tokens are already separate (ADR-72). A separate developer app means
+  new setup and, for TikTok and Meta, a new app review that takes days to weeks; Meta's page picker is per login and
+  per app, so re-authorizing Clip Factory's Meta app for a second Page can change Clip Factory's grant.
+- **Options.** (1) Always Clip Factory's apps; (2) always new apps; (3) the owner's explicit choice per platform,
+  shown on the card, with the trade-offs in plain words, and a recommendation of a separate app for Meta.
+- **Decision.** (CONTRACTS §45.30) Option 3 for YouTube, TikTok and X; **Facebook and Instagram always use Lamo
+  Stories' own Meta app** (re-authorizing Clip Factory's Meta app would change its existing grant). No default, no
+  fallback; own keys in `cf-prod/workspaces/{ws}/{p}/app`; one helper picks the keys everywhere; quotas, credits and
+  limits follow the app chosen.
+- **Consequences.** Fully separate apps keep every Clip Factory authorization untouched and cost the owner the
+  platforms' setup and reviews once; the quick choice shares quotas and review state and carries the Meta warning.
+
+## ADR-80 Video generation is configured apart from the reasoning models; the built-in animator first
+
+- **Context.** The second request separates reasoning models from image, video and audio generation and says an LLM
+  cannot make a video by itself. Only Amazon Bedrock is set up; Nova Reel writes to a bucket in us-east-1 and makes
+  realistic footage, which the platforms want labelled.
+- **Options.** (1) The built-in 2D animator only; (2) add Nova Reel now, its US bucket always on; (3) a provider
+  registry per kind, the built-in animator on, Nova Reel built behind a Terraform switch for its US bucket (off until
+  the owner allows US storage), AI labels set by Lamo Stories' own publisher wrappers, and a generic key store for
+  providers added later.
+- **Decision.** (CONTRACTS §45.31) Option 3.
+- **Consequences.** Videos are made today with the built-in animator; AI footage arrives when the owner allows the US
+  bucket and enables the model; no external provider is claimed as working until one is added and checked live.

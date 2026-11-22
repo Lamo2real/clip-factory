@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { animationsDone, CLIPS, findOverflow, openClip, resolveRoute, ROUTES, settle, SETUP_ROUTES, WIDTHS } from "./helpers.ts";
 
+/** Content Rewards' own pages (§38): its setup, the campaigns list and a campaign card (mock fixtures). */
+const CR_PAGES = ["/settings/posting/setup/contentrewards", "/campaigns", "/campaigns/200ea21b-be80-4db8-b552-8e32b148604e", "/campaigns/0c8fdea5-8a7b-4bcc-b1f4-d09c6e8dbf17"];
+
 const SKILL_PAGES = { written: "01JZ8S00000000000000000001", zip: "01JZ8S00000000000000000002", tricky: "01JZ8S00000000000000000003" };
 
 // Nothing may run out of its box, at any width from 320px up, on any screen (docs/CONTRACTS.md §11).
@@ -12,6 +15,7 @@ for (const width of WIDTHS) {
     await page.setViewportSize({ width, height: 900 });
     const paths: string[] = [];
     for (const r of ROUTES) paths.push(await resolveRoute(page, r));
+    paths.push(...CR_PAGES);
 
     const failures: string[] = [];
     for (const path of paths) {

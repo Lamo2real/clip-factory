@@ -162,3 +162,31 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
   path on the same origin), caches it 10 minutes and falls back to the copy bundled in the Lambda.
 - AC8: The knowledge never contains keys, ids, emails or infrastructure words; a test fails if it does.
 - AC9: A failing model raises an alarm (10 failures in an hour) to `cf-prod-alarms`.
+
+### NFR-19 Content Rewards is safe, additive and switched on only when complete
+([CONTRACTS.md §38.8–§38.16](CONTRACTS.md#38-content-rewards-campaigns-owner-request-2026-11-21),
+[SECURITY.md](SECURITY.md#content-rewards-contracts-38), [DEPLOYMENT.md](DEPLOYMENT.md#content-rewards-contracts-38))
+- AC1: Sign-in, membership, sending and money use only Content Rewards' official sign-in and tools (no browser
+  automation). The public campaign data (its JSON, else the page's Open Graph line or a group page's campaign links)
+  is read only when the owner acts, never on a schedule.
+- AC2: The Content Rewards token lives only in Secrets Manager and is used only by the cloud; the browser never calls
+  Content Rewards and the Mac app only passes a one-time code, once. The function that reads brand text has no
+  secret access.
+- AC3: Text from brands is data, never instructions: shown escaped, and every rule that reaches a caption, the video
+  or a link is checked by code against the brief.
+- AC4: A campaign post is tried right after it is live and never sent twice; the clip flow never fails because of
+  Content Rewards.
+- AC5: Only additive data (new sort keys, attributes, a media prefix, runtime secrets, one small Lambda); no table,
+  pool, bucket or secret holding the owner's data is replaced, and the deploy's delete gate passes.
+- AC6: Shipped switched off in prod (`content_rewards_enabled = false`) until every part had merged; the one-line
+  switch PR #88 turned it on, so it is on now. Setting it back to `false` turns it off again.
+- AC7: Money shows only what Content Rewards reports; a rate × views guess is never shown (a test checks).
+- AC8: The fit check (BR-28) is one pure function on the server, worked out from stored items each time it is asked
+  (never Content Rewards, the public campaign data or the network), and the same answer drives the Review card, the
+  clip page, Upload, Try again, Post now and the copy. The web only re-checks the four things that change while he
+  types or taps (tags, #Ad, the paid switch, the places).
+- AC9: All your money (BR-27) is added up on the server; the web only formats. Content Rewards' paid money is kept by
+  day; for an owner whose money was read before, a one-time scan fills it without ever changing the paid total.
+- AC10: Additive only: new attributes on the job, clip and money items and one api setting (`CR_REMAKE`, from
+  `cr_remake_enabled`; it shipped off and is on since PR #93); no new table, index, bucket, secret or Lambda, and
+  nothing that holds the owner's data is replaced.

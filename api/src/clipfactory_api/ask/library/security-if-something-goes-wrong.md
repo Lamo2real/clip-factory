@@ -12,6 +12,10 @@
   posting › {Platform} › **Save keys**, then **Connect again**. To cut a platform off at once, press **Disconnect**
   (it revokes the token where the platform allows it and deletes the token secret) or remove the app's access on the
   platform (for Google: <https://myaccount.google.com/permissions>).
+- **Content Rewards: an unknown sign-in or a lost Mac**: press **Disconnect** in Settings › Posting › Set up posting ›
+  Content Rewards (it revokes the refresh token and deletes the token secret), then on Content Rewards open Settings ›
+  **Connected apps** and press **Disconnect** next to Clip Factory. Nothing on any platform is deleted. Connect again
+  on the Mac when you want it back.
 - **The help assistant says something wrong or unwanted**: set the kill switch (`HELP` / `SWITCH`, `enabled: false`, or
   `model: false` to keep answers from search only) with the command in
   [DEPLOYMENT.md](DEPLOYMENT.md#ask-clip-factory-kill-switch); it takes effect within 60 seconds, no deploy needed.

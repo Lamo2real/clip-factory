@@ -38,6 +38,9 @@ variables {
   table_name      = "cf-test-data"
   table_arn       = "arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"
   app_url         = "https://app.example.test"
+
+  clip_flow_alias_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:live"
+  clip_flow_arn_prefix = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow"
 }
 
 run "routes_and_validation" {
@@ -146,8 +149,9 @@ run "verify_token_and_lambda" {
       VERIFY_TOKEN_PARAM = "/cf-test/hooks/verify-token"
       SECRET_PREFIX      = "cf-test/platforms/"
       OAUTH_STATE_SECRET = "cf-test/oauth/state-key"
+      CLIP_FLOW_ARN      = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:live"
     })
-    error_message = "cf-prod-hooks environment must match docs/CONTRACTS.md §9 and §17.9 (SECRET_PREFIX, OAUTH_STATE_SECRET)."
+    error_message = "cf-prod-hooks environment must match docs/CONTRACTS.md §9, §17.9 (SECRET_PREFIX, OAUTH_STATE_SECRET) and §17.6 (CLIP_FLOW_ARN)."
   }
 
   assert {
@@ -162,8 +166,28 @@ run "verify_token_and_lambda" {
       "dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query",
       "secretsmanager:GetSecretValue", "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue",
       "secretsmanager:DescribeSecret", "secretsmanager:DeleteSecret", "secretsmanager:TagResource",
+      "dynamodb:TransactWriteItems", "lambda:InvokeFunction",
     ])
-    error_message = "cf-prod-hooks may only store hook events, read the verify token, handle OAuth items and the platform secrets (§17.9), and set followed creators' live state (§24.4)."
+    error_message = "cf-prod-hooks may only store hook events, read the verify token, handle OAuth items and the platform secrets (§17.9), set followed creators' live state (§24.4), and release waiting posts with a clip flow start (§17.6)."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn.policy).Statement :
+      s.Sid == "ReleaseWaitingPosts" && toset(s.Action) == toset(["dynamodb:GetItem", "dynamodb:Query", "dynamodb:UpdateItem", "dynamodb:TransactWriteItems"]) &&
+      s.Resource == ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"] &&
+      s.Condition == { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["USER#*"] } }
+    ])
+    error_message = "§17.6: releasing waiting posts reads and updates the owner's USER# items only (no PutItem, no DeleteItem, no indexes)."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn.policy).Statement :
+      s.Sid == "StartClipFlow" && s.Action == ["lambda:InvokeFunction"] &&
+      s.Resource == ["arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:*"]
+    ])
+    error_message = "§17.6: cf-prod-hooks may start the clip flow (any qualifier of clip-flow) and no other function."
   }
 
   assert {
@@ -375,4 +399,67 @@ run "no_boundary_when_none_is_given" {
     condition     = aws_iam_role.fn.permissions_boundary == null && aws_iam_role.apigw_cloudwatch[0].permissions_boundary == null
     error_message = "Without permissions_boundary_arn the roles have no boundary (as before)."
   }
+}
+
+# docs/CONTRACTS.md §45.13.3 and §45.15: for Lamo Stories, cf-prod-hooks gains one env var, STORIES_OAUTH_CALLBACK (where
+# a w1. state is forwarded), and nothing else: no new IAM, no workspace secret. Its grants never reach a Lamo Stories
+# secret (globs against sample ARNs: "*" becomes ".*" and "?" becomes "." in an anchored regex, dots escaped).
+run "lamo_stories_forward_only" {
+  command = plan
+
+  variables {
+    stories_oauth_callback = "https://http123.execute-api.eu-north-1.amazonaws.com/v1/stories-oauth"
+  }
+
+  assert {
+    condition = one(aws_lambda_function.fn.environment).variables == tomap({
+      TABLE_NAME             = "cf-test-data"
+      APP_URL                = "https://app.example.test"
+      VERIFY_TOKEN_PARAM     = "/cf-test/hooks/verify-token"
+      SECRET_PREFIX          = "cf-test/platforms/"
+      OAUTH_STATE_SECRET     = "cf-test/oauth/state-key"
+      CLIP_FLOW_ARN          = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:live"
+      STORIES_OAUTH_CALLBACK = "https://http123.execute-api.eu-north-1.amazonaws.com/v1/stories-oauth"
+    })
+    error_message = "cf-prod-hooks gains exactly STORIES_OAUTH_CALLBACK (Lamo Stories' callback base) and keeps every other env var."
+  }
+
+  assert {
+    condition = (toset(flatten([for s in jsondecode(aws_iam_role_policy.fn.policy).Statement : s.Action])) == toset([
+      "logs:CreateLogStream", "logs:PutLogEvents", "xray:PutTraceSegments", "xray:PutTelemetryRecords",
+      "dynamodb:PutItem", "ssm:GetParameter",
+      "dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query",
+      "secretsmanager:GetSecretValue", "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue",
+      "secretsmanager:DescribeSecret", "secretsmanager:DeleteSecret", "secretsmanager:TagResource",
+      "dynamodb:TransactWriteItems", "lambda:InvokeFunction",
+      ]) && !strcontains(aws_iam_role_policy.fn.policy, "workspaces") && !strcontains(aws_iam_role_policy.fn.policy, "stories") &&
+      length(regexall("var\\.stories_oauth_callback", file("main.tf"))) == 2 &&
+    length(regexall("(?m)^    \\}, var\\.stories_oauth_callback == \"\" \\? \\{\\} : \\{ STORIES_OAUTH_CALLBACK = var\\.stories_oauth_callback \\}\\)$", file("main.tf"))) == 1)
+    error_message = "STORIES_OAUTH_CALLBACK reaches only cf-prod-hooks' environment: no new IAM and no workspace secret (§45.15)."
+  }
+
+  assert {
+    condition = alltrue(flatten([
+      for sample in [
+        "cf-test/workspaces/stories/youtube/token-AbC123", "cf-test/workspaces/stories/youtube/token",
+        "cf-test/workspaces/stories/facebook/pending-AbC123", "cf-test/workspaces/stories/instagram/app-AbC123",
+        "cf-test/workspaces/stories/providers/acme-AbC123",
+        ] : [
+        for s in jsondecode(aws_iam_role_policy.fn.policy).Statement : [
+          for r in flatten([s.Resource]) : !can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", "arn:aws:secretsmanager:eu-north-1:123456789012:secret:${sample}"))
+        ] if anytrue([for a in flatten([s.Action]) : startswith(a, "secretsmanager:") || a == "*"])
+      ]
+    ]))
+    error_message = "…:secret:<name>/workspaces/stories/youtube/token-AbC123 (and every Lamo Stories secret) matches no cf-prod-hooks resource."
+  }
+}
+
+run "lamo_stories_callback_base_is_checked" {
+  command = plan
+
+  variables {
+    stories_oauth_callback = "https://http123.execute-api.eu-north-1.amazonaws.com/v1/stories-oauth/"
+  }
+
+  expect_failures = [var.stories_oauth_callback]
 }

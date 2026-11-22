@@ -147,6 +147,9 @@ def test_every_contract_route_is_registered() -> None:
         ("PATCH", "/v1/clips/X"),
         ("POST", "/v1/clips/X/confirm"),
         ("POST", "/v1/clips/X/decline"),
+        ("GET", "/v1/clips/X/file"),
+        ("POST", "/v1/clips/X/tiktok/posted"),
+        ("DELETE", "/v1/clips/X/tiktok/posted"),
         ("GET", "/v1/clips/X/similar"),
         ("GET", "/v1/skills"),
         ("POST", "/v1/skills/uploads"),
@@ -156,6 +159,7 @@ def test_every_contract_route_is_registered() -> None:
         ("PATCH", "/v1/skills/X"),
         ("DELETE", "/v1/skills/X"),
         ("GET", "/v1/skills/X/content"),
+        ("POST", "/v1/skills/X/sections"),  # §44
         ("GET", "/v1/settings"),
         ("PUT", "/v1/settings"),
         ("GET", "/v1/lessons"),
@@ -199,8 +203,17 @@ def test_every_contract_route_is_registered() -> None:
         ("PUT", "/v1/money/country"),
         ("GET", "/v1/money/youtube/days"),
         ("GET", "/v1/money/summary"),
+        ("GET", "/v1/money/everywhere"),
         ("GET", "/v1/money/clips"),
-        # §38: follower counts
+        # §40: Get paid
+        ("GET", "/v1/getpaid"),
+        ("GET", "/v1/getpaid/youtube"),
+        ("PATCH", "/v1/getpaid/steps"),
+        ("PUT", "/v1/getpaid/whop/key"),
+        ("POST", "/v1/getpaid/whop/connect"),
+        ("DELETE", "/v1/getpaid/connections/adsense"),
+        ("DELETE", "/v1/getpaid/connections/whop"),
+        # §43: follower counts
         ("GET", "/v1/followers"),
         # §19.6: Ask Clip Factory
         ("GET", "/v1/help"),
@@ -221,6 +234,41 @@ def test_every_contract_route_is_registered() -> None:
         # §34: delete jobs
         ("DELETE", "/v1/jobs/01J0000000000000000000000A"),
         ("POST", "/v1/jobs/delete"),
+        # §38: Content Rewards campaigns
+        ("GET", "/v1/contentrewards"),
+        ("POST", "/v1/contentrewards/connect"),
+        ("POST", "/v1/contentrewards/connect/finish"),
+        ("POST", "/v1/contentrewards/check"),
+        ("PATCH", "/v1/contentrewards/connection"),
+        ("DELETE", "/v1/contentrewards/connection"),
+        ("GET", "/v1/contentrewards/campaigns"),
+        ("POST", "/v1/contentrewards/campaigns"),
+        ("GET", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e"),
+        ("POST", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e/read"),
+        ("PATCH", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e"),
+        ("POST", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e/logo"),
+        ("POST", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e/logo/done"),
+        ("POST", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e/logo/link"),
+        ("DELETE", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e/logo"),
+        ("DELETE", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e"),
+        ("POST", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e/remake"),
+        ("GET", "/v1/contentrewards/fit"),
+        ("POST", "/v1/contentrewards/fit/captions"),
+        ("GET", "/v1/contentrewards/submissions"),
+        ("POST", "/v1/contentrewards/submissions/check"),
+        ("POST", "/v1/contentrewards/submissions/01J0000000000000000000000A/send"),
+        ("PATCH", "/v1/contentrewards/submissions/01J0000000000000000000000A"),
+        ("GET", "/v1/contentrewards/money"),
+        ("POST", "/v1/contentrewards/money/refresh"),
+        ("POST", "/v1/contentrewards/seen"),
+        # §41: the campaign finder
+        ("GET", "/v1/contentrewards/finder"),
+        ("PATCH", "/v1/contentrewards/finder"),
+        ("POST", "/v1/contentrewards/finder/check"),
+        ("PATCH", "/v1/contentrewards/finder/matches/200ea21b-be80-4db8-b552-8e32b148604e"),
+        ("POST", "/v1/contentrewards/finder/matches/200ea21b-be80-4db8-b552-8e32b148604e/add"),
+        ("POST", "/v1/contentrewards/finder/joined"),
+        ("POST", "/v1/contentrewards/finder/ask"),
     }
     for method, path in expected:
         assert any(r.method == method and r.pattern.match(path) for r in ROUTES), (method, path)

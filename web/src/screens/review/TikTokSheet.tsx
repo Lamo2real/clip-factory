@@ -2,7 +2,7 @@
 // card TikTok's choices live in its own row (§36), so this sheet only opens where there is no row: Upload while nothing
 // is set up yet but TikTok is connected, and Try again on a clip whose TikTok post needs a new privacy pick. Who can
 // see it is the app's own dropdown with no default, Everyone first; Comments, Duet and Stitch start off and stay
-// visible; Commercial content needs Your brand or Branded content (branded cannot be "Only me").
+// visible; Commercial content needs Your brand or Branded content (branded is only Everyone or Friends).
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../api/index.ts";
@@ -11,9 +11,10 @@ import type { Clip, TikTokCreator, TikTokPostOptions } from "../../api/types.ts"
 import { Icon } from "../../components/Icon.tsx";
 import { trapTab } from "../../components/Sheet.tsx";
 import { Button, Toggle } from "../../components/ui.tsx";
+import { TikTokCommercial, TikTokLegal } from "./TikTokCommercial.tsx";
 import { TikTokPrivacy } from "./TikTokPrivacy.tsx";
 import { useAction, type ActionHandle } from "../../lib/motion.ts";
-import { NO_TIKTOK_CHOICES, sheetReady, tiktokOptions, tooLongForTikTok, type TikTokChoices } from "../../lib/tiktokChoices.ts";
+import { brandedBlocked, NO_TIKTOK_CHOICES, PICK_WHOSE, sheetReady, tiktokOptions, tooLongForTikTok, type TikTokChoices } from "../../lib/tiktokChoices.ts";
 
 export { onlyPrivateAllowed, PRIVACY_LABEL, privacyChoices, sheetReady, tooLongForTikTok } from "../../lib/tiktokChoices.ts";
 
@@ -34,8 +35,8 @@ export function TikTokSheet({
   onUpload: (options: TikTokPostOptions) => void;
   onClose: () => void;
   busy: boolean;
-  /** The big button's word: Upload, or Try again on a clip that did not go up. */
-  action?: "Upload" | "Try again";
+  /** The big button's word: Upload, Try again on a clip that did not go up, or Post now for a place set up since. */
+  action?: "Upload" | "Try again" | "Post now";
   /**
    * The big button's motion (§20.11 (a)): Upload posts to TikTok, so the plane flies; Try again turns. Pass a handle
    * to shake it when posting fails (the owner's own error path); without one the sheet uses its own.
@@ -44,7 +45,7 @@ export function TikTokSheet({
 }) {
   const id = useId();
   const dialog = useRef<HTMLDivElement>(null);
-  const ownAct = useAction(action === "Upload" ? "send" : "retry");
+  const ownAct = useAction(action === "Try again" ? "retry" : "send");
   const [creator, setCreator] = useState<TikTokCreator | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [choices, setChoices] = useState<TikTokChoices>(NO_TIKTOK_CHOICES);
@@ -56,6 +57,7 @@ export function TikTokSheet({
   const setStitch = (v: boolean) => set({ stitch: v });
   const setCommercial = (v: boolean) => set({ commercial: v });
   const setYourBrand = (v: boolean) => set({ yourBrand: v });
+  const setBranded = (v: boolean) => set({ branded: v });
 
   // Fetched every time the sheet opens: TikTok's rules say the creator's current options must be shown.
   const [asked, setAsked] = useState(0);
@@ -99,10 +101,13 @@ export function TikTokSheet({
 
   const ready = sheetReady({ privacy, commercial, yourBrand: commercial && yourBrand, branded: commercial && branded });
   const tooLong = !!creator && tooLongForTikTok(clip.durationSec, creator.maxDurationSec);
-
-  function setBrandedOn(on: boolean) {
-    set(on && privacy === "SELF_ONLY" ? { branded: on, privacy: "" } : { branded: on });
-  }
+  // Commercial content is on but says nothing about whose: TikTok's own words, as the hover text and the line under it.
+  const noWhose = commercial && !yourBrand && !branded;
+  const why = !privacy
+    ? `Pick who can see it to turn on ${action}.`
+    : noWhose
+      ? `${PICK_WHOSE} Pick Your brand or Branded content to turn on ${action}.`
+      : (brandedBlocked(privacy) ?? "");
 
   // Drawn on document.body: inside the glass review card a fixed backdrop would cover only the card (§17.8).
   return createPortal(
@@ -159,38 +164,9 @@ export function TikTokSheet({
               <Toggle label="Duet" checked={duet && !creator.duetDisabled} disabled={creator.duetDisabled} onChange={setDuet} description={creator.duetDisabled ? "Turned off in your TikTok settings." : undefined} />
               <Toggle label="Stitch" checked={stitch && !creator.stitchDisabled} disabled={creator.stitchDisabled} onChange={setStitch} description={creator.stitchDisabled ? "Turned off in your TikTok settings." : undefined} />
               <Toggle label="Commercial content" description="Turn on if this clip promotes a brand, a product or yourself." checked={commercial} onChange={setCommercial} />
-              {commercial ? (
-                <div className="tt-sheet__brand" role="group" aria-label="Commercial content">
-                  <label className={`check-chip${yourBrand ? " is-on" : ""}`}>
-                    <input type="checkbox" checked={yourBrand} onChange={(e) => setYourBrand(e.target.checked)} />
-                    <span>Your brand</span>
-                    <span className="tt-sheet__tag">Promotional content</span>
-                  </label>
-                  <label className={`check-chip${branded ? " is-on" : ""}`}>
-                    <input type="checkbox" checked={branded} onChange={(e) => setBrandedOn(e.target.checked)} />
-                    <span>Branded content</span>
-                    <span className="tt-sheet__tag">Paid partnership</span>
-                  </label>
-                  {!yourBrand && !branded ? <p className="field__hint">Pick Your brand, Branded content, or both.</p> : null}
-                </div>
-              ) : null}
+              {commercial ? <TikTokCommercial privacy={privacy} yourBrand={yourBrand} branded={branded} onYourBrand={setYourBrand} onBranded={setBranded} /> : null}
             </div>
-            <p className="tt-sheet__legal">
-              By posting, you agree to TikTok&apos;s{" "}
-              <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener noreferrer">
-                Music Usage Confirmation
-              </a>
-              {commercial && branded ? (
-                <>
-                  {" "}
-                  and{" "}
-                  <a href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank" rel="noopener noreferrer">
-                    Branded Content Policy
-                  </a>
-                </>
-              ) : null}
-              .
-            </p>
+            <TikTokLegal className="tt-sheet__legal" branded={commercial && branded} />
             {tooLong ? (
               <div className="tt-sheet__stuck">
                 <p className="callout callout--bad" role="alert">
@@ -211,17 +187,18 @@ export function TikTokSheet({
           <Button
             variant="primary"
             size="lg"
-            icon={action === "Upload" ? "upload" : "retry"}
+            icon={action === "Try again" ? "retry" : "upload"}
             act={act ?? ownAct}
             loading={busy}
             disabled={!ready || !creator || tooLong}
+            title={creator && noWhose ? PICK_WHOSE : undefined}
             onClick={() => onUpload(tiktokOptions(choices, creator!))}
           >
             {action}
           </Button>
         </footer>
         {!ready && creator && !tooLong ? (
-          <p className="tt-sheet__why">{privacy ? `Pick Your brand or Branded content to turn on ${action}.` : `Pick who can see it to turn on ${action}.`}</p>
+          <p className="tt-sheet__why">{why}</p>
         ) : null}
       </div>
     </div>,

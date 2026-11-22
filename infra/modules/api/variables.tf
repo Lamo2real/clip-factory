@@ -83,6 +83,41 @@ variable "money_function_arn" {
   }
 }
 
+# ---------- Content Rewards campaigns (docs/CONTRACTS.md §38.16) ----------
+variable "campaigns_function_arn" {
+  type        = string
+  default     = ""
+  description = "Unqualified ARN of cf-prod-campaigns (CAMPAIGNS_FUNCTION_ARN): rules reads, logo links, brand pictures. Empty: no grant."
+  validation {
+    condition     = var.campaigns_function_arn == "" || can(regex("^arn:aws[a-z-]*:lambda:[a-z0-9-]+:[0-9]{12}:function:[A-Za-z0-9_-]+$", var.campaigns_function_arn))
+    error_message = "campaigns_function_arn must be empty or an unqualified Lambda function ARN."
+  }
+}
+
+variable "content_rewards_enabled" {
+  type        = bool
+  default     = false
+  description = "§38.16: CONTENT_REWARDS on/off. Off until every builder's part of §38.19 has merged."
+}
+
+variable "cr_remake_enabled" {
+  type        = bool
+  default     = false
+  description = "§39.3: CR_REMAKE on/off, the campaign copy of a clip. Off until G, H and I of §39.4 have merged."
+}
+
+variable "cr_finder_enabled" {
+  type        = bool
+  default     = false
+  description = "§41.6: CR_FINDER on/off, the campaign finder's routes. Off until every builder's part of §41.6 has merged."
+}
+
+variable "whop_connect_enabled" {
+  type        = bool
+  default     = false
+  description = "§40.6: WHOP_CONNECT on/off, \"Connect Whop\" on the Content Rewards Get paid page. Off until K, L and M of §40.8 have merged; while off the Whop routes answer 503 \"Coming soon.\"."
+}
+
 # ---------- Set up posting (docs/CONTRACTS.md §17.4, §17.9) ----------
 variable "hooks_url" {
   type        = string
@@ -240,4 +275,34 @@ variable "permissions_boundary_arn" {
   type        = string
   default     = ""
   description = "Permissions boundary for this module's IAM roles (infra/bootstrap's cf-prod-role-boundary). Empty: none."
+}
+
+# ---------- Lamo Stories (docs/CONTRACTS.md §45.5, §45.13.3, §45.15): its own Lambda behind new routes ----------
+# Off (the default): no Lamo Stories route, integration, permission or route throttle. cf-prod-api's function, role
+# and environment never use these. A plain switch, because the invoke ARN is only known once the function exists.
+variable "stories_routes_enabled" {
+  type        = bool
+  default     = false
+  description = "Add Lamo Stories' five routes (ANY and public OPTIONS for /v1/workspaces and /v1/workspaces/{proxy+}, and the public GET /v1/stories-oauth/{platform}/callback), integrated with cf-prod-stories-api."
+}
+
+variable "stories_api_function_name" {
+  type        = string
+  default     = ""
+  description = "cf-prod-stories-api (modules/stories_api): API Gateway may invoke it for the Lamo Stories routes."
+  validation {
+    condition     = var.stories_api_function_name == "" || endswith(var.stories_api_function_name, "-stories-api")
+    error_message = "stories_api_function_name must be empty or Lamo Stories' own <name>-stories-api (never cf-prod-api)."
+  }
+}
+
+variable "stories_api_invoke_arn" {
+  type        = string
+  default     = ""
+  description = "cf-prod-stories-api's invoke ARN: ANY /v1/workspaces, ANY /v1/workspaces/{proxy+}, their public OPTIONS and GET /v1/stories-oauth/{platform}/callback are integrated with it."
+  validation {
+    condition = ((var.stories_api_invoke_arn != "" && var.stories_api_function_name != "") == var.stories_routes_enabled &&
+    (var.stories_api_invoke_arn == "" || strcontains(var.stories_api_invoke_arn, "-stories-api/invocations")))
+    error_message = "With stories_routes_enabled, stories_api_function_name and stories_api_invoke_arn are both set (and only then), and the invoke ARN must be cf-prod-stories-api's."
+  }
 }

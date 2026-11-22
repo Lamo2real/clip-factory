@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
-# Deploy drain (docs/CONTRACTS.md §30.7): before terraform apply replaces the agent image or updates the AgentCore
-# runtime, wait until no job is being made, so a deploy never stops one partway. Reads only: one projection-only Scan
-# of the table every POLL_SECONDS. Prints counts, never job ids or titles (the Actions logs are public).
+# Deploy drain (docs/CONTRACTS.md §30.7, §45.11.1, §45.15): before terraform apply replaces an agent image or updates
+# an AgentCore runtime, wait until nothing that runtime runs is being made, so a deploy never stops one partway. Reads
+# only: one projection-only Scan of the table every POLL_SECONDS. Prints counts, never ids or titles (the Actions logs
+# are public).
 #
 #   bash scripts/wait-for-jobs.sh <plan.json>      (terraform show -json prod.tfplan)
 #
-# - Nothing under module.agent changes in the plan: exits 0 at once.
-# - Otherwise counts jobs that are queued or running with a heartbeat newer than STALE_SECONDS (a job whose container
-#   is already gone is not waited for) and waits while there are any, at most WAIT_MAX_SECONDS. Then it goes on
-#   anyway (exit 0): a job still running is stopped by the update, and the job flow resumes it on the new version.
-# - A Scan that fails three times in a row: goes on without waiting (exit 0).
+# Two runtimes, each drained only when it changes:
+# - Clip Factory's agent (module.agent.): clip jobs (JOB#) that are queued or running, exactly as before Lamo Stories.
+# - Lamo Stories' agent (module.stories_agent.): in a workspace partition (pk contains #WS#), production jobs (PJOB#)
+#   queued or running, AI tasks (TASK#) running and chat answers (MSG#) streaming. A story job stopped by the update is
+#   failed by the API's fence and "Try again" resumes it from its first unfinished step.
+# - Neither changes in the plan: exits 0 at once.
+# Only items with a heartbeat newer than STALE_SECONDS count (one whose container is already gone is not waited for),
+# and the drain waits at most WAIT_MAX_SECONDS. Then it goes on anyway (exit 0): a job still running is stopped by the
+# update and picks up where it stopped. A Scan that fails three times in a row: goes on without waiting (exit 0).
 # Env: TABLE (default cf-prod-data), WAIT_MAX_SECONDS (1500), POLL_SECONDS (30), STALE_SECONDS (180), RETRY_SECONDS
 # (5), NOW (epoch seconds, tests only).
 set -euo pipefail
@@ -21,15 +26,42 @@ poll="${POLL_SECONDS:-30}"
 stale="${STALE_SECONDS:-180}"
 retry_wait="${RETRY_SECONDS:-5}"
 
-changes="$(jq '[.resource_changes[]? | select(.address | startswith("module.agent."))
-  | select(.change.actions != ["no-op"] and .change.actions != ["read"])] | length' "$plan")"
-if [ "$changes" -eq 0 ]; then
-  echo "Drain: the agent does not change in this deploy; not waiting for jobs."
+changes_under() { # changes_under <address prefix>: how many resources under it the plan creates, updates or deletes
+  jq --arg p "$1" '[.resource_changes[]? | select(.address | startswith($p))
+    | select(.change.actions != ["no-op"] and .change.actions != ["read"])] | length' "$plan"
+}
+clip_changes="$(changes_under "module.agent.")"
+story_changes="$(changes_under "module.stories_agent.")"
+if [ "$clip_changes" -eq 0 ] && [ "$story_changes" -eq 0 ]; then
+  echo "Drain: neither Clip Factory's agent nor Lamo Stories' agent changes in this deploy; not waiting for jobs."
   exit 0
+fi
+
+# Clip Factory's filter is the one it has always used; Lamo Stories' never matches a Clip Factory item (its sort keys
+# start PJOB#, TASK# or MSG# and live only in USER#{userId}#WS#{workspaceId} partitions, §45.3).
+clip_filter="begins_with(sk, :job) AND #s IN (:q, :r) AND heartbeatAt > :since"
+story_filter="contains(pk, :ws) AND heartbeatAt > :since AND ((begins_with(sk, :pjob) AND #s IN (:q, :r)) OR (begins_with(sk, :task) AND #s = :r) OR (begins_with(sk, :msg) AND #s = :st))"
+if [ "$clip_changes" -gt 0 ] && [ "$story_changes" -gt 0 ]; then
+  filter="(${clip_filter}) OR (${story_filter})"
+elif [ "$clip_changes" -gt 0 ]; then
+  filter="$clip_filter"
+else
+  filter="$story_filter"
 fi
 
 iso() { # epoch seconds -> 2026-11-19T16:08:00.000Z (GNU date on the runner; BSD date for local runs)
   date -u -d "@$1" +%Y-%m-%dT%H:%M:%S.000Z 2>/dev/null || date -u -r "$1" +%Y-%m-%dT%H:%M:%S.000Z
+}
+
+values_json() { # the placeholders the filter uses, and no other (DynamoDB refuses unused ones)
+  local since="$1" head=""
+  if [ "$clip_changes" -gt 0 ]; then
+    head='":job":{"S":"JOB#"},'
+  fi
+  if [ "$story_changes" -gt 0 ]; then
+    head="${head}"'":ws":{"S":"#WS#"},":pjob":{"S":"PJOB#"},":task":{"S":"TASK#"},":msg":{"S":"MSG#"},":st":{"S":"streaming"},'
+  fi
+  echo "{${head}\":q\":{\"S\":\"queued\"},\":r\":{\"S\":\"running\"},\":since\":{\"S\":\"${since}\"}}"
 }
 
 scan_once() {
@@ -38,9 +70,9 @@ scan_once() {
   since="$(iso $((now - stale)))"
   aws dynamodb scan --table-name "$table" \
     --projection-expression "sk" \
-    --filter-expression "begins_with(sk, :job) AND #s IN (:q, :r) AND heartbeatAt > :since" \
+    --filter-expression "$filter" \
     --expression-attribute-names '{"#s":"status"}' \
-    --expression-attribute-values "{\":job\":{\"S\":\"JOB#\"},\":q\":{\"S\":\"queued\"},\":r\":{\"S\":\"running\"},\":since\":{\"S\":\"${since}\"}}" \
+    --expression-attribute-values "$(values_json "$since")" \
     --output json 2>/dev/null | jq -e '[.Items[]?] | length'
 }
 
@@ -58,7 +90,12 @@ count_active() {
   echo "unknown"
 }
 
-echo "Drain: the agent changes in this deploy (${changes} resource(s)); waiting for running jobs to finish."
+if [ "$clip_changes" -gt 0 ]; then
+  echo "Drain: the agent changes in this deploy (${clip_changes} resource(s)); waiting for running jobs to finish."
+fi
+if [ "$story_changes" -gt 0 ]; then
+  echo "Drain: Lamo Stories' agent changes in this deploy (${story_changes} resource(s)); waiting for its running jobs, tasks and chat answers to finish."
+fi
 waited=0
 while true; do
   active="$(count_active)"

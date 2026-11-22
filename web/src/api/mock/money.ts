@@ -41,9 +41,9 @@ export interface MockMoneyControls {
 const KEY = "cf-mock-money";
 const ORDER: Platform[] = ["youtube", "tiktok", "instagram", "facebook", "x"];
 const YT_SOURCE = "https://support.google.com/youtube/answer/72851";
-const TT_SOURCE = "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program";
+const TT_SOURCE = "https://www.tiktok.com/creator-academy/en/article/creator-rewards-program";
 const IG_SOURCE = "https://creators.instagram.com/earn-money";
-const X_SOURCE = "https://help.x.com/en/using-x/creator-revenue-sharing";
+const X_SOURCE = "https://help.x.com/en/using-x/original-content-rewards";
 const MONETARY = "https://www.googleapis.com/auth/yt-analytics-monetary.readonly";
 const COUNTRIES = [
   { code: "US", name: "United States" },
@@ -155,10 +155,10 @@ function youtubeGoals(subs: number, hours: number, shorts: number): { goals: Mon
 function base(platform: Platform, state: MoneyState, line: string): MoneyCard {
   const where: Record<Platform, [string, string, string, string | undefined]> = {
     youtube: ["YouTube Partner Program", "YouTube Studio › Earn", "AdSense for YouTube › Payments", "https://adsense.google.com/"],
-    tiktok: ["Creator Rewards", "Creator tools › Creator Rewards", "Profile › Balance", undefined],
+    tiktok: ["Creator Rewards", "TikTok Studio › Monetization", "Profile › Balance", undefined],
     instagram: ["Instagram Gifts", "Professional dashboard › Monetization", "Professional dashboard › Payouts", undefined],
     facebook: ["Facebook content monetization", "Meta Business Suite › Monetization", "Meta Business Suite › Payouts", "https://business.facebook.com/latest/monetization"],
-    x: ["Creator Revenue Sharing", "X › Monetization", "X › Monetization (paid through Stripe)", "https://x.com/settings/monetization"],
+    x: ["Original Content Rewards", "X › Creator Studio", "X › Creator Studio (paid through Stripe)", "https://x.com/i/jf/creators/studio"],
   };
   const [programme, status, paid, paidUrl] = where[platform];
   return {
@@ -266,7 +266,7 @@ function youtubeCard(scenario: MoneyScenario): MoneyCard {
 function tiktokCard(scenario: MoneyScenario): MoneyCard {
   const extras = ["Videos 1 min or longer: 7 of your last 20.", "Deleted or private videos aren't counted.", "Don't switch to a Business account. Creator Rewards won't pay it."];
   if (scenario === "unsupported" || scenario === "earning" || scenario === "facebook_verified") {
-    const c = base("tiktok", "not_available", "TikTok doesn't tell apps if you're getting paid. Check Creator tools › Creator Rewards.");
+    const c = base("tiktok", "not_available", "TikTok doesn't tell apps if you're getting paid. Check TikTok Studio › Monetization.");
     c.goals = [
       goal("followers", "followers", 10_500, 10_000, TT_SOURCE),
       goal("views30", "views in 30 days", 64_200, 100_000, TT_SOURCE, { approx: true, windowDays: 30, help: "Our count from your public videos. TikTok only counts views it calls real." }),
@@ -314,7 +314,7 @@ function facebookCard(scenario: MoneyScenario): MoneyCard {
 }
 
 function xCard(): MoneyCard {
-  const c = base("x", "not_available", "X doesn't tell apps if you're getting paid. Check X › Monetization.");
+  const c = base("x", "not_available", "X doesn't tell apps if you're getting paid. Check X › Creator Studio.");
   c.goals = [
     goal("premium", "Premium", 1, 1, X_SOURCE, { kind: "tick", note: "X's rule, from X's help page" }),
     goal("verifiedFollowers", "verified followers", 120, 500, X_SOURCE, { note: "X's rule, from X's help page" }),

@@ -162,7 +162,8 @@ owner reads it from the console when registering Meta webhooks.
 * `GET /oauth/{platform}/callback`: the real OAuth callback of §17.5 (`302` to
   `{APP_URL}/settings/posting/setup/{platform}?result={code}`; query never logged). The phase-1 `coming_soon` redirect is gone.
 * IAM: `dynamodb:PutItem` on the table; `ssm:GetParameter` on
-  `arn:aws:ssm:{region}:{acct}:parameter/cf-prod/hooks/verify-token` (the `aws/ssm` key needs no IAM statement).
+  `arn:aws:ssm:{region}:{acct}:parameter/cf-prod/hooks/verify-token` (the `aws/ssm` key needs no IAM statement). The
+  OAuth callback's statements are §17.9 (with the release of waiting posts and the clip-flow start, §17.6).
 
 ### 14.4 Durable function `cf-prod-job-flow` (Terraform module `flows`)
 
@@ -244,22 +245,33 @@ Replaces the publish queue, DLQ, publisher, Scheduler group/role and perf-check.
     fall back to a strongly consistent read of every page of the owner's posts. Owner-wide reads (`Store.query_all`:
     weeks, stats, `/v1/me` counts, YouTube forget) follow every page with no silent item cap. Then start the flow; on success set
     `publishState: "started"` (+ `flowExecutionArn`). Response `{clip, posts}`.
-  * `confirmed`/`publishing` with `publishState: "pending"` → start the flow again at once (same name and payload, so it
-    is idempotent), 200. With `publishState: "started"` or status `posted` → 200 no-op with the current `{clip, posts}`.
+  * `confirmed`/`publishing`/`posted` without `platforms` and with `publishState: "pending"` (the public
+    `startPending`) → start the flow again at once (same name and payload, so it is idempotent), 200. Without
+    `platforms` and with `publishState: "started"` (or a `posted` clip) → 200 no-op with the current `{clip, posts}`.
   * `failed` (clip-flow ended with every queued post failed) → "Try again": `flowRun + 1`, failed posts back to
-    `queued`, status `confirmed`, `publishState: "pending"`, start `clip-{clipId}-{flowRun}`, 200.
+    `queued` (tagged with the new run, `flowRun` on the post), status `confirmed`, `publishState: "pending"`, start
+    `clip-{clipId}-{flowRun}`, 200.
   * §33: with `platforms`, a `review` clip gets posts for exactly those places (each must be connected) and an
-    internal-but-public `uploadTo`; on a `posted` or `failed` clip `platforms` names the failed posts to try again
-    (a `posted` clip stays `posted`). See §33.3.
+    internal-but-public `uploadTo`; on a `posted`, `failed` or `confirmed` clip `platforms` names the failed posts to try
+    again and the `pending_integration` posts to send now that their place is connected (Post now, §33.6): both go
+    to a new run (`release.restart`, §17.6 "Release"; a `posted` clip stays `posted`). A named waiting place that is not
+    connected is a 400 "{Platform} is not set up yet. Turn it off, then tap Upload."; a waiting TikTok post needs the
+    `tiktok` choices (400 "Pick who can see it on TikTok."). Naming nothing to send finishes a pending start (as above)
+    or changes nothing. See §33.3, §33.6.
   * `declined` → 409 `conflict`.
 * **Start:** `lambda.invoke(FunctionName=CLIP_FLOW_ARN /* alias ...:function:cf-prod-clip-flow:live */,
   InvocationType="Event", DurableExecutionName=f"clip-{clipId}-{flowRun}", Payload=json.dumps({"clipId", "userId",
   "run": flowRun}, sort_keys=True))`; `DurableExecutionAlreadyStartedException` = no-op. Names stay ≤ 64 chars of
   `[A-Za-z0-9-_]` (ULIDs qualify).
 * **Steps** (names are contract; every step is idempotent because steps are at-least-once):
-  1. `ensure-posts`: `posts.create_for_clip` (no-op when `postsCreated`; the same function the API uses), then if any
-     post is `queued` set the clip `publishing`. Returns `[{postId, platform, status}]`.
-  2. `publish-{platform}` for each `queued` post only (`pending_integration` posts are skipped, no step): adapter
+  1. `ensure-posts`: `posts.create_for_clip` (no-op when `postsCreated`; the same function the API uses; new posts
+     carry `flowRun` = the clip's run), then if any post is `queued` set the clip `publishing`. Returns
+     `[{postId, platform, status}]`.
+  2. `publish-{platform}` for each `queued` post only (`pending_integration` posts are skipped, no step; a connect
+     releases them into a new flow run, §17.6 "Release"). A run sends only its own posts: a `queued` post whose
+     `flowRun` is another run's (a later Try again, Post now or release gave it to a newer run, or an older run still
+     has it) is left alone (the step answers `other_run`); a post without `flowRun` (older items) goes with any run:
+     adapter
      `publish(post, idempotency_key=postId)`; retry 3 attempts, exponential backoff, `retryable_error_types =
      [RetryablePublishError]`, `StepSemantics.AT_LEAST_ONCE_PER_RETRY` (an adapter whose platform has no idempotency
      key uses `AT_MOST_ONCE_PER_RETRY`). Post update conditional on `status = queued`: `posted`, `url`, `postedAt`,

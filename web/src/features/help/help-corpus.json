@@ -1,8 +1,9 @@
 {
-  "version": "62d3cc07223c",
+  "version": "fbd8a23d1132",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
+    "src/components/CrPostLine.tsx",
     "src/components/Dropdown.tsx",
     "src/components/GetApp.tsx",
     "src/components/Glide.tsx",
@@ -15,8 +16,12 @@
     "src/features/help/helpKb.json",
     "src/lib/router.ts",
     "src/lib/settingsTree.ts",
+    "src/screens/campaigns/CampaignPaste.tsx",
+    "src/screens/campaigns/bits.tsx",
+    "src/screens/clip/ClipFit.tsx",
     "src/screens/clip/ClipFollowers.tsx",
     "src/screens/clip/ClipPerformance.tsx",
+    "src/screens/home/CampaignsRow.tsx",
     "src/screens/home/FollowersTile.tsx",
     "src/screens/home/Home.tsx",
     "src/screens/home/MoneyTile.tsx",
@@ -31,9 +36,14 @@
     "src/screens/jobs/mergeJobs.ts",
     "src/screens/jobs/pendingStops.ts",
     "src/screens/library/Library.tsx",
+    "src/screens/library/PostYourself.tsx",
     "src/screens/library/WeekView.tsx",
+    "src/screens/review/CampaignFit.tsx",
+    "src/screens/review/CampaignStrip.tsx",
+    "src/screens/review/FitSuggestion.tsx",
     "src/screens/review/PlaceRows.tsx",
     "src/screens/review/Review.tsx",
+    "src/screens/review/TikTokCommercial.tsx",
     "src/screens/review/TikTokPrivacy.tsx",
     "src/screens/review/TikTokSheet.tsx",
     "src/screens/review/UploadTo.tsx",
@@ -52,7 +62,11 @@
     "/library",
     "/library?view=week",
     "/money",
+    "/campaigns",
+    "/campaigns/find",
+    "/campaigns/{campaignId}",
     "/clips/{clipId}",
+    "/settings/posting/setup/contentrewards",
     "/settings",
     "/settings/clip-making/clips",
     "/settings/clip-making/skills",
@@ -60,6 +74,7 @@
     "/settings/clip-making/streamers",
     "/settings/clip-making/youtube",
     "/settings/posting/setup",
+    "/settings/posting/getpaid",
     "/settings/posting/where",
     "/settings/posting/my-settings",
     "/settings/posting/money",
@@ -105,7 +120,11 @@
     "download": "get the app",
     "dark": "reduce motion",
     "calm": "reduce motion",
-    "calmer": "reduce motion"
+    "calmer": "reduce motion",
+    "whop": "content rewards",
+    "clipping campaign": "content rewards",
+    "brand deal": "content rewards",
+    "cpm": "content rewards"
   },
   "stopwords": [
     "a",
@@ -232,7 +251,10 @@
         "stream",
         "vod",
         "new clips",
-        "start"
+        "start",
+        "make my clips",
+        "make clips for me",
+        "how do i make clips"
       ],
       "answer": "Copy the link to a stream or video, paste it on Home and tap **Make clips**. Clip Factory finds the best moments for you.",
       "steps": [
@@ -687,7 +709,10 @@
         "edit caption",
         "change the caption",
         "tiktok caption",
-        "instagram caption"
+        "instagram caption",
+        "fix my caption",
+        "add hashtags",
+        "tags"
       ],
       "answer": "Each clip has its own caption for every place it goes. Change them on the clip in **Review** before you tap **Upload**. They save by themselves.",
       "steps": [
@@ -867,10 +892,10 @@
         "each clip earned",
         "earnings for each video"
       ],
-      "answer": "Clip Factory only shows money an app reports. It never guesses from views and you never type money in. Tap **Money** in the menu. The big number at the top is what the apps reported for your last 30 days. The list under it shows each posted clip with what YouTube says it earned, the biggest first. TikTok, Instagram and X don't share money with apps.",
+      "answer": "Clip Factory only shows money a place reports. It never guesses from views and you never type money in. Tap **Money** in the menu. **All your money** at the top adds up your last 30 days from every place, Content Rewards too. **Monthly MRR** under it is the apps only. The list further down shows what YouTube says each posted clip earned. TikTok, Instagram and X don't share money with apps.",
       "steps": [
         "Tap **Money** in the menu.",
-        "Read the big number at the top. Each amount says whose estimate it is.",
+        "Read **All your money** at the top. Each amount says whose numbers it is.",
         "Scroll down to see what each clip earned."
       ],
       "actions": [
@@ -879,7 +904,7 @@
           "label": "Open Money",
           "to": "/money",
           "highlight": [
-            "money-dash-monthly"
+            "money-dash"
           ]
         },
         {
@@ -914,7 +939,8 @@
       "steps": [
         "Tap **Money** in the menu.",
         "Tap app icons in the bar at the bottom right to pick apps. **All** shows every app.",
-        "Tap **7 days**, **30 days**, **90 days** or **Year** to change the chart and the clip list."
+        "Tap **7 days**, **30 days**, **90 days** or **Year** to change the chart and the clip list.",
+        "Content Rewards money is not in MRR. It is in **All your money** at the top."
       ],
       "actions": [
         {
@@ -1058,6 +1084,80 @@
           "to": "/settings/posting/money#money-payouts",
           "highlight": [
             "money-payouts"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "money-everywhere",
+      "kind": "guide",
+      "route": "/money",
+      "where": "Money",
+      "title": "How much did I earn everywhere?",
+      "keywords": [
+        "all your money",
+        "earn everywhere",
+        "earn on all platforms",
+        "money from every platform",
+        "total",
+        "total money",
+        "all my money",
+        "money in one place",
+        "track my earnings",
+        "including content rewards",
+        "everything i earned"
+      ],
+      "answer": "Tap **Money**. The first card, **All your money**, adds up the last 30 days from YouTube, Content Rewards and every other place that tells apps what you earn. **Total** is the biggest number. Each amount says whose numbers it is. TikTok, Instagram and X say **Not available**, never $0. Dollars and euros are never added together.",
+      "steps": [
+        "Tap **Money** in the menu.",
+        "Look at **All your money**, the first card.",
+        "Read **Total** and the places in it.",
+        "Under Content Rewards, read **Right now** and **Earned so far**."
+      ],
+      "actions": [
+        {
+          "id": "money-everywhere:money",
+          "label": "Open Money",
+          "to": "/money",
+          "highlight": [
+            "money-dash"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "money-not-available",
+      "kind": "guide",
+      "route": "/money",
+      "where": "Money",
+      "title": "Why does it say Not available from TikTok?",
+      "keywords": [
+        "not available",
+        "not available from tiktok",
+        "not available from instagram",
+        "not available from x",
+        "no tiktok money",
+        "instagram money",
+        "x money",
+        "why no number",
+        "facebook money coming soon",
+        "look in"
+      ],
+      "answer": "TikTok, Instagram and X don't tell apps what you earn. So Clip Factory never guesses and never shows $0: it says **Not available from TikTok** and where to look. TikTok: **Profile**, then **Balance**. Instagram: **Professional dashboard**, then **Payouts**. X: **Monetization**. Facebook says **Coming soon** for now.",
+      "steps": [
+        "Tap **Money** in the menu.",
+        "Find the place in **All your money**.",
+        "Read its **Look in** line.",
+        "Open that app and look there.",
+        "Money that went to your bank? Content Rewards doesn't tell apps. Look on Whop, **Balances**."
+      ],
+      "actions": [
+        {
+          "id": "money-not-available:money",
+          "label": "Open Money",
+          "to": "/money",
+          "highlight": [
+            "money-dash"
           ]
         }
       ]
@@ -2859,6 +2959,671 @@
       ]
     },
     {
+      "id": "cr-setup",
+      "kind": "guide",
+      "route": "/settings/posting/setup/contentrewards",
+      "where": "Settings › Posting › Set up posting › Content Rewards",
+      "title": "Connect Content Rewards",
+      "keywords": [
+        "content rewards",
+        "connect content rewards",
+        "set up content rewards",
+        "clipping",
+        "campaign money",
+        "sign in content rewards",
+        "i have an account",
+        "i added them",
+        "connect my content rewards account",
+        "how to connect content rewards"
+      ],
+      "answer": "Content Rewards pays you for clips you make for brands. Connect it once, in 3 steps, in this order. 1: make a Content Rewards account, or tap **I have an account**. 2: add YouTube and your other accounts inside Content Rewards, then tap **I added them**. 3: on your Mac, tap **Connect Content Rewards** and allow it. Already set up there? Tap **Yes** at the top, then do step 3.",
+      "steps": [
+        "Tap **Settings**, then **Posting**, then **Set up posting**, then **Content Rewards**.",
+        "Already set up there? Tap **Yes**.",
+        "Step 1: tap **Open Content Rewards** and make your account. Then tap **I have an account**.",
+        "Step 2: tap **Open Content Rewards settings** and add YouTube. Then tap **I added them**.",
+        "Step 3: on your Mac, tap **Connect Content Rewards** and allow it."
+      ],
+      "actions": [
+        {
+          "id": "cr-setup:page",
+          "label": "Set up Content Rewards",
+          "to": "/settings/posting/setup/contentrewards",
+          "highlight": [
+            "cr-setup-card",
+            "cr-connect"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-cant-connect",
+      "kind": "guide",
+      "route": "/settings/posting/setup/contentrewards",
+      "where": "Settings › Posting › Set up posting › Content Rewards",
+      "title": "Content Rewards says my account can't connect apps",
+      "keywords": [
+        "can't connect apps",
+        "not allowed",
+        "content rewards said no",
+        "pilot",
+        "email content rewards"
+      ],
+      "answer": "Content Rewards turns this on by email. On the Content Rewards page in Clip Factory, open **Content Rewards said no?**, tap **Open email** and send it from the email you sign in with. Until they say yes, you send each clip yourself and I remind you.",
+      "steps": [
+        "Open the Content Rewards page in Set up posting.",
+        "Open **Content Rewards said no?**.",
+        "Tap **Open email** and send it.",
+        "Tap **I sent it**.",
+        "When they say yes, tap **Connect Content Rewards** again."
+      ],
+      "actions": [
+        {
+          "id": "cr-cant-connect:page",
+          "label": "Open the email card",
+          "to": "/settings/posting/setup/contentrewards",
+          "highlight": [
+            "cr-pilot-email"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-add-campaign",
+      "kind": "guide",
+      "route": "/campaigns",
+      "where": "Your campaigns",
+      "title": "Add a Content Rewards campaign",
+      "keywords": [
+        "add campaign",
+        "paste campaign link",
+        "campaign link",
+        "join campaign",
+        "new campaign",
+        "content rewards link"
+      ],
+      "answer": "Join the campaign on Content Rewards, tap its share icon, then **Copy campaign link**. In Clip Factory tap **Paste**, then **Add campaign**. I read the pay and the rules, and check by myself if you're in.",
+      "steps": [
+        "On Content Rewards, tap **Join Campaign** (or **Apply**).",
+        "Tap the share icon, then **Copy campaign link**.",
+        "Open **Your campaigns** in Clip Factory.",
+        "Tap **Paste**, then **Add campaign**."
+      ],
+      "actions": [
+        {
+          "id": "cr-add-campaign:open",
+          "label": "Open your campaigns",
+          "to": "/campaigns",
+          "highlight": [
+            "cr-campaign-paste"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-am-i-in",
+      "kind": "guide",
+      "route": "/campaigns",
+      "where": "Your campaigns",
+      "title": "Am I in the campaign?",
+      "keywords": [
+        "am i in",
+        "am i in the campaign",
+        "campaign",
+        "joined the campaign",
+        "in a campaign",
+        "accepted",
+        "pending review",
+        "not eligible",
+        "submit clip",
+        "member of the campaign",
+        "confirmed member"
+      ],
+      "answer": "Clip Factory checks by itself and says **You're in!** on the campaign. To look yourself, open the campaign on Content Rewards: **Submit clip** means you're in, **Pending review** means you wait, **Not eligible** means the brand said no.",
+      "steps": [
+        "Open **Your campaigns**.",
+        "Tap the campaign.",
+        "Read the chip at the top: You're in, Waiting for the brand, or Not joined yet.",
+        "Tap **Check now** to look again."
+      ],
+      "actions": [
+        {
+          "id": "cr-am-i-in:open",
+          "label": "Open your campaigns",
+          "to": "/campaigns",
+          "highlight": [
+            "cr-campaign-card",
+            "cr-next-step"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-applied",
+      "kind": "guide",
+      "route": "/campaigns",
+      "where": "Your campaigns",
+      "title": "I applied to a campaign. What now?",
+      "keywords": [
+        "applied",
+        "application",
+        "waiting for the brand",
+        "submit application",
+        "pending",
+        "apply"
+      ],
+      "answer": "Nothing to do. On the campaign tap **Yes, I applied** if you like. Content Rewards shows **Pending review** while the brand decides, and I tell you when you're in.",
+      "steps": [
+        "Open **Your campaigns** and tap the campaign.",
+        "Tap **Yes, I applied**.",
+        "Wait. I check by myself and tell you when you're in."
+      ],
+      "actions": [
+        {
+          "id": "cr-applied:open",
+          "label": "Open your campaigns",
+          "to": "/campaigns",
+          "highlight": [
+            "cr-next-step"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-logo",
+      "kind": "guide",
+      "route": "/campaigns",
+      "where": "Your campaigns › a campaign",
+      "title": "Add the campaign's logo",
+      "keywords": [
+        "logo",
+        "watermark",
+        "brand logo",
+        "reference materials",
+        "logo file",
+        "google drive logo"
+      ],
+      "answer": "Some campaigns want their logo on every clip. On Content Rewards open **Reference materials** and download the logo. On the campaign in Clip Factory tap **Add the logo** and pick the file, or paste a Google Drive or Dropbox link.",
+      "steps": [
+        "On Content Rewards, open **Reference materials**.",
+        "Download the file with logo in its name.",
+        "Open the campaign in Clip Factory.",
+        "Tap **Add the logo** and pick the file."
+      ],
+      "actions": [
+        {
+          "id": "cr-logo:open",
+          "label": "Open your campaigns",
+          "to": "/campaigns",
+          "highlight": [
+            "cr-logo"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-make-clips",
+      "kind": "guide",
+      "route": "/",
+      "where": "Home",
+      "title": "Make campaign clips",
+      "keywords": [
+        "campaign clips",
+        "campaign rules",
+        "clips for a brand",
+        "brand clips",
+        "paid partnership",
+        "campaign video",
+        "which campaign",
+        "videos from the campaign",
+        "for a campaign",
+        "clips for my campaign"
+      ],
+      "answer": "Campaign clips start from a campaign: tap its chip in **Your campaigns** on Home, or tap **Make clips for this campaign** on the campaign. Home then says **Campaign clips** and its name. Paste or pick the video and tap **Make campaign clips**. The rules go with it: length, tags, #Ad and the logo.",
+      "steps": [
+        "Go to **Home**.",
+        "In **Your campaigns**, tap **Make campaign clips** on the campaign.",
+        "Tap a **Videos from the campaign** chip, or tap **Paste**.",
+        "Tap **Make campaign clips**."
+      ],
+      "actions": [
+        {
+          "id": "cr-make-clips:home",
+          "label": "Go to Home",
+          "to": "/",
+          "highlight": [
+            "cr-make-clips"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-two-ways",
+      "kind": "guide",
+      "route": "/",
+      "where": "Home",
+      "title": "Normal clips or campaign clips?",
+      "keywords": [
+        "normal or campaign",
+        "two ways",
+        "which way",
+        "normal way",
+        "campaign way",
+        "both ways",
+        "pick a way"
+      ],
+      "answer": "There are two ways. **Make clips** on Home makes normal clips, the same as always. Campaign clips start from a campaign you joined: tap **Make campaign clips** on it in Your campaigns. Then Home says **Campaign clips** and its name. A normal clip that could earn on your campaign tells you so on Review.",
+      "steps": [
+        "Normal clips: on **Home**, tap **Paste**, then **Make clips**.",
+        "Campaign clips: in **Your campaigns** on Home, tap **Make campaign clips**.",
+        "Look at the top: it says **Campaign clips** and the campaign's name.",
+        "Tap **Make campaign clips**.",
+        "Back to normal clips? Tap **Make normal clips instead**."
+      ],
+      "actions": [
+        {
+          "id": "cr-two-ways:home",
+          "label": "Go to Home",
+          "to": "/",
+          "highlight": [
+            "make-clips",
+            "cr-make-clips"
+          ]
+        },
+        {
+          "id": "cr-two-ways:campaigns",
+          "label": "Open your campaigns",
+          "to": "/campaigns"
+        }
+      ]
+    },
+    {
+      "id": "cr-fit",
+      "kind": "guide",
+      "route": "/review",
+      "where": "Review",
+      "title": "Can this clip earn on my campaign?",
+      "keywords": [
+        "can it earn",
+        "will it earn",
+        "earn on my campaign",
+        "does it fit",
+        "fit the campaign",
+        "qualify",
+        "will it count",
+        "get paid for this clip",
+        "follows the rules",
+        "can earn",
+        "almost ready",
+        "one thing first",
+        "wait a little",
+        "can't earn",
+        "check 2 things",
+        "i read them",
+        "campaign clip",
+        "rules check",
+        "will this clip get paid",
+        "clip ok for the campaign",
+        "right for the campaign",
+        "content i upload",
+        "work for my campaign",
+        "earn money on content rewards",
+        "get paid on content rewards",
+        "i couldn't check",
+        "campaign deadline",
+        "needs a copy",
+        "can this clip earn on my campaign",
+        "will this clip get paid on content rewards"
+      ],
+      "answer": "On Review, a campaign clip checks its Content Rewards rules. It checks the length, where it pays, tags and #Ad, the logo, Paid partnership, where the video is from, its language, banned things and the deadline. If it can't earn money, **Upload** stays off. **Wait a little** means Upload turns on by itself. **I couldn't check** means look yourself. One clip earns on one campaign only.",
+      "steps": [
+        "Tap **Review**. Read the big line under **Campaign clip** at the top.",
+        "**Can earn on** it? Tap **Upload**.",
+        "**Almost ready** or **One thing first**? Tap the button right under it.",
+        "**Needs a copy of this clip**? Tap **Make a FaZe Clips copy**.",
+        "**Can't earn**? Tap **Make new clips for this campaign**.",
+        "**Check 2 things**? Read them. You can still tap **Upload**."
+      ],
+      "actions": [
+        {
+          "id": "cr-fit:review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "cr-review-strip"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-fix-it",
+      "kind": "guide",
+      "route": "/review",
+      "where": "Review",
+      "title": "What does Fix it for me do?",
+      "keywords": [
+        "fix it for me",
+        "what does fix it for me do",
+        "missing #ad",
+        "#ad missing",
+        "campaign tags missing"
+      ],
+      "answer": "On a campaign clip, when a caption is missing #Ad or a tag the campaign wants, Review says so and shows **Fix it for me**. Tap it to put them back in the words right now. Tap **Undo** within 8 seconds to get the old words back. You don't have to tap it: when the clip uploads, I put #Ad and the tags back by myself. For TikTok, **Turn on Branded content** is its own button. Tap that one yourself.",
+      "steps": [
+        "Tap **Review**.",
+        "Find the line that says #Ad or a tag is missing.",
+        "Tap **Fix it for me**. The words have them again.",
+        "Tap **Undo** if you want the old words back.",
+        "Or skip it: I put them back when it uploads."
+      ],
+      "actions": [
+        {
+          "id": "cr-fix-it:review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "cr-review-strip"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-make-it-for",
+      "kind": "guide",
+      "route": "/review",
+      "where": "Review",
+      "title": "Make a campaign copy of a clip",
+      "keywords": [
+        "make a copy",
+        "campaign copy",
+        "copy for my campaign",
+        "could earn",
+        "this clip could earn money",
+        "normal clip for a campaign",
+        "use this clip for my campaign",
+        "earn with this clip",
+        "not now",
+        "the copy",
+        "already up",
+        "already posted",
+        "posted the normal way"
+      ],
+      "answer": "When a normal clip could earn on a campaign you're in, Review says **This clip could earn money on** it. Tap the button with the campaign's name, like **Make a FaZe Clips copy**. In about 3 minutes the copy shows right below, with the logo, **Paid partnership** and #Ad. Upload the copy to earn. The first clip stays as it is. **Not now** hides the line.",
+      "steps": [
+        "In **Review**, find **This clip could earn money on** under the clip.",
+        "Tap **Make a FaZe Clips copy**. It shows your campaign's name.",
+        "Wait about 3 minutes. The copy shows right below.",
+        "On the copy, tap **Use my settings**, then **Upload**.",
+        "You can throw the first one away.",
+        "Already posted the normal way? Content Rewards only takes a post in its first 30 minutes, so make a copy."
+      ],
+      "actions": [
+        {
+          "id": "cr-make-it-for:review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "cr-review-strip",
+            "use-my-settings"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-tiktok",
+      "kind": "guide",
+      "route": "/campaigns",
+      "where": "Your campaigns",
+      "title": "Why is TikTok left out for campaigns?",
+      "keywords": [
+        "tiktok campaign",
+        "tiktok left out",
+        "tiktok private",
+        "tiktok audit",
+        "tiktok not paid"
+      ],
+      "answer": "Until TikTok checks Clip Factory, TikTok keeps its posts private, and private posts can't earn. So campaign clips go to YouTube, Instagram, X and Facebook for now. TikTok comes back by itself once TikTok says yes.",
+      "steps": [
+        "Set up YouTube, Instagram, X or Facebook.",
+        "Pick campaigns that pay for those places."
+      ],
+      "actions": [
+        {
+          "id": "cr-tiktok:open",
+          "label": "Open your campaigns",
+          "to": "/campaigns",
+          "highlight": [
+            "cr-pay"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-clip-sent",
+      "kind": "guide",
+      "route": "/library",
+      "where": "Library",
+      "title": "Did my clip go to Content Rewards?",
+      "keywords": [
+        "sent to content rewards",
+        "submitted",
+        "clip sent",
+        "approved",
+        "waiting for the brand",
+        "campaign clip status"
+      ],
+      "answer": "Each campaign clip has a line under its posts: **Sent** means Content Rewards has it and the brand will check it, **Approved** means it counts. Find it in Library, on the clip, or on the campaign.",
+      "steps": [
+        "Tap **Library**.",
+        "Find the clip.",
+        "Read its Content Rewards line."
+      ],
+      "actions": [
+        {
+          "id": "cr-clip-sent:library",
+          "label": "Open Library",
+          "to": "/library",
+          "highlight": [
+            "cr-post-line"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-send-by-hand",
+      "kind": "guide",
+      "route": "/library",
+      "where": "Library",
+      "title": "Send a clip to Content Rewards myself",
+      "keywords": [
+        "send by hand",
+        "send it yourself",
+        "copy and open",
+        "clip link",
+        "submit clip",
+        "send now",
+        "30 minutes"
+      ],
+      "answer": "When I can't send a clip, its line says **Send this to Content Rewards now**. Tap **Copy and open**, tap **Submit clip**, paste in **Clip link**, tick the box and tap **Submit clip**. Do it within 30 minutes of posting.",
+      "steps": [
+        "Tap **Copy and open** on the clip's line.",
+        "Tap **Submit clip**.",
+        "Tap **Clip link** and paste.",
+        "Tick the box. Tap **Submit clip**.",
+        "Tap **I sent it**."
+      ],
+      "actions": [
+        {
+          "id": "cr-send-by-hand:library",
+          "label": "Open Library",
+          "to": "/library",
+          "highlight": [
+            "cr-send-now"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-proof",
+      "kind": "guide",
+      "route": "/library",
+      "where": "Library",
+      "title": "The brand wants proof of views",
+      "keywords": [
+        "proof of views",
+        "screen recording",
+        "record screen",
+        "brand wants proof",
+        "stats recording"
+      ],
+      "answer": "Some brands ask for a screen recording of a clip's views. When it's due, the clip's line says so and I send a notification. Open the clip's views, record your screen, send it to the brand, then tap **I sent it**.",
+      "steps": [
+        "Open the clip's views (YouTube Studio, Instagram, X or Facebook).",
+        "Record your screen while they show.",
+        "Send it where the brief says, or in Content Rewards **Support**.",
+        "Tap **I sent it**."
+      ],
+      "actions": [
+        {
+          "id": "cr-proof:library",
+          "label": "Open Library",
+          "to": "/library",
+          "highlight": [
+            "cr-post-line"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-not-approved",
+      "kind": "guide",
+      "route": "/library",
+      "where": "Library",
+      "title": "My campaign clip was not approved",
+      "keywords": [
+        "not approved",
+        "rejected",
+        "turned down",
+        "appeal",
+        "ask again",
+        "brand said no to my clip"
+      ],
+      "answer": "The clip's line shows what the brand said. If you think it follows the rules, tap **Ask again**: it copies the words and opens Content Rewards. Tap **Rejected**, the clip, **Start appeal**, paste and tap **Start appeal**.",
+      "steps": [
+        "Tap **Ask again** on the clip's line.",
+        "Tap **Rejected**, then the clip.",
+        "Tap **Start appeal**.",
+        "Paste in **Appeal explanation**. Tap **Start appeal**.",
+        "Tap **I asked**."
+      ],
+      "actions": [
+        {
+          "id": "cr-not-approved:library",
+          "label": "Open Library",
+          "to": "/library",
+          "highlight": [
+            "cr-post-line"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-get-paid",
+      "kind": "guide",
+      "route": "/money",
+      "hash": "content-rewards",
+      "where": "Money › Content Rewards",
+      "title": "Get my Content Rewards money",
+      "keywords": [
+        "get paid",
+        "content rewards money",
+        "withdraw",
+        "balance",
+        "ready to move",
+        "payout",
+        "money to bank"
+      ],
+      "answer": "Money from approved campaign clips shows on **Money** under Content Rewards, in Content Rewards' own numbers. When **Ready to move** has $1 or more, move it to Whop on Content Rewards, then from Whop to your bank.",
+      "steps": [
+        "Tap **Money**.",
+        "Find **Content Rewards**.",
+        "Answer: do you see **Finance** in the Content Rewards menu?",
+        "Follow the steps: move it to Whop, then to your bank."
+      ],
+      "actions": [
+        {
+          "id": "cr-get-paid:money",
+          "label": "Open the money part",
+          "to": "/money#content-rewards",
+          "highlight": [
+            "cr-money"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-whop",
+      "kind": "guide",
+      "route": "/money",
+      "hash": "content-rewards",
+      "where": "Money › Content Rewards",
+      "title": "What is Whop?",
+      "keywords": [
+        "what is whop",
+        "whop",
+        "whop account",
+        "whop balance",
+        "whop bank"
+      ],
+      "answer": "Whop is the website where Content Rewards sends your money. From there it goes to your bank. Link your Whop account inside Content Rewards once, then add your bank on Whop.",
+      "steps": [
+        "Tap **Money**.",
+        "Find **Content Rewards**.",
+        "Follow **Link your Whop account** and **Add your bank on Whop**."
+      ],
+      "actions": [
+        {
+          "id": "cr-whop:money",
+          "label": "Open the money part",
+          "to": "/money#content-rewards",
+          "highlight": [
+            "cr-money"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-sign-in-again",
+      "kind": "guide",
+      "route": "/settings/posting/setup/contentrewards",
+      "where": "Settings › Posting › Set up posting › Content Rewards",
+      "title": "Sign in to Content Rewards again",
+      "keywords": [
+        "sign in again",
+        "content rewards signed out",
+        "reconnect content rewards",
+        "connect again",
+        "90 days"
+      ],
+      "answer": "Content Rewards keeps you signed in for up to 90 days. A week before, I remind you. Open the Content Rewards page on your Mac and tap **Connect again**. It takes one minute.",
+      "steps": [
+        "On your Mac, tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Tap **Content Rewards**.",
+        "Tap **Connect again** and allow it."
+      ],
+      "actions": [
+        {
+          "id": "cr-sign-in-again:page",
+          "label": "Open Content Rewards",
+          "to": "/settings/posting/setup/contentrewards",
+          "highlight": [
+            "cr-ready"
+          ]
+        }
+      ]
+    },
+    {
       "id": "page-home",
       "kind": "page",
       "route": "/",
@@ -2867,6 +3632,12 @@
       "keywords": [
         "start",
         "main page",
+        "add",
+        "campaign",
+        "not",
+        "done",
+        "yet",
+        "campaigns",
         "followers",
         "set",
         "up",
@@ -2876,25 +3647,19 @@
         "review",
         "working",
         "money",
-        "make",
-        "new",
         "cancel",
         "upload",
+        "check",
+        "make",
+        "normal",
+        "instead",
         "source",
         "clear",
         "link",
         "progress",
         "many",
         "number",
-        "streamers",
-        "follow",
-        "find",
-        "ask",
-        "copy",
-        "message",
-        "close",
-        "remove",
-        "check"
+        "videos"
       ],
       "answer": "Paste a link to a stream or a video. Clip Factory finds the best moments and makes short clips. You pick the ones to upload.",
       "steps": [
@@ -2954,6 +3719,22 @@
       "keywords": [
         "job steps",
         "job page",
+        "copy",
+        "link",
+        "sending",
+        "find",
+        "another",
+        "campaign",
+        "ask",
+        "words",
+        "content",
+        "rewards",
+        "settings",
+        "saved",
+        "sent",
+        "not",
+        "done",
+        "yet",
         "keep",
         "loading",
         "progress",
@@ -2965,14 +3746,7 @@
         "file",
         "check",
         "gone",
-        "stopping",
-        "stopped",
-        "turn",
-        "send",
-        "test",
-        "not",
-        "notifications",
-        "breadcrumb"
+        "stopping"
       ],
       "answer": "A job's page shows each step as your clips are made. Tap a job in Jobs to open it.",
       "steps": [
@@ -2997,8 +3771,17 @@
       "title": "Review",
       "keywords": [
         "check clips",
-        "ask",
+        "not",
+        "done",
+        "yet",
+        "save",
+        "video",
         "tiktok",
+        "paste",
+        "close",
+        "link",
+        "fix",
+        "ask",
         "made",
         "kids",
         "tell",
@@ -3015,10 +3798,8 @@
         "check",
         "throw",
         "away",
-        "done",
         "post",
-        "not",
-        "close"
+        "rewards"
       ],
       "answer": "These clips all come from one job. Tap Upload to post one, or Throw away if you do not like it. Tap Show every job to see the rest.",
       "steps": [
@@ -3044,24 +3825,34 @@
       "keywords": [
         "kept clips",
         "posted clips",
+        "copy",
+        "link",
+        "sending",
+        "find",
+        "another",
+        "campaign",
+        "ask",
+        "words",
+        "content",
+        "rewards",
+        "settings",
+        "saved",
+        "sent",
+        "not",
+        "done",
+        "yet",
         "review",
         "show",
         "views",
+        "save",
+        "video",
+        "tiktok",
+        "paste",
+        "close",
         "make",
         "earlier",
         "week",
-        "later",
-        "best",
-        "post",
-        "tiktok",
-        "ask",
-        "not",
-        "close",
-        "comments",
-        "duet",
-        "stitch",
-        "commercial",
-        "content"
+        "later"
       ],
       "answer": "Library has every clip you uploaded.",
       "steps": [
@@ -3086,8 +3877,32 @@
       "title": "A clip's numbers",
       "keywords": [
         "clip page",
+        "copy",
+        "link",
+        "sending",
+        "find",
+        "another",
+        "campaign",
+        "ask",
+        "words",
+        "content",
+        "rewards",
+        "settings",
+        "saved",
+        "sent",
+        "not",
+        "done",
+        "yet",
+        "review",
         "loading",
-        "views"
+        "check",
+        "views",
+        "save",
+        "video",
+        "tiktok",
+        "paste",
+        "close",
+        "fix"
       ],
       "answer": "A clip's page shows how it does on each app. Tap a clip in Library to open it.",
       "steps": [
@@ -3722,11 +4537,12 @@
       "title": "Posting",
       "keywords": [
         "Set up posting",
+        "Get paid",
         "Where clips go",
         "My settings",
         "Money"
       ],
-      "answer": "Where your clips go. It has Set up posting, Where clips go, My settings, Money.",
+      "answer": "Where your clips go. It has Set up posting, Get paid, Where clips go, My settings, Money.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**."
@@ -3749,7 +4565,10 @@
         "Set up posting",
         "The setup list on your screen",
         "Who can see your YouTube clips",
-        "What X costs"
+        "What X costs",
+        "Content Rewards",
+        "Your campaigns",
+        "Find campaigns"
       ],
       "answer": "Connect YouTube, TikTok, Instagram, Facebook and X.",
       "steps": [
@@ -3911,6 +4730,181 @@
       ],
       "highlight": [
         "x-cost"
+      ]
+    },
+    {
+      "id": "apple-contentrewards",
+      "kind": "apple",
+      "route": "/settings/posting/setup/contentrewards",
+      "hash": "contentrewards",
+      "where": "Settings › Posting › Set up posting",
+      "title": "Content Rewards",
+      "keywords": [
+        "content rewards",
+        "whop",
+        "campaign",
+        "campaigns",
+        "brand",
+        "brand deal",
+        "clipping",
+        "cpm",
+        "get paid",
+        "earn"
+      ],
+      "answer": "Get paid by brands for your clips. Set it up once.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Find **Content Rewards**."
+      ],
+      "actions": [
+        {
+          "id": "apple-contentrewards:open",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup/contentrewards",
+          "highlight": [
+            "contentrewards"
+          ]
+        }
+      ],
+      "highlight": [
+        "contentrewards"
+      ]
+    },
+    {
+      "id": "apple-campaigns",
+      "kind": "apple",
+      "route": "/campaigns",
+      "hash": "campaigns",
+      "where": "Settings › Posting › Set up posting",
+      "title": "Your campaigns",
+      "keywords": [
+        "content rewards",
+        "campaign",
+        "campaigns",
+        "brand",
+        "join",
+        "am i in",
+        "whop"
+      ],
+      "answer": "The Content Rewards campaigns you added, and what to do next.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Find **Your campaigns**."
+      ],
+      "actions": [
+        {
+          "id": "apple-campaigns:open",
+          "label": "Open Set up posting",
+          "to": "/campaigns",
+          "highlight": [
+            "campaigns"
+          ]
+        }
+      ],
+      "highlight": [
+        "campaigns"
+      ]
+    },
+    {
+      "id": "apple-campaign-finder",
+      "kind": "apple",
+      "route": "/campaigns/find",
+      "hash": "campaign-finder",
+      "where": "Settings › Posting › Set up posting",
+      "title": "Find campaigns",
+      "keywords": [
+        "find campaigns",
+        "campaign finder",
+        "discover",
+        "new campaigns",
+        "requirements",
+        "what i want",
+        "content rewards"
+      ],
+      "answer": "Campaigns on Content Rewards that pay what you want.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Find **Find campaigns**."
+      ],
+      "actions": [
+        {
+          "id": "apple-campaign-finder:open",
+          "label": "Open Set up posting",
+          "to": "/campaigns/find",
+          "highlight": [
+            "campaign-finder"
+          ]
+        }
+      ],
+      "highlight": [
+        "campaign-finder"
+      ]
+    },
+    {
+      "id": "settings-posting-getpaid",
+      "kind": "page",
+      "route": "/settings/posting/getpaid",
+      "where": "Settings › Posting › Get paid",
+      "title": "Get paid",
+      "keywords": [
+        "Get paid"
+      ],
+      "answer": "Set up how each app pays you. See if money can reach you.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Get paid**."
+      ],
+      "actions": [
+        {
+          "id": "settings-posting-getpaid:open",
+          "label": "Open Get paid",
+          "to": "/settings/posting/getpaid"
+        }
+      ]
+    },
+    {
+      "id": "apple-getpaid",
+      "kind": "apple",
+      "route": "/settings/posting/getpaid",
+      "hash": "getpaid",
+      "where": "Settings › Posting › Get paid",
+      "title": "Get paid",
+      "keywords": [
+        "get paid",
+        "payout",
+        "payouts",
+        "bank",
+        "bank account",
+        "paypal",
+        "stripe",
+        "adsense",
+        "whop",
+        "tax",
+        "money on hold",
+        "withdraw",
+        "cash out"
+      ],
+      "answer": "One card per place. Do the steps once so money can reach you.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Get paid**.",
+        "Find **Get paid**."
+      ],
+      "actions": [
+        {
+          "id": "apple-getpaid:open",
+          "label": "Open Get paid",
+          "to": "/settings/posting/getpaid#getpaid",
+          "highlight": [
+            "getpaid"
+          ]
+        }
+      ],
+      "highlight": [
+        "getpaid"
       ]
     },
     {
@@ -4188,6 +5182,7 @@
         "Instagram",
         "Facebook",
         "X",
+        "Content Rewards money",
         "Getting your money out"
       ],
       "answer": "How close you are to getting paid, and real money each app reports.",
@@ -4459,9 +5454,47 @@
       ]
     },
     {
+      "id": "apple-money-contentrewards",
+      "kind": "apple",
+      "route": "/money",
+      "hash": "money-contentrewards",
+      "where": "Settings › Posting › Money",
+      "title": "Content Rewards money",
+      "keywords": [
+        "content rewards",
+        "whop",
+        "campaign",
+        "campaigns",
+        "brand",
+        "withdraw",
+        "balance",
+        "payout",
+        "get paid"
+      ],
+      "answer": "Money from brand campaigns, in their own numbers, and how to move it to your bank.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Money**.",
+        "Find **Content Rewards money**."
+      ],
+      "actions": [
+        {
+          "id": "apple-money-contentrewards:open",
+          "label": "Open Money",
+          "to": "/money#content-rewards",
+          "highlight": [
+            "money-contentrewards"
+          ]
+        }
+      ],
+      "highlight": [
+        "money-contentrewards"
+      ]
+    },
+    {
       "id": "apple-money-payouts",
       "kind": "apple",
-      "route": "/settings/posting/money",
+      "route": "/settings/posting/getpaid",
       "hash": "money-payouts",
       "where": "Settings › Posting › Money",
       "title": "Getting your money out",
@@ -4480,7 +5513,7 @@
         "payment",
         "card"
       ],
-      "answer": "Each app pays you itself. Add your bank or PayPal inside each app.",
+      "answer": "Each app pays you itself. Get paid shows the steps for each one.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Money**.",
@@ -4490,7 +5523,7 @@
         {
           "id": "apple-money-payouts:open",
           "label": "Open Money",
-          "to": "/settings/posting/money#money-payouts",
+          "to": "/settings/posting/getpaid",
           "highlight": [
             "money-payouts"
           ]
@@ -5008,6 +6041,8 @@
         "It stopped",
         "Picked up again",
         "Every step",
+        "Content Rewards news",
+        "Money on hold or sent to your bank",
         "Number on the app icon",
         "Lock Screen widget",
         "Send a test"
@@ -5201,6 +6236,78 @@
       ],
       "highlight": [
         "notify-steps"
+      ]
+    },
+    {
+      "id": "apple-notify-contentrewards",
+      "kind": "apple",
+      "route": "/settings/app/notifications",
+      "hash": "notify-contentrewards",
+      "where": "Settings › App & account › Notifications",
+      "title": "Content Rewards news",
+      "keywords": [
+        "content rewards",
+        "campaign",
+        "brand",
+        "approved",
+        "send now",
+        "proof",
+        "whop"
+      ],
+      "answer": "You're in, send-now reminders, approvals, proof, money and new campaigns.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Notifications**.",
+        "Find **Content Rewards news**."
+      ],
+      "actions": [
+        {
+          "id": "apple-notify-contentrewards:open",
+          "label": "Open Notifications",
+          "to": "/settings/app/notifications#notify-contentrewards",
+          "highlight": [
+            "notify-contentrewards"
+          ]
+        }
+      ],
+      "highlight": [
+        "notify-contentrewards"
+      ]
+    },
+    {
+      "id": "apple-notify-getpaid",
+      "kind": "apple",
+      "route": "/settings/app/notifications",
+      "hash": "notify-getpaid",
+      "where": "Settings › App & account › Notifications",
+      "title": "Money on hold or sent to your bank",
+      "keywords": [
+        "get paid",
+        "payout",
+        "bank",
+        "on hold",
+        "money sent",
+        "adsense",
+        "whop"
+      ],
+      "answer": "When Google or Whop holds your money, or sends it to your bank.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Notifications**.",
+        "Find **Money on hold or sent to your bank**."
+      ],
+      "actions": [
+        {
+          "id": "apple-notify-getpaid:open",
+          "label": "Open Notifications",
+          "to": "/settings/app/notifications#notify-getpaid",
+          "highlight": [
+            "notify-getpaid"
+          ]
+        }
+      ],
+      "highlight": [
+        "notify-getpaid"
       ]
     },
     {

@@ -22,6 +22,21 @@ variable "agent_image_tag" {
   }
 }
 
+variable "stories_agent_image_tag" {
+  type        = string
+  description = "Tag of Lamo Stories' agent image (docs/CONTRACTS.md §45.15). The deploy workflow sets it to stories-agent- plus a hash of stories/** and web/src/stories/engine/**, so it only changes when Lamo Stories' agent changes; Clip Factory's agent_image_tag never changes because of it. terraform apply builds and pushes it before the runtime."
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$", var.stories_agent_image_tag))
+    error_message = "stories_agent_image_tag must be a valid Docker tag (letters, digits, _ . -, at most 128 characters)."
+  }
+}
+
+variable "stories_video_us_bucket" {
+  type        = bool
+  default     = false
+  description = "Amazon Nova Reel for Lamo Stories (docs/CONTRACTS.md §45.31): true makes the bucket cf-prod-stories-video-<account>-us in us-east-1 (private, TLS only, shots kept 14 days) and lets cf_prod_story_agent start Nova Reel jobs there. Off until the owner allows Lamo Stories to keep generated shots in the US (N. Virginia)."
+}
+
 variable "app_version" {
   type        = string
   default     = ""
@@ -52,6 +67,30 @@ variable "web_dev_origin" {
   type        = string
   default     = "http://localhost:5173"
   description = "Local Vite dev server, allowed by the API's and the media bucket's CORS."
+}
+
+variable "content_rewards_enabled" {
+  type        = bool
+  default     = true
+  description = "Content Rewards campaigns (docs/CONTRACTS.md §38.16). On: every builder's part of §38.19 has merged. Set false to turn it off again; then every /v1/contentrewards route answers 503 and the clip flow sends nothing."
+}
+
+variable "cr_remake_enabled" {
+  type        = bool
+  default     = true
+  description = "The campaign copy of a clip (docs/CONTRACTS.md §39.3, CR_REMAKE). On: G, H and I of §39.4 have merged. Set false to turn it off again; then the copy route answers 503 \"Coming soon.\" and no fit offers a copy."
+}
+
+variable "cr_finder_enabled" {
+  type        = bool
+  default     = false
+  description = "The campaign finder (docs/CONTRACTS.md §41, CR_FINDER on cf-prod-api, cf-prod-stats and cf-prod-campaigns). Off until P, Q, R, S and T of §41.6 have merged; then one switch PR sets it true. Set false to turn it off again (the same day if Content Rewards or Whop asks Clip Factory to stop reading): every finder route answers 503 \"Coming soon.\", the tick starts no look and the stored items stay."
+}
+
+variable "whop_connect_enabled" {
+  type        = bool
+  default     = false
+  description = "\"Connect Whop\" on the Content Rewards Get paid page (docs/CONTRACTS.md §40.6, WHOP_CONNECT on cf-prod-api). Off until K, L and M of §40.8 have merged; then one switch PR sets it true. While off the card says \"Coming soon: your Whop payouts here.\" and the Whop routes answer 503."
 }
 
 variable "help_enabled" {

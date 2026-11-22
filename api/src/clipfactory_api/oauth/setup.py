@@ -102,7 +102,7 @@ def gates(platform: str, setup: Mapping[str, Any], account: Mapping[str, Any]) -
         review = obj(stored.get("app_review")).get("value")
         audit = stored_state("posting_audit") if connected else None
         return [gate("app_review", APP_REVIEW.get(str(review), "limited")), gate("posting_audit", audit or "unknown")]
-    if platform == "facebook":
+    if platform in {"instagram", "facebook"}:  # Development mode: only the owner sees the Reels until it is Live
         return [gate("app_live", "ok" if "public-live" in steps else "limited")]
     if platform == "x":
         return [gate("credits", stored_state("credits") or ("ok" if connected else "unknown"))]

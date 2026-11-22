@@ -2,7 +2,7 @@
 
 - Between `clipTarget.min` and `clipTarget.max` clips (defaults 5 and 10). Fewer only when the source does not
   contain enough good moments; the job says so.
-- Clips are 20–45 seconds unless a skill says otherwise.
+- Clips are 20–45 seconds unless a skill says otherwise, or a campaign sets its own length ([Campaign clips](#campaign-clips)).
 - The source is capped at `maxSourceHours`.
 - **No cost ceiling** (the owner's decision, 2026-11-17): the deep analysis watches the whole source with the best
   signals and never trades coverage for money. What a job is expected to cost is in

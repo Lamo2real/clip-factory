@@ -65,6 +65,34 @@ variable "platform_token_secrets_arn" {
   }
 }
 
+# ---------- Lamo Stories (docs/CONTRACTS.md §45.13, §45.15): the story flow's own secrets ----------
+variable "ws_secret_prefix" {
+  type        = string
+  description = "Name prefix of the workspace token secrets (WS_SECRET_PREFIX, <name>/workspaces/)."
+  validation {
+    condition     = endswith(var.ws_secret_prefix, "/workspaces/") && !strcontains(var.ws_secret_prefix, "/platforms/")
+    error_message = "ws_secret_prefix must end with /workspaces/ and never be under /platforms/."
+  }
+}
+
+variable "workspace_secrets_arn" {
+  type        = string
+  description = "ARN pattern arn:aws:secretsmanager:REGION:ACCT:secret:<name>/workspaces/*: story-flow reads the workspace tokens."
+  validation {
+    condition     = can(regex("^arn:aws[a-z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9_-]+/workspaces/\\*$", var.workspace_secrets_arn))
+    error_message = "workspace_secrets_arn must be a secretsmanager ARN ending in /workspaces/*."
+  }
+}
+
+variable "workspace_token_secrets_arn" {
+  type        = string
+  description = "ARN pattern arn:aws:secretsmanager:REGION:ACCT:secret:<name>/workspaces/*/token*: the only secrets story-flow may write (a refreshed token)."
+  validation {
+    condition     = can(regex("^arn:aws[a-z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9_-]+/workspaces/\\*/token\\*$", var.workspace_token_secrets_arn))
+    error_message = "workspace_token_secrets_arn must be a secretsmanager ARN ending in /workspaces/*/token*."
+  }
+}
+
 variable "retention_days" {
   type        = number
   default     = 14
@@ -73,6 +101,12 @@ variable "retention_days" {
     condition     = var.retention_days >= 1 && var.retention_days <= 90
     error_message = "Durable execution retention must be 1 to 90 days."
   }
+}
+
+variable "content_rewards_enabled" {
+  type        = bool
+  default     = false
+  description = "§38.16: CONTENT_REWARDS on/off for the clip flow's cr-send steps."
 }
 
 variable "log_retention_days" {

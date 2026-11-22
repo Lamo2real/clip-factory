@@ -8,6 +8,13 @@ same upload instead of making a second one.
 * ``start``: create the upload and send the bytes → ``processing`` (or ``ready_to_finish``).
 * ``check``: read the platform's processing status → ``processing`` | ``ready_to_finish`` | ``done``.
 * ``finish``: the publish call where the platform has one (Instagram, Facebook, X) → ``done`` or ``processing``.
+
+A campaign post (its internal ``postOptions.campaign``, §38.14) also gets: the caption through ``campaign_caption``
+(the disclosure first, every required item, inside the limits), never made for kids, YouTube public with Paid
+promotion on (``paidProductPlacementDetails``), X's ``paid_partnership``. When YouTube or X refuses that switch the
+call is sent once more without it and the post is marked ``paidLabel: "not_set"``. Instagram and Facebook get nothing
+extra (Meta has no paid-partnership field for this app); TikTok's Branded content is the owner's own tap (§17.8). No
+publisher ever deletes, unpublishes or changes the privacy of a posted clip.
 """
 
 from __future__ import annotations
@@ -16,10 +23,14 @@ import json
 import re
 import secrets
 from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 from urllib.parse import quote, urlencode
 
-from ..clock import iso
+from .. import mojibake
+from ..clock import iso, parse
+from ..log import log
 from . import errors
 from .base import (
     GRAPH_HOST,
@@ -34,9 +45,16 @@ from .base import (
     appsecret_proof,
     obj,
 )
+from .campaign_caption import campaign_caption, x_length
 
 MB = 1024 * 1024
 YOUTUBE_UPLOAD = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status"
+YOUTUBE_PAID_PART = "paidProductPlacementDetails"
+X_PAID_FIELD = "paid_partnership"
+# A YouTube 400 for a part it does not take may give only the reason, not the part's name.
+YOUTUBE_PART_REASONS = frozenset({"unexpectedPart", "invalidPart"})
+REFUSED_FIELD = (400, 403)  # a field the platform doesn't take: 400, or 403 for one this app isn't allowed (§38.21)
+NOT_SET = "not_set"
 YOUTUBE_VIDEOS = "https://www.googleapis.com/youtube/v3/videos"
 YOUTUBE_CATEGORY_GAMING = "20"
 TIKTOK_API = "https://open.tiktokapis.com"
@@ -46,9 +64,26 @@ RUPLOAD = "https://rupload.facebook.com"
 X_API = "https://api.x.com/2"
 X_MAX_CHARS = 280
 CAPTION_MAX = 2200
+# TikTok's rule: branded content (a paid partnership) is only for Everyone or Friends (§17.8).
+BRANDED_PRIVACY = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS")
 HASHTAGS_MAX = 30
 _URL = re.compile(r"(https?://\S+|www\.\S+)", re.IGNORECASE)
 _HASHTAG = re.compile(r"#\w+")
+LOOKUP_SLACK = timedelta(minutes=2)  # clock drift between Clip Factory and Meta
+
+
+@dataclass(frozen=True)
+class LabelledPublished(Published):
+    """A campaign post whose platform refused the paid-partnership switch (§38.14): ``paid_label`` is ``"not_set"``
+    and ``posts.mark_posted`` writes it as the post's public ``paidLabel``. Other posts stay plain ``Published``."""
+
+    paid_label: str | None = None
+
+
+def _published(handle: dict[str, Any], **fields: Any) -> Published:
+    if handle.get("paidLabel") == NOT_SET:
+        return LabelledPublished(**fields, paid_label=NOT_SET)
+    return Published(**fields)
 
 
 # --- shared helpers ----------------------------------------------------------------------------------------------
@@ -81,7 +116,49 @@ def _bearer(token: str, extra: dict[str, str] | None = None) -> dict[str, str]:
 
 def _captions(job: PublishJob) -> dict[str, Any]:
     raw = job.clip.get("captions")
-    return raw if isinstance(raw, dict) else {}
+    # Never posts a caption garbled by a Mac clipboard (mojibake.py).
+    return mojibake.repair_captions(raw) if isinstance(raw, dict) else {}
+
+
+def _campaign(job: PublishJob) -> dict[str, Any] | None:
+    """The post's internal ``postOptions.campaign`` (§38.14), or None for a post without a campaign."""
+    found = job.options.get("campaign")
+    return found if isinstance(found, dict) else None
+
+
+def _paid(job: PublishJob) -> bool:
+    campaign = _campaign(job)
+    return bool(campaign and campaign.get("paidPartnership"))
+
+
+def _names(resp: HttpResponse, name: str, reasons: frozenset[str] = frozenset()) -> bool:
+    """A 400 or 403 whose answer names ``name`` (or a 400 that gives one of ``reasons``): the platform refused that
+    one field, so the same call without it can go through."""
+    if resp.status not in REFUSED_FIELD:
+        return False
+    if name.encode() in (resp.body or b""):
+        return True
+    if resp.status != 400:
+        return False
+    error = _json(resp).get("error")
+    found = error.get("errors") if isinstance(error, dict) else None
+    return any(isinstance(e, dict) and e.get("reason") in reasons for e in found or [])
+
+
+def caption(job: PublishJob, platform: str) -> str:
+    """The text sent for ``platform``: the clip's caption, through ``campaign_caption`` for a campaign post, inside
+    the platform's own limits. Used for sending and for matching what was sent (Instagram's lookup)."""
+    captions = _captions(job)
+    campaign = _campaign(job)
+    if platform == "youtube":
+        text = strip_angles(str(captions.get("youtubeDescription") or ""))
+        return cut_bytes(strip_angles(campaign_caption("youtube", text, campaign)), 5000)
+    if platform == "instagram":
+        return instagram_caption(campaign_caption("instagram", str(captions.get("instagram") or ""), campaign))
+    if platform == "x":
+        text = _URL.sub("", str(captions.get("x") or ""))
+        return x_text(campaign_caption("x", text, campaign) if campaign else text)
+    return campaign_caption(platform, str(captions.get(platform) or ""), campaign)[:CAPTION_MAX]
 
 
 def _preset(job: PublishJob, platform: str) -> dict[str, Any]:
@@ -100,6 +177,10 @@ def _now(job: PublishJob) -> str:
     return iso(job.now())
 
 
+def _same_text(text: str) -> str:
+    return " ".join(text.split())
+
+
 def strip_angles(text: str) -> str:
     return text.replace("<", "").replace(">", "")
 
@@ -111,20 +192,25 @@ def cut_bytes(text: str, limit: int) -> str:
     return raw[:limit].decode("utf-8", "ignore")
 
 
-def cut_words(text: str, limit: int) -> str:
-    """At most ``limit`` characters, cut at a word with "…" when it is too long."""
+def cut_words(text: str, limit: int, length: Callable[[str], int] = len) -> str:
+    """At most ``limit`` (characters, or as ``length`` counts them), cut at a word with "…" when it is too long."""
     text = " ".join(text.split())
-    if len(text) <= limit:
+    if length(text) <= limit:
         return text
-    head = text[: limit - 1]
+    room, used, end = limit - length("…"), 0, 0
+    while end < len(text) and used + length(text[end]) <= room:
+        used += length(text[end])
+        end += 1
+    head = text[:end]
     if " " in head:
         head = head.rsplit(" ", 1)[0]
     return head.rstrip() + "…"
 
 
 def x_text(caption: str) -> str:
-    """X caption with every URL removed (a link costs extra on X), ≤ 280 characters."""
-    return cut_words(_URL.sub("", caption), X_MAX_CHARS)
+    """X caption with every URL removed (a link costs extra on X), ≤ 280 as X counts it (emoji, CJK and most other
+    scripts count twice, so a caption X would refuse as too long is cut instead)."""
+    return cut_words(_URL.sub("", caption), X_MAX_CHARS, x_length)
 
 
 def instagram_caption(caption: str) -> str:
@@ -175,38 +261,51 @@ class YouTubePublisher:
     finish_semantics = "at_least_once"
     needs_credentials = True
 
-    def metadata(self, job: PublishJob) -> dict[str, Any]:
+    def metadata(self, job: PublishJob, *, paid: bool | None = None) -> dict[str, Any]:
+        """The video resource sent at the start. ``paid`` (default: the post's campaign says so) adds Paid promotion
+        (``paidProductPlacementDetails``, §38.14)."""
         captions = _captions(job)
         title = strip_angles(str(captions.get("youtubeTitle") or job.clip.get("hook") or "Clip")).strip()[:100]
-        description = cut_bytes(strip_angles(str(captions.get("youtubeDescription") or "")), 5000)
         # This clip's choices from its YouTube row (§36.3) win; then My settings; a post without them keeps the old
         # behaviour (the saved youtubePrivacy, Gaming, not made for kids).
         opts = job.options
         preset = _preset(job, "youtube")
         privacy = str(opts.get("privacy") or job.settings.get("youtubePrivacy") or "public")
         category = str(opts.get("category") or preset.get("category") or YOUTUBE_CATEGORY_GAMING)
+        campaign = _campaign(job) is not None
         status: dict[str, Any] = {
-            "privacyStatus": privacy if privacy in {"public", "unlisted", "private"} else "public",
+            # Campaign clips are always public and never made for kids, whatever any option says (§38.14).
+            "privacyStatus": "public" if campaign or privacy not in {"public", "unlisted", "private"} else privacy,
             # Only this clip's own switch can say made for kids; My settings never do (§36.2).
-            "selfDeclaredMadeForKids": opts.get("madeForKids") is True,
+            "selfDeclaredMadeForKids": opts.get("madeForKids") is True and not campaign,
             "containsSyntheticMedia": False,
         }
         if _choice_of(opts, preset, "embeddable") is False:
             status["embeddable"] = False
-        return {
+        out: dict[str, Any] = {
             "snippet": {
                 "title": title or "Clip",
-                "description": description,
+                "description": caption(job, self.platform),
                 "categoryId": category if category.isdigit() else YOUTUBE_CATEGORY_GAMING,
             },
             "status": status,
         }
+        wants_paid = _paid(job) if paid is None else paid
+        if wants_paid:
+            out[YOUTUBE_PAID_PART] = {"hasPaidProductPlacement": True}
+        return out
 
     @staticmethod
-    def upload_url(job: PublishJob) -> str:
-        """The resumable upload URL; ``notifySubscribers=false`` only when the owner turned the bell off (§36)."""
+    def upload_url(job: PublishJob, *, paid: bool | None = None) -> str:
+        """The resumable upload URL; ``notifySubscribers=false`` only when the owner turned the bell off (§36), and
+        the ``paidProductPlacementDetails`` part for a paid campaign post (§38.14)."""
         off = _choice_of(job.options, _preset(job, "youtube"), "notifySubscribers") is False
-        return YOUTUBE_UPLOAD + ("&notifySubscribers=false" if off else "")
+        paid_part = _paid(job) if paid is None else paid
+        return (
+            YOUTUBE_UPLOAD
+            + (f",{YOUTUBE_PAID_PART}" if paid_part else "")
+            + ("&notifySubscribers=false" if off else "")
+        )
 
     def start(self, job: PublishJob) -> Progress:
         handle = job.handle
@@ -225,22 +324,8 @@ class YouTubePublisher:
             else:
                 offset = offset_or_done
         if not session:
-            body = json.dumps(self.metadata(job), separators=(",", ":")).encode()
-            headers = _bearer(
-                token,
-                {
-                    "Content-Type": "application/json; charset=UTF-8",
-                    "X-Upload-Content-Length": str(size),
-                    "X-Upload-Content-Type": "video/mp4",
-                },
-            )
-            resp = _send(job, self.platform, HttpRequest("POST", self.upload_url(job), headers, body))
-            _ok(self.platform, resp, "init")
-            session = resp.headers.get("location", "")
-            if not session.startswith("https://"):
-                raise errors.down(self.platform)
-            handle = {"sessionUri": session}
-            job.save(handle)
+            handle = self._open(job)
+            session = str(handle["sessionUri"])
         chunk = int(_publish_settings(job, "chunkMb", 8)) * MB
         while offset < size:
             end = min(offset + chunk, size)
@@ -258,8 +343,37 @@ class YouTubePublisher:
             video_id = str(data.get("id") or "")
             if not video_id:
                 raise errors.down(self.platform)
-            return self._uploaded(job, {"sessionUri": session, "videoId": video_id})
+            return self._uploaded(job, {**handle, "sessionUri": session, "videoId": video_id})
         raise errors.down(self.platform)
+
+    def _init(self, job: PublishJob, paid: bool) -> HttpResponse:
+        body = json.dumps(self.metadata(job, paid=paid), separators=(",", ":")).encode()
+        headers = _bearer(
+            job.creds.access_token,
+            {
+                "Content-Type": "application/json; charset=UTF-8",
+                "X-Upload-Content-Length": str(job.video.size),
+                "X-Upload-Content-Type": "video/mp4",
+            },
+        )
+        return _send(job, self.platform, HttpRequest("POST", self.upload_url(job, paid=paid), headers, body))
+
+    def _open(self, job: PublishJob) -> dict[str, Any]:
+        """Starts the upload session. When YouTube refuses Paid promotion on a campaign post, the start is sent once
+        more without it (nothing is uploaded before the session exists) and the post says ``paidLabel: not_set``."""
+        paid = _paid(job)
+        resp = self._init(job, paid)
+        refused = paid and _names(resp, YOUTUBE_PAID_PART, YOUTUBE_PART_REASONS)
+        if refused:
+            log("warning", "publish.youtube_paid_refused", status=resp.status)
+            resp = self._init(job, False)
+        _ok(self.platform, resp, "init")
+        session = resp.headers.get("location", "")
+        if not session.startswith("https://"):
+            raise errors.down(self.platform)
+        handle: dict[str, Any] = {"sessionUri": session, **({"paidLabel": NOT_SET} if refused else {})}
+        job.save(handle)
+        return handle
 
     def _resume(self, job: PublishJob, session: str, size: int) -> int | str:
         """The next byte to send, the video id when the upload already finished, or -1 when the session is gone."""
@@ -309,7 +423,8 @@ class YouTubePublisher:
 
     def published(self, job: PublishJob, handle: dict[str, Any]) -> Published:
         video_id = str(handle.get("videoId") or "")
-        return Published(
+        return _published(
+            handle,
             url=f"https://www.youtube.com/shorts/{video_id}",
             posted_at=_now(job),
             platform_post_id=video_id,
@@ -352,9 +467,11 @@ class TikTokPublisher:
         allowed = [str(o) for o in creator.get("privacy_level_options") or []]
         if not isinstance(privacy, str) or privacy not in allowed:
             raise PublishError("Pick who can see it on TikTok again, then press Try again.")
-        caption = str(_captions(job).get("tiktok") or "")
+        # TikTok's rule: branded content (a paid partnership) is only for Everyone or Friends.
+        if options.get("brandContent") and privacy not in BRANDED_PRIVACY:
+            raise PublishError("Pick who can see it on TikTok again, then press Try again.")
         return {
-            "title": caption[:CAPTION_MAX],
+            "title": caption(job, self.platform),
             "privacy_level": privacy,
             "disable_comment": bool(options.get("disableComment")) or bool(creator.get("comment_disabled")),
             "disable_duet": bool(options.get("disableDuet")) or bool(creator.get("duet_disabled")),
@@ -513,23 +630,9 @@ class InstagramPublisher(_Graph):
             total = (row.get("config") or {}).get("quota_total") if isinstance(row.get("config"), dict) else None
             if isinstance(used, int) and isinstance(total, int) and used >= total:
                 raise PublishError("Instagram's daily limit is reached. Press Try again tomorrow.")
-            params = {
-                "media_type": "REELS",
-                "caption": instagram_caption(str(_captions(job).get("instagram") or "")),
-                # Reels shared to the main feed reach more people; off only when the owner says so (§36).
-                "share_to_feed": "false"
-                if _choice_of(job.options, _preset(job, "instagram"), "shareToFeed") is False
-                else "true",
-            }
-            if source == "video_url":
-                params["video_url"] = job.video.presigned_url(3600)
-            else:
-                params["upload_type"] = "resumable"
-            data = _ok(self.platform, self._post(job, f"{ig}/media", params, "container"), "container")
-            container = str(data.get("id") or "")
-            if not container:
-                raise errors.down(self.platform)
-            handle = {"container": container}
+            container = self._container(job, ig, source)
+            # When the container was made: the Reel it becomes can only be newer (see _already_published).
+            handle = {"container": container, "containerAt": _now(job)}
             job.save(handle)
             if source == "video_url":
                 handle = {**handle, "uploaded": True}
@@ -545,10 +648,37 @@ class InstagramPublisher(_Graph):
         }
         url = f"{RUPLOAD}/ig-api-upload/{job.graph_api_version}/{quote(container, safe='')}"
         resp = _send(job, self.platform, HttpRequest("POST", url, headers, job.video.read(0, size)))
+        if resp.status >= 500:
+            # rupload.facebook.com sometimes answers 5xx for a good file (seen in prod, 21 Nov 2026). Instagram can
+            # fetch the same file itself: start a new container from the media bucket's link instead.
+            log("warning", "publish.instagram_upload_fallback", status=resp.status)
+            handle = {"container": self._container(job, ig, "video_url"), "containerAt": _now(job), "uploaded": True}
+            job.save(handle)
+            return Progress("processing", handle, self._every(job))
         _ok(self.platform, resp, "upload")
         handle = {**handle, "uploaded": True}
         job.save(handle)
         return Progress("processing", handle, self._every(job))
+
+    def _container(self, job: PublishJob, ig: str, source: str) -> str:
+        """Creates the Reels container: resumable (the file is sent next) or video_url (Instagram fetches it)."""
+        params = {
+            "media_type": "REELS",
+            "caption": caption(job, self.platform),
+            # Reels shared to the main feed reach more people; off only when the owner says so (§36).
+            "share_to_feed": "false"
+            if _choice_of(job.options, _preset(job, "instagram"), "shareToFeed") is False
+            else "true",
+        }
+        if source == "video_url":
+            params["video_url"] = job.video.presigned_url(3600)
+        else:
+            params["upload_type"] = "resumable"
+        data = _ok(self.platform, self._post(job, f"{ig}/media", params, "container"), "container")
+        container = str(data.get("id") or "")
+        if not container:
+            raise errors.down(self.platform)
+        return container
 
     def _every(self, job: PublishJob) -> int:
         return int(_publish_settings(job, "checkSeconds", 60))
@@ -556,26 +686,91 @@ class InstagramPublisher(_Graph):
     def check(self, job: PublishJob, handle: dict[str, Any]) -> Progress:
         if handle.get("mediaId"):
             return Progress("done", handle, published=self._published(job, handle))
-        data = self._get(job, str(handle["container"]), {"fields": "status_code"}, "check")
+        data = self._get(job, str(handle["container"]), {"fields": "status_code,status"}, "check")
         code = str(data.get("status_code") or "")
         if code == "FINISHED":
             return Progress("ready_to_finish", handle, 0)
         if code in {"ERROR", "EXPIRED"}:
-            raise PublishError("Instagram did not like this video file.")
-        if code == "PUBLISHED":
-            return Progress("ready_to_finish", handle, 0)
+            # ``status`` holds Meta's reason ("Error: ... 2207026"); it goes to the logs, never to the owner.
+            log(
+                "warning",
+                "publish.container_failed",
+                platform=self.platform,
+                code=code,
+                status=str(data.get("status") or "")[:300],
+            )
+            if code == "EXPIRED":  # not published within 24 h: Try again starts a fresh upload (§17.6)
+                raise errors.PlatformProblem(
+                    errors.Problem("other", False, "Instagram waited too long for this upload. Press Try again.", code)
+                )
+            raise errors.PlatformProblem(errors.Problem("file", False, "Instagram did not like this video file.", code))
+        if code == "PUBLISHED":  # already posted (a finish that was cut off): never publish it twice
+            return self._already_published(job, handle)
         return Progress("processing", handle, self._every(job))
 
+    def _already_published(self, job: PublishJob, handle: dict[str, Any]) -> Progress:
+        """Find the Reel a published container became. Meta has no container → media link, so the newest few
+        posts are matched on the caption that was sent and on being newer than the container; never a guess."""
+        fields = {"fields": "id,permalink,timestamp,caption", "limit": "5"}
+        found = self._get(job, f"{self._ig(job)}/media", fields, "lookup")
+        sent = _same_text(caption(job, self.platform))
+        made = parse(handle.get("containerAt"))
+        matches = []
+        for row in found.get("data") or []:
+            if not isinstance(row, dict) or not row.get("id") or _same_text(str(row.get("caption") or "")) != sent:
+                continue
+            posted = parse(row.get("timestamp"))
+            if made is not None and (posted is None or posted < made - LOOKUP_SLACK):
+                continue
+            matches.append(row)
+        if len(matches) != 1:
+            log("warning", "publish.lookup_unmatched", platform=self.platform, rows=len(found.get("data") or []))
+            raise errors.PlatformProblem(
+                errors.Problem(
+                    "other",
+                    False,
+                    "Instagram may have posted this already. Look on Instagram before you press Try again.",
+                    "lookup",
+                )
+            )
+        row = matches[0]
+        handle = {**handle, "mediaId": str(row["id"]), "permalink": str(row.get("permalink") or "")}
+        job.save(handle)
+        return Progress("done", handle, published=self._published(job, handle))
+
+    def _status_code(self, job: PublishJob, handle: dict[str, Any]) -> str:
+        data = self._get(job, str(handle["container"]), {"fields": "status_code"}, "check")
+        return str(data.get("status_code") or "")
+
     def finish(self, job: PublishJob, handle: dict[str, Any]) -> Progress:
-        if not handle.get("mediaId"):
-            ig = self._ig(job)
-            resp = self._post(job, f"{ig}/media_publish", {"creation_id": str(handle["container"])}, "publish")
+        if handle.get("mediaId"):
+            return Progress("done", handle, published=self._published(job, handle))
+        if handle.get("publishing"):
+            # An earlier publish call lost its answer: Meta may have posted it. Look before publishing again.
+            if self._status_code(job, handle) == "PUBLISHED":
+                return self._already_published(job, handle)
+        else:
+            handle = {**handle, "publishing": True}
+            job.save(handle)
+        try:
+            resp = self._post(
+                job, f"{self._ig(job)}/media_publish", {"creation_id": str(handle["container"])}, "publish"
+            )
             data = _ok(self.platform, resp, "publish")
             media_id = str(data.get("id") or "")
             if not media_id:
                 raise errors.down(self.platform)
-            handle = {**handle, "mediaId": media_id}
-            job.save(handle)
+        except PublishError:
+            # Timeouts, 5xx and "already published" answers can all come after Meta posted the Reel.
+            try:
+                published = self._status_code(job, handle) == "PUBLISHED"
+            except PublishError:
+                published = False
+            if published:
+                return self._already_published(job, handle)
+            raise
+        handle = {**handle, "mediaId": media_id}
+        job.save(handle)
         return Progress("done", handle, published=self._published(job, handle))
 
     def _published(self, job: PublishJob, handle: dict[str, Any]) -> Published:
@@ -612,6 +807,11 @@ class FacebookPublisher(_Graph):
             return Progress("processing", handle, self._every(job))
         page = self._page(job)
         offset = 0
+        duration = job.clip.get("durationSec")
+        if not handle.get("videoId") and isinstance(duration, int | float) and not 3 <= duration <= 90:
+            raise errors.PlatformProblem(
+                errors.Problem("file", False, "Facebook Reels must be 3 to 90 seconds long.", "duration")
+            )
         if not handle.get("videoId"):
             data = _ok(
                 self.platform, self._post(job, f"{page}/video_reels", {"upload_phase": "start"}, "start"), "start"
@@ -656,9 +856,19 @@ class FacebookPublisher(_Graph):
             for p in ("uploading_phase", "processing_phase", "publishing_phase")
         ]
         if video in {"error", "upload_failed", "expired"} or "error" in phases:
-            raise PublishError("Facebook did not like this video file.")
+            # Meta's reason ("Resolution too low...") goes to the logs, never to the owner.
+            # Meta's docs show one ``error`` object per phase; some answers carry an ``errors`` list: read both.
+            found = [
+                f"{e.get('code')}: {e.get('message')}"
+                for p in ("uploading_phase", "processing_phase", "publishing_phase")
+                for e in [obj(status.get(p)).get("error"), *(obj(status.get(p)).get("errors") or [])]
+                if isinstance(e, dict)
+            ]
+            log("warning", "publish.video_failed", platform=self.platform, video=video, errors="; ".join(found)[:300])
+            raise errors.PlatformProblem(errors.Problem("file", False, "Facebook did not like this video file.", video))
         if not handle.get("finished"):
-            if phases[0] == "complete":
+            # The docs list "completed"; their samples (and real answers) say "complete": take both.
+            if phases[0] in {"complete", "completed"} or video == "upload_complete":
                 return Progress("ready_to_finish", handle, 0)
             return Progress("processing", handle, self._every(job))
         if phases[2] in {"complete", "completed"} and video in {"ready", "published", ""}:
@@ -673,12 +883,9 @@ class FacebookPublisher(_Graph):
             "upload_phase": "finish",
             "video_id": str(handle["videoId"]),
             "video_state": "PUBLISHED",
-            "description": str(_captions(job).get("facebook") or "")[:CAPTION_MAX],
+            "description": caption(job, self.platform),
         }
-        resp = self._post(job, f"{page}/video_reels", params, "finish")
-        if resp.status >= 400 and "video_state" in resp.body.decode("utf-8", "ignore"):
-            resp = self._post(job, f"{page}/video_reels", {**params, "video_state": "complete"}, "finish")
-        data = _ok(self.platform, resp, "finish")
+        data = _ok(self.platform, self._post(job, f"{page}/video_reels", params, "finish"), "finish")
         handle = {**handle, "finished": True}
         if data.get("post_id"):
             handle["postId"] = str(data["post_id"])
@@ -778,22 +985,39 @@ class XPublisher:
         data = _ok(self.platform, resp, "status")
         return self._progress(handle, (data.get("data") or {}).get("processing_info") or {})
 
+    def _tweet(self, job: PublishJob, tweet: dict[str, Any]) -> HttpResponse:
+        body = json.dumps(tweet, separators=(",", ":")).encode()
+        headers = _bearer(job.creds.access_token, {"Content-Type": "application/json"})
+        return _send(job, self.platform, HttpRequest("POST", f"{X_API}/tweets", headers, body))
+
     def finish(self, job: PublishJob, handle: dict[str, Any]) -> Progress:
         if not handle.get("tweetId"):
-            text = x_text(str(_captions(job).get("x") or ""))
-            tweet: dict[str, Any] = {"text": text, "media": {"media_ids": [str(handle["mediaId"])]}}
+            tweet: dict[str, Any] = {
+                "text": caption(job, self.platform),
+                "media": {"media_ids": [str(handle["mediaId"])]},
+            }
             replies = _choice_of(job.options, _preset(job, "x"), "replies")
             if replies in {"following", "mentionedUsers", "verified"}:
                 tweet["reply_settings"] = replies  # "everyone" sends nothing: X's default (§36)
-            data = self._post_json(job, f"{X_API}/tweets", tweet, "tweet")
+            paid = _paid(job)
+            if paid:
+                tweet[X_PAID_FIELD] = True  # "Disclose that the tweet is a paid partnership" (§38.14)
+            resp = self._tweet(job, tweet)
+            refused = paid and _names(resp, X_PAID_FIELD)
+            if refused:
+                # A 400 creates no post, so sending it once more without the switch can never post twice.
+                log("warning", "publish.x_paid_refused", status=resp.status)
+                resp = self._tweet(job, {k: v for k, v in tweet.items() if k != X_PAID_FIELD})
+            data = _ok(self.platform, resp, "tweet")
             tweet_id = str((data.get("data") or {}).get("id") or "")
             if not tweet_id:
                 raise errors.down(self.platform)
-            handle = {**handle, "tweetId": tweet_id}
+            handle = {**handle, "tweetId": tweet_id, **({"paidLabel": NOT_SET} if refused else {})}
             job.save(handle)
         username = str(job.creds.data.get("username") or "i")
         tweet_id = str(handle["tweetId"])
-        published = Published(
+        published = _published(
+            handle,
             url=f"https://x.com/{username}/status/{tweet_id}",
             posted_at=_now(job),
             platform_post_id=tweet_id,

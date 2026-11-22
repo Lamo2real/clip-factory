@@ -212,7 +212,7 @@ broadest to narrowest:
 ```
 
 What each group is for: S3 (web, media and state buckets), CloudFront (distribution, Origin Access Control,
-invalidations), Cognito (user pool, client, the owner), Lambda (nine functions; for the two durable ones also
+invalidations), Cognito (user pool, client, the owner), Lambda (every function, including `cf-prod-campaigns` for Content Rewards; for the two durable ones also
 `PublishVersion`, the `live` aliases, the event source mapping, and `ListDurableExecutionsByFunction` and
 `StopDurableExecution`, which a destroy uses to stop running executions), DynamoDB (table, its stream:
 `DescribeStream`, `ListStreams`), S3 Vectors (bucket `cf-prod-vectors-*` and its index), API Gateway (the HTTP,
@@ -316,10 +316,17 @@ terms pages, the exact redirect URI `{hooks_url}/oauth/{platform}/callback`) has
 pasted into the app, which keeps them in Secrets Manager. Nothing goes into GitHub, Terraform or `config.json` except
 the public `oauthCallbackBase`.
 
+**Content Rewards** (paid campaigns) is set up the same way, inside the app: Settings › Posting › Set up posting ›
+Content Rewards, with the last step in the Mac app ([SETUP_POSTING.md](SETUP_POSTING.md#content-rewards)). It is
+switched on: it shipped off and the switch PR #88 turned it on once all its parts had merged
+([Content Rewards](#content-rewards-contracts-38)).
+
 What this deploy changes for posting: `cf-prod-hooks` runs up to **28 s** (the code exchange calls the platform),
-`cf-prod-clip-flow` has **1024 MB** (chunked uploads), and Secrets Manager holds at most about **16 secrets** (the
-state key, plus an app, token and short-lived pending secret per platform) at $0.40 each, so about $6 a month at most
-([ARCHITECTURE.md](ARCHITECTURE.md#lambda-functions)).
+`cf-prod-clip-flow` has **1024 MB** (chunked uploads), and Secrets Manager holds at most about **22 secrets** in all
+(the state key, the push key, an app and a token secret per platform, Instagram's and Facebook's short-lived pending
+choice, Content Rewards' app and token, the four badge keys, Ask's search key and the optional YouTube proxy) at
+$0.40 each, so about $9 a month at most
+([ARCHITECTURE.md](ARCHITECTURE.md#lambda-functions), [ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager)).
 
 For webhooks (not built yet), a platform console would need:
 
@@ -349,8 +356,8 @@ Triggered by a push to `main` ([deploy.yml](../.github/workflows/deploy.yml)) or
    with a fresh heartbeat (counts only in the log, read only). A job still running after that resumes on the new
    agent version by itself.
    The apply creates or updates every resource, including the three API Gateway APIs (REST first, then WebSocket,
-   because API Gateway allows one deployment every 5 seconds per account), the nine Lambdas (the two durable ones
-   publish a new version and move their `live` alias; running executions stay on their old version), the stream
+   because API Gateway allows one deployment every 5 seconds per account), every Lambda (with `cf-prod-campaigns`, [Content Rewards](#content-rewards-contracts-38)); the two durable ones
+   publish a new version and move their `live` alias, and running executions stay on their old version), the stream
    trigger, the EventBridge rule `cf-prod-stats` (every 15 minutes, read from `config/platforms.json`), the vector
    bucket and index, the SSM parameter, the Connect state-key secret and the alarms (including `cf-prod-help-model-failures` and its log metric
    filter), and the AgentCore runtime's log group `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT` with 30-day
@@ -368,16 +375,18 @@ Triggered by a push to `main` ([deploy.yml](../.github/workflows/deploy.yml)) or
    `/version.json` last, never cached. Open apps show the update bar within 5 minutes
    ([ARCHITECTURE.md flow 11](ARCHITECTURE.md#11-updates-versionjson-release-areas-and-the-update-bar)).
 8. **Smoke test**: `GET /v1/health` must answer `{ "ok": true }`.
-9. **Desktop app** (jobs `desktop` and `desktop-upload`, only when needed): see [Desktop downloads](#desktop-downloads).
+9. **Desktop app**: once the deploy has succeeded, its own workflow
+   ([desktop.yml](../.github/workflows/desktop.yml)) rebuilds it when needed: see [Desktop downloads](#desktop-downloads).
 
 The run summary shows `app_url`. The first deploy into an empty account takes about 15–20 minutes (CloudFront and
-the AgentCore runtime are the slow parts); later deploys take a few minutes. A deploy that rebuilds the desktop app
-adds about 10–15 minutes on the macOS and Windows runners, in parallel, after the web is already live.
+the AgentCore runtime are the slow parts); later deploys take a few minutes. One deploy runs at a time (the
+`deploy-prod` group), and it ends with the smoke test: a desktop rebuild (about 10–15 minutes on the macOS and
+Windows runners, after the web is already live) runs in desktop.yml and never holds up the next merge's deploy.
 
 ## Desktop downloads
 
 The Mac `.dmg` and Windows `.exe` offered by **Get the app** are built by the `desktop` job in
-[deploy.yml](../.github/workflows/deploy.yml) ([CONTRACTS.md §12.3](CONTRACTS.md#123-desktop-wrapper-desktop-tauri-v2),
+[desktop.yml](../.github/workflows/desktop.yml) ([CONTRACTS.md §12.3](CONTRACTS.md#123-desktop-wrapper-desktop-tauri-v2),
 [ARCHITECTURE.md flow 12](ARCHITECTURE.md#12-get-the-app-and-the-desktop-wrapper)).
 
 | | Mac | Windows |
@@ -387,18 +396,29 @@ The Mac `.dmg` and Windows `.exe` offered by **Get the app** are built by the `d
 | File in the web bucket | `downloads/Clip-Factory.dmg` | `downloads/Clip-Factory-Setup.exe` |
 | Signed | No (see below) | No (see below) |
 
-**When it runs.** After the web deploy, only if one of these is true; otherwise the job is skipped in seconds:
+**When it runs.** After every successful deploy of `main` (desktop.yml starts when deploy.yml finishes, builds that
+deploy's commit and reads the app address, bucket and CloudFront id that the deploy's `infra` job handed off in the
+artifact `desktop-handoff`). Only a push to `main` or a run by hand of deploy in this repository counts, never a
+fork's pull request, which could otherwise reach the signing keys. A deploy that ran `infra` but has no hand-off fails
+the desktop run (red), so installed apps never stop updating without a sign. So does a hand-off that is not the only
+one made since the deploy's latest successful `infra` job started, and before it ended, since code that ran earlier in
+the deploy could have uploaded a fake one (an earlier attempt's, from before a re-run, is left out). The desktop run
+downloads that very hand-off, by id. Every other desktop job waits for that check and runs only when it passed. One
+desktop run at a time (`desktop-prod`); a started run is never cancelled, and a newer deploy only replaces a run that
+is still waiting. It builds only if one of these is true; otherwise the job is skipped in seconds:
 - something under `desktop/` changed,
 - the app icon changed,
 - a download is missing from `downloads/` in the web bucket (for example the first deploy),
 - the signing key is set and an update bundle is missing, and the installer there was built without the key (the
   first deploy with the updater, or the first after the secrets were set).
 
-Then both apps are built, as version `1.<run number>.0`. Each installer records `updater=true|false` (whether the
-key was used) next to its `source-hash`. When an installer was built with the key but its signed bundle is missing,
-the build and `desktop-plan` show an error annotation instead of rebuilding on every deploy (which would give every
-installed app a new version with nothing changed); the next change under `desktop/` tries again. A missing key is
-an error annotation on every deploy too; neither fails the run.
+Then both apps are built, as version `1.<run number>.0`, where the number is that of the deploy.yml run (never
+desktop.yml's own, which started again at 1: the updater refuses a lower version). The last version built inside
+deploy.yml was `1.78.0`; deploy runs were past 100 when the desktop jobs moved out, so versions keep going up. Each
+installer records `updater=true|false` (whether the key was used) next to its `source-hash`. When an installer was
+built with the key but its signed bundle is missing, the build and `desktop-plan` show an error annotation instead of
+rebuilding on every deploy (which would give every installed app a new version with nothing changed); the next change
+under `desktop/` tries again. A missing key is an error annotation on every deploy too; neither fails the run.
 
 The app address is read from the Terraform output `app_url` and built into the app. The build job has no OIDC token
 (npm, cargo and the Tauri CLI run there, and none of them may be able to assume the deploy role); it hands the
@@ -414,10 +434,14 @@ under `downloads/updates/<version>/` and writes `downloads/updates/<mac|windows>
 version installed apps update to.
 
 **Forcing a rebuild** (for example after a custom domain changes `app_url`): delete the two files from `downloads/` in the
-web bucket, then run the deploy by hand (Actions → deploy → Run workflow). Until it finishes, Get the app offers the
-browser install, never a broken link.
+web bucket, then run the desktop workflow by hand (Actions → desktop → Run workflow, on `main`): it rebuilds for the
+newest successful deploy, under that deploy's version, so apps already on that version keep theirs. To give installed
+apps a new version as well, run the deploy by hand instead (Actions → deploy → Run workflow): desktop.yml follows it
+with the new run number. Until it finishes, Get the app offers the browser install, never a broken link.
 
 **If the desktop job fails**, the web app is already live; the previous downloads and manifest stay. Fix and push again.
+Re-run a desktop run only while it is the newest one (Actions → desktop): an older one would put its older version
+back. Otherwise run desktop by hand from `main`, which builds for the newest successful deploy.
 
 ### Unsigned builds and the first open
 
@@ -561,6 +585,61 @@ first-call step: open Claude Haiku 5.5 once in the Bedrock console playground in
 ([step 4](#4-bedrock-model-access-and-data-retention)). If it keeps firing, turn the model off with the second command
 above until it is fixed.
 
+## Content Rewards (CONTRACTS §38)
+
+Paid clipping campaigns on Content Rewards ([CONTRACTS.md §38](CONTRACTS.md#38-content-rewards-campaigns-owner-request-2026-11-21),
+[ADR-62](DECISIONS.md#adr-62-content-rewards-the-official-sign-in-through-the-desktop-apps-loopback-door-sending-from-the-cloud-a-reminder-when-it-cant),
+the owner's steps in [SETUP_POSTING.md](SETUP_POSTING.md#content-rewards)). Nothing to set up in AWS or GitHub by
+hand: the owner connects inside the Mac app, and the app makes its own secrets.
+
+**Switched on (PR #88).** `infra/envs/prod` has `variable "content_rewards_enabled"` (bool, **default `true`**). It
+sets `CONTENT_REWARDS` on `cf-prod-api`, `cf-prod-stats`, `cf-prod-clip-flow` and `cf-prod-campaigns`. It shipped
+with default `false` while the parts were built in parallel (CONTRACTS §38.19: api, posting, agent, web, desktop,
+docs), each merging in any order and passing CI alone. Off (`CONTENT_REWARDS = "off"`), every `/v1/contentrewards*`
+route answers 503 `unavailable` ("Content Rewards is not switched on for this app yet."), the clip flow sends nothing,
+the stats tick skips Content Rewards and the web app shows "Coming soon" on the Set up posting card.
+
+**The switch PR.** After all six parts had merged, one last pull request (#88, builder A's line, 21 Nov 2026)
+changed the default to `true`; its deploy set `CONTENT_REWARDS = "on"` everywhere, and that was the only change it
+made. So no campaign clip could go out before the paid-partnership and caption code and the logo and on-screen
+disclosure were in. To turn it off again, set the default back to `false` (revert that one line); no owner data is
+touched either way.
+
+**Make a campaign copy (CONTRACTS §39.3).** Its own switch, `variable "cr_remake_enabled"` (bool, **default
+`true`**), sets `CR_REMAKE` on `cf-prod-api`, an in-place env change. It shipped `false` (the copy route answered 503
+"Coming soon." and no fit offered a copy); its switch PR #93 set it to `true` once G, H and I of §39.4 had merged.
+Turn it off the same way.
+
+**What the first deploy with §38 adds** (additive only, the plan in the deploy log shows it):
+- one new Lambda `cf-prod-campaigns` (the one zip, 512 MB, 120 s, async only, retries 0), its log group (same
+  retention), its `cf-prod-*` role and policy (DynamoDB `GetItem`, `PutItem`, `UpdateItem`, `Query`; `s3:GetObject`,
+  `PutObject`, `DeleteObject` on `campaigns/*` only; the clip agent's model; X-Ray; **no Secrets Manager action**), and
+  its place in the error and failed-invocation alarms;
+- in place: new env vars (`CONTENT_REWARDS`, `CAMPAIGNS_FUNCTION_ARN`) and IAM on `cf-prod-api` and `cf-prod-stats`
+  (invoke `cf-prod-campaigns`; the api also `campaigns/*` in the media bucket), `CONTENT_REWARDS` on the clip flow,
+  and two widened stream filters (live updates and notifications gain `CAMPAIGN#`, `CRCONN`, `CRSUB#`, `CRMONEY`;
+  notifications stay `MODIFY` only);
+- no new schedule (Content Rewards checking rides the `cf-prod-stats` tick), no new output, nothing on the agent.
+
+**The deploy role needs nothing new.** `cf-prod-campaigns` is one more Lambda, log group and `cf-prod-*` role with
+the permissions boundary, all covered by the role's existing `lambda:*`, `logs:*`, `cloudwatch:*`, `xray:*`, the
+`cf-prod-*` IAM statements and `iam:PassRole` to `lambda.amazonaws.com` (or `PowerUserAccess` in `infra/bootstrap`).
+No change to `infra/bootstrap`. The Content Rewards secrets are **never** made by Terraform or the deploy role.
+
+**Owner data.** Nothing that holds the owner's data is replaced or destroyed: no table, index, Cognito pool, bucket
+or secret. The new items are new sort keys (`CRCONN`, `CRSTATE#`, `CAMPAIGN#`, `CRSUB#`, `CRMONEY`, `CROWNERS`) and new
+attributes on jobs, clips, posts and settings; the media bucket gains the prefix `campaigns/`; the two secrets
+`cf-prod/platforms/contentrewards/app` and `…/token` are created by `cf-prod-api` at runtime under the existing
+prefix. The deploy's delete gate still prints "Delete gate: the plan deletes or replaces nothing that holds the
+owner's data." If it ever says otherwise for this change, stop and fix the plan. Never deploy from a local AWS CLI:
+only `deploy.yml` deploys.
+
+**The desktop app.** The sign-in door ships in the next signed desktop release; the owner taps "Restart now" once.
+An older app shows "Update the Clip Factory app first" on the Connect step.
+
+**Cost.** One more small Lambda, a few Content Rewards calls a tick, one model call per campaign rules read (about
+$0.02), and two more secrets ($0.80 a month).
+
 ## First sign-in
 
 1. On the first deploy, Cognito emails `CF_OWNER_EMAIL` a temporary password (from `no-reply@verificationemail.com`;
@@ -606,5 +685,7 @@ policy are not managed by this Terraform; delete them by hand (or `terraform des
 longer need them. The agent's log group `/aws/bedrock-agentcore/runtimes/...-DEFAULT` stays too (it expires its
 logs after 30 days); delete it in the CloudWatch console if you want it gone. GitHub Pages and the legal pages are not affected.
 The platform secrets under `cf-prod/platforms/` are created by the app, not by Terraform: press **Disconnect** on each
-platform first (which also revokes the tokens), or delete them in the Secrets Manager console (eu-north-1). Remove the
+platform first (which also revokes the tokens; Content Rewards too: its Disconnect deletes only the token secret, so
+also delete `cf-prod/platforms/contentrewards/app` in the Secrets Manager console, then remove Clip Factory under
+**Connected apps** on Content Rewards), or delete them in the Secrets Manager console (eu-north-1). Remove the
 developer apps on the platforms' websites too if you no longer need them.

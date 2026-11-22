@@ -1,3 +1,5 @@
+import "../styles/contentrewards.css";
+import "../styles/finder.css";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { initApi } from "../api/index.ts";
 import { auth, onSignedOut } from "../lib/auth.ts";
@@ -6,9 +8,12 @@ import { usePrefs } from "../lib/prefs.ts";
 import { navigate, useHash, useRoute, type Route } from "../lib/router.ts";
 import { findBranch, findTree, legacySettingsRedirect } from "../lib/settingsTree.ts";
 import { forgetLoaded } from "../lib/hooks.ts";
+import { resetCr } from "../lib/contentRewards.ts";
+import { resetGetPaid } from "../lib/getPaid.ts";
+import { resetFinder } from "../lib/finder.ts";
 import { sounds } from "../lib/sounds.ts";
 import { Backdrop, GlassFilter } from "../components/Backdrop.tsx";
-import { Sidebar, TabBar } from "../components/Nav.tsx";
+import { Sidebar, TabBar, WorkspaceSwitch } from "../components/Nav.tsx";
 import { ToastProvider } from "../components/Toasts.tsx";
 import { UpdateBar } from "../components/UpdateBar.tsx";
 import { GetAppPanel } from "../components/GetApp.tsx";
@@ -27,17 +32,32 @@ import { SignIn } from "../screens/SignIn.tsx";
 import { SessionProvider } from "./session.tsx";
 import { ErrorBoundary } from "./ErrorBoundary.tsx";
 import { MockConsent } from "../screens/settings/setup/MockConsent.tsx";
+import { MockCrConsent } from "../screens/campaigns/MockCrConsent.tsx";
+import { CampaignsPage } from "../screens/campaigns/CampaignsPage.tsx";
+import { CampaignPage } from "../screens/campaigns/CampaignPage.tsx";
+import { FindPage } from "../screens/campaigns/FindPage.tsx";
+import { CrSendNow } from "../components/CrSendNow.tsx";
 import { GUIDES } from "../setup/index.ts";
 import { AskClipFactory } from "../features/help/HelpLauncher.tsx";
+import { AskMemoryProvider } from "../features/help/askMemory.tsx";
 import { SetupTodo } from "../components/SetupTodo.tsx";
 import { AppBadge } from "../lib/badge.ts";
 import { MacFetchHost } from "./MacFetchHost.tsx";
 import { forgetDevice } from "../lib/push.ts";
+import { redirectAtStart, storiesTitle } from "../stories/workspace.ts";
 /**
  * The motion gallery (§20.10): mock builds only. Tested on import.meta.env directly (not isMock) so a real build
  * drops the import and does not even carry the code.
  */
 const MotionGallery = import.meta.env.VITE_MOCK === "1" ? lazy(() => import("../dev/MotionGallery.tsx").then((m) => ({ default: m.MotionGallery }))) : null;
+
+/** Lamo Stories (docs/CONTRACTS.md §45.16.2) loads only when it is opened, so Lamo Clips' own bundle and styles stay as
+ * they were. */
+const StoriesApp = lazy(() => import("../stories/StoriesApp.tsx").then((m) => ({ default: m.StoriesApp })));
+
+// Opening the app at "/" when Lamo Stories was the last choice goes to the last Lamo Stories page (§45.16.1), before
+// the first screen draws. Nothing happens while Lamo Stories is switched off.
+redirectAtStart();
 
 type Boot = { state: "loading" } | { state: "signed_out"; note: string | null } | { state: "ready" } | { state: "broken" };
 
@@ -53,13 +73,21 @@ const TITLES: Record<Route["name"], string> = {
   skill: "Skill",
   get_app: "Get the app",
   mock_oauth: "Pretend sign-in",
+  mock_cr_consent: "Pretend Content Rewards",
+  cr_setup: "Content Rewards setup · Settings",
+  getpaid: "Get paid · Settings",
+  campaigns: "Your campaigns",
+  campaigns_find: "Find campaigns",
+  campaign: "Campaign",
   motion_gallery: "Motion gallery",
+  stories: "Lamo Stories",
   not_found: "Not found",
 };
 
 /** The tab title: deeper Settings pages name where you are ("Sounds · Settings"). */
 export function titleFor(route: Route): string {
   if (route.name === "settings" && route.platform) return `${GUIDES[route.platform].name} setup · Settings`;
+  if (route.name === "getpaid") return `${route.place === "contentrewards" ? "Content Rewards" : GUIDES[route.place].name} · Get paid · Settings`;
   if (route.name === "settings" && route.tree) {
     const tree = findTree(route.tree);
     const branch = tree && route.branch ? findBranch(tree, route.branch) : undefined;
@@ -67,6 +95,7 @@ export function titleFor(route: Route): string {
   }
   if (route.name === "skill") return `${route.mode === "new" ? "Write a skill" : route.mode === "edit" ? "Change a skill" : "Skill"} · Settings`;
   if (route.name === "library" && route.view === "week") return `${weekTitle(route.week)} · Library`;
+  if (route.name === "stories") return storiesTitle(route.page);
   return TITLES[route.name];
 }
 
@@ -94,6 +123,9 @@ export function App() {
     () =>
       onSignedOut(() => {
         forgetLoaded();
+        resetCr();
+        resetGetPaid();
+        resetFinder();
         setBoot({ state: "signed_out", note: "Your sign-in on this device has ended. Please sign in again." });
       }),
     [],
@@ -107,6 +139,9 @@ export function App() {
     await Promise.race([forgetDevice(), new Promise<void>((done) => setTimeout(done, 4000))]);
     await auth().signOut();
     forgetLoaded();
+    resetCr();
+    resetGetPaid();
+    resetFinder();
     setBoot({ state: "signed_out", note: null });
   }, []);
 
@@ -133,7 +168,10 @@ export function App() {
         <SignIn note={boot.note} onDone={() => setBoot({ state: "ready" })} />
       ) : (
         <SessionProvider onSignOut={signOut}>
-          <Shell />
+          {/* Ask's conversation sits above the Clip Factory / Lamo Stories branch, so a switch keeps it (§45.16.1). */}
+          <AskMemoryProvider>
+            <Shell />
+          </AskMemoryProvider>
         </SessionProvider>
       )}
       {boot.state === "ready" || boot.state === "signed_out" ? <UpdateBar /> : null}
@@ -165,8 +203,16 @@ function Shell() {
     main.current?.focus({ preventScroll: true });
   }, [page]);
 
-  // Mock mode's pretend consent page stands alone, like the platform's real page would.
+  // Mock mode's pretend consent pages stand alone, like the platform's real page would.
   if (route.name === "mock_oauth") return <MockConsent platform={route.platform} />;
+  if (route.name === "mock_cr_consent") return <MockCrConsent />;
+  // Lamo Stories has its own shell (docs/CONTRACTS.md §45.16.2); every other route keeps this one, unchanged.
+  if (route.name === "stories")
+    return (
+      <Suspense fallback={<div className="boot" role="status" aria-label="Loading Lamo Stories" />}>
+        <StoriesApp page={route.page} />
+      </Suspense>
+    );
 
   return (
     <div className="app">
@@ -184,10 +230,13 @@ function Shell() {
               Clip <em>Factory</em>
             </span>
           </A>
+          <WorkspaceSwitch place="topbar" />
           <LiveDot />
         </header>
         <main className="main" id="main" ref={main} tabIndex={-1}>
           {/* One broken screen never blanks the app; moving to another page clears the error. */}
+          {/* The Mac app's "send this now" banner (§38.6): in the flow, so it never covers a control. */}
+          <CrSendNow route={route} />
           <ErrorBoundary resetKey={page} scope="page">
             <Screen route={route} />
           </ErrorBoundary>
@@ -220,6 +269,16 @@ function Screen({ route }: { route: Route }) {
       return <MoneyDashboard />;
     case "settings":
       return <Settings tree={route.tree} branch={route.branch} platform={route.platform ?? null} />;
+    case "cr_setup":
+      return <Settings tree="posting" branch="setup" contentRewards />;
+    case "getpaid":
+      return <Settings tree="posting" branch="getpaid" getPaid={route.place} />;
+    case "campaigns":
+      return <CampaignsPage />;
+    case "campaigns_find":
+      return <FindPage />;
+    case "campaign":
+      return <CampaignPage key={route.campaignId} campaignId={route.campaignId} />;
     case "skill":
       return <Settings skill={{ mode: route.mode, skillId: route.skillId }} />;
     case "motion_gallery":

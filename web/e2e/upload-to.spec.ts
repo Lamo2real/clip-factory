@@ -15,7 +15,7 @@ type MockWindow = Window & {
       settleWithOneFailed(clipId: string, platform: string, reason?: string): void;
     };
   };
-  __cfMockFaults?: { keepStopsAfterSave: number; setupFails?: number; resumeAfterMs?: number };
+  __cfMockFaults?: { keepStopsAfterSave: number; setupFails?: number; resumeAfterMs?: number; startFails?: boolean };
 };
 
 /** YouTube, TikTok, Instagram and Facebook set up; X not started (the owner's own setup, 2026-11-20). */
@@ -121,6 +121,103 @@ test.describe("Upload to many places", () => {
     const after = await page.evaluate((id) => (window as MockWindow).__cfMock!.posting.posts(id), clipId);
     expect(after.find((p) => p.platform === "youtube")!.status).toBe("posted");
     expect(after.find((p) => p.platform === "facebook")!.status).not.toBe("failed");
+  });
+
+  test("a clip waiting for a place that is set up now gets its own Post now row in the Library (§33.6)", async ({ page }) => {
+    await page.goto("/");
+    await settle(page);
+    // Instagram and TikTok were connected on an earlier visit: the clips waiting for them are older than that.
+    await page.evaluate(() => {
+      const s = (window as MockWindow).__cfMock!.setup;
+      s.finish("instagram");
+      s.finish("tiktok");
+    });
+    await page.goto("/library");
+    await settle(page);
+    const first = page
+      .locator(".lib-card")
+      .filter({ has: page.getByRole("button", { name: "Post now, Instagram" }) })
+      .filter({ has: page.getByRole("button", { name: "Post now, TikTok" }) })
+      .first();
+    const labelledBy = (await first.getAttribute("aria-labelledby"))!;
+    const clipId = labelledBy.replace("lib-", "");
+    const card = page.locator(`.lib-card[aria-labelledby="${labelledBy}"]`);
+    // Places still not set up stay in the one "Waiting for setup" line; Instagram has its own row.
+    await expect(card.locator(".post--group")).toContainText("Waiting for setup");
+    await expect(card.locator('.post--group .post__mark[title="Instagram"]')).toHaveCount(0);
+    await expect(card.locator(".post:not(.post--group)", { hasText: "Instagram" })).toContainText("Ready to post");
+    // TikTok asks who can see it first (TikTok's rules), then posts with that choice.
+    await card.getByRole("button", { name: "Post now, TikTok" }).click();
+    await expect(page.getByRole("dialog", { name: "Post to TikTok" })).toBeVisible();
+    await page.getByRole("dialog", { name: "Post to TikTok" }).getByRole("button", { name: "Not now" }).click();
+    await card.getByRole("button", { name: "Post now, Instagram" }).click();
+    await expect(page.getByText("Posting to Instagram!")).toBeVisible();
+    await expect(card.getByRole("button", { name: "Post now, Instagram" })).toHaveCount(0);
+    await expect(card.locator(".post:not(.post--group)", { hasText: "Instagram" })).toContainText("Uploading");
+    const after = await page.evaluate((id) => (window as MockWindow).__cfMock!.posting.posts(id), clipId);
+    expect(after.find((p) => p.platform === "instagram")!.status).toBe("queued");
+    expect(after.find((p) => p.platform === "facebook")!.status).toBe("pending_integration");
+  });
+
+  test("connecting a place sends the clips waiting for it by themselves (§17.6)", async ({ page }) => {
+    await page.goto("/library");
+    await settle(page);
+    const first = page.locator(".lib-card", { has: page.locator('.post--group .post__mark[title="Instagram"]') }).first();
+    const labelledBy = (await first.getAttribute("aria-labelledby"))!;
+    const card = page.locator(`.lib-card[aria-labelledby="${labelledBy}"]`);
+    await page.evaluate(() => (window as MockWindow).__cfMock!.setup.finish("instagram"));
+    await expect(card.locator('.post--group .post__mark[title="Instagram"]')).toHaveCount(0);
+    await expect(card.locator(".post:not(.post--group)", { hasText: "Instagram" })).toContainText("Uploading");
+    await expect(card.getByRole("button", { name: "Post now, Instagram" })).toHaveCount(0);
+  });
+
+  test("a release whose posting did not start turns into Try again on the card (§14.5)", async ({ page }) => {
+    await page.goto("/library");
+    await settle(page);
+    const first = page.locator(".lib-card", { has: page.locator('.post--group .post__mark[title="Instagram"]') }).first();
+    const labelledBy = (await first.getAttribute("aria-labelledby"))!;
+    const card = page.locator(`.lib-card[aria-labelledby="${labelledBy}"]`);
+    await page.evaluate(() => {
+      const w = window as MockWindow;
+      w.__cfMockFaults!.startFails = true;
+      w.__cfMock!.setup.finish("instagram");
+    });
+    await expect(card.locator(".post:not(.post--group)", { hasText: "Instagram" })).toContainText("Uploading");
+    // A start normally lands a moment later; one that is still missing after a few seconds gets the big Try again.
+    await expect(card.getByText("This clip has not started uploading yet. Tap Try again.")).toBeVisible({ timeout: 10_000 });
+    await page.evaluate(() => {
+      (window as MockWindow).__cfMockFaults!.startFails = false;
+    });
+    await card.getByRole("button", { name: "Try again", exact: true }).click();
+    await expect(page.getByText("Uploading to Instagram!")).toBeVisible();
+    await expect(card.getByText("This clip has not started uploading yet.")).toHaveCount(0);
+    await expect(card.locator(".post:not(.post--group)", { hasText: "Instagram" })).toContainText("Uploading");
+  });
+
+  test("a second Post now on the same card sends that place too (§17.6)", async ({ page }) => {
+    await page.goto("/");
+    await settle(page);
+    await page.evaluate(() => {
+      const s = (window as MockWindow).__cfMock!.setup;
+      s.finish("instagram");
+      s.finish("facebook");
+    });
+    await page.goto("/library");
+    await settle(page);
+    const first = page
+      .locator(".lib-card")
+      .filter({ has: page.getByRole("button", { name: "Post now, Instagram" }) })
+      .filter({ has: page.getByRole("button", { name: "Post now, Facebook" }) })
+      .first();
+    const labelledBy = (await first.getAttribute("aria-labelledby"))!;
+    const clipId = labelledBy.replace("lib-", "");
+    const card = page.locator(`.lib-card[aria-labelledby="${labelledBy}"]`);
+    await card.getByRole("button", { name: "Post now, Instagram" }).click();
+    await expect(page.getByText("Posting to Instagram!")).toBeVisible();
+    await card.getByRole("button", { name: "Post now, Facebook" }).click();
+    await expect(page.getByText("Posting to Facebook!")).toBeVisible();
+    const after = await page.evaluate((id) => (window as MockWindow).__cfMock!.posting.posts(id), clipId);
+    expect(after.filter((p) => p.platform === "instagram" || p.platform === "facebook").map((p) => p.status)).toEqual(["queued", "queued"]);
   });
 
   test("the last choice is remembered on this device, minus places no longer set up", async ({ page }) => {

@@ -62,7 +62,10 @@ async function readable(page: Page, at: string, failures: string[]): Promise<num
   return scan.checked;
 }
 
-for (const route of ROUTES) {
+/** Content Rewards' own pages (§38.20): its setup, the campaigns list, a campaign card and the Money part. */
+const CR_ROUTES = ["/settings/posting/setup/contentrewards", "/campaigns", "/campaigns/200ea21b-be80-4db8-b552-8e32b148604e", "/campaigns/a1cefc3b-4533-438f-8e70-a7299550f1cf"];
+
+for (const route of [...ROUTES, ...CR_ROUTES]) {
   test(`text on ${route} is readable at 320, 375 and 1440 px, light and dark`, async ({ page }) => {
     test.setTimeout(180_000);
     const path = await resolveRoute(page, route);

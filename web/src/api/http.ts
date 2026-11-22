@@ -3,11 +3,19 @@ import { ApiError, errorFromResponse, networkError } from "./errors.ts";
 import type {
   Account,
   Api,
+  Campaign,
+  CampaignSummary,
+  Captions,
+  ClipFit,
+  CrConnection,
+  CrSubmission,
   Clip,
+  ClipFile,
   ClipPerformance,
   Job,
   JobDeleted,
   KeyCheck,
+  Finder,
   Follow,
   Lesson,
   MacUploadParts,
@@ -20,6 +28,7 @@ import type {
   Skill,
   SkillDetail,
   TikTokCreator,
+  TikTokMarked,
   WeekView,
 } from "./types.ts";
 
@@ -108,6 +117,10 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
         ...(options && Object.keys(options).length ? { options } : {}),
       }),
     declineClip: async (clipId) => (await call<{ clip: Clip }>("POST", `/clips/${id(clipId)}/decline`)).clip,
+    clipFile: (clipId) => call<ClipFile>("GET", `/clips/${id(clipId)}/file`),
+    markTikTokPosted: (clipId, link, since) =>
+      call<TikTokMarked>("POST", `/clips/${id(clipId)}/tiktok/posted`, { ...(link ? { link } : {}), ...(since ? { since } : {}) }),
+    undoTikTokPosted: (clipId) => call<TikTokMarked>("DELETE", `/clips/${id(clipId)}/tiktok/posted`),
     listSkills: async () => (await call<{ skills: Skill[] }>("GET", "/skills")).skills,
     getSkill: (skillId) => call<SkillDetail>("GET", `/skills/${id(skillId)}`),
     writeSkill: async (form) => (await call<{ skill: Skill }>("POST", "/skills", form)).skill,
@@ -115,6 +128,7 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     createSkillUpload: (filename, skillId) =>
       call("POST", "/skills/uploads", skillId ? { filename, skillId } : { filename }),
     createSkill: async (body) => (await call<{ skill: Skill }>("POST", "/skills", body)).skill,
+    skillSection: (skillId, body) => call("POST", `/skills/${id(skillId)}/sections`, body),
     deleteSkill: (skillId) => call("DELETE", `/skills/${id(skillId)}`),
     getSettings: async () => (await call<{ settings: Settings }>("GET", "/settings")).settings,
     putSettings: async (patch) => (await call<{ settings: Settings }>("PUT", "/settings", patch)).settings,
@@ -185,5 +199,55 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
         return (await call<{ week: WeekView }>("GET", `/weeks/${id(week)}${q({ from: body.from, to: body.to })}`)).week;
       return out;
     },
+    // Content Rewards (§38.8)
+    crOverview: () => call("GET", "/contentrewards"),
+    crConnect: (port) => call("POST", "/contentrewards/connect", { port }),
+    crConnectFinish: (body) => call("POST", "/contentrewards/connect/finish", body),
+    crCheck: () => call("POST", "/contentrewards/check"),
+    crPatchConnection: async (body) => (await call<{ connection: CrConnection }>("PATCH", "/contentrewards/connection", body)).connection,
+    crDisconnect: () => call("DELETE", "/contentrewards/connection", undefined, true),
+    crCampaigns: async () => (await call<{ campaigns: CampaignSummary[] }>("GET", "/contentrewards/campaigns")).campaigns,
+    crAddCampaign: (url) => call("POST", "/contentrewards/campaigns", { url }),
+    crCampaign: async (campaignId) => (await call<{ campaign: Campaign }>("GET", `/contentrewards/campaigns/${id(campaignId)}`)).campaign,
+    crReadCampaign: async (campaignId, pastedRules) =>
+      (await call<{ campaign: Campaign }>("POST", `/contentrewards/campaigns/${id(campaignId)}/read`, pastedRules ? { pastedRules } : {})).campaign,
+    crPatchCampaign: async (campaignId, body) => (await call<{ campaign: Campaign }>("PATCH", `/contentrewards/campaigns/${id(campaignId)}`, body)).campaign,
+    crLogoUpload: (campaignId, body) => call("POST", `/contentrewards/campaigns/${id(campaignId)}/logo`, body),
+    crLogoDone: async (campaignId, key) => (await call<{ campaign: Campaign }>("POST", `/contentrewards/campaigns/${id(campaignId)}/logo/done`, { key })).campaign,
+    crLogoLink: async (campaignId, url) => (await call<{ campaign: Campaign }>("POST", `/contentrewards/campaigns/${id(campaignId)}/logo/link`, { url })).campaign,
+    crDeleteLogo: async (campaignId) => (await call<{ campaign: Campaign }>("DELETE", `/contentrewards/campaigns/${id(campaignId)}/logo`)).campaign,
+    crRemoveCampaign: (campaignId) => call("DELETE", `/contentrewards/campaigns/${id(campaignId)}`, undefined, true),
+    crSubmissions: async (query) =>
+      (await call<{ submissions: CrSubmission[] }>("GET", `/contentrewards/submissions${q({ clipId: query.clipId, campaignId: query.campaignId })}`)).submissions,
+    crCheckSubmissions: async (clipId) => (await call<{ submissions: CrSubmission[] }>("POST", "/contentrewards/submissions/check", { clipId })).submissions,
+    crSendSubmission: async (postId) => (await call<{ submission: CrSubmission }>("POST", `/contentrewards/submissions/${id(postId)}/send`)).submission,
+    crPatchSubmission: async (postId, said) => (await call<{ submission: CrSubmission }>("PATCH", `/contentrewards/submissions/${id(postId)}`, { said })).submission,
+    crMoney: () => call("GET", "/contentrewards/money"),
+    crRefreshMoney: () => call("POST", "/contentrewards/money/refresh"),
+    crSeen: async (key) => {
+      await call("POST", "/contentrewards/seen", { key });
+    },
+    // §39: does this clip fit, Fix it for me, the campaign copy, and All your money.
+    crFit: (clipId) => call<ClipFit>("GET", `/contentrewards/fit${q({ clipId })}`),
+    crFits: async (clipIds) => (await call<{ clips: ClipFit[] }>("GET", `/contentrewards/fit${q({ clipIds: clipIds.join(",") })}`)).clips,
+    crFitCaptions: async (body) => (await call<{ captions: Captions }>("POST", "/contentrewards/fit/captions", body)).captions,
+    crRemake: async (campaignId, body) => (await call<{ job: Job }>("POST", `/contentrewards/campaigns/${id(campaignId)}/remake`, body)).job,
+    // §41: the campaign finder.
+    crFinder: () => call<Finder>("GET", "/contentrewards/finder"),
+    crPatchFinder: async (body) => (await call<{ finder: Finder }>("PATCH", "/contentrewards/finder", body)).finder,
+    crFinderCheck: () => call("POST", "/contentrewards/finder/check"),
+    crFinderSaid: async (campaignId, said) => (await call<{ finder: Finder }>("PATCH", `/contentrewards/finder/matches/${id(campaignId)}`, { said })).finder,
+    crFinderAdd: async (campaignId) => (await call<{ campaign: Campaign }>("POST", `/contentrewards/finder/matches/${id(campaignId)}/add`)).campaign,
+    crFinderJoined: async () => (await call<{ added: CampaignSummary[] }>("POST", "/contentrewards/finder/joined")).added,
+    crFinderAsk: () => call("POST", "/contentrewards/finder/ask"),
+    getMoneyEverywhere: () => call("GET", "/money/everywhere"),
+    // §40: Get paid.
+    getPaid: () => call("GET", "/getpaid"),
+    getPaidPlace: (place) => call("GET", `/getpaid/${id(place)}`),
+    setGetPaidStep: (step, done) => call("PATCH", "/getpaid/steps", { step, done }),
+    stopPaymentReading: () => call("DELETE", "/getpaid/connections/adsense", undefined, true),
+    saveWhopKey: (clientId) => call("PUT", "/getpaid/whop/key", { clientId }),
+    connectWhop: () => call("POST", "/getpaid/whop/connect"),
+    stopWhop: () => call("DELETE", "/getpaid/connections/whop", undefined, true),
   };
 }

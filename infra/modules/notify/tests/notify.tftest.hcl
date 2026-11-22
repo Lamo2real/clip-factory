@@ -2,8 +2,9 @@
 #   cd infra/modules/notify && terraform init -backend=false && terraform test
 #
 # docs/CONTRACTS.md §32.2 and §32.5: the VAPID key is written only through the write-only argument (never in the plan
-# or the state) and is never destroyed; cf-prod-notify reads only MODIFY records of JOB# items, can never delete
-# anything and may read only its own secret.
+# or the state) and is never destroyed; cf-prod-notify reads only MODIFY records of JOB# items (and the Content Rewards
+# items of §38.11 and §41.4 and Get paid's of §40.7), can never delete anything and may read only its own secret. The
+# filter is one pattern on the same mapping, so a new prefix is an in-place change of that mapping.
 
 mock_provider "aws" {
   override_during = plan
@@ -57,13 +58,31 @@ run "notify_reads_job_changes_and_can_never_delete" {
   command = plan
 
   assert {
-    condition     = one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern == jsonencode({ eventName = ["MODIFY"], dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }] } } } })
-    error_message = "cf-test-notify reads only MODIFY records of JOB# items."
+    condition     = one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern == jsonencode({ eventName = ["MODIFY"], dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRCONN" }, { prefix = "CRFIND" }, { prefix = "PAYSTATE#" }] } } } })
+    error_message = "cf-test-notify reads only MODIFY records of JOB# items, the Content Rewards CAMPAIGN#, CRSUB#, CRMONEY, CRCONN (§38.11) and CRFIND (§41.4) items and Get paid's PAYSTATE# (§40.7), one pattern."
+  }
+
+  # §41.4: "3 new campaigns match" comes from a MODIFY of CRFIND (the look only updates it, never creates it). The
+  # shared CRPUBLIC cache (CAMP#{uuid}, PUB#{uuid}, STATE), CROWNERS' USER# rows and the NOTIFIED# dedupe items never
+  # reach cf-test-notify.
+  assert {
+    condition = (
+      jsondecode(one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern).eventName == ["MODIFY"] &&
+      anytrue([for p in jsondecode(one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern).dynamodb.Keys.sk.S : startswith("CRFIND", p.prefix)]) &&
+      alltrue([for sk in ["CAMP#3d9ef19f-0000-4000-8000-000000000000", "PUB#3d9ef19f-0000-4000-8000-000000000000", "STATE", "USER#u1", "NOTIFIED#cr#finder:2026112112:3"] :
+      !anytrue([for p in jsondecode(one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern).dynamodb.Keys.sk.S : startswith(sk, p.prefix)])])
+    )
+    error_message = "Only MODIFY records; CRFIND must pass, CRPUBLIC's CAMP#, PUB# and STATE, CROWNERS' USER# and NOTIFIED# must not."
   }
 
   assert {
-    condition     = aws_lambda_event_source_mapping.notify.starting_position == "LATEST" && aws_lambda_event_source_mapping.notify.maximum_record_age_in_seconds == 600
-    error_message = "The notify mapping starts at LATEST and drops records older than 10 minutes."
+    condition     = !strcontains(one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern, "PAYOUT#") && !strcontains(one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern, "PAYCONN#")
+    error_message = "Get paid notifications come from PAYSTATE# only: a PAYOUT# row or a PAYCONN# change never wakes cf-test-notify."
+  }
+
+  assert {
+    condition     = aws_lambda_event_source_mapping.notify.starting_position == "LATEST" && aws_lambda_event_source_mapping.notify.maximum_record_age_in_seconds == 600 && aws_lambda_event_source_mapping.notify.event_source_arn == var.stream_arn
+    error_message = "The notify mapping reads the table's stream from LATEST and drops records older than 10 minutes (so a new prefix is an in-place filter change)."
   }
 
   assert {

@@ -6,8 +6,11 @@ from ..http import Route, route
 from . import (
     ask,
     clips,
+    contentrewards,
+    finder,
     followers,
     follows,
+    getpaid,
     help,
     jobs,
     lessons,
@@ -42,6 +45,9 @@ ROUTES: list[Route] = [
     route("GET", "/v1/clips/{clipId}/similar", clips.similar),
     route("POST", "/v1/clips/{clipId}/confirm", clips.confirm),
     route("POST", "/v1/clips/{clipId}/decline", clips.decline),
+    route("GET", "/v1/clips/{clipId}/file", clips.clip_file),
+    route("POST", "/v1/clips/{clipId}/tiktok/posted", clips.tiktok_posted),
+    route("DELETE", "/v1/clips/{clipId}/tiktok/posted", clips.tiktok_posted_undo),
     route("GET", "/v1/clips/{clipId}/performance", performance.get_performance),
     route("POST", "/v1/clips/{clipId}/stats/refresh", performance.refresh),
     route("GET", "/v1/skills", skills.list_skills),
@@ -52,6 +58,7 @@ ROUTES: list[Route] = [
     route("PATCH", "/v1/skills/{skillId}", skills.patch_skill),
     route("DELETE", "/v1/skills/{skillId}", skills.delete_skill),
     route("GET", "/v1/skills/{skillId}/content", skills.content),
+    route("POST", "/v1/skills/{skillId}/sections", skills.skill_section),
     route("GET", "/v1/settings", system.get_settings),
     route("PUT", "/v1/settings", system.put_settings),
     route("POST", "/v1/settings/cookies", system.create_cookies_upload),
@@ -91,8 +98,20 @@ ROUTES: list[Route] = [
     # §27: the money dashboard. Before "/v1/money/{platform}/days" so "summary" and "clips" never read as an app.
     route("GET", "/v1/money/summary", money.get_summary),
     route("GET", "/v1/money/clips", money.get_clips),
+    # §39.2: all your money in one place (every platform and Content Rewards, one 30-day period). Before
+    # "/v1/money/{platform}/days" too.
+    route("GET", "/v1/money/everywhere", money.get_everywhere),
     route("GET", "/v1/money/{platform}/days", money.get_days),
-    # §38: follower counts, read from the snapshots the daily money run already stores.
+    # §40: Get paid. Stored items only, except Connect Whop (Whop's metadata) and the stops (Whop's revoke). The
+    # fixed paths come before "/v1/getpaid/{place}".
+    route("GET", "/v1/getpaid", getpaid.get_getpaid),
+    route("PATCH", "/v1/getpaid/steps", getpaid.patch_steps),
+    route("PUT", "/v1/getpaid/whop/key", getpaid.put_whop_key),
+    route("POST", "/v1/getpaid/whop/connect", getpaid.connect_whop),
+    route("DELETE", "/v1/getpaid/connections/adsense", getpaid.stop_adsense),
+    route("DELETE", "/v1/getpaid/connections/whop", getpaid.stop_whop),
+    route("GET", "/v1/getpaid/{place}", getpaid.get_place),
+    # §43: follower counts, read from the snapshots the daily money run already stores.
     route("GET", "/v1/followers", followers.get_followers),
     route("GET", "/v1/weeks/{week}", weeks.get_week),
     route("PUT", "/v1/weeks/{week}/best", weeks.put_best),
@@ -112,4 +131,41 @@ ROUTES: list[Route] = [
     route("PUT", "/v1/push/devices/{deviceId}", push.put_device),
     route("DELETE", "/v1/push/devices/{deviceId}", push.delete_device),
     route("POST", "/v1/push/test", push.send_test),
+    # §38: Content Rewards campaigns. 503 "unavailable" on every one until switched on (CONTENT_REWARDS=on).
+    route("GET", "/v1/contentrewards", contentrewards.overview),
+    route("POST", "/v1/contentrewards/connect", contentrewards.connect),
+    route("POST", "/v1/contentrewards/connect/finish", contentrewards.connect_finish),
+    route("POST", "/v1/contentrewards/check", contentrewards.check),
+    route("PATCH", "/v1/contentrewards/connection", contentrewards.patch_connection),
+    route("DELETE", "/v1/contentrewards/connection", contentrewards.delete_connection),
+    route("GET", "/v1/contentrewards/campaigns", contentrewards.list_campaigns),
+    route("POST", "/v1/contentrewards/campaigns", contentrewards.add_campaign),
+    route("GET", "/v1/contentrewards/campaigns/{campaignId}", contentrewards.get_campaign),
+    route("POST", "/v1/contentrewards/campaigns/{campaignId}/read", contentrewards.read_campaign),
+    route("PATCH", "/v1/contentrewards/campaigns/{campaignId}", contentrewards.patch_campaign),
+    route("POST", "/v1/contentrewards/campaigns/{campaignId}/logo", contentrewards.logo_upload),
+    route("POST", "/v1/contentrewards/campaigns/{campaignId}/logo/done", contentrewards.logo_done),
+    route("POST", "/v1/contentrewards/campaigns/{campaignId}/logo/link", contentrewards.logo_link),
+    route("DELETE", "/v1/contentrewards/campaigns/{campaignId}/logo", contentrewards.logo_delete),
+    route("DELETE", "/v1/contentrewards/campaigns/{campaignId}", contentrewards.delete_campaign),
+    # §39.3: does this clip fit the campaign, "Fix it for me", and a campaign copy of a clip (503 until CR_REMAKE=on).
+    route("POST", "/v1/contentrewards/campaigns/{campaignId}/remake", contentrewards.remake_clip),
+    route("GET", "/v1/contentrewards/fit", contentrewards.get_fit),
+    route("POST", "/v1/contentrewards/fit/captions", contentrewards.fit_captions),
+    route("GET", "/v1/contentrewards/submissions", contentrewards.list_submissions),
+    # Before "/submissions/{postId}" so "check" never reads as a post id.
+    route("POST", "/v1/contentrewards/submissions/check", contentrewards.check_submissions),
+    route("POST", "/v1/contentrewards/submissions/{postId}/send", contentrewards.send_submission),
+    route("PATCH", "/v1/contentrewards/submissions/{postId}", contentrewards.patch_submission),
+    route("GET", "/v1/contentrewards/money", contentrewards.get_money),
+    route("POST", "/v1/contentrewards/money/refresh", contentrewards.refresh_money),
+    route("POST", "/v1/contentrewards/seen", contentrewards.seen),
+    # §41: the campaign finder. 503 "unavailable" on every one until switched on (CR_FINDER=on).
+    route("GET", "/v1/contentrewards/finder", finder.get_finder),
+    route("PATCH", "/v1/contentrewards/finder", finder.patch_finder),
+    route("POST", "/v1/contentrewards/finder/check", finder.check),
+    route("PATCH", "/v1/contentrewards/finder/matches/{campaignId}", finder.patch_match),
+    route("POST", "/v1/contentrewards/finder/matches/{campaignId}/add", finder.add_match),
+    route("POST", "/v1/contentrewards/finder/joined", finder.joined),
+    route("POST", "/v1/contentrewards/finder/ask", finder.ask),
 ]

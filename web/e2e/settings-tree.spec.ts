@@ -583,3 +583,37 @@ test.describe("Sounds", () => {
     expect(await soundLog(page)).toMatchObject([{ kind: "tap", sound: 3, muted: false }]);
   });
 });
+
+test("Find a setting: Content Rewards, its campaigns and its money (§38.17)", async ({ page }) => {
+  await page.goto("/settings");
+  await settle(page);
+  const box = page.getByLabel("Find a setting");
+  await box.fill("content rewards");
+  const hits = page.getByRole("listbox", { name: "Settings found" }).getByRole("option");
+  await expect(hits.first()).toContainText("Content Rewards");
+  await box.press("Enter");
+  await expect(page).toHaveURL(/\/settings\/posting\/setup\/contentrewards$/);
+  await expect(page.getByRole("heading", { name: "Content Rewards", level: 1 })).toBeVisible();
+  await page.goto("/settings");
+  await settle(page);
+  await page.getByLabel("Find a setting").fill("whop");
+  await expect(page.getByRole("listbox", { name: "Settings found" })).toContainText("Content Rewards");
+});
+
+test("Find a setting: Find campaigns opens the campaign finder (§41.1)", async ({ page }) => {
+  await page.goto("/settings");
+  await settle(page);
+  const box = page.getByLabel("Find a setting");
+  await box.fill("find campaigns");
+  const hits = page.getByRole("listbox", { name: "Settings found" }).getByRole("option");
+  await expect(hits.first()).toContainText("Find campaigns");
+  await expect(hits.first()).toContainText("Campaigns on Content Rewards that pay what you want.");
+  await box.press("Enter");
+  await expect(page).toHaveURL(/\/campaigns\/find$/);
+  await expect(page.getByRole("heading", { name: "Find campaigns", level: 1 })).toBeVisible();
+  // Content Rewards news now names new campaigns too (§41.6 change 6).
+  await page.goto("/settings");
+  await settle(page);
+  await page.getByLabel("Find a setting").fill("content rewards news");
+  await expect(page.getByRole("listbox", { name: "Settings found" })).toContainText("You're in, send-now reminders, approvals, proof, money and new campaigns.");
+});

@@ -635,6 +635,26 @@ def test_x_reads_once_a_day_against_the_budget_and_has_no_impressions_bar(
     assert card["notShared"] == "X doesn't share earnings with apps."
 
 
+@pytest.mark.parametrize(
+    ("kind", "premium", "missing"),
+    [
+        ("Premium", True, None),
+        ("PremiumPlus", True, None),
+        ("PremiumBusiness", True, None),
+        ("Basic", False, None),
+        # §40.8 change 13: X also sends "None" for its newer plans the field doesn't know, so it never says no.
+        ("None", None, "X didn't share this."),
+        ("SomeNewPlan", None, "X didn't share this."),
+    ],
+)
+def test_x_premium_signal_never_says_no_for_none(kind: str, premium: bool | None, missing: str | None) -> None:
+    http = FakeHttp((200, {"data": {"id": "42", "subscription_type": kind, "verified_followers_count": 120}}))
+    reading, _ = sources.read_x(http, "token")
+    assert reading.numbers.get("premium") is premium
+    assert reading.missing.get("premium") == missing
+    assert reading.numbers["verifiedFollowers"] == 120
+
+
 # --- one platform failing never stops the others; tokens only through the provider -------------------------
 
 

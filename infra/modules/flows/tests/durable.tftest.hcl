@@ -4,7 +4,8 @@
 # docs/CONTRACTS.md §14.4, §14.5 and §14.12: both flows are durable functions with a published version and an alias
 # `live`, the agreed execution timeouts and retention, a 60-minute delete timeout, no Lambda destinations, and roles
 # that allow exactly what the code calls. §17.9: clip-flow reads and refreshes platform tokens (1024 MB); job-flow
-# gets no Secrets Manager access.
+# gets no Secrets Manager access. §45.15: Lamo Stories' story-flow is a third durable function with its own role
+# (run "story_flow_is_kept_apart"); the generic asserts below cover it too.
 
 mock_provider "aws" {
   override_during = plan
@@ -34,6 +35,11 @@ variables {
   secret_prefix              = "cf-test/platforms/"
   platform_secrets_arn       = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*"
   platform_token_secrets_arn = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/token-*"
+
+  # §45.15: Lamo Stories' workspace tokens (the hooks module's names).
+  ws_secret_prefix            = "cf-test/workspaces/"
+  workspace_secrets_arn       = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/*"
+  workspace_token_secrets_arn = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/*/token*"
 }
 
 run "both_flows_are_durable_with_alias_live" {
@@ -100,8 +106,13 @@ run "environment_matches_the_contract" {
   }
 
   assert {
-    condition     = toset(keys(one(aws_lambda_function.fn["clip-flow"].environment).variables)) == toset(["EMBED_MODEL_ID", "MEDIA_BUCKET", "MODEL_ID", "SECRET_PREFIX", "TABLE_NAME", "VECTOR_BUCKET", "VECTOR_INDEX"])
-    error_message = "clip-flow gets exactly TABLE_NAME, MEDIA_BUCKET, MODEL_ID, EMBED_MODEL_ID, VECTOR_BUCKET, VECTOR_INDEX and SECRET_PREFIX."
+    condition     = toset(keys(one(aws_lambda_function.fn["clip-flow"].environment).variables)) == toset(["CONTENT_REWARDS", "EMBED_MODEL_ID", "MEDIA_BUCKET", "MODEL_ID", "SECRET_PREFIX", "TABLE_NAME", "VECTOR_BUCKET", "VECTOR_INDEX"])
+    error_message = "clip-flow gets exactly TABLE_NAME, MEDIA_BUCKET, MODEL_ID, EMBED_MODEL_ID, VECTOR_BUCKET, VECTOR_INDEX, SECRET_PREFIX and CONTENT_REWARDS (§38.16)."
+  }
+
+  assert {
+    condition     = one(aws_lambda_function.fn["clip-flow"].environment).variables["CONTENT_REWARDS"] == "off"
+    error_message = "§38.16: the clip flow sends nothing to Content Rewards until the switch is on (default off)."
   }
 
   assert {
@@ -265,13 +276,282 @@ run "alias_arns_are_the_outputs" {
     values          = { arn = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:live" }
   }
 
+  override_resource {
+    target          = aws_lambda_alias.live["story-flow"]
+    override_during = plan
+    values          = { arn = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-story-flow:live" }
+  }
+
   assert {
     condition     = endswith(output.job_flow_alias_arn, ":cf-test-job-flow:live") && endswith(output.clip_flow_alias_arn, ":cf-test-clip-flow:live")
     error_message = "The alias ARN outputs must end in :live."
   }
 
   assert {
-    condition     = output.durable_function_names == { job-flow = "cf-test-job-flow", clip-flow = "cf-test-clip-flow" }
-    error_message = "durable_function_names must name both flows."
+    condition     = output.story_flow_alias_arn == "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-story-flow:live"
+    error_message = "story_flow_alias_arn is the story flow's alias live (the API's STORY_FLOW_ARN, §45.15)."
+  }
+
+  assert {
+    condition     = output.durable_function_names == { job-flow = "cf-test-job-flow", clip-flow = "cf-test-clip-flow", story-flow = "cf-test-story-flow" }
+    error_message = "durable_function_names must name the three flows (the story flow's alarms join them, §45.15)."
+  }
+}
+
+# docs/CONTRACTS.md §45.15, ADR-73: cf-prod-story-flow, Lamo Stories' publisher. Durable for longer than the 7-day
+# numbers, its own role (not clip-flow's statements): DynamoDB writes only under USER#*#WS#* and RATE#*, reads on
+# USER#*#WS#*, USER#*#WSREG and RATE#*, plus GetItem of five attributes on USER#* (Lamo Clips' ACCOUNT#), the table
+# only; S3 GetObject on ws/* only; the workspace secrets and Clip Factory's YouTube, TikTok and X app keys read, a
+# workspace token put back; no Bedrock, no Delete, no Scan. IAM patterns are checked as globs against sample ARNs and
+# keys: "*" becomes ".*" and "?" becomes "." in an anchored regex, dots escaped.
+run "story_flow_is_kept_apart" {
+  command = plan
+
+  assert {
+    condition = (aws_lambda_function.fn["story-flow"].function_name == "cf-test-story-flow" &&
+      aws_lambda_function.fn["story-flow"].handler == "clipfactory_api.flows.story_flow.handler" &&
+      aws_lambda_function.fn["story-flow"].memory_size == 1024 && aws_lambda_function.fn["story-flow"].timeout == 900 &&
+    aws_lambda_function.fn["story-flow"].publish && aws_lambda_alias.live["story-flow"].name == "live")
+    error_message = "story-flow is cf-test-story-flow, clipfactory_api.flows.story_flow.handler, 1024 MB / 900 s, published with an alias live."
+  }
+
+  assert {
+    condition     = one(aws_lambda_function.fn["story-flow"].durable_config).execution_timeout == 777600
+    error_message = "story-flow execution_timeout must be 777600 s (9 days: the 7-day numbers and the publish loops)."
+  }
+
+  assert {
+    condition     = one(aws_lambda_function.fn["story-flow"].durable_config).execution_timeout > 7 * 24 * 3600
+    error_message = "story-flow must run longer than 7 days (its last numbers are read 7 days after the post)."
+  }
+
+  assert {
+    condition = one(aws_lambda_function.fn["story-flow"].environment).variables == tomap({
+      TABLE_NAME       = "cf-test-data"
+      MEDIA_BUCKET     = "cf-test-media"
+      WS_SECRET_PREFIX = "cf-test/workspaces/"
+      SECRET_PREFIX    = "cf-test/platforms/"
+    })
+    error_message = "story-flow gets exactly TABLE_NAME, MEDIA_BUCKET, WS_SECRET_PREFIX and SECRET_PREFIX (for the app keys only)."
+  }
+
+  assert {
+    condition     = aws_iam_role.fn["story-flow"].name == "cf-test-fn-story-flow" && aws_iam_role.fn["clip-flow"].name == "cf-test-fn-clip-flow"
+    error_message = "story-flow has its own role, never clip-flow's."
+  }
+
+  assert {
+    condition = toset(flatten([for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : s.Action])) == toset([
+      "logs:CreateLogStream", "logs:PutLogEvents", "xray:PutTraceSegments", "xray:PutTelemetryRecords",
+      "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:TransactWriteItems", "dynamodb:ConditionCheckItem",
+      "dynamodb:GetItem", "dynamodb:Query", "dynamodb:BatchGetItem",
+      "s3:GetObject", "secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue",
+    ])
+    error_message = "story-flow's actions must match docs/CONTRACTS.md §45.15 exactly."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : alltrue([
+        for a in flatten([s.Action]) : !startswith(a, "bedrock") && a != "*" && !endswith(a, ":*")
+      ])
+    ])
+    error_message = "story-flow has no Bedrock action (and no wildcard action)."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : alltrue([
+        for a in flatten([s.Action]) : !contains(["dynamodb:DeleteItem", "dynamodb:BatchWriteItem", "dynamodb:Scan", "secretsmanager:CreateSecret", "secretsmanager:DeleteSecret", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket", "lambda:InvokeFunction"], a)
+      ])
+    ])
+    error_message = "story-flow never deletes or scans items, creates or deletes secrets, writes or lists files, or starts functions."
+  }
+
+  # Writes only under USER#*#WS#* and RATE#*, on the table itself.
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement :
+      s.Resource == ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"] &&
+      s.Condition == { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["USER#*#WS#*", "RATE#*"] } }
+      if anytrue([for a in flatten([s.Action]) : contains(["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:BatchWriteItem", "dynamodb:TransactWriteItems", "dynamodb:ConditionCheckItem"], a)])
+    ])
+    error_message = "Every story-flow DynamoDB write is limited by dynamodb:LeadingKeys to USER#*#WS#* and RATE#*, on the table only."
+  }
+
+  assert {
+    condition = alltrue(flatten([
+      for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : [
+        for key in ["USER#u1", "OAUTH#n1", "HOOK#h1", "USER#u1#WSREG"] : !anytrue([
+          for r in try(s.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"], ["*"]) : can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", key))
+        ])
+      ] if anytrue([for a in flatten([s.Action]) : contains(["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:TransactWriteItems", "dynamodb:ConditionCheckItem"], a)])
+    ]))
+    error_message = "No story-flow write reaches Lamo Clips' USER#{userId} partition, the workspace registry or any other partition."
+  }
+
+  assert {
+    condition = alltrue([
+      for key in ["USER#u1#WS#stories", "USER#u1#WS#01JD0000000000000000000000", "RATE#x"] : anytrue([
+        for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : anytrue([
+          for r in try(s.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"], []) : can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", key))
+        ]) if contains(flatten([s.Action]), "dynamodb:UpdateItem")
+      ])
+    ])
+    error_message = "story-flow can update its workspace partitions and the shared rate budgets."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement :
+      s.Sid == "Reads" && toset(s.Action) == toset(["dynamodb:GetItem", "dynamodb:Query", "dynamodb:BatchGetItem"]) &&
+      s.Resource == ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"] &&
+      s.Condition == { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["USER#*#WS#*", "USER#*#WSREG", "RATE#*"] } }
+    ])
+    error_message = "story-flow reads (GetItem, Query, BatchGetItem) only USER#*#WS#*, USER#*#WSREG and RATE#* on the table, no index."
+  }
+
+  # Lamo Clips' ACCOUNT# items: GetItem only, five attributes, nothing returned by a write (§45.15).
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement :
+      s.Sid == "ClipsAccountRead" && s.Action == ["dynamodb:GetItem"] &&
+      s.Resource == ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"] &&
+      s.Condition == {
+        "ForAllValues:StringLike"   = { "dynamodb:LeadingKeys" = ["USER#*"] }
+        "ForAllValues:StringEquals" = { "dynamodb:Attributes" = ["pk", "sk", "platform", "status", "accountId"] }
+        "StringEqualsIfExists"      = { "dynamodb:Select" = "SPECIFIC_ATTRIBUTES", "dynamodb:ReturnValues" = "NONE" }
+      }
+    ])
+    error_message = "story-flow reads Lamo Clips' ACCOUNT# items only with GetItem of pk, sk, platform, status and accountId."
+  }
+
+  # Every statement that reaches Lamo Clips' own partition (USER#u1) is that attribute-limited GetItem: no Query, no
+  # BatchGetItem, no write and no unrestricted read of USER#{userId}.
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement :
+      flatten([s.Action]) == ["dynamodb:GetItem"] && try(s.Condition["ForAllValues:StringEquals"]["dynamodb:Attributes"], []) == ["pk", "sk", "platform", "status", "accountId"]
+      if anytrue([for a in flatten([s.Action]) : startswith(a, "dynamodb:")]) && anytrue([
+        for r in try(s.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"], ["*"]) : can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", "USER#u1"))
+      ])
+    ])
+    error_message = "story-flow reaches USER#{userId} (Lamo Clips) only through the five-attribute GetItem."
+  }
+
+  assert {
+    condition = toset(flatten([
+      for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : s.Resource if anytrue([for a in flatten([s.Action]) : startswith(a, "s3:")])
+    ])) == toset(["arn:aws:s3:::cf-test-media/ws/*"])
+    error_message = "story-flow's S3 access is exactly GetObject on ws/*."
+  }
+
+  assert {
+    condition = toset(flatten([
+      for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : s.Resource if contains(flatten([s.Action]), "secretsmanager:GetSecretValue")
+      ])) == toset([
+      "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/*",
+      "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/youtube/app*",
+      "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/tiktok/app*",
+      "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/x/app*",
+    ])
+    error_message = "story-flow reads the workspace secrets and Clip Factory's YouTube, TikTok and X app keys (the shared-app choice, never Meta's), nothing else."
+  }
+
+  assert {
+    condition = toset(flatten([
+      for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : s.Resource if contains(flatten([s.Action]), "secretsmanager:PutSecretValue")
+    ])) == toset(["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/*/token*"])
+    error_message = "story-flow writes back only refreshed workspace tokens (<name>/workspaces/*/token*)."
+  }
+
+  # §45.14: a missing secret means "not set up" or "not connected". Secrets Manager checks a secret that does not
+  # exist by its bare name (no random suffix), so the app-key read and the token put must match the bare names too
+  # (otherwise the code gets AccessDenied instead of ResourceNotFoundException).
+  assert {
+    condition = alltrue([
+      for sample in [
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/youtube/app",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/x/app",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/stories/youtube/token",
+        ] : anytrue(flatten([
+          for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : [
+            for r in flatten([s.Resource]) : can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", sample))
+          ] if contains(flatten([s.Action]), "secretsmanager:GetSecretValue")
+      ]))
+      ]) && anytrue(flatten([
+        for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : [
+          for r in flatten([s.Resource]) : can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/stories/youtube/token"))
+        ] if contains(flatten([s.Action]), "secretsmanager:PutSecretValue")
+    ]))
+    error_message = "A deleted app key or workspace token must read as not found: story-flow's grants match the bare secret names."
+  }
+
+  # The sample ARNs of §45.15: no Secrets Manager grant of story-flow reaches a Lamo Clips token or pending choice.
+  assert {
+    condition = alltrue(flatten([
+      for sample in [
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/youtube/token-AbC123",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/youtube/pending-AbC123",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/tiktok/token-AbC123",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/twitch/app-AbC123",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/oauth/state-key-AbC123",
+        # Meta always uses Lamo Stories' own app (§45.30): Clip Factory's Instagram and Facebook keys are never read.
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/instagram/app-AbC123",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/facebook/app-AbC123",
+        # The same by their bare names (how a secret that does not exist is checked).
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/youtube/token",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/youtube/pending",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/twitch/app",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/kick/app",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/instagram/app",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/facebook/app",
+        ] : [
+        for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : [
+          for r in flatten([s.Resource]) : !can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", sample))
+        ] if anytrue([for a in flatten([s.Action]) : startswith(a, "secretsmanager:") || a == "*"])
+      ]
+    ]))
+    error_message = "…:secret:<name>/platforms/youtube/token-AbC123 and …/pending-AbC123 (and Meta's, Twitch's and Kick's app keys and the state key) must match no story-flow Secrets Manager resource."
+  }
+
+  assert {
+    condition = alltrue([
+      for sample in [
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/stories/youtube/token-AbC123",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/youtube/app-AbC123",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/x/app-AbC123",
+        ] : anytrue(flatten([
+          for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : [
+            for r in flatten([s.Resource]) : can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", sample))
+          ] if contains(flatten([s.Action]), "secretsmanager:GetSecretValue")
+      ]))
+    ])
+    error_message = "story-flow can read a workspace token and the platform app keys."
+  }
+
+  assert {
+    condition = alltrue(flatten([
+      for s in jsondecode(aws_iam_role_policy.fn["story-flow"].policy).Statement : [
+        for r in flatten([s.Resource]) : [
+          for sample in ["stories/facebook/pending-AbC123", "stories/facebook/pending"] :
+          !can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/${sample}"))
+        ]
+      ] if contains(flatten([s.Action]), "secretsmanager:PutSecretValue")
+    ]))
+    error_message = "story-flow never writes a workspace's pending Meta choices."
+  }
+
+  # The other way round: …:secret:<name>/workspaces/stories/youtube/token-AbC123 matches no clip-flow or job-flow
+  # resource (stats and money: their own module tests).
+  assert {
+    condition = alltrue(flatten([
+      for k in ["clip-flow", "job-flow"] : [
+        for s in jsondecode(aws_iam_role_policy.fn[k].policy).Statement : [
+          for r in flatten([s.Resource]) : !can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/stories/youtube/token-AbC123"))
+        ] if anytrue([for a in flatten([s.Action]) : startswith(a, "secretsmanager:") || a == "*"])
+      ]
+    ]))
+    error_message = "No clip-flow or job-flow Secrets Manager resource may match a Lamo Stories workspace token."
   }
 }

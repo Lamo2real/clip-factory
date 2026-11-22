@@ -15,9 +15,23 @@ from ..log import log
 from .base import HttpResponse, PublishError, ReconnectNeededError, RetryablePublishError
 from .stub import LABELS
 
+# TikTok refused an unaudited upload to a public account (§42: he posts it on TikTok himself).
+TIKTOK_PRIVATE_ONLY = (
+    "TikTok only takes Clip Factory's uploads on a private account until it approves the app. "
+    "Tap Post it yourself to post it for everyone."
+)
+
 META_RATE_CODES = frozenset({"4", "17", "32", "613", "80001", "80002"})
-META_FILE_SUBCODES = frozenset({"2207026", "2207052", "2207053", "2207004", "2207009", "2207057", "2207082"})
+# Bad file: Instagram 2207xxx, Facebook Reels specs (1363040 aspect, 1363127 resolution, 1363128 length, 1363129 fps).
+META_FILE_SUBCODES = frozenset(
+    {"2207026", "2207052", "2207004", "2207009", "2207057", "2207082", "1363040", "1363127", "1363128", "1363129"}
+)
 META_DAILY_SUBCODES = frozenset({"2207042"})
+# Meta's own hiccups: try the same call again (server error, container not ready yet, upload timed out).
+META_RETRY_CODES = frozenset({"-1", "-2", "1", "2", "9007"})
+META_RETRY_SUBCODES = frozenset({"2207001", "2207003", "2207008", "2207027", "2207032"})
+# The upload itself got lost (2207053 unknown upload error, 2207020 expired): Try again makes a fresh one (§17.6).
+META_FRESH_SUBCODES = frozenset({"2207020", "2207053"})
 TIKTOK_FILE_CODES = frozenset(
     {"file_format_check_failed", "duration_check_failed", "frame_rate_check_failed", "picture_size_check_failed"}
 )
@@ -77,6 +91,15 @@ def _meta_codes(body: Any) -> tuple[str, str]:
     return (str(code) if code is not None else "", str(sub) if sub is not None else "")
 
 
+def _meta_tag(code: str, sub: str) -> str:
+    """``Problem.code`` for Meta: "190/460" when there is a subcode, so the logs tell 458/460/463/467/492 apart."""
+    return f"{code}/{sub}" if code and sub else code or sub
+
+
+def _meta_permission(code: str) -> bool:
+    return code == "10" or (code.isdigit() and 200 <= int(code) <= 299)
+
+
 def _x_text(body: Any) -> str:
     if not isinstance(body, dict):
         return ""
@@ -119,9 +142,8 @@ def classify(platform: str, status: int, body: Any) -> Problem:
         if code in {"spam_risk_user_banned_from_posting", "spam_risk_too_many_pending_share", "spam_risk"}:
             return Problem("banned", False, "TikTok is not letting this account post right now.", code)
         if code == "unaudited_client_can_only_post_to_private_accounts":
-            return Problem(
-                "private", False, "Make your TikTok account private (Setup step 3), then press Try again.", code
-            )
+            # His account is public on purpose (§42): he posts it there himself instead of making it private.
+            return Problem("private", False, TIKTOK_PRIVATE_ONLY, code)
         if code == "reached_active_user_cap":
             return Problem("daily", False, "TikTok's daily limit for your app is reached. Try tomorrow.", code)
         if code in TIKTOK_FILE_CODES:
@@ -132,14 +154,36 @@ def classify(platform: str, status: int, body: Any) -> Problem:
             return Problem("down", True, down, code)
     elif platform in {"instagram", "facebook"}:
         code, sub = _meta_codes(parsed)
+        tag = _meta_tag(code, sub)
         if sub in META_DAILY_SUBCODES or (platform == "instagram" and code == "9"):
             return Problem("daily", False, f"{name}'s daily limit is reached. Press Try again tomorrow.", sub or code)
+        if sub == "2207051":  # code 4, but it means "flagged as spam", not "slow down"
+            return Problem("banned", False, f"{name} is not letting this account post right now.", tag)
+        if sub == "2207050":
+            return Problem("banned", False, "Open the Instagram app and clear any warning. Then press Try again.", tag)
+        if code == "368":
+            return Problem("banned", False, "Meta paused posting for now. Wait a day, then press Try again.", tag)
         if code in META_RATE_CODES:
             return Problem("rate", True, slow, code)
         if code == "190" or status == 401:
-            return Problem("reconnect", False, reconnect, "190")
+            if sub == "492":
+                text = "Your Facebook account is no longer an admin of the Page. Make it an admin, then connect again."
+                return Problem("reconnect", False, text, tag)
+            return Problem("reconnect", False, reconnect, tag or "190")
+        if _meta_permission(code):
+            text = (
+                f"{name} is missing a permission. Connect {name} again in Settings › Posting › Set up posting "
+                "and tick every box."
+            )
+            return Problem("reconnect", False, text, tag)
+        if sub == "1363128":
+            return Problem("file", False, "Facebook Reels must be 3 to 90 seconds long.", tag)
         if sub in META_FILE_SUBCODES or code == "352":
             return Problem("file", False, file_bad, sub or code)
+        if sub in META_FRESH_SUBCODES:
+            return Problem("other", False, f"{name} lost this upload. Press Try again.", tag)
+        if sub in META_RETRY_SUBCODES or code in META_RETRY_CODES:
+            return Problem("down", True, down, tag)
     elif platform == "x":
         text = _x_text(parsed)
         if status == 429:
@@ -187,10 +231,30 @@ class ReconnectProblem(ReconnectNeededError):
         self.problem = problem
 
 
+def _meta_detail(platform: str, body: Any) -> dict[str, str]:
+    """Meta's subcode, type, user title and fbtrace_id for the logs (never the token, never the raw message)."""
+    if platform not in {"instagram", "facebook"}:
+        return {}
+    parsed = _body(body)
+    error = parsed.get("error") if isinstance(parsed, dict) else None
+    if not isinstance(error, dict):
+        return {}
+    keys = {"subcode": "error_subcode", "type": "type", "userTitle": "error_user_title", "fbtraceId": "fbtrace_id"}
+    return {k: str(error[v])[:200] for k, v in keys.items() if error.get(v) not in (None, "")}
+
+
 def error_for(platform: str, resp: HttpResponse, *, step: str = "") -> PublishError:
     """The exception for a failed platform answer; the raw message is logged (it never holds a token)."""
     problem = classify(platform, resp.status, resp.body)
-    log("warning", "publish.platform_error", platform=platform, status=resp.status, code=problem.code, step=step)
+    log(
+        "warning",
+        "publish.platform_error",
+        platform=platform,
+        status=resp.status,
+        code=problem.code,
+        step=step,
+        **_meta_detail(platform, resp.body),
+    )
     if problem.kind == "reconnect":
         return ReconnectProblem(problem)
     if problem.retryable:

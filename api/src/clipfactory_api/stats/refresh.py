@@ -32,6 +32,7 @@ from . import STATS_ORDER, budget, config
 Item = dict[str, Any]
 COMMON = ("views", "likes", "comments", "shares")
 RETRY_DELAYS = (1.0, 4.0)
+META_PLATFORMS = frozenset({"instagram", "facebook"})
 SNAPSHOT_MIN_GAP = timedelta(minutes=15)
 SNAPSHOT_CHANGE = 0.01
 REASONS = ("poll", "manual", "flow")
@@ -232,6 +233,13 @@ def write_skipped(deps: StatsDeps, post: Item, now: datetime, *, until: datetime
         log("warning", "stats.post_gone", postId=post.get("postId"))
 
 
+def _token_dead(deps: StatsDeps, user_id: str, platform: str, now: datetime) -> None:
+    from ..oauth import setup  # imported here, like clip_flow._credits, to keep the stats Lambda import light
+
+    setup.mark_account(deps.store, user_id, platform, now, status="needs_reconnect", reason="token_dead")
+    log("warning", "stats.token_dead", platform=platform)
+
+
 def _skip(
     deps: StatsDeps,
     report: RefreshReport,
@@ -364,6 +372,11 @@ def _refresh_platform(
             _skip(deps, report, [*chunk, *pending], "not_connected", now)
             return
         report.requests += batch.requests
+        if platform in META_PLATFORMS and batch.meta.error_code == "190":
+            # A dead Meta token (Meta never says so by itself): Settings shows Connect again before the next Upload.
+            _token_dead(deps, user_id, platform, now)
+            _skip(deps, report, [*chunk, *pending], "not_connected", now)
+            return
         blocked_at = budget.record(deps.store, platform, batch.meta, now, cfg=cfg)
         for post in chunk:
             post_id = str(post["postId"])

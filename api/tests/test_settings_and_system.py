@@ -27,7 +27,15 @@ DEFAULTS = {
     "followPaused": False,
     "followDailyMax": 0,
     "followMinMinutes": 30,
-    "notify": {"ready": True, "stopped": True, "resumed": False, "steps": False},
+    # §40.7: "Money on hold or sent to your bank" (getPaid) is on by default.
+    "notify": {
+        "ready": True,
+        "stopped": True,
+        "resumed": False,
+        "steps": False,
+        "contentRewards": True,
+        "getPaid": True,
+    },
     # §36 My settings: the owner's own post choices per platform, never made for kids.
     "postPreset": {
         "youtube": {"category": "20", "notifySubscribers": True, "embeddable": True},
@@ -595,3 +603,22 @@ def test_post_preset_refuses_bad_choices(call: Call, preset: object) -> None:
 def test_stored_bad_preset_reads_the_defaults() -> None:
     out = settings.with_defaults({"postPreset": {"youtube": {"madeForKids": True}}})
     assert out["postPreset"] == DEFAULTS["postPreset"]
+
+
+def test_get_paid_notifications_default_on_and_can_be_turned_off(call: Call, store: db.Store) -> None:
+    """§40.7: ``notify.getPaid`` defaults to true, also for an owner who saved choices before it existed."""
+    store.put(
+        {
+            "pk": db.user_pk(USER),
+            "sk": db.SETTINGS_SK,
+            "type": "settings",
+            "notify": {"ready": True, "stopped": False, "resumed": False, "steps": False, "contentRewards": True},
+        }
+    )
+    assert call("GET", "/v1/settings")[1]["settings"]["notify"]["getPaid"] is True
+    status, body = call("PUT", "/v1/settings", {"notify": {"getPaid": False}})
+    assert status == 200
+    assert body["settings"]["notify"]["getPaid"] is False
+    assert body["settings"]["notify"]["stopped"] is True  # a missing key keeps its default
+    status, body = call("PUT", "/v1/settings", {"notify": {"getPaid": "yes"}})
+    assert status == 400

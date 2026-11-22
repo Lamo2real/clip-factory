@@ -1,4 +1,4 @@
-"""/v1/followers: each platform's follower or subscriber total right now (docs/CONTRACTS.md §38).
+"""/v1/followers: each platform's follower or subscriber total right now (docs/CONTRACTS.md §43).
 
 Reading only: the numbers come from the snapshots the daily money run (``cf-prod-money``) already stores.
 """

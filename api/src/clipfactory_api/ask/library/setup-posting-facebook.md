@@ -30,6 +30,8 @@ for Business.
 - If you see **Manage connection** after **Edit profile** on your Page: your Instagram is already linked to this
   Page. Close it. Never press **Disconnect**. Press **I did this**.
 - If you see **People who help manage your Page**: leave those choices as they are.
+- Your Page is in a business portfolio? Keep your own access too: Page **Settings**, then **Page access**. Your
+  account needs **Full control**.
 
 #### 2. Use a computer
 - The developer websites work best on a computer. Use the same browser for every step.
@@ -99,12 +101,14 @@ for Business.
 ### Part 4: Go public
 
 #### 13. Make the app Live
-- In the left menu, press **Publish**. Check the list, then press **Publish** at the bottom right.
+- In the left menu, press **Publish**. Check the list. Press **Go live** at the bottom right.
 - No **Publish** in the menu? Turn the **App Mode** switch to **Live**.
+- Press **I did this** when the top bar says **Live**.
 - Facebook Reels from apps must be 3 to 90 seconds long, 9:16, at least 540x960. Meta allows 30 app posts a day per
   Page.
 - Something missing? Go back to step 8.
-- If Meta asks for **App Review** first: your Reels stay visible only to you for now. Tell Clip Factory support.
+- If you see **App Review** or **Advanced access**: you do not need it for your own Page. Skip it. Press **Go live**.
+  Meta still says no? It lists what is missing. Go back to step 8.
 - Status before this step: "Works now, but only you can see your Facebook Reels until the app is Live."
 
 ### If Facebook says something went wrong

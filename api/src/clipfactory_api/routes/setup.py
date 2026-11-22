@@ -9,7 +9,7 @@ import re
 from datetime import timedelta
 from typing import Any
 
-from .. import posts, validate
+from .. import posts, release, validate
 from ..app import App
 from ..clock import iso
 from ..errors import ApiError, bad_request, conflict, not_found
@@ -18,6 +18,7 @@ from ..ids import ulid
 from ..log import log
 from ..oauth import (
     MONEY_GRANT,
+    PAYMENTS_GRANT,
     PKCE,
     SETUP_ORDER,
     STATE_SECONDS,
@@ -29,6 +30,7 @@ from ..oauth import (
     providers,
     setup,
     state,
+    state_label,
 )
 from ..oauth.providers import AppKeys
 from ..oauth.tokens import ReconnectNeededError, SecretsTokenProvider
@@ -190,14 +192,16 @@ def check(app: App, req: Request) -> Response:
     result: dict[str, Any] = {"at": iso(now), "ok": code == "ok", "code": code, "message": message, "account": "none"}
     account = setup.account_item(app.store, req.user_id, platform) or {}
     if code == "ok" and account.get("status") in {"connected", "needs_reconnect"}:
-        result.update(_check_account(app, env, platform, keys, account))
+        result.update(_check_account(app, env, platform, keys, account, started=req.started))
     elif code == "ok":
         result.update({"code": "not_connected", "message": providers.check_message("not_connected", platform)})
     setup.record(app.store, req.user_id, platform, now, {"check": result})
     return ok({"check": result, "setup": setup.one_setup(app.store, req.user_id, platform, now)})
 
 
-def _check_account(app: App, env: OAuthEnv, platform: str, keys: AppKeys, account: dict[str, Any]) -> dict[str, Any]:
+def _check_account(
+    app: App, env: OAuthEnv, platform: str, keys: AppKeys, account: dict[str, Any], *, started: float
+) -> dict[str, Any]:
     tokens = SecretsTokenProvider(app.store, env)
     try:
         creds = tokens.credentials(platform, account)
@@ -224,7 +228,10 @@ def _check_account(app: App, env: OAuthEnv, platform: str, keys: AppKeys, accoun
     if verdict == "platform_down":
         return {"ok": False, "code": "platform_down", "message": providers.check_message("platform_down", platform)}
     if account.get("status") == "needs_reconnect":
-        setup.mark_account(app.store, str(account.get("userId")), platform, now, remove=["reason"], status="connected")
+        user_id = str(account.get("userId"))
+        setup.mark_account(app.store, user_id, platform, now, remove=["reason"], status="connected")
+        # Connected again: the waiting clips go out, done before the answer is due (§17.6). Never raises.
+        release.release_waiting(app.store, app.flows, user_id, platform, deadline=started + release.ANSWER_SECONDS)
     return {"account": "ok", "message": f"Everything works. Clip Factory can post to {label(platform)}."}
 
 
@@ -290,11 +297,18 @@ def connect(app: App, req: Request) -> Response:
     body = req.json()
     validate.only_keys(body, {"grant"})
     grant = body.get("grant")
-    if grant is not None and grant != MONEY_GRANT:
-        raise bad_request('grant can only be "money".')
+    if grant is not None and grant not in (MONEY_GRANT, PAYMENTS_GRANT):
+        raise bad_request('grant can be "money" or "payments".')
     money = grant == MONEY_GRANT
+    payments = grant == PAYMENTS_GRANT
     keys = _keys(env, platform)
-    if keys is None or (platform in {"instagram", "facebook"} and not keys.config_id):
+    if payments:
+        # §40.6 "Allow payment reading": YouTube only, with its saved keys; YouTube need not be connected.
+        if not env.payment_scopes.get(platform):
+            raise bad_request(f"{label(platform)} does not share payments with apps, so there is nothing to allow.")
+        if keys is None:
+            raise conflict("Paste your YouTube keys first. Tap Set up YouTube.")
+    elif keys is None or (platform in {"instagram", "facebook"} and not keys.config_id):
         raise conflict(f"Paste your {label(platform)} keys first.")
     if money:
         # §25.4 "Allow money reading": only where it means something, and only on top of a working connection.
@@ -308,7 +322,7 @@ def connect(app: App, req: Request) -> Response:
     exp = int(now.timestamp()) + STATE_SECONDS
     key = env.state_key()
     nonce = state.new_nonce()
-    signed = state.sign(key, platform, nonce, exp)
+    signed = state.sign(key, state_label(platform, grant), nonce, exp)  # payments: its own label (§40.6)
     app.store.put(
         {
             "pk": setup.oauth_pk(nonce),
@@ -319,13 +333,17 @@ def connect(app: App, req: Request) -> Response:
             "redirectUri": env.redirect_uri(platform),
             "createdAt": iso(now),
             "ttl": exp + 300,
-            **({"grant": MONEY_GRANT} if money else {}),
+            **({"grant": grant} if grant else {}),
         },
         if_absent=True,
     )
     challenge = state.pkce(key, nonce)[1] if PKCE.get(platform) else None
-    rerequest = not money and setup.item(app.store, req.user_id, platform).get("lastResult") == "missing_permissions"
-    url = providers.authorize_url(env, platform, keys, signed, challenge, rerequest=rerequest, money=money)
+    rerequest = (
+        grant is None and setup.item(app.store, req.user_id, platform).get("lastResult") == "missing_permissions"
+    )
+    url = providers.authorize_url(
+        env, platform, keys, signed, challenge, rerequest=rerequest, money=money, payments=payments
+    )
     log("info", "setup.connect_started", platform=platform, grant=grant or "connect")
     return ok({"authorizeUrl": url, "expiresAt": iso(now + timedelta(seconds=STATE_SECONDS))})
 
@@ -357,6 +375,8 @@ def choose(app: App, req: Request) -> Response:
         raise gone from e
     callback.save(app.store, env, req.user_id, platform, linked)
     log("info", "setup.chosen", platform=platform)
+    # Connected now: the clips waiting for this place go out (§17.6). Never raises.
+    release.release_waiting(app.store, app.flows, req.user_id, platform, deadline=req.started + release.ANSWER_SECONDS)
     return _setup_body(app, req, platform)
 
 

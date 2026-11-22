@@ -1,0 +1,528 @@
+/* Get paid (docs/CONTRACTS.md §40): the list of places, a place's page, the Money card and All your money's sent lines.
+   The §38.1 screen rules: no edges (a pane shows by its glass, a control by its fill), no cursor rule, big targets,
+   AA contrast, reduced motion. Status tones are success, neutral, warn and error, never the vermilion of a button. */
+
+/* ---------- The status pill: words, an icon and a tone (never colour alone) ---------- */
+.gp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  max-width: 100%;
+  min-height: 30px;
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-small);
+  font-weight: 700;
+  line-height: 1.25;
+  box-shadow: none;
+}
+.gp-pill .icon {
+  flex: none;
+}
+.gp-pill__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.gp-pill--success {
+  background: var(--tint-leaf);
+  color: var(--green-text);
+}
+.gp-pill--neutral {
+  background: var(--fill);
+  color: var(--ink-2);
+}
+.gp-pill--warn {
+  background: var(--tint-amber);
+  color: #ffeec4;
+}
+.gp-pill--error {
+  background: var(--tint-vermilion);
+  color: var(--vermilion-ink);
+}
+
+/* §40.1: "Live" is never on a Get paid screen. The app's realtime chip ("● Live": changes show up by themselves) would
+   read as "payouts are live" next to a payout status with no signal behind it, so it steps aside on the list and the
+   place pages. The screens still update by themselves; the chip shows again everywhere else. */
+:root:has(.gp-list, .gp-page) .live-dot {
+  display: none;
+}
+
+/* ---------- Settings › Posting › Get paid ---------- */
+.gp-list {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.gp-summary {
+  justify-self: start;
+  margin: 0;
+  padding-inline: var(--loose-x);
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+/* Words that sit straight on the window or a picture get a plate behind them, as every loose line does (glass.css). */
+html:is(.see-through, [data-backdrop]) .gp-summary {
+  border-radius: var(--r-md);
+  background: rgb(var(--green-rgb) / var(--panel-veil));
+  padding-block: 8px;
+}
+.gp-cards {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr));
+}
+.gp-card {
+  align-items: flex-start;
+  min-height: 120px;
+}
+.gp-card .setup-card__go {
+  align-self: center;
+}
+.gp-card__text {
+  gap: 6px;
+}
+.gp-card__line {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.gp-card__warning {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: var(--fs-small);
+  font-weight: 650;
+  color: var(--vermilion-ink);
+}
+.gp-card__warning .icon {
+  flex: none;
+  margin-top: 2px;
+}
+.gp-bank {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: var(--inset);
+  border-radius: var(--r-lg);
+}
+.gp-bank p {
+  margin: 4px 0 0;
+}
+.gp-bank__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+}
+.gp-section__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  font-weight: 750;
+}
+
+/* ---------- A place's page ---------- */
+.gp-page {
+  min-width: 0;
+}
+.gp-status,
+.gp-facts,
+.gp-seen,
+.gp-sent,
+.gp-whop,
+.gp-each {
+  display: grid;
+  gap: 10px;
+  padding: var(--inset);
+  border-radius: var(--r-lg);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.gp-status__line {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+.gp-status__small,
+.gp-status__next {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.gp-status__next {
+  font-weight: 750;
+  color: var(--ink);
+}
+.gp-status__fix {
+  display: grid;
+  gap: 8px;
+}
+.gp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  margin: 0;
+  min-height: 30px;
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+  background: var(--fill);
+  font-size: var(--fs-small);
+  font-weight: 650;
+}
+.gp-warning {
+  margin: 0;
+}
+.gp-holds {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+.gp-holds__list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--fs-small);
+}
+.gp-facts__country {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.gp-facts__country p {
+  margin: 0;
+  flex: 1 1 220px;
+}
+.gp-facts__group {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+.gp-facts__list,
+.gp-seen__list,
+.gp-each .gstep__say {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+}
+.gp-each .gstep__say {
+  padding-left: 0;
+}
+.gp-step .gstep__num.gp-step__optional {
+  width: auto;
+  min-width: 40px;
+  padding-inline: 10px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 750;
+}
+.gp-step__who {
+  display: block;
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  color: var(--green-ink);
+}
+.gp-step__when,
+.gp-step__phone {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  font-weight: 650;
+}
+.gp-step__when .icon,
+.gp-step__phone .icon {
+  flex: none;
+  margin-top: 2px;
+}
+/* An Open or Copy chip between two lines (the reading step): no dot, no indent. */
+.gstep__say li.gp-step__inline {
+  padding-left: 0;
+}
+.gstep__say li.gp-step__inline::before {
+  content: none;
+}
+.gp-result {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+  font-weight: 650;
+}
+.gp-result.is-ok {
+  background: var(--tint-leaf);
+  color: var(--green-text);
+}
+.gp-result .icon {
+  flex: none;
+  margin-top: 2px;
+}
+.gp-finance {
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+}
+.gp-whop__soon,
+.gp-whop__lede {
+  margin: 0;
+  color: var(--ink-2);
+}
+.gp-whop__key {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+}
+.gp-whop__step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 1.05rem;
+}
+.gp-whop__form {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.gp-whop__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+.gp-whop__row .input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+/* Sent to your bank: Google's or Whop's own record, never "reached your bank". */
+.gp-sent__line {
+  display: grid;
+  gap: 4px;
+}
+.gp-sent__line p {
+  margin: 0;
+}
+.gp-sent__headline {
+  font-weight: 700;
+}
+.gp-sent__amount {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-variant-numeric: tabular-nums;
+}
+.gp-sent__sofar {
+  font-family: var(--font-ui);
+  font-size: var(--fs-small);
+  font-weight: 650;
+}
+.gp-sent__small {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.gp-sent .money-tag {
+  justify-self: start;
+  max-width: 100%;
+  white-space: normal;
+  border-radius: var(--r-md);
+}
+.gp-sent__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.gp-sent__rows {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gp-sent__row {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) minmax(0, 1fr);
+  gap: 2px 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+  font-size: var(--fs-small);
+}
+.gp-sent__money {
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.gp-sent__words,
+.gp-sent__arrive {
+  grid-column: 1 / -1;
+  color: var(--ink-2);
+}
+.gp-bank-line {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  font-weight: 650;
+}
+.gp-bank-line .icon {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* Phones: the next step's main action stays at the bottom right from the moment the page opens (§40.1 item 2), clear
+   of the tab bar (which floats 10 px above the bottom edge) with 12 px to spare. It is the page's last part, so it
+   rests in its own row at the end and never covers the last words. */
+.gp-pin {
+  position: sticky;
+  bottom: calc(var(--tabbar-h, 66px) + env(safe-area-inset-bottom) + 10px + 12px);
+  z-index: 3;
+  display: flex;
+  justify-content: flex-end;
+  justify-self: end;
+  max-width: 100%;
+}
+.gp-pin .btn {
+  box-shadow: 0 14px 30px -14px rgb(var(--shadow-rgb) / 0.9);
+}
+
+/* ---------- Money › Get paid ---------- */
+.gp-money {
+  display: grid;
+  gap: 12px;
+  padding: var(--inset);
+  border-radius: var(--r-xl);
+  min-width: 0;
+}
+.gp-money.is-loading {
+  min-height: 120px;
+}
+.gp-money__head {
+  display: grid;
+  gap: 2px;
+}
+.gp-money__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  font-weight: 750;
+}
+.gp-money__line {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+/* One row per place: a single column on phones, side by side on wide screens (the card stays short). */
+.gp-money__rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gp-money__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "mark name button" "mark pill button";
+  gap: 4px 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+}
+.gp-money__row .gp-mark {
+  grid-area: mark;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+}
+.gp-money__name {
+  grid-area: name;
+  font-weight: 750;
+}
+.gp-money__pill {
+  grid-area: pill;
+  display: flex;
+  min-width: 0;
+}
+.gp-money__button {
+  grid-area: button;
+  display: flex;
+  justify-content: flex-end;
+}
+@media (max-width: 479px) {
+  .gp-money__row {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "mark name" "mark pill" "button button";
+  }
+}
+/* Phones and touch tablets with the money dock: Ask's home spot sits at the card's right end, as in All your money,
+   so the card keeps that column clear (its words and buttons never come under Ask). */
+.money-dash.is-dock .gp-money__row,
+.money-dash.is-dock .gp-money__head,
+.money-dash.is-dock .cr-all__sentsofar {
+  padding-inline-end: 64px;
+}
+@media (min-width: 768px) {
+  .money-dash.is-dock .gp-money__row,
+  .money-dash.is-dock .gp-money__head,
+  .money-dash.is-dock .cr-all__sentsofar {
+    padding-inline-end: 112px;
+  }
+}
+
+/* ---------- All your money: each row's sent line and "Sent to your bank, so far" (§40.4) ---------- */
+.cr-all__sent {
+  margin: 2px 0 0;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.cr-all__sentsofar {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+}
+.cr-all__sent-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  font-weight: 750;
+}
+.cr-all__sent-lines {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cr-all__sent-num {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-variant-numeric: tabular-nums;
+}
+.cr-all__sent-names {
+  font-weight: 650;
+}
+.cr-all__sentsofar .cr-all__why,
+.cr-all__sentsofar .cr-all__nothing {
+  margin: 0;
+}
+.cr-all__bank {
+  font-weight: 650;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gp-pin .btn {
+    transition: none;
+  }
+}

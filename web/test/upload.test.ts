@@ -150,6 +150,45 @@ describe("Upload to the chosen places (mock, like the API)", () => {
   });
 });
 
+describe("waiting posts go out once their place is connected (§17.6, §33.6)", () => {
+  type Controls = { finish(p: string): void };
+  const controls = () => (window as unknown as { __cfMock: { setup: Controls } }).__cfMock.setup;
+  /** A seeded uploaded clip whose every post waits for an account. */
+  const waitingClip = (store: ReturnType<typeof seed>) =>
+    store.clips.find((c) => c.status === "confirmed" && store.posts.some((p) => p.clipId === c.clipId && p.status === "pending_integration"))!;
+  const statusOf = (store: ReturnType<typeof seed>, clipId: string, platform: string) =>
+    store.posts.find((p) => p.clipId === clipId && p.platform === platform)?.status;
+
+  it("connecting a place sends the posts waiting for it, and leaves the others waiting", () => {
+    sessionStorage.clear();
+    const { store } = setup();
+    const c = waitingClip(store);
+    controls().finish("instagram");
+    expect(statusOf(store, c.clipId, "instagram")).toBe("queued");
+    expect(statusOf(store, c.clipId, "facebook")).toBe("pending_integration");
+    // TikTok waits for the owner's choice of who can see it (Post now opens the sheet).
+    controls().finish("tiktok");
+    expect(statusOf(store, c.clipId, "tiktok")).toBe("pending_integration");
+  });
+
+  it("Post now sends a waiting place that is set up, and says so plainly when it is not", async () => {
+    sessionStorage.clear();
+    setup();
+    controls().finish("instagram");
+    // A new page: the place was connected before, so its posts are still waiting (an older clip).
+    const { store, api } = setup();
+    const c = waitingClip(store);
+    expect(statusOf(store, c.clipId, "instagram")).toBe("pending_integration");
+    const out = await api.confirmClip(c.clipId, undefined, undefined, ["instagram"]);
+    expect(out.posts.find((p) => p.platform === "instagram")?.status).toBe("queued");
+    expect(out.posts.find((p) => p.platform === "facebook")?.status).toBe("pending_integration");
+    await expect(api.confirmClip(c.clipId, undefined, undefined, ["facebook"])).rejects.toMatchObject({
+      status: 400,
+      message: "Facebook is not set up yet. Turn it off, then tap Upload.",
+    });
+  });
+});
+
 describe("the new Upload styles (§33)", () => {
   it("set no cursor and draw no visible edge", async () => {
     const { readFileSync } = await import("node:fs");

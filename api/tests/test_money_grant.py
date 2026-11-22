@@ -142,6 +142,7 @@ def test_normal_connect_asks_for_exactly_the_old_scopes(call: Call) -> None:
         assert query["scope"] == [expected]
         assert MONETARY not in body["authorizeUrl"]
         assert "user.info.stats" not in body["authorizeUrl"]
+        assert "adsense" not in body["authorizeUrl"]  # §40.6: only Allow payment reading asks for it
 
 
 def test_money_grant_needs_a_connection_and_a_platform_that_shares_money(call: Call) -> None:
@@ -154,8 +155,8 @@ def test_money_grant_needs_a_connection_and_a_platform_that_shares_money(call: C
     assert "Connect YouTube first" in body["error"]["message"]
     status, body = call("POST", "/v1/accounts/instagram/connect", {"grant": "money"})
     assert status == 400
-    status, _ = call("POST", "/v1/accounts/youtube/connect", {"grant": "everything"})
-    assert status == 400
+    status, body = call("POST", "/v1/accounts/youtube/connect", {"grant": "everything"})
+    assert (status, body["error"]["message"]) == (400, 'grant can be "money" or "payments".')  # §40.8 change 3
 
 
 # --- YouTube --------------------------------------------------------------------------------------------------------

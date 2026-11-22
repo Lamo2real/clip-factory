@@ -1,4 +1,4 @@
-// GET /v1/followers (docs/CONTRACTS.md §38) in memory. Tests and screenshots pick a scenario with
+// GET /v1/followers (docs/CONTRACTS.md §43) in memory. Tests and screenshots pick a scenario with
 // window.__cfMock.followers.setScenario(name) (kept in sessionStorage, so a reload keeps it). The numbers are
 // fixtures for the pretend app only: the real app shows only what each platform reported. Only bundled into mock builds.
 import { ApiError } from "../errors.ts";

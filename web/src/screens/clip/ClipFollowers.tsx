@@ -1,4 +1,4 @@
-// Clip page › New followers from this clip (docs/CONTRACTS.md §38): one line per app the clip went to. YouTube and
+// Clip page › New followers from this clip (docs/CONTRACTS.md §43): one line per app the clip went to. YouTube and
 // Facebook report new subscribers or followers per video; Instagram (for reels), TikTok and X don't, and the line
 // says so. Never a guess.
 import type { ClipPerformance } from "../../api/types.ts";

@@ -9,6 +9,12 @@
   every creator lesson learned from YouTube numbers is deleted (no tombstone: the data behind it is gone, §16.12).
   The money read from YouTube goes as well (§25.6): channel snapshots, reported revenue, the money state and each
   post's ``revenue``. Nothing is deleted on a token expiry: only an explicit Disconnect sends this.
+* ``{"action": "contentrewards", "userId", "what": "campaigns" | "money" | "all"}`` (async Invoke by ``cf-prod-api`` on
+  Connect finish and money refresh, §38.12): ``contentrewards.poll.run_owner`` for that one owner, a 60 s budget.
+* The scheduled tick also checks Content Rewards after the platform poll when ``CONTENT_REWARDS=on``
+  (``contentrewards.poll.run_tick`` with ``min(45 s, what is left - 15 s)``), then, when ``CR_FINDER=on`` and
+  ``CRPUBLIC/STATE`` says a finder look is due and none runs, invokes ``cf-prod-campaigns``
+  ``{"action": "find", "why": "schedule"}`` (§41.5); it never raises.
 * Anything else → log ``stats.bad_event``.
 
 Platform and network problems are handled inside ``refresh_posts`` (they become ``statsError``), so the handler
@@ -18,6 +24,7 @@ returns normally and EventBridge never retries; only a bug raises (and alarms).
 from __future__ import annotations
 
 import os
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -29,18 +36,91 @@ from .refresh import StatsDeps, refresh_posts
 
 DEFAULT_TIME_BUDGET = 240.0
 MAX_POST_IDS = 10
+CR_TICK_SECONDS = 45.0
+CR_MARGIN_SECONDS = 15.0
+CR_OWNER_SECONDS = 60.0
+CR_WHAT = ("campaigns", "money", "all")
 
 
-def handle(event: Any, deps: StatsDeps) -> dict[str, Any]:
+def handle(event: Any, deps: StatsDeps, cr: Callable[[], Any] | None = None) -> dict[str, Any]:
+    """``cr`` builds the Content Rewards deps (None when switched off): ``_cr_from_env`` in the Lambda."""
     now = deps.clock()
+    cr = _cr_from_env if cr is None else cr
     if isinstance(event, dict) and event.get("source") == "aws.events":
-        return {"action": "tick", **run_tick(deps, now)}
+        started = time.monotonic()
+        out = {"action": "tick", **run_tick(deps, now)}
+        left = float(deps.time_budget_seconds) - (time.monotonic() - started)
+        _cr_tick(cr, now, min(CR_TICK_SECONDS, left - CR_MARGIN_SECONDS))
+        return out
     if isinstance(event, dict) and event.get("action") == "refresh":
         return _manual(event, deps)
     if isinstance(event, dict) and event.get("action") == "forget":
         return _forget(event, deps)
+    if isinstance(event, dict) and event.get("action") == "contentrewards":
+        return _content_rewards(event, cr, now)
     log("warning", "stats.bad_event")
     return {"action": "bad_event"}
+
+
+def _cr_tick(cr: Callable[[], Any], now: Any, budget: float) -> None:
+    if budget <= 0:
+        return
+    try:
+        cr_deps = cr()
+        if cr_deps is None:
+            return
+        from ..contentrewards import poll
+
+        # Counts down from this tick's start: the refresh guard (≥ 20 s left) must see the time really left.
+        cr_deps.until(budget + CR_MARGIN_SECONDS)
+        poll.run_tick(cr_deps, now, budget)
+        from ..contentrewards import finderapi
+
+        finderapi.tick(cr_deps, now)  # §41.5: a scheduled finder look when one is due and none runs (CR_FINDER=on)
+    except Exception as e:  # the platform poll's work is done; CR checking never fails the tick
+        log("error", "stats.cr_tick_failed", error=type(e).__name__)
+
+
+def _content_rewards(event: dict[str, Any], cr: Callable[[], Any], now: Any) -> dict[str, Any]:
+    user_id, what = event.get("userId"), event.get("what")
+    if not (isinstance(user_id, str) and user_id and what in CR_WHAT):
+        log("warning", "stats.bad_event")
+        return {"action": "bad_event"}
+    cr_deps = cr()
+    if cr_deps is None:
+        log("info", "stats.cr_off")
+        return {"action": "contentrewards", "outcome": "off"}
+    from ..contentrewards import poll
+
+    deadline = time.monotonic() + CR_OWNER_SECONDS
+    cr_deps.until(CR_OWNER_SECONDS + CR_MARGIN_SECONDS)
+    report = poll.run_owner(cr_deps, user_id, now, what=str(what), deadline=deadline)
+    return {"action": "contentrewards", "report": report}
+
+
+_cr: Any = None
+
+
+def _cr_from_env() -> Any:
+    """The CR deps of ``cf-prod-stats`` (cached per container), or None while switched off (``CONTENT_REWARDS`` not
+    ``on``, or no ``SECRET_PREFIX``). Rules reads it starts go to ``CAMPAIGNS_FUNCTION_ARN``."""
+    global _cr
+    if _cr is None:
+        from ..contentrewards import config as cr_config
+        from ..contentrewards import deps as cr_deps
+
+        if not cr_config.enabled():
+            return None
+        from ..app import region
+        from ..async_invoke import AsyncInvoker
+        from ..flow_client import make_client
+
+        env = os.environ
+        invoker = AsyncInvoker(
+            make_client(region()), env.get("STATS_FUNCTION_ARN", ""), "", "", env.get("CAMPAIGNS_FUNCTION_ARN", "")
+        )
+        _cr = cr_deps.from_env(get_deps().store, None, invoker)
+    return _cr
 
 
 def _manual(event: dict[str, Any], deps: StatsDeps) -> dict[str, Any]:

@@ -71,6 +71,80 @@ describe("no money guesses (§25, ADR-47)", () => {
     expect(using.map(rel)).toEqual([]);
   });
 
+  // §38.7: Content Rewards' money is its own reported numbers, only formatted. Never a rate × views, never added up on
+  // the web (the mock's copy of the server's numbers is the one exception).
+  const CR_MOCK = "api/mock/contentrewards.ts";
+  it("Content Rewards amounts are never worked out (no cents times, divided or added)", () => {
+    const hits = files(SRC)
+      .filter((f) => rel(f) !== CR_MOCK)
+      .flatMap((f) => (code(f).match(/\w*Cents\b\s*[-*/+]\s*[\w(]|[\w)]\s*[*/+]\s*\w*Cents\b/g) ?? []).map((m) => `${rel(f)}: ${m}`));
+    expect(hits).toEqual([]);
+  });
+
+  it("a campaign's rate is never turned into money (no per 1,000 rate times views)", () => {
+    const using = files(SRC).filter((f) => rel(f) !== CR_MOCK && code(f).split("\n").some((line) => /per1kCents/.test(line) && /views/.test(line) && /[*/]/.test(line)));
+    expect(using.map(rel)).toEqual([]);
+  });
+
+  it("Content Rewards' paid-so-far line says Checking… until the list was read to its end", () => {
+    const part = read(join(SRC, "screens/money/CrMoneyPart.tsx"));
+    expect(part).toMatch(/paidSoFarCents == null \? "Checking…"/);
+    expect(part).toContain("Content Rewards&apos; numbers");
+  });
+
+  // §39.2: All your money adds money in one place only, the server (GET /v1/money/everywhere). The web formats it; the
+  // mock's copy of the server's sums (checked against money_everywhere_cases.json) is the one exception.
+  const EVERYWHERE_MOCK = "api/mock/moneyEverywhere.ts";
+  it("All your money only formats: no amount or cents added, multiplied or divided on its screens", () => {
+    for (const f of ["screens/money/AllMoney.tsx", "screens/money/MoneyDashboard.tsx", "screens/review/CampaignFit.tsx", "screens/review/FitSuggestion.tsx", "screens/clip/ClipFit.tsx", "lib/crFit.ts"]) {
+      const text = code(join(SRC, f));
+      expect(text, f).not.toMatch(/amountMicros\s*[-+*/]|[-+*/]=?\s*[\w.]*amountMicros\b/);
+      expect(text, f).not.toMatch(/Cents\b\s*[-+*/]|[-+*/]\s*[\w.]*Cents\b/);
+    }
+    const all = read(join(SRC, "screens/money/AllMoney.tsx"));
+    expect(all).toContain("formatMoney(");
+    expect(all).not.toMatch(/\.reduce\(/);
+  });
+
+  it("no screen sums amounts by place or currency (only the mock's copies of the server do)", () => {
+    const using = files(SRC).filter((f) => !rel(f).startsWith("api/mock/") && /amountMicros\s*\+=|\+=\s*[\w.]*amountMicros\b/.test(code(f)));
+    expect(using.map(rel)).toEqual([]);
+    expect(code(join(SRC, EVERYWHERE_MOCK))).toMatch(/amountMicros \+= a\.amountMicros/);
+  });
+
+  // §40.4: Get paid's screens show what Google or Whop reported, only formatted: never added, converted or guessed,
+  // and never typed in (the mock's copy of the server is the one exception).
+  it("Get paid only formats: no amount or cents worked out on its screens, no money field to type", () => {
+    const screens = ["lib/getPaid.ts", "screens/money/GetPaidCard.tsx", ...readdirSync(join(SRC, "screens/getpaid")).map((f) => `screens/getpaid/${f}`), ...readdirSync(join(SRC, "getpaid")).map((f) => `getpaid/${f}`)];
+    expect(screens.length).toBeGreaterThan(8);
+    for (const f of screens) {
+      const text = code(join(SRC, f));
+      expect(text, f).not.toMatch(/amountMicros\s*[-+*/]|[-+*/]=?\s*[\w.]*amountMicros\b/);
+      expect(text, f).not.toMatch(/Cents\b\s*[-+*/]|[-+*/]\s*[\w.]*Cents\b/);
+      expect(text, f).not.toMatch(/\.reduce\(/);
+      // No box to type money, a bank, card or tax number into (§40: Clip Factory never asks for them).
+      expect(text, f).not.toMatch(/type="number"|inputMode="(decimal|numeric)"|iban|account number|card number|tax number/i);
+    }
+    expect(read(join(SRC, "screens/getpaid/SentRows.tsx"))).toContain("formatMoney(");
+  });
+
+  // §41: the campaign finder shows only Content Rewards' own published numbers (pay per 1,000 views, the most a clip
+  // can earn, the money left), tagged as theirs, and never works one out. The mock's copy of the server's matching
+  // (api/mock/finder.ts) copies CR's numbers as they are and only compares and formats them.
+  const FINDER = ["lib/finder.ts", "screens/campaigns/FindPage.tsx", "screens/campaigns/FinderWant.tsx", "screens/campaigns/FinderMatchCard.tsx", "screens/campaigns/FinderEntry.tsx", "api/mock/finder.ts"];
+  it("the campaign finder only formats Content Rewards' numbers: nothing added, multiplied or divided", () => {
+    for (const f of FINDER) {
+      const text = code(join(SRC, f));
+      expect(text, f).not.toMatch(/Cents\b\s*[-+*/]|[-+*/]\s*[\w.]*Cents\b/);
+      expect(text, f).not.toMatch(/amountMicros/);
+      expect(text, f).not.toMatch(/\bviews\s*[*/]|[*/]\s*\(?\s*\w*\.?views\b/i);
+      expect(text, f).not.toMatch(/\.reduce\([^)]*\+/);
+    }
+    const card = read(join(SRC, "screens/campaigns/FinderMatchCard.tsx"));
+    expect(card).toContain("match.budget.tag");
+    expect(read(join(SRC, "api/mock/finder.ts"))).toContain('tag: "Content Rewards\' numbers"');
+  });
+
   it("the help assistant never offers to change a rate or calls money a best guess", () => {
     const kb = read(join(SRC, "features/help/helpKb.json")).toLowerCase();
     for (const phrase of ["for 1,000 views", "best guess", "use the usual", "your amount"]) expect(kb).not.toContain(phrase);

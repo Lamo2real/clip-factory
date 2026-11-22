@@ -1,11 +1,15 @@
 // A tiny history router: a handful of screens do not need a routing library. A page change swaps the content in
 // place, with no animation at all (docs/CONTRACTS.md §20.16): the window around it stays perfectly still.
 import { useSyncExternalStore } from "react";
-import type { Platform } from "../api/types.ts";
+import type { GetPaidPlace, Platform } from "../api/types.ts";
 import { isMock } from "./config.ts";
 import { findBranch, findTree } from "./settingsTree.ts";
+import { storiesEnabled } from "../stories/flag.ts";
+import { isStoriesPath, matchStories, type StoriesPage } from "../stories/routes.ts";
 
 const SETUP_PLATFORMS: readonly Platform[] = ["youtube", "tiktok", "instagram", "facebook", "x"];
+/** Settings › Posting › Get paid's place pages (§40.1): the five platforms, then Content Rewards. */
+const GETPAID_PLACES: readonly GetPaidPlace[] = [...SETUP_PLATFORMS, "contentrewards"];
 
 export type Route =
   | { name: "home" }
@@ -30,13 +34,29 @@ export type Route =
   | { name: "skill"; mode: "new" | "read" | "edit"; skillId: string | null }
   /** Mock mode only: the pretend consent page Connect goes to (§17.10). */
   | { name: "mock_oauth"; platform: Platform }
+  /** Posting › Set up posting › Content Rewards (§38.3): its own guide, not one of the five platforms. */
+  | { name: "cr_setup" }
+  /** Posting › Get paid › one place (§40.1 item 2). */
+  | { name: "getpaid"; place: GetPaidPlace }
+  /** Your Content Rewards campaigns (§38.4), and one campaign's card. */
+  | { name: "campaigns" }
+  /** The campaign finder (§41.1): matched before `campaign`, whose pattern would otherwise take "find". */
+  | { name: "campaigns_find" }
+  | { name: "campaign"; campaignId: string }
+  /** Mock mode only: the pretend Content Rewards sign-in page (§38.18). */
+  | { name: "mock_cr_consent" }
   | { name: "get_app" }
   /** Mock (e2e) mode only: one button per action motion kind (docs/CONTRACTS.md §20.10). Never in a real build. */
   | { name: "motion_gallery" }
+  /** Lamo Stories (docs/CONTRACTS.md §45.16): every /stories path, only while Lamo Stories is switched on. */
+  | { name: "stories"; page: StoriesPage }
   | { name: "not_found" };
 
 /** The motion gallery's address (mock mode only). */
 export const MOTION_GALLERY_PATH = "/__motion";
+
+/** The pretend Content Rewards sign-in page (mock mode only, §38.18). */
+export const MOCK_CR_CONSENT_PATH = "/mock-cr-consent";
 
 export function match(pathname: string, search = ""): Route {
   const path = pathname.replace(/\/+$/, "") || "/";
@@ -53,6 +73,10 @@ export function match(pathname: string, search = ""): Route {
       : { name: "library", view: "all", week: null };
   }
   if (path === "/money") return { name: "money" };
+  if (path === "/campaigns") return { name: "campaigns" };
+  if (path === "/campaigns/find") return { name: "campaigns_find" };
+  const campaign = /^\/campaigns\/([0-9A-Za-z-]{1,64})$/.exec(path);
+  if (campaign) return { name: "campaign", campaignId: campaign[1]!.toLowerCase() };
   const clip = /^\/clips\/([A-Za-z0-9_-]{1,64})$/.exec(path);
   if (clip) return { name: "clip", clipId: clip[1]! };
   const skill = /^\/settings\/clip-making\/skills\/(.+)$/.exec(path);
@@ -67,15 +91,21 @@ export function match(pathname: string, search = ""): Route {
     if (!findBranch(tree, branchSlug)) return { name: "not_found" };
     return { name: "settings", tree: tree.slug, branch: branchSlug };
   }
+  // Matched before the platform pages: Content Rewards is not a sixth platform (§38.3).
+  if (path === "/settings/posting/setup/contentrewards") return { name: "cr_setup" };
   const setup = /^\/settings\/posting\/setup\/([a-z]{1,20})$/.exec(path);
   if (setup) {
     const platform = setup[1] as Platform;
     return SETUP_PLATFORMS.includes(platform) ? { name: "settings", tree: "posting", branch: "setup", platform } : { name: "not_found" };
   }
+  const getpaid = /^\/settings\/posting\/getpaid\/([a-z]{1,20})$/.exec(path);
+  if (getpaid) return GETPAID_PLACES.includes(getpaid[1] as GetPaidPlace) ? { name: "getpaid", place: getpaid[1] as GetPaidPlace } : { name: "not_found" };
   const consent = /^\/mock-oauth\/([a-z]{1,20})$/.exec(path);
   if (consent && isMock && SETUP_PLATFORMS.includes(consent[1] as Platform)) return { name: "mock_oauth", platform: consent[1] as Platform };
   if (path === "/get-app") return { name: "get_app" };
   if (isMock && path === MOTION_GALLERY_PATH) return { name: "motion_gallery" };
+  if (isMock && path === MOCK_CR_CONSENT_PATH) return { name: "mock_cr_consent" };
+  if (isStoriesPath(path) && storiesEnabled()) return { name: "stories", page: matchStories(path, search) };
   return { name: "not_found" };
 }
 
@@ -236,8 +266,17 @@ export function decodeHash(raw: string): string {
 export function section(route: Route): "home" | "jobs" | "review" | "library" | "money" | "settings" | "get_app" | null {
   switch (route.name) {
     case "mock_oauth":
+    case "mock_cr_consent":
     case "motion_gallery":
+    case "stories":
       return null;
+    case "cr_setup":
+    case "getpaid":
+      return "settings";
+    case "campaigns":
+    case "campaigns_find":
+    case "campaign":
+      return "home";
     case "job":
       return "jobs";
     case "clip":

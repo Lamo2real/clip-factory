@@ -2,6 +2,7 @@
 import type { AnyExtra, PerfStatus, Platform, PlatformPerformance, PostMetrics } from "../api/types.ts";
 import type { IconName } from "../components/Icon.tsx";
 import { PLATFORM_LABEL, PLATFORM_ORDER, relative, timecode } from "./format.ts";
+import { postError, TIKTOK_PRIVATE_ONLY } from "./tiktokYourself.ts";
 
 /** Platform order on the performance page and in This week: the app-wide PLATFORM_ORDER. */
 export const STATS_ORDER: readonly Platform[] = PLATFORM_ORDER;
@@ -250,7 +251,7 @@ export interface CalmCopy {
 }
 
 /** The one plain line (and link) a stack shows instead of numbers. Null when it has numbers to show. */
-export function calmCopy(p: Pick<PlatformPerformance, "platform" | "status" | "metrics" | "error">): CalmCopy | null {
+export function calmCopy(p: Pick<PlatformPerformance, "platform" | "status" | "metrics" | "error"> & Partial<Pick<PlatformPerformance, "by" | "url">>): CalmCopy | null {
   const name = PLATFORM_LABEL[p.platform];
   switch (p.status) {
     case "waiting_for_connection":
@@ -268,10 +269,15 @@ export function calmCopy(p: Pick<PlatformPerformance, "platform" | "status" | "m
     case "posted_private":
       return { text: "Uploaded privately. TikTok shows numbers after the app is approved." };
     case "failed": {
+      // TikTok refused it because the account is public (§42): post it yourself, not Try again.
+      if (p.platform === "tiktok" && p.error && postError(p.error) === TIKTOK_PRIVATE_ONLY)
+        return { text: "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Go to Library and tap Post it yourself.", link: { href: "/library", label: "Go to Library" } };
       const why = (p.error ?? "something went wrong").replace(/[.!\s]+$/, "");
       return { text: `${why}. Go to Library and tap Try again.`, link: { href: "/library", label: "Go to Library" } };
     }
     case "posted":
+      // Posted on TikTok by the owner himself (§42): only its link lets Clip Factory find its numbers.
+      if (p.by === "you" && !p.url) return { text: "Posted by you. Add its TikTok link in Library to count views.", link: { href: "/library", label: "Go to Library" } };
       return p.metrics ? null : { text: "Numbers are on the way. Check back in a few minutes." };
   }
 }
@@ -299,6 +305,19 @@ export function perfStatus(post: { status: string; privacy?: string } | undefine
  */
 export function postStatusLabel(post: { status: string; privacy?: string }): string {
   return STATUS_LABEL[perfStatus(post)];
+}
+
+/**
+ * What a Library post row adds after its status word about numbers: when they come, or, for a private post, that
+ * none come. TikTok gives no numbers for private ("Only me") posts, so the api never reads them (platforms/tiktok.py).
+ */
+export function postNumbersNote(
+  post: { status: string; privacy?: string; metrics?: unknown; perfCheckAt?: string },
+  when: (iso: string) => string,
+): string {
+  if (post.status !== "posted" || post.metrics) return "";
+  if (post.privacy === "private") return " · private posts get no numbers";
+  return post.perfCheckAt ? ` · numbers ${when(post.perfCheckAt)}` : "";
 }
 
 /** Highest views above 0; a tie goes to the platform earlier in STATS_ORDER. */

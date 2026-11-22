@@ -173,3 +173,27 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 - AC6: The spotlight ring fades over 2.4 s and is a still ring with reduced motion; Escape closes the panel and returns
   focus; it works with a keyboard and a screen reader.
 - AC7: Nothing overflows from 320 to 1920 px, with the panel open.
+
+### UX-19 Content Rewards that an 8-year-old can follow
+([UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md#content-rewards-campaigns), [CONTRACTS.md §38.1](CONTRACTS.md#381-words-and-rules-every-new-screen-follows))
+- AC1: Plain short words on every Content Rewards screen ("Join", "Copy", "Paste", "Make clips", "sign in", "allow",
+  "per 1,000 views", "clip", "sent"); never "MCP", "OAuth", "token", "scope", "CPM", "submission" or "API" on screen.
+- AC2: **Bold** is always the other site's exact label; Clip Factory's own buttons are in quotes; Whop steps say
+  "Whop may show this a little differently. Look for the same words."
+- AC3: One vermilion button per screen, the next step; on phones it sits at the bottom right while its card is on
+  screen. Everything else is glass or green; no edges, no `cursor` changes; pick-one choices slide (`Glide`).
+- AC4: A step Clip Factory can see ticks itself; a step it can't see has its own green answer right under its Open
+  button ("I have an account", "I added them") and still ticks itself later. Waiting is never a step: Clip Factory
+  watches and tells the owner.
+- AC5: Every error says what to do next and names the button; every Undo is an 8-second toast; celebrations (confetti
+  and the success sound) happen once each and skip motion when reduced motion is on.
+- AC6: Brand text is plain escaped text, at most 300 characters a line with **Show more**.
+- AC7: Nothing overflows from 320 to 1920 px; targets are at least 44 px (48 on phones); WCAG AA contrast; Ask never
+  covers the main button.
+- AC8: The names of BR-26 AC3 are the only words for the two ways and for adding an account inside Content Rewards.
+- AC9: The fit block keeps one vermilion button per screen: Upload when the clip can go (or can't yet, off, with the
+  words why), "Make a {name} copy" or the item's own button when that is the next step; "Fix it for me" and "Read the
+  rules" are glass, "Turn on Branded content" and "I read them. They're OK" green. The "could earn" line is glass and
+  never takes the vermilion from Upload. A verdict is never colour alone (a mark and words).
+- AC10: All your money is a glass card with no vermilion button; each row has at most one glass button, at its right
+  end, so nothing tappable sits in a phone's top-left third.

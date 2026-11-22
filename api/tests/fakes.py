@@ -813,28 +813,61 @@ class FakeSecretsManager:
     def json(self, name: str) -> Any:
         return json.loads(self.values[name]) if name in self.values else None
 
-    def get_secret_value(self, SecretId: str) -> dict[str, Any]:
+    # Versions (§38.9, additive): every write gets a VersionId; a read can ask for one version. A name in
+    # ``scheduled`` answers create/put with InvalidRequestException (deleted moments ago) that many more times.
+
+    def _version(self, name: str, text: str) -> str:
+        self.version_counter = getattr(self, "version_counter", 0) + 1
+        version = f"v{self.version_counter}"
+        self.versions.setdefault(name, {})[version] = text
+        return version
+
+    @property
+    def versions(self) -> dict[str, dict[str, str]]:
+        if not hasattr(self, "_versions"):
+            self._versions: dict[str, dict[str, str]] = {}
+        return self._versions
+
+    @property
+    def scheduled(self) -> dict[str, int]:
+        if not hasattr(self, "_scheduled"):
+            self._scheduled: dict[str, int] = {}
+        return self._scheduled
+
+    def _check_scheduled(self, name: str) -> None:
+        if self.scheduled.get(name, 0) > 0:
+            self.scheduled[name] -= 1
+            raise client_error("InvalidRequestException", 400)
+
+    def get_secret_value(self, SecretId: str, VersionId: str | None = None) -> dict[str, Any]:
         self.calls.append(("get", SecretId))
         if SecretId not in self.values:
             raise client_error("ResourceNotFoundException", 400)
+        if VersionId is not None:
+            found = self.versions.get(SecretId, {}).get(VersionId)
+            if found is None:
+                raise client_error("ResourceNotFoundException", 400)
+            return {"Name": SecretId, "SecretString": found, "VersionId": VersionId}
         return {"Name": SecretId, "SecretString": self.values[SecretId]}
 
     def create_secret(self, Name: str, SecretString: str, Tags: list[dict[str, str]] | None = None) -> dict[str, Any]:
         self.calls.append(("create", Name))
+        self._check_scheduled(Name)
         if Name in self.values:
             raise client_error("ResourceExistsException", 400)
         self.values[Name] = SecretString
         self.tags[Name] = list(Tags or [])
         self.writes.append(("create", Name))
-        return {"Name": Name}
+        return {"Name": Name, "VersionId": self._version(Name, SecretString)}
 
     def put_secret_value(self, SecretId: str, SecretString: str) -> dict[str, Any]:
         self.calls.append(("put", SecretId))
+        self._check_scheduled(SecretId)
         if SecretId not in self.values:
             raise client_error("ResourceNotFoundException", 400)
         self.values[SecretId] = SecretString
         self.writes.append(("put", SecretId))
-        return {"Name": SecretId}
+        return {"Name": SecretId, "VersionId": self._version(SecretId, SecretString)}
 
     def delete_secret(self, SecretId: str, ForceDeleteWithoutRecovery: bool = False) -> dict[str, Any]:
         self.calls.append(("delete", SecretId))
@@ -842,6 +875,7 @@ class FakeSecretsManager:
         if SecretId not in self.values:
             raise client_error("ResourceNotFoundException", 400)
         del self.values[SecretId]
+        self.versions.pop(SecretId, None)
         self.writes.append(("delete", SecretId))
         return {"Name": SecretId}
 

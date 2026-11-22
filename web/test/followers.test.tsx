@@ -1,4 +1,4 @@
-// Followers and subscribers (docs/CONTRACTS.md §38): the words per platform, a clip's new followers only where the
+// Followers and subscribers (docs/CONTRACTS.md §43): the words per platform, a clip's new followers only where the
 // platform reports them (a plain note elsewhere, never a guess), the totals' lines, the mock's scenarios and the
 // Home tile and clip section as rendered.
 import { act } from "react";

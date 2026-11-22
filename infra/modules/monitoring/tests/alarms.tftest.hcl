@@ -192,3 +192,50 @@ run "no_ask_log_group_no_ask_alarms" {
     error_message = "Without cf-prod-ask's log group there are no Ask alarms."
   }
 }
+
+# docs/CONTRACTS.md §45.15: Lamo Stories' API Lambda is watched like every function (an <fn>-errors alarm from
+# function_names) and its agent runtime for error lines; off by default, so Clip Factory's alarms stay as they are.
+run "lamo_stories_is_watched" {
+  command = plan
+
+  variables {
+    function_names = {
+      api         = "cf-test-api"
+      stories-api = "cf-test-stories-api"
+    }
+    stories_agent_alarm_enabled  = true
+    stories_agent_log_group_name = "/aws/bedrock-agentcore/runtimes/cf_test_story_agent-AbCdEf1234-DEFAULT"
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.lambda_errors["stories-api"].alarm_name == "cf-test-stories-api-errors" && aws_cloudwatch_metric_alarm.lambda_errors["api"].alarm_name == "cf-test-api-errors"
+    error_message = "cf-prod-stories-api gets its own errors alarm next to cf-prod-api's."
+  }
+
+  assert {
+    condition = (aws_cloudwatch_log_metric_filter.stories_agent_errors[0].log_group_name == "/aws/bedrock-agentcore/runtimes/cf_test_story_agent-AbCdEf1234-DEFAULT" &&
+      aws_cloudwatch_log_metric_filter.stories_agent_errors[0].pattern == "{ $.level = \"error\" }" &&
+      one(aws_cloudwatch_log_metric_filter.stories_agent_errors[0].metric_transformation).name == "StoriesAgentErrors" &&
+    one(aws_cloudwatch_log_metric_filter.stories_agent_errors[0].metric_transformation).namespace == "cf-test")
+    error_message = "The story runtime's error lines are counted from its own log group."
+  }
+
+  assert {
+    condition = (aws_cloudwatch_metric_alarm.stories_agent_errors[0].alarm_name == "cf-test-stories-agent-errors" &&
+      aws_cloudwatch_metric_alarm.stories_agent_errors[0].metric_name == "StoriesAgentErrors" &&
+      aws_cloudwatch_metric_alarm.stories_agent_errors[0].period == 3600 && aws_cloudwatch_metric_alarm.stories_agent_errors[0].threshold == 5 &&
+      aws_cloudwatch_metric_alarm.stories_agent_errors[0].comparison_operator == "GreaterThanOrEqualToThreshold" &&
+      aws_cloudwatch_metric_alarm.stories_agent_errors[0].treat_missing_data == "notBreaching" &&
+    output.stories_agent_alarm_name == "cf-test-stories-agent-errors")
+    error_message = "Five error lines of the story runtime in an hour email the owner."
+  }
+}
+
+run "lamo_stories_agent_alarm_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.stories_agent_errors) == 0 && length(aws_cloudwatch_log_metric_filter.stories_agent_errors) == 0 && output.stories_agent_alarm_name == null
+    error_message = "Without the switch, no Lamo Stories alarm is added."
+  }
+}

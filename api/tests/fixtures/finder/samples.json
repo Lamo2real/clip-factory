@@ -1,0 +1,2850 @@
+{
+ "d04-cod-dmz": {
+  "detail": {
+   "banner": "https://crusercontent.com/a581a2a2-b79c-5f3c-b374-bab179ed49dc/campaigns/thumbnails/53962c59-39c5-4aa1-8c42-ed65e6d5301a.webp",
+   "createdAt": "2026-11-09T17:33:33.000Z",
+   "description": "Clip the DMZ Intel Briefing video from the official content folder.\nShow the new DMZ content in Modern Warfare 4 Season 1.\nPost to TikTok and Instagram Reels.\n",
+   "feeSchedule": "standard",
+   "id": "a1cefc3b-4533-438f-8e70-a7299550f1cf",
+   "launchDate": "2026-11-09T17:59:40.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 814,
+    "budgetProgressBps": 5379,
+    "budgetSpentCents": 1613583,
+    "creatorCount": 163,
+    "paidOutCents": 0,
+    "totalViews": 10007636
+   },
+   "name": "Call of Duty - MW4 DMZ Intel Briefing Clipping",
+   "organization": {
+    "logoUrl": "https://crusercontent.com/organizations/a581a2a2-b79c-5f3c-b374-bab179ed49dc/logo/a581a2a2-b79c-5f3c-b374-bab179ed49dc.1e1267ba82.jpg",
+    "name": "Clipping Culture",
+    "profileHandle": "clipping-culture",
+    "verified": true
+   },
+   "organizationId": "a581a2a2-b79c-5f3c-b374-bab179ed49dc",
+   "private": false,
+   "requiresApplication": false,
+   "showBeforeLaunch": false,
+   "showOnDiscover": true,
+   "status": "active",
+   "statusChangedAt": "2026-11-09T17:59:39.605Z",
+   "statusReason": "funded",
+   "updatedAt": "2026-11-09T17:59:39.000Z",
+   "configuration": {
+    "content": {
+     "contentCategories": [
+      {
+       "id": "entertainment",
+       "name": "Entertainment"
+      }
+     ],
+     "contentTypes": [
+      {
+       "id": "clipping",
+       "name": "Clipping"
+      }
+     ]
+    },
+    "creator": {
+     "creatorTypes": [
+      {
+       "id": "clipper",
+       "name": "Clipper"
+      }
+     ]
+    },
+    "display": {
+     "hiddenCreatorSubmissions": true,
+     "topPerformers": true
+    },
+    "requirement": {
+     "preApproval": false
+    },
+    "budget": 3000000,
+    "geoRates": {
+     "restOfWorld": [
+      {
+       "platform": "tiktok",
+       "rate": 200
+      }
+     ],
+     "tiers": [
+      {
+       "countries": [
+        "PK",
+        "IN",
+        "BD",
+        "PH",
+        "ID",
+        "VN",
+        "NG",
+        "EG",
+        "KE",
+        "NP",
+        "LK"
+       ],
+       "label": "COD Specific",
+       "platform": "tiktok",
+       "rate": 0
+      }
+     ]
+    },
+    "payoutModel": [
+     {
+      "maxPayout": 120000,
+      "minPayout": 600,
+      "platform": "tiktok",
+      "rate": 0
+     },
+     {
+      "maxPayout": 120000,
+      "minPayout": 450,
+      "platform": "instagram",
+      "rate": 150
+     }
+    ]
+   },
+   "type": "cpm",
+   "organizationPrivate": false,
+   "briefCounts": {
+    "contentRules": 0,
+    "creatorRequirements": 0,
+    "references": 1
+   }
+  },
+  "card": {
+   "banner": "a581a2a2-b79c-5f3c-b374-bab179ed49dc/campaigns/thumbnails/53962c59-39c5-4aa1-8c42-ed65e6d5301a.webp",
+   "budgetCents": 3000000,
+   "categories": [
+    {
+     "id": "entertainment",
+     "name": "Entertainment"
+    }
+   ],
+   "cpmMaxRateCents": 200,
+   "cpmMinRateCents": 0,
+   "createdAt": "2026-11-09T17:33:39.000Z",
+   "description": "Clip the DMZ Intel Briefing video from the official content folder.\nShow the new DMZ content in Modern Warfare 4 Season 1.\nPost to TikTok and Instagram Reels.\n",
+   "geoPriced": true,
+   "id": "a1cefc3b-4533-438f-8e70-a7299550f1cf",
+   "launchDate": "2026-11-09T17:59:40.000Z",
+   "listedAt": "2026-11-09T17:59:40.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 814,
+    "budgetProgressBps": 5378,
+    "budgetSpentCents": 1613583,
+    "creatorCount": 163,
+    "metricsUpdatedAt": "2026-11-21T03:32:21.000Z",
+    "paidOutCents": 0,
+    "totalViews": 10007636
+   },
+   "name": "Call of Duty - MW4 DMZ Intel Briefing Clipping",
+   "organizationExperienceId": "exp_zeADOv9rOOKk2x",
+   "organizationId": "a581a2a2-b79c-5f3c-b374-bab179ed49dc",
+   "organizationLogoUrl": "organizations/a581a2a2-b79c-5f3c-b374-bab179ed49dc/logo/a581a2a2-b79c-5f3c-b374-bab179ed49dc.1e1267ba82.jpg",
+   "organizationName": "Clipping Culture",
+   "organizationProfileHandle": "clipping-culture",
+   "organizationVerified": true,
+   "payouts": [
+    {
+     "maxPayoutCents": 120000,
+     "minPayoutCents": 600,
+     "payoutType": "cpm",
+     "platform": "tiktok",
+     "rateCents": 0,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 120000,
+     "minPayoutCents": 450,
+     "payoutType": "cpm",
+     "platform": "instagram",
+     "rateCents": 150,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    }
+   ],
+   "payoutType": "cpm",
+   "platforms": [
+    "instagram",
+    "tiktok"
+   ],
+   "primaryPayoutCents": 200,
+   "private": false,
+   "referenceMaterials": [],
+   "requiresApplication": false,
+   "retainerSpotsTotal": 0,
+   "status": "active",
+   "updatedAt": "2026-11-21T03:32:33.000Z",
+   "briefCounts": {
+    "contentRules": 0,
+    "creatorRequirements": 0,
+    "references": 1
+   },
+   "bannerBlur": null,
+   "bannerUrl": "https://crusercontent.com/a581a2a2-b79c-5f3c-b374-bab179ed49dc/campaigns/thumbnails/53962c59-39c5-4aa1-8c42-ed65e6d5301a.webp",
+   "group": null,
+   "organizationLogoSrc": "https://crusercontent.com/organizations/a581a2a2-b79c-5f3c-b374-bab179ed49dc/logo/a581a2a2-b79c-5f3c-b374-bab179ed49dc.1e1267ba82.jpg",
+   "retainerCycleLength": null
+  }
+ },
+ "d05-kai-pool": {
+  "detail": {
+   "banner": "https://crusercontent.com/5960ea84-7539-47a9-b2f5-c37ba9885fa4/campaigns/thumbnails/f8fe9f7b-c037-41fb-bfe7-567a5a18983a.webp",
+   "createdAt": "2026-11-18T14:44:10.000Z",
+   "description": "Clip Kai Cenat’s GTA 6 streams and get paid for your views. Post on TikTok, YouTube Shorts, Instagram Reels & X. The more views, the more you earn.\nRULES HERE:",
+   "feeSchedule": "standard",
+   "id": "1d2bcb00-c904-415f-aa82-f95b96baad86",
+   "launchDate": "2026-11-18T19:58:55.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 519,
+    "budgetProgressBps": 0,
+    "budgetSpentCents": 0,
+    "creatorCount": 354,
+    "paidOutCents": 0,
+    "poolSplit": {
+     "creatorCount": 3594,
+     "otherShareBps": 0,
+     "topShareBps": [
+      5197,
+      3225,
+      1577
+     ],
+     "final": false
+    },
+    "totalViews": 11581218
+   },
+   "name": "Kai Cenat - $10,000 GTA 6 Pool Campaign",
+   "organization": {
+    "name": "Clipped & Shipped",
+    "profileHandle": "kinse-clipping",
+    "verified": false,
+    "logoUrl": "$undefined"
+   },
+   "organizationId": "5960ea84-7539-47a9-b2f5-c37ba9885fa4",
+   "private": false,
+   "requiresApplication": false,
+   "showBeforeLaunch": false,
+   "showOnDiscover": true,
+   "status": "active",
+   "statusChangedAt": "2026-11-18T19:58:55.134Z",
+   "statusReason": "funded",
+   "updatedAt": "2026-11-20T19:20:07.000Z",
+   "configuration": {
+    "content": {
+     "contentCategories": [
+      {
+       "id": "streamer",
+       "name": "Streamer"
+      }
+     ],
+     "contentTypes": [
+      {
+       "id": "clipping",
+       "name": "Clipping"
+      }
+     ]
+    },
+    "creator": {
+     "creatorTypes": [
+      {
+       "id": "clipper",
+       "name": "Clipper"
+      }
+     ]
+    },
+    "display": {
+     "hiddenCreatorSubmissions": true,
+     "topPerformers": true
+    },
+    "requirement": {
+     "preApproval": false
+    },
+    "budget": 1000000,
+    "minClipViews": 1000,
+    "minCreatorViews": 750000,
+    "payoutModel": [
+     {
+      "platform": "tiktok"
+     },
+     {
+      "platform": "youtube"
+     },
+     {
+      "platform": "instagram"
+     },
+     {
+      "platform": "x"
+     }
+    ]
+   },
+   "type": "pool",
+   "organizationPrivate": false,
+   "briefCounts": {
+    "contentRules": 0,
+    "creatorRequirements": 0,
+    "references": 3
+   }
+  },
+  "card": {
+   "banner": "5960ea84-7539-47a9-b2f5-c37ba9885fa4/campaigns/thumbnails/f8fe9f7b-c037-41fb-bfe7-567a5a18983a.webp",
+   "budgetCents": 1000000,
+   "categories": [
+    {
+     "id": "streamer",
+     "name": "Streamer"
+    },
+    {
+     "id": "personal-brand",
+     "name": "Personal Brand"
+    }
+   ],
+   "createdAt": "2026-11-18T14:44:13.000Z",
+   "description": "Clip Kai Cenat’s GTA 6 streams and get paid for your views. Post on TikTok, YouTube Shorts, Instagram Reels & X. The more views, the more you earn.\nRULES HERE:",
+   "geoPriced": false,
+   "id": "1d2bcb00-c904-415f-aa82-f95b96baad86",
+   "launchDate": "2026-11-18T19:58:55.000Z",
+   "listedAt": "2026-11-18T19:58:55.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 519,
+    "budgetProgressBps": 0,
+    "budgetSpentCents": 0,
+    "creatorCount": 354,
+    "metricsUpdatedAt": "2026-11-21T03:32:21.000Z",
+    "paidOutCents": 0,
+    "poolSplit": {
+     "creatorCount": 3594,
+     "otherShareBps": 0,
+     "topShareBps": [
+      5197,
+      3225,
+      1577
+     ],
+     "final": false
+    },
+    "totalViews": 11581218
+   },
+   "name": "Kai Cenat - $10,000 GTA 6 Pool Campaign",
+   "organizationId": "5960ea84-7539-47a9-b2f5-c37ba9885fa4",
+   "organizationName": "Clipped & Shipped",
+   "organizationProfileHandle": "kinse-clipping",
+   "organizationVerified": false,
+   "payouts": [
+    {
+     "payoutType": "pool",
+     "platform": "tiktok",
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null,
+     "maxPayoutCents": null,
+     "minPayoutCents": null,
+     "rateCents": null
+    },
+    {
+     "payoutType": "pool",
+     "platform": "youtube",
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null,
+     "maxPayoutCents": null,
+     "minPayoutCents": null,
+     "rateCents": null
+    },
+    {
+     "payoutType": "pool",
+     "platform": "instagram",
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null,
+     "maxPayoutCents": null,
+     "minPayoutCents": null,
+     "rateCents": null
+    },
+    {
+     "payoutType": "pool",
+     "platform": "x",
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null,
+     "maxPayoutCents": null,
+     "minPayoutCents": null,
+     "rateCents": null
+    }
+   ],
+   "payoutType": "pool",
+   "platforms": [
+    "instagram",
+    "tiktok",
+    "x",
+    "youtube"
+   ],
+   "primaryPayoutCents": 0,
+   "private": false,
+   "referenceMaterials": [],
+   "requiresApplication": false,
+   "retainerSpotsTotal": 0,
+   "status": "active",
+   "updatedAt": "2026-11-21T03:32:38.000Z",
+   "briefCounts": {
+    "contentRules": 0,
+    "creatorRequirements": 0,
+    "references": 3
+   },
+   "bannerBlur": null,
+   "bannerUrl": "https://crusercontent.com/5960ea84-7539-47a9-b2f5-c37ba9885fa4/campaigns/thumbnails/f8fe9f7b-c037-41fb-bfe7-567a5a18983a.webp",
+   "cpmMaxRateCents": null,
+   "cpmMinRateCents": null,
+   "group": null,
+   "organizationExperienceId": null,
+   "organizationLogoSrc": null,
+   "organizationLogoUrl": null,
+   "retainerCycleLength": null
+  }
+ },
+ "d06-kreekcraft": {
+  "detail": {
+   "banner": "https://crusercontent.com/43893b4f-434d-549b-9037-4f1c62984ff2/campaigns/thumbnails/de06a52e-d394-482b-88e5-58325ac4dc89.webp",
+   "createdAt": "2026-11-18T18:23:21.000Z",
+   "description": "Get paid to clip KreekCraft's funniest, craziest, and most viral GTA 6 livestream moments! Turn hilarious reactions, insane gameplay, and unexpected moments into short-form clips. Every clip must include KreekCraft's overlay and drive viewers back to his livestream!",
+   "feeSchedule": "standard",
+   "id": "2eaa14fb-6927-4136-897e-b096e0d907d6",
+   "launchDate": "2026-11-18T23:50:23.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 146,
+    "budgetProgressBps": 3854,
+    "budgetSpentCents": 263048,
+    "creatorCount": 110,
+    "paidOutCents": 0,
+    "totalViews": 2434766
+   },
+   "name": "KreekCraft GTA 6 Clipping",
+   "organization": {
+    "logoUrl": "https://crusercontent.com/organizations/43893b4f-434d-549b-9037-4f1c62984ff2/logo/b467c12e-19de-4ec5-a9c0-a6505c552ace.webp",
+    "name": "ClipLaunch",
+    "profileHandle": "cliplaunch",
+    "verified": true
+   },
+   "organizationId": "43893b4f-434d-549b-9037-4f1c62984ff2",
+   "private": false,
+   "requiresApplication": false,
+   "showBeforeLaunch": false,
+   "showOnDiscover": true,
+   "status": "active",
+   "statusChangedAt": "2026-11-18T23:50:23.033Z",
+   "statusReason": "funded",
+   "updatedAt": "2026-11-18T23:50:23.000Z",
+   "configuration": {
+    "content": {
+     "contentCategories": [
+      {
+       "id": "twitch",
+       "name": "Twitch"
+      }
+     ],
+     "contentTypes": [
+      {
+       "id": "clipping",
+       "name": "Clipping"
+      }
+     ]
+    },
+    "creator": {
+     "creatorTypes": [
+      {
+       "id": "clipper",
+       "name": "Clipper"
+      }
+     ]
+    },
+    "display": {
+     "hiddenCreatorSubmissions": true,
+     "topPerformers": true
+    },
+    "requirement": {
+     "preApproval": false
+    },
+    "budget": 682460,
+    "payoutModel": [
+     {
+      "maxPayout": 50000,
+      "minPayout": 250,
+      "platform": "tiktok",
+      "rate": 50
+     },
+     {
+      "maxPayout": 50000,
+      "minPayout": 250,
+      "platform": "instagram",
+      "rate": 50
+     },
+     {
+      "maxPayout": 50000,
+      "minPayout": 500,
+      "platform": "youtube",
+      "rate": 50
+     }
+    ]
+   },
+   "type": "cpm",
+   "organizationPrivate": false,
+   "briefCounts": {
+    "contentRules": 0,
+    "creatorRequirements": 0,
+    "references": 5
+   }
+  },
+  "card": {
+   "banner": "43893b4f-434d-549b-9037-4f1c62984ff2/campaigns/thumbnails/de06a52e-d394-482b-88e5-58325ac4dc89.webp",
+   "budgetCents": 682460,
+   "categories": [
+    {
+     "id": "twitch",
+     "name": "Twitch"
+    },
+    {
+     "id": "personal-brand",
+     "name": "Personal Brand"
+    },
+    {
+     "id": "streamer",
+     "name": "Streamer"
+    }
+   ],
+   "cpmMaxRateCents": 50,
+   "cpmMinRateCents": 50,
+   "createdAt": "2026-11-18T18:26:07.000Z",
+   "description": "Get paid to clip KreekCraft's funniest, craziest, and most viral GTA 6 livestream moments! Turn hilarious reactions, insane gameplay, and unexpected moments into short-form clips. Every clip must include KreekCraft's overlay and drive viewers back to his livestream!",
+   "geoPriced": false,
+   "id": "2eaa14fb-6927-4136-897e-b096e0d907d6",
+   "launchDate": "2026-11-18T23:50:23.000Z",
+   "listedAt": "2026-11-18T23:50:23.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 146,
+    "budgetProgressBps": 3847,
+    "budgetSpentCents": 262584,
+    "creatorCount": 110,
+    "metricsUpdatedAt": "2026-11-21T03:32:21.000Z",
+    "paidOutCents": 0,
+    "totalViews": 2434766
+   },
+   "name": "KreekCraft GTA 6 Clipping",
+   "organizationExperienceId": "exp_drhUyiUEj7jN3e",
+   "organizationId": "43893b4f-434d-549b-9037-4f1c62984ff2",
+   "organizationLogoUrl": "organizations/43893b4f-434d-549b-9037-4f1c62984ff2/logo/b467c12e-19de-4ec5-a9c0-a6505c552ace.webp",
+   "organizationName": "ClipLaunch",
+   "organizationProfileHandle": "cliplaunch",
+   "organizationVerified": true,
+   "payouts": [
+    {
+     "maxPayoutCents": 50000,
+     "minPayoutCents": 250,
+     "payoutType": "cpm",
+     "platform": "tiktok",
+     "rateCents": 50,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 50000,
+     "minPayoutCents": 250,
+     "payoutType": "cpm",
+     "platform": "instagram",
+     "rateCents": 50,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 50000,
+     "minPayoutCents": 500,
+     "payoutType": "cpm",
+     "platform": "youtube",
+     "rateCents": 50,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    }
+   ],
+   "payoutType": "cpm",
+   "platforms": [
+    "instagram",
+    "tiktok",
+    "youtube"
+   ],
+   "primaryPayoutCents": 50,
+   "private": false,
+   "referenceMaterials": [],
+   "requiresApplication": false,
+   "retainerSpotsTotal": 0,
+   "status": "active",
+   "updatedAt": "2026-11-21T03:32:32.000Z",
+   "briefCounts": {
+    "contentRules": 0,
+    "creatorRequirements": 0,
+    "references": 5
+   },
+   "bannerBlur": null,
+   "bannerUrl": "https://crusercontent.com/43893b4f-434d-549b-9037-4f1c62984ff2/campaigns/thumbnails/de06a52e-d394-482b-88e5-58325ac4dc89.webp",
+   "group": null,
+   "organizationLogoSrc": "https://crusercontent.com/organizations/43893b4f-434d-549b-9037-4f1c62984ff2/logo/b467c12e-19de-4ec5-a9c0-a6505c552ace.webp",
+   "retainerCycleLength": null
+  }
+ },
+ "d07-8lanco-sound": {
+  "detail": {
+   "banner": "https://crusercontent.com/b5d86b5d-b3a3-5970-809c-81b92ccff73c/campaigns/thumbnails/d59b3d3e-e3ea-48c6-a140-71abec54ca05.webp",
+   "createdAt": "2026-11-09T20:46:19.000Z",
+   "description": "8lanco \"Every Little Thing\" Sound Campaign. \nMake GTA VI, Red Flag, False Hero edits.\nOfficial sound at 100% volume.\n$1 CPM, up to $200 per clip. \nFull rules in the guidelines.",
+   "feeSchedule": "standard",
+   "id": "d5d8b659-68ac-41d5-9e53-ab89545f437d",
+   "launchDate": "2026-11-09T20:47:31.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 4,
+    "budgetProgressBps": 32,
+    "budgetSpentCents": 971,
+    "creatorCount": 4,
+    "paidOutCents": 0,
+    "totalViews": 11102
+   },
+   "name": "$3,000 8lanco 'Every Little Thing' Sound Campaign",
+   "organization": {
+    "logoUrl": "https://crusercontent.com/organizations/b5d86b5d-b3a3-5970-809c-81b92ccff73c/logo/b5d86b5d-b3a3-5970-809c-81b92ccff73c.d0df0baf62.png",
+    "name": "ClippedIn",
+    "profileHandle": "clippedin",
+    "verified": false
+   },
+   "organizationId": "b5d86b5d-b3a3-5970-809c-81b92ccff73c",
+   "private": false,
+   "requiresApplication": false,
+   "showBeforeLaunch": false,
+   "showOnDiscover": true,
+   "status": "active",
+   "statusChangedAt": "2026-11-09T20:47:30.848Z",
+   "statusReason": "funded",
+   "updatedAt": "2026-11-18T21:15:40.000Z",
+   "configuration": {
+    "content": {
+     "contentCategories": [
+      {
+       "id": "music",
+       "name": "Music"
+      }
+     ],
+     "contentTypes": [
+      {
+       "id": "clipping",
+       "name": "Clipping"
+      },
+      {
+       "id": "sound",
+       "name": "Sound"
+      }
+     ]
+    },
+    "creator": {
+     "creatorTypes": [
+      {
+       "id": "clipper",
+       "name": "Clipper"
+      }
+     ]
+    },
+    "display": {
+     "hiddenCreatorSubmissions": true,
+     "topPerformers": true
+    },
+    "requirement": {
+     "preApproval": false
+    },
+    "budget": 300000,
+    "payoutModel": [
+     {
+      "maxPayout": 20000,
+      "minPayout": 200,
+      "platform": "tiktok",
+      "rate": 100
+     },
+     {
+      "maxPayout": 20000,
+      "minPayout": 200,
+      "platform": "instagram",
+      "rate": 100
+     }
+    ]
+   },
+   "type": "cpm",
+   "organizationPrivate": false,
+   "briefCounts": {
+    "contentRules": 2,
+    "creatorRequirements": 0,
+    "references": 1
+   }
+  },
+  "card": {
+   "banner": "b5d86b5d-b3a3-5970-809c-81b92ccff73c/campaigns/thumbnails/d59b3d3e-e3ea-48c6-a140-71abec54ca05.webp",
+   "budgetCents": 300000,
+   "categories": [
+    {
+     "id": "music",
+     "name": "Music"
+    }
+   ],
+   "cpmMaxRateCents": 100,
+   "cpmMinRateCents": 100,
+   "createdAt": "2026-11-09T20:46:20.000Z",
+   "description": "8lanco \"Every Little Thing\" Sound Campaign. \nMake GTA VI, Red Flag, False Hero edits.\nOfficial sound at 100% volume.\n$1 CPM, up to $200 per clip. \nFull rules in the guidelines.",
+   "geoPriced": false,
+   "group": {
+    "campaignIds": [
+     "d5d8b659-68ac-41d5-9e53-ab89545f437d",
+     "e7b7aa0d-8d5c-460b-bb1e-803ad0492bc5"
+    ],
+    "cover": "organizations/b5d86b5d-b3a3-5970-809c-81b92ccff73c/campaign-groups/covers/57f978cf-49a9-4c31-b043-fe8467cc05c7.webp",
+    "description": "Two tracks. Two live campaigns. Earn $1-$1.50 per 1,000 eligible views promoting 8lanco's “Man Out Of Me” and “Every Little Thing.”\n\nChoose your campaign, create edits using the approved footage and official sound, and get paid for your views. Each campaign has its own guidelines, so review the requirements before posting.",
+    "id": "81c65672-4878-4959-884f-68cb14c76a08",
+    "name": "8LANCO | 2 LIVE MUSIC CAMPAIGNS"
+   },
+   "id": "d5d8b659-68ac-41d5-9e53-ab89545f437d",
+   "launchDate": "2026-11-09T20:47:31.000Z",
+   "listedAt": "2026-11-09T20:47:31.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 4,
+    "budgetProgressBps": 32,
+    "budgetSpentCents": 971,
+    "creatorCount": 4,
+    "metricsUpdatedAt": "2026-11-21T03:32:10.000Z",
+    "paidOutCents": 0,
+    "totalViews": 11102
+   },
+   "name": "$3,000 8lanco 'Every Little Thing' Sound Campaign",
+   "organizationExperienceId": "exp_XfcRmGSAzuTsnM",
+   "organizationId": "b5d86b5d-b3a3-5970-809c-81b92ccff73c",
+   "organizationLogoUrl": "organizations/b5d86b5d-b3a3-5970-809c-81b92ccff73c/logo/b5d86b5d-b3a3-5970-809c-81b92ccff73c.d0df0baf62.png",
+   "organizationName": "ClippedIn",
+   "organizationProfileHandle": "clippedin",
+   "organizationVerified": false,
+   "payouts": [
+    {
+     "maxPayoutCents": 20000,
+     "minPayoutCents": 200,
+     "payoutType": "cpm",
+     "platform": "tiktok",
+     "rateCents": 100,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 20000,
+     "minPayoutCents": 200,
+     "payoutType": "cpm",
+     "platform": "instagram",
+     "rateCents": 100,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    }
+   ],
+   "payoutType": "cpm",
+   "platforms": [
+    "instagram",
+    "tiktok"
+   ],
+   "primaryPayoutCents": 100,
+   "private": false,
+   "referenceMaterials": [],
+   "requiresApplication": false,
+   "retainerSpotsTotal": 0,
+   "status": "active",
+   "updatedAt": "2026-11-21T03:32:12.000Z",
+   "briefCounts": {
+    "contentRules": 2,
+    "creatorRequirements": 0,
+    "references": 1
+   },
+   "bannerBlur": null,
+   "bannerUrl": "https://crusercontent.com/b5d86b5d-b3a3-5970-809c-81b92ccff73c/campaigns/thumbnails/d59b3d3e-e3ea-48c6-a140-71abec54ca05.webp",
+   "organizationLogoSrc": "https://crusercontent.com/organizations/b5d86b5d-b3a3-5970-809c-81b92ccff73c/logo/b5d86b5d-b3a3-5970-809c-81b92ccff73c.d0df0baf62.png",
+   "retainerCycleLength": null
+  }
+ },
+ "d08-ugc-splitscreen": {
+  "detail": {
+   "banner": "https://crusercontent.com/d3dd7e61-d3ed-5db5-bdee-a4c0d47f8a51/campaigns/thumbnails/6e8cb2c6-7724-44a4-83da-66697acb20af.jpg",
+   "createdAt": "2026-05-19T19:10:09.000Z",
+   "description": "Post UGC for Content Rewards, and get paid $3 per 1k views. This is for English content that targets tier 1 audience.\n\n",
+   "feeSchedule": "legacy_v1",
+   "id": "6e8cb2c6-7724-44a4-83da-66697acb20af",
+   "launchDate": "2026-05-19T20:25:22.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 487,
+    "budgetProgressBps": 7865,
+    "budgetSpentCents": 1415711,
+    "creatorCount": 70,
+    "paidOutCents": 718400,
+    "totalViews": 2476741
+   },
+   "name": "Split-Screen UGC [English]",
+   "organization": {
+    "logoUrl": "https://crusercontent.com/organizations/d3dd7e61-d3ed-5db5-bdee-a4c0d47f8a51/logo/d835b1ea-a20f-4373-b9e7-86d855f04843.webp",
+    "name": "Content Rewards",
+    "verified": true
+   },
+   "organizationId": "d3dd7e61-d3ed-5db5-bdee-a4c0d47f8a51",
+   "private": false,
+   "requiresApplication": false,
+   "showBeforeLaunch": false,
+   "showOnDiscover": true,
+   "status": "active",
+   "updatedAt": "2026-08-29T18:29:45.000Z",
+   "configuration": {
+    "creator": {
+     "creatorTypes": [
+      {
+       "id": "ugc",
+       "name": "UGC Creator"
+      }
+     ]
+    },
+    "display": {
+     "hiddenCreatorSubmissions": true,
+     "topPerformers": true
+    },
+    "requirement": {
+     "preApproval": false
+    },
+    "budget": 1800000,
+    "payoutModel": [
+     {
+      "maxPayout": 50000,
+      "minPayout": 150,
+      "platform": "youtube",
+      "rate": 150
+     },
+     {
+      "maxPayout": 50000,
+      "minPayout": 300,
+      "platform": "instagram",
+      "rate": 300
+     },
+     {
+      "maxPayout": 50000,
+      "minPayout": 300,
+      "platform": "tiktok",
+      "rate": 300
+     },
+     {
+      "maxPayout": 50000,
+      "minPayout": 300,
+      "platform": "x",
+      "rate": 300
+     }
+    ]
+   },
+   "type": "cpm",
+   "organizationPrivate": false,
+   "briefCounts": {
+    "contentRules": 1,
+    "creatorRequirements": 0,
+    "references": 3
+   }
+  },
+  "card": {
+   "banner": "d3dd7e61-d3ed-5db5-bdee-a4c0d47f8a51/campaigns/thumbnails/6e8cb2c6-7724-44a4-83da-66697acb20af.jpg",
+   "budgetCents": 1800000,
+   "categories": [],
+   "cpmMaxRateCents": 300,
+   "cpmMinRateCents": 150,
+   "createdAt": "2026-08-15T10:41:02.000Z",
+   "description": "Post UGC for Content Rewards, and get paid $3 per 1k views. This is for English content that targets tier 1 audience.\n\n",
+   "geoPriced": false,
+   "id": "6e8cb2c6-7724-44a4-83da-66697acb20af",
+   "launchDate": "2026-05-19T20:25:22.000Z",
+   "listedAt": "2026-05-19T20:25:22.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 487,
+    "budgetProgressBps": 7865,
+    "budgetSpentCents": 1415711,
+    "creatorCount": 70,
+    "metricsUpdatedAt": "2026-11-21T03:28:09.000Z",
+    "paidOutCents": 718400,
+    "totalViews": 2476741
+   },
+   "name": "Split-Screen UGC [English]",
+   "organizationExperienceId": "exp_fspXQWhnF3vH76",
+   "organizationId": "d3dd7e61-d3ed-5db5-bdee-a4c0d47f8a51",
+   "organizationLogoUrl": "organizations/d3dd7e61-d3ed-5db5-bdee-a4c0d47f8a51/logo/d835b1ea-a20f-4373-b9e7-86d855f04843.webp",
+   "organizationName": "Content Rewards",
+   "organizationVerified": true,
+   "payouts": [
+    {
+     "maxPayoutCents": 50000,
+     "minPayoutCents": 150,
+     "payoutType": "cpm",
+     "platform": "youtube",
+     "rateCents": 150,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 50000,
+     "minPayoutCents": 300,
+     "payoutType": "cpm",
+     "platform": "instagram",
+     "rateCents": 300,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 50000,
+     "minPayoutCents": 300,
+     "payoutType": "cpm",
+     "platform": "tiktok",
+     "rateCents": 300,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 50000,
+     "minPayoutCents": 300,
+     "payoutType": "cpm",
+     "platform": "x",
+     "rateCents": 300,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    }
+   ],
+   "payoutType": "cpm",
+   "platforms": [
+    "instagram",
+    "tiktok",
+    "x",
+    "youtube"
+   ],
+   "primaryPayoutCents": 300,
+   "private": false,
+   "referenceMaterials": [],
+   "requiresApplication": false,
+   "retainerSpotsTotal": 0,
+   "status": "active",
+   "updatedAt": "2026-11-21T03:28:12.000Z",
+   "briefCounts": {
+    "contentRules": 1,
+    "creatorRequirements": 0,
+    "references": 3
+   },
+   "bannerBlur": null,
+   "bannerUrl": "https://crusercontent.com/d3dd7e61-d3ed-5db5-bdee-a4c0d47f8a51/campaigns/thumbnails/6e8cb2c6-7724-44a4-83da-66697acb20af.jpg",
+   "group": null,
+   "organizationLogoSrc": "https://crusercontent.com/organizations/d3dd7e61-d3ed-5db5-bdee-a4c0d47f8a51/logo/d835b1ea-a20f-4373-b9e7-86d855f04843.webp",
+   "retainerCycleLength": null
+  }
+ },
+ "d09-santacruz-brand": {
+  "detail": {
+   "banner": "https://crusercontent.com/513b8a7e-dc9a-5df0-9c02-ba741f54471d/campaigns/thumbnails/e0853e9d-a26d-4aa9-98d9-30634a07673e.webp",
+   "createdAt": "2026-11-08T23:12:41.000Z",
+   "description": "Create & Post Viral Moments from Santa Cruz Medicinals New YT Content!",
+   "feeSchedule": "standard",
+   "id": "c49840ae-ca22-4745-8a42-b675847e0355",
+   "launchDate": "2026-11-09T00:27:40.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 130,
+    "budgetProgressBps": 5568,
+    "budgetSpentCents": 660584,
+    "creatorCount": 27,
+    "paidOutCents": 0,
+    "totalViews": 12697945
+   },
+   "name": "Santa Cruz Medicinals Clipping",
+   "organization": {
+    "logoUrl": "https://crusercontent.com/organizations/513b8a7e-dc9a-5df0-9c02-ba741f54471d/logo/513b8a7e-dc9a-5df0-9c02-ba741f54471d.fd8087db58.png",
+    "name": "VitaClips",
+    "profileHandle": "vitaclips",
+    "verified": false
+   },
+   "organizationId": "513b8a7e-dc9a-5df0-9c02-ba741f54471d",
+   "private": false,
+   "requiresApplication": false,
+   "showBeforeLaunch": false,
+   "showOnDiscover": true,
+   "status": "active",
+   "statusChangedAt": "2026-11-09T00:27:40.203Z",
+   "statusReason": "funded",
+   "updatedAt": "2026-11-09T00:27:40.000Z",
+   "configuration": {
+    "content": {
+     "contentCategories": [
+      {
+       "id": "health-wellness",
+       "name": "Health & Wellness"
+      }
+     ],
+     "contentTypes": [
+      {
+       "id": "clipping",
+       "name": "Clipping"
+      }
+     ]
+    },
+    "creator": {
+     "creatorTypes": [
+      {
+       "id": "clipper",
+       "name": "Clipper"
+      },
+      {
+       "id": "editor",
+       "name": "Video Editor"
+      }
+     ]
+    },
+    "display": {
+     "hiddenCreatorSubmissions": true,
+     "topPerformers": true
+    },
+    "requirement": {
+     "preApproval": false
+    },
+    "budget": 1186463,
+    "payoutModel": [
+     {
+      "maxPayout": 20000,
+      "minPayout": 500,
+      "platform": "tiktok",
+      "rate": 100
+     },
+     {
+      "maxPayout": 20000,
+      "minPayout": 500,
+      "platform": "instagram",
+      "rate": 100
+     },
+     {
+      "maxPayout": 20000,
+      "minPayout": 500,
+      "platform": "youtube",
+      "rate": 100
+     }
+    ]
+   },
+   "type": "cpm",
+   "organizationPrivate": false,
+   "briefCounts": {
+    "contentRules": 0,
+    "creatorRequirements": 1,
+    "references": 1
+   }
+  },
+  "card": {
+   "banner": "513b8a7e-dc9a-5df0-9c02-ba741f54471d/campaigns/thumbnails/e0853e9d-a26d-4aa9-98d9-30634a07673e.webp",
+   "budgetCents": 1186463,
+   "categories": [
+    {
+     "id": "health-wellness",
+     "name": "Health & Wellness"
+    }
+   ],
+   "cpmMaxRateCents": 100,
+   "cpmMinRateCents": 100,
+   "createdAt": "2026-11-08T23:12:55.000Z",
+   "description": "Create & Post Viral Moments from Santa Cruz Medicinals New YT Content!",
+   "geoPriced": false,
+   "id": "c49840ae-ca22-4745-8a42-b675847e0355",
+   "launchDate": "2026-11-09T00:27:40.000Z",
+   "listedAt": "2026-11-09T00:27:40.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 130,
+    "budgetProgressBps": 5567,
+    "budgetSpentCents": 660584,
+    "creatorCount": 27,
+    "metricsUpdatedAt": "2026-11-21T03:32:20.000Z",
+    "paidOutCents": 0,
+    "totalViews": 12697945
+   },
+   "name": "Santa Cruz Medicinals Clipping",
+   "organizationExperienceId": "exp_EQd8hNFqVOKzZI",
+   "organizationId": "513b8a7e-dc9a-5df0-9c02-ba741f54471d",
+   "organizationLogoUrl": "organizations/513b8a7e-dc9a-5df0-9c02-ba741f54471d/logo/513b8a7e-dc9a-5df0-9c02-ba741f54471d.fd8087db58.png",
+   "organizationName": "VitaClips",
+   "organizationProfileHandle": "vitaclips",
+   "organizationVerified": false,
+   "payouts": [
+    {
+     "maxPayoutCents": 20000,
+     "minPayoutCents": 500,
+     "payoutType": "cpm",
+     "platform": "tiktok",
+     "rateCents": 100,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 20000,
+     "minPayoutCents": 500,
+     "payoutType": "cpm",
+     "platform": "instagram",
+     "rateCents": 100,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 20000,
+     "minPayoutCents": 500,
+     "payoutType": "cpm",
+     "platform": "youtube",
+     "rateCents": 100,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    }
+   ],
+   "payoutType": "cpm",
+   "platforms": [
+    "instagram",
+    "tiktok",
+    "youtube"
+   ],
+   "primaryPayoutCents": 100,
+   "private": false,
+   "referenceMaterials": [],
+   "requiresApplication": false,
+   "retainerSpotsTotal": 0,
+   "status": "active",
+   "updatedAt": "2026-11-21T03:32:31.000Z",
+   "briefCounts": {
+    "contentRules": 0,
+    "creatorRequirements": 1,
+    "references": 1
+   },
+   "bannerBlur": null,
+   "bannerUrl": "https://crusercontent.com/513b8a7e-dc9a-5df0-9c02-ba741f54471d/campaigns/thumbnails/e0853e9d-a26d-4aa9-98d9-30634a07673e.webp",
+   "group": null,
+   "organizationLogoSrc": "https://crusercontent.com/organizations/513b8a7e-dc9a-5df0-9c02-ba741f54471d/logo/513b8a7e-dc9a-5df0-9c02-ba741f54471d.fd8087db58.png",
+   "retainerCycleLength": null
+  }
+ },
+ "d10-tradelens-slides": {
+  "detail": {
+   "banner": "https://crusercontent.com/0b310d3f-2a89-5d8c-9de2-165a1050e36d/campaigns/thumbnails/91f5c1f9-8e17-4126-8739-c85297cfa54b.webp",
+   "createdAt": "2026-09-03T10:11:38.000Z",
+   "description": "Create tiktok slideshows about the tradelens app following the guidelines",
+   "feeSchedule": "standard",
+   "id": "c9617009-53cb-4885-8ffc-b655f7c128b3",
+   "launchDate": "2026-09-03T14:20:17.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 386,
+    "budgetProgressBps": 4843,
+    "budgetSpentCents": 290585,
+    "creatorCount": 32,
+    "paidOutCents": 0,
+    "totalViews": 2253136
+   },
+   "name": "TradeLens [SLIDESHOWS]",
+   "organization": {
+    "logoUrl": "https://crusercontent.com/organizations/0b310d3f-2a89-5d8c-9de2-165a1050e36d/logo/0b310d3f-2a89-5d8c-9de2-165a1050e36d.d9f0817a86.png",
+    "name": "Reachify",
+    "profileHandle": "reachify",
+    "verified": false
+   },
+   "organizationId": "0b310d3f-2a89-5d8c-9de2-165a1050e36d",
+   "private": false,
+   "requiresApplication": false,
+   "showBeforeLaunch": false,
+   "showOnDiscover": true,
+   "status": "active",
+   "updatedAt": "2026-09-03T14:20:17.000Z",
+   "configuration": {
+    "content": {
+     "contentCategories": [
+      {
+       "id": "trading",
+       "name": "Trading"
+      }
+     ],
+     "contentTypes": [
+      {
+       "id": "slideshows",
+       "name": "Slideshows"
+      }
+     ]
+    },
+    "creator": {
+     "creatorTypes": [
+      {
+       "id": "clipper",
+       "name": "Clipper"
+      },
+      {
+       "id": "ugc",
+       "name": "UGC Creator"
+      },
+      {
+       "id": "editor",
+       "name": "Video Editor"
+      },
+      {
+       "id": "influencer",
+       "name": "Influencer"
+      }
+     ]
+    },
+    "display": {
+     "hiddenCreatorSubmissions": true,
+     "topPerformers": true
+    },
+    "requirement": {
+     "preApproval": false
+    },
+    "budget": 600000,
+    "payoutModel": [
+     {
+      "maxPayout": 40000,
+      "minPayout": 125,
+      "platform": "tiktok",
+      "rate": 125
+     }
+    ]
+   },
+   "type": "cpm",
+   "organizationPrivate": false,
+   "briefCounts": {
+    "contentRules": 1,
+    "creatorRequirements": 0,
+    "references": 1
+   }
+  },
+  "card": {
+   "banner": "0b310d3f-2a89-5d8c-9de2-165a1050e36d/campaigns/thumbnails/91f5c1f9-8e17-4126-8739-c85297cfa54b.webp",
+   "budgetCents": 600000,
+   "categories": [
+    {
+     "id": "trading",
+     "name": "Trading"
+    },
+    {
+     "id": "finance",
+     "name": "Finance"
+    }
+   ],
+   "cpmMaxRateCents": 125,
+   "cpmMinRateCents": 125,
+   "createdAt": "2026-09-03T10:11:43.000Z",
+   "description": "Create tiktok slideshows about the tradelens app following the guidelines",
+   "geoPriced": false,
+   "id": "c9617009-53cb-4885-8ffc-b655f7c128b3",
+   "launchDate": "2026-09-03T14:20:17.000Z",
+   "listedAt": "2026-09-03T14:20:17.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 386,
+    "budgetProgressBps": 4843,
+    "budgetSpentCents": 290585,
+    "creatorCount": 32,
+    "metricsUpdatedAt": "2026-11-21T03:32:13.000Z",
+    "paidOutCents": 0,
+    "totalViews": 2253136
+   },
+   "name": "TradeLens [SLIDESHOWS]",
+   "organizationExperienceId": "exp_tuSHAEqKbujxRz",
+   "organizationId": "0b310d3f-2a89-5d8c-9de2-165a1050e36d",
+   "organizationLogoUrl": "organizations/0b310d3f-2a89-5d8c-9de2-165a1050e36d/logo/0b310d3f-2a89-5d8c-9de2-165a1050e36d.d9f0817a86.png",
+   "organizationName": "Reachify",
+   "organizationProfileHandle": "reachify",
+   "organizationVerified": false,
+   "payouts": [
+    {
+     "maxPayoutCents": 40000,
+     "minPayoutCents": 125,
+     "payoutType": "cpm",
+     "platform": "tiktok",
+     "rateCents": 125,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    }
+   ],
+   "payoutType": "cpm",
+   "platforms": [
+    "tiktok"
+   ],
+   "primaryPayoutCents": 125,
+   "private": false,
+   "referenceMaterials": [],
+   "requiresApplication": false,
+   "retainerSpotsTotal": 0,
+   "status": "active",
+   "updatedAt": "2026-11-21T03:32:14.000Z",
+   "briefCounts": {
+    "contentRules": 1,
+    "creatorRequirements": 0,
+    "references": 1
+   },
+   "bannerBlur": null,
+   "bannerUrl": "https://crusercontent.com/0b310d3f-2a89-5d8c-9de2-165a1050e36d/campaigns/thumbnails/91f5c1f9-8e17-4126-8739-c85297cfa54b.webp",
+   "group": null,
+   "organizationLogoSrc": "https://crusercontent.com/organizations/0b310d3f-2a89-5d8c-9de2-165a1050e36d/logo/0b310d3f-2a89-5d8c-9de2-165a1050e36d.d9f0817a86.png",
+   "retainerCycleLength": null
+  }
+ },
+ "d11-ungodly-apply": {
+  "detail": {
+   "banner": "https://crusercontent.com/b9cb7545-8d45-5974-bd39-ae28e65450ac/campaigns/thumbnails/426d0aac-2d3f-4023-a807-1c9b86460b61.webp",
+   "createdAt": "2026-11-17T20:59:07.000Z",
+   "description": "UnGodly just launched worldwide. From the creator of Star Wars: Galaxy of Heroes comes a dark fantasy RPG where one hero swap can turn a boss fight. Clip the moment worth replaying. Earn up to $175 per clip, with a chance at a $500 bonus for passing 1M eligible views.",
+   "feeSchedule": "standard",
+   "id": "0d341d7d-e390-4807-9149-9b5294dff3e6",
+   "launchDate": "2026-11-18T17:36:36.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 136,
+    "budgetProgressBps": 426,
+    "budgetSpentCents": 8527,
+    "creatorCount": 45,
+    "paidOutCents": 0,
+    "totalViews": 62392
+   },
+   "name": "UnGodly Mobile RPG | Boss Fights & Clutch Plays",
+   "organization": {
+    "logoUrl": "https://crusercontent.com/organizations/b9cb7545-8d45-5974-bd39-ae28e65450ac/logo/08b0130b-a2ea-455b-99b6-af316be266df.webp",
+    "name": "Neuvant",
+    "profileHandle": "adversity-2",
+    "verified": false
+   },
+   "organizationId": "b9cb7545-8d45-5974-bd39-ae28e65450ac",
+   "private": false,
+   "requiresApplication": true,
+   "showBeforeLaunch": false,
+   "showOnDiscover": true,
+   "status": "active",
+   "statusChangedAt": "2026-11-18T17:36:36.129Z",
+   "statusReason": "funded",
+   "updatedAt": "2026-11-18T17:36:36.000Z",
+   "configuration": {
+    "application": {
+     "accountApproval": true,
+     "autoDeclineAfterDeadline": false,
+     "id": "8c970e0d-7e54-4bdf-a0bd-0680108340c9",
+     "reviewDeadline": "48h"
+    },
+    "content": {
+     "contentCategories": [
+      {
+       "id": "gaming",
+       "name": "Gaming"
+      }
+     ],
+     "contentTypes": [
+      {
+       "id": "clipping",
+       "name": "Clipping"
+      }
+     ],
+     "guidelines": "• The clip: Drop us into the fight. Show the boss winding up, the dodge that barely lands, or the hero swap that saves the run. Give us the payoff in 12–30 seconds. Go vertical, put “UnGodly” on screen, and make the edit yours.\n\n• Footage: Use Azra-supplied footage or your own UnGodly gameplay. For combat with mobile controls visible, see 1:00–1:22 in the official B-roll.\n\n• Branding: Fonts, colors, logos, and end cards are optional. If you use a logo, use the supplied file.\n\n• Audience: Only verified views from the US, UK, EU member countries, Australia, Canada, New Zealand, The Bahamas, Guyana, and Barbados count toward payouts and the 1M-view bonus. Views from India, Pakistan, and Bangladesh earn $0.\n\n• Disclosure: put #ad at the end of caption (not on video)\n\n• Audio: Use your own voice or any music cleared for Azra’s paid ads, including free or trending tracks.\n\n• Eligibility: Organic views only. No bought views, boosts, bots, engagement swaps, or duplicate submissions.\n\n• Analytics must be shared as a SCREEN RECORDING from the native app. Screenshots not accepted for bonus claims.\n\n• Usage rights: By submitting, you allow Azra to repost your clip and use it in paid ads, including your voice or on-camera appearance.\n\n•Corrections: Complete any requested fix or takedown within 24 hours.\n\nJOIN THE UNGODLY DISCORD: https://discord.com/invite/ungodly\n"
+    },
+    "creator": {
+     "creatorTypes": [
+      {
+       "id": "clipper",
+       "name": "Clipper"
+      },
+      {
+       "id": "editor",
+       "name": "Video Editor"
+      }
+     ],
+     "description": "<p>We’re looking for gaming creators who can make an UnGodly clip stop the scroll.</p>"
+    },
+    "display": {
+     "hiddenCreatorSubmissions": true,
+     "topPerformers": true
+    },
+    "requirement": {
+     "brandLogo": false,
+     "draftCaptionRequired": false,
+     "faceOnCamera": false,
+     "linkInBio": false,
+     "preApproval": false
+    },
+    "rules": {
+     "audio": {
+      "clearSpeech": false
+     },
+     "branding": {
+      "logoRequired": false
+     },
+     "content": {
+      "noExplicit": false
+     },
+     "faceOnCamera": false,
+     "sound": {
+      "keepOriginalAudio": false,
+      "mustUseProvided": false
+     },
+     "video": {
+      "wellLit": false
+     }
+    },
+    "budget": 200000,
+    "payoutModel": [
+     {
+      "maxPayout": 17500,
+      "minPayout": 175,
+      "platform": "tiktok",
+      "rate": 175
+     },
+     {
+      "maxPayout": 17500,
+      "minPayout": 175,
+      "platform": "youtube",
+      "rate": 175
+     }
+    ]
+   },
+   "type": "cpm",
+   "organizationPrivate": false,
+   "lockedReferences": 5
+  },
+  "card": {
+   "banner": "b9cb7545-8d45-5974-bd39-ae28e65450ac/campaigns/thumbnails/426d0aac-2d3f-4023-a807-1c9b86460b61.webp",
+   "budgetCents": 200000,
+   "categories": [
+    {
+     "id": "gaming",
+     "name": "Gaming"
+    }
+   ],
+   "cpmMaxRateCents": 175,
+   "cpmMinRateCents": 175,
+   "createdAt": "2026-11-17T20:59:11.000Z",
+   "description": "UnGodly just launched worldwide. From the creator of Star Wars: Galaxy of Heroes comes a dark fantasy RPG where one hero swap can turn a boss fight. Clip the moment worth replaying. Earn up to $175 per clip, with a chance at a $500 bonus for passing 1M eligible views.",
+   "geoPriced": false,
+   "id": "0d341d7d-e390-4807-9149-9b5294dff3e6",
+   "launchDate": "2026-11-18T17:36:36.000Z",
+   "listedAt": "2026-11-18T17:36:36.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 136,
+    "budgetProgressBps": 426,
+    "budgetSpentCents": 8527,
+    "creatorCount": 45,
+    "metricsUpdatedAt": "2026-11-21T03:34:11.000Z",
+    "paidOutCents": 0,
+    "totalViews": 62392
+   },
+   "name": "UnGodly Mobile RPG | Boss Fights & Clutch Plays",
+   "organizationExperienceId": "exp_87EhIu1hiCYrjp",
+   "organizationId": "b9cb7545-8d45-5974-bd39-ae28e65450ac",
+   "organizationLogoUrl": "organizations/b9cb7545-8d45-5974-bd39-ae28e65450ac/logo/08b0130b-a2ea-455b-99b6-af316be266df.webp",
+   "organizationName": "Neuvant",
+   "organizationProfileHandle": "adversity-2",
+   "organizationVerified": false,
+   "payouts": [
+    {
+     "maxPayoutCents": 17500,
+     "minPayoutCents": 175,
+     "payoutType": "cpm",
+     "platform": "tiktok",
+     "rateCents": 175,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 17500,
+     "minPayoutCents": 175,
+     "payoutType": "cpm",
+     "platform": "youtube",
+     "rateCents": 175,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    }
+   ],
+   "payoutType": "cpm",
+   "platforms": [
+    "tiktok",
+    "youtube"
+   ],
+   "primaryPayoutCents": 175,
+   "private": false,
+   "referenceMaterials": [],
+   "requiresApplication": true,
+   "retainerSpotsTotal": 0,
+   "status": "active",
+   "updatedAt": "2026-11-21T03:34:13.000Z",
+   "creatorRequirements": [
+    "We’re looking for gaming creators who can make an UnGodly clip stop the scroll."
+   ],
+   "lockedReferences": 5,
+   "bannerBlur": null,
+   "bannerUrl": "https://crusercontent.com/b9cb7545-8d45-5974-bd39-ae28e65450ac/campaigns/thumbnails/426d0aac-2d3f-4023-a807-1c9b86460b61.webp",
+   "group": null,
+   "organizationLogoSrc": "https://crusercontent.com/organizations/b9cb7545-8d45-5974-bd39-ae28e65450ac/logo/08b0130b-a2ea-455b-99b6-af316be266df.webp",
+   "retainerCycleLength": null
+  }
+ },
+ "d13-weeknd-music": {
+  "detail": {
+   "banner": "https://crusercontent.com/8caa4416-8b1b-5ec8-8fe0-6593859bb2d3/campaigns/thumbnails/12432947-e68c-4e0e-99c0-a5856310c904.webp",
+   "createdAt": "2026-11-02T10:31:54.000Z",
+   "description": "Get paid per view to clip The Weeknd's Hong Kong performance on TikTok + IG. Cut the best moments from the official performance video, hook in 2s. Must add the official sound (muted) + #TheWeeknd #fayewong. Multiple posts allowed. Read brief below. Max Pay $200+",
+   "feeSchedule": "standard",
+   "id": "4c7d1ede-2fca-406a-971d-f651880168aa",
+   "launchDate": "2026-11-02T10:32:42.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 24,
+    "budgetProgressBps": 1681,
+    "budgetSpentCents": 25217,
+    "creatorCount": 18,
+    "paidOutCents": 0,
+    "totalViews": 160580
+   },
+   "name": "The Weeknd - Hong Kong Performance Clipping",
+   "organization": {
+    "logoUrl": "https://crusercontent.com/organizations/8caa4416-8b1b-5ec8-8fe0-6593859bb2d3/logo/8caa4416-8b1b-5ec8-8fe0-6593859bb2d3.2f79fc627a.png",
+    "name": "Artist Influence",
+    "profileHandle": "artist-influence",
+    "verified": true
+   },
+   "organizationId": "8caa4416-8b1b-5ec8-8fe0-6593859bb2d3",
+   "private": false,
+   "requiresApplication": false,
+   "showBeforeLaunch": false,
+   "showOnDiscover": true,
+   "status": "active",
+   "statusChangedAt": "2026-11-02T10:32:41.610Z",
+   "statusReason": "funded",
+   "updatedAt": "2026-11-02T10:32:41.000Z",
+   "configuration": {
+    "content": {
+     "contentCategories": [
+      {
+       "id": "music",
+       "name": "Music"
+      }
+     ],
+     "contentTypes": [
+      {
+       "id": "clipping",
+       "name": "Clipping"
+      },
+      {
+       "id": "ugc-with-face",
+       "name": "UGC (With Face)"
+      },
+      {
+       "id": "ugc-faceless",
+       "name": "UGC (Faceless)"
+      },
+      {
+       "id": "sound",
+       "name": "Sound"
+      },
+      {
+       "id": "reposting",
+       "name": "Reposting"
+      }
+     ]
+    },
+    "creator": {
+     "creatorTypes": [
+      {
+       "id": "influencer",
+       "name": "Influencer"
+      },
+      {
+       "id": "clipper",
+       "name": "Clipper"
+      },
+      {
+       "id": "ugc",
+       "name": "UGC Creator"
+      },
+      {
+       "id": "editor",
+       "name": "Video Editor"
+      }
+     ]
+    },
+    "display": {
+     "hiddenCreatorSubmissions": true,
+     "topPerformers": true
+    },
+    "requirement": {
+     "preApproval": false
+    },
+    "budget": 150000,
+    "payoutModel": [
+     {
+      "maxPayout": 15000,
+      "minPayout": 150,
+      "platform": "tiktok",
+      "rate": 150
+     },
+     {
+      "maxPayout": 15000,
+      "minPayout": 150,
+      "platform": "instagram",
+      "rate": 150
+     }
+    ]
+   },
+   "type": "cpm",
+   "organizationPrivate": false,
+   "briefCounts": {
+    "contentRules": 0,
+    "creatorRequirements": 1,
+    "references": 2
+   }
+  },
+  "card": {
+   "banner": "8caa4416-8b1b-5ec8-8fe0-6593859bb2d3/campaigns/thumbnails/12432947-e68c-4e0e-99c0-a5856310c904.webp",
+   "budgetCents": 150000,
+   "categories": [
+    {
+     "id": "music",
+     "name": "Music"
+    }
+   ],
+   "cpmMaxRateCents": 150,
+   "cpmMinRateCents": 150,
+   "createdAt": "2026-11-02T10:32:07.000Z",
+   "description": "Get paid per view to clip The Weeknd's Hong Kong performance on TikTok + IG. Cut the best moments from the official performance video, hook in 2s. Must add the official sound (muted) + #TheWeeknd #fayewong. Multiple posts allowed. Read brief below. Max Pay $200+",
+   "geoPriced": false,
+   "id": "4c7d1ede-2fca-406a-971d-f651880168aa",
+   "launchDate": "2026-11-02T10:32:42.000Z",
+   "listedAt": "2026-11-02T10:32:42.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 24,
+    "budgetProgressBps": 1681,
+    "budgetSpentCents": 25217,
+    "creatorCount": 18,
+    "metricsUpdatedAt": "2026-11-21T03:36:21.000Z",
+    "paidOutCents": 0,
+    "totalViews": 160580
+   },
+   "name": "The Weeknd - Hong Kong Performance Clipping",
+   "organizationExperienceId": "exp_6z7XkoY9ESnz2i",
+   "organizationId": "8caa4416-8b1b-5ec8-8fe0-6593859bb2d3",
+   "organizationLogoUrl": "organizations/8caa4416-8b1b-5ec8-8fe0-6593859bb2d3/logo/8caa4416-8b1b-5ec8-8fe0-6593859bb2d3.2f79fc627a.png",
+   "organizationName": "Artist Influence",
+   "organizationProfileHandle": "artist-influence",
+   "organizationVerified": true,
+   "payouts": [
+    {
+     "maxPayoutCents": 15000,
+     "minPayoutCents": 150,
+     "payoutType": "cpm",
+     "platform": "tiktok",
+     "rateCents": 150,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 15000,
+     "minPayoutCents": 150,
+     "payoutType": "cpm",
+     "platform": "instagram",
+     "rateCents": 150,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    }
+   ],
+   "payoutType": "cpm",
+   "platforms": [
+    "instagram",
+    "tiktok"
+   ],
+   "primaryPayoutCents": 150,
+   "private": false,
+   "referenceMaterials": [],
+   "requiresApplication": false,
+   "retainerSpotsTotal": 0,
+   "status": "active",
+   "updatedAt": "2026-11-21T03:36:23.000Z",
+   "briefCounts": {
+    "contentRules": 0,
+    "creatorRequirements": 1,
+    "references": 2
+   },
+   "bannerBlur": null,
+   "bannerUrl": "https://crusercontent.com/8caa4416-8b1b-5ec8-8fe0-6593859bb2d3/campaigns/thumbnails/12432947-e68c-4e0e-99c0-a5856310c904.webp",
+   "group": null,
+   "organizationLogoSrc": "https://crusercontent.com/organizations/8caa4416-8b1b-5ec8-8fe0-6593859bb2d3/logo/8caa4416-8b1b-5ec8-8fe0-6593859bb2d3.2f79fc627a.png",
+   "retainerCycleLength": null
+  }
+ },
+ "d14-hablando-es-apply": {
+  "detail": {
+   "banner": "https://crusercontent.com/33c5bffc-84ed-5334-89e3-9f9376ea5317/campaigns/thumbnails/e76b7e6a-219a-4508-9c16-a1b2397f38de.webp",
+   "createdAt": "2026-11-01T11:39:23.000Z",
+   "description": "Gana dinero clipeando a Carlos Esparraga. ",
+   "feeSchedule": "standard",
+   "id": "e815a623-badd-4516-906c-b6cfce227ff9",
+   "launchDate": "2026-11-04T16:26:17.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 251,
+    "budgetProgressBps": 7046,
+    "budgetSpentCents": 704648,
+    "creatorCount": 34,
+    "paidOutCents": 0,
+    "totalViews": 27405574
+   },
+   "name": "Clips Hablando - 1$ por cada 1000 visitas",
+   "organization": {
+    "logoUrl": "https://crusercontent.com/organizations/33c5bffc-84ed-5334-89e3-9f9376ea5317/logo/33c5bffc-84ed-5334-89e3-9f9376ea5317.fb0c1b071d.jpg",
+    "name": "Carlos Esparraga Clipping",
+    "profileHandle": "carlos-esparraga-clipping",
+    "verified": false
+   },
+   "organizationId": "33c5bffc-84ed-5334-89e3-9f9376ea5317",
+   "private": false,
+   "requiresApplication": true,
+   "showBeforeLaunch": false,
+   "showOnDiscover": true,
+   "status": "active",
+   "statusChangedAt": "2026-11-04T16:26:17.167Z",
+   "statusReason": "funded",
+   "updatedAt": "2026-11-04T16:26:17.000Z",
+   "configuration": {
+    "application": {
+     "accountApproval": false,
+     "autoDeclineAfterDeadline": false,
+     "id": "53fc615a-6f4a-4018-8b56-3c142b5a4e83",
+     "reviewDeadline": "48h"
+    },
+    "content": {
+     "contentCategories": [
+      {
+       "id": "personal-brand",
+       "name": "Personal Brand"
+      }
+     ],
+     "contentTypes": [
+      {
+       "id": "clipping",
+       "name": "Clipping"
+      }
+     ],
+     "guidelines": "- El clip debe durar minimo 10 segundos.\n- Carlos debe aparecer un 70% del video.\n- PROHIBIDO CONECTAR INSTAGRAM CON FACEBOOK.\n- La PRIMERA linea de la descripcion en INSTAGRAM debe ser:\n\"Cuenta principal: @carlos_espaarraga4\" y etiquetarlo en la publicacion.\n- La PRIMERA linea de la descripcion en Youtube y Tiktok debe ser:\n\"Sigueme en Instagram: @carlos_espaarraga4 \"\n- Queda prohibido utilizar ganchos de mujeres, humoristicos o nada que no tenga que ver con carlos.\n- Para poder monetizar un video o un reto, tienes que estar activo en las 3 redes sociales subiendo 1 reel al dia.\n- No se puede monetizar el mismo video mas de una vez, a menos que se haya cambiado notablemente la edicion.\n- Hay que hacer todo lo posible por tener la maxima audiencia española, esos clips tendran prioridad a la hora de ser aceptados.\n- Cualquier video que no encaje con la vision y valores de carlos sera rechazado y el creador sera expulsado.\n- No se pueden resubir videos de otros creadores. Puedes utilizar la misma idea y replicarlo parecido, pero con tu propio estilo.\n- El video no puede tener marcas de agua."
+    },
+    "creator": {
+     "creatorTypes": [
+      {
+       "id": "clipper",
+       "name": "Clipper"
+      },
+      {
+       "id": "influencer",
+       "name": "Influencer"
+      }
+     ]
+    },
+    "display": {
+     "hiddenCreatorSubmissions": true,
+     "topPerformers": true
+    },
+    "requirement": {
+     "brandLogo": false,
+     "faceOnCamera": false,
+     "linkInBio": false,
+     "preApproval": false
+    },
+    "rules": {
+     "audio": {
+      "clearSpeech": false
+     },
+     "branding": {
+      "logoRequired": false
+     },
+     "content": {
+      "noExplicit": false
+     },
+     "faceOnCamera": false,
+     "sound": {
+      "keepOriginalAudio": false,
+      "mustUseProvided": false
+     },
+     "video": {
+      "wellLit": false
+     }
+    },
+    "budget": 1000000,
+    "payoutModel": [
+     {
+      "maxPayout": 5000,
+      "minPayout": 750,
+      "platform": "tiktok",
+      "rate": 30
+     },
+     {
+      "maxPayout": 10000,
+      "minPayout": 1000,
+      "platform": "instagram",
+      "rate": 100
+     },
+     {
+      "maxPayout": 3000,
+      "minPayout": 500,
+      "platform": "youtube",
+      "rate": 20
+     }
+    ]
+   },
+   "type": "cpm",
+   "organizationPrivate": false,
+   "lockedReferences": 1
+  },
+  "card": {
+   "banner": "33c5bffc-84ed-5334-89e3-9f9376ea5317/campaigns/thumbnails/e76b7e6a-219a-4508-9c16-a1b2397f38de.webp",
+   "budgetCents": 1000000,
+   "categories": [
+    {
+     "id": "personal-brand",
+     "name": "Personal Brand"
+    }
+   ],
+   "cpmMaxRateCents": 100,
+   "cpmMinRateCents": 20,
+   "createdAt": "2026-11-01T11:39:35.000Z",
+   "description": "Gana dinero clipeando a Carlos Esparraga. ",
+   "geoPriced": false,
+   "id": "e815a623-badd-4516-906c-b6cfce227ff9",
+   "launchDate": "2026-11-04T16:26:17.000Z",
+   "listedAt": "2026-11-04T16:26:17.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 251,
+    "budgetProgressBps": 7046,
+    "budgetSpentCents": 704648,
+    "creatorCount": 34,
+    "metricsUpdatedAt": "2026-11-21T03:34:20.000Z",
+    "paidOutCents": 0,
+    "totalViews": 27405574
+   },
+   "name": "Clips Hablando - 1$ por cada 1000 visitas",
+   "organizationExperienceId": "exp_9OyuS0vxboU11Q",
+   "organizationId": "33c5bffc-84ed-5334-89e3-9f9376ea5317",
+   "organizationLogoUrl": "organizations/33c5bffc-84ed-5334-89e3-9f9376ea5317/logo/33c5bffc-84ed-5334-89e3-9f9376ea5317.fb0c1b071d.jpg",
+   "organizationName": "Carlos Esparraga Clipping",
+   "organizationProfileHandle": "carlos-esparraga-clipping",
+   "organizationVerified": false,
+   "payouts": [
+    {
+     "maxPayoutCents": 5000,
+     "minPayoutCents": 750,
+     "payoutType": "cpm",
+     "platform": "tiktok",
+     "rateCents": 30,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 10000,
+     "minPayoutCents": 1000,
+     "payoutType": "cpm",
+     "platform": "instagram",
+     "rateCents": 100,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 3000,
+     "minPayoutCents": 500,
+     "payoutType": "cpm",
+     "platform": "youtube",
+     "rateCents": 20,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    }
+   ],
+   "payoutType": "cpm",
+   "platforms": [
+    "instagram",
+    "tiktok",
+    "youtube"
+   ],
+   "primaryPayoutCents": 100,
+   "private": false,
+   "referenceMaterials": [],
+   "requiresApplication": true,
+   "retainerSpotsTotal": 0,
+   "status": "active",
+   "updatedAt": "2026-11-21T03:34:36.000Z",
+   "lockedReferences": 1,
+   "bannerBlur": null,
+   "bannerUrl": "https://crusercontent.com/33c5bffc-84ed-5334-89e3-9f9376ea5317/campaigns/thumbnails/e76b7e6a-219a-4508-9c16-a1b2397f38de.webp",
+   "group": null,
+   "organizationLogoSrc": "https://crusercontent.com/organizations/33c5bffc-84ed-5334-89e3-9f9376ea5317/logo/33c5bffc-84ed-5334-89e3-9f9376ea5317.fb0c1b071d.jpg",
+   "retainerCycleLength": null
+  }
+ },
+ "d15-mack-twitch-apply": {
+  "detail": {
+   "banner": "https://crusercontent.com/c5a12338-ab94-4aee-909f-dfbcf9e35c17/campaigns/thumbnails/44b336b4-40f5-414b-b955-52405f070e54.webp",
+   "createdAt": "2026-10-15T12:27:30.000Z",
+   "description": "Clip Mack Camferdam's Minecraft Hardcore streams (plus Ready or Not and NBA 2K) for TikTok. Short, high-stakes moments: deaths, close calls, rage, big reactions. Raw clips are linked in the reference materials - take them, cut them, post them. Paid per 1,000 views.",
+   "feeSchedule": "standard",
+   "id": "79d6abae-b305-42e9-9ebe-82e47583adb5",
+   "launchDate": "2026-10-21T12:23:42.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 1,
+    "budgetProgressBps": 0,
+    "budgetSpentCents": 0,
+    "creatorCount": 1,
+    "paidOutCents": 0,
+    "totalViews": 106
+   },
+   "name": "Mack Camferdam - Twitch Clips",
+   "organization": {
+    "name": "Mack Camferdam",
+    "profileHandle": "mack-camferdam",
+    "verified": false,
+    "logoUrl": "$undefined"
+   },
+   "organizationId": "c5a12338-ab94-4aee-909f-dfbcf9e35c17",
+   "private": false,
+   "requiresApplication": true,
+   "showBeforeLaunch": false,
+   "showOnDiscover": true,
+   "status": "active",
+   "statusChangedAt": "2026-10-21T12:23:41.681Z",
+   "statusReason": "funded",
+   "updatedAt": "2026-10-21T12:23:41.000Z",
+   "configuration": {
+    "application": {
+     "accountApproval": true,
+     "autoDeclineAfterDeadline": false,
+     "id": "e5a6a48b-2292-4217-a7fa-eaec0690d23f",
+     "reviewDeadline": "48h"
+    },
+    "content": {
+     "contentCategories": [
+      {
+       "id": "pc-gaming",
+       "name": "PC Gaming"
+      }
+     ],
+     "contentTypes": [
+      {
+       "id": "clipping",
+       "name": "Clipping"
+      }
+     ],
+     "guidelines": "Keep my facecam in frame the whole time. The reaction is the content, not the gameplay.\nBurn the caption into the top third: white text, black outline, big enough to read on a phone.\n9:16 vertical, full screen, bright and readable. No letterboxing, no borders, no zoom-outs.\nNo watermarks from other apps and no other streamers' overlays or names in frame.\nPut \"Mack_Camferdam on Twitch\" in the TikTok description and tag @mack.camferdam.\nDo not open on a menu, a mod list, or a loading screen."
+    },
+    "creator": {
+     "creatorTypes": [
+      {
+       "id": "clipper",
+       "name": "Clipper"
+      }
+     ],
+     "description": "<p>Gaming clippers who already post short-form on TikTok and understand hooks. You should be comfortable pulling raw Twitch clips, cutting them down to 5-9 seconds, and burning in captions that read clean on a phone. Minecraft Hardcore, horror and FPS clipping experience is a plus. I care about retention, not volume - one clip people watch to the end beats three they scroll past.</p>"
+    },
+    "display": {
+     "hiddenCreatorSubmissions": true,
+     "topPerformers": true
+    },
+    "requirement": {
+     "brandLogo": false,
+     "faceOnCamera": false,
+     "linkInBio": false,
+     "preApproval": true
+    },
+    "rules": {
+     "audio": {
+      "clearSpeech": false
+     },
+     "branding": {
+      "logoRequired": false
+     },
+     "content": {
+      "noExplicit": false
+     },
+     "faceOnCamera": false,
+     "sound": {
+      "keepOriginalAudio": false,
+      "mustUseProvided": false
+     },
+     "video": {
+      "wellLit": false
+     }
+    },
+    "budget": 200000,
+    "payoutModel": [
+     {
+      "maxPayout": 50000,
+      "minPayout": 100,
+      "platform": "tiktok",
+      "rate": 100
+     }
+    ]
+   },
+   "type": "cpm",
+   "organizationPrivate": false,
+   "lockedReferences": 3
+  },
+  "card": {
+   "banner": "c5a12338-ab94-4aee-909f-dfbcf9e35c17/campaigns/thumbnails/44b336b4-40f5-414b-b955-52405f070e54.webp",
+   "budgetCents": 200000,
+   "categories": [
+    {
+     "id": "pc-gaming",
+     "name": "PC Gaming"
+    },
+    {
+     "id": "gaming",
+     "name": "Gaming"
+    }
+   ],
+   "cpmMaxRateCents": 100,
+   "cpmMinRateCents": 100,
+   "createdAt": "2026-10-15T12:27:32.000Z",
+   "description": "Clip Mack Camferdam's Minecraft Hardcore streams (plus Ready or Not and NBA 2K) for TikTok. Short, high-stakes moments: deaths, close calls, rage, big reactions. Raw clips are linked in the reference materials - take them, cut them, post them. Paid per 1,000 views.",
+   "geoPriced": false,
+   "id": "79d6abae-b305-42e9-9ebe-82e47583adb5",
+   "launchDate": "2026-10-21T12:23:42.000Z",
+   "listedAt": "2026-10-21T12:23:42.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 1,
+    "budgetProgressBps": 0,
+    "budgetSpentCents": 0,
+    "creatorCount": 1,
+    "metricsUpdatedAt": "2026-11-03T12:24:08.000Z",
+    "paidOutCents": 0,
+    "totalViews": 106
+   },
+   "name": "Mack Camferdam - Twitch Clips",
+   "organizationExperienceId": "exp_pIwGwNrNwLlqro",
+   "organizationId": "c5a12338-ab94-4aee-909f-dfbcf9e35c17",
+   "organizationName": "Mack Camferdam",
+   "organizationProfileHandle": "mack-camferdam",
+   "organizationVerified": false,
+   "payouts": [
+    {
+     "maxPayoutCents": 50000,
+     "minPayoutCents": 100,
+     "payoutType": "cpm",
+     "platform": "tiktok",
+     "rateCents": 100,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    }
+   ],
+   "payoutType": "cpm",
+   "platforms": [
+    "tiktok"
+   ],
+   "primaryPayoutCents": 100,
+   "private": false,
+   "referenceMaterials": [],
+   "requiresApplication": true,
+   "retainerSpotsTotal": 0,
+   "status": "active",
+   "updatedAt": "2026-11-21T02:59:48.000Z",
+   "contentRequirements": {
+    "items": [
+     "Get approval before publishing"
+    ]
+   },
+   "creatorRequirements": [
+    "Gaming clippers who already post short-form on TikTok and understand hooks. You should be comfortable pulling raw Twitch clips, cutting them down to 5-9 seconds, and burning in captions that read clean on a phone. Minecraft Hardcore, horror and FPS clipping experience is a plus. I care about retention, not volume - one clip people watch to the end beats three they scroll past."
+   ],
+   "lockedReferences": 3,
+   "bannerBlur": null,
+   "bannerUrl": "https://crusercontent.com/c5a12338-ab94-4aee-909f-dfbcf9e35c17/campaigns/thumbnails/44b336b4-40f5-414b-b955-52405f070e54.webp",
+   "group": null,
+   "organizationLogoSrc": null,
+   "organizationLogoUrl": null,
+   "retainerCycleLength": null
+  }
+ },
+ "d16-fundingpips": {
+  "detail": {
+   "banner": "https://crusercontent.com/26cc66d8-2eea-5bc5-b85f-d4c7a1ccff9d/campaigns/thumbnails/6f82c2c8-6173-4be5-a1da-39ad831140f5.webp",
+   "createdAt": "2026-05-22T12:07:52.000Z",
+   "description": "FundingPips was built by traders, for traders. Our core philosophy is simple: Your ideas, our risk. Now, we are giving you full access to our official content vault unlocking raw global trader interviews, platform mechanics, and deep psychological breakdowns on what it takes to master discipline, clear evaluation phases, and manage up to $300,000 across multiple simulated accounts.  If you understand the psychology of the charts and know how to construct high-impact, scroll-stopping loops, we will give you the raw ammunition. Take the footage, map out aggressive cuts, and show the internet what true risk management and scaling look like. Choose your file, engineer the hook, and claim your rewards. Speed wins.",
+   "feeSchedule": "legacy_v1",
+   "id": "c0c37381-e244-4643-98bd-edbff4bc1465",
+   "launchDate": "2026-05-26T11:21:33.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 8513,
+    "budgetProgressBps": 5828,
+    "budgetSpentCents": 233121,
+    "creatorCount": 1632,
+    "paidOutCents": 81504,
+    "totalViews": 819596
+   },
+   "name": "Fundingpips Clipping",
+   "organization": {
+    "logoUrl": "https://crusercontent.com/organizations/26cc66d8-2eea-5bc5-b85f-d4c7a1ccff9d/logo/26cc66d8-2eea-5bc5-b85f-d4c7a1ccff9d.547b85b95d.png",
+    "name": "FundingPips",
+    "profileHandle": "fundingpips",
+    "verified": false
+   },
+   "organizationId": "26cc66d8-2eea-5bc5-b85f-d4c7a1ccff9d",
+   "private": false,
+   "requiresApplication": false,
+   "showBeforeLaunch": false,
+   "showOnDiscover": true,
+   "status": "active",
+   "statusChangedAt": "2026-10-30T11:05:35.522Z",
+   "statusReason": "manual",
+   "updatedAt": "2026-10-30T11:40:51.000Z",
+   "configuration": {
+    "content": {
+     "contentCategories": [
+      {
+       "id": "technology",
+       "name": "Technology"
+      }
+     ],
+     "contentTypes": [
+      {
+       "id": "clipping",
+       "name": "Clipping"
+      }
+     ]
+    },
+    "creator": {
+     "creatorTypes": [
+      {
+       "id": "clipper",
+       "name": "Clipper"
+      }
+     ]
+    },
+    "display": {
+     "hiddenCreatorSubmissions": true,
+     "topPerformers": true
+    },
+    "requirement": {
+     "preApproval": false
+    },
+    "budget": 400000,
+    "payoutModel": [
+     {
+      "maxPayout": 10000,
+      "minPayout": 1200,
+      "platform": "instagram",
+      "rate": 600
+     },
+     {
+      "maxPayout": 10000,
+      "minPayout": 1200,
+      "platform": "tiktok",
+      "rate": 600
+     },
+     {
+      "maxPayout": 10000,
+      "minPayout": 1200,
+      "platform": "youtube",
+      "rate": 600
+     }
+    ]
+   },
+   "type": "cpm",
+   "organizationPrivate": false,
+   "briefCounts": {
+    "contentRules": 4,
+    "creatorRequirements": 0,
+    "references": 2
+   }
+  },
+  "card": {
+   "banner": "26cc66d8-2eea-5bc5-b85f-d4c7a1ccff9d/campaigns/thumbnails/6f82c2c8-6173-4be5-a1da-39ad831140f5.webp",
+   "budgetCents": 400000,
+   "categories": [
+    {
+     "id": "technology",
+     "name": "Technology"
+    }
+   ],
+   "cpmMaxRateCents": 600,
+   "cpmMinRateCents": 600,
+   "createdAt": "2026-08-26T23:08:08.000Z",
+   "description": "FundingPips was built by traders, for traders. Our core philosophy is simple: Your ideas, our risk. Now, we are giving you full access to our official content vault unlocking raw global trader interviews, platform mechanics, and deep psychological breakdowns on what it takes to master discipline, clear evaluation phases, and manage up to $300,000 across multiple simulated accounts.  If you understand the psychology of the charts and know how to construct high-impact, scroll-stopping loops, we will give you the raw ammunition. Take the footage, map out aggressive cuts, and show the internet what true risk management and scaling look like. Choose your file, engineer the hook, and claim your rewards. Speed wins.",
+   "geoPriced": false,
+   "id": "c0c37381-e244-4643-98bd-edbff4bc1465",
+   "launchDate": "2026-05-26T11:21:33.000Z",
+   "listedAt": "2026-05-26T11:21:33.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 8513,
+    "budgetProgressBps": 5828,
+    "budgetSpentCents": 233121,
+    "creatorCount": 1632,
+    "metricsUpdatedAt": "2026-11-21T03:36:15.000Z",
+    "paidOutCents": 81504,
+    "totalViews": 819596
+   },
+   "name": "Fundingpips Clipping",
+   "organizationExperienceId": "exp_myMfOXLDv8ATPu",
+   "organizationId": "26cc66d8-2eea-5bc5-b85f-d4c7a1ccff9d",
+   "organizationLogoUrl": "organizations/26cc66d8-2eea-5bc5-b85f-d4c7a1ccff9d/logo/26cc66d8-2eea-5bc5-b85f-d4c7a1ccff9d.547b85b95d.png",
+   "organizationName": "FundingPips",
+   "organizationProfileHandle": "fundingpips",
+   "organizationVerified": false,
+   "payouts": [
+    {
+     "maxPayoutCents": 10000,
+     "minPayoutCents": 1200,
+     "payoutType": "cpm",
+     "platform": "instagram",
+     "rateCents": 600,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 10000,
+     "minPayoutCents": 1200,
+     "payoutType": "cpm",
+     "platform": "tiktok",
+     "rateCents": 600,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 10000,
+     "minPayoutCents": 1200,
+     "payoutType": "cpm",
+     "platform": "youtube",
+     "rateCents": 600,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    }
+   ],
+   "payoutType": "cpm",
+   "platforms": [
+    "instagram",
+    "tiktok",
+    "youtube"
+   ],
+   "primaryPayoutCents": 600,
+   "private": false,
+   "referenceMaterials": [],
+   "requiresApplication": false,
+   "retainerSpotsTotal": 0,
+   "status": "active",
+   "updatedAt": "2026-11-21T03:36:17.000Z",
+   "briefCounts": {
+    "contentRules": 4,
+    "creatorRequirements": 0,
+    "references": 2
+   },
+   "bannerBlur": null,
+   "bannerUrl": "https://crusercontent.com/26cc66d8-2eea-5bc5-b85f-d4c7a1ccff9d/campaigns/thumbnails/6f82c2c8-6173-4be5-a1da-39ad831140f5.webp",
+   "group": null,
+   "organizationLogoSrc": "https://crusercontent.com/organizations/26cc66d8-2eea-5bc5-b85f-d4c7a1ccff9d/logo/26cc66d8-2eea-5bc5-b85f-d4c7a1ccff9d.547b85b95d.png",
+   "retainerCycleLength": null
+  }
+ },
+ "d17-forgegui-group": {
+  "detail": {
+   "banner": "https://crusercontent.com/95898331-98cb-5af5-aac2-0320b4037a35/campaigns/thumbnails/1db63081-715e-4e04-9b11-fbc1d4e8e700.png",
+   "createdAt": "2026-05-06T18:26:10.000Z",
+   "description": "Clip provided ForgeGUI footage into short-form content and get paid for the views you generate. ForgeGUI is an AI tool that helps Roblox developers create GUIs, models, thumbnails, scripts, and more.\n",
+   "feeSchedule": "legacy_v1",
+   "id": "1db63081-715e-4e04-9b11-fbc1d4e8e700",
+   "launchDate": "2026-05-06T18:28:44.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 29123,
+    "budgetProgressBps": 9776,
+    "budgetSpentCents": 21961265,
+    "creatorCount": 4023,
+    "paidOutCents": 9640324,
+    "totalViews": 295894728
+   },
+   "name": "Basic Clipping",
+   "organization": {
+    "logoUrl": "https://crusercontent.com/organizations/95898331-98cb-5af5-aac2-0320b4037a35/logo/e9ca6efb-4387-46b7-856c-b04dfe05baae.webp",
+    "name": "BloxClips",
+    "profileHandle": "bloxclips",
+    "verified": true
+   },
+   "organizationId": "95898331-98cb-5af5-aac2-0320b4037a35",
+   "private": false,
+   "requiresApplication": false,
+   "showBeforeLaunch": false,
+   "showOnDiscover": true,
+   "status": "active",
+   "updatedAt": "2026-10-27T16:51:54.000Z",
+   "configuration": {
+    "content": {
+     "contentCategories": [
+      {
+       "id": "technology",
+       "name": "Technology"
+      }
+     ],
+     "contentTypes": [
+      {
+       "id": "clipping",
+       "name": "Clipping"
+      },
+      {
+       "id": "ugc-faceless",
+       "name": "UGC (Faceless)"
+      }
+     ]
+    },
+    "creator": {
+     "creatorTypes": [
+      {
+       "id": "ugc",
+       "name": "UGC Creator"
+      },
+      {
+       "id": "clipper",
+       "name": "Clipper"
+      }
+     ]
+    },
+    "display": {
+     "hiddenCreatorSubmissions": true,
+     "topPerformers": true
+    },
+    "requirement": {
+     "preApproval": false
+    },
+    "budget": 22465300,
+    "payoutModel": [
+     {
+      "maxPayout": 100000,
+      "minPayout": 100,
+      "platform": "tiktok",
+      "rate": 100
+     },
+     {
+      "maxPayout": 100000,
+      "minPayout": 100,
+      "platform": "instagram",
+      "rate": 100
+     },
+     {
+      "maxPayout": 50000,
+      "minPayout": 100,
+      "platform": "youtube",
+      "rate": 50
+     }
+    ]
+   },
+   "type": "cpm",
+   "organizationPrivate": false,
+   "briefCounts": {
+    "contentRules": 1,
+    "creatorRequirements": 4,
+    "references": 2
+   }
+  },
+  "card": {
+   "banner": "95898331-98cb-5af5-aac2-0320b4037a35/campaigns/thumbnails/1db63081-715e-4e04-9b11-fbc1d4e8e700.png",
+   "budgetCents": 22465300,
+   "categories": [
+    {
+     "id": "technology",
+     "name": "Technology"
+    }
+   ],
+   "cpmMaxRateCents": 100,
+   "cpmMinRateCents": 50,
+   "createdAt": "2026-08-15T10:40:48.000Z",
+   "description": "Clip provided ForgeGUI footage into short-form content and get paid for the views you generate. ForgeGUI is an AI tool that helps Roblox developers create GUIs, models, thumbnails, scripts, and more.\n",
+   "geoPriced": false,
+   "group": {
+    "campaignIds": [
+     "52a937dd-2e14-4e4b-8eaf-971ac5921208",
+     "1db63081-715e-4e04-9b11-fbc1d4e8e700",
+     "237c2143-cbcc-4296-81f1-7da057a53264"
+    ],
+    "cover": "organizations/95898331-98cb-5af5-aac2-0320b4037a35/campaign-groups/covers/e0bfd968-beac-4b06-8ddc-d9869bccfad5.webp",
+    "description": "ForgeGUI is an AI-powered Roblox development tool that lets you build games, scripts, and systems using simple prompts. Create engaging Roblox short-form content showcasing what’s possible with ForgeGUI!",
+    "id": "82e8acef-29d8-40a5-a0d2-4e40a9fbfd82",
+    "name": "ForgeGUI [UNLIMITED]"
+   },
+   "id": "1db63081-715e-4e04-9b11-fbc1d4e8e700",
+   "launchDate": "2026-05-06T18:28:44.000Z",
+   "listedAt": "2026-05-06T18:28:44.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 29123,
+    "budgetProgressBps": 9775,
+    "budgetSpentCents": 21961265,
+    "creatorCount": 4023,
+    "metricsUpdatedAt": "2026-11-21T03:36:21.000Z",
+    "paidOutCents": 9640324,
+    "totalViews": 295894728
+   },
+   "name": "Basic Clipping",
+   "organizationExperienceId": "exp_EfN9ClEYDL8Bh9",
+   "organizationId": "95898331-98cb-5af5-aac2-0320b4037a35",
+   "organizationLogoUrl": "organizations/95898331-98cb-5af5-aac2-0320b4037a35/logo/e9ca6efb-4387-46b7-856c-b04dfe05baae.webp",
+   "organizationName": "BloxClips",
+   "organizationProfileHandle": "bloxclips",
+   "organizationVerified": true,
+   "payouts": [
+    {
+     "maxPayoutCents": 100000,
+     "minPayoutCents": 100,
+     "payoutType": "cpm",
+     "platform": "tiktok",
+     "rateCents": 100,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 100000,
+     "minPayoutCents": 100,
+     "payoutType": "cpm",
+     "platform": "instagram",
+     "rateCents": 100,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 50000,
+     "minPayoutCents": 100,
+     "payoutType": "cpm",
+     "platform": "youtube",
+     "rateCents": 50,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    }
+   ],
+   "payoutType": "cpm",
+   "platforms": [
+    "instagram",
+    "tiktok",
+    "youtube"
+   ],
+   "primaryPayoutCents": 100,
+   "private": false,
+   "referenceMaterials": [],
+   "requiresApplication": false,
+   "retainerSpotsTotal": 0,
+   "status": "active",
+   "updatedAt": "2026-11-21T03:36:24.000Z",
+   "briefCounts": {
+    "contentRules": 1,
+    "creatorRequirements": 4,
+    "references": 2
+   },
+   "bannerBlur": null,
+   "bannerUrl": "https://crusercontent.com/95898331-98cb-5af5-aac2-0320b4037a35/campaigns/thumbnails/1db63081-715e-4e04-9b11-fbc1d4e8e700.png",
+   "organizationLogoSrc": "https://crusercontent.com/organizations/95898331-98cb-5af5-aac2-0320b4037a35/logo/e9ca6efb-4387-46b7-856c-b04dfe05baae.webp",
+   "retainerCycleLength": null
+  }
+ },
+ "d18-pickleball": {
+  "detail": {
+   "banner": "https://crusercontent.com/fce5ec7c-9217-4c87-9d72-8252f2500323/campaigns/thumbnails/467837a2-a053-4513-9947-2b93d23737fc.webp",
+   "createdAt": "2026-11-09T15:30:28.000Z",
+   "description": "Clip official CNPL match footage into 8-60s vertical shorts. Best rallies, dinks, ernes, crowd pops. Paid per 1K views on TikTok, Reels and Shorts. Official match footage, logos and a hook list in the asset pack. First pickleball campaign on Content Rewards.",
+   "feeSchedule": "standard",
+   "id": "3d9ef19f-1256-47ca-b630-e33e2c923969",
+   "launchDate": "2026-11-14T17:23:44.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 41,
+    "budgetProgressBps": 360,
+    "budgetSpentCents": 8990,
+    "creatorCount": 15,
+    "paidOutCents": 0,
+    "totalViews": 55396
+   },
+   "name": "Clip Pro Pickleball: CNPL Rallies & Highlights",
+   "organization": {
+    "logoUrl": "https://crusercontent.com/organizations/fce5ec7c-9217-4c87-9d72-8252f2500323/logo/e3c1e19f-eb2a-4a2e-ba29-589f75a1c86c.webp",
+    "name": "Canadian National Pickleball League",
+    "profileHandle": "canadian-national-pickleball",
+    "verified": false
+   },
+   "organizationId": "fce5ec7c-9217-4c87-9d72-8252f2500323",
+   "private": false,
+   "requiresApplication": false,
+   "showBeforeLaunch": false,
+   "showOnDiscover": true,
+   "status": "active",
+   "statusChangedAt": "2026-11-14T17:23:44.117Z",
+   "statusReason": "funded",
+   "updatedAt": "2026-11-14T17:23:44.000Z",
+   "configuration": {
+    "content": {
+     "contentCategories": [
+      {
+       "id": "sports-highlights",
+       "name": "Sports Highlights"
+      }
+     ],
+     "contentTypes": [
+      {
+       "id": "clipping",
+       "name": "Clipping"
+      }
+     ]
+    },
+    "creator": {
+     "creatorTypes": [
+      {
+       "id": "clipper",
+       "name": "Clipper"
+      },
+      {
+       "id": "editor",
+       "name": "Video Editor"
+      }
+     ]
+    },
+    "display": {
+     "hiddenCreatorSubmissions": true,
+     "topPerformers": true
+    },
+    "requirement": {
+     "preApproval": false
+    },
+    "budget": 250000,
+    "payoutModel": [
+     {
+      "maxPayout": 25000,
+      "minPayout": 150,
+      "platform": "tiktok",
+      "rate": 150
+     },
+     {
+      "maxPayout": 25000,
+      "minPayout": 150,
+      "platform": "instagram",
+      "rate": 150
+     },
+     {
+      "maxPayout": 25000,
+      "minPayout": 150,
+      "platform": "youtube",
+      "rate": 150
+     }
+    ]
+   },
+   "type": "cpm",
+   "organizationPrivate": false,
+   "briefCounts": {
+    "contentRules": 0,
+    "creatorRequirements": 1,
+    "references": 8
+   }
+  },
+  "card": {
+   "banner": "fce5ec7c-9217-4c87-9d72-8252f2500323/campaigns/thumbnails/467837a2-a053-4513-9947-2b93d23737fc.webp",
+   "budgetCents": 250000,
+   "categories": [
+    {
+     "id": "sports-highlights",
+     "name": "Sports Highlights"
+    },
+    {
+     "id": "sports",
+     "name": "Sports"
+    }
+   ],
+   "cpmMaxRateCents": 150,
+   "cpmMinRateCents": 150,
+   "createdAt": "2026-11-09T15:30:32.000Z",
+   "description": "Clip official CNPL match footage into 8-60s vertical shorts. Best rallies, dinks, ernes, crowd pops. Paid per 1K views on TikTok, Reels and Shorts. Official match footage, logos and a hook list in the asset pack. First pickleball campaign on Content Rewards.",
+   "geoPriced": false,
+   "id": "3d9ef19f-1256-47ca-b630-e33e2c923969",
+   "launchDate": "2026-11-14T17:23:44.000Z",
+   "listedAt": "2026-11-14T17:23:44.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 41,
+    "budgetProgressBps": 359,
+    "budgetSpentCents": 8990,
+    "creatorCount": 15,
+    "metricsUpdatedAt": "2026-11-21T03:36:21.000Z",
+    "paidOutCents": 0,
+    "totalViews": 55396
+   },
+   "name": "Clip Pro Pickleball: CNPL Rallies & Highlights",
+   "organizationExperienceId": "exp_Ajv0RaQ2nKKFdw",
+   "organizationId": "fce5ec7c-9217-4c87-9d72-8252f2500323",
+   "organizationLogoUrl": "organizations/fce5ec7c-9217-4c87-9d72-8252f2500323/logo/e3c1e19f-eb2a-4a2e-ba29-589f75a1c86c.webp",
+   "organizationName": "Canadian National Pickleball League",
+   "organizationProfileHandle": "canadian-national-pickleball",
+   "organizationVerified": false,
+   "payouts": [
+    {
+     "maxPayoutCents": 25000,
+     "minPayoutCents": 150,
+     "payoutType": "cpm",
+     "platform": "tiktok",
+     "rateCents": 150,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 25000,
+     "minPayoutCents": 150,
+     "payoutType": "cpm",
+     "platform": "instagram",
+     "rateCents": 150,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 25000,
+     "minPayoutCents": 150,
+     "payoutType": "cpm",
+     "platform": "youtube",
+     "rateCents": 150,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    }
+   ],
+   "payoutType": "cpm",
+   "platforms": [
+    "instagram",
+    "tiktok",
+    "youtube"
+   ],
+   "primaryPayoutCents": 150,
+   "private": false,
+   "referenceMaterials": [],
+   "requiresApplication": false,
+   "retainerSpotsTotal": 0,
+   "status": "active",
+   "updatedAt": "2026-11-21T03:36:25.000Z",
+   "briefCounts": {
+    "contentRules": 0,
+    "creatorRequirements": 1,
+    "references": 8
+   },
+   "bannerBlur": null,
+   "bannerUrl": "https://crusercontent.com/fce5ec7c-9217-4c87-9d72-8252f2500323/campaigns/thumbnails/467837a2-a053-4513-9947-2b93d23737fc.webp",
+   "group": null,
+   "organizationLogoSrc": "https://crusercontent.com/organizations/fce5ec7c-9217-4c87-9d72-8252f2500323/logo/e3c1e19f-eb2a-4a2e-ba29-589f75a1c86c.webp",
+   "retainerCycleLength": null
+  }
+ },
+ "d19-energy-product": {
+  "detail": {
+   "banner": "https://crusercontent.com/a5a5c8c5-60eb-5ecd-b1de-31ccc32e1b30/campaigns/thumbnails/993ece1d-1e04-412c-8a04-04e1ddb66d4d.webp",
+   "createdAt": "2026-11-17T19:42:19.000Z",
+   "description": "Create short-form videos for the energy drinks, featuring its 170mg fast-acting 750mL elixir. Use approved flavors and provided footage. Keep content funny, creative and engaging. Creators must be 21+ and US-based, with at least 50% US views per clip.",
+   "feeSchedule": "standard",
+   "id": "e4a9465f-d415-4e30-bf53-e46014958bc6",
+   "launchDate": "2026-11-17T20:56:20.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 33,
+    "budgetProgressBps": 112,
+    "budgetSpentCents": 11248,
+    "creatorCount": 20,
+    "paidOutCents": 0,
+    "totalViews": 115103
+   },
+   "name": "ENERGY DRINKS -  Beverages",
+   "organization": {
+    "logoUrl": "https://crusercontent.com/organizations/a5a5c8c5-60eb-5ecd-b1de-31ccc32e1b30/logo/a5a5c8c5-60eb-5ecd-b1de-31ccc32e1b30.525ee70a4b.jpg",
+    "name": "ClipHaus",
+    "profileHandle": "cliphaus",
+    "verified": true
+   },
+   "organizationId": "a5a5c8c5-60eb-5ecd-b1de-31ccc32e1b30",
+   "private": false,
+   "requiresApplication": false,
+   "showBeforeLaunch": false,
+   "showOnDiscover": true,
+   "status": "active",
+   "statusChangedAt": "2026-11-17T20:56:20.415Z",
+   "statusReason": "funded",
+   "updatedAt": "2026-11-17T21:04:07.000Z",
+   "configuration": {
+    "content": {
+     "contentCategories": [
+      {
+       "id": "product",
+       "name": "Product"
+      }
+     ],
+     "contentTypes": [
+      {
+       "id": "clipping",
+       "name": "Clipping"
+      }
+     ]
+    },
+    "creator": {
+     "creatorTypes": [
+      {
+       "id": "clipper",
+       "name": "Clipper"
+      }
+     ]
+    },
+    "display": {
+     "hiddenCreatorSubmissions": true,
+     "topPerformers": true
+    },
+    "requirement": {
+     "preApproval": false
+    },
+    "budget": 1000000,
+    "payoutModel": [
+     {
+      "maxPayout": 20000,
+      "minPayout": 200,
+      "platform": "tiktok",
+      "rate": 100
+     },
+     {
+      "maxPayout": 20000,
+      "minPayout": 200,
+      "platform": "instagram",
+      "rate": 100
+     },
+     {
+      "maxPayout": 20000,
+      "minPayout": 200,
+      "platform": "youtube",
+      "rate": 100
+     },
+     {
+      "maxPayout": 20000,
+      "minPayout": 200,
+      "platform": "x",
+      "rate": 100
+     }
+    ]
+   },
+   "type": "cpm",
+   "organizationPrivate": false,
+   "briefCounts": {
+    "contentRules": 1,
+    "creatorRequirements": 0,
+    "references": 2
+   }
+  },
+  "card": {
+   "banner": "a5a5c8c5-60eb-5ecd-b1de-31ccc32e1b30/campaigns/thumbnails/993ece1d-1e04-412c-8a04-04e1ddb66d4d.webp",
+   "budgetCents": 1000000,
+   "categories": [
+    {
+     "id": "product",
+     "name": "Product"
+    },
+    {
+     "id": "consumer-brand",
+     "name": "Consumer Brand"
+    }
+   ],
+   "cpmMaxRateCents": 100,
+   "cpmMinRateCents": 100,
+   "createdAt": "2026-11-17T19:42:21.000Z",
+   "description": "Create short-form videos for the energy drinks, featuring its 170mg fast-acting 750mL elixir. Use approved flavors and provided footage. Keep content funny, creative and engaging. Creators must be 21+ and US-based, with at least 50% US views per clip.",
+   "geoPriced": false,
+   "id": "e4a9465f-d415-4e30-bf53-e46014958bc6",
+   "launchDate": "2026-11-17T20:56:20.000Z",
+   "listedAt": "2026-11-17T20:56:20.000Z",
+   "metrics": {
+    "approvedSubmissionCount": 33,
+    "budgetProgressBps": 112,
+    "budgetSpentCents": 11248,
+    "creatorCount": 20,
+    "metricsUpdatedAt": "2026-11-21T03:34:19.000Z",
+    "paidOutCents": 0,
+    "totalViews": 115103
+   },
+   "name": "ENERGY DRINKS -  Beverages",
+   "organizationExperienceId": "exp_BmRo1Cepnpq46o",
+   "organizationId": "a5a5c8c5-60eb-5ecd-b1de-31ccc32e1b30",
+   "organizationLogoUrl": "organizations/a5a5c8c5-60eb-5ecd-b1de-31ccc32e1b30/logo/a5a5c8c5-60eb-5ecd-b1de-31ccc32e1b30.525ee70a4b.jpg",
+   "organizationName": "ClipHaus",
+   "organizationProfileHandle": "cliphaus",
+   "organizationVerified": true,
+   "payouts": [
+    {
+     "maxPayoutCents": 20000,
+     "minPayoutCents": 200,
+     "payoutType": "cpm",
+     "platform": "tiktok",
+     "rateCents": 100,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 20000,
+     "minPayoutCents": 200,
+     "payoutType": "cpm",
+     "platform": "instagram",
+     "rateCents": 100,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 20000,
+     "minPayoutCents": 200,
+     "payoutType": "cpm",
+     "platform": "youtube",
+     "rateCents": 100,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    },
+    {
+     "maxPayoutCents": 20000,
+     "minPayoutCents": 200,
+     "payoutType": "cpm",
+     "platform": "x",
+     "rateCents": 100,
+     "amountCents": null,
+     "cycleLength": null,
+     "deliverablesTotal": null
+    }
+   ],
+   "payoutType": "cpm",
+   "platforms": [
+    "instagram",
+    "tiktok",
+    "x",
+    "youtube"
+   ],
+   "primaryPayoutCents": 100,
+   "private": false,
+   "referenceMaterials": [],
+   "requiresApplication": false,
+   "retainerSpotsTotal": 0,
+   "status": "active",
+   "updatedAt": "2026-11-21T03:34:22.000Z",
+   "briefCounts": {
+    "contentRules": 1,
+    "creatorRequirements": 0,
+    "references": 2
+   },
+   "bannerBlur": null,
+   "bannerUrl": "https://crusercontent.com/a5a5c8c5-60eb-5ecd-b1de-31ccc32e1b30/campaigns/thumbnails/993ece1d-1e04-412c-8a04-04e1ddb66d4d.webp",
+   "group": null,
+   "organizationLogoSrc": "https://crusercontent.com/organizations/a5a5c8c5-60eb-5ecd-b1de-31ccc32e1b30/logo/a5a5c8c5-60eb-5ecd-b1de-31ccc32e1b30.525ee70a4b.jpg",
+   "retainerCycleLength": null
+  }
+ }
+}

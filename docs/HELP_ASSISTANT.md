@@ -293,7 +293,11 @@ the generator with `--check` and fails when this table is out of date. Do not ed
 | library | `/library` |
 | library | `/library?view=week` |
 | money | `/money` |
+| campaigns | `/campaigns` |
+| campaigns_find | `/campaigns/find` |
+| campaign | `/campaigns/{campaignId}` |
 | clip | `/clips/{clipId}` |
+| cr_setup | `/settings/posting/setup/contentrewards` |
 | settings | `/settings` |
 | settings | `/settings/clip-making/clips` |
 | settings | `/settings/clip-making/skills` |
@@ -301,6 +305,7 @@ the generator with `--check` and fails when this table is out of date. Do not ed
 | settings | `/settings/clip-making/streamers` |
 | settings | `/settings/clip-making/youtube` |
 | settings | `/settings/posting/setup` |
+| settings | `/settings/posting/getpaid` |
 | settings | `/settings/posting/where` |
 | settings | `/settings/posting/my-settings` |
 | settings | `/settings/posting/money` |

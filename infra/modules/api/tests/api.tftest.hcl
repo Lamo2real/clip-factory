@@ -95,8 +95,16 @@ run "environment_names_the_flow_aliases" {
       HELP_PICTURE_QUESTIONS_PER_DAY = "40"
       # §28.12 module default: no assistant worker, so off.
       ASK_ENABLED = "false"
+      # §38.16 module default: Content Rewards off.
+      CONTENT_REWARDS = "off"
+      # §39.3 module default: the campaign copy off.
+      CR_REMAKE = "off"
+      # §41.6 module default: the campaign finder off.
+      CR_FINDER = "off"
+      # §40.6 module default: Connect Whop off.
+      WHOP_CONNECT = "off"
     })
-    error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9, §17.9 and §19.9 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID, HELP_*; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
+    error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9, §17.9, §19.9, §38.16, §40.6 and §41.6 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID, HELP_*; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
   }
 }
 
@@ -501,6 +509,205 @@ run "browser_preflight_is_public" {
   }
 }
 
+# docs/CONTRACTS.md §45.5, §45.13.3 and §45.15: Lamo Stories' own Lambda behind its own routes. ANY /v1/workspaces and
+# ANY /v1/workspaces/{proxy+} take the same JWT authorizer; their OPTIONS twins are public (the more specific paths
+# would otherwise catch the browser's token-less preflight, the §5 lesson); the OAuth callback is public with a route
+# throttle of 5 per second, burst 10. All five reach cf-prod-stories-api; every other path, cf-prod-api's function,
+# role and environment and the three existing routes stay exactly as they are.
+run "lamo_stories_routes" {
+  command = plan
+
+  variables {
+    stories_routes_enabled    = true
+    stories_api_function_name = "cf-test-stories-api"
+    stories_api_invoke_arn    = "arn:aws:apigateway:eu-north-1:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-north-1:123456789012:function:cf-test-stories-api/invocations"
+  }
+
+  override_resource {
+    target          = aws_apigatewayv2_integration.api
+    override_during = plan
+    values          = { id = "integ123" }
+  }
+
+  override_resource {
+    target          = aws_apigatewayv2_integration.stories[0]
+    override_during = plan
+    values          = { id = "story123" }
+  }
+
+  override_resource {
+    target          = aws_lambda_function.fn["api"]
+    override_during = plan
+    values          = { invoke_arn = "arn:aws:apigateway:eu-north-1:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-north-1:123456789012:function:cf-test-api/invocations" }
+  }
+
+  override_resource {
+    target          = aws_apigatewayv2_authorizer.jwt
+    override_during = plan
+    values          = { id = "auth123" }
+  }
+
+  override_resource {
+    target          = aws_apigatewayv2_api.http
+    override_during = plan
+    values = {
+      api_endpoint  = "https://http123.execute-api.eu-north-1.amazonaws.com"
+      execution_arn = "arn:aws:execute-api:eu-north-1:123456789012:http123"
+    }
+  }
+
+  assert {
+    condition = toset(keys(aws_apigatewayv2_route.stories)) == toset([
+      "ANY /v1/workspaces", "ANY /v1/workspaces/{proxy+}", "OPTIONS /v1/workspaces", "OPTIONS /v1/workspaces/{proxy+}",
+      "GET /v1/stories-oauth/{platform}/callback",
+    ]) && output.stories_route_keys == toset(keys(aws_apigatewayv2_route.stories))
+    error_message = "Lamo Stories adds exactly its five routes (§45.15)."
+  }
+
+  assert {
+    condition = alltrue([
+      for k, r in aws_apigatewayv2_route.stories : r.route_key == k && r.target == "integrations/story123" && (
+        startswith(k, "ANY ") ? r.authorization_type == "JWT" && r.authorizer_id == "auth123" : r.authorization_type == "NONE" && r.authorizer_id == null
+      )
+    ])
+    error_message = "Every Lamo Stories route reaches cf-prod-stories-api; ANY routes need the same JWT, OPTIONS and the callback are public."
+  }
+
+  assert {
+    condition = (aws_apigatewayv2_integration.stories[0].integration_uri == var.stories_api_invoke_arn &&
+      aws_apigatewayv2_integration.stories[0].integration_type == "AWS_PROXY" &&
+      aws_apigatewayv2_integration.stories[0].payload_format_version == "2.0" &&
+    aws_apigatewayv2_integration.stories[0].timeout_milliseconds == 29000)
+    error_message = "The Lamo Stories integration is a 2.0 proxy to cf-prod-stories-api, 29 s like cf-prod-api's."
+  }
+
+  assert {
+    condition = (aws_apigatewayv2_integration.api.integration_uri == "arn:aws:apigateway:eu-north-1:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-north-1:123456789012:function:cf-test-api/invocations" &&
+      aws_apigatewayv2_route.authorized.route_key == "ANY /v1/{proxy+}" && aws_apigatewayv2_route.authorized.target == "integrations/integ123" &&
+      aws_apigatewayv2_route.authorized.authorization_type == "JWT" && aws_apigatewayv2_route.authorized.authorizer_id == "auth123" &&
+      aws_apigatewayv2_route.preflight.route_key == "OPTIONS /v1/{proxy+}" && aws_apigatewayv2_route.preflight.target == "integrations/integ123" &&
+    aws_apigatewayv2_route.health.route_key == "GET /v1/health" && aws_apigatewayv2_route.health.target == "integrations/integ123")
+    error_message = "cf-prod-api's integration and its three routes are unchanged: every other path still reaches cf-prod-api."
+  }
+
+  assert {
+    condition = (one(aws_apigatewayv2_stage.http.default_route_settings).throttling_rate_limit == 20 &&
+      one(aws_apigatewayv2_stage.http.default_route_settings).throttling_burst_limit == 50 &&
+      length(aws_apigatewayv2_stage.http.route_settings) == 1 &&
+      one(aws_apigatewayv2_stage.http.route_settings).route_key == "GET /v1/stories-oauth/{platform}/callback" &&
+      one(aws_apigatewayv2_stage.http.route_settings).throttling_rate_limit == 5 &&
+    one(aws_apigatewayv2_stage.http.route_settings).throttling_burst_limit == 10)
+    error_message = "The public Lamo Stories callback has its own route throttle (5 per second, burst 10); the stage default stays 20/50."
+  }
+
+  assert {
+    condition = (aws_lambda_permission.stories[0].function_name == "cf-test-stories-api" &&
+      aws_lambda_permission.stories[0].principal == "apigateway.amazonaws.com" &&
+      aws_lambda_permission.stories[0].action == "lambda:InvokeFunction" &&
+      aws_lambda_permission.stories[0].source_arn == "arn:aws:execute-api:eu-north-1:123456789012:http123/*/*" &&
+    aws_lambda_permission.http.function_name == aws_lambda_function.fn["api"].function_name)
+    error_message = "API Gateway may invoke cf-prod-stories-api; cf-prod-api's own permission is unchanged."
+  }
+
+  assert {
+    condition     = output.stories_callback_base == "https://http123.execute-api.eu-north-1.amazonaws.com/v1/stories-oauth"
+    error_message = "storiesCallbackBase is {apiUrl}/v1/stories-oauth (§45.13.3)."
+  }
+
+  # cf-prod-api's function, role and environment are not touched: the same environment as with Lamo Stories off, no
+  # Lamo Stories name in its policy, and the two variables are used only by the new routes and permission.
+  assert {
+    condition = (keys(aws_lambda_function.fn) == ["api"] && aws_lambda_function.fn["api"].handler == "clipfactory_api.http.handler" &&
+      aws_lambda_function.fn["api"].memory_size == 512 && aws_lambda_function.fn["api"].timeout == 29 &&
+      !anytrue([for k in keys(one(aws_lambda_function.fn["api"].environment).variables) : strcontains(k, "STOR") || strcontains(k, "WS_")]) &&
+      !strcontains(aws_iam_role_policy.fn["api"].policy, "stories") && !strcontains(aws_iam_role_policy.fn["api"].policy, "workspaces") &&
+      !strcontains(aws_iam_role_policy.fn["api"].policy, "/ws/") &&
+      length(regexall("var\\.stories_api_invoke_arn", file("main.tf"))) == 1 &&
+      length(regexall("var\\.stories_routes_enabled", file("main.tf"))) == 1 &&
+      length(regexall("(?m)^  integration_uri\\s+= var\\.stories_api_invoke_arn$", file("main.tf"))) == 1 &&
+      length(regexall("var\\.stories_api_function_name", file("main.tf"))) == 1 &&
+    length(regexall("(?m)^  function_name = var\\.stories_api_function_name$", file("main.tf"))) == 1)
+    error_message = "cf-prod-api's function, role and environment never see Lamo Stories (§45.15): the stories variables reach only the new integration and permission."
+  }
+
+  assert {
+    condition = alltrue([
+      for k, v in one(aws_lambda_function.fn["api"].environment).variables :
+      !strcontains(lower(v), "stories") && !strcontains(v, "/workspaces") && !strcontains(k, "WORKSPACE")
+      ]) && (one(aws_lambda_function.fn["api"].environment).variables["AGENT_RUNTIME_ARN"] == var.agent_runtime_arn &&
+      one(aws_lambda_function.fn["api"].environment).variables["HOOKS_URL"] == var.hooks_url &&
+    one(aws_lambda_function.fn["api"].environment).variables["SECRET_PREFIX"] == "cf-test/platforms/")
+    error_message = "With the Lamo Stories routes, cf-prod-api keeps Clip Factory's agent, hooks and secret prefix and gets no Lamo Stories value."
+  }
+}
+
+# §45.15's sample ARN the other way round: no cf-prod-api Secrets Manager (or S3) grant reaches a Lamo Stories secret or
+# file, with every optional grant switched on. Globs: "*" becomes ".*" and "?" becomes "." in an anchored regex.
+run "cf_prod_api_never_reaches_lamo_stories" {
+  command = plan
+
+  variables {
+    stories_routes_enabled    = true
+    stories_api_function_name = "cf-test-stories-api"
+    stories_api_invoke_arn    = "arn:aws:apigateway:eu-north-1:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-north-1:123456789012:function:cf-test-stories-api/invocations"
+    ask_function_name         = "cf-test-ask"
+    ask_function_arn          = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-ask"
+    search_secret_arn         = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/ask/search-key-??????"
+    vapid_secret_name         = "cf-test/notify/vapid"
+    vapid_secret_arn          = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/notify/vapid-AbCdEf"
+  }
+
+  assert {
+    condition = alltrue(flatten([
+      for sample in [
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/stories/youtube/token-AbC123",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/stories/youtube/token",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/stories/instagram/app-AbC123",
+        "arn:aws:s3:::cf-test-media/ws/u1/stories/stories/s1/final/v1.mp4",
+        ] : [
+        for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : [
+          for r in flatten([s.Resource]) : !can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", sample))
+        ] if anytrue([for a in flatten([s.Action]) : startswith(a, "secretsmanager:") || startswith(a, "s3:") || a == "*"])
+      ]
+    ]))
+    error_message = "…:secret:<name>/workspaces/stories/youtube/token-AbC123 (and Lamo Stories' ws/ files) match no cf-prod-api resource."
+  }
+}
+
+run "lamo_stories_routes_off_by_default" {
+  command = plan
+
+  assert {
+    condition = (length(aws_apigatewayv2_route.stories) == 0 && length(aws_apigatewayv2_integration.stories) == 0 &&
+    length(aws_lambda_permission.stories) == 0 && length(aws_apigatewayv2_stage.http.route_settings) == 0)
+    error_message = "Without cf-prod-stories-api the module adds no route, integration, permission or route throttle."
+  }
+}
+
+run "lamo_stories_routes_never_reach_cf_prod_api" {
+  command = plan
+
+  variables {
+    stories_routes_enabled    = true
+    stories_api_function_name = "cf-test-api"
+    stories_api_invoke_arn    = "arn:aws:apigateway:eu-north-1:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-north-1:123456789012:function:cf-test-stories-api/invocations"
+  }
+
+  expect_failures = [var.stories_api_function_name]
+}
+
+run "lamo_stories_integration_is_never_cf_prod_api" {
+  command = plan
+
+  variables {
+    stories_routes_enabled    = true
+    stories_api_function_name = "cf-test-stories-api"
+    stories_api_invoke_arn    = "arn:aws:apigateway:eu-north-1:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-north-1:123456789012:function:cf-test-api/invocations"
+  }
+
+  expect_failures = [var.stories_api_invoke_arn]
+}
+
 # docs/CONTRACTS.md §32.3: with the VAPID secret, cf-prod-api may only read it (public key, "Send a test").
 run "push_key_is_read_only" {
   command = plan
@@ -527,5 +734,179 @@ run "push_off_without_a_key" {
   assert {
     condition     = !contains(keys(aws_lambda_function.fn["api"].environment[0].variables), "PUSH_VAPID_SECRET") && length(regexall("VapidKey", aws_iam_role_policy.fn["api"].policy)) == 0
     error_message = "Without the VAPID secret there is no push environment and no permission."
+  }
+}
+
+# docs/CONTRACTS.md §38.16: Content Rewards. Off by default; on with the switch. The api invokes cf-prod-campaigns and
+# reaches only the media bucket's campaigns/ prefix for it; the CR secrets ride the existing PlatformSecrets grant.
+run "content_rewards_off_by_default_without_a_grant" {
+  command = plan
+
+  assert {
+    condition     = one(aws_lambda_function.fn["api"].environment).variables["CONTENT_REWARDS"] == "off" && !contains(keys(one(aws_lambda_function.fn["api"].environment).variables), "CAMPAIGNS_FUNCTION_ARN")
+    error_message = "Without the switch and the function, CONTENT_REWARDS is off and no CAMPAIGNS_FUNCTION_ARN is set."
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s if try(s.Sid, "") == "Campaigns"]) == 0
+    error_message = "No invoke grant for cf-prod-campaigns without its ARN."
+  }
+}
+
+run "content_rewards_on" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = true
+    campaigns_function_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"
+  }
+
+  assert {
+    condition = (one(aws_lambda_function.fn["api"].environment).variables["CONTENT_REWARDS"] == "on" &&
+    one(aws_lambda_function.fn["api"].environment).variables["CAMPAIGNS_FUNCTION_ARN"] == "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns")
+    error_message = "With the switch on, CONTENT_REWARDS is on and CAMPAIGNS_FUNCTION_ARN names cf-prod-campaigns."
+  }
+
+  assert {
+    condition = one([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s if try(s.Sid, "") == "Campaigns"]) == {
+      Sid = "Campaigns", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"]
+    }
+    error_message = "The api may invoke cf-prod-campaigns and nothing else new."
+  }
+
+  assert {
+    condition     = contains(one([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s.Resource if try(s.Sid, "") == "MediaObjects"]), "arn:aws:s3:::cf-test-media/campaigns/*")
+    error_message = "The api reads, writes and deletes campaign files under campaigns/ (logos, brand pictures)."
+  }
+
+  assert {
+    condition     = !contains(one([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s.Condition.StringLike["s3:prefix"] if try(s.Sid, "") == "MediaList"]), "campaigns/*")
+    error_message = "The api never lists campaigns/: removing a campaign deletes its files by name."
+  }
+}
+
+# docs/CONTRACTS.md §39.3: the campaign copy of a clip waits behind CR_REMAKE, off by default; the switch is an
+# in-place environment change (no new grant, nothing replaced).
+run "cr_remake_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = one(aws_lambda_function.fn["api"].environment).variables["CR_REMAKE"] == "off"
+    error_message = "cr_remake_enabled defaults to false: CR_REMAKE is off."
+  }
+}
+
+run "cr_remake_on" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = true
+    cr_remake_enabled       = true
+    campaigns_function_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"
+  }
+
+  assert {
+    condition     = one(aws_lambda_function.fn["api"].environment).variables["CR_REMAKE"] == "on"
+    error_message = "With cr_remake_enabled, CR_REMAKE is on."
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s if try(s.Sid, "") == "Campaigns"]) == 1
+    error_message = "The copy needs no new permission: the api's grants are the ones Content Rewards already has."
+  }
+}
+
+# docs/CONTRACTS.md §41.5 and §41.6: the campaign finder's seven routes answer 503 "Coming soon." until CR_FINDER=on,
+# off by default and independent of the other Content Rewards switches; the switch is an in-place environment change
+# (its look invoke and send_feedback use the Campaigns and PlatformSecrets grants Content Rewards already has).
+run "cr_finder_off_by_default" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = true
+    cr_remake_enabled       = true
+    campaigns_function_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"
+  }
+
+  assert {
+    condition     = one(aws_lambda_function.fn["api"].environment).variables["CR_FINDER"] == "off"
+    error_message = "cr_finder_enabled defaults to false: CR_FINDER is off even with Content Rewards and the copy on."
+  }
+}
+
+run "cr_finder_on" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = true
+    cr_finder_enabled       = true
+    campaigns_function_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"
+  }
+
+  assert {
+    condition = (one(aws_lambda_function.fn["api"].environment).variables["CR_FINDER"] == "on" &&
+      one(aws_lambda_function.fn["api"].environment).variables["CONTENT_REWARDS"] == "on" &&
+      one(aws_lambda_function.fn["api"].environment).variables["CR_REMAKE"] == "off" &&
+    one(aws_lambda_function.fn["api"].environment).variables["CAMPAIGNS_FUNCTION_ARN"] == "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns")
+    error_message = "With cr_finder_enabled, CR_FINDER is on and the other Content Rewards env vars keep their own switches."
+  }
+
+  assert {
+    condition = one([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s if try(s.Sid, "") == "Campaigns"]) == {
+      Sid = "Campaigns", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"]
+    }
+    error_message = "A look is started through the same cf-prod-campaigns invoke grant, nothing new."
+  }
+
+  assert {
+    condition     = aws_lambda_function.fn["api"].function_name == "cf-test-api" && aws_lambda_function.fn["api"].timeout == 29
+    error_message = "The same function: the switch changes only its environment."
+  }
+}
+
+# The finder switch reaches only the CR_FINDER env var: one use of var.cr_finder_enabled in this module, inside the
+# Content Rewards env, so it can never add a grant or replace anything (the deploy's delete gate stays quiet).
+run "cr_finder_switch_only_sets_its_env_var" {
+  command = plan
+
+  assert {
+    condition = (one(aws_lambda_function.fn["api"].environment).variables["CR_FINDER"] == "off" &&
+      length(regexall("var\\.cr_finder_enabled", file("main.tf"))) == 1 &&
+    length(regexall("(?m)^\\s+CR_FINDER\\s+=\\s+var\\.cr_finder_enabled \\? \"on\" : \"off\"$", file("main.tf"))) == 1)
+    error_message = "var.cr_finder_enabled is used once, as CR_FINDER = var.cr_finder_enabled ? \"on\" : \"off\"."
+  }
+}
+
+# docs/CONTRACTS.md §40.6: "Connect Whop" waits behind WHOP_CONNECT, off by default; the switch is an in-place
+# environment change of the same function (no new grant, nothing replaced).
+run "whop_connect_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = var.whop_connect_enabled == false && one(aws_lambda_function.fn["api"].environment).variables["WHOP_CONNECT"] == "off"
+    error_message = "whop_connect_enabled defaults to false: WHOP_CONNECT is off."
+  }
+}
+
+run "whop_connect_on" {
+  command = plan
+
+  variables {
+    whop_connect_enabled = true
+  }
+
+  assert {
+    condition     = one(aws_lambda_function.fn["api"].environment).variables["WHOP_CONNECT"] == "on"
+    error_message = "With whop_connect_enabled, WHOP_CONNECT is on."
+  }
+
+  assert {
+    condition     = aws_lambda_function.fn["api"].function_name == "cf-test-api" && keys(aws_lambda_function.fn) == ["api"]
+    error_message = "The switch changes only cf-test-api's environment: the same function, nothing replaced."
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s if can(regex("(?i)whop", jsonencode(s)))]) == 0
+    error_message = "Connect Whop needs no new permission: its secrets ride the existing PlatformSecrets grant."
   }
 }

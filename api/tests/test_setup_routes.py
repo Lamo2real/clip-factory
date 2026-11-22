@@ -67,7 +67,7 @@ def test_setup_list_starts_empty_with_values(call: Call) -> None:
     }
     assert body["platforms"][1]["files"] == []
     assert [g["key"] for g in body["platforms"][1]["gates"]] == ["app_review", "posting_audit"]
-    assert body["platforms"][2]["gates"] == []
+    assert body["platforms"][2]["gates"] == [{"key": "app_live", "state": "limited"}]
     assert body["platforms"][3]["gates"] == [{"key": "app_live", "state": "limited"}]
     assert body["platforms"][4]["gates"] == [{"key": "credits", "state": "unknown"}]
     values = body["values"]
@@ -101,8 +101,9 @@ def test_tick_and_untick_steps(call: Call) -> None:
     assert call("PATCH", "/v1/setup/youtube", {"step": "x", "done": "yes"})[0] == 400
 
 
-def test_facebook_live_step_opens_its_gate(call: Call) -> None:
-    _, body = call("PATCH", "/v1/setup/facebook", {"step": "public-live", "done": True})
+@pytest.mark.parametrize("platform", ["instagram", "facebook"])
+def test_meta_live_step_opens_its_gate(call: Call, platform: str) -> None:
+    _, body = call("PATCH", f"/v1/setup/{platform}", {"step": "public-live", "done": True})
     assert body["setup"]["gates"] == [{"key": "app_live", "state": "ok"}]
 
 
@@ -253,6 +254,30 @@ def test_connect_youtube_url(call: Call, table: FakeTable) -> None:
     assert item["ttl"] == 1_794_744_000 + 600 + 300
     verifier = state.pkce(STATE_KEY.encode(), nonce)[0]
     assert verifier not in json.dumps(table.all(), default=str)  # derived, never stored
+
+
+def test_connect_youtube_payments_url(call: Call, table: FakeTable) -> None:
+    """§40.6 "Allow payment reading": the same YouTube keys and redirect, the AdSense scope only, Google's account
+    picker and no ``include_granted_scopes`` (its own token, even for the same Google account)."""
+    save_keys(call, "youtube")
+    status, body = call("POST", "/v1/accounts/youtube/connect", {"grant": "payments"})
+    assert status == 200
+    q = parse_qs(urlsplit(body["authorizeUrl"]).query)
+    assert q["client_id"] == [YOUTUBE_ID]
+    assert q["redirect_uri"] == [f"{HOOKS_URL}/oauth/youtube/callback"]
+    assert q["scope"] == ["https://www.googleapis.com/auth/adsense.readonly"]
+    assert (q["access_type"], q["prompt"]) == (["offline"], ["consent select_account"])
+    assert "include_granted_scopes" not in q
+    assert q["code_challenge_method"] == ["S256"]
+    assert _state_item(table)["grant"] == "payments"
+    _, plain = call("POST", "/v1/accounts/youtube/connect")
+    assert "adsense" not in plain["authorizeUrl"]  # a normal Connect never asks for it
+
+
+def test_connect_grant_words(call: Call) -> None:
+    save_keys(call, "youtube")
+    status, body = call("POST", "/v1/accounts/youtube/connect", {"grant": "bank"})
+    assert (status, body["error"]["message"]) == (400, 'grant can be "money" or "payments".')
 
 
 def test_connect_tiktok_url(call: Call) -> None:

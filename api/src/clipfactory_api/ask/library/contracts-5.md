@@ -34,6 +34,9 @@ try again in a minute, §17.4), `internal`.
 | GET `/v1/clips/{clipId}/similar` | – | `{ "clips": SimilarClip[] }` (≤ 5 of the owner's measured clips most like this one, §14.6; `[]` when none) |
 | POST `/v1/clips/{clipId}/confirm` | `{ "captions"?: Partial<Captions> }` | `{ "clip": Clip, "posts": Post[] }` (writes the posts, starts the durable `cf-prod-clip-flow`, §14.5) |
 | POST `/v1/clips/{clipId}/decline` | – | `{ "clip": Clip }` (video files and the clip's vector deleted) |
+| GET `/v1/clips/{clipId}/file` | – | `{ "url", "filename" }` (a 1-hour link that saves the video, §42) |
+| POST `/v1/clips/{clipId}/tiktok/posted` | `{ "link"?: string }` | `{ "clip", "posts", "note"? }` (posted on TikTok by the owner himself, §42) |
+| DELETE `/v1/clips/{clipId}/tiktok/posted` | – | `{ "clip", "posts" }` (Undo of the above, §42) |
 | GET `/v1/skills` | – | `{ "skills": Skill[] }` (§18.3: built-ins first, then the owner's by name; no `enabled`) |
 | GET `/v1/skills/{skillId}` | – | `SkillDetail` (§18.3) |
 | POST `/v1/skills/uploads` | `{ "filename", "skillId"? }` (`.md` ≤ 1 MB or `.zip` ≤ 20 MB; `skillId` = replace that skill's file, §18.4) | `{ "skillId", "key", "uploadUrl", "headers" }` (key per revision, §18.1) |
@@ -42,6 +45,7 @@ try again in a minute, §17.4), `internal`.
 | PATCH `/v1/skills/{skillId}` | – | always `400 bad_request` "Skills are always used now, so there is no switch." (§18.1; the on/off switch is gone) |
 | DELETE `/v1/skills/{skillId}` | – | `204` (owner skills only; built-ins → `409 conflict`, §18.5) |
 | GET `/v1/skills/{skillId}/content` | – | `{ "content": "<SKILL.md text>" }` (kept for old clients; the web uses `GET /v1/skills/{skillId}`) |
+| POST `/v1/skills/{skillId}/sections` | `{ "key", "action": "add" \| "undo", "version" }` or `{ "key", "action": "not_now" }` | `{ "skill": Skill, "newSections": SectionOffer[] }` (§44.3; owner skills only, built-ins → `409`) |
 | GET `/v1/settings` | – | `{ "settings": Settings }` |
 | PUT `/v1/settings` | `Partial<Settings>` (validated) | `{ "settings": Settings }` |
 | POST `/v1/settings/cookies` | `{ "filename" }` | presigned PUT for an optional YouTube `cookies.txt` (helps when YouTube blocks cloud IPs) |
@@ -92,7 +96,9 @@ interface Clip { clipId: string; jobId: string; rank: number; status: ClipStatus
                                        built by agent code from evidence inside the clip (§8), never by a model;
                                        absent on older clips and when nothing stood out */;
                  best?: boolean /* starred "Best this week" (§16) */; bestWeek?: string /* "yyyy-Www" */;
-                 totalViews?: number /* sum of Post.metrics.views over posted posts; absent when none measured */ }
+                 totalViews?: number /* sum of Post.metrics.views over posted posts; absent when none measured */;
+                 startPending?: true /* uploaded, but its flow has not started (internal publishState "pending" on a
+                                        confirmed, publishing or posted clip, §14.5): Confirm starts it */ }
 interface Skill { skillId: string; name: string /* frontmatter slug */; title: string /* shown name, §18.2 */;
                   description: string; builtin: boolean; source: "builtin" | "written" | "upload";
                   format: "md" | "zip"; size: number; createdAt: string; updatedAt: string;
@@ -129,5 +135,13 @@ Home checks a pasted link as it is typed (`web/src/lib/links.ts` `checkLink`): a
 live channel, except the sites' own pages (for example `twitch.tv/directory`, `/settings`, `/videos`, `/search`;
 `kick.com/categories`, `/browse`, `/following`), which are refused on the spot with "That Twitch link goes to a Twitch
 page, not a video, clip or channel. Open the video or the channel and copy its link." (Kick the same).
+
+**Captions garbled on a Mac (owner report, 2026-11-22).** A Mac tool with no UTF-8 locale (`pbcopy`/`pbpaste` run
+from an app, for example) reads each UTF-8 byte as one Mac Roman letter, so 💀 becomes an Apple logo and `üíÄ`, é
+becomes `√©` and 日本 `Êó•Êú¨`. One TikTok caption was saved like that and copied into TikTok by Post it yourself (§42).
+The API repairs such runs (`api/src/clipfactory_api/mojibake.py`: 3- and 4-byte characters, and 2-byte ones after
+`√` or `¬`; real emoji, accents and other scripts stay exactly as written): in every `Clip` it returns, in
+`Partial<Captions>` it saves (PATCH, confirm, the campaign caption fix), and in what the publishers send. Stored items
+are never rewritten for it.
 
 `Performance` sums treat a `null` metric as 0. Ids are ULIDs (26 chars, time-sortable). Timestamps are ISO-8601 UTC strings.

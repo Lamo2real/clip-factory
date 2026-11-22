@@ -1,4 +1,4 @@
-"""Follower counts: each platform's follower or subscriber total right now (docs/CONTRACTS.md §38).
+"""Follower counts: each platform's follower or subscriber total right now (docs/CONTRACTS.md §43).
 
 ``followers_view`` builds ``FollowersView``: always five platforms in ``STATS_ORDER``, read only from what the daily
 money run (``cf-prod-money``) already stores: the ``ACCTSTAT#{platform}#{day}`` snapshots and the ``missing`` map on

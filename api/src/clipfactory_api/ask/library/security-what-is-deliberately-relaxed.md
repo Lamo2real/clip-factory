@@ -9,6 +9,8 @@
 - No AWS WAF in front of CloudFront or the APIs (cost, one user; the JWT and WebSocket authorizers reject everything
   else, and the public REST API is throttled). A WAF web ACL can be attached to the REST API stage later.
 - Webhook signatures are not verified yet; stored events trigger nothing.
+- The platform-secret grants are shared by prefix, so the Content Rewards token can be read by `cf-prod-money` and
+  `cf-prod-hooks` too, although neither ever calls Content Rewards ([Content Rewards](#content-rewards-contracts-38)).
 - The owner's Google app is **published but not verified** ([ADR-33](DECISIONS.md#adr-33-posting-setup-bring-your-own-keys-with-a-guided-list-per-platform)):
   Google shows "Google hasn't verified this app" on Connect, which is expected for an app only its owner uses.
   Instagram's Meta app stays in Development mode. Neither widens who can use the app: only the owner's accounts

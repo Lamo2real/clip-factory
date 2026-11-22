@@ -13,6 +13,7 @@ import base64
 import binascii
 import json
 import re
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -37,6 +38,7 @@ class Request:
     token: str
     request_id: str
     params: dict[str, str] = field(default_factory=dict)
+    started: float = field(default_factory=time.monotonic)  # when the request arrived (time.monotonic)
 
     def json(self, max_bytes: int = MAX_BODY_BYTES) -> JsonBody:
         if not self.raw_body.strip():

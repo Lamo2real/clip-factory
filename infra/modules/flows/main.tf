@@ -1,4 +1,4 @@
-# The two durable Lambda functions of docs/CONTRACTS.md §14.4 and §14.5:
+# The durable Lambda functions of docs/CONTRACTS.md §14.4, §14.5 and §45.15:
 #   cf-prod-job-flow   starts the agent for one job and waits (no compute) for its callback, up to 8.5 hours (41.5
 #                      with a wait of up to 24 h for the owner's Mac when YouTube blocks the cloud, §35). A
 #                      missed heartbeat (15 minutes) fails the job. Replaces the watchdog.
@@ -6,6 +6,11 @@
 #                      Manager, §17.6), waits 48 hours (no compute), reads metrics, distils a learning and
 #                      updates the clip's vector. Replaces the publish queue, its DLQ, the publisher, the Scheduler
 #                      group and role, and perf-check.
+#   cf-prod-story-flow Lamo Stories (§45.14, ADR-73): sends one approved story video to the workspace's own social
+#                      accounts, checking each destination before every platform call, and reads its numbers at 1 h,
+#                      24 h, 72 h and 7 days. Its own role: only the workspace partitions, tokens and files, Clip
+#                      Factory's YouTube, TikTok and X app keys (read only), five attributes of Lamo Clips' ACCOUNT#
+#                      items (read only) and the rate budgets; never a Lamo Clips token, and no other Lamo Clips item.
 #
 # Durable execution can only be switched on when a function is created. Executions start through the alias `live`
 # (an execution needs a qualified ARN) and stay pinned to the version they started on, so every code change
@@ -23,6 +28,20 @@ locals {
 
   # CheckpointDurableExecution and GetDurableExecutionState on function:NAME:*, plus basic CloudWatch Logs.
   durable_basic_policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicDurableExecutionRolePolicy"
+
+  # Lamo Stories may use Clip Factory's developer app, on the owner's choice, only for these three platforms
+  # (docs/CONTRACTS.md §45.30; Facebook and Instagram always use Lamo Stories' own Meta app, whose keys live under
+  # <name>/workspaces/). The story flow reads only their app keys, <name>/platforms/{platform}/app*, never Meta's,
+  # Twitch's or Kick's and never a {platform}/token or /pending secret. No "-" before the "*" (as cf-prod-hooks' app
+  # keys): when Lamo Clips' keys were deleted, Secrets Manager checks the bare name and the read must give
+  # ResourceNotFoundException ("not set up", §45.14), not AccessDenied.
+  story_shared_app_platforms = ["youtube", "tiktok", "x"]
+  story_app_secret_arns      = [for p in local.story_shared_app_platforms : "${trimsuffix(var.platform_secrets_arn, "*")}${p}/app*"]
+
+  # The five attributes of Lamo Clips' ACCOUNT# items the story flow may read, and only with GetItem (§45.15): what
+  # "not Lamo Clips' own destination" compares. IAM limits partitions, not sort keys; the code reads only
+  # ACCOUNT#{platform} with a ProjectionExpression of these names, so nothing else of USER#{userId} is ever returned.
+  clips_account_attributes = ["pk", "sk", "platform", "status", "accountId"]
 
   functions = {
     job-flow = {
@@ -51,6 +70,23 @@ locals {
         VECTOR_BUCKET  = var.vector_bucket
         VECTOR_INDEX   = var.vector_index
         SECRET_PREFIX  = var.secret_prefix # §17.6: the owner's platform keys and tokens
+        # §38.12: campaign posts are sent to Content Rewards only while this is "on".
+        CONTENT_REWARDS = var.content_rewards_enabled ? "on" : "off"
+      }
+    }
+    # A new function (its durable_config is set at creation); job-flow and clip-flow are not touched.
+    story-flow = {
+      handler = "clipfactory_api.flows.story_flow.handler"
+      memory  = 1024 # the same 8 MB upload chunks and resumable uploads as clip-flow (§17.9)
+      timeout = 900  # a replay may upload a video
+      # 9 days: numbers at 1 h, 24 h, 72 h and 7 days after each platform's post, plus the longest publish loop.
+      execution_timeout = 777600
+      env = {
+        TABLE_NAME       = var.table_name
+        MEDIA_BUCKET     = var.media_bucket
+        WS_SECRET_PREFIX = var.ws_secret_prefix # §45.13.1: the workspace's own tokens
+        SECRET_PREFIX    = var.secret_prefix    # only for the five platform app keys, read only
+        # The rate budgets and publish settings come from config/platforms.json in the zip, as for clip-flow.
       }
     }
   }
@@ -82,6 +118,47 @@ locals {
       # Never create or delete, never write the app keys or pending choices.
       { Sid = "PlatformSecretsRead", Action = ["secretsmanager:GetSecretValue"], Resource = [var.platform_secrets_arn] },
       { Sid = "PlatformTokens", Action = ["secretsmanager:PutSecretValue"], Resource = [var.platform_token_secrets_arn] },
+    ]
+    # docs/CONTRACTS.md §45.15 and ADR-73: its own statements, not clip-flow's. No Delete, no Scan, no index, no
+    # Bedrock, no other S3 prefix, no Lamo Clips token.
+    story-flow = [
+      # Writes only in a workspace partition (USER#{userId}#WS#{workspaceId}: the story, its publishing jobs and
+      # activity) and the shared rate budgets (RATE#{platform}: one X bill, one Google project, §45.14).
+      {
+        Sid       = "WorkspaceWrites"
+        Action    = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:TransactWriteItems", "dynamodb:ConditionCheckItem"]
+        Resource  = [var.table_arn]
+        Condition = { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["USER#*#WS#*", "RATE#*"] } }
+      },
+      # Reads the workspace partitions, the workspace registry and the budgets.
+      {
+        Sid       = "Reads"
+        Action    = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:BatchGetItem"]
+        Resource  = [var.table_arn]
+        Condition = { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["USER#*#WS#*", "USER#*#WSREG", "RATE#*"] } }
+      },
+      # Lamo Clips' ACCOUNT#{platform} item, read only and only five attributes (the "not Lamo Clips' own destination"
+      # rule): GetItem with a ProjectionExpression of those names; no Query, no other attribute, nothing returned by
+      # a write.
+      {
+        Sid      = "ClipsAccountRead"
+        Action   = ["dynamodb:GetItem"]
+        Resource = [var.table_arn]
+        Condition = {
+          "ForAllValues:StringLike"   = { "dynamodb:LeadingKeys" = ["USER#*"] }
+          "ForAllValues:StringEquals" = { "dynamodb:Attributes" = local.clips_account_attributes }
+          "StringEqualsIfExists"      = { "dynamodb:Select" = "SPECIFIC_ATTRIBUTES", "dynamodb:ReturnValues" = "NONE" }
+        }
+      },
+      # The finished story video (final/v{n}.mp4) the platform publishers upload.
+      { Sid = "StoryFiles", Action = ["s3:GetObject"], Resource = ["${var.media_bucket_arn}/ws/*"] },
+      # The workspace's tokens and own app keys, and Clip Factory's YouTube, TikTok and X apps (the owner's shared-app
+      # choice, read only, §45.30).
+      { Sid = "WorkspaceSecretsRead", Action = ["secretsmanager:GetSecretValue"], Resource = [var.workspace_secrets_arn] },
+      { Sid = "PlatformAppKeysRead", Action = ["secretsmanager:GetSecretValue"], Resource = local.story_app_secret_arns },
+      # A refreshed (rotated) workspace token, put only: never create, delete or touch the pending choices. The pattern
+      # is <name>/workspaces/*/token* (no "-"), so a put on a token a Disconnect deleted reads "not connected".
+      { Sid = "WorkspaceTokens", Action = ["secretsmanager:PutSecretValue"], Resource = [var.workspace_token_secrets_arn] },
     ]
   }
 }

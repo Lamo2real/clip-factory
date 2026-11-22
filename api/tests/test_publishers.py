@@ -19,6 +19,7 @@ from clipfactory_api.platforms.publishers import (
     TikTokPublisher,
     XPublisher,
     YouTubePublisher,
+    caption,
     chunk_plan,
     instagram_caption,
     publisher_for,
@@ -265,6 +266,30 @@ def test_tiktok_refuses_a_privacy_the_creator_cannot_use() -> None:
         TikTokPublisher().start(job)
 
 
+@pytest.mark.parametrize("privacy", ["SELF_ONLY", "FOLLOWER_OF_CREATOR"])
+def test_tiktok_refuses_branded_content_that_is_not_for_everyone_or_friends(privacy: str) -> None:
+    http = FakeHttp(
+        (
+            200,
+            {
+                **json.loads(__import__("fakes").stats_fixture("publish/tiktok_creator")),
+                "data": {
+                    "privacy_level_options": [
+                        "PUBLIC_TO_EVERYONE",
+                        "MUTUAL_FOLLOW_FRIENDS",
+                        "FOLLOWER_OF_CREATOR",
+                        "SELF_ONLY",
+                    ]
+                },
+            },
+        )
+    )
+    job, _, _ = make_job("tiktok", http, options={"privacyLevel": privacy, "brandContent": True})
+    with pytest.raises(PublishError, match="Pick who can see it on TikTok"):
+        TikTokPublisher().start(job)
+    assert len(http.calls) == 1  # never init: nothing reaches TikTok
+
+
 def test_tiktok_refuses_a_too_long_clip() -> None:
     creator = json.loads(__import__("fakes").stats_fixture("publish/tiktok_creator"))
     creator["data"]["max_video_post_duration_sec"] = 10
@@ -337,10 +362,12 @@ def test_instagram_resumable_upload_then_publish() -> None:
     assert upload.headers["Authorization"] == "OAuth ACCESS-TOKEN"
     assert (upload.headers["offset"], upload.headers["file_size"]) == ("0", str(3 * MB))
     assert len(upload.body) == 3 * MB
-    assert saved == [{"container": "17889455560051444"}, {"container": "17889455560051444", "uploaded": True}]
+    made = {"container": "17889455560051444", "containerAt": "2026-11-15T12:00:00.000Z"}
+    assert saved == [made, {**made, "uploaded": True}]
     handle = saved[-1]
     assert publisher.check(job, handle).state == "ready_to_finish"
     done = publisher.finish(job, handle)
+    assert saved[2] == {**handle, "publishing": True}  # marked before the publish call, so a lost answer is caught
     assert form(http.calls[4])["creation_id"] == ["17889455560051444"]
     assert done.published is not None
     assert done.published.url == "https://www.instagram.com/reel/C1a2b3c4d5/"
@@ -360,6 +387,26 @@ def test_instagram_video_url_fallback() -> None:
     assert saved[-1]["uploaded"] is True
 
 
+def test_instagram_upload_5xx_falls_back_to_video_url() -> None:
+    # Seen in prod on 21 Nov 2026: rupload answered 500 three times for a good file. Instagram fetches it instead.
+    http = FakeHttp(
+        (200, "publish/instagram_limit"),
+        (200, "publish/instagram_container"),
+        (500, {"debug_info": {"type": "ProcessingFailedError", "message": "Request processing failed"}}),
+        (200, {"id": "17900000000000002"}),
+    )
+    job, saved, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    progress = InstagramPublisher().start(job)
+    assert progress.state == "processing"
+    assert form(http.calls[1])["upload_type"] == ["resumable"]
+    retry = form(http.calls[3])
+    assert http.calls[3].url == "https://graph.facebook.com/v27.0/1784/media"
+    assert retry["video_url"][0].startswith("https://cf-prod-media-123.s3.")
+    assert "upload_type" not in retry
+    assert retry["media_type"] == ["REELS"]
+    assert saved[-1] == {"container": "17900000000000002", "containerAt": "2026-11-15T12:00:00.000Z", "uploaded": True}
+
+
 def test_instagram_daily_limit() -> None:
     http = FakeHttp((200, {"data": [{"config": {"quota_total": 50}, "quota_usage": 50}]}))
     job, _, _ = make_job("instagram", http, data={"igUserId": "1784"})
@@ -367,11 +414,145 @@ def test_instagram_daily_limit() -> None:
         InstagramPublisher().start(job)
 
 
-def test_instagram_container_error() -> None:
-    http = FakeHttp((200, {"status_code": "ERROR"}))
+def test_instagram_container_error(capsys: pytest.CaptureFixture[str]) -> None:
+    http = FakeHttp((200, "publish/instagram_status_error"))
     job, _, _ = make_job("instagram", http, data={"igUserId": "1784"})
-    with pytest.raises(PublishError, match="did not like this video file"):
+    with pytest.raises(errors.PlatformProblem, match="did not like this video file") as e:
         InstagramPublisher().check(job, {"container": "c1", "uploaded": True})
+    assert e.value.problem.kind == "file"
+    assert "fields=status_code%2Cstatus" in http.calls[0].url  # the reason, not just the state
+    assert "2207026" in capsys.readouterr().out  # Meta's reason is logged
+
+
+def test_instagram_expired_container_is_not_blamed_on_the_file() -> None:
+    http = FakeHttp((200, "publish/instagram_status_expired"))
+    job, _, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    with pytest.raises(errors.PlatformProblem, match="waited too long") as e:
+        InstagramPublisher().check(job, {"container": "c1", "uploaded": True})
+    assert e.value.problem.kind == "other"
+
+
+IG_HANDLE = {"container": "c1", "containerAt": "2026-11-15T12:00:00.000Z", "uploaded": True}
+
+
+def test_instagram_published_container_is_never_published_twice() -> None:
+    http = FakeHttp((200, "publish/instagram_status_published"), (200, "publish/instagram_media_latest"))
+    job, saved, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    done = InstagramPublisher().check(job, dict(IG_HANDLE))
+    assert done.state == "done"
+    assert all("media_publish" not in c.url for c in http.calls)
+    assert http.calls[1].url.startswith(
+        "https://graph.facebook.com/v27.0/1784/media?fields=id%2Cpermalink%2Ctimestamp%2Ccaption&limit=5"
+    )
+    # Not the newest post (posted by hand), not the older Reel with the same caption: the one made after the container.
+    assert done.published is not None
+    assert (done.published.stats_id, done.published.url) == (
+        "17920238422030506",
+        "https://www.instagram.com/reel/C1a2b3c4d5/",
+    )
+    assert saved[-1]["mediaId"] == "17920238422030506"
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        [],
+        [{"id": "9", "caption": "Something else", "timestamp": "2026-11-15T12:10:00+0000"}],
+        [{"id": "9", "caption": "No way #gaming", "timestamp": "2026-11-10T09:00:00+0000"}],  # older than the container
+        [  # two could be it: never guess
+            {"id": "8", "caption": "No way #gaming", "timestamp": "2026-11-15T12:10:00+0000"},
+            {"id": "9", "caption": "No way #gaming", "timestamp": "2026-11-15T12:20:00+0000"},
+        ],
+    ],
+)
+def test_instagram_lookup_never_guesses(rows: list[dict[str, Any]]) -> None:
+    http = FakeHttp((200, "publish/instagram_status_published"), (200, {"data": rows}))
+    job, saved, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    with pytest.raises(errors.PlatformProblem, match="Look on Instagram before you press Try again") as e:
+        InstagramPublisher().check(job, dict(IG_HANDLE))
+    assert isinstance(e.value, RetryablePublishError) is False
+    assert saved == []  # no media id is saved
+
+
+@pytest.mark.parametrize(
+    "lost",
+    [NetworkError("timed out"), (500, {"error": {"code": 2, "message": "Service temporarily unavailable"}})],
+)
+def test_instagram_lost_publish_answer_is_never_published_twice(lost: Any) -> None:
+    http = FakeHttp(
+        lost,
+        (200, "publish/instagram_status_published"),
+        (200, "publish/instagram_media_latest"),
+    )
+    job, saved, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    done = InstagramPublisher().finish(job, dict(IG_HANDLE))
+    assert done.state == "done"
+    assert [c.url.split("?")[0].rsplit("/", 1)[-1] for c in http.calls] == ["media_publish", "c1", "media"]
+    assert done.published is not None
+    assert done.published.stats_id == "17920238422030506"
+    assert saved[0] == {**IG_HANDLE, "publishing": True}
+    assert saved[-1]["mediaId"] == "17920238422030506"
+
+
+def test_instagram_retried_publish_looks_before_publishing_again() -> None:
+    http = FakeHttp((200, "publish/instagram_status_published"), (200, "publish/instagram_media_latest"))
+    job, _, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    done = InstagramPublisher().finish(job, {**IG_HANDLE, "publishing": True})
+    assert done.state == "done"
+    assert all("media_publish" not in c.url for c in http.calls)
+
+
+def test_instagram_retried_publish_sends_again_when_not_posted() -> None:
+    http = FakeHttp(
+        (200, "publish/instagram_status_finished"),
+        (200, "publish/instagram_publish"),
+        (200, "publish/instagram_permalink"),
+    )
+    job, _, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    done = InstagramPublisher().finish(job, {**IG_HANDLE, "publishing": True})
+    assert "fields=status_code&" in http.calls[0].url
+    assert http.calls[1].url.endswith("/1784/media_publish")
+    assert done.published is not None
+    assert done.published.stats_id == "17920238422030506"
+
+
+def test_instagram_failed_publish_that_did_not_post_keeps_its_error() -> None:
+    http = FakeHttp(NetworkError("timed out"), NetworkError("timed out"))
+    job, _, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    with pytest.raises(RetryablePublishError, match="Instagram did not answer"):
+        InstagramPublisher().finish(job, dict(IG_HANDLE))
+    assert len(http.calls) == 2
+
+
+def test_instagram_upload_failure_with_debug_info() -> None:
+    http = FakeHttp(
+        (200, "publish/instagram_limit"), (200, "publish/instagram_container"), (400, "publish/instagram_upload_failed")
+    )
+    job, saved, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    with pytest.raises(PublishError, match="Posting to Instagram did not work"):
+        InstagramPublisher().start(job)
+    assert saved == [{"container": "17889455560051444", "containerAt": "2026-11-15T12:00:00.000Z"}]  # kept for a replay
+
+
+@pytest.mark.parametrize(
+    ("fixture", "kind", "code", "retryable"),
+    [
+        ("meta_error_190_460", "reconnect", "190/460", False),
+        ("meta_error_190_492", "reconnect", "190/492", False),
+        ("instagram_error_2207027", "down", "9007/2207027", True),
+        ("instagram_error_2207050", "banned", "25/2207050", False),
+        ("meta_error_368", "banned", "368/1390008", False),
+        ("meta_error_10", "reconnect", "10", False),
+    ],
+)
+def test_instagram_publish_errors(fixture: str, kind: str, code: str, retryable: bool) -> None:
+    http = FakeHttp((400, f"publish/{fixture}"), (200, "publish/instagram_status_finished"))
+    job, _, _ = make_job("instagram", http, data={"igUserId": "1784"})
+    with pytest.raises(PublishError) as e:
+        InstagramPublisher().finish(job, {"container": "c1", "uploaded": True})
+    problem = e.value.problem  # type: ignore[attr-defined]
+    assert (problem.kind, problem.code) == (kind, code)
+    assert isinstance(e.value, RetryablePublishError) is retryable
 
 
 # --- Facebook --------------------------------------------------------------------------------------------------------
@@ -382,7 +563,6 @@ def test_facebook_reel_upload_finish_and_permalink() -> None:
         (200, "publish/facebook_start"),
         (200, "publish/facebook_upload"),
         (200, "publish/facebook_status_uploaded"),
-        (400, {"error": {"code": 100, "message": "(#100) Param video_state must be one of {DRAFT, PUBLISHED}"}}),
         (200, "publish/facebook_finish"),
         (200, "publish/facebook_status_published"),
         (200, "publish/facebook_permalink"),
@@ -400,9 +580,9 @@ def test_facebook_reel_upload_finish_and_permalink() -> None:
     assert handle == {"videoId": "1234567890123", "uploaded": True}
     assert publisher.check(job, handle).state == "ready_to_finish"
     after = publisher.finish(job, handle)
-    first, second = form(http.calls[3]), form(http.calls[4])
-    assert (first["video_state"], second["video_state"]) == (["PUBLISHED"], ["complete"])
-    assert first["description"] == ["Watch this"]
+    finish = form(http.calls[3])
+    assert (finish["upload_phase"], finish["video_state"]) == (["finish"], ["PUBLISHED"])  # one call, never retried
+    assert finish["description"] == ["Watch this"]
     assert after.state == "processing"
     assert after.handle["postId"] == "111222333_444555666"
     done = publisher.check(job, after.handle)
@@ -428,6 +608,40 @@ def test_facebook_file_url_fallback() -> None:
     FacebookPublisher().start(job)
     assert http.calls[1].headers["file_url"].startswith("https://")
     assert http.calls[1].body == b""
+
+
+def test_facebook_upload_done_when_meta_says_completed() -> None:
+    http = FakeHttp((200, "publish/facebook_status_uploaded_completed"))
+    job, _, _ = make_job("facebook", http, data={"pageId": "p1"})
+    assert FacebookPublisher().check(job, {"videoId": "v", "uploaded": True}).state == "ready_to_finish"
+
+
+@pytest.mark.parametrize("fixture", ["facebook_status_processing_error_documented", "facebook_status_processing_error"])
+def test_facebook_processing_error_logs_the_reason(fixture: str, capsys: pytest.CaptureFixture[str]) -> None:
+    http = FakeHttp((200, f"publish/{fixture}"))
+    job, _, _ = make_job("facebook", http, data={"pageId": "p1"})
+    with pytest.raises(PublishError, match="Facebook did not like this video file"):
+        FacebookPublisher().check(job, {"videoId": "v", "uploaded": True})
+    assert "Resolution too low" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("seconds", [2.5, 91.0, 180.0])
+def test_facebook_reels_must_be_3_to_90_seconds(seconds: float) -> None:
+    http = FakeHttp()
+    job, _, _ = make_job("facebook", http, data={"pageId": "p1"})
+    job.clip["durationSec"] = seconds
+    with pytest.raises(errors.PlatformProblem, match=r"Facebook Reels must be 3 to 90 seconds long\.") as e:
+        FacebookPublisher().start(job)
+    assert e.value.problem.kind == "file"
+    assert http.calls == []  # nothing is uploaded
+
+
+def test_facebook_too_long_answer_is_a_file_problem() -> None:
+    http = FakeHttp((400, "publish/facebook_error_1363128"))
+    job, _, _ = make_job("facebook", http, data={"pageId": "p1"})
+    with pytest.raises(errors.PlatformProblem, match="3 to 90 seconds") as e:
+        FacebookPublisher().finish(job, {"videoId": "v", "uploaded": True})
+    assert e.value.problem.code == "100/1363128"
 
 
 def test_facebook_upload_failed() -> None:
@@ -559,7 +773,7 @@ def test_caption_rules() -> None:
             403,
             {"error": {"code": "unaudited_client_can_only_post_to_private_accounts"}},
             False,
-            "Make your TikTok account private (Setup step 3), then press Try again.",
+            "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone.",
         ),
         (
             "tiktok",
@@ -586,6 +800,67 @@ def test_caption_rules() -> None:
             "Connect Facebook again in Settings › Posting › Set up posting, then press Try again.",
         ),
         (
+            "facebook",
+            400,
+            {"error": {"code": 190, "error_subcode": 492}},
+            False,
+            "Your Facebook account is no longer an admin of the Page. Make it an admin, then connect again.",
+        ),
+        ("instagram", 400, {"error": {"code": 9007, "error_subcode": 2207027}}, True, "Instagram did not answer."),
+        ("instagram", 400, {"error": {"code": -1, "error_subcode": 2207001}}, True, "Instagram did not answer."),
+        ("instagram", 400, {"error": {"code": -2, "error_subcode": 2207003}}, True, "Instagram did not answer."),
+        ("instagram", 400, {"error": {"code": 2}}, True, "Instagram did not answer."),
+        (
+            "instagram",
+            400,
+            {"error": {"code": 4, "error_subcode": 2207051}},
+            False,
+            "Instagram is not letting this account post right now.",
+        ),
+        (
+            "instagram",
+            400,
+            {"error": {"code": 25, "error_subcode": 2207050}},
+            False,
+            "Open the Instagram app and clear any warning. Then press Try again.",
+        ),
+        (
+            "facebook",
+            400,
+            {"error": {"code": 368}},
+            False,
+            "Meta paused posting for now. Wait a day, then press Try again.",
+        ),
+        (
+            "instagram",
+            403,
+            {"error": {"code": 200}},
+            False,
+            "Instagram is missing a permission. Connect Instagram again in Settings › Posting › Set up posting and "
+            "tick every box.",
+        ),
+        (
+            "instagram",
+            400,
+            {"error": {"code": 2207053}},
+            False,
+            "Posting to Instagram did not work. Press Try again.",
+        ),
+        (
+            "instagram",
+            400,
+            {"error": {"code": 100, "error_subcode": 2207053}},
+            False,
+            "Instagram lost this upload. Press Try again.",
+        ),
+        (
+            "facebook",
+            400,
+            {"error": {"code": 100, "error_subcode": 1363040}},
+            False,
+            "Facebook did not like this video file.",
+        ),
+        (
             "x",
             402,
             {},
@@ -598,6 +873,43 @@ def test_caption_rules() -> None:
 )
 def test_friendly_errors(platform: str, status: int, body: dict[str, Any], retryable: bool, sentence: str) -> None:
     assert errors.friendly(platform, status, json.dumps(body).encode()) == (retryable, sentence)
+
+
+def test_meta_errors_log_subcode_type_and_trace_but_never_the_token(capsys: pytest.CaptureFixture[str]) -> None:
+    from clipfactory_api.platforms.base import HttpResponse
+    from fakes import stats_fixture
+
+    resp = HttpResponse(400, {}, stats_fixture("publish/meta_error_190_460"))
+    err = errors.error_for("instagram", resp, step="limit")
+    assert isinstance(err, errors.ReconnectProblem)
+    line = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert line["event"] == "publish.platform_error"
+    assert (line["code"], line["subcode"], line["type"], line["fbtraceId"], line["step"]) == (
+        "190/460",
+        "460",
+        "OAuthException",
+        "C4nH8jRf2WqZ6tLp0Ks5bV1",
+        "limit",
+    )
+    assert "message" not in line
+    assert "ACCESS-TOKEN" not in json.dumps(line)
+
+
+def test_captions_without_a_campaign_are_sent_as_before() -> None:
+    """``caption`` (shared by sending and Instagram's lookup) only changes campaign posts (§38.14)."""
+    captions = {
+        **CAPTIONS,
+        "youtubeDescription": "<b>Full</b> stream",
+        "instagram": "#a " * 40,
+        "x": "unreal https://example.com/x",
+        "tiktok": "t" * 2300,
+    }
+    job, _, _ = make_job("youtube", FakeHttp(), captions=captions)
+    assert caption(job, "youtube") == "bFull/b stream"
+    assert caption(job, "instagram") == instagram_caption("#a " * 40)
+    assert caption(job, "x") == x_text("unreal https://example.com/x") == "unreal"
+    assert caption(job, "tiktok") == "t" * 2200
+    assert caption(job, "facebook") == "Watch this"
 
 
 def test_publisher_for_every_platform() -> None:

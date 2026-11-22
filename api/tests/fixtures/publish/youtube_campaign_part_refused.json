@@ -1,0 +1,15 @@
+{
+  "error": {
+    "code": 400,
+    "message": "The request specifies an unexpected value for the part parameter.",
+    "errors": [
+      {
+        "message": "The request specifies an unexpected value for the part parameter.",
+        "domain": "youtube.part",
+        "reason": "unexpectedPart",
+        "location": "part",
+        "locationType": "parameter"
+      }
+    ]
+  }
+}

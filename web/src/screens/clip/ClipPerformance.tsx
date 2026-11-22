@@ -20,6 +20,11 @@ import { prefersReducedMotion, usePrefs } from "../../lib/prefs.ts";
 import { goBack } from "../../lib/router.ts";
 import { isoWeek, weekRange } from "../../lib/week.ts";
 import { ClipFollowers } from "./ClipFollowers.tsx";
+import { CrPostLines } from "../../components/CrPostLine.tsx";
+import { sendGroups, useSubmissions } from "../../lib/contentRewards.ts";
+import { CampaignsFold, ClipFit, useClipPageFit, useWaitingClip, WaitingClipFit } from "./ClipFit.tsx";
+import { canPostYourselfHere } from "../../lib/tiktokYourself.ts";
+import { PostYourselfButton } from "../library/PostYourself.tsx";
 
 /** Re-renders every `ms` so "3 min ago" and "Next check in 4 min" stay true. */
 export function useNow(ms = 15_000): number {
@@ -83,6 +88,11 @@ export function refreshMessage(results: RefreshResult[], now = Date.now()): { to
 }
 
 export function ClipPerformance({ clipId }: { clipId: string }) {
+  // This clip's posts on Content Rewards (§38.6). A post waiting to be sent by hand makes "Copy and open" the page's
+  // one vermilion button; Refresh numbers steps back to glass until it is sent.
+  const crSubs = useSubmissions({ clipId });
+  const sendNow = sendGroups(crSubs.subs).length > 0;
+  const crFirst = sendNow || (typeof location !== "undefined" && new URLSearchParams(location.search).has("cr"));
   const [perf, setPerf] = useState<Perf | null>(null);
   const [error, setError] = useState<{ message: string; missing: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -101,6 +111,12 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
   // Lines draw in once per visit; with reduced motion they are simply there.
   const [animate] = useState(() => !prefersReducedMotion());
   const live = useLiveStatus();
+  // §39.3: while it waits in Review, the clip's fit (its block's main button is then the page's vermilion).
+  const fitPage = useClipPageFit(perf?.clip ?? null);
+  const fitMain = !!fitPage.main && !sendNow;
+  // No numbers because it still waits in Review: the empty page sends him there (where it can be uploaded).
+  const waitingClip = useWaitingClip(clipId, !!error?.missing && !perf);
+  const inReview = waitingClip?.status === "review";
 
   const stage = useRef<HTMLDivElement | null>(null);
   const stageObserver = useRef<ResizeObserver | null>(null);
@@ -157,14 +173,21 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
       <div className="page perf">
         <h1 className="sr-only">{error.missing ? "No numbers for this clip" : "Could not load the numbers"}</h1>
         <BackRow />
+        {error.missing ? <WaitingClipFit clip={waitingClip} /> : null}
         <Empty
           icon={error.missing ? "chart" : "alert"}
           title={error.missing ? "No numbers for this clip" : "Could not load the numbers"}
           action={
             <>
-              <LinkButton href="/library" variant="primary" icon="library">
-                Go to Library
-              </LinkButton>
+              {waitingClip && inReview ? (
+                <LinkButton href={`/review?job=${encodeURIComponent(waitingClip.jobId)}`} variant="primary" icon="review">
+                  Go to Review
+                </LinkButton>
+              ) : (
+                <LinkButton href="/library" variant="primary" icon="library">
+                  Go to Library
+                </LinkButton>
+              )}
               {error.missing ? null : (
                 <Button icon="retry" act="retry" onClick={() => load()}>
                   Try again
@@ -173,7 +196,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
             </>
           }
         >
-          {error.message}
+          {inReview ? "It waits in Review. Upload it there first." : error.message}
         </Empty>
       </div>
     );
@@ -272,6 +295,11 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
           {MOMENT_LABEL[clip.momentType]} · {plural(perf.totals.platformsPosted, "platform")} posted
         </p>
       </header>
+
+      <ClipFit clip={clip} data={fitPage.data} primary={fitMain} copy={fitPage.copy} />
+
+      {/* From the send-now notification (?cr=), or while a post waits to be sent, the lines lead the page (§38.6). */}
+      {crSubs.subs.length && crFirst ? <ClipOnContentRewards clipId={clipId} subs={crSubs} sendNow={sendNow} /> : null}
 
       <div className="perf__stage" ref={setStage} data-layout={layout}>
         <PerfLines
@@ -384,7 +412,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
               <span>Best this week</span>
             </button>
             <Button
-              variant="primary"
+              variant={sendNow || fitMain ? "glass" : "primary"}
               size="lg"
               icon={waiting ? "clock" : "retry"}
               loading={state.refreshing}
@@ -397,6 +425,10 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
             >
               {label}
             </Button>
+            {/* TikTok keeps Clip Factory's own uploads Only me for now: he can post it there himself (§42). */}
+            {canPostYourselfHere(perf.clip, perf.posts.find((p) => p.platform === "tiktok")) ? (
+              <PostYourselfButton clip={perf.clip} onMarked={() => void load()} size="md" />
+            ) : null}
             {/* Not a live region: the clock re-renders it every minute. New numbers are announced by the toast. */}
             {/* The span is what the window look tints (see-through, glass.css), so the tint hugs the words. */}
             <p className="perf__updated">
@@ -425,6 +457,9 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
         </div>
       </div>
       <ClipFollowers perf={perf} />
+      {crSubs.subs.length && !crFirst ? <ClipOnContentRewards clipId={clipId} subs={crSubs} sendNow={false} /> : null}
+      {/* §39.3: closed by default, at the end, so the video and its numbers still come first. */}
+      <CampaignsFold data={fitPage.data} />
     </div>
   );
 }
@@ -436,5 +471,37 @@ function BackRow() {
         Back
       </Button>
     </div>
+  );
+}
+
+/** The clip's lines on Content Rewards, at the top; from the "send now" notification (`?cr=`) the steps fold open. */
+function ClipOnContentRewards({ clipId, subs, sendNow }: { clipId: string; subs: ReturnType<typeof useSubmissions>; sendNow: boolean }) {
+  const toast = useToast();
+  const [checking, setChecking] = useState(false);
+  const fromNotice = typeof location !== "undefined" && new URLSearchParams(location.search).has("cr");
+  async function checkNow() {
+    setChecking(true);
+    try {
+      subs.setSubs(await api().crCheckSubmissions(clipId));
+      return true;
+    } catch (e) {
+      toast.error(friendlyMessage(e));
+      return false;
+    } finally {
+      setChecking(false);
+    }
+  }
+  return (
+    <section className="cr-clip glass" aria-labelledby="cr-clip-title">
+      <div className="cr-clip__head">
+        <h2 className="cr-section__title" id="cr-clip-title">
+          On Content Rewards
+        </h2>
+        <Button variant="glass" size="sm" icon="retry" act="retry" loading={checking} onClick={checkNow}>
+          Check now
+        </Button>
+      </div>
+      <CrPostLines subs={subs.subs} onChange={subs.put} openSend={fromNotice} primary={sendNow} />
+    </section>
   );
 }

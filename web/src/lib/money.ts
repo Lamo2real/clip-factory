@@ -133,5 +133,5 @@ export const PAYOUTS: { platform: Platform; where: string; how: string }[] = [
   { platform: "facebook", where: "Meta Business Suite › Payouts", how: "Add your bank account or PayPal in Meta's payout settings." },
   { platform: "instagram", where: "Professional dashboard › Payouts", how: "Add your bank account or PayPal in Instagram's payout settings (Meta)." },
   { platform: "tiktok", where: "Profile › Balance", how: "Add your bank account or PayPal in your TikTok balance." },
-  { platform: "x", where: "X › Monetization", how: "Connect Stripe in X › Monetization. X pays through Stripe." },
+  { platform: "x", where: "X › Creator Studio", how: "Connect Stripe in X › Creator Studio. X pays through Stripe." },
 ];

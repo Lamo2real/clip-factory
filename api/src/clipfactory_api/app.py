@@ -21,6 +21,7 @@ from .log import log
 from .push.devices import VapidKey
 from .push.transport import Poster, urllib_post
 from .skills import BuiltinSkill, load_builtins
+from .tiktok_link import Opener, open_once
 from .vectors import Vectors
 
 if TYPE_CHECKING:
@@ -166,6 +167,12 @@ class App:
     # Notifications (§32): the VAPID key from Secrets Manager (read on first use) and how a message is posted.
     push: VapidKey = field(default_factory=VapidKey)
     push_post: Poster = urllib_post
+    # Post it on TikTok yourself (§42): opens a pasted short TikTok link once, without following its redirect.
+    tiktok_open: Opener = open_once
+    # Content Rewards (§38): None (every /v1/contentrewards route answers 503) unless switched on and configured.
+    contentrewards: Any = None
+    # Get paid (§40.6): "Connect Whop" and its routes answer 503 "Coming soon." unless WHOP_CONNECT is "on".
+    whop_connect: bool = False
     _builtin_cache: list[BuiltinSkill] | None = field(default=None, repr=False)
 
     def builtin_skills(self) -> list[BuiltinSkill]:
@@ -239,18 +246,22 @@ def from_env() -> App:
             env.get("EMBED_MODEL_ID", vectors.DEFAULT_EMBED_MODEL),
         )
     oauth, web_files = _posting_setup(env, reg)
+    invoker = AsyncInvoker(
+        lambda_client,
+        env.get("STATS_FUNCTION_ARN", ""),
+        env.get("LEARN_FUNCTION_ARN", ""),
+        env.get("MONEY_FUNCTION_ARN", ""),
+        env.get("CAMPAIGNS_FUNCTION_ARN", ""),
+    )
+    store = db.Store(table(env["TABLE_NAME"]))
+    media = s3.Media(s3.make_client(reg), env["MEDIA_BUCKET"])
     return App(
-        store=db.Store(table(env["TABLE_NAME"])),
-        media=s3.Media(s3.make_client(reg), env["MEDIA_BUCKET"]),
+        store=store,
+        media=media,
         agent=AgentClient(agent_client.make_client(reg), env.get("AGENT_RUNTIME_ARN", "")),
         flows=FlowClient(lambda_client, env.get("JOB_FLOW_ARN", ""), env.get("CLIP_FLOW_ARN", "")),
         vectors=vector_store,
-        invoker=AsyncInvoker(
-            lambda_client,
-            env.get("STATS_FUNCTION_ARN", ""),
-            env.get("LEARN_FUNCTION_ARN", ""),
-            env.get("MONEY_FUNCTION_ARN", ""),
-        ),
+        invoker=invoker,
         version=env.get("VERSION", "dev"),
         email_lookup=_cognito_email_lookup(boto3.client("cognito-idp", region_name=reg, config=_short_config())),
         oauth=oauth,
@@ -258,7 +269,23 @@ def from_env() -> App:
         help=help_from_env(reg),
         ask=ask_from_env(reg, lambda_client),
         push=_push_from_env(env, reg),
+        contentrewards=_content_rewards(env, store, media, invoker),
+        whop_connect=env.get("WHOP_CONNECT", "off").strip().lower() == "on",
     )
+
+
+def _content_rewards(env: Any, store: db.Store, media: s3.Media, invoker: AsyncInvoker) -> Any:
+    """§38.8: the CR deps only when ``CONTENT_REWARDS=on`` and the state key, secret prefix and both function ARNs
+    are set; else None, and every CR route answers 503 ``unavailable``."""
+    from .contentrewards import config as cr_config
+    from .contentrewards import deps as cr_deps
+
+    if not cr_deps.ready(env):
+        return None
+    found = cr_deps.from_env(store, media, invoker)
+    if found is not None:
+        found.submit_timeout = cr_config.SUBMIT_TIMEOUT_API
+    return found
 
 
 def _push_from_env(env: Any, reg: str) -> VapidKey:
@@ -276,7 +303,7 @@ def _posting_setup(env: Any, reg: str) -> tuple[OAuthEnv | None, WebFiles | None
     """Secrets Manager, the state key and the public URLs of §17.9; both None when any is missing."""
     import boto3
 
-    from .oauth import OAuthEnv, money_scopes_from_config, scopes_from_config
+    from .oauth import OAuthEnv, money_scopes_from_config, payment_scopes_from_config, scopes_from_config
     from .oauth.secrets import PREFIX, Secrets
     from .routes.setup import WebFiles
     from .stats import config
@@ -295,6 +322,7 @@ def _posting_setup(env: Any, reg: str) -> tuple[OAuthEnv | None, WebFiles | None
         graph_version=config.load().graph_api_version,
         scopes=scopes_from_config(),
         money_scopes=money_scopes_from_config(),
+        payment_scopes=payment_scopes_from_config(),
     )
     web_files = None
     if env.get("WEB_BUCKET") and env.get("DISTRIBUTION_ID"):

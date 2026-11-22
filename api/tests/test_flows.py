@@ -733,8 +733,8 @@ def test_clip_flow_try_again_run_publishes_the_reset_posts(store: db.Store, tabl
     youtube = next(
         p for p in posts.posts_for_clip(store, USER, clip["clipId"], consistent=True) if p["platform"] == "youtube"
     )
-    # What "Try again" does in the API: the failed post goes back to queued and the clip to confirmed.
-    store.update(youtube["pk"], youtube["sk"], {"status": "queued"}, remove=["error"])
+    # What "Try again" does in the API: the failed post goes back to queued for run 2 and the clip to confirmed.
+    store.update(youtube["pk"], youtube["sk"], {"status": "queued", "flowRun": 2}, remove=["error"])
     store.update(clip["pk"], clip["sk"], {"status": "confirmed", "flowRun": 2})
     ok = FakeAdapter("youtube")
     out = run_clip_flow(FakeDurableContext(), _event(clip, 2), _clip_deps(store, {"youtube": ok}))
@@ -1041,3 +1041,175 @@ def test_job_flow_replay_of_an_old_execution_keeps_its_names(
     run_job_flow(ctx, _job_event(job), _job_deps(store, agentcore))
     assert [n for n, _ in ctx.callbacks] == ["agent-done"]
     assert ctx.steps == ["start-agent", "finish"]
+
+
+# --- Content Rewards steps (§38.12) ---------------------------------------------------------------------------------
+
+
+class _ClockedContext(FakeDurableContext):
+    """A durable context whose waits move the clock (the 60 s between CR retries)."""
+
+    def __init__(self, clock: Clock, **kw: Any) -> None:
+        super().__init__(**kw)
+        self.clock = clock
+
+    def wait(self, duration: Any, name: str | None = None) -> None:
+        from datetime import timedelta
+
+        super().wait(duration, name)
+        self.clock.now = self.clock.now + timedelta(seconds=duration.to_seconds())
+
+
+def _cr_world(store: db.Store, *platforms: str, campaign_job: bool = True, answers: list[Any] | None = None) -> Any:
+    from cr_support import UUID, FakeCR, listed_campaign, make_deps, page, seed_campaign, seed_connection
+    from fakes import FakeSecretsManager
+
+    clock = Clock()
+    _connect(store, *platforms)
+    job = seed_job(store, campaign={"campaignId": UUID, "name": "FaZe Clips", "rules": {}}) if campaign_job else None
+    clip = _kept_clip(store, jobId=job["jobId"]) if job else _kept_clip(store)
+    fake = FakeCR()
+    fake.answer("list_my_campaigns", page([listed_campaign(access="open")]))
+    fake.answer("create_my_submission", *(answers or [{"id": "sub_1", "status": "pending"}]))
+    cr = make_deps(store, FakeSecretsManager(), fake, clock)
+    seed_connection(cr, USER, clock.now)
+    seed_campaign(store, USER, clock.now)
+    deps = _clip_deps(store, {p: FakeAdapter(p) for p in platforms})
+    deps.clock = clock
+    deps.cr = cr
+    return clip, deps, fake, clock
+
+
+def _cr_steps(ctx: FakeDurableContext) -> list[str]:
+    return [s for s in ctx.steps if s.startswith(("publish-", "cr-", "settle-"))]
+
+
+def test_clip_flow_cr_steps_for_one_two_and_three_campaign_posts(store: db.Store) -> None:
+    clip, deps, fake, clock = _cr_world(store, "youtube")
+    ctx = _ClockedContext(clock)
+    run_clip_flow(ctx, _event(clip), deps)
+    assert _cr_steps(ctx) == ["publish-youtube", "cr-send-youtube", "settle-clip"]
+    assert ctx.results["ensure-posts"][0]["campaignId"]
+    assert len(fake.calls("create_my_submission")) == 1
+
+
+def test_clip_flow_cr_two_and_three_posts(table: FakeTable) -> None:
+    for platforms in (("youtube", "instagram"), ("youtube", "instagram", "facebook")):
+        store = db.Store(FakeTable())
+        clip, deps, fake, clock = _cr_world(store, *platforms)
+        ctx = _ClockedContext(clock)
+        run_clip_flow(ctx, _event(clip), deps)
+        expected: list[str] = []
+        for p in ("youtube", "instagram", "facebook"):
+            if p in platforms:
+                expected += [f"publish-{p}", f"cr-send-{p}"]
+        assert _cr_steps(ctx) == [*expected, "settle-clip"]
+        assert len(fake.calls("create_my_submission")) == len(platforms)
+
+
+def test_clip_flow_cr_slow_post_with_catch_up_and_retries(store: db.Store) -> None:
+    from cr_support import tool_error
+
+    missing = tool_error("resource_missing", status=404)
+    clip, deps, _fake, clock = _cr_world(
+        store,
+        "youtube",
+        "instagram",
+        answers=[missing, missing, {"id": "sub_2", "status": "pending"}, missing, {"id": "sub_1", "status": "pending"}],
+    )
+    ctx = _ClockedContext(clock)
+    run_clip_flow(ctx, _event(clip), deps)
+    assert _cr_steps(ctx) == [
+        "publish-youtube",
+        "cr-send-youtube",
+        "publish-instagram",
+        "cr-catchup-instagram",
+        "cr-send-instagram",
+        "settle-clip",
+        "cr-retry-1",
+        "cr-retry-2",
+    ]
+    assert [w for w in ctx.waits if w[0] and w[0].startswith("cr-wait-")] == [("cr-wait-1", 60), ("cr-wait-2", 60)]
+    assert ctx.steps.index("cr-retry-2") < ctx.steps.index("metrics")  # then on to wait-48h as before
+    assert {s["state"] for s in store.query_all(db.user_pk(USER), "CRSUB#")} == {"sent"}
+
+
+def test_clip_flow_cr_retries_until_the_deadline_then_send_by_hand(store: db.Store) -> None:
+    from cr_support import tool_error
+
+    clip, deps, _fake, clock = _cr_world(store, "youtube", answers=[tool_error("resource_missing", status=404)])
+    ctx = _ClockedContext(clock)
+    run_clip_flow(ctx, _event(clip), deps)
+    retries = [s for s in ctx.steps if s.startswith("cr-retry-")]
+    assert 20 <= len(retries) <= 26
+    sub = store.query_all(db.user_pk(USER), "CRSUB#")[0]
+    assert (sub["state"], sub["reason"]["code"]) == ("send_by_hand", "not_visible_yet")
+
+
+def test_clip_flow_without_a_campaign_has_todays_steps(store: db.Store) -> None:
+    clip, deps, fake, _clock = _cr_world(store, "youtube", "tiktok", campaign_job=False)
+    ctx = FakeDurableContext()
+    run_clip_flow(ctx, _event(clip), deps)
+    assert ctx.steps == [
+        "ensure-posts",
+        "publish-youtube",
+        "publish-tiktok",
+        "settle-clip",
+        "metrics",
+        "distil",
+        "upsert-vector",
+    ]
+    assert all("campaignId" not in p for p in ctx.results["ensure-posts"])
+    assert fake.requests == []
+
+
+def test_clip_flow_cr_switched_off_sends_nothing(store: db.Store) -> None:
+    clip, deps, fake, _clock = _cr_world(store, "youtube")
+    deps.cr = None
+    ctx = FakeDurableContext()
+    run_clip_flow(ctx, _event(clip), deps)
+    assert not [s for s in ctx.steps if s.startswith("cr-")]
+    assert fake.requests == []
+
+
+def test_clip_flow_cr_replay_sends_once(store: db.Store) -> None:
+    clip, deps, fake, clock = _cr_world(store, "youtube")
+    ctx = _ClockedContext(clock, replay={"cr-send-youtube"})
+    run_clip_flow(ctx, _event(clip), deps)
+    assert len(fake.calls("create_my_submission")) == 1
+
+
+def test_clip_flow_a_cr_step_that_raises_still_settles_the_clip(store: db.Store, monkeypatch: Any) -> None:
+    from clipfactory_api.contentrewards import submit
+
+    clip, deps, _fake, clock = _cr_world(store, "youtube")
+
+    def boom(*_a: Any, **_k: Any) -> Any:
+        raise RuntimeError("bug")
+
+    monkeypatch.setattr(submit, "send_many", boom)
+    ctx = _ClockedContext(clock)
+    out = run_clip_flow(ctx, _event(clip), deps)
+    assert out["outcome"] == "done"
+    assert [s for s in ctx.steps if s in ("cr-send-youtube", "settle-clip", "metrics")] == [
+        "cr-send-youtube",
+        "settle-clip",
+        "metrics",
+    ]
+
+
+def test_the_clip_flow_gives_content_rewards_its_real_time_left() -> None:
+    """§38.9 step 1 in cf-prod-clip-flow: the refresh guard reads this invocation's time left from Lambda."""
+    from types import SimpleNamespace
+
+    from clipfactory_api.flows import clip_flow
+
+    cr = SimpleNamespace(remaining=lambda: 900.0)
+    context = SimpleNamespace(lambda_context=SimpleNamespace(get_remaining_time_in_millis=lambda: 15_000))
+    clip_flow._time_left(SimpleNamespace(cr=cr), context)  # type: ignore[arg-type]
+    assert cr.remaining() == 15.0
+    off = SimpleNamespace(cr=None)
+    clip_flow._time_left(off, context)  # type: ignore[arg-type]  # switched off: nothing to set
+    plain = SimpleNamespace(remaining=lambda: 900.0)
+    clip_flow._time_left(SimpleNamespace(cr=plain), SimpleNamespace())  # type: ignore[arg-type]  # no Lambda context
+    assert plain.remaining() == 900.0
