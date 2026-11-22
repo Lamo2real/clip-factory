@@ -14,6 +14,7 @@ import { useLoad, usePoll } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
 import type { Agent, AgentId, AiPicked, AiTask, Effort, ModelInfo, Price, ProviderStatus, StoriesAiConfig, TaskInfo, TaskKind } from "../api/types.ts";
 import { EFFORT_LABEL } from "../api/types.ts";
+import { providerWords } from "../chat/models.ts";
 import { Btn, cheer, Chip, effortWord, Failed, Loading, MODEL_STATUS, money, Note, Progress, refusedLine, SavedMark, SetCard, SetPick, SetSelect, SIcon, statusSuffix, useSaved, whenText } from "./bits.tsx";
 import { useAi, type AiData } from "./data.ts";
 import { OwnModels } from "./OwnModels.tsx";
@@ -147,7 +148,7 @@ export function CheckModels({ ws, count, onDone, only }: { ws: string; count: nu
 function ModelOptionLine({ m }: { m: ModelInfo }) {
   return (
     <>
-      {m.provider} · {m.statusLine}
+      {providerWords(m) ?? m.provider} · {m.statusLine}
       {m.checkedAt ? ` (${whenText(m.checkedAt)})` : ""}
     </>
   );

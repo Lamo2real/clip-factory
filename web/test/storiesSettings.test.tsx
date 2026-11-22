@@ -193,6 +193,8 @@ describe("AI", () => {
     const models = $$("[role=radio]", group("Default model"));
     expect(models.map((m) => m.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["Claude Fable 5.2", "Claude Fable 5.1", "Claude Opus 5.5", "Claude Sonnet 5.5", "Claude Haiku 5.5", "Amazon Nova Pro"]);
     for (const m of models) expect(m.textContent).toContain("Amazon Bedrock");
+    // §45.35 D8: the maker on its host.
+    expect(byText("[role=radio]", /Opus 5\.5/).textContent).toContain("Anthropic on Amazon Bedrock");
     expect(byText("[role=radio]", /Fable 5\.1/).textContent).toContain("No access");
     expect(byText("[role=radio]", /Sonnet 5\.5/).textContent).toContain("Not checked yet");
     expect(byText("[role=radio]", /Opus 5\.5/).getAttribute("aria-checked")).toBe("true");
