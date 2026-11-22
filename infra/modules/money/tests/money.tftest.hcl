@@ -134,3 +134,51 @@ run "no_lamo_stories_secrets" {
     error_message = "…:secret:<name>/workspaces/stories/youtube/token-AbC123 must match no money Secrets Manager resource."
   }
 }
+
+# docs/CONTRACTS.md §40.5.11: the bank reader follows BANK_READING (off by default, the same switch as cf-prod-api),
+# suggests Content Rewards only while CONTENT_REWARDS is on, and fills psu-referer from APP_URL. In-place env changes
+# of the same function: no new permission (the bank secrets ride the existing PlatformSecretsRead grant), still no
+# DeleteItem and no secret write it didn't have.
+run "your_bank_is_off_by_default" {
+  command = plan
+
+  assert {
+    condition = (aws_lambda_function.money.environment[0].variables.BANK_READING == "off" &&
+      aws_lambda_function.money.environment[0].variables.CONTENT_REWARDS == "off" &&
+    !contains(keys(aws_lambda_function.money.environment[0].variables), "APP_URL"))
+    error_message = "By default the bank reader is off, Content Rewards is off and there is no APP_URL."
+  }
+}
+
+run "your_bank_on" {
+  command = plan
+
+  variables {
+    bank_reading_enabled    = true
+    content_rewards_enabled = true
+    app_url                 = "https://app.example.test"
+  }
+
+  assert {
+    condition = (aws_lambda_function.money.environment[0].variables.BANK_READING == "on" &&
+      aws_lambda_function.money.environment[0].variables.CONTENT_REWARDS == "on" &&
+    aws_lambda_function.money.environment[0].variables.APP_URL == "https://app.example.test")
+    error_message = "With the switch on the reader gets BANK_READING=on, CONTENT_REWARDS=on and APP_URL."
+  }
+
+  assert {
+    condition = (aws_lambda_function.money.function_name == "cf-test-money" &&
+    length([for s in jsondecode(aws_iam_role_policy.money.policy).Statement : s if can(regex("(?i)bank|DeleteItem|CreateSecret|DeleteSecret", jsonencode(s)))]) == 0)
+    error_message = "The same function and no new permission: no bank-named grant, no DeleteItem, no secret create or delete."
+  }
+}
+
+run "app_url_is_validated" {
+  command = plan
+
+  variables {
+    app_url = "http://app.example.test/"
+  }
+
+  expect_failures = [var.app_url]
+}

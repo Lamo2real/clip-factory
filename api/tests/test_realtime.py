@@ -585,6 +585,85 @@ def test_broadcast_sends_get_paid_once_per_owner_per_batch(
     assert out == {"batchItemFailures": [{"itemIdentifier": str(m)} for m in range(1, 6)]}
 
 
+@pytest.mark.parametrize(
+    ("sk", "event"),
+    [
+        ("BANKCONN", "MODIFY"),
+        ("BANKCONN", "INSERT"),
+        ("BANKLINK#a1b2c3d4e5f6", "MODIFY"),
+        ("BANKLINK#a1b2c3d4e5f6", "REMOVE"),
+        ("DEPOSIT#2026-10-28#0123456789abcdef0123456789abcdef", "INSERT"),
+        ("DEPOSIT#2026-10-28#0123456789abcdef0123456789abcdef", "REMOVE"),
+        ("BANKPAYERS", "MODIFY"),
+    ],
+)
+def test_broadcast_your_bank_is_partial(
+    bc_deps: broadcast.BroadcastDeps, management: FakeManagement, sk: str, event: str
+) -> None:
+    """§40.5.11: the four Your bank prefixes → one partial ``bank`` event; no lease, payer key, amount or link ever
+    rides along (the web refetches GET /v1/getpaid/bank)."""
+    item = {
+        "pk": f"USER#{USER}",
+        "sk": sk,
+        "type": "deposit",
+        "payerKey": "f00dfeedf00dfeedf00dfeedf00dfeed",
+        "amountMinor": 123456,
+        "readLease": {"until": "2026-11-23T06:05:00.000Z"},
+        "psuHeaders": ["psu-ip-address"],
+    }
+    broadcast.process({"Records": [_record(item, event=event)]}, bc_deps)
+    message = {"type": "bank", "op": "upsert", "id": "bank", "partial": True}
+    assert [m for _, m in management.sent] == [message] * 2
+    sent = json.dumps(management.sent)
+    assert "f00d" not in sent
+    assert "123456" not in sent
+    assert "psu" not in sent
+
+
+def test_broadcast_folds_bank_and_get_paid_once_each_per_owner(
+    bc_deps: broadcast.BroadcastDeps, management: FakeManagement, table: FakeTable
+) -> None:
+    """A read writes many DEPOSIT# rows (and the money run a PAYOUT#): one ``bank`` and one ``getpaid`` message per
+    owner, each carrying every folded record's sequence numbers."""
+
+    def deposit(n: int, user: str = USER) -> dict[str, Any]:
+        item = {"pk": f"USER#{user}", "sk": f"DEPOSIT#2026-10-2{n}#d{n}", "type": "deposit"}
+        return _record(item, event="INSERT", seq=f"{n}")
+
+    payout = {"pk": f"USER#{USER}", "sk": "PAYOUT#youtube#2026-10-21#3456", "type": "payout", "userId": USER}
+    link = {"pk": f"USER#{USER}", "sk": "BANKLINK#a1b2c3d4e5f6", "type": "banklink"}
+    records = [deposit(n) for n in range(1, 6)]
+    records += [_record(payout, seq="10"), _record(link, seq="11"), _record(_job(), seq="20"), deposit(7, OTHER)]
+    broadcast.process({"Records": records}, bc_deps)
+    bank = {"type": "bank", "op": "upsert", "id": "bank", "partial": True}
+    getpaid = {"type": "getpaid", "op": "upsert", "id": "getpaid", "partial": True}
+    assert [m for c, m in management.sent if c == "c1"] == [bank, getpaid, _job_message(management, "c1")]
+    assert [m for c, m in management.sent if c == "o1"] == [bank]
+    changes = broadcast.collect(records, broadcast._deserializer())
+    kept = [c for c in changes if c.kind == "bank" and c.user_id == USER]
+    assert len(kept) == 1
+    assert kept[0].sequence_numbers == ("1", "2", "3", "4", "5", "11")
+    assert len([c for c in changes if c.kind == "getpaid"]) == 1
+    table.fail_queries = True
+    out = broadcast.process({"Records": records[:5]}, bc_deps)
+    assert out == {"batchItemFailures": [{"itemIdentifier": str(n)} for n in range(1, 6)]}
+
+
+def _job_message(management: FakeManagement, connection: str) -> dict[str, Any]:
+    return next(m for c, m in management.sent if c == connection and m["type"] == "job")
+
+
+def test_broadcast_never_sends_the_bank_owner_or_notified_items(
+    bc_deps: broadcast.BroadcastDeps, management: FakeManagement
+) -> None:
+    records = [
+        _record({"pk": "BANKOWNER", "sk": "BANKOWNER", "type": "bankowner", "userId": USER}),
+        _record({"pk": f"USER#{USER}", "sk": "NOTIFIED#getpaid#bank:reached:d1", "type": "notified"}),
+    ]
+    broadcast.process({"Records": records}, bc_deps)
+    assert management.sent == []
+
+
 def test_broadcast_never_sends_crstate_or_crowners(
     bc_deps: broadcast.BroadcastDeps, management: FakeManagement
 ) -> None:

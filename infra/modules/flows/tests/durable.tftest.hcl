@@ -555,3 +555,42 @@ run "story_flow_is_kept_apart" {
     error_message = "No clip-flow or job-flow Secrets Manager resource may match a Lamo Stories workspace token."
   }
 }
+
+# docs/CONTRACTS.md §40.5.11: clip-flow can read <name>/platforms/*, so an in-place Deny keeps it off Your bank's
+# secrets (the bank key and each bank link's session); only clip-flow gets it, and no Allow changes.
+run "clip_flow_never_reads_bank_secrets" {
+  command = plan
+
+  assert {
+    condition = [for s in jsondecode(aws_iam_role_policy.fn["clip-flow"].policy).Statement : s if try(s.Sid, "") == "NoBankSecrets"] == [{
+      Sid      = "NoBankSecrets"
+      Effect   = "Deny"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/bank/*"]
+    }]
+    error_message = "clip-flow has exactly one NoBankSecrets statement: Effect Deny, GetSecretValue, <name>/platforms/bank/*."
+  }
+
+  assert {
+    condition = alltrue(flatten([
+      for k, p in aws_iam_role_policy.fn : [
+        for s in jsondecode(p.policy).Statement : s.Effect == "Allow" if k != "clip-flow" || try(s.Sid, "") != "NoBankSecrets"
+      ]
+    ]))
+    error_message = "Only clip-flow gets the Deny; every other statement stays an Allow."
+  }
+
+  assert {
+    condition = alltrue(flatten([
+      for k, p in aws_iam_role_policy.fn : [
+        for s in jsondecode(p.policy).Statement : !strcontains(jsonencode(s.Resource), "/bank") if s.Effect == "Allow"
+      ]
+    ]))
+    error_message = "No Allow statement names Your bank's secrets."
+  }
+
+  assert {
+    condition     = aws_iam_role_policy.fn["clip-flow"].name == "least-privilege" && aws_iam_role.fn["clip-flow"].name == "cf-test-fn-clip-flow"
+    error_message = "The Deny is an in-place change of clip-flow's own role policy (same role, same policy name)."
+  }
+}

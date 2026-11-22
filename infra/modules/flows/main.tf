@@ -118,6 +118,10 @@ locals {
       # Never create or delete, never write the app keys or pending choices.
       { Sid = "PlatformSecretsRead", Action = ["secretsmanager:GetSecretValue"], Resource = [var.platform_secrets_arn] },
       { Sid = "PlatformTokens", Action = ["secretsmanager:PutSecretValue"], Resource = [var.platform_token_secrets_arn] },
+      # §40.5.11: Your bank's secrets (<name>/platforms/bank/app, the bank key; …/bank/token_{linkId}, each bank
+      # link's session) are read only by cf-prod-api, cf-prod-hooks and cf-prod-money. The explicit Effect wins over
+      # the merge's Allow; an in-place change of this role policy.
+      { Sid = "NoBankSecrets", Effect = "Deny", Action = ["secretsmanager:GetSecretValue"], Resource = ["${trimsuffix(var.platform_secrets_arn, "*")}bank/*"] },
     ]
     # docs/CONTRACTS.md §45.15 and ADR-73: its own statements, not clip-flow's. No Delete, no Scan, no index, no
     # Bedrock, no other S3 prefix, no Lamo Clips token.

@@ -3,7 +3,8 @@
 #
 # docs/CONTRACTS.md §32.2 and §32.5: the VAPID key is written only through the write-only argument (never in the plan
 # or the state) and is never destroyed; cf-prod-notify reads only MODIFY records of JOB# items (and the Content Rewards
-# items of §38.11 and §41.4 and Get paid's of §40.7), can never delete anything and may read only its own secret. The
+# items of §38.11 and §41.4, Get paid's of §40.7 and Your bank's BANKCONN of §40.5.11), can never delete anything and
+# may read only its own secret. The
 # filter is one pattern on the same mapping, so a new prefix is an in-place change of that mapping.
 
 mock_provider "aws" {
@@ -58,8 +59,19 @@ run "notify_reads_job_changes_and_can_never_delete" {
   command = plan
 
   assert {
-    condition     = one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern == jsonencode({ eventName = ["MODIFY"], dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRCONN" }, { prefix = "CRFIND" }, { prefix = "PAYSTATE#" }] } } } })
-    error_message = "cf-test-notify reads only MODIFY records of JOB# items, the Content Rewards CAMPAIGN#, CRSUB#, CRMONEY, CRCONN (§38.11) and CRFIND (§41.4) items and Get paid's PAYSTATE# (§40.7), one pattern."
+    condition     = one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern == jsonencode({ eventName = ["MODIFY"], dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRCONN" }, { prefix = "CRFIND" }, { prefix = "PAYSTATE#" }, { prefix = "BANKCONN" }] } } } })
+    error_message = "cf-test-notify reads only MODIFY records of JOB# items, the Content Rewards CAMPAIGN#, CRSUB#, CRMONEY, CRCONN (§38.11) and CRFIND (§41.4) items, Get paid's PAYSTATE# (§40.7) and Your bank's BANKCONN (§40.5.11), one pattern."
+  }
+
+  # §40.5.11: Your bank's notices come from BANKCONN.lastNotice only: a DEPOSIT# row, a BANKLINK#, BANKPAYERS, the
+  # BANKOWNER registry item and the NOTIFIED# dedupe items never wake cf-test-notify.
+  assert {
+    condition = (
+      anytrue([for p in jsondecode(one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern).dynamodb.Keys.sk.S : startswith("BANKCONN", p.prefix)]) &&
+      alltrue([for sk in ["DEPOSIT#2026-10-28#0123456789abcdef0123456789abcdef", "BANKLINK#a1b2c3d4e5f6", "BANKPAYERS", "BANKOWNER", "NOTIFIED#getpaid#bank:reached:d1"] :
+      !anytrue([for p in jsondecode(one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern).dynamodb.Keys.sk.S : startswith(sk, p.prefix)])])
+    )
+    error_message = "BANKCONN must pass the notify filter; DEPOSIT#, BANKLINK#, BANKPAYERS, BANKOWNER and NOTIFIED# must not."
   }
 
   # §41.4: "3 new campaigns match" comes from a MODIFY of CRFIND (the look only updates it, never creates it). The

@@ -4,9 +4,11 @@ The event source mapping only delivers ``JOB#``, ``CLIP#``, ``POST#``, ``LEARNIN
 ``SETUP#``, ``FOLLOW#`` (§24), ``JOBLIVE#`` (§31, the live status line, ``{type: "jobLive"}``) and the Content Rewards
 items ``CAMPAIGN#``, ``CRCONN``, ``CRSUB#``, ``CRMONEY`` (§38.11) and ``CRFIND`` (§41.5, ``id: "finder"``), each
 ``{type: "contentrewards", partial: true}``, and the Get paid items ``GETPAID``, ``PAYCONN#``, ``PAYSTATE#``,
-``PAYOUT#`` (§40.7, ``{type: "getpaid", id: "getpaid", partial: true}``) items (``ACCOUNT#`` and ``SETUP#`` become
-``{type: "setup", op: "upsert", id: platform, partial: true}``, §17.4). Per batch the last record per item wins (job
-heartbeats coalesce); each becomes one ``LiveEvent`` (Get paid's are all the same message, so it goes once per owner),
+``PAYOUT#`` (§40.7, ``{type: "getpaid", id: "getpaid", partial: true}``) items and Your bank's ``BANKCONN``,
+``BANKLINK#``, ``DEPOSIT#`` and ``BANKPAYERS`` (§40.5.11, ``{type: "bank", id: "bank", partial: true}``) (``ACCOUNT#``
+and ``SETUP#`` become ``{type: "setup", op: "upsert", id: platform, partial: true}``, §17.4). Per batch the last record
+per item wins (job heartbeats coalesce); each becomes one ``LiveEvent`` (Get paid's are all the same message, and so
+are Your bank's, so each goes once per owner),
 built by the same public-shape functions the HTTP API uses, so internal fields never leave. An event over 24 KB is sent as ``partial: true`` (the
 web refetches). Closed connections (410 Gone) are deleted; other send errors are logged and skipped. Only a
 failed connections query reports records as batch item failures, so Lambda retries just those.
@@ -48,7 +50,15 @@ TYPES = {
     "PAYCONN#": "getpaid",
     "PAYSTATE#": "getpaid",
     "PAYOUT#": "getpaid",
+    # §40.5.11: Your bank. Partial only: the web refetches GET /v1/getpaid/bank, so no link, deposit, payer key or
+    # lease ever rides along.
+    "BANKCONN": "bank",
+    "BANKLINK#": "bank",
+    "DEPOSIT#": "bank",
+    "BANKPAYERS": "bank",
 }
+# Kinds whose every item makes the same partial message: a batch sends each once per owner.
+FOLDED = {"getpaid": "getpaid", "bank": "bank"}
 CR_IDS = {"CAMPAIGN#": "campaign:", "CRSUB#": "submission:"}
 # Setup changes carry no item: the web refetches GET /v1/setup (§17.4), so keys, hints and tokens never ride along.
 PARTIAL_ONLY = frozenset({"setup"})
@@ -134,8 +144,8 @@ def message_for(record: Mapping[str, Any], deserialize: Callable[[Mapping[str, A
     data = record.get("dynamodb") or {}
     if kind == "contentrewards":
         return _content_rewards(key[1], record)
-    if kind == "getpaid":
-        return {"type": "getpaid", "op": "upsert", "id": "getpaid", "partial": True}
+    if kind in FOLDED:
+        return {"type": kind, "op": "upsert", "id": FOLDED[kind], "partial": True}
     if kind in PARTIAL_ONLY:
         return {"type": kind, "op": "upsert", "id": item_id.split("#", 1)[0], "partial": True}
     if record.get("eventName") == "REMOVE":
@@ -197,18 +207,18 @@ def collect(records: list[Mapping[str, Any]], deserialize: Callable[[Mapping[str
 
 
 def _one_getpaid(changes: list[Change]) -> list[Change]:
-    """Every Get paid item makes the same partial message, so a batch sends it once per owner (a first read can write
-    dozens of ``PAYOUT#`` rows). The kept one carries every folded record's sequence numbers, so a failed send still
-    retries them all."""
+    """Every Get paid item makes the same partial message, and so does every Your bank item, so a batch sends each
+    kind once per owner (a first read can write dozens of ``PAYOUT#`` or ``DEPOSIT#`` rows). The kept one carries every
+    folded record's sequence numbers, so a failed send still retries them all."""
     out: list[Change] = []
-    kept: dict[str, int] = {}
+    kept: dict[tuple[str, str], int] = {}
     for change in changes:
-        if change.kind != "getpaid":
+        if change.kind not in FOLDED:
             out.append(change)
             continue
-        at = kept.get(change.user_id)
+        at = kept.get((change.user_id, change.kind))
         if at is None:
-            kept[change.user_id] = len(out)
+            kept[(change.user_id, change.kind)] = len(out)
             out.append(change)
         else:
             first = out[at]
