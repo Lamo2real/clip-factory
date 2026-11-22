@@ -180,6 +180,7 @@ describe("where the owner is, and StoriesApp's chunk", () => {
   });
 
   it("a Lamo Stories page is on screen only at /stories… and only while Lamo Stories is switched on", () => {
+    localStorage.setItem("cf.storiesPreview", "0");
     history.replaceState(null, "", "/stories/ideas");
     expect(storiesOnScreen()).toBe(false);
     localStorage.setItem("cf.storiesPreview", "1");
@@ -191,6 +192,7 @@ describe("where the owner is, and StoriesApp's chunk", () => {
   });
 
   it("Lamo Stories is behind Clip Factory only while it is switched on and a Clip Factory page is on screen", () => {
+    localStorage.setItem("cf.storiesPreview", "0");
     history.replaceState(null, "", "/jobs");
     expect(storiesBehind()).toBe(false);
     localStorage.setItem("cf.storiesPreview", "1");
@@ -216,6 +218,7 @@ describe("where the owner is, and StoriesApp's chunk", () => {
   });
 
   it("fetches the chunk once while idle, and never while Lamo Stories is switched off", async () => {
+    localStorage.setItem("cf.storiesPreview", "0");
     vi.useFakeTimers();
     prefetchStoriesApp();
     await vi.runAllTimersAsync();
