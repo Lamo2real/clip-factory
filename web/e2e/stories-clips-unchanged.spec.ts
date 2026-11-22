@@ -146,6 +146,7 @@ test.describe("with Lamo Stories switched off", () => {
 
   test("the page tree is as before: the shell right under #root, no pane, and Lamo Stories' code is never fetched", async ({ browser }) => {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await ctx.addInitScript(() => localStorage.setItem("cf.storiesPreview", "0"));
     const page = await ctx.newPage();
     const fetched: string[] = [];
     page.on("request", (r) => {
@@ -164,6 +165,7 @@ test.describe("with Lamo Stories switched off", () => {
 
   test("opening / never jumps to Lamo Stories, whatever was stored", async ({ browser }) => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.addInitScript(() => localStorage.setItem("cf.storiesPreview", "0"));
     await ctx.addInitScript(() =>
       localStorage.setItem("cf.workspace", JSON.stringify({ workspaceId: "stories", lastStoriesWorkspaceId: "stories", lastClipsPath: "/jobs", lastStoriesPath: "/stories/ideas" })),
     );
