@@ -29,15 +29,39 @@ export interface StoriesConfig {
   captionsOn: boolean;
   musicOn: boolean;
   providers: { images: "builtin-rig" | "nova-canvas"; video: "builtin-2d" | "nova-reel"; audio: "builtin-synth" };
-  /** CRF: standard 23, high 20, best 17; 30 fps is the built-in animator's only rate */
-  video: { resolution: "1080x1920"; aspect: "9:16"; quality: "standard" | "high" | "best"; fps: 30 };
-  production: { burnCaptions: boolean; scenesAtOnce: 1 | 2 | 3; keepVersions: "all" | number };
+  /** CRF: standard 23, high 20, best 17; the resolution matches the aspect (§45.34); 30 fps is the only rate */
+  video: { resolution: VideoResolution; aspect: VideoAspect; quality: "standard" | "high" | "best"; fps: 30 };
+  production: {
+    burnCaptions: boolean;
+    scenesAtOnce: 1 | 2 | 3;
+    keepVersions: "all" | number;
+    /** §45.34; missing on a workspace saved before them, which means "all" */
+    keepReferences?: KeepReferences;
+    /** §45.34; missing means "all" */
+    keepChatPictures?: KeepChatPictures;
+    /** §45.34: made besides the MP4 after assembly; missing means none */
+    extraFormats?: ExtraFormat[];
+  };
   /** Film & Animation, Autos & Vehicles, Comedy, Entertainment, Education (default "27") */
   youtubeCategory: "1" | "2" | "23" | "24" | "27";
   youtubePrivacy: "public" | "unlisted" | "private";
   /** only with Lamo Stories' own X app */
   xMonthlyLimitUsd: number | null;
 }
+
+/** A video's shape and its sizes (§45.34): 9:16 stays the default, the one Shorts, Reels and TikTok want. */
+export type VideoAspect = "9:16" | "1:1" | "16:9";
+export type VideoResolution = "1080x1920" | "720x1280" | "1080x1080" | "720x720" | "1920x1080" | "1280x720";
+export const RESOLUTIONS: Record<VideoAspect, VideoResolution[]> = {
+  "9:16": ["1080x1920", "720x1280"],
+  "1:1": ["1080x1080", "720x720"],
+  "16:9": ["1920x1080", "1280x720"],
+};
+/** How long reference videos and chat pictures are kept (§45.34); study_only keeps a reference's study, not its file. */
+export type KeepReferences = "all" | "study_only" | "days_30" | "days_90";
+export type KeepChatPictures = "all" | "days_30" | "days_90";
+/** Files made besides the MP4 (H.264, AAC), which posting needs: WebM (VP9, Opus) and MOV (ProRes 422 Proxy, PCM). */
+export type ExtraFormat = "webm" | "mov";
 
 /** Reasoning effort (CONTRACTS §45.25); each model offers only some levels. */
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
@@ -65,7 +89,32 @@ export interface Price {
   currency: string;
   source: "anthropic_list" | "aws_price_list" | "owner";
   note: string;
+  /** a picture or video maker's price for one unit (§45.34), with inputPer1M and outputPer1M 0; null for models */
+  perUnit?: number | null;
+  unit?: "image" | "second" | null;
 }
+
+/** What a PUT …/ai says the owner picked on purpose (§45.34), stamped on AICONFIG.pickedAt for setup steps 1 to 3. */
+export type AiPicked = "environment" | "model" | "effort";
+
+/** A reasoning model on Amazon Bedrock the owner added himself (§45.34), saved by PUT …/ai/models/{key}. */
+export interface ModelDef {
+  label: string;
+  /** who makes it, e.g. "Anthropic", "Amazon", "Meta", "Mistral" */
+  provider: string;
+  /** a Bedrock model id, inference profile id or ARN */
+  modelId: string;
+  region: string;
+  /** the efforts it accepts; may be empty (then it runs at its own level) */
+  efforts: Effort[];
+  defaultEffort: Effort | null;
+  vision: boolean;
+  maxOutputTokens: number;
+  price: Price | null;
+}
+/** A custom model's key: `custom-` and up to 40 small letters, digits and dashes; never a bundled key; at most 20. */
+export const CUSTOM_MODEL_KEY = /^custom-[a-z0-9-]{1,40}$/;
+export const MAX_CUSTOM_MODELS = 20;
 
 export interface StoriesAiConfig {
   defaultModel: string;
@@ -108,6 +157,11 @@ export interface ModelInfo {
   statusLine: string;
   checkedAt: string | null;
   price: Price | null;
+  /** added by the owner in Settings › AI (§45.34); missing from an API older than that means false */
+  custom?: boolean;
+  /** a custom model's own Region and output limit, so Edit starts from them (contractIssues) */
+  region?: string;
+  maxOutputTokens?: number;
 }
 
 export type AgentId = "creative_director" | "video_analysis" | "storyboard" | "character" | "quality_assurance";
@@ -243,14 +297,33 @@ export interface Onboarding {
 }
 
 export interface UsageSummary {
-  days: { day: string; byModel: { model: string; input: number; output: number; cost: number | null; currency: string | null }[] }[];
+  days: {
+    day: string;
+    byModel: { model: string; input: number; output: number; cost: number | null; currency: string | null }[];
+    /** §45.34 */
+    renderMinutes?: number;
+    byProvider?: ProviderUsage[];
+  }[];
   totals: { model: string; input: number; output: number; cost: number | null; currency: string | null }[];
   renderMinutes: number;
+  /** §45.34 */
+  totalsByProvider?: ProviderUsage[];
+}
+
+/** A picture or video maker's use (§45.34): built-in render seconds are `builtin-rig`, free (cost 0, currency null). */
+export interface ProviderUsage {
+  provider: string;
+  units: number;
+  unit: "image" | "second";
+  cost: number | null;
+  currency: string | null;
 }
 
 export interface StorageSummary {
   bytes: { videos: number; scenes: number; audio: number; references: number; skills: number; other: number };
   files: number;
+  /** §45.34: "Lamo Stories' own folder in Clip Factory's media storage" */
+  location?: { region: string; folder: string };
 }
 
 export interface KeyCheck {
@@ -258,6 +331,8 @@ export interface KeyCheck {
   ok: boolean;
   code: string;
   message: string;
+  /** §45.34: whether Lamo Stories' own sign-in to the account still works with these keys */
+  account?: "ok" | "dead" | "none";
 }
 
 export interface Workspace {
@@ -547,6 +622,8 @@ export interface ProviderStatus {
   line: string;
   checkedAt?: string;
   lastError?: string;
+  /** present only for a provider that takes a key (§45.34); the key itself never comes back */
+  key?: { saved: boolean; hint: string | null; savedAt: string | null } | null;
 }
 
 export interface GuidanceTopic {
@@ -573,7 +650,8 @@ export interface SocialAccount {
   sharedWithClips: boolean;
   connectedAt: string | null;
   missing: string[];
-  reason: string | null;
+  /** a code (§45.34), said in words by the page */
+  reason: SocialReason | null;
   reconnectBy: string | null;
   choices: { id: string; name: string; avatarUrl?: string; usedByClips: boolean }[] | null;
   /** plain sentences: this platform's rules for a second account */
@@ -581,6 +659,9 @@ export interface SocialAccount {
   /** e.g. "Lamo Clips may have lost Facebook. …" */
   warning: string | null;
 }
+
+/** Why an account needs the owner (§45.34): a code, never a sentence. */
+export type SocialReason = "keys_changed" | "token_dead" | "expired" | "expires_soon" | "missing_permissions" | "clips_unknown";
 
 export interface ClipsDestination {
   platform: Platform;
@@ -751,7 +832,12 @@ export interface StoriesApi {
   deleteSocialApp(ws: string, platform: Platform): Promise<void>;
 
   getAi(ws: string): Promise<{ ai: StoriesAiConfig; models: ModelInfo[]; agents: Agent[]; tasks: TaskInfo[] }>;
-  putAi(ws: string, ai: StoriesAiConfig): Promise<StoriesAiConfig>;
+  /** picked: what the owner chose on purpose (setup steps 1 to 3, §45.34) */
+  putAi(ws: string, ai: StoriesAiConfig & { picked?: AiPicked[] }): Promise<StoriesAiConfig>;
+  /** add or change a model the owner added (§45.34) */
+  putAiModel(ws: string, key: string, def: ModelDef): Promise<ModelInfo>;
+  /** 409 with the setting's name while a saved setting uses it */
+  deleteAiModel(ws: string, key: string): Promise<void>;
   checkModels(ws: string, models?: string[]): Promise<AiTask>;
   setModelPrice(ws: string, modelKey: string, price: { inputPer1M: number; outputPer1M: number; currency: string } | null): Promise<ModelInfo>;
   usage(ws: string, days?: number): Promise<UsageSummary>;
@@ -797,6 +883,8 @@ export interface StoriesApi {
   setProviderKey(ws: string, providerId: string, key: string): Promise<ProviderStatus>;
   deleteProviderKey(ws: string, providerId: string): Promise<void>;
   storage(ws: string): Promise<StorageSummary>;
+  /** applies keepReferences, keepChatPictures and keepVersions now (§45.34) */
+  storageCleanup(ws: string): Promise<{ removed: { files: number; bytes: number } }>;
 
   publish(ws: string, storyId: string, targets: PublishTarget[]): Promise<PublishingJob[]>;
   listPublishing(ws: string, storyId?: string): Promise<PublishingJob[]>;

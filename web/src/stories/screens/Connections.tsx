@@ -9,7 +9,11 @@
 // (its keys pasted here, with Check it and Lamo Stories' own redirect URI to copy) or, for YouTube, TikTok and X only,
 // Clip Factory's app on purpose. Facebook and Instagram always use Lamo Stories' own Meta app, whose keys are entered
 // once for both. Nothing is ever chosen silently, and the keys never come back from the server (masked hints only).
-// Disconnect never revokes anything at the platform (§45.13.6): the page says where to remove the app by hand.
+// Disconnect never revokes anything at the platform (§45.13.6): the page says where to remove the app by hand, in
+// words that follow the app chosen (§45.34). Both Meta cards show both redirect URIs (Instagram's and Facebook's),
+// also once the keys are saved. After a connect the page says "Connected as {name} ({handle})" and the card asks "Is
+// this your Lamo Stories {place}?" (Yes, or Pick another). An account's reason is a code (SocialReason), said in words.
+import "../styles/social.css";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { KeyName } from "../../api/types.ts";
@@ -61,8 +65,23 @@ export function beforeConnect(p: Platform, choice: SocialAccount["app"]["choice"
   }
 }
 
+/** After a Disconnect with Clip Factory's app (shared on purpose): removing that app would touch Lamo Clips too. */
 export const AFTER_DISCONNECT =
   "To remove Clip Factory from this account completely, remove the app in the account's own settings. Only do that if Lamo Clips does not use the same account.";
+/** After a Disconnect with Lamo Stories' own developer app (always for Facebook and Instagram, §45.34). */
+export const AFTER_DISCONNECT_OWN =
+  "To remove Lamo Stories completely, remove your Lamo Stories app in the account's own settings. Lamo Clips is not affected.";
+
+/** The after-disconnect line for the app the account used (§45.34). */
+export function afterDisconnect(choice: SocialAccount["app"]["choice"]): string {
+  return choice === "own" ? AFTER_DISCONNECT_OWN : AFTER_DISCONNECT;
+}
+
+/** "Connected as Lamo Stories (@lamo.stories)": the account's name, and its handle when it says more. */
+export function connectedAsSentence(a: Pick<SocialAccount, "accountName" | "handle">): string {
+  const name = a.accountName ?? a.handle ?? "your account";
+  return a.handle && a.handle !== name ? `Connected as ${name} (${a.handle})` : `Connected as ${name}`;
+}
 
 const STATUS: Record<SocialAccount["connectionStatus"], { label: string; tone: StTone; auth: string }> = {
   connected: { label: "Connected", tone: "mint", auth: "Allowed: Lamo Stories may post here." },
@@ -172,13 +191,13 @@ const OWN_APP_NOTES: Record<Platform, string[]> = {
   ],
   instagram: [
     "Make one new Meta app for Lamo Stories. It serves Instagram and Facebook: its keys are entered once.",
-    "Add the redirect URI below in Facebook Login, and make a Login configuration (its ID goes in the last box).",
+    "Add both redirect URIs below in Facebook Login › Valid OAuth Redirect URIs, and make a Login configuration (its ID goes in the last box).",
     "While the app is in Development mode only you can connect. Going Live needs Meta's App Review.",
     PASTE_HERE,
   ],
   facebook: [
     "Make one new Meta app for Lamo Stories. It serves Instagram and Facebook: its keys are entered once.",
-    "Add the redirect URI below in Facebook Login, and make a Login configuration (its ID goes in the last box).",
+    "Add both redirect URIs below in Facebook Login › Valid OAuth Redirect URIs, and make a Login configuration (its ID goes in the last box).",
     "While the app is in Development mode only you can connect. Going Live needs Meta's App Review.",
     PASTE_HERE,
   ],
@@ -219,7 +238,7 @@ function Identity({ a }: { a: SocialAccount }) {
 }
 
 /** A box of text with a Copy button (the redirect URI). */
-function CopyLine({ label, value }: { label: string; value: string }) {
+function CopyLine({ label, value, copyLabel }: { label: string; value: string; copyLabel?: string }) {
   const toast = useToast();
   const [copied, setCopied] = useState(false);
   return (
@@ -228,7 +247,7 @@ function CopyLine({ label, value }: { label: string; value: string }) {
       <code className="st-copy__value">{value}</code>
       <StButton
         className="st-copy__btn"
-        aria-label={`Copy the ${label.toLowerCase()}`}
+        aria-label={copyLabel ?? `Copy the ${label.toLowerCase()}`}
         onClick={async () => {
           try {
             await navigator.clipboard.writeText(value);
@@ -247,12 +266,27 @@ function CopyLine({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * The redirect URIs to add in the developer app: the platform's own, or, on a Meta card, both Instagram's and
+ * Facebook's (one Meta app serves both, and Meta only returns to an address it was given, §45.34).
+ */
+function RedirectLines({ p }: { p: Platform }) {
+  if (!isMeta(p)) return <CopyLine label="Redirect URI" value={storiesRedirectUri(p)} />;
+  return (
+    <div className="st-redirects" role="group" aria-label="Both redirect URIs for the Meta app">
+      <CopyLine label="Instagram's redirect URI" copyLabel="Copy Instagram's redirect URI" value={storiesRedirectUri("instagram")} />
+      <CopyLine label="Facebook's redirect URI" copyLabel="Copy Facebook's redirect URI" value={storiesRedirectUri("facebook")} />
+    </div>
+  );
+}
+
 function CheckLine({ check }: { check: KeyCheck | undefined }) {
   if (!check) return null;
   return (
     <p className={`st-note ${check.ok ? "st-note--mint" : "st-note--coral"}`} role="status">
       <StIcon name={check.ok ? "check" : "alert"} size={18} />
       {check.message}
+      {check.ok && check.account === "dead" ? " But Lamo Stories' sign-in to the account stopped working: tap Reconnect." : ""}
       <span className="st-note__when"> Checked {relative(check.at)}.</span>
     </p>
   );
@@ -412,6 +446,16 @@ function AppPart({
             )}
           </p>
           {choice === "own" ? <CheckLine check={a.app.check} /> : null}
+          {choice === "own" ? (
+            <div className="st-app__uris">
+              <p className="st-app__uris-note">
+                {isMeta(p)
+                  ? "Your Meta app needs both of these in Facebook Login › Valid OAuth Redirect URIs, so Instagram and Facebook can each come back here."
+                  : `Your ${name} app needs this redirect URI.`}
+              </p>
+              <RedirectLines p={p} />
+            </div>
+          ) : null}
           {sure === "remove" ? (
             <div className="st-sure" role="group" aria-label="Are you sure?">
               <p className="st-sure__ask">
@@ -522,7 +566,7 @@ function AppPart({
                   <li key={n}>{n}</li>
                 ))}
               </ul>
-              <CopyLine label="Redirect URI" value={storiesRedirectUri(p)} />
+              <RedirectLines p={p} />
               <div className="st-app__guide">
                 <p>Every other step is the same as in Clip Factory's own guide. It opens in Clip Factory: come back here with the switcher.</p>
                 <p className="st-note st-note--coral st-app__keys-here" role="note">
@@ -552,6 +596,32 @@ function AppPart({
 
 type Ask = { kind: "share" } | { kind: "disconnect" } | null;
 
+/** After a connect: "Is this your Lamo Stories {place}?" with Yes and Pick another (§45.34). */
+function IntendedAsk({ a, busy, onYes, onAnother }: { a: SocialAccount; busy: boolean; onYes: (el: HTMLElement) => void; onAnother: () => void }) {
+  const place = PLACE[a.platform];
+  return (
+    <div className="st-intended" role="group" aria-label={`Is this your Lamo Stories ${place}?`}>
+      <p className="st-intended__said" role="status">
+        <StIcon name="check" size={18} />
+        {connectedAsSentence(a)}.
+      </p>
+      <p className="st-intended__ask">
+        <strong>Is this your Lamo Stories {place}?</strong> Lamo Stories posts only here, never to Clip Factory's.
+      </p>
+      <div className="st-sure__buttons">
+        <StButton main disabled={busy} onClick={(e) => onYes(e.currentTarget)}>
+          <StIcon name="check" size={18} />
+          Yes, that's it
+        </StButton>
+        <StButton disabled={busy} onClick={onAnother}>
+          <StIcon name="retry" size={18} />
+          Pick another {place}
+        </StButton>
+      </div>
+    </div>
+  );
+}
+
 /** One platform's card. Also used by the setup's connect steps (§45.29). */
 export function PlatformCard({
   ws,
@@ -560,17 +630,25 @@ export function PlatformCard({
   clips,
   onChanged,
   onDisconnected,
+  askIntended = false,
+  onAnswered,
 }: {
   ws: string;
   a: SocialAccount;
   all: SocialAccount[];
   clips: ClipsDestination | undefined;
   onChanged: () => Promise<void>;
-  onDisconnected: (p: Platform) => void;
+  /** with the developer app the account used, so the after-disconnect line fits it (§45.34) */
+  onDisconnected: (p: Platform, choice: SocialAccount["app"]["choice"]) => void;
+  /** just connected: ask whether this is the intended account */
+  askIntended?: boolean;
+  onAnswered?: () => void;
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState<Busy>(null);
   const [ask, setAsk] = useState<Ask>(null);
+  // Connected by picking from the list: the same "Is this your Lamo Stories {place}?" as after a sign-in (§45.34).
+  const [picked, setPicked] = useState(false);
   const p = a.platform;
   const name = PLATFORM_NAME[p];
   const status = STATUS[a.connectionStatus];
@@ -626,6 +704,9 @@ export function PlatformCard({
         ? `Pick another ${PLACE[p]}`
         : "Reconnect";
   const reasonText = a.connectionStatus === "needs_reconnect" ? reasonSentence(a.reason, p) : null;
+  // Any other code is said in words too (the two with their own lines below excepted); the server's warning, when
+  // there is one, already says it.
+  const otherReason = a.reason && a.connectionStatus !== "needs_reconnect" && a.reason !== "expires_soon" && a.reason !== "expired" && !a.warning ? reasonSentence(a.reason, p) : null;
 
   return (
     <li className={`st-conn st-conn--${a.connectionStatus}`} data-platform={p}>
@@ -686,6 +767,12 @@ export function PlatformCard({
           {a.warning}
         </p>
       ) : null}
+      {otherReason ? (
+        <p className="st-note st-note--sun" role="note">
+          <StIcon name="alert" size={18} />
+          {otherReason}
+        </p>
+      ) : null}
       {a.missing.length ? (
         <p className="st-note st-note--sun">
           <StIcon name="alert" size={18} />
@@ -710,6 +797,8 @@ export function PlatformCard({
                     void run("choose", () => storiesApi().chooseSocial(ws, p, c.id), {
                       text: c.usedByClips ? `${c.name} is Clip Factory's own. Check the card below.` : `Lamo Stories posts to ${c.name} now.`,
                       cheer: c.usedByClips ? undefined : el,
+                    }).then((ok) => {
+                      if (ok && !c.usedByClips) setPicked(true);
                     });
                   }}
                 >
@@ -736,7 +825,23 @@ export function PlatformCard({
         </p>
       ) : null}
 
-      {ask ? (
+      {(askIntended || picked) && connected && !ask ? (
+        <IntendedAsk
+          a={a}
+          busy={busy !== null}
+          onYes={(el) => {
+            celebrate(centerOf(el));
+            toast.success(`Great! Lamo Stories posts to ${a.accountName ?? a.handle ?? name} on ${name}.`);
+            setPicked(false);
+            onAnswered?.();
+          }}
+          onAnother={() => {
+            setPicked(false);
+            onAnswered?.();
+            void connect();
+          }}
+        />
+      ) : ask ? (
         <div className="st-sure" role="group" aria-label="Are you sure?">
           <p className="st-sure__ask">
             <strong>Are you sure?</strong>{" "}
@@ -767,7 +872,7 @@ export function PlatformCard({
                     "disconnect",
                     async () => {
                       await storiesApi().disconnectSocial(ws, p);
-                      onDisconnected(p);
+                      onDisconnected(p, a.app.choice);
                     },
                     { text: `${name} is disconnected from Lamo Stories.` },
                   )
@@ -873,29 +978,60 @@ export function useSocial(ws: string) {
 export function ConnectionsScreen({ ws, page }: StoriesScreenProps) {
   const toast = useToast();
   const social = useSocial(ws);
-  const reload = social.reload;
-  const [gone, setGone] = useState<Platform | null>(null);
+  const { reload, setData } = social;
+  const [gone, setGone] = useState<{ platform: Platform; choice: SocialAccount["app"]["choice"] } | null>(null);
+  // The platform just connected: its card asks whether this is the intended account (§45.34).
+  const [asking, setAsking] = useState<Platform | null>(null);
   const shown = useRef<string | null>(null);
   const result = page.name === "connections" ? page.result : null;
   const platform = page.name === "connections" ? page.platform : null;
 
-  // The callback's result, once, then the address goes back to plain Social accounts (a reload never repeats it).
+  // The callback's result, once, then the address goes back to plain Social accounts (a reload never repeats it). A
+  // connect is said with the account it connected ("Connected as {name} ({handle})"), read fresh from the server.
   useEffect(() => {
-    if (!result || !isPlatform(platform)) return;
+    // Back on plain Social accounts: the next landing (a second Connect from this page) is shown again.
+    if (!result || !isPlatform(platform)) {
+      shown.current = null;
+      return;
+    }
     const key = `${platform}|${result}`;
     if (shown.current === key) return;
     shown.current = key;
     const { text, good } = resultSentence(result, platform);
-    if (good) {
-      toast.success(text);
+    const cheerUp = () => {
       celebrate(undefined, false);
       storiesSound("success", { onNextTap: true });
-    } else toast.error(text);
-    void reload();
+    };
+    if (result === "connected" || result === "clips_meta_check") {
+      // Both are a connect (clips_meta_check also warns about Lamo Clips' own Meta connection): the card asks.
+      const said = () => (good ? toast.success(text) : toast.error(text));
+      void storiesApi()
+        .social(ws)
+        .then((fresh) => {
+          setData(() => fresh);
+          const a = fresh.accounts.find((x) => x.platform === platform);
+          if (a && a.connectionStatus === "connected" && (a.accountName || a.handle)) {
+            if (good) toast.success(`${connectedAsSentence(a)}.`);
+            else said();
+            setAsking(platform);
+          } else said();
+          if (good) cheerUp();
+        })
+        .catch(() => {
+          said();
+          void reload();
+        });
+    } else {
+      if (good) {
+        toast.success(text);
+        cheerUp();
+      } else toast.error(text);
+      void reload();
+    }
     void refreshDashboard(ws).catch(() => undefined);
     void refreshOnboarding(ws).catch(() => undefined);
     navigate("/stories/connections", { replace: true });
-  }, [result, platform, toast, reload, ws]);
+  }, [result, platform, toast, reload, setData, ws]);
 
   return (
     <section className="st-page st-connections">
@@ -904,15 +1040,7 @@ export function ConnectionsScreen({ ws, page }: StoriesScreenProps) {
         lede="Lamo Stories posts only to the accounts you connect here. They are separate from Clip Factory's accounts, which stay as they are."
       />
       <SetupBack ws={ws} />
-      {gone ? (
-        <p className="st-note st-note--sky st-note--wide" role="status">
-          <StIcon name="bulb" size={18} />
-          {AFTER_DISCONNECT}
-          <button type="button" className="st-note__close" aria-label="Hide this note" onClick={() => setGone(null)}>
-            <StIcon name="close" size={18} />
-          </button>
-        </p>
-      ) : null}
+      {gone ? <DisconnectedNote choice={gone.choice} onClose={() => setGone(null)} /> : null}
       {social.error && !social.data ? (
         <StError message={social.error} onRetry={() => void social.reload()} />
       ) : !social.data ? (
@@ -927,7 +1055,9 @@ export function ConnectionsScreen({ ws, page }: StoriesScreenProps) {
               all={social.data!.accounts}
               clips={social.data!.clips.find((c) => c.platform === a.platform)}
               onChanged={social.reload}
-              onDisconnected={(p) => setGone(p)}
+              onDisconnected={(p, choice) => setGone({ platform: p, choice })}
+              askIntended={asking === a.platform}
+              onAnswered={() => setAsking(null)}
             />
           ))}
         </ul>
@@ -936,12 +1066,12 @@ export function ConnectionsScreen({ ws, page }: StoriesScreenProps) {
   );
 }
 
-/** For the setup's connect steps: the note shown after a Disconnect, like this page's. */
-export function DisconnectedNote({ onClose }: { onClose: () => void }): ReactNode {
+/** The note shown after a Disconnect (this page and the setup's connect steps), for the app the account used. */
+export function DisconnectedNote({ choice, onClose }: { choice: SocialAccount["app"]["choice"]; onClose: () => void }): ReactNode {
   return (
     <p className="st-note st-note--sky st-note--wide" role="status">
       <StIcon name="bulb" size={18} />
-      {AFTER_DISCONNECT}
+      {afterDisconnect(choice)}
       <button type="button" className="st-note__close" aria-label="Hide this note" onClick={onClose}>
         <StIcon name="close" size={18} />
       </button>

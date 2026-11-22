@@ -536,23 +536,23 @@ describe("Video", () => {
     expect(card("Picture maker").querySelector("[role=status]")?.textContent).toContain("Make one portrait to check it works.");
   });
 
-  it("takes the owner's price for the AI makers, kept in the AI settings as a price for a million units", async () => {
+  it("takes the owner's price for the AI makers, kept in the AI settings as a price for one unit (§45.34)", async () => {
     await open("video");
     const makerPrices = () => $<HTMLElement>('[aria-label="Each maker\'s price"]')!;
     const reel = byText(".st-stg-price", /Amazon Nova Reel/, makerPrices());
     expect(reel.textContent).toContain("No price set.");
     expect(byText(".st-stg-price", /Amazon Nova Canvas/, makerPrices()).textContent).toContain("No price set.");
     await click(byText("button", "Type a price", reel));
-    setValue(reel.querySelector("input")!, "0.5");
+    setValue(reel.querySelector("input")!, "a lot");
     await act(async () => reel.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
     await settle(4);
     expect(called("putAi")).toHaveLength(0);
-    expect(document.body.textContent).toContain("from 0 to 0.10");
+    expect(document.body.textContent).toContain("Type the price for a second of video as a number, like 0.08.");
     setValue(reel.querySelector("input")!, "0.08");
     await act(async () => reel.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
     await settle(8);
-    expect(called("putAi").at(-1)?.args[1]).toMatchObject({ prices: { "nova-reel": { inputPer1M: 80_000, outputPer1M: 0, currency: "USD", source: "owner" } }, version: 0 });
-    expect(store.ai?.prices["nova-reel"]?.inputPer1M).toBe(80_000);
+    expect(called("putAi").at(-1)?.args[1]).toMatchObject({ prices: { "nova-reel": { perUnit: 0.08, unit: "second", inputPer1M: 0, outputPer1M: 0, currency: "USD", source: "owner" } }, version: 0 });
+    expect(store.ai?.prices["nova-reel"]).toMatchObject({ perUnit: 0.08, unit: "second" });
     const after = byText(".st-stg-price", /Amazon Nova Reel/, makerPrices());
     expect(after.textContent).toContain("Your price");
     expect(after.textContent).toMatch(/\$0\.08 for a second of video/);
@@ -562,19 +562,37 @@ describe("Video", () => {
     expect(byText(".st-stg-price", /Amazon Nova Reel/, makerPrices()).textContent).toContain("No price set.");
   });
 
-  it("shows 1080 × 1920, 9:16 with the other shapes not yet offered, 30 fps, and saves quality and length", async () => {
+  it("picks the shape and its size: 9:16, 1:1 and 16:9 with their own sizes; 30 fps; saves quality and length (§45.34)", async () => {
     await open("video");
-    expect(host.textContent).toContain("1080 × 1920, the built-in animator's only size");
-    expect(host.textContent).toContain("30 fps, the built-in animator's only rate");
     const shapes = $$("[role=radio]", group("Shape of the video"));
     expect(shapes.map((s) => [s.querySelector(".st-stg-pick__label")?.textContent, s.getAttribute("aria-disabled")])).toEqual([
       ["9:16 tall", null],
-      ["1:1 square", "true"],
-      ["16:9 wide", "true"],
+      ["1:1 square", null],
+      ["16:9 wide", null],
     ]);
-    expect(shapes[1]!.textContent).toContain("Not with the built-in animator yet");
+    expect(shapes[0]!.textContent).toContain("For Shorts, Reels and TikTok");
+    expect(card("Shape and size").textContent).toContain("Shorts, Reels and TikTok want 9:16.");
+    const sizes = () => $$("[role=radio]", group("Size of the video")).map((r) => r.querySelector(".st-stg-pick__label")?.textContent);
+    expect(sizes()).toEqual(["1080 × 1920", "720 × 1280"]);
+    expect(host.textContent).toContain("30 frames a second (30 fps)");
+    expect(host.textContent).not.toContain("the built-in animator's only size");
+
+    await click(byText("[role=radio]", /1:1 square/));
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { video: { aspect: "1:1", resolution: "1080x1080", quality: "high", fps: 30 } }, version: 3 });
+    expect(sizes()).toEqual(["1080 × 1080", "720 × 720"]);
+    expect(card("Shape and size").querySelector("[role=status]")?.textContent).toBe("Shorts, Reels and TikTok want 9:16. A square video shows smaller there, with bars around it.");
+    await click(byText("[role=radio]", /720 × 720/));
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { video: { aspect: "1:1", resolution: "720x720" } } });
+    // A new shape keeps the sharpness picked: the smaller size stays small.
+    await click(byText("[role=radio]", /16:9 wide/));
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { video: { aspect: "16:9", resolution: "1280x720" } } });
+    expect(sizes()).toEqual(["1920 × 1080", "1280 × 720"]);
+    await click(byText("[role=radio]", /9:16 tall/));
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { video: { aspect: "9:16", resolution: "720x1280" } } });
+    expect(card("Shape and size").querySelector("[role=status]")).toBeNull();
+
     await click(byText("[role=radio]", /^Best/));
-    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { video: { quality: "best", resolution: "1080x1920", aspect: "9:16", fps: 30 } } });
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { video: { quality: "best", resolution: "720x1280", aspect: "9:16", fps: 30 } } });
     await click($('[aria-label="5 seconds longer"]')!);
     expect($(".st-stg-length__value strong")?.textContent).toBe("50");
     expect(called("patchWorkspace").at(-1)?.args[1]).not.toMatchObject({ configuration: { defaultDurationSec: 50 } });
@@ -582,6 +600,61 @@ describe("Video", () => {
     await settle();
     expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { defaultDurationSec: 50 } });
     expect(host.textContent).toContain("Best length");
+  });
+
+  it("shows render minutes per day and each maker's units and cost, by name; No price yet opens that maker's price (§45.34)", async () => {
+    await open("video");
+    const use = card("Use and costs, last 30 days");
+    expect(use.querySelectorAll(".st-stg-chart__day")).toHaveLength(30);
+    expect(use.querySelector(".st-stg-chart")?.getAttribute("aria-label")).toMatch(/^Minutes of video made each day for the last 30 days\. The busiest day was .+, with [\d.]+ minutes?\.$/);
+    expect(use.querySelector(".st-stg-active")?.textContent).toMatch(/Rendering, last 30 days[\d.]+ minutes/);
+    const builtin = byText(".st-stg-usage__row", /Built-in animator/, use);
+    expect(builtin.textContent).toMatch(/minutes of rendering|seconds of rendering/);
+    expect(builtin.textContent).toContain("Free: it runs on Lamo Stories' own computer");
+    const canvas = byText(".st-stg-usage__row", /Amazon Nova Canvas/, use);
+    expect(canvas.textContent).toMatch(/\d+ pictures?/);
+    expect(canvas.textContent).toContain("No price yet:");
+    // Makers are named, never shown by their ids.
+    expect(use.textContent).not.toMatch(/builtin-rig|nova-canvas/);
+    await click(byText("button", "add one", canvas));
+    const form = byText(".st-stg-price", /Amazon Nova Canvas/, $<HTMLElement>('[aria-label="Each maker\'s price"]')!);
+    setValue(form.querySelector("input")!, "0.04");
+    await act(async () => form.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    await settle(10);
+    expect(called("putAi").at(-1)?.args[1]).toMatchObject({ prices: { "nova-canvas": { perUnit: 0.04, unit: "image" } } });
+    expect(called("usage").length).toBeGreaterThan(1);
+    const priced = byText(".st-stg-usage__row", /Amazon Nova Canvas/, card("Use and costs, last 30 days"));
+    expect(priced.textContent).not.toContain("No price yet");
+    expect(priced.textContent).toMatch(/\$0\.\d+/);
+    await click(byText("button", "Show each day", card("Use and costs, last 30 days")));
+    expect($$(".st-stg-days__day", card("Use and costs, last 30 days")).length).toBeGreaterThan(5);
+  });
+
+  it("shows Remove the saved key only while a key is saved (ProviderStatus.key, §45.34)", async () => {
+    providers.push({ kind: "animation", id: "acme-motion", label: "Acme Motion", state: "needs_setup", line: "Paste your Acme Motion key to use it.", key: { saved: false, hint: null, savedAt: null } });
+    store.knobs.keyedProviders = [{ kind: "animation", id: "acme-motion", label: "Acme Motion" }];
+    await open("video");
+    const row = () => byText(".st-stg-keyrow", /Acme Motion/);
+    expect(row().textContent).not.toContain("Remove the saved key");
+    await click(byText("button", "Paste a key", row()));
+    setValue(row().querySelector("input")!, "sk-acme-0123456789abcdef4f2a");
+    await act(async () => row().querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    await settle(8);
+    expect(row().textContent).toContain("Key saved · ends 4f2a.");
+    expect(byText("button", "Remove the saved key", row())).toBeTruthy();
+    expect(byText("button", "Paste a new key", row())).toBeTruthy();
+    await click(byText("button", "Remove the saved key", row()));
+    expect(row().textContent).not.toContain("Remove the saved key");
+    expect(row().textContent).toContain("Paste your Acme Motion key to use it.");
+  });
+
+  it("never promises backgrounds or that the built-in animation takes over for Nova Reel", async () => {
+    const { MAKERS } = await import("../src/stories/settings/VideoSection.tsx");
+    expect(MAKERS["nova-reel"]!.line).toContain("cut-aways (scenes with no character)");
+    expect(MAKERS["nova-reel"]!.line).not.toContain("backgrounds");
+    await open("video");
+    expect(host.textContent).not.toContain("backgrounds");
+    expect(host.textContent).not.toMatch(/built-in animation makes/i);
   });
 });
 
@@ -607,6 +680,328 @@ describe("Storage and production", () => {
     expect(host.textContent).toContain("The last 4 versions");
     await click(byText("[role=radio]", /^Only me/));
     expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { youtubePrivacy: "private" } });
+  });
+});
+
+describe("AI: models the owner adds (§45.34)", () => {
+  const fill = (form: HTMLElement, label: string, value: string) => {
+    const lab = Array.from(form.querySelectorAll("label")).find((l) => l.textContent === label);
+    if (!lab) throw new Error(`no field ${label}`);
+    setValue(form.querySelector<HTMLInputElement | HTMLSelectElement>(`#${CSS.escape(lab.htmlFor)}`)!, value);
+  };
+  const submit = async (form: HTMLElement) => {
+    await act(async () => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    await settle(8);
+  };
+
+  it("adds a Bedrock model with its maker, id, Region, efforts, own level, pictures, output limit and price; then suggests Check models", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    await open("ai");
+    const add = card("Add a model");
+    expect(add.textContent).toContain("No models added yet.");
+    await click(byText("button", "Add a model", add));
+    const form = $<HTMLElement>('form[aria-label="Add a model"]')!;
+    // Nothing is sent until the form says what it is.
+    await submit(form);
+    expect(called("putAiModel")).toHaveLength(0);
+    expect(form.querySelector("[role=alert]")?.textContent).toBe("Give the model a name, like Nova Premier.");
+    fill(form, "Name", "Nova Premier");
+    await click(byText("[role=radio]", "Amazon", form));
+    fill(form, "Bedrock model ID or inference profile", "eu.amazon.nova premier");
+    await submit(form);
+    expect(called("putAiModel")).toHaveLength(0);
+    expect(form.querySelector("[role=alert]")?.textContent).toContain("does not look like a Bedrock model ID");
+    fill(form, "Bedrock model ID or inference profile", "eu.amazon.nova-premier-v1:0");
+    fill(form, "AWS Region", "eu-west-1");
+    // Efforts: toggles, more than one; its own level is one of them.
+    await click(byText("button", "Low", form));
+    await click(byText("button", /High$/, form));
+    expect($$("[aria-pressed=true]", form).map((b) => b.textContent)).toEqual(["Low", "High"]);
+    expect($$("[role=radio]", group("Its own level")).map((r) => r.textContent)).toEqual(["Low", "High"]);
+    await click(byText("[role=radio]", "High", group("Its own level")));
+    await click(byText("[role=switch]", /On|Off/, byText(".st-stg-switchrow", /It can look at pictures/, form)));
+    fill(form, "Most tokens it may write in one answer", "8000");
+    await click(byText("[role=switch]", /On|Off/, byText(".st-stg-switchrow", /I know its price/, form)));
+    fill(form, "Reading, per million tokens", "2.5");
+    fill(form, "Writing, per million tokens", "12.5");
+    await submit(form);
+    expect(called("putAiModel").at(-1)?.args).toEqual([
+      "stories",
+      "custom-nova-premier",
+      {
+        label: "Nova Premier",
+        provider: "Amazon",
+        modelId: "eu.amazon.nova-premier-v1:0",
+        region: "eu-west-1",
+        efforts: ["low", "high"],
+        defaultEffort: "high",
+        vision: true,
+        maxOutputTokens: 8000,
+        price: { inputPer1M: 2.5, outputPer1M: 12.5, cacheReadPer1M: null, cacheWritePer1M: null, longContext: null, currency: "USD", source: "owner", note: "Your own price." },
+      },
+    ]);
+    // Listed with its mark, everywhere a model is picked.
+    const row = byText(".st-stg-own", /Nova Premier/, card("Add a model"));
+    expect(row.textContent).toContain("Added by you");
+    expect(row.textContent).toContain("Not checked yet");
+    expect(row.textContent).toContain("Made by Amazon · on Amazon Bedrock in eu-west-1");
+    expect(byText("[role=radio]", /Nova Premier/, group("Default model")).textContent).toContain("Added by you");
+    const director = $$(".st-stg-assign__row").find((r) => r.textContent?.includes("Creative director"))!;
+    expect(Array.from(director.querySelector("select")!.options).map((o) => o.value)).toContain("custom-nova-premier");
+    // Check models is suggested, for this model only.
+    const suggest = card("Add a model").querySelector(".st-stg-suggest")!;
+    expect(suggest.textContent).toContain("Nova Premier is listed, but it has not answered yet.");
+    await click(byText("button", "Check models", suggest as HTMLElement));
+    expect(called("checkModels").at(-1)?.args).toEqual(["stories", ["custom-nova-premier"]]);
+    await act(async () => await new Promise((r) => setTimeout(r, 1300)));
+    await settle(10);
+    expect(byText(".st-stg-own", /Nova Premier/, card("Add a model")).textContent).toContain("Works");
+    expect(card("Add a model").querySelector(".st-stg-suggest")).toBeNull();
+  });
+
+  it("a model Amazon Bedrock refuses keeps Bedrock's sentence; nothing is swapped", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    await aiPart.api(store).putAiModel("stories", "custom-llama", { label: "Llama 4", provider: "Meta", modelId: "eu.meta.llama4-typo-v1:0", region: "eu-north-1", efforts: [], defaultEffort: null, vision: false, maxOutputTokens: 4096, price: null });
+    store.knobs.bedrockUnknown = "custom-llama";
+    await open("ai");
+    await click(byText("button", "Check models", card("Default model")));
+    await act(async () => await new Promise((r) => setTimeout(r, 1300)));
+    await settle(10);
+    const row = byText(".st-stg-own", /Llama 4/, card("Add a model"));
+    expect(row.textContent).toContain("Not found");
+    expect(row.textContent).toContain("Amazon Bedrock said: The provided model identifier is invalid");
+    expect(row.textContent).toContain("No effort setting: it runs at its own level.");
+  });
+
+  it("changes one with Edit, and Remove shows the API's sentence while a setting still uses it", async () => {
+    await aiPart.api(store).putAiModel("stories", "custom-mistral", { label: "Mistral Large", provider: "Mistral", modelId: "mistral.mistral-large-2407-v1:0", region: "eu-west-3", efforts: ["low", "medium"], defaultEffort: "medium", vision: false, maxOutputTokens: 8192, price: null });
+    await open("ai");
+    await click(byText("button", "Edit", byText(".st-stg-own", /Mistral Large/)));
+    const form = $<HTMLElement>('form[aria-label="Change Mistral Large"]')!;
+    expect(form.querySelector<HTMLInputElement>("input")!.value).toBe("Mistral Large");
+    expect(byText("[role=radio]", "Mistral", form).getAttribute("aria-checked")).toBe("true");
+    expect(Array.from(form.querySelectorAll("select")).map((x) => x.value)).toContain("eu-west-3");
+    fill(form, "Name", "Mistral Large 2");
+    await submit(form);
+    expect(called("putAiModel").at(-1)?.args.slice(0, 2)).toEqual(["stories", "custom-mistral"]);
+    expect(called("putAiModel").at(-1)?.args[2]).toMatchObject({ label: "Mistral Large 2", maxOutputTokens: 8192, region: "eu-west-3", efforts: ["low", "medium"], defaultEffort: "medium" });
+    expect(byText(".st-stg-own", /Mistral Large 2/).textContent).toContain("Added by you");
+
+    // A task uses it: removing it is refused with the API's own sentence, shown on the row.
+    const story = $$(".st-stg-assign__row").find((r) => r.querySelector(".st-stg-assign__title")?.textContent === "Write the story")!;
+    setValue(story.querySelectorAll<HTMLSelectElement>("select")[0]!, "custom-mistral");
+    await settle();
+    await click(byText("button", "Remove", byText(".st-stg-own", /Mistral Large 2/)));
+    await click(byText("button", "Yes, remove it"));
+    expect(called("deleteAiModel").at(-1)?.args).toEqual(["stories", "custom-mistral"]);
+    expect(byText(".st-stg-own", /Mistral Large 2/).querySelector("[role=alert]")?.textContent).toBe("Mistral Large 2 is still used by the task Write the story in Settings › AI. Pick another model there first.");
+    // Once nothing uses it, it goes.
+    setValue($$(".st-stg-assign__row").find((r) => r.querySelector(".st-stg-assign__title")?.textContent === "Write the story")!.querySelectorAll<HTMLSelectElement>("select")[0]!, "");
+    await settle();
+    await click(byText("button", "Remove", byText(".st-stg-own", /Mistral Large 2/)));
+    await click(byText("button", "Yes, remove it"));
+    expect($$(".st-stg-own").some((r) => r.textContent?.includes("Mistral Large 2"))).toBe(false);
+    expect(document.body.textContent).toContain("Mistral Large 2 is removed from Lamo Stories.");
+  });
+
+  it("an Edit that moves a model asks for a new check even after Works; Another Region takes any code; up to 500,000 tokens; every select marks it", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const api = aiPart.api(store);
+    await api.putAiModel("stories", "custom-mistral", { label: "Mistral Large", provider: "Mistral", modelId: "mistral.mistral-large-2407-v1:0", region: "eu-west-3", efforts: [], defaultEffort: null, vision: false, maxOutputTokens: 8192, price: null });
+    await api.checkModels("stories", ["custom-mistral"]);
+    await act(async () => await new Promise((r) => setTimeout(r, 80)));
+    await open("ai");
+    expect(byText(".st-stg-own", /Mistral Large/).textContent).toContain("Works");
+    // Every agent and task select marks the models the owner added.
+    const options = () => Array.from($$(".st-stg-assign__row").find((r) => r.textContent?.includes("Creative director"))!.querySelector("select")!.options);
+    expect(options().find((o) => o.value === "custom-mistral")?.textContent).toBe("Mistral Large · added by you");
+    expect(options().find((o) => o.value === "opus-5-5")?.textContent).not.toContain("added by you");
+    // A new name only: its check still counts, nothing to suggest.
+    await click(byText("button", "Edit", byText(".st-stg-own", /Mistral Large/)));
+    let form = $<HTMLElement>('form[aria-label="Change Mistral Large"]')!;
+    fill(form, "Name", "Mistral Large 2");
+    await submit(form);
+    expect(card("Add a model").querySelector(".st-stg-suggest")).toBeNull();
+    // Another Region: any Region code, checked as the API checks it.
+    await click(byText("button", "Edit", byText(".st-stg-own", /Mistral Large 2/)));
+    form = $<HTMLElement>('form[aria-label="Change Mistral Large 2"]')!;
+    fill(form, "AWS Region", "another");
+    fill(form, "Its Region code", "London");
+    await submit(form);
+    expect(form.querySelector("[role=alert]")?.textContent).toBe("Type the AWS Region code where the model runs, like eu-west-2 or ap-south-1.");
+    fill(form, "Its Region code", "ap-southeast-5");
+    fill(form, "Most tokens it may write in one answer", "300000");
+    await submit(form);
+    expect(called("putAiModel").at(-1)?.args[2]).toMatchObject({ region: "ap-southeast-5", maxOutputTokens: 300000 });
+    // Its last check (Works) was of the old Region and is kept by the API: the card says so and suggests Check models.
+    const row = byText(".st-stg-own", /Mistral Large 2/);
+    expect(row.textContent).toContain("Check it again");
+    expect(row.textContent).toContain("Changed since its last check.");
+    expect(row.textContent).not.toContain("Works");
+    const suggest = card("Add a model").querySelector<HTMLElement>(".st-stg-suggest")!;
+    expect(suggest.textContent).toContain("Mistral Large 2 is changed, so its last check no longer counts.");
+    await click(byText("button", "Check models", suggest));
+    expect(called("checkModels").at(-1)?.args).toEqual(["stories", ["custom-mistral"]]);
+    await act(async () => await new Promise((r) => setTimeout(r, 1300)));
+    await settle(10);
+    expect(card("Add a model").querySelector(".st-stg-suggest")).toBeNull();
+    expect(byText(".st-stg-own", /Mistral Large 2/).textContent).toContain("Works");
+    expect(byText(".st-stg-own", /Mistral Large 2/).textContent).toContain("in ap-southeast-5");
+    // A Region not in the list opens as Another Region with its code, never as a listed one.
+    await click(byText("button", "Edit", byText(".st-stg-own", /Mistral Large 2/)));
+    form = $<HTMLElement>('form[aria-label="Change Mistral Large 2"]')!;
+    expect(Array.from(form.querySelectorAll("select")).map((x) => x.value)).toContain("another");
+    const code = Array.from(form.querySelectorAll("label")).find((l) => l.textContent === "Its Region code")!;
+    expect(form.querySelector<HTMLInputElement>(`#${CSS.escape(code.htmlFor)}`)!.value).toBe("ap-southeast-5");
+  });
+
+  it("the default model and effort cards say what was picked (picked), and a held model is saved with the level picked for it", async () => {
+    await aiPart.api(store).putAiModel("stories", "custom-quick", { label: "Quick One", provider: "Amazon", modelId: "eu.amazon.nova-lite-v1:0", region: "eu-north-1", efforts: ["low", "medium"], defaultEffort: "medium", vision: false, maxOutputTokens: 4096, price: null });
+    await open("ai");
+    await click(byText("[role=radio]", /Claude Sonnet 5\.5/));
+    expect(called("putAi").at(-1)?.args[1]).toMatchObject({ defaultModel: "sonnet-5-5", picked: ["model"] });
+    await click(byText("[role=radio]", "Low", group("Default effort")));
+    expect(called("putAi").at(-1)?.args[1]).toMatchObject({ defaultEffort: "low", picked: ["effort"] });
+    // Quick One offers Low and Medium; today's Low is fine, so it is saved as the model alone.
+    await click(byText("[role=radio]", /Quick One/));
+    expect(called("putAi").at(-1)?.args[1]).toMatchObject({ defaultModel: "custom-quick", defaultEffort: "low", picked: ["model"] });
+    // Back to Opus at Maximum, then Quick One: Maximum is not offered, so nothing is saved until a level is picked.
+    await click(byText("[role=radio]", /Claude Opus 5\.5/));
+    await click(byText("[role=radio]", "Maximum", group("Default effort")));
+    const before = called("putAi").length;
+    await click(byText("[role=radio]", /Quick One/));
+    expect(called("putAi")).toHaveLength(before);
+    expect(card("Default effort").querySelector("[role=alert]")?.textContent).toContain("Quick One does not offer Maximum. Pick another level.");
+    await click(byText("[role=radio]", /^Medium/, group("Default effort")));
+    expect(called("putAi").at(-1)?.args[1]).toMatchObject({ defaultModel: "custom-quick", defaultEffort: "medium", picked: ["model", "effort"] });
+    // A task's own change says nothing was picked for the setup.
+    const captions = $$(".st-stg-assign__row").find((r) => r.querySelector(".st-stg-assign__title")?.textContent === "Write the post captions")!;
+    await click(byText("button", "Use it", captions));
+    expect(called("putAi").at(-1)?.args[1]).not.toHaveProperty("picked");
+  });
+
+  it("sends only the configuration's own keys, whatever else the API answered", async () => {
+    await open("ai");
+    // An answer with a field the PUT does not take (for example a stamp the API may add later).
+    store.ai = { ...(store.ai ?? { defaultModel: "opus-5-5", defaultEffort: "high", tasks: {}, prices: {}, version: 0 }), pickedAt: { model: "x" } } as never;
+    forgetLoaded();
+    act(() => root.unmount());
+    root = createRoot(host);
+    await open("ai");
+    await click(byText("[role=radio]", "Low", group("Default effort")));
+    expect(Object.keys(called("putAi").at(-1)?.args[1] as object).sort()).toEqual(["defaultEffort", "defaultModel", "picked", "prices", "tasks", "version"]);
+  });
+
+  it("a model with no effort setting takes no effort in the same setting: the row's own effort is cleared, and it says why", async () => {
+    await open("ai");
+    const story = () => $$(".st-stg-assign__row").find((r) => r.querySelector(".st-stg-assign__title")?.textContent === "Write the story")!;
+    setValue(story().querySelectorAll<HTMLSelectElement>("select")[1]!, "low");
+    await settle();
+    expect(called("putAi").at(-1)?.args[1]).toMatchObject({ tasks: { storyboard: { effort: "low" } } });
+    setValue(story().querySelectorAll<HTMLSelectElement>("select")[0]!, "nova-pro");
+    await settle();
+    expect((called("putAi").at(-1)?.args[1] as { tasks: Record<string, unknown> }).tasks.storyboard).toEqual({ model: "nova-pro" });
+    expect(document.body.textContent).toContain("Amazon Nova Pro has no effort setting; it runs at its own level. Write the story's own effort is cleared.");
+    expect(document.body.textContent).not.toContain("Pick another level.");
+  });
+});
+
+describe("Storage and production (§45.34)", () => {
+  it("says where the files are, keeps reference videos and chat pictures as picked, and Clean up now says what it cleared", async () => {
+    await open("storage");
+    await settle(4);
+    expect(card("Space used").textContent).toContain("Lamo Stories' own folder in Clip Factory's media storage in Europe (Stockholm): ws/{you}/stories/");
+    const refs = group("Keep reference videos");
+    expect($$("[role=radio]", refs).map((r) => r.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["Keep them all", "Keep only the study", "30 days", "90 days"]);
+    // By age only the video goes: its study stays, as the API and the agent keep it (retention.py, fileRemovedAt).
+    for (const days of [/30 days/, /90 days/]) {
+      expect(byText("[role=radio]", days, refs).textContent).toContain("Then the video goes; its study stays");
+      expect(byText("[role=radio]", days, refs).textContent).not.toContain("its study go");
+    }
+    expect(byText("[role=radio]", /Keep them all/, refs).getAttribute("aria-checked")).toBe("true");
+    await click(byText("[role=radio]", /Keep only the study/, refs));
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { production: { keepReferences: "study_only", burnCaptions: true, scenesAtOnce: 2, keepVersions: "all" } } });
+    expect(card("Keeping other files").textContent).toContain("Lamo Stories still learns from each study after its video is gone.");
+    await click(byText("[role=radio]", /30 days/, group("Keep chat pictures")));
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { production: { keepReferences: "study_only", keepChatPictures: "days_30" } } });
+
+    // Clean up now: an "Are you sure?" first, then what was cleared, with a cheer.
+    store.workspaces[0] = workspace;
+    await click(byText("button", "Clean up now"));
+    expect(called("storageCleanup")).toHaveLength(0);
+    expect(card("Keeping other files").querySelector('[aria-label="Are you sure?"]')?.textContent).toContain("Clip Factory's files are never touched.");
+    const storageCalls = called("storage").length;
+    await click(byText("button", "Yes, clear them"));
+    expect(called("storageCleanup")).toHaveLength(1);
+    expect(card("Keeping other files").querySelector("[role=status]")?.textContent).toBe("Cleared 14 files (186 MB). The rest is kept.");
+    expect(called("storage").length).toBeGreaterThan(storageCalls);
+    // Again: nothing left to clear.
+    await click(byText("button", "Clean up now"));
+    await click(byText("button", "Yes, clear them"));
+    expect(card("Keeping other files").querySelector("[role=status]")?.textContent).toBe("Nothing to clear: every file is still one you keep.");
+  });
+
+  it("makes WebM and MOV besides the MP4 when asked, and says what burned-in captions leave out", async () => {
+    await open("storage");
+    const file = card("The finished file");
+    expect(file.textContent).toContain("MP4: H.264 picture and AAC sound");
+    expect(file.textContent).toContain("1080 × 1920 (9:16) at 30 fps");
+    await click(byText("[role=switch]", /On|Off/, byText(".st-stg-switchrow", /Also make a WebM file/, file)));
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { production: { extraFormats: ["webm"] } } });
+    await click(byText("[role=switch]", /On|Off/, byText(".st-stg-switchrow", /Also make a MOV file/, file)));
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { production: { extraFormats: ["webm", "mov"] } } });
+    expect(file.textContent).toContain("A big file for editing apps like Final Cut or Premiere");
+    await click(byText("[role=switch]", /On|Off/, byText(".st-stg-switchrow", /Also make a WebM file/, file)));
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { production: { extraFormats: ["mov"] } } });
+    await click(byText("[role=switch]", /On|Off/, byText(".st-stg-switchrow", /Put the captions into the picture/, file)));
+    expect(byText(".st-stg-switchrow", /Put the captions into the picture/, file).textContent).toContain(
+      "Only the caption words are left out of the picture. The speech bubbles and the safety end card always stay in.",
+    );
+  });
+
+  it("keeps this device's sounds and motion for Lamo Stories in cf.stories.prefs, apart from Clip Factory's", async () => {
+    localStorage.removeItem("cf.stories.prefs");
+    const { resetWorkspaceMemory } = await import("../src/stories/workspace.ts");
+    resetWorkspaceMemory();
+    const clipsBefore = localStorage.getItem("cf.prefs");
+    await open("storage");
+    const sm = card("Sounds and motion");
+    expect(sm.textContent).toContain("Follows Clip Factory's setting until you change it.");
+    expect(sm.textContent).toContain("Clip Factory's click sound until you pick one.");
+    const sw = (label: RegExp) => byText(".st-stg-switchrow", label, sm).querySelector<HTMLElement>("[role=switch]")!;
+    const picker = () => byText(".st-stg-selectbox", /^Click sound/, sm).querySelector<HTMLSelectElement>("select")!;
+    const kept = () => (JSON.parse(localStorage.getItem("cf.stories.prefs") ?? "{}") as { more?: Record<string, unknown> }).more ?? {};
+    const { getPrefs } = await import("../src/lib/prefs.ts");
+    // Unset, the card shows what Lamo Stories really uses: Clip Factory's choices.
+    expect(sw(/^Sounds/).getAttribute("aria-checked")).toBe(String(getPrefs().soundEnabled));
+    expect(picker().value).toBe(String(getPrefs().clickSound));
+    expect(picker().options).toHaveLength(30);
+    expect(picker().options[2]?.textContent).toBe("Bubble: rises a little");
+    // The click sound is kept as its number (the shape Lamo Stories' sounds read), and it plays once picked.
+    const log = () => (window as unknown as { __cfSoundLog?: { kind: string; sound: number }[] }).__cfSoundLog ?? [];
+    if (sw(/^Sounds/).getAttribute("aria-checked") === "false") await click(sw(/^Sounds/));
+    setValue(picker(), "3");
+    await settle();
+    expect(kept()["sound.click"]).toBe(3);
+    expect(log().at(-1)).toMatchObject({ kind: "tap", sound: 3 });
+    expect(card("Sounds and motion").textContent).toContain("Lamo Stories' own click sound.");
+    await click(byText("button", "Hear it", sm));
+    expect(log().at(-1)).toMatchObject({ kind: "tap", sound: 3 });
+    await click(sw(/^Less motion/));
+    expect(kept()).toMatchObject({ "sound.click": 3, "motion.reduce": true });
+    // Sounds off turns every click sound off; the picker and Hear it wait until it is on again.
+    await click(sw(/^Sounds/));
+    expect(kept()["sound.enabled"]).toBe(false);
+    expect(picker().getAttribute("aria-disabled")).toBe("true");
+    expect(byText("button", "Hear it", sm).getAttribute("aria-disabled")).toBe("true");
+    setValue(picker(), "9");
+    expect(kept()["sound.click"]).toBe(3);
+    expect(localStorage.getItem("cf.prefs")).toBe(clipsBefore);
+    await click(byText("button", "Use Clip Factory's settings again", sm));
+    expect(kept()).not.toHaveProperty("sound.enabled");
+    expect(kept()).not.toHaveProperty("sound.click");
+    expect(kept()).not.toHaveProperty("motion.reduce");
+    expect(card("Sounds and motion").textContent).toContain("Follows Clip Factory's setting until you change it.");
   });
 });
 

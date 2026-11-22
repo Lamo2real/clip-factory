@@ -829,15 +829,19 @@
   font-weight: 600;
 }
 .st-stg-usage {
+  container-type: inline-size;
   display: grid;
   gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
+/* A phone: the swatch, the maker and its cost on the first line, the units under them. The cost's column never takes
+   more than its share, so a long line (the built-in animator's "Free: …") wraps inside it instead of squeezing the
+   maker's name or landing in the swatch's 14 px column. */
 .st-stg-usage__row {
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) auto;
+  grid-template-columns: 14px minmax(0, 1fr) fit-content(45%);
   align-items: center;
   gap: 4px 10px;
   padding: 8px 12px;
@@ -850,11 +854,15 @@
   overflow-wrap: anywhere;
 }
 .st-stg-usage__tokens {
+  grid-row: 2;
   grid-column: 2 / -1;
   color: var(--st-ink-soft);
   font-size: 0.88rem;
 }
 .st-stg-usage__cost {
+  grid-row: 1;
+  grid-column: 3;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -863,12 +871,17 @@
   font-weight: 700;
   text-align: right;
 }
-@media (min-width: 700px) {
+/* A list wide enough (a laptop; not a tablet beside the settings menu): the units and the cost on the maker's line. */
+@container (min-width: 560px) {
   .st-stg-usage__row {
-    grid-template-columns: 14px minmax(0, 1fr) auto auto;
+    grid-template-columns: 14px minmax(0, 1fr) auto fit-content(40%);
   }
   .st-stg-usage__tokens {
-    grid-column: auto;
+    grid-row: 1;
+    grid-column: 3;
+  }
+  .st-stg-usage__cost {
+    grid-column: 4;
   }
 }
 .st-stg-sw {
@@ -1548,4 +1561,154 @@
   .st-stg-progress__fill.is-waiting {
     animation: none;
   }
+}
+
+/* ---------- Round 3 (builder W3c): Add a model, makers' use, storage, sounds and motion ---------- */
+
+/* Effort levels a model accepts: toggles (more than one can be on), never a pick-one bar. */
+.st-stg-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.st-stg-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 6px 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  color: var(--st-ink-soft);
+  background: rgba(13, 11, 38, 0.42);
+  font: 800 0.95rem/1.2 var(--st-font);
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@media (min-width: 768px) {
+  .st-stg-toggle {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+.st-stg-toggle:hover {
+  color: var(--st-ink);
+  background: var(--st-panel-strong);
+}
+.st-stg-toggle:active {
+  transform: scale(0.96);
+}
+.st-stg-toggle.is-on {
+  color: var(--st-on-sun);
+  background: var(--st-sun);
+}
+.st-stg-toggle.is-on:hover {
+  background: var(--st-sun-hover, #ffd56e);
+}
+.st-stg-modelform {
+  padding: 14px;
+  border-radius: var(--r-md);
+  background: rgba(13, 11, 38, 0.26);
+}
+.st-stg-owns {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.st-stg-own {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: rgba(13, 11, 38, 0.26);
+}
+.st-stg-own .st-stg-modelform {
+  padding: 0;
+  background: transparent;
+}
+.st-stg-own__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.st-stg-own__name {
+  min-width: 0;
+  color: var(--st-ink);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.st-stg-code {
+  color: var(--st-sky-ink, #c9ebff);
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+.st-stg-input--code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.95rem;
+}
+.st-stg-suggest {
+  display: grid;
+  gap: 10px;
+}
+.st-stg-where {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin: 0 0 8px;
+  color: var(--st-ink);
+  overflow-wrap: anywhere;
+}
+.st-stg-cleanup {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+.st-stg-usage__free {
+  min-width: 0;
+  color: var(--st-mint-ink, #b8f3dd);
+  font-weight: 700;
+  text-align: right;
+  overflow-wrap: break-word;
+}
+.st-stg-usage__noprice {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px 6px;
+  color: var(--st-sun-ink, #ffe3a1);
+}
+.st-stg-chart--render .st-stg-chart__part {
+  min-height: 2px;
+}
+
+/* Sounds and motion: the click sound picker and its "Hear it" button, side by side, the button under it on a phone. */
+.st-stg-hear {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+.st-stg-hear > .st-stg-selectbox {
+  flex: 1 1 220px;
+}
+.st-stg-hear > .st-stg-btn {
+  margin-left: auto;
+}
+
+/* Add a model: "Another Region" types the code beside the list. */
+.st-stg-region {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
 }

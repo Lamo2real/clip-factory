@@ -1,7 +1,9 @@
-// Lamo Stories mock: the onboarding part (docs/CONTRACTS.md §45.29, §45.33, §45.16.8). Eleven steps, every one
-// skippable; the done-states come from real state where they can (a saved AI configuration for steps 1 to 3, a video
-// provider picked for 4, each platform's own connection for 6 to 10); only 5 (agents and skills) and 11 (done) are
-// ticked by hand. A brand-new studio (knob `fresh`) starts at 0 of 11, so the setup opens by itself the first time.
+// Lamo Stories mock: the onboarding part (docs/CONTRACTS.md §45.29, §45.33, §45.34, §45.16.8). Eleven steps, every
+// one skippable; the done-states come from real state where they can (§45.34: step 1 once Check models ran or the
+// owner said the models look right, 2 once he picked the default model, 3 the default effort, each stamped by PUT
+// …/ai `picked`; 4 a video provider picked; 6 to 10 that platform connected, never an account that is Lamo Clips'
+// own); only 5 (agents and skills) and 11 (done) are ticked by hand. A brand-new studio (knob `fresh`) starts at 0 of
+// 11, so the setup opens by itself the first time.
 //
 // It also holds the shell's stand-ins for the AI settings the onboarding needs (index.ts uses builder F2's own
 // methods as soon as they are built): the AI configuration, the model list, Check models and its task.
@@ -9,6 +11,7 @@ import agentsFile from "../../../../../stories/config/agents.json";
 import modelsFile from "../../../../../stories/config/models.json";
 import { ApiError } from "../../../api/errors.ts";
 import type { Agent, AgentId, AiTask, Effort, ModelInfo, Onboarding, OnboardStep, SocialAccount, StoriesAiConfig, StoriesApi, TaskInfo, TaskKind } from "../types.ts";
+import { aiPicks, stampPicked } from "./ai.ts";
 import { ago, delay, HOUR, mockId, type MockStore } from "./store.ts";
 import { DEFAULT_CONFIG, storiesWorkspace } from "./workspace.ts";
 
@@ -36,9 +39,9 @@ const SOCIAL_LABEL: Partial<Record<OnboardStep, string>> = { instagram: "Instagr
 
 /** What the API answers (409) to a hand tick on a step that ticks itself. */
 const TICKS_ITSELF: Partial<Record<OnboardStep, string>> = {
-  ai: "This step ticks itself when you save your AI settings.",
-  model: "This step ticks itself when you save your AI settings.",
-  effort: "This step ticks itself when you save your AI settings.",
+  ai: "This step ticks itself when you check the models or say they look right.",
+  model: "This step ticks itself when you pick your default model.",
+  effort: "This step ticks itself when you pick your default effort.",
   video: "This step ticks itself when you pick how videos are made.",
   ...Object.fromEntries(SOCIAL_STEPS.map((p) => [p, `This step ticks itself when ${SOCIAL_LABEL[p]} is connected.`])),
 };
@@ -52,8 +55,8 @@ export function seed(store: MockStore): void {
   store.onboarding = { stepsDone: ["agents"], skipped: [], finishedAt: null, providersPickedAt: null };
 }
 
-/** A platform step is done once Lamo Stories' own account there is connected, or is Lamo Clips' own on hold (the API's CONNECTED). */
-const COUNTS_CONNECTED: SocialAccount["connectionStatus"][] = ["connected", "same_as_clips"];
+/** A platform step is done only once Lamo Stories' own account there is connected (§45.34): Lamo Clips' own on hold is not. */
+const COUNTS_CONNECTED: SocialAccount["connectionStatus"][] = ["connected"];
 
 /** Step 4: providersPickedAt, or a picture or video maker other than the built-in default (the API's rule). */
 function videoPicked(store: MockStore, ws: string): boolean {
@@ -62,8 +65,15 @@ function videoPicked(store: MockStore, ws: string): boolean {
   return (["video", "images"] as const).some((k) => chosen[k] !== DEFAULT_CONFIG.providers[k]);
 }
 
+/** Steps 1 to 3 (§45.34): AICONFIG.pickedAt, and for step 1 also a Check models that ran. */
+function aiDone(store: MockStore, step: "ai" | "model" | "effort"): boolean {
+  const { picked, checkedAt } = aiPicks(store);
+  if (step === "ai") return !!picked.environment || !!checkedAt || store.tasks.some((t) => t.kind === "check_models" && t.status === "done");
+  return !!picked[step];
+}
+
 function realDone(store: MockStore, ws: string, step: OnboardStep): boolean {
-  if (step === "ai" || step === "model" || step === "effort") return store.ai !== null;
+  if (step === "ai" || step === "model" || step === "effort") return aiDone(store, step);
   if (step === "video") return videoPicked(store, ws);
   if (SOCIAL_STEPS.includes(step)) return store.social.some((a) => a.workspaceId === ws && a.platform === step && COUNTS_CONNECTED.includes(a.connectionStatus));
   if (step === "done") return store.onboarding.stepsDone.includes("done") || store.onboarding.finishedAt !== null;
@@ -227,12 +237,14 @@ export function shellFallbacks(store: MockStore): Partial<StoriesApi> {
       storiesWorkspace(store, ws);
       return structuredClone({ ai: aiConfig(store), models: modelsOf(store), agents: agentsOf(store), tasks: tasksOf(store) });
     },
-    async putAi(ws, ai) {
+    async putAi(ws, body) {
       await delay(220);
       storiesWorkspace(store, ws);
       const now = aiConfig(store);
+      const { picked, ...ai } = body;
       if (ai.version !== now.version) throw new ApiError(409, "conflict", "These settings changed somewhere else. We loaded the new ones: check them and save again.");
       checkAi(ai);
+      stampPicked(store, picked);
       store.ai = { ...structuredClone(ai), version: now.version + 1 };
       return structuredClone(store.ai);
     },

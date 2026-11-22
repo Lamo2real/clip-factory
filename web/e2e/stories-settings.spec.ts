@@ -126,10 +126,20 @@ test.describe("every section keeps the owner's rules", () => {
     const shape = page.getByRole("radiogroup", { name: "Shape of the video" });
     await expect(shape).toHaveClass(/has-glide/);
     await page.evaluate(() => (window.__cfSoundLog = []));
+    // Every shape can be picked now (§45.34): the glide slides to it with a tap.
+    await shape.getByRole("radio", { name: /1:1 square/ }).click();
+    await expect(shape.getByRole("radio", { name: /1:1 square/ })).toHaveAttribute("aria-checked", "true");
+    await page.waitForTimeout(500);
+    const [sg, so] = await Promise.all([shape.locator(".glide").boundingBox(), shape.getByRole("radio", { name: /1:1 square/ }).boundingBox()]);
+    expect(Math.abs(sg!.x - so!.x)).toBeLessThan(2);
+    expect(await page.evaluate(() => (window.__cfSoundLog ?? []).map((e) => e.kind))).toEqual(["tap"]);
+    // What cannot be used plays the deny sound: at 15 seconds, "shorter" goes no further.
+    await page.getByRole("slider", { name: "Usual video length in seconds" }).fill("15");
+    await expect(page.locator(".st-stg-length__value strong")).toHaveText("15");
     // Playwright waits for aria-disabled controls to be usable, so this tap skips that wait (the owner's tap does not).
-    await shape.getByRole("radio", { name: /1:1 square/ }).click({ force: true });
-    await expect(shape.getByRole("radio", { name: /9:16 tall/ })).toHaveAttribute("aria-checked", "true");
-    expect(await page.evaluate(() => (window.__cfSoundLog ?? []).map((e) => e.kind))).toEqual(["deny"]);
+    await page.getByRole("button", { name: "5 seconds shorter" }).click({ force: true });
+    await expect(page.locator(".st-stg-length__value strong")).toHaveText("15");
+    expect(await page.evaluate(() => (window.__cfSoundLog ?? []).map((e) => e.kind))).toEqual(["tap", "deny"]);
     const quality = page.getByRole("radiogroup", { name: "Video quality" });
     await quality.getByRole("radio", { name: /^Best/ }).click();
     await expect(quality.getByRole("radio", { name: /^Best/ })).toHaveAttribute("aria-checked", "true");
@@ -138,7 +148,7 @@ test.describe("every section keeps the owner's rules", () => {
     const [g, o] = await Promise.all([quality.locator(".glide").boundingBox(), quality.getByRole("radio", { name: /^Best/ }).boundingBox()]);
     expect(Math.abs(g!.x - o!.x)).toBeLessThan(2);
     expect(Math.abs(g!.width - o!.width)).toBeLessThan(2);
-    expect(await page.evaluate(() => (window.__cfSoundLog ?? []).map((e) => e.kind))).toEqual(["deny", "tap"]);
+    expect(await page.evaluate(() => (window.__cfSoundLog ?? []).map((e) => e.kind))).toEqual(["tap", "deny", "tap"]);
   });
 });
 
@@ -192,6 +202,100 @@ test.describe("AI", () => {
     await expect(nova).toContainText("Your price");
     await expect(card(page, "Usage and cost, last 30 days").locator(".st-stg-usage__row").filter({ hasText: "Amazon Nova Pro" })).not.toContainText("No price set.");
   });
+});
+
+test.describe("AI: add a model (§45.34)", () => {
+  test("adds a Bedrock model, lists it as Added by you, checks it, changes it and removes it", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openSection(page, "ai");
+    const add = card(page, "Add a model");
+    await add.getByRole("button", { name: "Add a model" }).click();
+    const form = page.getByRole("form", { name: "Add a model" });
+    await form.getByLabel("Name").fill("Nova Premier");
+    await form.getByRole("radiogroup", { name: "Who makes it" }).getByRole("radio", { name: "Amazon" }).click();
+    await form.getByLabel("Bedrock model ID or inference profile").fill("eu.amazon.nova-premier-v1:0");
+    await form.getByLabel("AWS Region").selectOption("eu-west-1");
+    await form.getByRole("button", { name: "Medium" }).click();
+    await expect(form.getByRole("button", { name: "Medium" })).toHaveAttribute("aria-pressed", "true");
+    await expect(form.getByRole("radiogroup", { name: "Its own level" }).getByRole("radio", { name: "Medium" })).toHaveAttribute("aria-checked", "true");
+    await form.getByRole("button", { name: "Add the model" }).click();
+    await expect(page.locator(".toast").filter({ hasText: "Nova Premier is added!" })).toBeVisible();
+    const row = add.locator(".st-stg-own").filter({ hasText: "Nova Premier" });
+    await expect(row).toContainText("Added by you");
+    await expect(row).toContainText("Not checked yet");
+    await expect(page.getByRole("radiogroup", { name: "Default model" }).getByRole("radio", { name: /Nova Premier/ })).toContainText("Added by you");
+    // Check models is suggested, for this one.
+    await add.locator(".st-stg-suggest").getByRole("button", { name: "Check models" }).click();
+    await expect(page.locator(".toast").filter({ hasText: "Checked it: it works!" })).toBeVisible({ timeout: 10_000 });
+    await expect(row).toContainText("Works");
+    // Moved to a Region that is not in the list: its last check was of the old one, so a new check is asked for.
+    await row.getByRole("button", { name: "Edit Nova Premier" }).click();
+    const moved = page.getByRole("form", { name: "Change Nova Premier" });
+    await moved.getByLabel("AWS Region").selectOption("another");
+    await moved.getByLabel("Its Region code").fill("mx-central-1");
+    await moved.getByRole("button", { name: "Save the changes" }).click();
+    await expect(row).toContainText("Check it again");
+    await expect(row).toContainText("in mx-central-1");
+    await expect(add.locator(".st-stg-suggest")).toContainText("Nova Premier is changed, so its last check no longer counts.");
+    await add.locator(".st-stg-suggest").getByRole("button", { name: "Check models" }).click();
+    await expect(row).toContainText("Works", { timeout: 10_000 });
+    await expect(add.locator(".st-stg-suggest")).toHaveCount(0);
+    // Change it, then remove it.
+    await row.getByRole("button", { name: "Edit Nova Premier" }).click();
+    await page.getByRole("form", { name: "Change Nova Premier" }).getByLabel("Name").fill("Nova Premier EU");
+    await page.getByRole("button", { name: "Save the changes" }).click();
+    const renamed = add.locator(".st-stg-own").filter({ hasText: "Nova Premier EU" });
+    await expect(renamed).toContainText("Added by you");
+    await renamed.getByRole("button", { name: "Remove Nova Premier EU" }).click();
+    await renamed.getByRole("button", { name: "Yes, remove it" }).click();
+    await expect(add.locator(".st-stg-own")).toHaveCount(0);
+    await expect(add).toContainText("No models added yet.");
+  });
+});
+
+test.describe("AI: the Add a model form keeps the owner's rules", () => {
+  for (const [width, height] of [
+    [320, 700],
+    [1280, 900],
+  ] as const)
+    test(`${width} px: no overflow, the arrow cursor, AA contrast, no visible edges, big targets, a hover state on the toggles`, async ({ page }) => {
+      await on(page);
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.setViewportSize({ width, height });
+      await openSection(page, "ai");
+      await card(page, "Add a model").getByRole("button", { name: "Add a model" }).click();
+      const form = page.getByRole("form", { name: "Add a model" });
+      await form.getByRole("button", { name: "High", exact: true }).click();
+      await form.getByRole("switch", { name: "I know its price" }).click();
+      await form.getByRole("radiogroup", { name: "Who makes it" }).getByRole("radio", { name: "Someone else" }).click();
+      await form.getByLabel("AWS Region").selectOption("another");
+      await expect(form.getByLabel("Its Region code")).toBeVisible();
+      await page.waitForTimeout(300);
+      const o = await findOverflow(page);
+      expect(o.page).toBeLessThanOrEqual(o.viewport);
+      expect(o.items).toEqual([]);
+      expect(await page.evaluate(() => Array.from(document.querySelectorAll(".st-stg-modelform, .st-stg-modelform *")).map((el) => getComputedStyle(el).cursor).filter((c) => c !== "default" && c !== "auto"))).toEqual([]);
+      const axe = await new AxeBuilder({ page }).include(".st-stg-modelform").withRules(["color-contrast"]).analyze();
+      expect(axe.violations.flatMap((v) => v.nodes.map((n) => n.target.join(" ")))).toEqual([]);
+      expect((await visibleEdges(page)).filter((e) => /st-stg-modelform|st-stg-toggle/.test(e))).toEqual([]);
+      const need = width < 768 ? 48 : 44;
+      const small = await page.evaluate((n) => {
+        const out: string[] = [];
+        for (const el of Array.from(document.querySelectorAll<HTMLElement>(".st-stg-modelform button, .st-stg-modelform input, .st-stg-modelform select, .st-stg-modelform [role=radio], .st-stg-modelform [role=switch]"))) {
+          if (!el.checkVisibility()) continue;
+          const r = el.getBoundingClientRect();
+          if (r.width < n - 0.5 || r.height < n - 0.5) out.push(`${el.className} ${Math.round(r.width)}x${Math.round(r.height)}`);
+        }
+        return out;
+      }, need);
+      expect(small).toEqual([]);
+      const toggle = form.locator(".st-stg-toggle:not(.is-on)").first();
+      const before = await toggle.evaluate((e) => `${getComputedStyle(e).backgroundColor}|${getComputedStyle(e).color}`);
+      await toggle.hover();
+      await page.waitForTimeout(300);
+      expect(await toggle.evaluate((e) => `${getComputedStyle(e).backgroundColor}|${getComputedStyle(e).color}`)).not.toBe(before);
+    });
 });
 
 test.describe("Agents, skills and memory", () => {
@@ -268,7 +372,7 @@ test.describe("Agents, skills and memory", () => {
 });
 
 test.describe("Video and storage", () => {
-  test("the makers with their state, 1080 × 1920, 9:16 only, 30 fps, quality and length", async ({ page }) => {
+  test("the makers with their state, the shape and its size, 30 fps, quality and length, and the makers' use and prices", async ({ page }) => {
     await on(page);
     await page.setViewportSize({ width: 1280, height: 900 });
     await openSection(page, "video");
@@ -279,13 +383,27 @@ test.describe("Video and storage", () => {
     await expect(reel).not.toHaveAttribute("aria-disabled", "true");
     await reel.click();
     await expect(reel).toHaveAttribute("aria-checked", "true");
-    await expect(card(page, "Video maker").getByRole("status")).toContainText("is not ready yet.");
+    // The API's own sentence (§45.34): it says what to do, and nothing switches to the built-in animation by itself.
+    await expect(card(page, "Video maker").getByRole("status")).toContainText("Amazon Nova Reel is not ready yet: ");
+    await expect(card(page, "Video maker").getByRole("status")).toContainText("Pick Built-in animation in Settings › Video, or finish its setup.");
+    // Said once, though the API's label (Amazon Nova Reel 1.1 (AI video)) is not the name its sentence uses.
+    await expect(card(page, "Video maker").getByRole("status")).toHaveText(/^Amazon Nova Reel is not ready yet: /);
+    await expect(card(page, "Video maker").getByRole("status")).not.toContainText("(AI video) is not ready yet");
     await expect(reel).toContainText("Not ready yet");
     await maker.getByRole("radio", { name: /Built-in animator/ }).click();
     await expect(card(page, "Video maker").getByRole("status")).toHaveCount(0);
-    await expect(page.getByText("1080 × 1920, the built-in animator's only size")).toBeVisible();
-    await expect(page.getByText("30 fps, the built-in animator's only rate")).toBeVisible();
-    await expect(page.getByRole("radiogroup", { name: "Shape of the video" }).getByRole("radio", { name: /16:9 wide/ })).toContainText("Not with the built-in animator yet");
+    // The shape and its size (§45.34): Shorts, Reels and TikTok want 9:16.
+    const shape = page.getByRole("radiogroup", { name: "Shape of the video" });
+    const size = page.getByRole("radiogroup", { name: "Size of the video" });
+    await expect(shape.getByRole("radio", { name: /9:16 tall/ })).toContainText("For Shorts, Reels and TikTok");
+    await expect(size.getByRole("radio")).toHaveText([/1080 × 1920/, /720 × 1280/]);
+    await shape.getByRole("radio", { name: /16:9 wide/ }).click();
+    await expect(size.getByRole("radio")).toHaveText([/1920 × 1080/, /1280 × 720/]);
+    await expect(size.getByRole("radio", { name: /1920 × 1080/ })).toHaveAttribute("aria-checked", "true");
+    await expect(card(page, "Shape and size").getByRole("status")).toHaveText("Shorts, Reels and TikTok want 9:16. A wide video shows smaller there, with bars around it.");
+    await shape.getByRole("radio", { name: /9:16 tall/ }).click();
+    await expect(card(page, "Shape and size").getByRole("status")).toHaveCount(0);
+    await expect(page.getByText("30 frames a second (30 fps)")).toBeVisible();
     await page.getByRole("button", { name: "5 seconds longer" }).click();
     await expect(page.locator(".st-stg-length__value strong")).toHaveText("50");
     await expect(page.locator(".st-stg-saved")).toHaveText("Saved");
@@ -296,7 +414,7 @@ test.describe("Video and storage", () => {
     await ready(page);
     await expect(page.locator(".st-stg-length__value strong")).toHaveText("50");
 
-    // The AI makers' prices: none is known, so the owner types one.
+    // The AI makers' prices: none is known, so the owner types one (a price for one unit, §45.34).
     const price = page.locator(".st-stg-price").filter({ hasText: "Amazon Nova Reel" });
     await expect(price).toContainText("No price set.");
     await price.getByRole("button", { name: /Type a price for Amazon Nova Reel/ }).click();
@@ -304,6 +422,21 @@ test.describe("Video and storage", () => {
     await price.getByRole("button", { name: "Save the price" }).click();
     await expect(price).toContainText("Your price");
     await expect(price).toContainText("0.08 for a second of video");
+
+    // Use and costs: render minutes per day, each maker by name with its units and cost (§45.34).
+    const use = card(page, "Use and costs, last 30 days");
+    await expect(use.locator(".st-stg-chart__day")).toHaveCount(30);
+    await expect(use.locator(".st-stg-usage__row").filter({ hasText: "Built-in animator" })).toContainText("Free: it runs on Lamo Stories' own computer");
+    const canvas = use.locator(".st-stg-usage__row").filter({ hasText: "Amazon Nova Canvas" });
+    await expect(canvas).toContainText("No price yet:");
+    await expect(use).not.toContainText("builtin-rig");
+    await canvas.getByRole("button", { name: "Add a price for Amazon Nova Canvas" }).click();
+    const canvasPrice = page.locator(".st-stg-price").filter({ hasText: "Amazon Nova Canvas" });
+    await canvasPrice.getByLabel("Price for one picture").fill("0.04");
+    await canvasPrice.getByRole("button", { name: "Save the price" }).click();
+    await expect(canvasPrice).toContainText("0.04 for a picture");
+    await expect(canvas).not.toContainText("No price yet");
+    await expect(canvas.locator(".st-stg-usage__cost")).toContainText("$");
   });
 
   test("storage by kind and the production settings", async ({ page }) => {
@@ -316,5 +449,51 @@ test.describe("Video and storage", () => {
     await page.getByRole("button", { name: "Keep one more" }).click();
     await expect(page.locator(".st-stg-stepper__value")).toContainText("The last 4 versions");
     await expect(page.locator(".st-stg-saved")).toHaveText("Saved");
+  });
+
+  test("where files are, keeping them, Clean up now, other files, captions and this device's sounds and motion (§45.34)", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openSection(page, "storage");
+    await expect(card(page, "Space used")).toContainText("Lamo Stories' own folder in Clip Factory's media storage in Europe (Stockholm)");
+    const file = card(page, "The finished file");
+    await file.getByRole("switch", { name: "Also make a WebM file" }).click();
+    await expect(file.getByRole("switch", { name: "Also make a WebM file" })).toHaveAttribute("aria-checked", "true");
+    await file.getByRole("switch", { name: "Put the captions into the picture" }).click();
+    await expect(file).toContainText("Only the caption words are left out of the picture. The speech bubbles and the safety end card always stay in.");
+    const keeping = card(page, "Keeping other files");
+    await keeping.getByRole("radiogroup", { name: "Keep reference videos" }).getByRole("radio", { name: /Keep only the study/ }).click();
+    await expect(keeping).toContainText("Lamo Stories still learns from each study after its video is gone.");
+    await keeping.getByRole("radiogroup", { name: "Keep chat pictures" }).getByRole("radio", { name: /90 days/ }).click();
+    await expect(page.locator(".st-stg-saved")).toHaveText("Saved");
+    await keeping.getByRole("button", { name: "Clean up now" }).click();
+    await keeping.getByRole("button", { name: "Yes, clear them" }).click();
+    await expect(keeping.getByRole("status")).toHaveText("Cleared 14 files (186 MB). The rest is kept.");
+    await expect(page.locator("canvas.st-stg-burst")).toBeAttached();
+
+    // Sounds and motion: this device's own choices for Lamo Stories, never Clip Factory's.
+    const before = await page.evaluate(() => localStorage.getItem("cf.prefs"));
+    const sm = card(page, "Sounds and motion");
+    await sm.getByRole("switch", { name: "Less motion" }).click();
+    await expect(sm.getByRole("switch", { name: "Less motion" })).toHaveAttribute("aria-checked", "true");
+    // The click sound is picked by name and kept as its number, the shape Lamo Stories' sounds read.
+    await sm.getByLabel("Click sound").selectOption({ label: "Bubble: rises a little" });
+    const kept = await page.evaluate(() => (JSON.parse(localStorage.getItem("cf.stories.prefs") ?? "{}") as { more?: Record<string, unknown> }).more);
+    expect(kept).toMatchObject({ "motion.reduce": true, "sound.click": 3 });
+    await expect(sm).toContainText("Lamo Stories' own click sound.");
+    // Hear it plays the pick once, never the usual click sound on top of it.
+    // (The log keeps the last 200 sounds: it starts empty here, so only this click's sounds are in it. A tap within
+    // 60 ms of the last one is one sound, so the pick's own sound is let go first.)
+    await page.waitForTimeout(150);
+    await page.evaluate(() => ((window as unknown as { __cfSoundLog?: unknown[] }).__cfSoundLog = []));
+    await sm.getByRole("button", { name: "Hear it" }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __cfSoundLog?: { kind: string; sound: number }[] }).__cfSoundLog ?? [])).toEqual([expect.objectContaining({ kind: "tap", sound: 3 })]);
+    expect(await page.evaluate(() => localStorage.getItem("cf.prefs"))).toBe(before);
+    await page.reload();
+    await ready(page);
+    await expect(card(page, "Sounds and motion").getByRole("switch", { name: "Less motion" })).toHaveAttribute("aria-checked", "true");
+    await expect(card(page, "Sounds and motion").getByLabel("Click sound")).toHaveValue("3");
+    // By age only the video goes; its study stays.
+    await expect(card(page, "Keeping other files").getByRole("radiogroup", { name: "Keep reference videos" }).getByRole("radio", { name: /30 days/ })).toContainText("Then the video goes; its study stays");
   });
 });

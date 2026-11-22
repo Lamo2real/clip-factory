@@ -756,8 +756,11 @@ test.describe("the pages", () => {
     await expect(page.locator(".st-steps__item")).toHaveCount(11);
     await expect(page.locator(".st-left__item")).toHaveCount(10);
 
-    // 1 → 2: pick the default model; Check models really runs; saving ticks steps 1 to 3.
-    await page.getByRole("button", { name: "Next" }).click();
+    // 1: the models and their state; "These look right" ticks step 1 (§45.34).
+    await expect(page.locator(".st-setup__model")).toHaveCount(6);
+    await page.getByRole("button", { name: "These look right" }).click();
+    await expect(page.locator(".st-setup__head .st-ring")).toHaveAttribute("aria-label", "1 of 11 done");
+    // 2: pick the default model; Check models really runs; saving ticks step 2 only (the effort is picked in 3).
     await expect(page.locator("#st-setup-step")).toHaveText("Pick your default model");
     await expect(page.getByRole("radiogroup", { name: "Lamo Stories' default model" }).getByRole("radio")).toHaveText([/Claude Fable 5.2/, /Claude Fable 5.1/, /Claude Opus 5.5/, /Claude Sonnet 5.5/, /Claude Haiku 5.5/, /Amazon Nova Pro/]);
     // Builder F2's mock: a sixth, mock-only model (no effort, no price), and this account cannot use Fable 5.1.
@@ -765,10 +768,11 @@ test.describe("the pages", () => {
     await expect(page.locator(".toast").filter({ hasText: "5 of 6 models answered." })).toBeVisible({ timeout: 10_000 });
     await page.getByRole("radio", { name: /Claude Fable 5.2/ }).click();
     await page.getByRole("button", { name: "Use Claude Fable 5.2" }).click();
-    await expect(page.locator(".st-setup__head .st-ring")).toHaveAttribute("aria-label", "3 of 11 done");
+    await expect(page.locator(".st-setup__head .st-ring")).toHaveAttribute("aria-label", "2 of 11 done");
     await expect(page.locator("#st-setup-step")).toHaveText("Pick your default effort");
     await page.getByRole("radio", { name: "Maximum" }).click();
     await page.getByRole("button", { name: "Use Maximum" }).click();
+    await expect(page.locator(".st-setup__head .st-ring")).toHaveAttribute("aria-label", "3 of 11 done");
     await expect(page.locator("#st-setup-step")).toHaveText("Pick how videos are made");
     await page.getByRole("button", { name: "Use this" }).click();
     await expect(page.locator(".st-setup__head .st-ring")).toHaveAttribute("aria-label", "4 of 11 done");

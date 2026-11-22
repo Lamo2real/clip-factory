@@ -213,6 +213,8 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
 
     getAi: (ws) => call<{ ai: StoriesAiConfig; models: ModelInfo[]; agents: Agent[]; tasks: TaskInfo[] }>("GET", w(ws, "/ai")),
     putAi: async (ws, ai) => (await call<{ ai: StoriesAiConfig }>("PUT", w(ws, "/ai"), ai)).ai,
+    putAiModel: async (ws, key, def) => (await call<{ model: ModelInfo }>("PUT", w(ws, `/ai/models/${id(key)}`), def)).model,
+    deleteAiModel: (ws, key) => call<void>("DELETE", w(ws, `/ai/models/${id(key)}`)),
     checkModels: async (ws, models) => (await call<{ task: AiTask }>("POST", w(ws, "/ai/check-models"), models ? { models } : {})).task,
     setModelPrice: async (ws, modelKey, price) => (await call<{ model: ModelInfo }>("PUT", w(ws, `/ai/prices/${id(modelKey)}`), price ?? {})).model,
     usage: async (ws, days) => (await call<{ usage: UsageSummary }>("GET", w(ws, `/usage${q({ days })}`))).usage,
@@ -265,6 +267,7 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     setProviderKey: async (ws, providerId, key) => (await call<{ provider: ProviderStatus }>("PUT", w(ws, `/providers/${id(providerId)}/key`), { key })).provider,
     deleteProviderKey: (ws, providerId) => call<void>("DELETE", w(ws, `/providers/${id(providerId)}/key`)),
     storage: async (ws) => (await call<{ storage: StorageSummary }>("GET", w(ws, "/storage"))).storage,
+    storageCleanup: (ws) => call<{ removed: { files: number; bytes: number } }>("POST", w(ws, "/storage/cleanup")),
 
     publish: async (ws, storyId, targets) =>
       (await call<{ publishingJobs: PublishingJob[] }>("POST", w(ws, `/stories/${id(storyId)}/publish`), { targets })).publishingJobs,

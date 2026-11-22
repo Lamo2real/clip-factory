@@ -1,18 +1,21 @@
-// Lamo Stories › Settings › Video (docs/CONTRACTS.md §45.29 Video, §45.31): the makers, picked apart from the AI
-// models that write the stories (an LLM never "makes the video"): the video maker and its model, the picture maker
-// and the sound maker, each with its real state; the size 1080 × 1920 (the built-in animator's only size), 9:16 (1:1
-// and 16:9 listed, not with the built-in animator yet), the usual length (15 to 90 s, 30 to 60 s best), the quality,
-// the frame rate (30 fps, the built-in animator's only rate), the captions and music defaults, the render time used,
-// prices for the AI makers and provider keys.
+// Lamo Stories › Settings › Video (docs/CONTRACTS.md §45.29 Video, §45.31, §45.34): the makers, picked apart from
+// the AI models that write the stories (an LLM never "makes the video"): the video maker and its model, the picture
+// maker and the sound maker, each with its real state (a maker that is not ready says what it needs; nothing switches
+// to another one by itself); the default shape (9:16, 1:1 or 16:9; Shorts, Reels and TikTok want 9:16) and its size,
+// the frame rate (30 fps), the usual length (15 to 90 s, 30 to 60 s best), the quality, the captions and music
+// defaults, the use and costs (render minutes per day, each maker's units and cost), prices for the AI makers and
+// provider keys.
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useLoad } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
-import type { ProviderStatus, StoriesConfig } from "../api/types.ts";
+import { storiesReduceMotion } from "../prefs.ts";
+import { RESOLUTIONS, type ProviderStatus, type StoriesConfig, type VideoAspect, type VideoResolution } from "../api/types.ts";
 import modelsFile from "../../../../stories/config/models.json";
 import { Chip, Failed, Loading, Note, PROVIDER_STATE, SavedMark, SetCard, SetPick, SetSwitch, useSaved } from "./bits.tsx";
 import { useAi, useWorkspaceConfig } from "./data.ts";
 import { keepName, ProviderKeys } from "./ProviderKeys.tsx";
 import { MakerPrices } from "./ProviderPrices.tsx";
+import { VideoUsage } from "./VideoUsage.tsx";
 
 type VideoMaker = StoriesConfig["providers"]["video"];
 type PictureMaker = StoriesConfig["providers"]["images"];
@@ -20,7 +23,7 @@ type PictureMaker = StoriesConfig["providers"]["images"];
 /** Each maker's name and model, from Lamo Stories' own stories/config/models.json where it has one. */
 export const MAKERS: Record<string, { label: string; model: string; line: string }> = {
   "builtin-2d": { label: "Built-in animator", model: "Lamo Stories' own 2D animator", line: "Draws and moves every character the same way in every video." },
-  "nova-reel": { label: modelsFile.videoModel.label, model: `${modelsFile.videoModel.label} (${modelsFile.videoModel.modelId})`, line: "AI footage for backgrounds and cut-aways, 6 seconds a shot. Posts that use it carry the platforms' AI label." },
+  "nova-reel": { label: modelsFile.videoModel.label, model: `${modelsFile.videoModel.label} (${modelsFile.videoModel.modelId})`, line: "AI footage for cut-aways (scenes with no character), 6 seconds a shot. Posts that use it carry the platforms' AI label." },
   "builtin-rig": { label: "Built-in drawings", model: "Lamo Stories' own character drawings", line: "Every character looks the same in every video." },
   "nova-canvas": { label: `Also AI portraits (${modelsFile.imageModel.label})`, model: `${modelsFile.imageModel.label} (${modelsFile.imageModel.modelId})`, line: "Makes a portrait of each character for the app. Videos still use the drawings." },
   "builtin-synth": { label: "Built-in sounds and music", model: "Lamo Stories' own sound maker", line: "Every sound effect, noise and tune, made fresh for each video." },
@@ -31,6 +34,24 @@ const QUALITY: { value: StoriesConfig["video"]["quality"]; label: string; line: 
   { value: "high", label: "Better", line: "The usual (CRF 20)" },
   { value: "best", label: "Best", line: "Bigger files (CRF 17)" },
 ];
+
+/** The three shapes, the one Shorts, Reels and TikTok want first (§45.34). */
+export const SHAPES: { value: VideoAspect; label: string; line: string }[] = [
+  { value: "9:16", label: "9:16 tall", line: "For Shorts, Reels and TikTok" },
+  { value: "1:1", label: "1:1 square", line: "For feeds and posts" },
+  { value: "16:9", label: "16:9 wide", line: "For YouTube videos and big screens" },
+];
+
+/** "1080 × 1920" from "1080x1920". */
+export function sizeWords(r: VideoResolution): string {
+  return r.replace("x", " × ");
+}
+
+/** A new shape keeps the same sharpness: the big size stays big, the small one small. */
+export function sizeFor(aspect: VideoAspect, from: VideoResolution): VideoResolution {
+  const small = Object.values(RESOLUTIONS).some((sizes) => sizes[1] === from);
+  return RESOLUTIONS[aspect][small ? 1 : 0]!;
+}
 
 function stateOf(providers: ProviderStatus[] | null, id: string): ProviderStatus | undefined {
   return providers?.find((p) => p.id === id);
@@ -48,6 +69,11 @@ function makerOption<T extends string>(providers: ProviderStatus[] | null, id: T
   };
 }
 
+/** What a maker that is not working yet still needs, saying "is not ready yet" once (the API's line often says it). */
+export function notReadyLine(p: Pick<ProviderStatus, "label" | "line">): string {
+  return /\bis not ready yet\b/.test(p.line) ? p.line : `${p.label} is not ready yet. ${p.line}`;
+}
+
 function ModelLine({ providers, id }: { providers: ProviderStatus[] | null; id: string }) {
   const p = stateOf(providers, id);
   return (
@@ -60,7 +86,8 @@ function ModelLine({ providers, id }: { providers: ProviderStatus[] | null; id: 
       {/* The picked maker is not working yet: what it needs, in the API's own words (§45.11.6: on only after a real call). */}
       {p && (p.state === "needs_setup" || p.state === "unavailable") ? (
         <Note tone="sun" role="status">
-          {p.label} is not ready yet. {p.line}
+          {/* The API's line may already say it is not ready (§45.34's sentence, with the maker's short name): then it is said once. */}
+          {notReadyLine(p)}
           {p.lastError && p.lastError !== p.line ? ` Last problem: ${p.lastError}` : ""}
         </Note>
       ) : null}
@@ -128,6 +155,7 @@ export function VideoSection({ ws }: { ws: string }) {
   const usage = useLoad(() => storiesApi().usage(ws, 30), ws, "st-settings-usage");
   const ai = useAi(ws);
   const { saved, flash } = useSaved();
+  const [priceOpen, setPriceOpen] = useState<string | null>(null);
   const reloadProviders = providers.reload;
   // A saved change shows "Saved" and asks the makers again (a newly picked one may need a check).
   useEffect(() => {
@@ -149,7 +177,7 @@ export function VideoSection({ ws }: { ws: string }) {
         <SetPick<VideoMaker> label="Video maker" stack value={c.providers.video} options={[makerOption(p, "builtin-2d"), makerOption(p, "nova-reel")]} onChange={(v) => save({ providers: { ...c.providers, video: v } })} />
         <ModelLine providers={p} id={c.providers.video} />
       </SetCard>
-      <SetCard title="Picture maker" icon="brush" lede="How the characters are drawn.">
+      <SetCard title="Picture maker" icon="brush" id="picture-maker" lede="How the characters are drawn.">
         <SetPick<PictureMaker> label="Picture maker" stack value={c.providers.images} options={[makerOption(p, "builtin-rig"), makerOption(p, "nova-canvas")]} onChange={(v) => save({ providers: { ...c.providers, images: v } })} />
         <ModelLine providers={p} id={c.providers.images} />
       </SetCard>
@@ -159,28 +187,32 @@ export function VideoSection({ ws }: { ws: string }) {
       </SetCard>
       {providers.error && !p ? <Note tone="sun">{providers.error}</Note> : null}
 
-      <SetCard title="Picture size" icon="ruler" lede="Tall videos for phones.">
-        <dl className="st-stg-facts">
-          <div>
-            <dt>Size</dt>
-            <dd>1080 × 1920, the built-in animator's only size</dd>
-          </div>
-          <div>
-            <dt>Frame rate</dt>
-            <dd>30 fps, the built-in animator's only rate</dd>
-          </div>
-        </dl>
+      <SetCard title="Shape and size" icon="ruler" id="shape" lede="New videos start with this shape. Shorts, Reels and TikTok want 9:16. You can change it for one video in Production › New.">
         <p className="st-stg-label">Shape</p>
-        <SetPick<string>
+        <SetPick<VideoAspect>
           label="Shape of the video"
           value={c.video.aspect}
-          onChange={() => undefined}
-          options={[
-            { value: "9:16", label: "9:16 tall", line: "For Shorts, Reels and TikTok" },
-            { value: "1:1", label: "1:1 square", off: "Not with the built-in animator yet" },
-            { value: "16:9", label: "16:9 wide", off: "Not with the built-in animator yet" },
-          ]}
+          onChange={(v) => save({ video: { ...c.video, aspect: v, resolution: sizeFor(v, c.video.resolution) } })}
+          options={SHAPES}
         />
+        {c.video.aspect !== "9:16" ? (
+          <Note tone="sun" role="status">
+            Shorts, Reels and TikTok want 9:16. A {c.video.aspect === "1:1" ? "square" : "wide"} video shows smaller there, with bars around it.
+          </Note>
+        ) : null}
+        <p className="st-stg-label">Size</p>
+        <SetPick<VideoResolution>
+          label="Size of the video"
+          value={c.video.resolution}
+          onChange={(v) => save({ video: { ...c.video, resolution: v } })}
+          options={RESOLUTIONS[c.video.aspect].map((r, i) => ({ value: r, label: sizeWords(r), line: i === 0 ? "Sharp (Full HD)" : "Smaller files, quicker to make" }))}
+        />
+        <dl className="st-stg-facts">
+          <div>
+            <dt>Frame rate</dt>
+            <dd>30 frames a second (30 fps)</dd>
+          </div>
+        </dl>
       </SetCard>
 
       <SetCard title="Usual length" icon="clock" lede="New videos start at this length. You can change it for each video.">
@@ -196,13 +228,26 @@ export function VideoSection({ ws }: { ws: string }) {
         <SetSwitch label="Music" description="A tune under the sound effects." checked={c.musicOn} onChange={(v) => save({ musicOn: v })} />
       </SetCard>
 
-      <SetCard title="Use, prices and keys" icon="coin" lede="How much rendering was done, what the AI makers cost, and keys for makers that need one.">
-        <p className="st-stg-active">
-          <span className="st-stg-active__word">Rendering, last 30 days</span>
-          <strong>{usage.data ? `${Math.round(usage.data.renderMinutes)} ${Math.round(usage.data.renderMinutes) === 1 ? "minute" : "minutes"}` : usage.error ? "Not known right now" : "…"}</strong>
-        </p>
+      <VideoUsage
+        usage={usage.data}
+        error={usage.error}
+        providers={p}
+        onAddPrice={(id) => {
+          setPriceOpen(id);
+          requestAnimationFrame(() => document.getElementById(`price-${id}`)?.scrollIntoView?.({ block: "center", behavior: storiesReduceMotion() ? "auto" : "smooth" }));
+        }}
+      />
+
+      <SetCard title="Prices and keys" icon="coin" lede="What the AI makers cost, and keys for makers that need one.">
         <h4 className="st-stg-subhead">Prices</h4>
-        <MakerPrices ai={ai} />
+        <MakerPrices
+          ai={ai}
+          open={priceOpen}
+          setOpen={(id) => {
+            setPriceOpen(id);
+            if (id === null) void usage.reload();
+          }}
+        />
         <h4 className="st-stg-subhead">Keys</h4>
         {p ? <ProviderKeys ws={ws} providers={p} kinds={["images", "animation", "audio"]} onChange={(x) => providers.setData((l) => (l ? l.map((y) => (y.id === x.id ? keepName(y, x) : y)) : l))} /> : null}
       </SetCard>

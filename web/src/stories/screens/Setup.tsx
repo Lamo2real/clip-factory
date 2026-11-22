@@ -5,8 +5,12 @@
 // (each with the same card as Social accounts), 11 done (confetti). A ring shows "4 of 11 done" and the list of
 // what is left. Making videos never waits for the social steps.
 //
-// The ticks come from the server: steps 1 to 3 tick when the AI configuration is saved, 4 when a video provider is
-// picked, 6 to 10 when that platform is connected; only 5 and 11 are ticked here by hand.
+// The ticks come from the server (§45.34): step 1 once Check models ran or the owner tapped "These look right" (step 1
+// shows the models and their state), step 2 once he picked the default model, step 3 the default effort (each sent
+// as PUT …/ai `picked`), 4 when a video provider is picked, 6 to 10 when that platform is connected (an account that
+// is Lamo Clips' own is not); only 5 and 11 are ticked here by hand. Step 2 never saves an effort the owner did not
+// pick: a model that does not offer the current effort is held until he picks one in step 3, then both are saved.
+import "../styles/social.css";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
@@ -15,7 +19,8 @@ import { storiesGoLater } from "../pane.tsx";
 import { useLoad } from "../../lib/hooks.ts";
 import { storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
-import { EFFORT_LABEL, type Effort, type ModelInfo, type Onboarding, type OnboardStep, type Platform, type StoriesAiConfig, type StoriesConfig } from "../api/types.ts";
+import { EFFORT_LABEL, type Effort, type ModelInfo, type Onboarding, type OnboardStep, type Platform, type SocialAccount, type StoriesAiConfig, type StoriesConfig } from "../api/types.ts";
+import { aiBody } from "../settings/data.ts";
 import {
   celebrate,
   centerOf,
@@ -34,7 +39,7 @@ import {
   useOnboarding,
   type StIconName,
 } from "../ui.tsx";
-import { DisconnectedNote, PlatformCard, useSocial } from "./Connections.tsx";
+import { DisconnectedNote, PLACE, PlatformCard, useSocial } from "./Connections.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
 export const SETUP_ORDER: OnboardStep[] = ["ai", "model", "effort", "video", "agents", "instagram", "tiktok", "youtube", "facebook", "x", "done"];
@@ -91,19 +96,17 @@ function Foot({ step, busy, onBack, onSkip, children }: { step: OnboardStep; bus
 type Ai = { ai: StoriesAiConfig; models: ModelInfo[] };
 
 function modelLine(m: ModelInfo): string {
-  if (m.status === "ok") return `${m.provider} · Works: it answered.`;
-  if (m.status === "not_checked") return `${m.provider} · Not checked yet.`;
-  return `${m.provider} · ${m.statusLine}`;
+  const who = `${m.provider}${m.custom ? " · Added by you" : ""}`;
+  if (m.status === "ok") return `${who} · Works: it answered.`;
+  if (m.status === "not_checked") return `${who} · Not checked yet.`;
+  return `${who} · ${m.statusLine}`;
 }
 
-/** Steps 2 and 3: the default model (with Check models) and the default effort, saved to Lamo Stories' own AI setup. */
-function ModelStep({ ws, ai, onSaved, busy, setBusy }: { ws: string; ai: Ai; onSaved: (next: StoriesAiConfig) => void; busy: boolean; setBusy: (b: boolean) => void }) {
+/** Check models from the setup: one tiny real call per model, followed until it finishes; then the fresh models. */
+function useCheckModels(ws: string, start: ModelInfo[], onChecked?: (models: ModelInfo[]) => void) {
   const toast = useToast();
   const [checking, setChecking] = useState(false);
-  const [pick, setPick] = useState(ai.ai.defaultModel);
-  const [models, setModels] = useState(ai.models);
-  const chosen = models.find((m) => m.key === pick);
-
+  const [models, setModels] = useState(start);
   const check = async () => {
     setChecking(true);
     try {
@@ -117,20 +120,126 @@ function ModelStep({ ws, ai, onSaved, busy, setBusy }: { ws: string; ai: Ai; onS
       setModels(fresh.models);
       const ok = fresh.models.filter((m) => m.status === "ok").length;
       toast.success(`${ok} of ${fresh.models.length} models answered.`);
+      onChecked?.(fresh.models);
     } catch (e) {
       toast.error(friendlyMessage(e));
     } finally {
       setChecking(false);
     }
   };
+  return { checking, models, check };
+}
+
+function CheckRow({ checking, busy, onCheck }: { checking: boolean; busy: boolean; onCheck: () => void }) {
+  return (
+    <div className="st-setup__row">
+      <StButton disabled={checking || busy} onClick={onCheck}>
+        <StIcon name="retry" size={18} />
+        {checking ? "Checking every model…" : "Check models"}
+      </StButton>
+      <span className="st-setup__hint">One tiny real call per model, so you see which ones answer.</span>
+    </div>
+  );
+}
+
+const STATE_CHIP: Record<ModelInfo["status"], { label: string; tone: string }> = {
+  ok: { label: "Works", tone: "mint" },
+  not_checked: { label: "Not checked yet", tone: "sky" },
+  denied: { label: "No access", tone: "coral" },
+  not_found: { label: "Not found", tone: "coral" },
+  error: { label: "Had a problem", tone: "sun" },
+};
+
+/** Step 1: what Lamo Stories uses, the models and their state, Check models, and "These look right" (§45.34). */
+function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy }: { ws: string; ai: Ai; onSaved: (next: StoriesAiConfig) => void; onChecked: (models: ModelInfo[]) => void; busy: boolean; setBusy: (b: boolean) => void }) {
+  const toast = useToast();
+  const { checking, models, check } = useCheckModels(ws, ai.models, onChecked);
+  return (
+    <>
+      <p className="st-setup__text">
+        Lamo Stories is its own studio inside Clip Factory, with its own AI helpers, its own settings and its own social accounts. Nothing you set here
+        changes Clip Factory.
+      </p>
+      <ul className="st-setup__facts">
+        <li>
+          <StIcon name="bulb" size={20} />
+          An AI model writes each story, gives ideas and checks driving-safety facts against checked advice.
+        </li>
+        <li>
+          <StIcon name="clapper" size={20} />A video maker draws and animates it. That is a separate choice.
+        </li>
+        <li>
+          <StIcon name="sliders" size={20} />
+          You pick the model and how hard it thinks. Nothing is swapped behind your back.
+        </li>
+      </ul>
+      <h3 className="st-setup__sub">The AI models Lamo Stories can use</h3>
+      <ul className="st-setup__models" aria-label="The AI models and their state">
+        {models.map((m) => (
+          <li key={m.key} className="st-setup__model" data-status={m.status}>
+            <span className="st-setup__model-name">{m.label}</span>
+            <span className={`st-chip st-chip--${STATE_CHIP[m.status].tone}`}>{STATE_CHIP[m.status].label}</span>
+            <span className="st-setup__model-line">{modelLine(m)}</span>
+          </li>
+        ))}
+      </ul>
+      <CheckRow checking={checking} busy={busy} onCheck={() => void check()} />
+      <SaveBar
+        busy={busy}
+        label="These look right"
+        onSave={async (el) => {
+          setBusy(true);
+          try {
+            const next = await storiesApi().putAi(ws, aiBody(ai.ai, ai.ai.version, ["environment"]));
+            celebrate(centerOf(el));
+            toast.success("Great! Next, pick the model Lamo Stories uses most.");
+            onSaved(next);
+          } catch (e) {
+            toast.error(friendlyMessage(e));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+    </>
+  );
+}
+
+/** Step 2: the default model (with Check models), saved to Lamo Stories' own AI setup with `picked: ["model"]`. */
+function ModelStep({
+  ws,
+  ai,
+  onSaved,
+  onHold,
+  onChecked,
+  busy,
+  setBusy,
+}: {
+  ws: string;
+  ai: Ai;
+  onSaved: (next: StoriesAiConfig) => void;
+  /** the model does not offer the current effort: it waits for the owner's own pick in step 3 */
+  onHold: (key: string) => void;
+  onChecked: (models: ModelInfo[]) => void;
+  busy: boolean;
+  setBusy: (b: boolean) => void;
+}) {
+  const toast = useToast();
+  const [pick, setPick] = useState(ai.ai.defaultModel);
+  const { checking, models, check } = useCheckModels(ws, ai.models, onChecked);
+  const chosen = models.find((m) => m.key === pick);
+  const needsLevel = !!chosen && chosen.efforts.length > 0 && !chosen.efforts.includes(ai.ai.defaultEffort);
 
   const save = async (el: HTMLElement) => {
     if (!chosen) return;
+    // Never an effort the owner did not pick: a model without today's level waits for his pick in the next step.
+    if (needsLevel) {
+      onHold(chosen.key);
+      return;
+    }
     setBusy(true);
     try {
-      // The effort stays when the new model offers it; else the model's own default (never a level it lacks).
-      const effort = chosen.efforts.includes(ai.ai.defaultEffort) ? ai.ai.defaultEffort : (chosen.defaultEffort ?? chosen.efforts[0] ?? ai.ai.defaultEffort);
-      const next = await storiesApi().putAi(ws, { ...ai.ai, defaultModel: chosen.key, defaultEffort: effort });
+      const next = await storiesApi().putAi(ws, aiBody({ ...ai.ai, defaultModel: chosen.key }, ai.ai.version, ["model"]));
       celebrate(centerOf(el));
       toast.success(`${chosen.label} is Lamo Stories' default model now.`);
       onSaved(next);
@@ -160,23 +269,25 @@ function ModelStep({ ws, ai, onSaved, busy, setBusy }: { ws: string; ai: Ai; onS
           {chosen.label} isn't available right now: {chosen.statusLine} Pick another model, or try again later.
         </p>
       ) : null}
-      <div className="st-setup__row">
-        <StButton disabled={checking || busy} onClick={() => void check()}>
-          <StIcon name="retry" size={18} />
-          {checking ? "Checking every model…" : "Check models"}
-        </StButton>
-        <span className="st-setup__hint">One tiny real call per model, so you see which ones answer.</span>
-      </div>
-      <SaveBar busy={busy} label={chosen ? `Use ${chosen.label}` : "Use this model"} onSave={save} />
+      {needsLevel ? (
+        <p className="st-note st-note--sun" role="note">
+          <StIcon name="sliders" size={18} />
+          {chosen.label} does not offer {EFFORT_LABEL[ai.ai.defaultEffort]}. Next you pick its level, then both are saved together.
+        </p>
+      ) : null}
+      <CheckRow checking={checking} busy={busy} onCheck={() => void check()} />
+      <SaveBar busy={busy} label={chosen ? (needsLevel ? `Use ${chosen.label}: pick its level next` : `Use ${chosen.label}`) : "Use this model"} onSave={save} />
     </>
   );
 }
 
-function EffortStep({ ws, ai, onSaved, busy, setBusy }: { ws: string; ai: Ai; onSaved: (next: StoriesAiConfig) => void; busy: boolean; setBusy: (b: boolean) => void }) {
+/** Step 3: the default effort (`picked: ["effort"]`), or the held model with the level the owner picks for it. */
+function EffortStep({ ws, ai, held, onSaved, busy, setBusy }: { ws: string; ai: Ai; held: string | null; onSaved: (next: StoriesAiConfig) => void; busy: boolean; setBusy: (b: boolean) => void }) {
   const toast = useToast();
-  const model = ai.models.find((m) => m.key === ai.ai.defaultModel);
+  const model = ai.models.find((m) => m.key === (held ?? ai.ai.defaultModel));
   const offers = model?.efforts ?? [];
-  const [pick, setPick] = useState<Effort>(offers.includes(ai.ai.defaultEffort) ? ai.ai.defaultEffort : (model?.defaultEffort ?? offers[0] ?? "high"));
+  // A held model starts with nothing picked: the owner chooses its level himself.
+  const [pick, setPick] = useState<Effort | null>(held ? null : offers.includes(ai.ai.defaultEffort) ? ai.ai.defaultEffort : (model?.defaultEffort ?? offers[0] ?? "high"));
   if (!offers.length)
     return (
       <>
@@ -190,7 +301,7 @@ function EffortStep({ ws, ai, onSaved, busy, setBusy }: { ws: string; ai: Ai; on
           onSave={async (el) => {
             setBusy(true);
             try {
-              const next = await storiesApi().putAi(ws, { ...ai.ai });
+              const next = await storiesApi().putAi(ws, aiBody(ai.ai, ai.ai.version, ["effort"]));
               celebrate(centerOf(el));
               onSaved(next);
             } catch (e) {
@@ -204,25 +315,36 @@ function EffortStep({ ws, ai, onSaved, busy, setBusy }: { ws: string; ai: Ai; on
     );
   return (
     <>
+      {held && model ? (
+        <p className="st-note st-note--sun" role="note">
+          <StIcon name="sliders" size={18} />
+          {model.label} does not offer {EFFORT_LABEL[ai.ai.defaultEffort]}. Pick its level: then {model.label} and that level are saved together.
+        </p>
+      ) : null}
       <p className="st-setup__text">
         How hard {model?.label ?? "the model"} thinks before it answers. Higher is slower and costs more, and is best for storyboards and fact checks.
         You can pick a different level per task later.
       </p>
       <StPick<Effort>
         label="Lamo Stories' default effort"
-        value={pick}
+        value={(pick ?? "") as Effort}
         options={offers.map((e) => ({ value: e, label: EFFORT_LABEL[e], line: e === model?.defaultEffort ? "The model's own" : undefined }))}
         onChange={setPick}
       />
       <SaveBar
         busy={busy}
-        label={`Use ${EFFORT_LABEL[pick]}`}
+        label={pick ? `Use ${EFFORT_LABEL[pick]}` : "Pick a level first"}
+        off={!pick}
         onSave={async (el) => {
+          if (!pick || !model) {
+            toast.error("Pick a level first.");
+            return;
+          }
           setBusy(true);
           try {
-            const next = await storiesApi().putAi(ws, { ...ai.ai, defaultEffort: pick });
+            const next = await storiesApi().putAi(ws, aiBody({ ...ai.ai, defaultModel: model.key, defaultEffort: pick }, ai.ai.version, held ? ["model", "effort"] : ["effort"]));
             celebrate(centerOf(el));
-            toast.success(`Effort set to ${EFFORT_LABEL[pick]}.`);
+            toast.success(held ? `${model.label} at ${EFFORT_LABEL[pick]} is your default now.` : `Effort set to ${EFFORT_LABEL[pick]}.`);
             onSaved(next);
           } catch (e) {
             toast.error(friendlyMessage(e));
@@ -235,12 +357,13 @@ function EffortStep({ ws, ai, onSaved, busy, setBusy }: { ws: string; ai: Ai; on
   );
 }
 
-function SaveBar({ busy, label, onSave }: { busy: boolean; label: string; onSave: (el: HTMLElement) => void | Promise<void> }) {
+function SaveBar({ busy, label, onSave, off = false }: { busy: boolean; label: string; onSave: (el: HTMLElement) => void | Promise<void>; off?: boolean }) {
   return (
     <div className="st-setup__save">
       <StButton
         main
         disabled={busy}
+        aria-disabled={off || undefined}
         onClick={(e) => {
           const el = e.currentTarget;
           void onSave(el);
@@ -276,14 +399,15 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
         value={value}
         options={[
           { value: "builtin-2d", label: "Built-in animation", line: "On. Cartoons drawn right here, 9:16, 30 frames a second." },
-          { value: "nova-reel", label: "Amazon Nova Reel (AI video)", line: reel?.line ?? "Needs a storage place in the USA. Off until you allow it." },
+          { value: "nova-reel", label: "Amazon Nova Reel (AI video)", line: reel?.line ?? "AI cut-aways (scenes with no character). It needs a storage place in the USA first." },
         ]}
         onChange={setPick}
       />
-      {value === "nova-reel" ? (
+      {value === "nova-reel" && reel?.state !== "on" ? (
         <p className="st-note st-note--sun" role="note">
           <StIcon name="alert" size={18} />
-          Nova Reel is not switched on yet, so videos keep using the built-in animation until it is. Posts made with it get the platforms' AI labels.
+          Nova Reel is not ready yet. Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in
+          animation by itself. Pick Built-in animation to keep making videos. Posts made with Nova Reel get the platforms' AI labels.
         </p>
       ) : null}
       <SaveBar
@@ -294,7 +418,7 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
           try {
             await storiesApi().patchWorkspace(ws, { configuration: { providers: { ...config.providers, video: value } }, version: w.data!.version });
             celebrate(centerOf(el));
-            toast.success(value === "builtin-2d" ? "Videos are made with the built-in animation." : "Saved. Nova Reel starts once it is switched on.");
+            toast.success(value === "builtin-2d" ? "Videos are made with the built-in animation." : "Saved. Nova Reel works once its setup is finished.");
             onSaved();
           } catch (e) {
             toast.error(friendlyMessage(e));
@@ -345,7 +469,8 @@ function AgentsStep({ ws }: { ws: string }) {
 /** Steps 6 to 10: the platform's card, the same as on Social accounts (its app choice, keys and Connect). */
 function ConnectStep({ ws, platform }: { ws: string; platform: Platform }) {
   const social = useSocial(ws);
-  const [gone, setGone] = useState(false);
+  // The developer app the account used, for the right sentence after a Disconnect (§45.34).
+  const [gone, setGone] = useState<{ choice: SocialAccount["app"]["choice"] } | null>(null);
   if (social.error && !social.data) return <StError message={social.error} onRetry={() => void social.reload()} />;
   if (!social.data) return <StLoading label="Checking the account…" />;
   const a = social.data.accounts.find((x) => x.platform === platform);
@@ -356,7 +481,14 @@ function ConnectStep({ ws, platform }: { ws: string; platform: Platform }) {
         Connect the {PLATFORM_NAME[platform]} account that gets Lamo Stories' videos. It stays separate from Clip Factory's. You can skip this and
         connect it later.
       </p>
-      {gone ? <DisconnectedNote onClose={() => setGone(false)} /> : null}
+      {gone ? <DisconnectedNote choice={gone.choice} onClose={() => setGone(null)} /> : null}
+      {a.connectionStatus === "same_as_clips" ? (
+        <p className="st-note st-note--coral" role="note">
+          <StIcon name="alert" size={18} />
+          This is Clip Factory's own {PLACE[platform]}, so this step stays to do. Tap Pick another {PLACE[platform]} below, or Use it for both if you really want
+          both apps to post there.
+        </p>
+      ) : null}
       <ul className="st-conns st-conns--one">
         <PlatformCard
           ws={ws}
@@ -364,7 +496,7 @@ function ConnectStep({ ws, platform }: { ws: string; platform: Platform }) {
           all={social.data.accounts}
           clips={social.data.clips.find((c) => c.platform === platform)}
           onChanged={social.reload}
-          onDisconnected={() => setGone(true)}
+          onDisconnected={(_p, choice) => setGone({ choice })}
         />
       </ul>
     </>
@@ -391,6 +523,8 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
   const ai = useLoad(() => storiesApi().getAi(ws), ws, "st-setup-ai");
   const [at, setAt] = useState<OnboardStep | null>(null);
   const [busy, setBusy] = useState(false);
+  // Step 2's model, waiting for the owner's own effort in step 3 (nothing is saved until then).
+  const [held, setHeld] = useState<string | null>(null);
   const panel = useRef<HTMLDivElement>(null);
   const data = ob.data;
 
@@ -436,8 +570,16 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
   // Steps 2 and 3: the saved AI setup (with its new version) is what the next step starts from at once, never the one
   // from before the save while the reload is on its way (a stale version would be refused).
   const afterAiSave = (next: StoriesAiConfig) => {
+    setHeld(null);
     ai.setData((prev) => (prev ? { ...prev, ai: next } : prev));
     void afterSave();
+  };
+  // Check models ticks step 1 (§45.34): the ring follows, and the next steps start from the models' fresh states (a
+  // model Bedrock just refused says so in step 2).
+  const afterCheck = (models: ModelInfo[]) => {
+    ai.setData((prev) => (prev ? { ...prev, models } : prev));
+    void ob.reload();
+    void refreshDashboard(ws).catch(() => undefined);
   };
 
   if (ob.error && !data)
@@ -463,34 +605,6 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
   let foot: ReactNode;
   switch (step) {
     case "ai":
-      body = (
-        <>
-          <p className="st-setup__text">
-            Lamo Stories is its own studio inside Clip Factory, with its own AI helpers, its own settings and its own social accounts. Nothing you set
-            here changes Clip Factory.
-          </p>
-          <ul className="st-setup__facts">
-            <li>
-              <StIcon name="bulb" size={20} />
-              An AI model writes each story, gives ideas and checks driving-safety facts against checked advice.
-            </li>
-            <li>
-              <StIcon name="clapper" size={20} />A video maker draws and animates it. That is a separate choice.
-            </li>
-            <li>
-              <StIcon name="sliders" size={20} />
-              You pick the model and how hard it thinks. Nothing is swapped behind your back.
-            </li>
-          </ul>
-        </>
-      );
-      foot = (
-        <StButton main onClick={() => go("model")}>
-          Next
-          <StIcon name="chevron" size={18} />
-        </StButton>
-      );
-      break;
     case "model":
     case "effort":
       body =
@@ -498,10 +612,24 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
           <StError message={ai.error} onRetry={() => void ai.reload()} />
         ) : !ai.data ? (
           <StLoading label="Reading the models…" />
+        ) : step === "ai" ? (
+          <EnvironmentStep key={`a${ai.data.ai.version}`} ws={ws} ai={ai.data} busy={busy} setBusy={setBusy} onSaved={afterAiSave} onChecked={afterCheck} />
         ) : step === "model" ? (
-          <ModelStep key={`m${ai.data.ai.version}`} ws={ws} ai={ai.data} busy={busy} setBusy={setBusy} onSaved={afterAiSave} />
+          <ModelStep
+            key={`m${ai.data.ai.version}`}
+            ws={ws}
+            ai={ai.data}
+            busy={busy}
+            setBusy={setBusy}
+            onSaved={afterAiSave}
+            onChecked={afterCheck}
+            onHold={(key) => {
+              setHeld(key);
+              go("effort");
+            }}
+          />
         ) : (
-          <EffortStep key={`e${ai.data.ai.version}`} ws={ws} ai={ai.data} busy={busy} setBusy={setBusy} onSaved={afterAiSave} />
+          <EffortStep key={`e${ai.data.ai.version}${held ?? ""}`} ws={ws} ai={ai.data} held={held} busy={busy} setBusy={setBusy} onSaved={afterAiSave} />
         );
       foot = state === "done" ? <NextButton onClick={() => go(nextStep(step))} /> : null;
       break;

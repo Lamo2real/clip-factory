@@ -1,7 +1,8 @@
 // The Lamo Stories mock's AI, skills and memory parts (docs/CONTRACTS.md §45.16.8, §45.25–§45.27, §45.29): the
 // resolver passes the shared cases (stories/config/resolve-cases.json), the models are Lamo Stories' own (never Clip
 // Factory's config/models.json), an effort a model does not offer is refused (never swapped), stale versions answer
-// 409, a key never comes back, and every route keeps to Lamo Stories workspaces.
+// 409, a key never comes back, and every route keeps to Lamo Stories workspaces. Round 3 (§45.34): models the owner
+// adds, the no-effort pair rule, picked stamps, the makers' use and per-unit prices, storage's place and Clean up now.
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -154,7 +155,15 @@ describe("provider keys and storage", () => {
     // A provider that takes a key (listed for a test), answered with the ProviderStatus the providers list shows.
     store.knobs.keyedProviders = [{ kind: "audio", id: "acme-voice", label: "Acme Voice" }];
     const out = await api.setProviderKey("stories", "acme-voice", "sk-live-1234567890abcdef4f2a");
-    expect(out).toEqual({ kind: "audio", id: "acme-voice", label: "Acme Voice", state: "needs_setup", line: "Key saved · ends 4f2a. It is checked on its first real call." });
+    expect(out).toEqual({
+      kind: "audio",
+      id: "acme-voice",
+      label: "Acme Voice",
+      state: "needs_setup",
+      line: "Key saved · ends 4f2a. It is checked on its first real call.",
+      // §45.34: whether a key is saved, its last four and when (never the key).
+      key: { saved: true, hint: "4f2a", savedAt: expect.any(String) },
+    });
     expect(JSON.stringify(out)).not.toContain("1234567890");
     expect((await api.setProviderKey("stories", "acme-voice", "short-key")).line).toBe("Key saved. It is checked on its first real call.");
     await expect(api.setProviderKey("stories", "acme-voice", "  ")).rejects.toMatchObject({ field: "key" });
@@ -164,11 +173,17 @@ describe("provider keys and storage", () => {
 
   it("keeps prices by model key or provider id in the configuration, and refuses any other id", async () => {
     const now = (await api.getAi("stories")).ai;
-    const reel = { inputPer1M: 80_000, outputPer1M: 0, cacheReadPer1M: null, cacheWritePer1M: null, longContext: null, currency: "USD", source: "owner" as const, note: "Your price for a second of video." };
+    // §45.34: a maker's price is for one unit (perUnit with its unit, the token prices 0).
+    const reel = { inputPer1M: 0, outputPer1M: 0, cacheReadPer1M: null, cacheWritePer1M: null, longContext: null, currency: "USD", source: "owner" as const, note: "Your price for a second of video.", perUnit: 0.08, unit: "second" as const };
     const saved = await api.putAi("stories", { ...now, prices: { "nova-reel": reel } });
-    expect(saved.prices["nova-reel"]).toMatchObject({ inputPer1M: 80_000, outputPer1M: 0, source: "owner", note: "Your price for a second of video." });
+    expect(saved.prices["nova-reel"]).toMatchObject({ inputPer1M: 0, outputPer1M: 0, perUnit: 0.08, unit: "second", source: "owner", note: "Your price for a second of video." });
     await expect(api.putAi("stories", { ...saved, prices: { "acme-motion": reel } })).rejects.toMatchObject({ status: 400, field: "prices" });
     await expect(api.putAi("stories", { ...saved, prices: { "nova-reel": { ...reel, inputPer1M: 200_000 } } })).rejects.toMatchObject({ status: 400 });
+    // The old way (a unit price kept as a price for a million units) is refused, and so is a picture price per second.
+    await expect(api.putAi("stories", { ...saved, prices: { "nova-reel": { ...reel, inputPer1M: 80_000, perUnit: null } } })).rejects.toMatchObject({ status: 400, field: "perUnit" });
+    await expect(api.putAi("stories", { ...saved, prices: { "nova-canvas": reel } })).rejects.toMatchObject({ status: 400, field: "unit" });
+    // A model's price has no unit.
+    await expect(api.putAi("stories", { ...saved, prices: { "opus-5-5": reel } })).rejects.toMatchObject({ status: 400, field: "perUnit" });
     const cleared = await api.putAi("stories", { ...saved, prices: {} });
     expect(cleared.prices).toEqual({});
   });
@@ -261,6 +276,9 @@ describe("workspace boundaries", () => {
       ["listMemory", (ws) => api.listMemory(ws)],
       ["checkModels", (ws) => api.checkModels(ws)],
       ["getAgent", (ws) => api.getAgent(ws, "creative_director")],
+      ["putAiModel", (ws) => api.putAiModel(ws, "custom-x", { label: "X", provider: "Amazon", modelId: "eu.amazon.nova-lite-v1:0", region: "eu-north-1", efforts: [], defaultEffort: null, vision: false, maxOutputTokens: 100, price: null })],
+      ["deleteAiModel", (ws) => api.deleteAiModel(ws, "custom-x")],
+      ["storageCleanup", (ws) => api.storageCleanup(ws)],
     ];
     for (const [name, call] of calls) {
       await expect(call("clips"), name).rejects.toMatchObject({ status: 409, message: "That is a Lamo Stories page. Switch to Lamo Stories first." });
@@ -286,5 +304,121 @@ describe("workspace boundaries", () => {
         expect(i, file).not.toMatch(/\/api\/index\.ts$/);
       }
     }
+  });
+});
+
+describe("round 3 (§45.34)", () => {
+  const def = { label: "Nova Premier", provider: "Amazon", modelId: "eu.amazon.nova-premier-v1:0", region: "eu-west-1", efforts: ["low", "high"] as Effort[], defaultEffort: "high" as Effort, vision: true, maxOutputTokens: 8000, price: null };
+
+  it("adds, changes and lists a model the owner adds, merged after the bundled ones and marked custom", async () => {
+    const m = await api.putAiModel("stories", "custom-nova-premier", def);
+    expect(m).toMatchObject({ key: "custom-nova-premier", label: "Nova Premier", provider: "Amazon", modelId: "eu.amazon.nova-premier-v1:0", efforts: ["low", "high"], defaultEffort: "high", vision: true, status: "not_checked", custom: true, region: "eu-west-1", maxOutputTokens: 8000, price: null });
+    const { models, tasks } = await api.getAi("stories");
+    expect(models.map((x) => x.key)).toEqual([...storiesModels.models.map((x) => x.key), "nova-pro", "custom-nova-premier"]);
+    expect(models.filter((x) => x.custom).map((x) => x.key)).toEqual(["custom-nova-premier"]);
+    expect(models.find((x) => x.key === "opus-5-5")?.custom).toBe(false);
+    // It can be used anywhere a model is: a task, with only the efforts it offers.
+    const ai = (await api.getAi("stories")).ai;
+    await expect(api.putAi("stories", { ...ai, tasks: { storyboard: { model: "custom-nova-premier", effort: "max" } } })).rejects.toMatchObject({ status: 400, message: "Nova Premier does not offer Maximum. Pick another level." });
+    await api.putAi("stories", { ...ai, tasks: { storyboard: { model: "custom-nova-premier", effort: "low" } } });
+    expect((await api.getAi("stories")).tasks.find((t) => t.kind === "storyboard")?.effective).toMatchObject({ model: "custom-nova-premier", effort: "low", from: "task" });
+    expect(tasks.length).toBe(11);
+    // Changing it keeps its key; a new id has to be checked again.
+    const changed = await api.putAiModel("stories", "custom-nova-premier", { ...def, label: "Nova Premier 2", price: { inputPer1M: 2.5, outputPer1M: 12.5, cacheReadPer1M: null, cacheWritePer1M: null, longContext: null, currency: "USD", source: "owner", note: "x" } });
+    expect(changed).toMatchObject({ label: "Nova Premier 2", price: { inputPer1M: 2.5, outputPer1M: 12.5, source: "owner" } });
+  });
+
+  it("refuses a bad key, a bundled key, more than 20 models and bad details, each with its field", async () => {
+    await expect(api.putAiModel("stories", "nova-premier", def)).rejects.toMatchObject({ status: 400, field: "key" });
+    await expect(api.putAiModel("stories", "custom-Nova", def)).rejects.toMatchObject({ status: 400, field: "key" });
+    await expect(api.putAiModel("stories", "opus-5-5", def)).rejects.toMatchObject({ status: 400, field: "key" });
+    await expect(api.putAiModel("stories", "custom-x", { ...def, label: " " })).rejects.toMatchObject({ field: "label" });
+    await expect(api.putAiModel("stories", "custom-x", { ...def, label: "Claude Opus 5.5" })).rejects.toMatchObject({ field: "label" });
+    await expect(api.putAiModel("stories", "custom-x", { ...def, provider: "" })).rejects.toMatchObject({ field: "provider" });
+    await expect(api.putAiModel("stories", "custom-x", { ...def, modelId: "not a model" })).rejects.toMatchObject({ field: "modelId" });
+    await expect(api.putAiModel("stories", "custom-x", { ...def, region: "Ireland" })).rejects.toMatchObject({ field: "region" });
+    await expect(api.putAiModel("stories", "custom-x", { ...def, efforts: ["low", "low"] })).rejects.toMatchObject({ field: "efforts" });
+    await expect(api.putAiModel("stories", "custom-x", { ...def, defaultEffort: "max" })).rejects.toMatchObject({ field: "defaultEffort" });
+    await expect(api.putAiModel("stories", "custom-x", { ...def, efforts: [], defaultEffort: "low" })).rejects.toMatchObject({ field: "defaultEffort" });
+    await expect(api.putAiModel("stories", "custom-x", { ...def, maxOutputTokens: 0 })).rejects.toMatchObject({ field: "maxOutputTokens" });
+    await expect(api.putAiModel("stories", "custom-x", { ...def, extra: 1 } as never)).rejects.toMatchObject({ field: "extra" });
+    // An ARN and an inference profile are fine; no efforts at all is fine (it runs at its own level).
+    await api.putAiModel("stories", "custom-arn", { ...def, label: "By ARN", modelId: "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/eu.amazon.nova-pro-v1:0", efforts: [], defaultEffort: null });
+    for (let i = 1; i < 20; i++) await api.putAiModel("stories", `custom-m${i}`, { ...def, label: `Model ${i}` });
+    await expect(api.putAiModel("stories", "custom-m21", { ...def, label: "One too many" })).rejects.toMatchObject({ status: 400, message: "You can add up to 20 models. Remove one first." });
+  });
+
+  it("removes one only while no saved setting uses it (409 naming the setting); a bundled one never", async () => {
+    await api.putAiModel("stories", "custom-nova-premier", def);
+    const a = await api.getAgent("stories", "character");
+    await api.patchAgent("stories", "character", { version: a.version, model: "custom-nova-premier" });
+    await expect(api.deleteAiModel("stories", "custom-nova-premier")).rejects.toMatchObject({ status: 409, message: "Nova Premier is still used by the Character agent. Pick another model there first." });
+    await api.patchAgent("stories", "character", { version: a.version + 1, model: null });
+    await api.deleteAiModel("stories", "custom-nova-premier");
+    expect((await api.getAi("stories")).models.some((m) => m.key === "custom-nova-premier")).toBe(false);
+    await expect(api.deleteAiModel("stories", "custom-nova-premier")).rejects.toMatchObject({ status: 404 });
+    await expect(api.deleteAiModel("stories", "opus-5-5")).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("checks an added model like any other; one Bedrock does not know keeps Bedrock's sentence", async () => {
+    await api.putAiModel("stories", "custom-nova-premier", def);
+    store.knobs.bedrockUnknown = "custom-nova-premier";
+    const task = await api.checkModels("stories", ["custom-nova-premier"]);
+    await wait(60);
+    const done = (await api.getTask("stories", task.taskId)) as { result: { models: { key: string; status: string; line: string }[] } };
+    expect(done.result.models).toEqual([{ key: "custom-nova-premier", status: "not_found", line: expect.stringContaining("Amazon Bedrock said: The provided model identifier is invalid (eu.amazon.nova-premier-v1:0 in eu-west-1).") }]);
+    expect((await api.getAi("stories")).models.find((m) => m.key === "custom-nova-premier")?.status).toBe("not_found");
+  });
+
+  it("refuses an effort saved with a model that has no effort setting in the same setting; an inherited one is fine", async () => {
+    const ai = (await api.getAi("stories")).ai;
+    await expect(api.putAi("stories", { ...ai, tasks: { chat: { model: "nova-pro", effort: "low" } } })).rejects.toMatchObject({ status: 400, message: "Amazon Nova Pro has no effort setting; it runs at its own level." });
+    await api.putAi("stories", { ...ai, tasks: { chat: { model: "nova-pro" } } });
+    const a = await api.getAgent("stories", "creative_director");
+    await expect(api.patchAgent("stories", "creative_director", { version: a.version, model: "nova-pro", effort: "high" })).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("stamps what the owner picked (environment, model, effort) and refuses anything else", async () => {
+    const ai = (await api.getAi("stories")).ai;
+    expect(aiPart.aiPicks(store).picked).toEqual({});
+    const saved = await api.putAi("stories", { ...ai, picked: ["model"] });
+    expect(Object.keys(aiPart.aiPicks(store).picked)).toEqual(["model"]);
+    expect(saved).not.toHaveProperty("picked");
+    await expect(api.putAi("stories", { ...saved, picked: ["colour"] as never })).rejects.toMatchObject({ status: 400, field: "picked" });
+    await expect(api.putAi("stories", { ...saved, pickedAt: {} } as never)).rejects.toMatchObject({ status: 400, field: "pickedAt" });
+  });
+
+  it("counts the makers' use per day and in all, with render minutes; prices them per unit, the built-in animator free", async () => {
+    let usage = await api.usage("stories", 30);
+    const rig = usage.totalsByProvider!.find((p) => p.provider === "builtin-rig")!;
+    expect(rig).toMatchObject({ unit: "second", cost: 0, currency: null });
+    expect(usage.renderMinutes).toBeCloseTo(rig.units / 60, 0);
+    const daySum = usage.days.reduce((a, d) => a + (d.renderMinutes ?? 0), 0);
+    expect(Math.abs(daySum - usage.renderMinutes)).toBeLessThan(1);
+    expect(usage.totalsByProvider!.find((p) => p.provider === "nova-canvas")).toMatchObject({ unit: "image", cost: null, currency: null });
+    for (const t of usage.totalsByProvider!) expect(usage.days.flatMap((d) => d.byProvider ?? []).filter((b) => b.provider === t.provider).reduce((a, b) => a + b.units, 0)).toBe(t.units);
+    const ai = (await api.getAi("stories")).ai;
+    await api.putAi("stories", { ...ai, prices: { "nova-canvas": { inputPer1M: 0, outputPer1M: 0, cacheReadPer1M: null, cacheWritePer1M: null, longContext: null, currency: "USD", source: "owner", note: "x", perUnit: 0.04, unit: "image" } } });
+    usage = await api.usage("stories", 30);
+    const canvas = usage.totalsByProvider!.find((p) => p.provider === "nova-canvas")!;
+    expect(canvas.currency).toBe("USD");
+    expect(canvas.cost).toBeCloseTo(canvas.units * 0.04, 4);
+    // Model rows never carry a provider id.
+    expect(usage.totals.map((t) => t.model)).not.toContain("builtin-rig");
+  });
+
+  it("says where the files are, counts storyboards and captions under scenes, and Clean up now applies the keep choices", async () => {
+    store.assets = [
+      { assetId: "1", kind: "storyboard", storyId: "s", characterId: null, title: "A", url: "", contentType: "application/json", bytes: 40, version: 1, createdAt: "", meta: {} },
+      { assetId: "2", kind: "captions", storyId: "s", characterId: null, title: "A", url: "", contentType: "text/plain", bytes: 2, version: 1, createdAt: "", meta: {} },
+    ];
+    const s = await api.storage("stories");
+    expect(s.bytes).toMatchObject({ scenes: 42, other: 0 });
+    expect(s.location).toEqual({ region: "eu-north-1", folder: "ws/{you}/stories/" });
+    // Everything kept: nothing to clear.
+    expect(await api.storageCleanup("stories")).toEqual({ removed: { files: 0, bytes: 0 } });
+    (store.workspaces[1]!.configuration as never as { production: Record<string, unknown> }).production = { burnCaptions: true, scenesAtOnce: 2, keepVersions: "all", keepReferences: "study_only" };
+    expect((await api.storageCleanup("stories")).removed.files).toBeGreaterThan(0);
+    await expect(api.storageCleanup("clips")).rejects.toMatchObject({ status: 409 });
   });
 });
