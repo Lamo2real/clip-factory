@@ -10,6 +10,14 @@ API's resolver (``ai_resolve``, bound per request by ``guard.require_workspace``
 merge them after ``stories/config/models.json``. A key matches ``^custom-[a-z0-9-]{1,40}$`` and never shadows a
 bundled key; at most 20 per workspace. Adding a model never makes it look available: its ``ModelInfo.status`` is
 ``not_checked`` until Check models (or a real call) answers.
+
+**How the model is called** (§45.35 D1): ``effortField`` (``"output_config"``: the effort goes in Anthropic's
+``output_config.effort``; ``"none"``: no effort is ever sent, so its efforts must be empty), ``tools`` (it takes tool
+use: the chat's actions and structured answers through ``toolConfig``) and ``cache`` (it takes Bedrock's
+``cachePoint``). Each may be left out: an Anthropic model takes all three, an Amazon model the cache only, any other
+maker none. The agent builds every Bedrock request from them. Changing a model's ``modelId`` or Region clears its
+``MODELSTATUS#`` (D6): it reads "Not checked yet" until it is checked again. ``provider`` is who makes the model;
+``host`` (D8) is who runs it, always "Amazon Bedrock" for a model added here.
 """
 
 from __future__ import annotations
@@ -52,7 +60,13 @@ FIELDS: Final = (
     "vision",
     "maxOutputTokens",
     "price",
+    "effortField",
+    "tools",
+    "cache",
 )
+# How an added model is called (§45.35 D1): where its effort goes ("none": nowhere, it runs at its own level).
+EFFORT_FIELDS: Final = ("output_config", "none")
+HOST: Final = "Amazon Bedrock"  # who runs every added model (D8); ``provider`` is who makes it
 
 NOT_FOUND: Final = "Lamo Stories has no added model with that name."
 BAD_KEY: Final = "A model you add needs a name like custom-my-model (small letters, digits and dashes)."
@@ -64,10 +78,48 @@ BAD_MODEL_ID: Final = (
     "(like global.anthropic.claude-opus-5-5) or its ARN from the Amazon Bedrock console."
 )
 BAD_REGION: Final = "Type the AWS Region code where the model runs, like us-east-1 or eu-north-1."
+BAD_EFFORT_FIELD: Final = (
+    "Say how the model takes an effort: output_config (like Anthropic's Claude models) or none (it runs at its own "
+    "level)."
+)
+NO_EFFORT_FIELD: Final = (
+    "This model has no effort setting (effortField none), so leave its efforts empty. Only a model that takes "
+    "output_config can list efforts."
+)
 
 
 def model_sk(key: str) -> str:
     return f"{ws.MODELDEF_SK}{key}"
+
+
+def _maker(provider: Any) -> str:
+    return " ".join(str(provider or "").split()).lower()
+
+
+def default_effort_field(provider: Any) -> str:
+    """Anthropic's models take ``output_config.effort``; any other maker's model takes no effort unless told."""
+    return "output_config" if _maker(provider) == "anthropic" else "none"
+
+
+def default_tools(provider: Any) -> bool:
+    return _maker(provider) == "anthropic"
+
+
+def default_cache(provider: Any) -> bool:
+    return _maker(provider) in ("anthropic", "amazon")
+
+
+def calling(item: Mapping[str, Any]) -> dict[str, Any]:
+    """``effortField``, ``tools`` and ``cache`` of a ``MODELDEF#`` item or a body, each defaulted from the maker
+    when it was left out (an item saved before they existed reads the same way)."""
+    provider = item.get("provider")
+    field = item.get("effortField")
+    tools, cache = item.get("tools"), item.get("cache")
+    return {
+        "effortField": field if field in EFFORT_FIELDS else default_effort_field(provider),
+        "tools": tools if isinstance(tools, bool) else default_tools(provider),
+        "cache": cache if isinstance(cache, bool) else default_cache(provider),
+    }
 
 
 # --- reading (the resolver's loader) ----------------------------------------------------------------------------
@@ -80,13 +132,17 @@ def as_model(item: Mapping[str, Any]) -> dict[str, Any] | None:
     region = item.get("region")
     if not isinstance(key, str) or not KEY.match(key) or not isinstance(model_id, str) or not isinstance(region, str):
         return None
-    efforts = [str(e) for e in item.get("efforts") or [] if e in res.EFFORTS]
+    how = calling(item)
+    # a model that takes no effort field never lists one: nothing would be sent (D1)
+    takes = how["effortField"] != "none"
+    efforts = [str(e) for e in item.get("efforts") or [] if e in res.EFFORTS] if takes else []
     default = item.get("defaultEffort") if item.get("defaultEffort") in efforts else None
     price = item.get("price") if isinstance(item.get("price"), Mapping) else None
     return {
         "key": key,
         "label": str(item.get("label") or key),
         "provider": str(item.get("provider") or ""),
+        "host": HOST,
         "modelId": model_id,
         "profile": model_id,
         "regions": [region],
@@ -97,6 +153,7 @@ def as_model(item: Mapping[str, Any]) -> dict[str, Any] | None:
         "maxOutputTokens": int(item.get("maxOutputTokens") or 0) or None,
         "pricing": dict(price) if price else None,
         "custom": True,
+        **how,
     }
 
 
@@ -168,6 +225,21 @@ def clean_efforts(value: Any) -> list[str]:
     return [e for e in res.EFFORTS if e in value]
 
 
+def clean_calling(body: Mapping[str, Any], efforts: list[str]) -> dict[str, Any]:
+    """``effortField``, ``tools`` and ``cache`` (each may be left out: the maker's defaults, D1)."""
+    field = body.get("effortField")
+    if field is not None and field not in EFFORT_FIELDS:
+        raise bad_request(BAD_EFFORT_FIELD, "effortField")
+    for name in ("tools", "cache"):
+        if body.get(name) is not None and not isinstance(body.get(name), bool):
+            what = "takes tool use" if name == "tools" else "takes Bedrock's prompt cache"
+            raise bad_request(f"Say whether the model {what} (true or false), or leave it out.", name)
+    how = calling(body)
+    if how["effortField"] == "none" and efforts:
+        raise bad_request(NO_EFFORT_FIELD, "efforts")
+    return how
+
+
 def clean(body: Mapping[str, Any]) -> dict[str, Any]:
     """A ``ModelDef`` body, checked: every sentence is one the owner can act on."""
     validate.only_keys(body, FIELDS)
@@ -179,16 +251,22 @@ def clean(body: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(vision, bool):
         raise bad_request("Say whether the model can look at pictures.", "vision")
     price = body.get("price")
+    label = _text(body, "label", LABEL_MAX, "Give the model a name people can read.")
+    provider = _text(body, "provider", PROVIDER_MAX, "Say who makes the model, like Anthropic or Amazon.")
+    model_id = clean_model_id(body.get("modelId"))
+    region = clean_region(body.get("region"))
+    how = clean_calling({**body, "provider": provider}, efforts)
     return {
-        "label": _text(body, "label", LABEL_MAX, "Give the model a name people can read."),
-        "provider": _text(body, "provider", PROVIDER_MAX, "Say who makes the model, like Anthropic or Amazon."),
-        "modelId": clean_model_id(body.get("modelId")),
-        "region": clean_region(body.get("region")),
+        "label": label,
+        "provider": provider,
+        "modelId": model_id,
+        "region": region,
         "efforts": efforts,
         "defaultEffort": default,
         "vision": vision,
         "maxOutputTokens": validate.integer(body.get("maxOutputTokens"), "maxOutputTokens", lo=1, hi=MAX_OUTPUT),
         "price": cfg.clean_price(price, "price") if price is not None else None,
+        **how,
     }
 
 
@@ -263,11 +341,28 @@ def put(
             names={"#u": "userId", "#w": "workspaceId"},
             values={":u": user_id, ":w": workspace_id},
         )
+        if _repointed(existing, item):
+            # another model id or Region is another model: its old "Works" says nothing about it (D6)
+            _forget_status(store, user_id, workspace_id, key)
     res.forget_custom()
     log("info", "ws.model_added" if existing is None else "ws.model_changed", key=key)
     ai = cfg.current(store, user_id, workspace_id)
     status = cfg.model_status_items(store, user_id, workspace_id).get(key)
     return cfg.model_info(found, status, ai)
+
+
+def _repointed(before: Mapping[str, Any], after: Mapping[str, Any]) -> bool:
+    return any(str(before.get(name) or "") != str(after.get(name) or "") for name in ("modelId", "region"))
+
+
+def _forget_status(store: db.Store, user_id: str, workspace_id: str, key: str) -> None:
+    """Every ``MODELSTATUS#`` of this model (read by its ``model`` attribute, as ``ModelInfo`` reads it), so it
+    reads "Not checked yet" until Check models (or a real call) answers again."""
+    owner = {"userId": [user_id], "workspaceId": [workspace_id]}
+    for found in cfg.query_owned(store, user_id, workspace_id, ws.MODELSTATUS_SK):
+        if cfg.status_model(found) == key:
+            store.delete_if(cfg.pk(user_id, workspace_id), str(found["sk"]), owner)
+    log("info", "ws.model_status_cleared", key=key)
 
 
 USED_DEFAULT: Final = "the default model in Settings › AI"

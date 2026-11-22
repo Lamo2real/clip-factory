@@ -7,8 +7,9 @@ settings at once (Lamo Stories' agent applies them after each job too):
 * ``production.keepReferences``: ``all`` keeps everything; ``study_only`` deletes a reference video's file and its
   frames once its study is written and keeps the study; ``days_30`` / ``days_90`` delete the file and frames of a
   reference older than that (its study, if any, stays). The ``REFVID#`` keeps its name and study and gets
-  ``sourceRemovedAt`` and ``note`` (internal; the agent writes the same): the reference answers ``fileRemoved: true``
-  (the page says "The video was removed to save space. Its study stays.") and Analyze is refused.
+  ``fileRemovedAt`` and ``note`` (internal; the agent writes the same, §45.35 D9; an older item's
+  ``sourceRemovedAt`` still counts): the reference answers ``fileRemoved: true`` and ``studyKept`` (the page says
+  "The video was removed to save space. Its study stays." only when a study was kept) and Analyze is refused.
 * ``production.keepChatPictures``: ``days_30`` / ``days_90`` delete the pictures of chat messages older than that;
   the message keeps its words (its ``attachments`` empty, ``picturesRemovedAt`` internal).
 * ``production.keepVersions``: a number keeps the files of each story's last N versions, as the agent's own pruning
@@ -41,9 +42,10 @@ MAX_FILES: Final = 200  # S3 deletes and ASSET# row deletes per call: well insid
 DAYS: Final = {"days_30": 30, "days_90": 90}
 STORY_KINDS: Final = ("storyboard", "scene_still", "scene_clip", "audio", "captions", "final_video", "cover", "video")
 CLEARABLE_REFS: Final = ("ready", "analyzed", "failed")
-# A reference video whose file was cleared (§45.34). Lamo Stories' agent writes ``sourceRemovedAt`` and ``note`` after
-# each job; this module writes the same. ``fileRemovedAt`` (an earlier name) is still read.
-REMOVED_MARKS: Final = ("sourceRemovedAt", "fileRemovedAt")
+# A reference video whose file was cleared (§45.34, §45.35 D9). Lamo Stories' agent writes ``fileRemovedAt`` and
+# ``note`` after each job; this module writes the same. ``sourceRemovedAt`` (the API's earlier name) is still read.
+REMOVED_MARK: Final = "fileRemovedAt"
+REMOVED_MARKS: Final = (REMOVED_MARK, "sourceRemovedAt")
 REMOVED_NOTE: Final = "The video was removed to save space. Its study stays."
 REMOVED_NO_STUDY: Final = "The video was removed to save space."
 
@@ -73,6 +75,12 @@ def inside(user_id: str, workspace_id: str, key: Any) -> bool:
 def file_removed(item: Mapping[str, Any]) -> bool:
     """Whether a reference video's file was cleared by a keep setting (by this API or by Lamo Stories' agent)."""
     return any(item.get(mark) for mark in REMOVED_MARKS)
+
+
+def study_kept(item: Mapping[str, Any]) -> bool:
+    """Whether a cleared reference video still has its study (``analysisKey``): only then does the page say "Its
+    study stays." (§45.35 D9). A reference that was never studied (ready or failed) was cleared without one."""
+    return file_removed(item) and bool(item.get("analysisKey"))
 
 
 def _older(item: Mapping[str, Any], cutoff: datetime) -> bool:
@@ -135,7 +143,7 @@ def references(app: Any, user_id: str, workspace_id: str, *, keep: str, now: dat
         mark = Update(
             str(item["pk"]),
             str(item["sk"]),
-            sets={"sourceRemovedAt": at, "note": REMOVED_NOTE if studied else REMOVED_NO_STUDY, "updatedAt": at},
+            sets={REMOVED_MARK: at, "note": REMOVED_NOTE if studied else REMOVED_NO_STUDY, "updatedAt": at},
         )
         mark.equals("userId", user_id).equals("workspaceId", workspace_id)
         mark.equals("status", item.get("status")).absent_or_null("currentJobId")
@@ -158,9 +166,9 @@ def references(app: Any, user_id: str, workspace_id: str, *, keep: str, now: dat
 
 
 def _unmark(store: db.Store, item: Mapping[str, Any], at: str) -> None:
-    undo = Update(str(item["pk"]), str(item["sk"]), removes=["sourceRemovedAt", "note"])
+    undo = Update(str(item["pk"]), str(item["sk"]), removes=[REMOVED_MARK, "note"])
     try:
-        undo.equals("sourceRemovedAt", at).run(store)
+        undo.equals(REMOVED_MARK, at).run(store)
     except db.ConditionFailed:
         log("info", "ws.reference_unmark_skipped", refId=item.get("refId"))
 

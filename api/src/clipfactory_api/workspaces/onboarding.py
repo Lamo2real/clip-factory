@@ -4,14 +4,18 @@
 Eleven steps; any can be skipped and done later, and making videos never waits for them. Done states come from the
 real state and cannot be ticked by hand (§45.34 "Setup steps 1–3", "Onboarding step 4"):
 
-* step 1 (Set up the AI) when Check models ran (any ``MODELSTATUS#``) or the owner tapped "These look right"
+* step 1 (Set up the AI) when Check models ran (a ``MODELSTATUS#`` the check wrote, ``by: "check"``; one a chat,
+  ideas or storyboard call wrote does not count, §45.35 D7) or the owner tapped "These look right"
   (``AICONFIG.pickedAt.environment``); step 2 when the default model was picked (``pickedAt.model``); step 3 when
   the default effort was picked (``pickedAt.effort``). A configuration saved before ``pickedAt`` existed keeps
   ticking all three from ``configSavedAt``, so nothing goes backwards;
 * step 4 when ``PATCH …/workspaces/{ws}`` saved ``configuration.providers`` (``providersPickedAt``, even unchanged:
   keeping the built-in animator is a pick too) or a maker other than the built-in default is picked;
 * steps 6–10 when that platform's own Lamo Stories account is ``connected`` (Lamo Clips' own account,
-  ``same_as_clips``, is not: nothing can be posted there, so the step stays to do with a line saying why).
+  ``same_as_clips``, is not: nothing can be posted there, so the step stays to do with a line saying why). A stored
+  ``connected`` whose account is Lamo Clips' own destination (Lamo Clips connected it later and nobody shared it)
+  counts as ``same_as_clips`` too (§45.35 D11), and a stored ``same_as_clips`` that Lamo Clips let go of counts as
+  ``connected``, as the Social accounts page shows them.
 
 Only 5 and 11 are ticked by hand. The ``ONBOARD`` item keeps only the hand ticks, the skips and ``finishedAt``.
 """
@@ -26,7 +30,7 @@ from .. import db, validate
 from ..clock import iso
 from ..errors import bad_request, conflict
 from . import ai_config as cfg
-from . import guard
+from . import guard, social
 from . import types as ws
 
 STEPS: Final = (
@@ -46,6 +50,7 @@ STEP_KEYS: Final = tuple(k for k, _ in STEPS)
 BY_HAND: Final = ("agents", "done")
 FROM_AI: Final = ("ai", "model", "effort")
 PLATFORM_STEPS: Final = ("instagram", "tiktok", "youtube", "facebook", "x")
+CHECK_MARK: Final = "check"  # MODELSTATUS#.by when Check models wrote it (§45.35 D7)
 CONNECTED: Final = ("connected",)
 PLATFORM_LABEL: Final = {
     "instagram": "Instagram",
@@ -85,8 +90,22 @@ def ai_steps(store: db.Store, user_id: str, workspace_id: str) -> dict[str, bool
             "effort": bool(picked.get("effort")),
         }
     if not done["ai"]:
-        done["ai"] = bool(cfg.query_owned(store, user_id, workspace_id, ws.MODELSTATUS_SK))
+        statuses = cfg.query_owned(store, user_id, workspace_id, ws.MODELSTATUS_SK)
+        done["ai"] = any(s.get("by") == CHECK_MARK for s in statuses)
     return done
+
+
+def _platform_status(store: db.Store, user_id: str, platform: str, item: Mapping[str, Any] | None) -> str:
+    """The account's status as the Social accounts page works it out (``social.public_account``, §45.34, D11), both
+    ways: a stored ``connected`` that is Lamo Clips' own destination, not shared on purpose, is ``same_as_clips``;
+    a stored ``same_as_clips`` that Lamo Clips let go of (disconnected, or moved to another account) is
+    ``connected``, Lamo Stories' own."""
+    status = str((item or {}).get("connectionStatus") or "not_connected")
+    if item is None or status not in ("connected", "same_as_clips"):
+        return status
+    # ``social.clips_identity`` is the one read of Lamo Clips' ACCOUNT# (five attributes, §45.15)
+    clips = social.clips_identity(store, user_id, platform)
+    return "same_as_clips" if social.same_as_clips(item, clips) else "connected"
 
 
 def _item(store: db.Store, user_id: str, workspace_id: str) -> dict[str, Any] | None:
@@ -113,12 +132,13 @@ def state(store: db.Store, user_id: str, workspace_id: str, workspace: Mapping[s
         str(i.get("platform") or str(i["sk"])[len(ws.SOCIAL_SK) :]): i
         for i in cfg.query_owned(store, user_id, workspace_id, ws.SOCIAL_SK)
     }
+    platform_status = {p: _platform_status(store, user_id, p, social.get(p)) for p in PLATFORM_STEPS}
     done: dict[str, bool] = {}
     for key in STEP_KEYS:
         if key in FROM_AI:
             done[key] = from_ai[key]
         elif key in PLATFORM_STEPS:
-            done[key] = (social.get(key) or {}).get("connectionStatus") in CONNECTED
+            done[key] = platform_status[key] in CONNECTED
         elif key == "video":
             done[key] = _video_picked(workspace)
         elif key == "done":
@@ -130,10 +150,7 @@ def state(store: db.Store, user_id: str, workspace_id: str, workspace: Mapping[s
         for key, label in STEPS
     ]
     for step in steps:
-        if (
-            step["step"] in PLATFORM_STEPS
-            and (social.get(step["step"]) or {}).get("connectionStatus") == "same_as_clips"
-        ):
+        if step["step"] in PLATFORM_STEPS and platform_status[str(step["step"])] == "same_as_clips":
             step["line"] = same_as_clips_line(str(step["step"]))
     return {
         "steps": steps,

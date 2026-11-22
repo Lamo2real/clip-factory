@@ -5,8 +5,9 @@ The API writes the job item (every step, ``configuration.run``, ``sessionId``, `
 ``status = queued``); the agent then writes each step, ``progress``, ``heartbeatAt``, ``status``, ``error`` and
 ``meta``, every write conditional on the job's ``sessionId``. ``settle`` is called by every read that returns or checks
 a job: a job ``queued`` with a heartbeat older than 3 minutes, or ``running`` older than 6, is failed in one
-transaction (a new ``sessionId`` fences the old run out), then the old session is stopped (best effort). A refused
-condition means someone wrote meanwhile: the stored item is read again and returned.
+transaction (a new ``sessionId`` fences the old run out; a story's job writes the story's ``failed`` activity with it,
+like the agent's own failures, §45.35 D11), then the old session is stopped (best effort). A refused condition means
+someone wrote meanwhile: the stored item is read again and returned.
 
 Tasks and chat answers are fenced the same way on their own item (``settle_task``, ``settle_message``): a task
 ``queued`` for more than 3 minutes or ``running`` for more than 6 without a heartbeat, and an answer ``pending`` or
@@ -23,7 +24,7 @@ from typing import Any, Final
 from .. import db
 from ..clock import iso, parse
 from ..log import log
-from . import shapes
+from . import activity, shapes
 from . import types as ws
 from .agent import new_session_id
 from .expr import Update
@@ -37,8 +38,18 @@ PORTRAIT_STOPPED = "Making the picture stopped. Tap Try again."
 PORTRAIT_NOT_STARTED = "Making the picture did not start. Tap Try again."
 PORTRAIT_NOT_SET_UP = "The picture maker is not switched on yet, so making the picture did not start."
 REFERENCE_STOPPED = "Looking at the video stopped. Tap Try again."
+# "Try it" on Amazon Nova Reel (§45.35 D2): a ``provider_check`` job of content type ``provider``
+CHECK_STOPPED = "Trying Amazon Nova Reel stopped. Tap Try it again."
+CHECK_NOT_STARTED = "Trying Amazon Nova Reel did not start. Tap Try it again."
+CHECK_NOT_SET_UP = "Lamo Stories' helper is not switched on yet, so Amazon Nova Reel could not be tried."
+CHECK_KIND: Final = "provider"  # the content type of a "Try it" job (providers.CHECK_CONTENT_TYPE)
 CANCELED_STEP = "You stopped it."
-STOPPED_BY_KIND: Final = {"animation": STOPPED, "character": PORTRAIT_STOPPED, "reference": REFERENCE_STOPPED}
+STOPPED_BY_KIND: Final = {
+    "animation": STOPPED,
+    "character": PORTRAIT_STOPPED,
+    "reference": REFERENCE_STOPPED,
+    CHECK_KIND: CHECK_STOPPED,
+}
 
 Item = dict[str, Any]
 Stop = Callable[[str], None]
@@ -137,11 +148,14 @@ def is_stale(job: Mapping[str, Any], now: datetime) -> bool:
     return now - beat > limit
 
 
-def _failed_steps(steps: Iterable[Mapping[str, Any]], message: str) -> list[Item]:
+def _failed_steps(steps: Iterable[Mapping[str, Any]], message: str, *, pending_too: bool = False) -> list[Item]:
+    """The running step fails with the sentence. ``pending_too``: a "Try it" job's one step fails with it even before
+    it ran (a failed start, or a try that never began), since the Nova Reel row shows the step's sentence (§45.35
+    D2); a story's later steps stay pending, as before."""
     out = []
     for step in steps:
         s = dict(step)
-        if s.get("status") == "running":
+        if s.get("status") == "running" or (pending_too and s.get("status") == "pending"):
             s["status"] = "failed"
             s["message"] = message
         out.append(s)
@@ -215,14 +229,15 @@ def _fail(
     story: Mapping[str, Any] | None,
     expect_status: Iterable[str],
 ) -> bool:
-    """Fails the job (and its story when the story still points at it) in one transaction. False when refused."""
+    """Fails the job (and its story when the story still points at it) in one transaction, with the story's
+    ``failed`` activity (``ACT#``, as the agent writes for its own failures, §45.35 D11). False when refused."""
     at = iso(now)
     pjob = Update(
         str(job["pk"]),
         str(job["sk"]),
         sets={
             "status": "failed",
-            "steps": _failed_steps(job.get("steps") or [], message),
+            "steps": _failed_steps(job.get("steps") or [], message, pending_too=job.get("contentType") == CHECK_KIND),
             "error": message,
             "sessionId": new_session_id(str(job["jobId"])),
             "updatedAt": at,
@@ -232,10 +247,12 @@ def _fail(
     if job.get("heartbeatAt") is not None:
         pjob.equals("heartbeatAt", job["heartbeatAt"])
     updates = [pjob.request()]
+    puts: list[Item] = []
     if story is not None and story.get("currentJobId") == job.get("jobId"):
         updates.append(_story_fail(story, job, at).request())
+        puts.append(activity.item(str(job["userId"]), str(job["workspaceId"]), "failed", story, now=now))
     try:
-        store.transact(updates=updates)
+        store.transact(updates=updates, puts=puts)
     except db.ConditionFailed:
         return False
     return True

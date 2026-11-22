@@ -432,10 +432,25 @@ def test_no_presigned_url_or_key_outside_the_workspace(
             assert f".amazonaws.com/{prefix()}" in url, url  # every presigned link is a file of this workspace
 
 
+CLIPS_ACCOUNT_ATTRIBUTES = {"pk", "sk", "platform", "status", "accountId"}
+
+
+def _clips_account_read(op: str, kw: dict[str, Any]) -> bool:
+    """§45.33's one allowed read of a Clip Factory item: a GetItem of its ``ACCOUNT#{platform}`` limited to five
+    attributes (the dashboard's accounts compare with Lamo Clips' identity, §45.35 D11)."""
+    if op != "get_item" or kw["Key"]["pk"] != f"USER#{USER}" or not str(kw["Key"]["sk"]).startswith("ACCOUNT#"):
+        return False
+    names = kw.get("ExpressionAttributeNames") or {}
+    wanted = {names.get(p.strip(), p.strip()) for p in str(kw.get("ProjectionExpression") or "").split(",") if p}
+    return bool(wanted) and wanted <= CLIPS_ACCOUNT_ATTRIBUTES
+
+
 def _keys_touched(table: FakeTable) -> list[str]:
-    """Every partition key a DynamoDB call named (reads and writes)."""
+    """Every partition key a DynamoDB call named (reads and writes), but §45.33's attribute-limited ACCOUNT# read."""
     out: list[str] = []
     for op, kw in table.calls:
+        if _clips_account_read(op, kw):
+            continue
         if op in {"get_item", "delete_item", "update_item"}:
             out.append(kw["Key"]["pk"])
         elif op == "put_item":
@@ -460,6 +475,9 @@ def test_every_key_the_core_routes_touch_is_lamo_stories_own(
     assert touched
     allowed = {ws.registry_pk(USER)}
     assert {k for k in touched if k not in allowed and not k.startswith(f"USER#{USER}#WS#")} == set()
+    # the dashboard compared the accounts with Lamo Clips' own (five attributes, never its tokens or names)
+    reads = [kw for op, kw in table.calls if _clips_account_read(op, kw)]
+    assert all(kw["Key"]["sk"] in {f"ACCOUNT#{p}" for p in ws.PLATFORMS} for kw in reads)
     files = [p["Key"] for p in s3_client.puts] + list(s3_client.deleted) + list(s3_client.reads)
     files += presigned_keys(s3_client)
     assert files

@@ -12,7 +12,7 @@ Best-effort calls (a stop after the fence, a cancel's ``cancel`` and stop) are m
 the old run out, so a skipped or failed one changes nothing the owner sees.
 
 Actions (§45.11.1): ``process_story``, ``process_portrait``, ``process_reference``, ``run_task``, ``check_models``,
-``chat_turn``, ``cancel { id }``.
+``chat_turn``, ``provider_check`` (§45.35 D2: "Try it", one test call of a maker), ``cancel { id }``.
 """
 
 from __future__ import annotations
@@ -148,6 +148,23 @@ class StoryAgent:
                 "userId": user_id,
                 "workspaceId": workspace_id,
                 "characterId": character_id,
+                "jobId": job_id,
+            },
+        )
+
+    def start_provider_check(
+        self, *, user_id: str, workspace_id: str, provider_id: str, job_id: str, session_id: str
+    ) -> None:
+        """``provider_check`` (§45.35 D2): the job's one step ``check`` tries the maker once (Nova Reel: one 6-second
+        test shot into the United States bucket, deleted after), then proves ``PROVIDER#{kind}#{id}`` or records the
+        maker's own sentence."""
+        self._start(
+            session_id,
+            {
+                "action": "provider_check",
+                "userId": user_id,
+                "workspaceId": workspace_id,
+                "providerId": provider_id,
                 "jobId": job_id,
             },
         )

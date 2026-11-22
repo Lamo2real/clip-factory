@@ -1,7 +1,10 @@
 """The Lamo Stories dashboard (docs/CONTRACTS.md §45.16.3): counts, Needs you, what is being made, the accounts,
 the numbers and recent activity, all from this workspace's partition.
 
-``SOCIAL#`` and ``PUBJOB#`` items are builder B's and are only read here.
+``SOCIAL#`` and ``PUBJOB#`` items are builder B's and are only read here. The accounts are the public ones the Social
+accounts page shows (``social.accounts_shown``, settled the same way, §45.35 D11), so a key change or Lamo Clips
+connecting the same account later shows here too. A post that stopped on an account problem (its sentence sends the
+owner to Social accounts) has its Fix it open Social accounts; Try again stays on the video's Review page.
 """
 
 from __future__ import annotations
@@ -11,7 +14,7 @@ from datetime import timedelta
 from typing import Any, Final
 
 from ..clock import iso, parse
-from . import activity, shapes
+from . import activity, sentences, shapes
 from . import types as ws
 
 PLATFORM_NAMES: Final = {
@@ -25,6 +28,15 @@ METRICS: Final = ("views", "likes", "comments", "shares")
 NUMBERS_FOR = timedelta(days=7)
 ACTIVITY_SHOWN = 10
 CHECK_FACTS = "Check the facts in this video before you approve it."
+SOCIAL_ACCOUNTS: Final = "/stories/connections"  # Lamo Stories › Social accounts
+
+
+def _post_href(job: Mapping[str, Any], story_id: str) -> str:
+    """Fix it: Social accounts when the post stopped on an account problem (needs connecting again, not connected,
+    keys changed, Lamo Clips' own account: its sentence names that page), else the video's Review page."""
+    if sentences.CONNECTIONS in str(job.get("error") or ""):
+        return SOCIAL_ACCOUNTS
+    return f"/stories/review/{story_id}" if story_id else "/stories"
 
 
 def _post_sentence(job: Mapping[str, Any]) -> str:
@@ -41,6 +53,8 @@ def _account_sentence(account: Mapping[str, Any]) -> str | None:
         who = f" ({account['accountName']})" if account.get("accountName") else ""
         return f"Lamo Stories' {name}{who} needs connecting again. Open Social accounts and tap Connect."
     warning = account.get("warning")
+    if account.get("reason") == "clips_unknown":
+        return None  # nothing to do now: the first post shows the account to check (§45.34)
     if isinstance(warning, str) and warning.strip():
         return warning.strip()
     return None
@@ -70,7 +84,7 @@ def needs_you(
                 "title": titles.get(story_id, ""),
                 "platform": job.get("platform") if job.get("platform") in ws.PLATFORMS else None,
                 "sentence": _post_sentence(job),
-                "href": f"/stories/review/{story_id}" if story_id else "/stories",
+                "href": _post_href(job, story_id),
             }
         )
     for account in sorted(
