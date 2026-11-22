@@ -33,6 +33,8 @@ const CONV = chat.SEED_IDS.conversations;
 
 let store: MockStore;
 let api: StoriesApi;
+/** Models Bedrock refused on their last call (GET …/ai says "denied" for them). */
+let denied: string[] = [];
 let root: Root;
 let host: HTMLElement;
 
@@ -50,7 +52,8 @@ function makeApi(): StoriesApi {
   store.knobs.chatThinkMs = 0;
   store.knobs.chatChunkMs = 1;
   store.knobs.refSeconds = 0.2;
-  const models = ["fable-5-2", "fable-5-1", "opus-5-5", "sonnet-5-5", "haiku-5-5"].map(info);
+  const models = () =>
+    ["fable-5-2", "fable-5-1", "opus-5-5", "sonnet-5-5", "haiku-5-5"].map(info).map((m) => (denied.includes(m.key) ? { ...m, status: "denied" as const, statusLine: `Amazon Bedrock said this account has no access to ${m.label}.` } : m));
   const eff = (model: string, effort: Effort) => ({ model, effort, effortApplied: true, from: "task" as const });
   const tasks: TaskInfo[] = [
     { kind: "chat", label: "Chat", agentId: "creative_director", suggestedEffort: "medium", effective: eff("opus-5-5", "high") },
@@ -59,7 +62,7 @@ function makeApi(): StoriesApi {
   return {
     ...chat.api(store),
     ...references.api(store),
-    getAi: async () => ({ ai: { defaultModel: "opus-5-5", defaultEffort: "high", tasks: {}, prices: {}, version: 1 }, models: structuredClone(models), agents: [], tasks: structuredClone(tasks) }),
+    getAi: async () => ({ ai: { defaultModel: "opus-5-5", defaultEffort: "high", tasks: {}, prices: {}, version: 1 }, models: models(), agents: [], tasks: structuredClone(tasks) }),
     listIdeas: async () => [],
     listStories: async () => ({ stories: [], nextCursor: null }),
     listCharacters: async () => [],
@@ -67,6 +70,7 @@ function makeApi(): StoriesApi {
 }
 
 beforeEach(() => {
+  denied = [];
   localStorage.clear();
   forgetVisit();
   history.replaceState({}, "", "/stories/chat");
@@ -219,5 +223,76 @@ describe("an upload (§45.36 E2, E18)", () => {
     } finally {
       restore();
     }
+  });
+});
+
+// ---------- E12: the chat and the reference page never pre-pick a model that cannot be used ----------
+
+async function typeAndSend(words: string) {
+  const box = $("textarea") as HTMLTextAreaElement;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(box, words);
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    $(".st-chat-send")!.click();
+  });
+}
+
+describe("a usual model the studio knows cannot be used is skipped in the chat and on a reference (§45.36 E12)", () => {
+  it("the chat's line shows the stand-in, and the message is sent with it (never kept)", async () => {
+    denied = ["opus-5-5"];
+    const send = vi.spyOn(api, "sendMessage");
+    await render(<ChatScreen ws="stories" page={page({ name: "chat_conv", convId: CONV.winter })} />);
+    await until(() => /Fable 5\.2/.test($(".st-chat-ai__line")?.textContent ?? ""));
+    expect($(".st-chat-ai")?.textContent).toContain("Claude Opus 5.5 has no access right now, so this chat uses Claude Fable 5.2.");
+    await typeAndSend("A winter idea, please");
+    await until(() => send.mock.calls.length > 0);
+    expect(send.mock.calls[0]![2]).toMatchObject({ text: "A winter idea, please", override: { model: "fable-5-2" } });
+  });
+
+  it("a model this chat keeps on purpose stays, with its status, and is sent as it is", async () => {
+    denied = ["sonnet-5-5"];
+    const send = vi.spyOn(api, "sendMessage");
+    await render(<ChatScreen ws="stories" page={page({ name: "chat_conv", convId: CONV.hooks })} />);
+    await until(() => $(".st-chat-ai__status")?.textContent === "No access");
+    expect($(".st-chat-ai__line")?.textContent).toContain("Claude Sonnet 5.5");
+    expect($(".st-chat-ai")?.textContent).not.toContain("so this chat uses");
+    await typeAndSend("More hooks");
+    await until(() => send.mock.calls.length > 0);
+    expect(send.mock.calls[0]![2].override).toBeUndefined();
+  });
+
+  it("Analyze sends the stand-in for the analysis' usual, and the page says why", async () => {
+    denied = ["fable-5-2"];
+    const analyze = vi.spyOn(api, "analyzeReference");
+    const refId = references.SEED_IDS.ready;
+    history.replaceState({}, "", `/stories/references/${refId}`);
+    await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId })} />);
+    await until(() => /Opus 5\.5/.test($(".st-chat-ai__line")?.textContent ?? ""));
+    expect($(".st-ref-card2")?.textContent).toContain("Claude Fable 5.2 has no access right now, so this analysis uses Claude Opus 5.5.");
+    await act(async () => {
+      $$("button").find((b) => b.textContent?.trim() === "Analyze it")!.click();
+    });
+    await until(() => analyze.mock.calls.length > 0);
+    expect(analyze.mock.calls[0]![2]).toEqual({ model: "opus-5-5" });
+  });
+});
+
+// ---------- E8: the reference analysis is a model record too ----------
+
+describe("a reference analysis shows its exact model behind Technical details (§45.36 E8)", () => {
+  it("under Analyzed with, folded, the same Model ID line", async () => {
+    const refId = references.SEED_IDS.ready;
+    await api.analyzeReference("stories", refId);
+    await new Promise((r) => setTimeout(r, 600));
+    history.replaceState({}, "", `/stories/references/${refId}`);
+    await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId })} />);
+    await until(() => !!$(".st-ref-with"));
+    const fold = document.querySelector<HTMLDetailsElement>(".st-ref-tech");
+    expect(fold?.tagName).toBe("DETAILS");
+    expect(fold?.open).toBe(false);
+    expect(fold?.textContent).toMatch(/Model ID \S*anthropic\.claude-\S+ in eu-north-1/);
+    expect($(".st-ref-with")?.textContent).not.toContain("Model ID");
   });
 });

@@ -26,9 +26,11 @@ import { rememberConversation } from "../device.ts";
 import { FixIt } from "../fixit.tsx";
 import { productionNewHref } from "../handoff.ts";
 import { Btn, centerOf, cheer, Chip, clock, Empty, Icon, Progress, sentence, size, Waiting } from "../kit.tsx";
-import { effortProblem, findModel, modelLabel, effortLabel, projectEffective, useModels } from "../models.ts";
+import { effortProblem, findModel, modelLabel, effortLabel, projectEffective, useModels, withOverride } from "../models.ts";
 import { rememberProjectName } from "../project.ts";
+import { modelIdLine, modelName, modelOf, sendPick, unusableWords, usableUsual, type AiInfo, type Usual } from "../../studio/ai.tsx";
 import { referencesChanged } from "../../studio/hooks.ts";
+import { TechDetails } from "../../studio/kit.tsx";
 import { scheduleDelete } from "../undo.ts";
 import { AnalysisView } from "./Analysis.tsx";
 import { REF_STATUS } from "./RefList.tsx";
@@ -179,7 +181,14 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
 
   const ref = data.reference;
   const task = models.tasks?.find((t) => t.kind === "reference_analysis")?.effective ?? null;
-  const current = projectEffective(task, ref.ai, override);
+  // The analysis' usual skips a model the studio knows cannot be used, unless this video keeps that model on purpose:
+  // then it shows with its status (§45.36 E12). The line shows what Analyze sends.
+  const aiInfo: AiInfo = { models: models.models, tasks: models.tasks ?? [], live: !!models.tasks, ...(models.ai?.defaultModel ? { defaultModel: models.ai.defaultModel } : {}) };
+  const base = projectEffective(task, ref.ai, null);
+  const refUsual: Usual = { model: base.model, effort: base.effort, effortApplied: task?.effortApplied ?? true, from: ref.ai.model || ref.ai.effort ? "project" : (task?.from ?? "default"), modelKept: !!ref.ai.model };
+  const usable = usableUsual(aiInfo, refUsual);
+  const skipped = usable.skipped && !override?.model ? modelOf(aiInfo, usable.skipped) : null;
+  const current = skipped ? withOverride(usable, override) : projectEffective(task, ref.ai, override);
   const model = findModel(models.models, current.model);
   const effortBad = effortProblem(model, current.effort);
   // The keep setting cleared the file (§45.34, §45.35 D9).
@@ -200,7 +209,8 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
     setActionProblem(null);
     setWhyNot(null);
     try {
-      const body = override && (override.model || override.effort) ? override : undefined;
+      // The pick, or the stand-in the line shows for a usual model that cannot be used (this run only, §45.36 E12).
+      const body = sendPick(aiInfo, refUsual, override);
       const analysisBefore = same(data?.analysis);
       const r = await storiesApi().analyzeReference(ws, ref.refId, body);
       setFailed(null);
@@ -410,10 +420,13 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
               </ol>
               {job ? <Progress value={job.progress} label="How far the analysis is" /> : <div className="st-ref-busybar" aria-hidden="true" />}
               {(job ?? started)?.meta.models[0] ? (
-                <p className="st-chat-ai__note">
-                  With {modelLabel(models.models, (job ?? started)!.meta.models[0]!.model)}
-                  {(job ?? started)!.meta.models[0]!.effort ? ` · ${effortLabel((job ?? started)!.meta.models[0]!.effort)}` : ""}
-                </p>
+                <>
+                  <p className="st-chat-ai__note">
+                    With {modelLabel(models.models, (job ?? started)!.meta.models[0]!.model)}
+                    {(job ?? started)!.meta.models[0]!.effort ? ` · ${effortLabel((job ?? started)!.meta.models[0]!.effort)}` : ""}
+                  </p>
+                  <ModelIdFold record={(job ?? started)!.meta.models[0]!} />
+                </>
               ) : null}
             </div>
           ) : (
@@ -462,7 +475,10 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
                       </button>
                     </p>
                   ) : (
-                    <p className="st-chat-ai__note">{ref.ai.model || ref.ai.effort ? "Kept with this video (its own setting)." : "From Lamo Stories › Settings › AI."}</p>
+                    <p className="st-chat-ai__note">
+                      {skipped ? `${unusableWords(skipped)}, so this analysis uses ${modelName(aiInfo, usable.model)}. ` : ""}
+                      {ref.ai.model || ref.ai.effort ? "Kept with this video (its own setting)." : "From Lamo Stories › Settings › AI."}
+                    </p>
                   )
                 }
               />
@@ -511,10 +527,13 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
       {ref.status === "analyzed" && data.analysis ? (
         <>
           {ref.analyzedWith ? (
-            <p className="st-ref-with">
-              Analyzed with {modelLabel(models.models, ref.analyzedWith.model)}
-              {ref.analyzedWith.effort ? ` · ${effortLabel(ref.analyzedWith.effort)}` : ""}
-            </p>
+            <>
+              <p className="st-ref-with">
+                Analyzed with {modelLabel(models.models, ref.analyzedWith.model)}
+                {ref.analyzedWith.effort ? ` · ${effortLabel(ref.analyzedWith.effort)}` : ""}
+              </p>
+              <ModelIdFold record={(job ?? data.job ?? started)?.meta.models.find((m) => m.model === ref.analyzedWith!.model && !m.failed) ?? null} />
+            </>
           ) : null}
           <AnalysisView
             analysis={data.analysis}
@@ -564,5 +583,16 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
         />
       ) : null}
     </section>
+  );
+}
+
+/** The exact model and Region an analysis called, behind "Technical details" like every model record (§45.36 E8, E14). */
+function ModelIdFold({ record }: { record: { modelId?: string | null; region?: string | null } | null | undefined }) {
+  const id = record ? modelIdLine(record) : null;
+  if (!id) return null;
+  return (
+    <TechDetails className="st-ref-tech">
+      <p className="st-s-used__id">{id}</p>
+    </TechDetails>
   );
 }

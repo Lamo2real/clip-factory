@@ -134,11 +134,20 @@ export function accountProblem(job: Pick<PublishingJob, "publishingStatus" | "er
   return stuck && /Social accounts/i.test(job.error ?? "");
 }
 
-/** "Lamo Stories (@lamo.stories)": an account's name and handle, as the owner reads them. */
-export function accountWords(a: Pick<ErrorAccount, "accountName" | "handle" | "externalAccountId">): string {
-  const name = a.accountName || a.handle || a.externalAccountId;
+/**
+ * "Lamo Stories (@lamo.stories)": an account's name and handle, as the owner reads them; null for an account with
+ * neither, so a raw platform id is never a first line (§45.36 E14: it stays behind "Technical details").
+ */
+export function accountShown(a: Pick<ErrorAccount, "accountName" | "handle">): string | null {
+  const name = a.accountName || a.handle;
+  if (!name) return null;
   const handle = a.handle && a.handle !== name ? ` (${a.handle.startsWith("@") ? a.handle : `@${a.handle}`})` : "";
   return `${name}${handle}`;
+}
+
+/** "Lamo Stories (@lamo.stories)", else the account's id (for a place that must say which one it is). */
+export function accountWords(a: Pick<ErrorAccount, "accountName" | "handle" | "externalAccountId">): string {
+  return accountShown(a) ?? a.externalAccountId;
 }
 
 /** "45 seconds", "1 minute 5 seconds". */

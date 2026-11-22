@@ -276,8 +276,10 @@ export function ActionCard({
     const at = centerOf(e.currentTarget);
     setState({ kind: "busy" });
     try {
-      // The pick, or the usual's stand-in for a model the studio knows cannot be used (§45.36 E12).
-      const result = await plan.run(ws, task ? sendPick(info, storyUsual(info, { ai: own.data ?? { model: null, effort: null } }, task), pick) : undefined);
+      // The pick, or the usual's stand-in for a model the studio knows cannot be used (§45.36 E12): only once the video's
+      // (or reference's) own setting is read, so a stand-in never overrides a model kept with it. Until then, or when
+      // it could not be read, exactly the pick (the server uses the kept setting itself).
+      const result = await plan.run(ws, task ? (own.data ? sendPick(info, storyUsual(info, { ai: own.data }, task), pick) : cleanPick(pick)) : undefined);
       done.set(id, result);
       setState({ kind: "done", ...result });
       cheer(at);
@@ -321,7 +323,7 @@ export function ActionCard({
           {task ? (
             <ModelMenu
               info={info}
-              usual={storyUsual(info, { ai: own.data ?? { model: null, effort: null } }, task)}
+              usual={{ ...storyUsual(info, { ai: own.data ?? { model: null, effort: null } }, task), ...(own.data ? {} : { modelKept: true }) }}
               value={pick}
               onChange={setPick}
               title={task === "scene_rewrite" ? "Model and effort for these scenes" : "Model and effort for this analysis"}

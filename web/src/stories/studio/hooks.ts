@@ -8,18 +8,40 @@ import type { Workspace } from "../api/types.ts";
 // ---------- The remembered reference list (§45.36 E2) ----------
 
 let refsVersion = 0;
+const refsListeners = new Set<() => void>();
 
 /**
  * Says the reference videos changed (an upload finished, an analysis started or ended, one was deleted): the studio's
- * remembered list from before is never shown again, so a new reference is in the next list Production reads.
+ * remembered list from before is never shown again, so a new reference is in the next list Production reads, and a
+ * list on screen now reads itself again (keeping what it shows, and what is ticked, meanwhile).
  */
 export function referencesChanged(): void {
   refsVersion += 1;
+  for (const fn of [...refsListeners]) fn();
 }
 
 /** The cache name of the studio's reference list (useLoad): a new one after every change. */
 export function referencesCache(): string {
   return `st-s-refvids:${refsVersion}`;
+}
+
+/**
+ * This workspace's reference videos for a studio page (§45.36 E2). The cache name is read once, when the page opens:
+ * a change while it is open (a background upload finishing, a delete's undo running out) reads the list again in
+ * place, never swapping to an empty name that would hide the list and drop the ticked references.
+ */
+export function useReferenceList(ws: string) {
+  const [slot] = useState(referencesCache);
+  const refs = useLoad(() => storiesApi().listReferences(ws), ws, slot);
+  const reload = refs.reload;
+  useEffect(() => {
+    const again = () => void reload();
+    refsListeners.add(again);
+    return () => {
+      refsListeners.delete(again);
+    };
+  }, [reload]);
+  return refs;
 }
 
 /** The width an element has to draw in (a 9:16 player or preview fits it), following resizes. */

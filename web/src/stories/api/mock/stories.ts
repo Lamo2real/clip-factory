@@ -35,7 +35,7 @@ import {
   type StoryStatus,
   type TaskKind,
 } from "../types.ts";
-import { checkOverride, citationsFor, effectiveFor, modelCall, shownSteps, startMockTask, topicFor } from "./ideas.ts";
+import { callOf, checkOverride, citationsFor, effectiveFor, shownSteps, startMockTask, topicFor, writerOf } from "./ideas.ts";
 import { delay, type MockStore } from "./store.ts";
 
 export const KEYS = ["listStories", "createStory", "getStory", "storyJobs", "patchStory", "deleteStory", "produce", "cancelStory", "approve", "reject", "requestChanges", "writeCaptions", "download"] as const;
@@ -621,7 +621,7 @@ function startModelStep(store: MockStore, job: ProductionJob, story: Story, key:
   if (e.off && kind !== "fact_check" && kind !== "final_review") return e.off;
   if (e.off && !mustCheck) return null;
   // Each record says exactly what was called (§45.35 D5): the task, the Bedrock model id or profile and the Region.
-  const call = modelCall(e.model) ?? {};
+  const call = callOf(store, e.model) ?? {};
   if (e.problem) {
     // Bedrock refused the call: the step stops on its model and keeps what it was asked with (§45.34), as the agent does.
     if (e.denied) job.meta.models = [...job.meta.models.filter((m) => m.step !== key), { step: key, agentId: e.agentId, task: kind, model: e.model, ...call, effort: e.effort, effortApplied: false, failed: true }];
@@ -630,9 +630,11 @@ function startModelStep(store: MockStore, job: ProductionJob, story: Story, key:
   job.meta.models = [...job.meta.models.filter((m) => m.step !== key), { step: key, agentId: e.agentId, task: kind, model: e.model, ...call, effort: e.effort, effortApplied: e.effortApplied }];
   if (key !== "storyboard") return null;
   job.meta.writerModel = e.model;
+  // The real writer (§45.36 E7): "bedrock-claude" only for an Anthropic model.
+  job.meta.providers = { ...job.meta.providers, writer: writerOf(store, e.model) };
   // The storyboard step then writes the six post captions: the agent's second call in that step, its own record.
   const c = effectiveFor(store, "captions", { request: run.override, project: story.ai });
-  const asked = { step: key, agentId: c.agentId, task: "captions", model: c.model, ...(modelCall(c.model) ?? {}), effort: c.effort };
+  const asked = { step: key, agentId: c.agentId, task: "captions", model: c.model, ...(callOf(store, c.model) ?? {}), effort: c.effort };
   if (c.problem) {
     if (c.denied) job.meta.models = [...job.meta.models, { ...asked, effortApplied: false, failed: true }];
     return c.problem;
@@ -1200,7 +1202,9 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const musicMood = body.musicMood ?? (cfg.musicOn === false ? "none" : "playful");
       if (!MOODS.has(musicMood)) fail(400, "bad_request", "Pick a music mood.");
       const referenceIds = checkReferences(store, body.referenceIds);
-      if (body.ai) checkOverride(body.ai);
+      if (body.ai) checkOverride(body.ai, store);
+      // The first job's own model and effort, never kept with the video (§45.5 POST /stories `override`).
+      if (body.override) checkOverride(body.override, store);
       const format = body.format !== undefined ? checkFormat(body.format) : defaultFormat(cfg);
       await delay(220);
       const now = Date.now();
@@ -1242,7 +1246,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         idea.storyIds = [...idea.storyIds, storyId];
         idea.updatedAt = iso(now);
       }
-      const job = startJob(store, story, "produce", [...STEP_ORDER], { from: null, sceneIds: null, note: null }, now);
+      const job = startJob(store, story, "produce", [...STEP_ORDER], { from: null, sceneIds: null, note: null }, now, body.override && (body.override.model || body.override.effort) ? body.override : undefined);
       return { story: storyOut(store, story), job: clone(job) };
     },
     async getStory(ws, storyId) {
@@ -1285,7 +1289,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       }
       // The video's own model and effort, and its reference videos: for its next jobs; nothing in the video changes.
       if (patch.ai !== undefined) {
-        checkOverride(patch.ai);
+        checkOverride(patch.ai, store);
         story.ai = { model: patch.ai.model ?? null, effort: patch.ai.effort ?? null };
       }
       if (patch.referenceIds !== undefined) story.referenceIds = checkReferences(store, patch.referenceIds);
@@ -1394,7 +1398,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (body.sceneIds && (!body.from || !["scenes", "animation"].includes(body.from))) fail(400, "bad_request", "Scenes can only be picked from Draw the scenes or Animate.");
       if (body.sceneIds?.some((id) => !story.scenes.some((sc) => sc.sceneId === id))) fail(400, "bad_request", "One of those scenes is not in this video.");
       if (!store.scripts[storyId] && body.from && body.from !== "storyboard") fail(409, "conflict", "This video has no storyboard yet. Tap Try again first.");
-      checkOverride(body.override);
+      checkOverride(body.override, store);
       const run = body.from ? STEP_ORDER.slice(STEP_ORDER.indexOf(body.from)) : order(story.stale);
       if (!run.length) fail(409, "conflict", "Nothing needs making again: the video already has every change.");
       const job = startJob(store, story, "produce", run, { from: body.from ?? null, sceneIds: body.sceneIds ?? null, note: null }, Date.now(), body.override);
@@ -1458,7 +1462,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (!["review", "needs_check", "failed"].includes(story.status)) fail(409, "conflict", "This video can't be changed now.");
       if (!store.scripts[storyId]) fail(409, "conflict", "This video has no storyboard yet. Tap Try again first.");
       if (sceneIds?.some((id) => !story.scenes.some((sc) => sc.sceneId === id))) fail(400, "bad_request", "One of those scenes is not in this video.");
-      checkOverride(body.override);
+      checkOverride(body.override, store);
       if (note) story.reviewNote = note;
       const job = startJob(store, story, "changes", [...STEP_ORDER], { from: "storyboard", sceneIds, note }, Date.now(), body.override);
       addActivity(store, "changes", story);
@@ -1470,7 +1474,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const story = find(store, ws, storyId);
       for (const k of Object.keys(body ?? {})) if (k !== "override") fail(400, "bad_request", "Something in that request was not right.");
       if (!store.scripts[storyId]) fail(409, "conflict", "This video has no storyboard yet. Tap Try again first.");
-      checkOverride(body?.override);
+      checkOverride(body?.override, store);
       await delay(160);
       const version = story.scriptVersion;
       const round = store.tasks.filter((t) => t.kind === "captions").length + 1;

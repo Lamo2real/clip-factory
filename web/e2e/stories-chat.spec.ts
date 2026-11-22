@@ -680,3 +680,37 @@ test("round 5: Use in a video right after an upload ticks it; a cleared upload n
   await expect(page.locator("video.st-ref-player__video")).toHaveCount(0);
   await ctx.close();
 });
+
+test("round 5: a chat whose usual model has no access uses the stand-in; an analysis folds its exact model", async ({ browser }) => {
+  test.setTimeout(90_000);
+  const ctx = await context(browser, 390, 844, true);
+  const page = await ctx.newPage();
+  // §45.36 E12: Settings › AI gives the chat Claude Fable 5.1, which this account has no access to (the mock's seed).
+  await open(page, "/stories/chat");
+  await page.evaluate(() => {
+    const store = (window as StoriesWindow).__cfStoriesMock?.store as unknown as { ai?: { defaultModel: string; defaultEffort: string; tasks: Record<string, unknown>; prices: Record<string, unknown>; version: number } };
+    const ai = store.ai ?? { defaultModel: "opus-5-5", defaultEffort: "high", tasks: {}, prices: {}, version: 0 };
+    store.ai = { ...ai, tasks: { ...ai.tasks, chat: { model: "fable-5-1", effort: null } } };
+  });
+  await go(page, `/stories/chat/${CONV.winter}`);
+  const line = page.locator(".st-chat-compose .st-chat-ai");
+  await expect(line).toContainText("Claude Fable 5.1 has no access right now, so this chat uses Claude Opus 5.5.", { timeout: 20_000 });
+  await expect(line.locator(".st-chat-ai__line")).toContainText("Claude Opus 5.5");
+  await settle(page);
+  expect(await audit(page, "a chat whose usual model has no access", true)).toEqual([]);
+
+  // §45.36 E8: the analysis is a model record too: its exact model and Region behind Technical details.
+  await go(page, `/stories/references/${REF.ready}`);
+  await knobs(page, { refSeconds: 1 });
+  await page.getByRole("button", { name: "Analyze it" }).click();
+  await expect(page.getByRole("heading", { name: "What happens", exact: true })).toBeVisible({ timeout: 20_000 });
+  const fold = page.locator(".st-ref-tech");
+  await expect(fold).toHaveCount(1, { timeout: 20_000 });
+  await expect(fold).not.toHaveAttribute("open", "");
+  await expect(page.locator(".st-ref-with")).not.toContainText("Model ID");
+  await fold.locator("summary").click();
+  await expect(fold).toContainText(/Model ID \S+ in eu-north-1/);
+  await settle(page);
+  expect(await audit(page, "an analysis with its exact model open", true)).toEqual([]);
+  await ctx.close();
+});

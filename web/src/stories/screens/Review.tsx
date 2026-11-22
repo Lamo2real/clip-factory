@@ -15,19 +15,19 @@ import { useLoad, usePoll } from "../../lib/hooks.ts";
 import { storiesSound } from "../prefs.ts";
 import { starBurst } from "../ui.tsx";
 import { storiesApi } from "../api/client.ts";
-import type { DownloadFormat, ErrorAccount, ModelOverride, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus } from "../api/types.ts";
+import type { DownloadFormat, ErrorAccount, ModelOverride, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus, TaskKind } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
-import { madeWith, ModelMenu, ModelsUsed, NextRun, sendPick, SettingsFix, StoryAi, storyUsual, useAiInfo } from "../studio/ai.tsx";
+import { cleanPick, insteadPick, madeWith, ModelMenu, ModelsUsed, NextRun, runTask, sendPick, SettingsFix, StoryAi, storyUsual, UnusableSheet, unusableAsk, useAiInfo } from "../studio/ai.tsx";
 import { CaptionEditor, type CaptionTab } from "../studio/CaptionEditor.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
 import { usePaged, useSameScript, useWidth, useWorkspace } from "../studio/hooks.ts";
 import { Busy, celebrate, Chip, Notice, ShowMore, StSheet, Tag, TextField } from "../studio/kit.tsx";
 import { Player } from "../studio/Player.tsx";
 import { PostsPanel } from "../studio/PostsPanel.tsx";
-import { AccountCard, POST_YES, postToTitle, PublishSheet } from "../studio/PublishSheet.tsx";
+import { AccountCard, claimPostCheer, postToTitle, postYes, PublishSheet } from "../studio/PublishSheet.tsx";
 import { SfxEditor } from "../studio/SfxEditor.tsx";
 import { StepTrack } from "../studio/StepTrack.tsx";
-import { accountOf, CATEGORY_LABEL, isConflict, PLATFORM_LABEL, say, seconds, STATUS_LABEL, STATUS_TONE } from "../studio/words.ts";
+import { accountOf, CATEGORY_LABEL, isConflict, PLATFORM_LABEL, say, seconds, STATUS_LABEL, STATUS_TONE, thisAccount } from "../studio/words.ts";
 import type { StoriesScreenProps } from "./types.ts";
 
 export function ReviewScreen({ ws, page }: StoriesScreenProps) {
@@ -215,6 +215,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const [retrying, setRetrying] = useState<string | null>(null);
   /** The model and effort for the next remake only (never saved). */
   const [pick, setPick] = useState<ModelOverride | null>(null);
+  /** The question before a remake with a model the studio knows cannot be used (§45.36 E12), and the remake it holds. */
+  const [unusable, setUnusable] = useState<{ ask: NonNullable<ReturnType<typeof unusableAsk>>; name: string; run: (extra: { override?: ModelOverride }) => Promise<void> } | null>(null);
   /** The captions box's tab, kept here so it stays where the owner was after Use these or Save (§45.36 E10). */
   const [captionTab, setCaptionTab] = useState<CaptionTab>("video");
   const info = useAiInfo(ws);
@@ -264,8 +266,9 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     if (!before) return;
     const up = list.filter((j) => j.publishingStatus === "posted" && before.get(j.publishingJobId) !== "posted");
     if (!up.length) return;
-    // With the Post it sheet open, its own "Posted!" has the star burst and the cheer (§45.36 E11): only one of each.
-    if (!posting) {
+    // One star burst and one cheer per post (§45.36 E11): the Post it sheet celebrates the places it sent itself, and
+    // this page every other one (one that went up while the sheet was still on its form, or after it closed).
+    if (up.filter((j) => claimPostCheer(j.publishingJobId)).length) {
       starBurst(undefined, 140);
       storiesSound("success", { onNextTap: true });
     }
@@ -296,15 +299,26 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     setPick(null);
   };
 
-  /** This remake's own model and effort: the owner's pick, or the usual's stand-in for a model that cannot be used (§45.36 E12). */
-  const once = (): { override?: ModelOverride } => {
-    const o = story ? sendPick(info, storyUsual(info, story), pick) : undefined;
-    return o ? { override: o } : {};
-  };
+  /**
+   * Runs a remake (`name` is its busy name). Its own model and effort: the owner's pick, or, when the usual of the run's
+   * first model step (`task`) cannot be used, the model the menu shows instead (§45.36 E12). A model picked on purpose,
+   * or kept with this video, that the studio knows cannot be used is asked about first, never swapped by itself.
+   */
+  function remake(name: string, task: TaskKind, run: (extra: { override?: ModelOverride }) => Promise<void>) {
+    if (!story || busy) return;
+    const usual = storyUsual(info, story, task);
+    const ask = unusableAsk(info, usual, pick);
+    if (ask) {
+      setAsking("none");
+      return setUnusable({ ask, name, run });
+    }
+    const o = sendPick(info, usual, pick);
+    void act(name, () => run(o ? { override: o } : {}));
+  }
 
   /** A produce call that carries a body only when there is something in it. */
-  const produceNow = (body?: { from: StepKey }) => {
-    const b = { ...body, ...once() };
+  const produceNow = (body: { from?: StepKey }, extra: { override?: ModelOverride }) => {
+    const b = { ...body, ...extra };
     return Object.keys(b).length ? storiesApi().produce(ws, storyId, b) : storiesApi().produce(ws, storyId);
   };
 
@@ -473,7 +487,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   type="button"
                   className="st-btn st-btn--main"
                   aria-disabled={busy !== null || undefined}
-                  onClick={() => void act("check", async () => startRun(await produceNow({ from: "safety" })))}
+                  onClick={() => remake("check", "fact_check", async (x) => startRun(await produceNow({ from: "safety" }, x)))}
                 >
                   {busy === "check" ? "Starting…" : "Check again"}
                 </button>
@@ -491,7 +505,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                     type="button"
                     className="st-btn st-btn--main"
                     aria-disabled={busy !== null || undefined}
-                    onClick={() => void act("remake", async () => startRun(await produceNow()))}
+                    onClick={() => remake("remake", runTask(null, { stale: story.stale }), async (x) => startRun(await produceNow({}, x)))}
                   >
                     {busy === "remake" ? "Starting…" : checkAgain ? "Check again" : stopped ? "Try again" : "Remake"}
                   </button>
@@ -510,7 +524,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   type="button"
                   className="st-btn st-btn--main"
                   aria-disabled={busy !== null || undefined}
-                  onClick={() => void act("check", async () => startRun(await produceNow({ from: "safety" })))}
+                  onClick={() => remake("check", "fact_check", async (x) => startRun(await produceNow({ from: "safety" }, x)))}
                 >
                   {busy === "check" ? "Starting…" : "Check again"}
                 </button>
@@ -573,8 +587,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   onSubmit={(e) => {
                     e.preventDefault();
                     if (!note.trim() && !picked.length) return setProblem("Say what to change, or pick a scene.");
-                    void act("changes", async () => {
-                      const body: { note?: string; sceneIds?: string[]; override?: ModelOverride } = { ...once() };
+                    remake("changes", runTask("storyboard", { sceneIds: !note.trim() && picked.length > 0 }), async (x) => {
+                      const body: { note?: string; sceneIds?: string[]; override?: ModelOverride } = { ...x };
                       if (note.trim()) body.note = note.trim();
                       if (picked.length) body.sceneIds = picked;
                       startRun(await storiesApi().requestChanges(ws, storyId, body));
@@ -686,8 +700,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                       className="st-btn st-s-small"
                       aria-disabled={busy !== null || undefined}
                       onClick={() =>
-                        void act(`scene:${sceneId}`, async () => {
-                          startRun(await storiesApi().requestChanges(ws, storyId, { sceneIds: [sceneId], ...once() }));
+                        remake(`scene:${sceneId}`, "scene_rewrite", async (x) => {
+                          startRun(await storiesApi().requestChanges(ws, storyId, { sceneIds: [sceneId], ...x }));
                           toast.success("Making a new take of that scene.");
                         })
                       }
@@ -726,6 +740,25 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
         <p className="st-s-field__hint">An approved video can&apos;t be changed. Its captions and sounds stay as they are.</p>
       ) : null}
 
+      {unusable ? (
+        <UnusableSheet
+          info={info}
+          ask={unusable.ask}
+          onClose={() => setUnusable(null)}
+          onKeep={() => {
+            // Exactly the pick (nothing for a model kept with this video): the run tries it.
+            const u = unusable;
+            const o = cleanPick(pick);
+            setUnusable(null);
+            void act(u.name, () => u.run(o ? { override: o } : {}));
+          }}
+          onUse={() => {
+            const u = unusable;
+            setUnusable(null);
+            void act(u.name, () => u.run({ override: insteadPick(info, u.ask, pick) }));
+          }}
+        />
+      ) : null}
       {asking === "whole" ? (
         <StSheet
           title="Remake the whole video?"
@@ -740,8 +773,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 className="st-btn st-btn--main"
                 aria-disabled={busy !== null || undefined}
                 onClick={() =>
-                  void act("whole", async () => {
-                    startRun(await produceNow({ from: "storyboard" }));
+                  remake("whole", "storyboard", async (x) => {
+                    startRun(await produceNow({ from: "storyboard" }, x));
                     setAsking("none");
                     toast.success("Making the whole video again.");
                   })
@@ -790,14 +823,14 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 aria-disabled={retrying !== null || undefined}
                 onClick={() => retrying === null && void retry(confirm.job, confirm.account.externalAccountId)}
               >
-                {retrying ? "Trying…" : POST_YES}
+                {retrying ? "Trying…" : postYes(confirm.message)}
               </button>
             </>
           }
         >
           <p>{confirm.message}</p>
           <AccountCard platform={confirm.job.platform} account={confirm.account} />
-          {confirm.job.accountName && confirm.job.accountName !== confirm.account.accountName ? <p className="st-s-field__hint">It was {confirm.job.accountName} when you tapped Post it.</p> : null}
+          {confirm.job.accountName && confirm.job.accountName !== confirm.account.accountName ? <p className="st-s-field__hint">It was {thisAccount(confirm.job.platform, confirm.job.accountName)} when you tapped Post it.</p> : null}
         </StSheet>
       ) : null}
     </section>

@@ -35,9 +35,9 @@ import {
 import { CATALOG } from "../engine/catalog.ts";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { storiesHref } from "../routes.ts";
-import { effortName, madeWith, ModelIdList, modelIdLine, ModelMenu, modelName, modelOf, ModelsUsed, NextRun, sendPick, SettingsFix, shortName, stoppedOn, StoryAi, storyUsual, UnusableSheet, unusableAsk, useAiInfo, usedOf, usualFor, type AiInfo } from "../studio/ai.tsx";
+import { cleanPick, effortName, insteadPick, madeWith, ModelIdList, modelIdLine, ModelMenu, modelName, modelOf, ModelsUsed, NextRun, runTask, sendPick, SettingsFix, shortName, stoppedOn, StoryAi, storyUsual, UnusableSheet, unusableAsk, useAiInfo, usedOf, usualFor, type AiInfo } from "../studio/ai.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
-import { referencesCache, usePaged, useSameScript, useWorkspace } from "../studio/hooks.ts";
+import { usePaged, useReferenceList, useSameScript, useWorkspace } from "../studio/hooks.ts";
 import { formatOf, formatWords, sameFormat, ShapePicker } from "../studio/shape.tsx";
 import { Busy, celebrate, Notice, Pick, ShowMore, Slider, Switch, Tag, TechDetails, TextField } from "../studio/kit.tsx";
 import { showFace } from "../studio/looks.ts";
@@ -219,7 +219,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
   /** The question before making it with a model the studio knows cannot be used (§45.36 E12). */
   const [asking, setAsking] = useState<ReturnType<typeof unusableAsk>>(null);
   const info = useAiInfo(ws);
-  const refs = useLoad(() => storiesApi().listReferences(ws), ws, referencesCache());
+  const refs = useReferenceList(ws);
   /** The address's reference ids were checked against a list read just now (never a remembered one, §45.36 E2). */
   const refsChecked = useRef(false);
 
@@ -314,9 +314,13 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
     // This video's own shape, only when the owner picked one that is not the workspace's (§45.34). Nothing picked:
     // the API uses Settings › Video itself (also while it has not loaded here, or could not be read).
     if (shape && (!workspace || !sameFormat(shape, usualShape))) body.format = { ...shape };
-    // The owner's pick, or the model the menu shows when the usual one cannot be used (§45.36 E12).
-    const own = sendPick(info, usualFor(info, "storyboard"), pickNow);
+    // Kept with this video: only what the owner picked in its menu. When the usual model cannot be used, the model the
+    // menu shows instead goes with the first job only, never kept (§45.5 `override`, §45.36 E12), so a later remake
+    // uses the usual again once it works.
+    const own = cleanPick(pickNow);
     if (own) body.ai = { model: own.model ?? null, effort: own.effort ?? null };
+    const stand = own?.model ? undefined : sendPick(info, usualFor(info, "storyboard"), pickNow);
+    if (stand?.model) body.override = stand;
     const usable = refIds.filter((id) => refs.data?.some((r) => r.refId === id));
     if (usable.length) body.referenceIds = usable;
     if (source === "idea" && idea) body.ideaId = idea.ideaId;
@@ -503,7 +507,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
           onClose={() => setAsking(null)}
           onKeep={() => void make(ai, true)}
           onUse={() => {
-            // The usual (which skips it); an effort picked here stays when that model offers it.
+            // The usual (which skips it): nothing kept but an effort picked here, when that model offers it.
             const keep = ai?.effort && modelOf(info, asking.instead)?.efforts.includes(ai.effort) ? { effort: ai.effort } : null;
             setAi(keep);
             void make(keep, true);
@@ -618,7 +622,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
   const [pick, setPick] = useState<ModelOverride | null>(null);
   const [asking, setAsking] = useState<ReturnType<typeof unusableAsk>>(null);
   const info = useAiInfo(ws);
-  const refs = useLoad(() => storiesApi().listReferences(ws), ws, referencesCache());
+  const refs = useReferenceList(ws);
   const wasLive = useRef(false);
   const story = loaded.data?.story ?? null;
   const job = loaded.data?.job ?? null;
@@ -665,14 +669,17 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
 
   async function again(pickNow: ModelOverride | null = pick, sure = false) {
     if (!story) return;
-    // A model picked on purpose that the studio knows cannot be used: ask first (§45.36 E12).
-    const ask = sure ? null : unusableAsk(info, storyUsual(info, story), pickNow);
+    // The run starts at the first out-of-date step: its first model step's usual decides (§45.36 E12).
+    const runUsual = storyUsual(info, story, runTask(null, { stale: story.stale }));
+    // A model picked on purpose (or kept with this video) that the studio knows cannot be used: ask first (§45.36 E12).
+    const ask = sure ? null : unusableAsk(info, runUsual, pickNow);
     if (ask) return setAsking(ask);
     setAsking(null);
     setBusy("again");
     setProblem(null);
     try {
-      const override = sendPick(info, storyUsual(info, story), pickNow);
+      // "Try … anyway" sends exactly the pick (nothing for a model kept with this video).
+      const override = sure ? cleanPick(pickNow) : sendPick(info, runUsual, pickNow);
       const r = override ? await storiesApi().produce(ws, storyId, { override }) : await storiesApi().produce(ws, storyId);
       loaded.setData((d) => (d ? { ...d, story: r.story, job: r.job } : d));
       setPick(null);
@@ -724,7 +731,8 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
   const wrote = job?.meta.writerModel ?? (live ? null : (madeWith([job, ...(jobs.data ?? [])]).find((u) => u.step === "storyboard" && u.task !== "captions")?.model ?? null));
   const writer = wrote ? modelName(info, wrote) : null;
   const editable = !live && ["review", "needs_check", "failed"].includes(story.status);
-  const usual = storyUsual(info, story);
+  // What this run uses: the usual of its first model step (the writer's, or the fact check's for a run from there).
+  const usual = storyUsual(info, story, runTask(null, { stale: story.stale }));
 
   return (
     <section className="st-page st-studio">
@@ -773,11 +781,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
             ask={asking}
             onClose={() => setAsking(null)}
             onKeep={() => void again(pick, true)}
-            onUse={() => {
-              const keep = pick?.effort && modelOf(info, asking.instead)?.efforts.includes(pick.effort) ? { effort: pick.effort } : null;
-              setPick(keep);
-              void again(keep, true);
-            }}
+            onUse={() => void again(insteadPick(info, asking, pick), true)}
           />
         ) : null}
       </section>

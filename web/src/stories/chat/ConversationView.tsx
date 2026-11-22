@@ -12,7 +12,7 @@ import { usePoll } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
 import type { Conversation, Message, ModelOverride, ProjectRef } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
-import { modelIdLine, type AiInfo } from "../studio/ai.tsx";
+import { modelIdLine, modelName, modelOf, sendPick, unusableWords, usableUsual, type AiInfo, type Usual } from "../studio/ai.tsx";
 import { TechDetails } from "../studio/kit.tsx";
 import { ActionCard } from "./actions.tsx";
 import { AiLine, AiSheet, DEFAULT } from "./ai.tsx";
@@ -235,7 +235,14 @@ export function ConversationView({
   if (!conv) return <Waiting label="Opening the chat…" />;
 
   const title = listTitle ?? conv.title;
-  const current = withOverride(conv.effective, override);
+  // The studio's model menu on the director's buttons reads the same list (it is known once the server answered).
+  const aiInfo: AiInfo = { models: models.models, tasks: models.tasks ?? [], live: !!models.tasks, ...(models.ai?.defaultModel ? { defaultModel: models.ai.defaultModel } : {}) };
+  // The chat's usual skips a model the studio knows cannot be used (no access, not found, a problem), unless this
+  // chat keeps that model on purpose: then it shows with its status (§45.36 E12). The line shows what is sent.
+  const chatUsual: Usual = { ...conv.effective, modelKept: conv.model !== null };
+  const usable = usableUsual(aiInfo, chatUsual);
+  const skipped = usable.skipped && !override?.model ? modelOf(aiInfo, usable.skipped) : null;
+  const current = withOverride(skipped ? usable : conv.effective, override);
   const model = findModel(models.models, current.model);
   const uploading = pictures.some((p) => !p.assetId && !p.problem);
   const effortBad = effortProblem(model, current.effort);
@@ -271,7 +278,9 @@ export function ConversationView({
     try {
       const body: { text: string; attachments?: { assetId: string }[]; override?: ModelOverride } = { text: clean };
       if (attachmentIds.length) body.attachments = attachmentIds.map((assetId) => ({ assetId }));
-      if (once && (once.model || once.effort)) body.override = { ...(once.model ? { model: once.model } : {}), ...(once.effort ? { effort: once.effort } : {}) };
+      // The pick, or the stand-in the line shows for a usual model that cannot be used (never kept, §45.36 E12).
+      const o = sendPick(aiInfo, chatUsual, once);
+      if (o) body.override = o;
       const r = await storiesApi().sendMessage(ws, conv.convId, body);
       if (body.override) rememberSentWith(ws, r.assistant.msgId, body.override);
       setMessages((prev) => [...prev.filter((m) => m.msgId !== temp.msgId), r.user, r.assistant]);
@@ -457,8 +466,6 @@ export function ConversationView({
   }
 
   const chatSuggested = models.tasks?.find((t) => t.kind === "chat")?.suggestedEffort ?? null;
-  // The studio's model menu on the director's buttons reads the same list (it is known once the server answered).
-  const aiInfo: AiInfo = { models: models.models, tasks: models.tasks ?? [], live: !!models.tasks };
   const sheetValues =
     sheet?.scope === "once"
       ? { model: current.model, effort: current.effort }
@@ -598,7 +605,7 @@ export function ConversationView({
           onClearOverride={() => setOverride(null)}
           hint={
             <p className="st-chat-ai__note">
-              <span className="st-chat-ai__from">{fromLine}</span>
+              <span className="st-chat-ai__from">{skipped ? `${unusableWords(skipped)}, so this chat uses ${modelName(aiInfo, usable.model)}. ` : ""}{fromLine}</span>
               {models.problem ? (
                 <>
                   {" "}

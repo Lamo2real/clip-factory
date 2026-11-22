@@ -310,7 +310,9 @@ test("the whole flow: idea, character, production, review, approve and the publi
   await expect(places.first()).toHaveAttribute("aria-pressed", "true");
   // The exact account it goes to, checked live before Upload.
   const dest = sheet.locator(".st-s-dest").first();
-  await expect(dest).toContainText(`Goes to ${connected[0] ?? "the connected account"}`);
+  // By its place first, so it reads right when the account is itself called Lamo Stories (§45.36 E13).
+  await expect(dest).toContainText(connected[0] ? `account: ${connected[0]}` : "Goes to the connected");
+  await expect(dest).toContainText("Goes to ");
   await dest.getByRole("button", { name: "Check now" }).click();
   await expect(dest).toContainText("Checked just now");
   await sheet.getByRole("button", { name: "Use my settings" }).click();
@@ -819,5 +821,36 @@ test("round 5: the play badge leaves a square video's caption clear; a full idea
   const item = page.locator(".st-needs-list__item", { hasText: "needs connecting again. Open Lamo Stories › Social accounts" }).first();
   await expect(item).toBeVisible({ timeout: 20_000 });
   await expect(item.locator("a").last()).toHaveAttribute("href", "/stories/connections");
+  await ctx.close();
+});
+
+test("round 5: a stand-in is never kept with the video, and a video made with Amazon Nova Pro names it as its writer", async ({ browser }) => {
+  test.setTimeout(90_000);
+  const ctx = await context(browser, 1280, 800, false);
+  const page = await ctx.newPage();
+  // §45.36 E12: nothing picked, and the storyboard agent's own model has no access (the mock's seed): the first job
+  // uses the stand-in, and the video keeps nothing of its own.
+  await open(page, `/stories/production/new?idea=${I.sandwich}`);
+  await expect(page.locator(".st-s-newvideo .st-s-ai-btn")).toContainText("Opus 5.5");
+  await page.getByRole("button", { name: "Make the video" }).click();
+  await expect(page).toHaveURL(/\/stories\/production\/[0-9A-Z]{26}$/, { timeout: 20_000 });
+  await expect(page.locator(".st-studio")).toContainText("Your usual settings");
+  await expect(page.locator(".st-studio")).not.toContainText("kept with this video");
+
+  // §45.36 E7: Amazon Nova Pro (not Anthropic's) kept with a new video writes it, and Helpers used says so.
+  await go(page, `/stories/production/new?idea=${I.sandwich}`);
+  const chip = page.locator(".st-s-newvideo .st-s-ai-btn");
+  await chip.click();
+  const menu = await sheetRules(page, 1280, "Model and effort for this video");
+  await menu.locator(".st-s-pick__opt", { hasText: /^Amazon Nova Pro/ }).click();
+  await menu.getByRole("button", { name: "Done" }).click();
+  await expect(chip).toContainText("Amazon Nova Pro");
+  await page.getByRole("button", { name: "Make the video" }).click();
+  await expect(page).toHaveURL(/\/stories\/production\/[0-9A-Z]{26}$/, { timeout: 20_000 });
+  await page.locator(".st-s-details__sum", { hasText: "Production details" }).click();
+  await expect(page.locator(".st-s-details")).toContainText("Amazon Nova Pro on Amazon Bedrock", { timeout: 20_000 });
+  await expect(page.locator(".st-s-details")).not.toContainText("Claude on Amazon Bedrock");
+  await settle(page);
+  expect(await audit(page, "Production details of a video written by Amazon Nova Pro", false)).toEqual([]);
   await ctx.close();
 });

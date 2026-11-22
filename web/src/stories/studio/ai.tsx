@@ -17,7 +17,7 @@ import { Icon } from "../../components/Icon.tsx";
 import { useLoad, usePoll } from "../../lib/hooks.ts";
 import modelsFile from "../../../../stories/config/models.json";
 import { storiesApi } from "../api/client.ts";
-import { EFFORT_LABEL, STEP_ORDER, type AiSetting, type AiTask, type Effective, type Effort, type ModelInfo, type ModelOverride, type ModelUse, type ProductionJob, type Story, type TaskInfo, type TaskKind } from "../api/types.ts";
+import { EFFORT_LABEL, STEP_ORDER, type AiSetting, type AiTask, type Effective, type Effort, type ModelInfo, type ModelOverride, type ModelUse, type ProductionJob, type StepKey, type Story, type TaskInfo, type TaskKind } from "../api/types.ts";
 import { providerWords } from "../chat/models.ts";
 import { storiesHref } from "../routes.ts";
 import { Busy, Notice, Pick, StSheet, Tag, TechDetails } from "./kit.tsx";
@@ -182,8 +182,12 @@ export function usualFor(info: AiInfo, kind: TaskKind): Effective {
   return listedTasks().find((x) => x.kind === kind)!.effective;
 }
 
-/** What runs when nothing is picked; `modelKnown`/`effortKnown` false when it is only a guess (settings not read). */
-export type Usual = Effective & { modelKnown?: boolean; effortKnown?: boolean };
+/**
+ * What runs when nothing is picked; `modelKnown`/`effortKnown` false when it is only a guess (settings not read).
+ * `modelKept`: the model is one the owner kept on purpose (a video's, a reference's or a chat's own setting), so it is
+ * never swapped by itself, even when the studio knows it cannot be used: the run asks first (§45.36 E12).
+ */
+export type Usual = Effective & { modelKnown?: boolean; effortKnown?: boolean; modelKept?: boolean };
 
 /** A model and effort a call will use, and whether each part is known or only guessed (GET …/ai not read). */
 export interface Planned {
@@ -237,7 +241,8 @@ function fallbackModel(info: AiInfo, not: string): ModelInfo | null {
  * nothing was skipped (also when there is nothing better to offer: then the usual shows with its status).
  */
 export function usableUsual(info: AiInfo, usual: Usual): Usual & { skipped: string | null } {
-  const bad = unusableModel(info, usual.model);
+  // A model kept on purpose stays (it shows with its status, and the run asks first).
+  const bad = usual.modelKept ? null : unusableModel(info, usual.model);
   const next = bad ? fallbackModel(info, usual.model) : null;
   if (!bad || !next) return { ...usual, skipped: null };
   const applied = next.efforts.length > 0;
@@ -262,13 +267,36 @@ export function sendPick(info: AiInfo, usual: Usual, pick: ModelOverride | null 
   return out;
 }
 
-/** The question before a run with a model the studio knows cannot be used, picked on purpose (§45.36 E12); null: go on. */
+/**
+ * The question before a run with a model the studio knows cannot be used, picked on purpose (§45.36 E12): picked for
+ * this run, or kept with the video (or reference, or chat) when nothing is picked; null: go on. `instead` is the usual
+ * without the bad model (the kept one when it works, else the workspace's default, else one that works).
+ */
 export function unusableAsk(info: AiInfo, usual: Usual, pick: ModelOverride | AiSetting | null | undefined): { bad: ModelInfo; instead: string } | null {
-  const bad = unusableModel(info, pick?.model);
+  const bad = unusableModel(info, pick?.model) ?? (!pick?.model && usual.modelKept ? unusableModel(info, usual.model) : null);
   if (!bad) return null;
-  const base = usableUsual(info, usual);
+  const base = usableUsual(info, { ...usual, modelKept: false });
   if (base.model === bad.key || unusableModel(info, base.model)) return null;
   return { bad, instead: base.model };
+}
+
+/** "Use {usual} instead" (§45.36 E12): that model for this run only, with the effort picked when it offers it. */
+export function insteadPick(info: AiInfo, ask: { instead: string }, pick: ModelOverride | AiSetting | null | undefined): ModelOverride {
+  const effort = pick?.effort && modelOf(info, ask.instead)?.efforts.includes(pick.effort) ? pick.effort : undefined;
+  return effort ? { model: ask.instead, effort } : { model: ask.instead };
+}
+
+/**
+ * The task a run's first model step asks for (§45.36 E12): the stand-in for a model that cannot be used is worked out
+ * from that task's usual, so a run from the fact check never takes the writer's stand-in. Without `from` the run
+ * starts at the video's first out-of-date step.
+ */
+export function runTask(from: StepKey | null | undefined, opts: { stale?: readonly StepKey[]; sceneIds?: boolean } = {}): TaskKind {
+  const at = from ?? STEP_ORDER.find((k) => opts.stale?.includes(k)) ?? "storyboard";
+  const i = STEP_ORDER.indexOf(at);
+  if (i <= STEP_ORDER.indexOf("storyboard")) return opts.sceneIds ? "scene_rewrite" : "storyboard";
+  if (i <= STEP_ORDER.indexOf("safety")) return "fact_check";
+  return "final_review";
 }
 
 /** "Claude Fable 5.1 has no access right now. Use Claude Opus 5.5 instead?" with Use … and Try … anyway (§45.36 E12). */
@@ -838,7 +866,7 @@ export function storyUsual(info: AiInfo, story: Pick<Story, "ai">, kind: TaskKin
   const model = story.ai.model ?? base.model;
   const m = modelOf(info, model);
   const applied = m ? m.efforts.length > 0 : base.effortApplied;
-  return { model, effort: applied ? (story.ai.effort ?? base.effort) : null, effortApplied: applied, from: "project", modelKnown: !!story.ai.model, effortKnown: !!story.ai.effort };
+  return { model, effort: applied ? (story.ai.effort ?? base.effort) : null, effortApplied: applied, from: "project", modelKnown: !!story.ai.model, effortKnown: !!story.ai.effort, modelKept: !!story.ai.model };
 }
 
 /**
@@ -847,7 +875,7 @@ export function storyUsual(info: AiInfo, story: Pick<Story, "ai">, kind: TaskKin
  */
 export function nextRunLine(info: AiInfo, story: Pick<Story, "ai" | "effective">): string {
   // A model the studio knows cannot be used is skipped, as the remake menu does (§45.36 E12): the line names what runs.
-  const e = story.effective ? usableUsual(info, story.effective) : null;
+  const e = story.effective ? usableUsual(info, { ...story.effective, modelKept: !!story.ai.model }) : null;
   if (e) return `Next run: ${modelName(info, e.model)} · ${e.effortApplied === false || !e.effort ? "its own effort level" : EFFORT_LABEL[e.effort]}`;
   const p = merged(info, storyUsual(info, story), null);
   if (!p.modelKnown) return "Next run: your usual model and effort";

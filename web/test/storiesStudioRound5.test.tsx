@@ -56,12 +56,13 @@ HTMLCanvasElement.prototype.getContext = (() => null) as never;
 const { IdeasScreen } = await import("../src/stories/screens/Ideas.tsx");
 const { ProductionScreen } = await import("../src/stories/screens/Production.tsx");
 const { ReviewScreen, approveBlock, onlyPostWords, POST_WORDS_CHECK } = await import("../src/stories/screens/Review.tsx");
-const { LISTED_INFO, MODEL_STATUS_WORD, ModelMenu, nextRunLine, sendPick, unusableAsk, usableUsual } = await import("../src/stories/studio/ai.tsx");
-const { accountState, checkProblem, postToTitle, POST_YES, PublishSheet } = await import("../src/stories/studio/PublishSheet.tsx");
+const { insteadPick, LISTED_INFO, MODEL_STATUS_WORD, ModelMenu, nextRunLine, runTask, sendPick, unusableAsk, usableUsual } = await import("../src/stories/studio/ai.tsx");
+const { AccountCard, accountState, checkProblem, postToTitle, POST_YES, postYes, PublishSheet } = await import("../src/stories/studio/PublishSheet.tsx");
+const { ActionCard } = await import("../src/stories/chat/actions.tsx");
 const { PostRow } = await import("../src/stories/studio/PostsPanel.tsx");
 const { Filmstrip, frameShape } = await import("../src/stories/studio/Filmstrip.tsx");
 const { referencesCache, referencesChanged } = await import("../src/stories/studio/hooks.ts");
-const { accountProblem, helperName, helpersLine, modelHelperWords, providerName, thisAccount } = await import("../src/stories/studio/words.ts");
+const { accountProblem, accountShown, helperName, helpersLine, modelHelperWords, providerName, thisAccount } = await import("../src/stories/studio/words.ts");
 
 const S = stories.SEED_IDS.stories;
 const I = stories.SEED_IDS.ideas;
@@ -375,7 +376,7 @@ describe("every model record has its details, folded away (§45.36 E8, E14)", ()
     await click(control("Post it"));
     await click(control(/Lamo Stories Channel/, lastDialog()), 50);
     const dest = lastDialog().querySelector<HTMLElement>(".st-s-dest")!;
-    expect(dest.textContent).toContain("Goes to Lamo Stories Channel");
+    expect(dest.textContent).toContain("Goes to this YouTube account: Lamo Stories Channel");
     expect(dest.querySelector(".st-s-tech")?.textContent).toContain("Account id ext-youtube");
     expect(plainText(dest)).not.toContain("ext-youtube");
   });
@@ -545,14 +546,21 @@ describe("a model the studio knows cannot be used is never pre-picked (§45.36 E
     expect(value).toBeNull();
   });
 
-  it("Make the video with nothing picked sends the usual's stand-in, never the refused model", async () => {
+  it("Make the video with nothing picked sends the usual's stand-in for the first job only, never kept with the video", async () => {
     fableDenied();
     const create = vi.spyOn(api, "createStory");
     await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich })} />);
     expect(document.querySelector(".st-s-newvideo .st-s-ai-btn")?.textContent).toContain("Opus 5.5");
     await click(control("Make the video"));
     expect(dialogs()).toHaveLength(0);
-    expect(create.mock.calls[0]![1].ai).toEqual({ model: "opus-5-5", effort: null });
+    // Not this video's own setting (the owner kept nothing): the create call's one-job override (§45.5).
+    expect(create.mock.calls[0]![1].ai).toBeUndefined();
+    expect(create.mock.calls[0]![1].override).toEqual({ model: "opus-5-5" });
+    const { story, job } = await create.mock.results[0]!.value;
+    expect(story.ai).toEqual({ model: null, effort: null });
+    await wait(4000);
+    const run = store.jobs.find((j) => j.jobId === job.jobId)!;
+    expect(run.meta.models.find((m) => m.step === "storyboard" && m.task === "storyboard")?.model).toBe("opus-5-5");
   });
 
   it("Make the video with it picked asks first: Use the usual, or try it anyway", async () => {
@@ -568,7 +576,8 @@ describe("a model the studio knows cannot be used is never pre-picked (§45.36 E
     const ask = lastDialog();
     expect(ask.querySelector(".st-s-sheet__title")?.textContent).toBe("Claude Fable 5.1 has no access right now. Use Claude Opus 5.5 instead?");
     await click(control("Use Claude Opus 5.5", ask));
-    expect(create.mock.calls[0]![1].ai).toEqual({ model: "opus-5-5", effort: null });
+    expect(create.mock.calls[0]![1].ai).toBeUndefined();
+    expect(create.mock.calls[0]![1].override).toEqual({ model: "opus-5-5" });
   });
 
   it("Try it anyway sends the model the owner picked", async () => {
@@ -678,5 +687,190 @@ describe("PostRow (§45.36 E9, E14)", () => {
     );
     const row = document.querySelector<HTMLElement>(".st-s-post")!;
     expect(Array.from(row.querySelectorAll(".st-s-post__actions a, .st-s-post__actions button")).map((e) => e.textContent)).toEqual(["Open Social accounts", "Try again"]);
+  });
+});
+
+// ---------- Round 5, second pass: what the two reviews found ----------
+
+describe("a change to the reference videos while Production is open (§45.36 E2)", () => {
+  it("reads the list again in place: the ticked reference stays ticked and goes with Make the video", async () => {
+    await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich, refIds: [REF_A.refId] })} />);
+    const pressed = () => Array.from(document.querySelectorAll<HTMLElement>(".st-s-reftile")).filter((t) => t.getAttribute("aria-pressed") === "true").map((t) => t.textContent ?? "");
+    expect(pressed()).toEqual([expect.stringContaining(REF_A.title)]);
+    // A background upload finishes meanwhile (or a delete's undo runs out).
+    store.references.push(structuredClone(REF_NEW));
+    await act(async () => referencesChanged());
+    await wait(1500);
+    // Never "Getting your reference videos…" for good: the list is there, with the new one, and the pick stays.
+    expect(text()).not.toContain("Getting your reference videos");
+    expect(Array.from(document.querySelectorAll(".st-s-reftile")).map((t) => t.textContent ?? "")).toEqual(expect.arrayContaining([expect.stringContaining(REF_A.title), expect.stringContaining(REF_NEW.title)]));
+    expect(pressed()).toEqual([expect.stringContaining(REF_A.title)]);
+    const create = vi.spyOn(api, "createStory");
+    await click(control("Make the video"));
+    expect(create.mock.calls[0]![1]).toMatchObject({ referenceIds: [REF_A.refId] });
+  });
+});
+
+describe("a model the studio knows cannot be used, kept or per run (§45.36 E12)", () => {
+  const live = () => ({ models, tasks, live: true, defaultModel: "opus-5-5" });
+
+  it("a model kept with the video is never swapped by itself: the run asks first", () => {
+    fableDenied();
+    const kept = { model: "fable-5-1", effort: "high" as const, effortApplied: true, from: "project" as const, modelKept: true };
+    expect(usableUsual(live(), kept)).toMatchObject({ model: "fable-5-1", skipped: null });
+    expect(sendPick(live(), kept, null)).toBeUndefined();
+    expect(unusableAsk(live(), kept, null)).toMatchObject({ bad: { key: "fable-5-1" }, instead: "opus-5-5" });
+    // A pick on top of a kept model that works: Use … means the kept one.
+    const keptOk = { ...kept, model: "sonnet-5-5" };
+    expect(unusableAsk(live(), keptOk, { model: "fable-5-1" })).toMatchObject({ instead: "sonnet-5-5" });
+    expect(insteadPick(live(), { instead: "opus-5-5" }, { effort: "low" })).toEqual({ model: "opus-5-5", effort: "low" });
+    expect(nextRunLine(live(), { ai: { model: "fable-5-1", effort: null }, effective: kept })).toBe("Next run: Claude Fable 5.1 · High");
+  });
+
+  it("the run's first model step decides whose usual is skipped", () => {
+    expect(runTask(null)).toBe("storyboard");
+    expect(runTask("storyboard", { sceneIds: true })).toBe("scene_rewrite");
+    expect(runTask("safety")).toBe("fact_check");
+    expect(runTask(null, { stale: ["safety"] })).toBe("fact_check");
+    expect(runTask(null, { stale: ["sound", "captions", "assemble", "preview"] })).toBe("final_review");
+  });
+
+  it("Review's remake of a video that keeps a refused model asks; Use sends the usual for this run only", async () => {
+    fableDenied();
+    store.stories.find((s) => s.storyId === S.review)!.ai = { model: "fable-5-1", effort: null };
+    const produce = vi.spyOn(api, "produce");
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.review })} />);
+    expect(document.querySelector(".st-s-decide__ai .st-s-ai-btn")?.textContent).toContain("Fable 5.1");
+    expect(document.querySelector(".st-s-decide__ai .st-s-ai-btn__status")?.textContent).toBe("No access");
+    await click(control("Remake the whole video"), 50);
+    await click(control("Remake it", lastDialog()), 50);
+    expect(produce).not.toHaveBeenCalled();
+    expect(lastDialog().querySelector(".st-s-sheet__title")?.textContent).toBe("Claude Fable 5.1 has no access right now. Use Claude Opus 5.5 instead?");
+    await click(control("Use Claude Opus 5.5", lastDialog()));
+    expect(produce).toHaveBeenCalledWith("stories", S.review, { from: "storyboard", override: { model: "opus-5-5" } });
+    // This video still keeps its own model: nothing was saved.
+    expect(store.stories.find((s) => s.storyId === S.review)!.ai).toEqual({ model: "fable-5-1", effort: null });
+  });
+
+  it("Try it anyway sends nothing over the kept model", async () => {
+    fableDenied();
+    store.stories.find((s) => s.storyId === S.review)!.ai = { model: "fable-5-1", effort: null };
+    const produce = vi.spyOn(api, "produce");
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.review })} />);
+    await click(control("Remake the whole video"), 50);
+    await click(control("Remake it", lastDialog()), 50);
+    await click(control("Try Claude Fable 5.1 anyway", lastDialog()));
+    expect(produce).toHaveBeenCalledWith("stories", S.review, { from: "storyboard" });
+  });
+
+  it("Check again of new post words never takes the writer's stand-in", async () => {
+    fableDenied();
+    const produce = vi.spyOn(api, "produce");
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.review })} />);
+    await click(document.querySelector<HTMLElement>(".st-s-editor-box .st-s-pick__opt:nth-of-type(2) input")!, 50);
+    type(field("X"), "Pip keeps calm on the ice!");
+    await click(control("Save post words"));
+    const notice = Array.from(document.querySelectorAll<HTMLElement>(".st-s-notice")).find((n) => n.textContent?.includes(POST_WORDS_CHECK))!;
+    await click(control("Check again", notice));
+    expect(produce).toHaveBeenCalledWith("stories", S.review, { from: "safety" });
+  });
+
+  it("a chat card never sends the stand-in before the video's own setting is read", async () => {
+    fableDenied();
+    tasks = tasks.map((t) => (t.kind === "scene_rewrite" ? { ...t, effective: { model: "fable-5-1", effort: "high", effortApplied: true, from: "agent" } } : t));
+    vi.spyOn(api, "getStory").mockRejectedValue(new Error("offline"));
+    const changes = vi.spyOn(api, "requestChanges");
+    const sceneId = store.stories.find((s) => s.storyId === S.review)!.scenes[0]!.sceneId;
+    await show(<ActionCard ws="stories" id="m1" info={live()} action={{ kind: "remake_scene", label: "Remake scene 1", payload: { storyId: S.review, sceneIds: [sceneId] } }} />);
+    await click(control("Remake scene 1"));
+    expect(changes.mock.calls[0]![2]).toEqual({ sceneIds: [sceneId] });
+  });
+});
+
+describe("Make the video with Amazon Nova Pro records it as the writer (§45.36 E7)", () => {
+  it("bedrock-model:{key} for a model that is not Anthropic's, bedrock-claude for Claude; Helpers used names it", async () => {
+    const made = await call(api.createStory("stories", { ideaId: I.sandwich, characterIds: [stories.SEED_IDS.characters.pip], ai: { model: "nova-pro", effort: null } }));
+    const claude = await call(api.createStory("stories", { brief: { title: "Bolt and the kite", logline: "Bolt flies a kite that flies him.", category: "comedy" }, characterIds: [stories.SEED_IDS.characters.bolt], override: { model: "opus-5-5" } }));
+    await wait(4000);
+    const run = store.jobs.find((j) => j.jobId === made.job.jobId)!;
+    expect(run.meta.writerModel).toBe("nova-pro");
+    expect(run.meta.providers.writer).toBe("bedrock-model:nova-pro");
+    expect(run.meta.models.find((m) => m.step === "storyboard")).toMatchObject({ model: "nova-pro", modelId: "amazon.nova-pro-v1:0" });
+    const other = store.jobs.find((j) => j.jobId === claude.job.jobId)!;
+    expect(other.meta.providers.writer).toBe("bedrock-claude");
+    // The create call's override is the first job's only (§45.5): never kept with the video.
+    expect(store.stories.find((s) => s.storyId === claude.story.storyId)!.ai).toEqual({ model: null, effort: null });
+    const lookup = (key: string) => [...LISTED_INFO.models, { ...LISTED_INFO.models[0]!, key: "nova-pro", label: "Amazon Nova Pro", provider: "Amazon", host: "Amazon Bedrock" }].find((m) => m.key === key) ?? null;
+    expect(helperName("writer", run.meta.providers.writer, "nova-pro", lookup)).toBe("Amazon Nova Pro on Amazon Bedrock");
+  });
+});
+
+describe("one name on screen, second pass (§45.36 E13, E14)", () => {
+  it("the chosen place and the confirm sheet name the account by its place", async () => {
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />);
+    await click(control("Post it"));
+    await click(control(/^TikTok/, lastDialog()), 50);
+    const dest = Array.from(lastDialog().querySelectorAll<HTMLElement>(".st-s-dest")).find((d) => d.textContent?.includes("TikTok"))!;
+    expect(dest.querySelector(".st-s-dest__who")?.textContent).toBe("Goes to this TikTok account: Lamo Stories (@tiktok.stories)");
+  });
+
+  it("the yes button matches the sentence the API sends", () => {
+    expect(postYes("Lamo Stories' TikTok is a different account now: this TikTok account (Lamo Stories). Tap Yes if that is right.")).toBe(POST_YES);
+    expect(postYes("Lamo Stories' TikTok is a different account now: Lamo Stories. Tap Post to Lamo Stories if that is right.")).toBe("Post to Lamo Stories");
+    expect(postYes(null)).toBe(POST_YES);
+  });
+
+  it("an account with no name or handle never shows its raw id on the first line", async () => {
+    expect(accountShown({ accountName: null, handle: null })).toBeNull();
+    expect(accountShown({ accountName: "Lamo", handle: "lamo.stories" })).toBe("Lamo (@lamo.stories)");
+    const job = { ...store.publishing.find((j) => j.platform === "tiktok" && j.contentId === S.published)!, accountName: null, handle: null, externalAccountId: "UCx9raw-channel-id" };
+    await show(
+      <>
+        <ul>
+          <PostRow job={job} onRetry={() => undefined} />
+        </ul>
+        <AccountCard platform="youtube" account={{ externalAccountId: "UCx9raw-channel-id", accountName: null, handle: null }} />
+      </>,
+      50,
+    );
+    expect(document.querySelector(".st-s-post__account")?.textContent).toBe("The connected account");
+    expect(document.querySelector(".st-s-dest__who")?.textContent).toBe("Goes to the connected YouTube account.");
+    expect(plainText()).not.toContain("UCx9raw-channel-id");
+    expect(document.querySelector(".st-s-dest .st-s-tech")?.textContent).toContain("Account id UCx9raw-channel-id");
+  });
+});
+
+describe("every post that goes up is celebrated once (§45.36 E11)", () => {
+  it("one place up and one stopped: the sheet still celebrates the one that went up", async () => {
+    start({ publishMs: 300 });
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />);
+    await click(control("Post it"));
+    await click(control(/Lamo Stories Channel/, lastDialog()), 50);
+    await click(control(/^TikTok/, lastDialog()), 50);
+    await click(control("Use my settings", lastDialog()), 50);
+    spy.bursts = 0;
+    spy.sounds = [];
+    await click(control(/^Upload/, lastDialog()), 50);
+    // TikTok's sign-in runs out meanwhile: that place stops, YouTube goes up.
+    store.social.find((a) => a.platform === "tiktok")!.connectionStatus = "needs_reconnect";
+    await wait(11_000);
+    expect(lastDialog().querySelector(".st-s-sheet__title")?.textContent).toBe("Sending your video");
+    expect(spy.bursts).toBe(1);
+    expect(spy.sounds.filter((s) => s === "success")).toHaveLength(1);
+    await wait(11_000);
+    expect(spy.bursts).toBe(1);
+  });
+
+  it("a post that goes up while the sheet is still on its form is celebrated by the page", async () => {
+    start({ publishMs: 3000 });
+    await call(api.publish("stories", S.approved, [{ platform: "youtube", socialAccountId: "stories.youtube" }]));
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />, 600);
+    await click(control("Post it"), 50);
+    spy.bursts = 0;
+    spy.sounds = [];
+    await wait(11_000);
+    expect(lastDialog().querySelector(".st-s-sheet__title")?.textContent).toBe("Post it");
+    expect(spy.bursts).toBe(1);
+    expect(spy.sounds.filter((s) => s === "success")).toHaveLength(1);
   });
 });

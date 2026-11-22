@@ -13,7 +13,7 @@
 // again, and "Posted!" gets Lamo Stories' star burst and success cheer, as Approve does (§45.36 E11). Account ids sit
 // behind "Technical details" (§45.36 E14); an account problem offers "Open Social accounts" (§45.36 E9); the other
 // app is always "Clip Factory" (§45.36 E13).
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Dropdown } from "../../components/Dropdown.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { A } from "../../components/ui.tsx";
@@ -39,7 +39,7 @@ import { STORIES_PLATFORMS, type ErrorAccount, type Platform, type PublishOption
 import { storiesHref } from "../routes.ts";
 import { Busy, celebrate, Notice, Pick, StSheet, Switch, TechDetails } from "./kit.tsx";
 import { PostRow, SocialAccountsLink } from "./PostsPanel.tsx";
-import { accountOf, accountProblem, accountWords, ago, PLATFORM_LABEL, say, thisAccount } from "./words.ts";
+import { accountOf, accountProblem, accountShown, ago, PLATFORM_LABEL, say, thisAccount } from "./words.ts";
 
 type YouTubeOptions = { privacy: "public" | "unlisted" | "private"; category: string; notifySubscribers: boolean };
 
@@ -115,11 +115,29 @@ export function placeOf(message: string, account: ErrorAccount, chosen: Platform
 export function AccountCard({ platform, account }: { platform: Platform; account: ErrorAccount }) {
   return (
     <div className="st-s-dest st-s-dest--ask" aria-label={`The ${PLATFORM_LABEL[platform]} account`}>
-      <p className="st-s-dest__who">
-        Goes to this {PLATFORM_LABEL[platform]} account: <strong>{accountWords(account)}</strong>
-      </p>
+      <DestWho platform={platform} account={account} />
       <AccountId id={account.externalAccountId} />
     </div>
+  );
+}
+
+/**
+ * "Goes to this TikTok account: Lamo Stories (@lamo.stories)": by its place first, so it reads right when the account
+ * is itself called Lamo Stories (§45.36 E13); one with no name or handle is "the connected TikTok account", its id
+ * only behind Technical details (§45.36 E14).
+ */
+function DestWho({ platform, account }: { platform: Platform; account: Pick<ErrorAccount, "accountName" | "handle"> }) {
+  const shown = accountShown(account);
+  return (
+    <p className="st-s-dest__who">
+      {shown ? (
+        <>
+          Goes to this {PLATFORM_LABEL[platform]} account: <strong>{shown}</strong>
+        </>
+      ) : (
+        `Goes to the connected ${PLATFORM_LABEL[platform]} account.`
+      )}
+    </p>
   );
 }
 
@@ -140,6 +158,15 @@ export function postToTitle(platform: Platform, account: ErrorAccount): string {
 
 /** The yes of that question: the server's sentence says "Tap Yes …". */
 export const POST_YES = "Yes, post to this account";
+
+/**
+ * The yes button for the server's own sentence: "Yes, post to this account" for "Tap Yes …", and the button the
+ * sentence names when an API still says "Tap Post to {name} …", so the words on screen always match a button.
+ */
+export function postYes(message: string | null | undefined): string {
+  const named = /\bTap (Post to .+?) if\b/.exec(message ?? "");
+  return named ? named[1]! : POST_YES;
+}
 
 /** The Clip Factory-shaped creator the shared TikTok rules read (the same fields, §17.4). */
 const asClips = (c: TikTokCreator): ClipsTikTokCreator => ({ ...c, avatarUrl: c.avatarUrl ?? undefined });
@@ -382,10 +409,7 @@ export function PublishSheet({
                     </button>
                     {on ? (
                       <div className="st-s-dest" aria-label={`Where it goes on ${PLATFORM_LABEL[a.platform]}`}>
-                        <p className="st-s-dest__who">
-                          Goes to <strong>{a.accountName ?? "the connected account"}</strong>
-                          {a.handle ? ` (${a.handle})` : ""}
-                        </p>
+                        <DestWho platform={a.platform} account={a} />
                         <AccountId id={a.externalAccountId} />
                         <p className={`st-s-dest__note${checkNote[a.platform] && checkNote[a.platform] !== "Checked just now: this is the account the video goes to." ? " is-bad" : ""}`} role="status">
                           {checkNote[a.platform] ?? (when ? `Last checked ${when}.` : "Not checked yet.")}
@@ -551,7 +575,7 @@ export function PublishSheet({
                     Not now
                   </button>
                   <button type="button" className="st-btn st-btn--main" aria-disabled={sending || undefined} onClick={() => !sending && sayYes()}>
-                    {sending ? "Sending…" : POST_YES}
+                    {sending ? "Sending…" : postYes(ask.message)}
                   </button>
                 </>
               }
@@ -566,16 +590,31 @@ export function PublishSheet({
   );
 }
 
-/** After Upload: each place as it goes; "Posted!" once every one is up, with the star burst and the cheer (§45.36 E11). */
+/** The posts already celebrated: one star burst and one cheer per post, by whichever screen sees it go up first (§45.36 E11). */
+const cheeredPosts = new Set<string>();
+
+/** True the first time a post is claimed for its celebration; false after that. */
+export function claimPostCheer(publishingJobId: string): boolean {
+  if (cheeredPosts.has(publishingJobId)) return false;
+  cheeredPosts.add(publishingJobId);
+  return true;
+}
+
+/**
+ * After Upload: each place as it goes; "Posted!" once every one is up. Each place that goes up gets the star burst and
+ * the cheer, as Approve does (§45.36 E11), also when another place stops.
+ */
 function SentSheet({ sent, onClose, onRetry }: { sent: PublishingJob[]; onClose: () => void; onRetry: (job: PublishingJob) => void }) {
   const done = sent.length > 0 && sent.every((j) => j.publishingStatus === "posted");
-  const cheered = useRef(false);
+  const states = sent.map((j) => `${j.publishingJobId}:${j.publishingStatus}`).join(",");
   useEffect(() => {
-    if (!done || cheered.current) return;
-    cheered.current = true;
+    const up = sent.filter((j) => j.publishingStatus === "posted" && claimPostCheer(j.publishingJobId));
+    if (!up.length) return;
     // The same as Approve: Lamo Stories' own star burst from the sheet's title, and the success cheer.
     celebrate(document.querySelector(".st-s-posted-sheet .st-s-sheet__title"), 150);
-  }, [done]);
+    // Only when a place's state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [states]);
   return (
     <StSheet
       title={done ? "Posted!" : "Sending your video"}

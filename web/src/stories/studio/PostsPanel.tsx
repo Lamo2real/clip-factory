@@ -8,7 +8,7 @@ import { A } from "../../components/ui.tsx";
 import type { PublishingJob } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
 import { Tag, TechDetails } from "./kit.tsx";
-import { accountProblem, accountWords, ago, PLATFORM_LABEL, PUBLISH_LABEL, PUBLISH_TONE, shortNumber } from "./words.ts";
+import { accountProblem, accountShown, ago, PLATFORM_LABEL, PUBLISH_LABEL, PUBLISH_TONE, shortNumber } from "./words.ts";
 
 /** "Open Social accounts": the way to fix an account problem, next to Try again (§45.36 E9). */
 export function SocialAccountsLink({ className = "st-btn st-s-small" }: { className?: string }) {
@@ -33,7 +33,7 @@ export function PostRow({ job, onRetry, busy = false }: { job: PublishingJob; on
           <Tag tone={PUBLISH_TONE[job.publishingStatus]}>{PUBLISH_LABEL[job.publishingStatus]}</Tag>
         </span>
         <span className="st-s-post__account">
-          {job.externalAccountId ? accountWords({ accountName: job.accountName, handle: job.handle ?? null, externalAccountId: job.externalAccountId }) : (job.accountName ?? job.handle ?? "Lamo Stories account")}
+          {accountShown({ accountName: job.accountName, handle: job.handle ?? null }) ?? "The connected account"}
         </span>
         {job.publishingStatus === "posted" ? (
           <span className="st-s-post__when">Posted {ago(job.postedAt ?? job.updatedAt)}</span>
