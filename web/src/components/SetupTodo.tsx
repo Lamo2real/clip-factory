@@ -391,9 +391,11 @@ function TodoPanel({ onClose, finished, total, children }: { onClose: () => void
 }
 
 function TodoList({ rows, onSkip, onUnskip }: { rows: TodoRow[]; onSkip: (p: Platform) => void; onUnskip: (p: Platform) => Promise<boolean> }) {
-  // The Content Rewards pages have their own one vermilion button (§38.1): there the list's Set up is glass.
-  const routeName = useRoute().name;
-  const quietGo = routeName === "cr_setup" || routeName === "campaigns" || routeName === "campaigns_find" || routeName === "campaign";
+  // The Content Rewards pages (§38.1) and the Get paid pages (§40.1) have their own one vermilion button: there the
+  // list's Set up is glass.
+  const route = useRoute();
+  const routeName = route.name;
+  const quietGo = routeName === "cr_setup" || routeName === "campaigns" || routeName === "campaigns_find" || routeName === "campaign" || routeName === "getpaid" || (routeName === "settings" && route.branch === "getpaid");
   return (
     <ul className="setup-todo__rows" aria-label="Places to set up">
       {rows.map((row) => {

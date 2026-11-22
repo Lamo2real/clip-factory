@@ -356,6 +356,14 @@ export const CR_GUIDE: CrGuide = {
             WHOP_HINT,
           ],
           open: { label: "Open Whop", url: WHOP },
+          // §40.8 change 14: the two hints Get paid adds (Whop may pause payouts from 1 Dec 2026 until the tax one is answered).
+          ifYouSee: [
+            { see: "**Set up Whop Payments**", do: "Tap it. Pick Sweden." },
+            {
+              see: "that Whop asks about tax for a business (VAT)",
+              do: "Tap **Settings**, then **Tax**, then **No, my business is not registered**. Don't type your personal number.",
+            },
+          ],
         },
         {
           id: "bank-cashout",
