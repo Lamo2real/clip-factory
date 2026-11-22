@@ -1,8 +1,8 @@
 // One match of the campaign finder (docs/CONTRACTS.md §41.1): its head (a round letter, the name, the brand, "New",
-// open or apply), and once open, the pay per place, the money left (Content Rewards' numbers), why it matched, the
-// server's notes, heads-ups and can't-tell lines, then the buttons. Every match has "Open on Content Rewards" (a link
-// built here from the uuid, never taken from a reply); only the open match's main button is vermilion, and only when
-// the page gives it the vermilion. The steps on Content Rewards show as soon as the match is open ("On Content
+// anyone can join or apply), and once open, the pay per place, the money left (Content Rewards' numbers), why it
+// matched, the server's notes, watch-out lines and can't-tell lines, then the buttons. Every match has "Open on Content
+// Rewards" (a link built here from the uuid, never taken from a reply); only the open match's main button is
+// vermilion, and only when the page gives it the vermilion. The steps on Content Rewards show as soon as the match is open ("On Content
 // Rewards:", above Open), so he takes them with him. After Open they move right under the head with the If you see
 // fold (and, not signed in, the rules box), and "I joined: add it" (an application: "I applied: add it") leads for 2
 // hours; not signed in, it is the vermilion only once the box has the rules in it.
@@ -11,8 +11,8 @@ import type { FinderMatch } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { Button, Progress } from "../../components/ui.tsx";
-import { budgetChip, crCampaignUrl } from "../../lib/contentRewards.ts";
-import { IF_YOU_SEE, STEPS_APPLY, STEPS_OPEN_BY_HAND, STEPS_OPEN_SIGNED_IN, clockTime, openedRecently } from "../../lib/finder.ts";
+import { crCampaignUrl } from "../../lib/contentRewards.ts";
+import { ANYONE_CAN_JOIN, IF_YOU_SEE, STEPS_APPLY, STEPS_OPEN_BY_HAND, STEPS_OPEN_SIGNED_IN, clockTime, leftChip, leftPctOf, openedRecently } from "../../lib/finder.ts";
 import { PLATFORM_LABEL } from "../../lib/format.ts";
 import { CR_DISCOVER } from "../../setup/contentrewards.ts";
 import { CopyChip, Rich } from "../settings/setup/bits.tsx";
@@ -77,7 +77,9 @@ export function FinderMatchCard({
   const addLabel = apply ? "I applied: add it" : "I joined: add it";
   const byHand = !apply && !signedIn;
   const steps = apply ? STEPS_APPLY : byHand ? STEPS_OPEN_BY_HAND : STEPS_OPEN_SIGNED_IN;
-  const chip = budgetChip(match.budget.usedPct);
+  // The chip says what the Why it matched line says, in the same bands (never "Half used" over "A little money is left").
+  const left = match.budget.usedPct === null ? null : leftPctOf(match.budget);
+  const chip = left === null ? null : leftChip(left);
   // Not signed in, the rules box empty: "I joined: add it" stays glass and in place, right under the box (adding it
   // now would mean a second trip for the rules). It takes the vermilion, pinned, once the box has text.
   const holds = main && !(byHand && addLeads && !rules.trim());
@@ -111,7 +113,7 @@ export function FinderMatchCard({
             </span>
           ) : null}
           <span className="pill pill--neutral">
-            <span className="pill__text">{apply ? "You apply first" : "Open to join"}</span>
+            <span className="pill__text">{apply ? "You apply first" : ANYONE_CAN_JOIN}</span>
           </span>
         </span>
       </span>
@@ -169,8 +171,8 @@ export function FinderMatchCard({
           <p>{match.budget.line}</p>
           {match.budget.usedPct !== null ? <Progress value={1 - match.budget.usedPct / 100} label="Money left" tone="success" /> : null}
           {chip ? (
-            <span className={`pill pill--${chip === "Half used" ? "neutral" : "success"}`}>
-              <span className="pill__text">{chip}</span>
+            <span className={`pill pill--${chip.tone}`}>
+              <span className="pill__text">{chip.text}</span>
             </span>
           ) : null}
           <span className="finder-match__tag">

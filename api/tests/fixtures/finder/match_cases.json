@@ -53,7 +53,7 @@
      [
       "budget_low",
       1,
-      "1 campaign has less than a quarter of the money left."
+      "1 campaign has only a little money left."
      ]
     ],
     "looked": 15,
@@ -70,7 +70,7 @@
     },
     "lines": {
      "c0c37381-e244-4643-98bd-edbff4bc1465": {
-      "why": "Pays $6.00 per 1,000 views on YouTube and Instagram. 41% of the money left. Open to join.",
+      "why": "Pays $6.00 per 1,000 views on YouTube and Instagram. Some of the money is left. Anyone can join.",
       "notes": [
        "It has 4 rules you see once you join.",
        "Also pays on TikTok, once TikTok checks Clip Factory."
@@ -83,7 +83,7 @@
       ]
      },
      "a1cefc3b-4533-438f-8e70-a7299550f1cf": {
-      "why": "Pays $1.50 per 1,000 views on Instagram. 46% of the money left. Open to join.",
+      "why": "Pays $1.50 per 1,000 views on Instagram. Some of the money is left. Anyone can join.",
       "notes": [
        "Also pays on TikTok, once TikTok checks Clip Factory."
       ],
@@ -94,7 +94,7 @@
       ]
      },
      "3d9ef19f-1256-47ca-b630-e33e2c923969": {
-      "why": "Pays $1.50 per 1,000 views on YouTube and Instagram. 96% of the money left. Open to join.",
+      "why": "Pays $1.50 per 1,000 views on YouTube and Instagram. Most of the money is left. Anyone can join.",
       "notes": [
        "Also pays on TikTok, once TikTok checks Clip Factory."
       ],
@@ -106,7 +106,7 @@
       ]
      },
      "c49840ae-ca22-4745-8a42-b675847e0355": {
-      "why": "Pays $1.00 per 1,000 views on YouTube and Instagram. 44% of the money left. Open to join.",
+      "why": "Pays $1.00 per 1,000 views on YouTube and Instagram. Some of the money is left. Anyone can join.",
       "notes": [
        "Also pays on TikTok, once TikTok checks Clip Factory."
       ],
@@ -114,7 +114,7 @@
       "cantTell": []
      },
      "e4a9465f-d415-4e30-bf53-e46014958bc6": {
-      "why": "Pays $1.00 per 1,000 views on YouTube, Instagram and X. 98% of the money left. Open to join.",
+      "why": "Pays $1.00 per 1,000 views on YouTube, Instagram and X. Most of the money is left. Anyone can join.",
       "notes": [
        "It has 1 rule you see once you join.",
        "Also pays on TikTok, once TikTok checks Clip Factory."
@@ -125,7 +125,7 @@
       "cantTell": []
      },
      "d5d8b659-68ac-41d5-9e53-ab89545f437d": {
-      "why": "Pays $1.00 per 1,000 views on Instagram. 99% of the money left. Open to join.",
+      "why": "Pays $1.00 per 1,000 views on Instagram. Most of the money is left. Anyone can join.",
       "notes": [
        "It has 2 rules you see once you join.",
        "Also pays on TikTok, once TikTok checks Clip Factory."
@@ -185,7 +185,7 @@
     "looked": 15,
     "lines": {
      "e815a623-badd-4516-906c-b6cfce227ff9": {
-      "why": "Pays $1.00 per 1,000 views on Instagram. 29% of the money left. You apply first.",
+      "why": "Pays $1.00 per 1,000 views on Instagram. Some of the money is left. You apply first.",
       "notes": [
        "Also pays on TikTok, once TikTok checks Clip Factory."
       ],
@@ -197,7 +197,7 @@
       ]
      },
      "0d341d7d-e390-4807-9149-9b5294dff3e6": {
-      "why": "Pays $1.75 per 1,000 views on YouTube. 95% of the money left. You apply first.",
+      "why": "Pays $1.75 per 1,000 views on YouTube. Most of the money is left. You apply first.",
       "notes": [
        "Also pays on TikTok, once TikTok checks Clip Factory."
       ],
@@ -259,7 +259,7 @@
     },
     "lines": {
      "0d341d7d-e390-4807-9149-9b5294dff3e6": {
-      "why": "Pays $1.75 per 1,000 views on YouTube. Gaming. 95% of the money left. You apply first.",
+      "why": "Pays $1.75 per 1,000 views on YouTube. Gaming. Most of the money is left. You apply first.",
       "notes": [
        "Also pays on TikTok, once TikTok checks Clip Factory."
       ],
@@ -315,7 +315,7 @@
     "looked": 15,
     "lines": {
      "1d2bcb00-c904-415f-aa82-f95b96baad86": {
-      "why": "Shares the prize money on YouTube, Instagram and X. 100% of the money left. Open to join.",
+      "why": "Shares the prize money on YouTube, Instagram and X. All the money is left. Anyone can join.",
       "notes": [
        "Also pays on TikTok, once TikTok checks Clip Factory."
       ],
@@ -328,7 +328,7 @@
       ]
      },
      "6e8cb2c6-7724-44a4-83da-66697acb20af": {
-      "why": "Pays up to $3.00 per 1,000 views on YouTube, Instagram and X. 21% of the money left. Open to join.",
+      "why": "Pays up to $3.00 per 1,000 views on YouTube, Instagram and X. A little money is left. Anyone can join.",
       "notes": [
        "It has 1 rule you see once you join.",
        "Also pays on TikTok, once TikTok checks Clip Factory."
@@ -385,7 +385,7 @@
     "looked": 15,
     "lines": {
      "6e8cb2c6-7724-44a4-83da-66697acb20af": {
-      "why": "Pays $3.00 per 1,000 views on Instagram and X. 21% of the money left. Open to join.",
+      "why": "Pays $3.00 per 1,000 views on Instagram and X. A little money is left. Anyone can join.",
       "notes": [
        "It has 1 rule you see once you join.",
        "Also pays on TikTok, once TikTok checks Clip Factory."
@@ -461,7 +461,7 @@
     },
     "lines": {
      "c0c37381-e244-4643-98bd-edbff4bc1465": {
-      "why": "Pays $6.00 per 1,000 views on YouTube. 41% of the money left. Open to join.",
+      "why": "Pays $6.00 per 1,000 views on YouTube. Some of the money is left. Anyone can join.",
       "notes": [
        "It has 4 rules you see once you join.",
        "Also pays on Instagram.",
@@ -471,7 +471,7 @@
       "cantTell": []
      },
      "e4a9465f-d415-4e30-bf53-e46014958bc6": {
-      "why": "Pays $1.00 per 1,000 views on YouTube. 98% of the money left. Open to join.",
+      "why": "Pays $1.00 per 1,000 views on YouTube. Most of the money is left. Anyone can join.",
       "notes": [
        "It has 1 rule you see once you join.",
        "Also pays on Instagram and X.",
@@ -534,7 +534,7 @@
     "noNote": "Also pays on TikTok, once TikTok checks Clip Factory.",
     "lines": {
      "a1cefc3b-4533-438f-8e70-a7299550f1cf": {
-      "why": "Pays up to $2.00 per 1,000 views on TikTok and Instagram. 46% of the money left. Open to join.",
+      "why": "Pays up to $2.00 per 1,000 views on TikTok and Instagram. Some of the money is left. Anyone can join.",
       "notes": [
        "Pays less in some countries."
       ],
@@ -546,7 +546,7 @@
       ]
      },
      "c0c37381-e244-4643-98bd-edbff4bc1465": {
-      "why": "Pays $6.00 per 1,000 views on YouTube, TikTok and Instagram. 41% of the money left. Open to join.",
+      "why": "Pays $6.00 per 1,000 views on YouTube, TikTok and Instagram. Some of the money is left. Anyone can join.",
       "notes": [
        "It has 4 rules you see once you join."
       ],
@@ -604,7 +604,7 @@
     "looked": 15,
     "lines": {
      "6e8cb2c6-7724-44a4-83da-66697acb20af": {
-      "why": "Pays up to $3.00 per 1,000 views on YouTube, Instagram and X. 21% of the money left. Open to join.",
+      "why": "Pays up to $3.00 per 1,000 views on YouTube, Instagram and X. A little money is left. Anyone can join.",
       "notes": [
        "It has 1 rule you see once you join.",
        "Also pays on TikTok, once TikTok checks Clip Factory."
@@ -615,7 +615,7 @@
       "cantTell": []
      },
      "e815a623-badd-4516-906c-b6cfce227ff9": {
-      "why": "Pays $1.00 per 1,000 views on Instagram. 29% of the money left. You apply first.",
+      "why": "Pays $1.00 per 1,000 views on Instagram. Some of the money is left. You apply first.",
       "notes": [
        "Also pays on TikTok, once TikTok checks Clip Factory."
       ],

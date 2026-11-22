@@ -1459,7 +1459,7 @@ Heads-ups (its own sound maybe, its own picture on top maybe, face on camera, vi
 notes (cheaper in some countries, rules hidden until you join, also pays on TikTok once TikTok checks Clip Factory) ride
 with the match. Ranking: clean matches first, per-view pay before other kinds, the highest rate, the most money left,
 the newest launch. At most 20 matches. The defaults are chosen for him: at least $1.00 per 1,000 views, the places he
-set up, at least a quarter of the money left, open to join. Every rate and amount is CR's own number, formatted only and
+set up, some money left, anyone can join. Every rate and amount is CR's own number, formatted only and
 tagged "Content Rewards' numbers"; nothing estimates what a clip would earn. The web never decides a match: it shows the
 server's words.
 
