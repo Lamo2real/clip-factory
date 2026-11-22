@@ -353,8 +353,8 @@ def test_the_bundled_models_name_their_maker_and_their_host_and_keep_every_other
 class FakeUS:
     """Nova Reel in us-east-1 (start/get async invoke) and the US bucket (list and delete)."""
 
-    def __init__(self, *, error: tuple[str, str] | None = None, fail: bool = False) -> None:
-        self.error, self.fail = error, fail
+    def __init__(self, *, error: tuple[str, str] | None = None, fail: bool = False, elsewhere: bool = False) -> None:
+        self.error, self.fail, self.elsewhere = error, fail, elsewhere
         self.starts: list[dict[str, Any]] = []
         self.objects: dict[str, bytes] = {}
         self.deleted: list[str] = []
@@ -373,6 +373,8 @@ class FakeUS:
         if self.fail:
             return {"status": "Failed", "failureMessage": "The prompt was blocked."}
         uri = self.starts[0]["outputDataConfig"]["s3OutputDataConfig"]["s3Uri"] + "inv1"
+        if self.elsewhere:
+            uri = f"s3://{BUCKET}/somewhere-else/inv1"
         return {"status": "Completed", "outputDataConfig": {"s3OutputDataConfig": {"s3Uri": uri}}}
 
     def list_objects_v2(self, *, Bucket: str, Prefix: str) -> dict[str, Any]:
@@ -390,11 +392,19 @@ CHECK_PREFIX = f"ws/{USER}/{WS}/checks/nova-reel/J9/"
 
 
 def check_world(
-    tmp_path: Path, fake: FakeUS | None, *, bucket: str = BUCKET, job_type: str = "provider_check"
+    tmp_path: Path,
+    fake: FakeUS | None,
+    *,
+    bucket: str = BUCKET,
+    job_type: str = "provider_check",
+    before: dict[str, Any] | None = None,
 ) -> tuple[Services, FakeTable]:
     from ls_fakes import ENGINE_DIR
 
     table = FakeTable()
+    if before is not None:  # the PROVIDER# record an earlier Try it or story left
+        table.seed(item(keys.provider_sk("animation", "nova-reel"), type="ws_provider", kind="animation",
+                        providerId="nova-reel", **before))  # fmt: skip
     table.seed(item("PJOB#J9", type="ws_pjob", jobId="J9", jobType=job_type, contentType="provider",
                     contentId="nova-reel", status="queued",
                     steps=[{"key": "check", "label": "Try it", "status": "pending"}], progress=0, configuration={},
@@ -461,6 +471,54 @@ def test_try_it_records_bedrock_s_refusal_and_still_deletes_the_test_shot(tmp_pa
     assert blocked.objects == {}  # the failed shot's files are gone too
     record = table.item(keys.provider_sk("animation", "nova-reel"))
     assert record is not None and "The prompt was blocked." in record["lastError"]
+    assert record["state"] == "needs_setup"  # never shown ready after a Try it that failed
+
+
+def test_a_test_shot_bedrock_took_but_could_not_make_is_never_recorded_ready(tmp_path: Path) -> None:
+    """A ``Failed`` shot (or one written somewhere else) on Try it's harmless prompt is a setup problem every scene
+    would hit: an earlier ``on`` turns ``needs_setup``, and the sentence says to tap Try it again."""
+    from lamostories_agent.provider_check import SHOT_FAILED, said
+
+    earlier = {"state": "on", "checkedAt": "2026-11-20T10:00:00Z"}
+    for name, fake in (("failed", FakeUS(fail=True)), ("elsewhere", FakeUS(elsewhere=True))):
+        svc, table = check_world(tmp_path / name, fake, before=earlier)
+        assert run_check(svc) == "failed"
+        record = table.item(keys.provider_sk("animation", "nova-reel"))
+        assert record is not None and record["state"] == "needs_setup" and record["checkedAt"] > earlier["checkedAt"]
+        job = table.item("PJOB#J9")
+        assert job is not None and job["status"] == "failed" and job["steps"][0]["status"] == "failed"
+        if name == "failed":
+            assert record["lastError"] == said(SHOT_FAILED, "The prompt was blocked.") == job["error"]
+        else:
+            assert record["lastError"] == SHOT_FAILED == job["error"]
+        assert "Tap Try it again" in job["error"] and "Tap Try again" not in job["error"]
+        assert not table.prefix("USAGE#")  # no shot came back, so none is counted
+
+
+def test_a_throttle_or_a_timeout_on_try_it_says_try_it_again_and_keeps_the_record(tmp_path: Path) -> None:
+    """A throttle or a timeout proved nothing about Nova Reel: the record stays as it was, and the job says the
+    button the Settings row has (Try it), never a story's Try again."""
+    from lamostories_agent.provider_check import FAILED, said
+
+    earlier = {"state": "on", "checkedAt": "2026-11-20T10:00:00Z"}
+    throttled = FakeUS(error=("ThrottlingException", "Too many requests, please wait."))
+    svc, table = check_world(tmp_path / "t", throttled, before=earlier)
+    assert run_check(svc) == "failed"
+    record = table.item(keys.provider_sk("animation", "nova-reel"))
+    assert record is not None and record["state"] == "on" and record["checkedAt"] == earlier["checkedAt"]
+    job = table.item("PJOB#J9")
+    assert job is not None and job["error"] == said(FAILED, "Too many requests, please wait.")
+    assert "Tap Try again" not in job["error"]
+
+    class Slow(FakeUS):
+        def get_async_invoke(self, **kw: Any) -> dict[str, Any]:
+            return {"status": "InProgress"}
+
+    svc, table = check_world(tmp_path / "s", Slow())
+    assert run_check(svc) == "failed"
+    assert table.item(keys.provider_sk("animation", "nova-reel")) is None
+    job = table.item("PJOB#J9")
+    assert job is not None and job["error"] == FAILED
 
 
 def test_try_it_without_the_us_bucket_calls_nothing_and_says_the_not_ready_sentence(tmp_path: Path) -> None:

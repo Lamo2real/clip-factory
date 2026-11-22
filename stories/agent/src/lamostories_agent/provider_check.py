@@ -3,9 +3,12 @@
 
 Only Amazon Nova Reel has one. With the US bucket switched on (``CF_VIDEO_BUCKET``) the job makes one 6-second test
 shot there (Amazon bills it like any shot), under ``ws/{userId}/{workspaceId}/checks/nova-reel/{jobId}/``. A shot that
-came back proves the maker: ``PROVIDER#animation#nova-reel`` is written ``on``, and the usage is recorded. A refusal
-records what it proved (``needs_setup`` and the plain sentence, with Bedrock's own words when it gave some). The test
-shot's files are deleted whatever happened. With the bucket off nothing is called and the job ends with the API's own
+came back proves the maker: ``PROVIDER#animation#nova-reel`` is written ``on``, and the usage is recorded. Only a
+shot that came back does that: a refusal, or a shot Bedrock took but could not make (``Failed``, or written somewhere
+else), records ``needs_setup`` and the plain sentence, with Bedrock's own words when it gave some, so Settings never
+shows Nova Reel ready after a Try it that failed. A timeout or a throttle proved nothing and leaves the record as it
+was. Every failure tells the owner to tap Try it again (the button the Settings row has). The test shot's files are
+deleted whatever happened. With the bucket off nothing is called and the job ends with the API's own
 not-ready sentence. The fencing, heartbeat and last write are a story job's (``pipeline.Job``)."""
 
 from __future__ import annotations
@@ -16,8 +19,8 @@ from typing import Any, ClassVar
 from . import keys
 from .pipeline import Job, StoryFailed
 from .providers import (
-    REEL_FAILED,
     REEL_NO_BUCKET,
+    REEL_SETUP,
     REEL_SHOT,
     NovaReel,
     ProviderContext,
@@ -31,6 +34,10 @@ PROVIDERS = ("nova-reel",)  # the makers Try it can check
 UNKNOWN = "Lamo Stories can only try Amazon Nova Reel here."
 TRIED = "It made a 6-second test shot. Amazon Nova Reel is ready."
 FAILED = "Trying Amazon Nova Reel did not finish. Tap Try it again."
+SHOT_FAILED = (  # Bedrock took the test shot but could not make it: a setup problem every scene would hit
+    "Amazon Nova Reel could not make its test shot. Tap Try it again in Settings › Video, or pick the Built-in "
+    "animator there."
+)
 PROMPT = "Slow cinematic shot of a quiet country road on a sunny day, at eye level, no people, no text, no logos, calm camera, natural light"
 DIMENSION = "1280x720"  # what Nova Reel 1.1 makes
 SEED = 7
@@ -80,7 +87,7 @@ class ProviderCheckJob(Job):
         except JobSuperseded:
             raise
         except ProviderFailed as e:
-            return await self._fail(said(e.sentence, e.detail), e)
+            return await self._fail(said(self._sentence(e), e.detail), e)
         except (ProviderUnavailable, StoryFailed) as e:
             return await self._fail(str(e), e)
         except Exception as e:
@@ -94,6 +101,14 @@ class ProviderCheckJob(Job):
             )
         log("info", "stories.provider_check_done", job=self.fence.job_id, provider=self.content_id)
         return "ready"
+
+    @staticmethod
+    def _sentence(e: ProviderFailed) -> str:
+        """The job's own sentence: a refusal says what to set up (the API's own not-ready line); anything else says
+        to tap Try it again, never a story's "Tap Try again" (there is no such button on the Settings row)."""
+        if e.state == "needs_setup":
+            return e.sentence
+        return SHOT_FAILED if e.state == "on" else FAILED
 
     def _record(self, state: str, last_error: str | None) -> dict[str, Any]:
         return provider_item(self.fence.pk, self.fence.user_id, self.fence.workspace_id, "animation", self.content_id,
@@ -118,11 +133,17 @@ class ProviderCheckJob(Job):
         try:
             await NovaReel(ctx).shot(PROMPT, SEED, DIMENSION, prefix)
         except ProviderFailed as e:
-            # A refusal or a shot that failed proved something about the maker: it is kept, with Bedrock's own
-            # words. A timeout or a throttle proved nothing and is only this job's failure.
-            if e.state:
-                last = said(e.last_error or REEL_FAILED, e.detail)
-                await self.data.write(self.fence, puts=[self._record(e.state, last)])
+            # A refusal, or a shot Bedrock took but could not make, proved Nova Reel is not ready: ``needs_setup``
+            # with the plain sentence and Bedrock's own words. ``on`` is written only after a shot that came back
+            # (a story's scene keeps its own handling). A timeout or a throttle proved nothing and is only this
+            # job's failure: the record is left as it was.
+            if e.state == "needs_setup":
+                last = said(e.last_error or REEL_SETUP, e.detail)
+            elif e.state == "on":
+                last = said(SHOT_FAILED, e.detail)
+            else:
+                raise
+            await self.data.write(self.fence, puts=[self._record("needs_setup", last)])
             raise
         finally:
             await self._clean(prefix)
