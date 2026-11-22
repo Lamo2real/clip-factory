@@ -9,6 +9,7 @@ dependencies = [
   "uvicorn>=0.35",
   "numpy>=2.2",   # the rasterizer and the sound synthesis
   "deno==2.9.8",  # runs web/src/stories/engine/cli.ts (the same engine the browser draws)
+  "anthropic>=2.12,<3",  # the Anthropic API host for models the owner adds (§45.37 G4); never Clip Factory's
 ]
 
 [dependency-groups]

@@ -4,14 +4,17 @@
 # with Clip Factory's agent (modules/agent): not the repository, the image, the role, the runtime or its sessions.
 #
 # The optional us-east-1 bucket for Amazon Nova Reel (§45.31, ADR-80) is made only when stories_video_us_bucket is
-# true (an aliased provider: Nova Reel writes its shots only to a bucket in its own Region).
+# true (an aliased provider: Nova Reel writes its shots only to a bucket in its own Region). Amazon ended Nova Reel on
+# 2026-09-30; the bucket and its grants stay as they were (additive only). Luma AI Ray2 (§45.37 G7), the video maker
+# for cut-aways now, runs in us-west-2 only and writes its shots to the optional us-west-2 bucket below, made only
+# when stories_video_west_bucket is true (off by default).
 terraform {
   required_version = ">= 1.11.0"
   required_providers {
     aws = {
       source                = "hashicorp/aws"
       version               = ">= 6.68.0, < 7.0.0"
-      configuration_aliases = [aws.us_east_1]
+      configuration_aliases = [aws.us_east_1, aws.us_west_2]
     }
   }
 }
@@ -75,6 +78,21 @@ locals {
   video_bucket_name = "${var.name}-stories-video-${var.account_id}-us"
   video_bucket_arn  = "arn:aws:s3:::${local.video_bucket_name}"
 
+  # Luma AI Ray2 and any Luma model the owner adds (§45.37 G7): an asynchronous job in us-west-2 that writes its shots
+  # to the us-west-2 bucket below. StartAsyncInvoke is authorized as InvokeModel on the model and the job.
+  west_region = "us-west-2"
+  west_video_model_arns = sort(distinct(concat(
+    [for m in try(local.models.videoModels, []) : "arn:aws:bedrock:${m.region}::foundation-model/${m.modelId}" if try(m.region, "") == local.west_region],
+    ["arn:aws:bedrock:${local.west_region}::foundation-model/luma.*"],
+  )))
+  west_video_jobs_arn    = "arn:aws:bedrock:${local.west_region}:${var.account_id}:async-invoke/*"
+  west_video_bucket_name = "${var.name}-stories-video-${var.account_id}-usw2"
+  west_video_bucket_arn  = "arn:aws:s3:::${local.west_video_bucket_name}"
+
+  # The workspaces' secret prefix (<name>/workspaces/), from the one ARN pattern the role may read: the owner's keys
+  # for the keyed hosts (§45.37 G4) are read per call under <prefix><workspaceId>/providers/<host>.
+  provider_keys_prefix = regex(":secret:([A-Za-z0-9_-]+/workspaces/)", var.workspace_provider_secrets_arn)[0]
+
   # The runtime's log group is /aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT, and runtime ids start with the
   # runtime's name: this role writes only its own runtime's logs, never cf_prod_clip_agent's.
   log_group_arn = "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/bedrock-agentcore/runtimes/${local.runtime_name}-*"
@@ -94,6 +112,19 @@ locals {
       Resource = ["${local.video_bucket_arn}/*"]
     },
     { Sid = "VideoFilesList", Action = ["s3:ListBucket"], Resource = [local.video_bucket_arn] },
+  ] : []
+
+  west_video_permissions = var.stories_video_west_bucket ? [
+    # Start a Luma AI Ray2 job in us-west-2 (InvokeModel on the model and the job) and read its state.
+    { Sid = "WestVideoModel", Action = ["bedrock:InvokeModel"], Resource = concat(local.west_video_model_arns, [local.west_video_jobs_arn]) },
+    { Sid = "WestVideoJobs", Action = ["bedrock:GetAsyncInvoke"], Resource = [local.west_video_jobs_arn] },
+    # Luma writes the shots with the caller's identity; the agent reads them back and cleans up.
+    {
+      Sid      = "WestVideoFiles"
+      Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"]
+      Resource = ["${local.west_video_bucket_arn}/*"]
+    },
+    { Sid = "WestVideoFilesList", Action = ["s3:ListBucket"], Resource = [local.west_video_bucket_arn] },
   ] : []
 }
 
@@ -218,9 +249,22 @@ resource "aws_iam_role_policy" "agent" {
       { Sid = "StoryModels", Action = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"], Resource = local.story_model_arns },
       # Amazon Nova Canvas in eu-west-1 (character portraits, off until the owner picks it, §45.11.6).
       { Sid = "ImageModel", Action = ["bedrock:InvokeModel"], Resource = [local.image_model_arn] },
-      # Provider keys the owner pastes in Lamo Stories › Settings (§45.31): read only, never a social token or app key.
+      # Provider keys the owner pastes in Lamo Stories › Settings (§45.31, §45.37 G4): read only, never a social token
+      # or app key; the agent reads only the key of the workspace a call works for.
       { Sid = "ProviderKeys", Action = ["secretsmanager:GetSecretValue"], Resource = [var.workspace_provider_secrets_arn] },
-    ], local.video_permissions) : merge({ Effect = "Allow" }, p)]
+      # Check models for the makers' models (§45.37 G2): read-only access checks that generate nothing and cost
+      # nothing. GetFoundationModelAvailability takes no resource type (its service reference lists none).
+      { Sid = "MakerCheckModel", Action = ["bedrock:GetFoundationModel"], Resource = ["arn:aws:bedrock:*::foundation-model/*"] },
+      { Sid = "MakerCheckAccess", Action = ["bedrock:GetFoundationModelAvailability"], Resource = "*" },
+      # Amazon Polly's neural voices in eu-west-1 (§45.37 G7): the opt-in spoken voice, never the default, and
+      # Check models' DescribeVoices. Neither action needs a resource type; both are kept to eu-west-1.
+      {
+        Sid       = "SpokenVoice"
+        Action    = ["polly:SynthesizeSpeech", "polly:DescribeVoices"]
+        Resource  = "*"
+        Condition = { StringEquals = { "aws:RequestedRegion" = "eu-west-1" } }
+      },
+    ], local.video_permissions, local.west_video_permissions) : merge({ Effect = "Allow" }, p)]
   })
 
   lifecycle {
@@ -259,15 +303,18 @@ resource "aws_bedrockagentcore_agent_runtime" "agent" {
     idle_runtime_session_timeout = 900
     max_lifetime                 = 28800
   }
-  # §45.11.4. CF_VIDEO_BUCKET is set only while the us-east-1 bucket exists (absent reads as empty: Nova Reel off).
+  # §45.11.4. CF_VIDEO_BUCKET is set only while the us-east-1 bucket exists (absent reads as empty: Nova Reel off), and
+  # CF_VIDEO_WEST_BUCKET only while the us-west-2 bucket exists (absent: Luma AI Ray2 not ready, §45.37 G7).
   environment_variables = merge({
-    CF_STORIES_TABLE  = var.table_name
-    CF_MEDIA_BUCKET   = var.media_bucket
-    CF_REGION         = var.region
-    CF_IMAGE_MODEL_ID = local.image_model_id
-    CF_IMAGE_REGION   = local.image_model_region
-    AWS_REGION        = var.region
-  }, var.stories_video_us_bucket ? { CF_VIDEO_BUCKET = local.video_bucket_name } : {})
+    CF_STORIES_TABLE        = var.table_name
+    CF_MEDIA_BUCKET         = var.media_bucket
+    CF_REGION               = var.region
+    CF_IMAGE_MODEL_ID       = local.image_model_id
+    CF_IMAGE_REGION         = local.image_model_region
+    CF_PROVIDER_KEYS_PREFIX = local.provider_keys_prefix
+    AWS_REGION              = var.region
+    }, var.stories_video_us_bucket ? { CF_VIDEO_BUCKET = local.video_bucket_name } : {},
+  var.stories_video_west_bucket ? { CF_VIDEO_WEST_BUCKET = local.west_video_bucket_name } : {})
   tags = local.tags
 }
 
@@ -376,6 +423,82 @@ resource "aws_s3_bucket_policy" "video_us" {
       Principal = "*"
       Action    = "s3:*"
       Resource  = [aws_s3_bucket.video_us[0].arn, "${aws_s3_bucket.video_us[0].arn}/*"]
+      Condition = { Bool = { "aws:SecureTransport" = "false" } }
+    }]
+  })
+}
+
+# ---------- Luma AI Ray2's bucket in us-west-2 (only with stories_video_west_bucket, §45.37 G7) ----------
+# Generated shots only (realistic AI footage, posted only with the platforms' AI labels, §45.14): private, TLS only,
+# deleted after 14 days. The agent copies what a story keeps into ws/ in the media bucket.
+resource "aws_s3_bucket" "video_west" {
+  count    = var.stories_video_west_bucket ? 1 : 0
+  provider = aws.us_west_2
+  bucket   = local.west_video_bucket_name
+  tags     = local.tags
+}
+
+resource "aws_s3_bucket_ownership_controls" "video_west" {
+  count    = var.stories_video_west_bucket ? 1 : 0
+  provider = aws.us_west_2
+  bucket   = aws_s3_bucket.video_west[0].id
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "video_west" {
+  count                   = var.stories_video_west_bucket ? 1 : 0
+  provider                = aws.us_west_2
+  bucket                  = aws_s3_bucket.video_west[0].id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "video_west" {
+  count    = var.stories_video_west_bucket ? 1 : 0
+  provider = aws.us_west_2
+  bucket   = aws_s3_bucket.video_west[0].id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "video_west" {
+  count    = var.stories_video_west_bucket ? 1 : 0
+  provider = aws.us_west_2
+  bucket   = aws_s3_bucket.video_west[0].id
+  rule {
+    id     = "shots-14-days"
+    status = "Enabled"
+    filter {}
+    expiration {
+      days = 14
+    }
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "video_west" {
+  count      = var.stories_video_west_bucket ? 1 : 0
+  provider   = aws.us_west_2
+  bucket     = aws_s3_bucket.video_west[0].id
+  depends_on = [aws_s3_bucket_public_access_block.video_west]
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "TlsOnly"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = "s3:*"
+      Resource  = [aws_s3_bucket.video_west[0].arn, "${aws_s3_bucket.video_west[0].arn}/*"]
       Condition = { Bool = { "aws:SecureTransport" = "false" } }
     }]
   })

@@ -7,8 +7,8 @@ is ignored; ``cancel`` stops it (its Deno, rasterizer and ffmpeg processes die w
 stale-heartbeat fence and "Try again" resumes from its first unfinished step, because finished steps' files stay).
 
 ``register`` adds this builder's actions: ``process_story``, ``process_portrait``, ``process_reference``,
-``provider_check`` (Try it, §45.35 D2: ``{userId, workspaceId, jobId, providerId?}``, ``providerId`` ``nova-reel``
-when left out) and ``cancel``. Each runs as the session AgentCore invoked it in (``sessionId``, from the session header): every write is
+``provider_check`` (Try it, §45.35 D2, §45.37 G7: ``{userId, workspaceId, jobId, providerId?}``, ``providerId``
+``luma-ray`` when left out) and ``cancel``. Each runs as the session AgentCore invoked it in (``sessionId``, from the session header): every write is
 fenced on it, so a start for a job that a newer run owns, or that already ended, does nothing."""
 
 from __future__ import annotations

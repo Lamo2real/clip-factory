@@ -337,8 +337,21 @@ class FakeImages:
         return b"\xff\xd8jpeg:" + path.name.encode()
 
 
+class FakeMakerChecker:
+    """Check models' access check for the makers' models (§45.37 G2): records each model it checks and says ``ok``,
+    so no test ever reaches Bedrock, Polly or a keyed host."""
+
+    def __init__(self, answers: dict[str, tuple[str, str]] | None = None) -> None:
+        self.answers = answers or {}
+        self.checked: list[tuple[str, str]] = []
+
+    def check(self, workspace_id: str, entry: dict[str, Any]) -> tuple[str, str]:
+        self.checked.append((workspace_id, str(entry["key"])))
+        return self.answers.get(str(entry["key"]), ("ok", "Fake check: it can be used."))
+
+
 def services(
-    tmp_path: Path, model: FakeModel, *, images: FakeImages | None = None
+    tmp_path: Path, model: FakeModel, *, images: FakeImages | None = None, maker_checker: Any = None
 ) -> tuple[Services, FakeDynamo, FakeS3]:
     db, s3 = FakeDynamo(), FakeS3()
     svc = Services(
@@ -351,6 +364,7 @@ def services(
         work_dir=tmp_path / "work",
         heartbeat_s=30.0,
         stream_every_s=0.5,
+        maker_checker=maker_checker if maker_checker is not None else FakeMakerChecker(),
     )
     return svc, db, s3
 

@@ -8,6 +8,12 @@ reference analysis call it. Precedence, strongest first, model and effort merged
 per-request override, the conversation's or the project's setting, the task's, the agent's, the workspace default.
 There is never an automatic fallback to another model, and an effort the model does not offer is refused, never
 swapped. ``stories/config/resolve-cases.json`` holds the shared cases (the API's resolver passes the same ones).
+
+A model the owner added may run on a keyed host instead of Bedrock (§45.37 G4): the Anthropic API or any
+OpenAI-compatible chat-completions API (``hosts.py``), with the owner's own key read per call from that workspace's
+provider secret. The contract is the same for every host: the effort only where that API takes it, tools with
+automatic choice where the model takes them, a schema answer checked and asked once more, refusals and errors as the
+owner's sentences (naming the host), MODELSTATUS# and USAGE# written, never another model.
 """
 
 from __future__ import annotations
@@ -24,6 +30,7 @@ from decimal import Decimal
 from typing import Any, Protocol
 
 from . import config, keys
+from . import hosts as keyed
 from .agents import Workspace
 from .jsonschema import check
 from .retry import retry_sync
@@ -158,6 +165,7 @@ class Reply:
     tools_off: bool = False  # the caller gave tools, but this model takes none: they were not sent (§45.35 D1)
     task: str | None = None  # the task the call was for (§45.35 D5)
     maker: str | None = None  # who makes the model, lower case ("anthropic", "meta", ...), §45.36 E7
+    host: str | None = None  # where it ran: "bedrock", "anthropic" or "openai_compatible" (§45.37 G4)
 
 
 class ModelClient(Protocol):
@@ -214,6 +222,15 @@ AGENT_OFF = "{name} is switched off. Switch it on in Lamo Stories › Settings �
 EFFORT_REFUSED = (
     "{label} does not accept {effort} effort here (Amazon Bedrock refused it). Pick another level in Lamo Stories › "
     "Settings › AI."
+)
+# The same, for a model on a keyed host (§45.37 G4): the host that refused it is named.
+EFFORT_REFUSED_HOST = (
+    "{label} does not accept {effort} effort here ({host} refused it). Pick another level in Lamo Stories › "
+    "Settings › AI."
+)
+TOOLS_REFUSED_HOST = (
+    "{label} does not accept tool use here ({host} refused it). Tap Edit on its row in Lamo Stories › "
+    'Settings › AI and turn off "It can use tools", then tap Check models.'
 )
 # Bedrock refused the request's tools for this model (§45.36 E6): an added model's "It can use tools" switch (in the
 # form its row's Edit opens) is the fix; a bundled model has no switch, so another model is. Saving that switch does
@@ -315,7 +332,10 @@ def _message(e: BaseException) -> str:
 
 
 def effort_refused(e: BaseException) -> bool:
-    """Bedrock refused the request because of its effort field (``output_config.effort``), §45.34."""
+    """Bedrock refused the request because of its effort field (``output_config.effort``), §45.34; or a keyed host
+    refused it (``hosts.HostError`` of kind ``effort``, §45.37 G4)."""
+    if isinstance(e, keyed.HostError):
+        return e.kind == "effort"
     if _code(e) != "ValidationException":
         return False
     msg = _message(e).lower()
@@ -323,7 +343,10 @@ def effort_refused(e: BaseException) -> bool:
 
 
 def tools_refused(e: BaseException) -> bool:
-    """Bedrock refused the request because the model takes no tools (or none while streaming), §45.36 E6."""
+    """Bedrock refused the request because the model takes no tools (or none while streaming), §45.36 E6; or a keyed
+    host refused its tools."""
+    if isinstance(e, keyed.HostError):
+        return e.kind == "tools"
     if _code(e) != "ValidationException":
         return False
     msg = " ".join(_message(e).lower().split())
@@ -331,14 +354,20 @@ def tools_refused(e: BaseException) -> bool:
 
 
 def tools_sentence(info: dict[str, Any], model_key: str) -> str:
-    """The owner's sentence for a model whose tools Bedrock refused: turn off its Tools switch (a model he added),
-    or pick another model (a bundled one has no switch)."""
+    """The owner's sentence for a model whose tools Bedrock (or its keyed host) refused: turn off its Tools switch (a
+    model he added), or pick another model (a bundled one has no switch)."""
     label = str(info.get("label") or model_key)
+    host = config.host_of(info)
+    if host != "bedrock":
+        return TOOLS_REFUSED_HOST.format(label=label, host=keyed.host_words(host))
     return (TOOLS_REFUSED if info.get("custom") else TOOLS_REFUSED_BUNDLED).format(label=label)
 
 
 def unavailable(e: BaseException) -> tuple[str, str] | None:
-    """``(status, reason)`` when Bedrock refused the model itself (access, Region, model id or quota), else None."""
+    """``(status, reason)`` when Bedrock refused the model itself (access, Region, model id or quota), or a keyed
+    host refused the key or the model (its own reason, naming the host, §45.37 G4), else None."""
+    if isinstance(e, keyed.HostError):
+        return e.found
     code, msg = _code(e), _message(e).lower()
     if code == "AccessDeniedException":
         if "retention" in msg:
@@ -448,8 +477,14 @@ class BedrockModels:
         region: str | None = None,
         sleep: Callable[[float], None] | None = None,
         client_factory: Callable[[str], Any] | None = None,
+        keys: keyed.KeySource | None = None,
+        hosts: dict[str, Any] | None = None,
     ) -> None:
         self._table = table
+        # The owner's keys for the keyed hosts (read per call, for the workspace the call works for) and the hosts'
+        # clients (tests give fakes); §45.37 G4.
+        self._keys = keys
+        self._hosts: dict[str, Any] = dict(hosts or {})
         self._get_bytes = get_bytes
         self._client = client
         self._injected = client is not None  # a test's client; the one made in ``client`` is this Region's only
@@ -646,6 +681,7 @@ class BedrockModels:
                 tools_off=tools_off,
                 task=task,
                 maker=config.maker(info) or None,
+                host=config.host_of(info),
             )
         raise AssertionError("unreachable")
 
@@ -671,18 +707,21 @@ class BedrockModels:
             ).model
         except EffortUnavailable as e:  # the effort is the problem, not the model: the model is still the one
             choice_model = str(e.model)
-        return choice_model, config.maker(config.model(choice_model, catalog) or {})
+        return choice_model, writer_maker(config.model(choice_model, catalog) or {})
 
     def maker_of(self, ctx: CallContext, model_key: str) -> str:
         """Who makes ``model_key`` (lower case), from ``ctx``'s workspace list (a model the owner added) or the
         bundled one; "" when it is in neither. Nothing is sent. A job names an older storyboard's writer with it
         (§45.36 E7)."""
-        return config.maker(config.model(model_key, self.workspace(ctx).models()) or {})
+        return writer_maker(config.model(model_key, self.workspace(ctx).models()) or {})
 
     def called_as(self, info: dict[str, Any]) -> tuple[str, str | None]:
         """The Bedrock model id or inference profile a call to this model is sent to, and the Region (the model's own
-        for one the owner added in another Region, else this runtime's), as each record keeps them (§45.35 D5)."""
+        for one the owner added in another Region, else this runtime's), as each record keeps them (§45.35 D5). A
+        model on a keyed host is called by its own name there and has no Region."""
         model_id = str(info.get("profile") or info.get("modelId") or "")
+        if config.host_of(info) != "bedrock":
+            return model_id, None
         own = str(info.get("region") or "") if info.get("custom") else ""
         return model_id, own or self._region
 
@@ -743,6 +782,9 @@ class BedrockModels:
         record: bool = True,
     ) -> _Answer:
         label = str(info.get("label") or choice.model)
+        if config.host_of(info) in ("anthropic", "openai_compatible"):
+            return self._send_keyed(ctx, task, choice, info, system, messages, tools, max_tokens, on_text, ai,
+                                    catalog, record=record)  # fmt: skip
         client = self.client_for(info.get("region") if info.get("custom") else None)
         while True:
             body = self.request(choice, info, system, messages, tools, max_tokens)
@@ -802,6 +844,116 @@ class BedrockModels:
                 self._model_status(ctx, choice.model, "ok", STATUS_LINES["ok"])
             self._usage(ctx, task, choice, answer.usage, ai, info, catalog)
             return answer
+
+    # --- the keyed hosts (§45.37 G4) -------------------------------------------------------------------------------
+
+    def host(self, host: str) -> Any:
+        """The client of a keyed host (a test's, or the real one, made on first use)."""
+        with self._lock:
+            found = self._hosts.get(host)
+            if found is None:
+                found = keyed.AnthropicHost() if host == "anthropic" else keyed.OpenAICompatibleHost()
+                self._hosts[host] = found
+            return found
+
+    def host_call(
+        self,
+        choice: Choice,
+        info: dict[str, Any],
+        system: list[str],
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        max_tokens: int,
+    ) -> keyed.HostCall:
+        """What a keyed host is asked for (a test records it), built from how the model is called
+        (``config.call_shape``): the effort only in that host's own field (the Anthropic API's
+        ``output_config.effort``, an OpenAI-compatible ``reasoning_effort``) and only when the model offers it, a cache
+        point only on the Anthropic API for a model that takes one, tools only for a model that takes them."""
+        effort_field, takes_tools, _ = config.call_shape(info)
+        host = config.host_of(info)
+        wants = "output_config" if host == "anthropic" else config.REASONING_EFFORT
+        effort = choice.effort if choice.effort_applied and choice.effort and effort_field == wants else None
+        return keyed.HostCall(
+            model_id=str(info.get("profile") or info.get("modelId") or ""),
+            system=[b for b in system if b.strip()],
+            messages=messages,
+            tools=tools if takes_tools else [],
+            max_tokens=int(max_tokens),
+            effort=effort,
+            cache=host == "anthropic" and self.caches(info),
+            base_url=str(info.get("baseUrl") or "") or None,
+        )
+
+    def _key(self, ctx: CallContext, host: str) -> str:
+        """The owner's key for ``host`` in ``ctx``'s workspace, read now (never kept between calls)."""
+        if self._keys is None:
+            raise keyed.no_key(host)
+        found = self._keys.key(ctx.workspace_id, host)
+        if not found:
+            raise keyed.no_key(host)
+        return found
+
+    def _send_keyed(
+        self,
+        ctx: CallContext,
+        task: str,
+        choice: Choice,
+        info: dict[str, Any],
+        system: list[str],
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        max_tokens: int,
+        on_text: Callable[[str], None] | None,
+        ai: dict[str, Any],
+        catalog: dict[str, Any] | None = None,
+        *,
+        record: bool = True,
+    ) -> _Answer:
+        """One call to a keyed host, with the same outcomes as Bedrock's: an effort, tool, key or model refusal as the
+        owner's sentence naming the host (MODELSTATUS# with it), any other failure as it is, nothing sent again
+        without the effort or on another model."""
+        label = str(info.get("label") or choice.model)
+        host = config.host_of(info)
+        words = keyed.host_words(host)
+        call = self.host_call(choice, info, system, messages, tools, max_tokens)
+        try:
+            key = self._key(ctx, host)
+            client = self.host(host)
+            got = retry_sync(
+                lambda: client.send(key, call, on_text),
+                what=f"{host}.messages",
+                attempts=CALL_ATTEMPTS,
+                sleep=self._sleep or time.sleep,
+            )
+        except keyed.HostError as e:
+            log("warn", "stories.model_failed", model=choice.model, task=task, host=host, code=_code(e),
+                kind=e.kind, detail=str(e)[:300])  # fmt: skip
+            if call.effort and e.kind == "effort":
+                line = EFFORT_REFUSED_HOST.format(label=label, effort=EFFORT_WORDS.get(choice.effort or "", ""),
+                                                  host=words)  # fmt: skip
+                if record:
+                    self._model_status(ctx, choice.model, "error", line)
+                raise EffortUnavailable(line, model=choice.model, effort=choice.effort, sent=True,
+                                        status="error") from e  # fmt: skip
+            if call.tools and e.kind == "tools":
+                line = tools_sentence(info, choice.model)
+                if record:
+                    self._model_status(ctx, choice.model, "error", line)
+                raise ToolsUnavailable(line, model=choice.model, effort=choice.effort, status="error") from e
+            found = e.found
+            status = found[0] if found else "error"
+            if record:
+                self._model_status(ctx, choice.model, status, status_line(found))
+            if found:
+                raise ModelUnavailable(UNAVAILABLE.format(label=label, reason=found[1]), model=choice.model,
+                                       effort=choice.effort, status=found[0]) from e  # fmt: skip
+            _asked(e, choice)
+            raise
+        answer = _Answer(got.content, got.stop_reason, got.usage)
+        if record:
+            self._model_status(ctx, choice.model, "ok", STATUS_LINES["ok"])
+        self._usage(ctx, task, choice, answer.usage, ai, info, catalog)
+        return answer
 
     def _converse(self, body: dict[str, Any], client: Any = None) -> _Answer:
         r = (client or self.client).converse(**body)
@@ -927,7 +1079,19 @@ class BedrockModels:
                             ("msgId", ctx.msg_id)):  # fmt: skip
             if value:
                 item[name] = value
+        host = config.host_of(info or config.model(choice.model, catalog) or {})
+        if host != "bedrock":  # where it ran, for a model on a keyed host (§45.37 G4)
+            item["host"] = host
         self._put(item)
+
+
+def writer_maker(info: dict[str, Any]) -> str:
+    """Who makes a model (lower case), and where it runs when that is not Amazon Bedrock ("anthropic on anthropic"
+    for a Claude model on the Anthropic API), so ``providers.writer_id`` calls only a Claude model on Bedrock
+    ``bedrock-claude`` (§45.36 E7, §45.37 G4)."""
+    made = config.maker(info)
+    host = config.host_of(info)
+    return made if host == "bedrock" or not made else f"{made} on {host}"
 
 
 def _nudge(messages: list[dict[str, Any]], nudge: str = ANSWER_NUDGE) -> list[dict[str, Any]]:

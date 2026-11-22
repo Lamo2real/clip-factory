@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
 
-from . import ass, images, keys, media, retention, safety, writer
+from . import ass, config, images, keys, media, retention, safety, writer
 from .data import AssetPut, JobFence, StoryData
 from .engine import Engine, find_engine_dir, frame_count, write_json
 from .guidance import Guidance, Topic, load
@@ -52,7 +52,9 @@ from .models import (
     Reply,
 )
 from .providers import (
+    AI_VIDEO,
     DEFAULTS,
+    LUMA_SHOT,
     REEL_SHOT,
     REGISTRY,
     ProviderContext,
@@ -60,8 +62,10 @@ from .providers import (
     ProviderUnavailable,
     chosen,
     has_actors,
+    maker_model,
     provider_item,
     render_still,
+    sound_models,
     writer_id,
 )
 from .util import JobSuperseded, UserFacingError, log, now_iso, ulid
@@ -77,8 +81,10 @@ HELD_TOPIC = (
 )
 QUALITY_OFF = "Quality check is off"
 LAST_LOOK = "Last look: "
-WRITER_TASKS = ("storyboard", "scene_rewrite")  # the writer's own calls (a whole story, a rewrite, named scenes)
-REALISTIC = frozenset({"nova-reel"})  # generators whose footage looks real: the post must carry the AI labels (§45.14)
+# The writer's own calls: a whole story, a rewrite, named scenes, and the re-staging pass after the engine refused the
+# first staging (``animation_plan``, §45.37 G5).
+WRITER_TASKS = ("storyboard", "scene_rewrite", "animation_plan")
+REALISTIC = AI_VIDEO  # generators whose footage looks real: the post must carry the AI labels (§45.14)
 META_KEYS = ("writerModel", "engineVersion", "seed", "scriptVersion", "targetSec", "actualSec", "safetyTopicId")
 STORY_KINDS = ("storyboard", "scene_still", "scene_clip", "audio", "captions", "final_video", "cover", "video")
 MODEL_POOL = ThreadPoolExecutor(8, thread_name_prefix="ls-model")  # model calls never wait behind the heartbeat
@@ -111,6 +117,15 @@ class Services:
     video_model_id: str = ""
     reel_client: Callable[[], Any] | None = None
     us_s3: Callable[[], Any] | None = None
+    # The makers' clients (§45.37): Bedrock and S3 in any Region, the us-west-2 shots' bucket (empty while its switch
+    # is off), the workspaces' provider keys (read per call), HTTPS for the keyed hosts, Amazon Polly in a Region.
+    bedrock_runtime: Callable[[str], Any] | None = None
+    bedrock_control: Callable[[str], Any] | None = None  # Bedrock's control plane (Check models' access check)
+    s3_in: Callable[[str], Any] | None = None
+    video_west_bucket: str = ""
+    provider_keys: Any = None  # hosts.KeySource
+    http: Any = None  # hosts.Http
+    polly: Callable[[str], Any] | None = None
     registry: dict[str, dict[str, type[Any]]] = field(default_factory=lambda: REGISTRY)
     heartbeat_seconds: float = HEARTBEAT_SECONDS
     flush_seconds: float = FLUSH_SECONDS
@@ -518,7 +533,9 @@ class Job:
             self._note_failed_call(step, agent_id, task, e)
             raise
         if task in WRITER_TASKS:  # a storyboard saved from this answer names this model as its writer (§45.36 E7)
-            self._last_writer = writer_id(reply.model, reply.maker if isinstance(reply.maker, str) else None)
+            host = getattr(reply, "host", None)
+            self._last_writer = writer_id(reply.model, reply.maker if isinstance(reply.maker, str) else None,
+                                          host if isinstance(host, str) else None)  # fmt: skip
         entry = {
             "step": step,
             "agentId": agent_id,
@@ -550,6 +567,27 @@ class Job:
         if entry not in used:
             used.append(entry)
             self._dirty = True
+
+    async def makers(self) -> dict[str, list[dict[str, Any]]]:
+        """The makers' models for this job: the bundled lists and this workspace's own ``MAKERDEF#`` items (§45.37
+        G2), read now, never kept between jobs or workspaces. A workspace whose own models cannot be read still has
+        the bundled ones."""
+        try:
+            rows = await self.data.query_prefix(self.fence.pk, config.MAKERDEF_PREFIX)
+        except Exception as e:
+            log("warn", "stories.makerdefs_unreadable", job=self.fence.job_id, error=type(e).__name__)
+            rows = []
+        owned = [r for r in rows if r.get("userId") in (None, self.fence.user_id)
+                 and r.get("workspaceId") in (None, self.fence.workspace_id)]  # fmt: skip
+        return config.merged_makers(owned)
+
+    def key_reader(self) -> Callable[[str], str | None] | None:
+        """This job's workspace's key for a keyed host, read on each call (never kept)."""
+        source = self.svc.provider_keys
+        if source is None:
+            return None
+        workspace_id = self.fence.workspace_id
+        return lambda host: source.key(workspace_id, host)
 
     async def prove(self, kind: str, provider_id: str, state: str = "on", last_error: str | None = None) -> None:
         """``PROVIDER#{kind}#{id}`` after a real call (§45.11.6): once per job and provider."""
@@ -652,6 +690,7 @@ class StoryJob(Job):
         self._snapshot: dict[str, Any] | None = None
         self._snapshot_read = False
         self._engine_version: int | None = None
+        self.maker_models: dict[str, list[dict[str, Any]]] | None = None  # this job's makers' models (§45.37)
 
     async def _run(self) -> str:
         made = self.meta.get("providers")
@@ -667,6 +706,7 @@ class StoryJob(Job):
             return await self._fail(self.todo[0] if self.todo else "storyboard", "This story no longer exists.")
         self.story, self.workspace = story, ws
         self.config = dict(ws.get("configuration") or {})
+        self.maker_models = await self.makers()
         self.stale = [s for s in story.get("stale") or [] if s in keys.STEP_ORDER]
         self.assets = await self.data.assets(self.fence.user_id, self.fence.workspace_id, story_id=self.story_id)
         for k in META_KEYS:  # every key of §45.6's meta, null until this job knows it
@@ -824,7 +864,22 @@ class StoryJob(Job):
     def _key(self, fn: Callable[..., str], *args: Any) -> str:
         return fn(self.fence.user_id, self.fence.workspace_id, self.story_id, *args)
 
+    def _pick(self, kind: str) -> dict[str, Any] | None:
+        """This job's model for a maker kind, or None (a built-in maker, or a pick that stops: the step that uses it
+        says why with ``maker_model``'s own sentence)."""
+        try:
+            return maker_model(kind, self.config, self.maker_models)
+        except ProviderUnavailable:
+            return None
+
+    def _sound_models(self) -> dict[str, dict[str, Any]]:
+        try:
+            return sound_models(self.config, self.maker_models)
+        except ProviderUnavailable:
+            return {}
+
     def _ctx(self) -> ProviderContext:
+        video = self._pick("animation")
         return ProviderContext(
             engine=self.engine,
             workdir=self.work,
@@ -835,11 +890,20 @@ class StoryJob(Job):
             image_model_id=self.svc.image_model_id,
             image_client=self.svc.image_client,
             video_bucket=self.svc.video_bucket,
-            video_model_id=self.svc.video_model_id,
+            video_model_id=str((video or {}).get("modelId") or self.svc.video_model_id),
             reel_client=self.svc.reel_client,
             us_s3=self.svc.us_s3,
             reel_prefix=lambda sid: self._key(keys.reel_prefix, sid, self.version),
             sleep=self.svc.reel_sleep,
+            image_model=self._pick("images"),
+            video_model=video,
+            sound_models=self._sound_models(),
+            bedrock=self.svc.bedrock_runtime,
+            s3_in=self.svc.s3_in,
+            video_west_bucket=self.svc.video_west_bucket,
+            provider_key=self.key_reader(),
+            http=self.svc.http,
+            polly=self.svc.polly,
         )
 
     def _provider(self, kind: str, ctx: ProviderContext, pid: str | None = None) -> Any:
@@ -1197,7 +1261,13 @@ class StoryJob(Job):
         return {"mood": str(mood), "volume": round(min(1.0, max(0.0, volume)), 2)}
 
     async def _write(
-        self, mode: str, request: dict[str, Any], *, note: str | None, scene_ids: Sequence[str] | None
+        self,
+        mode: str,
+        request: dict[str, Any],
+        *,
+        note: str | None,
+        scene_ids: Sequence[str] | None,
+        restage: bool = False,
     ) -> dict[str, Any]:
         if not self.budget.take("writer"):
             raise StoryFailed(keys.WRITER_FAILED)
@@ -1211,6 +1281,8 @@ class StoryJob(Job):
             "request": request,
             "note": note,
             "sceneIds": list(scene_ids or []),
+            # The second call after the engine refused the first staging is the re-staging pass (§45.37 G5).
+            "restage": restage,
         }
         answer: dict[str, Any] = await provider.write(brief)
         await self.prove("writer", "bedrock-claude")
@@ -1298,7 +1370,10 @@ class StoryJob(Job):
         if errors:
             log("info", "stories.writer_retry", job=self.fence.job_id, errors=errors[:5])
             request["problems"] = errors[:20]
-            answer = await self._write(mode, request, note=note, scene_ids=scene_ids)
+            # The engine refused the staging (normalize, validate, fit): the writer's re-staging pass, on the owner's
+            # model and effort for animation planning (§45.37 G5); a remake that left out a scene is asked again as it
+            # was.
+            answer = await self._write(mode, request, note=note, scene_ids=scene_ids, restage=not missing)
             script, teaches, missing = self._script_from(mode, answer, **args)
             if missing:  # never "ready" with nothing changed
                 log("warn", "stories.writer_missed_scenes", job=self.fence.job_id, missing=missing, final=True)
@@ -1713,14 +1788,19 @@ class StoryJob(Job):
         return f"{len(targets)} drawn" if targets else "Nothing changed"
 
     def _scene_provider(self, scene: dict[str, Any]) -> str:
-        """The animation provider of one scene: the workspace's, except that Nova Reel never draws a scene with a
-        character in it (the built-in animator keeps characters the same, §45.8)."""
+        """The animation provider of one scene: the workspace's, except that an AI video maker (Luma AI Ray2, a video
+        model the owner added) never draws a scene with a character in it (the built-in animator keeps characters the
+        same, §45.8)."""
         picked = chosen(self.config)["animation"]
-        if picked == "nova-reel" and has_actors(scene):
+        if picked in AI_VIDEO and has_actors(scene):
             return "builtin-2d"
         return picked
 
     async def _render(self, script: dict[str, Any], scenes: list[dict[str, Any]]) -> None:
+        if scenes and chosen(self.config)["animation"] != DEFAULTS["animation"]:
+            # An ended video maker (Nova Reel), a pick that is not its maker's, or an own maker with no model stops here
+            # with its sentence, before any call; nothing switches to another maker by itself (§45.37 G7).
+            maker_model("animation", self.config, self.maker_models)
         engine = await self._drawing(script)
         total = max(1, sum(round(float(s.get("durationSec") or 0) * 30) for s in scenes))
         progress: dict[str, int] = {}
@@ -1728,6 +1808,7 @@ class StoryJob(Job):
         ctx = self._ctx()
         used: dict[str, float] = {}
         shots: dict[str, int] = {}
+        shot_len: dict[str, int] = {}  # each AI video maker's billed shot length (Luma AI Ray2 5 s)
         spent: dict[str, float] = {}  # each provider's own render seconds (never another one's wait, §45.34)
 
         async def one(scene: dict[str, Any]) -> None:
@@ -1751,6 +1832,10 @@ class StoryJob(Job):
                 spent[pid] = spent.get(pid, 0.0) + (time.monotonic() - began)
                 used[pid] = used.get(pid, 0.0) + clip.duration_sec
                 shots[pid] = shots.get(pid, 0) + 1
+                seconds_of = getattr(provider, "shot_seconds", None)
+                shot_len[pid] = (
+                    int(seconds_of()) if callable(seconds_of) else REEL_SHOT if pid == "nova-reel" else LUMA_SHOT
+                )
                 key = self._key(keys.scene_clip_key, sid, self.version)
                 meta = {"hash": scene_hash(script, scene, engine), "frames": round(clip.duration_sec * 30),
                         "provider": pid}  # fmt: skip
@@ -1763,12 +1848,12 @@ class StoryJob(Job):
                 rendered = round(spent.get(pid, 0.0), 3)
                 await self.provider_usage(pid, "", provider="builtin-rig", units=rendered, unit="second",
                                           videoSec=seconds, renderSec=rendered)  # fmt: skip
-            elif pid == "nova-reel":  # billed per generated 6 s shot, however long the scene it fills
-                await self.provider_usage(pid, self.svc.video_model_id, provider=pid, units=shots[pid] * REEL_SHOT,
-                                          unit="second", videoSec=shots[pid] * REEL_SHOT, shots=shots[pid],
-                                          sceneSec=seconds)  # fmt: skip
+            elif pid in AI_VIDEO:  # billed per generated shot (Luma AI Ray2 5 s), however long the scene it fills
+                made = shots[pid] * shot_len.get(pid, LUMA_SHOT)
+                await self.provider_usage(pid, ctx.video_model_id, provider=pid, units=made, unit="second",
+                                          videoSec=made, shots=shots[pid], sceneSec=seconds)  # fmt: skip
             else:
-                await self.provider_usage(pid, self.svc.video_model_id, provider=pid, units=seconds, unit="second",
+                await self.provider_usage(pid, ctx.video_model_id, provider=pid, units=seconds, unit="second",
                                           videoSec=seconds)  # fmt: skip
         self._note_providers()
 
@@ -1782,13 +1867,45 @@ class StoryJob(Job):
     # --- sound, captions, assembly ------------------------------------------------------------------------------
 
     async def _make_sound(self, script: dict[str, Any]) -> Path:
+        pid = chosen(self.config)["audio"]
+        # The picked sound maker on its picked model (§45.37 G3): an own maker with no model, or a pick that is not its
+        # maker's, stops here with its sentence before any call; nothing switches to another maker by itself.
+        if pid != DEFAULTS["audio"]:
+            sound_models(self.config, self.maker_models)
         provider = self._provider("audio", self._ctx())
         out = self.work / "sound" / "mix.m4a"
-        path: Path = await provider.mix(script, out)
-        pid = chosen(self.config)["audio"]
-        await self._save(path, self._key(keys.audio_key, self.version), "audio", "audio/mp4", meta={"provider": pid})
+        try:
+            path: Path = await provider.mix(script, out)
+        except JobSuperseded:
+            raise
+        except Exception as e:
+            await self._sound_usage(pid, provider)  # what was made before the failure was billed all the same
+            if isinstance(e, ProviderFailed) and e.state:  # what the real call proved (a refused key: needs_setup)
+                await self.prove("audio", pid, e.state, e.last_error)
+            raise
+        meta: dict[str, Any] = {"provider": pid}
+        made = getattr(provider, "made", None)
+        if isinstance(made, dict) and any(made.values()):
+            # which of the maker's models made which part (madeEffects, madeMusic, madeVoice, madeLines)
+            meta.update({f"made{k[:1].upper()}{k[1:]}": v for k, v in made.items() if isinstance(v, str | int)})
+        await self._save(path, self._key(keys.audio_key, self.version), "audio", "audio/mp4", meta=meta)
         await self.prove("audio", pid)
+        await self._sound_usage(pid, provider)
         return path
+
+    async def _sound_usage(self, pid: str, provider: Any) -> None:
+        """One ``USAGE#`` per model that made part of the sound (§45.37 G1: each with its own model id and units, so
+        each model's own price applies): the effects, the music bed, the spoken lines. The built-in sounds bill
+        nothing."""
+        if pid == DEFAULTS["audio"]:
+            return
+        for part in getattr(provider, "made_parts", None) or []:
+            units, unit = float(part.get("units") or 0), str(part.get("unit") or "second")
+            if units <= 0:
+                continue
+            amounts = {"soundSec": units} if unit == "second" else {"characters": units}
+            await self.provider_usage(pid, str(part.get("modelId") or ""), provider=pid, units=units, unit=unit,
+                                      **amounts)  # fmt: skip
 
     async def sound(self) -> str | None:
         script = await self._load_script()
