@@ -243,7 +243,7 @@
         "post to many",
         "post everywhere"
       ],
-      "answer": "**Upload** says yes to a clip. It goes up to every place you picked under **Upload to**, each with its own caption. Nothing is posted until you tap **Upload**.",
+      "answer": "**Upload** says yes to a clip. It goes up to every place you picked under **Upload to**, each with its own caption. Nothing is posted until you tap **Upload**, unless you turn on **Auto-posting** in Settings.",
       "steps": [
         "Tap **Review**.",
         "Under **Upload to**, turn on each place you want.",
@@ -413,6 +413,97 @@
       ]
     },
     {
+      "id": "autopost-turn-on",
+      "route": "/settings/posting/auto",
+      "where": "Settings › Posting › Auto-posting",
+      "title": "Turn on auto-posting",
+      "keywords": [
+        "auto-posting",
+        "auto posting",
+        "autopost",
+        "auto post",
+        "turn on auto-posting",
+        "turn off auto-posting",
+        "post my clips by themselves",
+        "post by itself",
+        "post by themselves",
+        "clips post by themselves",
+        "post automatically",
+        "schedule posts",
+        "post on a schedule",
+        "post every",
+        "every few hours",
+        "clips each time",
+        "clips a day",
+        "clips a day per platform",
+        "how often",
+        "next up",
+        "stop a clip going up",
+        "went up without me",
+        "go up without me",
+        "practice",
+        "practice run now",
+        "private test run",
+        "test it first",
+        "auto-posting tiktok",
+        "auto-posting campaign clips"
+      ],
+      "answer": "**Auto-posting** posts your oldest clips in **Review** by themselves, every few hours, to each place that is set up. TikTok: you post it yourself (TikTok's rule). Each clip gets **Post it yourself**. Campaign clips wait for your **Upload**: Content Rewards can't take clips from Clip Factory by itself yet. Test it first with **Practice**: it picks the clips, but sends nothing.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Auto-posting**.",
+        "Pick **Post every** and **Clips each time**. The line under them says how many clips a day that is.",
+        "Open **Test it first**. Tap **Practice run now** (nothing is sent), or **Private test run**: only you can see that clip, and it leaves **Review**.",
+        "Turn on **Post my clips by themselves**. It saves at once and says when the next one goes.",
+        "Don't want a clip to go up? Tap **Throw away** on it at least 8 seconds before its turn (that is how long **Undo** stays)."
+      ],
+      "actions": [
+        {
+          "id": "autopost-turn-on:open",
+          "label": "Open Auto-posting",
+          "to": "/settings/posting/auto"
+        }
+      ]
+    },
+    {
+      "id": "autopost-waits-failed",
+      "route": "/settings/posting/auto",
+      "where": "Settings › Posting › Auto-posting",
+      "title": "When auto-posting skips or fails a clip",
+      "keywords": [
+        "auto-posting failed",
+        "auto-post failed",
+        "failed to auto-post",
+        "didn't work",
+        "auto-posting didn't work",
+        "try again auto-posting",
+        "retry auto-posting",
+        "auto-posting skipped",
+        "auto-posting skips",
+        "why did auto-posting skip",
+        "skipped a clip",
+        "waits for you",
+        "open in review",
+        "recent runs",
+        "last runs"
+      ],
+      "answer": "**Waits for you** lists the clips auto-posting skips, each with why: tap **Open in Review** and **Upload** it yourself. **Didn't work** lists each post that did not go up, with what went wrong: tap **Try again** on it. The other places of that clip still post. **Recent** shows the last runs, with **Open** on each post.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Auto-posting**.",
+        "Under **Waits for you**, tap **Open in Review** on a clip, then **Upload** it yourself.",
+        "Under **Didn't work**, tap **Try again** on a post.",
+        "Under **Recent**, tap **Open** to see a post."
+      ],
+      "actions": [
+        {
+          "id": "autopost-waits-failed:open",
+          "label": "Open Auto-posting",
+          "to": "/settings/posting/auto"
+        }
+      ]
+    },
+    {
       "id": "review-throw-away",
       "route": "/review",
       "where": "Review",
@@ -532,7 +623,7 @@
         "new clips",
         "review count"
       ],
-      "answer": "New clips wait in **Review** until you **Upload** or **Throw away** each one.",
+      "answer": "New clips wait in **Review** until you **Upload** or **Throw away** each one. With **Auto-posting** on, the oldest ones go up by themselves.",
       "steps": [
         "Tap **Review** to check them one by one."
       ],

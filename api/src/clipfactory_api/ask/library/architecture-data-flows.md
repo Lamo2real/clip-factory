@@ -380,7 +380,7 @@ sequenceDiagram
   G->>TF: init (S3 state, lockfile), plan
   G->>E: build and push agent image (tag = hash of agent sources)
   G->>TF: apply the plan
-  TF->>AWS: Cognito, three APIs, nine Lambdas (two durable, new version + alias live),<br/>EventBridge rule cf-prod-stats, table + stream + gsi2, buckets, vector bucket + index, SSM, runtime, alarms
+  TF->>AWS: Cognito, three APIs, nine Lambdas (two durable, new version + alias live),<br/>EventBridge rules cf-prod-stats and cf-prod-autopost-hourly, table + stream + gsi2, buckets, vector bucket + index, SSM, runtime, alarms
   G->>AWS: write config.json (apiUrl, wsUrl, oauthCallbackBase) from outputs, sync web to S3 (keeps tiktok*.txt), invalidate CloudFront
   G->>AWS: write version.json with the release areas (flow 11)
   opt desktop/ or the icon changed, or a download is missing
@@ -1353,7 +1353,113 @@ to Clip Factory." After the five parts of §41.6 have merged, one switch PR turn
 turns the whole finder off again (the stored items stay), and is done the same day if Content Rewards or Whop asks
 Clip Factory to stop reading ([DEPLOYMENT.md](DEPLOYMENT.md#campaign-finder-contracts-41)).
 
-### 23. Get paid: payout steps, honest statuses and money sent to the bank (CONTRACTS §40, ADR-64)
+### 23. Auto-posting: the hourly tick, the due check and Upload's code (CONTRACTS §46, ADR-81)
+
+The owner turns on **Post my clips by themselves** in Settings › Posting › Auto-posting, picks **Post every** (1 to 24
+hours) and **Clips each time** (1 to 5), and the oldest clips in Review go up by themselves
+([CONTRACTS.md §46](CONTRACTS.md#46-auto-posting-the-oldest-clips-in-review-go-up-by-themselves-every-x-hours-owner-request-2026-11-22),
+[ADR-81](DECISIONS.md#adr-81-auto-posting-an-hourly-eventbridge-rule-a-due-check-and-uploads-own-code)). It is off for
+everyone until he turns it on, and nothing before it changes: Upload, Use my settings, TikTok's sheet, Post it
+yourself and the campaign rules work as before.
+
+* **One rule, a due check.** `cf-prod-autopost-hourly` fires every hour at :00 UTC. The tick's slot is
+  `floorHour(event.time)`, the event's own time, so a retried delivery is the same slot. While on, `nextRunAt =
+  max(nextFullHour(onAt), lastRunAt + everyHours h)`, and a slot runs when `slot ≥ nextRunAt`. So runs fall exactly
+  `everyHours` apart on whole hours (5 h: 00, 05, 10, 15, 20, 01, 06 …), across midnight and month ends; a save counts
+  from the next full hour, without a redeploy; a run that finds nothing still moves `lastRunAt`. A schedule the app
+  rewrites was not used: EventBridge Scheduler needs `iam:PassRole`, which the `cf-prod-*` role boundary forbids, and
+  neither it nor a rule's `rate()` says when the next run is.
+* **The pick** (`autopost/pick.py`): the owner's clips in `review`, oldest job first, then `rank`, then `clipId`. A clip
+  waits for him, with its reason, while its job is still being made, its video is missing, an important check failed,
+  or it is a campaign clip Content Rewards can't take from Clip Factory by itself yet. A clip another run planned in
+  the last 15 minutes is skipped.
+* **Places and options.** Every place whose setup is ready except TikTok (TikTok's rules want the creator's own pick
+  for each post; each auto-posted clip keeps Post it yourself), in STATS_ORDER, with My settings
+  (`post_preset.upload_options`: never made for kids); a campaign clip gets the campaign versions, exactly as Upload
+  builds them.
+* **Never twice.** The claim is one `TransactWriteItems`: Put `AUTORUN#{runId}` (`state: "planned"`, its clips) on
+  `attribute_not_exists(pk)` and move `AUTOPOST.lastRunAt` to the slot. A second delivery, a retry after a crash or an
+  overlapping invocation looks for the run item first, before the due check (the claim has already moved `lastRunAt`),
+  finds it and resumes its own list (never a new pick). Each clip then goes through
+  **Upload's own code**, `uploads.upload_review_clip` (the review branch of `POST /v1/clips/{clipId}/confirm` moved into
+  one function the route now calls): the clip's conditional transaction (`status = review` and
+  `attribute_not_exists(postsCreated)`, [flow 6](#6-review-keep-and-throw-away)) and the flow start
+  `clip-{clipId}-{flowRun}`, which is a no-op when it is already running.
+* **Posting** is the clip flow's, unchanged ([flow 7](#7-clip-flow-publish-wait-48-hours-learn)): one place after
+  another, Upload's retries, a failed place never stops the others, and the live link saved on each post.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant E as EventBridge rule cf-prod-autopost-hourly
+  participant L as cf-prod-autopost
+  participant D as DynamoDB (AUTOPOSTOWNERS, AUTOPOST, AUTORUN#, CLIP#, POST#)
+  participant C as cf-prod-clip-flow (durable)
+  participant X as Platform API
+  E->>L: scheduled event, every hour at :00 UTC (slot = floorHour(event.time))
+  L->>D: one Query: AUTOPOSTOWNERS (every owner who saved autoPost)
+  loop each owner (one owner's failure is logged and skipped)
+    L->>D: settings.autoPost
+    alt off
+      L->>L: off: nothing written
+    else on
+      L->>D: get AUTORUN#{runId} (runId = slot#scheduled), before the due check
+      alt the run item is there (the same event again, a retry after a crash, an overlap)
+        L->>L: done → stop; planned → resume its own clips (never a new pick)
+      else no run item, and slot < nextRunAt (AUTOPOST lastRunAt)
+        L->>L: not_due: nothing written
+      else due
+        L->>D: pick: Query CLIP# in review, oldest job first, then rank (the waiting rules, §46.5)
+        L->>D: claim: one TransactWriteItems: Put AUTORUN#{runId} planned (attribute_not_exists)<br/>+ Update AUTOPOST SET lastRunAt = slot (absent or older)
+        alt cancelled because the run item exists (an overlap won the claim)
+          L->>D: read AUTORUN#{runId}: done → stop; planned → resume its own clips
+        else cancelled only on AUTOPOST
+          L->>L: not_due
+        end
+      end
+      loop each planned clip of the new or resumed run, while 30 s of the 240 s budget are left
+        alt Practice
+          L->>L: would_send: nothing written, the clip stays in Review
+        else live or private test
+          L->>D: Upload's code: one transaction, clip confirmed + one Post per place<br/>if status = review and attribute_not_exists(postsCreated)
+          L->>C: Invoke alias live, Event, DurableExecutionName clip-{clipId}-{flowRun}
+          L->>D: publishState started (a failed condition: read the clip, sent or skipped with the reason)
+        end
+      end
+      L->>D: AUTORUN#{runId} done: each clip's outcome and reason, the run's note
+    end
+  end
+  loop each place of each sent clip, one after another
+    C->>X: publish-{platform}: start, check, finish (Upload's retries)
+    C->>D: post posted with its url, or failed with a plain sentence
+  end
+```
+
+**Test runs with nothing public.** `POST /v1/autopost/run` with `{"kind": "practice"}` or `{"kind": "private"}` runs
+the same `run_once` inline in `cf-prod-api`, with Upload's existing grants (cf-prod-api's infrastructure is
+unchanged), at most once a minute (`AUTOPOST.lastNowAt`), whether auto-posting is on or off, and never moves the
+schedule. A practice run plans and records, and sends nothing. The private test run sends the first clip that would
+go next, with the internal `postOptions.test = "private"` that no route body can set: YouTube uploads it private,
+Facebook finishes it as a draft (`video_state=DRAFT`), Instagram uploads and checks it to `FINISHED` and never calls
+`media_publish`, and X is left out. None of these posts joins the stats poller (`gsi2` is only for public posts).
+
+**Data** (additive only, [CONTRACTS.md §46.10](CONTRACTS.md#4610-data-additive-new-sort-keys-and-attributes-only)):
+
+| Item or place | Keys and attributes |
+|---|---|
+| Auto-post state | `USER#{userId}` / `AUTOPOST`: `lastRunAt`, `lastRunId`, `lastNowAt` |
+| Run | `USER#{userId}` / `AUTORUN#{runId}`: `runId`, `at`, `kind`, `mode`, `state`, `clips`, `note`, `ttl` (180 days); listed newest first, 10 |
+| Owner registry | `AUTOPOSTOWNERS` / `USER#{userId}`: `userId`, `since`; written by every settings save that carries `autoPost` |
+| `CLIP#{clipId}` | `autoRun`, `autoAt`, `autoTest` (internal; public `auto`) |
+| `POST#{postId}` | `autoRun` (internal; public `auto: true`), `postOptions.test` (internal; public `test`) |
+| Settings | `autoPost: {on, everyHours, perRun, practice, onAt}`; an owner who never saved it reads it off |
+
+The page reads `GET /v1/autopost` on open, on focus, every 60 seconds while open and after every change; clip and
+post changes reach Review and Library live as before (the stream forwards `CLIP#` and `POST#`, and nothing new). No
+table, index, secret, bucket, Cognito or `cf-prod-api` resource changes; the plan adds only the new module and two
+alarms.
+
+### 24. Get paid: payout steps, honest statuses and money sent to the bank (CONTRACTS §40, ADR-64)
 
 The owner asked for a step-by-step payout setup per place, "the same system" as Set up posting, a status that tells
 him money can reach him (or that it can't although he may earn), what he earned per place, and what reached his bank

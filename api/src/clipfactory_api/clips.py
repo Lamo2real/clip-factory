@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime, timedelta
 from typing import Any
 
 from . import db, mojibake, s3
+from .clock import iso
 from .errors import bad_request
 
 Item = dict[str, Any]
@@ -42,11 +44,28 @@ INTERNAL_FIELDS = (
     # §16.12: what the clip says (for the daily second look) and every key of its creator stay server side.
     "spokenText",
     "creatorKeys",
+    # §46.10: the auto-posting run that uploaded the clip (public as ``auto``), and the hold a Throw away puts on it.
+    "autoRun",
+    "autoAt",
+    "autoTest",
+    "holdUntil",
 )
 PUBLISH_PENDING = "pending"
 PUBLISH_STARTED = "started"
 # Uploaded clips whose flow start Confirm finishes when it is still pending (§14.5): the public ``startPending``.
 STARTABLE = ("confirmed", "publishing", "posted")
+# §46.2: Throw away holds the clip on the server the moment it is tapped (internal ``holdUntil``), so auto-posting never
+# sends it while Undo's 8 s toast is up; the decline itself goes when the toast ends, and Undo lifts the hold. A day,
+# not a minute: a phone locked (or an app switched) during the toast pauses its timer, so the decline can come hours
+# later, when the owner comes back. A lost Undo only keeps auto-posting off that clip for a day (Upload ignores the hold).
+HOLD_FOR = timedelta(hours=24)
+
+
+def is_held(item: Mapping[str, Any], now: datetime) -> bool:
+    """A Throw away's hold is still on (``holdUntil`` in the future). Compared as ISO strings, as the run's
+    conditional write compares them (§46.7)."""
+    until = item.get("holdUntil")
+    return isinstance(until, str) and until > iso(now)
 
 
 def public_clip(
@@ -59,7 +78,8 @@ def public_clip(
     """The Clip shape of §5. With ``media`` it carries 1-hour ``coverUrl`` (and, unless ``video=False``,
     ``videoUrl``) links; without (the live WebSocket events) it carries none, and the web keeps the links it already
     has. With the clip's ``posts`` it carries ``totalViews`` (absent when nothing was measured). ``startPending: true``
-    when the clip was uploaded but its flow has not started (``publishState: pending``, §14.5)."""
+    when the clip was uploaded but its flow has not started (``publishState: pending``, §14.5). ``auto`` when an
+    auto-posting run uploaded it (§46.9)."""
     clip = db.strip_keys(item, INTERNAL_FIELDS)
     clip.pop("totalViews", None)
     if "captions" in clip:
@@ -67,6 +87,9 @@ def public_clip(
         clip["captions"] = mojibake.repair_captions(clip["captions"])
     if item.get("publishState") == PUBLISH_PENDING and item.get("status") in STARTABLE:
         clip["startPending"] = True  # uploaded, but its flow has not started yet: the Library offers Try again
+    auto = public_auto(item)
+    if auto is not None:
+        clip["auto"] = auto
     if media is not None and item.get("status") != "declined":
         if video and item.get("videoKey"):
             clip["videoUrl"] = media.presign_get(item["videoKey"])
@@ -77,6 +100,18 @@ def public_clip(
         if total is not None:
             clip["totalViews"] = total
     return clip
+
+
+def public_auto(item: Item) -> Item | None:
+    """``Clip.auto`` (§46.9): the auto-posting run that uploaded the clip, ``test: "private"`` for a Private test run;
+    None for a clip the owner uploaded himself (or one still in Review)."""
+    run = item.get("autoRun")
+    if not isinstance(run, str) or not run:
+        return None
+    auto: Item = {"runId": run, "at": str(item.get("autoAt") or "")}
+    if item.get("autoTest") == "private":
+        auto["test"] = "private"
+    return auto
 
 
 def total_views(posts: list[Item]) -> int | None:

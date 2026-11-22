@@ -66,5 +66,9 @@ flowchart LR
   st -- "13 tick: membership, reviews, views, money" --> crmcp
   st -- "13 finder look every 6 hours: async" --> camp
   camp -- "13 finder: robots.txt, sitemap.xml, campaign pages, 40 a look" --> crpages["contentrewards.com public campaign pages, anonymous"]
+  eva[EventBridge rule cf-prod-autopost-hourly, every hour at :00 UTC] -- "14 tick" --> ap[Lambda cf-prod-autopost]
+  ap -- "14 due check, claim the run, Upload's transaction" --> ddb
+  ap -- "14 async invoke, alias live" --> clf
+  lapi -- "14 run-now tests: the same run, inline" --> clf
   classDef off stroke-dasharray: 5 5
 ```

@@ -2,7 +2,7 @@
 
 Contract: [CONTRACTS.md §40.1](CONTRACTS.md#401-what-the-owner-sees) and
 [§40.2](CONTRACTS.md#402-the-status-per-place-honest-and-how-it-is-known),
-[BR-29](BUSINESS_REQUIREMENTS.md#br-29-get-paid-set-up-each-places-payout-see-if-money-can-reach-you-and-what-was-sent-to-your-bank),
+[BR-30](BUSINESS_REQUIREMENTS.md#br-30-get-paid-set-up-each-places-payout-see-if-money-can-reach-you-and-what-was-sent-to-your-bank),
 [UX-20](BUSINESS_REQUIREMENTS.md#ux-20-get-paid-that-a-child-can-follow), the steps in
 [SETUP_POSTING.md](SETUP_POSTING.md#get-paid). The same look as [Set up posting](#set-up-posting), apart from it: it
 never touches the "2 of 5 ready" ring or the floating setup list.

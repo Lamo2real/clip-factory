@@ -57,6 +57,13 @@
   and Google deletes OAuth clients unused for 6 months; X charges per post.
 - **Clips kept before a platform was connected** are not posted automatically after Connect
   ([roadmap](ROADMAP.md#phase-2-social-integrations)).
+- **Auto-posting never posts to TikTok** (TikTok's rules want the creator's own pick of who can see each post; he
+  uses **Post it yourself**), and campaign clips wait for his Upload while Content Rewards can't take clips from Clip
+  Factory by itself. A run fires on whole hours only, so a save counts from the next full hour. YouTube takes at most
+  100 uploads a day (its `videos.insert` bucket); the page warns past 100 clips a day. That a Facebook draft Reel stays
+  hidden from everyone but the Page's admins, and that the hourly rule fires within the first minute, are checked at
+  the first private test run and the first hours of practice
+  ([CONTRACTS.md §46.14](CONTRACTS.md#4614-not-verified-live)).
 - **Content Rewards' sign-in is an alpha and a pilot.** Until CR lets the owner's account in, there are two cases. If
   the sign-in works without `my_submissions:write` (`read_only`), Clip Factory reads campaigns and money and reminds
   him to send each clip himself. If CR refuses the sign-in (`not_allowed`), there is no `CRCONN` connection: nothing

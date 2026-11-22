@@ -783,6 +783,63 @@ highlights must be real anchors).
 - **Live checks, not done here** ([§41.6](CONTRACTS.md#416-who-builds-what-the-switch-tests-not-verified-live)): see
   step 17 of [Manual checks after the first deploy](#manual-checks-after-the-first-deploy).
 
+### Auto-posting (CONTRACTS §46)
+From [CONTRACTS.md §46.15](CONTRACTS.md#4615-tests-offline-fakes-only). Offline, fakes only: a fake clock, a fake
+store, a fake Lambda client for the clip flow's start and fake publishers. No AWS, no platform, no network.
+
+- **The schedule** (pytest, `api/tests/test_autopost_schedule.py`): every `everyHours` from 1 to 24, over 10 days and
+  from several `onAt` minutes, gives runs exactly `everyHours` apart on whole hours, across midnight and month ends;
+  switching on runs at the next full hour; changing `everyHours` up and down counts from the last run (the next full
+  hour when that time has passed); off and on again; practice keeps the same times; a late tick keeps its slot
+  (`floorHour(event.time)`, never "now") and a lost tick is caught up by the next one, one run and never two;
+  `nextRunAt` as the page shows it.
+- **A run** (`test_autopost_run.py`): oldest first by job, then `rank`, then `clipId`; each waiting rule of §46.5 with
+  its sentence word for word; `perRun`; the places (TikTok never, X only when ready, nothing set up → no clip sent and
+  "Nothing is set up to post to."); My settings options (never made for kids) and the campaign versions; nothing in
+  Review does nothing but moves `lastRunAt`; off and not due write nothing; the same event twice, two overlapping
+  invocations, and a crash after the claim and its retry: every clip confirmed once and its flow started once; a clip
+  thrown away ("You threw it away first.") or uploaded by hand ("You uploaded it yourself.") after planning; out of
+  time ("Out of time. It goes next run.", the clip still in Review); one owner failing does not stop another.
+- **The routes** (`test_autopost_routes.py`): `autoPost` validation and its 400 sentences ("Pick 1 to 24 hours.",
+  "Pick 1 to 5 clips.", "autoPost has a setting Clip Factory does not know."), `onAt` written only on off → on, the
+  `AUTOPOSTOWNERS` registry written by every save that carries `autoPost`, an owner who never saved it reading it off;
+  `GET /v1/autopost` (each list and its cap, the `runAt`s, none while off); `POST /v1/autopost/run` practice and
+  private, "Pick practice or private.", the 60-second limit (409 "A test run just started. Wait a minute."), and private
+  with nothing in Review ("Nothing in Review to test with.").
+- **The private test** (`test_autopost_private.py`): YouTube uploads `private` whatever the options say, with
+  `notifySubscribers=false`; Facebook finishes with `video_state=DRAFT` (no `url`, no `statsId`); Instagram checks the
+  container to `FINISHED` and never calls `media_publish`; only the internal `postOptions.test` turns it on, and
+  Upload's `options` can't set it (`post_preset.clip_options` keeps refusing unknown keys); no private post gets `gsi2`.
+- **Upload unchanged**: `test_upload_to.py`, `test_campaign_posting.py`, `test_clips.py` and `test_release.py` pass
+  unchanged after Upload's review branch moved into `uploads.upload_review_clip`.
+- **Web units** (Vitest, `web/test/autopost.test.ts`): the result line for every pair of 1 to 5 clips × 1 to 24 hours
+  ("1 clip every 24 hours = 1 clip a day per platform.", "1 clip every 5 hours = about 5 clips a day per platform.",
+  "2 clips every 7 hours = about 7 clips a day per platform."), the warning over 5 a day and YouTube's line over 100,
+  the time words (weekday and 24-hour time, never "Today" or "Tomorrow"), and the mock's rules
+  (`web/src/api/mock/autopost.ts`, with a fake clock the e2e tests move).
+- **Playwright** (mock mode, `web/e2e/autopost.spec.ts`, at 390×844 and 1440×900): the switch and its line, both
+  controls saving ("Saved."), the result line and the warning, Next up with **Throw away** and **Undo**, Didn't work
+  with **Try again**, Recent, **Practice run now**, **Private test run**, the Review card's line and the Home hint.
+  Run it on a port of its own: `CF_E2E_PORT=4730 npx playwright test e2e/autopost.spec.ts`.
+- **Infrastructure** (`infra/modules/autopost/tests/autopost.tftest.hcl`, mock provider): the names, the cron
+  `cron(0 * * * ? *)`, the rule ENABLED, retries 2 and event age 3,300 s, the target is the function, the permission's
+  source is the rule, the role carries the boundary, no `DeleteItem`, `Scan`, `iam:*` or `scheduler:*`, no Secrets
+  Manager action (the campaign fit check reads only the table), and the only invoke grant is the clip flow.
+  `scripts/test-check-plan-deletes.sh` is unchanged and still passes.
+- **Help**: the guides `autopost-turn-on` and `autopost-waits-failed` in `web/src/features/help/helpKb.json` (where the
+  page is, each control, why TikTok and campaign clips wait, Practice and the Private test run; Didn't work with Try
+  again, Waits for you with Open in Review). Their page `/settings/posting/auto` exists only with the web part's
+  `auto` branch in `web/src/lib/settingsTree.ts`, so on the docs branch alone `test/helpCorpus.test.ts` and both
+  `--check` runs fail; the docs part merges after the server, infrastructure and web parts. Then, in `web/`,
+  `node scripts/help-corpus.mjs --write-docs` (it also rewrites the routes table in
+  [HELP_ASSISTANT.md](HELP_ASSISTANT.md), which gains `/settings/posting/auto`) and `node scripts/ask-knowledge.mjs`
+  regenerate the corpus and the Ask knowledge. Commit `web/src/features/help/help-corpus.json`,
+  `docs/HELP_ASSISTANT.md`, `api/src/clipfactory_api/ask/knowledge.json` and
+  `api/src/clipfactory_api/ask/library/*.md`; then `node scripts/help-corpus.mjs --check` and
+  `node scripts/ask-knowledge.mjs --check` pass (every route a real page, every highlight a real `data-help` anchor).
+- **Live checks, not done here** ([§46.14](CONTRACTS.md#4614-not-verified-live)): see step 17 of
+  [Manual checks after the first deploy](#manual-checks-after-the-first-deploy).
+
 ### Get paid (CONTRACTS §40)
 From [CONTRACTS.md §40.8](CONTRACTS.md#408-changes-to-earlier-sections-who-builds-what-tests-not-verified-live).
 Offline, fakes only: no AWS, Google, Whop, platform or network. The bank part (§40.5) is not built, so it has no
@@ -986,7 +1043,8 @@ collector finds no `PAYCONN#`; L's and M's tests read K's golden files when they
 - The vector index is float32, 1024, cosine with the four non-filterable keys.
 - No `aws_sqs_queue` or `aws_scheduler_*` remains; the only `aws_cloudwatch_event_rule`s are `cf-prod-stats` and
   `cf-prod-learn-daily` (`cron(0 5 * * ? *)`, targeting the unqualified `cf-prod-learn` with its own
-  `aws_lambda_permission`; the learn role has no `dynamodb:Scan`; learn timeout 900 s).
+  `aws_lambda_permission`; the learn role has no `dynamodb:Scan`; learn timeout 900 s). `cf-prod-autopost-hourly`
+  (`cron(0 * * * ? *)`, CONTRACTS §46.11) is checked by its own module test, `autopost.tftest.hcl`.
 - The delete gate: `scripts/test-check-plan-deletes.sh` (a plan that deletes or replaces the table, the user pool, a
   secret or a bucket fails with the resource named) and `scripts/test-deploy-workflow.sh` (the gate runs between
   `terraform plan` and `terraform apply`); the table, user pool, owner user, state-key secret, buckets and vector

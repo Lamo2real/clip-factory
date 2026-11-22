@@ -27,6 +27,8 @@ export interface UndoOptions {
   onCommit: () => void;
   /** How long Undo stays available. */
   ms?: number;
+  /** Aborting it takes the toast away quietly, running neither `onUndo` nor `onCommit` (nothing is left to undo). */
+  signal?: AbortSignal;
   /** The picture beside the words: the bin by default; an undo of an addition shows what was added (§44). */
   icon?: IconName;
 }
@@ -118,6 +120,18 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
     [dismiss],
   );
 
+  // Nothing left to decide (the signal was aborted): the toast goes, and neither Undo nor the real action runs.
+  const drop = useCallback(
+    (id: number) => {
+      const p = pending.current.get(id);
+      if (!p) return;
+      pending.current.delete(id);
+      clearTimeout(p.timer);
+      dismiss(id);
+    },
+    [dismiss],
+  );
+
   // Closing the tab inside the Undo window still carries out what the owner asked for.
   useEffect(() => {
     const flush = () => {
@@ -155,9 +169,12 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
         const ms = options.ms ?? UNDO_MS;
         const id = push("undo", t, ms, undefined, options.icon);
         pending.current.set(id, { ...options, timer: setTimeout(() => commit(id), ms) });
+        const signal = options.signal;
+        if (signal?.aborted) drop(id);
+        else signal?.addEventListener("abort", () => drop(id), { once: true });
       },
     }),
-    [push, commit],
+    [push, commit, drop],
   );
 
   // Phones: a toast never covers the screen's pinned main button ("You're in!" over Make clips for this campaign):

@@ -450,6 +450,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
                 best={perf.bestPlatform === platform}
                 index={i}
                 now={now}
+                auto={perf.clip.auto}
               />
             );
           })}

@@ -7,13 +7,14 @@ import { api } from "../api/index.ts";
 import { ApiError, friendlyMessage } from "../api/errors.ts";
 import type { Clip } from "../api/types.ts";
 import type { Toaster } from "../components/Toasts.tsx";
+import { AUTO_ALREADY_SENT } from "./autopost.ts";
 
 /** Shown when the decline finds the clip already kept or thrown away somewhere else. */
 export const ALREADY_DECIDED = "This clip was already uploaded or thrown away somewhere else, so there is nothing more to do.";
 
 const hidden = new Set<string>();
 const listeners = new Set<() => void>();
-const backListeners = new Set<(clipId: string) => void>();
+const backListeners = new Set<(clipId: string, released: Promise<void>) => void>();
 let snapshot: ReadonlySet<string> = new Set();
 
 function changed() {
@@ -42,42 +43,102 @@ export function isThrownAway(clipId: string): boolean {
   return hidden.has(clipId);
 }
 
-/** Calls `fn` with the clip id each time a thrown-away clip comes back (Undo, or the decline failed). */
-export function onClipBack(fn: (clipId: string) => void): () => void {
+/**
+ * Calls `fn` with the clip id each time a thrown-away clip comes back (Undo, or the decline failed), at once. Its hold
+ * is let go after that: `released` settles once it is (or the release failed), so auto-posting's status read only then
+ * has the clip in line again (§46.13).
+ */
+export function onClipBack(fn: (clipId: string, released: Promise<void>) => void): () => void {
   backListeners.add(fn);
   return () => {
     backListeners.delete(fn);
   };
 }
 
-function back(clipId: string) {
+function back(clipId: string, released: Promise<void>) {
   hidden.delete(clipId);
   changed();
-  for (const fn of backListeners) fn(clipId);
+  for (const fn of backListeners) fn(clipId, released);
 }
+
+/** An api call; one that throws before it starts (no such call) rejects like any other failure. */
+function attempt<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return call();
+  } catch (e) {
+    return Promise.reject(e);
+  }
+}
+
+/** Whether auto-posting already sent the clip (read again after a refused decline; unknown → no). */
+const sentByAutoPosting = (clipId: string): Promise<boolean> =>
+  attempt(() => api().getClip(clipId)).then(
+    (c) => !!c.auto,
+    () => false,
+  );
 
 /**
  * Hides the clip at once and shows "Clip thrown away." with Undo for 8 s. Undo brings it back and sends nothing;
  * the decline goes when the toast ends. A decline that fails brings the clip back with an error toast, except when
  * the clip was already decided (kept or thrown away somewhere else): then it stays gone and a calm note says so.
+ *
+ * Auto-posting (§46.13): the tap also holds the clip at once (POST /hold), whatever auto-posting's state, so a run
+ * inside the 8 s leaves it alone; the hold lasts a day, so a decline that comes late (a phone locked during the toast
+ * stops its timer) still finds it held. Undo lets it go again (DELETE /hold, sent only after the hold's own answer, so
+ * it always lands last). When a run already sent it, the hold says so: the clip stays out of Review, the Undo toast
+ * goes, no decline is sent, and "Auto-posting already sent this clip."
  */
 export function throwAwayWithUndo(clip: Clip, toast: Toaster, onDeclined?: () => void): void {
-  hidden.add(clip.clipId);
+  const { clipId } = clip;
+  hidden.add(clipId);
   changed();
+  let sentByAuto = false;
+  const closeUndo = new AbortController();
+  const alreadySent = () => {
+    if (sentByAuto) return;
+    sentByAuto = true;
+    if (!hidden.has(clipId)) {
+      hidden.add(clipId);
+      changed();
+    }
+    closeUndo.abort();
+    toast.info(AUTO_ALREADY_SENT);
+  };
+  const held = attempt(() => api().holdClip(clipId)).then(
+    () => undefined,
+    (e: unknown) => {
+      if (e instanceof ApiError && e.status === 409 && e.message === AUTO_ALREADY_SENT) alreadySent();
+      // Anything else (decided somewhere else, an api without holds, no connection): the decline decides, as before.
+    },
+  );
+  /** Lets auto-posting take it again: after the hold's answer, so a slow hold never lands after it. Never fails. */
+  const release = (): Promise<void> =>
+    held.then(() => attempt(() => api().unholdClip(clipId))).then(
+      () => undefined,
+      () => undefined,
+    );
   toast.undo("Clip thrown away.", {
-    onUndo: () => back(clip.clipId),
+    signal: closeUndo.signal,
+    onUndo: () => {
+      if (sentByAuto) return;
+      back(clipId, release());
+    },
     onCommit: () => {
+      if (sentByAuto) return;
       api()
-        .declineClip(clip.clipId)
+        .declineClip(clipId)
         .then(
           () => onDeclined?.(),
-          (e: unknown) => {
+          async (e: unknown) => {
             if (e instanceof ApiError && (e.status === 409 || e.status === 404)) {
-              // Already decided (kept or thrown away on another screen or device): not a failure, nothing to do.
-              toast.info(ALREADY_DECIDED);
+              // Already decided (kept or thrown away on another screen or device, or sent by auto-posting): not a
+              // failure, nothing to do.
+              const auto = await sentByAutoPosting(clipId);
+              if (!sentByAuto) toast.info(auto ? AUTO_ALREADY_SENT : ALREADY_DECIDED);
               return;
             }
-            back(clip.clipId);
+            // Back in his list: auto-posting may take it again too.
+            back(clipId, release());
             toast.error(`${friendlyMessage(e)} The clip is back in your list.`);
           },
         );

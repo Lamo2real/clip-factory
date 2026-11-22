@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import re
+from datetime import timedelta
 from typing import Any
 
 from .. import db, learn, posts, s3, settings, validate
 from ..app import App
-from ..clock import iso
-from ..errors import ApiError, bad_request
+from ..clock import iso, parse
+from ..errors import ApiError, bad_request, conflict
 from ..http import Request, Response, no_content, ok
 from ..ids import ulid
 from ..log import log
@@ -16,6 +17,8 @@ from ..log import log
 MAX_UPLOAD_BYTES = 5 * 1024**3  # a single presigned PUT tops out at 5 GB
 VIDEO_TYPE = re.compile(r"^video/[a-z0-9][a-z0-9.+-]{0,63}$")
 MAX_LEARNINGS = 50
+SAVE_TRIES = 3
+SETTINGS_CHANGED = "Your settings just changed. Try again."
 
 
 def health(app: App, req: Request) -> Response:
@@ -80,11 +83,33 @@ def get_settings(app: App, req: Request) -> Response:
     return ok({"settings": _settings_view(app, req.user_id)})
 
 
+def _stamp(before: dict[str, Any] | None, now: str) -> str:
+    """The saved item's ``updatedAt``: now, but always later than the one it replaces (two saves in one millisecond
+    still differ, so the next save's condition tells them apart)."""
+    old = parse((before or {}).get("updatedAt"))
+    moment = parse(now)
+    if old is not None and moment is not None and moment <= old:
+        return iso(old + timedelta(milliseconds=1))
+    return now
+
+
 def put_settings(app: App, req: Request) -> Response:
-    current = settings.load(app.store, req.user_id)
-    updated = settings.merge_update(current, req.json())
-    settings.save(app.store, req.user_id, updated, iso(app.clock()))
-    return ok({"settings": {**updated, "hasYoutubeCookies": _has_cookies(app, req.user_id)}})
+    """Merges the patch over the stored settings and saves them only if nobody saved in between (the stored
+    ``updatedAt`` is the one read); otherwise reads them again and merges the same patch, at most 3 times (409)."""
+    patch = req.json()
+    pk = db.user_pk(req.user_id)
+    for _ in range(SAVE_TRIES):
+        before = app.store.get(pk, db.SETTINGS_SK)
+        now = iso(app.clock())
+        updated = settings.merge_update(settings.with_defaults(before), patch, now=now)
+        settings.register_autopost(app.store, req.user_id, patch, now)  # §46.3: before the save the tick reads
+        try:
+            settings.save_if_unchanged(app.store, req.user_id, updated, _stamp(before, now), before)
+        except db.ConditionFailed:
+            log("info", "settings.save_raced")
+            continue
+        return ok({"settings": {**updated, "hasYoutubeCookies": _has_cookies(app, req.user_id)}})
+    raise conflict(SETTINGS_CHANGED)
 
 
 def create_cookies_upload(app: App, req: Request) -> Response:

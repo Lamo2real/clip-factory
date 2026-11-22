@@ -13,7 +13,8 @@ The diagram is [architecture/aws-architecture.drawio](architecture/aws-architect
 and [§19](CONTRACTS.md#19-ask-clip-factory-grounded-in-app-help-assistant-owner-request-2026-11-16) (Ask Clip Factory, the help assistant),
 and [§38](CONTRACTS.md#38-content-rewards-campaigns-owner-request-2026-11-21) (Content Rewards campaigns)
 with [§39](CONTRACTS.md#39-content-rewards-the-two-ways-all-your-money-and-does-this-clip-fit-owner-request-2026-11-21) (the two ways, all your money and the fit check)
-and [§41](CONTRACTS.md#41-campaign-finder-campaigns-that-match-what-you-want-owner-request-2026-11-21) (the campaign finder);
+and [§41](CONTRACTS.md#41-campaign-finder-campaigns-that-match-what-you-want-owner-request-2026-11-21) (the campaign finder),
+and [§46](CONTRACTS.md#46-auto-posting-the-oldest-clips-in-review-go-up-by-themselves-every-x-hours-owner-request-2026-11-22) (auto-posting);
 this document explains how the pieces work together and why.
 
 ![Clip Factory Cloud on AWS](architecture/aws-architecture.png)
@@ -86,6 +87,10 @@ flowchart LR
   st -- "13 tick: membership, reviews, views, money" --> crmcp
   st -- "13 finder look every 6 hours: async" --> camp
   camp -- "13 finder: robots.txt, sitemap.xml, campaign pages, 40 a look" --> crpages["contentrewards.com public campaign pages, anonymous"]
+  eva[EventBridge rule cf-prod-autopost-hourly, every hour at :00 UTC] -- "14 tick" --> ap[Lambda cf-prod-autopost]
+  ap -- "14 due check, claim the run, Upload's transaction" --> ddb
+  ap -- "14 async invoke, alias live" --> clf
+  lapi -- "14 run-now tests: the same run, inline" --> clf
   classDef off stroke-dasharray: 5 5
 ```
 
@@ -109,14 +114,16 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 | AWS Lambda | `cf-prod-learn` | The weekly best ([flow 14](#14-best-of-the-week)): marks the starred clips' vectors `best`, asks Claude Fable 5.1 (with the skills block) for one "Best of week" learning. See [ADR-31](DECISIONS.md#adr-31-the-weekly-best-is-an-explicit-owner-signal). |
 | AWS Lambda | `cf-prod-campaigns` | Content Rewards ([flow 19](#19-content-rewards-campaigns-contracts-38-adr-62), [CONTRACTS.md §38.10](CONTRACTS.md#3810-reading-a-campaign)): reads a campaign's rules from the brand's brief with Claude (one Bedrock Converse call per read, checked field by field in code), fetches the campaign logo from a Google Drive or Dropbox link and copies the brand's picture into the media bucket (`campaigns/*`). For the campaign finder ([flow 22](#22-campaign-finder-contracts-41-adr-65)) it also reads Content Rewards' **public** campaign pages that robots.txt allows (`/robots.txt`, `/sitemap.xml`, `/c/campaigns/{uuid}`), anonymously and politely, into a shared cache, and matches each owner's wants. Started only by `cf-prod-api` and `cf-prod-stats` (async). It reads untrusted brand text and outside pages, so it has **no Secrets Manager access at all** and **never calls Content Rewards' API** (no MCP call and no `/api/…` path); the brief is already on the `CAMPAIGN#` item. See [ADR-62](DECISIONS.md#adr-62-content-rewards-the-official-sign-in-through-the-desktop-apps-loopback-door-sending-from-the-cloud-a-reminder-when-it-cant) and [ADR-65](DECISIONS.md#adr-65-campaign-finder-content-rewards-public-pages-read-politely-joining-stays-the-owners-own-tap). |
 | AWS Lambda | `cf-prod-money` | Real earnings ([CONTRACTS.md §25](CONTRACTS.md#25-real-earnings-paid-programme-progress-and-platform-reported-money-owner-request-2026-11-18)): once a day reads each connected platform's account numbers and the money the platform itself reports (YouTube Analytics `estimatedRevenue` with the monetary scope; Facebook only after its live check), through the shared token manager and rate budgets, and writes `ACCTSTAT#`, `REVENUE#` and `MONEYSTATE#` items. After the platforms it reads the optional payout connections of Get paid (AdSense `payments`, Whop `payouts`) into `PAYSTATE#` and `PAYOUT#` items ([flow 24](#24-get-paid-payout-steps-honest-statuses-and-money-sent-to-the-bank-contracts-40-adr-64)). No DeleteItem. See [ADR-47](DECISIONS.md#adr-47-only-platform-reported-money-the-estimates-are-removed) and [ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner). |
-| Amazon EventBridge | rule `cf-prod-stats`, `rate(15 minutes)` | The only schedule in the system: one tick for the stats poller, its rate taken from the smallest interval in `config/platforms.json`. A few thousand invocations a month. See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
+| Amazon EventBridge | rule `cf-prod-stats`, `rate(15 minutes)` | The stats poller's schedule: one tick for the stats poller, its rate taken from the smallest interval in `config/platforms.json`. A few thousand invocations a month. See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
+| Amazon EventBridge | rule `cf-prod-autopost-hourly`, `cron(0 * * * ? *)` | Auto-posting ([flow 23](#23-auto-posting-the-hourly-tick-the-due-check-and-uploads-code-contracts-46-adr-81)): fires every hour on the hour (UTC) at the unqualified `cf-prod-autopost`, with 2 retries and an event age of 55 minutes (3,300 s, before the next tick). A run happens only when the owner's X hours are up, so the rule never changes when he saves. 24 short invocations a day. See [ADR-81](DECISIONS.md#adr-81-auto-posting-an-hourly-eventbridge-rule-a-due-check-and-uploads-own-code). |
+| AWS Lambda | `cf-prod-autopost` | Auto-posting ([flow 23](#23-auto-posting-the-hourly-tick-the-due-check-and-uploads-code-contracts-46-adr-81)): on each tick, one Query of the owner registry `AUTOPOSTOWNERS`, then per owner the due check, the pick (the oldest clips in Review), the claim (one transaction) and, for each clip, **Upload's own code** (`uploads.upload_review_clip`: the clip's conditional confirm transaction and the clip flow's idempotent start). It never calls a platform itself: the clip flow posts. No S3, no Bedrock and no Secrets Manager: the campaign fit check reads only the table. |
 | AWS Lambda, durable function | `cf-prod-job-flow` (alias `live`) | Starts the agent for a job and waits (no compute) for its callback; fails the job if heartbeats stop. Replaces the watchdog. See [ADR-22](DECISIONS.md#adr-22-lambda-durable-functions-for-the-job-and-clip-workflows). |
 | AWS Lambda, durable function | `cf-prod-clip-flow` (alias `live`) | After Keep: makes the posts, publishes each one (start, durable waits and checks, finish; tokens from Secrets Manager), sends each campaign post to Content Rewards right after it is live (`cr-send-{platform}`, retried every minute up to 25 minutes, never failing the flow), waits 48 hours (no compute), reads metrics, writes a learning, updates the clip's vector. Reads `cf-prod/platforms/*`, writes only a refreshed token (`cf-prod/platforms/*/token-*`). Replaces the publish queue, the publisher, the scheduler and perf-check. |
 | AWS Lambda | `cf-prod-ws-authorizer` | Checks the Cognito access token on `$connect` (standard library RS256 check, no extra packages). |
 | AWS Lambda | `cf-prod-ws` | `$connect` stores the connection, `$disconnect` removes it, `$default` answers `ping`. |
 | AWS Lambda | `cf-prod-broadcast` | Reads the DynamoDB stream and sends each change to the owner's open connections. |
 | AWS Lambda | `cf-prod-hooks` | Answers webhook verification challenges, stores webhook events, and finishes Connect: checks the signed state, exchanges the code, stores the token in Secrets Manager, redirects to the setup page with a result code ([flow 16](#16-set-up-posting-connect-and-real-posting)). Also finishes Get paid's two read-only grants, YouTube `payments` and Connect Whop ([flow 24](#24-get-paid-payout-steps-honest-statuses-and-money-sent-to-the-bank-contracts-40-adr-64)). |
-| Amazon DynamoDB | `cf-prod-data` + stream | Single table for all entities including WebSocket connections, webhook events, stats snapshots (`STAT#`, 90-day TTL), the weekly picks (`WEEK#`), the per-platform rate budgets (`RATE#`) and the Content Rewards items (`CRCONN`, `CRSTATE#`, `CAMPAIGN#`, `CRSUB#`, `CRMONEY`, `CROWNERS`, the finder's `CRFIND` and the shared public-page cache under pk `CRPUBLIC`, with TTL); a sparse `gsi2` holds only the posts due for a stats poll. On-demand, point-in-time recovery, TTL, stream `NEW_AND_OLD_IMAGES` feeding `cf-prod-broadcast`. See [ADR-05](DECISIONS.md#adr-05-one-dynamodb-table-single-table-design). |
+| Amazon DynamoDB | `cf-prod-data` + stream | Single table for all entities including WebSocket connections, webhook events, stats snapshots (`STAT#`, 90-day TTL), the weekly picks (`WEEK#`), the per-platform rate budgets (`RATE#`) and the Content Rewards items (`CRCONN`, `CRSTATE#`, `CAMPAIGN#`, `CRSUB#`, `CRMONEY`, `CROWNERS`, the finder's `CRFIND` and the shared public-page cache under pk `CRPUBLIC`, with TTL) and the auto-posting items (`AUTOPOST`, `AUTORUN#`, the `AUTOPOSTOWNERS` registry); a sparse `gsi2` holds only the posts due for a stats poll. On-demand, point-in-time recovery, TTL, stream `NEW_AND_OLD_IMAGES` feeding `cf-prod-broadcast`. See [ADR-05](DECISIONS.md#adr-05-one-dynamodb-table-single-table-design). |
 | AWS Systems Manager Parameter Store | `/cf-prod/hooks/verify-token` (SecureString) | The Meta webhook verify token. Generated by Terraform as a write-only value, so it never enters the Terraform state. |
 | AWS Secrets Manager | `cf-prod/oauth/state-key` (Terraform, write-only value), `cf-prod/platforms/{platform}/{app,token,pending}`, `cf-prod/platforms/contentrewards/{app,token}`, `cf-prod/platforms/adsense/token` and `cf-prod/platforms/whop/{app,token}` (all created at runtime) | The only place for the owner's platform app keys and account tokens, and the key that signs the Connect `state` ([flow 16](#16-set-up-posting-connect-and-real-posting), [ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager)). `cf-prod-api` writes all of them; `cf-prod-hooks` reads the app keys and writes tokens and pending choices; `cf-prod-clip-flow`, `cf-prod-stats` and `cf-prod-money` read `cf-prod/platforms/*` and write only the token secrets `cf-prod/platforms/*/token-*` (Terraform output `platform_token_secrets_arn` of the hooks module). With the push key, the badge keys, Ask's search key and the optional YouTube proxy, at most about 25 secrets in all ([ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager)). |
 | Amazon Bedrock AgentCore Runtime | `cf_prod_clip_agent` | Runs the agent container for as long as a job needs, one isolated session per job. See [ADR-03](DECISIONS.md#adr-03-amazon-bedrock-agentcore-runtime--claude-agent-sdk-for-the-agent). |
@@ -150,6 +157,7 @@ All of them, `cf-prod-campaigns` too, share one zip (`api/dist/lambda.zip`), Pyt
 | `cf-prod-learn` | `cf-prod-api`, async invoke on `PUT /v1/weeks/{week}/best`; EventBridge `cf-prod-learn-daily` at 05:00 UTC | 512 MB / 900 s; async retries 1, event age 1 h | no |
 | `cf-prod-money` | EventBridge `cf-prod-money-daily` at 06:00 UTC and `cf-prod-api` (async, Check now, once an hour) | 256 MB / 300 s; stops starting work after 240 s; async retries 0, event age 1 h | no |
 | `cf-prod-campaigns` | `cf-prod-api` and `cf-prod-stats`, async only (`{"action": "read" \| "logo" \| "brand_picture", "userId", "campaignId"}`, and the finder's `{"action": "find", "userId"?, "why"}`) | 512 MB / 120 s (a finder look stops reading at 100 s); async retries 0 | no |
+| `cf-prod-autopost` | EventBridge rule `cf-prod-autopost-hourly` (every hour at :00 UTC) only; the run-now tests run the same code inline in `cf-prod-api` | 256 MB / 300 s; a new clip starts only while at least 30 s of its 240 s budget are left (`AUTOPOST_TIME_BUDGET_SECONDS`); async retries 2, event age 3,300 s | no |
 
 ### What was removed
 
@@ -551,7 +559,7 @@ sequenceDiagram
   G->>TF: init (S3 state, lockfile), plan
   G->>E: build and push agent image (tag = hash of agent sources)
   G->>TF: apply the plan
-  TF->>AWS: Cognito, three APIs, nine Lambdas (two durable, new version + alias live),<br/>EventBridge rule cf-prod-stats, table + stream + gsi2, buckets, vector bucket + index, SSM, runtime, alarms
+  TF->>AWS: Cognito, three APIs, nine Lambdas (two durable, new version + alias live),<br/>EventBridge rules cf-prod-stats and cf-prod-autopost-hourly, table + stream + gsi2, buckets, vector bucket + index, SSM, runtime, alarms
   G->>AWS: write config.json (apiUrl, wsUrl, oauthCallbackBase) from outputs, sync web to S3 (keeps tiktok*.txt), invalidate CloudFront
   G->>AWS: write version.json with the release areas (flow 11)
   opt desktop/ or the icon changed, or a download is missing
@@ -1524,6 +1532,112 @@ to Clip Factory." After the five parts of §41.6 have merged, one switch PR turn
 turns the whole finder off again (the stored items stay), and is done the same day if Content Rewards or Whop asks
 Clip Factory to stop reading ([DEPLOYMENT.md](DEPLOYMENT.md#campaign-finder-contracts-41)).
 
+### 23. Auto-posting: the hourly tick, the due check and Upload's code (CONTRACTS §46, ADR-81)
+
+The owner turns on **Post my clips by themselves** in Settings › Posting › Auto-posting, picks **Post every** (1 to 24
+hours) and **Clips each time** (1 to 5), and the oldest clips in Review go up by themselves
+([CONTRACTS.md §46](CONTRACTS.md#46-auto-posting-the-oldest-clips-in-review-go-up-by-themselves-every-x-hours-owner-request-2026-11-22),
+[ADR-81](DECISIONS.md#adr-81-auto-posting-an-hourly-eventbridge-rule-a-due-check-and-uploads-own-code)). It is off for
+everyone until he turns it on, and nothing before it changes: Upload, Use my settings, TikTok's sheet, Post it
+yourself and the campaign rules work as before.
+
+* **One rule, a due check.** `cf-prod-autopost-hourly` fires every hour at :00 UTC. The tick's slot is
+  `floorHour(event.time)`, the event's own time, so a retried delivery is the same slot. While on, `nextRunAt =
+  max(nextFullHour(onAt), lastRunAt + everyHours h)`, and a slot runs when `slot ≥ nextRunAt`. So runs fall exactly
+  `everyHours` apart on whole hours (5 h: 00, 05, 10, 15, 20, 01, 06 …), across midnight and month ends; a save counts
+  from the next full hour, without a redeploy; a run that finds nothing still moves `lastRunAt`. A schedule the app
+  rewrites was not used: EventBridge Scheduler needs `iam:PassRole`, which the `cf-prod-*` role boundary forbids, and
+  neither it nor a rule's `rate()` says when the next run is.
+* **The pick** (`autopost/pick.py`): the owner's clips in `review`, oldest job first, then `rank`, then `clipId`. A clip
+  waits for him, with its reason, while its job is still being made, its video is missing, an important check failed,
+  or it is a campaign clip Content Rewards can't take from Clip Factory by itself yet. A clip another run planned in
+  the last 15 minutes is skipped.
+* **Places and options.** Every place whose setup is ready except TikTok (TikTok's rules want the creator's own pick
+  for each post; each auto-posted clip keeps Post it yourself), in STATS_ORDER, with My settings
+  (`post_preset.upload_options`: never made for kids); a campaign clip gets the campaign versions, exactly as Upload
+  builds them.
+* **Never twice.** The claim is one `TransactWriteItems`: Put `AUTORUN#{runId}` (`state: "planned"`, its clips) on
+  `attribute_not_exists(pk)` and move `AUTOPOST.lastRunAt` to the slot. A second delivery, a retry after a crash or an
+  overlapping invocation looks for the run item first, before the due check (the claim has already moved `lastRunAt`),
+  finds it and resumes its own list (never a new pick). Each clip then goes through
+  **Upload's own code**, `uploads.upload_review_clip` (the review branch of `POST /v1/clips/{clipId}/confirm` moved into
+  one function the route now calls): the clip's conditional transaction (`status = review` and
+  `attribute_not_exists(postsCreated)`, [flow 6](#6-review-keep-and-throw-away)) and the flow start
+  `clip-{clipId}-{flowRun}`, which is a no-op when it is already running.
+* **Posting** is the clip flow's, unchanged ([flow 7](#7-clip-flow-publish-wait-48-hours-learn)): one place after
+  another, Upload's retries, a failed place never stops the others, and the live link saved on each post.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant E as EventBridge rule cf-prod-autopost-hourly
+  participant L as cf-prod-autopost
+  participant D as DynamoDB (AUTOPOSTOWNERS, AUTOPOST, AUTORUN#, CLIP#, POST#)
+  participant C as cf-prod-clip-flow (durable)
+  participant X as Platform API
+  E->>L: scheduled event, every hour at :00 UTC (slot = floorHour(event.time))
+  L->>D: one Query: AUTOPOSTOWNERS (every owner who saved autoPost)
+  loop each owner (one owner's failure is logged and skipped)
+    L->>D: settings.autoPost
+    alt off
+      L->>L: off: nothing written
+    else on
+      L->>D: get AUTORUN#{runId} (runId = slot#scheduled), before the due check
+      alt the run item is there (the same event again, a retry after a crash, an overlap)
+        L->>L: done → stop; planned → resume its own clips (never a new pick)
+      else no run item, and slot < nextRunAt (AUTOPOST lastRunAt)
+        L->>L: not_due: nothing written
+      else due
+        L->>D: pick: Query CLIP# in review, oldest job first, then rank (the waiting rules, §46.5)
+        L->>D: claim: one TransactWriteItems: Put AUTORUN#{runId} planned (attribute_not_exists)<br/>+ Update AUTOPOST SET lastRunAt = slot (absent or older)
+        alt cancelled because the run item exists (an overlap won the claim)
+          L->>D: read AUTORUN#{runId}: done → stop; planned → resume its own clips
+        else cancelled only on AUTOPOST
+          L->>L: not_due
+        end
+      end
+      loop each planned clip of the new or resumed run, while 30 s of the 240 s budget are left
+        alt Practice
+          L->>L: would_send: nothing written, the clip stays in Review
+        else live or private test
+          L->>D: Upload's code: one transaction, clip confirmed + one Post per place<br/>if status = review and attribute_not_exists(postsCreated)
+          L->>C: Invoke alias live, Event, DurableExecutionName clip-{clipId}-{flowRun}
+          L->>D: publishState started (a failed condition: read the clip, sent or skipped with the reason)
+        end
+      end
+      L->>D: AUTORUN#{runId} done: each clip's outcome and reason, the run's note
+    end
+  end
+  loop each place of each sent clip, one after another
+    C->>X: publish-{platform}: start, check, finish (Upload's retries)
+    C->>D: post posted with its url, or failed with a plain sentence
+  end
+```
+
+**Test runs with nothing public.** `POST /v1/autopost/run` with `{"kind": "practice"}` or `{"kind": "private"}` runs
+the same `run_once` inline in `cf-prod-api`, with Upload's existing grants (cf-prod-api's infrastructure is
+unchanged), at most once a minute (`AUTOPOST.lastNowAt`), whether auto-posting is on or off, and never moves the
+schedule. A practice run plans and records, and sends nothing. The private test run sends the first clip that would
+go next, with the internal `postOptions.test = "private"` that no route body can set: YouTube uploads it private,
+Facebook finishes it as a draft (`video_state=DRAFT`), Instagram uploads and checks it to `FINISHED` and never calls
+`media_publish`, and X is left out. None of these posts joins the stats poller (`gsi2` is only for public posts).
+
+**Data** (additive only, [CONTRACTS.md §46.10](CONTRACTS.md#4610-data-additive-new-sort-keys-and-attributes-only)):
+
+| Item or place | Keys and attributes |
+|---|---|
+| Auto-post state | `USER#{userId}` / `AUTOPOST`: `lastRunAt`, `lastRunId`, `lastNowAt` |
+| Run | `USER#{userId}` / `AUTORUN#{runId}`: `runId`, `at`, `kind`, `mode`, `state`, `clips`, `note`, `ttl` (180 days); listed newest first, 10 |
+| Owner registry | `AUTOPOSTOWNERS` / `USER#{userId}`: `userId`, `since`; written by every settings save that carries `autoPost` |
+| `CLIP#{clipId}` | `autoRun`, `autoAt`, `autoTest` (internal; public `auto`) |
+| `POST#{postId}` | `autoRun` (internal; public `auto: true`), `postOptions.test` (internal; public `test`) |
+| Settings | `autoPost: {on, everyHours, perRun, practice, onAt}`; an owner who never saved it reads it off |
+
+The page reads `GET /v1/autopost` on open, on focus, every 60 seconds while open and after every change; clip and
+post changes reach Review and Library live as before (the stream forwards `CLIP#` and `POST#`, and nothing new). No
+table, index, secret, bucket, Cognito or `cf-prod-api` resource changes; the plan adds only the new module and two
+alarms.
+
 ### 24. Get paid: payout steps, honest statuses and money sent to the bank (CONTRACTS §40, ADR-64)
 
 The owner asked for a step-by-step payout setup per place, "the same system" as Set up posting, a status that tells
@@ -1716,6 +1830,14 @@ owner chooses a source.
 | A finder look times out or crashes | The lease update counted it before the first request, so the next tick 15 minutes later reads nothing (the 30-minute gap and the 6 a day still hold); one owner's matching failure is logged and the next owner goes on. |
 | "I joined: add it" while Content Rewards' public JSON is down | The campaign is made from the cached public copy when it is at most 24 hours old ("as of" that read); else the add answers `platform_down` and the match keeps its button. |
 | A joined campaign isn't listed by `list_my_campaigns` yet | The campaign card says "Checking that you joined… This can take a few minutes." for 15 minutes, with "I joined, but it still says not joined" at once; then §38.4's own checks. |
+| An auto-posting tick is delivered twice, retried after a crash, or two invocations overlap | Both have the same slot and `runId`; the claim transaction lets one write the run, and the other finds `AUTORUN#{runId}` and resumes its own list (`done`: nothing more). Each clip's confirm is conditional on `review` and `attribute_not_exists(postsCreated)`, and the flow start has a fixed name, so every clip is confirmed once and its flow started once. |
+| An auto-posting tick arrives late, or is lost | A late tick keeps its own slot (`event.time`); a lost one is caught up by the next tick, which is due because the X hours are up: one run, never two. Event age 3,300 s keeps a retry from running into the next tick. |
+| The owner throws a clip away or taps Upload while a run is sending it | One transaction wins. The run's conditional write fails, it reads the clip and records "You threw it away first." or "You uploaded it yourself."; nothing is posted twice. Throw away's request goes only when its 8-second Undo ends, so when the run's write comes first the clip posts, the decline gets 409 and the app shows its calm note ("This clip was already uploaded or thrown away somewhere else, so there is nothing more to do."). |
+| A place fails at 3 a.m. | The clip flow's normal retries (up to 3 tries on "did not answer", none where a retry could post twice); that post is `failed` with its plain sentence, shows in **Didn't work** and in Library with **Try again**, and the other places of the clip still post. |
+| An auto-posting run runs out of time | A new clip starts only while at least 30 s of the 240 s budget are left; the rest are `skipped` with "Out of time. It goes next run." and stay in Review. |
+| One owner's run fails inside a tick | Logged and skipped; the other owners in `AUTOPOSTOWNERS` still run. Lambda errors raise the new auto-posting alarms. |
+| The owner turns auto-posting off while a run is sending | Clips already handed to the clip flow keep posting, as after Upload; no new run starts. |
+| A test run is tapped again within a minute | 409 "A test run just started. Wait a minute." (`AUTOPOST.lastNowAt`); the first one shows in Recent. |
 
 ## Cost notes
 
@@ -1733,6 +1855,7 @@ Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything
 | API Gateway (HTTP, WebSocket, REST) | Requests, WebSocket messages and connection minutes while the app is open | under $1 |
 | DynamoDB (incl. stream reads by Lambda), other Lambdas, SSM standard parameter | Requests | under $1 |
 | EventBridge rule + `cf-prod-stats` | about 2,900 ticks a month (every 15 min), each a few seconds; post writes and 90-day `STAT#` snapshots | cents |
+| EventBridge rule + `cf-prod-autopost` | 24 short invocations a day (about 730 a month), almost all "not due"; a few writes per run (`AUTORUN#` items expire after 180 days). The posts themselves cost what Upload's cost | cents |
 | YouTube, TikTok, Instagram, Facebook APIs | Free within their quotas; the budgets stay well under them | $0 |
 | X API | Pay per use: $0.015 per post; about $0.005 per post read, a post read again on the same UTC day free, so about $0.15 per post over its 30 days | posts and reads together capped at $10 by the app ([DEPLOYMENT.md](DEPLOYMENT.md#x-api-credits-for-clip-numbers)) |
 | AWS Secrets Manager | At most about 25 secrets ([ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager): the state key, the push key, an app and a token secret per platform, Instagram's and Facebook's short-lived pending choice, Content Rewards' app and token, Get paid's AdSense token and Whop app and token, the four badge keys, Ask's search key and the optional YouTube proxy) at $0.40 each, plus API calls (cached 5 minutes) | about $10 at most |
@@ -1808,6 +1931,13 @@ only switch is `CF_DEEP=off` (Terraform `deep_analysis_enabled = false`), which 
   and Google deletes OAuth clients unused for 6 months; X charges per post.
 - **Clips kept before a platform was connected** are not posted automatically after Connect
   ([roadmap](ROADMAP.md#phase-2-social-integrations)).
+- **Auto-posting never posts to TikTok** (TikTok's rules want the creator's own pick of who can see each post; he
+  uses **Post it yourself**), and campaign clips wait for his Upload while Content Rewards can't take clips from Clip
+  Factory by itself. A run fires on whole hours only, so a save counts from the next full hour. YouTube takes at most
+  100 uploads a day (its `videos.insert` bucket); the page warns past 100 clips a day. That a Facebook draft Reel stays
+  hidden from everyone but the Page's admins, and that the hourly rule fires within the first minute, are checked at
+  the first private test run and the first hours of practice
+  ([CONTRACTS.md §46.14](CONTRACTS.md#4614-not-verified-live)).
 - **Content Rewards' sign-in is an alpha and a pilot.** Until CR lets the owner's account in, there are two cases. If
   the sign-in works without `my_submissions:write` (`read_only`), Clip Factory reads campaigns and money and reminds
   him to send each clip himself. If CR refuses the sign-in (`not_allowed`), there is no `CRCONN` connection: nothing
