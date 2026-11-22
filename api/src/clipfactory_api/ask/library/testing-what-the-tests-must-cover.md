@@ -1004,8 +1004,9 @@ cd web && CF_E2E_PORT=4804 npx playwright test e2e/bank.spec.ts
   Notify: each event once, none for quiet rows or with `getPaid` off, the exact bodies. Realtime: the four prefixes
   → one `bank` event per owner, next to one `getpaid`.
 - **Infrastructure** (BR, `terraform test`): the realtime and notify filters change in place; `NoBankSecrets` on
-  `clip-flow` and `stats` only, with `Effect = "Deny"`; `bank_reading_enabled` defaults to `false` → `BANK_READING =
-  "off"`, `true` → `"on"`; nothing replaced.
+  `clip-flow` and `stats` only, with `Effect = "Deny"`; `bank_reading_enabled` defaults to `false` in the modules →
+  `BANK_READING = "off"`, `true` → `"on"`, on `cf-prod-api` and `cf-prod-money`; `envs/prod` defaults to `true` since
+  the switch PR #172 (`bank_reading_is_wired_and_on`) and still plans with `false`; nothing replaced.
 - **Web** (BW, Vitest `bank.test.tsx` and `bankGuide.test.ts`, updates to `getpaid.test.tsx`, `allMoney.test.tsx`,
   `backLink.test.ts`, `noGuesses.test.ts`, `settingsTree.test.ts`): the guide's ids, roles and autos equal
   `bank_steps.json`; titles of 6 words or fewer, lines of 26 or fewer, at most 4 a card, https Opens (the `mailto:`

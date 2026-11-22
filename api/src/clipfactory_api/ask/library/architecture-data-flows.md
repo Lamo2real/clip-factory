@@ -1577,10 +1577,11 @@ the owner's steps in [SETUP_POSTING.md](SETUP_POSTING.md#your-bank), the protect
 [SECURITY.md](SECURITY.md#your-bank-contracts-405)). No new Lambda, table, index, bucket, role, route on the public API
 or Terraform-made secret: eleven routes under `/v1/getpaid/bank` in `cf-prod-api`, `bank` on the existing callback in
 `cf-prod-hooks`, the read inside `cf-prod-money`, new sort keys, two runtime secrets, two Deny statements, two stream
-filters changed in place and one api setting, `BANK_READING` (Terraform `bank_reading_enabled`, default `false`).
-While it is off, `GET /v1/getpaid/bank` answers `{"on": false}`, the other routes 503, and every screen keeps "Clip
-Factory can't see your bank. Look in your bank's app to see what arrived." Only the api reads it: `cf-prod-money`'s
-daily read and `cf-prod-hooks`' callback don't (see the end of this flow).
+filters changed in place and one setting, `BANK_READING`, on `cf-prod-api` and `cf-prod-money`, both from Terraform
+`bank_reading_enabled`. It was built off and is **on** since the switch PR #172 (22 Nov 2026). While it is off, `GET
+/v1/getpaid/bank` answers `{"on": false}`, the other routes 503, `cf-prod-money` reads no bank, and every screen
+keeps "Clip Factory can't see your bank. Look in your bank's app to see what arrived." Only `cf-prod-hooks`' callback
+doesn't read it (see the end of this flow).
 
 The code is split by side, so the api and the reader meet only through items, secrets and golden files: `bank/`
 (`keys.py`, `eb.py`, `grants.py`, `view.py`, `answers.py`) and `routes/bank.py` for setup, connect, the view and his
@@ -1716,10 +1717,12 @@ days, a link ended. None for a link's first read (`quiet`).
 | `BANKPAYERS` (`rules`, `notIncome`: keyed hashes to places) | api (his answers only) |
 | Secrets `cf-prod/platforms/bank/app`, `cf-prod/platforms/bank/token_{linkId}` (runtime, never Terraform) | api; hooks (the callback) |
 | `NoBankSecrets` Deny on `cf-prod-clip-flow` and `cf-prod-stats`; the realtime and notify stream filters | Terraform, in place |
-| api env `BANK_READING` from `bank_reading_enabled` (default `false`) | Terraform, in place |
+| `BANK_READING` on `cf-prod-api` and `cf-prod-money`, from `bank_reading_enabled` (prod default `true` since the switch PR #172) | Terraform, in place |
 
-The prod plan stays 0 to destroy and 0 to replace: role policies, two stream filters and one environment variable
-change in place, and nothing that holds the owner's data or connections is touched. The switch is an api setting
-only: the daily read in `cf-prod-money` reads whatever `BANKLINK#` is still `connected`, and the callback in
-`cf-prod-hooks` still saves a connect that was started before it went off. So he taps "Stop reading" on each bank
-before it goes off (the money found stays).
+The prod plan stays 0 to destroy and 0 to replace: role policies, two stream filters and the two functions'
+environment change in place, and nothing that holds the owner's data or connections is touched. The switch reaches
+the api and the reader: off, `cf-prod-money` reads no bank at all. Only the callback in `cf-prod-hooks` doesn't read
+it, so it still saves a connect that was started before the switch went off (nothing reads that link while it is
+off). Turning it off is `bank_reading_enabled = false` in `infra/envs/prod/variables.tf`, a one-line PR that
+`deploy.yml` applies. If Enable Banking says no, he taps "Stop reading" on each bank first, while it is still on:
+that also closes each link at Enable Banking (the money found stays).

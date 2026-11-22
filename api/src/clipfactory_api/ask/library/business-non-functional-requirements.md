@@ -226,7 +226,9 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
   language go to Enable Banking only for his own Check now and are never stored.
 - AC4: Additive only: new sort keys, two runtime secrets, two Deny statements, two stream filters and one api setting
   changed in place; nothing that holds his data or connections is replaced, and a read never deletes.
-- AC5: It ships switched off (`bank_reading_enabled = false`); one switch PR turns it on once the api, the reader,
-  the web and the docs have merged. The switch is the api's only: off again, it hides the screens and routes, but the
-  daily read goes on for links still connected, so if Enable Banking says no he taps "Stop reading" on each bank
-  first, then the same line turns it off (I-64).
+- AC5: It shipped switched off (`bank_reading_enabled = false`); once the api, the reader, the web and the docs had
+  merged, the switch PR #172 turned it on (22 Nov 2026), so it is on now. The one variable sets `BANK_READING` on
+  both `cf-prod-api` and `cf-prod-money`. Setting it back to `false` (one line in `infra/envs/prod/variables.tf`)
+  hides the screens and routes and stops every bank read; stored deposits, payers, links and secrets stay. If Enable
+  Banking says no he taps "Stop reading" on each bank first, which also closes each link at Enable Banking, then the
+  same line turns it off (I-64).

@@ -32,9 +32,10 @@
   link, no daily read touches it again, and the money found stays (his records). Only if he also wants Clip
   Factory's records gone does he tap "Forget my bank". Then set `bank_reading_enabled` back to `false` in
   `infra/envs/prod` the same day, in a one-line pull request, and let `deploy.yml` apply it (never a local AWS CLI).
-  Every bank route then answers 503 and every screen says "Clip Factory can't see your bank. Look in your bank's app to
-  see what arrived." again. If the switch has to go off first, a link that is still connected keeps being read once a
-  day until its bank link ends (90 to 180 days) or he ends it in his bank's app or on Enable Banking.
+  Every bank route then answers 503, `cf-prod-money` reads no bank, and every screen says "Clip Factory can't see
+  your bank. Look in your bank's app to see what arrived." again. If the switch has to go off first, nothing is read
+  any more, but each link stays open at Enable Banking ("Stop reading" answers 503 while the switch is off) until it
+  ends (90 to 180 days) or he ends it in his bank's app or on Enable Banking.
 - **The help assistant says something wrong or unwanted**: set the kill switch (`HELP` / `SWITCH`, `enabled: false`, or
   `model: false` to keep answers from search only) with the command in
   [DEPLOYMENT.md](DEPLOYMENT.md#ask-clip-factory-kill-switch); it takes effect within 60 seconds, no deploy needed.

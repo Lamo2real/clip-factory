@@ -8,8 +8,8 @@ It is the "Your bank" card under the place cards in Settings › Posting › Get
 accounts in the EU. You use BankID on Enable Banking's page and your bank's own page. Clip Factory never asks for,
 sees or keeps your bank login, your account number or your name. It only looks at money coming in.
 
-It ships switched off. Until it is on, every screen keeps "Clip Factory can't see your bank. Look in your bank's app
-to see what arrived."
+It is switched on (since 22 Nov 2026). If it is ever switched off, every screen says "Clip Factory can't see your
+bank. Look in your bank's app to see what arrived." again, and Clip Factory reads no bank until it is back on.
 
 ### Is Enable Banking free for me?
 

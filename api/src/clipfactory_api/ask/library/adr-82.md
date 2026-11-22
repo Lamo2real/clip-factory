@@ -77,8 +77,8 @@
     on the Get paid Your bank card, the bank page, each place page and Money. It is never added to "Sent to your bank"
     or the 30-day total.
   * **The terms risk** is handled by building behind `bank_reading_enabled` (default `false`, switched on by one PR
-    after the four builders merge), an optional first step with a ready email for him to send, and the switch as the
-    way back. B's file upload stays possible later through the deposit's `source`.
+    after the four builders merge: done, the switch PR #172 turned it on on 22 Nov 2026, on both `cf-prod-api` and
+    `cf-prod-money`), an optional first step with a ready email for him to send, and the switch as the way back. B's file upload stays possible later through the deposit's `source`.
 - **Consequences.** Setup takes about 64 taps in one sitting of about 25 minutes (18 of them Clip Factory's; 68 and
   20 with the optional email), counting every switch between Clip Factory and Enable Banking, with BankID twice,
   because Enable Banking's Control Panel link doesn't authorise the app; after that, BankID every 90 to 180 days, as
