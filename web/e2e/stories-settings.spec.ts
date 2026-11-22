@@ -90,6 +90,24 @@ test.describe("every section keeps the owner's rules", () => {
       }
     });
 
+  test("on a phone the section pills are one row that scrolls sideways, with the chosen one in view", async ({ page }) => {
+    await on(page);
+    for (const width of [320, 375]) {
+      await page.setViewportSize({ width, height: 812 });
+      for (const section of ["ai", "storage"] as const) {
+        await openSection(page, section);
+        const row = await page.evaluate(() => {
+          const ul = document.querySelector<HTMLElement>(".st-stg-top .st-stg-tabs")!;
+          const tops = Array.from(ul.querySelectorAll<HTMLElement>(".st-stg-tabs__cell")).map((c) => Math.round(c.getBoundingClientRect().top));
+          const box = ul.getBoundingClientRect();
+          const on = document.querySelector<HTMLElement>(".st-stg-tab.is-on")!.getBoundingClientRect();
+          return { rows: new Set(tops).size, scrolls: ul.scrollWidth > ul.clientWidth, inView: on.left >= box.left - 1 && on.right <= box.right + 1, height: Math.round(on.height) };
+        });
+        expect(row, `${section} @${width}`).toEqual({ rows: 1, scrolls: true, inView: true, height: 48 });
+      }
+    }
+  });
+
   test("every control shows itself on hover", async ({ page }) => {
     await on(page);
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -111,7 +129,11 @@ test.describe("every section keeps the owner's rules", () => {
       await el.scrollIntoViewIfNeeded();
       const before = await el.evaluate((e) => `${getComputedStyle(e).backgroundColor}|${getComputedStyle(e).color}|${getComputedStyle(e).transform}`);
       await el.hover();
+      // Read once the mouse really is over it and its own hover transitions have run: under load a transition can wait
+      // pending (no frame yet) past a fixed wait, which read the old style although the hover rule works.
+      await expect.poll(() => el.evaluate((e) => e.matches(":hover")), { message: `${section} ${sel}: under the mouse` }).toBe(true);
       await page.waitForTimeout(350);
+      await el.evaluate((e) => Promise.all(e.getAnimations().map((a) => a.finished.catch(() => undefined))));
       const after = await el.evaluate((e) => `${getComputedStyle(e).backgroundColor}|${getComputedStyle(e).color}|${getComputedStyle(e).transform}`);
       expect(after, `${section} ${sel}`).not.toBe(before);
       await page.mouse.move(0, 0);
