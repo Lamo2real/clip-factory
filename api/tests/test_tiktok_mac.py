@@ -1091,6 +1091,40 @@ def test_a_job_the_mac_beats_is_never_stuck_until_its_claim_is_50_minutes_old(
     assert _tiktok(body)["mac"]["state"] == "waiting"
 
 
+@pytest.mark.parametrize(("version", "beats"), [("1.0.0", False), ("1.1.0", True), ("1.2.3", True), ("2.0", True)])
+def test_a_helper_older_than_beats_counts_only_its_claims_age(
+    call: Call, store: db.Store, clock: Clock, version: str, beats: bool
+) -> None:
+    # The helper installed on his Mac before 1.1.0 sends no beat through its 12-minute upload wait or its link checks:
+    # for its jobs a stale beat is no sign it stopped, so only the 50-minute claim counts (the web's macHelperBeats).
+    _mac_on(call)
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "ok", "device": DEVICE, "version": version})[0] == 200
+    clip = _mac_clip(store)
+    assert _claim(call, clip["clipId"])[0] == 200
+    clock.now = NOW + timedelta(minutes=12)
+    status, body = _retry(call, clip["clipId"], {"now": True})
+    if not beats:
+        assert (status, _message(body)) == (409, tiktok_mac.MAC_WORKING)
+        status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"link": LINK})
+        assert (status, _message(body)) == (409, tiktok_mac.MAC_WORKING)
+        clock.now = NOW + timedelta(minutes=50)
+        status, body = _retry(call, clip["clipId"], {"now": True})
+    assert status == 200, body
+    assert _tiktok(body)["mac"]["state"] == "waiting"
+
+
+def test_helper_beats_reads_the_helpers_version() -> None:
+    assert tiktok_self.MAC_BEATS_FROM == "1.1.0"
+    assert not tiktok_self.helper_beats({"version": "1.0.0"})
+    assert not tiktok_self.helper_beats({"version": "0.9"})
+    for item in (None, {}, {"version": "1.1.0"}, {"version": "1.10.0"}, {"version": "dev"}):
+        assert tiktok_self.helper_beats(item)
+    row = {"status": "mac", "macState": "working", "macClaimedAt": iso(NOW), "macBeatAt": iso(NOW)}
+    assert tiktok_self.mac_stuck(row, NOW + timedelta(minutes=5))
+    assert not tiktok_self.mac_stuck(row, NOW + timedelta(minutes=49), beats=False)
+    assert tiktok_self.mac_stuck(row, NOW + timedelta(minutes=50), beats=False)
+
+
 def test_a_re_sent_step_is_the_beat_and_keeps_every_refusal(call: Call, store: db.Store, clock: Clock) -> None:
     _mac_on(call)
     clip = _mac_clip(store)
@@ -1213,11 +1247,32 @@ def test_no_link_is_refused_while_the_mac_beats_a_job_it_has_not_pressed_post_fo
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
     assert (status, _message(body)) == (409, tiktok_mac.MAC_WORKING)
     assert _raw_post(store, clip["clipId"])["status"] == "mac"
-    # Its beat goes stale: the Mac stopped working on it, so he may say it's on TikTok.
+    # Its beat goes stale: the Mac stopped before it pressed Post, so the clip isn't on TikTok. Saving it as posted
+    # with no link would lose it for good: only Try again helps, and it does.
     clock.now = NOW + timedelta(minutes=54)
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
+    assert (status, _message(body)) == (409, tiktok_self.MAC_NOT_PRESSED)
+    assert _raw_post(store, clip["clipId"])["status"] == "mac"
+    status, body = _retry(call, clip["clipId"], {"now": True})
     assert status == 200, body
-    assert (_tiktok(body)["by"], "url" in _tiktok(body), "note" in body) == ("you", False, False)
+    assert _tiktok(body)["mac"]["state"] == "waiting"
+
+
+def test_no_link_is_refused_on_a_job_stuck_before_post_by_its_beat(call: Call, store: db.Store, clock: Clock) -> None:
+    # The Mac slept mid-upload: its beat is 5 minutes old, so the job is stuck, but Post was never pressed.
+    _mac_on(call)
+    clip = _mac_clip(store)
+    assert _claim(call, clip["clipId"])[0] == 200
+    _beat(call, clip["clipId"], "uploading", clock, timedelta(minutes=3))
+    clock.now = NOW + timedelta(minutes=8)
+    assert tiktok_self.mac_stuck(_raw_post(store, clip["clipId"]), clock.now)
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
+    assert (status, _message(body)) == (409, tiktok_self.MAC_NOT_PRESSED)
+    assert (
+        tiktok_self.MAC_NOT_PRESSED == "Your Mac stopped before it pressed Post, so it isn't on TikTok. Tap Try again."
+    )
+    raw = _raw_post(store, clip["clipId"])
+    assert (raw["status"], raw["macState"]) == ("mac", "working")
 
 
 def test_no_link_after_post_was_pressed_on_a_stuck_job(call: Call, store: db.Store, clock: Clock) -> None:

@@ -197,3 +197,42 @@ test("doFind's beat: finding with the job's attempt; a 409 stops the look, other
     ]
   );
 });
+
+test("doFind beats every pressed job of this Mac, not only the one it looks for (review round 3, item 3)", async () => {
+  // An Upload posted while a backlog post was still in its find window: two pressed jobs. plan.js looks for one per
+  // tick, so the other must get its beat too, or its row says "Not sure it posted" while the Mac still means to look.
+  const state = { device, ledger: { c1: { device, step: "finding" }, p1: { device, step: "finding" }, p2: { device: "mac-other", step: "finding" } } };
+  const job = { clipId: "c1", attempt: 3, state: "working", pressedAt: "2026-11-23T06:00:00Z" };
+  const queue = [
+    job,
+    { clipId: "p1", state: "working", pressedAt: "2026-11-23T06:10:00Z", attempt: 1 },
+    { clipId: "p2", state: "working", pressedAt: "2026-11-23T06:10:00Z", attempt: 1 },
+    { clipId: "w1", state: "waiting" },
+  ];
+  const logs = [];
+  const api = fakeApi();
+  api.answer("p1", new ApiError(409, "This clip just changed."));
+  // A 409 on another job is only logged: the job it looks for is still looked for.
+  assert.equal(await findBeat({ api, state, job, queue, log: (name, fields) => logs.push({ name, ...fields }) }), true);
+  assert.deepEqual(api.calls, [
+    { clipId: "c1", device, step: "finding", attempt: 3 },
+    { clipId: "p1", device, step: "finding", attempt: 1 },
+  ]);
+  assert.deepEqual(logs.map((l) => [l.name, l.clipId, l.status]), [["beat.failed", "p1", 409]]);
+});
+
+test("doFind's timer beats the job with finding (not its last doPost step) and the other pressed jobs", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const state = { device, ledger: { c1: { device, step: "finding", sentStep: "pressing" }, p1: { device, step: "finding" } } };
+  const job = { clipId: "c1", attempt: 2 };
+  const api = fakeApi();
+  const queue = [{ ...job, state: "working", pressedAt: "2026-11-23T06:00:00Z" }, { clipId: "p1", state: "working", pressedAt: "2026-11-23T06:00:00Z", attempt: 4 }];
+  const beats = startBeats({ api, state, job, queue, log: () => {}, record: () => {}, current: "finding" });
+  t.mock.timers.tick(BEAT_EVERY_MS);
+  await flush();
+  assert.deepEqual(api.calls, [
+    { clipId: "c1", device, step: "finding", attempt: 2 },
+    { clipId: "p1", device, step: "finding", attempt: 4 },
+  ]);
+  await beats.stop();
+});

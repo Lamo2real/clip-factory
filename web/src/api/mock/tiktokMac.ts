@@ -14,6 +14,7 @@ import {
   MAC_NEVER_SEEN,
   MAC_NOT_HOLDING,
   MAC_NOT_PAUSED,
+  MAC_NOT_PRESSED,
   MAC_NOT_POSTING,
   MAC_PRESSED_REASON,
   MAC_REQUEST_PICK,
@@ -22,6 +23,7 @@ import {
   MAC_STILL_LOOKING,
   MAC_WORKING,
   macOn,
+  macHelperBeats,
   macStuck,
   macWindowOver,
 } from "../../lib/tiktokMac.ts";
@@ -448,7 +450,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       const c = clip(clipId);
       const p = macOf(clipId);
       const t = deps.now();
-      const stuck = macStuck(p.mac, t);
+      const stuck = macStuck(p.mac, t, macHelperBeats(helper));
       if (p.mac.state === "working" && !stuck) throw conflict(MAC_WORKING);
       if (p.mac.state === "waiting" && tapped) goNow(p);
       if (p.mac.state === "stopped" || stuck) {
@@ -495,16 +497,17 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     },
     /**
      * It's on TikTok (§42, the row's button) on a Mac post (tiktok_self.mark_posted): refused while the Mac works on
-     * it and it is not stuck; with `noLink` also while the Mac works on it before Post with a fresh beat (D3, even past
-     * the 50-minute cap). Afterwards the Mac no longer has it. Marking a stopped or stuck one answers the Mac's stop, so
+     * it and it is not stuck; with `noLink` also on a job the Mac never pressed Post for (D3): MAC_WORKING with a fresh
+     * beat (even past the 50-minute cap), else MAC_NOT_PRESSED (it can't be on TikTok: Try again). Afterwards the Mac no longer has it. Marking a stopped or stuck one answers the Mac's stop, so
      * a helper that needed him goes back to ok (as Try again does).
      */
     beforeMarked(p: Post | undefined, noLink = false) {
       if (p?.status !== "mac" || p.mac?.state !== "working") return;
       const t = deps.now();
-      if (!macStuck(p.mac, t)) throw conflict(MAC_WORKING);
+      if (!macStuck(p.mac, t, macHelperBeats(helper))) throw conflict(MAC_WORKING);
       const beat = Date.parse(p.mac.beatAt ?? p.mac.claimedAt ?? "");
-      if (noLink && !p.mac.pressedAt && Number.isFinite(beat) && t - beat < MAC_BEAT_STALE_MS) throw conflict(MAC_WORKING);
+      // Never pressed Post: it isn't on TikTok (still beating: the Mac may still post it).
+      if (noLink && !p.mac.pressedAt) throw conflict(Number.isFinite(beat) && t - beat < MAC_BEAT_STALE_MS ? MAC_WORKING : MAC_NOT_PRESSED);
     },
     marked(p: Post) {
       if (p.mac?.state === "stopped" || p.mac?.state === "working") clearNeedsYou();

@@ -31,6 +31,7 @@ import {
   MAC_ON_LINE,
   MAC_SEND_CONFIRM,
   MAC_STOP_LINE,
+  macHelperBeats,
   macOn,
   sendableLine,
   sendLots,
@@ -249,7 +250,8 @@ function MacAsks({ helper }: { helper: MacHelper }) {
       macChanged();
     }
   }
-  const paused = helper.state === "paused";
+  // An older helper never reads Start my Mac again (macHelperBeats): then only its status line says it is paused.
+  const paused = helper.state === "paused" && macHelperBeats(helper);
   const stoppedOn = helper.state === "needs_you" ? helper.needsYouClipId : undefined;
   const hold = helper.holdBefore;
   if (!paused && !stoppedOn && !hold) return null;

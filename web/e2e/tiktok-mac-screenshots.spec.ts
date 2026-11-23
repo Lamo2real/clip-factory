@@ -110,21 +110,34 @@ for (const width of [375, 1440]) {
       await fresh(page, width);
       const a = await sent(page);
       const b = await sent(page, [a]);
-      // Stuck: working, its beat 6 minutes old, Post never pressed (Try again at once).
+      // Stuck: working, its beat 6 minutes old, Post never pressed: it can't be on TikTok, so Try again only.
       await mac(page, "claim", b, undefined, 8 * MIN);
       await mac(page, "beat", b, 6 * MIN);
       await refocus(page);
-      await expect(rowOf(page, b).locator(".post__status")).toHaveText("Not sure it posted · look on your TikTok");
+      await expect(rowOf(page, b).locator(".post__status")).toHaveText("Your Mac stopped before it pressed Post");
       await expect(rowOf(page, b).getByRole("button", { name: "Try again, TikTok" })).toBeVisible();
+      await expect(rowOf(page, b).getByRole("button", { name: "It's on TikTok", exact: true })).toHaveCount(0);
+      // A real hover on its Try again.
+      const stuckAgain = rowOf(page, b).getByRole("button", { name: "Try again, TikTok" });
       await shot(page, cardOf(page, b), "lib-stuck", width);
-      await rowOf(page, b).getByRole("button", { name: "Try again, TikTok" }).click();
-      await rowOf(page, b).getByRole("button", { name: "Yes, post it again" }).click();
+      await stuckAgain.hover();
+      await expect.poll(() => stuckAgain.evaluate((el) => el.matches(":hover"))).toBe(true);
+      await shot(page, cardOf(page, b), "lib-stuck-hover", width, true);
+      await stuckAgain.click();
       await expect(rowOf(page, b).locator(".post__status")).toHaveText(/^Waiting for your Mac/);
-      // Inside the find window after Post: no Try again yet.
+      // Inside the find window after Post: no Try again yet, and the row says from when.
       await pressed(page, b, 10 * MIN);
+      await expect(rowOf(page, b).locator(".post__status")).toHaveText(/^Not sure it posted · look on your TikTok · Try again from \d\d:\d\d$/);
       await expect(rowOf(page, b).getByRole("button", { name: "It's on TikTok", exact: true })).toBeVisible();
       await expect(rowOf(page, b).getByRole("button", { name: "Try again, TikTok" })).toHaveCount(0);
       await shot(page, cardOf(page, b), "lib-not-sure-in-window", width);
+      // The same on the clip page: from when Try again comes (and none yet).
+      await go(page, `/clips/${b}`);
+      const stack = page.locator('[data-stack="tiktok"]');
+      await expect(stack.locator(".pstack__calm-text")).toHaveText(/^Look on your TikTok · Try again from \d\d:\d\d$/);
+      await expect(page.locator(".perf__actions").getByRole("button", { name: "Try again, TikTok" })).toHaveCount(0);
+      await shot(page, stack, "clip-try-again-from", width);
+      await go(page, "/library");
 
       await pressed(page, a, WINDOW_OVER);
       const card = cardOf(page, a);
@@ -158,7 +171,16 @@ for (const width of [375, 1440]) {
       await mac(page, "seen", new Date(Date.now() - 12 * MIN).toISOString());
       await refocus(page);
       await expect(rowOf(page, a).locator(".post__status")).toHaveText(/^Your Mac hasn't checked in since /);
+      await expect(rowOf(page, a).getByRole("button", { name: "Try again, TikTok" })).toBeVisible();
       await shot(page, card, "lib-offline-working", width);
+      // The same after Post (pressed 40 minutes ago): It's on TikTok and Try again.
+      await mac(page, "step", a, "pressing", undefined, 40 * MIN);
+      await mac(page, "beat", a, 12 * MIN);
+      await mac(page, "seen", new Date(Date.now() - 12 * MIN).toISOString());
+      await refocus(page);
+      await expect(rowOf(page, a).getByRole("button", { name: "It's on TikTok", exact: true })).toBeVisible();
+      await expect(rowOf(page, a).getByRole("button", { name: "Try again, TikTok" })).toBeVisible();
+      await shot(page, card, "lib-offline-pressed", width);
     });
 
     test(`library: a campaign clip (${width})`, async ({ page }) => {
@@ -284,6 +306,7 @@ for (const width of [375, 1440]) {
       await expect(stack.locator(".pstack__chip")).toHaveText("Not sure it posted");
       await shot(page, stack, "clip-not-sure-stack", width);
 
+
       await go(page, "/settings/posting/tiktok-mac");
       const status = page.locator(".apple-panel", { has: page.locator("[data-mac='helper']") });
       await mac(page, "ping", "paused", "Paused on your Mac.");
@@ -352,7 +375,9 @@ for (const width of [375, 1440]) {
         "lib-not-sure-hover-again",
         "lib-not-sure-in-window",
         "lib-stuck",
+        "lib-stuck-hover",
         "lib-offline-working",
+        "lib-offline-pressed",
         "lib-again-confirm",
         "lib-no-link-confirm",
         "lib-find-not-found",
@@ -366,6 +391,7 @@ for (const width of [375, 1440]) {
         "lib-working-past-15",
         "review-kept-queue-3",
         "clip-not-sure-stack",
+        "clip-try-again-from",
         "review-campaign-skip",
         "review-kept-not-sure",
         "review-kept-confirm",
@@ -386,6 +412,7 @@ for (const width of [375, 1440]) {
         expect(bytes.readUInt32BE(16), f).toBeLessThanOrEqual(width);
       }
       expect(readFileSync(join(dir, `lib-not-sure-hover-again-${width}.png`)).equals(readFileSync(join(dir, `lib-not-sure-${width}.png`)))).toBe(false);
+      expect(readFileSync(join(dir, `lib-stuck-hover-${width}.png`)).equals(readFileSync(join(dir, `lib-stuck-${width}.png`)))).toBe(false);
       void page;
     });
   });

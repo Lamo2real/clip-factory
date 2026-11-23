@@ -294,26 +294,32 @@ async function doPost(api, state, job, { fresh = false, fr, relogged = false, qu
   }
 }
 
-async function doFind(api, state, job, { relogged = false, fr = frame() } = {}) {
+async function doFind(api, state, job, { relogged = false, fr = frame(), queue = [], beats = null } = {}) {
   let browser = null;
   let page = null;
   let found = false;
   let handedOn = false;
-  // One beat before it looks (D2): Clip Factory sees the Mac still on it. A 409 means the post is no longer this
-  // try's (the owner said it's on TikTok, or tapped Try again): then it doesn't look for it this tick.
-  if (!relogged && !(await findBeat({ api, state, job, log }))) return;
+  // The frame first: a beat says the Mac is still looking, so none goes out while it can't look (the job then goes
+  // stuck after 5 minutes, which is the truth).
   if (!fr.shown && !(await fr.on(`Looking for${quoteHook(job)} on TikTok`))) return log("frame.missing", { clipId: job.clipId });
+  // Then the beats (D2), for this job and every other pressed job of this Mac, now and every minute while it looks
+  // (a login can take 20 minutes). A 409 on this job means the post is no longer this try's (the owner said it's on
+  // TikTok, or tapped Try again): then it doesn't look for it this tick.
+  const beat = beats || startBeats({ api, state, job, queue, log, record: () => {}, current: "finding" });
   try {
+    if (!relogged && !(await findBeat({ api, state, job, queue, log }))) return;
     const opened = await chrome.open();
     browser = opened.browser;
     page = opened.page;
     const link = await find(page, job, state.ledger[job.clipId]?.baseline || []);
     if (link) {
       found = true;
+      await beat.stop();
       return await finished(api, state, job, link, { counted: true });
     }
     const pressedAt = Date.parse(job.pressedAt || state.ledger[job.clipId]?.pressedAt || 0);
     if (Date.now() - pressedAt > FIND_FOR_MS) {
+      await beat.stop();
       await stopped(api, state, job, "Your Mac pressed Post but couldn't confirm it.", false);
     }
   } catch (e) {
@@ -323,12 +329,16 @@ async function doFind(api, state, job, { relogged = false, fr = frame() } = {}) 
       browser = null;
       if (back) {
         handedOn = true;
-        return await doFind(api, state, job, { relogged: true, fr });
+        return await doFind(api, state, job, { relogged: true, fr, queue, beats: beat });
       }
+      await beat.stop();
       await stopped(api, state, job, e.reason, true);
-    } else if (e instanceof Stop) await stopped(api, state, job, e.reason, e.needsYou);
-    else log("find.error", { clipId: job.clipId, error: String(e.message || e) });
+    } else if (e instanceof Stop) {
+      await beat.stop();
+      await stopped(api, state, job, e.reason, e.needsYou);
+    } else log("find.error", { clipId: job.clipId, error: String(e.message || e) });
   } finally {
+    await beat.stop();
     if (browser) await chrome.quit(browser);
     if (!handedOn) {
       if (found) await fr.done(`On TikTok ✓${quoteHook(job)}`);
@@ -465,7 +475,7 @@ export async function tick() {
       }
       await doPost(api, state, job, { fresh: action.action === "post", fr, queue });
     } else if (action.action === "find") {
-      await doFind(api, state, action.job);
+      await doFind(api, state, action.job, { queue });
     } else {
       await tidy(api, state, queue);
     }

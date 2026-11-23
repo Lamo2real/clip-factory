@@ -23,8 +23,9 @@ const words = (e) => String(e?.message || e);
  * @param {(event: string, fields: object) => void} o.log
  * @param {(fields: object) => void} o.record  saves fields to the job's ledger entry, on disk (store.remember)
  * @param {number} [o.every]
+ * @param {string} [o.current]  the job's own beat step (doFind: "finding"); default the last step the server took
  */
-export function startBeats({ api, state, job, queue, log, record, every = BEAT_EVERY_MS }) {
+export function startBeats({ api, state, job, queue, log, record, every = BEAT_EVERY_MS, current = null }) {
   const flying = new Map(); // clipId -> a promise (never rejecting) of the step or beat in flight for that job
   let lost = null;
   const track = (clipId, call) => {
@@ -51,7 +52,9 @@ export function startBeats({ api, state, job, queue, log, record, every = BEAT_E
     );
   };
   let timer = setInterval(() => {
-    for (const target of beatTargets({ queue, state, device: state.device, current: job })) beat(target);
+    const targets = beatTargets({ queue, state, device: state.device, current: job }).filter((t) => !current || t.clipId !== job.clipId);
+    if (current) targets.unshift({ clipId: job.clipId, step: current, attempt: job.attempt });
+    for (const target of targets) beat(target);
   }, every);
   timer.unref?.(); // never keeps the tick (and run.lock) alive on its own
 
@@ -79,15 +82,23 @@ export function startBeats({ api, state, job, queue, log, record, every = BEAT_E
 }
 
 /**
- * doFind's one beat before it looks (D2): "finding", with the job's attempt. Returns false when Clip Factory answered
- * 409 (the post is no longer this try's), so it stops looking for that job this tick. Other errors are only logged.
+ * doFind's beats before it looks (D2): "finding", with each job's attempt, for the job it looks for and for every other
+ * job of this Mac that is working and pressed (beatTargets): plan.js looks for one pressed job per tick, and the others
+ * are still this Mac's to look for, so none of them reads "Not sure it posted" meanwhile. Returns false when Clip
+ * Factory answered 409 on the job itself (it is no longer this try's), so it stops looking for it this tick. Other
+ * errors, and every error on the other jobs, are only logged.
  */
-export async function findBeat({ api, state, job, log }) {
-  try {
-    await api.step(job.clipId, state.device, "finding", job.attempt);
-    return true;
-  } catch (e) {
-    log("beat.failed", { clipId: job.clipId, step: "finding", status: e?.status, error: words(e) });
-    return !conflict(e);
-  }
+export async function findBeat({ api, state, job, queue = [], log }) {
+  const send = async ({ clipId, attempt }) => {
+    try {
+      await api.step(clipId, state.device, "finding", attempt);
+      return true;
+    } catch (e) {
+      log("beat.failed", { clipId, step: "finding", status: e?.status, error: words(e) });
+      return !conflict(e);
+    }
+  };
+  const others = beatTargets({ queue, state, device: state.device, current: job }).filter((t) => t.clipId !== job.clipId);
+  const [mine] = await Promise.all([send(job), ...others.map(send)]);
+  return mine;
 }

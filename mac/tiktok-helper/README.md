@@ -54,8 +54,13 @@ claim is 50 minutes old. Only then does the row offer It's on TikTok, and Try ag
 - While it posts a clip, the helper re-sends every minute (`BEAT_EVERY_MS`) the last step the server took for it
   (`ledger.sentStep`), with the job's attempt. A re-sent step is the beat.
 - This Mac's other pressed posts in the queue, which it still looks for, get the same beat with `finding`.
-- A look for a pressed post (doFind) starts with one `finding` beat. A 409 there means the post isn't this try's any
-  more, so it isn't looked for this tick.
+- A look for a pressed post (doFind) first puts up the frame (no beat while it can't look), then sends a `finding`
+  beat for that post and for every other pressed post of this Mac, and keeps beating them every minute while it looks
+  (a login can take 20 minutes). A 409 on the post it looks for means it isn't this try's any more, so it isn't looked
+  for this tick.
+- Clip Factory counts beats only from a helper of version 1.1.0 or later (`MAC_BEATS_FROM`). For an older helper on
+  the Mac only the 50-minute claim counts, and Start my Mac again isn't offered. After merging, run `./install.sh`
+  again so the Mac runs this version.
 - A beat never overlaps a step for the same job. Beat errors go to `helper.log` (`beat.failed`) and never stop the
   tick. A 409 on the beat of the clip being posted stops its next step, so Post is never pressed without the server's
   yes.

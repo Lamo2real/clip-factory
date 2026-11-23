@@ -37,6 +37,8 @@ export const MAC_WORKING = "Your Mac is posting it right now. Wait a minute.";
 export const MAC_NOT_POSTING = "Your Mac isn't posting this clip.";
 export const MAC_MAY_HAVE_POSTED = "Your Mac may have posted it already. Check your TikTok first.";
 export const MAC_UNDO_REFUSED = "Your Mac posted this one. To take it down, delete it in TikTok.";
+/** It's on TikTok, no link, on a job stuck before Post (tiktok_self.MAC_NOT_PRESSED): it can't be on TikTok. */
+export const MAC_NOT_PRESSED = "Your Mac stopped before it pressed Post, so it isn't on TikTok. Tap Try again.";
 export const MAC_UNKNOWN_SETTING = "tiktokMac has a setting Clip Factory does not know.";
 /** Try again inside the find window after Post was pressed (tiktok_mac.MAC_STILL_LOOKING). */
 export const MAC_STILL_LOOKING = "Your Mac pressed Post less than 30 minutes ago. Look on your TikTok first, then try again later.";
@@ -60,6 +62,13 @@ export const MAC_CLAIM_MAX_MS = 50 * 60_000;
 export const MAC_FIND_WINDOW_MS = 30 * 60_000;
 /** A stuck post whose Mac has not checked in this long says since when (D5). */
 export const MAC_OFFLINE_MS = 10 * 60_000;
+/**
+ * The first helper version that beats every job it works on and reads Start my Mac again (the API's
+ * tiktok_self.MAC_BEATS_FROM, the helper's paths.js VERSION; tests pin them). An older helper on his Mac (until it is
+ * installed again) sends no beat during its long waits: for its jobs only the 50-minute claim counts, and its paused
+ * rows keep Open Your Mac posts TikTok (it would never read Start my Mac again).
+ */
+export const MAC_BEATS_FROM = "1.1.0";
 /** POST /v1/tiktok/mac/send takes at most this many clips at once. */
 export const MAC_SEND_MAX = 25;
 
@@ -90,6 +99,8 @@ export const MAC_PAUSED_NEXT = "your clips wait until it's started again";
 export const MAC_NOT_SURE = "Not sure it posted";
 /** It may be on TikTok, so he looks there first (It's on TikTok, or Try again). */
 export const MAC_ROW_PRESSED = `${MAC_NOT_SURE} · look on your TikTok`;
+/** A job stuck before the Mac pressed Post: it can't be on TikTok, so only Try again (review round 3, item 2). */
+export const MAC_ROW_STOPPED_EARLY = "Your Mac stopped before it pressed Post";
 export const MAC_ROW_PRIVATE_TEST = "Private test · stays off TikTok";
 export const MAC_ROW_ADD_LINK = " · add the link";
 /**
@@ -110,6 +121,11 @@ export function inLineWords(before: number): string {
 /** "goes at about 20:30": the first backlog clip's time (the helper's own backlogAt, plan.js). */
 export function backlogTimeWords(at: string): string {
   return `goes at about ${at}`;
+}
+
+/** "Try again from 14:35": when Try again comes on a pressed post, once the 30-minute find window is over. */
+export function againFromWords(at: string): string {
+  return `Try again from ${at}`;
 }
 
 /** "Held on your Mac: made before 03:55": an auto-posting clip the Mac holds (its holdAutoBefore). */
@@ -296,16 +312,37 @@ export function shortReason(reason: string | undefined): string {
 
 const at = (iso: string | undefined): number => Date.parse(iso ?? "");
 
+const versionParts = (v: string | undefined): number[] | null => {
+  const parts = (v ?? "").trim().split(".");
+  return parts.every((p) => /^\d+$/.test(p)) ? parts.map(Number) : null;
+};
+
+/**
+ * Does the owner's helper beat every job it works on (tiktok_self.helper_beats, the same)? Yes unless it says a version
+ * older than MAC_BEATS_FROM (absent, never checked in, or not known yet: yes).
+ */
+export function macHelperBeats(helper: Pick<MacHelper, "version"> | null | undefined): boolean {
+  const said = versionParts(helper?.version);
+  if (!said) return true;
+  const from = versionParts(MAC_BEATS_FROM)!;
+  for (let i = 0; i < Math.max(said.length, from.length); i++) {
+    const d = (said[i] ?? 0) - (from[i] ?? 0);
+    if (d !== 0) return d > 0;
+  }
+  return true;
+}
+
 /**
  * The stuck rule (§47.3, the API's tiktok_self.mac_stuck, the same): a Mac post still `working` whose own beat
  * (`beatAt`, else `claimedAt`) is MAC_BEAT_STALE_MS old or more, or whose claim is MAC_CLAIM_MAX_MS old or more,
- * whichever comes first. Also read on a queue job (MacJob has the same three fields).
+ * whichever comes first. `beats` (macHelperBeats): for an older helper only the claim's age counts. Also read on a
+ * queue job (MacJob has the same three fields).
  */
-export function macStuck(mac: Pick<PostMac, "state" | "claimedAt" | "beatAt">, now: number = Date.now()): boolean {
+export function macStuck(mac: Pick<PostMac, "state" | "claimedAt" | "beatAt">, now: number = Date.now(), beats = true): boolean {
   if (mac.state !== "working") return false;
   const beat = at(mac.beatAt ?? mac.claimedAt);
   const claimed = at(mac.claimedAt);
-  return (Number.isFinite(beat) && now - beat >= MAC_BEAT_STALE_MS) || (Number.isFinite(claimed) && now - claimed >= MAC_CLAIM_MAX_MS);
+  return (beats && Number.isFinite(beat) && now - beat >= MAC_BEAT_STALE_MS) || (Number.isFinite(claimed) && now - claimed >= MAC_CLAIM_MAX_MS);
 }
 
 /** The find window after Post was pressed is over (tiktok_self.window_over): no `pressedAt`, or it is 30 minutes old. */
@@ -313,12 +350,6 @@ export function macWindowOver(mac: Pick<PostMac, "pressedAt">, now: number = Dat
   if (!mac.pressedAt) return true;
   const pressed = at(mac.pressedAt);
   return Number.isFinite(pressed) && now - pressed >= MAC_FIND_WINDOW_MS;
-}
-
-/** The Mac beat this post less than MAC_BEAT_STALE_MS ago (tiktok_self.beat_fresh): `beatAt`, else `claimedAt`. */
-function beatFresh(mac: Pick<PostMac, "claimedAt" | "beatAt">, now: number): boolean {
-  const beat = at(mac.beatAt ?? mac.claimedAt);
-  return Number.isFinite(beat) && now - beat < MAC_BEAT_STALE_MS;
 }
 
 /** plan.js picks one job per tick: Upload taps first, then auto-posting's, then the backlog. */
@@ -341,11 +372,12 @@ export function macPlace(queue: readonly MacQueueJob[] | null | undefined, clipI
   const mine = queue.findIndex((j) => j.clipId === clipId && j.state === "waiting");
   if (mine < 0) return null;
   const rank = RANK[queue[mine]!.source];
+  const beats = macHelperBeats(helper);
   let before = 0;
   queue.forEach((j, i) => {
     if (i === mine) return;
     if (j.state === "working") {
-      if (!macStuck(j, now)) before += 1;
+      if (!macStuck(j, now, beats)) before += 1;
       return;
     }
     if (j.state !== "waiting" || heldBy(j, helper)) return;
@@ -426,6 +458,8 @@ function notReady(ctx: TikTokRowContext, stopped: boolean, clipId?: string): Tik
     return { kind: "not_ready", words: needsYouWords(h), button: "open_stopped", href: `/clips/${stoppedOn}` };
   }
   if (h.state === "paused") {
+    // An older helper never reads Start my Mac again: its page says the rest, as before.
+    if (!macHelperBeats(h)) return openMac(pausedWords(h));
     if (h.resumeRequest) return { kind: "not_ready", words: `${pausedParts(h).why} · ${MAC_PAUSED_STARTING}`, button: null };
     return { kind: "not_ready", words: pausedWords(h), button: "resume" };
   }
@@ -444,12 +478,16 @@ function postedRow(kind: "posted" | "posted_you", words: string, p: NonNullable<
 }
 
 /**
- * Not sure it posted (D2): It's on TikTok first (it never posts again); Try again beside it only once the 30-minute
- * find window after Post is over (`again`); "It's on TikTok, no link" unless the Mac still works on it before Post.
+ * Not sure it posted (D2), after the Mac pressed Post: It's on TikTok first (it never posts again), with "It's on
+ * TikTok, no link"; Try again beside it only once the 30-minute find window after Post is over (`again`), and until
+ * then the words say from when ("· Try again from 14:35"), so a post that isn't there never waits without a time.
  */
-function notSure(mac: PostMac, words: string, now: number, noLink: boolean): TikTokRow {
+function notSure(mac: PostMac, words: string, now: number): TikTokRow {
   const since = findSince(mac);
-  return { kind: "stopped", words, button: "on_tiktok", ...(since ? { since } : {}), again: macWindowOver(mac, now), noLink };
+  const again = macWindowOver(mac, now);
+  const from = at(mac.pressedAt) + MAC_FIND_WINDOW_MS;
+  const when = !again && Number.isFinite(from) ? ` · ${againFromWords(clockWords(from, now))}` : "";
+  return { kind: "stopped", words: `${words}${when}`, button: "on_tiktok", ...(since ? { since } : {}), again, noLink: true };
 }
 
 /** A Mac post's row (6.2): not sure it posted, Didn't work, the Mac can't post, Posting…, held, or waiting. */
@@ -457,7 +495,7 @@ function macRow(mac: PostMac, ctx: TikTokRowContext, clipId?: string): TikTokRow
   const now = ctx.now ?? Date.now();
   // It may be on TikTok. Words chosen by pressedAt, never by matching the stored reason. Saying it's on TikTok needs
   // no Mac, so this shows even while it can't post.
-  if (mac.state === "stopped" && mac.pressedAt) return notSure(mac, MAC_ROW_PRESSED, now, true);
+  if (mac.state === "stopped" && mac.pressedAt) return notSure(mac, MAC_ROW_PRESSED, now);
   if (mac.state === "stopped") {
     const ready = notReady(ctx, true, clipId);
     if (ready) return ready;
@@ -467,14 +505,16 @@ function macRow(mac: PostMac, ctx: TikTokRowContext, clipId?: string): TikTokRow
     return { kind: "stopped", words: `${why ? `Didn't work: ${why}` : "Didn't work"}${first}`, button: "try_again" };
   }
   if (mac.state === "working") {
-    // Stuck (its own beat 5 minutes old, or its claim 50): the Mac stopped working on it. Since when, if the Mac
-    // itself has not checked in for 10 minutes (or never), else "Not sure it posted".
-    if (macStuck(mac, now)) {
+    // Stuck (its own beat 5 minutes old, or its claim 50; for an older helper only the claim): the Mac stopped working
+    // on it. Since when, if the Mac itself has not checked in for 10 minutes (or never). Before Post it can't be on
+    // TikTok: "Your Mac stopped before it pressed Post" with Try again only. After Post: "Not sure it posted".
+    if (macStuck(mac, now, macHelperBeats(ctx.helper))) {
       const seen = at(ctx.helper?.seenAt);
-      let words = MAC_ROW_PRESSED;
+      let words = mac.pressedAt ? MAC_ROW_PRESSED : MAC_ROW_STOPPED_EARLY;
       if (ctx.helper === null) words = MAC_ROW_NOT_SET_UP;
       else if (Number.isFinite(seen) && now - seen >= MAC_OFFLINE_MS) words = sinceWords(seen, now);
-      return notSure(mac, words, now, !(!mac.pressedAt && beatFresh(mac, now)));
+      if (!mac.pressedAt) return { kind: "stopped", words, button: "try_again" };
+      return notSure(mac, words, now);
     }
     // The Mac is on it (D2): never Not sure it posted or Try again here. The switch turned off before Post says so.
     if (ctx.macOn === false) return turnOn(MAC_ROW_OFF);
@@ -515,10 +555,13 @@ export function rowNeedsMac(facts: TikTokFacts): boolean {
 
 /**
  * The clip page's chip for a Mac post (its stack says the rest): "Not sure it posted" once the Mac pressed Post but
- * couldn't tell, or when its row says so (a stuck claim, `row`).
+ * couldn't tell, or when its row says so (a stuck claim, `row`); "Didn't work" when its row offers Try again (a job
+ * stuck before Post).
  */
 export function macChip(mac: Pick<PostMac, "state" | "pressedAt">, row?: Pick<TikTokRow, "button"> | null): string {
   if (row?.button === "on_tiktok" || (mac.state === "stopped" && mac.pressedAt)) return MAC_NOT_SURE;
+  // A job stuck before Post (its row's Try again): it didn't work.
+  if (row?.button === "try_again") return "Didn't work";
   return mac.state === "working" ? MAC_ROW_POSTING : mac.state === "stopped" ? "Didn't work" : MAC_ROW_WAITING;
 }
 

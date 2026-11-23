@@ -23,6 +23,7 @@ import {
   loginRequestLine,
   MAC_AGAIN_CONFIRM,
   MAC_BEAT_STALE_MS,
+  MAC_BEATS_FROM,
   MAC_CLAIM_MAX_MS,
   MAC_CLIP_PAGE_LOOK,
   MAC_FIND_BUTTON,
@@ -40,6 +41,7 @@ import {
   MAC_NOT_HOLDING,
   MAC_NOT_PAUSED,
   MAC_NOT_POSTING,
+  MAC_NOT_PRESSED,
   MAC_OFF_LINE,
   MAC_OFFLINE_MS,
   MAC_ON_TIKTOK_BUTTON,
@@ -55,12 +57,14 @@ import {
   MAC_ROW_IN_LINE,
   MAC_ROW_NEXT,
   MAC_ROW_PRESSED,
+  MAC_ROW_STOPPED_EARLY,
   MAC_STALE_MS,
   MAC_STILL_LOOKING,
   MAC_UNDO_REFUSED,
   MAC_UNKNOWN_SETTING,
   MAC_WORKING,
   macChip,
+  macHelperBeats,
   macInsteadOk,
   macOn,
   macPlace,
@@ -138,6 +142,10 @@ describe("the constants shared with the API (D2)", () => {
     expect(MAC_BEAT_STALE_MS).toBe(minutes("MAC_BEAT_STALE") * MIN);
     expect(MAC_CLAIM_MAX_MS).toBe(minutes("MAC_CLAIM_MAX") * MIN);
     expect(MAC_FIND_WINDOW_MS).toBe(minutes("MAC_FIND_WINDOW") * MIN);
+    // The refusal on no link before Post, word for word.
+    expect(/^MAC_NOT_PRESSED = "(.+)"$/m.exec(py)?.[1]).toBe(MAC_NOT_PRESSED);
+    // The helper version beats count from: the same on both sides.
+    expect(/^MAC_BEATS_FROM = "([\d.]+)"$/m.exec(py)?.[1]).toBe(MAC_BEATS_FROM);
     // The old 15-minute rule is gone on both sides (no alias).
     expect(py).not.toMatch(/^MAC_STUCK = /m);
     expect("MAC_STUCK_MS" in tiktokMacLib).toBe(false);
@@ -212,28 +220,56 @@ describe("the TikTok row (§47.4)", () => {
     expect(rowOf([working()], ready({ macOn: false }))?.spinner).toBeUndefined();
   });
 
-  it("stuck (its beat 5 minutes old, or its claim 50): not sure it posted, It's on TikTok, Try again once the find window is over", () => {
+  it("stuck (its beat 5 minutes old, or its claim 50) after Post: not sure it posted, It's on TikTok, Try again once the find window is over", () => {
     const claimedAt = iso(NOW - 8 * MIN);
     const since = iso(NOW - 9 * MIN);
-    // Never pressed, its beat 6 minutes old: Try again (nothing was posted), and no-link (the Mac stopped beating).
-    expect(rowOf([working({ claimedAt, beatAt: iso(NOW - 6 * MIN) })], ready())).toEqual({
+    // Pressed 10 minutes ago: It's on TikTok works now; Try again waits for the window, and the words say from when.
+    const pressedAt = NOW - 10 * MIN;
+    const pressed = working({ step: "finding", claimedAt, pressedAt: iso(pressedAt), beatAt: iso(NOW - 6 * MIN) });
+    expect(rowOf([pressed], ready())).toEqual({
       kind: "stopped",
-      words: MAC_ROW_PRESSED,
+      words: `${MAC_ROW_PRESSED} · Try again from ${hm(pressedAt + 30 * MIN)}`,
       button: "on_tiktok",
       since,
-      again: true,
+      again: false,
       noLink: true,
     });
-    // Pressed 10 minutes ago: Try again waits for the window; It's on TikTok works now.
-    const pressed = working({ step: "finding", claimedAt, pressedAt: iso(NOW - 10 * MIN), beatAt: iso(NOW - 6 * MIN) });
-    expect(rowOf([pressed], ready())).toMatchObject({ button: "on_tiktok", again: false, noLink: true });
-    expect(rowOf([{ ...pressed, mac: { ...pressed.mac!, pressedAt: iso(NOW - 30 * MIN) } }], ready())).toMatchObject({ again: true });
-    // The 50-minute cap with fresh beats before Post: It's on TikTok with its link only (the Mac may still post it).
-    expect(rowOf([working({ claimedAt: iso(NOW - 50 * MIN), beatAt: iso(NOW - MIN) })], ready())).toMatchObject({ button: "on_tiktok", again: true, noLink: false });
+    expect(rowOf([{ ...pressed, mac: { ...pressed.mac!, pressedAt: iso(NOW - 30 * MIN) } }], ready())).toMatchObject({ words: MAC_ROW_PRESSED, again: true });
+  });
+
+  it("stuck before Post (the Mac slept mid-upload): it can't be on TikTok, so Try again only, never It's on TikTok (review round 3, item 2)", () => {
+    const tryAgain = { kind: "stopped", words: "Your Mac stopped before it pressed Post", button: "try_again" };
+    expect(MAC_ROW_STOPPED_EARLY).toBe(tryAgain.words);
+    expect(rowOf([working({ claimedAt: iso(NOW - 8 * MIN), beatAt: iso(NOW - 6 * MIN) })], ready())).toEqual(tryAgain);
+    // The 50-minute cap with fresh beats: the same (nothing was posted).
+    expect(rowOf([working({ claimedAt: iso(NOW - 50 * MIN), beatAt: iso(NOW - MIN) })], ready())).toEqual(tryAgain);
+    // Its chip says it didn't work, never "Posting…" or "Not sure it posted".
+    const stuck = working({ beatAt: iso(NOW - 6 * MIN) }).mac!;
+    expect(macChip(stuck, tiktokRow(tiktokFacts(clip("posted"), [youtube, macPost(stuck)]), ready()))).toBe("Didn't work");
+  });
+
+  it("an older helper (before 1.1.0, no beats in its long waits): only its 50-minute claim makes a job stuck (review round 3, item 1)", () => {
+    const old = (extra: Partial<MacHelper> = {}) => ready({ helper: helper(iso(NOW - MIN), { version: "1.0.0", ...extra }) });
+    expect(macHelperBeats({ version: "1.0.0" })).toBe(false);
+    expect(macHelperBeats({ version: "0.9" })).toBe(false);
+    for (const h of [{ version: "1.1.0" }, { version: "1.10" }, { version: "2.0.0" }, { version: "dev" }, {}, null, undefined]) expect(macHelperBeats(h)).toBe(true);
+    // 12 minutes into its upload wait, its last step 11 minutes old: still Posting….
+    const uploading = working({ claimedAt: iso(NOW - 12 * MIN), beatAt: iso(NOW - 11 * MIN) });
+    expect(rowOf([uploading], old())).toMatchObject({ kind: "working", words: "Posting…" });
+    expect(macStuck(uploading.mac!, NOW, false)).toBe(false);
+    expect(macStuck(uploading.mac!, NOW)).toBe(true);
+    // Pressed 10 minutes ago, still checking for its link: Posting… too, until the claim is 50 minutes old.
+    const pressed = working({ step: "pressing", claimedAt: iso(NOW - 20 * MIN), pressedAt: iso(NOW - 10 * MIN), beatAt: iso(NOW - 10 * MIN) });
+    expect(rowOf([pressed], old())?.kind).toBe("working");
+    expect(rowOf([working({ claimedAt: iso(NOW - 50 * MIN), beatAt: iso(NOW - 40 * MIN) })], old())?.button).toBe("try_again");
+    // Its queue place counts its working job as the Mac's.
+    expect(macPlace([job("w", "upload", "working", { claimedAt: iso(NOW - 12 * MIN), beatAt: iso(NOW - 11 * MIN) }), job("c1", "upload")], "c1", old().helper, NOW)).toBe(1);
+    // It never reads Start my Mac again: its paused rows open its page, as before.
+    expect(rowOf([macPost()], old({ state: "paused", reason: "Paused on your Mac." }))).toEqual(openMac("Paused on your Mac · your clips wait until it's started again"));
   });
 
   it("stuck while the Mac itself stopped checking in (10 minutes, D5): since when, with It's on TikTok and Try again", () => {
-    const stuck = working({ claimedAt: iso(NOW - 20 * MIN), beatAt: iso(NOW - 15 * MIN) });
+    const stuck = working({ step: "finding", claimedAt: iso(NOW - 45 * MIN), pressedAt: iso(NOW - 40 * MIN), beatAt: iso(NOW - 15 * MIN) });
     for (const seen of [NOW - 10 * MIN, NOW - 40 * MIN])
       expect(rowOf([stuck], ready({ helper: helper(iso(seen)) }))).toMatchObject({
         kind: "stopped",
@@ -251,12 +287,16 @@ describe("the TikTok row (§47.4)", () => {
       expect(rowOf([stuck], ctx)?.spinner).toBeUndefined();
       expect(rowOf([stuck], ctx)?.button).toBe("on_tiktok");
     }
+    // Before Post, offline: since when, with Try again (nothing was posted).
+    const early = working({ claimedAt: iso(NOW - 20 * MIN), beatAt: iso(NOW - 15 * MIN) });
+    expect(rowOf([early], ready({ helper: helper(iso(NOW - 12 * MIN)) }))).toEqual({ kind: "stopped", words: `Your Mac hasn't checked in since ${hm(NOW - 12 * MIN)}`, button: "try_again" });
   });
 
   it("not sure it posted, after the Mac pressed Post and stopped: It's on TikTok first; Try again only after the find window", () => {
     const claimedAt = "2026-11-22T14:02:00.000Z";
     const pressedAt = "2026-11-22T14:05:00.000Z";
-    const pressed = { kind: "stopped", words: "Not sure it posted · look on your TikTok", button: "on_tiktok", since: "2026-11-22T14:01:00.000Z", again: false, noLink: true };
+    const words = "Not sure it posted · look on your TikTok";
+    const pressed = { kind: "stopped", words: `${words} · Try again from ${hm(Date.parse(pressedAt) + 30 * MIN)}`, button: "on_tiktok", since: "2026-11-22T14:01:00.000Z", again: false, noLink: true };
     // The stored reason (the server's tiktok_mac.PRESSED) never names a button he doesn't have; the row never shows it.
     expect(MAC_PRESSED_REASON).toBe("Your Mac pressed Post but couldn't confirm it. Look on your TikTok: if it's there, tap It's on TikTok.");
     expect(MAC_PRESSED_REASON).not.toMatch(/I posted it|yourself/i);
@@ -264,7 +304,7 @@ describe("the TikTok row (§47.4)", () => {
     expect(rowOf([macPost({ state: "stopped", claimedAt, pressedAt, reason: MAC_PRESSED_REASON })], ready())).toEqual(pressed);
     // 30 minutes after Post the Mac stopped looking: Try again comes too.
     const later = ready({ now: Date.parse(pressedAt) + 30 * MIN, helper: helper(iso(Date.parse(pressedAt) + 29 * MIN)) });
-    expect(rowOf([macPost({ state: "stopped", claimedAt, pressedAt })], later)).toEqual({ ...pressed, again: true });
+    expect(rowOf([macPost({ state: "stopped", claimedAt, pressedAt })], later)).toEqual({ ...pressed, words, again: true });
     // No claim time: from a minute before Post was pressed.
     expect(rowOf([macPost({ state: "stopped", pressedAt })], ready())?.since).toBe("2026-11-22T14:04:00.000Z");
     // Saying it's on TikTok needs no Mac: the same row while the Mac can't post.
@@ -442,11 +482,19 @@ describe("the TikTok row (§47.4)", () => {
     const pressed = mac({ state: "stopped", pressedAt: "2026-11-22T14:05:00.000Z", reason: MAC_PRESSED_REASON });
     expect(calmCopy({ ...stack, mac: pressed })).toEqual({ text: "Look on your TikTok" });
     expect(MAC_CLIP_PAGE_LOOK).toBe("Look on your TikTok");
-    // With its row too (stuck, or offline), never the row's words beside the chip's.
-    const stuck = working({ beatAt: iso(NOW - 6 * MIN) }).mac!;
+    // With its row too (stuck after Post), never the row's words beside the chip's: where to look, and from when Try
+    // again comes while the find window lasts.
+    const stuck = working({ step: "finding", claimedAt: iso(NOW - 40 * MIN), pressedAt: iso(NOW - 35 * MIN), beatAt: iso(NOW - 6 * MIN) }).mac!;
     const row = tiktokRow(tiktokFacts(clip("posted"), [youtube, macPost(stuck)]), ready())!;
     expect(macChip(stuck, row)).toBe("Not sure it posted");
     expect(calmCopy({ ...stack, mac: stuck }, row)).toEqual({ text: "Look on your TikTok" });
+    const early = { ...stuck, pressedAt: iso(NOW - 10 * MIN) };
+    const earlyRow = tiktokRow(tiktokFacts(clip("posted"), [youtube, macPost(early)]), ready())!;
+    expect(calmCopy({ ...stack, mac: early }, earlyRow)).toEqual({ text: `Look on your TikTok · Try again from ${hm(NOW + 20 * MIN)}` });
+    // Its Mac stopped checking in (D5): the row's own words, on the clip page too (review round 3, item 6).
+    const offline = tiktokRow(tiktokFacts(clip("posted"), [youtube, macPost(stuck)]), ready({ helper: helper(iso(NOW - 12 * MIN)) }))!;
+    expect(macChip(stuck, offline)).toBe("Not sure it posted");
+    expect(calmCopy({ ...stack, mac: stuck }, offline)).toEqual({ text: `Your Mac hasn't checked in since ${hm(NOW - 12 * MIN)}` });
     expect(calmCopy({ ...stack, mac: pressed }, tiktokRow(tiktokFacts(clip("posted"), [youtube, macPost(pressed)]), ready()))?.text).not.toMatch(/Not sure/);
     expect(macChip({ state: "waiting" })).toBe("Waiting for your Mac");
     expect(macChip({ state: "working" })).toBe("Posting…");
@@ -828,9 +876,11 @@ describe("the mock follows the API", () => {
     const p = store.posts.find((x) => x.clipId === c.clipId && x.platform === "tiktok")!;
     p.mac = { ...p.mac!, claimedAt: iso(Date.now() - MIN) };
     await expect(api.markTikTokPosted(c.clipId)).rejects.toThrow(MAC_WORKING);
-    // Its beat 5 minutes old: the Mac stopped, so he may say it's on TikTok.
+    // Its beat 5 minutes old: the Mac stopped before Post, so the clip isn't on TikTok: no link is still refused
+    // (it would be lost for good), and Try again puts it back for the Mac.
     knobs().mac.beat(c.clipId, 5 * MIN);
-    expect(tiktokOf(await api.markTikTokPosted(c.clipId, undefined, undefined, true))).toMatchObject({ status: "posted", by: "you" });
+    await expect(api.markTikTokPosted(c.clipId, undefined, undefined, true)).rejects.toThrow(MAC_NOT_PRESSED);
+    expect(tiktokOf(await api.retryMac(c.clipId, false, true))).toMatchObject({ status: "mac", mac: { state: "waiting" } });
   });
 
   it("It's on TikTok on the stopped post lets a Mac that needed him go on, as Try again does", async () => {

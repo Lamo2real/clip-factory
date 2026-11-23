@@ -12730,7 +12730,7 @@ not both."; unknown keys 400):
 | Body | What happens |
 |---|---|
 | `link` (non-empty) | the pasted link, as below |
-| `noLink: true` (**It's on TikTok, no link**, behind its own confirm in the web) | marked posted by him without a link and **without the finder** (`mark_posted(..., no_link=True)`); answer `{clip, posts}` with no `note`. On a Mac post still `working` it is refused (409 "Your Mac is posting it right now. Wait a minute.") unless the job is stuck (§47.3), and also while the Mac has not pressed Post and still beats the job (`beat_fresh`), even past the 50-minute cap: it may not be on TikTok at all |
+| `noLink: true` (**It's on TikTok, no link**, behind its own confirm in the web) | marked posted by him without a link and **without the finder** (`mark_posted(..., no_link=True)`); answer `{clip, posts}` with no `note`. On a Mac post still `working` it is refused (409 "Your Mac is posting it right now. Wait a minute.") unless the job is stuck (§47.3), and on a `working` job the Mac never pressed Post for: with that `MAC_WORKING` while it still beats the job (`beat_fresh`, even past the 50-minute cap), else 409 "Your Mac stopped before it pressed Post, so it isn't on TikTok. Tap Try again." (`MAC_NOT_PRESSED`, review round 3) |
 | neither (**Find it for me**) | a TikTok post already `by: "you"` with a `url` → 200, nothing changes. Else, before the finder, the same refusals as a save (`tiktok_self.check_can_mark`: not uploaded, still starting, `queued`, already public, a Mac post `working` and not stuck → `MAC_WORKING`), so TikTok is never asked for a clip that can't be marked. Then the finder: found → saved with its link (200, no `note`); nothing found, or TikTok did not answer → 409 **"Not found yet. Try again in a minute, or paste the link."** (`routes/clips.FIND_NONE`); TikTok not connected (or no OAuth client) → 409 **"Clip Factory can't look on your TikTok until TikTok is connected. Paste the link instead."** (`FIND_CANT`). Neither 409 writes anything |
 
 `routes/clips.NOT_FOUND_YET` ("Saved. Clip Factory could not find it on your TikTok yet. Tap Find it for me in a
@@ -15859,7 +15859,8 @@ Your Mac posts TikTok."
   → 400). It sets `macStep` and `macBeatAt`; `pressing` also sets `macPressedAt` (the first press is kept), the point
   of no return, and only that first press logs `tiktok_mac.pressing`. **The same step sent again is the job's beat**
   (round 3, D2): the helper re-sends the last step the server acknowledged every minute (`BEAT_EVERY_MS`) while it
-  works on the job, and `finding` for each of its pressed jobs still in the find window; every refusal still holds
+  works on the job, and `finding` for each of its pressed jobs still in the find window (also while it looks for one
+  of them, doFind, which beats only once its frame is up: review round 3); every refusal still holds
   (another device, the switch off before Post, auto-posting off before Post puts it back to waiting). While the switch is off a step before Post → 409 `MAC_OFF` (the owner's "Your Mac stops at once");
   after Post the helper may still look for the link. Each step reaches the web live: post item changes stream as post
   events (§14.2, `POST#` is in the broadcast filter) with the public `mac`.
@@ -15882,12 +15883,17 @@ Your Mac posts TikTok."
   post wait and the 30-minute find window), `MAC_FIND_WINDOW = timedelta(minutes=30)` (web `MAC_FIND_WINDOW_MS`, the
   helper's `FIND_FOR_MS`). The old 15-minute `MAC_STUCK` (and the web's `MAC_STUCK_MS`) are gone; `STALE_CLAIM` (15
   minutes, another device may take a crashed unpressed claim) and the web's 30-minute `MAC_STALE_MS` stay.
-* **Stuck** (`tiktok_self.mac_stuck(row, now)`, the web's `macStuck`, the same rule): `status = mac`, `macState =
-  working`, and either `now − (macBeatAt ?? macClaimedAt) ≥ MAC_BEAT_STALE` (the Mac stopped beating the job: it
-  crashed, slept or lost its ledger) or `now − macClaimedAt ≥ MAC_CLAIM_MAX`, whichever comes first. While the Mac
-  beats the job it is never stuck before the cap, so no Try again or "Not sure it posted" is offered while it is still
-  posting or looking. **Window over** (`window_over`): no `macPressedAt`, or `now − macPressedAt ≥ MAC_FIND_WINDOW`.
-  **Beat fresh** (`beat_fresh`): `now − (macBeatAt ?? macClaimedAt) < MAC_BEAT_STALE`.
+* **Stuck** (`tiktok_self.mac_stuck(row, now, *, beats)`, the web's `macStuck`, the same rule): `status = mac`,
+  `macState = working`, and either `now − (macBeatAt ?? macClaimedAt) ≥ MAC_BEAT_STALE` (the Mac stopped beating the
+  job: it crashed, slept or lost its ledger) or `now − macClaimedAt ≥ MAC_CLAIM_MAX`, whichever comes first. While the
+  Mac beats the job it is never stuck before the cap, so no Try again or "Not sure it posted" is offered while it is
+  still posting or looking. **The beat counts only for a helper that beats** (`beats`, `tiktok_self.helper_beats(item)`,
+  the web's `macHelperBeats(helper)`, review round 3): yes unless the helper item says a `version` older than
+  `MAC_BEATS_FROM = "1.1.0"` (web `MAC_BEATS_FROM`; the helper's `VERSION`, pinned by web and helper tests). A helper
+  before 1.1.0 sends no beat during its 12-minute upload wait, its link checks after Post or its finding, so for its
+  jobs only the 50-minute claim counts (`tiktok_self.working_stuck` reads the helper item for Retry and It's on TikTok).
+  **Window over** (`window_over`): no `macPressedAt`, or `now − macPressedAt ≥ MAC_FIND_WINDOW`. **Beat fresh**
+  (`beat_fresh`): `now − (macBeatAt ?? macClaimedAt) < MAC_BEAT_STALE`.
 * **Retry** (the owner's Try again, `tiktok_mac.retry(store, clip, *, not_on_tiktok, at, now)`, `at` required, the
   route passes `app.clock()`), in order: (1) `working` and not stuck → 409 "Your Mac is posting it right now. Wait a
   minute." (2) `waiting` → answered as it is (`now` makes it `upload` in place). (3) `stopped`, or `working` and stuck,
@@ -15908,8 +15914,10 @@ Your Mac posts TikTok."
   `working` once stuck (the write then needs that same `macClaimedAt`, and the same `macBeatAt` and `macPressedAt`
   when present); it becomes his own post; its Mac fields go into `beforeYou`, so his Undo puts the Mac post back as it
   was. Refused while `working` and not stuck with "Your Mac is posting it right now. Wait a minute.", and **without a
-  link** (`noLink`, D3) also while the Mac has not pressed Post and still beats the job (`beat_fresh`), even past
-  `MAC_CLAIM_MAX`: it may still be uploading. Find it for me answers the same `MAC_WORKING` before the finder asks
+  link** (`noLink`, D3) on any `working` job the Mac has not pressed Post for: while the Mac still beats it
+  (`beat_fresh`, even past `MAC_CLAIM_MAX`) with that same `MAC_WORKING`, else (review round 3) 409 "Your Mac stopped
+  before it pressed Post, so it isn't on TikTok. Tap Try again." (`tiktok_self.MAC_NOT_PRESSED`): saved as posted it
+  would never reach TikTok (the Mac's next step gets a 409, and Send these refuses it from then on). Find it for me answers the same `MAC_WORKING` before the finder asks
   TikTok anything. Marking a stopped or stuck Mac post also turns the helper item back to `ok` when it was
   `needs_you` (`tiktok_self.clear_needs_you`, as Retry does): the helper echoes `needs_you` for as long as the server
   says it, so nothing else would let the Mac go on. The Mac's late done on it is refused (409).
@@ -15941,14 +15949,21 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
 
   `macRow` (round 3):
   * **stopped with `pressedAt`**: "Not sure it posted · look on your TikTok" with **It's on TikTok**, **Try again**
-    beside it only once the find window is over (`macWindowOver`), and **It's on TikTok, no link** offered.
+    beside it only once the find window is over (`macWindowOver`), and **It's on TikTok, no link** offered. Inside the
+    window the words end with " · Try again from {pressedAt + 30 minutes}" (`againFromWords`, review round 3), so a
+    post that isn't there never waits without a time (a needs-you stop there holds the Mac until he answers it).
   * **stopped**: the not-yet rows first (switch off, never seen, not seen for 30 minutes); else "Didn't work: {short
     reason}" (+ " · look at your Mac first" while `needs_you`) with **Try again**.
   * **working, not stuck** (`macStuck`, the API's rule): switch off → the Turn on row; else "Posting…" with the
     spinner. Never "Not sure it posted" and never Try again here (D2).
-  * **working, stuck**: **It's on TikTok** (Try again beside it once the window is over; no link offered unless the
-    Mac never pressed Post and still beats it); words "Your Mac hasn't checked in since {time}" when the Mac has not
-    checked in for 10 minutes or more (`MAC_OFFLINE_MS`, D5), else "Not sure it posted · look on your TikTok".
+  * **working, stuck, with `pressedAt`**: **It's on TikTok** with **It's on TikTok, no link** (Try again beside it once
+    the window is over, " · Try again from {time}" until then); words "Your Mac hasn't checked in since {time}" when
+    the Mac has not checked in for 10 minutes or more (`MAC_OFFLINE_MS`, D5), else "Not sure it posted · look on your
+    TikTok".
+  * **working, stuck, no `pressedAt`** (review round 3): it can't be on TikTok, so **Try again** only (no question:
+    nothing was posted); words "Your Mac hasn't checked in since {time}" (10 minutes, as above), "Your Mac isn't set up
+    yet" (never checked in), else "Your Mac stopped before it pressed Post" (`MAC_ROW_STOPPED_EARLY`). The chip says
+    "Didn't work".
   * **waiting**: the not-yet rows; else auto-posting off with `source` `sent`/`auto` → "Waiting for your Mac ·
     auto-posting is off" with **Post with my Mac**; else **held** (`source: "auto"`, made before the helper's
     `holdBefore`) → "Held on your Mac: made before {time}" with **Post with my Mac**; else the queue words below.
@@ -15957,7 +15972,9 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
   "Your Mac isn't set up yet" with **Turn on**; not seen for 30 minutes → "Your Mac hasn't checked in since {time}"
   with **Open Your Mac posts TikTok** (the switch is already on); (not a stopped row) `needs_you` → "Your Mac needs
   you: {short reason} · look at your Mac" with **Open the stopped clip** (→ `/clips/{needsYouClipId}`; Open Your Mac
-  posts TikTok when there is none or it is this clip); paused → the paused words with **Start my Mac again**
+  posts TikTok when there is none or it is this clip); paused → the paused words with **Start my Mac again** (a
+  helper before 1.1.0, `macHelperBeats` false, never reads it: **Open Your Mac posts TikTok** instead, and Settings
+  shows no Start my Mac again)
   (`POST /v1/tiktok/mac/request {action: "resume"}`), or, once asked, "{why} · starting again within a minute".
 
   **The Mac's queue** (`macPlace`, D4): the jobs before this one the way the helper picks (one per tick, Upload first,
@@ -15973,12 +15990,12 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
   |---|---|---|---|
   | 1 | Posted `via: "mac"` | "Posted by your Mac · Everyone" ("Posted by your Mac · Only you" when private), with **Open** and its numbers | none; with no link it adds " · add the link" and the inline **Add link** (§42.1) |
   | 2 | `by: "you"`, no `via` (§42) | "Posted by you · Everyone", with **Open** | none; with no link " · add the link" and **Add link** |
-  | 3 | `mac.state` `working` | "Posting…", with a spinner (the steps arrive as live post events), while the Mac beats it; once stuck (`macStuck`: no beat for 5 minutes, or claimed 50 minutes ago): "Not sure it posted · look on your TikTok", or "Your Mac hasn't checked in since {time}" when the Mac has not checked in for 10 minutes | none; stuck: **It's on TikTok**, and **Try again** once the find window is over |
+  | 3 | `mac.state` `working` | "Posting…", with a spinner (the steps arrive as live post events), while the Mac beats it; once stuck (`macStuck`: no beat for 5 minutes, or claimed 50 minutes ago; a helper before 1.1.0 only the claim): after Post "Not sure it posted · look on your TikTok" (" · Try again from {time}" inside the find window), before Post "Your Mac stopped before it pressed Post", or "Your Mac hasn't checked in since {time}" when the Mac has not checked in for 10 minutes | none; stuck after Post: **It's on TikTok**, and **Try again** once the find window is over; stuck before Post: **Try again** |
   | 4 | The Mac can't post (waiting, stopped and not-yet rows) | "Your Mac posts TikTok is off" (the switch); "Your Mac isn't set up yet" (it never checked in); "Your Mac hasn't checked in since 14:03" (not seen for 30 minutes or more, `MAC_STALE_MS`) | **Turn on** → `/settings/posting/tiktok-mac`; not seen: **Open Your Mac posts TikTok** |
   | 5 | It needs him, or is paused (waiting and not-yet rows) | "Your Mac needs you: {the reason's first sentence} · look at your Mac"; paused: "Paused after the 3 trial posts · your Mac goes on once their views are checked" (the trial pause) or "Paused on your Mac · your clips wait until it's started again" (any other); once Start my Mac again was tapped: "{why} · starting again within a minute" | needs you: **Open the stopped clip**; paused: **Start my Mac again** |
   | 6 | `mac.state` `waiting` | "Waiting for your Mac · next", "… · in line (2 before it)", "… · in line" (a backfill) or "… · goes at about 20:30" (the helper's `backlogAt`), counted the way the helper picks; held: "Held on your Mac: made before {time}"; not known: "Waiting for your Mac" alone | none; held: **Post with my Mac** |
   | 7 | Waiting, `source` `sent` or `auto`, auto-posting off | "Waiting for your Mac · auto-posting is off" | **Turn on** → `/settings/posting/auto` |
-  | 8 | `mac.state` `stopped` | "Didn't work: {the reason's first sentence, without its full stop}"; once `pressedAt` is set, "Not sure it posted · look on your TikTok" (chosen by `pressedAt`, never by the stored sentence; shown even while the Mac can't post) | **Try again**; pressed: **It's on TikTok** (the inline Add link with **Find it for me**, and **It's on TikTok, no link**) and, once the 30-minute find window is over, a quieter **Try again** (no fill, its words underlined) that asks "Post it again? Only if it's not on your TikTok." with **Yes, post it again** and **Not now** |
+  | 8 | `mac.state` `stopped` | "Didn't work: {the reason's first sentence, without its full stop}"; once `pressedAt` is set, "Not sure it posted · look on your TikTok" (chosen by `pressedAt`, never by the stored sentence; shown even while the Mac can't post), with " · Try again from {time}" inside the find window | **Try again**; pressed: **It's on TikTok** (the inline Add link with **Find it for me**, and **It's on TikTok, no link**) and, once the 30-minute find window is over, a quieter **Try again** (no fill, its words underlined) that asks "Post it again? Only if it's not on your TikTok." with **Yes, post it again** and **Not now** |
   | 9 | Not on TikTok yet (`canSendToMac`: no TikTok post, or one waiting for setup, failed, failed for the public account, or private; never a campaign clip) | "Not on TikTok yet"; a campaign clip: "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." | **Post with my Mac**; a campaign clip: none |
   | 10 | A Private test's clip | "Private test · stays off TikTok" | none |
 
@@ -16021,9 +16038,11 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
   other actions: centred while those are centred (a phone), from the left once they start there.
 * **The clip page:** `calmCopy` says the row's words in the TikTok stack with no link, because the button is on the
   page (no "Go to Library and tap Post it yourself", and a stopped Mac post has no Go to Library link). The chip says
-  "Waiting for your Mac", "Posting…", "Didn't work", or "Not sure it posted" (pressed, or its row says so: stuck);
-  then the stack's line says "Look on your TikTok" (`MAC_CLIP_PAGE_LOOK`, round 3), so the page never says "Not sure it
-  posted" twice.
+  "Waiting for your Mac", "Posting…", "Didn't work" (also a job stuck before Post), or "Not sure it posted" (pressed,
+  or its row says so: stuck after Post); then the stack's line says "Look on your TikTok" (`MAC_CLIP_PAGE_LOOK`, round
+  3), with the row's " · Try again from {time}" inside the find window, so the page never says "Not sure it posted"
+  twice. Any other words of that row ("Your Mac hasn't checked in since {time}") stay as the row says them (review
+  round 3).
 * **Review:** with `tiktokMac.on` and TikTok not approved, the hint above Upload reads `MAC_HINT`, "TikTok: your Mac
   posts it for everyone.", and while the switch is off `TIKTOK_PUBLIC_HINT`, "TikTok: turn on Your Mac posts TikTok so
   it posts for everyone." (§42.1). "Uploaded just now" shows, for each kept clip, the words first (its hook, then
@@ -16134,8 +16153,9 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
 * Helper (`mac/tiktok-helper/test`, round 3): `plan.test.js` (`backlogAt` each branch and that `nextAction`'s backlog
   `until` equals it; never twice: `pressedAt` never posted, `pressedBefore` without or with an early `againAt`
   skipped, with a late `againAt` posted); `constants.test.js` (`FIND_FOR_MS` equals `MAC_FIND_WINDOW`, `3 ×
-  BEAT_EVERY_MS ≤ MAC_BEAT_STALE`, read from `tiktok_self.py`); the beat targets; `applyRequests` (resume, let go); a
-  grep that no `src/` string says "post it yourself" or "I posted it".
+  BEAT_EVERY_MS ≤ MAC_BEAT_STALE`, read from `tiktok_self.py`, and `VERSION` at least `MAC_BEATS_FROM`); the beat
+  targets, also doFind's (every pressed job of this Mac, review round 3); `applyRequests` (resume, let go); a grep
+  that no `src/` string says "post it yourself" or "I posted it".
 
 ### 47.6 Never twice, never TikTok's API
 

@@ -3,7 +3,7 @@ import type { AnyExtra, PerfStatus, Platform, PlatformPerformance, PostMetrics }
 import type { IconName } from "../components/Icon.tsx";
 import { PLATFORM_LABEL, PLATFORM_ORDER, relative, timecode } from "./format.ts";
 import { failedForPublicAccount, postError } from "./tiktokYourself.ts";
-import { MAC_CLIP_PAGE_LOOK, MAC_NOT_SURE, macChip, shortReason, type TikTokRow } from "./tiktokMac.ts";
+import { MAC_CLIP_PAGE_LOOK, MAC_NOT_SURE, MAC_ROW_PRESSED, macChip, shortReason, type TikTokRow } from "./tiktokMac.ts";
 
 /** Platform order on the performance page and in This week: the app-wide PLATFORM_ORDER. */
 export const STATS_ORDER: readonly Platform[] = PLATFORM_ORDER;
@@ -264,8 +264,12 @@ export function calmCopy(
   row?: TikTokRow | null,
 ): CalmCopy | null {
   const name = PLATFORM_LABEL[p.platform];
-  // Its chip says "Not sure it posted" (macChip): the line only says where to look, never the same words twice (D7).
-  if (p.platform === "tiktok" && p.status === "mac" && p.mac && macChip(p.mac, row) === MAC_NOT_SURE) return { text: MAC_CLIP_PAGE_LOOK };
+  // Its chip says "Not sure it posted" (macChip): the line only says where to look (and from when Try again comes),
+  // never the same words twice (D7). Other words of its row (the Mac hasn't checked in since …) stay as they are.
+  if (p.platform === "tiktok" && p.status === "mac" && p.mac && macChip(p.mac, row) === MAC_NOT_SURE) {
+    if (row && !row.words.startsWith(MAC_ROW_PRESSED)) return { text: row.words };
+    return { text: `${MAC_CLIP_PAGE_LOOK}${row ? row.words.slice(MAC_ROW_PRESSED.length) : ""}` };
+  }
   if (p.platform === "tiktok" && row && row.kind !== "posted" && row.kind !== "posted_you") {
     // A private upload keeps saying so (only he sees it); the row adds why the Mac can't post it for everyone yet.
     if (p.status === "posted_private") return { text: row.kind === "not_ready" ? `${PRIVATE_UPLOAD} ${row.words}.` : PRIVATE_UPLOAD };

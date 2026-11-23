@@ -50,8 +50,8 @@ from .tiktok_self import (
     MADE_MARK,
     Refused,
     clear_needs_you,
-    mac_stuck,
     window_over,
+    working_stuck,
 )
 
 Item = dict[str, Any]
@@ -575,11 +575,11 @@ def stopped(
 
 
 def retry(store: db.Store, clip: Mapping[str, Any], *, not_on_tiktok: bool, at: datetime, now: bool = False) -> None:
-    """The owner's Try again (§47.3, at ``at``): a stopped Mac post, or a stuck one (``mac_stuck``), waits for the Mac
-    again, keeping its place (``since``). A post the Mac still works on is refused (``MAC_WORKING``). After the Mac
+    """The owner's Try again (§47.3, at ``at``): a stopped Mac post, or a stuck one (``working_stuck``), waits for the
+    Mac again, keeping its place (``since``). A post the Mac still works on is refused (``MAC_WORKING``). After the Mac
     pressed Post, only when he says it is not on TikTok (``not_on_tiktok``) and only once the find window is over
-    (``window_over``, else ``MAC_STILL_LOOKING``): the press moves to ``macPressedBefore`` and ``macAgainAt`` says when he
-    tried again, so the helper's never-twice guard can tell this re-wait from a lost press. Without ``now`` a post
+    (``window_over``, else ``MAC_STILL_LOOKING``): the press moves to ``macPressedBefore`` and ``macAgainAt`` says when
+    he tried again, so the helper's never-twice guard can tell this re-wait from a lost press. Without ``now`` a post
     already waiting is left as it is. One write, conditional on the post as read (a stopped one still stopped, a stuck
     one the same claim, beat and press: a new claim or beat meanwhile answers ``CHANGED``); then the helper item goes
     back to ``ok`` when it needed him.
@@ -591,7 +591,7 @@ def retry(store: db.Store, clip: Mapping[str, Any], *, not_on_tiktok: bool, at: 
     auto-posting picked) no longer applies to it."""
     row, _rows = mac_row(store, clip)
     state = row.get("macState")
-    stuck = mac_stuck(row, at)
+    stuck = working_stuck(store, str(clip["userId"]), row, at)
     if state == "working" and not stuck:
         raise Refused(MAC_WORKING)
     if state not in ("stopped", "working"):
