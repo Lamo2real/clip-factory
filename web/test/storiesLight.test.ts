@@ -206,11 +206,16 @@ function surfacesOf(look: Look): Surface[] {
     const ls = layers(`var(${token})`, e);
     return { name, level, at: (b, at) => over(ls, pageOver(b), at), inks };
   };
+  const card = one("a card", 2, "--st-tint-card", [...GLASS_INKS, "--st-text-muted"]);
+  // A card inside a card (glass.css: .st-glass .st-glass) is painted over its card, as the browser draws it: its layers
+  // over the card's own colour over the backdrop, never straight over the backdrop.
+  const raised = layers("var(--st-tint-raised)", env);
+  const nested: Surface = { name: "a card inside a card", level: 3, at: (b, at) => over(raised, card.at(b, at), at), inks: [...GLASS_INKS, "--st-text-muted"] };
   const out: Surface[] = [
     one("the rail", 1, "--st-tint-rail"),
-    one("a card", 2, "--st-tint-card", [...GLASS_INKS, "--st-text-muted"]),
+    card,
     one("a hero", 3, "--st-tint-hero"),
-    one("a card inside a card", 3, "--st-tint-raised", [...GLASS_INKS, "--st-text-muted"]),
+    nested,
     one("a bar", 3, "--st-tint-bar"),
     one("a sheet", 5, "--st-tint-float"),
   ];

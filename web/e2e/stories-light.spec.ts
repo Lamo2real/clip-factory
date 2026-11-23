@@ -6,7 +6,8 @@ import { asMacWindow } from "./desktopWindow.ts";
 // read from the page as the browser computed it (every background layer, top and bottom) and laid over the same
 // backdrop pixel (the espresso, the stage's own colour, and black): each level is brighter than the one under it,
 // at its top and at its bottom; every surface is lighter at the top than at the bottom; and every surface has a bright
-// top rim, brighter on higher levels. Over a picture or the desktop also over white and mid grey: from the page panel
+// top rim, brighter on higher levels. A card inside a card is laid over its card, as the browser paints it. Over a
+// picture or the desktop also over white and mid grey: from the page panel
 // upward each level at least 0.015 brighter over white (the owner's rule). In every look: Colours › Ember, a picture,
 // See-through Clear and Frosted in the desktop app, and solid glass (reduced transparency). test/storiesLight.test.ts
 // proves the same from the style
@@ -109,6 +110,18 @@ async function surfaces(page: Page): Promise<Surface[]> {
       `.st-glass${PLAIN}`,
     );
     add(5, "a sheet", ".st-glass--float");
+    // A card inside a card (glass.css .st-glass .st-glass, one level up): no screen draws one yet, so one is put inside
+    // a plain card of the page for the measure (as a screen would nest it), read with its card as its parent (it is
+    // painted over its card, never over the bare backdrop), and taken away again.
+    const card = Array.from(document.querySelectorAll(`.st-glass${PLAIN}`)).find((e) => shown(e) && !e.parentElement?.closest(".st-glass"));
+    if (card) {
+      const nested = document.createElement("div");
+      nested.className = "st-glass";
+      nested.style.cssText = "height: 48px; margin: 8px";
+      card.append(nested);
+      out.push({ level: 3, what: "a card inside a card", layers: layersOf(nested), parent: layersOf(card), rim: rimOf(nested) });
+      nested.remove();
+    }
     return out as Surface[];
   });
 }

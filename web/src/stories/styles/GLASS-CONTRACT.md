@@ -180,7 +180,7 @@ measured floors (`MEASURED`; Frosted's frost and glass together), and keep the l
 ### 5. The glass recipe
 | token | meaning |
 |---|---|
-| `--st-tint-card`, `--st-tint-hero`, `--st-tint-rail`, `--st-tint-bar`, `--st-tint-float`, `--st-tint-plate`, `--st-tint-tinted`, `--st-tint-raised`, `--st-tint-cream` | the fills of each kind of surface: each is its level's light (`--st-light-N`) over its veil (`--st-shade-*`), lighter at the top (5a below) |
+| `--st-tint-card`, `--st-tint-hero`, `--st-tint-rail`, `--st-tint-bar`, `--st-tint-float`, `--st-tint-plate`, `--st-tint-tinted`, `--st-tint-raised`, `--st-tint-cream` | the fills of each kind of surface: each is its level's light (`--st-light-N`) over its veil (`--st-shade-*`), lighter at the top (5a below); a card inside a card over a picture or the desktop is a lift of light over its card |
 | `--st-tint-lens` | a liquid hero's fill (its light over the rim's veil; glass.css only) |
 | `--st-shade-card`, `-tinted`, `-hero`, `-raised`, `-rail`, `-plate`, `-bar`, `-float`, `-lens` | each surface's veil, giving its level's light the share it takes: `v / (1 - light)`, top and bottom |
 | `--st-fill-control`, `--st-fill-control-hover` | a glass control or inactive pill (a card's veil loose in Picture/See-through; on the colours the hover deepens loose on the page and is the cream lift `--st-fill-control-lift` inside a `.st-glass`) |
@@ -319,7 +319,9 @@ glass.css:
 - `.st-glass--float`: sheets, menus, toasts: the float veil and the heaviest blur.
 - `.st-glass--tinted`: a colour-tinted tile (level 3: its colour asks for the owner); set `--st-tone-rgb` (for
   example `var(--st-mint-rgb)`).
-- `.st-glass .st-glass` (a plain card inside a card): one level up (`--st-tint-raised`, `--st-sheen-raised`).
+- `.st-glass .st-glass` (a plain card inside a card): one level up (`--st-tint-raised`, `--st-sheen-raised`), painted
+  over its card: over the colours the hero's veil and level 3's light; over a picture or the desktop only a lift of light
+  (`--st-elev-raised-lift`, 0.06) and no veil of its own, so over white it is a step up from its card (0.041 to 0.059).
 - `.st-glass--control`: a glass control or inactive pill (radius control, control fill, hover deepens).
 - `.st-cream`: the solid cream surface with espresso words (the one highlighted card).
 - `.st-plate`: the backing plate for loose words (rule 6).

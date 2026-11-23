@@ -167,6 +167,7 @@
   --st-elev-grad-5: 0.06; /* a sheet is the top layer: its top is brighter than any control under it (on a hero too), and its controls keep their second lines at 4.5:1 */
   --st-elev-settle: 58%;
   --st-elev-4-loose: 0.05; /* a control loose on a picture or the desktop: the light over its card's veil */
+  --st-elev-raised-lift: 0.06; /* a card inside a card over a picture or the desktop: the light it lays over its card */
   /* the bright top rim (a thin soft inner highlight along the top edge, just inside the light edge: softened 3 px, so it
      is light, never a drawn line; the "no visible edges" scan, e2e/edges.ts, agrees) */
   --st-elev-rim-0: 0;
@@ -193,7 +194,8 @@
   --st-shade-card: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-card) / (1 - var(--st-elev-2) - var(--st-elev-grad-2)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-card) / (1 - var(--st-elev-2)))) var(--st-elev-settle));
   --st-shade-tinted: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
   --st-shade-hero: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-hero) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-hero) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
-  /* (a card inside a card is a raised surface: the hero's veil, so over a white picture it is a step up from its card) */
+  /* (a card inside a card is a raised surface laid over its card: over the colours the hero's veil, so its words keep
+     4.5:1 over the owner's brightest colours; over a picture or the desktop its own fill is below) */
   --st-shade-raised: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-hero) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-hero) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
   --st-shade-rail: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-rail) / (1 - var(--st-elev-1) - var(--st-elev-grad-1)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-rail) / (1 - var(--st-elev-1)))) var(--st-elev-settle));
   --st-shade-plate: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-plate) / (1 - var(--st-elev-1) - var(--st-elev-grad-1)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-plate) / (1 - var(--st-elev-1)))) var(--st-elev-settle));
@@ -433,6 +435,13 @@
   --st-s-fill-2: rgb(var(--st-veil-rgb) / calc(var(--st-veil-card) + 0.06));
   --st-s-fill-3: rgb(var(--st-well-rgb) / calc(var(--st-veil-card) + 0.12));
   --st-filter-glass: blur(var(--st-blur)) saturate(var(--st-saturate));
+  /* A card inside a card (glass.css .st-glass .st-glass) is painted over its card, which already lays the measured veil
+     and its own light, lighter at the top: it lays only a lift of light (--st-elev-raised-lift), the same top to bottom,
+     and no veil of its own. A second smoky veil over the card made it darker than the card under it over a white
+     picture (0.033 against 0.041 at the top). Over white it is now a raised surface's step up from its card, never
+     lighter than a raised surface's own veil (0.79) over white, and a sheet stays a step above it
+     (test/storiesLight.test.ts, e2e/stories-light.spec.ts). */
+  --st-tint-raised: linear-gradient(rgb(var(--st-cream-rgb) / var(--st-elev-raised-lift)), rgb(var(--st-cream-rgb) / var(--st-elev-raised-lift)));
 }
 
 /* Inside a glass surface or a plate over a picture or the desktop the surface already carries the measured veil, so a
