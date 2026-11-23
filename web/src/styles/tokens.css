@@ -107,6 +107,9 @@
   --glass-spec-sm: radial-gradient(50% 8px at 50% 0, rgb(var(--bone-rgb) / var(--light-spec)), transparent);
   --glass-light-panel: var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-panel)) 0, rgb(var(--bone-rgb) / calc(var(--light-panel) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-panel) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px);
   --glass-light-lead: var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-lead)) 0, rgb(var(--bone-rgb) / calc(var(--light-lead) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-lead) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px);
+  /* A pane-card on hover (tree and branch cards, job rows, teasers): the lead panel's light at its top, and where its
+     words are bone 0.03 over green 0.07, the raise's ratio, so it reads a step brighter and keeps AA at the cap. */
+  --glass-light-hover-face: var(--glass-light-lead), linear-gradient(rgb(var(--bone-rgb) / 0.03), rgb(var(--bone-rgb) / 0.03)), linear-gradient(rgb(var(--green-rgb) / 0.07), rgb(var(--green-rgb) / 0.07));
   --glass-light-float: var(--glass-spec-sm), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-float)) 0, rgb(var(--bone-rgb) / calc(var(--light-float) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-float) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px);
   --glass-light-float-hover: var(--glass-spec-sm), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-float-hover)) 0, rgb(var(--bone-rgb) / calc(var(--light-float-hover) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-float-hover) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px), linear-gradient(rgb(var(--bone-rgb) / 0.01), rgb(var(--bone-rgb) / 0.01));
   --glass-light-overlay: var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-overlay)) 0%, rgb(var(--bone-rgb) / calc(var(--light-overlay) * 0.6)) 30%, rgb(var(--bone-rgb) / calc(var(--light-overlay) * 0.33)) 65%);

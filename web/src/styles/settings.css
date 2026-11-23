@@ -509,7 +509,7 @@
    light from above (the same green, a whole ladder step brighter, its words at AA: lib/background.ts ladderFaults). */
 .tree-card:hover,
 .branch-card:hover {
-  --glass-light: var(--glass-light-lead);
+  --glass-light: var(--glass-light-hover-face);
 }
 .tree-card:active,
 .branch-card:active {

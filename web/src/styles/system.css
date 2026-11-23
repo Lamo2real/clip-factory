@@ -662,6 +662,8 @@ h1.getapp__title {
 /* Later is the quiet choice beside Reload: a ghost (still a button: a rim of light and its own top light), a little
    light over the bar (0.03 OKLab L), so Reload, 0.08 brighter again, is plainly the main choice. */
 .update-bar .btn--ghost.update-bar__later {
+  --btn-veil: 0;
   --btn-lift: 0.06;
+  --ghost-hover-veil: 0;
   --ghost-hover-lift: 0.075;
 }
