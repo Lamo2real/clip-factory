@@ -30,9 +30,10 @@ What stays for the owner:
   the finder (§42.2) looks for the post on his TikTok. A toast says what happened ("Link saved! Clip Factory will
   count its views.", "Found it on your TikTok! …", or the answer's `note`). The clip page has the same field beside Refresh numbers, and its
   TikTok stack says "Posted by you. Add its TikTok link to count views." ("Posted by your Mac. …" for the Mac's).
-* **A campaign clip** (the Mac never takes one: Branded content and its first 30 minutes, §47.2): "Campaign clip:
-  post it in the TikTok app", with the same inline Add link for the link once it is up. There the box needs the link
-  (empty: "Paste the TikTok link first. In TikTok, open your post, tap Share, then Copy link.").
+* **A campaign clip** goes to his Mac like any other clip since 2026-11-23 (he never posts by hand, §47.2): its row is
+  the same "Not on TikTok yet" with **Post with my Mac**, and the Mac posts it for Everyone. The inline Add link has
+  **Find it for me** right beside its box (the empty box's finder, the same `{since}` call), then **Paste** and **Save
+  the link**.
 * **Review** (TikTok ticked, TikTok not approved: `app_review` and `posting_audit` not both `ok`): one line just above
   TikTok's Music Usage line (which stays right above Upload, §17.8). While Your Mac posts TikTok is off it is
   `TIKTOK_PUBLIC_HINT`, "TikTok: turn on Your Mac posts TikTok so it posts for everyone."; while it is on, `MAC_HINT`,
@@ -63,8 +64,9 @@ numbered steps in TikTok's words, and I posted it (ADR-66). Its full description
 Unchanged by ADR-85. "I posted it" below names this write (`tiktok_self.mark_posted`), which the sheet's button used to
 call: the web now calls the POST only from the inline Add link (§42.1), the Mac's done runs the same write (§47.3), and
 the file link and the DELETE (Undo) stay for older apps, unused by the web. The sentences below are the server's,
-unchanged; the two that still name I posted it or Add link ("… Clear the box and tap I posted it …", "… Tap Add link in
-a minute.") mean the inline field's **Save the link**.
+unchanged, except the finder's note, which names **Find it for me** since 2026-11-23 (the button beside the inline
+box); the one that still names I posted it ("… Clear the box and tap I posted it …") means the inline field's **Save
+the link**.
 
 * **I posted it** writes the clip's one TikTok post (one per clip, as everywhere) as `status: "posted"`, `privacy:
   "public"`, public `by: "you"`, `postedAt` now (kept when marked again), `perfCheckAt` +48 h. A post Clip Factory made
@@ -105,8 +107,8 @@ a minute.") mean the inline field's **Save the link**.
   posts made at most 10 minutes before `since` (clamped to the last 24 hours; absent: an hour ago). The one whose
   description starts like the clip's TikTok caption (first 24 letters, case and marks ignored) wins; with no match,
   the only candidate does; otherwise nothing. Found: `url` and `statsId` as for a link. Not found, or TikTok did not
-  answer: the post is still marked and `note` is "Saved. Clip Factory could not find it on your TikTok yet. Tap Add
-  link in a minute."
+  answer: the post is still marked and `note` is "Saved. Clip Factory could not find it on your TikTok yet. Tap Find
+  it for me in a minute."
 * **Undo** (DELETE): a post made here is deleted, leaves `postIds` and clears `tiktokByYou`; Clip Factory's own post gets `beforeYou` back
   (status, url, privacy, error, ids and stats fields as they were). The clip's status follows the same settle rule.
   Nothing to undo: 409 "This clip was not marked as posted by you, so there is nothing to undo."

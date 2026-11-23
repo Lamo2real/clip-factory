@@ -282,19 +282,23 @@ export function Review({ jobId }: { jobId: string | null }) {
               const tiktok = tiktokRow(keptFacts[i]!, macCtx);
               return (
                 <li key={c.clipId} className="kept-now__item">
-                  <span className="kept-now__hook clamp-2 user-text">{c.hook}</span>
-                  {tiktok ? (
-                    <span className="kept-now__tiktok">
-                      <span className="kept-now__mac small" data-mac="kept">
-                        {`TikTok: ${tiktok.words}`}
+                  {/* The words first (the hook, then what the Mac does with TikTok), the buttons after them: the same
+                      order for reading and on screen. */}
+                  <span className="kept-now__text">
+                    <span className="kept-now__hook clamp-2 user-text">{c.hook}</span>
+                    {tiktok ? (
+                      <span className="kept-now__tiktok">
+                        <span className="kept-now__mac small" data-mac="kept">
+                          {`TikTok: ${tiktok.words}`}
+                        </span>
+                        {tiktok.url ? (
+                          <a className="icon-btn kept-now__open" href={tiktok.url} target="_blank" rel="noreferrer noopener" aria-label="Open the TikTok post">
+                            <Icon name="external" size={16} />
+                          </a>
+                        ) : null}
                       </span>
-                      {tiktok.url ? (
-                        <a className="icon-btn kept-now__open" href={tiktok.url} target="_blank" rel="noreferrer noopener" aria-label="Open the TikTok post">
-                          <Icon name="external" size={16} />
-                        </a>
-                      ) : null}
-                    </span>
-                  ) : null}
+                    ) : null}
+                  </span>
                   <LinkButton href={`/clips/${c.clipId}`} size="sm" icon="chart" iconAfter="chevronRight">
                     See how it does
                   </LinkButton>

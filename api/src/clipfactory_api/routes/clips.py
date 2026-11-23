@@ -404,7 +404,7 @@ def _try_again(
 # --- Post it on TikTok yourself (§42) ---------------------------------------------------------------------------
 
 OTHER_ACCOUNT = "Saved. Views only show for posts on the TikTok account you connected."
-NOT_FOUND_YET = "Saved. Clip Factory could not find it on your TikTok yet. Tap Add link in a minute."
+NOT_FOUND_YET = "Saved. Clip Factory could not find it on your TikTok yet. Tap Find it for me in a minute."
 SINCE_LIMIT = timedelta(hours=24)
 
 

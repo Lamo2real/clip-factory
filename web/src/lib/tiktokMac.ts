@@ -3,7 +3,7 @@
 // Studio for Everyone. Until TikTok approves the app the Mac is the only way to TikTok (ADR-85): every TikTok row says
 // what the Mac is doing, with at most one button (tiktokRow). Pure helpers here: the row, who may be sent, the
 // Settings lines.
-import type { Clip, MacHelper, PlatformPerformance, Post, PostMac, Settings } from "../api/types.ts";
+import type { Clip, MacHelper, MacJob, PlatformPerformance, Post, PostMac, Settings } from "../api/types.ts";
 import { plural } from "./format.ts";
 import { timeWords } from "./autopost.ts";
 import { settingsPath } from "./settingsTree.ts";
@@ -17,7 +17,8 @@ export const MAC_WHERE_LINE = "TikTok: your Mac posts it.";
 export const MAC_OFF_LINE = "Off. Your Mac doesn't post your TikTok clips.";
 export const MAC_ON_LINE = "On. Upload and auto-posting hand TikTok to your Mac.";
 export const MAC_NEVER_SEEN = "Your Mac hasn't checked in yet. Set it up on your Mac.";
-export const MAC_PAUSED = "Paused on your Mac.";
+/** Paused with no reason of its own (a helper from before it said why). */
+export const MAC_PAUSED = "Paused on your Mac";
 export const MAC_SEND_CONFIRM = "They go one at a time, oldest first.";
 export const MAC_STOP_LINE = "To stop it, turn the switch off. Your Mac stops at once.";
 /**
@@ -40,13 +41,18 @@ export const MAC_UNKNOWN_SETTING = "tiktokMac has a setting Clip Factory does no
 
 /** The Mac was not seen for this long: its rows say since when, with Turn on. */
 export const MAC_STALE_MS = 30 * 60_000;
+/**
+ * A Mac post still `working` this long after its claim (`claimedAt`) is stuck (the API's MAC_STUCK, §47.3): with a
+ * Mac that checks in and is fine, its row says "Not sure it posted", with It's on TikTok and Try again.
+ */
+export const MAC_STUCK_MS = 15 * 60_000;
 /** POST /v1/tiktok/mac/send takes at most this many clips at once. */
 export const MAC_SEND_MAX = 25;
 
 // The TikTok row's words (§47.4).
 export const MAC_ROW_WAITING = "Waiting for your Mac";
 /** An Upload tap's clip: the helper checks in every minute (launchd StartInterval 60) and takes it then. */
-export const MAC_ROW_CHECK_IN = "next check-in in about a minute";
+export const MAC_ROW_CHECK_IN = "it takes it in about a minute";
 export const MAC_ROW_AUTO_OFF = "Waiting for your Mac · auto-posting is off";
 export const MAC_ROW_POSTING = "Posting…";
 export const MAC_ROW_NOT_YET = "Not on TikTok yet";
@@ -57,24 +63,40 @@ export const MAC_ROW_NOT_SET_UP = "Your Mac isn't set up yet";
 /** It needs him (a login, a code, a puzzle): the Mac shows him what, in a pop-up. */
 export const MAC_ROW_NEEDS_YOU = "Your Mac needs you";
 export const MAC_ROW_LOOK = "look at your Mac";
-/** Paused on the Mac itself (only the Mac starts it again). */
-export const MAC_ROW_PAUSED = "Your Mac is paused · start it again on your Mac";
-/** Stopped after the Mac pressed Post: it may be on TikTok, so he looks there first (It's on TikTok, or Try again). */
-export const MAC_ROW_PRESSED = "your Mac couldn't tell if it posted · look on your TikTok first";
-export const MAC_ROW_CAMPAIGN = "Campaign clip: post it in the TikTok app";
+/**
+ * Paused on the Mac: what goes on next, and when. There is no Start again in Clip Factory (no route asks the helper to
+ * go on), so the row and Settings say it in plain words. The trial pause (plan.js: "Paused after the 3 trial posts.
+ * Clip Factory checks their views first.") ends once their views are checked; any other pause (cli.js off, or a batch
+ * that stopped) holds the clips until the Mac is started again.
+ */
+export const MAC_PAUSED_TRIAL_NEXT = "your Mac goes on once their views are checked";
+export const MAC_PAUSED_NEXT = "your clips wait until it's started again";
+/** The Mac pressed Post but couldn't tell if it posted, or its claim is stuck: the chip's words. */
+export const MAC_NOT_SURE = "Not sure it posted";
+/** It may be on TikTok, so he looks there first (It's on TikTok, or Try again). */
+export const MAC_ROW_PRESSED = `${MAC_NOT_SURE} · look on your TikTok`;
 export const MAC_ROW_PRIVATE_TEST = "Private test · stays off TikTok";
 export const MAC_ROW_ADD_LINK = " · add the link";
 
-/** "goes after the next auto-posting run (20:30)": a backlog clip's wait, with the run's time (§47.4). */
+/** "goes after the next auto-posting run (20:30)": the first backlog clip's wait, with the run's time (§47.4). */
 export function afterRunWords(at: string): string {
   return `goes after the next auto-posting run (${at})`;
+}
+
+/** "in line (2 before it)": a later backlog clip's place in the Mac's queue. */
+export function inLineWords(before: number): string {
+  return `in line (${before} before it)`;
 }
 
 // The row's buttons (§47.4), each the app's own Button or LinkButton.
 /** open_mac: to Settings › Posting › Your Mac posts TikTok, where the Mac's status line says the rest. */
 export const MAC_OPEN_BUTTON = "Open Your Mac posts TikTok";
-/** on_tiktok: the Mac pressed Post; it opens the row's Add link (its link, or an empty box to find it). */
+/** on_tiktok: the Mac pressed Post; it opens the row's Add link (its link, or Find it for me). */
 export const MAC_ON_TIKTOK_BUTTON = "It's on TikTok";
+/** Try again beside It's on TikTok asks first: posting it again is only for a post that isn't there. */
+export const MAC_AGAIN_CONFIRM = "Post it again? Only if it's not on your TikTok.";
+/** Add link's finder: Clip Factory looks for the post on his TikTok (no link needed). */
+export const MAC_FIND_BUTTON = "Find it for me";
 
 /** Is Your Mac posts TikTok on? Absent (old servers) is off. */
 export function macOn(settings: Pick<Settings, "tiktokMac"> | null | undefined): boolean {
@@ -88,30 +110,31 @@ export function macInsteadOk(mac: Pick<PostMac, "state" | "pressedAt">): boolean
 
 /**
  * Can the Mac take this clip (§47.2)? A kept clip that is not on TikTok for everyone (no TikTok post, one waiting for
- * setup, failed, or uploaded privately), and not a campaign clip (Branded content, its own first 30 minutes) or a
- * Private test run's clip.
+ * setup, failed, or uploaded privately), and not a Private test run's clip. A campaign clip goes too: the owner never
+ * posts by hand, and the Mac posts it on his own TikTok for Everyone (the campaign's rule, §38.14).
  */
 export function canSendToMac(clip: Clip, posts: Post[]): boolean {
-  return canPostYourself(clip, posts) && !clip.campaignId && clip.auto?.test !== "private";
+  return canPostYourself(clip, posts) && clip.auto?.test !== "private";
 }
 
 // ---------- The TikTok row (§47.4) ----------
 
 /** What a TikTok row reads: the clip's TikTok post, if any, and what the clip is. */
 export interface TikTokFacts {
+  /** The clip, for its place in the Mac's queue (a backlog clip's wait). */
+  clipId?: string;
   post: Pick<Post, "status" | "by" | "via" | "url" | "privacy" | "mac" | "postedAt"> | null;
-  /** Kept and not on TikTok for everyone (canPostYourself): the Mac can take it, unless campaign or Private test. */
+  /** Kept and not on TikTok for everyone (canPostYourself): the Mac can take it, unless it is a Private test. */
   offer: boolean;
-  campaign: boolean;
   privateTest: boolean;
 }
 
 /** The facts from a clip and its posts (Library, Review). */
 export function tiktokFacts(clip: Clip, posts: readonly Post[]): TikTokFacts {
   return {
+    clipId: clip.clipId,
     post: posts.find((p) => p.platform === "tiktok") ?? null,
     offer: canPostYourself(clip, [...posts]),
-    campaign: !!clip.campaignId,
     privateTest: clip.auto?.test === "private",
   };
 }
@@ -152,6 +175,8 @@ export interface TikTokRowContext {
   macOn?: boolean;
   /** The Mac's last check-in: null when it never checked in, undefined while not known. */
   helper?: MacHelper | null;
+  /** The Mac's queue (GET /v1/tiktok/mac), in the server's order: where a backlog clip is in line. Unknown: no place. */
+  queue?: readonly Pick<MacJob, "clipId" | "source" | "state">[] | null;
   /** Auto-posting is on. Unknown: a backlog clip says no run time. */
   autoPostOn?: boolean;
   /** Auto-posting's next run (GET /v1/autopost nextRunAt): a backlog clip goes after it. */
@@ -164,13 +189,13 @@ export interface TikTokRowContext {
   now?: number;
 }
 
-export type TikTokRowKind = "posted" | "posted_you" | "working" | "waiting" | "stopped" | "not_ready" | "offer" | "campaign" | "private_test";
+export type TikTokRowKind = "posted" | "posted_you" | "working" | "waiting" | "stopped" | "not_ready" | "offer" | "private_test";
 /**
  * The row's button. `try_again`: retry `now`. `post_with_mac`: send `now` (also a waiting post while auto-posting is
  * off, which then goes as an Upload tap's). `turn_on` and `open_mac`: links to `href` (MAC_OPEN_BUTTON's words).
- * `add_link`: the inline Add link. `on_tiktok`: the Mac pressed Post but couldn't tell if it posted:
- * MAC_ON_TIKTOK_BUTTON opens the inline Add link (its link, or an empty box to find it from `since`), and Try again
- * (`notOnTikTok`) is the second, quieter choice beside it.
+ * `add_link`: the inline Add link. `on_tiktok`: not sure it posted (the Mac pressed Post but couldn't tell, or its
+ * claim is stuck): MAC_ON_TIKTOK_BUTTON opens the inline Add link (its link, or Find it for me from `since`), and Try
+ * again (`notOnTikTok`, after MAC_AGAIN_CONFIRM) is the second, quieter choice beside it.
  */
 export type TikTokRowButton = "try_again" | "post_with_mac" | "turn_on" | "open_mac" | "add_link" | "on_tiktok";
 
@@ -213,26 +238,56 @@ export function shortReason(reason: string | undefined): string {
   return first.replace(YOURSELF, "").replace(/[.\s]+$/, "").trim();
 }
 
+/** The Mac checked in within 30 minutes and is fine (not needing him, not paused). */
+function freshOk(ctx: TikTokRowContext): boolean {
+  const h = ctx.helper;
+  const seen = h ? Date.parse(h.seenAt) : NaN;
+  return !!h && h.state === "ok" && Number.isFinite(seen) && (ctx.now ?? Date.now()) - seen < MAC_STALE_MS;
+}
+
+/** A Mac post still working 15 minutes or more after its claim (the API's mac_stuck, §47.3). */
+export function macStuck(mac: Pick<PostMac, "state" | "claimedAt">, now: number = Date.now()): boolean {
+  const claimed = Date.parse(mac.claimedAt ?? "");
+  return mac.state === "working" && Number.isFinite(claimed) && now - claimed >= MAC_STUCK_MS;
+}
+
 /**
  * What a waiting Mac post's row says (§47.4), only from what the server or the Mac knows. An Upload tap's clip goes
- * at the Mac's next check-in (every minute), once it is ready: "Waiting for your Mac · next check-in in about a
- * minute". A backlog clip ("Send these to my Mac") goes after an auto-posting run, at the helper's own pace: "Waiting
- * for your Mac · goes after the next auto-posting run (20:30)". An auto-posting run's clip goes at once unless the
- * Mac holds it, which the web can't see. Not known: "Waiting for your Mac" alone.
+ * at the Mac's next check-in (every minute), once it is ready: "Waiting for your Mac · it takes it in about a
+ * minute". A backlog clip ("Send these to my Mac") goes after an auto-posting run, one at a time at the helper's own
+ * pace, so only the first one in the Mac's queue says when: "Waiting for your Mac · goes after the next auto-posting
+ * run (20:30)"; a later one says its place, "Waiting for your Mac · in line (2 before it)". An auto-posting run's clip
+ * goes at once unless the Mac holds it, which the web can't see. Not known (no queue, no run time): "Waiting for your
+ * Mac" alone, never a time that may be wrong.
  */
-export function macWaitWords(mac: Pick<PostMac, "source">, ctx: TikTokRowContext): string {
+export function macWaitWords(mac: Pick<PostMac, "source">, ctx: TikTokRowContext, clipId?: string): string {
   const now = ctx.now ?? Date.now();
-  if (mac.source === "upload") {
-    const h = ctx.helper;
-    const seen = h ? Date.parse(h.seenAt) : NaN;
-    const fresh = !!h && h.state === "ok" && Number.isFinite(seen) && now - seen < MAC_STALE_MS;
-    return fresh ? `${MAC_ROW_WAITING} · ${MAC_ROW_CHECK_IN}` : MAC_ROW_WAITING;
-  }
-  if (mac.source === "sent" && ctx.autoPostOn === true && ctx.nextRunAt) {
-    const at = clockWords(ctx.nextRunAt, now);
-    if (at) return `${MAC_ROW_WAITING} · ${afterRunWords(at)}`;
+  if (mac.source === "upload") return freshOk(ctx) ? `${MAC_ROW_WAITING} · ${MAC_ROW_CHECK_IN}` : MAC_ROW_WAITING;
+  if (mac.source === "sent" && ctx.autoPostOn === true && clipId && ctx.queue) {
+    const place = ctx.queue.findIndex((j) => j.clipId === clipId);
+    const first = ctx.queue.find((j) => j.source === "sent" && j.state === "waiting");
+    if (place >= 0 && first?.clipId === clipId && ctx.nextRunAt) {
+      const at = clockWords(ctx.nextRunAt, now);
+      if (at) return `${MAC_ROW_WAITING} · ${afterRunWords(at)}`;
+    }
+    if (place > 0 && first?.clipId !== clipId) return `${MAC_ROW_WAITING} · ${inLineWords(place)}`;
   }
   return MAC_ROW_WAITING;
+}
+
+/**
+ * Paused on the Mac (§47.3 ping `paused`): the reason's first sentence and what goes on next. "Paused after the 3
+ * trial posts · your Mac goes on once their views are checked"; "Paused on your Mac · your clips wait until it's
+ * started again".
+ */
+export function pausedWords(h: Pick<MacHelper, "reason">): string {
+  const { why, next } = pausedParts(h);
+  return `${why} · ${next}`;
+}
+
+function pausedParts(h: Pick<MacHelper, "reason">): { why: string; next: string } {
+  const why = shortReason(h.reason) || MAC_PAUSED;
+  return { why, next: /\btrial\b/i.test(why) ? MAC_PAUSED_TRIAL_NEXT : MAC_PAUSED_NEXT };
 }
 
 const macSettings = () => settingsPath("posting", "tiktok-mac");
@@ -261,7 +316,7 @@ function notReady(ctx: TikTokRowContext, stopped: boolean): TikTokRow | null {
   if (Number.isFinite(seen) && now - seen >= MAC_STALE_MS) return turnOn(`Your Mac hasn't checked in since ${clockWords(seen, now)}`);
   if (stopped) return null;
   if (h.state === "needs_you") return openMac(needsYouWords(h));
-  if (h.state === "paused") return openMac(MAC_ROW_PAUSED);
+  if (h.state === "paused") return openMac(pausedWords(h));
   return null;
 }
 
@@ -276,14 +331,17 @@ function postedRow(kind: "posted" | "posted_you", words: string, p: NonNullable<
   return { kind, words: `${words}${MAC_ROW_ADD_LINK}`, button: "add_link", ...(p.postedAt ? { since: p.postedAt } : {}) };
 }
 
-/** A Mac post's row: Didn't work (pressed, or not), the Mac can't post, Posting…, or waiting. */
-function macRow(mac: PostMac, ctx: TikTokRowContext): TikTokRow {
-  if (mac.state === "stopped" && mac.pressedAt) {
-    // It may be on TikTok: It's on TikTok first (never posts again), Try again second. Words chosen by pressedAt,
-    // never by matching the stored reason. Saying it's on TikTok needs no Mac, so this shows even while it can't post.
-    const since = findSince(mac);
-    return { kind: "stopped", words: `Didn't work: ${MAC_ROW_PRESSED}`, button: "on_tiktok", ...(since ? { since } : {}) };
-  }
+/** Not sure it posted: It's on TikTok first (never posts again), Try again second. */
+function notSure(mac: PostMac): TikTokRow {
+  const since = findSince(mac);
+  return { kind: "stopped", words: MAC_ROW_PRESSED, button: "on_tiktok", ...(since ? { since } : {}) };
+}
+
+/** A Mac post's row: not sure it posted, Didn't work, the Mac can't post, Posting…, or waiting. */
+function macRow(mac: PostMac, ctx: TikTokRowContext, clipId?: string): TikTokRow {
+  // It may be on TikTok. Words chosen by pressedAt, never by matching the stored reason. Saying it's on TikTok needs
+  // no Mac, so this shows even while it can't post.
+  if (mac.state === "stopped" && mac.pressedAt) return notSure(mac);
   if (mac.state === "stopped") {
     const ready = notReady(ctx, true);
     if (ready) return ready;
@@ -296,16 +354,19 @@ function macRow(mac: PostMac, ctx: TikTokRowContext): TikTokRow {
   // spinner for good).
   const ready = notReady(ctx, false);
   if (ready) return ready;
+  // Still working 15 minutes after the claim while the Mac checks in and is fine: its helper lost track of it (a
+  // crash after Post, another Mac), so it may be on TikTok. The server takes It's on TikTok and Try again from then on.
+  if (macStuck(mac, ctx.now ?? Date.now()) && freshOk(ctx)) return notSure(mac);
   if (mac.state === "working") return { kind: "working", words: MAC_ROW_POSTING, button: null, spinner: true };
   // Auto-posting off: a backlog or auto-posting clip would wait for good, so he can send this one now.
   if ((mac.source === "sent" || mac.source === "auto") && ctx.autoPostOn === false) return { kind: "waiting", words: MAC_ROW_AUTO_OFF, button: "post_with_mac" };
-  return { kind: "waiting", words: macWaitWords(mac, ctx), button: null };
+  return { kind: "waiting", words: macWaitWords(mac, ctx, clipId), button: null };
 }
 
 /**
  * The TikTok row (§47.4): only what the Mac is doing, with at most one button (It's on TikTok comes with Try again).
- * In this order: posted by the Mac (Open, or Add link); posted by him (§42); a Mac post (macRow: pressed, the Mac
- * can't post, Didn't work, Posting…, waiting); not on TikTok yet (Post with my Mac); a campaign clip (Add link) or a
+ * In this order: posted by the Mac (Open, or Add link); posted by him (§42); a Mac post (macRow: not sure it posted,
+ * the Mac can't post, Didn't work, Posting…, waiting); not on TikTok yet (Post with my Mac, a campaign clip too); a
  * Private test. Null: the row keeps its old words and buttons, for a clip not on TikTok once TikTok approved the app,
  * and for Clip Factory's own posts.
  */
@@ -313,19 +374,17 @@ export function tiktokRow(facts: TikTokFacts, ctx: TikTokRowContext): TikTokRow 
   const p = facts.post;
   if (p && p.status === "posted" && p.via === "mac") return postedRow("posted", p.privacy === "private" ? MAC_POSTED_PRIVATE : MAC_POSTED, p);
   if (p && p.by === "you") return postedRow("posted_you", YOU_POSTED, p);
-  if (p && p.status === "mac" && p.mac) return macRow(p.mac, ctx);
+  if (p && p.status === "mac" && p.mac) return macRow(p.mac, ctx, facts.clipId);
   // The rest is TikTok's API or the Mac: once TikTok approved the app, those rows stay as they were.
   if (ctx.audited || !facts.offer) return null;
   if (facts.privateTest) return { kind: "private_test", words: MAC_ROW_PRIVATE_TEST, button: null };
-  // The Mac never takes a campaign clip (Branded content): he posts it in TikTok and adds its link (§47.2).
-  if (facts.campaign) return { kind: "campaign", words: MAC_ROW_CAMPAIGN, button: "add_link" };
   const words = p && p.status === "posted" && p.privacy === "private" ? MAC_ROW_ONLY_YOU : MAC_ROW_NOT_YET;
   return notReady(ctx, false) ?? { kind: "offer", words, button: "post_with_mac" };
 }
 
 /** Does this row read the Mac's check-in (GET /v1/tiktok/mac)? Its Mac post, or a clip the Mac could take. */
 export function rowNeedsMac(facts: TikTokFacts): boolean {
-  return facts.post?.status === "mac" || (facts.offer && !facts.campaign && !facts.privateTest);
+  return facts.post?.status === "mac" || (facts.offer && !facts.privateTest);
 }
 
 /** Does this row read auto-posting's runs (GET /v1/autopost)? A backlog clip waiting while auto-posting is on. */
@@ -339,8 +398,12 @@ export function lastLiveRunAt(runs: readonly { at: string; kind: string; mode: s
   return runs?.find((r) => r.kind === "scheduled" && r.mode === "live")?.at ?? null;
 }
 
-/** The clip page's chip for a Mac post (its stack says the rest). */
-export function macChip(mac: Pick<PostMac, "state">): string {
+/**
+ * The clip page's chip for a Mac post (its stack says the rest): "Not sure it posted" once the Mac pressed Post but
+ * couldn't tell, or when its row says so (a stuck claim, `row`).
+ */
+export function macChip(mac: Pick<PostMac, "state" | "pressedAt">, row?: Pick<TikTokRow, "button"> | null): string {
+  if (row?.button === "on_tiktok" || (mac.state === "stopped" && mac.pressedAt)) return MAC_NOT_SURE;
   return mac.state === "working" ? MAC_ROW_POSTING : mac.state === "stopped" ? "Didn't work" : MAC_ROW_WAITING;
 }
 
@@ -354,11 +417,18 @@ export function sendLots(clipIds: readonly string[]): string[][] {
   return out;
 }
 
-/** Settings' status line: when the Mac checked in, that it never did, that it needs him, or that it is paused. */
+/**
+ * Settings' status line: when the Mac checked in, that it never did, that it needs him, or that it is paused (the
+ * reason's first sentence and what goes on next: "Paused after the 3 trial posts. Your Mac goes on once their views
+ * are checked.").
+ */
 export function helperLine(helper: MacHelper | null, now: number = Date.now()): string {
   if (!helper) return MAC_NEVER_SEEN;
   if (helper.state === "needs_you") return `Your Mac needs you: ${helper.reason ?? "open it and look."}`;
-  if (helper.state === "paused") return MAC_PAUSED;
+  if (helper.state === "paused") {
+    const { why, next } = pausedParts(helper);
+    return `${why}. ${next.charAt(0).toUpperCase()}${next.slice(1)}.`;
+  }
   return `Your Mac checked in ${timeWords(helper.seenAt, now)}.`;
 }
 

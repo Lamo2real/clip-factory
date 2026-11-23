@@ -6,7 +6,7 @@
 import { ApiError } from "../errors.ts";
 import type { Clip, MacHelper, MacJob, MacSendResult, MacSource, MacStep, Post, PostMac, Settings, TikTokMacStatus, TikTokPostOptions } from "../types.ts";
 import { presetOf } from "../../lib/preset.ts";
-import { canSendToMac, MAC_MAY_HAVE_POSTED, MAC_NOT_POSTING, MAC_PRESSED_REASON, MAC_SEND_MAX, MAC_WORKING, macOn } from "../../lib/tiktokMac.ts";
+import { canSendToMac, MAC_MAY_HAVE_POSTED, MAC_NOT_POSTING, MAC_PRESSED_REASON, MAC_SEND_MAX, MAC_WORKING, macOn, macStuck } from "../../lib/tiktokMac.ts";
 import { tiktokState, videoFileName } from "../../lib/tiktokYourself.ts";
 import { ulid } from "./fixtures.ts";
 
@@ -50,7 +50,8 @@ export interface TikTokMacControls {
   login(login: "saved" | "none", done?: boolean): void;
   /** The helper was last seen at `at` (ISO), or never (null). */
   seen(at: string | null): void;
-  claim(clipId: string, device?: string): MacJob;
+  /** `agoMs`: the claim was made that long ago (a helper that crashed or lost track of it, for the stuck rule). */
+  claim(clipId: string, device?: string, agoMs?: number): MacJob;
   step(clipId: string, step: MacStep, device?: string): MacJob;
   done(clipId: string, link?: string, device?: string): { clip: Clip; posts: Post[] };
   stopped(clipId: string, reason: string, needsYou?: boolean, device?: string): MacJob;
@@ -59,11 +60,14 @@ export interface TikTokMacControls {
   post(clipId: string): Post | null;
 }
 
-/** My settings' TikTok choices (Everyone, Comment, Duet and Stitch on), in the TikTok sheet's shape. */
-export function presetChoices(settings: Settings): TikTokPostOptions {
+/**
+ * My settings' TikTok choices (Everyone, Comment, Duet and Stitch on), in the TikTok sheet's shape. A campaign clip's
+ * is always for Everyone (the API's options_for: the campaign's rule holds on the Mac too).
+ */
+export function presetChoices(settings: Settings, campaign = false): TikTokPostOptions {
   const t = presetOf(settings.postPreset).tiktok;
   return {
-    privacyLevel: t.privacy,
+    privacyLevel: campaign ? "PUBLIC_TO_EVERYONE" : t.privacy,
     disableComment: !t.comments,
     disableDuet: !t.duet,
     disableStitch: !t.stitch,
@@ -193,7 +197,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     seen(at) {
       helper = at === null ? null : { seenAt: at, state: helper?.state ?? "ok", ...(helper?.reason ? { reason: helper.reason } : {}), device: helper?.device ?? "mock-mac" };
     },
-    claim(clipId, device = "mock-mac") {
+    claim(clipId, device = "mock-mac", agoMs = 0) {
       if (!macOn(deps.settings())) throw conflict(MAC_OFF);
       const p = macOf(clipId);
       if (p.mac.source === "auto" && deps.settings().autoPost?.on !== true) throw conflict(AUTO_OFF);
@@ -201,10 +205,11 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       const claim = claims.get(p.postId);
       const stale = p.mac.state === "working" && !p.mac.pressedAt && (!claim || now - claim.beatAt > MAC_STALE_CLAIM_MS);
       if (p.mac.state !== "waiting" && !stale) throw conflict(ANOTHER_TRY);
-      p.mac = { ...p.mac, state: "working", step: "video", claimedAt: iso(now) };
+      const at = now - agoMs;
+      p.mac = { ...p.mac, state: "working", step: "video", claimedAt: iso(at) };
       delete p.mac.stoppedAt;
       delete p.mac.reason;
-      claims.set(p.postId, { device, beatAt: now });
+      claims.set(p.postId, { device, beatAt: at });
       attempts.set(p.postId, (attempts.get(p.postId) ?? 0) + 1);
       deps.publishPost(p);
       return job(p);
@@ -312,7 +317,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
           out.push({ clipId, sent: true });
           continue;
         }
-        const choices = presetChoices(deps.settings());
+        const choices = presetChoices(deps.settings(), !!c.campaignId);
         if (!p) {
           const made: Post = { postId: ulid(), clipId, platform: "tiktok", ...macFields(source) };
           deps.posts().push(made);
@@ -336,19 +341,22 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     /**
      * POST /v1/clips/{clipId}/tiktok/mac/retry: a stopped Mac post waits again, keeping its place (since). With `now`
      * it becomes an Upload tap's (source "upload"), also an auto-posting run's while auto-posting is off: he tapped it.
-     * A waiting post becomes one with `now` too; without it, it is answered as it is.
+     * A waiting post becomes one with `now` too; without it, it is answered as it is. A claim stuck for 15 minutes
+     * (macStuck) is taken back the same way, so the Mac claims it afresh.
      */
     retry(clipId: string, notOnTikTok: boolean, now: unknown = false): { clip: Clip; posts: Post[] } {
       const tapped = nowKey(now);
       const c = clip(clipId);
       const p = macOf(clipId);
-      if (p.mac.state === "working") throw conflict(MAC_WORKING);
+      const stuck = macStuck(p.mac, deps.now());
+      if (p.mac.state === "working" && !stuck) throw conflict(MAC_WORKING);
       if (p.mac.state === "waiting" && tapped) goNow(p);
-      if (p.mac.state === "stopped") {
+      if (p.mac.state === "stopped" || stuck) {
         if (p.mac.pressedAt && !notOnTikTok) throw conflict(MAC_MAY_HAVE_POSTED);
         const { step: _s, claimedAt: _c, stoppedAt: _t, reason: _r, pressedAt, ...rest } = p.mac;
         p.mac = { ...rest, state: "waiting", ...(tapped ? { source: "upload" as const } : {}), ...(pressedAt && !notOnTikTok ? { pressedAt } : {}) };
-        if (helper?.state === "needs_you") helper = { seenAt: helper.seenAt, state: "ok", device: helper.device, ...(helper.version ? { version: helper.version } : {}) };
+        if (stuck) claims.delete(p.postId);
+        clearNeedsYou();
         deps.publishPost(p);
       }
       return answer(c);
@@ -382,17 +390,27 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       settle(c, false);
       return answer(c);
     },
-    /** I posted it (§42) on a Mac post: refused while the Mac works on it; afterwards the Mac no longer has it. */
+    /**
+     * I posted it (§42, the row's It's on TikTok) on a Mac post: refused while the Mac works on it, unless that claim is
+     * stuck (15 minutes); afterwards the Mac no longer has it. Marking a stopped or stuck one answers the Mac's stop, so
+     * a helper that needed him goes back to ok (as Try again does).
+     */
     beforeMarked(p: Post | undefined) {
-      if (p?.status === "mac" && p.mac?.state === "working") throw conflict(MAC_WORKING);
+      if (p?.status === "mac" && p.mac?.state === "working" && !macStuck(p.mac, deps.now())) throw conflict(MAC_WORKING);
     },
     marked(p: Post) {
+      if (p.mac?.state === "stopped" || p.mac?.state === "working") clearNeedsYou();
       claims.delete(p.postId);
       delete p.mac;
     },
     /** A new post Upload or an auto-posting run makes for the Mac (§47.2). */
     macFields,
   };
+
+  /** The helper item goes back to ok (without its reason) when it needed him: he answered its stopped post. */
+  function clearNeedsYou() {
+    if (helper?.state === "needs_you") helper = { seenAt: helper.seenAt, state: "ok", device: helper.device, ...(helper.version ? { version: helper.version } : {}) };
+  }
 
   /**
    * A waiting Mac post becomes an Upload tap's (the API's _go_now): the owner tapped its row's button (`now`), so the
@@ -409,7 +427,6 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     const posts = postsOf(c.clipId);
     if (c.status === "review" || c.status === "declined") return "Upload this clip first.";
     if (!posts.length) return "This clip is still starting to upload. Try again in a minute.";
-    if (c.campaignId) return "Campaign clips go on TikTok by hand. Post it in the TikTok app, then add the link.";
     if (c.auto?.test === "private") return "This was a Private test, so it stays off TikTok.";
     const state = tiktokState(posts);
     if (state === "mac") return source === "upload" && tiktokOf(c.clipId)?.mac?.state === "waiting" ? null : "Your Mac already has this clip.";

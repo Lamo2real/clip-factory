@@ -481,7 +481,7 @@ def test_nothing_found_yet_marks_it_and_says_so(
     )
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"since": "2026-11-15T11:50:00.000Z"})
     assert status == 200
-    assert body["note"] == "Saved. Clip Factory could not find it on your TikTok yet. Tap Add link in a minute."
+    assert body["note"] == "Saved. Clip Factory could not find it on your TikTok yet. Tap Find it for me in a minute."
     assert _tiktok(body)["by"] == "you"
     assert "url" not in _tiktok(body)
 

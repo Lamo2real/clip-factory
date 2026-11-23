@@ -29,7 +29,7 @@ import { currentClipModel, isClipModel } from "../../lib/models.ts";
 import { autoPostMock, NOTE_NO_PLACES, CR_BY_HAND, CR_CANT_TAKE, type AutoPostControls } from "./autopost.ts";
 import { AUTO_ALREADY_SENT } from "../../lib/autopost.ts";
 import { tiktokMacMock, presetChoices, type TikTokMacControls } from "./tiktokMac.ts";
-import { MAC_UNDO_REFUSED, MAC_UNKNOWN_SETTING, macOn } from "../../lib/tiktokMac.ts";
+import { canSendToMac, MAC_UNDO_REFUSED, MAC_UNKNOWN_SETTING, macOn } from "../../lib/tiktokMac.ts";
 import { tiktokAudited } from "../../lib/tiktokYourself.ts";
 
 const STEP_MS = 3500;
@@ -290,6 +290,17 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       publishPost(p);
       c.status = "publishing";
       publishClip(c);
+    },
+    /**
+     * A kept clip that isn't on TikTok yet becomes a campaign clip (§38), for the TikTok row (§47.4): the Mac takes it
+     * like any other, always for Everyone. Answers its id.
+     */
+    campaignClip(campaignId = "200ea21b-be80-4db8-b552-8e32b148604e"): string {
+      const c = store.clips.find((x) => !x.campaignId && !x.startPending && canSendToMac(x, store.posts.filter((p) => p.clipId === x.clipId)));
+      if (!c) throw new Error("no kept clip that isn't on TikTok yet");
+      c.campaignId = campaignId;
+      publishClip(c);
+      return c.clipId;
     },
     /** The clip's posts, as the server holds them. */
     posts(clipId: string): Post[] {
@@ -725,9 +736,10 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     const tiktokGoing = chosen ? chosen.includes("tiktok") : store.settings.platforms.includes("tiktok") && connected.includes("tiktok");
     if (c.status === "review" && tiktokGoing && !tiktok?.privacyLevel) throw bad("Pick who can see it on TikTok.");
     // Your Mac posts TikTok (§47.2): Upload's TikTok goes to the Mac while TikTok has not approved the app, and a live
-    // auto-posting run gives a normal clip a Mac post too (never a Private test run or a campaign clip).
-    const macUpload = !auto && !!chosen?.includes("tiktok") && macOn(store.settings) && !tiktokAudited(setup.overview().platforms) && !c.campaignId;
-    const macAuto = !!auto && !auto.test && macOn(store.settings) && !c.campaignId;
+    // auto-posting run gives a clip a Mac post too (never a Private test run). A campaign clip goes the same way (the
+    // owner never posts by hand), always for Everyone.
+    const macUpload = !auto && !!chosen?.includes("tiktok") && macOn(store.settings) && !tiktokAudited(setup.overview().platforms);
+    const macAuto = !!auto && !auto.test && macOn(store.settings);
     const startPosting = () => {
       const have = new Set(store.posts.filter((p) => p.clipId === clipId).map((p) => p.platform));
       const targets = c.uploadTo ?? store.settings.platforms;
@@ -742,13 +754,13 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       if (auto) for (const p of created) privateTest(Object.assign(p, { auto: true as const }), auto.test);
       if (macAuto && !have.has("tiktok") && !targets.includes("tiktok")) {
         const made: Post = { postId: ulid(), clipId, platform: "tiktok", ...mac.macFields("auto"), auto: true };
-        postOptions.set(made.postId, presetChoices(store.settings));
+        postOptions.set(made.postId, presetChoices(store.settings, !!c.campaignId));
         created.splice(PLATFORM_ORDER.filter((p) => p === "youtube" && created.some((x) => x.platform === p)).length, 0, made);
       }
       store.posts.push(...created);
       for (const p of created) if (p.platform === "tiktok" && p.status === "queued" && tiktok) postOptions.set(p.postId, clone(tiktok));
       // Every Mac post asks the Mac for My settings' choices (Everyone, all three on), whatever the sheet said (§47.1).
-      for (const p of created) if (p.platform === "tiktok" && p.status === "mac") postOptions.set(p.postId, presetChoices(store.settings));
+      for (const p of created) if (p.platform === "tiktok" && p.status === "mac") postOptions.set(p.postId, presetChoices(store.settings, !!c.campaignId));
       for (const p of created) {
         const own = options?.[p.platform as keyof ClipPostOptions];
         if (own) clipOptions.set(p.postId, clone(own));
@@ -1220,7 +1232,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       let note: string | undefined;
       if (!video) {
         if (p?.by === "you") video = { id: "7710644811602169121", handle: "lamo.clips" };
-        else note = "Saved. Clip Factory could not find it on your TikTok yet. Tap Add link in a minute.";
+        else note = "Saved. Clip Factory could not find it on your TikTok yet. Tap Find it for me in a minute.";
       }
       if (p?.status === "queued") throw conflict("This clip is still uploading to TikTok. Wait until it is done, then try again.");
       // A Mac post (§47.3): his own post while it waits or stopped, never while the Mac is posting it.

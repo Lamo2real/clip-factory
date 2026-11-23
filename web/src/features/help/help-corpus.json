@@ -1,5 +1,5 @@
 {
-  "version": "fb725c7ae9cc",
+  "version": "ac89ac1da0c7",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -4672,6 +4672,7 @@
         "paste",
         "save",
         "link",
+        "yes",
         "tiktok",
         "add",
         "fix",
@@ -4691,8 +4692,7 @@
         "make",
         "check",
         "throw",
-        "away",
-        "close"
+        "away"
       ],
       "answer": "These clips all come from one job. Tap Upload to post one, or Throw away if you do not like it. Tap Show every job to see the rest.",
       "steps": [
@@ -4741,11 +4741,11 @@
         "mac",
         "paste",
         "save",
+        "yes",
         "tiktok",
         "add",
         "make",
-        "earlier",
-        "week"
+        "earlier"
       ],
       "answer": "Library has every clip you uploaded.",
       "steps": [
@@ -4794,10 +4794,10 @@
         "mac",
         "paste",
         "save",
+        "yes",
         "tiktok",
         "add",
         "fix",
-        "yes",
         "send"
       ],
       "answer": "A clip's page shows how it does on each app. Tap a clip in Library to open it.",

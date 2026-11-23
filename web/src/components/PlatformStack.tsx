@@ -103,7 +103,7 @@ export function PlatformStack({
         <div className="pstack__chip">
           <Pill tone={CHIP_TONE[perf.status]} icon={perf.status === "failed" ? "alert" : perf.status === "posted" ? "checkCircle" : undefined}>
             {perf.status === "mac" && perf.mac
-              ? macChip(perf.mac)
+              ? macChip(perf.mac, perf.platform === "tiktok" ? row : null)
               : perf.via === "mac"
                 ? "Posted by your Mac"
                 : autoPerfLabel(perf.status, perf.platform, auto, perf.by, STATUS_LABEL[perf.status])}

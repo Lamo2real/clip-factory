@@ -10,11 +10,15 @@ Nothing here calls TikTok's posting API, so TikTok's API rules for unaudited app
 The owner's Mac (§47) finishes a Mac post through the same ``mark_posted`` (``mac_device``): the one TikTok post per
 clip becomes ``posted``, ``by: "you"``, with the public ``via: "mac"``, in the same conditional write, so the Mac's
 done and the owner's "I posted it" can never both make a post. "I posted it" on a Mac post is allowed while it waits
-or stopped (its Mac fields go into ``beforeYou``, so Undo puts the Mac post back), never while the Mac is posting it.
+or stopped (its Mac fields go into ``beforeYou``, so Undo puts the Mac post back), never while the Mac is posting it,
+unless that claim is stuck (``MAC_STUCK``: claimed 15 minutes ago or more, the web's "Not sure it posted"). Marking a
+stopped or stuck Mac post (his It's on TikTok) also puts the helper item back to ``ok`` when it needed him
+(``clear_needs_you``), as Try again does: nothing else would let the Mac go on.
 """
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -39,6 +43,11 @@ MAC_WORKING = "Your Mac is posting it right now. Wait a minute."
 MAC_NOT_POSTING = "Your Mac isn't posting this clip."
 MAC_TAKEN = "Another try already has this clip."
 MAC_POSTED = "Your Mac posted this one. To take it down, delete it in TikTok."
+# The helper item (``USER#{id}`` / ``MACHELPER``, §47.3): when the Mac last checked in and how it is.
+HELPER_SK = "MACHELPER"
+# A Mac post claimed this long ago and still ``working`` is stuck (the helper crashed, or lost its ledger): the web
+# shows "Not sure it posted" from its ``claimedAt``, and his It's on TikTok and Try again are taken (§47.3).
+MAC_STUCK = timedelta(minutes=15)
 # The internal fields that make a post a Mac post (§47): its state (public as ``mac``), who claimed it and its
 # heartbeat, what a Clip Factory post was before it was handed over (``beforeMac``), and whether the post was made for
 # the Mac (``madeForMac``, so Take it back deletes it).
@@ -126,6 +135,29 @@ class Refused(Exception):
         self.status = status
 
 
+def mac_stuck(row: Mapping[str, Any], now: datetime) -> bool:
+    """A Mac post still ``working`` whose claim (``macClaimedAt``) is ``MAC_STUCK`` old or more: whatever its
+    heartbeat, the owner may say it's on TikTok, or try again (§47.3)."""
+    if row.get("status") != MAC_STATUS or row.get("macState") != "working":
+        return False
+    claimed = parse(row.get("macClaimedAt"))
+    return claimed is not None and now - claimed >= MAC_STUCK
+
+
+def clear_needs_you(store: db.Store, user_id: str) -> None:
+    """The helper item goes back to ``ok`` (without its reason) when it was ``needs_you``: the owner answered the
+    stopped post (Try again, or It's on TikTok), so the Mac goes on. Nothing changes when it did not need him."""
+    with contextlib.suppress(db.ConditionFailed):
+        store.update_expr(
+            db.user_pk(user_id),
+            HELPER_SK,
+            "SET #st = :ok REMOVE #re",
+            condition="#st = :nu",
+            names={"#st": "state", "#re": "reason"},
+            values={":ok": "ok", ":nu": "needs_you"},
+        )
+
+
 def tiktok_row(rows: list[Item]) -> Item | None:
     return next((p for p in rows if p.get("platform") == "tiktok" and p.get("type") == "post"), None)
 
@@ -149,7 +181,8 @@ def mark_posted(
     the post gets its link and, when ``count_views``, joins the poller. Marking again only adds or changes the link.
     ``mac`` is the owner's Mac saying it posted it (§47): only the Mac post it claimed (``macDevice``, and
     ``macAttempt`` when given, still ``working`` or ``stopped``) becomes posted, with ``via: "mac"``, the privacy it
-    set (``mac_privacy``) and its Mac fields gone; a post it already finished only gets the link. Raises
+    set (``mac_privacy``) and its Mac fields gone; a post it already finished only gets the link. Without ``mac`` (his
+    It's on TikTok) a stopped or stuck Mac post also clears the helper's ``needs_you`` (``clear_needs_you``). Raises
     ``Refused``."""
     status = clip.get("status")
     if status not in DECIDED:
@@ -160,7 +193,7 @@ def mark_posted(
     clip_id = str(clip["clipId"])
     rows = posts_for_clip(store, user_id, clip_id, consistent=True)
     row = tiktok_row(rows)
-    _check_mac(row, mac)
+    _check_mac(row, mac, now)
     if row is not None and row.get("status") == "queued":
         raise Refused(STILL_UPLOADING)
     if row is not None and row.get("by") != "you" and row.get("status") == "posted" and row.get("privacy") == "public":
@@ -173,7 +206,8 @@ def mark_posted(
     post_id = str(row["postId"])
     fields: Item = {"status": "posted", "by": "you", "privacy": "public"}
     remove: list[str] = []
-    expect = _mac_fields(row, mac, fields, remove)
+    expect = _mac_fields(row, mac, fields, remove, now)
+    answered = mac is None and row.get("status") == MAC_STATUS and row.get("macState") in ("stopped", "working")
     if row.get("by") != "you":
         # Clip Factory's own post (waiting, failed or private), or a Mac post: keep what it was, for Undo. The Mac's
         # own done keeps nothing: what it posted is on TikTok and is never undone.
@@ -211,6 +245,8 @@ def mark_posted(
             db.update_request(db.user_pk(user_id), db.clip_sk(clip_id), clip_fields, expect_in={"status": [status]})
         )
     store.transact(updates=updates)
+    if answered:
+        clear_needs_you(store, user_id)
 
 
 def _new_post(
@@ -268,16 +304,16 @@ def _new_post(
     store.transact(puts=[item], updates=[update])
 
 
-def _check_mac(row: Mapping[str, Any] | None, mac: MacDone | None) -> None:
+def _check_mac(row: Mapping[str, Any] | None, mac: MacDone | None, now: datetime) -> None:
     """§47: the Mac's done is only for the Mac post its device (and attempt) claimed, or one it already finished; I
-    posted it is never taken while the Mac is posting it."""
+    posted it is never taken while the Mac is posting it, unless that claim is stuck (``mac_stuck``)."""
     is_mac = row is not None and row.get("status") == MAC_STATUS
     if mac is not None:
         if row is None or not (is_mac or row.get("via") == "mac"):
             raise Refused(MAC_NOT_POSTING)
         if is_mac and not owns(row, mac.device, ("working", "stopped"), mac.attempt):
             raise Refused(MAC_TAKEN)
-    elif is_mac and row is not None and row.get("macState") == "working":
+    elif is_mac and row is not None and row.get("macState") == "working" and not mac_stuck(row, now):
         raise Refused(MAC_WORKING)
 
 
@@ -288,10 +324,12 @@ def owns(row: Mapping[str, Any], device: str, states: tuple[str, ...], attempt: 
     return attempt is None or row.get("macAttempt") == attempt
 
 
-def _mac_fields(row: Mapping[str, Any], mac: MacDone | None, fields: Item, remove: list[str]) -> dict[str, list[Any]]:
+def _mac_fields(
+    row: Mapping[str, Any], mac: MacDone | None, fields: Item, remove: list[str], now: datetime
+) -> dict[str, list[Any]]:
     """The write's condition, and what a Mac post loses (§47): its Mac fields go; the Mac's done adds ``via: "mac"``
     and the privacy the Mac set, and needs the claim to still be its own; I posted it needs the Mac not to be posting
-    it."""
+    it (or that stuck claim, unchanged)."""
     expect: dict[str, list[Any]] = {"status": [str(row.get("status"))]}
     if row.get("status") == MAC_STATUS:
         remove += [k for k in MAC_FIELDS if k in row]
@@ -302,6 +340,8 @@ def _mac_fields(row: Mapping[str, Any], mac: MacDone | None, fields: Item, remov
             expect.update({"macDevice": [mac.device], "macState": ["working", "stopped"]})
             if mac.attempt is not None:
                 expect["macAttempt"] = [mac.attempt]
+        elif mac_stuck(row, now):
+            expect.update({"macState": ["working"], "macClaimedAt": [str(row.get("macClaimedAt"))]})
         else:
             expect["macState"] = ["waiting", "stopped"]  # never while the Mac is posting it
     elif mac is not None:

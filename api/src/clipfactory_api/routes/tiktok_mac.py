@@ -248,14 +248,15 @@ def done(app: App, req: Request) -> Response:
 def retry(app: App, req: Request) -> Response:
     """``POST /v1/clips/{clipId}/tiktok/mac/retry`` ``{notOnTikTok?, now?}`` → ``{clip, posts}``: the owner's Try
     again. With ``now: true`` the stopped post, or one that already waits, goes at once, as an Upload tap
-    (``macSource: "upload"``)."""
+    (``macSource: "upload"``). A post whose claim is stuck (still ``working`` 15 minutes after it, ``mac_stuck``) is
+    taken back from that claim the same way, so the Mac claims it afresh."""
     body = req.json()
     validate.only_keys(body, {"notOnTikTok", "now"})
     not_on_tiktok = validate.boolean(body.get("notOnTikTok", False), "notOnTikTok")
     now_tap = validate.boolean(body.get("now", False), "now")
     item = clip_routes._clip_or_404(app, req)
     try:
-        tiktok_mac.retry(app.store, item, not_on_tiktok=not_on_tiktok, now=now_tap)
+        tiktok_mac.retry(app.store, item, not_on_tiktok=not_on_tiktok, now=now_tap, at=app.clock())
     except tiktok_self.Refused as e:
         raise _refused(e) from e
     log("info", "tiktok_mac.retry", clipId=item["clipId"], notOnTikTok=not_on_tiktok, now=now_tap)

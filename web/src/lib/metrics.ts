@@ -3,7 +3,7 @@ import type { AnyExtra, PerfStatus, Platform, PlatformPerformance, PostMetrics }
 import type { IconName } from "../components/Icon.tsx";
 import { PLATFORM_LABEL, PLATFORM_ORDER, relative, timecode } from "./format.ts";
 import { failedForPublicAccount, postError } from "./tiktokYourself.ts";
-import { macChip, shortReason, type TikTokRow } from "./tiktokMac.ts";
+import { MAC_ROW_PRESSED, macChip, shortReason, type TikTokRow } from "./tiktokMac.ts";
 
 /** Platform order on the performance page and in This week: the app-wide PLATFORM_ORDER. */
 export const STATS_ORDER: readonly Platform[] = PLATFORM_ORDER;
@@ -275,6 +275,8 @@ export function calmCopy(
       if (!p.mac) return { text: "Waiting for your Mac." };
       if (p.mac.state === "working") return { text: macChip(p.mac), spinner: true };
       if (p.mac.state === "stopped") {
+        // The Mac pressed Post but couldn't tell: it may be on TikTok (never "Didn't work", §47.4).
+        if (p.mac.pressedAt) return { text: MAC_ROW_PRESSED };
         const why = shortReason(p.mac.reason);
         return { text: why ? `Didn't work: ${why}` : "Didn't work" };
       }

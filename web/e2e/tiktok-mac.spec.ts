@@ -1,9 +1,11 @@
 // Your Mac posts it on TikTok (docs/CONTRACTS.md §47) in mock mode: Settings › Posting › Your Mac posts TikTok (the
 // switch, the Mac's check-in, Send these to my Mac), and the TikTok row on the Library, the clip page and Review's
 // Uploaded just now, which says only what the Mac is doing, with at most one button (§47.4, ADR-85): Waiting for your
-// Mac, Posting…, Didn't work with Try again, It's on TikTok (with Try again second) once the Mac pressed Post, Posted
-// by your Mac, Not on TikTok yet with Post with my Mac, Turn on while the Mac can't post, and Open Your Mac posts
-// TikTok while it needs him or is paused. The Mac is moved by the helper's knobs (window.__cfMock.mac). The pretend
+// Mac (an Upload tap's in about a minute; the backlog's first after the next auto-posting run, the rest in line),
+// Posting…, Didn't work with Try again, Not sure it posted (the Mac pressed Post but couldn't tell, or its claim is
+// stuck) with It's on TikTok and a quieter Try again that asks first, Posted by your Mac, Not on TikTok yet with Post
+// with my Mac (a campaign clip too), Turn on while the Mac can't post, and Open Your Mac posts TikTok while it needs
+// him or is paused. On a narrow card the button goes under the words. The Mac is moved by the helper's knobs (window.__cfMock.mac). The pretend
 // app keeps its settings and posts in this page only, so every step after the first page is an in-app navigation.
 import { expect, test, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
@@ -12,12 +14,12 @@ type Job = { clipId: string; postId: string; hook: string; state: string; source
 type MockWindow = Window & {
   __cfMock?: {
     setup: { finish(p: string): void; setAudit(passed: boolean): void };
-    posting: { posts(clipId: string): { postId: string; platform: string; status: string }[] };
+    posting: { posts(clipId: string): { postId: string; platform: string; status: string }[]; campaignClip(): string };
     mac: {
       ping(state?: string, reason?: string): { on: boolean };
       seen(at: string | null): void;
       login(login: "saved" | "none", done?: boolean): void;
-      claim(clipId: string): Job;
+      claim(clipId: string, device?: string, agoMs?: number): Job;
       step(clipId: string, step: string): Job;
       done(clipId: string, link?: string): unknown;
       stopped(clipId: string, reason: string, needsYou?: boolean): Job;
@@ -28,8 +30,9 @@ type MockWindow = Window & {
 
 const LINK = "https://www.tiktok.com/@lamo.clips/video/7710644811602169121";
 /** An Upload tap's clip (and Post with my Mac, and Try again): the Mac takes it at its next check-in. */
-const CHECK_IN = "Waiting for your Mac · next check-in in about a minute";
-const PRESSED = "Didn't work: your Mac couldn't tell if it posted · look on your TikTok first";
+const CHECK_IN = "Waiting for your Mac · it takes it in about a minute";
+const PRESSED = "Not sure it posted · look on your TikTok";
+const AGAIN_ASK = "Post it again? Only if it's not on your TikTok.";
 const OPEN_MAC = "Open Your Mac posts TikTok";
 
 test.use({ viewport: { width: 1440, height: 900 } });
@@ -52,7 +55,9 @@ const mac = {
   ping: (page: Page, state?: string, reason?: string) =>
     page.evaluate(([s, r]) => (window as MockWindow).__cfMock!.mac.ping(s, r), [state, reason] as const),
   seen: (page: Page, at: string | null) => page.evaluate((t) => (window as MockWindow).__cfMock!.mac.seen(t), at),
-  claim: (page: Page, clipId: string) => page.evaluate((id) => (window as MockWindow).__cfMock!.mac.claim(id), clipId),
+  /** `agoMs`: the claim was made that long ago (a helper that lost track of it: the stuck rule, 15 minutes). */
+  claim: (page: Page, clipId: string, agoMs = 0) =>
+    page.evaluate(([id, ago]) => (window as MockWindow).__cfMock!.mac.claim(id, undefined, ago), [clipId, agoMs] as const),
   step: (page: Page, clipId: string, step: string) =>
     page.evaluate(([id, st]) => (window as MockWindow).__cfMock!.mac.step(id, st), [clipId, step] as const),
   stopped: (page: Page, clipId: string, reason: string) =>
@@ -224,7 +229,7 @@ test("library: off, not set up, Post with my Mac, Posting…, Didn't work with T
   await expect(status).toHaveText(CHECK_IN);
 
   // It pressed Post but couldn't tell if it posted: look on TikTok first. It's on TikTok, or Try again (second), which
-  // says it is not there.
+  // asks first, then says it is not there.
   await mac.claim(page, clipId);
   await mac.step(page, clipId, "pressing");
   await mac.stopped(page, clipId, "Timed out.");
@@ -232,7 +237,11 @@ test("library: off, not set up, Post with my Mac, Posting…, Didn't work with T
   await expect(row.getByRole("button")).toHaveCount(2);
   await expect(row.getByRole("button", { name: "It's on TikTok" })).toBeVisible();
   await row.getByRole("button", { name: "Try again, TikTok" }).click();
+  await expect(row.getByText(AGAIN_ASK)).toBeVisible();
+  await row.getByRole("button", { name: "Yes, post it again" }).click();
+  await expect(page.getByText("Sent to your Mac again.")).toBeVisible();
   await expect(status).toHaveText(CHECK_IN);
+  await expect(row.getByText(AGAIN_ASK)).toHaveCount(0);
 
   // Posted by the Mac: Everyone, with Open and its numbers, and no button.
   await mac.claim(page, clipId);
@@ -258,7 +267,7 @@ async function sentWithMyMac(page: Page) {
   return { clipId, row, status: row.locator(".post__status") };
 }
 
-test("library: the Mac pressed Post but couldn't tell: It's on TikTok saves its link, Try again comes second", async ({ page }) => {
+test("library: not sure it posted: It's on TikTok saves its link, a quieter Try again comes second and asks first", async ({ page }) => {
   const { clipId, row, status } = await sentWithMyMac(page);
   await mac.claim(page, clipId);
   await mac.step(page, clipId, "pressing");
@@ -273,6 +282,17 @@ test("library: the Mac pressed Post but couldn't tell: It's on TikTok saves its 
   await expect(onTikTok).toHaveAttribute("aria-expanded", "false");
   await expect(row.getByRole("textbox")).toHaveCount(0);
 
+  // Try again looks quieter than It's on TikTok: no fill of its own, its words underlined (never the same button).
+  const look = (el: Element) => {
+    const s = getComputedStyle(el);
+    return { bg: s.backgroundImage === "none" ? s.backgroundColor : s.backgroundImage, line: s.textDecorationLine, shadow: s.boxShadow };
+  };
+  const [loud, quiet] = [await onTikTok.evaluate(look), await again.evaluate(look)];
+  expect(quiet.bg).not.toBe(loud.bg);
+  expect(quiet.line).toBe("underline");
+  expect(loud.line).not.toBe("underline");
+  expect(quiet.shadow).toBe("none");
+
   // Each one shows it can be pressed (hover), and the cursor stays the arrow.
   const plain = await onTikTok.evaluate((el) => getComputedStyle(el).backgroundColor);
   await onTikTok.hover();
@@ -280,12 +300,27 @@ test("library: the Mac pressed Post but couldn't tell: It's on TikTok saves its 
   const ghost = await again.evaluate((el) => getComputedStyle(el).backgroundColor);
   await again.hover();
   await expect.poll(() => again.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(ghost);
+  for (const b of [onTikTok, again]) expect(await b.evaluate((el) => getComputedStyle(el).cursor)).toBe("default");
+
+  // Try again asks first; Not now leaves it as it was, and nothing goes to the Mac.
+  await again.click();
+  await expect(row.getByText(AGAIN_ASK)).toBeVisible();
+  await expect(row.getByRole("button", { name: "Yes, post it again" })).toBeFocused();
+  await row.getByRole("button", { name: "Not now" }).click();
+  await expect(row.getByText(AGAIN_ASK)).toHaveCount(0);
+  await expect(status).toHaveText(PRESSED);
+  expect((await mac.queue(page)).some((j) => j.clipId === clipId)).toBe(false);
 
   await onTikTok.click();
   await expect(onTikTok).toHaveAttribute("aria-expanded", "true");
   const box = row.getByRole("textbox", { name: "TikTok link" });
   await expect(box).toBeFocused();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  // Find it for me sits right next to the link box (no link needed).
+  const find = row.getByRole("button", { name: "Find it for me" });
+  await expect(find).toBeVisible();
+  const [bx, f] = [await box.boundingBox(), await find.boundingBox()];
+  expect(Math.abs(f!.y + f!.height / 2 - (bx!.y + bx!.height / 2)) < 4 || f!.y >= bx!.y + bx!.height - 1).toBe(true);
   await box.fill(LINK);
   await row.getByRole("button", { name: "Save the link" }).click();
   await expect(page.getByText("Link saved! Clip Factory will count its views.")).toBeVisible();
@@ -294,6 +329,80 @@ test("library: the Mac pressed Post but couldn't tell: It's on TikTok saves its 
   await expect(row.getByRole("button")).toHaveCount(0);
   // Nothing went to the Mac again: no second post.
   expect((await mac.queue(page)).some((j) => j.clipId === clipId)).toBe(false);
+});
+
+test("library: It's on TikTok with Find it for me, and the Mac that needed him goes on", async ({ page }) => {
+  const { clipId, row, status } = await sentWithMyMac(page);
+  await mac.claim(page, clipId);
+  await mac.step(page, clipId, "pressing");
+  await page.evaluate((id) => (window as MockWindow).__cfMock!.mac.stopped(id, "TikTok logged your Mac out.", true), clipId);
+  await expect(status).toHaveText(PRESSED);
+  await row.getByRole("button", { name: "It's on TikTok" }).click();
+  await row.getByRole("button", { name: "Find it for me" }).click();
+  // The finder looks on his TikTok (from a minute before the claim); not found yet, it says to tap it again soon.
+  await expect(page.getByText("Saved. Clip Factory could not find it on your TikTok yet. Tap Find it for me in a minute.")).toBeVisible();
+  await expect(status).toHaveText("Posted by you · Everyone · add the link");
+  await expect(row.getByRole("button", { name: "Find it for me" })).toBeVisible();
+  // It answered the stopped post: the Mac is fine again (as after Try again).
+  await go(page, "/settings/posting/tiktok-mac");
+  await expect(page.getByText(/^Your Mac checked in /)).toBeVisible();
+  await expect(page.getByText(/^Your Mac needs you/)).toHaveCount(0);
+});
+
+test("library: a post still Posting… 15 minutes after its claim says not sure it posted, and Try again takes it back", async ({ page }) => {
+  const { clipId, row, status } = await sentWithMyMac(page);
+  // The Mac took it 16 minutes ago and never said more (it crashed after Post, or lost track of it), yet checks in.
+  await mac.claim(page, clipId, 16 * 60_000);
+  await mac.ping(page);
+  await refocus(page);
+  await expect(status).toHaveText(PRESSED);
+  await expect(row.locator(".spinner")).toHaveCount(0);
+  await expect(row.getByRole("button", { name: "It's on TikTok" })).toBeVisible();
+  await row.getByRole("button", { name: "Try again, TikTok" }).click();
+  await row.getByRole("button", { name: "Yes, post it again" }).click();
+  await expect(status).toHaveText(CHECK_IN);
+  // Back in line, so the Mac claims it afresh.
+  expect((await mac.queue(page)).find((j) => j.clipId === clipId)).toMatchObject({ state: "waiting", source: "upload" });
+  await mac.claim(page, clipId);
+  await expect(status).toHaveText("Posting…");
+});
+
+test("library: the backlog's first clip goes after the next auto-posting run; the rest say their place in line", async ({ page }) => {
+  await page.goto("/");
+  await settle(page);
+  await go(page, "/settings/posting/auto");
+  const auto = page.getByRole("switch", { name: "Post my clips by themselves" });
+  await auto.click();
+  await expect(auto).toHaveAttribute("aria-checked", "true");
+  await sendAll(page);
+  await mac.ping(page);
+  const queue = await mac.queue(page);
+  expect(queue.length).toBeGreaterThan(1);
+  await go(page, "/library");
+  const first = tiktokRow(page, queue[0]!.clipId).locator(".post__status");
+  await expect(first).toHaveText(/^Waiting for your Mac · goes after the next auto-posting run \((\w{3} )?\d\d:\d\d\)$/);
+  // Never the same time on a later one: its place in the Mac's queue.
+  await expect(tiktokRow(page, queue[1]!.clipId).locator(".post__status")).toHaveText("Waiting for your Mac · in line (1 before it)");
+  const runWords = page.locator(".post__status", { hasText: "goes after the next auto-posting run" });
+  await expect(runWords).toHaveCount(1);
+});
+
+test("library: a campaign clip goes with the Mac like any other, for Everyone", async ({ page }) => {
+  await page.goto("/");
+  await settle(page);
+  await turnOn(page);
+  await mac.ping(page);
+  const clipId = await page.evaluate(() => (window as MockWindow).__cfMock!.posting.campaignClip());
+  await go(page, "/library");
+  const row = tiktokRow(page, clipId);
+  await expect(cardOf(page, clipId).locator("[data-cr='campaign-chip']")).toHaveText("Campaign");
+  await expect(row.locator(".post__status")).toHaveText("Not on TikTok yet");
+  await expect(page.getByText("Campaign clip: post it in the TikTok app")).toHaveCount(0);
+  await row.getByRole("button", { name: "Post with my Mac" }).click();
+  await expect(page.getByText("Sent to your Mac! It posts it in a minute.")).toBeVisible();
+  await expect(row.locator(".post__status")).toHaveText(CHECK_IN);
+  const job = (await mac.queue(page)).find((j) => j.clipId === clipId) as (Job & { privacy?: string }) | undefined;
+  expect(job).toMatchObject({ source: "upload", state: "waiting", privacy: "PUBLIC_TO_EVERYONE" });
 });
 
 test("library: a post left Posting… says so once the Mac can't post (asleep, or the switch off), never a spinner for good", async ({ page }) => {
@@ -335,12 +444,18 @@ test("library: the Mac needs him, or is paused: what to do, and Open Your Mac po
   expect(link!.y).toBeGreaterThanOrEqual(words!.y + words!.height - 1);
   expect(li!.x + li!.width - (link!.x + link!.width)).toBeLessThan(16);
 
+  // Paused: the reason's first sentence and what goes on next (nothing in Clip Factory starts it again, so it says when).
   await mac.ping(page, "paused");
   await refocus(page);
-  await expect(row.locator(".post__status")).toHaveText("Your Mac is paused · start it again on your Mac");
+  await expect(row.locator(".post__status")).toHaveText("Paused on your Mac · your clips wait until it's started again");
+  await mac.ping(page, "paused", "Paused after the 3 trial posts. Clip Factory checks their views first.");
+  await refocus(page);
+  await expect(row.locator(".post__status")).toHaveText("Paused after the 3 trial posts · your Mac goes on once their views are checked");
   await expect(open).toHaveAttribute("href", "/settings/posting/tiktok-mac");
   await open.click();
   await expect(page).toHaveURL(/\/settings\/posting\/tiktok-mac$/);
+  await settle(page);
+  await expect(page.getByText("Paused after the 3 trial posts. Your Mac goes on once their views are checked.")).toBeVisible();
 });
 
 test("library: auto-posting off, a backlog clip goes now with Post with my Mac", async ({ page }) => {
@@ -376,7 +491,7 @@ async function privateClip(page: Page): Promise<string> {
 }
 
 for (const width of [1440, 375]) {
-  test(`library at ${width}: a private upload is not lit green, and its button sits right of the words with Open under it`, async ({ page }) => {
+  test(`library at ${width}: a private upload is not lit green; on the narrow card its button goes under the words, Open beside them`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/library");
     await settle(page);
@@ -392,16 +507,18 @@ for (const width of [1440, 375]) {
       await button.boundingBox(),
       await open.boundingBox(),
     ];
-    // The mark keeps its own size, the words start right after it, the button is right of the words (on their line),
-    // and Open sits under the button, on the right.
+    // The mark keeps its own size and the words start right after it. The cards are narrow at both sizes (three side
+    // by side at 1440), so the button goes under the words, on the right of the row's full width, and Open stays beside
+    // the words, on their line.
+    const li = (await row.boundingBox())!;
     expect(mark!.width).toBeLessThan(40);
     expect(text!.x - (mark!.x + mark!.width)).toBeLessThan(16);
-    expect(b!.x).toBeGreaterThanOrEqual(text!.x + text!.width - 1);
-    expect(b!.y).toBeLessThan(text!.y + text!.height);
-    expect(o!.y).toBeGreaterThanOrEqual(b!.y + b!.height - 1);
-    expect(Math.abs(o!.x + o!.width - (b!.x + b!.width))).toBeLessThan(2);
-    // Words get at least a third of the row.
-    expect(text!.width).toBeGreaterThan((await row.boundingBox())!.width / 3);
+    expect(b!.y).toBeGreaterThanOrEqual(text!.y + text!.height - 1);
+    expect(li.x + li.width - (b!.x + b!.width)).toBeLessThan(16);
+    expect(o!.x).toBeGreaterThanOrEqual(text!.x + text!.width - 1);
+    expect(o!.y).toBeLessThan(text!.y + text!.height);
+    // The words get the row, less the mark and Open.
+    expect(text!.width).toBeGreaterThan(li.width / 2);
 
     // On, checked in: Only you can see it, with Post with my Mac; still not green.
     await turnOn(page);
@@ -411,8 +528,11 @@ for (const width of [1440, 375]) {
     await expect(row).not.toHaveClass(/is-posted/);
     const post = await row.getByRole("button", { name: "Post with my Mac" }).boundingBox();
     const words = await row.locator(".post__text").boundingBox();
-    expect(post!.x).toBeGreaterThanOrEqual(words!.x + words!.width - 1);
-    expect(post!.y).toBeLessThan(words!.y + words!.height);
+    const li2 = (await row.boundingBox())!;
+    expect(post!.y).toBeGreaterThanOrEqual(words!.y + words!.height - 1);
+    expect(li2.x + li2.width - (post!.x + post!.width)).toBeLessThan(16);
+    // Its words stay on one line instead of a thin column.
+    expect(words!.height).toBeLessThan(48);
   });
 }
 
@@ -481,6 +601,58 @@ test("clip page: TikTok's stack says what the Mac does, and its one button sits 
   await go(page, `/clips/${clipId}`);
   await expect(calm).toHaveText("Your Mac posts TikTok is off");
   await expect(actions.getByRole("link", { name: "Turn on" })).toHaveAttribute("href", "/settings/posting/tiktok-mac");
+});
+
+for (const width of [1440, 375]) {
+  test(`clip page at ${width}: not sure it posted, its chip, and the two choices lined up with the actions`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { clipId } = await sentWithMyMac(page);
+    await mac.claim(page, clipId);
+    await mac.step(page, clipId, "pressing");
+    await mac.stopped(page, clipId, "Timed out.");
+    await go(page, `/clips/${clipId}`);
+    const stack = page.locator('[data-stack="tiktok"]');
+    await expect(stack.locator(".pstack__calm-text")).toHaveText(PRESSED);
+    await expect(stack.locator(".pstack__chip")).toHaveText("Not sure it posted");
+    const actions = page.locator(".perf__actions");
+    const choices = actions.locator(".post__choices");
+    await expect(choices.getByRole("button", { name: "It's on TikTok" })).toBeVisible();
+    const [a, c] = [(await actions.boundingBox())!, (await choices.boundingBox())!];
+    const refresh = (await actions.locator(".perf__refresh").boundingBox())!;
+    const mid = (r: { x: number; width: number }) => r.x + r.width / 2;
+    // Centred under the centred actions on a phone; from the left with the other actions on a wide screen.
+    if (width < 620) expect(Math.abs(mid(c) - mid(a))).toBeLessThan(4);
+    else expect(Math.abs(c.x - refresh.x)).toBeLessThan(4);
+    // Its question sits the same way.
+    await choices.getByRole("button", { name: "Try again, TikTok" }).click();
+    const ask = actions.locator(".post__confirm");
+    await expect(ask).toContainText(AGAIN_ASK);
+    const q = (await ask.locator(".post__confirm-buttons").boundingBox())!;
+    if (width < 620) expect(Math.abs(mid(q) - mid(a))).toBeLessThan(4);
+    else expect(Math.abs(q.x - refresh.x)).toBeLessThan(4);
+  });
+}
+
+test("review at 375: Uploaded just now reads the words first, then its buttons, on screen too", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/");
+  await settle(page);
+  await turnOn(page);
+  await mac.ping(page);
+  await go(page, "/review");
+  const card = page.locator(".review-card").first();
+  const hook = await card.locator(".review-card__hook").innerText();
+  await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
+  const item = page.locator(".kept-now__item", { hasText: hook.slice(0, 20) });
+  await expect(item.locator(".kept-now__mac")).toHaveText("TikTok: Not on TikTok yet");
+  const words = (await item.locator(".kept-now__text").boundingBox())!;
+  for (const name of ["See how it does", "Post with my Mac"]) {
+    const b = (await item.getByRole(name === "See how it does" ? "link" : "button", { name }).boundingBox())!;
+    expect(b.y, name).toBeGreaterThanOrEqual(words.y + words.height - 1);
+  }
+  // Reading order: the hook and the TikTok line come before the buttons.
+  const order = await item.evaluate((li) => [...li.querySelectorAll(".kept-now__hook, .kept-now__mac, a.btn, button")].map((e) => e.textContent?.trim().slice(0, 16)));
+  expect(order.slice(0, 2)).toEqual([hook.slice(0, 16), "TikTok: Not on T"]);
 });
 
 test("review: the hint, and Uploaded just now follows the Mac", async ({ page }) => {

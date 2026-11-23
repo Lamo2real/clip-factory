@@ -33,3 +33,12 @@
   error says "Clear the box and tap Save the link", and the campaign refusal says "Post it in the TikTok app, then
   add the link." The stored pressed reason keeps its old words (posts already hold it), and the web never shows it:
   it picks its own words by `pressedAt`.
+- **Amended 2026-11-23.** The owner: "its always the automation that covers it weather its invoked by be clicking
+  upload or if its the schedule". He never posts by hand, so a campaign clip goes to the Mac like any other (Upload,
+  an auto-posting run, Post with my Mac, Send these to my Mac), on his own TikTok and always for Everyone
+  (`tiktok_mac.options_for`, the campaign's rule; Upload's own campaign checks are unchanged). The refusal "Campaign
+  clips go on TikTok by hand…" and the row "Campaign clip: post it in the TikTok app" are gone. A post still `working`
+  15 minutes after its claim, with a Mac that checks in and is fine, reads "Not sure it posted" like a pressed one;
+  the server takes It's on TikTok and Try again on it (`tiktok_self.mac_stuck`, in one write conditional on that same
+  claim). It's on TikTok on a stopped (or stuck) Mac post also turns the helper's `needs_you` back to `ok`, as Try
+  again does. Paused has no Start again (nothing asks the helper to go on), so the row says what comes next.

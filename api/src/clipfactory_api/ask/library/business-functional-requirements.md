@@ -630,11 +630,21 @@ taps, and records "Posted by your Mac · Everyone" with the link.
 - AC1: **The sheet is gone.** No **Post it yourself**, **Post it yourself instead**, **I posted it**, **Save the
   video**, **Open TikTok** or **AirDrop** control on Library, the clip page, Review or Auto-posting, and nothing opens
   by itself after Upload. Auto-posting has no **Post these on TikTok yourself** list.
-- AC2: **Each TikTok row says what his Mac is doing**, with at most one button: "Waiting for your Mac · next at
-  14:05"; "Posting…"; "Posted by your Mac · Everyone" with **Open**; "Didn't work: {short reason}" with **Try
-  again** (it goes back to his Mac at once); "Not on TikTok yet" with **Post with my Mac** (to his Mac at once, like
-  an Upload tap). Switch off, or his Mac not seen for 30 minutes or more: the row says so, with **Turn on** (to
-  Settings › Posting › Your Mac posts TikTok).
+- AC2: **Each TikTok row says what his Mac is doing**, with at most one button: "Waiting for your Mac · it takes it in
+  about a minute" (an Upload tap), "Waiting for your Mac · goes after the next auto-posting run (20:30)" (only the
+  first backlog clip; the rest "Waiting for your Mac · in line (2 before it)", never a time that may be wrong);
+  "Posting…"; "Posted by your Mac · Everyone" with **Open**; "Didn't work: {short reason}" with **Try again** (it goes
+  back to his Mac at once); "Not sure it posted · look on your TikTok" (his Mac pressed Post but couldn't tell, or it
+  is still posting 15 minutes after it took the clip) with **It's on TikTok** (the link box with **Find it for me**)
+  and a quieter **Try again** that asks "Post it again? Only if it's not on your TikTok." first; "Not on TikTok yet"
+  with **Post with my Mac** (to his Mac at once, like an Upload tap), a campaign clip too. Switch off, or his Mac not
+  seen for 30 minutes or more: the row says so, with **Turn on** (to Settings › Posting › Your Mac posts TikTok). His
+  Mac needs him, or is paused: what and what comes next ("Paused after the 3 trial posts · your Mac goes on once their
+  views are checked"), with **Open Your Mac posts TikTok**.
+- AC5: **He never posts by hand** (23 Nov 2026: "its always the automation that covers it weather its invoked by be
+  clicking upload or if its the schedule"). A campaign clip goes to his Mac like any other clip, on his own TikTok and
+  always for **Everyone** (the campaign's rule). Answering a stopped post (**It's on TikTok** or **Try again**) lets a
+  Mac that needed him go on.
 - AC3: **Nothing stored breaks.** A clip he posted himself before keeps "Posted by you · Everyone"; with no link yet it
   gets only an inline link box with **Save the link**, no sheet. Every API route stays, and the only API change is an
   optional `now: true` on two routes, so older apps work as before.

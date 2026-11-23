@@ -5,7 +5,7 @@ import { ApiError } from "../src/api/errors.ts";
 import { mockApi } from "../src/api/mock/index.ts";
 import { seed } from "../src/api/mock/fixtures.ts";
 import type { TikTokMacControls } from "../src/api/mock/tiktokMac.ts";
-import type { Clip, MacHelper, PlatformPerformance, Post, PostMac } from "../src/api/types.ts";
+import type { Clip, MacHelper, MacJob, PlatformPerformance, Post, PostMac } from "../src/api/types.ts";
 import { calmCopy, perfStatus, postStatusLabel } from "../src/lib/metrics.ts";
 import { perfFromPost } from "../src/lib/liveCache.ts";
 import {
@@ -20,15 +20,20 @@ import {
   MAC_OFF_LINE,
   MAC_ON_TIKTOK_BUTTON,
   MAC_OPEN_BUTTON,
+  MAC_AGAIN_CONFIRM,
+  MAC_FIND_BUTTON,
   MAC_PRESSED_REASON,
   MAC_STALE_MS,
+  MAC_STUCK_MS,
   MAC_UNDO_REFUSED,
   MAC_UNKNOWN_SETTING,
   MAC_WORKING,
   macChip,
   macInsteadOk,
   macOn,
+  macStuck,
   macWaitWords,
+  pausedWords,
   postsFromStacks,
   rowNeedsMac,
   rowNeedsRuns,
@@ -126,7 +131,7 @@ describe("the TikTok row (§47.4)", () => {
   });
 
   it("waiting for an Upload tap: only the Mac's next check-in, never a time it doesn't know", () => {
-    const upload = { kind: "waiting", words: "Waiting for your Mac · next check-in in about a minute", button: null };
+    const upload = { kind: "waiting", words: "Waiting for your Mac · it takes it in about a minute", button: null };
     expect(rowOf([macPost()], ready())).toEqual(upload);
     expect(rowOf([macPost()], ready({ helper: helper(iso(NOW - 5 * MIN)) }))).toEqual(upload);
     // Every waiting Upload clip says the same: the Mac takes them one at a time, so none says a minute of its own.
@@ -136,19 +141,35 @@ describe("the TikTok row (§47.4)", () => {
     expect(macWaitWords({ source: "upload" }, ready({ helper: undefined }))).toBe("Waiting for your Mac");
   });
 
-  it("waiting from the backlog: after the next auto-posting run, with its time; never a guessed minute", () => {
+  it("waiting from the backlog: only the first in line goes after the next auto-posting run; the rest say their place", () => {
     const sent = macPost({ source: "sent" });
     const next = NOW + 5 * 3_600_000;
     const words = `Waiting for your Mac · goes after the next auto-posting run (${hm(next)})`;
-    expect(rowOf([sent], ready({ nextRunAt: iso(next) }))).toEqual({ kind: "waiting", words, button: null });
+    // The Mac's queue, in the server's order: an Upload tap's clip first, then the backlog, oldest first.
+    const job = (clipId: string, source: MacJob["source"], state: MacJob["state"] = "waiting") => ({ clipId, source, state });
+    const queue = [job("u1", "upload"), job("c1", "sent"), job("c2", "sent"), job("c3", "sent")];
+    expect(rowOf([sent], ready({ nextRunAt: iso(next), queue }))).toEqual({ kind: "waiting", words, button: null });
     // The last run doesn't move it: the helper paces the backlog itself (one per run, or the backfill's pace).
-    expect(rowOf([sent], ready({ nextRunAt: iso(next), lastRunAt: iso(NOW - 10 * MIN) }))?.words).toBe(words);
+    expect(rowOf([sent], ready({ nextRunAt: iso(next), lastRunAt: iso(NOW - 10 * MIN), queue }))?.words).toBe(words);
     // Another day: its weekday.
     const later = NOW + 30 * 3_600_000;
-    expect(macWaitWords({ source: "sent" }, ready({ nextRunAt: iso(later) }))).toBe(`Waiting for your Mac · goes after the next auto-posting run (${timeWords(later, NOW)})`);
-    // Runs not read, or auto-posting not known yet: no time.
-    expect(rowOf([sent], ready())?.words).toBe("Waiting for your Mac");
-    expect(rowOf([sent], ready({ nextRunAt: iso(next), autoPostOn: undefined }))?.words).toBe("Waiting for your Mac");
+    expect(macWaitWords({ source: "sent" }, ready({ nextRunAt: iso(later), queue }), "c1")).toBe(
+      `Waiting for your Mac · goes after the next auto-posting run (${timeWords(later, NOW)})`,
+    );
+    // A later backlog clip never says that run's time (it goes after a later one): its place in the Mac's queue.
+    const third = tiktokRow(tiktokFacts(clip("posted", { clipId: "c3" }), [youtube, { ...sent, clipId: "c3" }]), ready({ nextRunAt: iso(next), queue }));
+    expect(third).toEqual({ kind: "waiting", words: "Waiting for your Mac · in line (3 before it)", button: null });
+    expect(macWaitWords({ source: "sent" }, ready({ nextRunAt: iso(next), queue }), "c2")).toBe("Waiting for your Mac · in line (2 before it)");
+    // A backlog clip the Mac is posting already doesn't count as the first one waiting.
+    const busy = [job("c0", "sent", "working"), job("c1", "sent"), job("c2", "sent")];
+    expect(macWaitWords({ source: "sent" }, ready({ nextRunAt: iso(next), queue: busy }), "c1")).toBe(words);
+    expect(macWaitWords({ source: "sent" }, ready({ nextRunAt: iso(next), queue: busy }), "c2")).toBe("Waiting for your Mac · in line (2 before it)");
+    // Never a wrong time: no queue yet, a clip not in it (past its 50), runs not read, or auto-posting not known yet.
+    expect(rowOf([sent], ready({ nextRunAt: iso(next) }))?.words).toBe("Waiting for your Mac");
+    expect(rowOf([sent], ready({ nextRunAt: iso(next), queue: [job("c9", "sent")] }))?.words).toBe("Waiting for your Mac");
+    expect(rowOf([sent], ready({ queue }))?.words).toBe("Waiting for your Mac");
+    expect(rowOf([sent], ready({ nextRunAt: iso(next), autoPostOn: undefined, queue }))?.words).toBe("Waiting for your Mac");
+    expect(macWaitWords({ source: "sent" }, ready({ nextRunAt: iso(next), queue }))).toBe("Waiting for your Mac");
   });
 
   it("waiting from an auto-posting run: no time (the Mac may hold it, which the web can't see)", () => {
@@ -185,10 +206,10 @@ describe("the TikTok row (§47.4)", () => {
     });
   });
 
-  it("Didn't work after the Mac pressed Post: It's on TikTok first, Try again second, so it never posts twice", () => {
+  it("not sure it posted, after the Mac pressed Post: It's on TikTok first, Try again second, so it never posts twice", () => {
     const claimedAt = "2026-11-22T14:02:00.000Z";
     const pressedAt = "2026-11-22T14:05:00.000Z";
-    const pressed = { kind: "stopped", words: "Didn't work: your Mac couldn't tell if it posted · look on your TikTok first", button: "on_tiktok", since: "2026-11-22T14:01:00.000Z" };
+    const pressed = { kind: "stopped", words: "Not sure it posted · look on your TikTok", button: "on_tiktok", since: "2026-11-22T14:01:00.000Z" };
     // The stored reason stays word for word (posts already have it saved, and the API writes it); the row never shows it.
     expect(MAC_PRESSED_REASON).toBe("Your Mac pressed Post but couldn't confirm it. Check your TikTok: if it's there, tap I posted it.");
     // His own words, chosen by pressedAt, never the stored reason's; the finder looks from a minute before the claim.
@@ -199,6 +220,29 @@ describe("the TikTok row (§47.4)", () => {
     // Saying it's on TikTok needs no Mac: the same row while the Mac can't post.
     for (const ctx of [ready({ macOn: false }), ready({ helper: null }), ready({ helper: helper(iso(NOW - MAC_STALE_MS)) })])
       expect(rowOf([macPost({ state: "stopped", claimedAt, pressedAt })], ctx)).toEqual(pressed);
+    expect(rowOf([macPost({ state: "stopped", claimedAt, pressedAt })], ready())?.words).not.toMatch(/Didn't work/);
+    expect(MAC_AGAIN_CONFIRM).toBe("Post it again? Only if it's not on your TikTok.");
+    expect(MAC_FIND_BUTTON).toBe("Find it for me");
+  });
+
+  it("a post still working 15 minutes after its claim, with a Mac that checks in and is fine: not sure it posted", () => {
+    const claimedAt = iso(NOW - MAC_STUCK_MS);
+    const stuck = { kind: "stopped", words: "Not sure it posted · look on your TikTok", button: "on_tiktok", since: iso(NOW - MAC_STUCK_MS - MIN) };
+    expect(MAC_STUCK_MS).toBe(15 * MIN);
+    // Whatever its last step or Post: the server's claimedAt says it.
+    for (const extra of [{ step: "uploading" as const }, { step: "pressing" as const, pressedAt: iso(NOW - 10 * MIN) }])
+      expect(rowOf([macPost({ state: "working", claimedAt, ...extra })], ready())).toEqual(stuck);
+    expect(macStuck({ state: "working", claimedAt }, NOW)).toBe(true);
+    // 14 minutes: still Posting….
+    expect(rowOf([macPost({ state: "working", claimedAt: iso(NOW - 14 * MIN) })], ready())?.kind).toBe("working");
+    expect(macStuck({ state: "working", claimedAt: iso(NOW - 14 * MIN) }, NOW)).toBe(false);
+    expect(macStuck({ state: "waiting", claimedAt }, NOW)).toBe(false);
+    expect(macStuck({ state: "working" }, NOW)).toBe(false);
+    // Only with a fresh, fine Mac: one that can't post says so first, and one not read yet keeps Posting….
+    expect(rowOf([macPost({ state: "working", claimedAt })], ready({ macOn: false }))?.button).toBe("turn_on");
+    expect(rowOf([macPost({ state: "working", claimedAt })], ready({ helper: helper(iso(NOW - MAC_STALE_MS)) }))?.button).toBe("turn_on");
+    expect(rowOf([macPost({ state: "working", claimedAt })], ready({ helper: helper(iso(NOW - MIN), { state: "needs_you" }) }))?.button).toBe("open_mac");
+    expect(rowOf([macPost({ state: "working", claimedAt })], ready({ helper: undefined }))?.kind).toBe("working");
   });
 
   it("not on TikTok yet: one Post with my Mac, for every clip the Mac can take", () => {
@@ -215,12 +259,9 @@ describe("the TikTok row (§47.4)", () => {
     expect(rowOf([tiktok({ privacy: "public" })], ready())).toBeNull();
   });
 
-  it("a campaign clip is posted in the TikTok app (Add link), a Private test stays off TikTok", () => {
-    expect(rowOf([], ready(), clip("posted", { campaignId: "camp-1" }))).toEqual({
-      kind: "campaign",
-      words: "Campaign clip: post it in the TikTok app",
-      button: "add_link",
-    });
+  it("a campaign clip goes with the Mac like any other (the owner never posts by hand); a Private test stays off TikTok", () => {
+    expect(rowOf([], ready(), clip("posted", { campaignId: "camp-1" }))).toEqual({ kind: "offer", words: "Not on TikTok yet", button: "post_with_mac" });
+    expect(rowOf([macPost()], ready(), clip("posted", { campaignId: "camp-1" }))?.kind).toBe("waiting");
     expect(rowOf([], ready(), clip("posted", { auto: { runId: "r", at: "t", test: "private" } }))).toEqual({
       kind: "private_test",
       words: "Private test · stays off TikTok",
@@ -247,8 +288,13 @@ describe("the TikTok row (§47.4)", () => {
     for (const posts of [[], [macPost()], [macPost({ source: "sent" })]])
       expect(rowOf(posts, needs)).toEqual(open("Your Mac needs you: TikTok wants a code · look at your Mac"));
     expect(rowOf([], ready({ helper: helper(iso(NOW - MIN), { state: "needs_you" }) }))).toEqual(open("Your Mac needs you · look at your Mac"));
+    // Paused: the reason's first sentence and what goes on next, and when (no Start again: nothing asks the helper to
+    // go on, so the words say it).
     const paused = ready({ helper: helper(iso(NOW - MIN), { state: "paused", reason: "Paused on your Mac." }) });
-    for (const posts of [[], [macPost()]]) expect(rowOf(posts, paused)).toEqual(open("Your Mac is paused · start it again on your Mac"));
+    for (const posts of [[], [macPost()]]) expect(rowOf(posts, paused)).toEqual(open("Paused on your Mac · your clips wait until it's started again"));
+    const trial = ready({ helper: helper(iso(NOW - MIN), { state: "paused", reason: "Paused after the 3 trial posts. Clip Factory checks their views first." }) });
+    expect(rowOf([macPost({ source: "sent" })], trial)).toEqual(open("Paused after the 3 trial posts · your Mac goes on once their views are checked"));
+    expect(pausedWords({})).toBe("Paused on your Mac · your clips wait until it's started again");
     expect(MAC_OPEN_BUTTON).toBe("Open Your Mac posts TikTok");
     expect(MAC_ON_TIKTOK_BUTTON).toBe("It's on TikTok");
   });
@@ -279,7 +325,8 @@ describe("the TikTok row (§47.4)", () => {
   it("which rows read the Mac's check-in and auto-posting's runs", () => {
     expect(rowNeedsMac(tiktokFacts(clip("posted"), [youtube]))).toBe(true);
     expect(rowNeedsMac(tiktokFacts(clip("posted"), [youtube, macPost()]))).toBe(true);
-    expect(rowNeedsMac(tiktokFacts(clip("posted", { campaignId: "c" }), [youtube]))).toBe(false);
+    expect(rowNeedsMac(tiktokFacts(clip("posted", { campaignId: "c" }), [youtube]))).toBe(true);
+    expect(rowNeedsMac(tiktokFacts(clip("posted", { auto: { runId: "r", at: "t", test: "private" } }), [youtube]))).toBe(false);
     expect(rowNeedsMac(tiktokFacts(clip("posted"), [youtube, tiktok({ privacy: "public" })]))).toBe(false);
     expect(rowNeedsRuns(tiktokFacts(clip("posted"), [macPost({ source: "sent" })]), true)).toBe(true);
     expect(rowNeedsRuns(tiktokFacts(clip("posted"), [macPost({ source: "sent" })]), false)).toBe(false);
@@ -309,9 +356,16 @@ describe("the TikTok row (§47.4)", () => {
     const stack = { platform: "tiktok", status: "mac", metrics: null } as Pick<PlatformPerformance, "platform" | "status" | "metrics">;
     expect(calmCopy({ ...stack, mac: mac({ state: "working", step: "settings" }) })).toEqual({ text: "Posting…", spinner: true });
     expect(calmCopy({ ...stack, mac: mac({ state: "stopped", reason: "A puzzle showed." }) })).toEqual({ text: "Didn't work: A puzzle showed" });
+    expect(calmCopy({ ...stack, mac: mac({ state: "stopped", pressedAt: "2026-11-22T14:05:00.000Z", reason: MAC_PRESSED_REASON }) })).toEqual({
+      text: "Not sure it posted · look on your TikTok",
+    });
     expect(macChip({ state: "waiting" })).toBe("Waiting for your Mac");
     expect(macChip({ state: "working" })).toBe("Posting…");
     expect(macChip({ state: "stopped" })).toBe("Didn't work");
+    // Pressed, or a stuck claim (its row says so): not sure it posted.
+    expect(macChip({ state: "stopped", pressedAt: "2026-11-22T14:05:00.000Z" })).toBe("Not sure it posted");
+    expect(macChip({ state: "working" }, { button: "on_tiktok" })).toBe("Not sure it posted");
+    expect(macChip({ state: "working" }, { button: null })).toBe("Posting…");
   });
 
   it("a live post brings its Mac state to the clip page, and drops it once posted", () => {
@@ -335,9 +389,9 @@ describe("who may go to the Mac", () => {
     expect(tiktokState([{ ...youtube, platform: "tiktok", by: "you", via: "mac", privacy: "public" }])).toBe("yours");
   });
 
-  it("Send these to my Mac and Post with my Mac take clips not on TikTok yet, never a campaign clip or a Private test", () => {
+  it("Send these to my Mac and Post with my Mac take clips not on TikTok yet, a campaign clip too, never a Private test", () => {
     expect(canSendToMac(clip("posted"), [youtube])).toBe(true);
-    expect(canSendToMac(clip("posted", { campaignId: "camp" }), [youtube])).toBe(false);
+    expect(canSendToMac(clip("posted", { campaignId: "camp" }), [youtube])).toBe(true);
     expect(canSendToMac(clip("posted", { auto: { runId: "r", at: "t", test: "private" } }), [youtube])).toBe(false);
     expect(canSendToMac(clip("posted"), [youtube, macPost()])).toBe(false);
     expect(canSendToMac(clip("review"), [])).toBe(false);
@@ -354,7 +408,11 @@ describe("Settings' lines", () => {
     expect(helperLine(helper(at, { state: "needs_you", reason: "TikTok wants you to log in again." }), NOW)).toBe(
       "Your Mac needs you: TikTok wants you to log in again.",
     );
-    expect(helperLine(helper(at, { state: "paused" }), NOW)).toBe("Paused on your Mac.");
+    expect(helperLine(helper(at, { state: "paused" }), NOW)).toBe("Paused on your Mac. Your clips wait until it's started again.");
+    expect(helperLine(helper(at, { state: "paused", reason: "Paused on your Mac." }), NOW)).toBe("Paused on your Mac. Your clips wait until it's started again.");
+    expect(helperLine(helper(at, { state: "paused", reason: "Paused after the 3 trial posts. Clip Factory checks their views first." }), NOW)).toBe(
+      "Paused after the 3 trial posts. Your Mac goes on once their views are checked.",
+    );
     expect(waitingLine(3)).toBe("3 waiting for your Mac");
     expect(sendableLine(1)).toBe("1 clip isn't on TikTok yet.");
     expect(sendableLine(4)).toBe("4 clips aren't on TikTok yet.");
@@ -479,6 +537,40 @@ describe("the mock follows the API", () => {
     expect((await api.tiktokMacStatus()).helper?.state).toBe("ok");
   });
 
+  it("It's on TikTok on the stopped post lets a Mac that needed him go on, as Try again does", async () => {
+    const { store, api } = start();
+    await api.putSettings({ tiktokMac: { on: true } });
+    const c = store.clips.find((x) => canSendToMac(x, store.posts.filter((p) => p.clipId === x.clipId)))!;
+    await api.sendToMac([c.clipId]);
+    const m = knobs().mac;
+    m.claim(c.clipId);
+    m.step(c.clipId, "pressing");
+    m.stopped(c.clipId, "TikTok logged your Mac out.", true);
+    expect((await api.tiktokMacStatus()).helper?.state).toBe("needs_you");
+    expect(tiktokOf(await api.markTikTokPosted(c.clipId))).toMatchObject({ status: "posted", by: "you" });
+    expect((await api.tiktokMacStatus()).helper).toMatchObject({ state: "ok" });
+    expect((await api.tiktokMacStatus()).helper?.reason).toBeUndefined();
+  });
+
+  it("a claim stuck for 15 minutes: It's on TikTok and Try again are taken, and the Mac claims it afresh", async () => {
+    const { store, api } = start();
+    await api.putSettings({ tiktokMac: { on: true } });
+    const [a, b] = store.clips.filter((x) => canSendToMac(x, store.posts.filter((p) => p.clipId === x.clipId)));
+    await api.sendToMac([a!.clipId, b!.clipId]);
+    const m = knobs().mac;
+    // 14 minutes: still the Mac's.
+    m.claim(a!.clipId, "mock-mac", 14 * MIN);
+    await expect(api.retryMac(a!.clipId, true, true)).rejects.toThrow(MAC_WORKING);
+    await expect(api.markTikTokPosted(a!.clipId)).rejects.toThrow(MAC_WORKING);
+    // A claim made 16 minutes ago (the helper lost track of it), even after Post was pressed.
+    m.claim(b!.clipId, "mock-mac", 16 * MIN);
+    m.step(b!.clipId, "pressing");
+    await expect(api.retryMac(b!.clipId, false, true)).rejects.toThrow(MAC_MAY_HAVE_POSTED);
+    const back = await api.retryMac(b!.clipId, true, true);
+    expect(tiktokOf(back)?.mac).toEqual({ state: "waiting", since: expect.any(String), source: "upload" });
+    expect(m.claim(b!.clipId, "mac-mini-2").attempt).toBe(2);
+  });
+
   it("Take it back: a converted post gets its old fields back, a made one goes", async () => {
     const { store, api } = start();
     await api.putSettings({ tiktokMac: { on: true } });
@@ -533,12 +625,14 @@ describe("the mock follows the API", () => {
     expect((await api.autoPostStatus()).tiktokYourself.map((t) => t.clipId)).not.toContain(c.clipId);
   });
 
-  it("a campaign clip or a Private test never goes to the Mac", async () => {
+  it("a campaign clip goes to the Mac for Everyone; a Private test never does", async () => {
     const { store, api } = start();
-    await api.putSettings({ tiktokMac: { on: true } });
-    const c = store.clips.find((x) => x.status === "posted")!;
+    await api.putSettings({ tiktokMac: { on: true }, postPreset: { tiktok: { privacy: "SELF_ONLY" } } as never });
+    const c = store.clips.find((x) => x.status === "posted" && canSendToMac(x, store.posts.filter((p) => p.clipId === x.clipId)))!;
     c.campaignId = "camp-1";
-    expect((await api.sendToMac([c.clipId]))[0]).toMatchObject({ sent: false, reason: "Campaign clips go on TikTok by hand. Post it in the TikTok app, then add the link." });
+    expect((await api.sendToMac([c.clipId]))[0]).toEqual({ clipId: c.clipId, sent: true });
+    expect((await api.tiktokMacStatus()).queue.find((j) => j.clipId === c.clipId)).toMatchObject({ privacy: "PUBLIC_TO_EVERYONE" });
+    await api.takeBackFromMac(c.clipId);
     delete c.campaignId;
     c.auto = { runId: "r", at: "2026-11-22T10:00:00.000Z", test: "private" };
     expect((await api.sendToMac([c.clipId]))[0]).toMatchObject({ sent: false, reason: "This was a Private test, so it stays off TikTok." });
