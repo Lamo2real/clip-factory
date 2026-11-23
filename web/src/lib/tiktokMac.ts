@@ -9,9 +9,12 @@ import { timeWords } from "./autopost.ts";
 import { settingsPath } from "./settingsTree.ts";
 import { canPostYourself } from "./tiktokYourself.ts";
 
-/** Review, above Upload, instead of TIKTOK_PUBLIC_HINT while the Mac posts TikTok and TikTok has not approved the app. */
+/**
+ * Review, above Upload, instead of TIKTOK_PUBLIC_HINT while the Mac posts this clip's TikTok (TikTok has not approved
+ * the app, not a campaign clip) and My settings' Who can see it is Everyone; otherwise MAC_WHERE_LINE (§47.9).
+ */
 export const MAC_HINT = "TikTok: your Mac posts it for everyone.";
-/** Auto-posting › Where they go, while it is on. */
+/** Auto-posting › Where they go, while it is on; and Review's line above Upload while My settings isn't Everyone. */
 export const MAC_WHERE_LINE = "TikTok: your Mac posts it.";
 
 export const MAC_OFF_LINE = "Off. Your Mac doesn't post your TikTok clips.";
@@ -62,6 +65,11 @@ export const MAC_ROW_PAUSED = "Your Mac is paused · start it again on your Mac"
 /** Stopped after the Mac pressed Post: it may be on TikTok, so he looks there first (It's on TikTok, or Try again). */
 export const MAC_ROW_PRESSED = "your Mac couldn't tell if it posted · look on your TikTok first";
 export const MAC_ROW_CAMPAIGN = "Campaign clip: post it in the TikTok app";
+/**
+ * Review's "Uploaded just now", a clip uploaded with Commercial content on its card while the Mac posts TikTok (§47.9):
+ * the Mac can't add TikTok's label yet, so he posts it in the TikTok app himself (commercialRow).
+ */
+export const MAC_ROW_COMMERCIAL = "Commercial content: post it yourself in the TikTok app, with its label";
 export const MAC_ROW_PRIVATE_TEST = "Private test · stays off TikTok";
 export const MAC_ROW_ADD_LINK = " · add the link";
 
@@ -164,7 +172,7 @@ export interface TikTokRowContext {
   now?: number;
 }
 
-export type TikTokRowKind = "posted" | "posted_you" | "working" | "waiting" | "stopped" | "not_ready" | "offer" | "campaign" | "private_test";
+export type TikTokRowKind = "posted" | "posted_you" | "working" | "waiting" | "stopped" | "not_ready" | "offer" | "campaign" | "commercial" | "private_test";
 /**
  * The row's button. `try_again`: retry `now`. `post_with_mac`: send `now` (also a waiting post while auto-posting is
  * off, which then goes as an Upload tap's). `turn_on` and `open_mac`: links to `href` (MAC_OPEN_BUTTON's words).
@@ -321,6 +329,17 @@ export function tiktokRow(facts: TikTokFacts, ctx: TikTokRowContext): TikTokRow 
   if (facts.campaign) return { kind: "campaign", words: MAC_ROW_CAMPAIGN, button: "add_link" };
   const words = p && p.status === "posted" && p.privacy === "private" ? MAC_ROW_ONLY_YOU : MAC_ROW_NOT_YET;
   return notReady(ctx, false) ?? { kind: "offer", words, button: "post_with_mac" };
+}
+
+/**
+ * Review's "Uploaded just now" row of a clip uploaded with Commercial content on its card while the Mac posts TikTok
+ * (§47.9): the Mac can't add TikTok's label yet, so instead of Post with my Mac (or what the Mac still needs) it says to
+ * post it in the TikTok app and offers Add link, as a campaign clip's row does. Any other row stays. Only this card
+ * knows: nothing on the clip keeps Commercial content (a server-side flag is a later step).
+ */
+export function commercialRow(row: TikTokRow | null): TikTokRow | null {
+  if (!row || (row.kind !== "offer" && row.kind !== "not_ready")) return row;
+  return { kind: "commercial", words: MAC_ROW_COMMERCIAL, button: "add_link" };
 }
 
 /** Does this row read the Mac's check-in (GET /v1/tiktok/mac)? Its Mac post, or a clip the Mac could take. */

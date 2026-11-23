@@ -525,7 +525,7 @@ test("review: the hint, TikTok on My settings with no tap, and Uploaded just now
   // Branded content waits: the Mac can't add TikTok's label yet.
   await ttRow.getByRole("switch", { name: "Commercial content" }).click();
   await ttRow.getByRole("checkbox", { name: /^Branded content/ }).click();
-  const held = "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok for this clip.";
+  const held = "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok and post this clip yourself in the TikTok app with the label, not with your Mac.";
   await expect(card.locator(".upload-going")).toHaveText(held);
   await expect(ttRow.getByRole("alert")).toHaveText(held);
   await ttRow.getByRole("checkbox", { name: /^Branded content/ }).click();
@@ -558,6 +558,37 @@ test("review: the hint, TikTok on My settings with no tap, and Uploaded just now
   await expect(line).toHaveText("TikTok: Posted by your Mac · Everyone");
   // Its Open link, as on Library.
   await expect(item.getByRole("link", { name: "Open the TikTok post" })).toHaveAttribute("href", /tiktok\.com/);
+});
+
+test("review: a clip with Branded content ticked, uploaded without TikTok, is never offered Post with my Mac", async ({ page }) => {
+  await page.goto("/");
+  await settle(page);
+  await page.evaluate(() => {
+    localStorage.removeItem("cf-upload-to");
+    const s = (window as MockWindow).__cfMock!.setup;
+    for (const p of ["youtube", "tiktok"]) s.finish(p);
+    s.setAudit(false);
+  });
+  await turnOn(page);
+  await mac.ping(page);
+  await go(page, "/review");
+  const card = page.locator(".review-card").first();
+  const clipId = (await card.locator("..").getAttribute("id"))!.replace("clip-", "");
+  const hook = await card.locator(".review-card__hook").innerText();
+  await card.locator('[data-place="tiktok"] summary').click();
+  const ttRow = card.locator('[data-place="tiktok"]');
+  await ttRow.getByRole("switch", { name: "Commercial content" }).click();
+  await ttRow.getByRole("checkbox", { name: /^Branded content/ }).click();
+  // The hold's way out: untick TikTok here and post it yourself in the TikTok app.
+  await card.locator(".upload-chip", { hasText: "TikTok" }).click();
+  await expect(card.locator(".upload-going")).toHaveText("Going to: YouTube");
+  await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
+  const item = page.locator(".kept-now__item", { hasText: hook.slice(0, 20) });
+  // The Mac can't add TikTok's label: no Post with my Mac, the Add link for the post he makes in the TikTok app.
+  await expect(item.locator(".kept-now__mac")).toHaveText("TikTok: Commercial content: post it yourself in the TikTok app, with its label");
+  await expect(item.getByRole("button", { name: "Post with my Mac" })).toHaveCount(0);
+  await expect(item.getByRole("button", { name: "Save the link" })).toBeVisible();
+  expect((await mac.queue(page)).find((j) => j.clipId === clipId)).toBeUndefined();
 });
 
 test("review: uploaded without TikTok, Uploaded just now offers Post with my Mac", async ({ page }) => {

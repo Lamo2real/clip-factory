@@ -49,7 +49,7 @@ import { TIKTOK_PUBLIC_HINT, tiktokAudited } from "../../lib/tiktokYourself.ts";
 import { useAutoPost } from "../settings/AutoPostBranch.tsx";
 import { TikTokRowAction, TurnOnMac, useTikTokRowContext } from "../library/MacButtons.tsx";
 import { settingsPath } from "../../lib/settingsTree.ts";
-import { lastLiveRunAt, MAC_HINT, macOn, rowNeedsMac, rowNeedsRuns, tiktokFacts, tiktokRow } from "../../lib/tiktokMac.ts";
+import { commercialRow, lastLiveRunAt, MAC_HINT, MAC_WHERE_LINE, macOn, rowNeedsMac, rowNeedsRuns, tiktokFacts, tiktokRow } from "../../lib/tiktokMac.ts";
 import { autoPostOf, reviewLede, reviewLine, sentFirstLine } from "../../lib/autopost.ts";
 
 /** Video and cover links are presigned for an hour (docs/CONTRACTS.md §5); fetch new ones a little before that. */
@@ -212,9 +212,19 @@ export function Review({ jobId }: { jobId: string | null }) {
     // Auto-posting's own status, read here anyway while it is on.
     runs: autopost.status ? { nextRunAt: autopost.status.nextRunAt, lastRunAt: lastLiveRunAt(autopost.status.runs) } : null,
   });
-  const kept = (clip: Clip, posts: Post[] = []) => {
+  // Those uploaded with Commercial content on their card while the Mac posts TikTok (§47.9): the Mac can't add TikTok's
+  // label yet, so their row never offers Post with my Mac (commercialRow). Only this visit knows it.
+  const [commercialKept, setCommercialKept] = useState<ReadonlySet<string>>(() => new Set());
+  const kept = (clip: Clip, posts: Post[] = [], commercial = false) => {
     setJustKept((k) => [clip, ...k.filter((c) => c.clipId !== clip.clipId)].slice(0, 5));
     setKeptPosts((all) => ({ ...all, [clip.clipId]: posts }));
+    setCommercialKept((all) => {
+      if (all.has(clip.clipId) === commercial) return all;
+      const next = new Set(all);
+      if (commercial) next.add(clip.clipId);
+      else next.delete(clip.clipId);
+      return next;
+    });
   };
   // Try again or Post with my Mac went through: the clip's posts as they are now (its card already left the list).
   const keptAgain = (clip: Clip, posts: Post[]) => setKeptPosts((all) => (all[clip.clipId] ? { ...all, [clip.clipId]: posts } : all));
@@ -310,7 +320,8 @@ export function Review({ jobId }: { jobId: string | null }) {
           </h2>
           <ul className="kept-now__list">
             {justKept.map((c, i) => {
-              const tiktok = tiktokRow(keptFacts[i]!, macCtx);
+              const row = tiktokRow(keptFacts[i]!, macCtx);
+              const tiktok = commercialKept.has(c.clipId) ? commercialRow(row) : row;
               return (
                 <li key={c.clipId} className="kept-now__item">
                   <span className="kept-now__hook clamp-2 user-text">{c.hook}</span>
@@ -436,8 +447,11 @@ function ReviewCard({
   /** Just put back by Undo: the card plays its return (§20.7). */
   returning: boolean;
   onDone: (clipId: string) => void;
-  /** Uploaded: the list offers a link to the clip's numbers. */
-  onKept: (clip: Clip, posts?: Post[]) => void;
+  /**
+   * Uploaded: the list offers a link to the clip's numbers. `commercial`: uploaded with Commercial content on while the
+   * Mac posts TikTok (§47.9), so its row there never offers Post with my Mac.
+   */
+  onKept: (clip: Clip, posts?: Post[], commercial?: boolean) => void;
   onThrowAway: (clip: Clip) => void;
   /** Tells the list this card is leaving (or, after a failed Upload, staying after all). */
   onSettling: (clipId: string, on: boolean) => void;
@@ -825,7 +839,7 @@ function ReviewCard({
       if (out.kind === "uploading" && sentFirst) {
         setSheet(false);
         toast.info(sentFirst);
-        onKept(out.clip, out.posts);
+        onKept(out.clip, out.posts, !!ttMacHeld);
         leave();
         return;
       }
@@ -835,7 +849,7 @@ function ReviewCard({
         burst(centerOf(confirmRef.current), 120);
         toast.success(uploadedMessage(out.posts));
         if (tiktok) toast.info("TikTok can take a few minutes to process your clip.");
-        onKept(out.clip, out.posts);
+        onKept(out.clip, out.posts, !!ttMacHeld);
         leave();
         return;
       }
@@ -1230,11 +1244,13 @@ function ReviewCard({
           </p>
         ) : null}
         {/* Above TikTok's Music Usage line, which stays right above Upload (§17.8). */}
-        {/* With Your Mac posts TikTok on (§47.4) his Mac posts it for everyone; off, the line says to turn it on (ADR-85). */}
+        {/* While his Mac posts this clip's TikTok (§47.4) the line says so: "for everyone" only when My settings says
+            Everyone (§47.9). Off, the line says to turn it on (ADR-85). A campaign clip never goes to the Mac (§47.2):
+            with the switch on it has no line here. */}
         {placesReady && !noneReady && tiktokOn && !tiktokApproved && !keepFailed ? (
-          macOn(me?.settings) ? (
-            <p className="tt-yourself-hint">{MAC_HINT}</p>
-          ) : (
+          macTikTok ? (
+            <p className="tt-yourself-hint">{ttChoices.privacy === "PUBLIC_TO_EVERYONE" ? MAC_HINT : MAC_WHERE_LINE}</p>
+          ) : macOn(me?.settings) ? null : (
             // Off: Turn on, right beside it, goes to the switch (Settings › Posting › Your Mac posts TikTok).
             <div className="tt-yourself-hint-row">
               <p className="tt-yourself-hint">{TIKTOK_PUBLIC_HINT}</p>

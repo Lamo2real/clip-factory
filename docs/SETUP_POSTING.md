@@ -519,7 +519,9 @@ The answers, word for word. They are all true today: do not change them to sound
 (Everyone, with Comments, Duet and Stitch on, unless you changed them): just press **Upload**. Your Mac always posts
 TikTok with your saved choices: the **TikTok** row says so ("Your Mac posts it with My settings: …") and **Change My
 settings** takes you there. Paid partnerships can't go through your Mac yet: with **Your brand** or **Branded
-content** ticked, Upload waits; untick it, or untick TikTok for that clip. **While Your Mac posts TikTok is off**,
+content** ticked, Upload waits; untick it, or untick TikTok for that clip and post it yourself in the TikTok app with
+the label. Don't use **Post with my Mac** or **Send these to my Mac** for that clip: your Mac would post it without the
+label. **While Your Mac posts TikTok is off**,
 every clip with TikTok ticked waits for your tap: press **Use my settings** (it puts your saved TikTok choices on), or
 open the **TikTok** row and pick who can see it there (there is no default, TikTok's rule for apps that post through
 its API). The row also has the Comments, Duet and Stitch switches and Commercial content (tick **Branded content** for

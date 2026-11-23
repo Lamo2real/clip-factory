@@ -15871,7 +15871,8 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
   page (no "Go to Library and tap Post it yourself", and a stopped Mac post has no Go to Library link). The chip says
   "Waiting for your Mac", "Posting…" or "Didn't work".
 * **Review:** with `tiktokMac.on` and TikTok not approved, the hint above Upload reads `MAC_HINT`, "TikTok: your Mac
-  posts it for everyone.", and while the switch is off `TIKTOK_PUBLIC_HINT`, "TikTok: turn on Your Mac posts TikTok so
+  posts it for everyone." (`MAC_WHERE_LINE` when My settings isn't Everyone, and none on a campaign clip, §47.9), and
+  while the switch is off `TIKTOK_PUBLIC_HINT`, "TikTok: turn on Your Mac posts TikTok so
   it posts for everyone." (§42.1). "Uploaded just now" shows "TikTok: {the row's words}" and its one button (Try again
   or Post with my Mac) for each kept clip. Nothing opens by itself after Upload. Upload's own rules and buttons are
   unchanged: with the switch on it writes the Mac post as `source: "upload"`, which the helper posts at once. With the
@@ -16026,14 +16027,28 @@ TikTok. No API, table or infrastructure change.
      with no name yet (not asked, slow, failed) the line is left out in this mode only.
    * **Commercial content stays visible and is this clip's own.** Ticking **Your brand** or **Branded content** (with
      Commercial content on) holds Upload for TikTok (`macTikTokHeld`): Upload's line and an alert in the row say
-     `MAC_LABEL_HELD`, "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok for this
-     clip." With Commercial content on and nothing ticked it is held too, with `MAC_COMMERCIAL_HELD`, "Your Mac can't
-     add TikTok's Branded content label yet. Turn off Commercial content, or untick TikTok for this clip." (TikTok's own
+     `MAC_LABEL_HELD`, "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok and post
+     this clip yourself in the TikTok app with the label, not with your Mac." With Commercial content on and nothing
+     ticked it is held too, with `MAC_COMMERCIAL_HELD`, "Your Mac can't add TikTok's Branded content label yet. Turn
+     off Commercial content, or untick TikTok and post this clip yourself in the TikTok app with the label, not with
+     your Mac." (TikTok's own
      `PICK_WHOSE` line would send him round in a circle: either pick holds the Mac too; Upload's hover text is left
      empty). TikTokCommercial leaves out its hint line in this mode ("Your video will be labeled as …" would be untrue;
      "Pick Your brand, Branded content, or both." is the circle again). With TikTok unticked the other places upload as
-     usual. A paid partnership never goes through the Mac without TikTok's label, which TikTok's Branded Content Policy
-     requires.
+     usual. So Upload never hands a clip with a label ticked to the Mac. But nothing on the clip records Commercial
+     content (it lives only in the card's state), so once that clip is uploaded without TikTok it is like any other
+     kept clip: Post with my Mac (Library, the clip page) and Settings › Your Mac posts TikTok › Send these to my Mac
+     would hand it to the Mac, which posts it with `preset_options` (`brandContent` false), without the label TikTok's
+     Branded Content Policy requires. So the hold's words above, My settings (item 3) and Ask tell him to post that clip
+     himself in the TikTok app with the label, never with Post with my Mac or Send these to my Mac; and Review's
+     "Uploaded just now" row of a clip uploaded from a card with Commercial content on (`commercialRow`, this visit
+     only) reads "TikTok: Commercial content: post it yourself in the TikTok app, with its label" (`MAC_ROW_COMMERCIAL`)
+     with the inline Add link, never Post with my Mac. A flag on the clip that keeps every Mac path off it is the later
+     step's (below).
+   * **The line above Upload** (§47.4) is built for this clip: `MAC_HINT`, "TikTok: your Mac posts it for everyone.",
+     only while the Mac posts this clip's TikTok and My settings' Who can see it is Everyone; with Followers, Friends or
+     Only me it is `MAC_WHERE_LINE`, "TikTok: your Mac posts it." (the row says who). A campaign clip with the switch on
+     has no line there, as the Mac never takes one.
    * TikTok's creator info (`GET /v1/accounts/tiktok/creator-info`, TikTok API data) is still asked, in the background
      as soon as TikTok is ticked, only for the account's name and the longest video it takes (`macCreator`). In this
      mode only, one ask serves every card for 60 seconds (`macCreatorInfo` in `Review.tsx`; a failed ask is not kept).
@@ -16046,8 +16061,9 @@ TikTok. No API, table or infrastructure change.
      saved privacy, with the saved Comment, Duet and Stitch).
    * **Later step, not in this release:** per-clip TikTok choices and Branded content through the Mac. Both need the
      helper's Branded content step (TikTok Studio's content disclosure) and the server honouring the card's own
-     `tiktok` choices for a Mac post instead of `preset_options`. Until both ship, the row stays read-only and a ticked
-     label holds Upload for TikTok.
+     `tiktok` choices for a Mac post instead of `preset_options`, and a flag on the clip (its label) that Post with my
+     Mac and Send these to my Mac honour. Until they ship, the row stays read-only, a ticked label holds
+     Upload for TikTok, and the words tell him to post a paid partnership in the TikTok app himself.
 2. **Your Mac posts TikTok off, or TikTok approved the app** (TikTok's API path; the app is still in review), and every
    campaign clip: exactly as §36. Who can see it starts unpicked, Comments, Duet and Stitch start off, creator info is
    asked only on Use my settings or when the TikTok row opens, and Upload waits for his tap ("Tap Use my settings
@@ -16059,7 +16075,8 @@ TikTok. No API, table or infrastructure change.
    posts TikTok off.
 3. **Words elsewhere:** Settings › Posting › My settings (`MySettingsBranch.tsx`) reads "Every clip on Review starts
    on these, TikTok too, except campaign clips." at the top, and under TikTok "Commercial content is off. Your Mac
-   posts TikTok with these. Paid partnerships can't go through your Mac yet, so untick TikTok for that clip." in item
+   posts TikTok with these. Paid partnerships can't go through your Mac yet: untick TikTok for that clip and post it
+   yourself in the TikTok app with the label, not with Post with my Mac or Send these to my Mac." in item
    1's mode; otherwise both keep today's words ("Tap Use my settings on a clip to put these on.", "Commercial content
    is off. For a paid partnership, tick Branded content in the TikTok row of that clip. TikTok wants your own tap on
    each clip, so tap Use my settings there."). The TikTok part's leaf (`settingsTree.ts`, `my-settings-tiktok`) reads
@@ -16067,7 +16084,8 @@ TikTok. No API, table or infrastructure change.
    both modes. Ask's "Use my settings" guide (`helpKb.json`, `review-use-my-settings`, titled "Use my settings: your
    saved choices on every place", true in both modes) says every ticked place, TikTok included, starts on his settings
    while his Mac posts TikTok, so he just taps Upload, that the Mac always posts with them (change them in My
-   settings), and that paid partnerships can't go through the Mac yet, so he unticks TikTok for that clip;
+   settings), and that paid partnerships can't go through the Mac yet, so he unticks TikTok for that clip and posts it
+   himself in the TikTok app with the label, never with Post with my Mac or Send these to my Mac;
    `review-place-rows` says the same after its Branded content step; `review-upload-to` says to tap Use my settings
    only when the card does not already say Your settings are on. None of them tells him to tick Branded content for
    the Mac. docs/SETUP_POSTING.md says the same, and its demo step (`public-demo`, also in `tiktok.ts`) says to record
@@ -16076,7 +16094,9 @@ TikTok. No API, table or infrastructure change.
    settings and Upload is not held, also while creator info is slow or failed; the row is read-only (the Mac line,
    Change My settings, no Who can see it, no Comments, Duet or Stitch switch) and the Mac job gets the preset's privacy;
    Your brand or Branded content holds Upload for TikTok with `MAC_LABEL_HELD` (Commercial content alone with
-   `MAC_COMMERCIAL_HELD`) and unticking TikTok lets the rest go; the shared creator-info answer is used in Mac mode
+   `MAC_COMMERCIAL_HELD`) and unticking TikTok lets the rest go, and that clip's "Uploaded just now" row says
+   `MAC_ROW_COMMERCIAL` with Add link and no Post with my Mac; the line above Upload says `MAC_WHERE_LINE` with
+   Followers saved; the shared creator-info answer is used in Mac mode
    only, and a card that switches to the API path asks again on Use my settings. With it off: today's unpicked start and
    held Upload, a fresh ask per card, and "Posting as" shown even with an empty nickname.
    `web/test/mySettingsTikTok.test.tsx` pins My settings' words in both modes; `helpEvals.json` has "Does TikTok need my

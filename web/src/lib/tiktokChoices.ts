@@ -186,7 +186,8 @@ function macPrivacy(saved: TikTokPreset): string {
  * and Stitch on, by default), as the server asks the Mac for whatever the card sends (§47.1, `preset_options`). There
  * is no per-clip change for the Mac yet (§47.9), so the row shows these read-only. Commercial content is about this
  * one clip, as ticked on it: the Mac can't add TikTok's label yet, so a ticked Your brand or Branded content holds
- * Upload for TikTok (`macLabelHeld`) and the clip goes to the other places with TikTok unticked.
+ * Upload for TikTok (`macTikTokHeld`). The clip goes to the other places with TikTok unticked, and he posts it on TikTok
+ * himself in the TikTok app with the label, never through the Mac (nothing on the clip keeps the label for it).
  */
 export function macTikTokChoices(saved: TikTokPreset, now: TikTokChoices = NO_TIKTOK_CHOICES): TikTokChoices {
   return {
@@ -208,12 +209,12 @@ export function macPostsLine(saved: TikTokPreset): string {
 }
 
 /** Upload's line (and the row's) while Your brand or Branded content is ticked and the Mac posts TikTok (§47.9). */
-export const MAC_LABEL_HELD = "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok for this clip.";
+export const MAC_LABEL_HELD = "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok and post this clip yourself in the TikTok app with the label, not with your Mac.";
 /**
  * The same with Commercial content on and nothing ticked under it. TikTok's own "Pick Your brand or Branded content"
  * would send him round in a circle here (either one holds the Mac too), so the way out is to turn it off.
  */
-export const MAC_COMMERCIAL_HELD = "Your Mac can't add TikTok's Branded content label yet. Turn off Commercial content, or untick TikTok for this clip.";
+export const MAC_COMMERCIAL_HELD = "Your Mac can't add TikTok's Branded content label yet. Turn off Commercial content, or untick TikTok and post this clip yourself in the TikTok app with the label, not with your Mac.";
 
 /**
  * Why the Mac can't post this clip on TikTok, or null: Commercial content is on (Your brand or Branded content ticked,

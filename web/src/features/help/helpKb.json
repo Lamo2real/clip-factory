@@ -320,7 +320,7 @@
         "upload in one tap",
         "upload with my settings"
       ],
-      "answer": "Every ticked place starts on your saved choices (who can see it, comments; never made for kids), TikTok too while your Mac posts TikTok. So just tap **Upload**. Change a place for one clip in its row. Your Mac always posts TikTok with your saved choices. Paid partnerships can't go through your Mac yet, so untick TikTok for that clip. With **Your Mac posts TikTok** off, tap **Use my settings**.",
+      "answer": "Every ticked place starts on your saved choices (never made for kids), TikTok too while your Mac posts TikTok, and your Mac posts with them. Just tap **Upload**. A paid partnership can't go through your Mac yet: untick TikTok and post it in the TikTok app with the label, never with **Post with my Mac** or **Send these to my Mac**. With **Your Mac posts TikTok** off, tap **Use my settings**.",
       "steps": [
         "Tap **Review**.",
         "It says **Your settings are on**. If not, tap **Use my settings**.",
@@ -359,7 +359,7 @@
         "mark as paid partnership",
         "promotional"
       ],
-      "answer": "Each ticked place has its own row under **Use my settings**. Tap the row to open its words and options. For a paid partnership, open **TikTok**, turn on **Commercial content** and tick **Branded content**. While your Mac posts TikTok, its row shows the settings your Mac uses, and paid partnerships can't go through your Mac yet: untick TikTok for that clip.",
+      "answer": "Each ticked place has its own row under **Use my settings**: tap it to change that place for this clip. For a paid partnership, open **TikTok**, turn on **Commercial content**, tick **Branded content**. While your Mac posts TikTok, the row shows what it uses and it can't add that label yet: untick TikTok and post it in the TikTok app, not with **Post with my Mac** or **Send these to my Mac**.",
       "steps": [
         "Tap **Review**.",
         "Tap a place's row, like **TikTok · caption and settings**.",

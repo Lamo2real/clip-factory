@@ -1053,6 +1053,11 @@
   font-weight: 600;
   color: var(--ink-3);
 }
+/* On a ticked chip's bone fill the tag takes the chip's own ink, softened (about 4.9:1), never the glass's light ink. */
+.check-chip.is-on .tt-sheet__tag {
+  color: inherit;
+  opacity: 0.72;
+}
 .tt-sheet__legal {
   font-size: var(--fs-small);
   color: var(--ink-2);

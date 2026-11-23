@@ -14,6 +14,7 @@ import { mockApi } from "../src/api/mock/index.ts";
 import type { Api, Platform, Settings, TikTokCreator, TikTokPostOptions } from "../src/api/types.ts";
 import { forgetLoaded } from "../src/lib/hooks.ts";
 import { DEFAULT_PRESET } from "../src/lib/preset.ts";
+import { commercialRow, MAC_HINT, MAC_ROW_COMMERCIAL, MAC_WHERE_LINE } from "../src/lib/tiktokMac.ts";
 import {
   MAC_COMMERCIAL_HELD,
   MAC_LABEL_HELD,
@@ -47,7 +48,7 @@ const { Review } = await import("../src/screens/review/Review.tsx");
 type Knobs = {
   setup: { finish(p: Platform): void; setAudit(passed: boolean): void };
   posting: { posts(clipId: string): { platform: string; status: string }[] };
-  mac: { queue(): { clipId: string; privacy: string; comment: boolean; duet: boolean; stitch: boolean }[] };
+  mac: { queue(): { clipId: string; privacy: string; comment: boolean; duet: boolean; stitch: boolean }[]; ping(): { on: boolean } };
 };
 const knobs = () => (window as unknown as { __cfMock: Knobs }).__cfMock;
 
@@ -233,6 +234,17 @@ describe("the Mac's choices (pure)", () => {
   });
 });
 
+describe("Uploaded just now after Commercial content (pure)", () => {
+  it("where the row would offer the Mac, it says to post it in the TikTok app with Add link; any other row stays", () => {
+    const commercial = { kind: "commercial", words: MAC_ROW_COMMERCIAL, button: "add_link" };
+    expect(commercialRow({ kind: "offer", words: "Not on TikTok yet", button: "post_with_mac" })).toEqual(commercial);
+    expect(commercialRow({ kind: "not_ready", words: "Your Mac isn't set up yet", button: "turn_on", href: "/x" })).toEqual(commercial);
+    const posted = { kind: "posted_you", words: "Posted by you · Everyone", button: null, url: "https://www.tiktok.com/@a/video/1" } as const;
+    expect(commercialRow(posted)).toBe(posted);
+    expect(commercialRow(null)).toBeNull();
+  });
+});
+
 describe("Review card while the Mac posts TikTok", () => {
   it("starts on My settings: Everyone with the switches on, no tap, and Upload goes at once", async () => {
     const clipId = await mount({ mac: true });
@@ -243,7 +255,8 @@ describe("Review card while the Mac posts TikTok", () => {
     expect(tiktokLine()).not.toContain("not picked yet");
     expect(upload().getAttribute("aria-disabled")).toBeNull();
     expect(inCard(".upload-going")!.textContent).toBe("Going to: YouTube · TikTok");
-    expect(inCard(".tt-yourself-hint")!.textContent).toBe("TikTok: your Mac posts it for everyone.");
+    expect(inCard(".tt-yourself-hint")!.textContent).toBe(MAC_HINT);
+    expect(MAC_HINT).toBe("TikTok: your Mac posts it for everyone.");
     // TikTok's API is asked in the background, for the account's name and the longest clip only: once for every card.
     await until(() => tiktokLine().startsWith("Posting as "), "TikTok's answer names the account");
     expect(document.querySelectorAll(".review-card").length).toBeGreaterThan(1);
@@ -311,6 +324,9 @@ describe("Review card while the Mac posts TikTok: the row is read-only", () => {
     await click(inCard('[data-place="tiktok"] summary')!);
     const row = tiktokRowOf();
     expect(row.querySelector(".tt-mac-uses")!.textContent).toContain("Your Mac posts it with My settings: Followers · Comments on · Duet on · Stitch off");
+    // The line above Upload never says "for everyone" while the Mac posts it for followers.
+    expect(inCard(".tt-yourself-hint")!.textContent).toBe(MAC_WHERE_LINE);
+    expect(card().textContent).not.toContain(MAC_HINT);
     const change = Array.from(row.querySelectorAll<HTMLAnchorElement>("a")).find((a) => a.textContent?.trim() === "Change My settings")!;
     expect(change.getAttribute("href")).toBe("/settings/posting/my-settings");
     // Nothing that changes who sees it or the switches for this clip: no Who can see it dropdown, no Comments, Duet or Stitch.
@@ -373,6 +389,25 @@ describe("Review card while the Mac posts TikTok: the row is read-only", () => {
     expect(sent[0]).toBeUndefined();
     await until(() => knobs().posting.posts(clipId).length === 1, "its post");
     expect(knobs().posting.posts(clipId).map((p) => p.platform)).toEqual(["youtube"]);
+    // Uploaded just now: the Mac can't add the label, so the row says to post it in the TikTok app (Add link), and
+    // never offers Post with my Mac.
+    const kept = document.querySelector<HTMLElement>(".kept-now__item")!;
+    expect(kept.querySelector(".kept-now__mac")!.textContent).toBe(`TikTok: ${MAC_ROW_COMMERCIAL}`);
+    expect(buttonIn(kept, "Post with my Mac")).toBeUndefined();
+    expect(buttonIn(kept, "Save the link")).toBeTruthy();
+    expect(knobs().mac.queue().find((j) => j.clipId === clipId)).toBeUndefined();
+  });
+
+  it("a clip uploaded without TikTok and no label ticked is still offered Post with my Mac", async () => {
+    const clipId = await mount({ mac: true });
+    knobs().mac.ping();
+    await click(chip("TikTok"));
+    await click(upload());
+    await until(() => knobs().posting.posts(clipId).length === 1, "its post");
+    await until(() => !!document.querySelector(".kept-now__item"), "Uploaded just now");
+    const kept = document.querySelector<HTMLElement>(".kept-now__item")!;
+    await until(() => !!buttonIn(kept, "Post with my Mac"), "Post with my Mac");
+    expect(kept.querySelector(".kept-now__mac")!.textContent).toBe("TikTok: Not on TikTok yet");
   });
 });
 
