@@ -294,7 +294,11 @@ function contrastKit() {
     if (!/^linear-gradient\((rgba?|color)\(/.test(layer) || box.height <= 0) return all;
     // Stops at their positions (a stop with none sits evenly between its neighbours, as in CSS).
     const parts = imageLayers(layer.slice("linear-gradient(".length, -1));
-    const stops = parts.map((p, i) => ({ c: colours(p)[0]!, at: /\s([\d.]+)%$/.test(p) ? Number(/\s([\d.]+)%$/.exec(p)![1]) / 100 : i === 0 ? 0 : i === parts.length - 1 ? 1 : NaN }));
+    // A stop placed in px (the light that lies in a pane's top padding: 0, 6px, 11px, 14px) is read at that depth.
+    const stops = parts.map((p, i) => ({
+      c: colours(p)[0]!,
+      at: /\s([\d.]+)%$/.test(p) ? Number(/\s([\d.]+)%$/.exec(p)![1]) / 100 : /\s([\d.]+)px$/.test(p) ? Math.min(1, Number(/\s([\d.]+)px$/.exec(p)![1]) / box.height) : /\s0$/.test(p) ? 0 : i === 0 ? 0 : i === parts.length - 1 ? 1 : NaN,
+    }));
     if (stops.some((s) => !s.c)) return all;
     for (let i = 1; i < stops.length - 1; i++)
       if (Number.isNaN(stops[i]!.at)) {

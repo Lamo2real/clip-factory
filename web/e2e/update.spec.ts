@@ -129,8 +129,10 @@ test.describe("Reload is a colourless glass lens", () => {
   const VERMILION = [/\b232[,\s]+57[,\s]+43\b/, /\b206[,\s]+48[,\s]+36\b/, /\b184[,\s]+38[,\s]+28\b/];
   /** A plain white picture: the hardest photo for bone words. */
   const WHITE_PICTURE = `data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'><rect width='16' height='16' fill='#fff'/></svg>")}`;
-  /** A step of light a person sees (OKLab L), the one the owner asked for. */
+  /** A step of light a person sees (OKLab L): Later over the bar. */
   const STEP = 0.03;
+  /** Reload over Later at the height of its words (mid-height): plainly the main choice. */
+  const LEAD = 0.08;
 
   const LOOKS: { name: string; look?: Record<string, unknown>; picture?: string; whiteUnder?: boolean }[] = [
     { name: "the app's own backdrop" },
@@ -260,7 +262,8 @@ test.describe("Reload is a colourless glass lens", () => {
         for (const part of ["top", "middle", "bottom"] as const) {
           const dl = L(lensAt[part]) - L(laterAt[part]);
           notes.push(`Reload over Later at its ${part}: ${dl.toFixed(3)}`);
-          expect(dl, `Reload over Later at its ${part} (${c.name})`).toBeGreaterThanOrEqual(STEP);
+          // The words are at mid-height: there Reload reads LEAD over Later; above and below it is still a step.
+          expect(dl, `Reload over Later at its ${part} (${c.name})`).toBeGreaterThanOrEqual(part === "middle" ? LEAD : STEP);
         }
         notes.push(`Later over the bar: ${(L(laterAt.middle) - L(gapAt)).toFixed(3)}`);
         expect(L(laterAt.middle) - L(gapAt), `Later over the bar (${c.name})`).toBeGreaterThanOrEqual(STEP);

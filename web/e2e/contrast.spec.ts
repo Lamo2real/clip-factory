@@ -480,13 +480,15 @@ test("the tab bar, the setup pill and the Ask sheet hold their words over a whit
     const { min, box, marks } = await read(selector);
     expect(min, `${selector} tint`).toBeGreaterThanOrEqual(floor - 0.005);
     expect(marks.length, `${selector} has words or icons`).toBeGreaterThan(0);
-    // A white thumbnail right under the whole layer: everything else is hidden over a white sheet, and the layer's
-    // own words and icons too, so only its green and its bone light show where they sit.
+    // A white thumbnail right under the whole layer: everything else is hidden over a white sheet. The layer's own
+    // words and icons are made clear, but its raised children (a button, a row, a chip) keep their fills and lights,
+    // so words on a raised child are read over that child's real fill, as the browser draws it.
     const tag = await page.addStyleTag({
       content: `body > .cf-white-under { position: fixed; inset: 0; z-index: 0; background: #fff; visibility: visible !important; }
         body *:not(.cf-white-under) { visibility: hidden !important; transition: none !important; animation: none !important; }
         html body ${selector} { visibility: visible !important; }
-        html body ${selector} * { visibility: hidden !important; }`,
+        html body ${selector} * { visibility: visible !important; color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important; caret-color: transparent !important; }
+        html body ${selector} :is(svg, img, video, canvas) { visibility: hidden !important; }`,
     });
     await page.evaluate(() => {
       const white = document.createElement("div");

@@ -64,8 +64,8 @@ Each glass variant sets its `--glass-tint` (green) and `--glass-light` (bone, fr
 
 | Class | `--glass-tint` | `--glass-light` |
 |---|---|---|
-| `.glass` | `--glass-tint-panel`: green at `--panel-veil` + `--light-pay` | `--glass-light-panel`: bone 0.04 at the top, gone by 65 %, plus the catch light |
-| `.glass--green` | `--glass-tint-lead`: the panel's green (the lead panel: the hero, the sign-in card, Library's learnings) | `--glass-light-lead`: bone 0.075 at the top, a whole step over a panel |
+| `.glass` | `--glass-tint-panel`: green at `--panel-veil` + `--light-pay` | `--glass-light-panel`: bone 0.04 at the top edge, gone 14 px down (inside the top padding, never under words), plus the catch light |
+| `.glass--green` | `--glass-tint-lead`: the panel's green (the lead panel: the hero, the sign-in card, Library's learnings) | `--glass-light-lead`: bone 0.075 at the top edge, gone 14 px down |
 | `.glass--vermilion` | the panel, a breath of vermilion (0.16 → 0.08), then green 0.20 over it | the panel's |
 | `.glass--clear` | the panel tint | the panel's |
 | Nested `.glass` | the relative raise: green 0.22 over the outer panel, no blur of its own | flat bone 0.09 |

@@ -7,15 +7,16 @@ it more liquid glassy" ([DECISIONS.md ADR-85](DECISIONS.md#adr-85-the-logic-of-l
 * **Every level is brighter than the one under it**, nested levels too: a panel over the page, a row over its card, a
   mark over its row, the selected pill over all of them. Only wells (fields, the link box, progress tracks) sit lower.
 * **Inside every pane the top is brighter than the bottom**: a bone light from above that eases out and is gone by
-  65 % of the height, a catch light at the top centre 8 px deep (inside the top padding), a blurred top glow, a soft
+  14 px down (it lies in the top padding, never under a word), a catch light at the top centre 8 px deep, a blurred top glow, a soft
   shade at the foot and a drop below that grows with the level. All soft: no line is ever drawn (ADR-45).
-* **Every bone lift is paid for with a step more green**, so the words keep AA over the lightest thing behind
-  (`lib/background.ts` works every number out; `web/test/background.test.ts` checks them in every look).
-* **The ladder.** From a pane up, every level reads at least +0.015 OKLab L brighter than the one it sits on, in
-  every look, with no tolerance (`LADDER_STEP`). Page to pane is the one exception: over a white desktop or photo, a
-  bright spot of the mesh or a light colour, a pane holding bone words has to be darker than what is behind it. The
-  pay (`--light-pay`) is worked out per look so the ladder fits under the AA ceiling; the cost is a pane less
-  see-through (about 28 % of the app's own backdrop shows through, 11 % of a white desktop or photo).
+* **See-through first, every step earned with light.** Panes keep main's veils (67 % of the app's own backdrop shows
+  through; a light look adds at most 0.05: 22 % of a white desktop or photo), and each level above a pane brings its
+  own bone light over a little green, so its words keep AA (`lib/background.ts` works every number out;
+  `web/test/background.test.ts` checks them in every look).
+* **The ladder.** From a pane up, every level reads at least +0.015 OKLab L brighter than the one it sits on, where
+  its words are, in every look (`LADDER_STEP`), wherever the AA cap leaves room. Where it leaves none (the brightest
+  corners of the mesh, white under Clear and Picture, Cream, a vivid vermilion mesh: CONTRACTS §22.7 has the numbers)
+  a level keeps AA and reads at most 0.03 darker instead. Page to pane may go darker over a light backdrop.
 * **Hover adds light, press takes it away.** No hover is darker than its rest, in any look (a tab on the tab bar
   lays bone alone, so it adds light over a white thumbnail too).
 * **Quiet buttons still look like buttons**: Later, Skip and Not now are a pill with a soft rim of light and their own
@@ -26,8 +27,8 @@ it more liquid glassy" ([DECISIONS.md ADR-85](DECISIONS.md#adr-85-the-logic-of-l
 | Level | What | Tint | Light (top → base) |
 |---|---|---|---|
 | L0 | The page and the backdrop | unchanged | none |
-| E1 | Panels, the sidebar, the title and line plates | panel veil + the pay | 0.04 → 0 at 65 %, plus the catch light |
-| E1 lead | The hero, the sign-in card, Library's learnings | the panel's green | 0.075 → 0 at 65 %: a whole step over E1 |
+| E1 | Panels, the sidebar, the title and line plates | panel veil + the pay (0 over the app's own backdrop and the window looks) | 0.04 → 0 at 14 px, plus the catch light |
+| E1 lead | The hero, the sign-in card, Library's learnings | the panel's green | 0.075 → 0 at 14 px: brighter than E1 at its top edge |
 | E2, E3 | Rows, cards, controls, marks, chips (each over the one under it) | 0.22 over the parent (on the page: panel + 0.22) | flat 0.09 (on the page 0.08) |
 | Float | Toasts, the update bar, the setup pill and list, the Ask panel, the money dock | the floating veil + 0.16 | 0.08 → 0.02 |
 | Lens | Reload | none: clear glass | white 0.18 → 0.12 at 32 %, a catch light on the top edge, a clear rim |
@@ -48,7 +49,7 @@ every lit surface, so one name is right on the page and inside a pane):
 | `--fill-sunk` | `rgb(var(--green-deep-rgb) / 0.3)` | The few true wells that are not fields: progress tracks, drop targets |
 | `--tint-leaf` | `linear-gradient(rgb(var(--green-leaf-rgb) / 0.22), rgb(var(--green-leaf-rgb) / 0.22)), linear-gradient(rgb(var(--bone-rgb) / 0.04), rgb(var(--bone-rgb) / 0.04)), rgb(var(--green-rgb) / 0.35)` | The success tint: leaf over bottle green 0.35 (`CHIP_UNDER`) |
 | `--tint-vermilion` | `linear-gradient(rgb(var(--vermilion-rgb) / 0.2), rgb(var(--vermilion-rgb) / 0.2)), linear-gradient(rgb(var(--bone-rgb) / 0.13), rgb(var(--bone-rgb) / 0.13)), rgb(var(--green-rgb) / 0.35)` | The vermilion tint (pills, callouts, the error sound) over bottle green 0.35 |
-| `--tint-amber` | `linear-gradient(rgb(246 201 69 / 0.16), rgb(246 201 69 / 0.16)), linear-gradient(rgb(var(--bone-rgb) / 0.02), rgb(var(--bone-rgb) / 0.02)), rgb(var(--green-rgb) / 0.35)` | The amber (warn) tint over bottle green 0.35 |
+| `--tint-amber` | `linear-gradient(rgb(246 201 69 / 0.16), rgb(246 201 69 / 0.16)), linear-gradient(rgb(var(--bone-rgb) / 0.01), rgb(var(--bone-rgb) / 0.01)), rgb(var(--green-rgb) / 0.35)` | The amber (warn) tint over bottle green 0.35 |
 | `--selected` | `rgb(var(--bone-rgb) / 0.92)` | The selected pill and the glide: the brightest layer, `--on-bone` words |
 | `--fill-field` | `rgb(var(--green-deep-rgb) / 0.45)` | Text fields and the link box: a well, one step below its parent |
 | `--shade-field` | `inset 0 3px 10px rgb(var(--shadow-rgb) / 0.35)` | The field's soft inner shade (blurred, never a line) |
@@ -60,30 +61,26 @@ every lit surface, so one name is right on the page and inside a pane):
 
 | Token | Value | Use |
 |---|---|---|
-| `--light-raise-veil` | `calc(var(--panel-veil) + 0.22)` | Green a raised thing lays over what it sits on. Page: panel + 0.22 (`TRACK_EXTRA_VEIL`); inside a lit surface, and on a pick-one track's options, 0.22 (`RAISE_VEIL`) |
-| `--light-raise-lift` | `0.08` | Bone on top of it. Page 0.08 (`TRACK_LIFT`); inside 0.09 (`RAISE_LIFT`) |
-| `--light-raise-hover-veil` | `calc(var(--panel-veil) + 0.22)` | Hover green. Page: panel + 0.22; inside 0.26 (`RAISE_HOVER_VEIL`) |
-| `--light-raise-hover-lift` | `0.09` | Hover bone. Page 0.09 (`PAGE_HOVER_LIFT`); inside 0.11 (`RAISE_HOVER_LIFT`) |
-| `--light-ghost-veil` | `calc(var(--panel-veil) + 0.22)` | A quiet fill's green. Page: the track's; inside 0.21 (`GHOST_VEIL`) |
-| `--light-ghost-lift` | `0.06` | A quiet fill's bone. Page 0.06 (`PAGE_GHOST_LIFT`); inside 0.086 (`GHOST_LIFT`) |
+| `--light-raise-veil` | `calc(var(--panel-veil) + 0.22)` | Green a raised thing lays over what it sits on. Page: panel + 0.22 (`TRACK_EXTRA_VEIL`); inside a lit surface, and on a pick-one track's options, 0.34 (`RAISE_VEIL`) |
+| `--light-raise-lift` | `0.08` | Bone on top of it. Page 0.08 (`TRACK_LIFT`); inside 0.13 (`RAISE_LIFT`) |
+| `--light-raise-hover-veil` | `calc(var(--panel-veil) + 0.22)` | Hover green. Page: panel + 0.22; inside 0.37 (`RAISE_HOVER_VEIL`) |
+| `--light-raise-hover-lift` | `0.09` | Hover bone. Page 0.09 (`PAGE_HOVER_LIFT`); inside 0.145 (`RAISE_HOVER_LIFT`) |
+| `--light-ghost-veil` | `calc(var(--panel-veil) + 0.22)` | A quiet fill's green. Page: the track's; inside 0.33 (`GHOST_VEIL`) |
+| `--light-ghost-lift` | `0.06` | A quiet fill's bone. Page 0.06 (`PAGE_GHOST_LIFT`); inside 0.125 (`GHOST_LIFT`) |
 | `--light-press-lift` | `0.03` | Bone when pressed (`RAISE_PRESS_LIFT`) |
-| `--light-pay` | `0.39` | The green that pays for the light and leaves room for the ladder (`lightPay`): lib/look.ts sets each look's own on `<html>`. 0.39 over the app's own backdrop (`LIGHT_PAY_OWN`), 0.16 where white can be behind (`LIGHT_PAY_WHITE`), 0 in Frosted, 0.04 under reduced transparency |
-| `--light-panel` | `0.04` | A panel's light at its top, gone by 65 % (`PANEL_LIGHT`) |
+| `--light-pay` | `0` | Extra green on a pane (`lightPay`): lib/look.ts sets each look's own on `<html>`. See-through first: 0 over the app's own backdrop, Clear and Frosted (`LIGHT_PAY_OWN`), 0 where white can be behind (`LIGHT_PAY_WHITE`), at most 0.05 in a light Colours look (`MAX_LIGHT_PAY`, never 0.82 or more in all), 0.04 under reduced transparency. The ladder is earned with each level's own light |
+| `--light-panel` | `0.04` | A panel's light at its top edge, gone 14 px down (`PANEL_LIGHT`) |
 | `--light-lead` | `0.075` | The lead panel's light: a whole step over a plain panel (`LEAD_LIGHT`) |
 | `--light-lead-pay` | `0` | The lead panel's extra green (`LEAD_EXTRA_VEIL`) |
 | `--light-float` | `0.08` | A floating layer's light (`FLOAT_LIGHT`) |
 | `--light-float-hover` | `0.09` | Its hover (`FLOAT_HOVER_LIGHT`) |
-| `--light-float-pay` | `0.16` | Its extra green over the floating veil, room for the ladder over a white thumbnail (`FLOAT_EXTRA_VEIL`) |
+| `--light-float-pay` | `0` | Its extra green over the floating veil (`FLOAT_EXTRA_VEIL`): none, main's float veil; its light lies in its top padding, never under its words |
+| `--light-update-pay` | `0.22` | The update bar's extra green (`UPDATE_EXTRA_VEIL`): the one float that darkens more, so Reload reads 0.08 over Later with bone words at AA over a white thumbnail |
 | `--light-overlay` | `0.12` | Sheets, the picture viewer, the markup editor (`OVERLAY_LIGHT`) |
 | `--light-menu` | `0.1` | The dropdown list and the workspace menu (`MENU_LIGHT`) |
 | `--light-tabbar` | `0.04` | The tab bar's light (`TABBAR_LIGHT`) |
 | `--light-tabbar-pay` | `0.04` | The tab bar's extra green (`TABBAR_EXTRA_VEIL`) |
 | `--light-spec` | `0.06` | The catch light at the top centre, inside the top padding only (`SPECULAR`) |
-| `--light-lens-veil` | `0.38` | No longer drawn: the Reload lens is clear glass with no green (components.css `.btn--lens`); kept for `LENS_VEIL` |
-| `--light-lens` | `0.14` | Its bone at the top (`LENS_LIGHT`) |
-| `--light-lens-hover-veil` | `0.42` | Its hover green (`LENS_HOVER_VEIL`) |
-| `--light-lens-hover` | `0.16` | Its hover bone (`LENS_HOVER_LIGHT`) |
-| `--light-lens-press` | `0.06` | Its bone when pressed (`LENS_PRESS_LIGHT`) |
 | `--light-rim-1` | `inset 0 6px 8px -6px rgb(var(--bone-rgb) / 0.24)` | A panel's top glow: light catching the top of the glass, blurred, never a line |
 | `--light-rim-2` | `inset 0 4px 6px -4px rgb(var(--bone-rgb) / 0.26)` | A raised thing's top glow |
 | `--light-rim-2-hover` | `inset 0 4px 6px -4px rgb(var(--bone-rgb) / 0.34)` | Its hover |
@@ -114,10 +111,10 @@ the `--glass-shadow-*`):
 | `--glass-tint-tabbar` | `linear-gradient(rgb(var(--green-rgb) / min(1, var(--tabbar-veil) + var(--light-tabbar-pay))), rgb(var(--green-rgb) / min(1, var(--tabbar-veil) + var(--light-tabbar-pay))))` | The tab bar's green (icons only, 3:1) |
 | `--glass-spec` | `radial-gradient(60% 8px at 50% 0, rgb(var(--bone-rgb) / var(--light-spec)), transparent)` | The catch light, 8 px deep (panels, overlays): inside the smallest top padding above words, never under them |
 | `--glass-spec-sm` | `radial-gradient(50% 8px at 50% 0, rgb(var(--bone-rgb) / var(--light-spec)), transparent)` | The small catch light, 8 px deep (floats, the tab bar) |
-| `--glass-light-panel` | `var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-panel)) 0%, rgb(var(--bone-rgb) / calc(var(--light-panel) * 0.5)) 22%, rgb(var(--bone-rgb) / calc(var(--light-panel) * 0.2)) 42%, rgb(var(--bone-rgb) / 0) 65%)` | E1's light: brightest at the top, gone by 65 % |
-| `--glass-light-lead` | `var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-lead)) 0%, rgb(var(--bone-rgb) / calc(var(--light-lead) * 0.5)) 22%, rgb(var(--bone-rgb) / calc(var(--light-lead) * 0.2)) 42%, rgb(var(--bone-rgb) / 0) 65%)` | The lead panel's light |
-| `--glass-light-float` | `var(--glass-spec-sm), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-float)) 0%, rgb(var(--bone-rgb) / calc(var(--light-float) * 0.5)) 30%, rgb(var(--bone-rgb) / calc(var(--light-float) * 0.25)) 65%)` | A floating layer's light |
-| `--glass-light-float-hover` | `var(--glass-spec-sm), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-float-hover)) 0%, rgb(var(--bone-rgb) / calc(var(--light-float-hover) * 0.5)) 30%, rgb(var(--bone-rgb) / calc(var(--light-float-hover) * 0.25)) 65%)` | Its hover |
+| `--glass-light-panel` | `var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-panel)) 0, rgb(var(--bone-rgb) / calc(var(--light-panel) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-panel) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px)` | E1's light: brightest at the top edge, gone 14 px down |
+| `--glass-light-lead` | `var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-lead)) 0, rgb(var(--bone-rgb) / calc(var(--light-lead) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-lead) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px)` | The lead panel's light |
+| `--glass-light-float` | `var(--glass-spec-sm), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-float)) 0, rgb(var(--bone-rgb) / calc(var(--light-float) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-float) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px)` | A floating layer's light |
+| `--glass-light-float-hover` | `var(--glass-spec-sm), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-float-hover)) 0, rgb(var(--bone-rgb) / calc(var(--light-float-hover) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-float-hover) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px), linear-gradient(rgb(var(--bone-rgb) / 0.01), rgb(var(--bone-rgb) / 0.01))` | Its hover |
 | `--glass-light-overlay` | `var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-overlay)) 0%, rgb(var(--bone-rgb) / calc(var(--light-overlay) * 0.6)) 30%, rgb(var(--bone-rgb) / calc(var(--light-overlay) * 0.33)) 65%)` | An overlay's light |
 | `--glass-light-menu` | `linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-menu)) 0%, rgb(var(--bone-rgb) / calc(var(--light-menu) * 0.6)) 40%, rgb(var(--bone-rgb) / calc(var(--light-menu) * 0.4)) 70%)` | A menu's light |
 | `--glass-light-tabbar` | `var(--glass-spec-sm), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-tabbar)) 0%, rgb(var(--bone-rgb) / calc(var(--light-tabbar) * 0.25)) 65%)` | The tab bar's light |

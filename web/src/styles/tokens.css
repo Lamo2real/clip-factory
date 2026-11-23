@@ -58,7 +58,7 @@
      two (CHIP_TINTS), so a chip is a step of light over the row it sits on in every look. */
   --tint-leaf: linear-gradient(rgb(var(--green-leaf-rgb) / 0.22), rgb(var(--green-leaf-rgb) / 0.22)), linear-gradient(rgb(var(--bone-rgb) / 0.04), rgb(var(--bone-rgb) / 0.04)), rgb(var(--green-rgb) / 0.35);
   --tint-vermilion: linear-gradient(rgb(var(--vermilion-rgb) / 0.2), rgb(var(--vermilion-rgb) / 0.2)), linear-gradient(rgb(var(--bone-rgb) / 0.13), rgb(var(--bone-rgb) / 0.13)), rgb(var(--green-rgb) / 0.35);
-  --tint-amber: linear-gradient(rgb(246 201 69 / 0.16), rgb(246 201 69 / 0.16)), linear-gradient(rgb(var(--bone-rgb) / 0.02), rgb(var(--bone-rgb) / 0.02)), rgb(var(--green-rgb) / 0.35);
+  --tint-amber: linear-gradient(rgb(246 201 69 / 0.16), rgb(246 201 69 / 0.16)), linear-gradient(rgb(var(--bone-rgb) / 0.01), rgb(var(--bone-rgb) / 0.01)), rgb(var(--green-rgb) / 0.35);
   --selected: rgb(var(--bone-rgb) / 0.92); /* unchanged: the brightest layer, --on-bone words */
   /* No edges (ADR-45): text fields are a well with a soft inner shade, a chosen or found thing a soft glow, never a ring. */
   --fill-field: rgb(var(--green-deep-rgb) / 0.45); /* unchanged: a well is one step below its parent */
@@ -82,23 +82,19 @@
      ladder's pay (lib/background.ts lightPay: the least green that leaves room under the AA ceiling for every level
      above a pane to read a step brighter, over everything the look can show). lib/look.ts sets it on <html> for each
      look; this is the app's own backdrop (LIGHT_PAY_OWN) until it does, and glass.css has the white looks' number. */
-  --light-pay: 0.39; /* LIGHT_PAY_OWN */
+  --light-pay: 0; /* LIGHT_PAY_OWN: see-through first, a pane keeps main's veil */
   --light-panel: 0.04; /* PANEL_LIGHT: E1 top lift, gone by 65 % of the height */
   --light-lead: 0.075; /* LEAD_LIGHT: the hero, the sign-in card, learnings: a whole step over a panel */
   --light-lead-pay: 0; /* LEAD_EXTRA_VEIL */
   --light-float: 0.08; /* FLOAT_LIGHT */
   --light-float-hover: 0.09; /* FLOAT_HOVER_LIGHT */
-  --light-float-pay: 0.16; /* FLOAT_EXTRA_VEIL: room for the ladder on a layer over a white thumbnail */
+  --light-float-pay: 0; /* FLOAT_EXTRA_VEIL: main's float veil; its light lies in its top padding, never under its words */
+  --light-update-pay: 0.22; /* UPDATE_EXTRA_VEIL: the update bar, so Reload reads 0.08 over Later with bone words at AA over white */
   --light-overlay: 0.12; /* OVERLAY_LIGHT: sheets, the picture viewer, the markup editor */
   --light-menu: 0.1; /* MENU_LIGHT: the dropdown list, the workspace menu */
   --light-tabbar: 0.04; /* TABBAR_LIGHT */
   --light-tabbar-pay: 0.04; /* TABBAR_EXTRA_VEIL */
   --light-spec: 0.06; /* SPECULAR: the catch light at the top centre, inside the top padding only (8 px deep) */
-  --light-lens-veil: 0.38; /* LENS_VEIL: the Reload lens, over the bar */
-  --light-lens: 0.14; /* LENS_LIGHT */
-  --light-lens-hover-veil: 0.42; /* LENS_HOVER_VEIL */
-  --light-lens-hover: 0.16; /* LENS_HOVER_LIGHT */
-  --light-lens-press: 0.06; /* LENS_PRESS_LIGHT */
 
   /* Per-level tints (bottle green, flat, two stops) and lights (bone, 180deg, top brighter). */
   --glass-tint-panel: linear-gradient(rgb(var(--green-rgb) / min(1, var(--panel-veil) + var(--light-pay))), rgb(var(--green-rgb) / min(1, var(--panel-veil) + var(--light-pay))));
@@ -109,10 +105,10 @@
   /* 8 px deep: the smallest top padding above words (the line plates, compact rows), so it is never under them. */
   --glass-spec: radial-gradient(60% 8px at 50% 0, rgb(var(--bone-rgb) / var(--light-spec)), transparent);
   --glass-spec-sm: radial-gradient(50% 8px at 50% 0, rgb(var(--bone-rgb) / var(--light-spec)), transparent);
-  --glass-light-panel: var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-panel)) 0%, rgb(var(--bone-rgb) / calc(var(--light-panel) * 0.5)) 22%, rgb(var(--bone-rgb) / calc(var(--light-panel) * 0.2)) 42%, rgb(var(--bone-rgb) / 0) 65%);
-  --glass-light-lead: var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-lead)) 0%, rgb(var(--bone-rgb) / calc(var(--light-lead) * 0.5)) 22%, rgb(var(--bone-rgb) / calc(var(--light-lead) * 0.2)) 42%, rgb(var(--bone-rgb) / 0) 65%);
-  --glass-light-float: var(--glass-spec-sm), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-float)) 0%, rgb(var(--bone-rgb) / calc(var(--light-float) * 0.5)) 30%, rgb(var(--bone-rgb) / calc(var(--light-float) * 0.25)) 65%);
-  --glass-light-float-hover: var(--glass-spec-sm), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-float-hover)) 0%, rgb(var(--bone-rgb) / calc(var(--light-float-hover) * 0.5)) 30%, rgb(var(--bone-rgb) / calc(var(--light-float-hover) * 0.25)) 65%);
+  --glass-light-panel: var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-panel)) 0, rgb(var(--bone-rgb) / calc(var(--light-panel) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-panel) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px);
+  --glass-light-lead: var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-lead)) 0, rgb(var(--bone-rgb) / calc(var(--light-lead) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-lead) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px);
+  --glass-light-float: var(--glass-spec-sm), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-float)) 0, rgb(var(--bone-rgb) / calc(var(--light-float) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-float) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px);
+  --glass-light-float-hover: var(--glass-spec-sm), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-float-hover)) 0, rgb(var(--bone-rgb) / calc(var(--light-float-hover) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-float-hover) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px), linear-gradient(rgb(var(--bone-rgb) / 0.01), rgb(var(--bone-rgb) / 0.01));
   --glass-light-overlay: var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-overlay)) 0%, rgb(var(--bone-rgb) / calc(var(--light-overlay) * 0.6)) 30%, rgb(var(--bone-rgb) / calc(var(--light-overlay) * 0.33)) 65%);
   --glass-light-menu: linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-menu)) 0%, rgb(var(--bone-rgb) / calc(var(--light-menu) * 0.6)) 40%, rgb(var(--bone-rgb) / calc(var(--light-menu) * 0.4)) 70%);
   --glass-light-tabbar: var(--glass-spec-sm), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-tabbar)) 0%, rgb(var(--bone-rgb) / calc(var(--light-tabbar) * 0.25)) 65%);

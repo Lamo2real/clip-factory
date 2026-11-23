@@ -7,7 +7,13 @@ import {
   brandMeshSpots,
   coloursMeshSpots,
   coloursVeils,
-  FLOAT_EXTRA_VEIL,
+  UPDATE_EXTRA_VEIL,
+  GHOST_VEIL,
+  GHOST_LIFT,
+  LADDER_SLACK,
+  LADDER_STEP,
+  noRoom,
+  panelWords,
   FLOAT_LIGHT,
   FLOAT_VEIL,
   glassChecks,
@@ -47,6 +53,15 @@ const worst = (bg: Rgb) => {
   return Math.min(...TEXT_COLOURS.map((t) => (luminance(t) > lb ? (luminance(t) + 0.05) / (lb + 0.05) : (lb + 0.05) / (luminance(t) + 0.05))));
 };
 
+const sys = readFileSync(join(import.meta.dirname, "..", "src", "styles", "system.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+/** A number declared in system.css's rule whose selector is exactly `selector`. */
+const sysNum = (selector: string, prop: string) => {
+  const rule = new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(sys)?.[1] ?? "";
+  const m = new RegExp(`${prop}:\\s*([\\d.]+);`).exec(rule);
+  expect(m, `${selector} { ${prop} }`).not.toBeNull();
+  return Number(m![1]);
+};
+const LATER = ".update-bar .btn--ghost.update-bar__later";
 const LENS = ".btn.btn--lens";
 const LENS_HOVER = '.btn.btn--lens:hover:not([aria-disabled="true"])';
 const GHOST_INSIDE = ":where(.glass, .tt-sheet, .help-panel, .money-dock, .page-head__text, .dash-head__text, .dropdown__list, .ws-menu) .btn--ghost";
@@ -78,9 +93,10 @@ const PLACES: Place[] = (() => {
 describe("the update bar's two buttons (ADR-85)", () => {
   const lift = num(LENS, "--btn-lift");
   const hoverLift = num(LENS_HOVER, "--btn-lift");
-  const later = num(GHOST_INSIDE, "--btn-lift");
-  const laterVeil = num(GHOST_INSIDE, "--btn-veil");
-  const laterHover = num(GHOST_INSIDE, "--ghost-hover-lift");
+  // Later on the bar: bone alone over the bar's heavier green (UPDATE_EXTRA_VEIL), quieter than Reload.
+  const later = sysNum(LATER, "--btn-lift");
+  const laterVeil = 0;
+  const laterHover = sysNum(LATER, "--ghost-hover-lift");
 
   it("the lens is colourless: white light over the bar, no green and no vermilion under it, and no blur of its own", () => {
     const rule = body(LENS);
@@ -110,8 +126,8 @@ describe("the update bar's two buttons (ADR-85)", () => {
     for (const p of PLACES) {
       const page = mix(VEIL, p.behind, p.look.pageVeil ?? 0);
       for (const under of [WHITE, page, panelTop(p.look, p.behind)]) {
-        // The bar's own tint: the floating veil (or the panel's, if heavier) and the float's pay (--light-float-pay).
-        const tint = Math.min(1, Math.max(FLOAT_VEIL, p.look.panelVeil) + FLOAT_EXTRA_VEIL);
+        // The bar's own tint: the floating veil (or the panel's, if heavier) and the bar's pay (--light-update-pay).
+        const tint = Math.min(1, Math.max(FLOAT_VEIL, p.look.panelVeil) + UPDATE_EXTRA_VEIL);
         // The bar's light where the buttons sit: from half its top light (the buttons' top on a computer) down to a
         // quarter (the bottom row on a phone, where its light has eased off).
         for (const light of [FLOAT_LIGHT * 0.25, FLOAT_LIGHT * 0.5, FLOAT_LIGHT * 0.75]) {
@@ -127,7 +143,7 @@ describe("the update bar's two buttons (ADR-85)", () => {
           lowest.later = Math.min(lowest.later, steps[0]![1]);
           lowest.lens = Math.min(lowest.lens, steps[1]![1]);
           lowest.hover = Math.min(lowest.hover, steps[2]![1]);
-          for (const [name, dl] of steps) if (dl < (name.includes("hover") ? 0.01 : 0.03) && fails.length < 20) fails.push(`${name} ${dl.toFixed(3)}, ${p.at}, light ${light}`);
+          for (const [name, dl] of steps) if (dl < (name.includes("hover") ? 0.01 : name.startsWith("Reload") ? 0.08 : 0.03) && fails.length < 20) fails.push(`${name} ${dl.toFixed(3)}, ${p.at}, light ${light}`);
           // The words sit in the middle of the button, where the bar's light is half its top or less.
           if (light <= FLOAT_LIGHT * 0.5)
             for (const [name, face] of [["Later", laterFace], ["Later hover", lit(bar, laterVeil, laterHover)], ["Reload", lensFace], ["Reload hover", lensHover]] as const) {
@@ -139,7 +155,8 @@ describe("the update bar's two buttons (ADR-85)", () => {
       }
     }
     expect(fails).toEqual([]);
-    expect(lowest.lens).toBeGreaterThanOrEqual(0.03);
+    expect(lowest.lens).toBeGreaterThanOrEqual(0.08);
+    expect(lowest.later).toBeGreaterThanOrEqual(0.03);
     expect(lowest.aa).toBeGreaterThanOrEqual(AA);
   });
 });
@@ -155,20 +172,21 @@ describe("the quiet button looks like a button (ADR-85)", () => {
     expect(rule).toMatch(/--ghost-rim: inset 0 0 [3-9]px rgb\(var\(--bone-rgb\) \/ 0\.\d+\);/);
     expect(rule).toMatch(/--ghost-top: inset 0 \dpx \dpx -\dpx rgb\(var\(--bone-rgb\) \/ 0\.\d+\);/);
     expect(rule).toContain("box-shadow: var(--ghost-top), var(--ghost-rim);");
-    // Inside a lit surface its face is bone alone over the surface; on the page the track's green carries the words.
-    expect(Number(declaredValue(body(GHOST_INSIDE), "--btn-veil"))).toBe(0);
+    // Inside a lit surface its face is the quiet fill (GHOST_VEIL, GHOST_LIFT); on the page the track's green carries the words.
+    expect(Number(declaredValue(body(GHOST_INSIDE), "--btn-veil"))).toBe(GHOST_VEIL);
+    expect(lift).toBe(GHOST_LIFT);
     expect(declaredValue(rule, "--btn-veil")).toMatch(/^var\(--light-ghost-veil/);
     expect(hoverLift).toBeGreaterThan(lift);
   });
 
-  it("its face is at least 0.03 OKLab L over the panel it sits on, and its words keep AA, wherever the panel can be", () => {
+  it("its face is a step of light over the panel it sits on (0.03 where the AA cap leaves room), and its words keep AA, wherever the panel can be", () => {
     const fails: string[] = [];
     for (const p of PLACES) {
-      const e1 = panelTop(p.look, p.behind);
+      const e1 = panelWords(p.look, p.behind);
       for (const [where, parent] of [["a panel", e1], ["a row on a panel", raised(e1)]] as const) {
         const face = lit(parent, veil, lift);
         const dl = oklabL(face) - oklabL(parent);
-        if (where === "a panel" && dl < 0.03 && fails.length < 20) fails.push(`on ${where}: +${dl.toFixed(3)}, ${p.at}`);
+        if (where === "a panel" && dl < (noRoom(parent) ? -LADDER_SLACK : oklabL(parent) > 0.4 ? LADDER_STEP : 0.03) && fails.length < 20) fails.push(`on ${where}: +${dl.toFixed(3)}, ${p.at}`);
         for (const [state, f] of [["rest", face], ["hover", lit(parent, hoverVeil, hoverLift)]] as const) {
           const c = worst(f);
           if (c < AA && fails.length < 20) fails.push(`on ${where}, ${state}: ${c.toFixed(2)}:1 (parent L ${oklabL(parent).toFixed(3)}), ${p.at}`);

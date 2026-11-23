@@ -283,12 +283,12 @@ html[data-strength="frosted"] .backdrop__frost {
     .stepper > *,
     .ws-switch > *
   ) {
-  --light-raise-veil: 0.22; /* RAISE_VEIL */
-  --light-raise-lift: 0.09; /* RAISE_LIFT */
-  --light-raise-hover-veil: 0.26; /* RAISE_HOVER_VEIL */
-  --light-raise-hover-lift: 0.11; /* RAISE_HOVER_LIFT */
-  --light-ghost-veil: 0.21; /* GHOST_VEIL */
-  --light-ghost-lift: 0.086; /* GHOST_LIFT */
+  --light-raise-veil: 0.34; /* RAISE_VEIL */
+  --light-raise-lift: 0.13; /* RAISE_LIFT */
+  --light-raise-hover-veil: 0.37; /* RAISE_HOVER_VEIL */
+  --light-raise-hover-lift: 0.145; /* RAISE_HOVER_LIFT */
+  --light-ghost-veil: 0.33; /* GHOST_VEIL */
+  --light-ghost-lift: 0.125; /* GHOST_LIFT */
   --fill: linear-gradient(rgb(var(--bone-rgb) / var(--light-raise-lift)), rgb(var(--bone-rgb) / var(--light-raise-lift))), rgb(var(--green-rgb) / min(1, var(--light-raise-veil)));
   --fill-hover: linear-gradient(rgb(var(--bone-rgb) / var(--light-raise-hover-lift)), rgb(var(--bone-rgb) / var(--light-raise-hover-lift))), rgb(var(--green-rgb) / min(1, var(--light-raise-hover-veil)));
   --fill-press: linear-gradient(rgb(var(--bone-rgb) / var(--light-press-lift)), rgb(var(--bone-rgb) / var(--light-press-lift))), rgb(var(--green-rgb) / min(1, var(--light-raise-veil)));
@@ -301,7 +301,7 @@ html[data-strength="frosted"] .backdrop__frost {
 /* Where white can be behind (a white desktop, a white photo) the panels already carry 0.73 green; the ladder's pay on
    top of it (LIGHT_PAY_WHITE, Clear and Picture over white) until lib/look.ts sets each look's own on <html>. */
 html:is(.see-through, [data-backdrop="picture"]) {
-  --light-pay: 0.16; /* LIGHT_PAY_WHITE */
+  --light-pay: 0.05; /* LIGHT_PAY_WHITE */
 }
 /* --panel-veil (lib/background.ts) is the least bottle green that keeps every text colour of this look (tokens.css)
    at WCAG AA over the lightest thing behind (a white desktop, a white photo); the panel tint adds the light's pay to

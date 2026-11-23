@@ -3,7 +3,7 @@
 ```css
 .glass {
   --glass-tint: var(--glass-tint-panel); /* flat green: --panel-veil + --light-pay */
-  --glass-light: var(--glass-light-panel); /* bone from above, gone by 65 %, and the catch light */
+  --glass-light: var(--glass-light-panel); /* bone from above, inside the top padding, and the catch light */
   position: relative;
   isolation: isolate;
   background: var(--glass-light), var(--glass-tint);

@@ -4829,13 +4829,14 @@ everywhere.
 
   | Surface | Tint | Light (bone, top → base, §22.7) | Worst text contrast (at the top) |
   |---|---|---|---|
-  | `.glass` panels, the sidebar, `.glass--clear`, the loose-text plates (every look: `html:is(.see-through, [data-backdrop])`) | `--panel-veil` + `--light-pay`, the ladder's pay for each look (§22.7): 0.33 + 0.39 over the app's backdrop, its grain included (`BRAND_PANEL_VEIL`, `LIGHT_PAY_OWN`); 0.73 + 0.16 over a white desktop or photo (`LIGHT_PAY_WHITE`); 0.88 + 0 in Frosted; in Colours what the mix needs (0 to 0.42) | 0.04 → 0 at 65 %, plus the catch light (`PANEL_LIGHT`, `SPECULAR`) | 6.83 over the app's backdrop (every blob subset, field end, `saturate()` and the grain at its peak); 6.93 over white; 6.78 in Colours |
-  | `.glass--green` (the lead panel: hero, sign-in, learnings) | the panel's (`LEAD_EXTRA_VEIL` 0) | 0.075 → 0 at 65 % (`LEAD_LIGHT`): a whole step over a panel | 6.28; 6.36 over white; 6.24 in Colours |
-  | Nested `.glass`, rows, cards and controls inside a surface | the relative raise: green 0.22 over the parent (`RAISE_VEIL`) | flat 0.09 (`RAISE_LIFT`); hover 0.26 / 0.11 | 5.01 four levels deep on the lead panel, on hover (4.99 in Colours) |
+  | `.glass` panels, the sidebar, `.glass--clear`, the loose-text plates (every look: `html:is(.see-through, [data-backdrop])`) | `--panel-veil` + `--light-pay` (§22.7): see-through first, so 0.33 + 0 over the app's backdrop, Clear and Frosted (`BRAND_PANEL_VEIL`, `LIGHT_PAY_OWN` 0, as on main); 0.73 + 0.05 over a white desktop or photo (`LIGHT_PAY_WHITE`, the most a light look may add); 0.88 + 0 in the window's Frosted; in Colours + 0 to 0.05 (`MAX_LIGHT_PAY`), never 0.82 or more | 0.04 at the top edge → 0 at 14 px, inside the top padding (`PANEL_LIGHT`), plus the catch light (`SPECULAR`) | 4.52 over the app's backdrop at its very brightest corner (as on main); 5.39 over white; 4.86 in Colours |
+  | `.glass--green` (the lead panel: hero, sign-in, learnings) | the panel's (`LEAD_EXTRA_VEIL` 0) | 0.075 at the top edge → 0 at 14 px (`LEAD_LIGHT`) | as the panel where its words are |
+  | Nested `.glass`, rows, cards and controls inside a surface | the relative raise: green 0.34 over the parent (`RAISE_VEIL`) | flat 0.13 (`RAISE_LIFT`); hover 0.37 / 0.145 | 4.55 on hover at the brightest corner (4.62 in Colours) |
   | Pick-one tracks and every control straight on the page (`--fill` at `:root`, such as the Library tabs) | panel + 0.22 (`TRACK_EXTRA_VEIL`) | flat 0.08 (`TRACK_LIFT`); hover 0.09 | 4.98 on hover (4.90 in Colours); an option's hover over it 4.80 |
   | Fields (`--fill-field`) | deep green 0.45 over the panel: a well, one step below | none | 7.35 |
-  | Floating layers: toasts, the update bar, the setup pill, list and sheet, the Ask launcher, the Ask panel and phone sheet (`--glass-tint-float`) | `max(FLOAT_VEIL 0.73, --panel-veil)` + 0.16 (`FLOAT_EXTRA_VEIL`: room for the ladder on it over a white thumbnail), blur 28 px | 0.08 → 0.02 at 65 % (`FLOAT_LIGHT`); hover 0.09 | 6.28 over white; hover 6.12 |
-  | The Reload lens on the update bar | green 0.38 over the bar (`LENS_VEIL`) | 0.14 → 0.07 (`LENS_LIGHT`); hover 0.42 / 0.16 | 4.68; hover 4.60 |
+  | Floating layers: toasts, the setup pill, list and sheet, the Ask launcher, the Ask panel and phone sheet (`--glass-tint-float`) | `max(FLOAT_VEIL 0.73, --panel-veil)` + 0 (`FLOAT_EXTRA_VEIL`, main's), blur 28 px | 0.08 at the top edge → 0 at 14 px (`FLOAT_LIGHT`); hover 0.09 there plus a flat 0.01 (`FLOAT_HOVER_LIFT`) | 4.61 over white; hover 4.52 |
+  | The update bar | `max(FLOAT_VEIL, --panel-veil)` + 0.22 (`UPDATE_EXTRA_VEIL`, the one float that darkens more: over a white thumbnail the AA cap leaves Reload no room for +0.08 over Later otherwise) | as a float | Later 7.15, Reload 4.93 (hover 4.59) over white |
+  | Reload on the update bar (`.btn--lens`) | none: clear glass, white light alone | white 0.18 where its words are (0.24 at its top edge); hover 0.205 | 4.93; hover 4.59 (over white) |
   | The tab bar (icons only, `--glass-tint-tabbar`) | `TABBAR_VEIL` 0.59 + 0.04, blur 28 px | 0.04 → 0.01 at 65 % | 3.22:1 over white; the chosen icon on bone 9.88 |
   | The question sheet, the picture viewer (`--glass-tint-overlay`) | 0.86 (viewer 0.90), over its own scrim | 0.12 → 0.04 at 65 % (`OVERLAY_LIGHT`) | 6.44 (viewer 6.79) over white, on the lightest scrim |
   | The vermilion CTA | `--cta`, white label | unchanged | 4.65 over white, 4.86 over a panel |
@@ -4865,8 +4866,8 @@ everywhere.
   refracting surfaces; the title plates draw no filter in any look). The light, the top glow, the shade and the
   shadow stay, so the top is still brighter and the ladder holds.
 * **Panels in the window look.** `.glass` keeps the recipe (blur, saturation, the light from above, shadow,
-  refraction in Chromium); its tint is `--panel-veil` plus the look's pay (`LIGHT_PAY_WHITE` 0.16 in Clear, 0 in
-  Frosted: the ladder's room over a white desktop, §22.7).
+  refraction in Chromium); its tint is `--panel-veil` plus the look's pay (`LIGHT_PAY_WHITE` 0.05 in Clear, the most a
+  light look may add over main's veil; 0 in Frosted, §22.7).
 * **Frosted fallback** (see-through in a browser, installed PWA, phone, or the desktop app with `none`): the living
   backdrop above (already blurred), a frost pane (Clear: none; Frosted,
   `html[data-strength="frosted"]`: green 0.40 → deep green 0.45, so Glass strength always does something; no full-screen
@@ -4877,11 +4878,27 @@ everywhere.
 
 ### 22.4 Why phones and browsers cannot see through
 
+**How much of what is behind a pane shows through** (1 − its green; see-through first, coordinator 2026-11-23: the
+light ladder may not be paid for by darkening panes; a light look may add at most 0.05 over main and never reach 0.82):
+
+| Look | main (36ade52) | 7bb0fe0a | now |
+|---|---|---|---|
+| The app's own backdrop, Clear (panels) | 67 % (0.33) | 28 % (0.33 + 0.39) | **67 %** (0.33 + 0) |
+| The app's own backdrop, Frosted (panels; the frost pane on the page as on main) | 67 % (0.33) | 28 % (0.72) | **67 %** (0.33) |
+| Window Clear (liquid, every glass), over a white desktop | 27 % (0.73) | 11 % (0.89) | **22 %** (0.78) |
+| Window Frosted | 12 % (0.88) | 12 % (0.88) | **12 %** (0.88) |
+| Picture (white or busy photo) | 27 % (0.73) | 11 % (0.89) | **22 %** (0.78) |
+| Colours, default trio | 70 % (0.30) | 36 % (0.64) | **65 %** (0.35) |
+| Colours, Cream (`#f7f5ef`, page veil 0.28) | 40 % (0.60) | 16 % (0.84) | **35 %** (0.65) |
+| Floating layers (toasts, setup pill, Ask) | 27 % (0.73) | 11 % (0.89) | **27 %** (0.73) |
+| The update bar | 27 % (0.73) | 11 % (0.89) | 5 % (0.95, `UPDATE_EXTRA_VEIL`: Reload +0.08 over Later with AA over white) |
+
+
 Web pages, installed PWAs and phone home-screen apps are drawn on an opaque surface; no browser lets a page see the
 wallpaper or windows behind it, and iOS gives a home-screen app no way to either. On a phone "see-through" therefore
 means this: every panel, the top bar, the setup pill, the tab bar and sheets are glass over a living backdrop the
 app draws itself (bottle green, deep teal, leaf, two vermilion glows, faint bone light and two soft lenses, drifting
-slowly), which shows through 70 % of every panel and fully between them. Only the desktop app owns its window. The Background page says so in one sentence
+slowly), which shows through 67 % of every panel and fully between them. Only the desktop app owns its window. The Background page says so in one sentence
 under the choice whenever see-through is picked and there is no native glass:
 
 > See-through works in the Mac and Windows app. Browsers don't let apps look behind them, so here you get the Clip
@@ -5009,36 +5026,49 @@ then: "can you make sure the reload button when a new feature is released is wit
 style". A refinement, not a redesign: Bottle Green, Bone, the vermilion CTAs, Times and Inter, the layout, the copy,
 the cursor and the behaviour stay. Only the light changes: fills, lifts, the soft top light, the inner shade and the
 shadows. `lib/background.ts` works out every number (`LADDER_*`, `LIGHT_PAY_*`, `PANEL_LIGHT`, `RAISE_*`, `GHOST_*`,
-`FLOAT_*`, `CHIP_TINTS`, `LENS_*` and the pure `lit`, `panelTop`, `raised`, `onPage`, `floatTop`, `chipOn`,
+`FLOAT_*`, `UPDATE_EXTRA_VEIL`, `CHIP_TINTS` and the pure `lit`, `panelTop`, `panelWords`, `noRoom`, `raised`, `onPage`, `floatTop`, `chipOn`,
 `ladderFaults`, `ladderPay`, `lightPay`, `oklabL`); `tokens.css` carries them as
 `--light-*` and the per-level layers (`--glass-tint-*`, `--glass-light-*`, `--glass-shadow-*`); `glass.css`
 re-declares the raise inside every lit surface. Brightness is OKLab L.
 
 * **Two lights.** (a) From a pane up, every level is brighter than the level under it, nested levels too (the
   ladder, below). (b) Inside every pane the
-  top is brighter than the bottom: a bone light from above that eases out and reaches the pane's base at 65 % of its
-  height, plus a static catch light at the top centre (`--glass-spec`, 8 px deep: the smallest top padding above
+  top is brighter than the bottom: a bone light from above that lies in the pane's top padding (full at the top edge,
+  half at 6 px, gone 14 px down, so it is never under a word, a heading included), plus a static catch light at the top centre (`--glass-spec`, 8 px deep: the smallest top padding above
   words, on the line plates and compact rows, so it is never under them; 14 px was first drawn, but measured words
   start 8 to 12 px down on the plates, the setup steps, the job rows and the Content Rewards chips).
-* **Every bone lift is paid for, and the pay leaves room for the ladder.** Bone words cap whatever they sit on at
-  luminance 0.140 (4.5:1, about OKLab L 0.52), so a lift with no more green under it fails AA, and every level above a
-  pane needs room under that cap to be brighter. The pay (`--light-pay`) is worked out for each look (`lightPay`,
-  `ladderPay`: the least, in 0.01 steps, at which the whole ladder holds over every spot the look can show) and
-  `lib/look.ts` sets it on `<html>` beside `--panel-veil`: 0.39 over the app's own backdrop (`LIGHT_PAY_OWN`, the CSS
-  default), 0.16 in the window look's Clear and in Picture (`LIGHT_PAY_WHITE`, `html:is(.see-through,
-  [data-backdrop="picture"])` until the look is applied), 0 in the window look's Frosted, 0 to 0.42 in Colours (0.34
-  for the default trio, 0.24 for Cream), and 0.04 under reduced transparency (glass.css, `!important`). The
-  see-through veils (`--panel-veil`, `--float-veil`, `--tabbar-veil`), `GLASS_TINT` and the measured floors are
-  unchanged; the pay goes on top of them, on panes and the loose-text plates only.
+* **See-through first; every step is earned with light** (coordinator, 2026-11-23, after review of 7bb0fe0a, which
+  reached the ladder by darkening every pane: 28 % of the backdrop showed through). Bone words cap whatever they sit on
+  at luminance 0.140 (4.5:1, about OKLab L 0.52). Panes keep main's veils over the app's own backdrop, Clear and
+  Frosted (`LIGHT_PAY_OWN` 0) and floating layers keep main's float veil (`FLOAT_EXTRA_VEIL` 0). A light look (the
+  window's Clear and Picture, where white can be behind, and Colours) adds at most 0.05 green (`MAX_LIGHT_PAY`), never
+  0.82 or more in all (`SEE_THROUGH_LIMIT`): `lightPay` takes the least at which every level climbs a whole step with
+  no exemption (`ladderPay(..., strict)`), capped there, so the window's Clear and Picture are 0.78 (`LIGHT_PAY_WHITE`
+  0.05), the default Colours 0.35, Cream 0.65 on its 0.28 page veil; 0 in the window's Frosted; 0.04 under reduced
+  transparency. `lib/look.ts` sets `--light-pay` on `<html>`. The pane light lies in the top padding, so the words of
+  every pane and float sit on its plain glass and keep main's AA (`WORDS_LIGHT` 0, `FLOAT_WORDS_LIGHT` 0).
+* **Where the AA cap leaves no room** (`noRoom`, `LADDER_ROOM_L` 0.44, `LADDER_RED_A` 0.06 over `LADDER_RED_L` 0.38,
+  `LADDER_ROOM` 0.12): a level that keeps AA at any depth has its fixed point at the cap (about L 0.515 over bottle
+  green), so over a parent already at L 0.44 or more (or a vermilion-red one at L 0.38 or more, where green and bone
+  mixed over red in sRGB lose L), or one that has not even 0.12 of bone room under AA, it keeps AA and may read at
+  most 0.03 darker (`LADDER_SLACK`) instead of climbing a whole step. That is only: the brightest corners of the
+  living backdrop (its teal and vermilion glows, where a 0.33 pane is already at 4.52:1: rows there read −0.001 to
+  +0.001), white under the window's Clear and Picture at the 0.05 cap (row +0.016, mark +0.009, a fourth level
+  +0.005), Cream (+0.010 / +0.006), vivid vermilion meshes (+0.009 at least) and a float over a white thumbnail (0).
+  Everywhere else every level climbs +0.015 or more (over the brand field +0.113 then +0.062; the window over mid
+  grey +0.051 then +0.029). Each raised thing's own base green (`RAISE_VEIL` 0.34 under `RAISE_LIFT` 0.13) is the
+  least that keeps that fixed point at the cap: it is what lets the step be light over a dark parent and still keep
+  AA over a bright one.
 * **A raised thing is one relative step brighter than its parent, at any depth.** Inside any lit surface it lays green
-  0.22 and bone 0.09 over whatever it sits on (`RAISE_VEIL`, `RAISE_LIFT`); the step's fixed point is under the AA
+  0.34 and bone 0.13 over whatever it sits on (`RAISE_VEIL`, `RAISE_LIFT`; hover 0.37 / 0.145); the step's fixed point is at the AA
   ceiling, so a resting stack keeps AA however deep things nest. Straight on the page it carries the pick-one track's
   recipe (panel + 0.22, bone 0.08). One token works in both places: `:root` declares the page values of
   `--light-raise-*` and the fills built from them; every lit surface (`.glass`, the dropdown list, the workspace
   menu, the money dock, the TikTok sheet, the Ask launcher and panel, the title and line plates) and every option of a
   pick-one track (`.segmented > *`, `.tabs > *`, `.bg-modes > *`, `.model-picks > *`, `.stepper > *`,
   `.ws-switch > *`) declares them again, because a custom property resolves `var()` where it is declared. A quiet
-  fill (`--fill-ghost`) is green 0.21 and bone 0.086 (`GHOST_*`): a step over its parent, never over a raised fill.
+  fill (`--fill-ghost`, and a ghost button inside a lit surface) is green 0.33 and bone 0.125 (`GHOST_*`): a step over
+  its parent, never over a raised fill.
 * **The light is soft, never a line** (ADR-45 stays). The top glow is an inset shadow blurred 6 to 8 px with a negative
   spread (light catching the top of the glass, under 7 % at the sides), the bottom shade an inset shadow from below,
   the drop an offset soft shadow that grows with the level. No `inset 0 1px 0` hairline, no `::before` rim. Light comes
@@ -5047,7 +5077,7 @@ re-declares the raise inside every lit surface. Brightness is OKLab L.
 * **Hover adds light; press takes it away** (§20.17). Ghost buttons (Later, Skip, Not now) rest with a fainter lift,
   no top glow and no shadow; on hover they rise to a raised control.
 * **Tinted chips** lay bottle green 0.35 under their colour (`CHIP_UNDER`, was deep green) and a lift of bone between
-  them (leaf 0.04, vermilion 0.13, amber 0.02, `CHIP_TINTS`), so a chip on a row or a mark is a whole step brighter
+  them (leaf 0.04, vermilion 0.13, amber 0.01, `CHIP_TINTS`), so a chip on a row or a mark is a whole step brighter
   than it in every look (a vermilion chip read darker than a bluish row without it) and its colour still reads.
 * **Liquid.** Refraction (`#cf-refract`, unchanged and never animated, `blur(14px) url(#cf-refract) saturate(1.75)`:
   blur first) on at most three surfaces a screen (`e2e/refract.spec.ts` counts them on every screen at 1440 and 390):
@@ -5055,29 +5085,34 @@ re-declares the raise inside every lit surface. Brightness is OKLab L.
   without bending (with the menu, the rail and the dock it would be four). The page title plates (`.page-head__text`,
   `.dash-head__text`) draw no filter at all: their tint alone holds their words (worked out with nothing blurred).
   Nested glass and controls inside a blurred surface draw no blur of their own; chips over media keep theirs.
-* **The Reload lens** (`.btn--lens` on the update bar, `variant="glass"`): green 0.38 and bone 0.14 at its top
-  (`LENS_VEIL`, `LENS_LIGHT`), easing to half by its foot; hover 0.42 / 0.16 and `translateY(-1px)`; press 0.38 /
-  0.06 with an inset shade. Bone words, no vermilion, no white label, no shine and no glow. Later beside it is a ghost,
-  so the lens reads as the primary choice by light alone. The desktop app's **Update** (`AppOffer`) stays vermilion.
+* **Reload is plainly the main choice** (`.btn--lens` on the update bar, `variant="glass"`): colourless clear glass,
+  no green and no vermilion, white light alone over the bar (0.18 where its words are, 0.06 more at its top edge, a
+  catch light 9 px deep, a clear rim and a small drop). At the height of its words it reads at least +0.08 OKLab L
+  over Later in every look (+0.087 over a white thumbnail, +0.093 over the brand field), its bone words 4.93:1 at rest
+  and 4.59:1 on hover (white 0.205, with the 1 px lift). To leave that room over a white thumbnail the update bar is the
+  one floating layer that darkens more: `UPDATE_EXTRA_VEIL` 0.22 over the float veil (0.95, L 0.369 over white).
+  **Later** beside it is a ghost, still a button (a pill with a soft rim and its own top light), quieter: bone 0.06
+  over the bar (+0.037 over white), hover 0.075, no drop. `e2e/update.spec.ts` holds Reload +0.08 over Later at
+  mid-height and Later +0.03 over the bar. The desktop app's **Update** (`AppOffer`) stays vermilion.
 
 **The ladder.** `v` is `--panel-veil` (0.33 over the app's backdrop, 0.73 window Clear and Picture, 0.88 window
 Frosted, 0.30 to 0.60 Colours, 0.92 reduced transparency); `pay` is `--light-pay`, the look's own (above). **From a
 pane up, every level reads at least +0.015 OKLab L brighter than the level it sits on (`LADDER_STEP`), in every
-look, with no tolerance:** a row on a pane and a mark, chip or button on the row (`LADDER_DEPTH` 2: the levels the app
-draws, and their quiet fills), the lead panel over a plain panel, a tinted chip over its row, and the rows and marks on
-a floating layer. Above those no level ever steps back (a fourth raised level still never reads darker and keeps AA),
-and the next level of light is the bone selected pill (E4). Every hover adds light (an option's over its own track
+look, measured where the words are (mid-height), wherever the AA cap leaves room (above):** a row on a pane, a mark,
+chip or button on the row and a fourth raised level on that (no depth exemption since this review), their quiet
+fills, a tinted chip over its row, and the rows and marks on a floating layer; the next level of light is the bone
+selected pill (E4). Every hover adds light (an option's over its own track
 too), every press takes it away, never below the level under it.
 
 | Level | What | Tint (green) | Light (bone, top → base) | Top glow | Shade | Drop |
 |---|---|---|---|---|---|---|
 | L0 | The page, the backdrop (every mode) | unchanged | none | none | none | none |
-| E1 | Panels, the sidebar, folders, the title and line plates, the setup bar | `v + pay`, flat | 0.04 → 0.02 at 22 % → 0.008 at 42 % → 0 at 65 %, plus the catch light | `--light-rim-1` | `--light-shade-1` | `--light-shadow-1` |
-| E1 lead | The hero, the sign-in card, Library's learnings, the week's quote | `v + pay` (`LEAD_EXTRA_VEIL` 0, at most 0.97) | 0.075 → 0 at 65 %, plus the catch light: a whole step over E1 | `--light-rim-1` | `--light-shade-1` | `--light-shadow-1` |
-| E2 | Raised on a panel: rows, inner cards, nested glass, controls, tracks, callouts | relative: 0.22 over the parent (on the page `v + 0.22`) | flat 0.09 (on the page 0.08); the parent's light shows through | `--light-rim-2` (small things `--light-rim-sm`) | `--light-shade-2` | `--light-shadow-2` (rows inside a card: `--glass-shadow-row`, the faintest drop) |
-| E3 | Raised on E2: post marks, chips in rows, buttons in rows, a track's options | the same step again (a chip: its tint over a bone lift over green 0.35) | flat 0.09 | `--light-rim-sm` | `--light-shade-2` | `--light-shadow-2` |
-| E3 float | Toasts, the update bar, the setup pill, rail and list, the Ask launcher and panel, the money dock: a pane of its own, its rows and marks climb the ladder on it | `max(float-veil, v) + 0.16` | 0.08 → 0.04 at 30 % → 0.02 at 65 %, plus the small catch light | `--light-rim-3` | `--light-shade-1` | `--light-shadow-3` |
-| E3 lens | Reload on the update bar | 0.38 over the bar | 0.14 → 0.098 at 45 % → 0.07 | `--light-rim-lens` | `--light-shade-2` | `--light-shadow-2` |
+| E1 | Panels, the sidebar, folders, the title and line plates, the setup bar | `v + pay`, flat | 0.04 at the top edge → 0.02 at 6 px → 0.006 at 11 px → 0 at 14 px (inside the top padding), plus the catch light | `--light-rim-1` | `--light-shade-1` | `--light-shadow-1` |
+| E1 lead | The hero, the sign-in card, Library's learnings, the week's quote | `v + pay` (`LEAD_EXTRA_VEIL` 0, at most 0.97) | 0.075 at the top edge → 0 at 14 px, plus the catch light: brighter than E1 at its top | `--light-rim-1` | `--light-shade-1` | `--light-shadow-1` |
+| E2 | Raised on a panel: rows, inner cards, nested glass, controls, tracks, callouts | relative: 0.34 over the parent (on the page `v + 0.22`) | flat 0.13 (on the page 0.08); hover 0.37 / 0.145 | `--light-rim-2` (small things `--light-rim-sm`) | `--light-shade-2` | `--light-shadow-2` (rows inside a card: `--glass-shadow-row`, the faintest drop) |
+| E3 | Raised on E2: post marks, chips in rows, buttons in rows, a track's options | the same step again (a chip: its tint over a bone lift over green 0.35) | flat 0.13 | `--light-rim-sm` | `--light-shade-2` | `--light-shadow-2` |
+| E3 float | Toasts, the setup pill, rail and list, the Ask launcher and panel, the money dock: a pane of its own, its rows and marks climb the ladder on it where a white thumbnail is not right under them | `max(float-veil, v)` (main's; the update bar + 0.22) | 0.08 at the top edge → 0 at 14 px, plus the small catch light; hover 0.09 there and a flat 0.01 | `--light-rim-3` | `--light-shade-1` | `--light-shadow-3` |
+| E3 Reload | Reload on the update bar, the main choice | none: clear glass, white light alone | white 0.24 at its top edge → 0.18 from 32 % down (its words); hover 0.205 | `--light-rim-lens` | `--light-shade-2` | `--light-shadow-2` |
 | L5 overlay | The question sheet, the TikTok sheet, the picture viewer, the markup editor | `max(0.86, v)` (viewer 0.90) | 0.12 → 0.072 at 30 % → 0.04 at 65 %, plus the catch light | `--light-rim-3` | `--light-shade-1` | `--light-shadow-4` |
 | L5 menu | The dropdown list (solid), the workspace menu (0.94) | solid or 0.94 | 0.10 → 0.06 at 40 % → 0.04 at 70 % | `--light-rim-3` | none | `--light-shadow-4` |
 | E4 | The selected pill, glide pills, icon tiles, the tooltip | bone 0.92 (`--selected`), `--on-bone` words | none (the brightest) | none | `--light-shade-2` on the bone pills and tiles, so the brightest layer is lit from above too (the tooltip: none) | `--light-shadow-2` |
@@ -5088,41 +5123,39 @@ The tab bar is an E1 shell piece that floats: `tabbar-veil + 0.04`, light 0.04 �
 bar (no green, which would read darker than the bar over a white thumbnail), with `--light-rim-sm`: it adds light
 over anything under the bar, and the icons keep 3:1 over white.
 
-**Worst text contrast, at the TOP of each surface** (where its light is strongest; the comfort halo never counts):
+**Worst text contrast, where the words are** (a pane's and a float's light lies in their top padding; the comfort
+halo never counts):
 
-| Surface | App's backdrop (every corner, every `saturate()`) | Window Clear, Picture (white) | Window Frosted | Colours (1,464 swatch mixes) | Reduced transparency |
+| Surface | App's backdrop (every corner, every `saturate()`) | Window Clear, Picture (white) | Window Frosted | Colours (every swatch, 3 mixes each) | Reduced transparency |
 |---|---|---|---|---|---|
-| E1 panel | 6.83 | 6.93 | 7.51 | 6.78 | 8.57 |
-| E1 lead | 6.28 | 6.36 | 6.86 | 6.24 | 7.82 |
-| E2 on E1 / hover / press | 6.09 / 5.89 / 7.03 | 6.12 / 5.92 / 7.11 | 6.48 / 6.24 / 7.55 | 6.05 / 5.86 / 6.99 | 7.13 / 6.82 / 8.35 |
-| E3 on E2 / hover | 5.60 / 5.45 | 5.61 / 5.46 | 5.84 / 5.67 | 5.57 / 5.43 | 6.25 / 6.04 |
-| E4 on E3 / hover | 5.27 / 5.15 | 5.27 / 5.16 | 5.42 / 5.29 | 5.25 / 5.14 | 5.69 / 5.53 |
-| E2–E4 on the lead, hover | 5.01 | 5.01 | 5.14 | 4.99 | 5.36 |
-| A quiet fill on a panel (`--fill-ghost`) | 6.12 | 6.16 | 6.53 | 6.08 | 7.19 |
-| A control on the page / hover | 5.09 / 4.98 | 7.49 / 7.29 | 8.66 / 8.42 | 5.00 / 4.90 | 8.66 / 8.42 |
-| An option's hover over its own track on the page | 4.85 | 6.23 | 6.87 | 4.80 | 6.87 |
-| Selected pill (`--on-bone` words) | 9.35 | 9.30 | 9.31 | 9.31 | 9.32 |
-| Float (planned over white) / hover | 6.28 / 6.12 | 6.28 / 6.12 | 8.66 / 8.42 | 6.28 / 6.12 | 8.66 / 8.42 |
-| Later (a ghost on the bar) | 4.85 | 4.85 | 6.97 | 4.85 | 7.68 |
-| **Reload lens: rest / hover / press** | **4.68 / 4.60 / 5.62** | 4.68 / 4.60 / 5.62 | 5.91 / 5.69 / 7.26 | 4.68 / 4.60 / 5.62 | 6.29 / 6.02 / 7.77 |
+| E1 panel and E1 lead | 4.52 | 5.39 | 8.30 | 4.86 | 9.51 |
+| E2 on E1 / hover | 4.60 / 4.55 | 5.04 / 4.95 | 6.46 / 6.25 | 4.83 / 4.76 | 7.00 / 6.74 |
+| E3 on E2 / hover | 4.61 / 4.56 | 4.85 / 4.78 | 5.58 / 5.45 | 4.73 / 4.67 | 5.85 / 5.69 |
+| E4 on E3 / hover | 4.61 / 4.56 | 4.74 / 4.68 | 5.14 / 5.04 | 4.68 / 4.62 | 5.28 / 5.17 |
+| E2–E4 on the lead, hover | 4.55 | 4.68 | 5.04 | 4.62 | 5.17 |
+| A quiet fill / a ghost inside glass, rest / hover | 4.62 / 4.55 | 5.07 / 4.95 | 6.53 / 6.25 | 4.85 / 4.76 | 7.09 / 6.74 |
+| Float over a white thumbnail / hover | 4.61 / 4.52 | 4.61 / 4.52 | 7.41 / 7.23 | 4.61 / 4.52 | 8.41 / 8.20 |
+| Later on the update bar / hover (white under the bar) | 7.15 / 6.88 | 7.15 / 6.88 | 8.25 / 7.92 | 7.15 / 6.88 | 8.25 / 7.92 |
+| **Reload: rest / hover** (white under the bar) | **4.93 / 4.59** | 4.93 / 4.59 | 5.58 / 5.17 | 4.93 / 4.59 | 5.58 / 5.17 |
 
-Over every look: the question sheet 6.44 (viewer 6.79) on its lightest scrim, the workspace menu 6.90, the solid list
-8.19; tinted chips on a row: leaf 5.25, vermilion 5.41, amber 5.20. The contrast margins grew with the ladder (the
-pay that leaves the levels room to climb also darkens the pane); the tightest spot is an option's hover over a track
-straight on the page in Colours (4.80). Never round a number up by eye; change it in `lib/background.ts` and let
-`test/background.test.ts` recompute.
+The margins are thin by design: see-through first means a pane sits at main's veil, the least that keeps AA over the
+lightest thing its look can show. Never round a number up by eye; change it in `lib/background.ts` and let
+`test/background.test.ts` and `test/buttonLight.test.ts` recompute.
 
 **Brightness steps (OKLab L).**
 
-| Behind | L0 | E1 base → top | E1 lead top | E2 row (hover) | E3 mark | Float top | A row on the float | E4 selected |
-|---|---|---|---|---|---|---|---|---|
-| The brand field `#08221b` | 0.229 | 0.284 → 0.313 | 0.338 | 0.373 (0.386) | 0.414 | 0.353 | 0.400 | 0.892 |
-| The brightest teal corner of the mesh | 0.597 | 0.392 → 0.414 | 0.434 | 0.442 (0.450) | 0.462 | 0.390 | 0.426 | 0.895 |
-| The window over mid grey (`#999`) | 0.683 | 0.348 → 0.374 | 0.396 | 0.415 (0.425) | 0.444 | 0.399 | 0.433 | 0.894 |
-| The window or Picture over white | 1.000 | 0.390 → 0.413 | 0.434 | 0.442 (0.450) | 0.463 | 0.437 | 0.459 | 0.896 |
+| Behind | L0 | E1 words → top edge | E1 lead top edge | E2 row (hover) | E3 mark | Float words | A row on the float | E4 selected | E2 − E1 / E3 − E2 |
+|---|---|---|---|---|---|---|---|---|---|
+| The brand field `#08221b` | 0.229 | 0.255 → 0.286 | 0.312 | 0.367 (0.379) | 0.429 | 0.509 | 0.509 | 0.893 | +0.113 / +0.062 |
+| The brightest teal corner of the mesh (no room: a 0.33 pane is at 4.52:1) | 0.597 | 0.506 → 0.522 | 0.537 | 0.505 (0.507) | 0.506 | 0.509 | 0.509 | 0.898 | −0.001 / +0.001 |
+| The window over mid grey (`#999`) | 0.683 | 0.391 → 0.415 | 0.435 | 0.442 (0.449) | 0.471 | 0.509 | 0.509 | 0.896 | +0.051 / +0.029 |
+| The window or Picture over white (pay at its 0.05 cap) | 1.000 | 0.472 → 0.492 | 0.509 | 0.488 (0.492) | 0.497 | 0.509 | 0.509 | 0.898 | +0.016 / +0.009 |
 
-Later and the Reload lens on the update bar are components.css's (test/buttonLight.test.ts holds them: Later a step
-over the bar, Reload a step over Later, in every look).
+(Floats plan for a white thumbnail under them, so their column is the same in every row.) The update bar over white:
+bar 0.369, Later 0.406 (+0.037), Reload 0.493 (+0.087), Reload on hover 0.510.
+
+Later and Reload on the update bar are components.css's and system.css's (test/buttonLight.test.ts holds them: Later
++0.03 over the bar, Reload +0.08 over Later, their words at AA at rest and on hover, in every look).
 
 **Page to pane: the one exception** (read this before judging the window over white). Bone `#efe7da` has luminance
 0.806; words at 4.5:1 cap whatever they sit on at Y = 0.140 (OKLab L about 0.52). The ladder needs room under that cap:
@@ -5139,12 +5172,11 @@ two whole steps above a pane, the lead panel's step and a hover on top. So:
   than a light picture right under them (page to pane again), the levels on them climb, and their elevation is the
   largest shadow.
 
-**The see-through cost** (the price of the ladder with AA): about 28 % of the app's own backdrop shows through a panel
-(59 % with the first light, 67 % before it), 11 % of a white desktop or photo in Clear and Picture (23 %, 27 %), about
-36 % of the default Colours; Frosted's panels are unchanged (the frost already gives the room); between panels nothing
-changes (100 %). The pay is the least that fits the ladder for each look, so dark colours and dark pictures keep more.
-The owner judges the real see-through window; a browser cannot show it (§22.4), so it is checked with these maths and
-the stand-ins of `e2e/glass.ts`, headless.
+**The see-through cost**: none over the app's own backdrop and in Frosted (67 % shows through a panel, as on main);
+22 % of a white desktop or photo in the window's Clear and Picture (27 % on main, 11 % in 7bb0fe0a); 65 % of the
+default Colours (70 %, 36 %); floating layers 27 % as on main; only the update bar 5 % (§22.4 has every look). The
+owner judges the real see-through window; a browser cannot show it (§22.4), so it is checked with these maths and the
+stand-ins of `e2e/glass.ts`, headless.
 
 * **Performance (Windows WebView2).** All light is static: gradients and box-shadows composite once. Displacement only
   on the few hero surfaces, at most three a screen, never on the title plates; nothing transitions `backdrop-filter`

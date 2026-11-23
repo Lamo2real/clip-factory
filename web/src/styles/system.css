@@ -480,7 +480,9 @@ h1.getapp__title {
   bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 18px);
   padding: 10px 10px 10px 14px;
   border-radius: var(--r-lg);
-  --glass-tint: var(--glass-tint-float);
+  /* The one floating layer that darkens more (UPDATE_EXTRA_VEIL): over a white thumbnail the AA cap leaves no room for
+     Reload to read 0.08 over Later with bone words otherwise. */
+  --glass-tint: linear-gradient(rgb(var(--green-rgb) / min(1, max(var(--float-veil), var(--panel-veil)) + var(--light-update-pay))), rgb(var(--green-rgb) / min(1, max(var(--float-veil), var(--panel-veil)) + var(--light-update-pay))));
   --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
   box-shadow: var(--glass-shadow-float);
@@ -655,4 +657,11 @@ h1.getapp__title {
   .has-update-bar .toasts {
     bottom: 104px;
   }
+}
+
+/* Later is the quiet choice beside Reload: a ghost (still a button: a rim of light and its own top light), a little
+   light over the bar (0.03 OKLab L), so Reload, 0.08 brighter again, is plainly the main choice. */
+.update-bar .btn--ghost.update-bar__later {
+  --btn-lift: 0.06;
+  --ghost-hover-lift: 0.075;
 }

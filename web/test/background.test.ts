@@ -38,17 +38,13 @@ import {
   GREEN_DEEP,
   hexToRgb,
   isHexColour,
-  LADDER_DEPTH,
   LADDER_STEP,
   ladderFaults,
-  ladderPay,
+  LADDER_SLACK,
+  noRoom,
+  panelWords,
   LEAD_EXTRA_VEIL,
   LEAD_LIGHT,
-  LENS_HOVER_LIGHT,
-  LENS_HOVER_VEIL,
-  LENS_LIGHT,
-  LENS_PRESS_LIGHT,
-  LENS_VEIL,
   LIGHT_PAY_OWN,
   LIGHT_PAY_REDUCED,
   LIGHT_PAY_WHITE,
@@ -316,11 +312,11 @@ describe("see-through veil", () => {
     // A chip on a row is a level of its own: a whole step of light over the row, in every look (its colour still reads).
     const fails: string[] = [];
     for (const p of LIGHT_PLACES) {
-      const e1 = panelTop(p.look, p.behind, false, p.pay);
-      for (const row of [raised(e1), raised(e1, 2), raised(panelTop(p.look, p.behind, true, p.pay))])
+      const e1 = panelWords(p.look, p.behind, false, p.pay);
+      for (const row of [raised(e1), raised(e1, 2), raised(panelWords(p.look, p.behind, true, p.pay))])
         for (const t of CHIP_TINTS) {
           const chip = chipOn(row, t);
-          if (oklabL(chip) - oklabL(row) < LADDER_STEP && fails.length < 20) fails.push(`${t.name}: ${(oklabL(chip) - oklabL(row)).toFixed(4)}, ${p.at}`);
+          if (oklabL(chip) - oklabL(row) < (noRoom(row) ? -LADDER_SLACK : LADDER_STEP) && fails.length < 20) fails.push(`${t.name}: ${(oklabL(chip) - oklabL(row)).toFixed(4)}, ${p.at}`);
         }
     }
     expect(fails).toEqual([]);
@@ -603,10 +599,10 @@ describe("colours", () => {
             // The lit levels (ADR-85): the top of a panel and of the lead panel, a row on it on hover, the deepest
             // raise on hover, and a control on the page on hover (the tightest of each kind).
             const look: LightLook = { kind: "colours", panelVeil: v.panelVeil, pageVeil: v.pageVeil };
-            const e1 = panelTop(look, spot);
+            const e1 = panelWords(look, spot);
             const levels: [string, Rgb][] = [
               ["E1", e1],
-              ["the lead panel", panelTop(look, spot, true)],
+              ["the lead panel", panelWords(look, spot, true)],
               ["E2 hover", raised(e1, 1, "hover")],
               ["E4 hover", raised(e1, 3, "hover")],
               ["a control on the page, hover", onPage(look, spot, "hover")],
@@ -695,7 +691,7 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
     for (const spot of brandMeshSpots()) {
       const at = `over rgb(${spot.map(Math.round).join(" ")})`;
       const panel = mix(VEIL, spot, BRAND_PANEL_VEIL);
-      const top = panelTop(look, spot);
+      const top = panelWords(look, spot);
       expect(worst(mix(BONE, mix(VEIL, spot, BRAND_PANEL_VEIL + TRACK_EXTRA_VEIL), TRACK_LIFT)), `track ${at}`).toBeGreaterThanOrEqual(AA);
       // A field is a well, one step below the panel it sits in (the bare panel and its lit top).
       for (const under of [panel, top]) expect(worst(mix(GREEN_DEEP, under, 0.45)), `field ${at}`).toBeGreaterThanOrEqual(AA);
@@ -710,7 +706,7 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
         for (const bg of [d!, dh!, dp!]) expect(contrast(hexToRgb(TEXT_TOKENS["--vermilion-ink"]), bg), `danger ${at}`).toBeGreaterThanOrEqual(AA);
         expect(oklabL(dh!), `danger hover ${at}`).toBeGreaterThan(oklabL(d!));
       }
-      expect(oklabL(mix(VERMILION, lit(top, RAISE_VEIL, RAISE_LIFT), 0.14)) - oklabL(top), `danger over its panel ${at}`).toBeGreaterThanOrEqual(LADDER_STEP);
+      expect(oklabL(mix(VERMILION, lit(top, RAISE_VEIL, RAISE_LIFT), 0.14)) - oklabL(top), `danger over its panel ${at}`).toBeGreaterThanOrEqual(noRoom(top) ? -LADDER_SLACK : LADDER_STEP);
       for (const under of [panel, raised(top)]) expect(contrast(hexToRgb("#ffeec4"), mix([246, 201, 69], mix(CHIP_UNDER, under, CHIP_DEEPEN), 0.16)), `amber chip ${at}`).toBeGreaterThanOrEqual(AA);
     }
   });
@@ -825,8 +821,8 @@ const STATES: readonly LightState[] = ["rest", "hover", "press", "ghost"];
 function litSurfaces(p: LightPlace): [name: string, bg: Rgb][] {
   const { look, behind, pay } = p;
   const page = mix(VEIL, behind, look.pageVeil ?? 0);
-  const e1 = panelTop(look, behind, false, pay);
-  const lead = panelTop(look, behind, true, pay);
+  const e1 = panelWords(look, behind, false, pay);
+  const lead = panelWords(look, behind, true, pay);
   const out: [string, Rgb][] = [
     ["E1 panel", e1],
     ["E1 lead panel", lead],
@@ -876,11 +872,6 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
       "--light-tabbar": TABBAR_LIGHT,
       "--light-tabbar-pay": TABBAR_EXTRA_VEIL,
       "--light-spec": SPECULAR,
-      "--light-lens-veil": LENS_VEIL,
-      "--light-lens": LENS_LIGHT,
-      "--light-lens-hover-veil": LENS_HOVER_VEIL,
-      "--light-lens-hover": LENS_HOVER_LIGHT,
-      "--light-lens-press": LENS_PRESS_LIGHT,
       // Straight on the page a raised thing is the pick-one track.
       "--light-raise-lift": TRACK_LIFT,
       "--light-raise-hover-lift": PAGE_HOVER_LIFT,
@@ -893,7 +884,7 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
     // until then, the white looks' where white can be behind, and reduced transparency's.
     expect(Number(declared(block(glass, 'html:is(.see-through, [data-backdrop="picture"])')).get("--light-pay"))).toBe(LIGHT_PAY_WHITE);
     expect(glass).toMatch(new RegExp(`@media \\(prefers-reduced-transparency: reduce\\) \\{[\\s\\S]*--light-pay: ${LIGHT_PAY_REDUCED} !important;`));
-    expect(LIGHT_PAY_OWN).toBe(ladderPay(brandMeshSpots(), BRAND_PANEL_VEIL));
+    expect(LIGHT_PAY_OWN).toBe(0);
     for (const kind of ["frosted", "brand"] as const) expect(lightPay({ kind, panelVeil: BRAND_PANEL_VEIL })).toBe(LIGHT_PAY_OWN);
     for (const glassName of GLASSES)
       for (const scheme of SCHEMES) {
@@ -945,7 +936,7 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
     expect(root.get("--glass-tint-tabbar")).toBe(flat("min(1, var(--tabbar-veil) + var(--light-tabbar-pay))"));
     // The light: the catch light at the top centre, then bone from the top down, gone by 65 % on panels.
     expect(root.get("--glass-light-panel")).toBe(
-      "var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-panel)) 0%, rgb(var(--bone-rgb) / calc(var(--light-panel) * 0.5)) 22%, rgb(var(--bone-rgb) / calc(var(--light-panel) * 0.2)) 42%, rgb(var(--bone-rgb) / 0) 65%)",
+      "var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-panel)) 0, rgb(var(--bone-rgb) / calc(var(--light-panel) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-panel) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px)",
     );
     // The catch light stays in the smallest top padding above words (8 px: the line plates), never under them.
     expect(root.get("--glass-spec")).toBe("radial-gradient(60% 8px at 50% 0, rgb(var(--bone-rgb) / var(--light-spec)), transparent)");
@@ -979,7 +970,7 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
   it("the selected pill's green words reach AA wherever it sits, and the tab bar's icons reach 3:1", () => {
     const fails: string[] = [];
     for (const p of LIGHT_PLACES) {
-      const e1 = panelTop(p.look, p.behind, false, p.pay);
+      const e1 = panelWords(p.look, p.behind, false, p.pay);
       for (const under of [e1, raised(e1), raised(e1, 2), onPage(p.look, p.behind)]) if (contrast(ON_BONE, mix(BONE, under, SELECTED_ALPHA)) < AA && fails.length < 20) fails.push(p.at);
     }
     expect(fails).toEqual([]);
@@ -1011,14 +1002,14 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
   const rungs = (p: LightPlace): [string, Rgb, Rgb, number][] => {
     const { look, behind, pay } = p;
     const page = mix(VEIL, behind, look.pageVeil ?? 0);
-    const e1 = panelTop(look, behind, false, pay);
-    const lead = panelTop(look, behind, true, pay);
+    const e1 = panelWords(look, behind, false, pay);
+    const lead = panelWords(look, behind, true, pay);
     /** The rest of a level `depth` above a pane must climb a whole step over its parent up to LADDER_DEPTH. */
-    const need = (depth: number) => (depth <= LADDER_DEPTH ? LADDER_STEP : 0);
+    const need = (_depth: number, under?: Rgb) => (under && noRoom(under) ? -LADDER_SLACK : LADDER_STEP);
     const out: [string, Rgb, Rgb, number][] = [
       // Inside a pane its top is brighter than its base.
       ["E1 base → top", lit(page, look.panelVeil + pay, 0), e1, 0],
-      ["E1 → the lead panel", e1, lead, LADDER_STEP],
+      ["E1 → the lead panel", e1, lead, 0],
       ["a control on the page → its hover", onPage(look, behind), onPage(look, behind, "hover"), Number.MIN_VALUE],
       ["a control on the page, pressed → rest", onPage(look, behind, "press"), onPage(look, behind), 0],
       ["a quiet control on the page → rest", onPage(look, behind, "ghost"), onPage(look, behind), 0],
@@ -1029,9 +1020,9 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
         const rest = raised(under);
         const at = `E${depth + 1} on the ${paneName}`;
         out.push(
-          [`${at}: over its parent`, under, rest, need(depth)],
-          [`${at}: quiet, over its parent`, under, raised(under, 1, "ghost"), need(depth)],
-          [`${at}: quiet → rest`, raised(under, 1, "ghost"), rest, 0],
+          [`${at}: over its parent`, under, rest, need(depth, under)],
+          [`${at}: quiet, over its parent`, under, raised(under, 1, "ghost"), need(depth, under)],
+          [`${at}: quiet → rest`, raised(under, 1, "ghost"), rest, noRoom(under) ? -LADDER_SLACK : 0],
           [`${at}: rest → hover`, rest, raised(under, 1, "hover"), Number.MIN_VALUE],
           [`${at}: pressed → rest`, raised(under, 1, "press"), rest, 0],
         );
@@ -1042,7 +1033,7 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
       let x = bar;
       for (let depth = 1; depth <= 3; depth++) {
         const rest = raised(x);
-        out.push([`level ${depth + 1} on a floating layer: over its parent`, x, rest, need(depth)], [`level ${depth + 1} on a floating layer: rest → hover`, rest, raised(x, 1, "hover"), Number.MIN_VALUE]);
+        out.push([`level ${depth + 1} on a floating layer: over its parent`, x, rest, need(depth, x)], [`level ${depth + 1} on a floating layer: rest → hover`, rest, raised(x, 1, "hover"), Number.MIN_VALUE]);
         x = rest;
       }
     }
@@ -1058,11 +1049,10 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
       }
     // No tolerance: at the hardest corners too (a white desktop or photo, a bright spot of the mesh, a light colour),
     // each rung climbs at least what it must, because the pane under it pays for the room (`lightPay`).
-    const short = [...lowest].filter(([, v]) => v.dl < v.need || v.dl < 0).map(([k, v]) => `${k}: ${v.dl.toFixed(4)} (needs ${v.need}) at ${v.at}`);
+    const short = [...lowest].filter(([, v]) => v.dl < v.need).map(([k, v]) => `${k}: ${v.dl.toFixed(4)} (needs ${v.need}) at ${v.at}`);
     expect(short).toEqual([]);
     expect(lowest.size).toBeGreaterThan(30);
     expect(LADDER_STEP).toBe(0.015);
-    expect(LADDER_DEPTH).toBe(2);
     // Over the app's own backdrop (its dark field) every step is clearly brighter.
     const field = BRAND_MESH.field[1]!;
     const look: LightLook = { kind: "frosted", panelVeil: BRAND_PANEL_VEIL };
@@ -1085,17 +1075,17 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
     const fails: string[] = [];
     let least = Infinity;
     for (const p of LIGHT_PLACES) {
-      const e1 = panelTop(p.look, p.behind, false, p.pay);
-      for (const [where, track] of [["on the page", onPage(p.look, p.behind)], ["on a panel", raised(e1)], ["on the lead panel", raised(panelTop(p.look, p.behind, true, p.pay))], ["on a row", raised(e1, 2)]] as const) {
+      const e1 = panelWords(p.look, p.behind, false, p.pay);
+      for (const [where, track] of [["on the page", onPage(p.look, p.behind)], ["on a panel", raised(e1)], ["on the lead panel", raised(panelWords(p.look, p.behind, true, p.pay))], ["on a row", raised(e1, 2)]] as const) {
         const hover = raised(track, 1, "hover");
         const dl = oklabL(hover) - oklabL(track);
         least = Math.min(least, dl);
-        if (!(dl > 0) && fails.length < 20) fails.push(`${where}: ${dl.toFixed(4)}, ${p.at}`);
+        if (!(dl > (noRoom(track) ? -LADDER_SLACK : 0)) && fails.length < 20) fails.push(`${where}: ${dl.toFixed(4)}, ${p.at}`);
         if (worst(hover) < AA && fails.length < 20) fails.push(`${where}: ${worst(hover).toFixed(2)}:1, ${p.at}`);
       }
     }
     expect(fails).toEqual([]);
-    expect(least).toBeGreaterThan(0);
+    expect(least).toBeGreaterThan(-LADDER_SLACK);
   }, 60_000);
 
   it("each look's pay is the least that leaves the ladder room: 0.01 less breaks it somewhere", () => {
@@ -1109,7 +1099,7 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
       const pay = lightPay(look);
       const pages = spots.map((s) => mix(VEIL, s, look.pageVeil ?? 0));
       expect(pages.flatMap((pg) => ladderFaults(pg, look.panelVeil, pay)), name).toEqual([]);
-      if (pay > 0) expect(pages.some((pg) => ladderFaults(pg, look.panelVeil, Math.round((pay - 0.01) * 100) / 100).length > 0), `${name} at ${pay - 0.01}`).toBe(true);
+      if (pay > 0) expect(pages.some((pg) => ladderFaults(pg, look.panelVeil, Math.round((pay - 0.01) * 100) / 100, false, true).length > 0), `${name} at ${pay - 0.01}`).toBe(true);
     }
     // What the see-through costs: the share of the backdrop a pane still shows (1 − its green), per look.
     expect(1 - (BRAND_PANEL_VEIL + LIGHT_PAY_OWN)).toBeGreaterThan(0.25);

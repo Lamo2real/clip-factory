@@ -448,6 +448,8 @@
 .teaser:hover {
   transform: translateY(-3px);
   box-shadow: var(--light-rim-1), var(--light-shade-1), var(--light-shadow-1-hover);
+  /* Hover adds light to the face, like a tree card: the lead panel's stronger light from above (ADR-85). */
+  --glass-light: var(--glass-light-lead);
 }
 .teaser:active {
   transform: scale(0.98);
@@ -626,6 +628,8 @@
 .job-row:hover {
   transform: translateY(-2px);
   box-shadow: var(--light-rim-1), var(--light-shade-1), var(--light-shadow-1-hover);
+  /* Hover adds light to the face, like a tree card: the lead panel's stronger light from above (ADR-85). */
+  --glass-light: var(--glass-light-lead);
 }
 .job-row:active {
   transform: scale(0.99);

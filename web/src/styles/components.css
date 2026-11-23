@@ -116,7 +116,7 @@
    the lens, which in Chromium and WebView2 made the lens 0.05 L darker than Later over a white thumbnail. Hover adds
    light (and, with motion allowed, the 1 px lift of every unblurred button). */
 .btn.btn--lens {
-  --btn-lift: 0.12; /* white over the bar where the words sit; 0.06 more at the very top */
+  --btn-lift: 0.18; /* white over the bar where the words sit (0.08 OKLab L over Later); 0.06 more at the very top */
   --lens-spec: 0.34; /* the catch light on the top edge, inside the top padding (9 px deep), never under the words */
   --lens-rim: 0.3; /* the clear rim: a soft inner glow all round, 5 px blur (no drawn edge, ADR-45) */
   --lens-face:
@@ -143,7 +143,7 @@
     opacity var(--dur-2) var(--ease-out);
 }
 .btn.btn--lens:hover:not([aria-disabled="true"]) {
-  --btn-lift: 0.14;
+  --btn-lift: 0.205;
   --lens-spec: 0.42;
   --lens-rim: 0.4;
   /* Restated: .btn--glass's hover and press fills are heavier selectors than .btn.btn--lens. */
@@ -199,10 +199,10 @@
     opacity var(--dur-2) var(--ease-out);
 }
 :where(.glass, .tt-sheet, .help-panel, .money-dock, .page-head__text, .dash-head__text, .dropdown__list, .ws-menu) .btn--ghost {
-  --btn-veil: 0;
-  --btn-lift: 0.07;
-  --ghost-hover-veil: 0;
-  --ghost-hover-lift: 0.08;
+  --btn-veil: 0.33; /* GHOST_VEIL: the quiet fill's green, so its bone lift keeps AA up to the cap */
+  --btn-lift: 0.125; /* GHOST_LIFT */
+  --ghost-hover-veil: 0.37; /* RAISE_HOVER_VEIL */
+  --ghost-hover-lift: 0.145; /* RAISE_HOVER_LIFT */
 }
 .btn--ghost:hover:not([aria-disabled="true"]) {
   --btn-veil: var(--ghost-hover-veil);

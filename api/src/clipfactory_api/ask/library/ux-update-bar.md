@@ -16,8 +16,8 @@ Shown when `/version.json` reports a version other than the running one ([CONTRA
 | Sparkle | 20 px vermilion four-point star icon. |
 | Title | "New!" in Inter 600. Never a version number. |
 | Pills | Bone glass chips, 13 px Inter 500, `--r-pill`, single line with ellipsis; on narrow phones they wrap under the title and the bar grows taller rather than overflowing. Labels come from `version.json` `areas`. |
-| Reload | A colourless liquid-glass lens (`.btn--lens`, owner 2026-11-23, ADR-85): refresh icon + "Reload" in bone (`--ink`), 48 px tall. Green 0.38 under bone 0.14 at its top, easing to half at its foot, a soft top glow and a small drop; no vermilion, no white label, no shine, no glow. It reads as the primary choice beside Later by light alone; hover brightens it (0.42 / 0.16) and lifts it 1 px, press dims it. |
-| Later | Quiet text button; hides the bar until the next check (5 minutes, or when the app comes back to the screen). |
+| Reload | The main choice, a colourless clear-glass button (`.btn--lens`, owner 2026-11-23, ADR-85): refresh icon + "Reload" in bone (`--ink`), 48 px tall. No green and no vermilion: white light alone over the bar (0.18 where its words are, 0.06 more at its very top), a bright catch light on its top edge, a clear rim and a small drop. At the height of its words it reads at least +0.08 OKLab L over Later in every look, a white thumbnail under the bar included; its words keep 4.5:1 at rest (4.93) and on hover (white 0.205, 4.59), and hover adds light and a 1 px lift. |
+| Later | The quiet choice: a ghost button (still a pill with a soft rim of light and its own top light), bone 0.06 over the bar (+0.03 OKLab L or more, hover 0.075), no drop shadow; hides the bar until the next check (5 minutes, or when the app comes back to the screen). |
 | While reloading | Pills and buttons fade out; the bar's fill becomes the progress bar (below) with "Updating…" and the percentage for screen readers (`role="progressbar"`, `aria-valuenow`). |
 
 ### The reload curve

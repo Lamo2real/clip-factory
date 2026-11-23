@@ -1,5 +1,5 @@
 {
- "version": "75c3ae7eb3d1",
+ "version": "0f55a6febc4d",
  "parts": [
   {
    "id": "app-map",
@@ -159,7 +159,7 @@
    "id": "contracts-22",
    "title": "CONTRACTS: 22. Background modes and see-through glass (owner request, 2026-11-16)",
    "line": "The owner wants the whole app to feel like liquid glass you can almost see through: \"if there's a car behind it, I",
-   "chars": 53416
+   "chars": 57033
   },
   {
    "id": "contracts-23",
@@ -1053,19 +1053,19 @@
    "id": "ux-colour-tokens",
    "title": "UX_DESIGN_SYSTEM: Colour tokens",
    "line": "The palette is the November 2026 bottle-green look ([DECISIONS.md ADR-43](DECISIONS.md#adr-43-bottle-green-glass-bone-words-vermilion-actions)):",
-   "chars": 7551
+   "chars": 7598
   },
   {
    "id": "ux-the-liquid-glass-recipe",
    "title": "UX_DESIGN_SYSTEM: The liquid glass recipe",
    "line": "glass-tint: var(--glass-tint-panel); / flat green: --panel-veil + --light-pay /",
-   "chars": 6738
+   "chars": 6748
   },
   {
    "id": "ux-the-logic-of-light",
    "title": "UX_DESIGN_SYSTEM: The logic of light",
    "line": "The owner (2026-11-23): \"the top layer is always brighter than the bottom, and it grows gradually in between ... make",
-   "chars": 15748
+   "chars": 15970
   },
   {
    "id": "ux-typography",
@@ -1155,7 +1155,7 @@
    "id": "ux-update-bar",
    "title": "UX_DESIGN_SYSTEM: Update bar",
    "line": "Shown when /version.json reports a version other than the running one ([CONTRACTS.md §12.2](CONTRACTS.md#122-update-banner-whats-new--reload)).",
-   "chars": 3527
+   "chars": 3838
   },
   {
    "id": "ux-ask-clip-factory",
