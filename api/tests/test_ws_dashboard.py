@@ -106,7 +106,7 @@ def test_every_tile(call: Call, store: db.Store, s3_client: FakeS3) -> None:
         contentId=published["storyId"],
         platform="tiktok",
         publishingStatus="needs_attention",
-        error="Make the Clip Factory Stories TikTok account private until TikTok approves the app, then tap Try again.",
+        error="Make the Clip Stories TikTok account private until TikTok approves the app, then tap Try again.",
         createdAt="2026-11-15T10:20:00.000Z",
     )
     seed_item(
@@ -174,7 +174,7 @@ def test_every_tile(call: Call, store: db.Store, s3_client: FakeS3) -> None:
         ("facebook", "/stories/connections"),
         (None, f"/stories/review/{check['storyId']}"),
     ]
-    assert you[0]["sentence"].startswith("Make the Clip Factory Stories TikTok account private")
+    assert you[0]["sentence"].startswith("Make the Clip Stories TikTok account private")
     assert you[0]["publishingJobId"] == "01J0000000000000000000PJ3"
     assert you[0]["title"] == "Out"
     assert (
@@ -206,7 +206,7 @@ def test_every_tile(call: Call, store: db.Store, s3_client: FakeS3) -> None:
 def test_the_dashboard_is_a_lamo_stories_page(call: Call) -> None:
     status, body = call("GET", "/v1/workspaces/clips/dashboard")
     assert status == 409
-    assert body["error"]["message"] == "That is a Clip Factory Stories page. Switch to Clip Factory Stories first."
+    assert body["error"]["message"] == "That is a Clip Stories page. Switch to Clip Stories first."
 
 
 # --- §45.35 D11: the accounts as Social accounts shows them, Fix it for an account problem --------------------

@@ -248,16 +248,19 @@ export function wantedStoriesWorkspace(): string | null {
   return pendingStories ?? currentChoice().lastStoriesWorkspaceId;
 }
 
-/** The first Stories workspace's default name until 22 Nov 2026, and today's. */
+/** The first Stories workspace's first default name (until 22 Nov 2026). */
 export const OLD_STORIES_NAME = "Lamo Stories";
-export const STORIES_NAME = "Clip Factory Stories";
+/** Every earlier default name of the first Stories workspace: "Lamo Stories", then "Clip Factory Stories" (22 Nov 2026). */
+export const OLD_STORIES_NAMES: readonly string[] = [OLD_STORIES_NAME, "Clip Factory Stories"];
+/** Today's: the app's name, "Clip Stories". */
+export const STORIES_NAME = "Clip Stories";
 
 /**
- * The name a person sees for a stored Stories workspace name: a workspace still stored with the old default name
+ * The name a person sees for a stored Stories workspace name: a workspace still stored with an old default name
  * reads as today's. Only what is shown changes; the stored record is never rewritten.
  */
 export function shownWorkspaceName(name: string): string {
-  return name === OLD_STORIES_NAME ? STORIES_NAME : name;
+  return OLD_STORIES_NAMES.includes(name) ? STORIES_NAME : name;
 }
 
 /** The name a workspace goes by in the switcher: Lamo Clips is the app itself, "Clip Factory" (§45.16.1). */

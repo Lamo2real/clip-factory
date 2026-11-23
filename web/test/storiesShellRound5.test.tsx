@@ -229,15 +229,15 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
     for (const p of ["youtube", "tiktok", "instagram", "facebook", "x"] as const) for (const l of store.social.find((a) => a.platform === p)!.limits) expect(l).not.toContain("Lamo Clips");
   });
 
-  it("an account called Clip Factory Stories reads right: this Facebook Page (Clip Factory Stories)", async () => {
-    expect(thisPlace({ platform: "facebook", accountName: "Clip Factory Stories", handle: null })).toBe("this Facebook Page (Clip Factory Stories)");
-    expect(thisPlace({ platform: "tiktok", accountName: null, handle: "@lamo.stories" })).toBe("this TikTok account (@lamo.stories)");
+  it("an account called Clip Stories reads right: this Facebook Page (Clip Stories)", async () => {
+    expect(thisPlace({ platform: "facebook", accountName: "Clip Stories", handle: null })).toBe("this Facebook Page (Clip Stories)");
+    expect(thisPlace({ platform: "tiktok", accountName: null, handle: "@clip.stories" })).toBe("this TikTok account (@clip.stories)");
     expect(thisPlace({ platform: "youtube", accountName: null, handle: null })).toBe("this YouTube channel");
     await render();
     const yt = card("youtube");
     await click(button(yt, "Disconnect"));
-    expect(yt.querySelector(".st-sure__ask")?.textContent).toBe("Are you sure? Clip Factory Stories stops posting to this YouTube channel (Clip Factory Stories). Clip Factory is not touched.");
-    expect(yt.querySelector(".st-sure__ask")?.textContent).not.toMatch(/posting to Clip Factory Stories/);
+    expect(yt.querySelector(".st-sure__ask")?.textContent).toBe("Are you sure? Clip Stories stops posting to this YouTube channel (Clip Stories). Clip Factory is not touched.");
+    expect(yt.querySelector(".st-sure__ask")?.textContent).not.toMatch(/posting to Clip Stories/);
     // The X account is Clip Factory's own (named "Clip Factory"): it is never shared (§45.37 G8), so there is no Use it
     // for both, and its one sentence says so plainly, said once.
     const x = card("x");
@@ -373,7 +373,7 @@ describe("Finish setting up (§45.36 E15)", () => {
     expect(Array.from(card.querySelectorAll(".st-setupcard__list li")).map((l) => l.textContent)).toEqual(expect.arrayContaining(["Connect TikTok", "Connect Facebook", "Connect X"]));
     expect(card.querySelector("a")?.getAttribute("href")).toBe("/stories/setup");
     // The big setup card is gone once finished.
-    expect(host.textContent).not.toContain("Set up Clip Factory Stories:");
+    expect(host.textContent).not.toContain("Set up Clip Stories:");
   });
 
   it("before Finish the usual setup card shows; finished with nothing left there is no card at all", async () => {
@@ -395,7 +395,7 @@ describe("the Needs you bar on the page it points to (§45.36 E17)", () => {
   let host: HTMLElement;
   let root: Root;
 
-  const STUCK = "Clip Factory Stories' TikTok (Lamo Stories) needs connecting again. Open Clip Factory Stories › Social accounts, then tap Try again.";
+  const STUCK = "Clip Stories' TikTok (Clip Stories) needs connecting again. Open Clip Stories › Social accounts, then tap Try again.";
   async function render(here: string, item: { sentence: string; href: string; platform: "tiktok" | null }) {
     const api = mockStoriesApi();
     const real = await api.dashboard("stories");
@@ -430,17 +430,25 @@ describe("the Needs you bar on the page it points to (§45.36 E17)", () => {
   });
 
   it("says the Social accounts trip in words for this page", () => {
-    expect(socialHere(STUCK)).toBe("Clip Factory Stories' TikTok (Lamo Stories) needs connecting again. Fix it below, then tap Try again.");
-    expect(socialHere("Clip Factory Stories' TikTok needs connecting again. Open Social accounts and tap Connect.")).toBe("Clip Factory Stories' TikTok needs connecting again. Tap Connect below.");
-    expect(socialHere("Clip Factory Stories' X is not connected. Open Clip Factory Stories › Social accounts, connect it, then tap Try again.")).toBe("Clip Factory Stories' X is not connected. Connect it below, then tap Try again.");
-    expect(socialHere("The TikTok app keys changed. Connect TikTok again in Clip Factory Stories › Social accounts, then tap Try again.")).toBe("The TikTok app keys changed. Connect TikTok again below, then tap Try again.");
+    expect(socialHere(STUCK)).toBe("Clip Stories' TikTok (Clip Stories) needs connecting again. Fix it below, then tap Try again.");
+    expect(socialHere("Clip Stories' TikTok needs connecting again. Open Social accounts and tap Connect.")).toBe("Clip Stories' TikTok needs connecting again. Tap Connect below.");
+    expect(socialHere("Clip Stories' X is not connected. Open Clip Stories › Social accounts, connect it, then tap Try again.")).toBe("Clip Stories' X is not connected. Connect it below, then tap Try again.");
+    expect(socialHere("The TikTok app keys changed. Connect TikTok again in Clip Stories › Social accounts, then tap Try again.")).toBe("The TikTok app keys changed. Connect TikTok again below, then tap Try again.");
     expect(socialHere("“Bike lights” needs a check before you can approve it.")).toBe("“Bike lights” needs a check before you can approve it.");
+  });
+
+  it("reads a sentence saved before a rename the same way, and never takes Clip Factory's own Social accounts", () => {
+    for (const old of ["Clip Factory Stories", "Lamo Stories"]) {
+      expect(socialHere(`${old}' X is not connected. Open ${old} › Social accounts, connect it, then tap Try again.`)).toBe(`${old}' X is not connected. Connect it below, then tap Try again.`);
+      expect(socialHere(`Pick another in ${old} › Social accounts, then tap Try again.`)).toBe("Pick another below, then tap Try again.");
+    }
+    expect(socialHere("Open Clip Factory › Social accounts, then tap Try again.")).toBe("Open Clip Factory › Social accounts, then tap Try again.");
   });
 
   it("on another page: the server's sentence and Fix it, which opens Social accounts", async () => {
     await render("/stories/ideas", { sentence: STUCK, href: "/stories/connections", platform: "tiktok" });
     const bar = host.querySelector<HTMLElement>(".st-needs")!;
-    expect(bar.textContent).toContain("Open Clip Factory Stories › Social accounts, then tap Try again.");
+    expect(bar.textContent).toContain("Open Clip Stories › Social accounts, then tap Try again.");
     expect(bar.querySelector<HTMLAnchorElement>("a.st-needs__go")?.getAttribute("href")).toBe("/stories/connections");
   });
 

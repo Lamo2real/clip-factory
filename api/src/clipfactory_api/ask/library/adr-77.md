@@ -1,6 +1,6 @@
 ## ADR-77 Models and reasoning effort are the owner's, per workspace, agent, task and request, never substituted
 
-- **Context.** The owner wants complete control over which model powers Clip Factory Stories (examples "Sable 5.2, Sable 5.1,
+- **Context.** The owner wants complete control over which model powers Clip Stories (examples "Sable 5.2, Sable 5.1,
   Opus 5.5": the account's Claude Fable 5.2 / 5.1 and Opus 5.5), with a default, per-agent and per-task choices, a
   per-request override from the chat, the active model visible, no silent substitution, and the reasoning effort set
   separately and really sent where the model supports it. Fable 5.x, Opus 5.5, Sonnet 5.5 and Haiku 5.5 take

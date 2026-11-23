@@ -45,7 +45,7 @@ test("Add campaign that answers while Lamo Stories is on screen: the owner stays
   await slow(page, 2500);
   await add.click();
   // While it is still asking, over to Lamo Stories.
-  await page.locator(".ws-dock").getByRole("link", { name: "Clip Factory Stories" }).click();
+  await page.locator(".ws-dock").getByRole("link", { name: "Clip Stories" }).click();
   await expect(page).toHaveURL(/\/stories$/);
   await storiesReady(page);
   const entries = await page.evaluate((): number => window.history.length);
@@ -83,7 +83,7 @@ test("a skill saved while Lamo Stories is on screen: no jump, no toast or sound 
   });
   await slow(page, 2500);
   await page.getByRole("button", { name: "Save skill" }).click();
-  await page.locator(".ws-dock").getByRole("link", { name: "Clip Factory Stories" }).click();
+  await page.locator(".ws-dock").getByRole("link", { name: "Clip Stories" }).click();
   await expect(page).toHaveURL(/\/stories$/);
   await storiesReady(page);
   const stored = await choice(page);

@@ -38,7 +38,7 @@ const PLACES: Record<string, string> = {
   "us-east-1": "US East (N. Virginia)",
 };
 
-export const LOCATION_WORDS = "Clip Factory Stories' own folder in Clip Factory's media storage";
+export const LOCATION_WORDS = "Clip Stories' own folder in Clip Factory's media storage";
 
 const CATEGORIES: { value: StoriesConfig["youtubeCategory"]; label: string }[] = [
   { value: "27", label: "Education" },
@@ -215,7 +215,7 @@ function SoundsAndMotion() {
   const anySet = mine.sound !== undefined || mine.click !== undefined || mine.deny !== undefined || mine.motion !== undefined;
   const offWhy = soundOn ? undefined : "Turn Sounds on first";
   return (
-    <SetCard title="Sounds and motion" icon="sound" id="sounds-and-motion" lede="For Clip Factory Stories on this device. Clip Factory's sounds and motion stay as they are.">
+    <SetCard title="Sounds and motion" icon="sound" id="sounds-and-motion" lede="For Clip Stories on this device. Clip Factory's sounds and motion stay as they are.">
       <SetSwitch
         label="Sounds"
         description="Click sounds on every button, and cheers when something works."
@@ -249,7 +249,7 @@ function SoundsAndMotion() {
           Hear it
         </button>
       </div>
-      <p className="st-stg-small">Clip Factory Stories' own click sound.</p>
+      <p className="st-stg-small">Clip Stories' own click sound.</p>
       <SetSelect
         label="Error sound"
         value={String(deny)}
@@ -267,7 +267,7 @@ function SoundsAndMotion() {
         checked={calm}
         onChange={(v) => setStoriesDevicePref("motion.reduce", v)}
       />
-      {systemCalm ? <p className="st-stg-small">This device asks for less motion too, so Clip Factory Stories keeps it calm anyway.</p> : null}
+      {systemCalm ? <p className="st-stg-small">This device asks for less motion too, so Clip Stories keeps it calm anyway.</p> : null}
       {anySet ? (
         <Btn
           quiet
@@ -302,10 +302,10 @@ export function StorageSection({ ws }: { ws: string }) {
   return (
     <div className="st-stg-cards">
       <div className="st-stg-bar">
-        <p className="st-stg-small">Clip Factory Stories keeps its files in its own folder, apart from Clip Factory's.</p>
+        <p className="st-stg-small">Clip Stories keeps its files in its own folder, apart from Clip Factory's.</p>
         <SavedMark saved={saved} busy={busy} />
       </div>
-      <SetCard title="Space used" icon="box" lede="Everything Clip Factory Stories has made and kept.">
+      <SetCard title="Space used" icon="box" lede="Everything Clip Stories has made and kept.">
         <Where storage={storage.data} />
         {storage.data ? <Used storage={storage.data} /> : storage.error ? <Failed message={storage.error} onRetry={() => void storage.reload()} /> : <Loading label="Adding it up…" />}
       </SetCard>
@@ -391,14 +391,14 @@ export function StorageSection({ ws }: { ws: string }) {
       <SetCard title="Keeping other files" icon="clock" id="keeping" lede="Reference videos and chat pictures can be cleared after a while to save space.">
         <p className="st-stg-label">Reference videos</p>
         <SetPick<KeepReferences> label="Keep reference videos" stack value={prod.keepReferences ?? "all"} options={KEEP_REFERENCES} onChange={(v) => save({ production: { ...prod, keepReferences: v } })} />
-        {(prod.keepReferences ?? "all") === "study_only" ? <p className="st-stg-small">Clip Factory Stories still learns from each study after its video is gone.</p> : null}
+        {(prod.keepReferences ?? "all") === "study_only" ? <p className="st-stg-small">Clip Stories still learns from each study after its video is gone.</p> : null}
         <p className="st-stg-label">Pictures added in the chat</p>
         <SetPick<KeepChatPictures> label="Keep chat pictures" value={prod.keepChatPictures ?? "all"} options={KEEP_CHAT_PICTURES} onChange={(v) => save({ production: { ...prod, keepChatPictures: v } })} />
         <p className="st-stg-small">These choices and Old versions are applied after each video. Clean up now applies them at once.</p>
         <Cleanup ws={ws} onDone={() => storage.reload()} />
       </SetCard>
 
-      <SetCard title="YouTube posts" icon="film" lede="Clip Factory Stories' own YouTube choices, never made for kids. Clip Factory's YouTube settings are not used here.">
+      <SetCard title="YouTube posts" icon="film" lede="Clip Stories' own YouTube choices, never made for kids. Clip Factory's YouTube settings are not used here.">
         <p className="st-stg-label">Which shelf on YouTube</p>
         <SetPick label="YouTube category" value={c.youtubeCategory} options={CATEGORIES} onChange={(v) => save({ youtubeCategory: v })} />
         <p className="st-stg-label">Who can see the videos</p>

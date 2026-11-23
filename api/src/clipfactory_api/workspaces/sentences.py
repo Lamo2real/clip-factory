@@ -64,7 +64,7 @@ NEEDS_YOU: Final = frozenset(
         "ai_label",
     }
 )
-CONNECTIONS: Final = "Clip Factory Stories › Social accounts"  # the page's name (§45.34: never "Connections")
+CONNECTIONS: Final = "Clip Stories › Social accounts"  # the page's name (§45.34: never "Connections")
 
 
 def label(platform: str) -> str:
@@ -83,7 +83,7 @@ def _who(platform: str, account_name: str | None, *, start: bool = False) -> str
     own ``{Platform}``."""
     if (account_name or "").strip():
         return this_account(platform, account_name, start=start)
-    return f"Clip Factory Stories' {label(platform)}"
+    return f"Clip Stories' {label(platform)}"
 
 
 def story_sentence(platform: str, kind: str, account_name: str | None = None, *, shared: bool = True) -> str:
@@ -101,41 +101,31 @@ def story_sentence(platform: str, kind: str, account_name: str | None = None, *,
         return f"The {name} app keys changed. Connect {name} again in {CONNECTIONS}, then tap Try again."
     if kind == "same_as_clips":
         return (
-            f"{who_start} is Clip Factory's own account. Clip Factory Stories needs its own separate account: connect "
+            f"{who_start} is Clip Factory's own account. Clip Stories needs its own separate account: connect "
             f"a different one in {CONNECTIONS}, then tap Try again."
         )
     if kind == "clips_unknown":
-        return (
-            f"Clip Factory Stories cannot tell if {who} is Clip Factory's {name}. Tap Try again to check the account "
-            "first."
-        )
+        return f"Clip Stories cannot tell if {who} is Clip Factory's {name}. Tap Try again to check the account first."
     if kind == "changed":
         if (account_name or "").strip():
             return (
-                f"Clip Factory Stories' {name} is a different account now: {this_account(platform, account_name)}. Tap "
-                f"Try "
+                f"Clip Stories' {name} is a different account now: {this_account(platform, account_name)}. Tap Try "
                 "again to check where it goes."
             )
-        return f"Clip Factory Stories' {name} is a different account now. Tap Try again to check where it goes."
+        return f"Clip Stories' {name} is a different account now. Tap Try again to check where it goes."
     if kind == "story":
         return "This story is not ready to post. Approve it first, then tap Try again."
     if kind == "workspace":
-        return "We could not find this Clip Factory Stories workspace."
+        return "We could not find this Clip Stories workspace."
     if kind == "x_cap":
         if not shared:
-            return (
-                "Clip Factory Stories stopped X: this month's Clip Factory Stories X limit is used up. Try again next "
-                "month."
-            )
-        return "Clip Factory Stories stopped X: this month's X limit is used up (it is shared with Clip Factory)."
+            return "Clip Stories stopped X: this month's Clip Stories X limit is used up. Try again next month."
+        return "Clip Stories stopped X: this month's X limit is used up (it is shared with Clip Factory)."
     if kind == "credits":
         return "X has no credits left. Buy more in console.x.com › Billing › Credits, then tap Try again."
     if kind == "private":
         if platform == "tiktok":
-            return (
-                "Make the Clip Factory Stories TikTok account private until TikTok approves the app, then tap Try "
-                "again."
-            )
+            return "Make the Clip Stories TikTok account private until TikTok approves the app, then tap Try again."
         return f"{who_start} is private. Make it public, then tap Try again."
     if kind == "rate":
         return f"{name} says slow down. Tap Try again in a few minutes."
@@ -163,7 +153,7 @@ def story_sentence(platform: str, kind: str, account_name: str | None = None, *,
         return "Posting did not start. Tap Try again."
     if kind == "ai_label":
         return (
-            f"This video has realistic AI shots, and Clip Factory Stories cannot mark them as AI on {name}. "
+            f"This video has realistic AI shots, and Clip Stories cannot mark them as AI on {name}. "
             "Post it to YouTube or TikTok instead."
         )
     return f"Posting to {name} did not work. Tap Try again."

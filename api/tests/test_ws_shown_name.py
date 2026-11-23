@@ -1,8 +1,8 @@
-"""The app's new name, Clip Factory Stories (22 Nov 2026), on records stored before it (docs/CONTRACTS.md §45).
+"""The app's new name, Clip Stories (22 Nov 2026), on records stored before it (docs/CONTRACTS.md §45).
 
-A stored workspace still named the old default, "Lamo Stories", is shown as "Clip Factory Stories" in the public
-workspace shape, and a built-in agent still holding the old default instructions is shown with today's; nothing
-stored is rewritten. A new first workspace is stored with the new name."""
+A stored workspace still named an old default, "Lamo Stories" or "Clip Factory Stories" (briefly), is shown
+as "Clip Stories" in the public workspace shape, and a built-in agent still holding the old default instructions is
+shown with today's; nothing stored is rewritten. A new first workspace is stored with the new name."""
 
 from __future__ import annotations
 
@@ -22,7 +22,8 @@ from test_ws_ai_support import FakeRuntime, install, ws_call
 from ws_support import AT, BASE, caller, seed_workspace
 
 OLD = "Lamo Stories"
-NEW = "Clip Factory Stories"
+BETWEEN = "Clip Factory Stories"  # the default for a short while on 22 Nov 2026, before the owner picked this one
+NEW = "Clip Stories"
 
 
 @pytest.fixture
@@ -36,9 +37,11 @@ def _writes(table: FakeTable) -> list[str]:
 
 def test_only_the_old_default_name_reads_as_the_new_one() -> None:
     assert (ws.OLD_STORIES_NAME, ws.FIRST_STORIES_NAME) == (OLD, NEW)
+    assert ws.OLD_STORIES_NAMES == (OLD, BETWEEN)
     assert ws.WORKSPACE_TYPES[ws.STORIES].label == NEW
     assert ws.shown_workspace_name(OLD) == NEW
-    for name in (NEW, "Lamo Cars", "My Lamo Stories", "Lamo Stories 2", ""):
+    assert ws.shown_workspace_name(BETWEEN) == NEW
+    for name in (NEW, "Lamo Cars", "My Lamo Stories", "Lamo Stories 2", "Clip Factory", "My Clip Factory Stories", ""):
         assert ws.shown_workspace_name(name) == name
     assert ws.shown_workspace_name(None) == ""
 
@@ -46,15 +49,17 @@ def test_only_the_old_default_name_reads_as_the_new_one() -> None:
 def test_a_stored_old_name_is_shown_new_and_never_rewritten(call: Call, store: db.Store, table: FakeTable) -> None:
     seed_workspace(store, workspace_id=ws.FIRST_STORIES_ID, name=OLD)  # made before the rename
     other = seed_workspace(store, name=OLD)
+    between = seed_workspace(store, name=BETWEEN)  # named while the default was Clip Factory Stories
     mine = seed_workspace(store, name="Lamo Cars")
     table.calls.clear()
 
     status, body = call("GET", "/v1/workspaces")
     assert status == 200
     names = {w["workspaceId"]: w["workspaceName"] for w in body["workspaces"]}
-    assert names == {"clips": "Lamo Clips", ws.FIRST_STORIES_ID: NEW, other: NEW, mine: "Lamo Cars"}
+    assert names == {"clips": "Lamo Clips", ws.FIRST_STORIES_ID: NEW, other: NEW, between: NEW, mine: "Lamo Cars"}
     assert call("GET", BASE)[1]["workspace"]["workspaceName"] == NEW
     assert call("GET", f"/v1/workspaces/{other}")[1]["workspace"]["workspaceName"] == NEW
+    assert call("GET", f"/v1/workspaces/{between}")[1]["workspace"]["workspaceName"] == NEW
     assert _writes(table) == []  # reading never writes the new name back
 
     # a settings change returns the new name and leaves the stored name as it was
@@ -62,23 +67,24 @@ def test_a_stored_old_name_is_shown_new_and_never_rewritten(call: Call, store: d
     status, body = call("PATCH", BASE, {"version": version, "configuration": {"musicOn": False}})
     assert status == 200, body
     assert body["workspace"]["workspaceName"] == NEW
-    for workspace_id in (ws.FIRST_STORIES_ID, other):
+    for workspace_id, stored in ((ws.FIRST_STORIES_ID, OLD), (other, OLD), (between, BETWEEN)):
         raw = table.raw(ws.registry_pk(USER), ws.workspace_sk(workspace_id))
         assert raw is not None
-        assert raw["workspaceName"] == OLD
+        assert raw["workspaceName"] == stored
 
 
-def test_the_public_shape_maps_the_name_only() -> None:
+@pytest.mark.parametrize("stored", [OLD, BETWEEN])
+def test_the_public_shape_maps_the_name_only(stored: str) -> None:
     item: dict[str, Any] = {
         "workspaceId": ws.FIRST_STORIES_ID,
-        "workspaceName": OLD,
+        "workspaceName": stored,
         "workspaceType": ws.STORIES,
         "version": 3,
         "createdAt": AT,
     }
     out = shapes.public_workspace(item)
     assert (out["workspaceName"], out["workspaceId"], out["version"], out["createdAt"]) == (NEW, "stories", 3, AT)
-    assert item["workspaceName"] == OLD  # the item itself is not changed
+    assert item["workspaceName"] == stored  # the item itself is not changed
 
 
 def test_a_new_first_workspace_is_stored_with_the_new_name(call: Call, table: FakeTable) -> None:
@@ -88,9 +94,10 @@ def test_a_new_first_workspace_is_stored_with_the_new_name(call: Call, table: Fa
     assert raw["workspaceName"] == NEW
 
 
-def test_no_two_workspaces_show_the_same_name(call: Call, store: db.Store) -> None:
-    seed_workspace(store, workspace_id=ws.FIRST_STORIES_ID, name=OLD)
-    for name in (NEW, "clip factory stories", OLD):
+@pytest.mark.parametrize("stored", [OLD, BETWEEN])
+def test_no_two_workspaces_show_the_same_name(call: Call, store: db.Store, table: FakeTable, stored: str) -> None:
+    seed_workspace(store, workspace_id=ws.FIRST_STORIES_ID, name=stored)
+    for name in (NEW, "clip stories", OLD, BETWEEN):
         status, body = call("POST", "/v1/workspaces", {"workspaceType": "stories", "workspaceName": name})
         assert status == 409, name
         assert body["error"]["message"] == f"You already have a workspace called {name}. Pick another name."
@@ -100,6 +107,9 @@ def test_no_two_workspaces_show_the_same_name(call: Call, store: db.Store) -> No
     # the old-named workspace itself may take the name it shows (the owner's rename is stored as typed)
     version = call("GET", BASE)[1]["workspace"]["version"]
     assert call("PATCH", BASE, {"version": version, "workspaceName": NEW})[0] == 200
+    raw = table.raw(ws.registry_pk(USER), ws.workspace_sk(ws.FIRST_STORIES_ID))
+    assert raw is not None
+    assert raw["workspaceName"] == NEW
 
 
 @pytest.mark.parametrize(

@@ -244,7 +244,7 @@ def test_cleanup_is_a_lamo_stories_route_with_no_body(wcall: WsCall) -> None:
     status, body = wcall("POST", "/v1/workspaces/clips/storage/cleanup", {})
     assert (status, body["error"]["message"]) == (
         409,
-        "That is a Clip Factory Stories page. Switch to Clip Factory Stories first.",
+        "That is a Clip Stories page. Switch to Clip Stories first.",
     )
     assert wcall("POST", "/v1/workspaces/01JD0000000000000000000000/storage/cleanup", {})[0] == 404
 

@@ -448,7 +448,7 @@ def test_a_model_added_in_one_workspace_is_never_another_ones(wcall: WsCall, sto
     status, body = wcall("PUT", f"{BASE}/ai", {"defaultModel": "custom-llama", "defaultEffort": "high", "version": 0})
     assert (status, body["error"]["message"]) == (
         400,
-        "Clip Factory Stories has no model called 'custom-llama'. Pick another one in Clip Factory Stories › Settings › AI.",
+        "Clip Stories has no model called 'custom-llama'. Pick another one in Clip Stories › Settings › AI.",
     )
     # another owner's item in this very partition is ignored too
     seed(store, "MODELDEF#custom-theirs", ws.TYPE_MODELDEF, user=OTHER, key="custom-theirs", **LLAMA)

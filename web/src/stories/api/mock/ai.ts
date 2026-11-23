@@ -205,7 +205,7 @@ export function resolveEffective(input: ResolveInput, models: readonly ModelEntr
     if (effort === null && set.effort) effort = set.effort;
   }
   const entry = models.find((m) => m.key === model);
-  if (!entry) return { error: "model", message: "That model is not one Clip Factory Stories can use. Pick another model in Clip Factory Stories › Settings › AI." };
+  if (!entry) return { error: "model", message: "That model is not one Clip Stories can use. Pick another model in Clip Stories › Settings › AI." };
   if (effort !== null && !(EFFORTS as readonly string[]).includes(effort)) return { error: "effort", message: "That effort level does not exist. Pick Low, Medium, High, Extra high or Maximum." };
   if (!entry.efforts.length) return { model: entry.key, effort: null, effortApplied: false, from };
   const e = (effort ?? entry.defaultEffort ?? "high") as Effort;
@@ -367,7 +367,7 @@ function conflict(message = "That changed while you were looking. Reload the pag
 
 /** The API's workspace rules: Lamo Clips' id is not a Lamo Stories page; an unknown id is not found. */
 export function guardStories(store: MockStore, ws: string): void {
-  if (ws === "clips") throw new ApiError(409, "conflict", "That is a Clip Factory Stories page. Switch to Clip Factory Stories first.");
+  if (ws === "clips") throw new ApiError(409, "conflict", "That is a Clip Stories page. Switch to Clip Stories first.");
   const known = store.workspaces.length ? store.workspaces.some((w) => w.workspaceId === ws && w.workspaceType === "stories") : ws === "stories";
   if (!known) throw new ApiError(404, "not_found", "We could not find that workspace.");
 }
@@ -492,7 +492,7 @@ export const noEffortSetting = (label: string) => `${label} has no effort settin
 
 function modelEntryIn(models: readonly ModelEntry[], key: string | null | undefined, field: string): ModelEntry {
   const m = models.find((x) => x.key === key);
-  if (!m) throw bad("That model is not one Clip Factory Stories can use. Pick one from the list.", field);
+  if (!m) throw bad("That model is not one Clip Stories can use. Pick one from the list.", field);
   return m;
 }
 
@@ -578,11 +578,11 @@ function originHost(origin: string): string {
 
 /** The API's sentences for the one OpenAI-compatible service a workspace may use (hosts.ONE_SERVICE, KEY_FOR_OTHER, provider_keys.NEED_MODEL_FIRST). */
 export const ONE_SERVICE = (host: string) =>
-  `Clip Factory Stories keeps one key for one OpenAI-compatible service. Your other OpenAI-compatible models use ${host}: use that address too, or remove those models first.`;
+  `Clip Stories keeps one key for one OpenAI-compatible service. Your other OpenAI-compatible models use ${host}: use that address too, or remove those models first.`;
 export const KEY_FOR_OTHER = (saved: string, host: string) =>
-  `Your OpenAI-compatible key is for ${saved}. To use ${host}, remove that key in Clip Factory Stories › Settings › AI › Provider keys first, then paste the key for ${host}.`;
+  `Your OpenAI-compatible key is for ${saved}. To use ${host}, remove that key in Clip Stories › Settings › AI › Provider keys first, then paste the key for ${host}.`;
 export const NEED_MODEL_FIRST =
-  "Add the model on your OpenAI-compatible API first (Clip Factory Stories › Settings › AI › Add a model), then paste its key, so Clip Factory Stories knows the one address it is for.";
+  "Add the model on your OpenAI-compatible API first (Clip Stories › Settings › AI › Add a model), then paste its key, so Clip Stories knows the one address it is for.";
 
 /** The origins every OpenAI-compatible model of the workspace uses (reasoning and picture models), but `skip`. */
 function openAiOrigins(store: MockStore, skip?: string): string[] {
@@ -671,7 +671,7 @@ export const MAX_OUTPUT_TOKENS = 500_000;
 /** A ModelDef checked as the API does (unknown keys and bad values are a 400 with the field). */
 function cleanDef(store: MockStore, key: string, value: unknown): ModelDef {
   if (!CUSTOM_MODEL_KEY.test(key)) throw bad("A model you add gets a name like custom-my-model.", "key");
-  if (MOCK_MODELS.some((m) => m.key === key)) throw bad("That name is taken by a model Clip Factory Stories comes with.", "key");
+  if (MOCK_MODELS.some((m) => m.key === key)) throw bad("That name is taken by a model Clip Stories comes with.", "key");
   if (!value || typeof value !== "object") throw bad("Fill in the model's details.");
   const v = value as Partial<ModelDef> & Record<string, unknown>;
   const allowed = ["label", "provider", "modelId", "region", "efforts", "defaultEffort", "vision", "maxOutputTokens", "price", "effortField", "tools", "cache", "host", "baseUrl"];
@@ -818,7 +818,7 @@ export function cleanBaseUrl(value: unknown): string {
   if (u.search || u.hash || raw.includes("?") || raw.includes("#")) throw bad("Leave out anything after ? or # in the address.", "baseUrl");
   const name = u.hostname.toLowerCase().replace(/\.+$/, "");
   if (privateHost(name))
-    throw bad("That address is not on the public internet (a private, local or internal address). Clip Factory Stories can only call a public https address.", "baseUrl");
+    throw bad("That address is not on the public internet (a private, local or internal address). Clip Stories can only call a public https address.", "baseUrl");
   // The path as typed (the browser's URL would fold "/v1/../x" into "/x"): never "." or ".." parts, never a % escape.
   const typedPath = raw.replace(/^https:\/\/[^/]*/i, "").replace(/\/+$/, "");
   if (typedPath.split("/").some((part) => part === "." || part === "..") || typedPath.includes("%")) throw notAddress();
@@ -963,7 +963,7 @@ export function makerRowModels(store: MockStore, maker: string): MakerModelInfo[
 
 /** "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Lamo Stories › Settings › Video." */
 export function endedSentence(m: { label: string; kind: MakerKind }): string {
-  return `${m.label} was ended by Amazon on 30 Sep 2026. Pick another ${MAKER_KIND[m.kind].noun} maker in Clip Factory Stories › Settings › Video.`;
+  return `${m.label} was ended by Amazon on 30 Sep 2026. Pick another ${MAKER_KIND[m.kind].noun} maker in Clip Stories › Settings › Video.`;
 }
 
 /** The makers Amazon ended, by maker id, with their names (the API refuses a new pick of them with endedSentence). */
@@ -1023,16 +1023,16 @@ function bareModelId(id: string): string {
   const parts = tail.split(".");
   return parts.length > 2 && ["us", "eu", "apac", "global", "jp", "au", "ca", "us-gov"].includes(parts[0]!) ? parts.slice(1).join(".") : tail;
 }
-export const BAD_PICTURE_MODEL = "Clip Factory Stories can make pictures on Amazon Bedrock with Stability AI's or Amazon Titan Image's models. Paste a model id like stability.stable-image-core-v1:1.";
-export const BAD_VIDEO_MODEL = "Clip Factory Stories can make video on Amazon Bedrock with Luma AI's models only. Paste a model id like luma.ray-v2:0.";
+export const BAD_PICTURE_MODEL = "Clip Stories can make pictures on Amazon Bedrock with Stability AI's or Amazon Titan Image's models. Paste a model id like stability.stable-image-core-v1:1.";
+export const BAD_VIDEO_MODEL = "Clip Stories can make video on Amazon Bedrock with Luma AI's models only. Paste a model id like luma.ray-v2:0.";
 export const ENDED_MODEL = "Amazon ended that model on 30 Sep 2026, so it can't be added. Pick another model, like stability.stable-image-core-v1:1 for pictures or luma.ray-v2:0 for video.";
-export const NO_BEDROCK_SOUND = "Amazon Bedrock has no sound-effect or music model yet, so Clip Factory Stories can't add one there. Add an ElevenLabs model instead, like eleven_text_to_sound_v2.";
+export const NO_BEDROCK_SOUND = "Amazon Bedrock has no sound-effect or music model yet, so Clip Stories can't add one there. Add an ElevenLabs model instead, like eleven_text_to_sound_v2.";
 export const ELEVENLABS_ONLY_SOUND = "ElevenLabs is used for sound effects and music only, never a voice. Paste a model like eleven_text_to_sound_v2 or music_v1.";
 
 /** A MakerModelDef checked as the API does (unknown keys and bad values are a 400 with the field). */
 function cleanMakerDef(store: MockStore, key: string, value: unknown): MakerModelDef {
   if (!CUSTOM_MODEL_KEY.test(key)) throw bad("A model you add gets a name like custom-my-model.", "key");
-  if (bundledMakerModels().some((m) => m.key === key)) throw bad("That name is taken by a model Clip Factory Stories comes with.", "key");
+  if (bundledMakerModels().some((m) => m.key === key)) throw bad("That name is taken by a model Clip Stories comes with.", "key");
   // One name across both kinds of added model, so a status is about exactly one model.
   if (allModels(store).some((m) => m.key === key)) throw bad("You already added an AI model with that name in Settings › AI. Pick another name.", "key");
   if (!value || typeof value !== "object") throw bad("Fill in the model's details.");
@@ -1111,9 +1111,9 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
   const keyedProvider = (providerId: string): KeyedProvider => {
     // The keyed host openai_compatible has an underscore (§45.37 G4), so ids take one too.
     if (!/^[a-z0-9][a-z0-9_-]{1,39}$/.test(providerId)) throw new ApiError(404, "not_found", "We could not find that provider.");
-    if (NO_KEY[providerId]) throw bad(`${NO_KEY[providerId]} uses Clip Factory Stories' own AWS access, so it needs no key.`);
+    if (NO_KEY[providerId]) throw bad(`${NO_KEY[providerId]} uses Clip Stories' own AWS access, so it needs no key.`);
     const p = keyed(store)[providerId];
-    if (!p) throw new ApiError(404, "not_found", `Clip Factory Stories has no provider called '${providerId}' that uses a key yet.`);
+    if (!p) throw new ApiError(404, "not_found", `Clip Stories has no provider called '${providerId}' that uses a key yet.`);
     return p;
   };
   // A keyed provider's ProviderStatus, on only after a real call.
@@ -1139,7 +1139,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       checkEffort(def, next.defaultEffort, "defaultEffort");
       const tasks: StoriesAiConfig["tasks"] = {};
       for (const [kind, set] of Object.entries(next.tasks ?? {})) {
-        if (!TASK_KINDS.includes(kind)) throw bad("That is not a Clip Factory Stories task.", "tasks");
+        if (!TASK_KINDS.includes(kind)) throw bad("That is not a Clip Stories task.", "tasks");
         if (!set || (!set.model && !set.effort)) continue;
         const agent = store.agents.find((a) => a.agentId === agentForTask(kind as TaskKind));
         const model = modelEntryIn(models, set.model ?? agent?.model ?? next.defaultModel, "tasks");
@@ -1206,7 +1206,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       // { models?, makers? } (§45.37 G2, the API's clean_check): neither named is every AI model; only makers named
       // is only those (an access check that costs nothing).
       if (makers !== undefined && (!Array.isArray(makers) || !makers.length)) throw bad("makers must be a list of the models to check.", "makers");
-      for (const k of makers ?? []) if (!makerList.some((m) => m.key === k)) throw bad(`Clip Factory Stories has no picture, video or sound model called '${k}'. Pick one in Clip Factory Stories › Settings › Video.`, "makers");
+      for (const k of makers ?? []) if (!makerList.some((m) => m.key === k)) throw bad(`Clip Stories has no picture, video or sound model called '${k}'. Pick one in Clip Stories › Settings › Video.`, "makers");
       const reasoning = models?.length ? models : makers?.length ? [] : list.map((m) => m.key);
       for (const k of reasoning) modelEntry(k, "models");
       const keys = [...new Set(reasoning)];
@@ -1269,7 +1269,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       await delay();
       guardStories(store, ws);
       const s = state(store);
-      if (bundledMakerModels().some((m) => m.key === key)) throw new ApiError(409, "conflict", "That model comes with Clip Factory Stories, so it can't be removed.");
+      if (bundledMakerModels().some((m) => m.key === key)) throw new ApiError(409, "conflict", "That model comes with Clip Stories, so it can't be removed.");
       const def = s.makerCustom[key];
       if (!def) throw new ApiError(404, "not_found", "We could not find that model.");
       // The API's sentence (makers.delete): picked, or the model its picked maker uses.

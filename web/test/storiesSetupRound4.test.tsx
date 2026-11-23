@@ -107,16 +107,20 @@ describe("Lamo Clips' own account (§45.35 D11)", () => {
     const why = host.querySelector(".st-left__why")!;
     expect(why).not.toBeNull();
     expect(why.textContent).toContain(sameAsClipsLine("x"));
-    // Its step says it too (the card reads the account as the page shows it: Clip Factory's own).
+    // Its step says it too, once: the card reads the account as the page shows it (Clip Factory's own) and says why in
+    // the API's words; the step around it does not say it again.
     await click(button("Connect X"));
-    expect(host.textContent).toContain("This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.");
+    const step = host.querySelector(".st-setup__body")!;
+    const card = step.querySelector(".st-conn")!;
+    expect(card.textContent).toMatch(/This is Clip Factory's (own account|account now)\./);
+    expect(step.textContent!.split("This is Clip Factory's").length - 1).toBe(1);
     expect(store.social.find((a) => a.platform === "x")?.connectionStatus).toBe("same_as_clips");
   });
 
   it("an account that is Lamo Stories' own says nothing of the kind", async () => {
     await start({}, (s) => {
       // Its own id and its own handle (§45.37 G8: a matching handle alone would make it Clip Factory's).
-      Object.assign(s.social.find((a) => a.platform === "x")!, { connectionStatus: "connected", sharedWithClips: false, externalAccountId: "1600000000000000002", accountName: "Lamo Stories", handle: "@lamostories" });
+      Object.assign(s.social.find((a) => a.platform === "x")!, { connectionStatus: "connected", sharedWithClips: false, externalAccountId: "1600000000000000002", accountName: "Clip Stories", handle: "@clipstories" });
     });
     expect(host.querySelector(".st-left__why")).toBeNull();
     expect($$(".st-steps__item").find((b) => b.textContent?.includes("Connect X"))!.className).toContain("is-done");

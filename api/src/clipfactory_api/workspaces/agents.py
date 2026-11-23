@@ -118,7 +118,7 @@ def switched_off(agent: Mapping[str, Any] | None) -> str | None:
     if agent is None or agent.get("active") is not False:
         return None
     name = public(agent)["name"]
-    return f"{name} is switched off. Switch it on in Clip Factory Stories › Settings › Agents."
+    return f"{name} is switched off. Switch it on in Clip Stories › Settings › Agents."
 
 
 def get(store: db.Store, user_id: str, workspace_id: str, agent_id: str, now: datetime) -> dict[str, Any]:

@@ -17,6 +17,7 @@ import {
   SCROLL_KEY,
   setStoriesPref,
   setStoriesPrefs,
+  shownWorkspaceName,
   STORIES_PREFS_KEY,
   storiesPref,
   storiesPrefs,
@@ -282,12 +283,24 @@ describe("opening the app", () => {
 describe("the workspace list", () => {
   it("shows Clip Factory and Lamo Stories until the server answers", () => {
     expect(knownWorkspaces()).toEqual(DEFAULT_WORKSPACES);
-    expect(knownWorkspaces().map(switcherName)).toEqual(["Clip Factory", "Clip Factory Stories"]);
+    expect(knownWorkspaces().map(switcherName)).toEqual(["Clip Factory", "Clip Stories"]);
   });
 
   it("labels Lamo Clips with the app's own name, whatever the server calls it, and other workspaces by theirs", () => {
     expect(switcherName(CLIPS)).toBe("Clip Factory");
     expect(switcherName(CARS)).toBe("Lamo Cars");
+  });
+
+  it("shows a workspace stored with either old default name as Clip Stories, and every other name as it is", () => {
+    for (const old of ["Lamo Stories", "Clip Factory Stories"]) {
+      const stored = ws("stories", "stories", old);
+      expect(shownWorkspaceName(old)).toBe("Clip Stories");
+      expect(switcherName(stored)).toBe("Clip Stories");
+      // Only what is shown: the stored record keeps its name.
+      expect(stored.workspaceName).toBe(old);
+    }
+    expect(shownWorkspaceName("Clip Stories")).toBe("Clip Stories");
+    for (const own of ["Clip Factory", "Lamo Cars", "Clip Factory Stories 2", "clip factory stories", "Stories"]) expect(shownWorkspaceName(own)).toBe(own);
   });
 
   it("then every workspace the server lists, Lamo Clips first, never two Lamo Clips", () => {
@@ -324,8 +337,8 @@ it("keeps Lamo Stories' own scroll position for one way back, only for a Lamo St
 });
 
 it("names each Lamo Stories page in the tab title", () => {
-  expect(storiesTitle({ name: "dashboard" })).toBe("Dashboard · Clip Factory Stories");
-  expect(storiesTitle({ name: "connections", platform: null, result: null, ws: null })).toBe("Social accounts · Clip Factory Stories");
-  expect(storiesTitle({ name: "setup" })).toBe("Set up · Clip Factory Stories");
-  expect(storiesTitle({ name: "chat_conv", convId: "c" })).toBe("Chat · Clip Factory Stories");
+  expect(storiesTitle({ name: "dashboard" })).toBe("Dashboard · Clip Stories");
+  expect(storiesTitle({ name: "connections", platform: null, result: null, ws: null })).toBe("Social accounts · Clip Stories");
+  expect(storiesTitle({ name: "setup" })).toBe("Set up · Clip Stories");
+  expect(storiesTitle({ name: "chat_conv", convId: "c" })).toBe("Chat · Clip Stories");
 });

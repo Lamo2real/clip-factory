@@ -1,0 +1,70 @@
+/* Clip Stories' logo (components/WorkspaceMark.tsx; the owner, 22 Nov 2026: "the same logo as clip factory but with
+   the colors in clip factory stories"). The mark is Clip Factory's own markup and shape (.brand__mark and .brand__dot,
+   layout.css: the italic "C" on its tile, its size, type and dot), so only its colours are set here. Four tokens colour
+   it: --ws-mark-tile (the tile, a colour or a gradient), --ws-mark-letter (the "C"), --ws-mark-dot (the dot) and
+   --ws-wordmark (the words "Clip Stories"). Clip Stories' own stylesheet sets them, never this file; until it does,
+   each falls back to today's Clip Stories colours (sunshine tile, night-indigo "C", coral dot, cream words). In the
+   main stylesheet, because the mark is an element of the shell: it is there wherever the mark is, also on the start-up
+   card before Clip Stories' own styles load. Clip Factory's own mark never carries ws-mark, so its colours stay
+   exactly as they are. */
+
+.ws-mark.brand__mark {
+  color: var(--ws-mark-letter, #1c1842);
+  background: var(--ws-mark-tile, #ffc94a);
+}
+.ws-mark > .brand__dot {
+  background: var(--ws-mark-dot, #ff6f61);
+}
+
+/* A smaller mark at a given size (--ws-mark-size), on the shell's round workspace toggle: Clip Factory's mark in
+   proportion (the same tile, italic "C" and dot as .brand__mark and .brand__dot), drawn with its own classes so Clip
+   Factory's top bar keeps one brand mark, and with no shadow, so nothing paints outside the toggle's own box. */
+.ws-mark.ws-mark--sized {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--ws-mark-size);
+  height: var(--ws-mark-size);
+  padding-right: calc(var(--ws-mark-size) * 0.08);
+  border-radius: 7px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: calc(var(--ws-mark-size) * 0.67);
+  line-height: 1;
+  text-shadow: none;
+  color: var(--ws-mark-letter, #1c1842);
+  background: var(--ws-mark-tile, #ffc94a);
+}
+.ws-mark--sized > .ws-mark__dot {
+  position: absolute;
+  top: calc(var(--ws-mark-size) * 0.21);
+  right: calc(var(--ws-mark-size) * 0.18);
+  width: calc(var(--ws-mark-size) * 0.18);
+  height: calc(var(--ws-mark-size) * 0.18);
+  border-radius: 50%;
+  background: var(--ws-mark-dot, #ff6f61);
+}
+
+/* The wordmark: Clip Factory's wordmark type (.brand__name: "Clip Factory", its italic "Factory") in one colour, so
+   the whole brand is as wide as Clip Factory's own and keeps its name wherever Clip Factory's does (the rail; a
+   phone's top bar from 340 px). The doubled class outranks the one-class name style of the app it sits in (loaded
+   later, in its own chunk), which still places it and hides it where the frame says. */
+.ws-wordmark.ws-wordmark {
+  display: inline-grid;
+  justify-items: start;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-stretch: normal;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  color: var(--ws-wordmark, #fff6e5);
+}
+.ws-wordmark__main {
+  font-size: 1.45rem;
+}
+.ws-wordmark.ws-wordmark em {
+  font-style: italic;
+  color: inherit;
+}

@@ -115,7 +115,7 @@ export function lowerLevels(store: MockStore, task: TaskKind, agentId: AgentId):
     task: ai?.tasks?.[task] ?? null,
     agent: agent ? { model: agent.model, effort: agent.effort } : null,
     ai: ai ? { defaultModel: ai.defaultModel, defaultEffort: ai.defaultEffort } : null,
-    agentOff: agent && !agent.active ? `${agent.name} is switched off. Switch it on in Clip Factory Stories › Settings › Agents.` : null,
+    agentOff: agent && !agent.active ? `${agent.name} is switched off. Switch it on in Clip Stories › Settings › Agents.` : null,
   };
 }
 
@@ -154,7 +154,7 @@ const iso = (ms = Date.now()) => new Date(ms).toISOString();
 export function checkWs(store: MockStore, ws: string): void {
   const found = store.workspaces.find((w) => w.workspaceId === ws);
   if (store.workspaces.length ? !found : ws !== "stories") throw new ApiError(404, "not_found", "We could not find that workspace.");
-  if (found && found.workspaceType !== "stories") throw new ApiError(409, "conflict", "That is a Clip Factory Stories page. Switch to Clip Factory Stories first.");
+  if (found && found.workspaceType !== "stories") throw new ApiError(409, "conflict", "That is a Clip Stories page. Switch to Clip Stories first.");
 }
 
 const bad = (message: string, field?: string) => new ApiError(400, "bad_request", message, field);
@@ -581,7 +581,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const fail =
         failOnce ??
         low.agentOff ??
-        (denied.includes(eff.model) ? `${model.label} isn't available right now: this account cannot use it yet. Pick another model in Clip Factory Stories › Settings › AI, or try again.` : null);
+        (denied.includes(eff.model) ? `${model.label} isn't available right now: this account cannot use it yet. Pick another model in Clip Stories › Settings › AI, or try again.` : null);
       const answer = answerFor(store, text, conv.projectRef);
       s.streams.set(assistant.msgId, { start: now, chunks: pieces(answer.text), actions: answer.actions, fail, memory: answer.memory });
       if (conv.title === "New chat") conv.title = text.length <= 40 ? text : `${text.slice(0, 40).replace(/\s+\S*$/, "")}…`;

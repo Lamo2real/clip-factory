@@ -36,7 +36,7 @@ def _model(value: Any, field: str) -> dict[str, Any]:
 
         found = next((m for m in custom_models() if m.get("key") == value), None)
     if found is None:
-        raise bad_request("We don't know that model. Pick one in Clip Factory Stories › Settings › AI.", field)
+        raise bad_request("We don't know that model. Pick one in Clip Stories › Settings › AI.", field)
     return found
 
 

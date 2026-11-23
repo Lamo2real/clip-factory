@@ -93,7 +93,7 @@ def test_another_owners_workspace_is_404_and_writes_nothing(
 def test_a_clips_id_is_the_stories_only_409(r: Route, wcall: WsCall, table: FakeTable) -> None:
     status, body = wcall(r.method, path_of(r, _ids(ws="clips")), {})
     assert status == 409, body
-    assert body["error"]["message"] == "That is a Clip Factory Stories page. Switch to Clip Factory Stories first."
+    assert body["error"]["message"] == "That is a Clip Stories page. Switch to Clip Stories first."
     assert table.all() == []
 
 

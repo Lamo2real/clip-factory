@@ -289,7 +289,7 @@ describe("the owner's own picture, video and sound models (§45.37 G2)", () => {
     await click(byText("button", /Add a model/, box()));
     const form = $<HTMLElement>('form[aria-label="Add a picture, video or sound model"]')!;
     await click(byText("[role=radio]", /^Sound/, form));
-    expect(form.textContent).toContain("Sound models make sound effects and music only. Clip Factory Stories never asks them for a voice.");
+    expect(form.textContent).toContain("Sound models make sound effects and music only. Clip Stories never asks them for a voice.");
     // Sound runs on ElevenLabs only (the owner's key): Amazon Bedrock has no sound or music model (the API's NO_BEDROCK_SOUND).
     expect($$("[role=radio]", $<HTMLElement>('[aria-label="Where it runs"]', form)!).map((r) => r.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["ElevenLabs"]);
     expect($$("select", form).some((s) => s.getAttribute("aria-label") === "AWS Region")).toBe(false);

@@ -220,7 +220,7 @@ function frames(r: Recorded, rest: { median: number; worst: number }) {
 // the Linux CI runners is the GTK/WPE port, which never started the glide's Web Animation there.
 test.skip(({ browserName }) => browserName === "webkit" && process.platform !== "darwin", "WebKit's slide is measured on macOS (the Mac app's engine)");
 
-async function tapChoice(page: Page, name: "Clip Factory Stories" | "Clip Factory") {
+async function tapChoice(page: Page, name: "Clip Stories" | "Clip Factory") {
   const opt = page.locator(".ws-dock .ws-switch__opt", { hasText: new RegExp(`^${name}$`) });
   const box = (await opt.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -246,7 +246,7 @@ for (const [label, glass] of [
     await warm(page);
     const chromium = browserName === "chromium";
     for (const [to, url] of [
-      ["Clip Factory Stories", /\/stories$/],
+      ["Clip Stories", /\/stories$/],
       ["Clip Factory", /\/library$/],
     ] as const) {
       const rest = await restFrame(page);
@@ -254,7 +254,7 @@ for (const [label, glass] of [
       const tasks = chromium
         ? await trace(page, () => tapChoice(page, to).then(() => page.waitForURL(url)))
         : (await tapChoice(page, to), await page.waitForURL(url), null);
-      if (to === "Clip Factory Stories") await storiesReady(page);
+      if (to === "Clip Stories") await storiesReady(page);
       else await settle(page);
       const r = await page.evaluate(() => (window as unknown as { __slide: Recorded }).__slide);
       const slides = r.slides.filter((s) => s.id === "glide-slide");
@@ -344,8 +344,8 @@ test.describe("the slide in pictures", () => {
       await warm(page);
       // The slide is held at six moments (the page changes only once it ends, which this test lets it do last).
       for (const [to, from, url] of [
-        ["Clip Factory Stories", "clip-factory", /\/stories$/],
-        ["Clip Factory", "clip-factory-stories", /\/library$/],
+        ["Clip Stories", "clip-factory", /\/stories$/],
+        ["Clip Factory", "clip-stories", /\/library$/],
       ] as const) {
         const opt = page.locator(".ws-dock .ws-switch__opt", { hasText: new RegExp(`^${to}$`) });
         await opt.click();
@@ -382,7 +382,7 @@ test.describe("the slide in pictures", () => {
           for (const a of document.querySelector(".ws-dock .ws-switch")!.getAnimations({ subtree: true })) a.finish();
         });
         await page.waitForURL(url);
-        if (to === "Clip Factory Stories") await page.locator(".stories-app[data-ws]").waitFor();
+        if (to === "Clip Stories") await page.locator(".stories-app[data-ws]").waitFor();
         await page.waitForTimeout(1500);
       }
     });

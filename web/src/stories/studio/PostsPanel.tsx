@@ -121,7 +121,7 @@ export function PostsPanel({ jobs, onRetry, busyId }: { jobs: PublishingJob[] | 
       {jobs === null ? (
         <p className="st-s-field__hint">Getting the posts…</p>
       ) : jobs.length === 0 ? (
-        <p className="st-s-field__hint">Not posted anywhere yet. Tap Post it to send it to your Clip Factory Stories accounts.</p>
+        <p className="st-s-field__hint">Not posted anywhere yet. Tap Post it to send it to your Clip Stories accounts.</p>
       ) : (
         <ul className="st-s-posts">
           {jobs.map((j) => (

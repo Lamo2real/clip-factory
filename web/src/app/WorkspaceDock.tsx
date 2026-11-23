@@ -22,12 +22,12 @@ import { flushSync } from "react-dom";
 import { Glide, GLIDE_ANIMATION_ID, GLIDE_MS, GlideCalm } from "../components/Glide.tsx";
 import { LiveDot } from "../components/LiveDot.tsx";
 import { useFootRows } from "../components/Nav.tsx";
+import { WorkspaceMark } from "../components/WorkspaceMark.tsx";
 import { prefersReducedMotion, usePrefs } from "../lib/prefs.ts";
 import { leaveGuarded, navigate, useHash, useRoute } from "../lib/router.ts";
 import type { Workspace } from "../stories/api/types.ts";
 import { CLIPS_WORKSPACE_ID, FIRST_STORIES_WORKSPACE_ID } from "../stories/api/types.ts";
 import { prefetchStoriesApp, preloadStoriesApp } from "../stories/pane.tsx";
-import { StoriesMark } from "../stories/brand/StoriesMark.tsx";
 import { storiesReduceMotion } from "../stories/prefs.ts";
 import {
   currentChoice,
@@ -275,19 +275,19 @@ function dockCalm(): boolean {
 const warm = (w: Workspace | null) => (w && w.workspaceType === "stories" ? preloadStoriesApp : undefined);
 
 /**
- * The little picture of a workspace on its round toggle: Clip Factory's "C", and for Clip Factory Stories the same
- * mark in Stories' colours (its logo, stories/brand/StoriesMark.tsx).
+ * The little picture of a workspace on its round toggle: Clip Factory's "C", and for Clip Stories the same
+ * mark in Clip Stories' colours (its logo, components/WorkspaceMark.tsx).
  */
-export function WorkspaceMark({ type, size = 24 }: { type: Workspace["workspaceType"]; size?: number }) {
+export function ToggleMark({ type, size = 24 }: { type: Workspace["workspaceType"]; size?: number }) {
   if (type === "clips")
     return (
-      <svg className="ws-mark" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <svg className="ws-round__mark" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="#EFE7DA" />
         <path d="M15.6 8.2a4.6 4.6 0 1 0 0 7.6" fill="none" stroke="#0F372B" strokeWidth="2.4" strokeLinecap="round" />
         <circle cx="17.4" cy="6.2" r="1.6" fill="#E8392B" />
       </svg>
     );
-  return <StoriesMark size={Math.round(size * 0.875)} className="ws-mark" />;
+  return <WorkspaceMark size={Math.round(size * 0.875)} className="ws-round__mark" />;
 }
 
 /**
@@ -320,14 +320,14 @@ function Toggle({ list, current, kind, markSize, below, tip }: { list: Workspace
         onPointerEnter={warm(target)}
         onFocus={warm(target)}
       >
-        <WorkspaceMark type={target.workspaceType} size={markSize} />
+        <ToggleMark type={target.workspaceType} size={markSize} />
       </a>
     );
   }
   return (
     <>
       <button type="button" className={kind} aria-label={`Pick a workspace (now ${switcherName(here_)})`} aria-expanded={menu} onClick={() => setMenu((m) => !m)} onPointerEnter={preloadStoriesApp}>
-        <WorkspaceMark type={here_.workspaceType} size={markSize} />
+        <ToggleMark type={here_.workspaceType} size={markSize} />
       </button>
       {menu ? <WorkspaceMenu list={list} current={current} go={go} close={() => setMenu(false)} below={below} /> : null}
     </>

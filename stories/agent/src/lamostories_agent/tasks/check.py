@@ -36,7 +36,7 @@ OK_LINE = "It answered. Ready to use."
 NOT_SENT = "Checking the models did not finish. Tap Try again."
 NOT_A_CALL = frozenset({"AgentOff", "EffortUnavailable", "TaskFailed"})
 REFUSALS = frozenset({"ModelRefused"})
-PROMPT = "This is an availability check from Clip Factory Stories. Reply with the one word: ok"
+PROMPT = "This is an availability check from Clip Stories. Reply with the one word: ok"
 # A model that takes tools is checked with one tiny tool (automatic choice), streamed as the chat calls it, so a model
 # Bedrock refuses tools for (some only while streaming) shows that sentence here, never "Works" (§45.36 E6).
 CHECK_TOOL = {

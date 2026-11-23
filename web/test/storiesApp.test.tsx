@@ -115,7 +115,7 @@ describe("the shell", () => {
     document.title = "Home · Clip Factory";
     fake = {
       listWorkspaces: vi.fn(async () => [CLIPS, STORIES, CARS]),
-      dashboard: vi.fn(async () => dash("Clip Factory Stories' TikTok needs connecting again.")),
+      dashboard: vi.fn(async () => dash("Clip Stories' TikTok needs connecting again.")),
       getOnboarding: vi.fn(async () => onboarding(4)),
     };
     setStoriesApi(fake as StoriesApi);
@@ -160,7 +160,7 @@ describe("the shell", () => {
       "Social accounts",
       "Settings",
     ]);
-    expect(host.querySelector(".st-needs")?.textContent).toContain("Clip Factory Stories' TikTok needs connecting again.");
+    expect(host.querySelector(".st-needs")?.textContent).toContain("Clip Stories' TikTok needs connecting again.");
     // Lamo Clips' Ask and setup to-do are not part of Lamo Stories.
     expect(host.querySelector(".help-launcher, .setup-todo")).toBeNull();
   });
@@ -227,13 +227,13 @@ describe("the shell", () => {
   it("says so plainly when there is no Lamo Stories workspace at all", async () => {
     fake.listWorkspaces = vi.fn(async () => [CLIPS]);
     await mount();
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain("Clip Factory Stories is not ready yet");
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("Clip Stories is not ready yet");
   });
 
   it("gives the page title and the theme colour back to Lamo Clips when it leaves", async () => {
     await mount();
     expect(meta.content.toLowerCase()).toBe("#1c1842");
-    document.title = "Dashboard · Clip Factory Stories · Clip Factory";
+    document.title = "Dashboard · Clip Stories · Clip Factory";
     act(() => root.render(<ToastProvider>{null}</ToastProvider>));
     expect(meta.content).toBe("#0F372B");
     expect(document.title).toBe("Home · Clip Factory");

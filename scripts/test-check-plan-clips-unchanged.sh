@@ -61,6 +61,11 @@ g "${work}/merge" merge -q --no-ff -m "Merge pull request #115 from example/feat
 # A Lamo Stories fix that edits only a shared module, named in its message.
 new_repo message
 commit "${work}/message" "fix: the Lamo Stories callback throttle" infra/modules/api/main.tf
+# The same, named with today's name "Clip Stories", and with the name between, "Clip Factory Stories".
+new_repo message-clip
+commit "${work}/message-clip" "fix: the Clip Stories callback throttle" infra/modules/api/main.tf
+new_repo message-cfs
+commit "${work}/message-cfs" "fix: the Clip Factory Stories callback throttle" infra/modules/api/main.tf
 # A Lamo Stories web-only change (nothing that feeds the plan) deployed together with a Clip Factory env flag.
 new_repo web
 commit "${work}/web" "feat: Lamo Stories dashboard" web/src/stories/screens/Dashboard.tsx
@@ -76,6 +81,8 @@ LIVE_STORIES="$(live_of stories)"
 LIVE_CLIPS="$(live_of clips)"
 LIVE_MERGE="$(g "${work}/merge" rev-list --max-parents=0 HEAD)"
 LIVE_MESSAGE="$(live_of message)"
+LIVE_MESSAGE_CLIP="$(live_of message-clip)"
+LIVE_MESSAGE_CFS="$(live_of message-cfs)"
 LIVE_WEB="$(live_of web HEAD~2)"
 LIVE_AGENT="$(live_of agent)"
 LIVE_RERUN="$(live_of rerun HEAD)"
@@ -346,6 +353,12 @@ REPO="${work}/merge" expect "a Lamo Stories pull request merged with a merge com
 variant "${work}/message-env.json" "$whop" "$LIVE_MESSAGE"
 REPO="${work}/message" expect "a commit that names Lamo Stories and edits a shared module counts as Lamo Stories work" 1 "${work}/message-env.json" \
   "fix: the Lamo Stories callback throttle"
+variant "${work}/message-clip-env.json" "$whop" "$LIVE_MESSAGE_CLIP"
+REPO="${work}/message-clip" expect "a commit that names Clip Stories and edits a shared module counts as Clip Stories work" 1 \
+  "${work}/message-clip-env.json" "fix: the Clip Stories callback throttle"
+variant "${work}/message-cfs-env.json" "$whop" "$LIVE_MESSAGE_CFS"
+REPO="${work}/message-cfs" expect "a commit that names Clip Factory Stories and edits a shared module counts as Clip Stories work" 1 \
+  "${work}/message-cfs-env.json" "fix: the Clip Factory Stories callback throttle"
 variant "${work}/unknown-env.json" "$whop" "89abcdef0123456789abcdef0123456789abcdef"
 expect "a live release that is not in the history stops a Clip Factory change (it cannot tell whose it is)" 1 "${work}/unknown-env.json" \
   "is not in this checkout's history"

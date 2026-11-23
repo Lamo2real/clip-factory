@@ -1473,7 +1473,7 @@ class StoryJob(Job):
             return script, bool(answer.get("teachesSafety")), missing
         script = writer.script_from(
             answer,
-            title=str(self.story.get("title") or answer.get("title") or "Clip Factory Stories"),
+            title=str(self.story.get("title") or answer.get("title") or "Clip Stories"),
             engine_version=engine,
             seed=seed,
             cast=cast,

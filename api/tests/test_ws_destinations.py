@@ -394,7 +394,7 @@ def test_publish_refuses_and_writes_nothing(
 def test_made_for_kids_is_never_accepted(call: Call, starter: sup.FakeStarter) -> None:
     target = {"platform": "youtube", "socialAccountId": "stories.youtube", "options": {"madeForKids": True}}
     _, body = call("POST", PUBLISH, {"targets": [target]})
-    assert body["error"]["message"] == "Clip Factory Stories videos are never marked as made for kids."
+    assert body["error"]["message"] == "Clip Stories videos are never marked as made for kids."
 
 
 def test_publish_checks_the_story_at_the_tap(call: Call, store: db.Store, starter: sup.FakeStarter) -> None:
@@ -421,7 +421,7 @@ def test_publish_needs_the_story_flow(
     sup.ready(store, secrets_client, "x")
     status, body = call("POST", PUBLISH, {"targets": [{"platform": "x", "socialAccountId": "stories.x"}]})
     assert status == 503
-    assert body["error"]["message"] == "Posting is not switched on for Clip Factory Stories yet."
+    assert body["error"]["message"] == "Posting is not switched on for Clip Stories yet."
 
 
 def test_a_flow_that_does_not_start_fails_the_jobs_plainly(
@@ -486,7 +486,7 @@ def test_the_new_account_question_names_this_account_and_the_yes_button(
     status, body = call("POST", f"/v1/workspaces/stories/publishing/{job['publishingJobId']}/retry", {})
     assert status == 409, body
     assert body["error"]["message"] == (
-        "Clip Factory Stories' YouTube is a different account now: this YouTube account (Lamo Stories). Tap Yes if that is "
+        "Clip Stories' YouTube is a different account now: this YouTube account (Lamo Stories). Tap Yes if that is "
         "right."
     )
     assert starter.started == []
@@ -506,7 +506,7 @@ def test_the_new_account_question_never_puts_a_raw_channel_id_in_its_sentence(
     status, body = call("POST", f"/v1/workspaces/stories/publishing/{job['publishingJobId']}/retry", {})
     assert status == 409, body
     assert body["error"]["message"] == (
-        "Clip Factory Stories' YouTube is a different account now: this YouTube account. Tap Yes if that is right."
+        "Clip Stories' YouTube is a different account now: this YouTube account. Tap Yes if that is right."
     )
     assert "UCnoNameChannel0000" not in body["error"]["message"]
     assert body["error"]["account"]["externalAccountId"] == "UCnoNameChannel0000"

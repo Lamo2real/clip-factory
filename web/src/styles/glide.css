@@ -337,7 +337,7 @@ html:where(.see-through, [data-backdrop]) .ws-round:hover {
   width: 100%;
   border-radius: var(--r-pill);
 }
-.ws-mark {
+.ws-round__mark {
   display: block;
   flex: none;
 }

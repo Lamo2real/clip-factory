@@ -50,16 +50,16 @@ test("after a connect: Connected as {name} ({handle}), and the card asks whether
   const yt = cardOf(page, "YouTube");
   await yt.getByRole("button", { name: "Pick another channel" }).click();
   await expect(page).toHaveURL(/\/stories\/connections$/);
-  await expect(page.locator(".toast").filter({ hasText: "Connected as Clip Factory Stories (@lamostories)." })).toBeVisible();
-  const ask = yt.getByRole("group", { name: "Is this your Clip Factory Stories channel?" });
+  await expect(page.locator(".toast").filter({ hasText: "Connected as Clip Stories (@clipstories)." })).toBeVisible();
+  const ask = yt.getByRole("group", { name: "Is this your Clip Stories channel?" });
   await expect(ask).toBeVisible();
-  await expect(ask).toContainText("Clip Factory Stories posts only here, never to Clip Factory's.");
+  await expect(ask).toContainText("Clip Stories posts only here, never to Clip Factory's.");
   // Pick another connects again, and asks again.
   await ask.getByRole("button", { name: "Pick another channel" }).click();
-  await expect(page.locator(".toast").filter({ hasText: "Connected as Clip Factory Stories (@lamostories)." }).first()).toBeVisible();
-  await expect(yt.getByRole("group", { name: "Is this your Clip Factory Stories channel?" })).toBeVisible();
+  await expect(page.locator(".toast").filter({ hasText: "Connected as Clip Stories (@clipstories)." }).first()).toBeVisible();
+  await expect(yt.getByRole("group", { name: "Is this your Clip Stories channel?" })).toBeVisible();
   await yt.getByRole("button", { name: "Yes, that's it" }).click();
-  await expect(page.locator(".toast").filter({ hasText: "Great! Clip Factory Stories posts to this YouTube channel (Clip Factory Stories)." })).toBeVisible();
+  await expect(page.locator(".toast").filter({ hasText: "Great! Clip Stories posts to this YouTube channel (Clip Stories)." })).toBeVisible();
   await expect(yt.locator(".st-intended")).toHaveCount(0);
   await expect(page.locator("canvas.confetti").first()).toBeAttached();
 });
@@ -70,15 +70,15 @@ test("a connect finished by picking the Instagram account from the list asks whe
   await page.goto("/stories/connections");
   await ready(page);
   const ig = cardOf(page, "Instagram");
-  await ig.locator(".st-choose").getByRole("button", { name: /lamo\.stories/ }).click();
-  const ask = ig.getByRole("group", { name: "Is this your Clip Factory Stories account?" });
+  await ig.locator(".st-choose").getByRole("button", { name: /clip\.stories/ }).click();
+  const ask = ig.getByRole("group", { name: "Is this your Clip Stories account?" });
   await expect(ask).toBeVisible();
-  await expect(ask).toContainText("Connected as lamo.stories.");
+  await expect(ask).toContainText("Connected as clip.stories.");
   const o = await findOverflow(page);
   expect(o.page, "@320: the page scrolls sideways").toBeLessThanOrEqual(o.viewport);
   expect(o.items, "@320").toEqual([]);
   await ask.getByRole("button", { name: "Yes, that's it" }).click();
-  await expect(page.locator(".toast").filter({ hasText: "Great! Clip Factory Stories posts to this Instagram account (lamo.stories)." })).toBeVisible();
+  await expect(page.locator(".toast").filter({ hasText: "Great! Clip Stories posts to this Instagram account (clip.stories)." })).toBeVisible();
   await expect(ig.locator(".st-intended")).toHaveCount(0);
 });
 
@@ -90,13 +90,13 @@ test("after Disconnect, an own Meta app gets the Lamo Stories line, Clip Factory
   const fb = cardOf(page, "Facebook");
   await fb.getByRole("button", { name: "Connect Facebook" }).click();
   await expect(page).toHaveURL(/\/stories\/connections$/);
-  await fb.getByRole("button", { name: /^Clip Factory Stories/ }).click();
+  await fb.getByRole("button", { name: /^Clip Stories/ }).click();
   await expect(fb.locator(".st-chip").first()).toHaveText("Connected");
   // Picked from the list: the card asks first whether this is the Lamo Stories Page (§45.34).
-  await fb.getByRole("group", { name: "Is this your Clip Factory Stories Page?" }).getByRole("button", { name: "Yes, that's it" }).click();
+  await fb.getByRole("group", { name: "Is this your Clip Stories Page?" }).getByRole("button", { name: "Yes, that's it" }).click();
   await fb.getByRole("button", { name: "Disconnect" }).click();
   await fb.getByRole("button", { name: "Yes, disconnect" }).click();
-  await expect(page.getByText("To remove Clip Factory Stories completely, remove your Clip Factory Stories app in the account's own settings. Clip Factory is not affected.")).toBeVisible();
+  await expect(page.getByText("To remove Clip Stories completely, remove your Clip Stories app in the account's own settings. Clip Factory is not affected.")).toBeVisible();
   await page.getByRole("button", { name: "Hide this note" }).click();
   const yt = cardOf(page, "YouTube");
   await yt.getByRole("button", { name: "Disconnect" }).click();
@@ -121,12 +121,12 @@ test("round 4: no Check now while the account is still to be picked, and one toa
       for (const r of records) for (const n of Array.from(r.addedNodes)) if (n instanceof HTMLElement) for (const t of [n, ...Array.from(n.querySelectorAll(".toast__text"))]) if (t.matches(".toast__text")) w.__toasts.push(t.textContent?.trim() ?? "");
     }).observe(document.body, { childList: true, subtree: true });
   });
-  await ig.locator(".st-choose").getByRole("button", { name: /lamo\.stories/ }).click();
-  const ask = ig.getByRole("group", { name: "Is this your Clip Factory Stories account?" });
+  await ig.locator(".st-choose").getByRole("button", { name: /clip\.stories/ }).click();
+  const ask = ig.getByRole("group", { name: "Is this your Clip Stories account?" });
   await expect(ask).toBeVisible();
   await ask.getByRole("button", { name: "Yes, that's it" }).click();
-  await expect(page.locator(".toast").filter({ hasText: "Great! Clip Factory Stories posts to this Instagram account (lamo.stories)." })).toBeVisible();
-  expect(await page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts)).toEqual(["Great! Clip Factory Stories posts to this Instagram account (lamo.stories)."]);
+  await expect(page.locator(".toast").filter({ hasText: "Great! Clip Stories posts to this Instagram account (clip.stories)." })).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts)).toEqual(["Great! Clip Stories posts to this Instagram account (clip.stories)."]);
   // Connected now: Check now is back.
   await expect(ig.getByRole("button", { name: /Check now/ })).toBeVisible();
 });

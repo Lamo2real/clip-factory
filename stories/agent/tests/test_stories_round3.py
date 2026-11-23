@@ -260,7 +260,7 @@ def test_a_remake_that_names_the_scene_on_the_second_try_is_made(tmp_path: Path)
 
 @needs_deno
 def test_a_step_that_failed_on_its_model_still_shows_what_was_asked(tmp_path: Path) -> None:
-    sentence = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Clip Factory Stories › Settings › AI, or try again."
+    sentence = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Clip Stories › Settings › AI, or try again."
     refused = ModelUnavailable(sentence, model="fable-5-2", effort="max", status="denied")
     svc, _store, table, _ = world(tmp_path, answers(storyboard=refused), job=job_item("J1", "S1", run=WRITE_RUN))
     assert run_job(svc) == "failed"
@@ -478,7 +478,7 @@ def test_a_story_that_still_picks_nova_reel_stops_with_the_ended_line_and_calls_
     assert run_job(svc) == "failed"
     job = table.item("PJOB#J1")
     assert job is not None and job["error"] == (
-        "Amazon Nova Reel 1.1 was ended by Amazon on 30 Sep 2026. Pick another video maker in Clip Factory Stories › Settings › "
+        "Amazon Nova Reel 1.1 was ended by Amazon on 30 Sep 2026. Pick another video maker in Clip Stories › Settings › "
         "Video."
     )
     assert called == [] and not [a for a in table.prefix("ASSET#") if a["kind"] == "scene_clip"]

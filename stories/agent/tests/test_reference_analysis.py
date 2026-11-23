@@ -410,7 +410,7 @@ def test_a_switched_off_video_analysis_agent_fails_the_job_and_keeps_the_old_ana
              "name": "Video analysis"})  # fmt: skip
     assert run(svc) == "failed"
     job = db.get(PK, "PJOB#J1")
-    assert job["error"] == "Video analysis is switched off. Switch it on in Clip Factory Stories › Settings › Agents."
+    assert job["error"] == "Video analysis is switched off. Switch it on in Clip Stories › Settings › Agents."
     assert job["steps"][0]["status"] == "failed" and model.calls == [] and s3.reads == []
     assert db.get(PK, "REFVID#R1")["status"] == "analyzed"
 

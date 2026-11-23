@@ -52,7 +52,7 @@ import { chooseClips, redirectAtStart, restoreScroll, storiesTitle, takeClipsScr
 import { storiesEnabled } from "../stories/flag.ts";
 import type { StoriesPage } from "../stories/routes.ts";
 import { AppPanes, loadStoriesApp, storiesModule, StoriesPaneBoundary } from "../stories/pane.tsx";
-import { StoriesMark } from "../stories/brand/StoriesMark.tsx";
+import { WorkspaceMark } from "../components/WorkspaceMark.tsx";
 import { calmPage, followStoriesMotion, storiesDeniedSound } from "../stories/prefs.ts";
 import { KeptSearchProvider, storiesOnScreen, takeParkedClipsGo, useAppActive, useShellHosted } from "./shell.ts";
 import { TopBarSwitch, WorkspaceDock } from "./WorkspaceDock.tsx";
@@ -88,7 +88,7 @@ const TITLES: Record<Route["name"], string> = {
   campaigns_find: "Find campaigns",
   campaign: "Campaign",
   motion_gallery: "Motion gallery",
-  stories: "Clip Factory Stories",
+  stories: "Clip Stories",
   not_found: "Not found",
 };
 
@@ -262,8 +262,8 @@ function StoriesHost({ page }: { page: StoriesPage }) {
   return (
     <Suspense
       fallback={
-        <div className="boot" role="status" aria-label="Loading Clip Factory Stories">
-          <StoriesMark boot />
+        <div className="boot" role="status" aria-label="Loading Clip Stories">
+          <WorkspaceMark boot />
         </div>
       }
     >

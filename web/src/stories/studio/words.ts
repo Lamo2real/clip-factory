@@ -88,7 +88,7 @@ export const STEP_WORD: Record<StepKey, string> = {
 
 /** The sentence a safety idea or story shows when no checked advice covers it (CONTRACTS §45.11.5). */
 export const NO_GUIDANCE =
-  "Clip Factory Stories only makes driving-safety videos from checked advice, and this one isn't in the list yet.";
+  "Clip Stories only makes driving-safety videos from checked advice, and this one isn't in the list yet.";
 
 /** A failed call as one sentence the owner can read. */
 export function say(e: unknown, fallback = "Something went wrong. Try again in a moment."): string {
@@ -273,7 +273,7 @@ export function helpersLine(providers: Record<string, string> | null | undefined
 }
 
 /** Where a video's files are kept, in words (the exact folder is behind "Technical details"). */
-export const STORAGE_WORDS = "Clip Factory Stories' own folder in Clip Factory's media storage";
+export const STORAGE_WORDS = "Clip Stories' own folder in Clip Factory's media storage";
 
 /** A checked advice topic's own title ("Skid recovery on ice"); its id is never shown. */
 export function topicTitle(topics: readonly { id: string; title: string }[] | null | undefined, id: string | null | undefined): string | null {

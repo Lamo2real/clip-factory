@@ -552,7 +552,7 @@ test("round 3: a reference video keeps its own model and effort, and a stopped a
     await sheet.getByRole("button", { name: "Done" }).click();
     await expect(page.locator(".st-chat-ai__line")).toHaveText(/^Model: Claude Sonnet 5\.5 · Effort: /);
     await expect(page.getByText("Kept with this video (its own setting).")).toBeVisible();
-    await knobs(page, { refFail: "Claude Sonnet 5.5 isn't available right now: no access. Pick another model in Clip Factory Stories › Settings › AI, or try again.", refSeconds: 2 });
+    await knobs(page, { refFail: "Claude Sonnet 5.5 isn't available right now: no access. Pick another model in Clip Stories › Settings › AI, or try again.", refSeconds: 2 });
     await page.getByRole("button", { name: "Analyze it" }).click();
     const failed = page.locator(".st-ref-failed");
     await expect(failed).toContainText("no access", { timeout: 20_000 });

@@ -55,17 +55,17 @@ FAILED: Final = {
     "portrait": "Drawing the picture did not finish. Tap Try again.",
 }
 NO_TOPIC: Final = (
-    "Clip Factory Stories only makes driving-safety videos from checked advice, and this one isn't in the list yet."
+    "Clip Stories only makes driving-safety videos from checked advice, and this one isn't in the list yet."
 )
 NO_SCRIPT: Final = "This story has no storyboard yet. Tap Remake the whole video."
 WRITER_FAILED: Final = "The story writer's answer did not work. Tap Try again."
-IMAGES_OFF: Final = "AI pictures are off. Turn them on in Clip Factory Stories › Settings."
+IMAGES_OFF: Final = "AI pictures are off. Turn them on in Clip Stories › Settings."
 
 
 def ws_pk(user_id: str, workspace_id: str) -> str:
     """The workspace's own partition. Never ``USER#{userId}``: that is Clip Factory's."""
     if workspace_id == CLIPS or not WORKSPACE_ID.match(workspace_id):
-        raise ValueError("not a Clip Factory Stories workspace id")
+        raise ValueError("not a Clip Stories workspace id")
     if not SAFE_ID.match(user_id):
         raise ValueError("bad user id")
     return f"USER#{user_id}#WS#{workspace_id}"

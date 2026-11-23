@@ -647,7 +647,7 @@ export function AiSection({ ws }: { ws: string }) {
   return (
     <div className="st-stg-cards">
       <div className="st-stg-bar">
-        <p className="st-stg-small">Clip Factory Stories' own models. Clip Factory's model setting is separate and stays as it is.</p>
+        <p className="st-stg-small">Clip Stories' own models. Clip Factory's model setting is separate and stays as it is.</p>
         <SavedMark saved={saved} busy={ai.busy} />
       </div>
       <DefaultModel data={data} pending={pending} onPick={pickModel} ws={ws} reload={ai.reload} />

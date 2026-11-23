@@ -1,7 +1,7 @@
-# Clip Factory Stories animation engine
+# Clip Stories animation engine
 
 One dependency-free TypeScript engine (CONTRACTS §45.10, ADR-71). The browser runs it for live previews
-(`web/src/stories/preview/`), and Clip Factory Stories' own agent runs the same files with Deno (`cli.ts`) and rasterizes
+(`web/src/stories/preview/`), and Clip Stories' own agent runs the same files with Deno (`cli.ts`) and rasterizes
 its draw lists into the final frames (`stories/agent/src/lamostories_agent/raster.py`). This file is the one description of what a draw list means.
 Both drawers must follow it exactly.
 

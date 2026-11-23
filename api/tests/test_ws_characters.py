@@ -179,7 +179,7 @@ def test_portrait_needs_ai_pictures_on(call: Call, agentcore: FakeAgentCore, tab
     assert status == 409
     assert (
         body["error"]["message"]
-        == "AI pictures are off. Turn them on in Clip Factory Stories › Settings › Video › Picture maker."
+        == "AI pictures are off. Turn them on in Clip Stories › Settings › Video › Picture maker."
     )
     _turn_on_pictures(call)
     status, body = call("POST", f"{BASE}/characters/{cid}/portrait")
@@ -216,7 +216,7 @@ def test_an_ended_picture_maker_is_never_called_for_a_portrait(
     cid = call("POST", f"{BASE}/characters", character_body())[1]["character"]["characterId"]
     store.update(f"USER#{USER}#WSREG", "WS#stories", {"configuration": {"providers": {"images": "nova-canvas"}}})
     ended = (
-        "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Clip Factory Stories › "
+        "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Clip Stories › "
         "Settings › Video."
     )
     calls = len(agentcore.calls)

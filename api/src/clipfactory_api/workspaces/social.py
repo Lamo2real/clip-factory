@@ -76,15 +76,13 @@ YOUTUBE_PROMPT: Final = "select_account consent"
 STATUSES: Final = ("not_connected", "connected", "choose_account", "needs_reconnect", "same_as_clips")
 POSTABLE: Final = ("connected", "same_as_clips")
 NOT_ON: Final = "Posting setup is not switched on for this app yet."
-TIKTOK_NOT_CONNECTED: Final = (
-    "Clip Factory Stories' TikTok is not connected. Connect it in Clip Factory Stories › Social accounts."
-)
+TIKTOK_NOT_CONNECTED: Final = "Clip Stories' TikTok is not connected. Connect it in Clip Stories › Social accounts."
 LIST_TOO_OLD: Final = "That list is too old. Tap Connect again."
 X_CREDITS: Final = "X has no credits left. Buy more in console.x.com › Billing › Credits."
 # TikTok gives every developer app its own open_id for the same person (§45.13.4, ``clips_unknown``).
 TIKTOK_UNSURE: Final = (
-    "Clip Factory Stories cannot tell if this is Clip Factory's TikTok, because TikTok gives each app its own id. "
-    "Before the first post, Clip Factory Stories shows you the account to check."
+    "Clip Stories cannot tell if this is Clip Factory's TikTok, because TikTok gives each app its own id. "
+    "Before the first post, Clip Stories shows you the account to check."
 )
 # The only attributes of Clip Factory's ACCOUNT# items Lamo Stories may read (§45.15, §45.37 G8 b: an
 # attribute-limited GetItem). ``accountId`` is the channel, Page, Instagram, TikTok (open id) or X user id;
@@ -100,19 +98,16 @@ COMPARED: Final = {
     "x": ("id", "username"),
 }
 SAME_AT_CONNECT: Final = (
-    "This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a "
-    "different one."
+    "This is Clip Factory's own account. Clip Stories needs its own separate account: sign in with a different one."
 )
-SAME_LATER: Final = "This is Clip Factory's account now. Connect a different account made for Clip Factory Stories."
-OWN_ACCOUNT: Final = "Use a new account made for Clip Factory Stories, not lamo.clips."
-SHARED_APP_FIRST: Final = "Clip Factory's posts always go first. Stories uses what's left."
+SAME_LATER: Final = "This is Clip Factory's account now. Connect a different account made for Clip Stories."
+OWN_ACCOUNT: Final = "Use a new account made for Clip Stories, not Clip Factory's."
+SHARED_APP_FIRST: Final = "Clip Factory's posts always go first. Clip Stories uses what's left."
 # Identities once found to be Clip Factory's own, on Lamo Stories' own SOCIAL# (§45.37 G8, sticky): never
 # Clip Factory's item, never cleared by a read, kept across connects and disconnects (at most MATCHED_MAX of each).
 MATCHED: Final = "clipsMatched"
 MATCHED_MAX: Final = 20
-SHARED_APP_ACCOUNT: Final = (
-    "Even with Clip Factory's app, sign in with a different account made for Clip Factory Stories."
-)
+SHARED_APP_ACCOUNT: Final = "Even with Clip Factory's app, sign in with a different account made for Clip Stories."
 
 
 @dataclass(frozen=True)
@@ -244,25 +239,23 @@ def clips_unknown(platform: str, account: Mapping[str, Any], choice: str | None,
 _YOUTUBE = (
     "One Google sign-in can hold several channels (Brand Accounts).",
     "A connection posts to exactly one channel: the one you pick in Google's list.",
-    "To change it, tap Pick another channel. Google will ask which channel. Pick your Clip Factory Stories channel.",
+    "To change it, tap Pick another channel. Google will ask which channel. Pick your Clip Stories channel.",
 )
 _TIKTOK = (
-    "Sign in to your Clip Factory Stories account on tiktok.com in this browser first. TikTok connects the account "
+    "Sign in to your Clip Stories account on tiktok.com in this browser first. TikTok connects the account "
     "that is signed in.",
 )
 _X = (
-    "Use a separate X account. First sign in to your Clip Factory Stories account on x.com in this browser. X connects "
+    "Use a separate X account. First sign in to your Clip Stories account on x.com in this browser. X connects "
     "the account that is signed in.",
 )
 _META = (
-    "Clip Factory Stories uses its own Meta app, so Clip Factory's Facebook connection is never touched.",
-    "Facebook will ask which Pages this app may use. Tick only your Clip Factory Stories Page.",
+    "Clip Stories uses its own Meta app, so Clip Factory's Facebook connection is never touched.",
+    "Facebook will ask which Pages this app may use. Tick only your Clip Stories Page.",
     "A new Meta app in Development mode lets you, its admin, connect your own Pages. Going Live needs Meta's "
     "App Review.",
 )
-_PICK_APP: Final = (
-    f"First pick which app Clip Factory Stories uses: your own, or Share Clip Factory's app. {SHARED_APP_FIRST}"
-)
+_PICK_APP: Final = f"First pick which app Clip Stories uses: your own, or Share Clip Factory's app. {SHARED_APP_FIRST}"
 _SHARED: Final = (SHARED_APP_FIRST, SHARED_APP_ACCOUNT)
 _LIMITS: Final[dict[str, dict[str | None, tuple[str, ...]]]] = {
     "youtube": {
@@ -270,7 +263,7 @@ _LIMITS: Final[dict[str, dict[str | None, tuple[str, ...]]]] = {
             OWN_ACCOUNT,
             *_YOUTUBE,
             *_SHARED,
-            "Stories uses only what is left of Clip Factory's Google project's uploads each day.",
+            "Clip Stories uses only what is left of Clip Factory's Google project's uploads each day.",
         ),
         OWN: (OWN_ACCOUNT, *_YOUTUBE, "Your own Google project has its own daily uploads."),
         None: (OWN_ACCOUNT, *_YOUTUBE, _PICK_APP),
@@ -282,7 +275,7 @@ _LIMITS: Final[dict[str, dict[str | None, tuple[str, ...]]]] = {
             "While TikTok is still reviewing Clip Factory's app, only accounts added as Sandbox target users can "
             "connect.",
             "Until TikTok approves the app, the account must be private and posts stay Only me.",
-            "When the app goes live with new keys, Clip Factory Stories asks you to connect again.",
+            "When the app goes live with new keys, Clip Stories asks you to connect again.",
             *_TIKTOK,
         ),
         OWN: (
@@ -290,7 +283,7 @@ _LIMITS: Final[dict[str, dict[str | None, tuple[str, ...]]]] = {
             "A new TikTok app needs TikTok's review, which can take days to weeks. Until then only Sandbox target "
             "users can connect, the account must be private and posts stay Only me.",
             *_TIKTOK,
-            "TikTok gives each app its own id, so Clip Factory Stories compares the usernames. When it cannot tell, it "
+            "TikTok gives each app its own id, so Clip Stories compares the usernames. When it cannot tell, it "
             "shows you the account to check before the first post.",
         ),
         None: (OWN_ACCOUNT, *_TIKTOK, _PICK_APP),
@@ -316,13 +309,13 @@ _LIMITS: Final[dict[str, dict[str | None, tuple[str, ...]]]] = {
             OWN_ACCOUNT,
             *_X,
             *_SHARED,
-            "Stories uses only what Clip Factory's share of your monthly X limit leaves.",
+            "Clip Stories uses only what Clip Factory's share of your monthly X limit leaves.",
             X_OVER_LIMIT,
         ),
         OWN: (
             OWN_ACCOUNT,
             *_X,
-            "Your own X app needs its own credits. Clip Factory Stories' own monthly X limit applies.",
+            "Your own X app needs its own credits. Clip Stories' own monthly X limit applies.",
         ),
         None: (OWN_ACCOUNT, *_X, _PICK_APP),
     },
@@ -345,7 +338,7 @@ def sign_state(key: bytes, platform: str, workspace_id: str, nonce: str, exp: in
     if not key:
         raise ValueError("the state key is empty")
     if workspace_id == ws.CLIPS or not ws.WORKSPACE_ID.match(workspace_id):
-        raise ValueError("not a Clip Factory Stories workspace id")
+        raise ValueError("not a Clip Stories workspace id")
     signature = _mac(key, f"{STATE_VERSION}|{platform}|{workspace_id}|{nonce}|{exp}")
     return f"{STATE_VERSION}.{workspace_id}.{nonce}.{exp}.{signature}"
 
@@ -1102,7 +1095,7 @@ def check(scope: Scope, env: OAuthEnv, platform: str, now: datetime) -> Item:
     store, secrets, user_id, workspace_id = scope.store, scope.secrets, scope.user_id, scope.workspace_id
     item = scope.account(platform)
     if item is None or item.get("connectionStatus") not in (*POSTABLE, "needs_reconnect"):
-        raise conflict(f"Connect Clip Factory Stories' {label(platform)} first.")
+        raise conflict(f"Connect Clip Stories' {label(platform)} first.")
     if item.get("connectionStatus") == "same_as_clips":
         return dict(item)  # Clip Factory's account: nothing to check, it stays so (sticky, §45.37 G8)
     chosen = apps.app_keys(store, secrets, user_id, workspace_id, platform, account=item)
@@ -1218,7 +1211,7 @@ def creator_info(scope: Scope, env: OAuthEnv) -> Item:
 
 # --- the developer app (§45.30) -------------------------------------------------------------------------------
 
-META_ONLY_OWN: Final = "Facebook and Instagram always use Clip Factory Stories' own Meta app. Paste its keys."
+META_ONLY_OWN: Final = "Facebook and Instagram always use Clip Stories' own Meta app. Paste its keys."
 KEY_ASK: Final = {
     "clientId": "Paste the first key.",
     "clientSecret": "Paste the secret.",
@@ -1371,7 +1364,7 @@ def _check_own_account(
             "message": providers.check_message("credits_empty", platform),
             "account": "ok",
         }
-    return {"account": "ok", "message": f"Everything works. Clip Factory Stories can post to {label(platform)}."}
+    return {"account": "ok", "message": f"Everything works. Clip Stories can post to {label(platform)}."}
 
 
 def secrets_or_503(found: WorkspaceSecrets | None) -> WorkspaceSecrets:

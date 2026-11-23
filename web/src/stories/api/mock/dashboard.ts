@@ -17,7 +17,7 @@ export function seed(_store: MockStore): void {}
 type Activity = StoriesDashboard["activity"][number];
 
 /** The page an account problem's sentence names (the API's sentences.CONNECTIONS). */
-const CONNECTIONS = "Clip Factory Stories › Social accounts";
+const CONNECTIONS = "Clip Stories › Social accounts";
 
 /** Fix it for a stopped post: Social accounts when it stopped on an account problem, else the video's Review page. */
 export function postHref(error: string | null | undefined, storyId: string): string {
