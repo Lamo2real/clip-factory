@@ -62,6 +62,20 @@
 .stories-app[data-look="window"]::before {
   background: rgb(var(--st-veil-rgb) / var(--st-veil-page));
 }
+/* The phone's status bar (the shell's --status-bar-h): an installed phone app runs edge to edge, so the stage above
+   runs under the clock and nothing of a page sits there (the frame starts on --top-line). Where the stage's top strip
+   is light (light colours, a picture) a soft black scrim lies in the status bar alone, as strong as the white clock
+   needs for AA (--st-status-scrim, stories/look.ts statusScrim), held under the clock and fading out at the bar's
+   bottom; over Ember, Rose and Lagoon it is 0 and nothing is drawn. Above every layer of Stories, clear of every tap. */
+.stories-app::after {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 110;
+  height: var(--status-bar-h, 0px);
+  pointer-events: none;
+  background: linear-gradient(rgb(0 0 0 / var(--st-status-scrim, 0)) 75%, rgb(0 0 0 / 0));
+}
 
 /* ---------- The glass ---------- */
 

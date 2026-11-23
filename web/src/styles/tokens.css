@@ -209,6 +209,10 @@
      each one reads this token and none adds its own number, so their top edges stay on one horizontal line. */
   --titlebar-h: 0px;
   --top-safe: max(env(safe-area-inset-top), var(--titlebar-h));
+  /* The phone's own status bar (the clock, the Dynamic Island, the signal) alone: 0 everywhere else. An installed
+     iPhone app runs edge to edge (index.html: black-translucent), so the page's backdrop shows under it and only the
+     status-bar scrim (layout.css .app::after, Clips Funded's .stories-app::after) is as tall as this. */
+  --status-bar-h: env(safe-area-inset-top);
   --top-line: calc(var(--top-safe) + 12px);
 
   /* The older names: a panel's drop and a floating layer's drop, from the light above (ADR-87). */

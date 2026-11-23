@@ -18,6 +18,22 @@ html[data-titlebar="overlay"] .titlebar-drag {
   height: var(--titlebar-h);
   background: transparent;
 }
+/* The phone's status bar (--status-bar-h, tokens.css): the app runs edge to edge, so the backdrop shows under the
+   clock and nothing of the page sits there (every column starts on --top-line). The white clock and icons keep AA over
+   it: where the look's top edge is light (a light Colours look, a picture), a soft black scrim lies in the status bar
+   alone, as strong as AA needs there (--status-scrim, lib/look.ts statusScrim), held under the clock and fading out
+   at the bottom of the bar. Over the dark looks it is 0: nothing is drawn. Clear of every tap. The sign-in screen,
+   drawn outside the app shell, carries it too. */
+.app::after,
+.signin::after {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 210;
+  height: var(--status-bar-h);
+  pointer-events: none;
+  background: linear-gradient(rgb(0 0 0 / var(--status-scrim, 0)) 75%, rgb(0 0 0 / 0));
+}
 .shell {
   min-height: 100vh;
   min-height: 100dvh;

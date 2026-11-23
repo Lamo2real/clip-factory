@@ -24,7 +24,9 @@ body {
   line-height: 1.5;
   font-feature-settings: "cv11", "ss03";
   color: var(--ink);
-  background: var(--green);
+  /* The living backdrop's own top edge (glass.css .backdrop), not a flat band: the backdrop is drawn over it, under
+     the phone's status bar too, and this only shows where the page bounces past it. */
+  background: #0f3d31;
   overflow-wrap: break-word;
   -webkit-font-smoothing: antialiased;
 }

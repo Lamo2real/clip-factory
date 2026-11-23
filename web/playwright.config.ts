@@ -31,11 +31,12 @@ export default defineConfig({
     // WebKit too: the Mac app (WKWebView) and the iPhone PWA (Safari) are WebKit. Pictures in Ask (§26), the
     // assistant's files and markup editor (§28), the motion, stillness and top-line checks (§20.13, §20.16, §11.1),
     // Home's boxes fitting what is in them at every size (home-fit), Home's covers springing open (home-fan), and Get
-    // paid (§40.8). CI runs this project in its own job (ci.yml).
+    // paid (§40.8), and the phone running edge to edge under its status bar (phone-edge-to-edge, §11.1). CI runs this
+    // project in its own job (ci.yml).
     {
       name: "webkit",
       use: { ...devices["Desktop Safari"] },
-      testMatch: /(help-pictures|ask-assistant|ask-markup|nav-smooth|page-still|top-line|job-head|drop-video|home-fit|home-fan|getpaid|stories-switch-slide)\.spec\.ts/,
+      testMatch: /(help-pictures|ask-assistant|ask-markup|nav-smooth|page-still|top-line|job-head|drop-video|home-fit|home-fan|getpaid|stories-switch-slide|phone-edge-to-edge)\.spec\.ts/,
     },
     {
       name: "webkit-phone",

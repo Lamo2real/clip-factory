@@ -71,7 +71,20 @@ the traffic lights' band; nothing ever covers the traffic lights.
   `z-index: 45`, transparent, no border, rim or shadow. Pressing it moves the window; a double click zooms it.
 * **Phones** keep their own top bar under the pill strip (top bar at `--top-line + --todo-top`).
 * **Also on the token:** `html { scroll-padding-top }`, the skip link, the sign-in screen, the small question sheet's
-  scrim, the phone Ask sheet and the setup list's glass bar all clear `--top-safe`.
+  scrim, the phone Ask sheet and the setup list's glass bar all clear `--top-safe`; so do the markup editor, the
+  Post to TikTok sheet and Clips Funded's sheets.
+* **Edge to edge on a phone (owner request, 2026-11-23: "remove the entire green top bar").** `index.html` asks for
+  `apple-mobile-web-app-status-bar-style: black-translucent` with `viewport-fit=cover`, so an installed iPhone app has
+  no solid band at the top: each app's own backdrop (Clip Factory's `.backdrop`, Clips Funded's `.stories-app::before`,
+  both `position: fixed; inset: 0`) shows under the clock, the Dynamic Island and the signal. Nothing of a page sits
+  there: every column still starts on `--top-line`. `--status-bar-h` (`env(safe-area-inset-top)`, in `tokens.css`) is
+  the status bar alone; only the status-bar scrim is that tall (`.app::after`, `.stories-app::after`): black, held
+  under the clock to 75 % and gone at the bar's bottom, exactly as strong as the white clock needs for AA over the
+  look's top edge (`statusScrim` in `lib/background.ts` and `stories/look.ts`: 0 over the living backdrop, Ember,
+  Rose, Lagoon and dark colours, so nothing is drawn; about 0.5 over Cream or a picture, planned for white). The body
+  under the backdrop is the backdrop's own top edge (`#0f3d31`), and `theme-color` (Android's status bar) is its
+  average (`#13483C`). An installed app picks the new style up when it is closed and opened again (at worst, removed
+  and added to the Home Screen again). Tests: `test/edgeToEdge.test.ts`, `e2e/phone-edge-to-edge.spec.ts`.
 * **Tests:** `e2e/top-line.spec.ts` (Chromium and WebKit): the simulated macOS window at 1000 x 650, 1200 x 820 (the
   pill) and 1440 x 900 on `/`, `/jobs`, `/review`, `/library`, `/settings` and a settings branch puts every column
   within 1 px of the line (42 px), keeps the 80 x 28 traffic-light corner clear and checks the 28 px drag strip; a tab
