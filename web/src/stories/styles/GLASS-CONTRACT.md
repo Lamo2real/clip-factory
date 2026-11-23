@@ -100,13 +100,18 @@ Later files win at equal specificity, so a screen can place and size a figure, b
 | attribute | values | meaning |
 |---|---|---|
 | `data-look` | `window` · `picture` · `colours` | what is drawn behind the glass: the desktop through the window (See-through in the Mac or Windows app), the owner's picture, or the colours (also See-through in a browser or on a phone, and Picture with no picture yet) |
-| `data-strength` | `clear` · `frosted` | See-through's Glass strength (Frosted: a 0.30 frost, panels at 0.89) |
+| `data-strength` | `clear` · `frosted` | See-through's Glass strength (Frosted: a 0.30 frost, then the panels in the light's order, 0.96 / 0.84 / 0.77 / 0.72) |
 | `data-glass` | `liquid` · `simple` · `solid` | how glass is drawn on this device: the liquid rim (Chromium on a capable device), plain CSS light (WebKit, low power), or solid (reduced transparency) |
 
 Inline custom properties it sets: `--st-veil-page`, `--st-veil-card`, `--st-veil-tinted`, `--st-veil-hero`,
 `--st-veil-rail`, `--st-veil-bar`, `--st-veil-float`, `--st-veil-plate`, `--st-stage-c1`, `--st-stage-c2-rgb`,
 `--st-stage-c3-rgb`, `--st-picture`. In `window` while Stories is on screen it adds `html.see-through` (only when
-Clip Factory had not, and takes away only what it added). Screens style by these attributes only through the
+Clip Factory had not, and takes away only what it added). See-through and its Glass strength are Stories' own,
+never Clip Factory's Look or Glass strength: while Stories holds the window it marks `<html data-st-window>`, hides
+Clip Factory's own `.backdrop` (its colours, picture or Frosted frost; inline, on that element only) and puts the
+class back if Clip Factory's look takes it away meanwhile; Clip Factory on screen gets both back exactly as it left
+them (look.ts `holdWindowGlass`, `keepWindowGlass`; test/storiesSeeThroughOwn.test.tsx,
+e2e/stories-see-through-own.spec.ts). Screens style by these attributes only through the
 glass classes; if a screen needs a look-specific rule, select `.stories-app[data-look="picture"] .your-class`.
 
 ## Tokens (glass-tokens.css)
@@ -155,16 +160,19 @@ glass classes; if a screen needs a look-specific rule, select `.stories-app[data
 | old: `--st-sun`, `--st-sun-top`, `--st-sun-bottom`, `--st-sun-hover`, `--st-sun-deep`, `--st-ember`, `--st-sun-rgb`, `--st-ember-rgb` | | |
 
 ### 4. Veils (numbers 0..1 of the smoky tint; look.ts sets each look's)
-| token | Ember | over a white desktop or photo (measured, worst contrast) |
+| token | Ember | over a white desktop or photo: the measured floor (worst contrast) · drawn Clear · drawn Frosted |
 |---|---|---|
-| `--st-veil-page` | 0 | 0 (Frosted: 0.30 frost) |
-| `--st-veil-card` | 0.58 | 0.74 (5.34:1); Frosted 0.89 (9.91:1) |
-| `--st-veil-tinted` | 0.66 | 0.80 with the colour cut to `--st-tint-cut` 0.12 (5.12:1) |
-| `--st-veil-hero` | 0.60 | 0.76 (5.14:1), glare only in a top band with no words |
-| `--st-veil-rail` | 0.62 | 0.78 (6.47:1) |
-| `--st-veil-bar` | 0.72 | 0.78 |
-| `--st-veil-float` | 0.68 | 0.74 (with its level-5 light it covers 0.88 over the colours, 0.94 over a picture or the desktop: never thinner than the rail) |
-| `--st-veil-plate` | 0 | 0.78 |
+| `--st-veil-page` | 0 (the owner's own colours: what keeps loose words, and loose controls at 4.6:1, readable) | 0 · 0 · 0.30 frost |
+| `--st-veil-card` | 0.58 | 0.74 (5.34:1) · 0.84 · 0.84 |
+| `--st-veil-tinted` | 0.66 | 0.80 with the colour cut to `--st-tint-cut` 0.12 (5.12:1) · 0.80 · 0.82 |
+| `--st-veil-hero` | 0.60 | 0.76 (5.14:1), glare only in a top band with no words · 0.79 · 0.77 (a card inside a card uses it too) |
+| `--st-veil-rail` | 0.62 | 0.78 (6.47:1) · 0.90 · 0.96 |
+| `--st-veil-bar` | 0.72 | 0.78 · 0.79 · 0.77 |
+| `--st-veil-float` | 0.72 (its controls' second lines keep 4.5:1 under the sheet's brighter top) | 0.74 · 0.74 · 0.72 |
+| `--st-veil-plate` | 0 | 0.78 · 0.90 · 0.96 |
+
+Over a picture or the desktop the drawn veils (look.ts `WINDOW_CLEAR`, `WINDOW_FROSTED`) are never thinner than the
+measured floors (`MEASURED`; Frosted's frost and glass together), and keep the light's order over white (5a).
 | `--st-veil-solid` | 0.96 | reduced transparency (look.ts puts it inline on every glass, page 0.9 over a desktop or picture) |
 | `--st-veil-lens-rim` | 0.4 | a liquid hero's own tint: its filter lays the rest of `--st-veil-hero` under the words, so only the rim band (inside the padding, no words) is this thin |
 
@@ -201,7 +209,7 @@ glass. One scale, defined once in glass-tokens.css (5a) and held to look.ts (`EL
 | 2 | cards: `.st-glass`, an empty state | 0.045 / +0.04 | 0.20 | 0.42 | `--st-tint-card`, `--st-sheen`, `--st-glow-2` |
 | 3 | raised: the hero (and a liquid hero), a tinted tile (needs you, done, a note: its colour asks for the owner), a card inside a card, the bars (`.st-glass--bar`: the phone tab bar, the composer) | 0.07 / +0.05 | 0.28 | 0.50 | `--st-tint-hero`, `--st-tint-lens`, `--st-tint-tinted`, `--st-tint-raised`, `--st-tint-bar`, `--st-sheen-hero`, `--st-sheen-raised`, `--st-glow-3` |
 | 4 | controls: `.st-btn`, `.st-pill`, `.st-round-btn`, `.st-glass--control`, rows and tiles | its fill is its light, over the surface it sits on (`--st-fill-control`, the cream lift inside glass); top extra +0.015 (`--st-light-4`) | 0.32 | 0.52 | `--st-light-4`, `--st-sheen-control`, `--st-glow-4` |
-| 5 | menus, popovers, sheets, toasts: `.st-glass--float` (the More sheet, the studio's and the chat's sheets, Undo) | 0.20 / +0.03 | 0.40 | 0.58 | `--st-tint-float`, `--st-sheen-float`, `--st-glow-5` |
+| 5 | menus, popovers, sheets, toasts: `.st-glass--float` (the More sheet, the studio's and the chat's sheets, Undo) | 0.20 / +0.06 (its top brighter than any control under it, on a hero too) | 0.40 | 0.58 | `--st-tint-float`, `--st-sheen-float`, `--st-glow-5` |
 
 - Solids (the cream card, the active pill, the steppers, the action, the status fills) are light itself, outside the
   scale. Wells (fields, tracks, the toggle's off track) are carved in: a step down from the surface they are in.
@@ -221,9 +229,15 @@ glass. One scale, defined once in glass-tokens.css (5a) and held to look.ts (`EL
   owner's own), a picture, See-through Clear and Frosted, and solid glass. A control is brighter than the surface it
   sits on; a control on a card is brighter than every raised surface but a tinted tile (whose tone is colour too), and
   a sheet brighter than it. Over a bright glow, a white or a busy picture or desktop, smoky glass is darker than what is
-  behind it (that is what keeps its words readable): there each surface stays at its measured veil, and every word
-  keeps 4.5:1 at its brightest part (its top), checked over every look's lightest pixels and, for bars and sheets, over
-  a cream card or the action under them.
+  behind it (that is what keeps its words readable): there each surface stays at or above its measured veil, and every
+  word keeps 4.5:1 at its brightest part (its top), checked over every look's lightest pixels and, for bars and sheets,
+  over a cream card or the action under them.
+- **Over a light backdrop** (the owner's rule, Clip Factory's own, 23 Nov): the page-to-panel step may go darker where
+  AA needs the veil, but from the panel upward every level is at least `LIGHT_STEP` (+0.015 relative luminance)
+  brighter than the one under it over a white picture or desktop, and brighter over mid grey: panels 0.90, cards 0.84,
+  raised surfaces 0.79, sheets 0.74 in Clear (about +0.017 a step), and a control a step up from the surface it sits
+  on. Over white the light takes its share from what is behind, so there the order is the veils' alone: each level's
+  veil is thinner than the one under it (test/storiesLight.test.ts and e2e/stories-light.spec.ts hold it).
 - **For builders.** A new surface uses its level's tint (`background: var(--st-tint-card)` …) and sheen; a surface
   that writes its fill out lays `var(--st-light-N)` in front and divides its veil by `(1 - var(--st-elev-N))` (the
   test reads every screen file for it). Gradients and inset shadows only, never another blur layer (the WebView2

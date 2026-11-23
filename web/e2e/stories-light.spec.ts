@@ -6,8 +6,10 @@ import { asMacWindow } from "./desktopWindow.ts";
 // read from the page as the browser computed it (every background layer, top and bottom) and laid over the same
 // backdrop pixel (the espresso, the stage's own colour, and black): each level is brighter than the one under it,
 // at its top and at its bottom; every surface is lighter at the top than at the bottom; and every surface has a bright
-// top rim, brighter on higher levels. In every look: Colours › Ember, a picture, See-through Clear and Frosted in the
-// desktop app, and solid glass (reduced transparency). test/storiesLight.test.ts proves the same from the style
+// top rim, brighter on higher levels. Over a picture or the desktop also over white and mid grey: from the page panel
+// upward each level at least 0.015 brighter over white (the owner's rule). In every look: Colours › Ember, a picture,
+// See-through Clear and Frosted in the desktop app, and solid glass (reduced transparency). test/storiesLight.test.ts
+// proves the same from the style
 // sheets alone, without a browser.
 
 type Rgb = [number, number, number];
@@ -16,6 +18,8 @@ type Surface = { level: number; what: string; layers: Layer[]; parent: Layer[] |
 
 const ESPRESSO: Rgb = [28, 19, 14];
 const BLACK: Rgb = [0, 0, 0];
+const WHITE: Rgb = [255, 255, 255];
+const GREY: Rgb = [128, 128, 128];
 
 const LOOKS: { name: string; more: Record<string, string>; picture?: boolean; desktop?: boolean }[] = [
   { name: "Colours › Ember", more: {} },
@@ -178,6 +182,28 @@ test.describe("the logic of light: each level is brighter than the one under it"
             for (const b of below) if (!(here > b.l)) problems.push(`over ${under.join(" ")}, at the ${at}: ${s.what} (level ${s.level}, ${here.toFixed(4)}) is not brighter than ${b.what} (${b.l.toFixed(4)})`);
           }
         }
+      // Over a light backdrop (a picture or the desktop can be white or mid grey: the owner's rule, Clip Factory's own)
+      // the page-to-panel step may go darker where AA needs the veil, but from the panel upward every level is at least
+      // 0.015 brighter in relative luminance than the one under it over white (brighter over mid grey), and a control
+      // a step up from the card it sits on.
+      if (look.picture || look.desktop)
+        for (const [name, under, step] of [
+          ["white", WHITE, 0.015],
+          ["mid grey", GREY, 1e-4],
+        ] as const)
+          for (const at of ["top", "bottom"] as const)
+            for (const s of found) {
+              const here = lum(seen(s, under, at));
+              const below =
+                s.level === 4
+                  ? [{ what: "the card it sits on", l: lum(over(s.parent!, under, at)) }]
+                  : s.level === 5
+                    ? found.filter((o) => o.level === 3 && !o.what.startsWith("a tinted")).map((o) => ({ what: o.what, l: lum(seen(o, under, at)) }))
+                    : s.level >= 2
+                      ? found.filter((o) => o.level === s.level - 1).map((o) => ({ what: o.what, l: lum(seen(o, under, at)) }))
+                      : [];
+              for (const b of below) if (!(here >= b.l + step)) problems.push(`over ${name}, at the ${at}: ${s.what} (level ${s.level}, ${here.toFixed(4)}) is not ${step} above ${b.what} (${b.l.toFixed(4)})`);
+            }
       for (const s of found) {
         // lighter at the top than at the bottom (its own light), over the espresso
         const top = lum(seen(s, ESPRESSO, "top"));

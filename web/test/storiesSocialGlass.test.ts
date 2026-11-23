@@ -145,8 +145,11 @@ describe("every word on the social screens' boxes reaches 4.5:1 over all three b
   it("the looks are the ones the contract measured", () => {
     expect(looks[1]!.v.card).toBeGreaterThanOrEqual(0.74);
     expect(looks[2]!.v.card).toBeGreaterThanOrEqual(0.74);
-    expect(looks[3]!.v.card).toBeGreaterThanOrEqual(0.89);
+    // Frosted: the 0.30 frost, then the panels in the light's order (look.ts WINDOW_FROSTED); the frost and a card
+    // together still cover more than Clear's measured card.
+    expect(looks[3]!.v.card).toBeGreaterThanOrEqual(0.84);
     expect(looks[3]!.v.page).toBeGreaterThanOrEqual(0.3);
+    expect(1 - (1 - looks[3]!.v.page) * (1 - looks[3]!.v.card)).toBeGreaterThanOrEqual(0.88);
   });
 
   for (const look of looks)

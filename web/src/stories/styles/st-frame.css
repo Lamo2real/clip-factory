@@ -401,6 +401,14 @@
        margin. So the list of pages always stops above them. */
     height: max(0px, calc(var(--ws-dock-room, 0px) - 36px));
   }
+  /* A short window: the rows are a little lower (40 px, a computer's pointer target), so all ten pages fit above the
+     switch from 768 px high; below that the list scrolls and the chosen page is scrolled into view (StoriesApp). */
+  @media (max-height: 820px) {
+    .st-rail .st-rail__item {
+      min-height: 40px;
+      padding-block: 4px;
+    }
+  }
   /* A folded sidebar in a short window has the switch beside its fold button, over the brand's name here: the shell
      says so with --ws-dock-name (hidden). */
   .st-rail .st-brand__name {

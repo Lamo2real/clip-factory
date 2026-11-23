@@ -210,7 +210,9 @@ describe("the background is Stories' own", () => {
       expect(el.dataset.look).toBe("window");
       expect(el.dataset.strength).toBe("frosted");
       expect(el.style.getPropertyValue("--st-veil-page")).toBe("0.3");
-      expect(el.style.getPropertyValue("--st-veil-card")).toBe("0.89");
+      // the panels in the light's order over the frost (look.ts WINDOW_FROSTED: a card 0.84, under its 0.3 frost)
+      expect(el.style.getPropertyValue("--st-veil-card")).toBe("0.84");
+      expect(el.style.getPropertyValue("--st-veil-rail")).toBe("0.96");
       expect(document.documentElement.classList.contains("see-through")).toBe(true);
       render(<App active={false} />);
       expect(document.documentElement.classList.contains("see-through")).toBe(false);

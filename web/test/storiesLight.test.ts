@@ -7,6 +7,9 @@
 //   (the stage's own colour) and black, in every look: the colours (Ember, Rose, Lagoon, the owner's own),
 //   a picture, See-through Clear and Frosted, and solid glass (reduced transparency); a control is brighter than the
 //   surface it sits on;
+// - over a light backdrop (a white or mid-grey picture or desktop) the light keeps its order (the owner's rule, Clip
+//   Factory's own): from the page panel upward every level is at least LIGHT_STEP (+0.015) brighter than the one under
+//   it over white, and brighter over mid grey; only the page-to-panel step may go darker, where AA needs the veil;
 // - every surface is lighter at its top, and has a bright top rim, brighter on higher levels;
 // - every word keeps 4.5:1 at the brightest part of each surface (its top) and at its bottom, over the lightest pixel
 //   each look can show (the stage's lights, a white or busy picture or desktop, a cream card under a bar or a sheet);
@@ -23,6 +26,7 @@ import {
   FROSTED,
   INKS,
   KIND_LEVEL,
+  LIGHT_STEP,
   MEASURED,
   PRESETS,
   SOLID_PAGE,
@@ -169,9 +173,10 @@ const LOOKS: Look[] = [
   ...PRESETS.map((p) => ({ name: `Colours › ${p.name}`, kind: "colours" as const, veils: veilsOfColours(p.colours), colours: p.colours })),
   { name: "Colours › the owner's own (white)", kind: "colours", veils: veilsOfColours(["#ffffff"]), colours: ["#ffffff"] },
   { name: "Colours › the owner's own (bright)", kind: "colours", veils: veilsOfColours(["#fff000", "#00ffff", "#ff00ff"]), colours: ["#fff000", "#00ffff", "#ff00ff"] },
-  { name: "a picture", kind: "picture", veils: { ...MEASURED } },
-  { name: "See-through, Clear", kind: "window", veils: { ...MEASURED } },
-  { name: "See-through, Frosted", kind: "window", veils: { ...FROSTED } },
+  // (as veilsFor draws them: each glass at or above its measured floor, MEASURED and FROSTED, in the light's order)
+  { name: "a picture", kind: "picture", veils: veilsFor({ mode: "picture", strength: "clear", colours: [...EMBER], picture: "data:image/png;base64," }, "none") },
+  { name: "See-through, Clear", kind: "window", veils: veilsFor({ mode: "see-through", strength: "clear", colours: [...EMBER], picture: null }, "liquid") },
+  { name: "See-through, Frosted", kind: "window", veils: veilsFor({ mode: "see-through", strength: "frosted", colours: [...EMBER], picture: null }, "liquid") },
   { name: "solid glass over the colours", kind: "colours", veils: solidVeils(0), solid: true, colours: EMBER },
   { name: "solid glass over a picture or the desktop", kind: "picture", veils: solidVeils(SOLID_PAGE), solid: true },
 ];
@@ -287,6 +292,13 @@ describe("each level is brighter than the one under it", () => {
             // (a tinted tile's tone is colour as well as light: a control on one is a step above that tile, below)
             for (const b of byLevel(3).filter((x) => !x.name.startsWith("a tinted"))) if (!(onCard > L(b))) problems.push(`${at} over ${under}: ${c.name} on a card (${onCard.toFixed(4)}) ≤ ${b.name} (${L(b).toFixed(4)})`);
             for (const s of byLevel(5)) if (!(L(s) > onCard)) problems.push(`${at} over ${under}: ${s.name} (${L(s).toFixed(4)}) ≤ ${c.name} on a card (${onCard.toFixed(4)})`);
+            // the top layer's top is brighter than the top of any control under it, on a hero too (the More sheet over
+            // the hero's buttons)
+            if (at === "top")
+              for (const h of byLevel(3).filter((x) => !x.name.startsWith("a tinted"))) {
+                const onRaised = luminance(over(c.ls, h.at(under, at), at));
+                for (const s of byLevel(5)) if (!(L(s) > onRaised)) problems.push(`top over ${under}: ${s.name} (${L(s).toFixed(4)}) ≤ ${c.name} on ${h.name} (${onRaised.toFixed(4)})`);
+              }
             // and on every surface it sits on, a step up from it
             for (const s of surfaces) {
               const on = luminance(over(c.ls, s.at(under, at), at));
@@ -325,7 +337,7 @@ describe("each level is brighter than the one under it", () => {
     // what is behind is never white there (its words are checked below, at 9:1 and more).
     for (const look of LOOKS.filter((l) => l.kind !== "colours" && !l.solid && l.veils.page === 0))
       for (const s of surfacesOf(look).filter((x) => !x.name.startsWith("a tinted"))) {
-        const key = ({ "the rail": "rail", "a card": "card", "a hero": "hero", "a card inside a card": "card", "a bar": "bar", "a sheet": "float", "a plate": "plate", "a liquid hero (under its words)": "hero" } as const)[s.name as "a card"];
+        const key = ({ "the rail": "rail", "a card": "card", "a hero": "hero", "a card inside a card": "hero", "a bar": "bar", "a sheet": "float", "a plate": "plate", "a liquid hero (under its words)": "hero" } as const)[s.name as "a card"];
         const plain = mix(VEIL, look.veils.page ? mix(VEIL, WHITE, look.veils.page) : WHITE, look.veils[key]);
         const lv = KIND_LEVEL[key];
         for (const at of ["top", "bottom"] as const) {
@@ -336,6 +348,51 @@ describe("each level is brighter than the one under it", () => {
         }
       }
   });
+});
+
+describe("over a light backdrop the light keeps its order (a picture or the desktop)", () => {
+  const GREY: Rgb = [128, 128, 128];
+  it("the drawn veils are never thinner than the measured floors", () => {
+    for (const look of LOOKS.filter((l) => l.kind !== "colours" && !l.solid)) {
+      const floor = look.veils.page ? FROSTED : MEASURED;
+      // Frosted's floor is its whole cover: the frost and the glass together (1 - (1 - page)(1 - veil)).
+      const cover = (v: Veils, k: keyof Veils) => 1 - (1 - v.page) * (1 - v[k]);
+      for (const k of ["card", "tinted", "hero", "rail", "bar", "float", "plate"] as const)
+        expect(cover(look.veils, k) + 1e-9, `${look.name}: ${k}`).toBeGreaterThanOrEqual(look.veils.page ? MEASURED[k] : floor[k]);
+    }
+  });
+  for (const look of LOOKS.filter((l) => l.kind !== "colours" && !l.solid))
+    it(look.name, () => {
+      const surfaces = surfacesOf(look);
+      const problems: string[] = [];
+      for (const [name, under, step] of [
+        ["white", WHITE, LIGHT_STEP],
+        ["mid grey", GREY, 1e-4],
+      ] as const)
+        for (const at of ["top", "bottom"] as const) {
+          const L = (s: Surface) => luminance(s.at(under, at));
+          const byLevel = (n: number) => surfaces.filter((s) => s.level === n);
+          // (a tinted tile's tone is colour as well as light: it is a step up from the cards, and the sheets are a
+          // step up from every other raised surface)
+          const plain3 = byLevel(3).filter((x) => !x.name.startsWith("a tinted"));
+          const steps: [Surface[], Surface[]][] = [
+            [byLevel(2), byLevel(1)],
+            [byLevel(3), byLevel(2)],
+            [byLevel(5), plain3],
+          ];
+          for (const [ups, downs] of steps)
+            for (const s of ups)
+              for (const b of downs)
+                if (!(L(s) >= L(b) + step)) problems.push(`${at} over ${name}: ${s.name} (${L(s).toFixed(4)}) is not ${step} above ${b.name} (${L(b).toFixed(4)})`);
+          // a control is a step up from every surface it sits on
+          for (const c of controlLayers(look, true))
+            for (const s of surfaces) {
+              const on = luminance(over(c.ls, s.at(under, at), at));
+              if (!(on >= L(s) + step)) problems.push(`${at} over ${name}: ${c.name} on ${s.name} (${on.toFixed(4)}) is not ${step} above it (${L(s).toFixed(4)})`);
+            }
+        }
+      expect(problems, problems.join("\n")).toEqual([]);
+    });
 });
 
 describe("every word stays readable at the brightest part of every surface", () => {
