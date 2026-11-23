@@ -271,18 +271,39 @@ def test_instagram_throttle_is_never_retried() -> None:
 # --- Facebook -----------------------------------------------------------------------------------------------------
 
 
+FB_INSIGHTS = (
+    "?fields=video_insights.metric(blue_reels_play_count,fb_reels_total_plays,fb_reels_replay_count,"
+    "post_video_avg_time_watched,post_video_view_time,post_video_followers,post_video_likes_by_reaction_type,"
+    "post_video_social_actions)"
+)
+FB_REACH = "?fields=insights.metric(post_total_media_view_unique)"
+# What Graph v26.0+ answers to the old ``?ids=`` batch form (checked against the live API, signed out, 23 Nov).
+IDS_DEPRECATED = {
+    "error": {
+        "message": "The ids query parameter is deprecated in v26.0+.",
+        "type": "FacebookApiException",
+        "code": 100,
+    }
+}
+
+
+def stats_logs(capsys: pytest.CaptureFixture[str]) -> list[dict[str, Any]]:
+    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith("{")]
+    return [line for line in lines if str(line.get("event", "")).startswith("stats.")]
+
+
 def test_facebook_requests_and_mapping() -> None:
     a = post("facebook", "1234567890123456", platformPostId="111222333_444555666")
     http = FakeHttp((200, "facebook_video_insights"), (200, "facebook_post_views"))
     batch = FacebookAdapter(tokens=tokens).fetch_stats([a], ACCOUNT, now=NOW, want_insights=False, http=http)
     assert http.urls == [
-        "https://graph.facebook.com/v27.0/?ids=1234567890123456&fields=video_insights.metric(blue_reels_play_count,"
-        "fb_reels_total_plays,fb_reels_replay_count,post_video_avg_time_watched,post_video_view_time,"
-        "post_video_followers,post_video_likes_by_reaction_type,post_video_social_actions)",
-        "https://graph.facebook.com/v27.0/?ids=111222333_444555666&fields=insights.metric(post_total_media_view_unique)",
+        f"https://graph.facebook.com/v27.0/1234567890123456{FB_INSIGHTS}",
+        f"https://graph.facebook.com/v27.0/111222333_444555666{FB_REACH}",
     ]
+    assert all(c.headers == {"Authorization": "Bearer token-facebook"} for c in http.calls)
     for banned in ("post_impressions_unique", "total_video_impressions", "total_video_views_unique", "impressions"):
         assert all(banned not in u for u in http.urls)
+    assert batch.requests == 2
     assert batch.results[a["postId"]] == {"comments": None, "shares": None}
     assert batch.insights[a["postId"]] == {
         "views": 6900,
@@ -300,6 +321,73 @@ def test_facebook_requests_and_mapping() -> None:
     }
 
 
+def test_facebook_never_uses_the_ids_lookup_graph_v26_removed() -> None:
+    """Graph v26.0+ refuses every ``?ids=`` request (error 100), so each Reel and each post is its own node read."""
+    reels = [post("facebook", f"12345678901234{n}", platformPostId=f"111222333_44455566{n}") for n in range(3)]
+    http = FakeHttp(*[(200, name) for _ in reels for name in ("facebook_video_insights", "facebook_post_views")])
+    batch = FacebookAdapter(tokens=tokens).fetch_stats(reels, ACCOUNT, now=NOW, want_insights=False, http=http)
+    assert len(http.calls) == 6
+    for url in http.urls:
+        assert "ids=" not in url
+        assert not urlsplit(url).path.endswith("/v27.0/")  # never the root node
+    assert [urlsplit(u).path for u in http.urls] == [
+        p for n in range(3) for p in (f"/v27.0/12345678901234{n}", f"/v27.0/111222333_44455566{n}")
+    ]
+    assert {r["postId"] for r in reels} == set(batch.insights)
+    assert all(batch.insights[r["postId"]]["views"] == 6900 for r in reels)
+    assert batch.errors == {}
+    assert batch.requests == 6
+
+
+def test_facebook_one_failing_reel_does_not_block_the_rest(capsys: pytest.CaptureFixture[str]) -> None:
+    gone_reel = post("facebook", "1111111111111111", platformPostId="111222333_000000001")
+    broken = post("facebook", "2222222222222222", platformPostId="111222333_000000002")
+    fine = post("facebook", "1234567890123456")  # no post id: no reach request
+    gone = {
+        "error": {
+            "message": "Unsupported get request. Object with ID '1111111111111111' does not exist, cannot be loaded "
+            "due to missing permissions, or does not support this operation.",
+            "type": "GraphMethodException",
+            "code": 100,
+            "error_subcode": 33,
+        }
+    }
+    http = FakeHttp((400, gone), (400, IDS_DEPRECATED), (200, "facebook_video_insights"))
+    batch = FacebookAdapter(tokens=tokens).fetch_stats(
+        [gone_reel, broken, fine], ACCOUNT, now=NOW, want_insights=False, http=http
+    )
+    assert len(http.calls) == 3
+    assert batch.errors == {
+        gone_reel["postId"]: "Facebook could not find this Reel. It may be deleted.",
+        broken["postId"]: "Facebook did not answer. We will try again soon.",
+    }
+    assert batch.insights[fine["postId"]]["views"] == 6900
+    assert batch.meta.error_code == "100"  # not a throttle and not a dead token: nothing is blocked
+    lines = stats_logs(capsys)
+    assert [(x["level"], x["event"], x["platform"], x["code"]) for x in lines] == [
+        ("warning", "stats.read_failed", "facebook", "100/33"),
+        ("warning", "stats.read_failed", "facebook", "100"),
+    ]
+    assert lines[1]["error"] == "The ids query parameter is deprecated in v26.0+."
+    assert "<id>" in lines[0]["error"]
+    text = json.dumps(lines)
+    for secret in ("1111111111111111", "2222222222222222", "token-facebook", "111222333"):
+        assert secret not in text
+
+
+@pytest.mark.parametrize("code", ["80001", "190"])
+def test_facebook_throttle_or_dead_token_stops_the_batch(code: str) -> None:
+    reels = [post("facebook", f"12345678901234{n}") for n in range(3)]
+    answer = {"error": {"message": "Stop", "code": int(code)}}
+    http = FakeHttp((200, "facebook_video_insights"), (400, answer))
+    batch = FacebookAdapter(tokens=tokens).fetch_stats(reels, ACCOUNT, now=NOW, want_insights=False, http=http)
+    assert len(http.calls) == 2  # the third Reel is never asked for
+    assert batch.meta.error_code == code
+    assert batch.insights[reels[0]["postId"]]["views"] == 6900
+    assert batch.errors[reels[1]["postId"]] == "Facebook did not answer. We will try again soon."
+    assert batch.errors[reels[2]["postId"]] == "Facebook is busy. We will try again later."
+
+
 def test_facebook_reach_is_guarded() -> None:
     a = post("facebook", "1234567890123456", platformPostId="111222333_444555666")
     gone = {"error": {"message": "(#100) The value must be a valid insights metric", "code": 100}}
@@ -308,6 +396,18 @@ def test_facebook_reach_is_guarded() -> None:
     assert "reachUnique" not in batch.insights[a["postId"]]["extra"]
     assert batch.insights[a["postId"]]["views"] == 6900
     assert batch.meta.error_code is None  # a reach error never blocks the platform
+
+
+def test_facebook_reach_throttle_stops_the_batch() -> None:
+    a = post("facebook", "1234567890123456", platformPostId="111222333_444555666")
+    b = post("facebook", "1234567890123457", platformPostId="111222333_444555667")
+    throttled = {"error": {"message": "Too many calls", "code": 80001}}
+    http = FakeHttp((200, "facebook_video_insights"), (400, throttled))
+    batch = FacebookAdapter(tokens=tokens).fetch_stats([a, b], ACCOUNT, now=NOW, want_insights=False, http=http)
+    assert len(http.calls) == 2
+    assert batch.meta.error_code == "80001"
+    assert batch.insights[a["postId"]]["views"] == 6900
+    assert batch.errors[b["postId"]] == "Facebook is busy. We will try again later."
 
 
 # --- X ------------------------------------------------------------------------------------------------------------

@@ -711,7 +711,7 @@ sequenceDiagram
   participant W as Web app
   E->>S: scheduled event, every 15 min
   S->>D: Query gsi2: gsi2pk = STATS and gsi2sk <= "{now}#~" (up to 2,000 posts)
-  S->>S: group by platform in STATS_ORDER, chunk by idsPerRequest (50, 20, 50, 50, 100)
+  S->>S: group by platform in STATS_ORDER, chunk by idsPerRequest (50, 20, 50, 10, 100)
   loop each platform not blocked, each chunk, until 240 s
     S->>D: reserve: one conditional UpdateItem on RATE#{platform}
     alt budget left
