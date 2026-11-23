@@ -89,7 +89,7 @@ test.describe("Upload to many places", () => {
     await card.locator(".upload-chip", { hasText: "TikTok" }).click();
     await expect(card.locator('[data-place="instagram"]')).toHaveCount(0);
     await card.getByRole("button", { name: UPLOAD }).click();
-    await expect(page.getByText(/longer than its platform allows/)).toHaveCount(0);
+    await expect(page.getByText(/caption is too long/)).toHaveCount(0);
     await expect(page.getByText("Uploading to 2 places!")).toBeVisible();
   });
 

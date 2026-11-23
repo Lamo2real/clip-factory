@@ -77,7 +77,7 @@ export function StepCard({
             <div className="gstep__actions">
               {step.open ? (
                 <a
-                  className={`btn btn--${primary ? "primary" : "glass"} btn--lg gstep__open`}
+                  className={`btn btn--${primary ? "primary" : "action"} btn--lg gstep__open`}
                   href={step.open.url}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -106,8 +106,7 @@ export function StepCard({
           {step.copy?.length ? (
             <div className="gstep__copies">
               {step.copy.map((c) => (
-                // Several to copy: quiet chips, so the step keeps one strong button.
-                <CopyChip key={c.label} label={c.label} value={copyValue(c.value)} quiet={step.copy!.length > 1} />
+                <CopyChip key={c.label} label={c.label} value={copyValue(c.value)} />
               ))}
             </div>
           ) : null}

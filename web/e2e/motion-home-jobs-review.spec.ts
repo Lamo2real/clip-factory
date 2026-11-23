@@ -165,7 +165,7 @@ test.describe("motion: Review (APPLY a)", () => {
     const phases = (await recordAct(keep, 200)).join(" ");
     expect(phases).toContain("is-fail");
     expect(phases).not.toContain("is-play");
-    await expect(page.getByText(/longer than its platform allows/)).toBeVisible();
+    await expect(page.getByText(/Your X caption is too long\. Make it shorter/)).toBeVisible();
   });
 
   test("an Upload that does not finish shakes the Try again glyph", async ({ page }) => {
