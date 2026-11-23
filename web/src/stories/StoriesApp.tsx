@@ -14,7 +14,7 @@
 import "./styles/stories.css";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ApiError } from "../api/errors.ts";
-import { appSwitched, setStoriesWorkspaceShown, whenAppSlidesIn } from "../app/shell.ts";
+import { appSwitched, setStoriesWorkspaceShown, setSwitchBare, whenAppSlidesIn } from "../app/shell.ts";
 import { TopBarSwitch } from "../app/WorkspaceDock.tsx";
 import { useToast } from "../components/Toasts.tsx";
 import { Glide } from "../components/Glide.tsx";
@@ -516,13 +516,12 @@ function StoriesShell({ page }: { page: StoriesPage }) {
   const on = (item: NavItem) => item.match.includes(page.name);
   const moreOn = MORE.some(on);
   const solo = alone && page.name === "setup";
-  // On a computer the shell's switch is drawn over the rail; on its own Setup there is none, so the page says so while
-  // it is on screen and the switch carries a plate of its own there (glide.css html[data-ws-bare]).
+  // On a computer the shell's switch is drawn over the rail; on its own Setup there is none, so the page tells the shell
+  // while it is on screen, and the shell's switch carries a plate of its own there (app/shell.ts setSwitchBare).
   useLayoutEffect(() => {
     if (!active || !solo) return;
-    const html = document.documentElement;
-    html.setAttribute("data-ws-bare", "");
-    return () => html.removeAttribute("data-ws-bare");
+    setSwitchBare(true);
+    return () => setSwitchBare(false);
   }, [active, solo]);
 
   // A short window: the rail's list of pages stops above the shell's switch and scrolls; the chosen page is always

@@ -113,6 +113,17 @@ export function useStoriesWorkspaceShown(): string | null {
   );
 }
 
+// ---------- The switch with no rail under it (Clips Funded's own Setup, on a computer) ----------
+
+/**
+ * StoriesApp says its own Setup is on screen, with no rail under the shell's switch (on a computer the switch is drawn
+ * over the rail). The shell marks the page (html[data-ws-bare]) and the switch carries a plate of its own there
+ * (glide.css): <html> is the shell's, so Clips Funded never writes or watches it itself (test/shellPageGlass).
+ */
+export function setSwitchBare(on: boolean): void {
+  if (typeof document !== "undefined") document.documentElement.toggleAttribute("data-ws-bare", on);
+}
+
 // ---------- Clip Factory's search, kept while it is hidden (§45.35 D18) ----------
 
 /** The search of Clip Factory's kept route, given by the shell around Clip Factory's pane (null: no pane around). */
