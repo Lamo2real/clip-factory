@@ -758,6 +758,20 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
     expect(nested).toContain("box-shadow: var(--glass-shadow-raise);");
   });
 
+  it("the shell's Live chip, while Clip Factory is on screen, is raised on the sidebar exactly as the sidebar's own chip", () => {
+    // Funded Clips switched on: the shell draws the Live chip over Clip Factory's sidebar, where the sidebar's own was
+    // (app/WorkspaceDock.tsx). Its rule has nested glass's very declarations, as light, right after it (§45.19).
+    const nested = ":where(.glass) .glass";
+    const dock = ':where([data-app-pane="clips"]:not([hidden]) ~ .ws-dock > .ws-dock__live) > .glass';
+    expect(block(glass, dock), "the dock's chip has a rule of its own").not.toBe("");
+    expect(block(glass, dock)).toBe(block(glass, nested));
+    const at = (selector: string) => glass.indexOf(`\n${selector} {`);
+    expect(at(nested)).toBeGreaterThan(0);
+    expect(glass.slice(at(nested) + 1, at(dock)).trim(), "right after nested glass").toBe(`${nested} {${block(glass, nested)}}`);
+    // Only while Clip Factory is on screen: no other rule of glass.css reaches the dock's chip.
+    expect(glass.match(/\.ws-dock__live/g)).toHaveLength(1);
+  });
+
   it("loose words get an E1 plate in every look, and glass.css leaves buttons to components.css", () => {
     expect(glass).toContain("html:is(.see-through, [data-backdrop])");
     expect(glass).not.toContain('[data-backdrop="frosted"]');
