@@ -347,19 +347,19 @@ run "lamo_stories_is_wired" {
     condition = (module.stories_agent.runtime_name == "cf_prod_story_agent" && module.agent.runtime_name == "cf_prod_clip_agent" &&
       output.stories_agent_runtime_arn == "arn:aws:bedrock-agentcore:eu-north-1:123456789012:runtime/cf_prod_story_agent-AbCdEf1234" &&
     module.stories_agent.log_group_name == "/aws/bedrock-agentcore/runtimes/cf_prod_story_agent-AbCdEf1234-DEFAULT")
-    error_message = "Lamo Stories has its own runtime, cf_prod_story_agent, beside Clip Factory's cf_prod_clip_agent."
+    error_message = "Funded Clips has its own runtime, cf_prod_story_agent, beside Clip Factory's cf_prod_clip_agent."
   }
 
   assert {
     condition = (output.stories_agent_image_tag == "stories-agent-test" && output.stories_agent_image_tag != var.agent_image_tag &&
     output.stories_ecr_repository_url == "123456789012.dkr.ecr.eu-north-1.amazonaws.com/cf-prod-stories-agent")
-    error_message = "deploy.yml reads stories_agent_image_tag (the tag Lamo Stories' runtime runs) before the plan; it is never Clip Factory's tag."
+    error_message = "deploy.yml reads stories_agent_image_tag (the tag Funded Clips' runtime runs) before the plan; it is never Clip Factory's tag."
   }
 
   assert {
     condition = (output.stories_api_function_name == "cf-prod-stories-api" && module.api.function_names == { api = "cf-prod-api" } &&
     module.stories_api.function_names == { stories-api = "cf-prod-stories-api" })
-    error_message = "Lamo Stories has its own API Lambda, cf-prod-stories-api; cf-prod-api stays the only function of module.api."
+    error_message = "Funded Clips has its own API Lambda, cf-prod-stories-api; cf-prod-api stays the only function of module.api."
   }
 
   assert {
@@ -373,7 +373,7 @@ run "lamo_stories_is_wired" {
       "ANY /v1/workspaces", "ANY /v1/workspaces/{proxy+}", "OPTIONS /v1/workspaces", "OPTIONS /v1/workspaces/{proxy+}",
       "GET /v1/stories-oauth/{platform}/callback",
     ])
-    error_message = "The HTTP API gets Lamo Stories' five routes (§45.15)."
+    error_message = "The HTTP API gets Funded Clips' five routes (§45.15)."
   }
 
   assert {
@@ -399,7 +399,7 @@ run "lamo_stories_is_wired" {
       local.workspace_secrets_arn == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/workspaces/*" &&
       local.workspace_token_secrets_arn == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/workspaces/*/token*" &&
     local.workspace_provider_secrets_arn == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/workspaces/*/providers/*")
-    error_message = "Lamo Stories' secrets live under cf-prod/workspaces/ (§45.13.1)."
+    error_message = "Funded Clips' secrets live under cf-prod/workspaces/ (§45.13.1)."
   }
 
   # What Clip Factory's functions read and write (cf-prod/platforms/*, …/token-*, the clip agent's YouTube proxy and
@@ -423,7 +423,7 @@ run "lamo_stories_is_wired" {
         ] : !can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", sample))
       ]
     ]))
-    error_message = "…:secret:cf-prod/platforms/youtube/token-AbC123 and …/pending-AbC123 must match no Lamo Stories secret pattern."
+    error_message = "…:secret:cf-prod/platforms/youtube/token-AbC123 and …/pending-AbC123 must match no Funded Clips secret pattern."
   }
 
   # The story agent's model grants come from stories/config/models.json, never from Clip Factory's config/models.json.
@@ -431,7 +431,7 @@ run "lamo_stories_is_wired" {
     condition = (contains(module.stories_agent.model_invoke_arns, "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-opus-5-5") &&
       module.stories_agent.image_model_arn == "arn:aws:bedrock:eu-west-1::foundation-model/amazon.nova-canvas-v1:0" &&
     !contains(keys(local.models), "imageModel") && !contains(keys(local.models), "videoModel"))
-    error_message = "Lamo Stories' models come from stories/config/models.json (Nova Canvas in eu-west-1); config/models.json gains nothing (§45.11.4)."
+    error_message = "Funded Clips' models come from stories/config/models.json (Nova Canvas in eu-west-1); config/models.json gains nothing (§45.11.4)."
   }
 
   assert {

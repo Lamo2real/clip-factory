@@ -286,7 +286,7 @@ resource "aws_iam_role_policy" "agent" {
 resource "aws_bedrockagentcore_agent_runtime" "agent" {
   depends_on         = [terraform_data.image, aws_iam_role_policy.agent]
   agent_runtime_name = local.runtime_name
-  description        = "Lamo Stories agent: writes, draws, animates and checks short animated story videos"
+  description        = "Funded Clips agent: writes, draws, animates and checks short animated story videos"
   role_arn           = aws_iam_role.agent.arn
   platform_version   = "V2"
   agent_runtime_artifact {

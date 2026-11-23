@@ -4,8 +4,8 @@
 # Only what a change can break is checked: the changes job says which areas a change touches, and a job whose area did
 # not change is skipped. The required checks (web, api, agent, infra, scripts) still always report: web and agent fail
 # when changes did not finish, so "skipped" only ever means "nothing it tests changed". stories-agent and desktop are
-# not required checks of their own, so the web gate waits for them too: a pull request can never merge with their tests
-# failing.
+# not required checks of their own, so the web gate waits for them too: with their tests failing, a pull request's merge
+# and auto-merge are held back (branch protection does not hold admins to it, enforce_admins is off).
 # A push to main skips the web checks and the browser tests: its pull request ran them (with strict=false two green pull
 # requests can still clash on main, which the nightly run finds). It still runs the cheap jobs, which also keep the
 # caches warm. The nightly run (and a run by hand) checks everything; when a job of the nightly run fails, is cancelled
@@ -370,7 +370,8 @@ jobs:
   # when a job it needs failed or was cancelled, or when changes did not finish. A job changes said was not needed must
   # have been skipped; every other must have passed. It also gates stories-agent and desktop, which are not required
   # checks of their own (branch protection requires only web, api, agent, infra and scripts), so a pull request whose
-  # Funded Clips agent tests or desktop tests fail cannot merge either. Not on a push to main (B1): nothing it gates
+  # Funded Clips agent tests or desktop tests fail is held back too: its merge and auto-merge wait for this check (an
+  # admin can still merge past it, enforce_admins is off). Not on a push to main (B1): nothing it gates
   # runs there, and branch protection reads the pull request's run.
   web:
     needs: [changes, web-checks, web-e2e, web-e2e-webkit, stories-agent, desktop]
@@ -496,6 +497,8 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
           cache-dependency-glob: api/uv.lock
+          # A5: only main (a push, the nightly run, a run by hand) saves uv's cache; a pull request only reads it.
+          save-cache: ${{ github.event_name != 'pull_request' }}
       - run: uv sync --frozen
       - run: uv run ruff check
       - run: uv run ruff format --check
@@ -532,6 +535,8 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
           cache-dependency-glob: agent/uv.lock
+          # A5: only main (a push, the nightly run, a run by hand) saves uv's cache; a pull request only reads it.
+          save-cache: ${{ github.event_name != 'pull_request' }}
       - name: lint, types and tests
         working-directory: agent
         run: |
@@ -586,6 +591,8 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
           cache-dependency-glob: stories/agent/uv.lock
+          # A5: only main (a push, the nightly run, a run by hand) saves uv's cache; a pull request only reads it.
+          save-cache: ${{ github.event_name != 'pull_request' }}
       - name: ffmpeg with libass (the render, captions and assembly tests)
         run: |
           sudo apt-get update
@@ -754,6 +761,8 @@ jobs:
         with:
           workspaces: desktop/src-tauri -> target
           key: ci-linux
+          # A5: only main (a push, the nightly run, a run by hand) saves the Rust cache; a pull request only reads it.
+          save-if: ${{ github.event_name != 'pull_request' }}
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked

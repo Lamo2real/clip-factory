@@ -69,11 +69,11 @@ variable "ask_tokens_alarm_threshold" {
 variable "stories_agent_alarm_enabled" {
   type        = bool
   default     = false
-  description = "Watch Lamo Stories' agent runtime for error lines (docs/CONTRACTS.md §45.15). A separate switch because the runtime's log group name is only known once the runtime exists."
+  description = "Watch Funded Clips' agent runtime for error lines (docs/CONTRACTS.md §45.15). A separate switch because the runtime's log group name is only known once the runtime exists."
 }
 
 variable "stories_agent_log_group_name" {
   type        = string
   default     = ""
-  description = "Lamo Stories' runtime log group (/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT, made by modules/stories_agent)."
+  description = "Funded Clips' runtime log group (/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT, made by modules/stories_agent)."
 }

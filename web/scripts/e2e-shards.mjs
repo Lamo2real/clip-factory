@@ -279,7 +279,8 @@ async function check() {
   const grouped = Object.values(GROUPS).flatMap((g) => g.projects);
   const missing = all.projects.filter((p) => !grouped.includes(p));
   if (missing.length) fail(`playwright.config.ts has projects no CI shard runs: ${missing.join(", ")} (add them to GROUPS in scripts/e2e-shards.mjs)`);
-  // Every mode is pinned to what the owner chose (B3), so a pull request can never shrink its own run by editing MODES:
+  // Every mode is pinned to what the owner chose (B3), so an accidental edit of MODES that shrinks a run fails here (a
+  // pull request that changes MODES and PINNED together still passes; that is for review to catch):
   // the nightly run (full) leaves nothing out, so no test is ever in no run at all, style leaves out only the
   // screenshots project, and core only that and @contrast-full. A change to this file also runs in the style mode at
   // least (ci.yml's STYLE pattern).

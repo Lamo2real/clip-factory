@@ -12,19 +12,22 @@ with `validate` without a backend and `terraform test` against a mock AWS provid
 | Web type check and lint | `web/` | TypeScript, ESLint | yes | no |
 | Web end-to-end and layout tests | `web/` | Playwright in mock mode | yes | no |
 | API Lambdas | `api/` | pytest, ruff, mypy (uv) | yes | no |
-| Agent runtime | `agent/` | pytest, ruff, mypy (uv), the image build and its self-check | yes | no (it builds and pushes the image) |
-| Funded Clips agent | `stories/agent/` | pytest, ruff, mypy (uv), ffmpeg, the image build and its self-check | yes (job `stories-agent`; the `web` gate waits for it) | no (it builds and pushes the image) |
+| Agent runtime | `agent/` | pytest, ruff, mypy (uv), the image build and its self-check | yes | no tests, but the apply builds and pushes a new image, and that build runs the Dockerfile's self-check (`agent/Dockerfile`: the PO token check, `python -m clipfactory_agent.pot`) |
+| Funded Clips agent | `stories/agent/` | pytest, ruff, mypy (uv), ffmpeg, the image build and its self-check | yes (job `stories-agent`; the `web` gate waits for it) | no tests, but it builds and pushes a new image, and that build runs the Dockerfile's self-checks (`stories/agent/Dockerfile`: the engine's `validate` under Deno and `python -m lamostories_agent.selfcheck`) |
 | Desktop app | `desktop/` | `cargo fmt --check`, clippy, `cargo test`, the tools lock and its signing | yes, when `desktop/` changes (the `web` gate waits for it) | no ([desktop.yml](../.github/workflows/desktop.yml) builds it after a deploy) |
 | Infrastructure | `infra/` | `terraform fmt -check`, `terraform validate`, `terraform test` (mock provider), tflint | yes | no tests: plan, the delete gate, the Clip Factory check and apply |
 | Help corpus drift | `web/` | `node scripts/help-corpus.mjs --check` (corpus, routes table in [HELP_ASSISTANT.md](HELP_ASSISTANT.md), `/v1/help` rows of CONTRACTS §19); the CI `web-checks` job runs it right after `npm ci`, before type check, lint and tests | yes | no (the build regenerates the corpus) |
 | Documentation | `docs/`, `README.md` | relative-link and anchor check, draw.io XML parse and PNG export (below); `docs/SETUP_POSTING.md` is also checked by the web test `setup-docs.test.ts` (the five platforms, and the Content Rewards steps once `## Content Rewards` is there) | by hand (the setup page: yes, through the web tests) | no |
 | Workflows and scripts | `.github/`, `scripts/`, `mac/tiktok-helper/` | actionlint 1.7.12 (every workflow, with shellcheck on their `run:` steps), shellcheck (`scripts/*.sh`, `desktop/scripts/*.sh`, the TikTok helper's install scripts), each `scripts/test-*.sh`, the TikTok helper's `npm test` | yes (job `scripts`) | no |
 
-`deploy.yml` runs none of these tests. It deploys each push to `main` (and a run by hand), and a change reaches `main`
-only through a pull request whose required checks passed in `ci.yml` (`web`, `api`, `agent`, `infra`, `scripts`;
-`web` also waits for `stories-agent` and `desktop`). The push's own `ci` run goes on beside the deploy and does not
-hold it back. What `deploy.yml` checks is the release itself: the delete gate and the Clip Factory check on the saved
-plan, then the smoke test against the live app after the upload.
+`deploy.yml` runs none of these test suites. The only checks it repeats are the self-checks in the two agent
+Dockerfiles, which run whenever its image build builds a new agent image (a build that fails them stops that image). It
+deploys each push to `main` (and a run by hand). The required checks in `ci.yml` (`web`, `api`, `agent`, `infra`,
+`scripts`; `web` also waits for `stories-agent` and `desktop`) gate a pull request's merge and its auto-merge. They are
+not a lock on `main`: branch protection does not hold admins to them (`enforce_admins` is off), so an admin can still
+merge past them. The push's own `ci` run goes on beside the deploy and does not hold it back. What `deploy.yml` checks
+is the release itself: the delete gate and the Clip Factory check on the saved plan, then the smoke test against the
+live app after the upload.
 
 The exact commands are in each folder's `package.json` or `pyproject.toml` and in `ci.yml`, which are the source of
 truth. The common ones:
@@ -62,7 +65,7 @@ as one job, so [ci.yml](../.github/workflows/ci.yml) splits it:
 | `web-checks` | a real `npm ci` (never node_modules from a cache, so a `package.json` that disagrees with `package-lock.json` fails here), the help corpus and Ask knowledge checks, the shard check (`node scripts/e2e-shards.mjs check`), type check, lint, Vitest, the bundle (`vite build`) and the Funded Clips bundle check (none of its code or styles in the main bundle). npm's download folder comes from a cache that only the nightly run and a run by hand save; a pull request only reads it |
 | `web-e2e (1/7)` … `web-e2e (7/7)` | Chromium (the `chromium` and, at night, `screenshots` projects), 4 workers each. Each shard builds the mock app once. |
 | `web-e2e (WebKit 1/5)` … `web-e2e (WebKit 5/5)` | `webkit` and `webkit-phone`, 2 workers each |
-| `web` | the gate: passes only when `web-checks`, every shard, `stories-agent` and `desktop` passed, or `changes` said they had nothing to check (then each must be skipped). `stories-agent` and `desktop` are not required checks of their own, so this is what keeps a pull request with failing Funded Clips agent tests or desktop tests from merging. It fails when `changes` did not finish, so "skipped" only ever means "nothing it tests changed". This is the check branch protection requires, so keep a job with this exact name. |
+| `web` | the gate: passes only when `web-checks`, every shard, `stories-agent` and `desktop` passed, or `changes` said they had nothing to check (then each must be skipped). `stories-agent` and `desktop` are not required checks of their own, so this is what holds back the merge and auto-merge of a pull request whose Funded Clips agent tests or desktop tests fail (an admin can still merge past it). It fails when `changes` did not finish, so "skipped" only ever means "nothing it tests changed". This is the check branch protection requires, so keep a job with this exact name. |
 
 **Shards are split by time, not by count.** Playwright's own `--shard` splits in file order, which put all of
 `contrast.spec.ts` in one shard (14 to 23 minutes while the others took 8 to 12). So every shard but the last runs a
@@ -70,8 +73,9 @@ list made from each test's saved time (`web/e2e/shards/<group>-<n>.txt`, built f
 the last shard runs every test in no list (`--test-list-invert`), so a new or renamed test always runs.
 `node scripts/e2e-shards.mjs check` (in `web-checks`) has Playwright list each shard with the arguments CI passes, in
 each of the three modes below, and fails when a test would run in no shard or in two, when a B3 tag is wrong, when
-a mode leaves out more or less than B3 chose (all three are pinned in the check, so a pull request cannot shrink its own
-run), or when `ci.yml` names a mode the script does not know or does not run the full mode at night. To refresh the times:
+a mode leaves out more or less than B3 chose (all three are pinned in the check, which catches an accidental edit
+to a mode; a pull request that changes a mode and its pin together still passes, so that is for review to catch), or
+when `ci.yml` names a mode the script does not know or does not run the full mode at night. To refresh the times:
 `gh run view <id> --log > run.log`, then `node scripts/e2e-shards.mjs timings run.log` and
 `node scripts/e2e-shards.mjs build`. To change the number of shards, change the matrix in `ci.yml` and `GROUPS` in
 `scripts/e2e-shards.mjs` together, then run `build`.
