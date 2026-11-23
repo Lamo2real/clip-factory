@@ -4,6 +4,8 @@
 // functionality"). The shell owns it: it draws Clip Factory's own backdrop (components/Backdrop.tsx) only while Clip
 // Factory is on screen (app/ClipsBackdrop.tsx), and it alone writes html.see-through, from the wish of the app on screen
 // (app/shell.ts setPageGlass: Clip Factory's applyLook states Clip Factory's, Stories' look.ts states Stories').
+// While Stories is on screen Clip Factory's backdrop is kept, the very same element, but not drawn and with its drift
+// waiting (Backdrop's `away`, glass.css .backdrop--away), so back in Clip Factory nothing of it starts over.
 //
 // Everything here is the real thing, put together as App.tsx does: Clip Factory's real Backdrop drawn by the shell's
 // ClipsBackdrop, the shell's real panes (stories/pane.tsx AppPanes), Stories' real useStoriesBackground (as StoriesApp
@@ -77,7 +79,10 @@ const CLIPS: Record<string, { prefs: Partial<Prefs>; kind: string; backdrop: str
 type ClipsLook = keyof typeof CLIPS;
 
 /** Clip Factory's own backdrop as drawn now (every .backdrop outside Stories). */
-const clipsBackdrops = () => [...document.querySelectorAll<HTMLElement>(".backdrop")].filter((b) => !b.closest(".stories-app")).map((b) => b.className);
+const clipsBackdropEls = () => [...document.querySelectorAll<HTMLElement>(".backdrop")].filter((b) => !b.closest(".stories-app"));
+const clipsBackdrops = () => clipsBackdropEls().map((b) => b.className);
+/** Clip Factory's backdrop kept behind Stories: its own classes, and away (not drawn, its drift waiting). */
+const away = (look: ClipsLook) => `${CLIPS[look]!.backdrop} backdrop--away`;
 
 /** Clip Factory on screen: exactly as its own Look says. */
 function expectClips(look: ClipsLook, why: string) {
@@ -89,14 +94,20 @@ function expectClips(look: ClipsLook, why: string) {
   expect(appOnScreen()).toBe("clips");
 }
 
-/** Stories on screen in its own See-through: the page is transparent and nothing of Clip Factory's is drawn under it. */
-function expectStories(strength: GlassStrength, why: string) {
+/**
+ * Stories on screen in its own See-through: the page is transparent and nothing of Clip Factory's is drawn under it
+ * (its backdrop, Clip Factory on `clips`, is kept away: one element, not drawn).
+ */
+function expectStories(strength: GlassStrength, why: string, clips?: ClipsLook) {
   const el = host.querySelector<HTMLElement>(".stories-app")!;
   expect(el.dataset.look, `${why}: data-look`).toBe("window");
   expect(el.dataset.strength, `${why}: Stories' strength`).toBe(strength);
   expect(el.style.getPropertyValue("--st-veil-page"), `${why}: Stories' own frost`).toBe(strength === "frosted" ? "0.3" : "0");
   expect(html.classList.contains("see-through"), `${why}: html.see-through`).toBe(true);
-  expect(clipsBackdrops(), `${why}: nothing of Clip Factory's under Stories`).toEqual([]);
+  const kept = clipsBackdrops();
+  expect(kept.length, `${why}: Clip Factory's backdrop kept, once`).toBe(1);
+  expect(kept[0]!.split(" "), `${why}: nothing of Clip Factory's drawn under Stories`).toContain("backdrop--away");
+  if (clips) expect(kept, `${why}: Clip Factory's backdrop kept as its Look says, away`).toEqual([away(clips)]);
   expect(appOnScreen()).toBe("stories");
 }
 
@@ -108,25 +119,30 @@ describe("See-through is Stories' own, and the shell keeps the two apps apart", 
         setStoriesLook({ mode: "see-through", strength });
         render(<App on="clips" />);
         expectClips(clips, "first on screen");
+        const el = clipsBackdropEls()[0];
         render(<App on="stories" />);
-        expectStories(strength, "Stories on screen");
+        expectStories(strength, "Stories on screen", clips);
         render(<App on="clips" />);
         expectClips(clips, "back in Clip Factory");
         render(<App on="stories" />);
-        expectStories(strength, "Stories again");
+        expectStories(strength, "Stories again", clips);
         render(<App on="clips" />);
         expectClips(clips, "Clip Factory again");
+        // the very same element all along: never drawn again, so its drift goes on from where the owner left it
+        expect(clipsBackdropEls()[0], "the same backdrop element").toBe(el);
       });
 
       it(`Clip Factory on ${clips}, Stories See-through ${strength}: opened in Stories, then Clip Factory and back`, () => {
         act(() => void setPrefs(CLIPS[clips]!.prefs));
         setStoriesLook({ mode: "see-through", strength });
         render(<App on="stories" />);
-        expectStories(strength, "opened in Stories");
+        expectStories(strength, "opened in Stories", clips);
+        const el = clipsBackdropEls()[0];
         render(<App on="clips" />);
         expectClips(clips, "over to Clip Factory");
+        expect(clipsBackdropEls()[0], "the same backdrop element, now drawn").toBe(el);
         render(<App on="stories" />);
-        expectStories(strength, "back in Stories");
+        expectStories(strength, "back in Stories", clips);
       });
     }
 
@@ -136,12 +152,13 @@ describe("See-through is Stories' own, and the shell keeps the two apps apart", 
     setStoriesLook({ mode: "see-through", strength: "clear" });
     render(<App on="clips" />);
     render(<App on="stories" />);
-    expectStories("clear", "Stories on screen");
+    expectStories("clear", "Stories on screen", "See-through Clear");
     // Another device changes Clip Factory's Look: the session's refresh calls setPrefs with it, twice.
     act(() => void setPrefs({ backgroundMode: "colours" }));
     expectStories("clear", "Clip Factory synced to Colours");
+    expect(clipsBackdrops()[0], "Clip Factory's backdrop follows its Look, still away").toContain("backdrop--colours backdrop--away");
     act(() => void setPrefs({ backgroundMode: "see-through" }));
-    expectStories("clear", "Clip Factory synced back to See-through");
+    expectStories("clear", "Clip Factory synced back to See-through", "See-through Clear");
     // The owner switches to Clip Factory: its See-through page, the desktop showing, its own backdrop drawn.
     render(<App on="clips" />);
     expectClips("See-through Clear", "back in Clip Factory");
@@ -152,15 +169,15 @@ describe("See-through is Stories' own, and the shell keeps the two apps apart", 
     setStoriesLook({ mode: "see-through", strength: "frosted" });
     render(<App on="clips" />);
     render(<App on="stories" />);
-    expectStories("frosted", "Stories on screen");
+    expectStories("frosted", "Stories on screen", "Colours");
     act(() => void setPrefs(CLIPS["See-through Clear"]!.prefs));
-    expectStories("frosted", "Clip Factory synced to See-through");
+    expectStories("frosted", "Clip Factory synced to See-through", "See-through Clear");
     render(<App on="clips" />);
     expectClips("See-through Clear", "back in Clip Factory");
     // and to Colours while Stories is on screen once more: back in Clip Factory, no see-through
     render(<App on="stories" />);
     act(() => void setPrefs(CLIPS.Colours!.prefs));
-    expectStories("frosted", "Clip Factory synced to Colours");
+    expectStories("frosted", "Clip Factory synced to Colours", "Colours");
     render(<App on="clips" />);
     expectClips("Colours", "back in Clip Factory again");
   });
@@ -182,7 +199,7 @@ describe("See-through is Stories' own, and the shell keeps the two apps apart", 
     render(<App on="stories" />);
     expect(host.querySelector<HTMLElement>(".stories-app")!.dataset.look).toBe("colours");
     expect(html.classList.contains("see-through")).toBe(false);
-    expect(clipsBackdrops()).toEqual([]);
+    expect(clipsBackdrops()).toEqual([away("See-through Clear")]);
     render(<App on="clips" />);
     expectClips("See-through Clear", "back in Clip Factory");
   });
@@ -191,7 +208,7 @@ describe("See-through is Stories' own, and the shell keeps the two apps apart", 
     act(() => void setPrefs(CLIPS.Colours!.prefs));
     setStoriesLook({ mode: "see-through", strength: "clear" });
     render(<App on="stories" />);
-    expectStories("clear", "Stories on screen");
+    expectStories("clear", "Stories on screen", "Colours");
     // Signed out: the panes are gone, Clip Factory's sign-in page is on screen.
     render(<App on="clips" stories={false} />);
     expectClips("Colours", "the panes gone");
@@ -222,6 +239,35 @@ describe("Stories switched off: Clip Factory exactly as before", () => {
     for (const look of ["See-through Clear", "Colours", "See-through Frosted", "a Picture", "See-through Clear"] as const) {
       act(() => void setPrefs(CLIPS[look]!.prefs));
       expectClips(look, `Clip Factory on ${look}`);
+    }
+  });
+});
+
+describe("Clip Factory's backdrop kept away while Stories is on screen", () => {
+  it("is not drawn and every one of its animations waits (the blobs, the lens rings, the caustics), after their own rules", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const css = readFileSync(join(import.meta.dirname, "..", "src", "styles", "glass.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const hide = css.indexOf(".backdrop.backdrop--away {");
+    expect(hide, "the away rule").toBeGreaterThan(-1);
+    expect(css.slice(hide, css.indexOf("}", hide))).toMatch(/visibility: hidden;/);
+    const wait = /\.backdrop\.backdrop--away,\s*\.backdrop\.backdrop--away \*,\s*\.backdrop\.backdrop--away::before,\s*\.backdrop\.backdrop--away::after \{\s*animation-play-state: paused;\s*\}/.exec(css);
+    expect(wait, "the animations wait").not.toBeNull();
+    // the lens rings' selector is as specific as the away one, so the away rule comes after it
+    for (const own of [".backdrop:not(.backdrop--window, .backdrop--colours, .has-image)::before {", ".backdrop:not(.backdrop--window, .backdrop--colours, .has-image)::after {", ".blob {", ".backdrop__caustic {"]) {
+      const at = css.lastIndexOf(own);
+      expect(at, own).toBeGreaterThan(-1);
+      expect(wait!.index, own).toBeGreaterThan(at);
+    }
+    // nothing else in the file draws a kept backdrop again
+    expect(css.match(/visibility:/g)).toHaveLength(1);
+  });
+
+  it("Stories switched off: Clip Factory's backdrop is never away", () => {
+    render(<App on="clips" stories={false} />);
+    for (const look of ["See-through Clear", "Colours", "See-through Frosted", "a Picture"] as const) {
+      act(() => void setPrefs(CLIPS[look]!.prefs));
+      expect(document.querySelectorAll(".backdrop--away"), look).toHaveLength(0);
     }
   });
 });

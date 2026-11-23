@@ -10,10 +10,12 @@ import { settle } from "./helpers.ts";
 // Colours, a Picture, See-through Clear and See-through Frosted, each with Stories' See-through Clear and Frosted,
 // opened in either app and switched both ways. While Stories is on screen the desktop shows between its panels exactly
 // as Stories' own strength says (Clear: the magenta itself; Frosted: only Stories' own 0.30 frost over it) and nothing of
-// Clip Factory's backdrop is in the page; back in Clip Factory its page is exactly what its own settings say (its
-// class, its backdrop drawn, the desktop showing only for its See-through Clear). And the review's case: Clip Factory's
-// Look saved on another device (Colours, then See-through again) while Stories is on screen, then back in Clip
-// Factory: its See-through page. Stories switched off: Clip Factory exactly as its settings say.
+// Clip Factory's backdrop is drawn (it is kept away: the same element, hidden, its drift waiting); back in Clip Factory
+// its page is exactly what its own settings say (its class, its backdrop drawn, the desktop showing only for its
+// See-through Clear). And the review's case: Clip Factory's Look saved on another device (Colours, then See-through
+// again) while Stories is on screen, then back in Clip Factory: its See-through page. Stories switched off: Clip Factory
+// exactly as its settings say. With motion on, Clip Factory's moving backdrop goes on from where the owner left it
+// after a trip to Stories, never from its first pose.
 
 test.use({ reducedMotion: "reduce" });
 
@@ -105,7 +107,10 @@ const shown = (page: Page) =>
     look: document.querySelector<HTMLElement>(".stories-app")?.dataset.look ?? null,
     strength: document.querySelector<HTMLElement>(".stories-app")?.dataset.strength ?? null,
     // Clip Factory's own backdrop: every .backdrop outside Stories, as drawn
-    backdrops: [...document.querySelectorAll<HTMLElement>(".backdrop")].filter((b) => !b.closest(".stories-app")).map((b) => ({ cls: b.className, display: getComputedStyle(b).display })),
+    backdrops: [...document.querySelectorAll<HTMLElement>(".backdrop")]
+      .filter((b) => !b.closest(".stories-app"))
+      .map((b) => ({ cls: b.className, display: getComputedStyle(b).display, visibility: getComputedStyle(b).visibility, running: b.getAnimations({ subtree: true }).filter((a) => a.playState === "running").length })),
+    path: location.pathname,
     // nothing of Stories' old reach into Clip Factory's page
     marks: [...document.querySelectorAll("[data-st-hidden], [data-st-window], [data-st-see-through]")].length,
   }));
@@ -115,11 +120,17 @@ async function expectStories(page: Page, strength: "clear" | "frosted", why: str
   expect(s.look, why).toBe("window");
   expect(s.strength, why).toBe(strength);
   expect(s.seeThrough, `${why}: the page is see-through`).toBe(true);
-  expect(s.backdrops, `${why}: nothing of Clip Factory's backdrop under Stories`).toEqual([]);
+  // Clip Factory's backdrop is kept (one element) but away: not drawn, nothing of it moving
+  expect(s.backdrops.length, `${why}: Clip Factory's backdrop kept once`).toBe(1);
+  expect(s.backdrops[0]!.cls.split(" "), `${why}: kept away`).toContain("backdrop--away");
+  expect(s.backdrops[0]!.visibility, `${why}: nothing of Clip Factory's backdrop drawn under Stories`).toBe("hidden");
+  expect(s.backdrops[0]!.running, `${why}: nothing of it moving`).toBe(0);
   expect(s.marks, why).toBe(0);
-  // The desktop between the panels: the magenta itself for Clear, Stories' own frost over it for Frosted (5 to 6 % of
-  // the dashboard at 1440 x 900, 8 % or more of the library; anything of Clip Factory's backdrop under it: none).
-  expect(await desktopShown(page, strength === "clear" ? 0 : FROST), `${why}: the desktop as Stories' ${strength} says`).toBeGreaterThan(3);
+  // The desktop between the panels: the magenta itself for Clear, Stories' own frost over it for Frosted (8 % or more
+  // of the library at 1440 x 900, as the check always was; 5 to 6 % of the dashboard, where a switch from Clip Factory
+  // lands; anything of Clip Factory's backdrop under it: none).
+  const least = s.path === "/stories/library" ? 8 : 3;
+  expect(await desktopShown(page, strength === "clear" ? 0 : FROST), `${why}: the desktop as Stories' ${strength} says on ${s.path}`).toBeGreaterThan(least);
 }
 
 async function expectClips(page: Page, cf: ClipsLook, why: string) {
@@ -129,7 +140,9 @@ async function expectClips(page: Page, cf: ClipsLook, why: string) {
   expect(s.strengthOnHtml, `${why}: data-strength`).toBe(cf === "clear" ? "clear" : cf === "frosted" ? "frosted" : null);
   expect(s.backdrops.length, `${why}: Clip Factory's backdrop is drawn`).toBe(1);
   expect(s.backdrops[0]!.cls, why).toContain(BACKDROP[cf]);
+  expect(s.backdrops[0]!.cls, why).not.toContain("backdrop--away");
   expect(s.backdrops[0]!.display, why).not.toBe("none");
+  expect(s.backdrops[0]!.visibility, why).toBe("visible");
   expect(s.marks, why).toBe(0);
   // The desktop shows between Clip Factory's panels only for its See-through Clear (its Frosted lays its own frost).
   const desktop = await desktopShown(page);
@@ -222,3 +235,58 @@ for (const cf of ["colours", "picture", "clear", "frosted"] as const)
     expect(await page.locator("[data-app-pane], .ws-dock").count()).toBe(0);
     await expectClips(page, cf, "Stories off");
   });
+
+/** Every animation of Clip Factory's backdrop (its blobs, lens rings and caustics): where it is, and whether it runs. */
+const drift = (page: Page) =>
+  page.evaluate(() => {
+    const b = [...document.querySelectorAll<HTMLElement>(".backdrop")].find((x) => !x.closest(".stories-app"))!;
+    return b.getAnimations({ subtree: true }).map((a) => {
+      const fx = a.effect as KeyframeEffect | null;
+      const el = fx?.target as HTMLElement | null;
+      return { who: `${el?.className ?? "?"}${fx?.pseudoElement ?? ""}`, at: Number(a.currentTime ?? -1), state: a.playState };
+    });
+  });
+
+test.describe("with motion on", () => {
+  test.use({ reducedMotion: "no-preference" });
+  for (const [cf, desktop] of [
+    ["frosted", false],
+    ["colours", false],
+    ["colours", true],
+  ] as const)
+    test(`Clip Factory on ${NAMES[cf]}${desktop ? " in the desktop app" : " in a browser"}: back from Stories its backdrop goes on from where it was left`, async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      if (desktop) await prepare(page, cf, "clear");
+      else
+        await page.addInitScript((cf) => {
+          localStorage.setItem("cf.storiesPreview", "1");
+          localStorage.setItem("cf.stories.prefs", JSON.stringify({ setupShown: ["e2e"] }));
+          const look = JSON.stringify(cf === "colours" ? { backgroundMode: "colours", glassStrength: "clear", backgroundColours: ["#e2621f", "#3355dd"] } : { backgroundMode: "see-through", glassStrength: "frosted" });
+          if (!localStorage.getItem("cf.prefs")) localStorage.setItem("cf.prefs", look);
+          if (!sessionStorage.getItem("cf-mock-look")) sessionStorage.setItem("cf-mock-look", look);
+        }, cf);
+      await page.goto("/");
+      await clipsReady(page);
+      await page.waitForTimeout(2000);
+      const left = await drift(page);
+      // (the blobs at least, and for the brand backdrop its lens rings and caustics too)
+      expect(left.length, left.map((a) => a.who).join(", ")).toBeGreaterThanOrEqual(cf === "frosted" ? 9 : 3);
+      expect(left.every((a) => a.state === "running" && a.at > 1500), JSON.stringify(left)).toBe(true);
+      await toOther(page, "stories");
+      const away = await drift(page);
+      await page.waitForTimeout(2500);
+      const later = await drift(page);
+      // Away: every animation waits where it was, nothing of it moves under Stories.
+      expect(later.map((a) => a.state), "kept away: waiting").toEqual(left.map(() => "paused"));
+      expect(later.map((a) => a.at), "kept away: not moving").toEqual(away.map((a) => a.at));
+      for (const [i, a] of away.entries()) expect(a.at, `${a.who}: kept where it was`).toBeGreaterThanOrEqual(left[i]!.at);
+      await toOther(page, "clips");
+      const back = await drift(page);
+      expect(back.map((a) => a.who), "the same animations").toEqual(left.map((a) => a.who));
+      for (const [i, a] of back.entries()) {
+        expect(a.state, `${a.who}: moving again`).toBe("running");
+        // never started over from its first pose: on from where it waited
+        expect(a.at, `${a.who}: on from where it was left`).toBeGreaterThanOrEqual(away[i]!.at);
+      }
+    });
+});
