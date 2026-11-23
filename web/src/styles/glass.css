@@ -423,8 +423,12 @@ html:is(.see-through, [data-backdrop]) .perf__updated > span {
 
 /* Nested glass is raised on its panel: one relative step brighter (the outer panel gives the words most of their
    green), lit flat from the panel's light above it, with no blur of its own (the parent's blur is what it sits on).
-   :where() keeps it as light as `.glass`, so a surface with a tint of its own wins. */
-:where(.glass) .glass {
+   :where() keeps it as light as `.glass`, so a surface with a tint of its own wins.
+   The shell's Live chip (app/WorkspaceDock.tsx, while Funded Clips is switched on) is drawn over Clip Factory's
+   sidebar, in the place of the sidebar's own chip: while Clip Factory is on screen it is that chip, raised on the
+   sidebar in this same rule, so Clip Factory looks exactly as with Funded Clips off (the pixel check, §45.19). */
+:where(.glass) .glass,
+:where([data-app-pane="clips"]:not([hidden]) ~ .ws-dock > .ws-dock__live) > .glass {
   --glass-tint: linear-gradient(rgb(var(--green-rgb) / var(--light-raise-veil)), rgb(var(--green-rgb) / var(--light-raise-veil)));
   --glass-light: linear-gradient(rgb(var(--bone-rgb) / var(--light-raise-lift)), rgb(var(--bone-rgb) / var(--light-raise-lift)));
   -webkit-backdrop-filter: none;

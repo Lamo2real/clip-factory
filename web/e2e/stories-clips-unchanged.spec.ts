@@ -31,6 +31,8 @@ interface Layout {
   /** the page's own box (beside the sidebar) */
   page: Box | null;
   switcher: { mode: string | null; box: Box | null; place: string; squeeze: boolean }[];
+  /** How the Live chip on screen is drawn (the sidebar's foot, or the top bar on a phone): its fills, light and words. */
+  liveLook: Record<string, string> | null;
 }
 
 const SIZES: { w: number; h: number; folded?: boolean }[] = [
@@ -97,6 +99,13 @@ async function layout(page: Page): Promise<Layout> {
         brand: box(document.querySelector(".sidebar__top .brand")),
       },
       top: { brand: box(document.querySelector(".topbar .brand")), live: box(document.querySelector(".topbar .live-dot")), bar: box(document.querySelector(".topbar")) },
+      liveLook: (() => {
+        const el = document.querySelector(innerWidth < 768 ? ".topbar .live-dot" : ".sidebar__live .live-dot");
+        if (!el) return null;
+        const cs = getComputedStyle(el);
+        const keys = ["backgroundImage", "backgroundColor", "boxShadow", "backdropFilter", "color", "textShadow", "opacity"] as const;
+        return Object.fromEntries(keys.map((k) => [k, cs[k]]));
+      })(),
       mainTop: Math.round(document.querySelector("main")!.getBoundingClientRect().top),
       page: box(document.querySelector(".shell > .main")),
       // The shell's switch (§45.38): on a computer the dock's (its place in data-ws-dock), on a phone the top bar's toggle.
@@ -206,6 +215,10 @@ test.describe("with Lamo Stories switched on", () => {
       expect(after.tabs).toEqual(before.tabs);
       expect(after.tabbar).toEqual(before.tabbar);
       expect(after.foot).toEqual(before.foot);
+      // The Live chip is drawn as before too, not only in its old place: on a computer the shell's chip lies over the
+      // sidebar where the sidebar's own was, raised on it as that one was (glass.css), never a pane of its own over it.
+      expect(before.liveLook, "the Live chip is on screen").not.toBeNull();
+      expect(after.liveLook, "the Live chip is drawn as before").toEqual(before.liveLook);
       // On the smallest phones (320 px) the brand drops its name so the switch stays a full 48 px (§45.36 E16): its
       // mark stays where it was; the live dot and the bar do not move. Everywhere else the top bar is as before.
       const squeezed = after.switcher.some((sw) => sw.place === "topbar" && sw.squeeze);
