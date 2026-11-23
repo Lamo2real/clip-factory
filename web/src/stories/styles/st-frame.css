@@ -384,8 +384,11 @@
     padding: 0 14px;
   }
   .st-rail .st-rail__list {
-    flex: 0 1 auto;
+    /* It takes all the room between the brand and the foot, so its own height is that room (whatever the window's
+       title bar, the top line or the shell's switch take): the rows below ask it, not the window, whether they fit. */
+    flex: 1 1 0;
     min-height: 0;
+    container: st-rail-list / size;
     /* Its scroll box reaches the rail's own edges, so the highlight's glow and focus rings are not cut short. */
     margin: -6px calc(-1 * var(--st-gap-surface));
     padding: 6px var(--st-gap-surface);
@@ -401,9 +404,12 @@
        margin. So the list of pages always stops above them. */
     height: max(0px, calc(var(--ws-dock-room, 0px) - 36px));
   }
-  /* A short window: the rows are a little lower (40 px, a computer's pointer target), so all ten pages fit above the
-     switch from 768 px high; below that the list scrolls and the chosen page is scrolled into view (StoriesApp). */
-  @media (max-height: 820px) {
+  /* A short room: the rows are a little lower (40 px, a computer's pointer target) as soon as the ten pages
+     (StoriesApp's NAV) no longer fit at 48 px: 10 × 48 + 9 × 4 (--st-gap-control) = 516 px of the list's own room. So
+     all ten fit above the switch from 768 px high in a browser, and at every height where 48 px rows would not
+     (a window's title bar, a stacked switch); below 448 px of room the list scrolls and the chosen page is scrolled
+     into view (StoriesApp). */
+  @container st-rail-list (height < 516px) {
     .st-rail .st-rail__item {
       min-height: 40px;
       padding-block: 4px;

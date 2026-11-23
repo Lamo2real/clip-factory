@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { asMacWindow } from "./desktopWindow.ts";
 
 // Clip Factory Stories' rail in short windows (owner, 23 Nov: the switch never covers anything). The shell's fixed
 // workspace switch and Live chip (app/WorkspaceDock.tsx) sit over the rail's foot: the rail's list of pages ends above
@@ -24,7 +25,11 @@ async function room(page: Page) {
     const list = document.querySelector<HTMLElement>(".st-rail .st-rail__list")!;
     const r = list.getBoundingClientRect();
     const parts = [...document.querySelectorAll(".ws-dock .ws-switch, .ws-dock .live-dot")].map((e) => e.getBoundingClientRect()).filter((b) => b.width > 0 && b.height > 0);
-    return { bottom: r.bottom, dockTop: Math.min(...parts.map((b) => b.top)), scrolls: list.scrollHeight > list.clientHeight + 1 };
+    const cs = getComputedStyle(list);
+    // the list's own room (its box less its padding) and how tall its rows are
+    const room = list.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const row = document.querySelector<HTMLElement>(".st-rail .st-rail__item")!.getBoundingClientRect().height;
+    return { bottom: r.bottom, dockTop: Math.min(...parts.map((b) => b.top)), scrolls: list.scrollHeight > list.clientHeight + 1, room, row };
   });
 }
 
@@ -50,6 +55,13 @@ for (const [w, h] of [
   [1366, 768],
   [1280, 800],
   [1280, 720],
+  // just over the old 820 px breakpoint, where 48 px rows came back before the ten pages fit at 48 (the review: the
+  // list scrolled and Settings was cut at its end from 821 to 837 px high)
+  [1280, 821],
+  [1280, 830],
+  [1280, 837],
+  [1280, 840],
+  [1920, 845],
   [1440, 900],
 ] as const)
   test(`${w}x${h}: the rail's pages end above the switch, every one can be reached, the chosen one is in view`, async ({ page }) => {
@@ -60,6 +72,8 @@ for (const [w, h] of [
       const r = await room(page);
       expect(r.bottom, `${path}: the list ends above the switch`).toBeLessThanOrEqual(r.dockTop);
       if (h >= 768) expect(r.scrolls, `${path}: all the pages fit from 768 px high`).toBe(false);
+      // 48 px rows wherever the ten fit at 48 (10 × 48 + 9 × 4 = 516 px of room), the lower 40 px only where not
+      expect(r.row, `${path}: rows of ${r.row} px in ${r.room} px of room`).toBe(r.room >= 516 ? 48 : 40);
       // The chosen page is wholly inside the list's view as the page opens, nothing scrolled by hand.
       const shown = await page.evaluate(() => {
         const list = document.querySelector<HTMLElement>(".st-rail .st-rail__list")!.getBoundingClientRect();
@@ -75,4 +89,26 @@ for (const [w, h] of [
     await last.scrollIntoViewIfNeeded();
     await last.click();
     await expect(page).toHaveURL(/\/stories\/settings/);
+  });
+
+// The Mac app lays its 28 px title bar over the page, so the rail starts lower: the rows follow the list's own room, not
+// the window's height, so its pages fit there too wherever 40 px rows can (from 800 px high), at 48 px where 48 fit.
+for (const [w, h] of [
+  [1280, 800],
+  [1280, 850],
+  [1280, 866],
+  [1440, 900],
+] as const)
+  test(`the Mac app, ${w}x${h}: the rail's pages fit above the switch, at 48 px where they can`, async ({ page }) => {
+    await asMacWindow(page);
+    await on(page);
+    await page.setViewportSize({ width: w, height: h });
+    for (const path of ["/stories", "/stories/connections"]) {
+      await open(page, path);
+      const r = await room(page);
+      expect(r.bottom, `${path}: the list ends above the switch`).toBeLessThanOrEqual(r.dockTop);
+      expect(r.scrolls, `${path}: all the pages fit`).toBe(false);
+      expect(r.row, `${path}: rows of ${r.row} px in ${r.room} px of room`).toBe(r.room >= 516 ? 48 : 40);
+      expect(await reachable(page), `${path}: every page can be reached`).toEqual([]);
+    }
   });
