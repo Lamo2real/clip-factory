@@ -738,6 +738,18 @@ export function statusScrim(under: Rgb): number {
   return 1;
 }
 
+/**
+ * The status bar's glass strip once the page has scrolled (glass.css .st-frame::before, glass-tokens.css
+ * --st-status-strip-veil): the least espresso veil (0.01 steps) that keeps the white clock at AA over white, the
+ * lightest thing a page can slide under the clock (a cream card too), one 8-bit rounding step lighter to spare. Its
+ * filter dims nothing (DIM is 1 in every look) and saturate() keeps white white, so it is the same in every look, and
+ * it holds where a browser draws no backdrop-filter at all.
+ */
+export function statusStripVeil(): number {
+  for (let a = 0; a < 100; a++) if (contrast(WHITE, mix(VEIL, WHITE, a / 100).map((c) => Math.min(255, c + 1)) as unknown as Rgb) >= AA) return a / 100;
+  return 1;
+}
+
 /** The theme colour of the window while Stories is on screen. */
 export const THEME_COLOUR = "#1C130E";
 

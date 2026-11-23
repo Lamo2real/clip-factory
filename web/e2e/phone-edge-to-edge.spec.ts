@@ -10,7 +10,9 @@ import { stillBackdrop } from "./helpers.ts";
 // --status-bar-h, the status bar alone. At 390 x 844, in Clip Factory (Home, Settings) and Clips Funded (Dashboard):
 //   (a) the pixel row at y = 10, under the clock, is the backdrop as it is drawn alone, not the solid green band;
 //   (b) every control on screen, the first one included, starts at or below the status bar.
-// And over a light look (Cream) the soft scrim keeps the white clock at AA there.
+// And over a light look (Cream) the soft scrim keeps the white clock at AA there. Once the page scrolls, cards and
+// buttons slide up under the clock, so a strip of each app's own glass lies there (<html data-scrolled>): at every
+// scroll stop of Home, Library and Clips Funded's Dashboard and Ideas the clock's and the icons' zones keep AA.
 // Run in WebKit too (playwright.config.ts, project "webkit"): the iPhone app is WebKit.
 
 const INSET = 59;
@@ -154,6 +156,59 @@ test.describe("a phone runs edge to edge: the backdrop shows under the status ba
       expect(worst, "the row under the clock against the backdrop drawn alone (worst pixel)").toBeLessThanOrEqual(12);
       // And the backdrop under the clock keeps the white clock at AA (the dark looks need no scrim).
       expect(Math.min(...row!.map(whiteOn)), "white on the row under the clock").toBeGreaterThanOrEqual(4.5);
+    });
+  }
+
+  // Where iOS draws the clock (left of the Dynamic Island) and the signal, wifi and battery (right of it), in a 59 px
+  // status bar: the rows their glyphs take.
+  const ZONES = [
+    [20, 110],
+    [290, 372],
+  ] as const;
+  const SCROLLED = [
+    { name: "Clip Factory Home", path: "/", stories: false },
+    { name: "Clip Factory Library", path: "/library", stories: false },
+    { name: "Clips Funded Dashboard", path: "/stories", stories: true },
+    { name: "Clips Funded Ideas", path: "/stories/ideas", stories: true },
+  ] as const;
+  for (const p of SCROLLED) {
+    test(`${p.name} scrolled: the white clock and icons keep AA over whatever slides up under them`, async ({ page }) => {
+      await phone(page);
+      // The setup list's own glass bar also runs under the status bar once the page scrolls: left out, so the strip
+      // alone is what holds the clock (the setup list done).
+      await page.addInitScript(() => {
+        const add = () => {
+          const style = document.createElement("style");
+          style.textContent = ".setup-todo-bar { display: none !important; }";
+          document.head.append(style);
+        };
+        if (document.head) add();
+        else document.addEventListener("DOMContentLoaded", add, { once: true });
+      });
+      await open(page, p.path, p.stories);
+      expect(await page.evaluate(() => document.documentElement.hasAttribute("data-scrolled"))).toBe(false);
+      const room = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+      expect(room, "the page is long enough to scroll").toBeGreaterThan(300);
+      const failing: string[] = [];
+      let stops = 0;
+      for (let y = 50; y <= Math.min(room, 2500); y += y < 400 ? 50 : 100) {
+        await page.evaluate((y) => window.scrollTo({ top: y, behavior: "instant" as ScrollBehavior }), y);
+        // The strip fades in on its opacity (--dur-2) the first time; then only the page moves under it.
+        await page.waitForTimeout(stops === 0 ? 450 : 90);
+        await expect.poll(() => page.evaluate(() => document.documentElement.hasAttribute("data-scrolled"))).toBe(true);
+        const clock = await rows(page, 12, 40);
+        for (const [x0, x1] of ZONES) {
+          let least = Infinity;
+          for (const r of clock) for (let x = x0; x < x1; x++) least = Math.min(least, whiteOn(r[x]!));
+          if (least < 4.5) failing.push(`scrollY ${y}, x ${x0}-${x1}: ${least.toFixed(2)}:1`);
+        }
+        stops++;
+      }
+      expect(stops).toBeGreaterThan(4);
+      expect(failing, "white on the status bar's lightest pixel, at each scroll stop").toEqual([]);
+      // Back at the top the strip goes and the backdrop shows under the clock as it is.
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior }));
+      await expect.poll(() => page.evaluate(() => document.documentElement.hasAttribute("data-scrolled"))).toBe(false);
     });
   }
 

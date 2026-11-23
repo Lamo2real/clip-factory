@@ -21,9 +21,9 @@ html[data-titlebar="overlay"] .titlebar-drag {
 /* The phone's status bar (--status-bar-h, tokens.css): the app runs edge to edge, so the backdrop shows under the
    clock and nothing of the page sits there (every column starts on --top-line). The white clock and icons keep AA over
    it: where the look's top edge is light (a light Colours look, a picture), a soft black scrim lies in the status bar
-   alone, as strong as AA needs there (--status-scrim, lib/look.ts statusScrim), held under the clock and fading out
-   at the bottom of the bar. Over the dark looks it is 0: nothing is drawn. Clear of every tap. The sign-in screen,
-   drawn outside the app shell, carries it too. */
+   alone, as strong as AA needs there (--status-scrim, lib/look.ts statusScrim), held under the clock and easing out
+   over the bar's last quarter (--status-bar-fade), so it has no edge to see. Over the dark looks it is 0: nothing is
+   drawn. Clear of every tap. The sign-in screen, drawn outside the app shell, carries it too. */
 .app::after,
 .signin::after {
   content: "";
@@ -32,7 +32,34 @@ html[data-titlebar="overlay"] .titlebar-drag {
   z-index: 210;
   height: var(--status-bar-h);
   pointer-events: none;
-  background: linear-gradient(rgb(0 0 0 / var(--status-scrim, 0)) 75%, rgb(0 0 0 / 0));
+  background: rgb(0 0 0 / var(--status-scrim, 0));
+  -webkit-mask-image: var(--status-bar-fade);
+  mask-image: var(--status-bar-fade);
+}
+/* Once the page has scrolled (<html data-scrolled>, lib/pageScrolled.ts), cards and buttons slide up under the clock,
+   so a strip of the app's own glass lies there: its blur and saturation, and a green veil planned for white
+   (--status-strip-veil, lib/background.ts statusStripVeil), the lightest thing a page can put under the clock, so the
+   white clock keeps AA over anything, with or without the blur. It runs off the top of the screen and eases out at the
+   bar's bottom (the fade masks the veil and the blur together), so it has no edge. At the top of the page it is not
+   drawn (opacity 0) and the backdrop shows under the clock as it is. It comes and goes on its opacity alone. */
+.app::before,
+.signin::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 209;
+  height: var(--status-bar-h);
+  pointer-events: none;
+  background: rgb(var(--green-rgb) / var(--status-strip-veil));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-mask-image: var(--status-bar-fade);
+  mask-image: var(--status-bar-fade);
+  opacity: 0;
+  transition: opacity var(--dur-2) var(--ease-out);
+}
+html[data-scrolled] :is(.app, .signin)::before {
+  opacity: 1;
 }
 .shell {
   min-height: 100vh;

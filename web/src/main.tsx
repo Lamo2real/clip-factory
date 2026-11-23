@@ -29,6 +29,7 @@ import { initPwa } from "./lib/pwa.ts";
 import { startUpdateChecks } from "./lib/update.ts";
 import { applyLookNow } from "./lib/look.ts";
 import { installInputModality } from "./lib/inputModality.ts";
+import { installPageScrolled } from "./lib/pageScrolled.ts";
 
 // Refraction inside backdrop-filter only works in Chromium; elsewhere the glass falls back to blur and saturation.
 const brands = (navigator as Navigator & { userAgentData?: { brands?: { brand: string }[] } }).userAgentData?.brands;
@@ -38,6 +39,8 @@ if (brands?.some((b) => b.brand === "Chromium")) document.documentElement.classL
 applyLookNow();
 
 installInputModality();
+// The phone's status bar: a glass strip under the clock once the page has scrolled (layout.css .app::before).
+installPageScrolled();
 installClickSounds(sounds);
 initPwa();
 startUpdateChecks();

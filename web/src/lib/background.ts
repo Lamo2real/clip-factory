@@ -966,6 +966,18 @@ export function statusScrim(under: Rgb): number {
   return 1;
 }
 
+/**
+ * The status bar's glass strip once the page has scrolled (layout.css .app::before, tokens.css `--status-strip-veil`):
+ * the least green (0.01 steps) that keeps the white clock and icons at AA over white, the lightest thing a page can
+ * slide under the clock, one 8-bit rounding step lighter to spare. It counts on no dimming: the strip's filter only
+ * blurs and saturates (saturate() keeps white white), so it holds over every card and button in every look, and
+ * where a browser draws no backdrop-filter at all (WebKit's test build paints none, e2e/phone-edge-to-edge.spec.ts).
+ */
+export function statusStripVeil(): number {
+  for (let a = 0; a < 100; a++) if (contrast(WHITE, mix(VEIL, WHITE, a / 100).map((c) => Math.min(255, c + 1)) as unknown as Rgb) >= AA) return a / 100;
+  return 1;
+}
+
 // ---------- The logic of light: what words sit on at each level (ADR-87) ----------
 
 /** `veil` of bottle green (at most solid) over `under`, then `lift` of bone over that: how every lit surface composites. */
