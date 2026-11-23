@@ -34,7 +34,7 @@ def test_list_puts_lamo_clips_first_and_makes_lamo_stories_once(call: Call, tabl
         "version": 1,
     }
     assert second["workspaceId"] == "stories"
-    assert second["workspaceName"] == "Clip Stories"
+    assert second["workspaceName"] == "Funded Clips"
     assert second["workspaceType"] == "stories"
     assert second["builtin"] is False
     assert second["configuration"]["defaultDurationSec"] == 45
@@ -66,7 +66,7 @@ def test_create_checks_type_name_and_the_cap(call: Call, store: db.Store) -> Non
     assert ws.WORKSPACE_ID.match(created["workspaceId"])
     assert created["workspaceId"] not in {"clips", "stories"}
     names = [w["workspaceName"] for w in call("GET", "/v1/workspaces")[1]["workspaces"]]
-    assert names == ["Lamo Clips", "Clip Stories", "Lamo Cars"]
+    assert names == ["Lamo Clips", "Funded Clips", "Lamo Cars"]
     assert call("POST", "/v1/workspaces", {"workspaceType": "stories", "workspaceName": "lamo cars"})[0] == 409
     assert call("POST", "/v1/workspaces", {"workspaceType": "stories", "workspaceName": "Lamo Clips"})[0] == 409
     assert call("POST", "/v1/workspaces", {"workspaceType": "clips", "workspaceName": "X"})[0] == 400
@@ -81,7 +81,7 @@ def test_create_checks_type_name_and_the_cap(call: Call, store: db.Store) -> Non
 
 def test_get_answers_both_types_and_hides_other_owners(call: Call, store: db.Store) -> None:
     assert call("GET", "/v1/workspaces/clips")[1]["workspace"]["builtin"] is True
-    assert call("GET", "/v1/workspaces/stories")[1]["workspace"]["workspaceName"] == "Clip Stories"
+    assert call("GET", "/v1/workspaces/stories")[1]["workspace"]["workspaceName"] == "Funded Clips"
     theirs = seed_workspace(store, OTHER, name="Their brand")
     status, body = call("GET", f"/v1/workspaces/{theirs}")
     assert status == 404
@@ -190,7 +190,7 @@ def test_patch_refuses_bad_settings(call: Call, configuration: dict[str, object]
 def test_patch_on_lamo_clips_is_refused(call: Call) -> None:
     status, body = call("PATCH", "/v1/workspaces/clips", {"version": 1, "workspaceName": "x"})
     assert status == 409
-    assert body["error"]["message"] == "That is a Clip Stories page. Switch to Clip Stories first."
+    assert body["error"]["message"] == "That is a Funded Clips page. Switch to Funded Clips first."
 
 
 def test_rename_cannot_take_another_workspaces_name(call: Call) -> None:

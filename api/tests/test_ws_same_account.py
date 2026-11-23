@@ -1,4 +1,4 @@
-"""Clip Stories has different accounts than Clip Factory (docs/CONTRACTS.md §45.37 G8; the owner's hard rule,
+"""Funded Clips has different accounts than Clip Factory (docs/CONTRACTS.md §45.37 G8; the owner's hard rule,
 22 Nov 19:01: "I do not want videos generated in lamo stories … uploaded to the same accounts as clip factory thats a
 hard no").
 
@@ -105,7 +105,7 @@ def test_clip_factorys_account_is_refused_before_every_upload_also_when_it_conne
     assert (shown["connectionStatus"], shown["reason"], shown["warning"]) == (
         "same_as_clips",
         "clips_now",
-        "This is Clip Factory's account now. Connect a different account made for Clip Stories.",
+        "This is Clip Factory's account now. Connect a different account made for Funded Clips.",
     )
     after = [i for i in table.all() if i["pk"] == f"USER#{USER}" and not str(i["sk"]).startswith("ACCOUNT#")]
     assert json.dumps(sorted(after, key=str), default=str) == json.dumps(
@@ -228,7 +228,7 @@ def test_an_account_clip_factory_took_later_stays_refused_after_it_lets_go(
         now=NOW,
     )
     assert again["connectionStatus"] == "same_as_clips", what
-    # a different account made for Clip Stories connects and posts
+    # a different account made for Funded Clips connects and posts
     fresh = _linked(platform, "brand-new-1", "@brand.new")
     if "username" in fresh.token:
         fresh.token["username"] = "brand.new"

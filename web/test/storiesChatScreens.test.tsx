@@ -247,7 +247,7 @@ describe("the chat", () => {
     conv.effort = "max";
     await openChat(CONV.winter);
     expect(line()).toBe("Model: Claude Opus 5.5 · Effort: Maximum");
-    expect($(".st-chat-ai__from")?.textContent).toBe("Effort saved for this chat. The model comes from Clip Stories › Settings › AI.");
+    expect($(".st-chat-ai__from")?.textContent).toBe("Effort saved for this chat. The model comes from Funded Clips › Settings › AI.");
   });
 
   it("Try again on a failed answer sends its picture again (uploaded once more), and Edit it keeps the pictures", async () => {
@@ -382,7 +382,7 @@ describe("references", () => {
     const play = vi.spyOn(SoundEngine.prototype, "play");
     await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.analyzed })} />);
     await until(() => !!$(".st-ref-analysis"));
-    store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Clip Stories › Settings › AI, or try again.";
+    store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Funded Clips › Settings › AI, or try again.";
     store.knobs.refNoJob = true; // an answer without the job (the API before §45.34)
     await click(byText("button", "Analyze again"));
     await until(() => !!$(".st-ref-busybar"));
@@ -407,7 +407,7 @@ describe("references", () => {
 
     store.knobs.refJobInGet = true;
     store.knobs.refSeconds = 9;
-    store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Clip Stories › Settings › AI, or try again.";
+    store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Funded Clips › Settings › AI, or try again.";
     await click(byText("button", "Try again"));
     await until(() => !!$(".st-ref-card2 .st-chat-progress"));
     await until(() => ($(".st-ref-failed")?.textContent ?? "").includes("no access"), 8000);

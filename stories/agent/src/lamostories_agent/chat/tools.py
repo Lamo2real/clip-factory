@@ -231,7 +231,7 @@ def specs() -> list[dict[str, Any]]:
         _spec("offer_analyze_reference", "Offer an Analyze this reference video button.", {"refId": _STR}, ["refId"]),
         _spec(
             "offer_open",
-            "Offer a button that opens a Clip Stories page.",
+            "Offer a button that opens a Funded Clips page.",
             {
                 "page": {"type": "string", "enum": list(PAGES)},
                 "id": {"type": "string", "description": "the item id for one-item pages"},
@@ -279,7 +279,7 @@ class Toolbox:
 
     def offer(self, kind: str, label: str, payload: dict[str, Any]) -> dict[str, Any]:
         if kind not in ACTION_KINDS:
-            raise ToolError("That button is not one Clip Stories has.")
+            raise ToolError("That button is not one Funded Clips has.")
         action = {"kind": kind, "label": clip(label, 40), "payload": payload}
         if any(a["kind"] == kind and a["payload"] == payload for a in self.actions):
             return {"ok": True, "button": action["label"], "note": "That button is already in your answer."}
@@ -629,7 +629,7 @@ class Toolbox:
                 and guidance.keyword_match([fields["title"], fields["logline"]]) is None
             ):
                 raise ToolError(
-                    "Clip Stories only makes driving-safety videos from checked advice, and this one isn't in the list."
+                    "Funded Clips only makes driving-safety videos from checked advice, and this one isn't in the list."
                 )
             story["brief"] = fields
         if args.get("durationSec") is not None:
@@ -648,7 +648,7 @@ class Toolbox:
     def offer_open(self, args: dict[str, Any]) -> dict[str, Any]:
         page = args.get("page")
         if page not in PAGES:
-            raise ToolError("That is not a Clip Stories page.")
+            raise ToolError("That is not a Funded Clips page.")
         href = PAGES[str(page)]
         if "{id}" in href:
             item_id = str(args.get("id") or "")

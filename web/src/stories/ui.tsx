@@ -513,11 +513,11 @@ export function forgetDashboards(): void {
 }
 
 /**
- * The Social accounts page as Needs you sentences name it ("Clip Stories › Social accounts", or just "Social
+ * The Social accounts page as Needs you sentences name it ("Funded Clips › Social accounts", or just "Social
  * accounts"). A sentence stored before a rename still says "Clip Factory Stories › Social accounts" or "Lamo Stories ›
  * Social accounts" and reads the same way.
  */
-const SOCIAL_PAGE = String.raw`(?:(?:Clip(?: Factory)?|Lamo) Stories\s*›\s*)?Social accounts`;
+const SOCIAL_PAGE = String.raw`(?:(?:(?:Clip(?: Factory)?|Lamo) Stories|Funded Clips)\s*›\s*)?Social accounts`;
 
 /**
  * A Needs you sentence shown on the Social accounts page it sends the owner to, without the trip (§45.36 E17): "Open

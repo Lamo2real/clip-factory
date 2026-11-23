@@ -261,7 +261,7 @@ test.describe("with Lamo Stories switched on", () => {
         } else expect(box.height).toBeGreaterThanOrEqual(44);
       }
       // Where there is room it is there in its largest form: the bar from about 650 px tall with the sidebar open (its
-      // two names, "Clip Factory" and "Clip Stories", fit side by side in a 52 px bar, WorkspaceDock's barHeight), a
+      // two names, "Clip Factory" and "Funded Clips", fit side by side in a 52 px bar, WorkspaceDock's barHeight), a
       // round toggle beside the live dot below that; folded, a round toggle, and in a short folded window (600 px
       // tall, 36 px between the menu and the foot) a slim one over that gap. On phones the icon over the short name
       // from 360 px (a pill with the name where it is roomy); at 340 px a slim icon-only toggle of 48 px fills the gap
@@ -292,7 +292,7 @@ test.describe("with Lamo Stories switched on", () => {
     const bar = page.locator(".ws-dock .ws-switch");
     await expect(bar).toBeVisible();
     // One choice per workspace the server lists; Lamo Clips goes by the app's own name.
-    await expect(bar.locator(".ws-switch__opt")).toHaveText(["Clip Factory", "Clip Stories"]);
+    await expect(bar.locator(".ws-switch__opt")).toHaveText(["Clip Factory", "Funded Clips"]);
     await expect(bar.locator(".glide")).toHaveCount(1);
     await expect(bar.locator(".ws-switch__opt.is-on")).toHaveText("Clip Factory");
     await expect(page.locator(".sidebar__item.ws-switch__opt, .ws-switch .sidebar__item")).toHaveCount(0);

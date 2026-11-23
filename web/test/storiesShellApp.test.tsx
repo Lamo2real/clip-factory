@@ -136,7 +136,7 @@ describe("kept behind Clip Factory", () => {
     try {
       await inPanes("stories");
       await act(async () => await vi.advanceTimersByTimeAsync(10));
-      expect(document.title).toBe("Dashboard · Clip Stories · Clip Factory");
+      expect(document.title).toBe("Dashboard · Funded Clips · Clip Factory");
       expect(meta.content.toLowerCase()).toBe("#1c1842");
       expect(host.querySelectorAll("#main")).toHaveLength(1);
       expect(host.querySelector("#main")?.classList.contains("st-main")).toBe(true);
@@ -159,7 +159,7 @@ describe("kept behind Clip Factory", () => {
       // Back: at once, on the same page, its title and colour again, checked and polled again.
       await inPanes("stories");
       await act(async () => await vi.advanceTimersByTimeAsync(10));
-      expect(document.title).toBe("Dashboard · Clip Stories · Clip Factory");
+      expect(document.title).toBe("Dashboard · Funded Clips · Clip Factory");
       expect(meta.content.toLowerCase()).toBe("#1c1842");
       expect(vi.mocked(fake.listWorkspaces!).mock.calls.length).toBeGreaterThan(lists);
       expect(vi.mocked(fake.dashboard!).mock.calls.length).toBeGreaterThan(dashboards);

@@ -251,7 +251,7 @@ def test_a_tool_use_refusal_is_its_own_sentence_naming_the_switch_and_the_model_
     assert isinstance(e.value, models.ToolsUnavailable) and str(e.value) == sentence
     assert sentence.startswith("Meta Llama 4 Maverick does not accept tool use here")
     assert sentence.endswith(
-        'Tap Edit on its row in Clip Stories › Settings › AI and turn off "It can use tools", then tap Check models.'
+        'Tap Edit on its row in Funded Clips › Settings › AI and turn off "It can use tools", then tap Check models.'
     )  # saving the switch keeps the old status (D6), so the sentence names the step that clears it
     assert (e.value.status, e.value.model, getattr(e.value, "sent", None)) == ("error", "custom-llama", True)
     assert getattr(e.value, "model_id", None) == "meta.llama4-maverick-17b-instruct-v1:0"  # what was asked (D5)

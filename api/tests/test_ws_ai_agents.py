@@ -110,7 +110,7 @@ def test_switch_off_model_effort_and_workspace_default(wcall: WsCall, table: Fak
 @pytest.mark.parametrize(
     ("change", "sentence"),
     [
-        ({"model": "gpt-9"}, "Clip Stories has no model called 'gpt-9'."),
+        ({"model": "gpt-9"}, "Funded Clips has no model called 'gpt-9'."),
         ({"effort": "turbo"}, "'turbo' is not an effort level."),
         ({"instructions": "   "}, "Write what this agent should do, or tap Reset."),
         ({"instructions": "x" * 10_001}, "The instructions are too long"),

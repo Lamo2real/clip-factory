@@ -43,7 +43,7 @@ async def check(work: Path) -> None:
         raise SystemExit("the sound was not made")
     if not await media.has_filter("ass"):
         raise SystemExit("ffmpeg has no libass (the ass filter)")
-    events = [{"kind": "caption", "text": "Clip Stories ♥", "start": 0, "end": 1, "x": 540, "y": 1300,
+    events = [{"kind": "caption", "text": "Funded Clips ♥", "start": 0, "end": 1, "x": 540, "y": 1300,
                "size": 64, "color": "#fff6e5"}]  # fmt: skip
     (work / "captions.ass").write_text(ass.build(events), "utf-8")
     burned = work / "burned.jpg"
@@ -55,9 +55,9 @@ async def check(work: Path) -> None:
     if not burned.is_file() or burned.stat().st_size < 1000:
         raise SystemExit("the captions were not burned in")
     if not config.models().get("models") or not config.agents().get("agents") or not config.guidance().get("topics"):
-        raise SystemExit("Clip Stories' config files are missing")
+        raise SystemExit("Funded Clips' config files are missing")
     if len(agents.builtin_ids()) < 3:
-        raise SystemExit("Clip Stories' built-in skills are missing")
+        raise SystemExit("Funded Clips' built-in skills are missing")
 
 
 def main() -> int:

@@ -66,7 +66,7 @@ def get(runner: Any = None) -> Services:
     return _installed
 
 
-NO_CLIENT = "The AI helper is not set up in Clip Stories' agent yet. Tap Try again later."
+NO_CLIENT = "The AI helper is not set up in Funded Clips' agent yet. Tap Try again later."
 
 
 def find_model_client(runner: Any = None) -> models.ModelClient:
@@ -132,10 +132,10 @@ def find_image_helper() -> Callable[[Path], Any]:
     try:
         images = importlib.import_module("lamostories_agent.images")  # builder E's picture helper (§45.33)
     except ImportError as e:
-        raise ServiceMissing("The picture helper is not set up in Clip Stories' agent yet.") from e
+        raise ServiceMissing("The picture helper is not set up in Funded Clips' agent yet.") from e
     helper = getattr(images, "to_model_image", None)
     if not callable(helper):
-        raise ServiceMissing("The picture helper is not set up in Clip Stories' agent yet.")
+        raise ServiceMissing("The picture helper is not set up in Funded Clips' agent yet.")
     return helper
 
 
@@ -148,7 +148,7 @@ def from_env(runner: Any = None) -> Services:
     table = os.environ.get("CF_STORIES_TABLE") or os.environ.get("TABLE_NAME") or ""
     bucket = os.environ.get("CF_MEDIA_BUCKET") or os.environ.get("MEDIA_BUCKET") or ""
     if not table or not bucket:
-        raise ServiceMissing("Clip Stories' agent has no table or bucket set. Tap Try again later.")
+        raise ServiceMissing("Funded Clips' agent has no table or bucket set. Tap Try again later.")
     region = os.environ.get("CF_REGION") or os.environ.get("AWS_REGION") or None
     cfg = Config(retries={"max_attempts": 4, "mode": "standard"}, connect_timeout=5, read_timeout=30)
     session = boto3.session.Session(region_name=region)

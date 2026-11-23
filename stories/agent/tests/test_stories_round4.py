@@ -548,7 +548,7 @@ def test_try_it_of_nova_reel_says_it_was_ended_and_calls_nothing(tmp_path: Path)
     assert run_check(svc, "nova-reel") == "failed"
     job = table.item("PJOB#J9")
     assert job is not None and job["error"] == (
-        "Amazon Nova Reel 1.1 was ended by Amazon on 30 Sep 2026. Pick another video maker in Clip Stories › Settings › "
+        "Amazon Nova Reel 1.1 was ended by Amazon on 30 Sep 2026. Pick another video maker in Funded Clips › Settings › "
         "Video."
     )
     assert fake.starts == [] and table.item(keys.provider_sk("animation", "nova-reel")) is None

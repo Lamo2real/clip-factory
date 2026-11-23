@@ -23,7 +23,7 @@
 # live release (cf-prod-api's VERSION before this plan, the git sha of the last applied deploy) to this one are read,
 # one pull request (or pushed commit) each. A commit is Lamo Stories' when it touches its folders (stories/,
 # web/src/stories/, infra/modules/stories_*, api/.../workspaces/, the story flow, its tests) or names it in its message
-# ("Clip Stories", or an old name "Clip Factory Stories" or "Lamo Stories", any case); it matters here when it also
+# ("Funded Clips", or an old name "Clip Stories", "Clip Factory Stories" or "Lamo Stories", any case); it matters here when it also
 # touches what feeds this plan (infra/, deploy.yml, or Clip Factory's agent sources agent/, skills/, config/). With
 # none, the findings are Clip Factory's own and are printed as notices.
 # When the history cannot be read (no live release in the plan, a commit that is not here), they stop the deploy. A
@@ -175,8 +175,9 @@ fi
 
 # ---------- Whose work is in this deploy (the commits since the live release) ----------
 stories_paths='^(stories/|web/src/stories/|web/test/stories|web/e2e/stories|infra/modules/stories_|api/src/clipfactory_api/workspaces/|api/src/clipfactory_api/flows/story_flow\.py$|api/tests/ws_|api/tests/workspaces/)'
-# The app's name in a commit message, any case: today's "Clip Stories" and its two old names (§45.18).
-stories_names='lamo stories|clip factory stories|clip stories'
+# The app's name in a commit message, any case, as whole words (so "unfunded clips" is not it): today's "Funded
+# Clips" and its three old names (§45.18).
+stories_names='lamo stories|clip factory stories|clip stories|funded clips'
 plan_paths='^(infra/|\.github/workflows/deploy\.yml$|agent/|skills/|config/)'
 agent_paths='^(agent/|skills/|config/)'
 empty_tree="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -201,7 +202,7 @@ else
     files="$(g diff --name-only "$parent" "$c")"
     subject="$(g log -1 --format='%h %s' "$c")"
     message="$(g log -1 --format=%B "$c")"
-    if grep -Eq "$stories_paths" <<<"$files" || grep -qiE "$stories_names" <<<"$message"; then
+    if grep -Eq "$stories_paths" <<<"$files" || grep -qiE "(^|[^a-z])(${stories_names})([^a-z]|$)" <<<"$message"; then
       if grep -Eq "$plan_paths" <<<"$files"; then
         scope="stories"
         stories_commits+=("$subject")

@@ -46,7 +46,7 @@ export function seed(store: MockStore): void {
     CLIPS,
     {
       workspaceId: FIRST_STORIES_WORKSPACE_ID,
-      workspaceName: "Clip Stories",
+      workspaceName: "Funded Clips",
       workspaceType: "stories",
       builtin: false,
       configuration: structuredClone(DEFAULT_CONFIG),
@@ -77,7 +77,7 @@ export function seed(store: MockStore): void {
 export function storiesWorkspace(store: MockStore, ws: string): Workspace & { configuration: StoriesConfig } {
   const found = store.workspaces.find((w) => w.workspaceId === ws);
   if (!found) throw new ApiError(404, "not_found", "We could not find that workspace.");
-  if (found.workspaceType !== "stories") throw new ApiError(409, "conflict", "That is a Clip Stories page. Switch to Clip Stories first.");
+  if (found.workspaceType !== "stories") throw new ApiError(409, "conflict", "That is a Funded Clips page. Switch to Funded Clips first.");
   return found as Workspace & { configuration: StoriesConfig };
 }
 
@@ -156,7 +156,7 @@ export const LUMA_DENIED = "Amazon Bedrock said this account has no access to Lu
 export const LUMA_BUSY = "Luma AI Ray2 is being tried. Wait until it is done.";
 /** The API's lines for the owner's own video model's Try it (providers.CHECK_BUSY_LINE, routes/core.check_provider). */
 export const OWN_VIDEO_BUSY = "Your own video model is being tried. Wait until it is done.";
-export const OWN_VIDEO_FIRST = "Add a video model first: tap Add a model in Clip Stories › Settings › Video.";
+export const OWN_VIDEO_FIRST = "Add a video model first: tap Add a model in Funded Clips › Settings › Video.";
 /** The API's not-ready sentence for the owner's own video model (providers.NOT_READY["own-video"]). */
 export const OWN_VIDEO_NOT_READY =
   "Your own video model is not ready yet: it needs a storage bucket in the United States (Oregon), which is switched off, and the model turned on for your account. Pick Built-in animation in Settings › Video, or finish its setup and tap Try it.";

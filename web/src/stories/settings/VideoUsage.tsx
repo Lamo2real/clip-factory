@@ -25,7 +25,7 @@ export const USAGE_NAME: Record<string, string> = {
   polly: "A spoken voice (Amazon Polly)",
 };
 
-export const FREE_LINE = "Free: it runs on Clip Stories' own computer";
+export const FREE_LINE = "Free: it runs on Funded Clips' own computer";
 
 /** One mark colour per maker, in the order they are listed (marks only, never words). */
 const SWATCH = ["st-stg-sw--sky", "st-stg-sw--sun", "st-stg-sw--mint", "st-stg-sw--coral", "st-stg-sw--lilac"];

@@ -1,6 +1,6 @@
 ---
 name: driving-safety-teaching
-description: How Clip Stories teaches driving safety honestly, only from the checked guidance list, without scaring or showing anything to copy.
+description: How Funded Clips teaches driving safety honestly, only from the checked guidance list, without scaring or showing anything to copy.
 ---
 
 # Teaching driving safety

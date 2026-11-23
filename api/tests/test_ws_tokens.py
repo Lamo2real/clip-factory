@@ -81,7 +81,7 @@ def test_no_workspace_token_is_not_connected_even_when_lamo_clips_has_one(
     secrets_client.values["cf-prod/platforms/youtube/token"] = json.dumps({"accessToken": "CLIPS-YT"})
     with pytest.raises(NotConnectedError) as e:
         provider.credentials("youtube")
-    assert "Clip Stories' YouTube" in str(e.value)
+    assert "Funded Clips' YouTube" in str(e.value)
     assert "Settings" not in str(e.value)
     assert ("get", "cf-prod/platforms/youtube/token") not in secrets_client.calls
 
@@ -196,7 +196,7 @@ def test_a_dead_token_marks_only_the_workspace_account(
     with pytest.raises(ReconnectNeededError) as e:
         provider("tiktok")
     assert str(e.value) == (
-        "This TikTok account (Lamo Stories tiktok) needs connecting again. Open Clip Stories › Social accounts, "
+        "This TikTok account (Lamo Stories tiktok) needs connecting again. Open Funded Clips › Social accounts, "
         "then tap Try again."
     )
     item = table.raw(sup.PK, "SOCIAL#tiktok")
@@ -239,5 +239,5 @@ def test_its_own_class_with_none_of_lamo_clips_helpers() -> None:
     ):
         assert name not in source, name
     assert "from ..oauth.tokens import Credentials, clear_lease, take_lease" in source
-    with pytest.raises(ValueError, match="Clip Stories"):
+    with pytest.raises(ValueError, match="Funded Clips"):
         WorkspaceTokenProvider(None, None, None, USER, "clips")  # type: ignore[arg-type]

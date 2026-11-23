@@ -90,7 +90,7 @@ REEL_SIZES = ((1280, 720),)  # what Nova Reel 1.1 makes; a shot is scaled and cr
 # Amazon ended Nova Canvas and Nova Reel on 30 September 2026 (§45.37 G7): never offered, never called.
 ENDED_MAKERS = frozenset({"nova-canvas", "nova-reel"})
 ENDED_DAY = "2026-09-30"
-ENDED_LINE = "{label} was ended by Amazon on {day}. Pick another {what} maker in Clip Stories › Settings › Video."
+ENDED_LINE = "{label} was ended by Amazon on {day}. Pick another {what} maker in Funded Clips › Settings › Video."
 ENDED_STATE_LINE = "Ended by Amazon on 30 Sep 2026."
 WHAT = {"images": "picture", "animation": "video", "audio": "sound"}
 MODEL_FIELDS = {"images": "imageModel", "animation": "videoModel", "audio": "audioModel"}
@@ -112,10 +112,10 @@ OWN_VIDEO_NOT_READY = (  # word for word the API's line (providers.NOT_READY["ow
     "its setup and tap Try it."
 )
 NO_OWN_MODEL = (
-    "You have not added a {what} model yet. Add one in Clip Stories › Settings › Video, or pick another {what} maker."
+    "You have not added a {what} model yet. Add one in Funded Clips › Settings › Video, or pick another {what} maker."
 )
 NOT_ITS_MODEL = (
-    "{label} can't use the {what} model you picked any more. Pick another in Clip Stories › Settings › Video."
+    "{label} can't use the {what} model you picked any more. Pick another in Funded Clips › Settings › Video."
 )
 PICTURE_SETUP = (
     "AI pictures are not set up yet: {why}. Pick Built-in characters in Settings › Video, or finish its setup, then "
@@ -123,23 +123,23 @@ PICTURE_SETUP = (
 )
 PICTURE_REFUSED = "{label} would not draw this character. Change the description a little, then tap Try again."
 PICTURE_FAILED = "{label} did not answer. Tap Try again."
-PICTURE_UNKNOWN = "Clip Stories can't ask {label} for a picture. Pick another picture maker in Settings › Video."
-VIDEO_UNKNOWN = "Clip Stories can't ask {label} for video. Pick another video maker in Settings › Video."
+PICTURE_UNKNOWN = "Funded Clips can't ask {label} for a picture. Pick another picture maker in Settings › Video."
+VIDEO_UNKNOWN = "Funded Clips can't ask {label} for video. Pick another video maker in Settings › Video."
 SOUND_KEY = (
-    "Paste your ElevenLabs key in Clip Stories › Settings › AI › Provider keys first, or pick Built-in sounds "
+    "Paste your ElevenLabs key in Funded Clips › Settings › AI › Provider keys first, or pick Built-in sounds "
     "in Settings › Video, then tap Try again."
 )
 KEY_UNREADABLE = (
-    "Clip Stories could not read the key you saved for {words}. Tap Try again. If it keeps happening, paste "
-    "the key again in Clip Stories › Settings › AI › Provider keys."
+    "Funded Clips could not read the key you saved for {words}. Tap Try again. If it keeps happening, paste "
+    "the key again in Funded Clips › Settings › AI › Provider keys."
 )
-KEY_ELSEWHERE = "Clip Stories did not make this picture: {why}."
+KEY_ELSEWHERE = "Funded Clips did not make this picture: {why}."
 SOUND_FAILED = (
-    "{label} could not make the sounds. Tap Try again, or pick Built-in sounds in Clip Stories › Settings › Video."
+    "{label} could not make the sounds. Tap Try again, or pick Built-in sounds in Funded Clips › Settings › Video."
 )
 SOUND_BEDROCK = (
-    "Amazon Bedrock has no sound model Clip Stories can call yet. Pick another sound maker in "
-    "Clip Stories › Settings › Video."
+    "Amazon Bedrock has no sound model Funded Clips can call yet. Pick another sound maker in "
+    "Funded Clips › Settings › Video."
 )
 VOICE_FAILED = "Amazon Polly could not speak the words. Tap Try again, or pick Built-in sounds in Settings › Video."
 VOICE_SETUP = (
@@ -568,7 +568,7 @@ class AiPictures(_Base):
         else:
             raise ProviderUnavailable(PICTURE_UNKNOWN.format(label=label))
         if self.ctx.bedrock is None:
-            raise ProviderUnavailable(PICTURE_SETUP.format(why="Clip Stories cannot reach Amazon Bedrock"))
+            raise ProviderUnavailable(PICTURE_SETUP.format(why="Funded Clips cannot reach Amazon Bedrock"))
         from botocore.exceptions import ClientError
 
         client = self.ctx.bedrock(str(entry.get("region") or WEST))

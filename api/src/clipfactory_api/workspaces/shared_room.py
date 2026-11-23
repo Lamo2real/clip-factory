@@ -86,8 +86,8 @@ RATE_KINDS: Final = ("rate",)
 MONTHS: Final = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 WAITING: Final = "Waiting: Clip Factory's posts go first."
 X_OVER_LIMIT: Final = (
-    "Clip Factory does not count Clip Stories' X posts, so if Clip Factory posts much more than planned, the month "
-    "can go over your X limit by what Clip Stories spent."
+    "Clip Factory does not count Funded Clips' X posts, so if Clip Factory posts much more than planned, the month "
+    "can go over your X limit by what Funded Clips spent."
 )
 
 
@@ -295,7 +295,7 @@ def x_next_room(
 def _item(scope: Scope, platform: str, key: str) -> dict[str, Any]:
     found = scope.store.get(scope.pk(platform), share_sk(platform, key))
     if found and (found.get("type") != TYPE or found.get("platform") != platform):
-        raise ValueError("not a Clip Stories shared-app counter")
+        raise ValueError("not a Funded Clips shared-app counter")
     return found or {}
 
 

@@ -250,10 +250,10 @@ export function wantedStoriesWorkspace(): string | null {
 
 /** The first Stories workspace's first default name (until 22 Nov 2026). */
 export const OLD_STORIES_NAME = "Lamo Stories";
-/** Every earlier default name of the first Stories workspace: "Lamo Stories", then "Clip Factory Stories" (22 Nov 2026). */
-export const OLD_STORIES_NAMES: readonly string[] = [OLD_STORIES_NAME, "Clip Factory Stories"];
-/** Today's: the app's name, "Clip Stories". */
-export const STORIES_NAME = "Clip Stories";
+/** Every earlier default name of the first Stories workspace: "Lamo Stories", then "Clip Factory Stories" and "Clip Stories" (22-23 Nov 2026). */
+export const OLD_STORIES_NAMES: readonly string[] = [OLD_STORIES_NAME, "Clip Factory Stories", "Clip Stories"];
+/** Today's: the app's name, "Funded Clips". */
+export const STORIES_NAME = "Funded Clips";
 
 /**
  * The name a person sees for a stored Stories workspace name: a workspace still stored with an old default name

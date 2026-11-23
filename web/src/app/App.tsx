@@ -88,7 +88,7 @@ const TITLES: Record<Route["name"], string> = {
   campaigns_find: "Find campaigns",
   campaign: "Campaign",
   motion_gallery: "Motion gallery",
-  stories: "Clip Stories",
+  stories: "Funded Clips",
   not_found: "Not found",
 };
 
@@ -262,7 +262,7 @@ function StoriesHost({ page }: { page: StoriesPage }) {
   return (
     <Suspense
       fallback={
-        <div className="boot" role="status" aria-label="Loading Clip Stories">
+        <div className="boot" role="status" aria-label="Loading Funded Clips">
           <WorkspaceMark boot />
         </div>
       }

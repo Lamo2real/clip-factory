@@ -102,7 +102,7 @@ function fileName(i: LibraryItem): string {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
-      .slice(0, 40) || "clip-stories";
+      .slice(0, 40) || "funded-clips";
   const scene = typeof i.meta.sceneId === "string" ? `-${i.meta.sceneId}` : "";
   return `${slug}-${i.kind.replace(/_/g, "-")}${scene}${i.version ? `-v${i.version}` : ""}.${ext[i.contentType] ?? "bin"}`;
 }
@@ -661,7 +661,7 @@ export function LibraryScreen({ ws, page }: StoriesScreenProps) {
   };
   return (
     <section className="st-page st-library">
-      <StPageHead title="Library" lede="Every file Clip Stories made or you added, kept safe. Only Clip Stories' own: Clip Factory's Library stays separate." />
+      <StPageHead title="Library" lede="Every file Funded Clips made or you added, kept safe. Only Funded Clips' own: Clip Factory's Library stays separate." />
       <div className="st-tabs" role="tablist" aria-label="Library">
         <Glide active=".st-tabs__tab.is-on" className="glide--st" />
         {TABS.map((t) => (

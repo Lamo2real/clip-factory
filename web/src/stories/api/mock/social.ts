@@ -27,13 +27,13 @@ export const PLATFORM_NAME: Record<Platform, string> = { youtube: "YouTube", tik
 export const LIMITS: Record<Platform, string[]> = {
   youtube: [
     "One Google sign-in can hold several channels.",
-    "Clip Stories posts to the one channel you pick in Google's list. To use a different one, tap Pick another channel.",
-    "Both channels share Clip Factory's daily uploads, about 6 a day in all. Clip Factory's come first: Clip Stories uses what is left, and a post waits for the next day when none are left.",
+    "Funded Clips posts to the one channel you pick in Google's list. To use a different one, tap Pick another channel.",
+    "Both channels share Clip Factory's daily uploads, about 6 a day in all. Clip Factory's come first: Funded Clips uses what is left, and a post waits for the next day when none are left.",
   ],
   instagram: [
     "It needs its own professional account (Business or Creator), linked to a Facebook Page.",
     "Facebook asks which Pages the app may use for your whole Facebook login. If you untick Clip Factory's Page there, Clip Factory loses it.",
-    "Clip Stories checks Clip Factory afterwards and tells you if something went wrong.",
+    "Funded Clips checks Clip Factory afterwards and tells you if something went wrong.",
   ],
   facebook: [
     "It needs its own Facebook Page, run by the same Facebook login.",
@@ -42,15 +42,15 @@ export const LIMITS: Record<Platform, string[]> = {
   tiktok: [
     "While TikTok is still checking the app, only test accounts added in TikTok's Sandbox can connect.",
     "Until TikTok says yes, the account must be private and posts are seen by you only.",
-    "When TikTok says yes, Clip Stories asks you to connect again.",
-    "Clip Factory's posts come first: Clip Stories uses what is left of the app's daily posts.",
+    "When TikTok says yes, Funded Clips asks you to connect again.",
+    "Clip Factory's posts come first: Funded Clips uses what is left of the app's daily posts.",
   ],
   x: [
     "It needs its own X account. X connects the account that is signed in on x.com.",
-    "Posts use Clip Factory's X app. Clip Factory's posts come first: Clip Stories uses what is left of the month's credits.",
+    "Posts use Clip Factory's X app. Clip Factory's posts come first: Funded Clips uses what is left of the month's credits.",
     // The API's lines (social._LIMITS["x"], shared_room.X_OVER_LIMIT, §45.37 G6).
-    "Clip Stories uses only what Clip Factory's share of your monthly X limit leaves.",
-    "Clip Factory does not count Clip Stories' X posts, so if Clip Factory posts much more than planned, the month can go over your X limit by what Clip Stories spent.",
+    "Funded Clips uses only what Clip Factory's share of your monthly X limit leaves.",
+    "Clip Factory does not count Funded Clips' X posts, so if Clip Factory posts much more than planned, the month can go over your X limit by what Funded Clips spent.",
   ],
 };
 
@@ -58,17 +58,17 @@ export const LIMITS: Record<Platform, string[]> = {
 export const LIMITS_OWN: Record<Platform, string[]> = {
   youtube: [
     "One Google sign-in can hold several channels.",
-    "Clip Stories posts to the one channel you pick in Google's list. To use a different one, tap Pick another channel.",
+    "Funded Clips posts to the one channel you pick in Google's list. To use a different one, tap Pick another channel.",
     "Your own Google project has its own daily uploads: about 6 a day.",
   ],
   instagram: [
     "It needs its own professional account (Business or Creator), linked to a Facebook Page.",
-    "Clip Stories uses its own Meta app, so Clip Factory's Meta connection is never touched.",
+    "Funded Clips uses its own Meta app, so Clip Factory's Meta connection is never touched.",
     "While the Meta app is in Development mode, only you (its admin) can connect. Going Live needs Meta's App Review.",
   ],
   facebook: [
     "It needs its own Facebook Page, run by the same Facebook login.",
-    "Clip Stories uses its own Meta app, so Clip Factory's Pages stay as they are. Tick only the Clip Stories Page.",
+    "Funded Clips uses its own Meta app, so Clip Factory's Pages stay as they are. Tick only the Funded Clips Page.",
   ],
   tiktok: [
     "A new TikTok app starts in Sandbox: only test accounts added there can connect, and they must be private.",
@@ -76,7 +76,7 @@ export const LIMITS_OWN: Record<Platform, string[]> = {
   ],
   x: [
     "It needs its own X account. X connects the account that is signed in on x.com.",
-    "Your own X app has its own credits and its own monthly limit (Clip Stories › Settings).",
+    "Your own X app has its own credits and its own monthly limit (Funded Clips › Settings).",
   ],
 };
 
@@ -135,8 +135,8 @@ export function sameAsClips(a: Pick<SocialAccount, "platform" | "connectionStatu
 }
 
 /** The API's same_as_clips sentences (social.SAME_AT_CONNECT and SAME_LATER), word for word. */
-export const SAME_AT_CONNECT = "This is Clip Factory's own account. Clip Stories needs its own separate account: sign in with a different one.";
-export const SAME_LATER = "This is Clip Factory's account now. Connect a different account made for Clip Stories.";
+export const SAME_AT_CONNECT = "This is Clip Factory's own account. Funded Clips needs its own separate account: sign in with a different one.";
+export const SAME_LATER = "This is Clip Factory's account now. Connect a different account made for Funded Clips.";
 
 /**
  * The account as Social accounts shows it (the API's public_of): one Clip Factory connected later reads same_as_clips
@@ -153,13 +153,13 @@ function settled(a: SocialAccount, store: MockStore): SocialAccount {
   return sameWarning ? { ...out, warning: null } : out;
 }
 
-/** What a connect in the pretend app finds for each platform: the Clip Stories account the owner picked. */
+/** What a connect in the pretend app finds for each platform: the Funded Clips account the owner picked. */
 const STORIES_IDENTITY: Record<Platform, { id: string; name: string; handle: string }> = {
-  youtube: { id: "UC7stories0lamo00000000a", name: "Clip Stories", handle: "@clipstories" },
-  tiktok: { id: "-000lamostories-open-id", name: "Clip Stories", handle: "@clip.stories" },
-  instagram: { id: "17841400000000001", name: "clip.stories", handle: "@clip.stories" },
-  facebook: { id: "109876543210987", name: "Clip Stories", handle: "Clip Stories" },
-  x: { id: "1600000000000000002", name: "Clip Stories", handle: "@clipstories" },
+  youtube: { id: "UC7stories0lamo00000000a", name: "Funded Clips", handle: "@fundedclips" },
+  tiktok: { id: "-000lamostories-open-id", name: "Funded Clips", handle: "@funded.clips" },
+  instagram: { id: "17841400000000001", name: "funded.clips", handle: "@funded.clips" },
+  facebook: { id: "109876543210987", name: "Funded Clips", handle: "Funded Clips" },
+  x: { id: "1600000000000000002", name: "Funded Clips", handle: "@fundedclips" },
 };
 
 /** A little round face as a pretend profile picture (`_name` only tells the seeds apart when reading them). */
@@ -265,7 +265,7 @@ export function seed(store: MockStore): void {
     ...base(ws, "instagram", META_APP),
     connectionStatus: "choose_account",
     choices: [
-      { id: STORIES_IDENTITY.instagram.id, name: "clip.stories", avatarUrl: avatar("clip.stories", "#62C6FF"), usedByClips: false },
+      { id: STORIES_IDENTITY.instagram.id, name: "funded.clips", avatarUrl: avatar("funded.clips", "#62C6FF"), usedByClips: false },
       { id: CLIPS_IDS.instagram, name: CLIPS_NAMES.instagram, avatarUrl: avatar("clipfactory.gg", "#0F372B"), usedByClips: true },
     ],
     warning: META_WARNING("instagram"),
@@ -324,8 +324,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       await delay(typeof store.knobs.connectMs === "number" ? store.knobs.connectMs : 220);
       const a = account(store, ws, platform);
       // One helper picks the keys (§45.30): no choice asks, own keys must be saved, Clip Factory's must exist.
-      if (a.app.choice === null) throw new ApiError(409, "conflict", `Pick which ${PLATFORM_NAME[platform]} app Clip Stories uses first.`);
-      if (a.app.choice === "own" && !a.app.saved) throw new ApiError(409, "conflict", `Paste your Clip Stories ${PLATFORM_NAME[platform]} app keys first.`);
+      if (a.app.choice === null) throw new ApiError(409, "conflict", `Pick which ${PLATFORM_NAME[platform]} app Funded Clips uses first.`);
+      if (a.app.choice === "own" && !a.app.saved) throw new ApiError(409, "conflict", `Paste your Funded Clips ${PLATFORM_NAME[platform]} app keys first.`);
       if (a.app.choice === "clips" && store.knobs.noAppKeys === platform)
         throw new ApiError(
           409,
@@ -377,7 +377,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
     async checkSocial(ws, platform) {
       await delay(400);
       const a = account(store, ws, platform);
-      if (a.connectionStatus === "not_connected") throw new ApiError(409, "conflict", `Clip Stories' ${PLATFORM_NAME[platform]} is not connected. Tap Connect first.`);
+      if (a.connectionStatus === "not_connected") throw new ApiError(409, "conflict", `Funded Clips' ${PLATFORM_NAME[platform]} is not connected. Tap Connect first.`);
       // A live profile call: a dead token turns the account to needs_reconnect (a test knob plays that).
       if (store.knobs.tokenDead === platform) return replace(store, { ...a, connectionStatus: "needs_reconnect", reason: "token_dead", lastCheckedAt: new Date().toISOString() });
       // Check it settles the account as the page does: Clip Factory connecting it later blocks it (§45.37 G8).
@@ -386,10 +386,10 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
     async tiktokCreatorInfo(ws) {
       await delay(200);
       const a = account(store, ws, "tiktok");
-      if (a.connectionStatus !== "connected") throw new ApiError(409, "conflict", "Clip Stories' TikTok is not connected. Connect it in Clip Stories › Social accounts.");
+      if (a.connectionStatus !== "connected") throw new ApiError(409, "conflict", "Funded Clips' TikTok is not connected. Connect it in Funded Clips › Social accounts.");
       const creator: TikTokCreator = {
-        nickname: a.accountName ?? "Clip Stories",
-        username: (a.handle ?? "@clip.stories").replace(/^@/, ""),
+        nickname: a.accountName ?? "Funded Clips",
+        username: (a.handle ?? "@funded.clips").replace(/^@/, ""),
         avatarUrl: a.avatarUrl,
         privacyOptions: ["SELF_ONLY"],
         commentDisabled: false,
@@ -411,7 +411,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const name = PLATFORM_NAME[platform];
       if (body.choice === "clips") {
         if (!SHARED_APP_PLATFORMS.includes(platform))
-          throw new ApiError(400, "bad_request", `${name} always uses Clip Stories' own Meta app, so Clip Factory's Meta connection is never touched.`);
+          throw new ApiError(400, "bad_request", `${name} always uses Funded Clips' own Meta app, so Clip Factory's Meta connection is never touched.`);
         const changed = a.app.choice !== "clips";
         const next = changed ? base(ws, platform, CLIPS_APP) : a;
         return replace(store, { ...next, app: CLIPS_APP, limits: limitsFor(platform, "clips") });
@@ -439,7 +439,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       await delay(500);
       const a = account(store, ws, platform);
       const name = PLATFORM_NAME[platform];
-      if (a.app.choice !== "own" || !a.app.saved) throw new ApiError(409, "conflict", `Paste your Clip Stories ${name} app keys first.`);
+      if (a.app.choice !== "own" || !a.app.saved) throw new ApiError(409, "conflict", `Paste your Funded Clips ${name} app keys first.`);
       const wrong = store.knobs.keysWrong === platform;
       const check: KeyCheck = wrong
         ? { at: new Date().toISOString(), ok: false, code: "keys_wrong", message: `${name} said these keys are wrong. Copy them again from your ${name} app.` }
@@ -452,7 +452,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
     async deleteSocialApp(ws, platform) {
       await delay(220);
       const a = account(store, ws, platform);
-      if (a.app.choice !== "own") throw new ApiError(409, "conflict", "Clip Stories has no keys of its own here.");
+      if (a.app.choice !== "own") throw new ApiError(409, "conflict", "Funded Clips has no keys of its own here.");
       // Disconnects first; only Lamo Stories' own keys go (Clip Factory's are never touched). The own Meta app is one
       // app: its keys go for Instagram and Facebook together.
       for (const each of appPlatforms(platform)) {

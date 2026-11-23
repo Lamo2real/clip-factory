@@ -80,7 +80,7 @@ def test_done_states_come_from_the_real_state(wcall: WsCall, store: db.Store) ->
     assert got["onboarding"]["done"] == 3
     tiktok = next(s for s in got["onboarding"]["steps"] if s["step"] == "tiktok")
     assert tiktok["line"] == (
-        "This is Clip Factory's own account. Clip Stories needs its own separate account: sign in with a different one."
+        "This is Clip Factory's own account. Funded Clips needs its own separate account: sign in with a different one."
     )
     assert "line" not in next(s for s in got["onboarding"]["steps"] if s["step"] == "youtube")
     # a step that ticks itself cannot be ticked by hand
@@ -176,7 +176,7 @@ def test_a_connected_account_that_lamo_clips_has_too_is_not_a_done_step(
     steps = {s["step"]: s for s in got["onboarding"]["steps"]}
     assert steps["youtube"]["state"] == "todo"
     assert steps["youtube"]["line"] == (
-        "This is Clip Factory's own account. Clip Stories needs its own separate account: sign in with a different one."
+        "This is Clip Factory's own account. Funded Clips needs its own separate account: sign in with a different one."
     )
     assert (steps["x"]["state"], "line" in steps["x"]) == ("done", False)  # another X account: Lamo Stories' own
     # an old "Use it for both" for this very channel no longer counts (§45.37 G8): the step stays to do

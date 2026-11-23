@@ -16,7 +16,7 @@ from .. import s3
 DOWNLOAD_SECONDS = 3600
 
 
-def slug(title: str, fallback: str = "clip-story") -> str:
+def slug(title: str, fallback: str = "funded-clip") -> str:
     """A safe file name stem: ASCII letters, digits and dashes, at most 60 characters."""
     text = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode().lower()
     text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")

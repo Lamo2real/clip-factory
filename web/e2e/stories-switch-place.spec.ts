@@ -152,9 +152,9 @@ for (const size of SIZES) {
     // On a computer the bar lists both apps and its highlight is on the app on screen; on a phone the toggle names the
     // other one.
     if (size.w >= 768) {
-      if (!size.folded) for (const { at } of seen) expect(at.names).toEqual(["Clip Factory", "Clip Stories"]);
+      if (!size.folded) for (const { at } of seen) expect(at.names).toEqual(["Clip Factory", "Funded Clips"]);
       for (const { path, at } of seen) expect(at.sw!.x, `${path}: in the left column`).toBeLessThan((size.folded ? 80 : 252) + 14 + 0.5);
-    } else for (const { path, at } of seen) expect(at.names, path).toEqual([path.startsWith("/stories") ? "Clip Factory" : "Clip Stories"]);
+    } else for (const { path, at } of seen) expect(at.names, path).toEqual([path.startsWith("/stories") ? "Clip Factory" : "Funded Clips"]);
     // Where it has always been in Clip Factory: the sidebar's foot, the switch right above the Live chip.
     if (size.w >= 768 && !size.folded) expect(first!.at.live!.y - (first!.at.sw!.y + first!.at.sw!.height)).toBeCloseTo(4, 0);
     await page.context().close();
@@ -184,15 +184,15 @@ test("a longer workspace name stands the choices one above the other, the same b
   const page = await open(browser, { w: 1440, h: 900 }, true);
   await ready(page, "/library");
   const bar = page.locator(".ws-dock .ws-switch");
-  // Today's two names, "Clip Factory" and "Clip Stories", fit side by side.
-  await expect(bar.locator(".ws-switch__opt")).toHaveText(["Clip Factory", "Clip Stories"]);
+  // Today's two names, "Clip Factory" and "Funded Clips", fit side by side.
+  await expect(bar.locator(".ws-switch__opt")).toHaveText(["Clip Factory", "Funded Clips"]);
   await expect(bar).not.toHaveClass(/ws-switch--stack/);
   // The server names the studio so from now on (the shell reads the list again when Lamo Stories opens).
   await page.evaluate(() => {
     const store = (window as unknown as { __cfStoriesMock?: { store?: { workspaces: { workspaceName: string }[] } } }).__cfStoriesMock?.store;
     store!.workspaces[1]!.workspaceName = "Driving Safety Stories";
   });
-  await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Clip Stories$/ }).click();
+  await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Funded Clips$/ }).click();
   await page.locator(".stories-app[data-ws]").waitFor();
   await expect(bar).toHaveClass(/ws-switch--stack/);
   await expect(bar.locator(".ws-switch__opt")).toHaveText(["Clip Factory", "Driving Safety Stories"]);

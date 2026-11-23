@@ -1003,7 +1003,7 @@ export interface SocialAccount {
   handle: string | null;
   avatarUrl: string | null;
   /**
-   * Gone (§45.37 G8): Clip Stories never posts to Clip Factory's own account, so nothing is shared; an older API
+   * Gone (§45.37 G8): Funded Clips never posts to Clip Factory's own account, so nothing is shared; an older API
    * may still send false. Never read by the screens.
    */
   sharedWithClips?: boolean;
@@ -1028,7 +1028,7 @@ export type SocialReason =
   | "missing_permissions"
   | "clips_unknown"
   /**
-   * §45.37 G8: with connectionStatus same_as_clips, Clip Factory connected this very account after Clip Stories
+   * §45.37 G8: with connectionStatus same_as_clips, Clip Factory connected this very account after Funded Clips
    * did (any stable identity matches: the channel, Page or user id, or the username or handle), so it is blocked from
    * posting. Without it, same_as_clips is the account the owner just signed in with.
    */

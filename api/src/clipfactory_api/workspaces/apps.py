@@ -88,8 +88,8 @@ def not_ready_sentence(platform: str, reason: str) -> str:
             "(Settings › Posting › Set up posting, up to the keys step)."
         )
     if reason == "no_choice" and platform in ws.SHARED_APP_PLATFORMS:
-        return f"Pick which app Clip Stories uses for {name} first."
-    return f"Paste your Clip Stories {name} app keys first."
+        return f"Pick which app Funded Clips uses for {name} first."
+    return f"Paste your Funded Clips {name} app keys first."
 
 
 def social_item(store: db.Store, user_id: str, workspace_id: str, platform: str) -> Item | None:

@@ -19,7 +19,7 @@ from typing import Any
 from . import config
 
 FILE_NAME = "guidance.json"
-NO_GUIDANCE = "Clip Stories only makes driving-safety videos from checked advice, and this one isn't in the list yet."
+NO_GUIDANCE = "Funded Clips only makes driving-safety videos from checked advice, and this one isn't in the list yet."
 
 
 class GuidanceError(ValueError):

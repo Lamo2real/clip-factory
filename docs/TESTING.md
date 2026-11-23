@@ -1480,7 +1480,7 @@ cd web && CF_E2E_PORT=4804 npx playwright test e2e/bank.spec.ts
   including `ws_url`, `hooks_url`, `vector_bucket`, `vector_index`, `job_flow_alias_arn`, `clip_flow_alias_arn`,
   `stats_function_name`, `learn_function_name`, `stats_rule_name`, `stats_tick_minutes`.
 
-## Clip Stories (CONTRACTS §45)
+## Funded Clips (CONTRACTS §45)
 
 The list is CONTRACTS §45.19. Three checks matter most, because the owner put protecting Lamo Clips first:
 
@@ -1492,7 +1492,7 @@ The list is CONTRACTS §45.19. Three checks matter most, because the owner put p
 * **Lamo Clips unchanged.** Every existing test passes untouched (the old route list in `test_http.py`, the OAuth
   callback cases, the agent server tests, the nav and Glide specs). `web/scripts/clips-unchanged.sh` builds the mock
   of the merge base and of the branch on one machine and compares screenshots of `/`, `/jobs`, `/review`, `/library`,
-  `/money` and `/settings` at 390×844, 1000×600, 1000×720 and 1440×900: pixel-identical with Clip Stories off
+  `/money` and `/settings` at 390×844, 1000×600, 1000×720 and 1440×900: pixel-identical with Funded Clips off
   (`cf.storiesPreview` = `"0"`), and different only inside the switcher's box with it on (`"1"`; the default since the
   switch, §45.36). The lead runs it on the switch pull request and in the
   final check (Mac and CI fonts differ, so both shots come from one machine). §45.23 lists the live evidence for each

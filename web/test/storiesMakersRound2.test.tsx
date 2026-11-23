@@ -280,7 +280,7 @@ describe("the mock's base URL guard is the API's (hosts.private_host)", () => {
 describe("the publish sheet's line for Clip Factory's own account (§45.37 G8)", () => {
   it("asks for a different account, never to decide", () => {
     const a = { connectionStatus: "same_as_clips" } as SocialAccount;
-    expect(accountState(a)).toBe("This is Clip Factory's own account. Connect a different account made for Clip Stories in Social accounts.");
+    expect(accountState(a)).toBe("This is Clip Factory's own account. Connect a different account made for Funded Clips in Social accounts.");
     expect(accountState(a)).not.toMatch(/decide|both/i);
   });
 });

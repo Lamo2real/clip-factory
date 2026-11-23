@@ -81,7 +81,7 @@ const account = (platform: SocialAccount["platform"], connectionStatus: SocialAc
   ...extra,
 });
 
-const CREATOR: TikTokCreator = { nickname: "Clip Stories", username: "tiktok.stories", avatarUrl: null, privacyOptions: ["PUBLIC_TO_EVERYONE", "SELF_ONLY"], commentDisabled: false, duetDisabled: false, stitchDisabled: false, maxDurationSec: 600 };
+const CREATOR: TikTokCreator = { nickname: "Funded Clips", username: "tiktok.stories", avatarUrl: null, privacyOptions: ["PUBLIC_TO_EVERYONE", "SELF_ONLY"], commentDisabled: false, duetDisabled: false, stitchDisabled: false, maxDurationSec: 600 };
 
 const MODELS: ModelInfo[] = LISTED_INFO.models.map((m) => ({ ...m, status: "ok", statusLine: "Ready." }));
 
@@ -439,7 +439,7 @@ describe("Post to {name}? (error.account, §45.34)", () => {
     const accounts = new Map(store.social.map((a) => [a.platform, a]));
     const named = { externalAccountId: "ext-tiktok", accountName: "A", handle: null };
     expect(placeOf("anything", named, ["youtube", "tiktok"], accounts)).toBe("tiktok");
-    expect(placeOf("Clip Stories' YouTube is a different account now: B.", { externalAccountId: "other", accountName: "B", handle: null }, ["youtube", "tiktok"], accounts)).toBe("youtube");
+    expect(placeOf("Funded Clips' YouTube is a different account now: B.", { externalAccountId: "other", accountName: "B", handle: null }, ["youtube", "tiktok"], accounts)).toBe("youtube");
     expect(placeOf("Something else.", { externalAccountId: "other", accountName: "B", handle: null }, ["youtube", "tiktok"], accounts)).toBeNull();
     expect(placeOf("Something else.", { externalAccountId: "other", accountName: "B", handle: null }, ["x"], accounts)).toBe("x");
     expect(accountWords({ externalAccountId: "1", accountName: "Lamo", handle: "lamo.stories" })).toBe("Lamo (@lamo.stories)");

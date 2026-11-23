@@ -34,7 +34,7 @@ test("after Check models in step 1, step 2 starts from the models' fresh states"
   await expect(page.locator(".st-setup__head .st-ring")).toHaveAttribute("aria-label", "1 of 11 done");
   await page.getByRole("button", { name: "Next" }).click();
   await expect(page.locator("#st-setup-step")).toHaveText("Pick your default model");
-  const radio = page.getByRole("radiogroup", { name: "Clip Stories' default model" }).getByRole("radio", { name: /Claude Sonnet 5.5/ });
+  const radio = page.getByRole("radiogroup", { name: "Funded Clips' default model" }).getByRole("radio", { name: /Claude Sonnet 5.5/ });
   await expect(radio).toContainText("Works: it answered.");
   await expect(radio).not.toContainText("Not checked yet");
   const o = await findOverflow(page);
@@ -53,7 +53,7 @@ test("round 4: step 4 says the built-in animator makes tall, square or wide vide
   await expect(builtin).not.toContainText("9:16");
   // The seed's X account is Lamo Clips' own: the step stays to do, and What is left says why in the server's words.
   const why = page.locator(".st-left__why");
-  await expect(why).toContainText("This is Clip Factory's own account. Clip Stories needs its own separate account: sign in with a different one.");
+  await expect(why).toContainText("This is Clip Factory's own account. Funded Clips needs its own separate account: sign in with a different one.");
   await page.setViewportSize({ width: 320, height: 700 });
   await page.waitForTimeout(250);
   const o = await findOverflow(page);

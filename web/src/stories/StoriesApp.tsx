@@ -238,7 +238,7 @@ function Screen(props: StoriesScreenProps) {
   }
 }
 
-/** The brand in the rail and the phone top bar: Clip Factory's mark in Stories' colours and "Clip Stories". */
+/** The brand in the rail and the phone top bar: Clip Factory's mark in Stories' colours and "Funded Clips". */
 function Brand() {
   return (
     <A href="/stories" className="st-brand" aria-label={`${STORIES_BRAND} dashboard`}>
@@ -379,9 +379,9 @@ function StoriesShell({ page }: { page: StoriesPage }) {
           if (id) {
             setWs(id);
             setProblem(null);
-          } else setProblem("Clip Stories is not ready yet. Try again in a minute.");
+          } else setProblem("Funded Clips is not ready yet. Try again in a minute.");
         })
-        .catch(() => live && !quick && setProblem("Clip Stories could not load. Check that you are online, then try again."));
+        .catch(() => live && !quick && setProblem("Funded Clips could not load. Check that you are online, then try again."));
     };
     run();
     // The switcher picked another Lamo Stories workspace: check again.
@@ -408,7 +408,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
           if (id) setWs(id);
           else setProblem("We could not find that workspace. Reload the page to try again.");
         })
-        .catch(() => live && setProblem("Clip Stories could not load. Check that you are online, then try again."));
+        .catch(() => live && setProblem("Funded Clips could not load. Check that you are online, then try again."));
     };
     return () => {
       live = false;
@@ -512,7 +512,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
         Skip to content
       </a>
       {solo ? null : (
-        <nav className="st-rail" aria-label="Clip Stories">
+        <nav className="st-rail" aria-label="Funded Clips">
           <Brand />
           <ul className="st-rail__list">
             <Glide active=".st-rail__item.is-active" className="glide--st-rail" as="li" />
@@ -540,7 +540,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
           {ws && !solo ? <NeedsYouBar ws={ws} here={storiesHref(page)} /> : null}
           {problem ? (
             <section className="st-page">
-              <h1 className="sr-only">Clip Stories</h1>
+              <h1 className="sr-only">Funded Clips</h1>
               <StError message={problem} onRetry={() => location.reload()} />
             </section>
           ) : ws ? (
@@ -549,14 +549,14 @@ function StoriesShell({ page }: { page: StoriesPage }) {
             </StBoundary>
           ) : (
             <section className="st-page">
-              <h1 className="sr-only">Clip Stories</h1>
+              <h1 className="sr-only">Funded Clips</h1>
               <StLoading label="Opening the studio…" />
             </section>
           )}
         </main>
       </div>
       {solo ? null : (
-        <nav className="st-tabbar" aria-label="Clip Stories">
+        <nav className="st-tabbar" aria-label="Funded Clips">
           <ul className="st-tabbar__list">
             <Glide active=".st-tabbar__item.is-active" className="glide--st-tab" as="li" />
             {TABS.map((item) => (

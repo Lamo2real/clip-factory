@@ -1,6 +1,6 @@
 ---
 name: nonverbal-storytelling
-description: How Clip Stories tells a whole story with no voice-over, only action, faces, sound and a few words on screen.
+description: How Funded Clips tells a whole story with no voice-over, only action, faces, sound and a few words on screen.
 ---
 
 # Telling a story without words

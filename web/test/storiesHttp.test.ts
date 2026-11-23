@@ -268,19 +268,19 @@ describe("sign-in and errors", () => {
   });
 
   it("passes the server's own sentence on (the contract's error envelope)", async () => {
-    const { api } = fake(() => ({ status: 409, body: { error: { code: "conflict", message: "That is a Clip Stories page. Switch to Clip Stories first." } } }));
+    const { api } = fake(() => ({ status: 409, body: { error: { code: "conflict", message: "That is a Funded Clips page. Switch to Funded Clips first." } } }));
     const e = await api.dashboard("clips").catch((x: unknown) => x);
     expect(e).toBeInstanceOf(ApiError);
-    expect(e).toMatchObject({ status: 409, code: "conflict", message: "That is a Clip Stories page. Switch to Clip Stories first." });
+    expect(e).toMatchObject({ status: 409, code: "conflict", message: "That is a Funded Clips page. Switch to Funded Clips first." });
   });
 
   it("keeps the account a publishing 409 names (error.account, §45.34) on its ApiError; a 409 without one has none", async () => {
-    const sentence = "Clip Stories cannot tell if Clip Stories is Lamo Clips' TikTok, because TikTok gives each app its own id. Tap Post to Clip Stories if it is your Clip Stories TikTok.";
-    const named = fake(() => ({ status: 409, body: { error: { code: "conflict", message: sentence, account: { externalAccountId: "-000open-id", accountName: "Clip Stories", handle: "@clip.stories" } } } }));
+    const sentence = "Funded Clips cannot tell if Funded Clips is Lamo Clips' TikTok, because TikTok gives each app its own id. Tap Post to Funded Clips if it is your Funded Clips TikTok.";
+    const named = fake(() => ({ status: 409, body: { error: { code: "conflict", message: sentence, account: { externalAccountId: "-000open-id", accountName: "Funded Clips", handle: "@funded.clips" } } } }));
     const e = await named.api.publish("stories", "s1", [{ platform: "tiktok", socialAccountId: "stories.tiktok" }]).catch((x: unknown) => x);
     expect(e).toBeInstanceOf(ApiError);
     expect(e).toBeInstanceOf(StoriesApiError);
-    expect(e).toMatchObject({ status: 409, code: "conflict", message: sentence, account: { externalAccountId: "-000open-id", accountName: "Clip Stories", handle: "@clip.stories" } });
+    expect(e).toMatchObject({ status: 409, code: "conflict", message: sentence, account: { externalAccountId: "-000open-id", accountName: "Funded Clips", handle: "@funded.clips" } });
     const plain = fake(() => ({ status: 409, body: { error: { code: "conflict", message: "That post is not stuck.", account: { accountName: "no id" } } } }));
     const p = await plain.api.retryPublishing("stories", "p1").catch((x: unknown) => x);
     expect(p).toBeInstanceOf(ApiError);

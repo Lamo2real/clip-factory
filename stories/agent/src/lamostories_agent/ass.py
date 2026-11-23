@@ -84,7 +84,7 @@ def safe_box(formats: Any, width: int, height: int) -> dict[str, Any] | None:
 
 
 HEADER = """[Script Info]
-; Clip Stories captions (docs/CONTRACTS.md §45.11.3)
+; Funded Clips captions (docs/CONTRACTS.md §45.11.3)
 ScriptType: v4.00+
 PlayResX: {w}
 PlayResY: {h}

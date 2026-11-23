@@ -271,7 +271,7 @@ describe("AI", () => {
 
   it("Check models gives up after a few failed asks in a row and says the server's sentence", async () => {
     await open("ai");
-    failures.set("getTask", new ApiError(503, "platform_down", "Clip Stories' helper is not answering. Try again in a minute."));
+    failures.set("getTask", new ApiError(503, "platform_down", "Funded Clips' helper is not answering. Try again in a minute."));
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const button = byText("button", "Check models");
     await act(async () => {
@@ -286,7 +286,7 @@ describe("AI", () => {
     vi.useRealTimers();
     await settle(4);
     expect(called("getTask")).toHaveLength(3);
-    expect(document.body.textContent).toContain("Clip Stories' helper is not answering. Try again in a minute.");
+    expect(document.body.textContent).toContain("Funded Clips' helper is not answering. Try again in a minute.");
     expect(byText("button", "Check models")).toBeTruthy();
   });
 
@@ -426,7 +426,7 @@ describe("Agents", () => {
   it("edits the instructions, saves them, and Reset puts the original back after Are you sure", async () => {
     await open("agents");
     const box = $<HTMLTextAreaElement>("textarea")!;
-    expect(box.value).toContain("You are the creative director of Clip Stories");
+    expect(box.value).toContain("You are the creative director of Funded Clips");
     expect(byText("button", "Save the words").getAttribute("aria-disabled")).toBe("true");
     setValue(box, "Make every idea about Pip.");
     await click(byText("button", "Save the words"));
@@ -436,7 +436,7 @@ describe("Agents", () => {
     expect($('[role="group"][aria-label="Are you sure?"]')).not.toBeNull();
     await click(byText("button", "Yes, reset"));
     expect(called("patchAgent").at(-1)?.args).toEqual(["stories", "creative_director", { reset: true }]);
-    expect($<HTMLTextAreaElement>("textarea")!.value).toContain("You are the creative director of Clip Stories");
+    expect($<HTMLTextAreaElement>("textarea")!.value).toContain("You are the creative director of Funded Clips");
     expect(host.textContent).toContain("The original");
   });
 
@@ -471,7 +471,7 @@ describe("Skills", () => {
   it("lists built-ins first, read-only, and shows which agents use each", async () => {
     await open("skills");
     const cards = $$(".st-stg-skill");
-    expect(cards.slice(0, 3).every((c) => c.textContent?.includes("Comes with Clip Stories"))).toBe(true);
+    expect(cards.slice(0, 3).every((c) => c.textContent?.includes("Comes with Funded Clips"))).toBe(true);
     expect(cards[0]!.textContent).toMatch(/Used by: Creative director, Video analysis, Storyboard, Character/);
     await click(byText("button", "Open", cards[0]!));
     await settle();
@@ -746,7 +746,7 @@ describe("Video", () => {
     expect(use.querySelector(".st-stg-active")?.textContent).toMatch(/Rendering, last 30 days[\d.]+ minutes/);
     const builtin = byText(".st-stg-usage__row", /Built-in animator/, use);
     expect(builtin.textContent).toMatch(/minutes of rendering|seconds of rendering/);
-    expect(builtin.textContent).toContain("Free: it runs on Clip Stories' own computer");
+    expect(builtin.textContent).toContain("Free: it runs on Funded Clips' own computer");
     const canvas = byText(".st-stg-usage__row", /Amazon Nova Canvas/, use);
     expect(canvas.textContent).toMatch(/\d+ pictures?/);
     expect(canvas.textContent).toContain("No price yet:");
@@ -946,7 +946,7 @@ describe("AI: models the owner adds (§45.34)", () => {
     await click(byText("button", "Remove", byText(".st-stg-own", /Mistral Large 2/)));
     await click(byText("button", "Yes, remove it"));
     expect($$(".st-stg-own").some((r) => r.textContent?.includes("Mistral Large 2"))).toBe(false);
-    expect(document.body.textContent).toContain("Mistral Large 2 is removed from Clip Stories.");
+    expect(document.body.textContent).toContain("Mistral Large 2 is removed from Funded Clips.");
   });
 
   it("an Edit that moves a model asks for a new check even after Works; Another Region takes any code; up to 500,000 tokens; every select marks it", async () => {
@@ -1056,7 +1056,7 @@ describe("Storage and production (§45.34)", () => {
     await open("storage");
     await settle(4);
     // The place in words; the exact folder one tap away (§45.36 E14).
-    expect(card("Space used").textContent).toContain("Clip Stories' own folder in Clip Factory's media storage in Europe (Stockholm).");
+    expect(card("Space used").textContent).toContain("Funded Clips' own folder in Clip Factory's media storage in Europe (Stockholm).");
     expect(card("Space used").querySelector("details.st-tech-fold")?.textContent).toContain("ws/{you}/stories/");
     const refs = group("Keep reference videos");
     expect($$("[role=radio]", refs).map((r) => r.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["Keep them all", "Keep only the study", "30 days", "90 days"]);
@@ -1068,7 +1068,7 @@ describe("Storage and production (§45.34)", () => {
     expect(byText("[role=radio]", /Keep them all/, refs).getAttribute("aria-checked")).toBe("true");
     await click(byText("[role=radio]", /Keep only the study/, refs));
     expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { production: { keepReferences: "study_only", burnCaptions: true, scenesAtOnce: 2, keepVersions: "all" } } });
-    expect(card("Keeping other files").textContent).toContain("Clip Stories still learns from each study after its video is gone.");
+    expect(card("Keeping other files").textContent).toContain("Funded Clips still learns from each study after its video is gone.");
     await click(byText("[role=radio]", /30 days/, group("Keep chat pictures")));
     expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { production: { keepReferences: "study_only", keepChatPictures: "days_30" } } });
 

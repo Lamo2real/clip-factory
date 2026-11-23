@@ -5,7 +5,7 @@
   realistic footage, which the platforms want labelled.
 - **Options.** (1) The built-in 2D animator only; (2) add Nova Reel now, its US bucket always on; (3) a provider
   registry per kind, the built-in animator on, Nova Reel built behind a Terraform switch for its US bucket (off until
-  the owner allows US storage), AI labels set by Clip Stories' own publisher wrappers, and a generic key store for
+  the owner allows US storage), AI labels set by Funded Clips' own publisher wrappers, and a generic key store for
   providers added later.
 - **Decision.** (CONTRACTS §45.31) Option 3.
 - **Consequences.** Videos are made today with the built-in animator; AI footage arrives when the owner allows the US

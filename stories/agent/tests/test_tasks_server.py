@@ -155,7 +155,7 @@ def test_the_model_client_is_found_in_the_shared_services_of_builder_e(monkeypat
     assert svc_mod.find_model_client(object()) is fake
 
     def not_configured() -> Any:
-        raise RuntimeError("Clip Stories' agent is missing its table or bucket setting.")
+        raise RuntimeError("Funded Clips' agent is missing its table or bucket setting.")
 
     shared.get = not_configured  # type: ignore[attr-defined]
     import pytest

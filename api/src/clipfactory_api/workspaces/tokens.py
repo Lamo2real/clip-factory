@@ -57,7 +57,7 @@ class WorkspaceTokenProvider:
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         if workspace_id == ws.CLIPS or not ws.WORKSPACE_ID.match(workspace_id):
-            raise ValueError("not a Clip Stories workspace id")
+            raise ValueError("not a Funded Clips workspace id")
         self.store = store
         self.env = env
         self.secrets = secrets

@@ -195,8 +195,8 @@ describe("the director's buttons", () => {
   });
 
   it("a failure that names a setting offers the way there", () => {
-    expect(settingsNamed("Claude Fable 5.2 isn't available right now: no access. Pick another model in Clip Stories › Settings › AI, or try again.")).toEqual({ ai: true, agents: false });
-    expect(settingsNamed("The video analysis agent is switched off. Switch it on in Clip Stories › Settings › Agents.")).toEqual({ ai: false, agents: true });
+    expect(settingsNamed("Claude Fable 5.2 isn't available right now: no access. Pick another model in Funded Clips › Settings › AI, or try again.")).toEqual({ ai: true, agents: false });
+    expect(settingsNamed("The video analysis agent is switched off. Switch it on in Funded Clips › Settings › Agents.")).toEqual({ ai: false, agents: true });
     expect(settingsNamed(null)).toEqual({ ai: false, agents: false });
   });
 

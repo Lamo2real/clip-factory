@@ -275,8 +275,8 @@ function dockCalm(): boolean {
 const warm = (w: Workspace | null) => (w && w.workspaceType === "stories" ? preloadStoriesApp : undefined);
 
 /**
- * The little picture of a workspace on its round toggle: Clip Factory's "C", and for Clip Stories the same
- * mark in Clip Stories' colours (its logo, components/WorkspaceMark.tsx).
+ * The little picture of a workspace on its round toggle: Clip Factory's "C", and for Funded Clips the same
+ * mark in Funded Clips' colours (its logo, components/WorkspaceMark.tsx).
  */
 export function ToggleMark({ type, size = 24 }: { type: Workspace["workspaceType"]; size?: number }) {
   if (type === "clips")

@@ -102,10 +102,10 @@ def test_the_first_put_makes_the_item_and_later_ones_need_the_version(wcall: WsC
 @pytest.mark.parametrize(
     ("change", "sentence"),
     [
-        ({"defaultModel": "gpt-9"}, "Clip Stories has no model called 'gpt-9'."),
+        ({"defaultModel": "gpt-9"}, "Funded Clips has no model called 'gpt-9'."),
         ({"defaultEffort": "turbo"}, "'turbo' is not an effort level."),
         ({"tasks": {"dance": {"model": "opus-5-5"}}}, "There is no AI task called 'dance'."),
-        ({"tasks": {"storyboard": {"model": "gpt-9"}}}, "Clip Stories has no model called 'gpt-9'."),
+        ({"tasks": {"storyboard": {"model": "gpt-9"}}}, "Funded Clips has no model called 'gpt-9'."),
         ({"tasks": {"storyboard": {"speed": "fast"}}}, "Unknown field: speed."),
         ({"prices": {"gpt-9": {"inputPer1M": 1, "outputPer1M": 2, "currency": "USD"}}}, "There is no model"),
         (
@@ -288,7 +288,7 @@ def test_check_models_fails_plainly_when_the_runtime_is_off_or_refuses(app: App,
     assert status == 202
     assert (body["task"]["status"], body["task"]["error"]) == (
         "failed",
-        "Clip Stories' AI helper isn't switched on yet.",
+        "Funded Clips' AI helper isn't switched on yet.",
     )
     runtime = FakeRuntime()
     runtime.fail = True
@@ -301,7 +301,7 @@ def test_check_models_fails_plainly_when_the_runtime_is_off_or_refuses(app: App,
 def test_a_clips_id_and_another_owners_id_are_refused(wcall: WsCall, table: FakeTable) -> None:
     status, body = wcall("GET", "/v1/workspaces/clips/ai")
     assert status == 409
-    assert body["error"]["message"] == "That is a Clip Stories page. Switch to Clip Stories first."
+    assert body["error"]["message"] == "That is a Funded Clips page. Switch to Funded Clips first."
     assert wcall("GET", "/v1/workspaces/01JD0000000000000000000000/ai")[0] == 404
     assert wcall("PUT", "/v1/workspaces/clips/ai", {"version": 0})[0] == 409
     assert not [i for i in table.all() if i["pk"] == f"USER#{USER}"]

@@ -583,7 +583,7 @@ def slow_writer(seconds: float, then: Callable[[], None] | None = None) -> Calla
 def test_a_model_the_owner_cannot_use_stops_the_job_with_its_sentence_and_no_other_model(tmp_path: Path) -> None:
     sentence = (
         "Claude Fable 5.2 isn't available right now: Bedrock says this AWS account may not use it. Pick another model "
-        "in Clip Stories › Settings › AI, or try again."
+        "in Funded Clips › Settings › AI, or try again."
     )
     svc, _store, table, models = world(tmp_path, answers(storyboard=ModelUnavailable(sentence)))
     assert run_job(svc) == "failed"

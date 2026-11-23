@@ -224,7 +224,7 @@ def test_an_own_x_app_counts_on_its_own_limit_and_stops_at_it(
     assert job is not None
     assert (job["publishingStatus"], job["error"]) == (
         "needs_attention",
-        "Clip Stories stopped X: this month's Clip Stories X limit is used up. Try again next month.",
+        "Funded Clips stopped X: this month's Funded Clips X limit is used up. Try again next month.",
     )
     assert http.calls == []
     assert store.get("RATE#x", "BUDGET") == shared  # Clip Factory's shared counter: not read for this, not written
@@ -461,8 +461,8 @@ def test_the_tiktok_question_names_this_account_and_the_yes_button(
     status, body = call("POST", PUBLISH, {"targets": [TIKTOK_TARGET]})
     assert status == 409, body
     assert body["error"]["message"] == (
-        "Clip Stories cannot tell if this TikTok account (Lamo Stories) is Clip Factory's TikTok. Tap Yes if it is "
-        "your Clip Stories TikTok."
+        "Funded Clips cannot tell if this TikTok account (Lamo Stories) is Clip Factory's TikTok. Tap Yes if it is "
+        "your Funded Clips TikTok."
     )
     assert body["error"]["account"]["accountName"] == "Lamo Stories"
     assert unsure.started == []
@@ -477,7 +477,7 @@ def test_the_tiktok_question_never_puts_a_raw_open_id_in_its_sentence(
     status, body = call("POST", PUBLISH, {"targets": [TIKTOK_TARGET]})
     assert status == 409, body
     assert body["error"]["message"] == (
-        "Clip Stories cannot tell if this TikTok account is Clip Factory's TikTok. Tap Yes if it is your Clip Stories "
+        "Funded Clips cannot tell if this TikTok account is Clip Factory's TikTok. Tap Yes if it is your Funded Clips "
         "TikTok."
     )
     assert OTHER_APP_ID not in body["error"]["message"]

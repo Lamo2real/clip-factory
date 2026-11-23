@@ -102,11 +102,11 @@ export function mockId(): string {
 
 /** The S routes' workspace check (§45.5): Lamo Clips' id is a conflict, an unknown id is not found. */
 export function guardWs(store: MockStore, ws: string): void {
-  if (ws === "clips") fail(409, "conflict", "That is a Clip Stories page. Switch to Clip Stories first.");
+  if (ws === "clips") fail(409, "conflict", "That is a Funded Clips page. Switch to Funded Clips first.");
   if (store.workspaces.length) {
     const w = store.workspaces.find((x) => x.workspaceId === ws);
     if (!w) fail(404, "not_found", "We could not find that workspace.");
-    if (w.workspaceType !== "stories") fail(409, "conflict", "That is a Clip Stories page. Switch to Clip Stories first.");
+    if (w.workspaceType !== "stories") fail(409, "conflict", "That is a Funded Clips page. Switch to Funded Clips first.");
   } else if (ws !== "stories") fail(404, "not_found", "We could not find that workspace.");
 }
 
@@ -114,7 +114,7 @@ function wsConfig(store: MockStore, ws: string): Partial<StoriesConfig> {
   return (store.workspaces.find((w) => w.workspaceId === ws)?.configuration ?? {}) as Partial<StoriesConfig>;
 }
 
-const NO_GUIDANCE = "Clip Stories only makes driving-safety videos from checked advice, and this one isn't in the list yet.";
+const NO_GUIDANCE = "Funded Clips only makes driving-safety videos from checked advice, and this one isn't in the list yet.";
 
 // ---------- Video shape and copies (§45.34) ----------
 
@@ -493,10 +493,10 @@ function postCaptionsFor(title: string, logline: string, topicId: string | null)
   const sources = pubs.length ? `\n\nBased on advice from ${pubs.join(", ")}. Check your local road rules.\nSources:\n${cites.slice(0, 4).map((c) => c.url).join("\n")}` : "";
   return {
     youtubeTitle: `${title} #Shorts`.slice(0, 100),
-    youtubeDescription: `${logline}${sources}\n\n#ClipStories #animation`.slice(0, 5000),
-    instagram: `${logline}${pubs.length ? ` Based on ${pubs[0]} advice.` : ""} #ClipStories #animation #cartoon`.slice(0, 2200),
+    youtubeDescription: `${logline}${sources}\n\n#FundedClips #animation`.slice(0, 5000),
+    instagram: `${logline}${pubs.length ? ` Based on ${pubs[0]} advice.` : ""} #FundedClips #animation #cartoon`.slice(0, 2200),
     facebook: `${logline}${sources}`.slice(0, 5000),
-    tiktok: `${logline} #ClipStories #animation #fyp`.slice(0, 2200),
+    tiktok: `${logline} #FundedClips #animation #fyp`.slice(0, 2200),
     x: `${title}: ${logline}`.slice(0, 270),
   };
 }
@@ -978,7 +978,7 @@ function slug(title: string): string {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
-      .slice(0, 60) || "clip-story"
+      .slice(0, 60) || "funded-clip"
   );
 }
 
@@ -1336,7 +1336,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
           if (edit.sfx !== undefined && JSON.stringify(edit.sfx) !== JSON.stringify(sc.sfx)) {
             const seen = new Set<string>();
             for (const c of edit.sfx) {
-              if (!SFX_IDS.has(c.sfx)) fail(400, "bad_request", "One of those sounds is not one Clip Stories has.");
+              if (!SFX_IDS.has(c.sfx)) fail(400, "bad_request", "One of those sounds is not one Funded Clips has.");
               if (c.at < 0 || c.at > sc.durationSec) fail(400, "bad_request", "Every sound must play inside its scene.");
               if (c.volume < 0 || c.volume > 1) fail(400, "bad_request", "Sound volume is 0 to 1.");
               if (!c.id || seen.has(c.id)) fail(400, "bad_request", "Each sound needs its own id.");
@@ -1494,7 +1494,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
           const postCaptions: Captions = {
             ...fresh,
             youtubeTitle: `${now.title}: ${hook} #Shorts`.slice(0, 100),
-            tiktok: `${hook} ${brief.logline} #ClipStories #animation #fyp`.slice(0, 2200),
+            tiktok: `${hook} ${brief.logline} #FundedClips #animation #fyp`.slice(0, 2200),
             instagram: `${hook} ${fresh.instagram}`.slice(0, 2200),
             x: `${hook} ${now.title}`.slice(0, 270),
           };

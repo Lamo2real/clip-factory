@@ -52,12 +52,12 @@ def test_only_the_keyed_hosts_take_a_key(wcall: WsCall, secrets_client: FakeSecr
     status, body = wcall("PUT", f"{BASE}/providers/runway/key", {"key": KEY})
     assert (status, body["error"]["message"]) == (
         404,
-        "Clip Stories has no provider called 'runway' that uses a key yet.",
+        "Funded Clips has no provider called 'runway' that uses a key yet.",
     )
     status, body = wcall("PUT", f"{BASE}/providers/nova-canvas/key", {"key": KEY})
     assert (status, body["error"]["message"]) == (
         400,
-        "Amazon Nova Canvas uses Clip Stories' own AWS access, so it needs no key.",
+        "Amazon Nova Canvas uses Funded Clips' own AWS access, so it needs no key.",
     )
     for aws in ("stability", "luma-ray", "polly", "bedrock"):
         assert wcall("PUT", f"{BASE}/providers/{aws}/key", {"key": KEY})[0] == 400
@@ -147,7 +147,7 @@ def test_key_validation(wcall: WsCall, keyed: provider_keys.KeyedProvider, body:
 
 def test_the_secret_name_never_leaves_the_workspace_prefix() -> None:
     assert ws.provider_secret_name("cf-prod/workspaces/", "stories", "runway") == NAME
-    with pytest.raises(ValueError, match="Clip Stories"):
+    with pytest.raises(ValueError, match="Funded Clips"):
         ws.provider_secret_name("cf-prod/workspaces/", "clips", "runway")
     with pytest.raises(ValueError, match="platforms"):
         ws.provider_secret_name("cf-prod/platforms/", "stories", "runway")

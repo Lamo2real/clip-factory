@@ -84,7 +84,7 @@ describe("each app has its own error boundary (§45.35 D16)", () => {
     render(<AppPanes on="stories" clips={<Counter name="clips" />} stories={stories} />);
     const card = q('[data-app-pane="stories"] [data-stories-problem]')!;
     expect(card).not.toBeNull();
-    expect(card.textContent).toContain("Clip Stories had a problem.");
+    expect(card.textContent).toContain("Funded Clips had a problem.");
     expect(card.textContent).toContain("Clip Factory is fine");
     expect(Array.from(card.querySelectorAll("button")).map((b) => b.textContent?.trim())).toEqual(["Try again", "Go to Clip Factory"]);
     // Its pane is the main landmark while it is on screen.

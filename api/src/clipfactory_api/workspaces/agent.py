@@ -228,7 +228,7 @@ class StoryAgent:
     def _start(self, session_id: str, payload: dict[str, Any]) -> None:
         reply = self._invoke(session_id, payload)
         if reply.get("accepted") is not True:
-            raise StoriesAgentError("Clip Stories' agent did not accept the work")
+            raise StoriesAgentError("Funded Clips' agent did not accept the work")
 
     def _invoke(self, session_id: str, payload: dict[str, Any], *, attempts: int = ATTEMPTS) -> dict[str, Any]:
         if not self.runtime_arn:

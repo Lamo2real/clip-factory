@@ -80,11 +80,11 @@ FIELDS: Final = (
 EFFORT_FIELDS: Final = ("output_config", "reasoning_effort", "none")
 HOST: Final = "Amazon Bedrock"  # who runs an added Bedrock model (D8); ``provider`` is who makes it
 
-NOT_FOUND: Final = "Clip Stories has no added model with that name."
+NOT_FOUND: Final = "Funded Clips has no added model with that name."
 BAD_KEY: Final = "A model you add needs a name like custom-my-model (small letters, digits and dashes)."
-TAKEN: Final = "Clip Stories already has a model with that name. Pick another name."
+TAKEN: Final = "Funded Clips already has a model with that name. Pick another name."
 TOO_MANY: Final = f"You can add at most {MAX_MODELS} models. Remove one first."
-BUNDLED: Final = "That model comes with Clip Stories, so it can't be removed."
+BUNDLED: Final = "That model comes with Funded Clips, so it can't be removed."
 BAD_MODEL_ID: Final = (
     "That is not a Bedrock model id. Paste the model id (like anthropic.claude-opus-5-5), the inference profile id "
     "(like global.anthropic.claude-opus-5-5) or its ARN from the Amazon Bedrock console."

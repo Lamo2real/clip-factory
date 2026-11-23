@@ -40,7 +40,7 @@ CHECK_SCHEMA: dict[str, Any] = {
     },
 }
 
-CHECK_SYSTEM = """You are the fact checker of Clip Stories, a channel of short animated videos without voice-over.
+CHECK_SYSTEM = """You are the fact checker of Funded Clips, a channel of short animated videos without voice-over.
 
 You get one video's texts and driving actions, each with a ref, and, for a driving-safety video, the checked advice it
 must follow: the steps and donts that may be shown, the caveats, and the steps that are NOT checked (they must never
@@ -61,7 +61,7 @@ A mistake that the story clearly shows as a mistake, followed by the safe way, i
 Each problem is one plain sentence a beginner understands, with the item's ref. Set ok to true only when there is no
 problem."""
 
-REVIEW_PROMPT = """You take the last look at one finished Clip Stories video before the owner sees it: its script and
+REVIEW_PROMPT = """You take the last look at one finished Funded Clips video before the owner sees it: its script and
 eight frames from the video, in order, with their times.
 
 Report a problem only when it would be wrong to post the video as it is:

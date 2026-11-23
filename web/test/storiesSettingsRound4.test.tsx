@@ -128,7 +128,7 @@ describe("how an added model is called (§45.35 D1)", () => {
     expect([switchOf(form, /It has effort levels/), switchOf(form, /It can use tools/), switchOf(form, /It can reuse its instructions/)].map(checked)).toEqual(["false", "false", "false"]);
     // No effort levels: the levels are not even shown, and the words say none is ever sent.
     expect($$("button", form).some((b) => b.textContent === "Low")).toBe(false);
-    expect(byText(".st-stg-switchrow", /It has effort levels/, form).textContent).toContain("It runs at its own level. Clip Stories never sends it one.");
+    expect(byText(".st-stg-switchrow", /It has effort levels/, form).textContent).toContain("It runs at its own level. Funded Clips never sends it one.");
     expect(byText(".st-stg-switchrow", /It can use tools/, form).textContent).toContain("It only talks: in the chat it cannot start things");
     // The owner's own choice stays when the maker changes again.
     await click(switchOf(form, /It can reuse its instructions/));
@@ -311,7 +311,7 @@ describe("Try it on Luma AI Ray2 (§45.35 D2, moved from Nova Reel by §45.37)",
     expect(luma.check).toMatchObject({ jobId: job.jobId, status: "failed" });
     expect(tryProblem(luma.check ?? null, luma)).toBe(LUMA_DENIED);
     await expect(api.tryNovaReel("stories")).rejects.toMatchObject({ status: 409, message: REEL_ENDED });
-    expect(REEL_ENDED).toBe("Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Clip Stories › Settings › Video.");
+    expect(REEL_ENDED).toBe("Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Funded Clips › Settings › Video.");
   });
 
   it("shows the try just started until the list knows it, then the list's newest", () => {

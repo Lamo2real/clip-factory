@@ -1,11 +1,11 @@
-/* Clip Stories' logo (components/WorkspaceMark.tsx; the owner, 22 Nov 2026: "the same logo as clip factory but with
+/* Funded Clips' logo (components/WorkspaceMark.tsx; the owner, 22 Nov 2026: "the same logo as clip factory but with
    the colors in clip factory stories"). The mark is Clip Factory's own markup and shape (.brand__mark and .brand__dot,
    layout.css: the italic "C" on its tile, its size, type and dot), so only its colours are set here. Four tokens colour
    it: --ws-mark-tile (the tile, a colour or a gradient), --ws-mark-letter (the "C"), --ws-mark-dot (the dot) and
-   --ws-wordmark (the words "Clip Stories"). Clip Stories' own stylesheet sets them, never this file; until it does,
-   each falls back to today's Clip Stories colours (sunshine tile, night-indigo "C", coral dot, cream words). In the
+   --ws-wordmark (the words "Funded Clips"). Funded Clips' own stylesheet sets them, never this file; until it does,
+   each falls back to today's Funded Clips colours (sunshine tile, night-indigo "C", coral dot, cream words). In the
    main stylesheet, because the mark is an element of the shell: it is there wherever the mark is, also on the start-up
-   card before Clip Stories' own styles load. Clip Factory's own mark never carries ws-mark, so its colours stay
+   card before Funded Clips' own styles load. Clip Factory's own mark never carries ws-mark, so its colours stay
    exactly as they are. */
 
 .ws-mark.brand__mark {
@@ -46,9 +46,9 @@
   background: var(--ws-mark-dot, #ff6f61);
 }
 
-/* The wordmark: Clip Factory's wordmark type (.brand__name: "Clip Factory", its italic "Factory") in one colour, so
-   the whole brand is as wide as Clip Factory's own and keeps its name wherever Clip Factory's does (the rail; a
-   phone's top bar from 340 px). The doubled class outranks the one-class name style of the app it sits in (loaded
+/* The wordmark: Clip Factory's wordmark type (.brand__name: "Clip Factory", its italic "Factory") in one colour.
+   "Funded Clips" is a few px wider than "Clip Factory" and still keeps its name in the rail and in a phone's top bar
+   from 340 px (e2e/stories-shell.spec.ts checks it at 340 and 375). The doubled class outranks the one-class name style of the app it sits in (loaded
    later, in its own chunk), which still places it and hides it where the frame says. */
 .ws-wordmark.ws-wordmark {
   display: inline-grid;

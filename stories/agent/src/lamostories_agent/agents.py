@@ -268,7 +268,7 @@ class Workspace:
         blocks = [profile.instructions]
         skills = self.skills(profile)
         if skills:
-            parts = ["Your skills (Clip Stories' own; follow them):"]
+            parts = ["Your skills (Funded Clips' own; follow them):"]
             for s in skills:
                 head = f"## Skill: {s.title}"
                 if s.description:
@@ -278,7 +278,7 @@ class Workspace:
         memory = self.memory()
         if memory:
             blocks.append(
-                "What the owner asked Clip Stories to remember (newest first):\n" + "\n".join(f"- {m}" for m in memory)
+                "What the owner asked Funded Clips to remember (newest first):\n" + "\n".join(f"- {m}" for m in memory)
             )
         return blocks
 

@@ -39,7 +39,7 @@ export const TRY_WORDS: Record<TryMaker, { name: string; line: string; needs: st
   "own-video": {
     name: "your own video model",
     line: "Try it makes one test shot with your own video model to see if it works for you. Amazon bills that one shot. Nothing is posted.",
-    needs: "A shot can only work once Clip Stories' storage in your model's Region (the US, Oregon) is switched on and Amazon has turned the model on for your account.",
+    needs: "A shot can only work once Funded Clips' storage in your model's Region (the US, Oregon) is switched on and Amazon has turned the model on for your account.",
     stopped: "Trying your own video model stopped. Tap Try it again.",
     busy: "Your own video model is being tried. Wait until it is done.",
     made: "It works! Your own video model made its test shot.",

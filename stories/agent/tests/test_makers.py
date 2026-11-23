@@ -158,19 +158,19 @@ def test_the_pick_is_the_makers_model_and_an_ended_or_foreign_pick_stops_with_a_
     with pytest.raises(ProviderUnavailable) as canvas:
         pick("images", "nova-canvas")
     assert str(canvas.value) == (
-        "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Clip Stories › Settings "
+        "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Funded Clips › Settings "
         "› Video."
     )
     with pytest.raises(ProviderUnavailable) as reel:
         pick("animation", "nova-reel", "nova-reel")
     assert str(reel.value) == (
-        "Amazon Nova Reel 1.1 was ended by Amazon on 30 Sep 2026. Pick another video maker in Clip Stories › Settings › "
+        "Amazon Nova Reel 1.1 was ended by Amazon on 30 Sep 2026. Pick another video maker in Funded Clips › Settings › "
         "Video."
     )
     with pytest.raises(ProviderUnavailable) as foreign:
         pick("images", "stability", "luma-ray2")
     assert str(foreign.value) == (
-        "Stability AI pictures can't use the picture model you picked any more. Pick another in Clip Stories › "
+        "Stability AI pictures can't use the picture model you picked any more. Pick another in Funded Clips › "
         "Settings › Video."
     )
     with pytest.raises(ProviderUnavailable) as none:
