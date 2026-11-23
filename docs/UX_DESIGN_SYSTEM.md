@@ -764,8 +764,11 @@ Numbers are compact (`Intl.NumberFormat` with `notation: "compact"`: 1.2K, 3.4M)
 | Not posted | "Not posted here. Turn on {Platform} in Settings › Posting › Where clips go." | `/settings/posting/where` |
 | Posting | "Posting now…" with a small spinner | – |
 | Posted privately (TikTok) | "Posted privately. TikTok shows numbers after the app is approved." | – |
-| Posted, no numbers yet | "Numbers are on the way. Check back in a few minutes." | – |
+| Posted, no numbers yet | "Numbers are on the way. Check back in a few minutes." When the last read failed, its plain sentence instead ("Facebook did not answer. We will try again soon.") | – |
 | Failed | "Posting failed: {reason}. Go to Library and press Try again." (`--vermilion-ink` text) | Library |
+
+A YouTube Short that still shows 0 views 6 hours after posting gets one quiet line under the number: "That's YouTube's
+own count: it hasn't shown this Short to viewers yet."
 
 **Live.** A `post` event for one of this clip's posts replaces that stack's numbers and adds a sparkline point; a
 `clip` event updates the star; a reconnect or a `partial` event refetches the page. With no live connection the page

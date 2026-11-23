@@ -1,5 +1,5 @@
 {
- "version": "29b5204f9cc4",
+ "version": "6c56d02c428d",
  "parts": [
   {
    "id": "app-map",
@@ -123,7 +123,7 @@
    "id": "contracts-16",
    "title": "CONTRACTS: 16. Clip performance, stats refresh and weekly best (owner request, 2026-11-16)",
    "line": "The owner's words: \"click on any video and see how they performed for each social media platform ... the video on",
-   "chars": 59489
+   "chars": 60332
   },
   {
    "id": "contracts-17",
@@ -483,7 +483,7 @@
    "id": "adr-29",
    "title": "DECISIONS: ADR-29 Stats refresh intervals per platform",
    "line": "Context. The owner wants each clip's numbers per platform, refreshed \"every 15 minutes or 30 minutes. Or",
-   "chars": 4777
+   "chars": 4856
   },
   {
    "id": "adr-30",
@@ -1119,7 +1119,7 @@
    "id": "ux-clip-performance-page",
    "title": "UX_DESIGN_SYSTEM: Clip performance page",
    "line": "The owner's picture: \"the video on top, like the preview of it ... and then there's like ... lines that go, in a smooth",
-   "chars": 11301
+   "chars": 11583
   },
   {
    "id": "ux-set-up-posting",
