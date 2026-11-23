@@ -3,7 +3,7 @@ import { useSession } from "../app/session.tsx";
 import { useShellHosted } from "../app/shell.ts";
 import { Glide } from "./Glide.tsx";
 import { setPrefs, usePrefs } from "../lib/prefs.ts";
-import { section, useRoute } from "../lib/router.ts";
+import { section, useRoute, type Route } from "../lib/router.ts";
 import { plural } from "../lib/format.ts";
 import { useDeletedJobs } from "../lib/jobDeletes.ts";
 import { useInstall } from "../lib/pwa.ts";
@@ -28,8 +28,14 @@ const ITEMS: Item[] = [
   { key: "settings", href: "/settings", label: "Settings", icon: "settings" },
 ];
 
-function useNavState() {
-  const route = useRoute();
+/**
+ * `at`: the page the nav lights (Clip Factory's shell gives its kept page: while it is not on screen next to Clips
+ * Funded, the address is Clips Funded's, and a slide back to Clip Factory brings its sidebar and tab bar in with that
+ * page already lit). Else the address's own page.
+ */
+function useNavState(at?: Route) {
+  const live = useRoute();
+  const route = at ?? live;
   const { me } = useSession();
   const active = section(route);
   // A job deleted here comes off the counts at once, until the server's own counts include it (§34.5).
@@ -55,8 +61,8 @@ const TURN = { "--act-turn": "180deg" } as CSSProperties;
 const FLIP: CSSProperties = { display: "inline-grid", transform: "rotate(180deg)" };
 
 /** Larger screens: a glass sidebar that folds down to icons. The choice is remembered on this device. */
-export function Sidebar() {
-  const { active, review, running, accessible } = useNavState();
+export function Sidebar({ route }: { route?: Route } = {}) {
+  const { active, review, running, accessible } = useNavState(route);
   const { sidebarCollapsed } = usePrefs();
   const { installed } = useInstall();
   // Next to Lamo Stories the shell draws the workspace switch and the Live chip for both apps, in this very place
@@ -157,8 +163,8 @@ export function Sidebar() {
 }
 
 /** Phones: a floating glass tab bar with icons only. Names are announced to screen readers and shown on hover. */
-export function TabBar() {
-  const { active, review, accessible } = useNavState();
+export function TabBar({ route }: { route?: Route } = {}) {
+  const { active, review, accessible } = useNavState(route);
   return (
     <nav className="tabbar glass glass--refract" aria-label="Main">
       <ul className="tabbar__list">

@@ -448,8 +448,7 @@ describe("the stylesheets and the text colour list stay in step", () => {
    * not a token and not named here fails the test below.
    */
   const NOT_ON_A_PANEL_TINT: Record<string, string> = {
-    "#fff": "white words on a vermilion CTA, badge or count fill of their own, and the workspace switch's hovered names on its own smoked clear glass (lighter than bone, so never less contrast; test/switchGlass.test.ts)",
-    "#141414": "the workspace switch's chosen name, near-black words on its own near-white clear lens (white 0.86 over the smoked track: AA over anything behind it; test/switchGlass.test.ts)",
+    "#fff": "white words on a vermilion CTA, badge or count fill of their own, and the workspace switch's names on its see-through glass, over the panel its dock is drawn over or the menu's own plate (lighter than bone; AA on its track, hover and lens worked out in test/switchGlass.test.ts)",
     "var(--on-bone)": "green words on a bone fill of their own (the selected pill, inverted chips, the tooltip)",
     "var(--green-deep)": "deep green words on a solid leaf fill of their own",
     "#0a64d8": "Safari's blue in the Get the app drawings, on their own bone card",
@@ -885,7 +884,15 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
       for (const m of rules(f).matchAll(/backdrop-filter:\s*([^;]+);/g)) if (/brightness\(/.test(m[1]!)) dims.push(`${f}: ${m[1]!.trim()}`);
     expect(dims.length).toBeGreaterThanOrEqual(5);
     // The look's own number (lib/look.ts), after the blur and the saturation, so the maths' order is the browser's.
-    for (const d of dims) expect(d, d).toMatch(/saturate\([^)]*\)\)? brightness\(var\(--glass-brightness\)\)$/);
+    // Except the workspace switch and the Live chip under it (glide.css, §45.38 S5): not panes but a lens drawn over
+    // one (the sidebar or the rail, whose own glass has already dimmed the backdrop by the look's number), so they take
+    // back only their own fixed little light, the same in every look (a look's 0.5 again would halve the panel under
+    // them); test/switchGlass.test.ts works that number out over every look's panels. Each is exactly that recipe.
+    for (const d of dims) {
+      if (d.startsWith("glide.css: ")) expect(d, d).toMatch(/^glide\.css: blur\(\d+px\) brightness\(0\.9\)$/);
+      else expect(d, d).toMatch(/saturate\([^)]*\)\)? brightness\(var\(--glass-brightness\)\)$/);
+    }
+    expect(dims.filter((d) => !d.startsWith("glide.css: ")).length, "the panes' own").toBeGreaterThanOrEqual(5);
     const root = declared(block(rules("tokens.css"), ":root"));
     expect(Number(root.get("--glass-brightness"))).toBe(BRAND_BRIGHTNESS);
     expect(Number(root.get("--panel-veil"))).toBe(BRAND_PANEL_VEIL);
@@ -911,18 +918,13 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
     expect(nested).toContain("box-shadow: var(--glass-shadow-raise);");
   });
 
-  it("the shell's Live chip, while Clip Factory is on screen, is raised on the sidebar exactly as the sidebar's own chip", () => {
-    // Clips Funded switched on: the shell draws the Live chip over Clip Factory's sidebar, where the sidebar's own was
-    // (app/WorkspaceDock.tsx). Its rule has nested glass's very declarations, as light, right after it (§45.19).
-    const nested = ":where(.glass) .glass";
-    const dock = ':where([data-app-pane="clips"]:not([hidden]) ~ .ws-dock > .ws-dock__live) > .glass';
-    expect(block(glass, dock), "the dock's chip has a rule of its own").not.toBe("");
-    expect(block(glass, dock)).toBe(block(glass, nested));
-    const at = (selector: string) => glass.indexOf(`\n${selector} {`);
-    expect(at(nested)).toBeGreaterThan(0);
-    expect(glass.slice(at(nested) + 1, at(dock)).trim(), "right after nested glass").toBe(`${nested} {${block(glass, nested)}}`);
-    // Only while Clip Factory is on screen: no other rule of glass.css reaches the dock's chip.
-    expect(glass.match(/\.ws-dock__live/g)).toHaveLength(1);
+  it("the shell's Live chip is the switch's see-through glass (glide.css), never a pane of glass.css's", () => {
+    // Clips Funded switched on: the shell draws the Live chip over Clip Factory's sidebar or Clips Funded's rail
+    // (app/WorkspaceDock.tsx). It is one family with the workspace switch (the owner, 23 Nov: "the live indicator should
+    // be one glasssy liquyid theme as well"), so glide.css draws it and no rule of glass.css reaches it
+    // (test/switchGlass.test.ts holds its glass). The sidebar's own chip, with Clips Funded off, is nested glass as before.
+    expect(glass).not.toMatch(/\.ws-dock__live/);
+    expect(block(glass, ":where(.glass) .glass"), "nested glass stays").not.toBe("");
   });
 
   it("loose words get an E1 plate in every look, and glass.css leaves buttons to components.css", () => {
