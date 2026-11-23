@@ -1,11 +1,12 @@
 import "../styles/contentrewards.css";
 import "../styles/finder.css";
+import "../styles/app-slide.css";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentType } from "react";
 import { initApi } from "../api/index.ts";
 import { auth, onSignedOut } from "../lib/auth.ts";
 import { loadConfig } from "../lib/config.ts";
 import { getPrefs, usePrefs } from "../lib/prefs.ts";
-import { navigate, useHash, useRoute, type Route } from "../lib/router.ts";
+import { match, navigate, useHash, useRoute, type Route } from "../lib/router.ts";
 import { findBranch, findTree, legacySettingsRedirect } from "../lib/settingsTree.ts";
 import { forgetLoaded } from "../lib/hooks.ts";
 import { resetCr } from "../lib/contentRewards.ts";
@@ -49,9 +50,9 @@ import { SetupTodo } from "../components/SetupTodo.tsx";
 import { AppBadge } from "../lib/badge.ts";
 import { MacFetchHost } from "./MacFetchHost.tsx";
 import { forgetDevice } from "../lib/push.ts";
-import { chooseClips, redirectAtStart, restoreScroll, storiesTitle, takeClipsScroll } from "../stories/workspace.ts";
+import { chooseClips, currentChoice, redirectAtStart, restoreScroll, storiesTitle, takeClipsScroll } from "../stories/workspace.ts";
 import { storiesEnabled } from "../stories/flag.ts";
-import type { StoriesPage } from "../stories/routes.ts";
+import { matchStories, type StoriesPage } from "../stories/routes.ts";
 import { AppPanes, loadStoriesApp, storiesModule, StoriesPaneBoundary } from "../stories/pane.tsx";
 import { WorkspaceMark } from "../components/WorkspaceMark.tsx";
 import { calmPage, followStoriesMotion, storiesDeniedSound } from "../stories/prefs.ts";
@@ -208,14 +209,19 @@ export function App() {
  * host. The panes tell the shell which app is on screen (app/shell.ts): Clip Factory's own backdrop is drawn only while
  * Clip Factory is (ClipsBackdrop), and html.see-through is the wish of the app on screen, never one app's over the
  * other's.
+ *
+ * A switch slides the whole app like a sliding window (AppPanes, the owner, 23 Nov): the app not on screen can be
+ * mounted a moment before it is shown, so it opens there at the page a switch to it lands on (the stored choice,
+ * §45.16.1), and Clip Factory's own backdrop slides with Clip Factory's pane.
  */
 function BothApps() {
   const route = useRoute();
   const inStories = route.name === "stories";
-  const lastStories = useRef<StoriesPage>(inStories ? route.page : { name: "dashboard" });
+  const [opening] = useState(openingPages);
+  const lastStories = useRef<StoriesPage>(inStories ? route.page : opening.stories);
   if (route.name === "stories") lastStories.current = route.page;
-  const lastClips = useRef<Route>(route);
-  const lastClipsSearch = useRef(typeof location === "undefined" ? "" : location.search);
+  const lastClips = useRef<Route>(inStories ? opening.clips : route);
+  const lastClipsSearch = useRef(inStories ? opening.clipsSearch : typeof location === "undefined" ? "" : location.search);
   if (!inStories) {
     lastClips.current = route;
     lastClipsSearch.current = typeof location === "undefined" ? "" : location.search;
@@ -229,11 +235,12 @@ function BothApps() {
       <AppPanes
         on={inStories ? "stories" : "clips"}
         fresh={fresh}
+        alsoSlides={ALSO_SLIDES}
         clips={
           <KeptSearchProvider value={lastClipsSearch.current}>
             <ToastScope active={!inStories} onScreen={clipsOnScreen} onError={clipsDenied}>
               <ErrorBoundary scope="app">
-                <Shell />
+                <Shell held={held} />
               </ErrorBoundary>
             </ToastScope>
           </KeptSearchProvider>
@@ -257,6 +264,24 @@ const clipsCalm = () => getPrefs().reduceMotion;
 const clipsOnScreen = () => !storiesOnScreen();
 const clipsDenied = () => sounds.play("deny");
 
+/** Clip Factory's own backdrop (ClipsBackdrop, drawn outside both panes) slides with Clip Factory's pane. */
+const ALSO_SLIDES = { clips: () => document.querySelector<HTMLElement>(".backdrop") };
+
+/** A stored path's address parts: "/jobs?x=1#y" is ["/jobs", "?x=1"]. */
+function pathParts(path: string): [string, string] {
+  const [beforeHash = "/"] = path.split("#");
+  const at = beforeHash.indexOf("?");
+  return at < 0 ? [beforeHash || "/", ""] : [beforeHash.slice(0, at) || "/", beforeHash.slice(at)];
+}
+
+/** Each app's page as a switch to it opens it now: its last page, from the device's stored choice. */
+function openingPages(): { stories: StoriesPage; clips: Route; clipsSearch: string } {
+  const c = currentChoice();
+  const [storiesPath, storiesSearch] = pathParts(c.lastStoriesPath);
+  const [clipsPath, clipsSearch] = pathParts(c.lastClipsPath);
+  return { stories: matchStories(storiesPath, storiesSearch), clips: match(clipsPath, clipsSearch), clipsSearch };
+}
+
 /**
  * Lamo Stories' shell, from its own chunk: at once when the idle prefetch already brought it, else after it loads.
  * Each mount makes its own lazy app, so Try again on Lamo Stories' error card fetches a chunk that failed once more.
@@ -276,14 +301,18 @@ function StoriesHost({ page }: { page: StoriesPage }) {
   );
 }
 
-function Shell() {
+/**
+ * Clip Factory's shell. `held` is the page it keeps next to Lamo Stories (BothApps): mounted before it is on screen (a
+ * slide to it, or Lamo Stories opened first), it opens there, never at Lamo Stories' address.
+ */
+function Shell({ held }: { held?: Route }) {
   // On screen (always, while Lamo Stories is switched off). Hidden behind Lamo Stories, it keeps its last page and
   // stays quiet: no title, no focus move, no redirect.
   const active = useAppActive();
   // Next to Lamo Stories: the shell draws the switch and the Live chip, the app badge and the Mac download host.
   const hosted = useShellHosted();
   const live = useRoute();
-  const kept = useRef(live);
+  const kept = useRef(active || !held ? live : held);
   if (active) kept.current = live;
   const route = kept.current;
   const hash = useHash();

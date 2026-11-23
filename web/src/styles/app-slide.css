@@ -1,0 +1,34 @@
+/* The sliding window between the two apps (the owner, 23 Nov: "id like the transission between clip factory and clips
+   funded to be like a sliding window"; stories/pane.tsx AppPanes runs it, app/shell.ts says how long). Only while a
+   slide is under way (data-app-slide, set and taken away by AppPanes): at rest the pane on screen takes no box of its
+   own (display: contents) and the other one is hidden, exactly as before.
+
+   For the slide both panes are boxes the size of the window, side by side, moved by their transform alone (a Web
+   Animation, never a transition: nothing here is laid out again while they move). Each shows its page where it is
+   scrolled to: the pane is the window now, so its page moves up by that much (--app-pane-y, the window's scroll for
+   the one going out, the kept place for the one coming in), while everything fixed in it (Clip Factory's sidebar and
+   tab bar, Funded Clips' rail and stage) keeps its place in the pane. Neither pane takes a tap while it moves. The
+   shell's dock (the switch and the Live chip) is outside both panes and does not move. */
+[data-app-pane][data-app-slide] {
+  display: block !important;
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  will-change: transform;
+}
+[data-app-pane][data-app-slide]::before {
+  content: "";
+  display: block;
+  height: 0;
+  margin-bottom: calc(-1 * var(--app-pane-y, 0px));
+}
+
+/* Clip Factory's own backdrop is drawn outside its pane (app/ClipsBackdrop.tsx): it slides with it (each app moves
+   with its own background, as one window), and is drawn for the slide even while Funded Clips is on screen (its drift
+   waits until Clip Factory is back). */
+.backdrop.backdrop--away[data-app-slide],
+.backdrop.backdrop[data-app-slide] {
+  visibility: visible;
+  will-change: transform;
+}

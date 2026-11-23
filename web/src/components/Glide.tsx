@@ -15,6 +15,11 @@ import { prefersReducedMotion } from "../lib/prefs.ts";
  * such as a new page being drawn under the glass, cannot make it stutter. One exception: between options of clearly
  * different widths (a bar inside a page, never the menu) the same animation also carries width and height, so the
  * pill is never squashed (`unevenBoxes`).
+ *
+ * A glide can move on a curve of its own: its CSS sets --glide-ease (the workspace switch's lens, .glide--ws, sets the
+ * app's slow-in slow-out, tokens.css --ease-in-out, as the two apps' panes slide on it), and its `ms` prop its length.
+ * Then the slide's Web Animation runs on that curve itself (its effect's easing), and its keyframes move evenly
+ * between the two boxes. Every other glide keeps the plain ease-out below, sampled into its keyframes.
  */
 
 /** How long a slide takes, and its curve: a plain ease-out that never passes the target (no spring, no creep back). */
@@ -67,15 +72,17 @@ export function unevenBoxes(a: Box, b: Box): boolean {
  * `to` (transform-origin 0 0), so the last keyframe is exactly its resting transform. Along the way it stretches along
  * its path and narrows across it (at most +9% / -7%, centred on where it is), and the stretch eases back to nothing
  * before it lands. With `sized`, the size (stretch included) goes into width and height and the transform only
- * moves it, so a pill's round ends stay round between options of different widths.
+ * moves it, so a pill's round ends stay round between options of different widths. With `curve` null the frames are
+ * evenly spaced (the animation's own easing then gives the slide its curve).
  */
-export function slideFrames(from: Box, to: Box, axis: "x" | "y", sized = false): Keyframe[] {
+export function slideFrames(from: Box, to: Box, axis: "x" | "y", sized = false, curve: readonly number[] | null = GLIDE_EASE): Keyframe[] {
   const stretch = Math.hypot(to.x - from.x, to.y - from.y) > 4 ? 1 : 0;
   const f = (n: number) => Number(n.toFixed(3));
   const frames: Keyframe[] = [];
   for (let i = 0; i <= STEPS; i++) {
     const t = i / STEPS;
-    const p = cubicBezier(GLIDE_EASE, t);
+    // No curve: the animation's own easing carries it (a glide with --glide-ease), so its keyframes move evenly.
+    const p = curve ? cubicBezier(curve, t) : t;
     const bump = stretch * Math.sin(Math.PI * Math.pow(t, 0.6)) ** 2;
     const along = 1 + 0.09 * bump;
     const across = 1 - 0.07 * bump;
@@ -139,12 +146,15 @@ export function Glide({
   active,
   className = "",
   as: Tag = "span",
+  ms = GLIDE_MS,
 }: {
   /** CSS selector for the chosen item inside the container, e.g. ".is-on". */
   active: string;
   className?: string;
   /** "li" inside a list, so the list stays valid HTML. */
   as?: "span" | "li";
+  /** How long a slide takes (the workspace switch's lens: as long as the two apps' panes slide). */
+  ms?: number;
 }) {
   const ref = useRef<HTMLElement>(null);
   const calm = useContext(GlideCalm);
@@ -196,7 +206,14 @@ export function Glide({
       if (moved && from && !calm() && typeof glide.animate === "function") {
         const axis = Math.abs(r.x - from.x) >= Math.abs(r.y - from.y) ? "x" : "y";
         glide.dataset.axis = axis;
-        const run = glide.animate(slideFrames(from, r, axis, unevenBoxes(from, r)), { duration: GLIDE_MS, easing: "linear", fill: "backwards", id: GLIDE_ANIMATION_ID });
+        // A curve of its own (--glide-ease, read now: the layout above has just brought its styles up to date).
+        const own = getComputedStyle(glide).getPropertyValue("--glide-ease").trim();
+        const run = glide.animate(slideFrames(from, r, axis, unevenBoxes(from, r), own ? null : GLIDE_EASE), {
+          duration: ms,
+          easing: own || "linear",
+          fill: "backwards",
+          id: GLIDE_ANIMATION_ID,
+        });
         slide = run;
         // Start it on the first frame the page draws after the tap, from the moment that frame runs. Left to itself
         // the browser holds a new animation "pending" until the compositor reports back, which on a busy machine took
@@ -242,7 +259,7 @@ export function Glide({
       window.removeEventListener("resize", place);
       box.classList.remove("has-glide");
     };
-  }, [active, calm]);
+  }, [active, calm, ms]);
 
   return <Tag ref={ref as never} className={`glide is-still ${className}`.trim()} aria-hidden="true" />;
 }

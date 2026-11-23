@@ -3,32 +3,41 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { DEFAULT_COLOURS } from "../src/lib/background.ts";
 import { asMacWindow } from "./desktopWindow.ts";
-import { settle } from "./helpers.ts";
+import { looseText, scanText, settle } from "./helpers.ts";
 import { decode } from "./pixels.ts";
 
-// The workspace switch is clear, colour-free liquid glass (the owner, 2026-11-23: "make his color freee and liquid
-// glass style"; docs/CONTRACTS.md §45.38 S5), measured in real pixels wherever it is drawn: the dock over Clip
-// Factory's sidebar and over Funded Clips' rail, the stacked switch in both phone top bars' menus, in every look
-// (the app's own backdrop, Colours, Colours with a Cream backdrop, Picture with a white photo, the see-through window
-// Clear and Frosted over a white desktop, and Funded Clips' own picture and window looks). With the words hidden, the
-// pixels where each name's words sit are read:
+// The workspace switch is see-through, colour-free liquid glass (the owner, 2026-11-23: "make his color freee and
+// liquid glass style", then "see through liquid glassy instead of black and white so whatever is under it is visible
+// through the glassy buttons"; docs/CONTRACTS.md §45.38 S5), measured in real pixels wherever it is drawn: the dock
+// over Clip Factory's sidebar and over Funded Clips' rail, the stacked switch in both phone top bars' menus, in every
+// look (the app's own backdrop, Colours, Colours with a Cream backdrop, Picture with a white photo, the see-through
+// window Clear and Frosted over a white desktop, and Funded Clips' own picture and window looks). With the words
+// hidden, the pixels where each name's words sit are read:
 //   - every name keeps 4.5:1 against the lightest and the darkest pixel behind its words, at rest and hovered;
 //   - the chosen side is plainly the chosen one for a child: its lens is at least 0.06 OKLab L over the track where
-//     the words sit, and still 0.06 over the other name while that one is hovered; hover adds light;
-//   - the track carries no colour of its own: what shows through it is drained grey (OKLab chroma 0.03 or less);
-//   - unfolding Clip Factory's sidebar, the switch keeps its glass: its blur and grey-out never drop while the dock's
-//     clip runs (the clip is the switch's own, never its host's, which would be its glass's Backdrop Root).
-// test/switchGlass.test.ts holds the colours of the CSS; this holds what they add up to on screen. Pictures under
-// test-results/switch-glass. Funded Clips is switched on with cf.storiesPreview = 1.
+//     the words sit, and still 0.04 over the other name while that one is hovered; hover adds light;
+//   - the track is see-through: with the switch hidden, the same pixels read what is under it, and the track keeps
+//     them, no smoke (at most 0.06 OKLab L darker), only a faint tint (at most 0.05 lighter), and their colour (at
+//     least 70 % of their chroma, where they have any);
+//   - unfolding Clip Factory's sidebar, the switch keeps its glass: its blur and light never drop while the dock's
+//     clip runs (the clip is the switch's own, never its host's, which would be its glass's Backdrop Root);
+//   - scanText and looseText (e2e/helpers.ts) read its words over the panel its dock is drawn over, and still catch
+//     dimmed words.
+// test/switchGlass.test.ts holds the colours of the CSS and works them out on paper; this holds what they add up to on
+// screen. Pictures under test-results/switch-glass. Funded Clips is switched on with cf.storiesPreview = 1.
 
 const SHOTS = join(import.meta.dirname, "..", "test-results", "switch-glass");
 const WHITE = `data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'><rect width='16' height='16' fill='#fff'/></svg>")}`;
 
-/** The plainly-chosen floor (S5) and AA. */
+/** The plainly-chosen floor (S5), the lens over a hovered name, what hover adds, and AA. */
 const LIFT = 0.06;
+const OVER_HOVER = 0.04;
+const HOVER_UP = 0.01;
 const AA = 4.5;
-/** The most colour a drained track may still show (OKLab chroma at the words of the other name). */
-const GREY = 0.03;
+/** See-through: the track over what is under it, in OKLab L (no smoke, a faint tint) and the share of its chroma kept. */
+const NO_SMOKE = -0.06;
+const FAINT = 0.05;
+const KEEPS = 0.7;
 
 interface Look {
   name: string;
@@ -117,8 +126,11 @@ interface Name {
   C: number;
 }
 
-/** Each name of the switch `root`: its words' colour against the pixels behind them, with the words hidden. */
-async function read(page: Page, root: string, shot: string): Promise<Name[]> {
+/**
+ * Each name of the switch `root`: its words' colour against the pixels behind them, with the words hidden. `bare`: the
+ * whole switch hidden instead, so the same pixels read what is under it.
+ */
+async function read(page: Page, root: string, shot: string, bare = false): Promise<Name[]> {
   const bar = page.locator(root).first();
   await expect(bar, root).toBeVisible();
   const info = await bar.evaluate((el) => {
@@ -143,7 +155,9 @@ async function read(page: Page, root: string, shot: string): Promise<Name[]> {
   around.width = Math.min(vw.width - around.x, Math.ceil(info.bar.w) + 48);
   around.height = Math.min(vw.height - around.y, Math.ceil(info.bar.h) + 48);
   await page.screenshot({ clip: around, path: join(SHOTS, `${shot} words.png`) });
-  const hide = await page.addStyleTag({ content: `${root} .ws-switch__opt { color: transparent !important; text-shadow: none !important; transition: none !important; }` });
+  const hide = await page.addStyleTag({
+    content: bare ? `${root} { visibility: hidden !important; }` : `${root} .ws-switch__opt { color: transparent !important; text-shadow: none !important; transition: none !important; }`,
+  });
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   const clip = { x: Math.floor(info.bar.x), y: Math.floor(info.bar.y), width: Math.ceil(info.bar.w) + 1, height: Math.ceil(info.bar.h) + 1 };
   const png = await page.screenshot({ clip });
@@ -179,35 +193,42 @@ const fmt = (ns: Name[]) => ns.map((n) => `${n.on ? "*" : ""}${n.text} ${n.contr
 
 /**
  * The switch `root` at rest and with the other name hovered: every word at AA, the lens plainly the brightest, hover
- * adding light, the track grey. Failures go to `fails`; every reading to the test's notes.
+ * adding light, the track see-through. Failures go to `fails`; every reading to the test's notes.
  */
 async function check(page: Page, root: string, at: string, fails: string[]) {
   await page.mouse.move(1, 1);
   await page.waitForTimeout(450);
   const rest = await read(page, root, `${at} rest`.replace(/\W+/g, "-"));
+  const under = await read(page, root, `${at} under`.replace(/\W+/g, "-"), true);
   const on = rest.find((n) => n.on);
   const others = rest.filter((n) => !n.on);
   expect(on, `${at}: a chosen name`).toBeTruthy();
   expect(others.length, `${at}: other names`).toBeGreaterThan(0);
   const other = page.locator(`${root} .ws-switch__opt:not(.is-on)`).first();
   await other.hover();
-  // Hover's fill, light and white words fade in (--dur-2, 300 ms for the colour).
+  // Hover's fill and light fade in (--dur-2).
   await page.waitForTimeout(500);
   const hovered = await read(page, root, `${at} hover`.replace(/\W+/g, "-"));
   await page.mouse.move(1, 1);
   const h = hovered.find((n) => n.text === others[0]!.text)!;
   const hOn = hovered.find((n) => n.on)!;
-  test.info().annotations.push({ type: at, description: `rest ${fmt(rest)} || hover ${fmt(hovered)}` });
+  test.info().annotations.push({ type: at, description: `rest ${fmt(rest)} || hover ${fmt(hovered)} || under ${fmt(under)}` });
   for (const [state, names] of [["at rest", rest], ["hovered", hovered]] as const)
     for (const n of names) if (n.contrast < AA) fails.push(`${at} ${state}: "${n.text}" ${n.contrast.toFixed(2)}:1 (words rgb ${n.color.join(" ")})`);
   for (const o of others) if (on!.L - o.L < LIFT) fails.push(`${at}: the lens is only +${(on!.L - o.L).toFixed(3)} OKLab L over the track under "${o.text}"`);
-  if (hOn.L - h.L < LIFT) fails.push(`${at}: the lens is only +${(hOn.L - h.L).toFixed(3)} OKLab L over the hovered "${h.text}"`);
-  if (h.L - others[0]!.L < 0.02) fails.push(`${at}: hover adds only +${(h.L - others[0]!.L).toFixed(3)} OKLab L`);
-  for (const o of others) if (o.C > GREY) fails.push(`${at}: the track under "${o.text}" shows colour, chroma ${o.C.toFixed(3)}`);
+  if (hOn.L - h.L < OVER_HOVER) fails.push(`${at}: the lens is only +${(hOn.L - h.L).toFixed(3)} OKLab L over the hovered "${h.text}"`);
+  if (h.L - others[0]!.L < HOVER_UP) fails.push(`${at}: hover adds only +${(h.L - others[0]!.L).toFixed(3)} OKLab L`);
+  // See-through: the track under each other name keeps what is under it (the panel, or the menu's plate).
+  for (const o of others) {
+    const u = under.find((n) => n.text === o.text)!;
+    if (o.L - u.L < NO_SMOKE) fails.push(`${at}: the track under "${o.text}" is smoked, ${(o.L - u.L).toFixed(3)} OKLab L under what is behind it`);
+    if (o.L - u.L > FAINT) fails.push(`${at}: the track under "${o.text}" is frosted over, +${(o.L - u.L).toFixed(3)} OKLab L`);
+    if (u.C > 0.02 && o.C < KEEPS * u.C) fails.push(`${at}: the track under "${o.text}" drains the colour behind it, chroma ${o.C.toFixed(3)} of ${u.C.toFixed(3)}`);
+  }
 }
 
 for (const look of LOOKS) {
-  test(`the switch is clear glass, its words at AA and the chosen side plainly lit (${look.name})`, async ({ browser }) => {
+  test(`the switch is see-through glass, its words at AA and the chosen side plainly lit (${look.name})`, async ({ browser }) => {
     test.setTimeout(150_000);
     const fails: string[] = [];
     // A computer: the dock over Clip Factory's sidebar, then over Funded Clips' rail.
@@ -242,7 +263,7 @@ for (const look of LOOKS) {
   });
 }
 
-test("unfolding Clip Factory's sidebar, the switch keeps its blur and grey-out (its own clip, never its host's)", async ({ browser }) => {
+test("unfolding Clip Factory's sidebar, the switch keeps its blur and light (its own clip, never its host's)", async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   await page.addInitScript(() => {
@@ -283,9 +304,31 @@ test("unfolding Clip Factory's sidebar, the switch keeps its blur and grey-out (
   const [x, y] = [a.find((n) => n.on)!, b.find((n) => n.on)!];
   expect(Math.abs(x.C - y.C), `chroma during ${x.C.toFixed(3)}, after ${y.C.toFixed(3)}`).toBeLessThan(0.008);
   expect(Math.abs(x.L - y.L), `L during ${x.L.toFixed(3)}, after ${y.L.toFixed(3)}`).toBeLessThan(0.015);
-  expect(y.C).toBeLessThanOrEqual(GREY);
   // So the host is never the switch's Backdrop Root: no clip and no opacity of its own; the bar carries the clip.
   expect(during.host).toEqual(["none", "1"]);
   expect(during.bar).toMatch(/^inset\(/);
   await ctx.close();
 });
+
+// scanText and looseText (e2e/helpers.ts, every contrast and see-through check) read the switch over the panel its
+// dock is drawn over, and stay strict: over a white desktop the switch's faint glass alone could never hold white
+// words, so passing there means the panel was read under them; and dimmed words must still fail.
+for (const [path, look] of [["/", LOOKS.find((l) => l.name === "window Clear")!], ["/stories", LOOKS.find((l) => l.name === "Funded Clips window")!]] as const) {
+  test(`scanText and looseText read the switch's words over the panel under the dock, and still catch dimmed words (${path})`, async ({ browser }) => {
+    test.setTimeout(120_000);
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    const page = await ctx.newPage();
+    await useLook(page, look);
+    await open(page, path);
+    await expect(page.locator(".ws-dock .ws-switch .ws-switch__opt")).toHaveCount(2);
+    const names = (scan: Awaited<ReturnType<typeof scanText>>) => scan.contrast.filter((f) => f.selector.startsWith("a.ws-switch__opt"));
+    expect(names(await scanText(page))).toEqual([]);
+    expect((await looseText(page)).filter((t) => t.includes("ws-switch__opt"))).toEqual([]);
+    // Dimmed words: both names must fail.
+    const dim = await page.addStyleTag({ content: ".ws-dock .ws-switch__opt { color: rgb(255 255 255 / 0.45) !important; transition: none !important; }" });
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    expect(names(await scanText(page)).map((f) => f.text).sort()).toHaveLength(2);
+    await dim.evaluate((el) => (el as Element).remove());
+    await ctx.close();
+  });
+}

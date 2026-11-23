@@ -19,7 +19,7 @@
 // The workspace list, where a switch lands and what is remembered on the device are stories/workspace.ts (§45.16.1).
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent } from "react";
 import { flushSync } from "react-dom";
-import { Glide, GLIDE_ANIMATION_ID, GLIDE_MS, GlideCalm } from "../components/Glide.tsx";
+import { Glide, GLIDE_ANIMATION_ID, GlideCalm } from "../components/Glide.tsx";
 import { LiveDot } from "../components/LiveDot.tsx";
 import { useFootRows } from "../components/Nav.tsx";
 import { WorkspaceMark } from "../components/WorkspaceMark.tsx";
@@ -44,7 +44,7 @@ import {
   switchTarget,
   wantedStoriesWorkspace,
 } from "../stories/workspace.ts";
-import { storiesOnScreen, useAppActive, useStoriesWorkspaceShown } from "./shell.ts";
+import { APP_SLIDE_MS, appSliding, prepareAppSlide, startAppSlide, storiesOnScreen, useAppActive, useStoriesWorkspaceShown, type AppName, type AppSlide } from "./shell.ts";
 
 // ---------- Where it sits on a computer: Clip Factory's sidebar, measured once into numbers ----------
 
@@ -271,8 +271,40 @@ function dockCalm(): boolean {
   return storiesOnScreen() ? storiesReduceMotion() : prefersReducedMotion();
 }
 
-/** The Lamo Stories chunk, fetched the moment the pointer or the keyboard comes to a way there. */
-const warm = (w: Workspace | null) => (w && w.workspaceType === "stories" ? preloadStoriesApp : undefined);
+/** The app a workspace belongs to. */
+const appOf = (w: Pick<Workspace, "workspaceType">): AppName => (w.workspaceType === "clips" ? "clips" : "stories");
+
+/**
+ * The pointer or the keyboard came to a way to `w`: Lamo Stories' chunk is fetched now, and the other app's pane is
+ * mounted (hidden) at the page the tap will open, so the slide that follows finds it ready (nothing for the app on
+ * screen).
+ */
+const warm = (w: Workspace | null) =>
+  w
+    ? () => {
+        if (w.workspaceType === "stories") preloadStoriesApp();
+        prepareAppSlide(appOf(w));
+      }
+    : undefined;
+
+/**
+ * The hand-off to the shell's sliding window (stories/pane.tsx AppPanes, the owner, 23 Nov: "id like the transission
+ * between clip factory and clips funded to be like a sliding window"): a switch to the other app slides both apps'
+ * panes from this tap, and the page changes once they have landed. Null when nothing slides (calm motion, a page
+ * holding the switch with "Leave without saving?", the same app, a browser without Web Animations): then the switch
+ * happens at once, as before.
+ */
+function slidePanes(w: Workspace): AppSlide | null {
+  if (dockCalm() || leaveGuarded()) return null;
+  return startAppSlide(appOf(w), hrefFor(w));
+}
+
+/** The panes landed: the page changes now, in this same task, so they come to rest on the frame they landed on. */
+function landSwitch(w: Workspace, at: Leaving, slide: AppSlide | null): void {
+  if (!slide) return switchTo(w, at);
+  flushSync(() => switchTo(w, at));
+  slide.settle();
+}
 
 /**
  * The little picture of a workspace on its round toggle: Clip Factory's real mark (its italic serif "C" on the bone
@@ -297,8 +329,13 @@ function Toggle({ list, current, kind, markSize, below, tip }: { list: Workspace
     if (!plainClick(e)) return;
     e.preventDefault();
     setMenu(false);
-    if (w.workspaceId === current) return;
-    switchTo(w, leaving(phone));
+    // A second tap while the whole app slides changes nothing (the slide already goes there).
+    if (w.workspaceId === current || appSliding()) return;
+    const at = leaving(phone);
+    // The whole app slides there from this tap, and the page changes once it has landed (else at once).
+    const slide = slidePanes(w);
+    if (!slide) return switchTo(w, at);
+    void slide.landed.then((ok) => ok && landSwitch(w, at, slide));
   };
   if (target) {
     const name = switcherName(target);
@@ -348,9 +385,18 @@ function WorkspaceMenu({ list, current, go, close, below }: { list: Workspace[];
   return (
     <div ref={box} className="ws-menu" role="dialog" aria-label="Pick a workspace" style={below ? BELOW : undefined}>
       <div className="ws-switch ws-switch--stack" role="group" aria-label="Workspace">
-        <Glide active=".ws-switch__opt.is-on" className="glide--ws" />
+        <Glide active=".ws-switch__opt.is-on" className="glide--ws" ms={APP_SLIDE_MS} />
         {list.map((w) => (
-          <a key={w.workspaceId} href={hrefFor(w)} className={`ws-switch__opt${w.workspaceId === current ? " is-on" : ""}`} aria-current={w.workspaceId === current ? "true" : undefined} onClick={go(w)} onPointerEnter={warm(w)} onFocus={warm(w)}>
+          <a
+            key={w.workspaceId}
+            href={hrefFor(w)}
+            className={`ws-switch__opt${w.workspaceId === current ? " is-on" : ""}`}
+            data-ws-type={w.workspaceType}
+            aria-current={w.workspaceId === current ? "true" : undefined}
+            onClick={go(w)}
+            onPointerEnter={warm(w)}
+            onFocus={warm(w)}
+          >
             {switcherName(w)}
           </a>
         ))}
@@ -362,20 +408,29 @@ function WorkspaceMenu({ list, current, go, close, below }: { list: Workspace[];
 // ---------- The bar, whose highlight slides ----------
 
 /**
- * The pick bar (§20.13): the highlight slides to the tapped choice on the tap's own frame (the bar is the shell's,
+ * The pick bar (§20.13): the highlight (the lens) slides to the tapped choice on the tap's own frame, on the
+ * slow-in slow-out curve and for as long as the two apps' panes slide (APP_SLIDE_MS; glide.css .glide--ws gives it
+ * tokens.css --ease-in-out, the panes' own curve), so the lens and the whole app move as one (the bar is the shell's,
  * mounted across the change, so nothing cuts the slide short), and the page changes once it has landed, so the slide
- * shares no frame with a new page being laid out. Calm motion moves it at once and changes the page at once. A page
- * asking "Leave without saving?" asks first: the highlight moves only if the page really changes.
+ * shares no frame with a new page being laid out. A choice of the other app slides the whole app with it, from the same
+ * tap (the shell's sliding window, slidePanes): the page changes once both have landed. Calm motion moves it at once
+ * and changes the page at once. A page asking "Leave without saving?" asks first: the highlight moves (and the page
+ * changes) only if the page really changes, and nothing slides.
  */
 function Bar({ list, current, stacked, barRef }: { list: Workspace[]; current: string; stacked: boolean; barRef: { current: HTMLDivElement | null } }) {
   const [pending, setPending] = useState<string | null>(null);
   const token = useRef(0);
+  /** The whole app's slide under way for the last tap, if it slides. */
+  const panes = useRef<AppSlide | null>(null);
   const shown = pending ?? current;
   // The page changed (the switch landed, or Back went there): the highlight shows where the owner is now.
   useEffect(() => setPending(null), [current]);
   useEffect(
     () => () => {
       token.current++;
+      // Gone mid-way (the window changed size): the whole app slides back where it was.
+      panes.current?.back();
+      panes.current = null;
     },
     [],
   );
@@ -386,7 +441,9 @@ function Bar({ list, current, stacked, barRef }: { list: Workspace[]; current: s
     if (w.workspaceId === shown) return;
     const run = ++token.current;
     if (w.workspaceId === current) {
-      // Tapped back during the slide: it slides back, and nothing changes.
+      // Tapped back during the slide: the highlight and the whole app slide back, and nothing changes.
+      panes.current?.back();
+      panes.current = null;
       setPending(null);
       return;
     }
@@ -397,34 +454,47 @@ function Bar({ list, current, stacked, barRef }: { list: Workspace[]; current: s
     }
     // The class moves in this task, so Glide (its MutationObserver) starts the slide before the next frame.
     flushSync(() => setPending(w.workspaceId));
+    // The whole app slides with it from this same tap (another workspace of the same app does not slide).
+    if (panes.current && panes.current.to !== appOf(w)) {
+      panes.current.back();
+      panes.current = null;
+    }
+    const slide = (panes.current ??= slidePanes(w));
     let gone = false;
     const land = () => {
       if (gone || run !== token.current) return;
       gone = true;
-      switchTo(w, at);
+      if (panes.current === slide) panes.current = null;
+      landSwitch(w, at, slide);
       // Held by "Leave without saving?" (the page did not change): the highlight goes back to where he still is.
       if (here() === at.from) setPending(null);
     };
     // After Glide's own observer has run (a microtask queued before this one): its slide exists now.
     queueMicrotask(() => {
       const glide = barRef.current?.querySelector<HTMLElement>(":scope > .glide");
-      const slide = glide?.getAnimations?.().find((a) => a.id === GLIDE_ANIMATION_ID);
-      if (slide) slide.finished.then(land, land);
-      // A browser that starts no slide switches at once; one whose slide never says it ended (a window hidden mid-way)
-      // switches well after it would have.
-      setTimeout(land, slide ? GLIDE_MS + 2000 : 0);
+      const highlight = glide?.getAnimations?.().find((a) => a.id === GLIDE_ANIMATION_ID);
+      const glided = new Promise<void>((done) => {
+        if (highlight) highlight.finished.then(() => done(), () => done());
+        // A browser that starts no slide switches at once; one whose slide never says it ended (a window hidden
+        // mid-way) switches well after it would have.
+        setTimeout(done, highlight ? APP_SLIDE_MS + 2000 : 0);
+      });
+      void Promise.all([glided, slide ? slide.landed : true]).then(([, ok]) => {
+        if (ok) land();
+      });
     });
   };
 
   return (
     <GlideCalm.Provider value={dockCalm}>
       <div ref={barRef} className={`ws-switch${stacked || list.length > 2 ? " ws-switch--stack" : ""}`} role="group" aria-label="Workspace">
-        <Glide active=".ws-switch__opt.is-on" className="glide--ws" />
+        <Glide active=".ws-switch__opt.is-on" className="glide--ws" ms={APP_SLIDE_MS} />
         {list.map((w) => (
           <a
             key={w.workspaceId}
             href={hrefFor(w)}
             className={`ws-switch__opt${w.workspaceId === shown ? " is-on" : ""}`}
+            data-ws-type={w.workspaceType}
             aria-current={w.workspaceId === shown ? "true" : undefined}
             onClick={tap(w)}
             onPointerEnter={warm(w)}

@@ -251,6 +251,8 @@ function contrastKit() {
       1,
     ];
   };
+  /** CSS brightness(k), as a glass backdrop-filter applies it to what is behind (sRGB, clipped). */
+  const brightness = (c: C, k: number): C => [Math.min(255, c[0] * k), Math.min(255, c[1] * k), Math.min(255, c[2] * k), 1];
   const hex = (c: C) => "#" + [c[0], c[1], c[2]].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
 
   /** A computed background-image split into its layers (top layer first), at the commas between them. */
@@ -381,18 +383,24 @@ function contrastKit() {
   }
 
   /**
-   * Clip Factory's sidebar with its ancestors, from <html> down, when `el` is in the Live chip of the shell's dock
-   * (app/WorkspaceDock.tsx, while Funded Clips is switched on) and its words `r` lie over the sidebar on screen. The
-   * dock is not inside the sidebar but drawn over it, the chip in the place of the sidebar's own, so what is under its
-   * words is the sidebar first (like a <Glide> under its item, below). Otherwise null: over Funded Clips, or beside the
-   * sidebar, the chip is read on its own, as before; the switch is always read on its own.
+   * The panel the shell's dock (app/WorkspaceDock.tsx, while Funded Clips is switched on) is drawn over, with its
+   * ancestors, from <html> down, when `el` is in the dock and its words `r` lie inside that panel's box on screen. The
+   * dock is not inside the panel but drawn over it, so what is under its words is the panel first (like a <Glide>
+   * under its item, below). The Live chip, in the place of the sidebar's own: Clip Factory's sidebar only (over Funded
+   * Clips the chip is its own glass). The workspace switch (its see-through glass, glide.css): Clip Factory's sidebar
+   * or Funded Clips' rail, whichever is on screen. Otherwise null: beside the panel (a short window's slim toggle) the
+   * dock is read on its own, as before. Only what is under the words changes; the words' own colour and every layer of
+   * the dock over the panel are still read, so dimmed words still fail.
    */
   function underDock(el: Element, r: DOMRect): Element[] | null {
-    if (!el.closest(".ws-dock > .ws-dock__live")) return null;
-    const side = document.querySelector("nav.sidebar");
-    if (!side || !side.checkVisibility()) return null;
-    const b = side.getBoundingClientRect();
-    if (r.left < b.left || r.right > b.right || r.top < b.top || r.bottom > b.bottom) return null;
+    const chip = !!el.closest(".ws-dock > .ws-dock__live");
+    if (!chip && !el.closest(".ws-dock > .ws-switch-host")) return null;
+    const side = Array.from(document.querySelectorAll(chip ? "nav.sidebar" : "nav.sidebar, nav.st-rail")).find((p) => {
+      if (!p.checkVisibility()) return false;
+      const b = p.getBoundingClientRect();
+      return r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom;
+    });
+    if (!side) return null;
     const chain: Element[] = [];
     for (let a: Element | null = side; a; a = a.parentElement) chain.unshift(a);
     return chain;
@@ -406,8 +414,8 @@ function contrastKit() {
   /**
    * Every visible text run on the page: its rendered colour against every background it can have, found by walking
    * its ancestors from the root down and compositing each background colour and each gradient stop (glass tints are
-   * gradients of translucent colours) over the backdrop, with the glass's backdrop saturate() and any ancestor
-   * opacity applied. Also its font size.
+   * gradients of translucent colours) over the backdrop, with the glass's backdrop saturate() and brightness() and
+   * any ancestor opacity applied. Also its font size.
    */
   /**
    * The visible text runs, found before the backdrop photo touches the page: [text node, its element], or
@@ -481,7 +489,7 @@ function contrastKit() {
         }
       const chain: Element[] = [];
       for (let a: Element | null = el; a; a = a.parentElement) chain.unshift(a);
-      // The shell's Live chip is drawn over Clip Factory's sidebar: the sidebar's own chain is painted under it.
+      // The shell's dock (its Live chip, its switch) is drawn over a panel: the panel's own chain is painted under it.
       const side = underDock(el, rect);
       if (side) chain.splice(0, chain.indexOf(document.body) + 1, ...side);
       // (A picture on <html> or <body> is in the backdrop photo already, like their colours below.)
@@ -500,8 +508,12 @@ function contrastKit() {
         if (hasBackdrop && (a === document.documentElement || a === document.body)) continue;
         const o = Number(cs.opacity);
         if (o < 1) states = states.map((st) => ({ bg: st.bg, groups: [...st.groups, { behind: st.bg, o }] }));
-        const sat = /saturate\(([\d.]+)\)/.exec(cs.backdropFilter || cs.getPropertyValue("-webkit-backdrop-filter"));
-        if (sat) states = states.map((st) => ({ ...st, bg: saturate(st.bg, Number(sat[1])) }));
+        // A glass's backdrop-filter, in its own order: saturate() and brightness() (the switch's see-through glass
+        // takes back a little light from behind, glide.css), each in sRGB as Chromium and WebKit apply the shorthands.
+        for (const f of (cs.backdropFilter || cs.getPropertyValue("-webkit-backdrop-filter")).matchAll(/(saturate|brightness)\(([\d.]+)\)/g)) {
+          const k = Number(f[2]);
+          states = states.map((st) => ({ ...st, bg: f[1] === "saturate" ? saturate(st.bg, k) : brightness(st.bg, k) }));
+        }
         const fill = colours(cs.backgroundColor)[0];
         if (fill && fill[3] > 0) states = states.map((st) => ({ ...st, bg: over(fill, st.bg) }));
         // The background-image layers paint over its colour, the last listed lowest (a pane is its light over its
@@ -714,17 +726,23 @@ export async function looseText(page: Page, minAlpha?: number): Promise<string[]
       for (let n: Element | null = el; n && n !== document.body; n = n.parentElement) {
         const s = getComputedStyle(n);
         if (n.classList.contains("backdrop")) return false;
-        // The chosen choice of a glide bar sits on the glide, a sibling drawn under it.
-        if (n.matches(".has-glide > .is-on")) return true;
+        // The chosen choice of a glide bar sits on the glide, a sibling drawn under it. Not the workspace switch's: its
+        // glide is a see-through lens (glide.css), so its chosen name needs what is under the switch too, as the other.
+        if (n.matches(".has-glide > .is-on:not(.ws-switch__opt)")) return true;
         if (alphaOf(s.backgroundColor) >= min || alphaOf(s.backgroundImage) >= min) return true;
-        // The shell's Live chip (app/WorkspaceDock.tsx) is drawn over Clip Factory's sidebar, in the place of the
-        // sidebar's own: its words, where they lie over the sidebar on screen, sit on the sidebar too.
-        if (n.matches(".ws-dock > .ws-dock__live")) {
-          const side = document.querySelector("nav.sidebar");
-          if (!side || !side.checkVisibility()) return false;
+        // The shell's dock (app/WorkspaceDock.tsx) is drawn over a panel: its words, where they lie inside that
+        // panel's box on screen, sit on the panel too. The Live chip, in the place of the sidebar's own: Clip
+        // Factory's sidebar only. The workspace switch, see-through glass: Clip Factory's sidebar or Funded Clips' rail,
+        // whichever is on screen (underDock in contrastKit reads its contrast the same way). Beside a panel it is loose.
+        const chip: boolean = n.matches(".ws-dock > .ws-dock__live");
+        if (chip || n.matches(".ws-dock > .ws-switch-host")) {
           const r = el.getBoundingClientRect();
-          const b = side.getBoundingClientRect();
-          return r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom && tinted(side);
+          const side = Array.from(document.querySelectorAll(chip ? "nav.sidebar" : "nav.sidebar, nav.st-rail")).find((p) => {
+            if (!p.checkVisibility()) return false;
+            const b = p.getBoundingClientRect();
+            return r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom;
+          });
+          return !!side && tinted(side);
         }
       }
       return false;
