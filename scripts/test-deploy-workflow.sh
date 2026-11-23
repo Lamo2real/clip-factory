@@ -26,7 +26,7 @@
 #   - desktop-manifest still runs after every upload: desktop-plan skips it only when nothing is built, the tools
 #     lock is unchanged and manifest.json records the same inputs both jobs work out (run on samples); desktop-plan
 #     skips desktop-tools only with the same lock question desktop-tools asks again itself.
-#   - Lamo Stories (docs/CONTRACTS.md §45.15, §45.18): its agent image has its own tag (stories-agent- + a hash of
+#   - Funded Clips (docs/CONTRACTS.md §45.15, §45.18): its agent image has its own tag (stories-agent- + a hash of
 #     stories/** and web/src/stories/engine/**), shown with Clip Factory's unchanged one in the summary; it is built
 #     before the plan and one that does not build keeps the live tag; the Clip Factory check
 #     (scripts/check-plan-clips-unchanged.sh) runs on the saved plan after the delete gate and before the apply, with
@@ -533,7 +533,7 @@ else
 fi
 
 # 15. Two agent images, two tags (docs/CONTRACTS.md §45.15, ADR-76): Clip Factory's tag hash stays agent/**, skills/**
-#     and config/** (so a Lamo Stories change never rebuilds or drains Clip Factory's agent); Lamo Stories' tag is
+#     and config/** (so a Funded Clips change never rebuilds or drains Clip Factory's agent); Funded Clips' tag is
 #     stories-agent- plus 16 characters of a hash of stories/** and web/src/stories/engine/**, passed to the plan
 #     (through the image step below); the build's summary shows both tags (§45.23: Clip Factory's tag unchanged).
 build="$(job build)"
@@ -548,26 +548,26 @@ if grep -Fxq "          SOURCES_HASH: \${{ hashFiles('agent/**', 'skills/**', 'c
   && grep -Fxq '          NEW_TAG: ${{ needs.build.outputs.stories_image_tag }}' <<<"$infra" \
   && grep -Fxq '          TF_VAR_stories_agent_image_tag: ${{ steps.stories_push.outputs.tag }}' <<<"$infra" \
   && grep -Fxq '          TF_VAR_agent_image_tag: ${{ needs.build.outputs.image_tag }}' <<<"$infra"; then
-  ok "Clip Factory's agent tag still hashes agent/, skills/ and config/; Lamo Stories' agent has its own stories-agent- tag"
+  ok "Clip Factory's agent tag still hashes agent/, skills/ and config/; Funded Clips' agent has its own stories-agent- tag"
 else
   not_ok "the build job must keep SOURCES_HASH (agent/**, skills/**, config/**) and add STORIES_HASH (stories/**, web/src/stories/engine/**) as stories-agent-<16>, passed as TF_VAR_stories_agent_image_tag"
 fi
-tag_step="$(awk '/^      - name: Clip Stories agent image tag/ { on = 1; print; next } on && /^      - / { exit } on { print }' <<<"$build")"
+tag_step="$(awk '/^      - name: Funded Clips agent image tag/ { on = 1; print; next } on && /^      - / { exit } on { print }' <<<"$build")"
 # shellcheck disable=SC2016
 if grep -Fxq '          CLIPS_TAG: ${{ steps.image.outputs.tag }}' <<<"$tag_step" \
   && grep -Fq 'echo "- Clip Factory agent image: \`${CLIPS_TAG}\`"' <<<"$tag_step" \
-  && grep -Fq 'echo "- Clip Stories agent image: \`${tag}\`"' <<<"$tag_step" \
+  && grep -Fq 'echo "- Funded Clips agent image: \`${tag}\`"' <<<"$tag_step" \
   && grep -Fq '} >> "$GITHUB_STEP_SUMMARY"' <<<"$tag_step"; then
-  ok "the deploy summary shows Clip Factory's and Lamo Stories' agent image tags"
+  ok "the deploy summary shows Clip Factory's and Funded Clips' agent image tags"
 else
-  not_ok "the Lamo Stories tag step must write both agent image tags to the step summary"
+  not_ok "the Funded Clips tag step must write both agent image tags to the step summary"
 fi
 
-# 16. Lamo Stories' image is built before the plan once its runtime is live (read from Terraform's outputs), with
+# 16. Funded Clips' image is built before the plan once its runtime is live (read from Terraform's outputs), with
 #     Clip Factory's push-image.sh and stories/agent/Dockerfile; one that does not build keeps the live tag, so the
 #     apply never fails on it and Clip Factory still ships. It never builds Clip Factory's agent.
-push_step="$(awk '/^      - name: Clip Stories agent image \(built before the plan/ { on = 1; print; next } on && /^      - / { exit } on { print }' <<<"$infra")"
-push_line="$(grep -n '^      - name: Clip Stories agent image (built before the plan' <<<"$infra" | head -1 | cut -d: -f1)"
+push_step="$(awk '/^      - name: Funded Clips agent image \(built before the plan/ { on = 1; print; next } on && /^      - / { exit } on { print }' <<<"$infra")"
+push_line="$(grep -n '^      - name: Funded Clips agent image (built before the plan' <<<"$infra" | head -1 | cut -d: -f1)"
 plan_line="$(grep -n '^      - name: terraform plan$' <<<"$infra" | head -1 | cut -d: -f1)"
 init_line="$(grep -n '^      - name: terraform init$' <<<"$infra" | head -1 | cut -d: -f1)"
 # shellcheck disable=SC2016
@@ -576,13 +576,13 @@ if [ -n "$push_line" ] && [ -n "$plan_line" ] && [ -n "$init_line" ] && [ "$init
   && grep -Fq 'terraform output -raw stories_agent_image_tag' <<<"$push_step" \
   && grep -Fq 'DOCKERFILE="${GITHUB_WORKSPACE}/stories/agent/Dockerfile" bash "${GITHUB_WORKSPACE}/scripts/push-image.sh"' <<<"$push_step" \
   && grep -Fq 'echo "tag=${live}" >> "$GITHUB_OUTPUT"' <<<"$push_step" \
-  && grep -Fq '::error title=Clip Stories agent image::' <<<"$push_step" \
+  && grep -Fq '::error title=Funded Clips agent image::' <<<"$push_step" \
   && ! grep -q 'agent/Dockerfile"' <<<"$(grep -v 'stories/agent/Dockerfile' <<<"$push_step")" \
   && ! grep -Eq 'exit 1|continue-on-error' <<<"$push_step" \
   && grep -Fq 'output "stories_agent_image_tag"' "${root}/infra/envs/prod/outputs.tf"; then
-  ok "Lamo Stories' image is built before the plan; one that does not build keeps the live tag and never stops Clip Factory"
+  ok "Funded Clips' image is built before the plan; one that does not build keeps the live tag and never stops Clip Factory"
 else
-  not_ok "infra must build Lamo Stories' image between terraform init and plan, keep the live tag (stories_agent_image_tag) when it fails, and never exit 1 there"
+  not_ok "infra must build Funded Clips' image between terraform init and plan, keep the live tag (stories_agent_image_tag) when it fails, and never exit 1 there"
 fi
 
 # 17. The Clip Factory check runs on the saved plan after the delete gate and before the drain and the apply, with the
@@ -612,8 +612,8 @@ else
   not_ok "scripts/test-check-plan-clips-unchanged.sh failed:"$'\n'"${out}"
 fi
 
-# 19. The smoke job also sends the browser's preflight to Lamo Stories' routes (/v1/workspaces and a deep
-#     /v1/workspaces/stories/dashboard path) and checks the CORS answer, as its last step, so a Lamo Stories failure
+# 19. The smoke job also sends the browser's preflight to Funded Clips' routes (/v1/workspaces and a deep
+#     /v1/workspaces/stories/dashboard path) and checks the CORS answer, as its last step, so a Funded Clips failure
 #     never hides a Clip Factory check.
 last_smoke_step="$(grep '^      - name: ' <<<"$smoke" | tail -1)"
 # shellcheck disable=SC2016  # the literal ${API_URL%/} text is what the workflow must contain
@@ -621,7 +621,7 @@ if grep -Fq 'for path in /v1/workspaces /v1/workspaces/stories/dashboard; do' <<
   && grep -A12 'for path in /v1/workspaces /v1/workspaces/stories/dashboard; do' <<<"$smoke" | grep -q -- '-X OPTIONS' \
   && grep -A20 'for path in /v1/workspaces /v1/workspaces/stories/dashboard; do' <<<"$smoke" | grep -q 'access-control-allow-origin' \
   && grep -q 'url="${API_URL%/}/v1/jobs"' <<<"$smoke" \
-  && [ "$last_smoke_step" = "      - name: the Clip Stories routes let the app's browsers in (CORS preflight)" ]; then
+  && [ "$last_smoke_step" = "      - name: the Funded Clips routes let the app's browsers in (CORS preflight)" ]; then
   ok "the smoke job preflights /v1/workspaces and /v1/workspaces/stories/dashboard last (and still /v1/jobs)"
 else
   not_ok "the smoke job must send a CORS preflight to /v1/workspaces and /v1/workspaces/stories/dashboard as its last step (last: ${last_smoke_step})"

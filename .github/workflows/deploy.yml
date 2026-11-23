@@ -14,20 +14,20 @@
 #   preflight - skips everything (with a notice) until the role and the email are set. It is the only job before infra
 #               that reads the owner's email, and it runs no packages; the two builds start beside it (they skip
 #               themselves only when CF_DEPLOY_ROLE_ARN is not set) and infra waits for all three.
-#   build     - Lambda zip, and the agent image tag (a hash of the agent's sources); Lamo Stories' agent has its own
+#   build     - Lambda zip, and the agent image tag (a hash of the agent's sources); Funded Clips' agent has its own
 #               tag (a hash of stories/ and the animation engine), so neither image rebuilds for the other
 #   build-web - web bundle. infra waits for it too, so none of the web build's packages is still running while infra
 #               makes the hand-off desktop.yml trusts (only one made during infra's run). Each build hands the digest of
 #               what it uploaded to the job that downloads it, which stops if the files are not the same.
-#   infra     - state bucket if missing, Lamo Stories' new agent image once its runtime is live (one that does not
+#   infra     - state bucket if missing, Funded Clips' new agent image once its runtime is live (one that does not
 #               build keeps the live one, so Clip Factory still ships), terraform plan, the delete gate, the Clip
-#               Factory check (with Lamo Stories work in the deploy, the plan may not change Clip Factory's agent,
+#               Factory check (with Funded Clips work in the deploy, the plan may not change Clip Factory's agent,
 #               cf-prod-api, cf-prod-hooks or the HTTP API's shared pieces, docs/CONTRACTS.md §45.15), then apply
 #               exactly that plan. The apply builds and pushes each agent image (scripts/push-image.sh) whose tag is new.
 #   smoke     - "web and smoke", one job. The web upload: config.json from Terraform's outputs, version.json ("What's
 #               new": scripts/release-areas.sh over the commits since the live release), upload to S3, CloudFront
 #               refresh. The smoke test, whose API checks start first and run in the background during the upload:
-#               the HTTP API answers /v1/health and the browser's CORS preflight from the app (also on Lamo Stories'
+#               the HTTP API answers /v1/health and the browser's CORS preflight from the app (also on Funded Clips'
 #               /v1/workspaces routes), the webhooks
 #               REST API refuses a Meta challenge without the verify token (403), the WebSocket API refuses a
 #               connection without a valid token (401), Ask's worker reads a tiny picture with the real model
@@ -54,7 +54,7 @@ on:
   workflow_dispatch:
     inputs:
       allow_clip_factory_change:
-        description: "Clip Factory changes on purpose (this deploy carries Clip Stories work and a Clip Factory pull request that changes its agent, cf-prod-api, cf-prod-hooks or the HTTP API): the Clip Factory check only warns"
+        description: "Clip Factory changes on purpose (this deploy carries Funded Clips work and a Clip Factory pull request that changes its agent, cf-prod-api, cf-prod-hooks or the HTTP API): the Clip Factory check only warns"
         type: boolean
         default: false
 
@@ -144,23 +144,23 @@ jobs:
         run: |
           [ -n "$SOURCES_HASH" ] || { echo "::error::No agent sources found to hash."; exit 1; }
           echo "tag=agent-${SOURCES_HASH:0:16}" >> "$GITHUB_OUTPUT"
-      # docs/CONTRACTS.md §45.15 and ADR-76: Lamo Stories' own agent image (stories/agent/Dockerfile copies stories/ and
-      # the engine folder), so a Lamo Stories change never rebuilds or redeploys Clip Factory's agent, and the other way.
-      - name: Clip Stories agent image tag (changes only when Clip Stories' agent or engine changes)
+      # docs/CONTRACTS.md §45.15 and ADR-76: Funded Clips' own agent image (stories/agent/Dockerfile copies stories/ and
+      # the engine folder), so a Funded Clips change never rebuilds or redeploys Clip Factory's agent, and the other way.
+      - name: Funded Clips agent image tag (changes only when Funded Clips' agent or engine changes)
         id: stories_image
         env:
           STORIES_HASH: ${{ hashFiles('stories/**', 'web/src/stories/engine/**') }}
           CLIPS_TAG: ${{ steps.image.outputs.tag }}
         run: |
-          [ -n "$STORIES_HASH" ] || { echo "::error::No Clip Stories agent sources found to hash."; exit 1; }
+          [ -n "$STORIES_HASH" ] || { echo "::error::No Funded Clips agent sources found to hash."; exit 1; }
           tag="stories-agent-${STORIES_HASH:0:16}"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          # §45.23: the summary shows both tags, so a Lamo Stories deploy shows Clip Factory's agent tag unchanged.
+          # §45.23: the summary shows both tags, so a Funded Clips deploy shows Clip Factory's agent tag unchanged.
           {
             echo "## Agent images"
             echo
             echo "- Clip Factory agent image: \`${CLIPS_TAG}\`"
-            echo "- Clip Stories agent image: \`${tag}\`"
+            echo "- Funded Clips agent image: \`${tag}\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -287,11 +287,11 @@ jobs:
             -backend-config="key=${TF_STATE_KEY}" \
             -backend-config="region=${STATE_REGION}" \
             -backend-config="use_lockfile=true"
-      # docs/CONTRACTS.md §45.15, ADR-76: once Lamo Stories' runtime is live, its new image is built and pushed here,
-      # before the plan. If it does not build, this deploy keeps the image Lamo Stories runs now (the plan then leaves
-      # its runtime alone) and says so, so a broken Lamo Stories image never holds back Clip Factory's release. Its
+      # docs/CONTRACTS.md §45.15, ADR-76: once Funded Clips' runtime is live, its new image is built and pushed here,
+      # before the plan. If it does not build, this deploy keeps the image Funded Clips runs now (the plan then leaves
+      # its runtime alone) and says so, so a broken Funded Clips image never holds back Clip Factory's release. Its
       # first image (no runtime yet) is built by the apply. Clip Factory's agent image is never built here.
-      - name: Clip Stories agent image (built before the plan, so a broken one never holds back Clip Factory)
+      - name: Funded Clips agent image (built before the plan, so a broken one never holds back Clip Factory)
         id: stories_push
         working-directory: infra/envs/prod
         env:
@@ -300,19 +300,19 @@ jobs:
           repo="$(terraform output -raw stories_ecr_repository_url 2>/dev/null || true)"
           live="$(terraform output -raw stories_agent_image_tag 2>/dev/null || true)"
           if [ -z "$repo" ] || [ -z "$live" ]; then
-            echo "Clip Stories' agent has no live image yet: the apply builds ${NEW_TAG}."
+            echo "Funded Clips' agent has no live image yet: the apply builds ${NEW_TAG}."
             echo "tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
           elif [ "$live" = "$NEW_TAG" ]; then
-            echo "Clip Stories' agent image ${NEW_TAG} is already live."
+            echo "Funded Clips' agent image ${NEW_TAG} is already live."
             echo "tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
           elif REPO_URL="$repo" IMAGE_TAG="$NEW_TAG" CONTEXT_DIR="$GITHUB_WORKSPACE" \
             DOCKERFILE="${GITHUB_WORKSPACE}/stories/agent/Dockerfile" bash "${GITHUB_WORKSPACE}/scripts/push-image.sh"; then
             echo "tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
-            echo "- Clip Stories agent image \`${NEW_TAG}\` is built and goes live in this deploy." >> "$GITHUB_STEP_SUMMARY"
+            echo "- Funded Clips agent image \`${NEW_TAG}\` is built and goes live in this deploy." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "tag=${live}" >> "$GITHUB_OUTPUT"
-            echo "::error title=Clip Stories agent image::${NEW_TAG} did not build or push, so Clip Stories keeps running ${live} and Clip Factory deploys as usual. Fix stories/agent (CI's stories-agent job builds the same image) and push again."
-            echo "- **Clip Stories agent image \`${NEW_TAG}\` did not build.** Clip Stories keeps \`${live}\`; Clip Factory is not affected." >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Funded Clips agent image::${NEW_TAG} did not build or push, so Funded Clips keeps running ${live} and Clip Factory deploys as usual. Fix stories/agent (CI's stories-agent job builds the same image) and push again."
+            echo "- **Funded Clips agent image \`${NEW_TAG}\` did not build.** Funded Clips keeps \`${live}\`; Clip Factory is not affected." >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: terraform plan
         working-directory: infra/envs/prod
@@ -344,14 +344,14 @@ jobs:
         run: |
           terraform show -json prod.tfplan > "${RUNNER_TEMP}/plan.json"
           bash "${GITHUB_WORKSPACE}/scripts/check-plan-deletes.sh" "${RUNNER_TEMP}/plan.json"
-      # docs/CONTRACTS.md §45.1, §45.15 and §45.18: Lamo Stories never changes Clip Factory. When Lamo Stories work that
+      # docs/CONTRACTS.md §45.1, §45.15 and §45.18: Funded Clips never changes Clip Factory. When Funded Clips work that
       # feeds the plan is in this deploy (the commits since the live release), the same saved plan may not change Clip
       # Factory's agent (unless its own image tag changed), cf-prod-api's or cf-prod-hooks' role, policy or settings
       # (only this release's zip and VERSION, and hooks' STORIES_OAUTH_CALLBACK), the HTTP API, its sign-in check,
       # stage or existing routes. Clip Factory's own pull requests are only noted, so their push deploys go on. A run
-      # by hand with "Clip Factory changes on purpose" only warns (both kinds in one deploy); a Lamo Stories route on a
+      # by hand with "Clip Factory changes on purpose" only warns (both kinds in one deploy); a Funded Clips route on a
       # Clip Factory path always stops it. The history is fetched first (the checkout has only this commit).
-      - name: Clip Factory check (Clip Stories changes nothing of Clip Factory)
+      - name: Clip Factory check (Funded Clips changes nothing of Clip Factory)
         env:
           ALLOW_CLIPS_CHANGE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_clip_factory_change && 'true' || 'false' }}
         run: |
@@ -413,7 +413,7 @@ jobs:
   # The web upload and the smoke test in one job, so a release waits for one runner fewer. The API checks need only
   # infra's outputs, so they start first and run in the background while the web app uploads. Each prints its result
   # in its own step below, in the old order, and a failed one still skips the steps after it. The app check runs after
-  # the upload, and Lamo Stories' check reports last, so a Lamo Stories failure never hides a Clip Factory check.
+  # the upload, and Funded Clips' check reports last, so a Funded Clips failure never hides a Clip Factory check.
   smoke:
     name: web and smoke
     needs: [preflight, build-web, infra]
@@ -571,7 +571,7 @@ jobs:
             fi
             exit 1
           }
-          # docs/CONTRACTS.md §45.15: Lamo Stories' own routes (ANY /v1/workspaces and /v1/workspaces/{proxy+}, on
+          # docs/CONTRACTS.md §45.15: Funded Clips' own routes (ANY /v1/workspaces and /v1/workspaces/{proxy+}, on
           # cf-prod-stories-api) are more specific than /v1/{proxy+}, so their public OPTIONS twins must answer the
           # browser's token-less preflight; a deep path (the dashboard) proves the {proxy+} one.
           stories() {
@@ -588,14 +588,14 @@ jobs:
                 allow_origin="$(tr -d '\r' < "$headers" | awk -F': ' 'tolower($1)=="access-control-allow-origin"{print $2}')"
                 allow_headers="$(tr -d '\r' < "$headers" | awk -F': ' 'tolower($1)=="access-control-allow-headers"{print tolower($2)}')"
                 if [[ "$status" == 2?? ]] && [ "$allow_origin" = "$origin" ] && [[ ",${allow_headers// /}," == *",authorization,"* ]]; then
-                  echo "Clip Stories CORS preflight passed for ${path}: ${status}, allow-origin ${allow_origin}, allow-headers ${allow_headers}."
+                  echo "Funded Clips CORS preflight passed for ${path}: ${status}, allow-origin ${allow_origin}, allow-headers ${allow_headers}."
                   passed=true
                   break
                 fi
                 echo "Attempt ${attempt} (${path}): preflight got ${status}, allow-origin '${allow_origin}', allow-headers '${allow_headers}'; retrying in 10 s."
                 sleep 10
               done
-              [ "$passed" = true ] || { echo "::error::The browser's CORS preflight to ${url} from ${origin} is refused, so Clip Stories cannot load in any browser (Clip Factory is not affected)."; exit 1; }
+              [ "$passed" = true ] || { echo "::error::The browser's CORS preflight to ${url} from ${origin} is refused, so Funded Clips cannot load in any browser (Clip Factory is not affected)."; exit 1; }
             done
           }
           # start <check>: runs it in the background, with its output in <check>.log, its exit code in <check>.rc and
@@ -618,7 +618,7 @@ jobs:
           [ -s "${dir}/$1.rc" ] || { echo "::error::The $1 check stopped without a result."; exit 1; }
           exit "$(cat "${dir}/$1.rc")"
           SH
-          echo "The API checks are running; their results follow the upload: health, CORS, webhooks, WebSocket, Ask, then Clip Stories' CORS."
+          echo "The API checks are running; their results follow the upload: health, CORS, webhooks, WebSocket, Ask, then Funded Clips' CORS."
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # scripts/release-areas.sh reads the commits since the live release.
@@ -710,6 +710,6 @@ jobs:
             echo
             echo "Webhook address for platform consoles: ${HOOKS_URL%/}/hooks/{platform}"
           } >> "$GITHUB_STEP_SUMMARY"
-      # Last in this job, so a Lamo Stories failure never hides a Clip Factory check.
-      - name: the Clip Stories routes let the app's browsers in (CORS preflight)
+      # Last in this job, so a Funded Clips failure never hides a Clip Factory check.
+      - name: the Funded Clips routes let the app's browsers in (CORS preflight)
         run: bash "${RUNNER_TEMP}/api-checks/result.sh" stories

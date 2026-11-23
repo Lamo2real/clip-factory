@@ -3,11 +3,14 @@
 # branch protection reads), so running both doubled the load and left runners queued for 20+ minutes.
 # Only what a change can break is checked: the changes job says which areas a change touches, and a job whose area did
 # not change is skipped. The required checks (web, api, agent, infra, scripts) still always report: web and agent fail
-# when changes did not finish, so "skipped" only ever means "nothing it tests changed".
+# when changes did not finish, so "skipped" only ever means "nothing it tests changed". stories-agent and desktop are
+# not required checks of their own, so the web gate waits for them too: a pull request can never merge with their tests
+# failing.
 # A push to main skips the web checks and the browser tests: its pull request ran them (with strict=false two green pull
 # requests can still clash on main, which the nightly run finds). It still runs the cheap jobs, which also keep the
-# caches warm. The nightly run (and a run by hand) checks everything; when the nightly run fails, its last job opens
-# (or updates) the one "Nightly CI failed" issue. A pull request runs fewer browser tests (B3, e2e_mode in changes): no
+# caches warm. The nightly run (and a run by hand) checks everything; when a job of the nightly run fails, is cancelled
+# or times out, its last job opens (or updates) the one "Nightly CI failed" issue, assigned to the owner, who is
+# mentioned in each new comment. A pull request runs fewer browser tests (B3, e2e_mode in changes): no
 # screenshots, and only part of the contrast matrix unless it changes a style file. The jobs run in parallel (the
 # browser tests as 7 Chromium and 5 WebKit shards); a newer push to the same branch cancels the older run. The desktop
 # job (Tauri, desktop/) runs only when desktop/ changed, since it needs the Linux web view libraries and a Rust build.
@@ -120,13 +123,14 @@ jobs:
           UNIT_ONLY='^web/test/|^desktop/src-tauri/src/'
           # The agent image's folders (deploy.yml: agent, skills, config) and what agent/tests reads from elsewhere.
           AGENT='^(agent|skills|config)/|^api/src/clipfactory_api/(jobs|creators)\.py$|^api/tests/fixtures/|^web/src/api/(types|mock/fixtures)\.ts$|^infra/modules/storage/variables\.tf$'
-          # Lamo Stories' image (deploy.yml: stories, the engine) and the stream rules its isolation test reads.
+          # Funded Clips' image (deploy.yml: stories, the engine) and the stream rules its isolation test reads.
           STORIES='^stories/|^web/src/stories/engine/|^infra/modules/(realtime|notify)/main\.tf$'
           # B3: what the whole contrast matrix guards. The styles (tokens.css and glass.css among them, and any other
           # stylesheet, the legal and about pages' public/legal/site.css too), the shared controls (ui.tsx), the
-          # background, veil and look code (background.ts, look.ts), the glass stand-ins (e2e/glass.ts) and
-          # contrast.spec.ts itself.
-          STYLE='^web/src/(styles|stories/styles)/|^web/(src|public)/.+\.css$|^web/src/components/ui\.tsx$|^web/src/lib/(background|look)\.ts$|^web/e2e/(contrast\.spec|glass)\.ts$'
+          # background, veil and look code (background.ts, look.ts), the glass stand-ins (e2e/glass.ts), the helpers
+          # contrast.spec.ts uses (e2e/helpers.ts), contrast.spec.ts itself, and the script that picks each mode's tests
+          # (scripts/e2e-shards.mjs), so a change to how a mode runs runs the whole matrix.
+          STYLE='^web/src/(styles|stories/styles)/|^web/(src|public)/.+\.css$|^web/src/components/ui\.tsx$|^web/src/lib/(background|look)\.ts$|^web/e2e/(contrast\.spec|glass|helpers)\.ts$|^web/scripts/e2e-shards\.mjs$'
           not_web="$(grep -vE "$NOT_WEB" <<<"$changed" || [ $? -eq 1 ])"
           web_reads="$(grep -E "$WEB_READS" <<<"$changed" || [ $? -eq 1 ])"
           web="$(printf '%s\n%s\n' "$not_web" "$web_reads" | sed '/^$/d' | sort -u)"
@@ -162,12 +166,23 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      # Always a real npm ci (only npm's download folder is cached, not node_modules): npm ci fails when package.json and
-      # package-lock.json disagree, so a change to one without the other fails here, on every web pull request. The
-      # browser test jobs may take node_modules from web-cache's cache; this job is the one that checks the lockfile.
+      # Always a real npm ci (only npm's download folder, ~/.npm, is cached, not node_modules): npm ci fails when
+      # package.json and package-lock.json disagree, so a change to one without the other fails here, on every web pull
+      # request. The browser test jobs may take node_modules from web-cache's cache; this job is the one that checks the
+      # lockfile. A5: only main (the nightly run, a run by hand) saves the download folder; pull requests only read it.
+      - name: npm's download folder from the cache
+        id: npm-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.npm
+          key: npm-web-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('web/package-lock.json') }}
       - run: npm ci
+      - name: save npm's download folder (main only)
+        if: github.event_name != 'pull_request' && steps.npm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.npm
+          key: ${{ steps.npm-cache.outputs.cache-primary-key }}
       # The committed help corpus, the docs routes table and CONTRACTS §19.6 must match the app routes.
       - name: help corpus is up to date
         run: node scripts/help-corpus.mjs --check
@@ -185,11 +200,11 @@ jobs:
       # Just the bundle: npm run build would run tsc (the typecheck above) and the corpus scripts (checked above) again.
       - name: build (vite)
         run: npx vite build
-      # Lamo Stories stays out of Clip Factory's first download (CONTRACTS §45.17): the page loads one script and one
-      # stylesheet (index.html), and neither carries Lamo Stories' look (.stories-app, --st-*, st- classes), its shell
+      # Funded Clips stays out of Clip Factory's first download (CONTRACTS §45.17): the page loads one script and one
+      # stylesheet (index.html), and neither carries Funded Clips' look (.stories-app, --st-*, st- classes), its shell
       # (StoriesApp) or its animation engine; they come in their own chunks, only when a /stories page opens. The
       # markers are first proven to be in the build at all, so the check can never pass by looking for nothing.
-      - name: Clip Stories is not in the main bundle
+      - name: Funded Clips is not in the main bundle
         run: |
           set -euo pipefail
           js=$(grep -oE '<script[^>]+src="/assets/[^"]+\.js"' dist/index.html | sed -E 's/.*src="\/([^"]+)".*/\1/')
@@ -198,16 +213,16 @@ jobs:
           [ -n "$js" ] && [ -n "$css" ] || { echo "index.html names no main script or stylesheet"; exit 1; }
           markers_js='stories-app|st-rail|st-tabbar|st-frame|steer_left|tyre_burst|facepalm'
           markers_css='stories-app|--st-|\.st-[a-z]'
-          grep -lqE "$markers_js" dist/assets/*.js || { echo "no Clip Stories chunk found: the markers are stale"; exit 1; }
-          grep -lqE "$markers_css" dist/assets/*.css || { echo "no Clip Stories stylesheet found: the markers are stale"; exit 1; }
+          grep -lqE "$markers_js" dist/assets/*.js || { echo "no Funded Clips chunk found: the markers are stale"; exit 1; }
+          grep -lqE "$markers_css" dist/assets/*.css || { echo "no Funded Clips stylesheet found: the markers are stale"; exit 1; }
           bad=0
           for f in $js $extra; do
-            case "$f" in *.js) if grep -qE "$markers_js" "dist/$f"; then echo "::error::$f (loaded by index.html) carries Clip Stories code: $(grep -oE "$markers_js" "dist/$f" | sort -u | tr '\n' ' ')"; bad=1; fi ;; esac
+            case "$f" in *.js) if grep -qE "$markers_js" "dist/$f"; then echo "::error::$f (loaded by index.html) carries Funded Clips code: $(grep -oE "$markers_js" "dist/$f" | sort -u | tr '\n' ' ')"; bad=1; fi ;; esac
           done
           for f in $css; do
-            if grep -qE "$markers_css" "dist/$f"; then echo "::error::$f (loaded by index.html) carries Clip Stories styles: $(grep -oE "$markers_css" "dist/$f" | sort -u | head -5 | tr '\n' ' ')"; bad=1; fi
+            if grep -qE "$markers_css" "dist/$f"; then echo "::error::$f (loaded by index.html) carries Funded Clips styles: $(grep -oE "$markers_css" "dist/$f" | sort -u | head -5 | tr '\n' ' ')"; bad=1; fi
           done
-          [ "$bad" = 0 ] && echo "Main bundle: $js $css $extra: no Clip Stories code or styles."
+          [ "$bad" = 0 ] && echo "Main bundle: $js $css $extra: no Funded Clips code or styles."
 
   # About 1,700 Chromium tests (the app at many widths, contrast, overflow, help, the screenshots), in 7 shards with 4
   # workers each, one per 4-CPU runner; each shard builds the mock app once. Playwright's own --shard splits by count in
@@ -353,27 +368,35 @@ jobs:
 
   # The required check. always() makes it report a failure (not "skipped", which branch protection would accept)
   # when a job it needs failed or was cancelled, or when changes did not finish. A job changes said was not needed must
-  # have been skipped; every other must have passed. Not on a push to main (B1): nothing it gates runs there, and
-  # branch protection reads the pull request's run.
+  # have been skipped; every other must have passed. It also gates stories-agent and desktop, which are not required
+  # checks of their own (branch protection requires only web, api, agent, infra and scripts), so a pull request whose
+  # Funded Clips agent tests or desktop tests fail cannot merge either. Not on a push to main (B1): nothing it gates
+  # runs there, and branch protection reads the pull request's run.
   web:
-    needs: [changes, web-checks, web-e2e, web-e2e-webkit]
+    needs: [changes, web-checks, web-e2e, web-e2e-webkit, stories-agent, desktop]
     if: always() && github.event_name != 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: web-checks and every web-e2e shard passed (or had nothing to check)
+      - name: web-checks, every web-e2e shard, stories-agent and desktop passed (or had nothing to check)
         env:
           CHANGES: ${{ needs.changes.result }}
           NEED_CHECKS: ${{ needs.changes.outputs.web }}
           NEED_E2E: ${{ needs.changes.outputs.e2e }}
+          NEED_STORIES: ${{ needs.changes.outputs.stories_agent }}
+          NEED_DESKTOP: ${{ needs.changes.outputs.desktop }}
           CHECKS: ${{ needs.web-checks.result }}
           E2E: ${{ needs.web-e2e.result }}
           WEBKIT: ${{ needs.web-e2e-webkit.result }}
+          STORIES: ${{ needs.stories-agent.result }}
+          DESKTOP: ${{ needs.desktop.result }}
         run: |
-          echo "changes: ${CHANGES} (web: ${NEED_CHECKS:-none}, e2e: ${NEED_E2E:-none})"
+          echo "changes: ${CHANGES} (web: ${NEED_CHECKS:-none}, e2e: ${NEED_E2E:-none}, stories_agent: ${NEED_STORIES:-none}, desktop: ${NEED_DESKTOP:-none})"
           echo "web-checks: ${CHECKS}"
           echo "web-e2e (all Chromium shards): ${E2E}"
           echo "web-e2e (all WebKit shards): ${WEBKIT}"
+          echo "stories-agent (the Funded Clips agent): ${STORIES}"
+          echo "desktop: ${DESKTOP}"
           [ "$CHANGES" = "success" ] || { echo "::error::The changes job ended ${CHANGES}, so nothing may count as skipped."; exit 1; }
           ok=1
           # need <job> <needed> <result>
@@ -387,6 +410,8 @@ jobs:
           need web-checks "$NEED_CHECKS" "$CHECKS"
           need web-e2e "$NEED_E2E" "$E2E"
           need web-e2e-webkit "$NEED_E2E" "$WEBKIT"
+          need stories-agent "$NEED_STORIES" "$STORIES"
+          need desktop "$NEED_DESKTOP" "$DESKTOP"
           [ "$ok" = 1 ]
 
   # A5: node_modules and the two browsers for the web-e2e jobs, which only read them (web-checks always runs a real
@@ -538,10 +563,10 @@ jobs:
           cache-from: type=gha,scope=agent
           cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,scope=agent,mode=max' || '' }}
 
-  # Lamo Stories' own AgentCore runtime (stories/agent, docs/CONTRACTS.md §45.11, ADR-76): its own project, tests and
+  # Funded Clips' own AgentCore runtime (stories/agent, docs/CONTRACTS.md §45.11, ADR-76): its own project, tests and
   # image, apart from Clip Factory's agent job above. Native ARM64 for the same Deno reason. ffmpeg comes from Ubuntu
   # (with libass, like the image's Debian one), so the pipeline, captions and assembly tests run for real. Like agent, it
-  # runs when its own inputs changed and always on main.
+  # runs when its own inputs changed and always on main. Not a required check itself: the web gate waits for it.
   stories-agent:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.stories_agent == 'true') }}
@@ -578,7 +603,7 @@ jobs:
       # self-check (one frame drawn, one sound mastered, one caption burned in), as the deployed image does. Pull
       # requests only read the layer cache, as in agent.
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-      - name: build the Clip Stories agent image (linux/arm64, not pushed)
+      - name: build the Funded Clips agent image (linux/arm64, not pushed)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
@@ -661,6 +686,21 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: shellcheck
         run: shellcheck scripts/*.sh desktop/scripts/*.sh
+      # actionlint (rhysd/actionlint, the release binary its install docs name, checked against the release's sha256):
+      # every workflow's syntax, expressions, job needs and action inputs, and shellcheck over each run step. Seconds.
+      - name: actionlint (every workflow, with shellcheck on their run steps)
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          tarball="${RUNNER_TEMP}/actionlint.tar.gz"
+          curl -sSfL --retry 3 -o "$tarball" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xzf "$tarball" -C "$RUNNER_TEMP" actionlint
+          "${RUNNER_TEMP}/actionlint" -version
+          "${RUNNER_TEMP}/actionlint" -color
       - name: release-areas.sh against a throwaway git repository
         run: bash scripts/test-release-areas.sh
       - name: write-web-config.sh against saved Terraform output fixtures (wsUrl required)
@@ -676,12 +716,11 @@ jobs:
       - name: read-logs.yml prints the Content Rewards lines and connection, with nothing secret (fake aws)
         run: bash scripts/test-read-logs.sh
       # The Mac's TikTok helper (mac/tiktok-helper, CONTRACTS §47): its rules (never twice, pacing, the trial pause, the
-      # caption match) and its install scripts. It runs on the owner's Mac, so no browser is started here.
+      # caption match) and its install scripts. It runs on the owner's Mac, so no browser is started here. No npm cache:
+      # its lockfile has one package, and a cache here would be saved by every pull request too (A5: only main writes).
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
-          cache: npm
-          cache-dependency-path: mac/tiktok-helper/package-lock.json
       - name: the Mac's TikTok helper (npm ci, npm test)
         working-directory: mac/tiktok-helper
         run: |
@@ -728,23 +767,28 @@ jobs:
           python3 desktop/tools/test_build_tools.py
           jq -e . desktop/tools/tools.lock.json >/dev/null
 
-  # B1's nightly run checks all of main, so a failure there must reach someone: this opens one issue, "Nightly CI
-  # failed", with the run's link and which jobs failed, or adds the new run to the one that is still open (close it once
-  # main is green again). Only for the nightly run: a pull request shows its own checks, and a run by hand is watched by
-  # whoever started it. It posts nothing but the run, the commit and job names, and uses only the run's own token.
+  # B1's nightly run checks all of main, so a failure there must reach someone: when a job failed, was cancelled or timed
+  # out, this opens one issue, "Nightly CI failed", assigned to the owner (Lamo2real, so GitHub notifies them: they do
+  # not watch the repository), with the run's link and which jobs did not pass, or adds the new run to the one that is
+  # still open in a comment that mentions them (close it once main is green again). Only for the nightly run: a pull
+  # request shows its own checks, and a run by hand is watched by whoever started it, so elsewhere it shows as skipped.
+  # !cancelled() keeps it from running when the whole run was cancelled. It posts nothing but the run, the commit and
+  # job names, and uses only the run's own token.
   nightly-failed:
-    name: the nightly run failed (open or update its issue)
+    name: nightly alert (runs only at night)
     needs: [changes, web-checks, web-e2e, web-e2e-webkit, web, web-cache, api, agent, stories-agent, infra, scripts, desktop]
-    if: failure() && github.event_name == 'schedule'
+    if: ${{ github.event_name == 'schedule' && !cancelled() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       issues: write
     steps:
-      - name: open or update the "Nightly CI failed" issue
+      - name: open or update the "Nightly CI failed" issue (assigned to the owner)
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          # The owner's GitHub login: the issue is assigned to them and each new comment mentions them.
+          OWNER: Lamo2real
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           ATTEMPT: ${{ github.run_attempt }}
           SHA: ${{ github.sha }}
@@ -752,16 +796,21 @@ jobs:
         run: |
           set -euo pipefail
           title="Nightly CI failed"
-          failed="$(jq -r '[to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key] | join(", ")' <<<"$NEEDS")"
+          failed="$(jq -r '[to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | "\(.key) (\(.value.result))"] | join(", ")' <<<"$NEEDS")"
           when="$(date -u '+%Y-%m-%d %H:%M UTC')"
-          body="$(printf 'The nightly ci run on main failed (%s).\n\n- Run: %s (attempt %s)\n- Commit: %s\n- Failed jobs: %s\n\nRe-run the failed jobs from the run page, or fix main. Close this issue once a nightly run is green again.\n' \
+          body="$(printf 'The nightly ci run on main did not pass (%s): a job failed, was cancelled or timed out.\n\n- Run: %s (attempt %s)\n- Commit: %s\n- Jobs that did not pass: %s\n\nRe-run the failed jobs from the run page, or fix main. Close this issue once a nightly run is green again.\n' \
             "$when" "$RUN_URL" "$ATTEMPT" "$SHA" "${failed:-see the run}")"
-          number="$(gh issue list --state open --limit 100 --json number,title \
+          # The search finds the open issue however many other issues are open; the exact title is then matched.
+          number="$(gh issue list --search "in:title \"${title}\"" --state open --json number,title \
             --jq "map(select(.title == \"${title}\")) | sort_by(.number) | .[0].number // empty")"
           if [ -n "$number" ]; then
-            gh issue edit "$number" --body "$body"
-            gh issue comment "$number" --body "Failed again on ${when}: ${RUN_URL} (${SHA:0:7}; ${failed:-see the run})."
-            echo "Updated issue #${number}."
+            gh issue edit "$number" --body "$body" --add-assignee "$OWNER" \
+              || { echo "::warning::Could not assign #${number} to ${OWNER}; updating the body only."; gh issue edit "$number" --body "$body"; }
+            gh issue comment "$number" --body "@${OWNER} the nightly run failed again on ${when}: ${RUN_URL} (${SHA:0:7}; ${failed:-see the run})."
+            echo "Updated issue #${number} and mentioned @${OWNER}."
+          elif gh issue create --title "$title" --body "$body" --assignee "$OWNER"; then
+            echo "Opened the issue, assigned to ${OWNER}."
           else
-            gh issue create --title "$title" --body "$body"
+            echo "::warning::Could not assign the issue to ${OWNER}; opening it with a mention instead."
+            gh issue create --title "$title" --body "$(printf '@%s\n\n%s' "$OWNER" "$body")"
           fi

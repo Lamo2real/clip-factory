@@ -1,16 +1,24 @@
 ## What runs where
 
-| Suite | Folder | Tools | In CI ([ci.yml](../.github/workflows/ci.yml)) | Before deploy ([deploy.yml](../.github/workflows/deploy.yml)) |
+| Suite | Folder | Tools | In CI ([ci.yml](../.github/workflows/ci.yml)) | In the deploy ([deploy.yml](../.github/workflows/deploy.yml)) |
 |---|---|---|---|---|
-| Web unit and component tests | `web/` | Vitest, Testing Library | yes | yes |
-| Web type check and lint | `web/` | TypeScript, ESLint | yes | yes |
-| Web end-to-end and layout tests | `web/` | Playwright in mock mode | yes | yes |
-| API Lambdas | `api/` | pytest, ruff, mypy (uv) | yes | yes |
-| Agent runtime | `agent/` | pytest, ruff, mypy (uv) | yes | yes |
-| Infrastructure | `infra/` | `terraform fmt -check`, `terraform validate`, `terraform test` (mock provider), tflint | yes | plan and apply |
-| Help corpus drift | `web/` | `node scripts/help-corpus.mjs --check` (corpus, routes table in [HELP_ASSISTANT.md](HELP_ASSISTANT.md), `/v1/help` rows of CONTRACTS §19); the CI `web-checks` job runs it right after `npm ci`, before type check, lint and tests | yes | – (the build regenerates the corpus) |
-| Documentation | `docs/`, `README.md` | relative-link and anchor check, draw.io XML parse and PNG export (below); `docs/SETUP_POSTING.md` is also checked by the web test `setup-docs.test.ts` (the five platforms, and the Content Rewards steps once `## Content Rewards` is there) | by hand (the setup page: yes, through the web tests) | – |
-| Workflows and scripts | `.github/`, `scripts/` | actionlint, shellcheck where available | yes | – |
+| Web unit and component tests | `web/` | Vitest, Testing Library | yes | no |
+| Web type check and lint | `web/` | TypeScript, ESLint | yes | no |
+| Web end-to-end and layout tests | `web/` | Playwright in mock mode | yes | no |
+| API Lambdas | `api/` | pytest, ruff, mypy (uv) | yes | no |
+| Agent runtime | `agent/` | pytest, ruff, mypy (uv), the image build and its self-check | yes | no (it builds and pushes the image) |
+| Funded Clips agent | `stories/agent/` | pytest, ruff, mypy (uv), ffmpeg, the image build and its self-check | yes (job `stories-agent`; the `web` gate waits for it) | no (it builds and pushes the image) |
+| Desktop app | `desktop/` | `cargo fmt --check`, clippy, `cargo test`, the tools lock and its signing | yes, when `desktop/` changes (the `web` gate waits for it) | no ([desktop.yml](../.github/workflows/desktop.yml) builds it after a deploy) |
+| Infrastructure | `infra/` | `terraform fmt -check`, `terraform validate`, `terraform test` (mock provider), tflint | yes | no tests: plan, the delete gate, the Clip Factory check and apply |
+| Help corpus drift | `web/` | `node scripts/help-corpus.mjs --check` (corpus, routes table in [HELP_ASSISTANT.md](HELP_ASSISTANT.md), `/v1/help` rows of CONTRACTS §19); the CI `web-checks` job runs it right after `npm ci`, before type check, lint and tests | yes | no (the build regenerates the corpus) |
+| Documentation | `docs/`, `README.md` | relative-link and anchor check, draw.io XML parse and PNG export (below); `docs/SETUP_POSTING.md` is also checked by the web test `setup-docs.test.ts` (the five platforms, and the Content Rewards steps once `## Content Rewards` is there) | by hand (the setup page: yes, through the web tests) | no |
+| Workflows and scripts | `.github/`, `scripts/`, `mac/tiktok-helper/` | actionlint 1.7.12 (every workflow, with shellcheck on their `run:` steps), shellcheck (`scripts/*.sh`, `desktop/scripts/*.sh`, the TikTok helper's install scripts), each `scripts/test-*.sh`, the TikTok helper's `npm test` | yes (job `scripts`) | no |
+
+`deploy.yml` runs none of these tests. It deploys each push to `main` (and a run by hand), and a change reaches `main`
+only through a pull request whose required checks passed in `ci.yml` (`web`, `api`, `agent`, `infra`, `scripts`;
+`web` also waits for `stories-agent` and `desktop`). The push's own `ci` run goes on beside the deploy and does not
+hold it back. What `deploy.yml` checks is the release itself: the delete gate and the Clip Factory check on the saved
+plan, then the smoke test against the live app after the upload.
 
 The exact commands are in each folder's `package.json` or `pyproject.toml` and in `ci.yml`, which are the source of
 truth. The common ones:
@@ -44,18 +52,19 @@ as one job, so [ci.yml](../.github/workflows/ci.yml) splits it:
 | Job | What it runs |
 |---|---|
 | `changes` | which areas a change touches (web, e2e, the two agents, desktop) and how much of the browser tests run (`e2e_mode`, below). A job whose area did not change is skipped. |
-| `web-checks` | a real `npm ci` (never node_modules from a cache, so a `package.json` that disagrees with `package-lock.json` fails here), the help corpus and Ask knowledge checks, the shard check (`node scripts/e2e-shards.mjs check`), type check, lint, Vitest, the bundle (`vite build`) and the Clip Stories bundle check |
+| `web-checks` | a real `npm ci` (never node_modules from a cache, so a `package.json` that disagrees with `package-lock.json` fails here), the help corpus and Ask knowledge checks, the shard check (`node scripts/e2e-shards.mjs check`), type check, lint, Vitest, the bundle (`vite build`) and the Funded Clips bundle check (none of its code or styles in the main bundle). npm's download folder comes from a cache that only the nightly run and a run by hand save; a pull request only reads it |
 | `web-e2e (1/7)` … `web-e2e (7/7)` | Chromium (the `chromium` and, at night, `screenshots` projects), 4 workers each. Each shard builds the mock app once. |
 | `web-e2e (WebKit 1/5)` … `web-e2e (WebKit 5/5)` | `webkit` and `webkit-phone`, 2 workers each |
-| `web` | the gate: passes only when `web-checks` and every shard passed, or `changes` said they had nothing to check. It fails when `changes` did not finish, so "skipped" only ever means "nothing it tests changed". This is the check branch protection requires, so keep a job with this exact name. |
+| `web` | the gate: passes only when `web-checks`, every shard, `stories-agent` and `desktop` passed, or `changes` said they had nothing to check (then each must be skipped). `stories-agent` and `desktop` are not required checks of their own, so this is what keeps a pull request with failing Funded Clips agent tests or desktop tests from merging. It fails when `changes` did not finish, so "skipped" only ever means "nothing it tests changed". This is the check branch protection requires, so keep a job with this exact name. |
 
 **Shards are split by time, not by count.** Playwright's own `--shard` splits in file order, which put all of
 `contrast.spec.ts` in one shard (14 to 23 minutes while the others took 8 to 12). So every shard but the last runs a
 list made from each test's saved time (`web/e2e/shards/<group>-<n>.txt`, built from `web/e2e/shards/timings.tsv`), and
 the last shard runs every test in no list (`--test-list-invert`), so a new or renamed test always runs.
 `node scripts/e2e-shards.mjs check` (in `web-checks`) has Playwright list each shard with the arguments CI passes, in
-each of the three modes below, and fails when a test would run in no shard or in two, when a B3 tag is wrong, or when
-`ci.yml` names a mode the script does not know or does not run the full mode at night. To refresh the times:
+each of the three modes below, and fails when a test would run in no shard or in two, when a B3 tag is wrong, when
+a mode leaves out more or less than B3 chose (all three are pinned in the check, so a pull request cannot shrink its own
+run), or when `ci.yml` names a mode the script does not know or does not run the full mode at night. To refresh the times:
 `gh run view <id> --log > run.log`, then `node scripts/e2e-shards.mjs timings run.log` and
 `node scripts/e2e-shards.mjs build`. To change the number of shards, change the matrix in `ci.yml` and `GROUPS` in
 `scripts/e2e-shards.mjs` together, then run `build`.
@@ -82,7 +91,7 @@ picks the mode (`e2e_mode`), and `scripts/e2e-shards.mjs` (`MODES`) turns it int
 | Mode | When | What it leaves out |
 |---|---|---|
 | `full` | the nightly run (02:17 UTC) and a run by hand (Actions, ci, Run workflow) | nothing: every test of every project |
-| `style` | a pull request that changes a style, token, glass or theme file: `web/src/styles/**`, `web/src/stories/styles/**` and any other stylesheet (the legal pages' `web/public/legal/site.css` too), `web/src/components/ui.tsx`, `web/src/lib/background.ts` and `look.ts`, `web/e2e/glass.ts` or `web/e2e/contrast.spec.ts`; also a pull request that changes `ci.yml` or has no usable base, which runs every check | the `screenshots` project (174 tests that only take pictures; CI never keeps them) |
+| `style` | a pull request that changes a style, token, glass or theme file: `web/src/styles/**`, `web/src/stories/styles/**` and any other stylesheet (the legal pages' `web/public/legal/site.css` too), `web/src/components/ui.tsx`, `web/src/lib/background.ts` and `look.ts`, `web/e2e/glass.ts`, `web/e2e/helpers.ts` (the helpers `contrast.spec.ts` uses), `web/e2e/contrast.spec.ts` or `web/scripts/e2e-shards.mjs` (the script that picks each mode's tests); also a pull request that changes `ci.yml` or has no usable base, which runs every check | the `screenshots` project (174 tests that only take pictures; CI never keeps them) |
 | `core` | every other pull request that touches the web | the `screenshots` project, and the `@contrast-full` part of `contrast.spec.ts` |
 
 Every test in `contrast.spec.ts` carries exactly one of two tags. `@contrast-core` runs on every pull request: one
@@ -98,9 +107,11 @@ their own inputs change.
 
 **Main and the nightly run.** A push to `main` does not run the web checks and browser tests again: its pull request
 ran them. Branch protection is not strict, so two green pull requests can still break `main` together, which the
-nightly full run finds. When the nightly run fails, its last job (`nightly-failed`) opens one issue, "Nightly CI
-failed", with the run's link and the failed jobs, or adds the new run to the one still open; close it once a nightly
-run is green.
+nightly full run finds. When a job of the nightly run fails, is cancelled or times out, its last job (`nightly
+alert (runs only at night)`, shown as skipped on every other run) opens one issue, "Nightly CI failed", assigned to
+the owner (`Lamo2real`, so GitHub notifies them even without watching the repository), with the run's link and the
+jobs that did not pass, or adds the new run to the one still open in a comment that mentions `@Lamo2real`; close it
+once a nightly run is green.
 
 ### API and agent
 

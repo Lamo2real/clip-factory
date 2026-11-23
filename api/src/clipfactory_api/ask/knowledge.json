@@ -1,5 +1,5 @@
 {
- "version": "5510e0c34a71",
+ "version": "84fbe71b1559",
  "parts": [
   {
    "id": "app-map",
@@ -986,8 +986,8 @@
   {
    "id": "testing-what-runs-where",
    "title": "TESTING: What runs where",
-   "line": "Suite | Folder | Tools | In CI ([ci.yml](../.github/workflows/ci.yml)) | Before deploy ([deploy.yml](../.github/workflows/deploy.yml)) |",
-   "chars": 10033
+   "line": "Suite | Folder | Tools | In CI ([ci.yml](../.github/workflows/ci.yml)) | In the deploy ([deploy.yml](../.github/workflows/deploy.yml)) |",
+   "chars": 12263
   },
   {
    "id": "testing-ask-clip-factory",

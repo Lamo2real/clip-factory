@@ -11,10 +11,10 @@
 //   node scripts/e2e-shards.mjs args <group> <shard> <total> [mode]   one CI shard's Playwright arguments, one per
 //                                         line (mode: core, style or full; full when left out)
 //   node scripts/e2e-shards.mjs check     in every mode, every test that mode runs is in exactly one shard
-//                                         (Playwright's own --list per shard), the nightly (full) mode runs every
-//                                         test, and ci.yml picks only these modes (full at night) and passes them to
-//                                         every shard; web-checks runs it, so a list, a tag or ci.yml can never drop
-//                                         a test
+//                                         (Playwright's own --list per shard), every mode leaves out exactly what
+//                                         B3 chose (full: nothing), and ci.yml picks only these modes (full at
+//                                         night) and passes them to every shard; web-checks runs it, so a list, a
+//                                         tag, a mode or ci.yml can never drop a test
 //   node scripts/e2e-shards.mjs timings <log>...   saves the times of CI job logs (`gh run view <id> --log`) in
 //                                         e2e/shards/timings.tsv, keeping the saved time of a test the logs lack
 //   node scripts/e2e-shards.mjs build     rebuilds the lists from e2e/shards/timings.tsv (run it when check warns
@@ -258,7 +258,8 @@ function checkCi() {
   }
   const ci = readFileSync(CI, "utf8");
   const problems = [];
-  const named = [...ci.matchAll(/\bsay e2e_mode (\w+)\b(?!")|\beverything "[^"]*" (\w+);/g)].map((m) => m[1] ?? m[2]);
+  // `say e2e_mode <mode>` and `everything "<why>" <mode>`, the mode followed by `;` or at the end of the line.
+  const named = [...ci.matchAll(/\bsay e2e_mode (\w+)\b(?!")|\beverything "[^"]*" (\w+)(?=;|[ \t]*$)/gm)].map((m) => m[1] ?? m[2]);
   if (!named.length) problems.push("its changes job sets no e2e_mode");
   for (const m of new Set(named)) if (!MODES[m]) problems.push(`its changes job sets e2e_mode ${m}, which is not a mode here (${Object.keys(MODES).join(", ")})`);
   if (!/^\s*schedule \| workflow_dispatch\) everything "[^"]*" full;/m.test(ci)) problems.push("the nightly run and a run by hand (schedule | workflow_dispatch) must use the full mode");
@@ -278,8 +279,23 @@ async function check() {
   const grouped = Object.values(GROUPS).flatMap((g) => g.projects);
   const missing = all.projects.filter((p) => !grouped.includes(p));
   if (missing.length) fail(`playwright.config.ts has projects no CI shard runs: ${missing.join(", ")} (add them to GROUPS in scripts/e2e-shards.mjs)`);
-  // The nightly run must be the one that runs everything, so no test is ever in no run at all.
-  if (MODES.full.skip.length || MODES.full.drop) fail("the full mode (the nightly run) must leave nothing out");
+  // Every mode is pinned to what the owner chose (B3), so a pull request can never shrink its own run by editing MODES:
+  // the nightly run (full) leaves nothing out, so no test is ever in no run at all, style leaves out only the
+  // screenshots project, and core only that and @contrast-full. A change to this file also runs in the style mode at
+  // least (ci.yml's STYLE pattern).
+  const PINNED = {
+    core: { skip: ["screenshots"], drop: "contrast-full" },
+    style: { skip: ["screenshots"], drop: null },
+    full: { skip: [], drop: null },
+  };
+  const modeNames = (o) => Object.keys(o).sort().join(", ");
+  if (modeNames(MODES) !== modeNames(PINNED)) fail(`the modes must be exactly ${modeNames(PINNED)} (MODES has ${modeNames(MODES)})`);
+  for (const [mode, want] of Object.entries(PINNED)) {
+    const m = MODES[mode];
+    if (JSON.stringify([...m.skip].sort()) !== JSON.stringify(want.skip) || m.drop !== want.drop) {
+      fail(`the ${mode} mode (${m.what}) must leave out exactly ${want.skip.length ? `the ${want.skip.join(", ")} project` : "no project"}${want.drop ? ` and @${want.drop}` : ""} (it has skip ${JSON.stringify(m.skip)}, drop ${JSON.stringify(m.drop)})`);
+    }
+  }
   let bad = checkTags(all.tests) + checkCi();
   const times = readTimings();
   const estimate = estimator(times, all.tests);

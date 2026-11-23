@@ -184,12 +184,12 @@ expect() {
 }
 
 base_plan "$LIVE_STORIES" >"${work}/base.json"
-expect "a Lamo Stories deploy (new modules and routes, cf-prod-api's new zip and VERSION, hooks' one key, the callback throttle) goes through" 0 \
+expect "a Funded Clips deploy (new modules and routes, cf-prod-api's new zip and VERSION, hooks' one key, the callback throttle) goes through" 0 \
   "${work}/base.json" "the plan changes nothing of Clip Factory"
 expect "it says cf-prod-api only gets this release's package" 0 "${work}/base.json" "gets this release's package and VERSION"
-expect "it lists what the plan replaces (here only Lamo Stories' image build trigger)" 0 "${work}/base.json" \
+expect "it lists what the plan replaces (here only Funded Clips' image build trigger)" 0 "${work}/base.json" \
   "  - module.stories_agent.terraform_data.image (replace)"
-expect "it names the Lamo Stories commit it found since the live release" 0 "${work}/base.json" \
+expect "it names the Funded Clips commit it found since the live release" 0 "${work}/base.json" \
   "feat: Lamo Stories' routes and its own API Lambda"
 
 # --- Clip Factory's agent ---
@@ -209,8 +209,8 @@ variant "${work}/agent-new.json" '.resource_changes += [{address: "module.agent.
 expect "a new resource under module.agent. without a new agent tag is refused too" 1 "${work}/agent-new.json" "module.agent.aws_iam_role_policy_attachment.x"
 
 variant "${work}/agent-sources.json" "$(set_change 'module.agent.terraform_data.image' '.change.actions = ["delete","create"]') | $(set_change 'module.agent.aws_bedrockagentcore_agent_runtime.agent' '.change.actions = ["update"]')" "$LIVE_AGENT"
-REPO="${work}/agent" expect "a Lamo Stories commit that edits Clip Factory's agent sources (config/models.json) stops the deploy, new agent tag or not" 1 \
-  "${work}/agent-sources.json" "this Lamo Stories commit changes Clip Factory's agent sources"
+REPO="${work}/agent" expect "a Funded Clips commit that edits Clip Factory's agent sources (config/models.json) stops the deploy, new agent tag or not" 1 \
+  "${work}/agent-sources.json" "this Funded Clips commit changes Clip Factory's agent sources"
 
 # --- cf-prod-api's role and policy ---
 variant "${work}/api-policy.json" "$(set_change 'module.api.aws_iam_role_policy.fn["api"]' '.change.actions = ["update"]')"
@@ -259,7 +259,7 @@ variant "${work}/integration.json" "$(set_change 'module.api.aws_apigatewayv2_in
 expect "cf-prod-api's integration changing stops the deploy" 1 "${work}/integration.json" "aws_apigatewayv2_integration.api"
 
 variant "${work}/stories-route-update.json" "$(set_change 'module.api.aws_apigatewayv2_route.stories["ANY /v1/workspaces"]' '.change.actions = ["update"] | .change.before = {route_key: "ANY /v1/workspaces"}') | $(set_change 'module.api.aws_apigatewayv2_integration.stories[0]' '.change.actions = ["update"]')"
-expect "Lamo Stories' own route and integration may change (they are not Clip Factory's)" 0 "${work}/stories-route-update.json"
+expect "Funded Clips' own route and integration may change (they are not Clip Factory's)" 0 "${work}/stories-route-update.json"
 
 # --- the shared HTTP API, its sign-in check, cf-prod-api's permission and the stage ---
 variant "${work}/http-api.json" "$(set_change 'module.api.aws_apigatewayv2_api.http' '.change.actions = ["update"]')"
@@ -313,12 +313,12 @@ expect "cf-prod-hooks' policy changing (the first round's workspace secrets) sto
 # --- the route rule: always stops, even for Clip Factory's own deploys or a run by hand ---
 hijack='.resource_changes += [{address: "module.api.aws_apigatewayv2_route.stories[\"ANY /v1/jobs/{proxy+}\"]", mode: "managed", type: "aws_apigatewayv2_route", change: {actions: ["create"], after: {route_key: "ANY /v1/jobs/{proxy+}"}}}]'
 variant "${work}/hijack.json" "$hijack"
-expect "a Lamo Stories route on a Clip Factory path (/v1/jobs) stops the deploy" 1 "${work}/hijack.json" \
-  "a Lamo Stories route would take a path that is not its own (ANY /v1/jobs/{proxy+})"
+expect "a Funded Clips route on a Clip Factory path (/v1/jobs) stops the deploy" 1 "${work}/hijack.json" \
+  "a Funded Clips route would take a path that is not its own (ANY /v1/jobs/{proxy+})"
 ALLOW=true expect "the route rule stops the deploy even with \"Clip Factory changes on purpose\"" 1 "${work}/hijack.json" \
   "does not let this through"
 variant "${work}/hijack-clips.json" "$hijack" "$LIVE_CLIPS"
-REPO="${work}/clips" expect "the route rule stops the deploy even when no Lamo Stories work is in it" 1 "${work}/hijack-clips.json" "ANY /v1/jobs/{proxy+}"
+REPO="${work}/clips" expect "the route rule stops the deploy even when no Funded Clips work is in it" 1 "${work}/hijack-clips.json" "ANY /v1/jobs/{proxy+}"
 
 # --- whose change: Clip Factory's own pull requests keep reaching production ---
 whop="$(set_change 'module.api.aws_lambda_function.fn["api"]' '.change.after.environment[0].variables.WHOP_CONNECT = "off"')"
@@ -327,24 +327,24 @@ REPO="${work}/clips" expect "Clip Factory's own new env flag on cf-prod-api (Get
   "::notice title=Clip Factory's own change::module.api.aws_lambda_function.fn[\"api\"]: cf-prod-api would change its environment key(s) WHOP_CONNECT."
 variant "${work}/clips-agent.json" "$(set_change 'module.agent.aws_bedrockagentcore_agent_runtime.agent' '.change.actions = ["update"]') | $(set_change 'module.agent.aws_iam_role_policy.agent' '.change.actions = ["update"]')" "$LIVE_CLIPS"
 REPO="${work}/clips" expect "Clip Factory's own agent switch or grant (no new tag) goes through as a notice" 0 "${work}/clips-agent.json" \
-  "no Lamo Stories work"
+  "no Funded Clips work"
 variant "${work}/clips-policy.json" "$(set_change 'module.api.aws_iam_role_policy.fn["api"]' '.change.actions = ["update"]')" "$LIVE_CLIPS"
 REPO="${work}/clips" expect "Clip Factory's own grant on cf-prod-api goes through as a notice" 0 "${work}/clips-policy.json" "Clip Factory's own change"
 variant "${work}/web-env.json" "$whop" "$LIVE_WEB"
-REPO="${work}/web" expect "a Lamo Stories web-only change deployed with Clip Factory's env flag lets the flag through" 0 "${work}/web-env.json" \
+REPO="${work}/web" expect "a Funded Clips web-only change deployed with Clip Factory's env flag lets the flag through" 0 "${work}/web-env.json" \
   "Clip Factory's own change"
 variant "${work}/rerun-env.json" "$whop" "$LIVE_RERUN"
 REPO="${work}/rerun" expect "a rerun of the live commit (nothing new) treats a change as Clip Factory's own" 0 "${work}/rerun-env.json" "Clip Factory's own change"
 
 # --- whose change: Lamo Stories work in the deploy keeps the rule strict ---
 variant "${work}/stories-env.json" "$whop"
-expect "the same env flag with a Lamo Stories infra commit in the deploy stops it and names the commit" 1 "${work}/stories-env.json" \
+expect "the same env flag with a Funded Clips infra commit in the deploy stops it and names the commit" 1 "${work}/stories-env.json" \
   "feat: Lamo Stories' routes and its own API Lambda"
 variant "${work}/merge-env.json" "$whop" "$LIVE_MERGE"
-REPO="${work}/merge" expect "a Lamo Stories pull request merged with a merge commit counts as Lamo Stories work" 1 "${work}/merge-env.json" \
+REPO="${work}/merge" expect "a Funded Clips pull request merged with a merge commit counts as Funded Clips work" 1 "${work}/merge-env.json" \
   "Merge pull request #115"
 variant "${work}/message-env.json" "$whop" "$LIVE_MESSAGE"
-REPO="${work}/message" expect "a commit that names Lamo Stories and edits a shared module counts as Lamo Stories work" 1 "${work}/message-env.json" \
+REPO="${work}/message" expect "a commit that names Lamo Stories (its old name) and edits a shared module counts as Funded Clips work" 1 "${work}/message-env.json" \
   "fix: the Lamo Stories callback throttle"
 variant "${work}/unknown-env.json" "$whop" "89abcdef0123456789abcdef0123456789abcdef"
 expect "a live release that is not in the history stops a Clip Factory change (it cannot tell whose it is)" 1 "${work}/unknown-env.json" \
@@ -355,7 +355,7 @@ REPO="${work}/missing" expect "a folder that is not a repository stops a Clip Fa
 
 # --- other cases ---
 variant "${work}/allowed.json" "$(set_change 'module.api.aws_lambda_function.fn["api"]' '.change.after.environment[0].variables.CR_FINDER = "on"')"
-ALLOW=true expect "a Clip Factory change made on purpose with Lamo Stories work in the deploy (ALLOW_CLIPS_CHANGE=true) goes through with a warning per finding" 0 \
+ALLOW=true expect "a Clip Factory change made on purpose with Funded Clips work in the deploy (ALLOW_CLIPS_CHANGE=true) goes through with a warning per finding" 0 \
   "${work}/allowed.json" '::warning title=Clip Factory changes on purpose::module.api.aws_lambda_function.fn["api"]: cf-prod-api would change its environment key(s) CR_FINDER.'
 
 summary_file="${work}/summary.md"
