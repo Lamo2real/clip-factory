@@ -1,5 +1,5 @@
 /* =====================================================================================================================
-   Funded Clips · "Ember Glass" · the design tokens (imported first, before stories.css)
+   Clips Funded · "Ember Glass" · the design tokens (imported first, before stories.css)
    ---------------------------------------------------------------------------------------------------------------------
    The owner's warm reference of 22 Nov (a warm dark espresso room, amber and copper light out of focus behind smoky
    glass, cream solids, an orange accent) on direction B's technical base (one radius scale, a liquid rim on a few
@@ -20,7 +20,7 @@
    ===================================================================================================================== */
 
 /* The fonts (Fugaz One and Fraunces, self-hosted with their OFL licences) are fonts.css, which StoriesApp puts on the
-   page with the first Funded Clips screen (stories/fonts.ts), not this style sheet. */
+   page with the first Clips Funded screen (stories/fonts.ts), not this style sheet. */
 
 .stories-app {
   /* ========== 1. The base: warm dark espresso and smoky brown (Colours › Ember is the default background) ==========
@@ -419,8 +419,8 @@
   --mark-cut: var(--st-base);
 }
 
-/* Funded Clips' toasts (docs/CONTRACTS.md §45.38): the shell draws every toast in its own .toasts box, outside
-   .stories-app, so the toasts Funded Clips' screens raise carry st-toast (App.tsx gives its ToastScope that class)
+/* Clips Funded' toasts (docs/CONTRACTS.md §45.38): the shell draws every toast in its own .toasts box, outside
+   .stories-app, so the toasts Clips Funded' screens raise carry st-toast (App.tsx gives its ToastScope that class)
    and get the smaller-text token here, the same stack as --st-font above (test/storiesStyles.test.ts keeps the two
    the same). st-end.css sets them in it. Clip Factory's toasts, and the shell's own, carry no st-toast: Inter. */
 .toasts .st-toast {

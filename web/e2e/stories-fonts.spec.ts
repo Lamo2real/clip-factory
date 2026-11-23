@@ -1,10 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import { CLIPS, openClip } from "./helpers.ts";
 
-// Funded Clips' type (docs/CONTRACTS.md §45.39) in the real faces: its toasts are Fraunces, though the shell draws
-// every toast outside .stories-app, while Clip Factory's stay Inter even after Funded Clips has been on screen; and,
+// Clips Funded' type (docs/CONTRACTS.md §45.39) in the real faces: its toasts are Fraunces, though the shell draws
+// every toast outside .stories-app, while Clip Factory's stay Inter even after Clips Funded has been on screen; and,
 // as neither Fugaz One nor Fraunces has tabular figures, every number that ticks keeps one width (its box holds its
-// widest value), so nothing beside it moves. Funded Clips is switched on here with cf.storiesPreview = 1.
+// widest value), so nothing beside it moves. Clips Funded is switched on here with cf.storiesPreview = 1.
 
 async function storiesReady(page: Page) {
   await page.locator(".stories-app[data-ws]").waitFor({ timeout: 15_000 });
@@ -13,7 +13,7 @@ async function storiesReady(page: Page) {
   await page.waitForTimeout(400);
 }
 
-/** A toast's class, its words' font and whether it sits inside Funded Clips' own box. */
+/** A toast's class, its words' font and whether it sits inside Clips Funded' own box. */
 async function toastType(page: Page, text: string) {
   const toast = page.locator(".toast").filter({ hasText: text });
   await expect(toast).toBeVisible();
@@ -30,12 +30,12 @@ async function toastType(page: Page, text: string) {
   });
 }
 
-test("Funded Clips' toasts are Fraunces in the shell's toast box; Clip Factory's stay Inter, also after Funded Clips was on screen", async ({ page }) => {
+test("Clips Funded' toasts are Fraunces in the shell's toast box; Clip Factory's stay Inter, also after Clips Funded was on screen", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("cf.storiesPreview", "1"));
   await page.setViewportSize({ width: 1280, height: 900 });
   await openClip(page, CLIPS.all);
 
-  await page.locator(".ws-dock .ws-switch__opt", { hasText: "Funded Clips" }).click();
+  await page.locator(".ws-dock .ws-switch__opt", { hasText: "Clips Funded" }).click();
   await storiesReady(page);
   await page.getByRole("button", { name: "Try again" }).first().click();
   const mine = await toastType(page, "Trying again now.");
@@ -44,7 +44,7 @@ test("Funded Clips' toasts are Fraunces in the shell's toast box; Clip Factory's
   expect(mine.family).toMatch(/^"?Fraunces"?, "Iowan Old Style", Georgia, serif$/);
   expect(mine.loaded, "Fraunces is loaded for it").toBe(true);
 
-  // Back in Clip Factory (its pane kept, Funded Clips' style sheet still on the page): its own toast is Inter.
+  // Back in Clip Factory (its pane kept, Clips Funded' style sheet still on the page): its own toast is Inter.
   await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Clip Factory$/ }).click();
   await expect(page).toHaveURL(/\/clips\/[A-Z0-9]+$/);
   await page.locator(".perf__refresh").click();

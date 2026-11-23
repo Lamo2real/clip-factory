@@ -36,7 +36,7 @@ MAX_PROMPT_CHARACTERS = 20
 # the story's own format when the chat is about a story. Never a fixed "vertical 9:16". The shape wins over any other
 # shape named elsewhere: an agent's instructions the owner edited from an earlier default, a skill or a memory may
 # still say "vertical 9:16", and this video's shape is the one the owner picked.
-HOUSE_BRIEF_TEMPLATE = """Funded Clips house brief (the studio's rules for every video):
+HOUSE_BRIEF_TEMPLATE = """Clips Funded house brief (the studio's rules for every video):
 1. A SHAPE ASPECT cartoon, 30 to 60 seconds long (15 to 90 allowed). Plan every moment for that frame. This shape wins over any other shape named in your instructions, skills or notes.
 2. No voice-over and no spoken words. Everything is told through the characters' movement, faces and body language, sound effects, short non-verbal noises (a gasp, a laugh, a sigh, a happy "yay"), background music and, when it helps, a few short on-screen captions. Speech bubbles hold symbols only.
 3. Recurring characters: use the owner's saved characters from CHARACTERS by name, acting like their personality says, so they feel the same in every video.

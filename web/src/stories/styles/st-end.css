@@ -51,7 +51,7 @@
   }
 }
 
-/* ---------- Funded Clips' toasts in its own type: Fraunces, like all its smaller text ---------- */
+/* ---------- Clips Funded' toasts in its own type: Fraunces, like all its smaller text ---------- */
 /* The toasts its screens raise carry st-toast (glass-tokens.css gives them --st-font): the words and the Undo button
    (it inherits the font) at the shell's sizes and weights (550 and 700 at 15 px, over the 400 floor). */
 .toasts .st-toast {

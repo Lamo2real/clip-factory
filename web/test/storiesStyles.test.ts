@@ -151,7 +151,7 @@ describe("the owner's rules hold in Lamo Stories' styles", () => {
     expect(outside).toEqual([]);
   });
 
-  it("declare only Funded Clips' own fonts (Fugaz One and Fraunces, from /fonts/stories/), never one of Clip Factory's names", () => {
+  it("declare only Clips Funded' own fonts (Fugaz One and Fraunces, from /fonts/stories/), never one of Clip Factory's names", () => {
     const faces = files.flatMap(([f, text]) => rules(text).filter((r) => r.selector === "@font-face").map((r) => [f, Object.fromEntries(decls(r.body))] as const));
     expect(faces.length).toBeGreaterThan(0);
     for (const [f, d] of faces) {
@@ -159,7 +159,7 @@ describe("the owner's rules hold in Lamo Stories' styles", () => {
       expect(d.src, f).toMatch(/^url\("\/fonts\/stories\/[A-Za-z-]+\.woff2"\) format\("woff2"\)$/);
       expect(existsSync(join(FONTS, /\/fonts\/stories\/([A-Za-z-]+\.woff2)/.exec(d.src!)![1]!)), d.src).toBe(true);
       expect(d["font-display"], f).toBe("swap");
-      // Roman only (nothing in Funded Clips is set in italic), and each file says which characters it carries.
+      // Roman only (nothing in Clips Funded is set in italic), and each file says which characters it carries.
       expect(d["font-style"], f).toBe("normal");
       expect(d["unicode-range"], `${f}: ${d.src}`).toMatch(/^U\+[0-9A-F]{4}(-[0-9A-F]{4})?(, U\+[0-9A-F]{4}(-[0-9A-F]{4})?)*$/);
     }
@@ -184,7 +184,7 @@ describe("the owner's rules hold in Lamo Stories' styles", () => {
     for (const [f, text] of files) expect(text, f).not.toMatch(/Playfair|\bJost\b/);
   });
 
-  it("leave Clip Factory's own fonts as they are: Inter and Times, and no Funded Clips font name outside web/src/stories", () => {
+  it("leave Clip Factory's own fonts as they are: Inter and Times, and no Clips Funded font name outside web/src/stories", () => {
     const cf = readFileSync(join(import.meta.dirname, "..", "src", "styles", "tokens.css"), "utf8");
     expect(/--font-ui:\s*([^;]+);/.exec(cf)?.[1]).toBe('"Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif');
     expect(/--font-display:\s*([^;]+);/.exec(cf)?.[1]).toBe('"Times New Roman", "Times New Roman MT", Tinos, Times, serif');
@@ -196,13 +196,13 @@ describe("the owner's rules hold in Lamo Stories' styles", () => {
     expect(readFileSync(join(import.meta.dirname, "..", "index.html"), "utf8")).not.toMatch(/Fugaz|Fraunces|fonts\/stories/);
   });
 
-  it("set Funded Clips' toasts in Fraunces: the shell draws them outside .stories-app, so .toasts .st-toast gets --st-font's very stack", () => {
+  it("set Clips Funded' toasts in Fraunces: the shell draws them outside .stories-app, so .toasts .st-toast gets --st-font's very stack", () => {
     const toast = files.flatMap(([, text]) => rules(text).filter((r) => r.selector === ".toasts .st-toast").flatMap((r) => decls(r.body)));
     const d = new Map(toast);
     expect(d.get("--st-font")).toBe(tokens().get("--st-font"));
     expect(d.get("font-family")).toBe("var(--st-font)");
     expect(d.get("font-optical-sizing")).toBe("auto");
-    // Only its own toasts carry the class: App.tsx gives it to Funded Clips' ToastScope, never to Clip Factory's.
+    // Only its own toasts carry the class: App.tsx gives it to Clips Funded' ToastScope, never to Clip Factory's.
     const app = readFileSync(join(import.meta.dirname, "..", "src", "app", "App.tsx"), "utf8");
     expect(app.match(/className="st-toast"/g)).toHaveLength(1);
     expect(app).toMatch(/<ToastScope active=\{inStories\}[^>]*className="st-toast">/);
@@ -405,7 +405,7 @@ function readWoff2(file: string, want: number[]): { family: string; axes: Record
   return { family: names.get(16) ?? names.get(1) ?? "", axes, has };
 }
 
-describe("Funded Clips' own font files", () => {
+describe("Clips Funded' own font files", () => {
   // å ä ö Å Ä Ö and the marks the words use (− – ’ … · ›)
   const WANT = [0xe5, 0xe4, 0xf6, 0xc5, 0xc4, 0xd6, 0x2212, 0x2013, 0x2019, 0x2026, 0xb7, 0x203a];
   // Latin Extended letters: ą č ę ł ń ő ś š ű ź ż ž

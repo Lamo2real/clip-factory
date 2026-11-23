@@ -214,7 +214,7 @@ run "role_matches_the_contract" {
       "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/x/app*",
       "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/oauth/state-key-AbCdEf",
     ])
-    error_message = "cf-prod-stories-api reads Funded Clips' secrets, Clip Factory's YouTube, TikTok and X app keys and the OAuth state key, nothing else."
+    error_message = "cf-prod-stories-api reads Clips Funded's secrets, Clip Factory's YouTube, TikTok and X app keys and the OAuth state key, nothing else."
   }
 
   assert {

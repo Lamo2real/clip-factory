@@ -82,11 +82,11 @@ describe("Luma AI Ray2's line (the AI video maker since Amazon ended Nova Reel, 
     expect(list.find((p) => p.id === "nova-canvas")).toMatchObject({ state: "ended", line: "Ended by Amazon on 30 Sep 2026.", endedAt: "2026-09-30", replacement: "stability", model: null });
     await expect(patch({ providers: { images: "builtin-rig", video: "nova-reel", audio: "builtin-synth" } })).rejects.toMatchObject({
       status: 400,
-      message: "Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Funded Clips › Settings › Video.",
+      message: "Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Clips Funded › Settings › Video.",
     });
     await expect(patch({ providers: { images: "nova-canvas", video: "builtin-2d", audio: "builtin-synth" } })).rejects.toMatchObject({
       status: 400,
-      message: "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Funded Clips › Settings › Video.",
+      message: "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Clips Funded › Settings › Video.",
     });
   });
 });

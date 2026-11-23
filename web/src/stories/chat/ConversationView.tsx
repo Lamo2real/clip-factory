@@ -477,14 +477,14 @@ export function ConversationView({
       : { model: conv.model ?? DEFAULT, effort: conv.effort ?? DEFAULT };
   const sheetModel = findModel(models.models, sheet?.scope === "once" ? current.model : (conv.model ?? conv.effective.model));
   // Model and effort are chosen separately (§45.25), so each part says where it comes from.
-  const elsewhere = conv.effective.from === "agent" ? "Funded Clips › Settings › Agents" : "Funded Clips › Settings › AI";
+  const elsewhere = conv.effective.from === "agent" ? "Clips Funded › Settings › Agents" : "Clips Funded › Settings › AI";
   const fromLine =
     override && (override.model || override.effort)
       ? "Only the next message uses this. Your chat's setting stays."
       : conv.model !== null && conv.effort !== null
         ? "Saved for this chat."
         : conv.model !== null
-          ? "Model saved for this chat. The effort comes from Funded Clips › Settings."
+          ? "Model saved for this chat. The effort comes from Clips Funded › Settings."
           : conv.effort !== null
             ? `Effort saved for this chat. The model comes from ${elsewhere}.`
             : `From ${elsewhere}.`;

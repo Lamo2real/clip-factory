@@ -119,7 +119,7 @@ function ProductionList({ ws }: { ws: string }) {
         <div className="st-s-empty st-glass">
           <span className="st-s-empty__film" aria-hidden="true" />
           <h2 className="st-s-empty__title">No videos yet</h2>
-          <p className="st-s-empty__text">Pick an idea and a character, and Funded Clips makes the whole video.</p>
+          <p className="st-s-empty__text">Pick an idea and a character, and Clips Funded makes the whole video.</p>
           <A href={storiesHref({ name: "production_new", ideaId: null })} className="st-btn st-btn--main">
             Make your first video
           </A>
@@ -359,7 +359,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
             <span className="st-s-back__orb">‹</span> Production
           </A>
           <h1 className="st-s-head__title">Make a new video</h1>
-          <p className="st-s-head__lede">A few quick picks, then Funded Clips writes, draws, animates and puts it all together.</p>
+          <p className="st-s-head__lede">A few quick picks, then Clips Funded writes, draws, animates and puts it all together.</p>
         </div>
       </header>
       {!data.data ? (
@@ -458,7 +458,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
             <h2 className="st-s-panel__title" id="st-nv-4">
               <span className="st-s-num">5</span> Words and music
             </h2>
-            <Switch label="Captions" line="Short words on screen. No talking in Funded Clips videos." checked={captionsOn} onChange={setCaptions} />
+            <Switch label="Captions" line="Short words on screen. No talking in Clips Funded videos." checked={captionsOn} onChange={setCaptions} />
             <Pick label="Music" value={music} options={CATALOG.musicMoods.map((m) => ({ value: m.id, label: m.id === "none" ? "No music" : m.label }))} onChange={setMood} />
           </section>
 
@@ -545,14 +545,14 @@ function RefPicker({
   if (!refs.length)
     return (
       <p className="st-s-field__hint">
-        No reference videos yet. Upload one in <A href={storiesHref({ name: "references" })}>References</A> and Funded Clips studies how it is made.
+        No reference videos yet. Upload one in <A href={storiesHref({ name: "references" })}>References</A> and Clips Funded studies how it is made.
       </p>
     );
   // Only the picks that have a tile count (one that is not in the list can never be unpicked).
   const full = picked.filter((id) => refs.some((r) => r.refId === id)).length >= 3;
   return (
     <>
-      <p className="st-s-field__hint">Pick up to 3. Funded Clips borrows their timing and structure, never their characters or footage.</p>
+      <p className="st-s-field__hint">Pick up to 3. Clips Funded borrows their timing and structure, never their characters or footage.</p>
       <ul className="st-s-refpick">
         {refs.map((r) => {
           const on = picked.includes(r.refId);
@@ -832,7 +832,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
           {job ? (
             <>
               <dt>Helpers used</dt>
-              <dd>{helpersLine(job.meta.providers, job.meta.writerModel, (key) => modelOf(info, key)) || "Funded Clips' own built-in helpers"}</dd>
+              <dd>{helpersLine(job.meta.providers, job.meta.writerModel, (key) => modelOf(info, key)) || "Clips Funded's own built-in helpers"}</dd>
             </>
           ) : null}
           <dt>Model and effort for this video</dt>

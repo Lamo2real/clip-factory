@@ -175,7 +175,7 @@ const account = (
   ...extra,
 });
 
-const CREATOR: TikTokCreator = { nickname: "Funded Clips", username: "tiktok.stories", avatarUrl: null, privacyOptions: ["PUBLIC_TO_EVERYONE", "SELF_ONLY"], commentDisabled: false, duetDisabled: false, stitchDisabled: false, maxDurationSec: 600 };
+const CREATOR: TikTokCreator = { nickname: "Clips Funded", username: "tiktok.stories", avatarUrl: null, privacyOptions: ["PUBLIC_TO_EVERYONE", "SELF_ONLY"], commentDisabled: false, duetDisabled: false, stitchDisabled: false, maxDurationSec: 600 };
 
 /** A Meta model the owner added (it writes storyboards as "bedrock-model:custom-llama", §45.36 E7). */
 const LLAMA: ModelInfo = {
@@ -229,7 +229,7 @@ function makeApi(knobs: Record<string, unknown> = {}): StoriesApi {
   ideas.seed(store);
   characters.seed(store);
   stories.seed(store);
-  store.social.push(account("youtube", "connected", "Lamo Stories Channel"), account("tiktok", "connected", "Funded Clips"), account("instagram", "not_connected", null), account("facebook", "not_connected", null), account("x", "not_connected", null));
+  store.social.push(account("youtube", "connected", "Lamo Stories Channel"), account("tiktok", "connected", "Clips Funded"), account("instagram", "not_connected", null), account("facebook", "not_connected", null), account("x", "not_connected", null));
   store.references.push(structuredClone(REF_A));
   publishing.afterSeed(store);
   const now = "2026-11-22T08:00:00.000Z";
@@ -716,7 +716,7 @@ describe("an account problem always has Open Social accounts (§45.36 E9)", () =
     const story = store.stories.find((s) => s.storyId === S.published)!;
     const jobs = store.publishing.filter((j) => j.contentId === S.published);
     await show(<PublishSheet ws="stories" story={story} config={{}} jobs={jobs} onSent={() => undefined} onRetry={() => undefined} onClose={() => undefined} />);
-    vi.spyOn(api, "publish").mockRejectedValueOnce(new ApiError(409, "conflict", "Funded Clips' YouTube is not connected. Connect it in Funded Clips › Social accounts, then tap Try again."));
+    vi.spyOn(api, "publish").mockRejectedValueOnce(new ApiError(409, "conflict", "Clips Funded's YouTube is not connected. Connect it in Clips Funded › Social accounts, then tap Try again."));
     await click(control(/Lamo Stories Channel/, lastDialog()), 50);
     await click(control(/^Upload/, lastDialog()));
     const notice = lastDialog().querySelector<HTMLElement>(".st-s-notice")!;
@@ -727,10 +727,10 @@ describe("an account problem always has Open Social accounts (§45.36 E9)", () =
   });
 
   it("says which sentences are account problems, as the API's Fix it does", () => {
-    expect(accountProblem({ publishingStatus: "needs_attention", error: "This TikTok account (Funded Clips) needs connecting again. Open Funded Clips › Social accounts, then tap Try again." })).toBe(true);
+    expect(accountProblem({ publishingStatus: "needs_attention", error: "This TikTok account (Clips Funded) needs connecting again. Open Clips Funded › Social accounts, then tap Try again." })).toBe(true);
     expect(accountProblem({ publishingStatus: "failed", error: "Facebook did not answer. Tap Try again in a few minutes." })).toBe(false);
-    expect(accountProblem({ publishingStatus: "posted", error: "Open Funded Clips › Social accounts" })).toBe(false);
-    expect(accountProblem("Funded Clips' TikTok needs connecting again. Fix it in Social accounts, or leave TikTok out.")).toBe(true);
+    expect(accountProblem({ publishingStatus: "posted", error: "Open Clips Funded › Social accounts" })).toBe(false);
+    expect(accountProblem("Clips Funded's TikTok needs connecting again. Fix it in Social accounts, or leave TikTok out.")).toBe(true);
   });
 
   it("the mock's Needs you › Fix it goes to Social accounts for an account problem, like the API", () => {
@@ -741,7 +741,7 @@ describe("an account problem always has Open Social accounts (§45.36 E9)", () =
     const facebook = needs.find((n) => n.platform === "facebook")!;
     expect(tiktok.href).toBe("/stories/connections");
     expect(facebook.href).toBe(`/stories/review/${S.published}`);
-    expect(dashboard.postHref("Pick another in Funded Clips › Social accounts, then tap Try again.", S.approved)).toBe("/stories/connections");
+    expect(dashboard.postHref("Pick another in Clips Funded › Social accounts, then tap Try again.", S.approved)).toBe("/stories/connections");
   });
 });
 
@@ -1171,16 +1171,16 @@ describe("a model the studio knows cannot be used is never pre-picked (§45.36 E
 
 describe("one name on screen: Clip Factory, and accounts by their place (§45.36 E13)", () => {
   it("the publish sheet's words", () => {
-    // §45.37 G8: nothing to decide about Clip Factory's own account; a different one made for Funded Clips.
-    expect(accountState(account("x", "same_as_clips", "Funded Clips"))).toBe("This is Clip Factory's own account. Connect a different account made for Funded Clips in Social accounts.");
-    expect(accountState(account("x", "same_as_clips", "Funded Clips"))).not.toMatch(/Lamo Clips/);
-    expect(checkProblem(account("x", "connected", "Funded Clips"), account("x", "same_as_clips", "Funded Clips"))).toContain("is Clip Factory's own account right now");
-    expect(thisAccount("tiktok", "Funded Clips")).toBe("this TikTok account (Funded Clips)");
+    // §45.37 G8: nothing to decide about Clip Factory's own account; a different one made for Clips Funded.
+    expect(accountState(account("x", "same_as_clips", "Clips Funded"))).toBe("This is Clip Factory's own account. Connect a different account made for Clips Funded in Social accounts.");
+    expect(accountState(account("x", "same_as_clips", "Clips Funded"))).not.toMatch(/Lamo Clips/);
+    expect(checkProblem(account("x", "connected", "Clips Funded"), account("x", "same_as_clips", "Clips Funded"))).toContain("is Clip Factory's own account right now");
+    expect(thisAccount("tiktok", "Clips Funded")).toBe("this TikTok account (Clips Funded)");
     expect(thisAccount("youtube", null)).toBe("this YouTube account");
-    expect(postToTitle("tiktok", { externalAccountId: "ext", accountName: "Funded Clips", handle: "@funded.clips" })).toBe("Post to this TikTok account (Funded Clips)?");
+    expect(postToTitle("tiktok", { externalAccountId: "ext", accountName: "Clips Funded", handle: "@funded.clips" })).toBe("Post to this TikTok account (Clips Funded)?");
     expect(POST_YES).toBe("Yes, post to this account");
-    expect(checkProblem(account("tiktok", "connected", "Old"), account("tiktok", "connected", "Funded Clips", { externalAccountId: "ext-other", handle: "@funded.clips" }))).toBe(
-      "Funded Clips' TikTok is now a different account: this TikTok account (Funded Clips, @funded.clips). Look at it below, then tap Upload again.",
+    expect(checkProblem(account("tiktok", "connected", "Old"), account("tiktok", "connected", "Clips Funded", { externalAccountId: "ext-other", handle: "@funded.clips" }))).toBe(
+      "Clips Funded's TikTok is now a different account: this TikTok account (Clips Funded, @funded.clips). Look at it below, then tap Upload again.",
     );
   });
 
@@ -1219,13 +1219,13 @@ describe("one name on screen: Clip Factory, and accounts by their place (§45.36
     const youtube = store.social.find((a) => a.platform === "youtube")!;
     Object.assign(youtube, { accountName: null, handle: "@stories.channel", externalAccountId: "UCx9raw-channel-id" });
     e = await asked(api.publish("stories", S.approved, [{ platform: "youtube", socialAccountId: "stories.youtube", confirmAccount: "UC-old" }]));
-    expect(e.message).toBe("Funded Clips' YouTube is a different account now: this YouTube account (@stories.channel). Tap Yes if that is right.");
+    expect(e.message).toBe("Clips Funded's YouTube is a different account now: this YouTube account (@stories.channel). Tap Yes if that is right.");
     Object.assign(youtube, { handle: null });
     e = await asked(api.publish("stories", S.approved, [{ platform: "youtube", socialAccountId: "stories.youtube", confirmAccount: "UC-old" }]));
-    expect(e.message).toBe("Funded Clips' YouTube is a different account now: this YouTube account. Tap Yes if that is right.");
+    expect(e.message).toBe("Clips Funded's YouTube is a different account now: this YouTube account. Tap Yes if that is right.");
   });
 
-  it("the TikTok question reads right for an account called Funded Clips, and its button matches", async () => {
+  it("the TikTok question reads right for an account called Clips Funded, and its button matches", async () => {
     start({ tiktokUnsure: true });
     await show(
       <ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />,
@@ -1235,8 +1235,8 @@ describe("one name on screen: Clip Factory, and accounts by their place (§45.36
     await click(control("Use my settings", lastDialog()), 50);
     await click(control(/^Upload/, lastDialog()));
     const ask = lastDialog();
-    expect(ask.querySelector(".st-s-sheet__title")?.textContent).toBe("Post to this TikTok account (Funded Clips)?");
-    expect(ask.textContent).toContain("Funded Clips cannot tell if this TikTok account (Funded Clips) is the one Clip Factory posts to. Tap Yes if it is your Funded Clips TikTok.");
+    expect(ask.querySelector(".st-s-sheet__title")?.textContent).toBe("Post to this TikTok account (Clips Funded)?");
+    expect(ask.textContent).toContain("Clips Funded cannot tell if this TikTok account (Clips Funded) is the one Clip Factory posts to. Tap Yes if it is your Clips Funded TikTok.");
     expect(ask.textContent).not.toContain("Lamo Clips");
     expect(ask.textContent).not.toContain("gives each app its own id");
     expect(control(POST_YES, ask)).toBeTruthy();
@@ -1258,8 +1258,8 @@ describe("one name on screen: Clip Factory, and accounts by their place (§45.36
       ]),
     );
     expect(made.map((j) => j.error)).toEqual([
-      "This TikTok account (Funded Clips) is the one Clip Factory posts to. Pick another in Funded Clips › Social accounts, then tap Try again.",
-      "This YouTube account (Lamo Stories Channel) needs connecting again. Open Funded Clips › Social accounts, then tap Try again.",
+      "This TikTok account (Clips Funded) is the one Clip Factory posts to. Pick another in Clips Funded › Social accounts, then tap Try again.",
+      "This YouTube account (Lamo Stories Channel) needs connecting again. Open Clips Funded › Social accounts, then tap Try again.",
     ]);
     expect(JSON.stringify(store.publishing)).not.toContain("Lamo Clips");
   });
@@ -1708,12 +1708,12 @@ describe("one name on screen, second pass (§45.36 E13, E14)", () => {
     await click(control("Post it"));
     await click(control(/^TikTok/, lastDialog()), 50);
     const dest = Array.from(lastDialog().querySelectorAll<HTMLElement>(".st-s-dest")).find((d) => d.textContent?.includes("TikTok"))!;
-    expect(dest.querySelector(".st-s-dest__who")?.textContent).toBe("Goes to this TikTok account: Funded Clips (@tiktok.stories)");
+    expect(dest.querySelector(".st-s-dest__who")?.textContent).toBe("Goes to this TikTok account: Clips Funded (@tiktok.stories)");
   });
 
   it("the yes button matches the sentence the API sends", () => {
-    expect(postYes("Funded Clips' TikTok is a different account now: this TikTok account (Funded Clips). Tap Yes if that is right.")).toBe(POST_YES);
-    expect(postYes("Funded Clips' TikTok is a different account now: Funded Clips. Tap Post to Funded Clips if that is right.")).toBe("Post to Funded Clips");
+    expect(postYes("Clips Funded's TikTok is a different account now: this TikTok account (Clips Funded). Tap Yes if that is right.")).toBe(POST_YES);
+    expect(postYes("Clips Funded's TikTok is a different account now: Clips Funded. Tap Post to Clips Funded if that is right.")).toBe("Post to Clips Funded");
     expect(postYes(null)).toBe(POST_YES);
   });
 

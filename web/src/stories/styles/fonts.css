@@ -1,7 +1,7 @@
-/* Funded Clips · its own fonts (the foundation; GLASS-CONTRACT.md). Only the families "Fugaz One" and "Fraunces",
+/* Clips Funded · its own fonts (the foundation; GLASS-CONTRACT.md). Only the families "Fugaz One" and "Fraunces",
    only from /fonts/stories/, only used under .stories-app through --st-font-display, --st-font and --st-font-caps:
    Clip Factory keeps Inter and Times. test/storiesStyles.test.ts checks every @font-face here. Not imported by
-   stories.css: StoriesApp puts this file on the page with the first Funded Clips screen (stories/fonts.ts, `?inline`),
+   stories.css: StoriesApp puts this file on the page with the first Clips Funded screen (stories/fonts.ts, `?inline`),
    so the chunk the shell prefetches while Clip Factory is on screen adds no font face there. */
 
 /* The fonts (the owner, 23 Nov: "use Fugaz One font style in combination with Fraunces on the smaller text"):
@@ -9,7 +9,7 @@
    smaller text (--st-font and --st-font-caps: body, labels, buttons, chips, captions, inputs, hints, toasts). Both OFL,
    self-hosted from web/public/fonts/stories/ on the app's own origin (no font CDN; the Mac and Windows app loads the
    deployed web app, so it gets them from there too) and precached by the service worker, each with its OFL licence
-   next to it. Roman only: nothing in Funded Clips is set in italic.
+   next to it. Roman only: nothing in Clips Funded is set in italic.
 
    - Fugaz One: google/fonts ofl/fugazone at 0b82f9ec (FugazOne-Regular.ttf, "Version 1.002", LatinoType). Its OFL
      names "Fugaz One" as a Reserved Font Name, so the font is not modified (no subset, no change): the whole file, only

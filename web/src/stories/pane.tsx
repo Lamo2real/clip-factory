@@ -264,10 +264,10 @@ function StoriesProblem({ onRetry, onClips }: { onRetry: () => void; onClips: ()
   const active = useAppActive();
   return (
     <main style={PROBLEM_BOX} id={active ? "main" : undefined} data-stories-problem="">
-      <h1 className="sr-only">Funded Clips had a problem</h1>
+      <h1 className="sr-only">Clips Funded had a problem</h1>
       <Empty
         icon="alert"
-        title="Funded Clips had a problem."
+        title="Clips Funded had a problem."
         heading="h2"
         action={
           <>

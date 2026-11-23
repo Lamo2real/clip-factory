@@ -123,7 +123,7 @@ jobs:
           UNIT_ONLY='^web/test/|^desktop/src-tauri/src/'
           # The agent image's folders (deploy.yml: agent, skills, config) and what agent/tests reads from elsewhere.
           AGENT='^(agent|skills|config)/|^api/src/clipfactory_api/(jobs|creators)\.py$|^api/tests/fixtures/|^web/src/api/(types|mock/fixtures)\.ts$|^infra/modules/storage/variables\.tf$'
-          # Funded Clips' image (deploy.yml: stories, the engine) and the stream rules its isolation test reads.
+          # Clips Funded's image (deploy.yml: stories, the engine) and the stream rules its isolation test reads.
           STORIES='^stories/|^web/src/stories/engine/|^infra/modules/(realtime|notify)/main\.tf$'
           # B3: what the whole contrast matrix guards. The styles (tokens.css and glass.css among them, and any other
           # stylesheet, the legal and about pages' public/legal/site.css too), the shared controls (ui.tsx), the
@@ -200,11 +200,11 @@ jobs:
       # Just the bundle: npm run build would run tsc (the typecheck above) and the corpus scripts (checked above) again.
       - name: build (vite)
         run: npx vite build
-      # Funded Clips stays out of Clip Factory's first download (CONTRACTS §45.17): the page loads one script and one
-      # stylesheet (index.html), and neither carries Funded Clips' look (.stories-app, --st-*, st- classes), its shell
+      # Clips Funded stays out of Clip Factory's first download (CONTRACTS §45.17): the page loads one script and one
+      # stylesheet (index.html), and neither carries Clips Funded's look (.stories-app, --st-*, st- classes), its shell
       # (StoriesApp) or its animation engine; they come in their own chunks, only when a /stories page opens. The
       # markers are first proven to be in the build at all, so the check can never pass by looking for nothing.
-      - name: Funded Clips is not in the main bundle
+      - name: Clips Funded is not in the main bundle
         run: |
           set -euo pipefail
           js=$(grep -oE '<script[^>]+src="/assets/[^"]+\.js"' dist/index.html | sed -E 's/.*src="\/([^"]+)".*/\1/')
@@ -213,16 +213,16 @@ jobs:
           [ -n "$js" ] && [ -n "$css" ] || { echo "index.html names no main script or stylesheet"; exit 1; }
           markers_js='stories-app|st-rail|st-tabbar|st-frame|steer_left|tyre_burst|facepalm'
           markers_css='stories-app|--st-|\.st-[a-z]'
-          grep -lqE "$markers_js" dist/assets/*.js || { echo "no Funded Clips chunk found: the markers are stale"; exit 1; }
-          grep -lqE "$markers_css" dist/assets/*.css || { echo "no Funded Clips stylesheet found: the markers are stale"; exit 1; }
+          grep -lqE "$markers_js" dist/assets/*.js || { echo "no Clips Funded chunk found: the markers are stale"; exit 1; }
+          grep -lqE "$markers_css" dist/assets/*.css || { echo "no Clips Funded stylesheet found: the markers are stale"; exit 1; }
           bad=0
           for f in $js $extra; do
-            case "$f" in *.js) if grep -qE "$markers_js" "dist/$f"; then echo "::error::$f (loaded by index.html) carries Funded Clips code: $(grep -oE "$markers_js" "dist/$f" | sort -u | tr '\n' ' ')"; bad=1; fi ;; esac
+            case "$f" in *.js) if grep -qE "$markers_js" "dist/$f"; then echo "::error::$f (loaded by index.html) carries Clips Funded code: $(grep -oE "$markers_js" "dist/$f" | sort -u | tr '\n' ' ')"; bad=1; fi ;; esac
           done
           for f in $css; do
-            if grep -qE "$markers_css" "dist/$f"; then echo "::error::$f (loaded by index.html) carries Funded Clips styles: $(grep -oE "$markers_css" "dist/$f" | sort -u | head -5 | tr '\n' ' ')"; bad=1; fi
+            if grep -qE "$markers_css" "dist/$f"; then echo "::error::$f (loaded by index.html) carries Clips Funded styles: $(grep -oE "$markers_css" "dist/$f" | sort -u | head -5 | tr '\n' ' ')"; bad=1; fi
           done
-          [ "$bad" = 0 ] && echo "Main bundle: $js $css $extra: no Funded Clips code or styles."
+          [ "$bad" = 0 ] && echo "Main bundle: $js $css $extra: no Clips Funded code or styles."
 
   # About 1,700 Chromium tests (the app at many widths, contrast, overflow, help, the screenshots), in 7 shards with 4
   # workers each, one per 4-CPU runner; each shard builds the mock app once. Playwright's own --shard splits by count in
@@ -370,7 +370,7 @@ jobs:
   # when a job it needs failed or was cancelled, or when changes did not finish. A job changes said was not needed must
   # have been skipped; every other must have passed. It also gates stories-agent and desktop, which are not required
   # checks of their own (branch protection requires only web, api, agent, infra and scripts), so a pull request whose
-  # Funded Clips agent tests or desktop tests fail is held back too: its merge and auto-merge wait for this check (an
+  # Clips Funded agent tests or desktop tests fail is held back too: its merge and auto-merge wait for this check (an
   # admin can still merge past it, enforce_admins is off). Not on a push to main (B1): nothing it gates
   # runs there, and branch protection reads the pull request's run.
   web:
@@ -396,7 +396,7 @@ jobs:
           echo "web-checks: ${CHECKS}"
           echo "web-e2e (all Chromium shards): ${E2E}"
           echo "web-e2e (all WebKit shards): ${WEBKIT}"
-          echo "stories-agent (the Funded Clips agent): ${STORIES}"
+          echo "stories-agent (the Clips Funded agent): ${STORIES}"
           echo "desktop: ${DESKTOP}"
           [ "$CHANGES" = "success" ] || { echo "::error::The changes job ended ${CHANGES}, so nothing may count as skipped."; exit 1; }
           ok=1
@@ -568,7 +568,7 @@ jobs:
           cache-from: type=gha,scope=agent
           cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,scope=agent,mode=max' || '' }}
 
-  # Funded Clips' own AgentCore runtime (stories/agent, docs/CONTRACTS.md §45.11, ADR-76): its own project, tests and
+  # Clips Funded's own AgentCore runtime (stories/agent, docs/CONTRACTS.md §45.11, ADR-76): its own project, tests and
   # image, apart from Clip Factory's agent job above. Native ARM64 for the same Deno reason. ffmpeg comes from Ubuntu
   # (with libass, like the image's Debian one), so the pipeline, captions and assembly tests run for real. Like agent, it
   # runs when its own inputs changed and always on main. Not a required check itself: the web gate waits for it.
@@ -610,7 +610,7 @@ jobs:
       # self-check (one frame drawn, one sound mastered, one caption burned in), as the deployed image does. Pull
       # requests only read the layer cache, as in agent.
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-      - name: build the Funded Clips agent image (linux/arm64, not pushed)
+      - name: build the Clips Funded agent image (linux/arm64, not pushed)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .

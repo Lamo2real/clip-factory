@@ -344,7 +344,7 @@ test.describe("Agents, skills and memory", () => {
     await page.getByRole("button", { name: "Reset" }).click();
     await page.getByRole("button", { name: "Yes, reset" }).click();
     await expect(page.locator(".st-stg-instr")).toContainText("The original");
-    await expect(box).toHaveValue(/You check Funded Clips videos/);
+    await expect(box).toHaveValue(/You check Clips Funded videos/);
   });
 
   test("skills: write one, upload one with progress, bring back a version; built-ins stay read-only", async ({ page }) => {
@@ -352,7 +352,7 @@ test.describe("Agents, skills and memory", () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await openSection(page, "skills");
     const builtin = page.locator(".st-stg-skill").first();
-    await expect(builtin).toContainText("Comes with Funded Clips");
+    await expect(builtin).toContainText("Comes with Clips Funded");
     await builtin.getByRole("button", { name: /^Open / }).click();
     await expect(builtin.locator(".st-stg-pre")).toContainText("name: nonverbal-storytelling");
     await expect(builtin.getByRole("button", { name: /Change it|Delete/ })).toHaveCount(0);
@@ -461,7 +461,7 @@ test.describe("Video and storage", () => {
     // Use and costs: render minutes per day, each maker by name with its units and cost (§45.34).
     const use = card(page, "Use and costs, last 30 days");
     await expect(use.locator(".st-stg-chart__day")).toHaveCount(30);
-    await expect(use.locator(".st-stg-usage__row").filter({ hasText: "Built-in animator" })).toContainText("Free: it runs on Funded Clips' own computer");
+    await expect(use.locator(".st-stg-usage__row").filter({ hasText: "Built-in animator" })).toContainText("Free: it runs on Clips Funded's own computer");
     const canvas = use.locator(".st-stg-usage__row").filter({ hasText: "Amazon Nova Canvas" });
     await expect(canvas).toContainText("No price yet:");
     await expect(use).not.toContainText("builtin-rig");
@@ -496,7 +496,7 @@ test.describe("Video and storage", () => {
     await on(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await openSection(page, "storage");
-    await expect(card(page, "Space used")).toContainText("Funded Clips' own folder in Clip Factory's media storage in Europe (Stockholm)");
+    await expect(card(page, "Space used")).toContainText("Clips Funded's own folder in Clip Factory's media storage in Europe (Stockholm)");
     const file = card(page, "The finished file");
     await file.getByRole("switch", { name: "Also make a WebM file" }).click();
     await expect(file.getByRole("switch", { name: "Also make a WebM file" })).toHaveAttribute("aria-checked", "true");
@@ -504,7 +504,7 @@ test.describe("Video and storage", () => {
     await expect(file).toContainText("Only the caption words are left out of the picture. The speech bubbles and the safety end card always stay in.");
     const keeping = card(page, "Keeping other files");
     await keeping.getByRole("radiogroup", { name: "Keep reference videos" }).getByRole("radio", { name: /Keep only the study/ }).click();
-    await expect(keeping).toContainText("Funded Clips still learns from each study after its video is gone.");
+    await expect(keeping).toContainText("Clips Funded still learns from each study after its video is gone.");
     await keeping.getByRole("radiogroup", { name: "Keep chat pictures" }).getByRole("radio", { name: /90 days/ }).click();
     await expect(page.locator(".st-stg-saved")).toHaveText("Saved");
     await keeping.getByRole("button", { name: "Clean up now" }).click();
@@ -521,7 +521,7 @@ test.describe("Video and storage", () => {
     await sm.getByLabel("Click sound").selectOption({ label: "Bubble: rises a little" });
     const kept = await page.evaluate(() => (JSON.parse(localStorage.getItem("cf.stories.prefs") ?? "{}") as { more?: Record<string, unknown> }).more);
     expect(kept).toMatchObject({ "motion.reduce": true, "sound.click": 3 });
-    await expect(sm).toContainText("Funded Clips' own click sound.");
+    await expect(sm).toContainText("Clips Funded's own click sound.");
     // Hear it plays the pick once, never the usual click sound on top of it.
     // (The log keeps the last 200 sounds: it starts empty here, so only this click's sounds are in it. A tap within
     // 60 ms of the last one is one sound, so the pick's own sound is let go first.)

@@ -216,9 +216,9 @@ for (const size of SIZES) {
     // On a computer the bar lists both apps and its highlight is on the app on screen; on a phone the toggle names the
     // other one.
     if (size.w >= 768) {
-      if (!size.folded) for (const { at } of seen) expect(at.names).toEqual(["Clip Factory", "Funded Clips"]);
+      if (!size.folded) for (const { at } of seen) expect(at.names).toEqual(["Clip Factory", "Clips Funded"]);
       for (const { path, at } of seen) expect(at.sw!.x, `${path}: in the left column`).toBeLessThan((size.folded ? 80 : 252) + 14 + 0.5);
-    } else for (const { path, at } of seen) expect(at.names, path).toEqual([path.startsWith("/stories") ? "Clip Factory" : "Funded Clips"]);
+    } else for (const { path, at } of seen) expect(at.names, path).toEqual([path.startsWith("/stories") ? "Clip Factory" : "Clips Funded"]);
     // Where it has always been in Clip Factory: the sidebar's foot, the switch right above the Live chip.
     if (size.w >= 768 && !size.folded) expect(first!.at.live!.y - (first!.at.sw!.y + first!.at.sw!.height)).toBeCloseTo(4, 0);
     await page.context().close();
@@ -248,15 +248,15 @@ test("a longer workspace name stands the choices one above the other, the same b
   const page = await open(browser, { w: 1440, h: 900 }, true);
   await ready(page, "/library");
   const bar = page.locator(".ws-dock .ws-switch");
-  // Today's two names, "Clip Factory" and "Funded Clips", fit side by side.
-  await expect(bar.locator(".ws-switch__opt")).toHaveText(["Clip Factory", "Funded Clips"]);
+  // Today's two names, "Clip Factory" and "Clips Funded", fit side by side.
+  await expect(bar.locator(".ws-switch__opt")).toHaveText(["Clip Factory", "Clips Funded"]);
   await expect(bar).not.toHaveClass(/ws-switch--stack/);
   // The server names the studio so from now on (the shell reads the list again when Lamo Stories opens).
   await page.evaluate(() => {
     const store = (window as unknown as { __cfStoriesMock?: { store?: { workspaces: { workspaceName: string }[] } } }).__cfStoriesMock?.store;
     store!.workspaces[1]!.workspaceName = "Driving Safety Stories";
   });
-  await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Funded Clips$/ }).click();
+  await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Clips Funded$/ }).click();
   await page.locator(".stories-app[data-ws]").waitFor();
   await expect(bar).toHaveClass(/ws-switch--stack/);
   await expect(bar.locator(".ws-switch__opt")).toHaveText(["Clip Factory", "Driving Safety Stories"]);
@@ -355,7 +355,7 @@ test("Clip Factory's jobs starting or ending behind Lamo Stories never move the 
   const page = await open(browser, SIZES[0]!, true);
   await ready(page, "/library");
   await expect(page.locator("nav.sidebar .sidebar__status")).toBeVisible();
-  await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Funded Clips$/ }).click();
+  await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Clips Funded$/ }).click();
   await page.locator(".stories-app[data-ws]").waitFor();
   await page.waitForTimeout(500);
   const before = await place(page);
@@ -435,20 +435,20 @@ test("for the keyboard the switch comes where it is drawn: right after the menu,
     await page.keyboard.press("Tab");
     forward.push(await focused());
   }
-  expect(forward).toEqual(["Clip Factory", "Funded Clips", "Get the app"]);
+  expect(forward).toEqual(["Clip Factory", "Clips Funded", "Get the app"]);
   await page.keyboard.press("Shift+Tab");
-  expect(await focused()).toBe("Funded Clips");
+  expect(await focused()).toBe("Clips Funded");
   await page.keyboard.press("Shift+Tab");
   await page.keyboard.press("Shift+Tab");
   expect(await focused()).toBe("Settings");
   // Lamo Stories: right after its rail's pages.
-  await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Funded Clips$/ }).click();
+  await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Clips Funded$/ }).click();
   await page.locator(".stories-app[data-ws]").waitFor();
   await page.locator(".st-rail .st-rail__item").last().focus();
   await page.keyboard.press("Tab");
   expect(await focused()).toBe("Clip Factory");
   await page.keyboard.press("Tab");
-  expect(await focused()).toBe("Funded Clips");
+  expect(await focused()).toBe("Clips Funded");
   await page.keyboard.press("Tab");
   expect(await page.evaluate(() => !!document.activeElement?.closest(".ws-dock"))).toBe(false);
   await page.context().close();

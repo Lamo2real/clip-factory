@@ -11,7 +11,7 @@ interface ToastItem {
   group?: string;
   /** An undo toast's own picture (the bin by default). */
   icon?: IconName;
-  /** The class of the app that raised it (its ToastScope's `className`): Funded Clips' st-toast gives it its type. */
+  /** The class of the app that raised it (its ToastScope's `className`): Clips Funded' st-toast gives it its type. */
   className?: string;
 }
 
@@ -341,7 +341,7 @@ function useHost(): ToastHost {
  * comes back for the rest of its time if the app is back by then. Undo toasts go through at once and stay: they come
  * from the owner's own tap and hold a decision. Toasts the shell itself raises (outside both apps) stay with the
  * ToastProvider, global. `className` goes on every toast the app raises, undo ones too: the shell draws them all in
- * its own box, outside the app, so this is how an app's own type reaches its toasts (Funded Clips' st-toast: its
+ * its own box, outside the app, so this is how an app's own type reaches its toasts (Clips Funded' st-toast: its
  * smaller-text font, docs/CONTRACTS.md §45.39), while every other toast keeps the shell's.
  */
 export function ToastScope({

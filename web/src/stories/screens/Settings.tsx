@@ -22,10 +22,10 @@ import type { StoriesScreenProps } from "./types.ts";
 
 /** The sections in the order the bar shows them; Social accounts opens the Connections page. */
 export const SECTIONS: { section: SettingsSection | "social"; label: string; icon: SIconName; lede: string }[] = [
-  { section: "ai", label: "AI", icon: "chip", lede: "Which AI models think for Funded Clips, and how hard." },
-  { section: "agents", label: "Agents", icon: "people", lede: "Funded Clips' five helpers: what each one does, and with which model and skills." },
+  { section: "ai", label: "AI", icon: "chip", lede: "Which AI models think for Clips Funded, and how hard." },
+  { section: "agents", label: "Agents", icon: "people", lede: "Clips Funded's five helpers: what each one does, and with which model and skills." },
   { section: "skills", label: "Skills", icon: "book", lede: "Know-how the agents read before they work. Clip Factory's skills are separate." },
-  { section: "memory", label: "Memory", icon: "note", lede: "What Funded Clips remembers about you and your videos." },
+  { section: "memory", label: "Memory", icon: "note", lede: "What Clips Funded remembers about you and your videos." },
   { section: "social", label: "Social accounts", icon: "plug", lede: "" },
   { section: "video", label: "Video", icon: "film", lede: "How videos are made: the makers, size, length and quality." },
   { section: "storage", label: "Storage", icon: "box", lede: "Space used, the files made, and how videos are put together." },
@@ -77,7 +77,7 @@ export function SettingsScreen({ ws, page }: StoriesScreenProps) {
       <div className="st-stg-top st-glass st-glass--hero st-lens">
         <header className="st-stg-head">
           <h1 className="st-stg-head__title st-display">Settings</h1>
-          <p className="st-stg-head__lede">Funded Clips' own settings. Nothing here changes Clip Factory.</p>
+          <p className="st-stg-head__lede">Clips Funded's own settings. Nothing here changes Clip Factory.</p>
           <SetupAgain ws={ws} />
         </header>
         <nav className="st-stg-nav" aria-label="Settings sections">

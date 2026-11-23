@@ -1,4 +1,4 @@
-# Funded Clips · the liquid-glass contract
+# Clips Funded · the liquid-glass contract
 
 The owner's warm reference of 22 Nov (a dark espresso room, amber and copper light out of focus behind smoky glass,
 cream solids, an orange accent) on direction B's technical base (one radius scale, a liquid rim on a few hero
@@ -280,7 +280,7 @@ surfaces (12 → 28 px), `--st-inset` inside a surface (16 → 28 px).
 
 ### 10. Type
 Fugaz One for the large text, Fraunces for the smaller text: the owner, 23 Nov, "i want to you to use Fugaz One font
-style in combination with Fraunces on the smaller text", and asked which app, "Funded Clips only". **Funded Clips
+style in combination with Fraunces on the smaller text", and asked which app, "Clips Funded only". **Clips Funded
 only:** Clip Factory keeps Inter and Times, untouched.
 
 - `--st-font-display`: "Fugaz One", "Arial Black", "Helvetica Neue", system-ui, sans-serif. The **large** text:
@@ -298,9 +298,9 @@ only:** Clip Factory keeps Inter and Times, untouched.
   `font-variation-settings` is set (plain upright letters, no leaning "wonky" ones, for 6-8-year-old readers).
 - `--st-font-caps`: the same family as `--st-font` (Fraunces). The short caps captions keep their `text-transform`
   and their `--st-track-caps` tracking.
-- **Never changed:** `--st-font-mark` (the logo's "C" stays Clip Factory's Times), the "Funded Clips" wordmark (as it
+- **Never changed:** `--st-font-mark` (the logo's "C" stays Clip Factory's Times), the "Clips Funded" wordmark (as it
   is today), the shell's workspace switch, and Clip Factory's toasts and the shell's own (the shell's `--font-ui`).
-- **Toasts:** the shell draws every toast in its one `.toasts` box, outside `.stories-app`. The toasts Funded Clips'
+- **Toasts:** the shell draws every toast in its one `.toasts` box, outside `.stories-app`. The toasts Clips Funded'
   screens raise (its `ToastScope` in `App.tsx`, undo toasts too) carry the class `st-toast`, and only those are
   Fraunces: `glass-tokens.css` gives `.toasts .st-toast` the same `--st-font` stack as `.stories-app`
   (test/storiesStyles.test.ts keeps the two the same) and `st-end.css` sets them in it, at the shell's sizes and
@@ -315,7 +315,7 @@ only:** Clip Factory keeps Inter and Times, untouched.
   Mac and Windows app loads the deployed web app, so it gets them from there too) and precached by the service
   worker, each with its OFL licence text beside its files. The faces load only through `stories/fonts.ts`
   (`addStoriesFonts`, `fonts.css?inline`), never in the chunk Clip Factory prefetches, and the names are used only
-  under `.stories-app` and on its own toasts (`.st-toast`), both in Funded Clips' own style sheet, so ci.yml's "Funded
+  under `.stories-app` and on its own toasts (`.st-toast`), both in Clips Funded' own style sheet, so ci.yml's "Funded
   Clips is not in the main bundle" check still holds.
 - **Sources and licences:**
 
@@ -324,8 +324,8 @@ only:** Clip Factory keeps Inter and Times, untouched.
   | Fugaz One | large text | LatinoType (2011) | google/fonts `ofl/fugazone`, from github.com/googlefonts/fugazone | SIL Open Font License 1.1, Reserved Font Name "Fugaz One" |
   | Fraunces | smaller text, caps captions | Undercase Type: Phaedra Charles and Flavia Zimbardi (2018-2020) | google/fonts `ofl/fraunces`, from github.com/undercasetype/Fraunces | SIL Open Font License 1.1 |
 
-  Before 23 Nov, Funded Clips used Playfair (OFL) for all text and Jost (OFL) for the caps captions. Neither is
-  used in Funded Clips' type any more, and their files are gone from `web/public/fonts/stories/`.
+  Before 23 Nov, Clips Funded used Playfair (OFL) for all text and Jost (OFL) for the caps captions. Neither is
+  used in Clips Funded' type any more, and their files are gone from `web/public/fonts/stories/`.
 
 Sizes (unchanged; nothing goes under today's floors, the users are 6-8 years old): `--st-fs-hero` 34 → 72 px,
 `--st-fs-h1` 32 → 56, `--st-fs-h2` 24 → 36, `--st-fs-h3` 20 → 26, `--st-fs-body` 17, `--st-fs-small` 15,

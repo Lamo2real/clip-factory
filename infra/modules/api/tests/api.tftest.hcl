@@ -563,7 +563,7 @@ run "lamo_stories_routes" {
       "ANY /v1/workspaces", "ANY /v1/workspaces/{proxy+}", "OPTIONS /v1/workspaces", "OPTIONS /v1/workspaces/{proxy+}",
       "GET /v1/stories-oauth/{platform}/callback",
     ]) && output.stories_route_keys == toset(keys(aws_apigatewayv2_route.stories))
-    error_message = "Funded Clips adds exactly its five routes (§45.15)."
+    error_message = "Clips Funded adds exactly its five routes (§45.15)."
   }
 
   assert {
@@ -572,7 +572,7 @@ run "lamo_stories_routes" {
         startswith(k, "ANY ") ? r.authorization_type == "JWT" && r.authorizer_id == "auth123" : r.authorization_type == "NONE" && r.authorizer_id == null
       )
     ])
-    error_message = "Every Funded Clips route reaches cf-prod-stories-api; ANY routes need the same JWT, OPTIONS and the callback are public."
+    error_message = "Every Clips Funded route reaches cf-prod-stories-api; ANY routes need the same JWT, OPTIONS and the callback are public."
   }
 
   assert {
@@ -580,7 +580,7 @@ run "lamo_stories_routes" {
       aws_apigatewayv2_integration.stories[0].integration_type == "AWS_PROXY" &&
       aws_apigatewayv2_integration.stories[0].payload_format_version == "2.0" &&
     aws_apigatewayv2_integration.stories[0].timeout_milliseconds == 29000)
-    error_message = "The Funded Clips integration is a 2.0 proxy to cf-prod-stories-api, 29 s like cf-prod-api's."
+    error_message = "The Clips Funded integration is a 2.0 proxy to cf-prod-stories-api, 29 s like cf-prod-api's."
   }
 
   assert {
@@ -599,7 +599,7 @@ run "lamo_stories_routes" {
       one(aws_apigatewayv2_stage.http.route_settings).route_key == "GET /v1/stories-oauth/{platform}/callback" &&
       one(aws_apigatewayv2_stage.http.route_settings).throttling_rate_limit == 5 &&
     one(aws_apigatewayv2_stage.http.route_settings).throttling_burst_limit == 10)
-    error_message = "The public Funded Clips callback has its own route throttle (5 per second, burst 10); the stage default stays 20/50."
+    error_message = "The public Clips Funded callback has its own route throttle (5 per second, burst 10); the stage default stays 20/50."
   }
 
   assert {
@@ -629,7 +629,7 @@ run "lamo_stories_routes" {
       length(regexall("(?m)^  integration_uri\\s+= var\\.stories_api_invoke_arn$", file("main.tf"))) == 1 &&
       length(regexall("var\\.stories_api_function_name", file("main.tf"))) == 1 &&
     length(regexall("(?m)^  function_name = var\\.stories_api_function_name$", file("main.tf"))) == 1)
-    error_message = "cf-prod-api's function, role and environment never see Funded Clips (§45.15): the stories variables reach only the new integration and permission."
+    error_message = "cf-prod-api's function, role and environment never see Clips Funded (§45.15): the stories variables reach only the new integration and permission."
   }
 
   assert {
@@ -639,7 +639,7 @@ run "lamo_stories_routes" {
       ]) && (one(aws_lambda_function.fn["api"].environment).variables["AGENT_RUNTIME_ARN"] == var.agent_runtime_arn &&
       one(aws_lambda_function.fn["api"].environment).variables["HOOKS_URL"] == var.hooks_url &&
     one(aws_lambda_function.fn["api"].environment).variables["SECRET_PREFIX"] == "cf-test/platforms/")
-    error_message = "With the Funded Clips routes, cf-prod-api keeps Clip Factory's agent, hooks and secret prefix and gets no Funded Clips value."
+    error_message = "With the Clips Funded routes, cf-prod-api keeps Clip Factory's agent, hooks and secret prefix and gets no Clips Funded value."
   }
 }
 
@@ -672,7 +672,7 @@ run "cf_prod_api_never_reaches_lamo_stories" {
         ] if anytrue([for a in flatten([s.Action]) : startswith(a, "secretsmanager:") || startswith(a, "s3:") || a == "*"])
       ]
     ]))
-    error_message = "…:secret:<name>/workspaces/stories/youtube/token-AbC123 (and Funded Clips' ws/ files) match no cf-prod-api resource."
+    error_message = "…:secret:<name>/workspaces/stories/youtube/token-AbC123 (and Clips Funded's ws/ files) match no cf-prod-api resource."
   }
 }
 

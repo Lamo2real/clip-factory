@@ -8,9 +8,9 @@ import { decode } from "./pixels.ts";
 
 // The workspace switch is clear, colour-free liquid glass (the owner, 2026-11-23: "make his color freee and liquid
 // glass style"; docs/CONTRACTS.md §45.38 S5), measured in real pixels wherever it is drawn: the dock over Clip
-// Factory's sidebar and over Funded Clips' rail, the stacked switch in both phone top bars' menus, in every look
+// Factory's sidebar and over Clips Funded' rail, the stacked switch in both phone top bars' menus, in every look
 // (the app's own backdrop, Colours, Colours with a Cream backdrop, Picture with a white photo, the see-through window
-// Clear and Frosted over a white desktop, and Funded Clips' own picture and window looks). With the words hidden, the
+// Clear and Frosted over a white desktop, and Clips Funded' own picture and window looks). With the words hidden, the
 // pixels where each name's words sit are read:
 //   - every name keeps 4.5:1 against the lightest and the darkest pixel behind its words, at rest and hovered;
 //   - the chosen side is plainly the chosen one for a child: its lens is at least 0.06 OKLab L over the track where
@@ -19,7 +19,7 @@ import { decode } from "./pixels.ts";
 //   - unfolding Clip Factory's sidebar, the switch keeps its glass: its blur and grey-out never drop while the dock's
 //     clip runs (the clip is the switch's own, never its host's, which would be its glass's Backdrop Root).
 // test/switchGlass.test.ts holds the colours of the CSS; this holds what they add up to on screen. Pictures under
-// test-results/switch-glass. Funded Clips is switched on with cf.storiesPreview = 1.
+// test-results/switch-glass. Clips Funded is switched on with cf.storiesPreview = 1.
 
 const SHOTS = join(import.meta.dirname, "..", "test-results", "switch-glass");
 const WHITE = `data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'><rect width='16' height='16' fill='#fff'/></svg>")}`;
@@ -38,7 +38,7 @@ interface Look {
   picture?: boolean;
   /** The see-through window over a white desktop. */
   window?: boolean;
-  /** Funded Clips' own look. */
+  /** Clips Funded' own look. */
   stories?: "picture" | "window";
 }
 const LOOKS: Look[] = [
@@ -48,8 +48,8 @@ const LOOKS: Look[] = [
   { name: "Picture white", cf: { backgroundMode: "picture" }, picture: true },
   { name: "window Clear", cf: { backgroundMode: "see-through", glassStrength: "clear" }, window: true },
   { name: "window Frosted", cf: { backgroundMode: "see-through", glassStrength: "frosted" }, window: true },
-  { name: "Funded Clips picture white", cf: { backgroundMode: "picture" }, picture: true, stories: "picture" },
-  { name: "Funded Clips window", cf: { backgroundMode: "see-through", glassStrength: "clear" }, window: true, stories: "window" },
+  { name: "Clips Funded picture white", cf: { backgroundMode: "picture" }, picture: true, stories: "picture" },
+  { name: "Clips Funded window", cf: { backgroundMode: "see-through", glassStrength: "clear" }, window: true, stories: "window" },
 ];
 
 async function useLook(page: Page, look: Look, studios = 0) {
@@ -210,7 +210,7 @@ for (const look of LOOKS) {
   test(`the switch is clear glass, its words at AA and the chosen side plainly lit (${look.name})`, async ({ browser }) => {
     test.setTimeout(150_000);
     const fails: string[] = [];
-    // A computer: the dock over Clip Factory's sidebar, then over Funded Clips' rail.
+    // A computer: the dock over Clip Factory's sidebar, then over Clips Funded' rail.
     {
       const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
       const page = await ctx.newPage();

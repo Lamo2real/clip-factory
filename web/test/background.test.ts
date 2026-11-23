@@ -374,8 +374,8 @@ describe("the stylesheets and the text colour list stay in step", () => {
     "var(--green-leaf)": "a button's glyph, for a blink of its action",
     "var(--vermilion-light)": "the error toast's icon, a mark rather than words",
     "rgb(255 255 255 / 0.7)": "a CTA that is off: on its own thin vermilion over deep green (checked below)",
-    "var(--ws-mark-letter, #2a160b)": "the Funded Clips mark's espresso C, on the cream tile of its own (checked below)",
-    "var(--ws-wordmark, #fff6ea)": "the Funded Clips wordmark, only in Funded Clips' own rail and top bar, on its own dark stage (checked below)",
+    "var(--ws-mark-letter, #2a160b)": "the Clips Funded mark's espresso C, on the cream tile of its own (checked below)",
+    "var(--ws-wordmark, #fff6ea)": "the Clips Funded wordmark, only in Clips Funded's own rail and top bar, on its own dark stage (checked below)",
   };
 
   it("a CTA that is off keeps its label above 3:1 on any panel, and is not brown", () => {
@@ -390,15 +390,15 @@ describe("the stylesheets and the text colour list stay in step", () => {
     }
   });
 
-  it("the Funded Clips mark's C and wordmark pass AA on their own tile, stage and rail", () => {
-    // Funded Clips' warm logo everywhere (the owner, 23 Nov): the espresso C on the cream tile, at both ends of its
+  it("the Clips Funded mark's C and wordmark pass AA on their own tile, stage and rail", () => {
+    // Clips Funded's warm logo everywhere (the owner, 23 Nov): the espresso C on the cream tile, at both ends of its
     // gradient, and the cream wordmark.
     const mark = rules("ws-mark.css");
     expect(mark).toContain("background: var(--ws-mark-tile, linear-gradient(150deg, #fff3e4, #f2dcc2))");
     expect(mark).toContain("color: var(--ws-mark-letter, #2a160b)");
     expect(mark).toContain("color: var(--ws-wordmark, #fff6ea)");
     for (const tile of ["#fff3e4", "#f2dcc2"]) expect(contrast(hexToRgb("#2a160b"), hexToRgb(tile)), tile).toBeGreaterThanOrEqual(AA);
-    // A dark stage (its top bar) and the lightest of a rail's fill, as before; and Funded Clips' espresso stage.
+    // A dark stage (its top bar) and the lightest of a rail's fill, as before; and Clips Funded's espresso stage.
     for (const under of [hexToRgb("#1c1842"), [50, 42, 115] as Rgb, hexToRgb("#1c130e")]) expect(contrast(hexToRgb("#fff6ea"), under)).toBeGreaterThanOrEqual(AA);
   });
 
@@ -760,7 +760,7 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
   });
 
   it("the shell's Live chip, while Clip Factory is on screen, is raised on the sidebar exactly as the sidebar's own chip", () => {
-    // Funded Clips switched on: the shell draws the Live chip over Clip Factory's sidebar, where the sidebar's own was
+    // Clips Funded switched on: the shell draws the Live chip over Clip Factory's sidebar, where the sidebar's own was
     // (app/WorkspaceDock.tsx). Its rule has nested glass's very declarations, as light, right after it (§45.19).
     const nested = ":where(.glass) .glass";
     const dock = ':where([data-app-pane="clips"]:not([hidden]) ~ .ws-dock > .ws-dock__live) > .glass';

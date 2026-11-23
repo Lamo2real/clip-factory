@@ -105,7 +105,7 @@ function fileName(i: LibraryItem): string {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
-      .slice(0, 40) || "funded-clips";
+      .slice(0, 40) || "clips-funded";
   const scene = typeof i.meta.sceneId === "string" ? `-${i.meta.sceneId}` : "";
   return `${slug}-${i.kind.replace(/_/g, "-")}${scene}${i.version ? `-v${i.version}` : ""}.${ext[i.contentType] ?? "bin"}`;
 }
@@ -783,7 +783,7 @@ export function LibraryScreen({ ws, page }: StoriesScreenProps) {
   }, [tab]);
   return (
     <section className="st-page st-library">
-      <StPageHead title="Library" lede="Every file Funded Clips made or you added, kept safe. Only Funded Clips' own: Clip Factory's Library stays separate." />
+      <StPageHead title="Library" lede="Every file Clips Funded made or you added, kept safe. Only Clips Funded's own: Clip Factory's Library stays separate." />
       {/* The kinds as pills (the reference's chips): the chosen one solid cream with espresso words, sliding on
           <Glide>; the rest glass. Each keeps .st-tabs__tab and role="tab". One row on a phone, scrolling sideways. */}
       <div className="st-library__kinds" role="tablist" aria-label="Library" ref={kinds}>
