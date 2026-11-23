@@ -527,6 +527,31 @@ function StoriesShell({ page }: { page: StoriesPage }) {
   const moreOn = MORE.some(on);
   const solo = alone && page.name === "setup";
 
+  // A short window: the rail's list of pages stops above the shell's switch and scrolls; the chosen page is always
+  // scrolled into its view (the switch never covers a page, and the chosen one is never cut off at the list's end).
+  const railList = useRef<HTMLUListElement>(null);
+  useLayoutEffect(() => {
+    const list = railList.current;
+    if (!list) return;
+    const show = () => {
+      const item = list.querySelector<HTMLElement>(".st-rail__item.is-active");
+      if (!item || list.scrollHeight <= list.clientHeight) return;
+      const box = list.getBoundingClientRect();
+      const at = item.getBoundingClientRect();
+      const top = at.top - box.top + list.scrollTop;
+      const bottom = at.bottom - box.top + list.scrollTop;
+      if (top >= list.scrollTop && bottom <= list.scrollTop + list.clientHeight) return;
+      list.scrollTop = Math.max(0, bottom - list.clientHeight + 6);
+    };
+    show();
+    // The list's room changes after the first paint (the shell lays out its switch, the fonts arrive, the window
+    // is resized): the chosen page stays in view.
+    if (typeof ResizeObserver !== "function") return;
+    const watch = new ResizeObserver(show);
+    watch.observe(list);
+    return () => watch.disconnect();
+  }, [page.name, solo]);
+
   return (
     <div ref={root} className={`stories-app${solo ? " is-alone" : ""}`} data-ws={ws ?? undefined}>
       <a className="st-skip" href="#main">
@@ -536,7 +561,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
         <nav className="st-rail st-glass" aria-label="Lamo Stories">
           <Brand />
           {/* For the keyboard the shell's switch comes right after this list, where it is drawn (data-ws-tab-after). */}
-          <ul className="st-rail__list" data-ws-tab-after="">
+          <ul className="st-rail__list" data-ws-tab-after="" ref={railList}>
             <Glide active=".st-rail__item.is-active" className="glide--st-rail" as="li" />
             {NAV.map((item) => (
               <li key={item.label}>
