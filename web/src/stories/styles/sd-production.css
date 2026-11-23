@@ -318,7 +318,7 @@
 
 .st-s-preview__row .st-media__thumb {
   align-self: start;
-  border-radius: calc(var(--st-r-control) - 6px);
+  border-radius: var(--st-r-inner); /* on the scale (10), as every media thumbnail */
   box-shadow: var(--st-depth-1);
 }
 

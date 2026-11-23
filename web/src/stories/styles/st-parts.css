@@ -211,23 +211,25 @@
   background: var(--st-fill-control);
   white-space: nowrap;
 }
+/* The tone is cut back over a deep well in every look (Ember, the owner's own colours, a picture, the desktop), so its
+   words keep 4.5:1 on the brightest hero too: coral and sun measured 3.98-4.44:1 straight on Ember's lit hero. */
 .st-chip--sun {
   color: var(--st-text-amber);
-  background: rgb(var(--st-amber-rgb) / 0.2);
+  background: linear-gradient(rgb(var(--st-amber-rgb) / 0.12), rgb(var(--st-amber-rgb) / 0.12)), rgb(var(--st-well-rgb) / 0.42);
 }
 .st-chip--coral {
   color: var(--st-coral-ink);
-  background: rgb(var(--st-coral-rgb) / 0.22);
+  background: linear-gradient(rgb(var(--st-coral-rgb) / 0.12), rgb(var(--st-coral-rgb) / 0.12)), rgb(var(--st-well-rgb) / 0.42);
 }
 .st-chip--mint {
   color: var(--st-mint-ink);
-  background: rgb(var(--st-mint-rgb) / 0.2);
+  background: linear-gradient(rgb(var(--st-mint-rgb) / 0.12), rgb(var(--st-mint-rgb) / 0.12)), rgb(var(--st-well-rgb) / 0.42);
 }
 .st-chip--sky {
   color: var(--st-sky-ink);
-  background: rgb(var(--st-sky-rgb) / 0.2);
+  background: linear-gradient(rgb(var(--st-sky-rgb) / 0.12), rgb(var(--st-sky-rgb) / 0.12)), rgb(var(--st-well-rgb) / 0.42);
 }
-/* Over a picture or the desktop: the tone is cut back over a deep well, so its words keep 4.5:1 over white too. */
+/* Over a picture or the desktop the plain chip sits on the same deep well (and the tones keep theirs over it). */
 .stories-app:is([data-look="window"], [data-look="picture"]) .st-chip {
   background: rgb(var(--st-well-rgb) / 0.42);
 }
