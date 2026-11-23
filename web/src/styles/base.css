@@ -14,6 +14,13 @@ html {
   scroll-padding-top: calc(var(--top-safe) + 16px);
   -webkit-tap-highlight-color: transparent;
 }
+/* On a phone the tab bar floats over the page's foot: whatever gets the focus, or is scrolled into view (an opened
+   dropdown), stops above it, never under it (the bar is var(--tabbar-h) tall, 10 px over the safe area). */
+@media (max-width: 767px) {
+  html {
+    scroll-padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 22px);
+  }
+}
 
 body {
   margin: 0;

@@ -85,6 +85,27 @@ test.describe("All your money", () => {
     await expect(page.locator("#content-rewards")).toBeAttached();
   });
 
+  test("See it all brings Content Rewards' part into view on every tap, and so does Settings › Money's link", async ({ page }) => {
+    await open(page);
+    const part = page.locator("#content-rewards");
+    const see = row(page, "contentrewards").getByRole("link", { name: "See it all" });
+    await see.click();
+    await expect(part).toBeInViewport();
+    await expect(page.locator("#cr-money-title")).toBeFocused();
+    // Back up and again: a second tap goes there too.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(part).not.toBeInViewport();
+    await see.click();
+    await expect(part).toBeInViewport();
+    // From Settings › Posting › Money (another page): the part, not the top of Money.
+    await page.goto("/settings/posting/money");
+    await settle(page);
+    await page.getByRole("link", { name: "Open Content Rewards money" }).click();
+    await expect(page).toHaveURL(/\/money#content-rewards$/);
+    await expect(part).toBeInViewport();
+    await expect(page.locator("#cr-money-title")).toBeFocused();
+  });
+
   test("two currencies: one total each, never added; YouTube needs your OK; nothing to add up yet", async ({ page }) => {
     await open(page, "dash_two_currencies");
     await expect(page.locator(".cr-all__sum")).toHaveCount(2);

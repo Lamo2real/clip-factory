@@ -12,6 +12,7 @@ import { burst } from "../../lib/confetti.ts";
 import { CR_SETUP_PATH, MOVE_MIN_CENTS, amountText, patchCr, reloadCr, shortDay, usd, useCr, dayDate } from "../../lib/contentRewards.ts";
 import { relative } from "../../lib/format.ts";
 import { prefersReducedMotion } from "../../lib/prefs.ts";
+import { useHash } from "../../lib/router.ts";
 import { cheerOnNextTap } from "../../lib/sound.ts";
 import { sounds } from "../../lib/sounds.ts";
 import { crPart } from "../../setup/contentrewards.ts";
@@ -20,6 +21,21 @@ import { Rich } from "../settings/setup/bits.tsx";
 import { CrStepCard } from "../campaigns/bits.tsx";
 
 const MOVED_KEY = "cf-cr-on-its-way";
+/** The part's id: /money#content-rewards, All your money's "See it all" and Settings › Money's link land here. */
+export const CR_MONEY_ID = "content-rewards";
+
+/**
+ * Brings Money's Content Rewards part into view and puts the focus on its heading (a screen reader starts there);
+ * false when it is not on this page. Run on every tap of a link to it (the router does nothing for the address it is
+ * already on).
+ */
+export function showCrMoney(): boolean {
+  const el = document.getElementById(CR_MONEY_ID);
+  if (!el) return false;
+  el.scrollIntoView?.({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  document.getElementById("cr-money-title")?.focus({ preventScroll: true });
+  return true;
+}
 
 /**
  * What this device saw of the moves to Whop: what was on its way, the last amount moved, if one ever was, and the
@@ -143,6 +159,9 @@ export function CrMoneyPart() {
   });
   const shown = useRef(new Set<string>());
   const autoTicked = useRef(false);
+  const financeBox = useRef<HTMLDivElement>(null);
+  const hash = useHash();
+  const arrived = useRef(false);
 
   const data = cr.state === "ok" ? cr.data : null;
   const money = data?.money ?? null;
@@ -199,6 +218,38 @@ export function CrMoneyPart() {
     }
   }, [money, toast]);
 
+  // Arriving at /money#content-rewards: the router opens every page at its top, so once this part is drawn it comes into
+  // view and gets the focus. The page above it is still filling in for a moment, so it is brought back into view
+  // while that happens, unless the owner scrolls or types meanwhile.
+  const drawn = cr.state !== "missing" && cr.state !== "loading";
+  useEffect(() => {
+    if (!drawn || hash !== CR_MONEY_ID || arrived.current) return;
+    arrived.current = true;
+    let moved = false;
+    const stop = () => (moved = true);
+    const opts = { passive: true, once: true } as const;
+    window.addEventListener("wheel", stop, opts);
+    window.addEventListener("touchmove", stop, opts);
+    window.addEventListener("keydown", stop, opts);
+    const timers = [120, 600, 1400].map((ms) =>
+      setTimeout(() => {
+        const el = document.getElementById(CR_MONEY_ID);
+        if (moved || !el) return;
+        const top = el.getBoundingClientRect().top;
+        if (ms === 120 || Math.abs(top) > 24) showCrMoney();
+      }, ms),
+    );
+    return () => {
+      timers.forEach(clearTimeout);
+      window.removeEventListener("wheel", stop);
+      window.removeEventListener("touchmove", stop);
+      window.removeEventListener("keydown", stop);
+    };
+  }, [drawn, hash]);
+  useEffect(() => {
+    if (hash !== CR_MONEY_ID) arrived.current = false;
+  }, [hash]);
+
   if (cr.state === "missing" || cr.state === "loading") return null;
 
   async function setFinance(v: boolean | null) {
@@ -206,6 +257,8 @@ export function CrMoneyPart() {
     try {
       const connection = await api().crPatchConnection({ finance: v });
       patchCr((d) => ({ ...d, connection }));
+      // The answer (or the question again) takes the tapped control's place: the focus stays on the question.
+      setTimeout(() => financeBox.current?.focus({ preventScroll: true }), 0);
       return true;
     } catch (e) {
       toast.error(friendlyMessage(e));
@@ -254,9 +307,9 @@ export function CrMoneyPart() {
   const paidLine = money?.paidSoFarCents == null ? "Checking…" : `Content Rewards paid you ${usd(money.paidSoFarCents)} so far${money.lastPaidAt ? ` · last money ${dayDate(money.lastPaidAt)}` : ""}`;
 
   return (
-    <section className="cr-money glass" id="content-rewards" data-help="cr-money" aria-labelledby="cr-money-title" tabIndex={-1}>
+    <section className="cr-money glass" id={CR_MONEY_ID} data-help="cr-money" aria-labelledby="cr-money-title" tabIndex={-1}>
       <div className="dash-section-head">
-        <h2 className="dash-section-title" id="cr-money-title">
+        <h2 className="dash-section-title" id="cr-money-title" tabIndex={-1}>
           Content Rewards
         </h2>
         <span className="money-tag">Content Rewards&apos; numbers</span>
@@ -328,7 +381,7 @@ export function CrMoneyPart() {
 
       {conn && conn.status !== "not_connected" ? (
         <div className="cr-money__steps">
-          <div className="gstep__picker">
+          <div className="gstep__picker" ref={financeBox} tabIndex={-1} data-cr="finance">
             <span className="gstep__picker-label">
               <Rich text="Do you see **Finance** in the Content Rewards menu?" />
             </span>

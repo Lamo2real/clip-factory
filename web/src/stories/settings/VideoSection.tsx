@@ -442,7 +442,7 @@ export function VideoSection({ ws }: { ws: string }) {
       </MakerCard>
       <MakerCard kind="image" c={c} providers={p} models={models} save={save} />
       <MakerCard kind="audio" c={c} providers={p} models={models} save={save} />
-      {providers.error && !p ? <Note tone="sun">{providers.error}</Note> : null}
+      {providers.error && !p ? <Failed message={providers.error} onRetry={() => void providers.reload()} /> : null}
 
       <MakerModels ws={ws} models={models} providers={p} aiKeys={ai.data?.models.map((m) => m.key) ?? []} onChanged={reloadAll} />
 
@@ -501,30 +501,45 @@ export function VideoSection({ ws }: { ws: string }) {
       />
 
       <SetCard title="Prices and keys" icon="coin" lede="What the AI makers cost, and keys for makers that need one.">
-        <h4 className="st-stg-subhead">Prices</h4>
-        <MakerPrices
-          ai={ai}
-          open={priceOpen}
-          setOpen={(id, from) => {
-            if (id !== null) return setPriceOpen(id);
-            // Only that maker's own form closes: its save may end after the owner opened another one, which stays open.
-            setPriceOpen((now) => (now === from ? null : now));
-            void usage.reload();
-          }}
-        />
-        <h4 className="st-stg-subhead">Keys</h4>
-        {p ? (
-          <ProviderKeys
-            ws={ws}
-            providers={p}
-            kinds={["images", "animation", "audio"]}
-            also={["openai_compatible"]}
-            onChange={(x) => {
-              // The key's row (and so every model on that host) shows the new key state; nothing else changes.
-              providers.setData((l) => (l ? l.map((y) => (y.id === x.id ? keepName(y, x) : y)) : l));
+        {!ai.data && ai.error && !p && providers.error ? (
+          // Both did not load (the same cause, as a rule): one card, one Try again for both.
+          <Failed
+            message={ai.error}
+            onRetry={() => {
+              void ai.reload();
+              void providers.reload();
             }}
           />
-        ) : null}
+        ) : (
+          <>
+            <h4 className="st-stg-subhead">Prices</h4>
+            <MakerPrices
+              ai={ai}
+              open={priceOpen}
+              setOpen={(id, from) => {
+                if (id !== null) return setPriceOpen(id);
+                // Only that maker's own form closes: its save may end after the owner opened another one, which stays open.
+                setPriceOpen((now) => (now === from ? null : now));
+                void usage.reload();
+              }}
+            />
+            <h4 className="st-stg-subhead">Keys</h4>
+            {/* The keys come with the makers: while those did not load, Try again here too (never an empty space). */}
+            {!p && providers.error ? <Failed message={providers.error} onRetry={() => void providers.reload()} /> : null}
+            {p ? (
+              <ProviderKeys
+                ws={ws}
+                providers={p}
+                kinds={["images", "animation", "audio"]}
+                also={["openai_compatible"]}
+                onChange={(x) => {
+                  // The key's row (and so every model on that host) shows the new key state; nothing else changes.
+                  providers.setData((l) => (l ? l.map((y) => (y.id === x.id ? keepName(y, x) : y)) : l));
+                }}
+              />
+            ) : null}
+          </>
+        )}
       </SetCard>
     </div>
   );

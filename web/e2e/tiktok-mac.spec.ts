@@ -51,7 +51,7 @@ const MIN = 60_000;
 const NEXT = "Waiting for your Mac · next";
 const PRESSED = "Not sure it posted · look on your TikTok";
 /** Inside the 30-minute find window after Post: from when Try again comes. */
-const PRESSED_WAIT = /^Not sure it posted · look on your TikTok · Try again from \d\d:\d\d$/;
+const PRESSED_WAIT = /^Not sure it posted · look on your TikTok · Try again from (?:[A-Z][a-z]{2} )?\d\d:\d\d$/;
 const STOPPED_EARLY = "Your Mac stopped before it pressed Post";
 const AGAIN_ASK = "Post it again? Only if it's not on your TikTok.";
 const OPEN_MAC = "Open Your Mac posts TikTok";
@@ -102,6 +102,9 @@ const hm = (t: number) => {
   const d = new Date(t);
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
+/** The rows' clock words (clockWords): "14:05" today, "Mon 23:15" for another day (a run near midnight). */
+const clock = (t: number) =>
+  new Date(t).toDateString() === new Date().toDateString() ? hm(t) : `${new Date(t).toLocaleDateString("en-GB", { weekday: "short" })} ${hm(t)}`;
 
 const SWITCH = "My Mac posts my TikTok clips";
 
@@ -121,7 +124,7 @@ async function sendAll(page: Page): Promise<Job> {
   await page.getByRole("button", { name: "Send these to my Mac" }).click();
   await expect(page.getByText("They go one at a time, oldest first.")).toBeVisible();
   await page.getByRole("button", { name: "Yes, send them" }).click();
-  await expect(page.getByText(/^Sent \d+ clips? to your Mac\.$/)).toBeVisible();
+  await expect(page.getByText(/^Sent \d+ clips? to your Mac\./)).toBeVisible();
   const first = (await mac.queue(page))[0];
   expect(first).toBeTruthy();
   return first!;
@@ -142,6 +145,10 @@ test("settings: the switch, the Mac's check-in and Send these to my Mac", async 
   await go(page, "/settings/posting/tiktok-mac");
   await expect(page.getByText("Off. Your Mac doesn't post your TikTok clips.")).toBeVisible();
   await expect(page.getByText("Your Mac hasn't checked in yet. Set it up on your Mac.")).toBeVisible();
+  // Never a dead end: how to set it up, right under it.
+  const setUp = page.locator('[data-mac="setup"]');
+  await expect(setUp).toContainText("./install.sh --no-start");
+  await expect(setUp).toContainText("Log in to TikTok and to Clip Factory in the window that opens.");
   await expect(page.getByText("To stop it, turn the switch off. Your Mac stops at once.")).toBeVisible();
   // Off: nothing to send.
   await expect(page.getByRole("button", { name: "Send these to my Mac" })).toHaveCount(0);
@@ -161,10 +168,13 @@ test("settings: the switch, the Mac's check-in and Send these to my Mac", async 
   await expect(page.getByText("Posts when you tap Upload · 0 waiting")).toBeVisible();
 
   await page.getByRole("button", { name: "Send these to my Mac" }).click();
+  // The Mac never checked in: they wait for it, and the page says so before and after.
+  await expect(page.getByText("They wait until your Mac checks in.")).toBeVisible();
   await page.getByRole("button", { name: "Yes, send them" }).click();
-  await expect(page.getByText(`Sent ${n} clip${n === 1 ? "" : "s"} to your Mac.`)).toBeVisible();
+  await expect(page.getByText(`Sent ${n} clip${n === 1 ? "" : "s"} to your Mac. They wait until your Mac checks in.`)).toBeVisible();
   await expect(page.getByText(`Posts when you tap Upload · ${n} waiting`)).toBeVisible();
-  await expect(page.getByText("0 clips aren't on TikTok yet.")).toBeVisible();
+  await expect(page.getByText(`${n} clip${n === 1 ? " already waits" : "s already wait"} for your Mac.`)).toBeVisible();
+  await expect(page.getByText("0 clips aren't on TikTok yet.")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Send these to my Mac" })).toHaveCount(0);
   // The backlog goes one after each auto-posting run, not at once.
   expect((await mac.queue(page)).every((j) => j.source === "sent")).toBe(true);
@@ -173,6 +183,7 @@ test("settings: the switch, the Mac's check-in and Send these to my Mac", async 
   await mac.ping(page);
   await refocus(page);
   await expect(page.getByText(/^Your Mac checked in \w{3} \d\d:\d\d\.$/)).toBeVisible();
+  await expect(setUp).toHaveCount(0);
   await mac.ping(page, "needs_you", "TikTok wants you to log in again.");
   await refocus(page);
   await expect(page.getByText("Your Mac needs you: TikTok wants you to log in again.")).toBeVisible();
@@ -274,10 +285,11 @@ test("library: off, not set up, Post with my Mac, Posting…, Didn't work with T
   await page.getByRole("switch", { name: SWITCH }).click();
   await expect(page.getByRole("switch", { name: SWITCH })).toHaveAttribute("aria-checked", "true");
 
-  // On, but the Mac never checked in.
+  // On, but the Mac never checked in: its page (with the setup steps), never Turn on (the switch is on).
   await go(page, "/library");
   await expect(status).toHaveText("Your Mac isn't set up yet");
-  await expect(row.getByRole("link", { name: "Turn on" })).toBeVisible();
+  await expect(row.getByRole("link", { name: OPEN_MAC })).toHaveAttribute("href", "/settings/posting/tiktok-mac");
+  await expect(row.getByRole("link", { name: "Turn on" })).toHaveCount(0);
 
   // It checks in: not on TikTok yet, with one Post with my Mac.
   await mac.ping(page);
@@ -540,7 +552,7 @@ test("library: the backlog's first clip says the Mac's own time; the rest their 
   expect(queue.length).toBeGreaterThan(1);
   await go(page, "/library");
   const first = tiktokRow(page, queue[0]!.clipId).locator(".post__status");
-  await expect(first).toHaveText(`Waiting for your Mac · goes at about ${hm(at)}`);
+  await expect(first).toHaveText(`Waiting for your Mac · goes at about ${clock(at)}`);
   // Never the same time on a later one: its place in the Mac's queue.
   await expect(tiktokRow(page, queue[1]!.clipId).locator(".post__status")).toHaveText("Waiting for your Mac · in line (1 before it)");
   await expect(page.locator(".post__status", { hasText: "goes at about" })).toHaveCount(1);
@@ -578,7 +590,7 @@ test("library: a campaign clip skips TikTok for now, in plain words with no butt
   await expect(page.getByText(new RegExp(`^${before - 1} clips? (isn't|aren't) on TikTok yet\\.$`))).toBeVisible();
   await page.getByRole("button", { name: "Send these to my Mac" }).click();
   await page.getByRole("button", { name: "Yes, send them" }).click();
-  await expect(page.getByText(/^Sent \d+ clips? to your Mac\.$/)).toBeVisible();
+  await expect(page.getByText(/^Sent \d+ clips? to your Mac\./)).toBeVisible();
   expect((await mac.queue(page)).some((j) => j.clipId === clipId)).toBe(false);
 });
 
@@ -606,7 +618,7 @@ test("library: a post left Posting… once the switch went off says so; a Mac go
   await mac.seen(page, new Date(quiet).toISOString());
   await go(page, "/library");
   await refocus(page);
-  await expect(status).toHaveText(`Your Mac hasn't checked in since ${hm(quiet)}`);
+  await expect(status).toHaveText(`Your Mac hasn't checked in since ${clock(quiet)}`);
   await expect(row.locator(".spinner")).toHaveCount(0);
   await expect(row.getByRole("button")).toHaveCount(1);
   await expect(row.getByRole("button", { name: "Try again, TikTok" })).toBeVisible();
@@ -616,7 +628,7 @@ test("library: a post left Posting… once the switch went off says so; a Mac go
   await mac.beat(page, clipId, 12 * MIN);
   await mac.seen(page, new Date(quiet).toISOString());
   await refocus(page);
-  await expect(status).toHaveText(`Your Mac hasn't checked in since ${hm(quiet)}`);
+  await expect(status).toHaveText(`Your Mac hasn't checked in since ${clock(quiet)}`);
   await expect(row.getByRole("button", { name: "It's on TikTok", exact: true })).toBeVisible();
   await row.getByRole("button", { name: "Try again, TikTok" }).click();
   await expect(row.getByText(AGAIN_ASK)).toBeVisible();
@@ -687,7 +699,7 @@ test("library: an auto-posting clip the Mac holds says so, with Post with my Mac
   await mac.ping(page, "ok", undefined, { holdBefore: new Date(hold).toISOString() });
   await go(page, "/library");
   await refocus(page);
-  await expect(status).toHaveText(`Held on your Mac: made before ${hm(hold)}`);
+  await expect(status).toHaveText(`Held on your Mac: made before ${clock(hold)}`);
   await row.getByRole("button", { name: "Post with my Mac" }).click();
   await expect(page.getByText("Sent to your Mac! It posts it in a minute.")).toBeVisible();
   await expect(status).toHaveText(NEXT);
@@ -875,7 +887,7 @@ test("clip page: inside the find window it says from when Try again comes; a Mac
   await go(page, `/clips/${clipId}`);
   const stack = page.locator('[data-stack="tiktok"]');
   await expect(stack.locator(".pstack__chip")).toHaveText("Not sure it posted");
-  await expect(stack.locator(".pstack__calm-text")).toHaveText(/^Look on your TikTok · Try again from \d\d:\d\d$/);
+  await expect(stack.locator(".pstack__calm-text")).toHaveText(/^Look on your TikTok · Try again from (?:[A-Z][a-z]{2} )?\d\d:\d\d$/);
   const actions = page.locator(".perf__actions");
   await expect(actions.getByRole("button", { name: "It's on TikTok", exact: true })).toBeVisible();
   await expect(actions.getByRole("button", { name: "Try again, TikTok" })).toHaveCount(0);
@@ -892,7 +904,7 @@ test("clip page: inside the find window it says from when Try again comes; a Mac
   await mac.seen(page, new Date(quiet).toISOString());
   await go(page, `/clips/${other}`);
   await expect(stack.locator(".pstack__chip")).toHaveText("Not sure it posted");
-  await expect(stack.locator(".pstack__calm-text")).toHaveText(`Your Mac hasn't checked in since ${hm(quiet)}`);
+  await expect(stack.locator(".pstack__calm-text")).toHaveText(`Your Mac hasn't checked in since ${clock(quiet)}`);
   await expect(stack.getByText(/Not sure it posted/)).toHaveCount(1);
 });
 
@@ -941,7 +953,9 @@ test("review: the hint, TikTok on My settings with no tap, and Uploaded just now
   const card = page.locator(".review-card").first();
   const clipId = (await card.locator("..").getAttribute("id"))!.replace("clip-", "");
   const hook = await card.locator(".review-card__hook").innerText();
-  await expect(card.locator(".tt-yourself-hint")).toHaveText("TikTok: your Mac posts it for everyone.");
+  // The Mac never checked in: the line says so before Upload, with its page (never "for everyone", never Turn on).
+  await expect(card.locator(".tt-yourself-hint")).toHaveText("TikTok: Your Mac isn't set up yet");
+  await expect(card.locator('[data-mac="card"]').getByRole("link", { name: OPEN_MAC })).toHaveAttribute("href", "/settings/posting/tiktok-mac");
   await expect(card.getByRole("link", { name: "Turn on" })).toHaveCount(0);
   // On: TikTok starts on My settings like every other place (Everyone, all three on), with no tap before Upload.
   await expect(card.getByRole("button", { name: "Your settings are on" })).toBeVisible();
@@ -971,9 +985,10 @@ test("review: the hint, TikTok on My settings with no tap, and Uploaded just now
   await upload.click();
   const item = page.locator(".kept-now__item", { hasText: hook.slice(0, 20) });
   const line = item.locator(".kept-now__mac");
-  // The Mac never checked in: said, with Turn on.
+  // The Mac never checked in: said, with its page (the switch is on: never Turn on).
   await expect(line).toHaveText("TikTok: Your Mac isn't set up yet");
-  await expect(item.getByRole("link", { name: "Turn on" })).toHaveAttribute("href", "/settings/posting/tiktok-mac");
+  await expect(item.getByRole("link", { name: OPEN_MAC })).toHaveAttribute("href", "/settings/posting/tiktok-mac");
+  await expect(item.getByRole("link", { name: "Turn on" })).toHaveCount(0);
   // Nothing of Clip Factory's own goes to TikTok's API, and no sheet.
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const posts = await page.evaluate((id) => (window as MockWindow).__cfMock!.posting.posts(id), clipId);

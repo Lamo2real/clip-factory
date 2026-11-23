@@ -426,8 +426,14 @@ for slow groups, "Insights from 2 days ago" (`insightsUpdatedAt`); "Open on {Pla
   `/settings/posting/where`.
 * Posting: "Posting now…" with a small spinner.
 * Posted privately (TikTok): "Posted privately. TikTok shows numbers after the app is approved."
-* Posted, no metrics yet: "Numbers are on the way. Check back in a few minutes."
-* Failed: "Posting failed: {error}. Go to Library and press Try again."
+* Posted, no metrics yet: the post's `perfCheckAt` in the Library's words (`numbersComing`): "Numbers come tomorrow."
+  (Library: "· numbers tomorrow"), else "Numbers are on the way. Check back in a few minutes." (also when that time
+  has passed).
+* Not sent yet (posting never started, or the start is stuck past `START_GRACE_MS`): "Not sent yet. Tap Try again.";
+  the Library's line and its **Try again** (`UploadAgain`) lead the page's actions as its one red button; "This clip
+  was not sent to {Platform}." when the place is on in Where clips go (no wrong "Turn on" link).
+* Failed: "{why}. Tap Try again." with that platform's own **Try again** inside its stack (not TikTok while it has
+  its Mac row, and not TikTok's public-account refusal).
 
 **Live**: `post` upserts for this clip's posts replace that stack's data (metrics, refreshing, nextRefreshAt) and add
 a series point; `clip` upserts update the star; reconnect or `partial` → refetch `GET …/performance`. Polling fallback

@@ -3,7 +3,8 @@
 // When slider), change it, make it louder or quieter, or remove it; and pick the music. A scene's whole list is sent
 // back when it changed (SceneEdit.sfx replaces it), so Remake then remixes the sound. The place's own sounds (wind,
 // rain, traffic, a car's engine) are in each scene's list from its start, with ids "{sceneId}.amb{k}" (the engine's
-// BED_ID, CONTRACTS §45.34): labelled "(whole scene)", they can be moved or removed like any other.
+// BED_ID, CONTRACTS §45.34): labelled "(whole scene)", they can be moved or removed like any other. Changes not saved
+// ask "Leave without saving?" before the page changes.
 import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { Dropdown } from "../../components/Dropdown.tsx";
 import type { MusicMood, SfxCue, Story, StoryPatch, StoryScript } from "../api/types.ts";
@@ -11,6 +12,7 @@ import { BED_ID } from "../engine/ambience.ts";
 import { CATALOG } from "../engine/catalog.ts";
 import type { SfxId } from "../engine/types.ts";
 import { Notice, Pick, Slider } from "./kit.tsx";
+import { useLeaveGuard } from "./leaveGuard.tsx";
 import { clock } from "./words.ts";
 
 type Edit = Omit<StoryPatch, "version">;
@@ -98,6 +100,7 @@ export function SfxEditor({ story, script, saving, onSave }: { story: Story; scr
   const [problem, setProblem] = useState<string | null>(null);
   const changed = useMemo(() => changedScenes(script, lists), [script, lists]);
   const dirty = changed.length > 0 || mood !== story.musicMood;
+  const leave = useLeaveGuard(dirty && !saving);
   const options = useMemo(() => CATALOG.sfx.map((e) => ({ value: e.id, label: e.label })), []);
 
   const edit = (sceneId: string, fn: (l: SfxCue[]) => SfxCue[]) => {
@@ -169,6 +172,7 @@ export function SfxEditor({ story, script, saving, onSave }: { story: Story; scr
           {saving ? "Saving…" : dirty ? "Save sounds" : "No changes yet"}
         </button>
       </div>
+      {leave}
     </div>
   );
 }

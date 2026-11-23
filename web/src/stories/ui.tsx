@@ -14,7 +14,7 @@ import { storiesApi } from "./api/client.ts";
 import { RoundGlassButton } from "./glass/index.ts";
 import { storiesBehind, useAppActive } from "./pane.tsx";
 import { storiesReduceMotion, storiesSound } from "./prefs.ts";
-import type { Onboarding, Platform, StoriesDashboard, StoryStatus } from "./api/types.ts";
+import type { Onboarding, Platform, StoriesDashboard, Story, StoryStatus } from "./api/types.ts";
 
 // ---------- Buttons, cards, chips ----------
 
@@ -464,6 +464,12 @@ export const STATUS_WORDS: Record<StoryStatus, { label: string; tone: StTone }> 
   failed: { label: "Stopped", tone: "coral" },
 };
 
+/** A story's state in words: a draft nothing is making (never started, or stopped with Cancel) is "Not made yet". */
+export function statusWords(story: Pick<Story, "status" | "currentJobId">): { label: string; tone: StTone } {
+  if (story.status === "draft" && !story.currentJobId) return { label: "Not made yet", tone: "sky" };
+  return STATUS_WORDS[story.status];
+}
+
 // ---------- The dashboard, shared by the Dashboard page and the Needs you bar ----------
 
 interface DashSnap {
@@ -547,6 +553,20 @@ export function socialHere(sentence: string): string {
 /** The address's page, without its query or hash. */
 const pathOf = (href: string) => href.replace(/[?#].*$/, "").replace(/\/+$/, "") || "/";
 
+type NeedsItem = StoriesDashboard["needsYou"][number];
+
+/**
+ * A stopped post whose account problem is fixed now (the account it names is connected again): it no longer sends
+ * the owner to Social accounts, where nothing is left to fix, but to the post itself, to tap its Try again. The
+ * server says so itself (dashboard._post_href); this reads an older answer the same way.
+ */
+export function afterFix(item: NeedsItem, accounts: StoriesDashboard["accounts"] | undefined): NeedsItem {
+  if (!item.publishingJobId || !item.storyId || !item.platform || pathOf(item.href) !== "/stories/connections") return item;
+  if (accounts?.find((a) => a.platform === item.platform)?.status !== "connected") return item;
+  const title = item.title ? `“${item.title}”` : "the video";
+  return { ...item, href: `/stories/review/${encodeURIComponent(item.storyId)}`, sentence: `${PLATFORM_NAME[item.platform]} is connected now. Tap Try again on ${title}.` };
+}
+
 /** On the page a Needs you item points to: where on it to look (the platform's card on Social accounts), else null. */
 function targetOn(item: StoriesDashboard["needsYou"][number]): HTMLElement | null {
   if (!item.platform || typeof document === "undefined") return null;
@@ -561,8 +581,9 @@ function targetOn(item: StoriesDashboard["needsYou"][number]): HTMLElement | nul
 export function NeedsYouBar({ ws, here }: { ws: string; here?: string }) {
   const { data } = useDashboard(ws);
   const [gone, setGone] = useState<string | null>(null);
-  const first = data?.needsYou[0];
-  if (!first) return null;
+  const top = data?.needsYou[0];
+  if (!top) return null;
+  const first = afterFix(top, data?.accounts);
   const key = `${first.href}|${first.sentence}`;
   if (gone === key) return null;
   const more = (data?.needsYou.length ?? 1) - 1;

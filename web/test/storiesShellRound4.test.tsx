@@ -469,8 +469,9 @@ describe("Clip Factory's kept search (§45.35 D18)", () => {
 
   it("NewJobForm reads its way and its start through the hook only (its one change)", async () => {
     const form = source("screens/home/NewJobForm.tsx");
-    // From the shell, never from Lamo Stories' own files (§45.38 A3); with clipsGoLater, its one other change.
-    expect(form).toContain('import { clipsGoLater, useKeptSearch } from "../../app/shell.ts";');
+    // From the shell, never from Lamo Stories' own files (§45.38 A3); with clipsGoLater, and the upload's leave question
+    // that holds only while Clip Factory is on screen and never on the switch (storiesAddress, useAppActive).
+    expect(form).toContain('import { clipsGoLater, storiesAddress, useAppActive, useKeptSearch } from "../../app/shell.ts";');
     expect(form).not.toMatch(/stories\//);
     expect(form).not.toMatch(/location\.search/);
     expect(form).toContain(

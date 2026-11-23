@@ -113,7 +113,9 @@ settings is kept in localStorage.
 ### 34.5 TikTok's "Who can see it"
 
 The app's own dropdown (`components/Dropdown.tsx`: a soft-fill button that opens a solid list, keyboard arrows,
-Escape, never the OS list), labelled "Who can see it", with exactly `privacyOptions` (Only me and Followers greyed when branded, §17.8),
+Escape, never the OS list; an open list measures itself against the phone tab bar or the screen's bottom and opens
+upward when there is room above, else scrolls into view, and the arrow, Home and End keys keep the chosen option in
+view), labelled "Who can see it", with exactly `privacyOptions` (Only me and Followers greyed when branded, §17.8),
 Everyone first, and the placeholder "Pick who can see it" until the owner picks or taps Use my settings. When only
 `SELF_ONLY` is allowed: one choice and the line "TikTok keeps posts private until it approves your app." Used in the
 TikTok row and on the Post to TikTok sheet (which still opens for Library's Try again, and on Upload while nothing is

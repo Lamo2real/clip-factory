@@ -477,3 +477,118 @@ test("in the desktop app Connect stops spinning once connected, or when the owne
   }).toPass();
   await expect(page).toHaveURL(/\/settings\/posting\/setup\/instagram$/);
 });
+
+// Kid-proof (an 8-year-old must never get stuck): what a connected platform says after a cancelled Connect again, typed
+// keys that survive folding their step, a logged-out platform that opens on Connect again, a Disconnect still waiting
+// for its Undo after leaving, TikTok's done line, and a list that could not load.
+test.describe("kid-proof setup on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  const finish = (page: Page, p: Platform) => page.evaluate((x) => (window as MockWindow).__cfMock!.setup.finish(x), p);
+
+  test("Connect again, then Cancel: still connected, nothing to fix", async ({ page }) => {
+    await page.goto("/settings/posting/setup");
+    await settle(page);
+    await finish(page, "x");
+    await page.goto("/settings/posting/setup/x");
+    await settle(page);
+    await page.locator(".done-panel").getByRole("button", { name: "Connect again" }).click();
+    await page.waitForURL(/\/mock-oauth\/x/);
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await page.waitForURL(/\/settings\/posting\/setup\/x(\?result=denied)?$/);
+    await settle(page);
+    await expect(page.locator(".result-card[data-result='still-connected']")).toContainText(/^Still connected as .+\. Nothing changed\.$/);
+    await expect(page.getByText("Not connected yet")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Go to step/ })).toHaveCount(0);
+    await expect(page.locator(".done-panel__state")).toHaveText("Ready. Clip Factory posts here by itself.");
+  });
+
+  test("typed keys stay when their step folds and opens again", async ({ page }) => {
+    await page.goto("/settings/posting/setup/facebook");
+    await settle(page);
+    const card = step(page, "key-paste");
+    await card.locator(".gstep__head").click();
+    await card.getByLabel("App ID", { exact: true }).fill(KEYS.facebook.clientId);
+    await card.getByLabel("App secret", { exact: true }).fill(KEYS.facebook.clientSecret);
+    await expect(card.locator(".field__status.is-ok")).toHaveCount(2);
+    await card.locator(".gstep__head").click();
+    await expect(card.locator("input.key-field__input")).toHaveCount(0);
+    await card.locator(".gstep__head").click();
+    await expect(card.getByLabel("App ID", { exact: true })).toHaveValue(KEYS.facebook.clientId);
+    await expect(card.getByLabel("App secret", { exact: true })).toHaveValue(KEYS.facebook.clientSecret);
+  });
+
+  test("logged out: the page opens on Connect again, in view and focused", async ({ page }) => {
+    await page.goto("/settings/posting/setup");
+    await settle(page);
+    await page.evaluate(() => {
+      const s = (window as MockWindow).__cfMock!.setup;
+      s.finish("x");
+      s.expireToken("x");
+    });
+    await page.goto("/settings/posting/setup/x");
+    await settle(page);
+    const again = page.locator(".done-panel").getByRole("button", { name: "Connect again" });
+    await expect(again).toBeFocused();
+    await expect(again).toBeInViewport({ ratio: 1 });
+    await expect(page.locator(".done-panel__state")).toBeInViewport();
+  });
+
+  test("a Disconnect waiting for its Undo still says so after leaving and coming back", async ({ page }) => {
+    await page.goto("/settings/posting/setup");
+    await settle(page);
+    await finish(page, "x");
+    await page.reload();
+    await settle(page);
+    // In the app (no page load): open X, Disconnect, Back, and X again within the 8-second Undo.
+    await page.locator(".setup-card[data-platform='x']").click();
+    await settle(page);
+    await page.locator(".done-panel").getByRole("button", { name: "Disconnect" }).click();
+    await page.goBack();
+    await settle(page);
+    await page.locator(".setup-card[data-platform='x']").click();
+    await settle(page);
+    await expect(page.locator(".done-panel__state")).toHaveText("Disconnecting…");
+    await expect(page.locator(".done-panel").getByRole("button", { name: "Disconnect" })).toHaveAttribute("aria-disabled", "true");
+    await page.getByRole("button", { name: "Undo" }).click();
+    await expect(page.locator(".done-panel__state")).toHaveText("Ready. Clip Factory posts here by itself.");
+  });
+
+  test("TikTok's done line agrees with its card: posts stay private, and the way to Your Mac posts TikTok", async ({ page }) => {
+    await page.goto("/settings/posting/setup");
+    await settle(page);
+    await finish(page, "tiktok");
+    await page.goto("/settings/posting/setup/tiktok");
+    await settle(page);
+    await expect(page.locator(".done-panel__state")).toHaveText("Works now, posts stay private. To post for everyone, turn on Your Mac posts TikTok.");
+    await page.locator(".done-panel").getByRole("link", { name: "Open Your Mac posts TikTok" }).click();
+    await expect(page).toHaveURL(/\/settings\/posting\/tiktok-mac$/);
+  });
+
+  test("TikTok's file saved twice by the browser is still taken, under TikTok's name", async ({ page }) => {
+    await page.goto("/settings/posting/setup/tiktok#step-key-verify");
+    await settle(page);
+    await step(page, "key-verify")
+      .locator("input[type=file]")
+      .setInputFiles({ name: "tiktokAbCdEf123456 (1).txt", mimeType: "text/plain", buffer: Buffer.from("tiktok-developers-site-verification=AbCdEf123456") });
+    await expect(step(page, "key-verify").locator(".upload-box__file", { hasText: "tiktokAbCdEf123456.txt" })).toBeVisible();
+    await expect(page.getByText("That is not TikTok's file", { exact: false })).toHaveCount(0);
+  });
+
+  test("a list that can't load shows only its error and Try again, never Checking… forever", async ({ page }) => {
+    await page.addInitScript(() => {
+      let faults: Record<string, unknown> | undefined;
+      Object.defineProperty(window, "__cfMockFaults", {
+        configurable: true,
+        get: () => faults,
+        set: (v: Record<string, unknown>) => {
+          faults = v;
+          v.setupFails = 50;
+        },
+      });
+    });
+    await page.goto("/settings/posting/setup");
+    await expect(page.getByRole("button", { name: "Try again" }).first()).toBeVisible();
+    await expect(page.getByText("Checking…")).toHaveCount(0);
+    await expect(page.locator(".setup-card-skel")).toHaveCount(0);
+  });
+});

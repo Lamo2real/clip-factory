@@ -6,11 +6,12 @@
 // that tells apps nothing says so, never $0.
 import type { GetPaidCard, GetPaidPlace, PayoutRow, SentLine } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
-import { LinkButton, Skeleton } from "../../components/ui.tsx";
+import { Button, LinkButton, Skeleton } from "../../components/ui.tsx";
 import { isGetPaidPlace } from "../../getpaid/index.ts";
 import { bankView, useBank } from "../../lib/bank.ts";
 import { BANK_TEXT } from "../../lib/getPaid.ts";
 import { formatMoney } from "../../lib/money.ts";
+import { prefersReducedMotion } from "../../lib/prefs.ts";
 import { OpenButton } from "../campaigns/bits.tsx";
 import { Rich } from "../settings/setup/bits.tsx";
 import { PlaceReached, pairFor } from "./bank/BankMoney.tsx";
@@ -50,6 +51,33 @@ function linksHere(href: string, here: string | undefined): boolean {
   return !!here && href.split(/[?#]/)[0] === here && !href.includes("#");
 }
 
+/** The `#anchor` of a link to a place on the page it is drawn on ("…/youtube#yt-reading" on YouTube's page), else null. */
+export function anchorHere(href: string, here: string | undefined): string | null {
+  const at = href.indexOf("#");
+  if (at < 0 || !href.slice(at + 1)) return null;
+  const path = href.slice(0, at).split("?")[0];
+  return at === 0 || (!!here && path === here) ? href.slice(at + 1) : null;
+}
+
+/**
+ * Goes to a step on this page on every tap: the address keeps its `?back=` and gets the step's `#anchor` (so the page
+ * opens that step), and the step comes into view with the focus on its head. Going to the same address again
+ * through the router would do nothing.
+ */
+export function jumpHere(anchor: string): void {
+  const to = `${location.pathname}${location.search}#${anchor}`;
+  if (location.hash !== `#${anchor}`) {
+    history.replaceState(history.state, "", to);
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+  }
+  setTimeout(() => {
+    const el = document.getElementById(anchor) ?? document.getElementById(`step-${anchor}`);
+    if (!el) return;
+    el.scrollIntoView?.({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    (el.querySelector<HTMLElement>(":scope > .gstep__head") ?? el).focus({ preventScroll: true });
+  }, 60);
+}
+
 /** A place's sent line: its headline, its amounts per currency (never added across), and where to look. */
 export function SentLineView({ sent, compact = false, here }: { sent: SentLine; compact?: boolean; here?: string }) {
   const button = sent.button && !linksHere(sent.button.href, here) ? sent.button : null;
@@ -77,6 +105,10 @@ export function SentLineView({ sent, compact = false, here }: { sent: SentLine; 
           {button ? (
             button.external ? (
               <OpenButton label={button.label} href={button.href} size="sm" />
+            ) : anchorHere(button.href, here) ? (
+              <Button variant="glass" size="sm" iconAfter="chevronDown" onClick={() => jumpHere(anchorHere(button.href, here)!)} data-sent-jump="">
+                {button.label}
+              </Button>
             ) : (
               <LinkButton href={button.href} variant="glass" size="sm" iconAfter="chevronRight">
                 {button.label}

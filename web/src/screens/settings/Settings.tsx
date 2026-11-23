@@ -411,7 +411,9 @@ function BranchPage({ tree, branch }: { tree: Tree; branch: Branch }) {
       el.classList.remove("is-found");
       void el.offsetWidth;
       el.classList.add("is-found");
-      el.focus({ preventScroll: true });
+      // A fold takes the focus on its summary: the part the keyboard reaches and opens with Enter or Space.
+      const focusable = el instanceof HTMLDetailsElement ? (el.querySelector<HTMLElement>(":scope > summary") ?? el) : el;
+      focusable.focus({ preventScroll: true });
       fade = setTimeout(() => el?.classList.remove("is-found"), FOUND_MS);
       return true;
     };

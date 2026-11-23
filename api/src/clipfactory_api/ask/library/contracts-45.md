@@ -1107,14 +1107,25 @@ publishing every 10 s while one is in flight. No WebSocket filter changes (§45.
 
 * Ideas: a board of idea cards (saved and used), **New idea** (manual), **Ask for ideas** (topic + category →
   drafts with Save), each card **Make it a full idea** (expand), **More like this** (variations), **Make the video**
-  (→ Production › New with it), Delete with Undo. Safety ideas show their guidance source or "Needs checked advice".
+  (→ Production › New with it), Delete with Undo. Safety ideas show their guidance source or "Needs checked advice";
+  a "Needs checked advice" idea has a quiet Make the video, More like this off, and an **Edit it** button ("Tap Edit
+  it to make it another kind of video, or pick another idea."). Save idea, Save changes, Get ideas and a draft's Save
+  run once on a double tap. Unsaved New idea or Edit typing asks before closing ("Throw away this idea?") and before
+  leaving ("Leave without saving?"; not for the switch to Clip Factory, which keeps the page). The Dashboard's New idea
+  opens `/stories/ideas?new=1` with the form open.
 * Characters: a cast gallery (each rig animated idle), **New character** (a stepper: looks, face, moves, sounds,
   name and personality), the live preview with every face and action button, reference uploads, a portrait button
-  when AI pictures are on, Save.
+  when AI pictures are on, Save. Unsaved changes ask "Leave without saving?" (**Keep editing** / **Leave**,
+  `studio/leaveGuard.tsx`); Next and Back scroll to the new step and focus it; Try on a face and Try a move bring the
+  preview into view; a redesign's "Use this" keeps the editor's own changes and takes only what the redesign changed;
+  × on a picture hides it with Undo and deletes it when the Undo ends.
 * Production › New: an idea or the short concept form, cast (1–3), length (15–90 s slider, default 45, 30–60 marked),
-  captions on/off, music mood, **Make the video**. Production list: every story being made or made, its step track
-  (the eight steps) and progress. A story's production page: the storyboard as a filmstrip of scenes with the live
-  engine preview of each and the finished stills, the step track, Cancel, Try again.
+  captions on/off, music mood, **Make the video**. A missing pick says so in the pinned bar next to the button and
+  scrolls to and focuses that part (the idea, the cast or the Title). Production list: every story being made or
+  made, its step track (the eight steps) and progress; a cancelled or never-started draft (and a failed video) reads
+  "Not made yet" in its own group with **Make it**; a rejected video reads "Not used. It won't be posted.". A
+  story's production page: the storyboard as a filmstrip of scenes with the live engine preview of each and the
+  finished stills, the step track, Cancel, Try again.
 
 #### 45.16.6 Review
 
@@ -1126,6 +1137,13 @@ add, move, remove), **Remake** when anything is stale, **Check again** after fix
 after approval **Post it** (the publish sheet: only this workspace's connected accounts, each with its name; nothing
 chosen without a tap; the TikTok rules; "Use my settings"), and a **Posts** panel on approved and published stories:
 each publishing job's status, account, link, numbers, its sentence and **Try again**.
+Kid-proof rules (round G5): **Reject** asks "Reject this video?" (**Keep it** / **Reject it**). The facts notice has
+**Fix the words**, which opens "On the video", scrolls to the caption the problem quotes and focuses it ("Tap Fix the
+words, change them, then tap Save captions."; under Approve: "Fix the facts first: tap Fix the words."). The captions
+and sounds editors each keep their own unsaved changes when the other saves, and ask "Leave without saving?". An empty
+Ask for changes says so in the form and focuses "What should change?". Post it's Upload with nothing picked says
+"Tap YouTube (or another place) first." by the buttons, rings the place rows and focuses the first; Upload is the
+only main button, and with exactly one place connected "Use my settings" picks it.
 
 #### 45.16.7 Library, Connections, Settings
 
@@ -1138,12 +1156,25 @@ each publishing job's status, account, link, numbers, its sentence and **Try aga
 * Social accounts (the Connections page) also shows, per platform: the developer-app choice (§45.30) with its key
   form and **Check it**, the authorization status, **last checked** (`lastCheckedAt`, with **Check now**), Connect,
   Reconnect and Disconnect; the publish sheet shows the exact account each video goes to, with **Check now**, before
-  **Upload**.
+  **Upload**. Picking "Share Clip Factory's app" saves the choice at once; only a switch away from a connected own app
+  asks, with **Yes, switch apps** after the warning. A connect result names the button the card shows
+  (`connectLabelOf`: Connect X, Reconnect or Pick another channel); with the shared app, wrong keys or a wrong return
+  address point to Clip Factory. A Needs you item whose account is connected again reads "TikTok is connected now. Tap
+  Try again on “title”." and Fix it opens `/stories/review/{id}`; the Dashboard's Try again on a stuck post that stays
+  stuck shows its own reason (no confetti), and the server's account question shows Yes / Not now under the item.
 * Settings: §45.29's sections (AI, Agents, Skills, Memory, Social accounts, Video, Storage and production, Look), plus
-  YouTube category and privacy and captions and music defaults.
+  YouTube category and privacy and captions and music defaults. Prices and the video makers that fail to load show the
+  Failed card with Try again (one card when both fail). Look › Picture says "Pick a photo (JPG or PNG)." for another
+  file and "That picture would not open. Pick another one." for a broken one.
+* Setup: each step change scrolls its title into view and focuses it; a save only moves on if the owner is still on
+  that step; a done step's save is quiet and Next is the main button (until the pick changes); connect steps show
+  "Skip for now" until connected, then Next.
 * Chat: §45.27 (conversation list, messages, the model and effort line above the box, "Just for this message",
-  attachments, action buttons, Stop); References: §45.28 (upload with progress, Analyze with the model and effort
-  shown, the analysis, "Use in a video").
+  attachments, action buttons, Stop); the typed draft is kept per chat (sessionStorage) and cleared on send; under
+  360 px the model and effort fold into one chip. References: §45.28 (upload with progress, Analyze with the model and
+  effort shown, the analysis, "Use in a video"); Talk about it in Chat makes one chat on a double tap ("Opening the
+  chat…"); right after Analyze only step 1 shows as running; a video that won't play says "This video would not
+  play." with Try again.
 
 #### 45.16.8 Mock mode
 
@@ -1695,7 +1726,8 @@ is already built and only written down here.
   The agent writes `USAGE#` items with `kind: "provider"`, `provider`, `units`, `unit`; `usage.summary` sums them.
   Settings › Video shows render minutes per day and each provider's units and cost (or "No price yet: add one").
 * **`ProviderStatus.key`** (api, web): `key?: { saved: boolean; hint: string | null; savedAt: string | null } | null`,
-  present only for a provider that takes a key; the key card shows "Remove the saved key" only when `saved`.
+  present only for a provider that takes a key; the key card shows "Remove the saved key" only when `saved`, and it
+  asks "Are you sure?" first (**Yes, remove the key** / **No, keep it**).
 * **A provider that is not ready** (api, agent): a story's create, produce and changes answer `409` with the
   provider's own line when `configuration.providers.video` (or `images`) names a provider whose state is not `on`
   ("Amazon Nova Reel is not ready yet: {what is missing}. Pick Built-in animation in Settings › Video, or finish its
@@ -2222,7 +2254,7 @@ The owner (22 Nov, 18:01, with screenshots): "just like you have in the top or i
 
 * **S1. One element.** The workspace switch and the Live chip under it are one element of the application shell (`web/src/app/WorkspaceDock.tsx`), only while Clips Funded is switched on, with the same place, size and look (the shell's own clear glass and words, never one app's style, S5) in both apps, on every page: every Clips Funded page (Setup the first time included, which keeps the left column free on a computer), Clip Factory with its sidebar open or folded (the folded form shows in both apps), every Look, and the Mac and Windows windows. Clips Funded' rail and top bar no longer draw a switch of their own; the round toggle at the top right of Clips Funded' Setup is gone on a computer.
 * **S2. Where.** On a computer the shell draws it outside both panes, fixed over the left column where Clip Factory's sidebar foot has always had it: the bar right above the Live chip, with Get the app and the jobs line under them (in a short window: a round toggle beside or above the chip, a slim one between the menu and the foot, a slim one beside the fold button of a folded sidebar, or one in the strip between an open sidebar and the page). Its place is worked out once from the window and Clip Factory's sidebar (`dockLayout`), never from the app on screen, so both apps always agree; Clip Factory's foot keeps the chip's row (`.sidebar__live-room`) so nothing in it moves, and Clips Funded' rail stops its list of pages above the dock (`--ws-dock-room`). On a phone it is the round toggle (48 px; 44 by 48 below 360 px) with the Live chip 4 px after it at the right end of each app's own top bar (one component, `TopBarSwitch`, in both); an app's brand drops its name only when it would come closer than 4 px (320 px). Known limit: on a phone, while Clip Factory's own "Set up posting" pill sits above Clip Factory's page, Clip Factory's whole top bar (its toggle with it) is that much lower than Clips Funded'; side, size and its place in the bar stay the same.
-* **S3. The slide.** The bar's highlight slides from one choice to the other on the tap's own frame (Glide, 360 ms, the same curve as every pick-one bar, transform only); the switch stays mounted across the change, and the page changes once the slide has landed, so no page is built or laid out during it. Clips Funded' code is fetched while the browser is idle and again the moment the pointer or the keyboard comes to a way there. Calm motion (the app on screen's own setting) moves it at once and switches at once. A page asking "Leave without saving?" asks first; the highlight moves only if the page really changes. `e2e/stories-switch-slide.spec.ts` checks the slide's animation runs to its end both ways in Chromium and WebKit, with no main-thread task over 50 ms and no frame later than the machine's own at rest.
+* **S3. The slide.** The bar's highlight slides from one choice to the other on the tap's own frame (Glide, 360 ms, the same curve as every pick-one bar, transform only); the switch stays mounted across the change, and the page changes once the slide has landed, so no page is built or laid out during it. Clips Funded' code is fetched while the browser is idle and again the moment the pointer or the keyboard comes to a way there. Calm motion (the app on screen's own setting) moves it at once and switches at once. A page asking "Leave without saving?" asks first; the highlight moves only if the page really changes. Clips Funded's editors (Ideas, characters, captions, sounds) and Home's running upload never ask on the switch itself: the other app keeps them exactly as they are behind it (§45.34), and a page kept behind never holds the app on screen. `e2e/stories-switch-slide.spec.ts` checks the slide's animation runs to its end both ways in Chromium and WebKit, with no main-thread task over 50 ms and no frame later than the machine's own at rest.
 * **A1. Clip Factory waits behind Clips Funded.** A Clip Factory page change that comes after a wait (a campaign added, a skill saved) goes through `clipsGoLater` (`web/src/app/shell.ts`), the mirror of Clips Funded' `storiesGoLater`: while a Clips Funded page is on screen it is held, and it happens the moment Clip Factory's pane is on screen again (replacing the entry it asked to replace, past its own "Leave without saving?" only where it asked to). The owner is never moved out of Clips Funded by it, Clips Funded' history entry and its own guard are never touched, and `cf.workspace` keeps saying Clips Funded. While Clips Funded is off it is exactly `navigate`. Clip Factory's own sounds (`lib/sounds.ts`) and confetti are quiet while a Clips Funded page is on screen.
 * **A2. Nothing of one app inside the other.** Clips Funded draws nothing of Clip Factory's own: no Content Rewards "Send … now" banner, no app badge or Mac download host (the shell draws those once, for both). Each pane has its own toasts (`ToastScope`): a toast its app raises while hidden waits until that app is on screen again, or is dropped once older than its own time on screen; each app's error toast plays its own error sound; the shell's own toasts stay global. Clips Funded' sounds and motion (`cf.stories.prefs`: `sound.enabled`, `sound.click`, `sound.deny`, `motion.reduce`) have Clips Funded' own defaults (sounds on, its usual click and error sounds, motion as the device asks) and never fall back to Clip Factory's `cf.prefs`; its Settings card has its own Error sound.
 * **A3. No imports across.** No Clip Factory file imports `web/src/stories/`: what both need (which app is on screen, the pane, the kept search, `clipsGoLater`) is the shell's (`web/src/app/shell.ts`), which both import. The shell's own files (`web/src/app/`) and the one router both apps go through (`web/src/lib/router.ts`, which hands /stories addresses to Clips Funded' route table) are the only ones that read Clips Funded' code; `test/shellApart.test.tsx` scans for it.

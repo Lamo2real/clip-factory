@@ -175,6 +175,73 @@ test("a delete that fails brings the job back and says so", async ({ page }) => 
   await expect(page.locator(".toast--error")).toContainText("The job is back in your list.");
 });
 
+test("a double-click on Keep it or Delete job never opens the job under the sheet", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/jobs");
+  await settle(page);
+  const title = await page.locator(".job-item").nth(3).locator(".job-row__title").innerText();
+  const centre = async (name: string) => {
+    const b = (await sheet(page).getByRole("button", { name }).boundingBox())!;
+    return [b.x + b.width / 2, b.y + b.height / 2] as const;
+  };
+  await (await bin(page, title)).click();
+  await page.mouse.dblclick(...(await centre("Keep it")));
+  await expect(sheet(page)).toBeHidden();
+  await page.waitForTimeout(400);
+  await expect(page).toHaveURL(/\/jobs$/);
+
+  await (await bin(page, title)).click();
+  await page.mouse.dblclick(...(await centre("Delete job")));
+  await expect(row(page, title)).toHaveCount(0);
+  await page.waitForTimeout(400);
+  await expect(page).toHaveURL(/\/jobs$/);
+
+  // From a job's own page: the second click lands on the list it goes back to, and does nothing there.
+  await page.locator(".job-row").first().click();
+  await settle(page);
+  await page.getByRole("button", { name: "Delete job" }).click();
+  await page.mouse.dblclick(...(await centre("Delete job")));
+  await expect(page).toHaveURL(/\/jobs$/);
+  await page.waitForTimeout(400);
+  await expect(page).toHaveURL(/\/jobs$/);
+});
+
+test("a double tap on Select stays in Select (Make clips never slides under the finger), and Done ends it", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/jobs");
+  await settle(page);
+  const select = page.getByRole("button", { name: "Select", exact: true });
+  const b = (await select.boundingBox())!;
+  await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+  await page.waitForTimeout(120);
+  await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+  await page.waitForTimeout(300);
+  await expect(page).toHaveURL(/\/jobs$/);
+  const bar = page.getByRole("toolbar", { name: "Picked jobs" });
+  await expect(bar).toBeVisible();
+  // The header keeps its buttons where they were: Done sits where Select was.
+  const done = page.getByRole("button", { name: "Done", exact: true });
+  const d = (await done.boundingBox())!;
+  expect(Math.abs(d.x + d.width / 2 - (b.x + b.width / 2))).toBeLessThan(b.width / 2);
+  await done.click();
+  await expect(bar).toBeHidden();
+  await expect(select).toBeVisible();
+});
+
+test("with the keyboard, Select and Cancel keep the focus on the page's controls, never on the body", async ({ page }) => {
+  await page.goto("/jobs");
+  await settle(page);
+  await page.getByRole("button", { name: "Select", exact: true }).focus();
+  await page.keyboard.press("Space");
+  const bar = page.getByRole("toolbar", { name: "Picked jobs" });
+  await expect(bar).toBeVisible();
+  await expect(page.getByRole("button", { name: "Done", exact: true })).toBeFocused();
+  await bar.getByRole("button", { name: "Cancel" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(bar).toBeHidden();
+  await expect(page.getByRole("button", { name: "Select", exact: true })).toBeFocused();
+});
+
 for (const size of SIZES) {
   test(`pictures and fit: ${size.name}`, async ({ browser }) => {
     // A phone is a touch screen (its bins always show); the Mac window has a mouse (a bin shows on its row).

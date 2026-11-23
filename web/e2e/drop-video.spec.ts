@@ -202,6 +202,8 @@ test("while a job is starting, a drag says so and the drop is refused with plain
     (window as unknown as { __cfMockFaults: { latencyMs: number } }).__cfMockFaults.latencyMs = 4000;
   });
   await page.getByRole("button", { name: "Make clips" }).click();
+  // The upload bar and Cancel upload show from the tap; once the file is all up, the job is starting.
+  await expect(page.locator("form.newjob")).toContainText("Uploading… 100%");
   const other = { files: [{ name: "other.mp4", type: "video/mp4" }] };
   await fire(page, "form.newjob", "dragenter", other);
   await expect(overlay(page)).toHaveText("Starting your job…");

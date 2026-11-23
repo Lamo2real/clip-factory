@@ -3,6 +3,7 @@ import { api } from "../api/index.ts";
 import type { SimilarClip } from "../api/types.ts";
 import { count, MOMENT_LABEL } from "../lib/format.ts";
 import { Icon } from "./Icon.tsx";
+import { A } from "./ui.tsx";
 
 /** "86% alike" from a 0..1 similarity. */
 export function alike(similarity: number): string {
@@ -53,24 +54,29 @@ export function SimilarClips({ clipId }: { clipId: string }) {
         <Icon name="sparkle" size={16} />
         <span>Like clips that did well</span>
       </h3>
-      <ul className="similar__list" tabIndex={0} aria-labelledby={`${id}-t`}>
+      {/* Each tile opens that clip's page (it looks like a clip card, so a tap must do what a card does). The tiles
+          are links, so the keyboard reaches each one and scrolls the strip to it: the list itself takes no focus. */}
+      <ul className="similar__list" aria-labelledby={`${id}-t`}>
         {clips.map((c) => (
-          <li key={c.clipId} className="similar__item">
-            <span className="similar__cover">{c.coverUrl ? <img src={c.coverUrl} alt="" loading="lazy" /> : null}</span>
-            <span className="similar__text">
-              <span className="similar__hook clamp-2 user-text">{c.hook}</span>
-              <span className="similar__meta">
-                {c.performance ? (
-                  <span className="similar__views">
-                    <Icon name="eye" size={14} />
-                    {count(c.performance.views)} views
-                  </span>
-                ) : (
-                  <span>{MOMENT_LABEL[c.momentType]}</span>
-                )}
-                <span>{alike(c.similarity)}</span>
+          // The tile (the link) carries the card look; its list item keeps the tile's width in the scrolling strip.
+          <li key={c.clipId} style={{ flex: "none" }}>
+            <A href={`/clips/${c.clipId}`} className="similar__item" style={{ textDecoration: "none" }}>
+              <span className="similar__cover">{c.coverUrl ? <img src={c.coverUrl} alt="" loading="lazy" /> : null}</span>
+              <span className="similar__text">
+                <span className="similar__hook clamp-2 user-text">{c.hook}</span>
+                <span className="similar__meta">
+                  {c.performance ? (
+                    <span className="similar__views">
+                      <Icon name="eye" size={14} />
+                      {count(c.performance.views)} views
+                    </span>
+                  ) : (
+                    <span>{MOMENT_LABEL[c.momentType]}</span>
+                  )}
+                  <span>{alike(c.similarity)}</span>
+                </span>
               </span>
-            </span>
+            </A>
           </li>
         ))}
       </ul>

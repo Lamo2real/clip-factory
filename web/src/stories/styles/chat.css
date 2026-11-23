@@ -2097,6 +2097,34 @@
     padding: var(--st-space-2) var(--st-gap-surface) var(--st-gap-surface);
   }
 
+  /* A short row: the model and effort in one chip, "Claude Opus 5.5 · High" (its sheet has both, and "Just for this
+     message"); who runs it and a model that is fine wait in that sheet. A problem with the model still shows. */
+  .st-chat-compose .st-chat-ai__part--model::after {
+    /* The pill's own gap is the space before the dot. */
+    content: "· " attr(data-effort);
+    white-space: pre;
+  }
+
+  .st-chat-compose .st-chat-ai__word,
+  .st-chat-compose .st-chat-ai__part--effort,
+  .st-chat-compose .st-chat-ai__provider,
+  .st-chat-compose .st-chat-ai__row > .st-chat-chip,
+  .st-chat-compose .st-chat-ai__status:not(.st-chat-ai__status--coral),
+  .st-chat-compose .st-chat-ai:not(.is-once) .st-chat-ai__once {
+    display: none;
+  }
+
+  /* The box's hint fits on its one line. */
+  .st-chat-compose .st-chat-box {
+    padding-inline: 12px;
+  }
+
+  .st-chat-compose .st-chat-box::placeholder {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .st-chat-msg {
     gap: var(--st-space-2);
   }

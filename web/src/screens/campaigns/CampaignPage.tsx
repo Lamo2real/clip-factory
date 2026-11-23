@@ -16,8 +16,11 @@ import {
   COMING_SOON,
   TIKTOK_NOT_YET,
   budgetChip,
+  campaignPath,
+  campaignRemoved,
   countryLines,
   crAvailability,
+  hideCampaign,
   makeClipsPath,
   payLine,
   placeList,
@@ -38,7 +41,10 @@ import { sounds } from "../../lib/sounds.ts";
 import { Rich } from "../settings/setup/bits.tsx";
 import { BrandMark, BrandText, Fold, Note, OpenButton } from "./bits.tsx";
 import { LogoBox, type LogoBoxHandle } from "./LogoBox.tsx";
-import { NextStepPanel, RulesBox } from "./NextStep.tsx";
+import { NextStepPanel, RulesBox, useKeptRules } from "./NextStep.tsx";
+
+/** Videos to clip's own way on, from a channel's video link to Home's campaign way. */
+const MAKE_CLIPS_HERE = "Make clips for this campaign";
 
 const WAITING = new Set(["not_joined", "apply_first", "waiting", "left", "unknown"]);
 
@@ -141,14 +147,27 @@ export function CampaignPage({ campaignId }: { campaignId: string }) {
   function remove() {
     if (!campaign) return;
     const name = campaign.name;
+    // Gone from Your campaigns at once (it can't be opened again while the Undo counts), back on Undo.
+    hideCampaign(campaignId);
     navigate(CAMPAIGNS_PATH);
     toast.undo(`Removing ${name}…`, {
-      onUndo: () => navigate(`/campaigns/${campaignId}`),
+      onUndo: () => {
+        hideCampaign(campaignId, false);
+        navigate(campaignPath(campaignId));
+      },
       onCommit: () => {
+        // Its card opened again meanwhile (Back, a link): it is gone now, so Your campaigns takes its place.
+        if (location.pathname === campaignPath(campaignId)) navigate(CAMPAIGNS_PATH, { replace: true });
         void api()
           .crRemoveCampaign(campaignId)
-          .then(() => reloadCr())
-          .catch((e) => toast.error(`${friendlyMessage(e)} ${name} is still here.`));
+          .then(() => {
+            campaignRemoved(campaignId);
+            return reloadCr();
+          })
+          .catch((e) => {
+            hideCampaign(campaignId, false);
+            toast.error(`${friendlyMessage(e)} ${name} is still here.`);
+          });
       },
     });
   }
@@ -315,8 +334,9 @@ function PaySection({ c }: { c: Campaign }) {
 
 function RulesSection({ c, onCampaign }: { c: Campaign; onCampaign: (c: Campaign) => void }) {
   const toast = useToast();
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState("");
+  // Pasted but not read yet: kept for the visit, so the box opens again with it after a reload or another page.
+  const [text, setText] = useKeptRules(`rules:${c.campaignId}`);
+  const [open, setOpen] = useState(() => text.length > 0);
   const [busy, setBusy] = useState(false);
   async function read() {
     if (!text.trim()) {
@@ -451,7 +471,18 @@ function VideosSection({ c, pickVideo }: { c: Campaign; pickVideo: boolean }) {
               <OpenButton key={ch.href} label={`Open ${ch.name}'s ${/twitch\.tv/.test(ch.href) ? "Twitch" : /kick\.com/.test(ch.href) ? "Kick" : "YouTube"}`} href={ch.href} size="sm" />
             ))}
           </div>
-          <p className="cr-quiet">Pick a video there. Copy its link. Come back and tap Paste.</p>
+          <p className="cr-quiet">Pick a video there. Copy its link. Then tap {MAKE_CLIPS_HERE}.</p>
+          {/* The paste box for that link is on Home's campaign way: this is the way there (§39.1). */}
+          <div className="cr-chips" data-cr="videos-make">
+            <LinkButton
+              href={makeClipsPath(c.campaignId)}
+              variant={pickVideo && !c.sourceVideos.some((v) => v.canMakeClips) ? "primary" : "glass"}
+              size="sm"
+              icon="scissors"
+            >
+              {MAKE_CLIPS_HERE}
+            </LinkButton>
+          </div>
         </>
       ) : null}
       <p className="cr-quiet">{plural(c.sourceVideos.length + c.channels.length, "place")} to find videos.</p>

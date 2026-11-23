@@ -1,7 +1,7 @@
 // The paste boxes for a platform's keys (docs/CONTRACTS.md §17.1, §17.4): a Paste button on each box, a format
 // check while typing with a friendly sentence under the box, Google's downloaded JSON fills both boxes, and a Login
 // URL gives its Configuration ID. After Save keys the values leave the browser: only masked hints come back.
-import { useId, useRef, useState, type DragEvent } from "react";
+import { useId, useRef, useState, type Dispatch, type DragEvent, type SetStateAction } from "react";
 import { api } from "../../../api/index.ts";
 import { friendlyMessage } from "../../../api/errors.ts";
 import type { KeyCheck, KeyName, Platform, PlatformSetup } from "../../../api/types.ts";
@@ -15,23 +15,38 @@ import { readClipboard } from "./bits.tsx";
 
 type Values = Partial<Record<KeyName, string>>;
 
+/** What is typed in the boxes, and whether Change keys opened them: the setup page keeps it while a step folds. */
+export interface KeyDraft {
+  values: Values;
+  editing: boolean;
+}
+export const NO_DRAFT: KeyDraft = { values: {}, editing: false };
+
 export function KeyForm({
   platform,
   setup,
   primary,
   onSaved,
+  draft,
+  onDraft,
 }: {
   platform: Platform;
   setup: PlatformSetup;
   /** Save keys is this screen's vermilion button. */
   primary: boolean;
   onSaved: (setup: PlatformSetup) => void;
+  /** The typing, kept by the page (the step's body goes away while it is folded); without it the form keeps its own. */
+  draft?: KeyDraft;
+  onDraft?: Dispatch<SetStateAction<KeyDraft>>;
 }) {
   const toast = useToast();
   const id = useId();
   const names = keyNames(platform);
-  const [values, setValues] = useState<Values>({});
-  const [editing, setEditing] = useState(false);
+  const [own, setOwn] = useState<KeyDraft>(NO_DRAFT);
+  const { values, editing } = draft ?? own;
+  const setDraft = onDraft ?? setOwn;
+  const setValues = (fn: (v: Values) => Values) => setDraft((d) => ({ ...d, values: fn(d.values) }));
+  const setEditing = (on: boolean) => setDraft((d) => ({ ...d, editing: on }));
   const [saving, setSaving] = useState(false);
   const [dragging, setDragging] = useState(false);
   const file = useRef<HTMLInputElement>(null);
@@ -95,8 +110,7 @@ export function KeyForm({
     try {
       const next = await api().saveSetupKeys(platform, keysBody(platform, values));
       // The keys now live only on the server: forget them here.
-      setValues({});
-      setEditing(false);
+      setDraft(NO_DRAFT);
       toast.success("Keys saved.");
       onSaved(next);
     } catch (e) {

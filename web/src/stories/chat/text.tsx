@@ -1,6 +1,7 @@
 // The creative director's words, drawn safely (docs/CONTRACTS.md §45.27): paragraphs, "- " and "1. " lists and
-// **bold**, nothing else. Everything is React text, so markup in an answer shows as the letters it is, and no link
-// in an answer is ever live (buttons do the work).
+// **bold** (one not closed yet, as an answer is written, bolds to the end of its line), nothing else. Everything is
+// React text, so markup in an answer shows as the letters it is, and no link in an answer is ever live (buttons do
+// the work).
 import type { ReactNode } from "react";
 
 type Block = { t: "p"; lines: string[] } | { t: "ul"; items: string[] } | { t: "ol"; items: string[]; start: number };
@@ -25,9 +26,19 @@ export function blocks(text: string): Block[] {
   return out.filter((b) => (b.t === "p" ? b.lines.length > 0 : b.items.length > 0));
 }
 
-function inline(s: string): ReactNode[] {
+/**
+ * A line's **bold**. A ** that is not closed (an answer still being written, or stopped half way) never shows as
+ * stars: the words after it are bold to the end of the line.
+ */
+export function inline(s: string): ReactNode[] {
   const parts = s.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((p, i) => (/^\*\*[^*]+\*\*$/.test(p) ? <strong key={i}>{p.slice(2, -2)}</strong> : p));
+  return parts.flatMap((p, i): ReactNode[] => {
+    if (/^\*\*[^*]+\*\*$/.test(p)) return [<strong key={i}>{p.slice(2, -2)}</strong>];
+    const open = p.indexOf("**");
+    if (open < 0) return [p];
+    const rest = p.slice(open + 2).replace(/\*\*/g, "");
+    return [p.slice(0, open), rest ? <strong key={i}>{rest}</strong> : null].filter((x) => x !== "" && x !== null);
+  });
 }
 
 export function ChatText({ text }: { text: string }) {

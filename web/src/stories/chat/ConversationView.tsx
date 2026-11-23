@@ -48,6 +48,35 @@ export const ADD_AGAIN = "Add the pictures again, then tap Send.";
 /** How many messages one read answers (the API's SHOWN): a full page may have more before it. */
 export const PAGE = 500;
 
+/**
+ * A message typed and not sent yet stays with its chat for the visit (another tab, another chat, and back): kept in
+ * this tab's session storage, and in memory where that cannot be used. Sending it lets it go.
+ */
+const drafts = new Map<string, string>();
+const draftKey = (ws: string, convId: string) => `cf.stories.chatDraft.${ws}.${convId}`;
+
+export function readDraft(ws: string, convId: string): string {
+  try {
+    const kept = sessionStorage.getItem(draftKey(ws, convId));
+    if (kept !== null) return kept;
+  } catch {
+    // no session storage here: the visit's own copy
+  }
+  return drafts.get(draftKey(ws, convId)) ?? "";
+}
+
+export function keepDraft(ws: string, convId: string, text: string): void {
+  const key = draftKey(ws, convId);
+  if (text) drafts.set(key, text);
+  else drafts.delete(key);
+  try {
+    if (text) sessionStorage.setItem(key, text);
+    else sessionStorage.removeItem(key);
+  } catch {
+    // full or not allowed: the visit's own copy still has it
+  }
+}
+
 /** Test hook: forget this visit's copy of the choices answers were asked with (sentWith.ts keeps them on the device). */
 export function forgetSentWith(): void {
   forgetSentWithVisit();
@@ -103,7 +132,7 @@ export function ConversationView({
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadProblem, setLoadProblem] = useState<{ text: string; missing: boolean } | null>(null);
   const [round, setRound] = useState(0);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => readDraft(ws, convId));
   const [pictures, setPictures] = useState<Attached[]>([]);
   const [override, setOverride] = useState<ModelOverride | null>(null);
   const [sheet, setSheet] = useState<null | { scope: "chat" | "once" }>(null);
@@ -127,6 +156,9 @@ export function ConversationView({
   const stick = useRef(true);
   const onConv = useRef(onConversation);
   onConv.current = onConversation;
+
+  // The words in the box stay with this chat until they are sent.
+  useEffect(() => keepDraft(ws, convId, text), [ws, convId, text]);
 
   const show = useCallback((c: Conversation) => {
     setConv(c);

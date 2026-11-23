@@ -6,6 +6,8 @@
 // again") and the sound effects editor, which model and effort made each step, Download (the MP4 and each extra copy
 // the video has), Post it (the publish sheet, with the exact account each platform sends to) and the Posts panel,
 // whose Try again asks "Post to {name}?" when the API names a changed account (§45.34). Each queue group has Show more.
+// Facts to fix have "Fix the words", which opens the caption to change; Reject asks first; saving the captions keeps
+// the sounds' changes not saved yet (and the other way round).
 import "../styles/studio.css";
 import { useEffect, useRef, useState } from "react";
 import { A } from "../../components/ui.tsx";
@@ -21,6 +23,7 @@ import { cleanPick, insteadPick, madeWith, ModelMenu, ModelsUsed, NextRun, runTa
 import { CaptionEditor, type CaptionTab } from "../studio/CaptionEditor.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
 import { usePaged, useSameScript, useWidth, useWorkspace } from "../studio/hooks.ts";
+import { storiesReduceMotion } from "../prefs.ts";
 import { Busy, celebrate, Chip, Notice, ShowMore, StSheet, Tag, TextField } from "../studio/kit.tsx";
 import { Player } from "../studio/Player.tsx";
 import { PostsPanel } from "../studio/PostsPanel.tsx";
@@ -72,13 +75,20 @@ export function onlyPostWords(story: Pick<Story, "stale" | "status">): boolean {
  * change is in it, and the facts were checked on this very storyboard.
  */
 export function approveBlock(story: Story): string | null {
-  if (story.safety?.status === "problems") return "Fix the facts first, then tap Check again.";
+  if (story.safety?.status === "problems") return "Fix the facts first: tap Fix the words.";
   if (onlyPostWords(story)) return POST_WORDS_CHECK;
   if (story.status === "needs_check") return "Check the facts first.";
   if (story.status !== "review") return null;
   if (story.stale.length) return "Your changes aren't in the video yet. Tap Remake first.";
   if (checkOutdated(story)) return OUTDATED_CHECK;
   return null;
+}
+
+/** The words to fix for a fact problem: the caption (or a scene's words) whose words the problem quotes, else the first. */
+export function fieldToFix(box: ParentNode, problems: string[]): HTMLInputElement | HTMLTextAreaElement | null {
+  const fields = Array.from(box.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input.st-s-input, textarea.st-s-input"));
+  const quoted = (v: string) => v.trim().length > 0 && problems.some((p) => p.includes(`“${v.trim()}”`) || p.includes(v.trim()));
+  return fields.find((f) => quoted(f.value)) ?? fields[0] ?? null;
 }
 
 /**
@@ -221,6 +231,12 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const [unusable, setUnusable] = useState<{ ask: NonNullable<ReturnType<typeof unusableAsk>>; name: string; run: (extra: { override?: ModelOverride }) => Promise<void> } | null>(null);
   /** The captions box's tab, kept here so it stays where the owner was after Use these or Save (§45.36 E10). */
   const [captionTab, setCaptionTab] = useState<CaptionTab>("video");
+  /** Each box starts again only after its own save (or a Reload): the other box keeps its changes not saved yet. */
+  const [saves, setSaves] = useState({ captions: 0, sounds: 0, reloads: 0 });
+  /** Ask for changes with nothing said: its own line, in the form. */
+  const [changesProblem, setChangesProblem] = useState<string | null>(null);
+  /** Reject asks first: it can't be undone. */
+  const [sureReject, setSureReject] = useState(false);
   const info = useAiInfo(ws);
   const [col, colWidth] = useWidth<HTMLDivElement>(300);
   const seen = useRef<Map<string, PublishingJob["publishingStatus"]> | null>(null);
@@ -333,7 +349,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     });
   }
 
-  async function save(edit: Omit<StoryPatch, "version">) {
+  async function save(edit: Omit<StoryPatch, "version">, box: "captions" | "sounds") {
     if (!story) return;
     setSaving(true);
     setProblem(null);
@@ -341,6 +357,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     try {
       const r = await storiesApi().patchStory(ws, storyId, { version: story.version, ...edit });
       loaded.setData((d) => (d ? { ...d, story: r.story, script: r.script } : d));
+      setSaves((n) => ({ ...n, [box]: n[box] + 1 }));
       // New post words are not in the video: they only need the quick fact check (§45.36 E10), never a remake. A video
       // waiting for its check says the page's own button, Check again.
       toast.success(
@@ -401,6 +418,18 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
       a.click();
       a.remove();
       toast.success(format ? `Downloading the ${FORMAT_NAME[format]} copy.` : "Downloading your video.");
+    });
+  }
+
+  /** "Fix the words": the captions box on the words on the video, at the caption the fact problem quotes. */
+  function fixWords(problems: string[]) {
+    setCaptionTab("video");
+    requestAnimationFrame(() => {
+      const box = document.getElementById("st-captions-title")?.closest("section");
+      if (!box) return;
+      const f = fieldToFix(box, problems);
+      (f ?? box).scrollIntoView?.({ block: "center", behavior: storiesReduceMotion() ? "auto" : "smooth" });
+      f?.focus({ preventScroll: true });
     });
   }
 
@@ -482,14 +511,23 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           ) : null}
 
           {problems.length ? (
-            <Notice tone="bad">
+            <Notice
+              tone="bad"
+              action={
+                editable ? (
+                  <button type="button" className="st-btn st-btn--main" onClick={() => fixWords(problems)}>
+                    Fix the words
+                  </button>
+                ) : undefined
+              }
+            >
               <strong>Fix the facts first.</strong>
               <ul className="st-s-problems">
                 {problems.map((p, i) => (
                   <li key={i}>{p}</li>
                 ))}
               </ul>
-              Change the words below, then tap Check again.
+              {editable ? "Tap Fix the words, change them, then tap Save captions." : "Change the words, then save them."}
             </Notice>
           ) : null}
 
@@ -585,7 +623,15 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
               </div>
               {!pick ? <NextRun info={info} story={story} /> : null}
               <div className="st-s-decide__more">
-                <button type="button" className="st-btn" aria-expanded={form === "changes"} onClick={() => setForm((f) => (f === "changes" ? "none" : "changes"))}>
+                <button
+                  type="button"
+                  className="st-btn"
+                  aria-expanded={form === "changes"}
+                  onClick={() => {
+                    setChangesProblem(null);
+                    setForm((f) => (f === "changes" ? "none" : "changes"));
+                  }}
+                >
                   Ask for changes
                 </button>
                 <button type="button" className="st-btn" onClick={() => setAsking("whole")}>
@@ -601,7 +647,13 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   aria-label="Ask for changes"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    if (!note.trim() && !picked.length) return setProblem("Say what to change, or pick a scene.");
+                    if (!note.trim() && !picked.length) {
+                      // Said here, by the box to fill in (the page's own notice is far above on a phone).
+                      setChangesProblem("Say what to change, or pick a scene.");
+                      document.getElementById("st-changes-note")?.focus();
+                      return;
+                    }
+                    setChangesProblem(null);
                     remake("changes", changesTask, async (x) => {
                       const body: { note?: string; sceneIds?: string[]; override?: ModelOverride } = { ...x };
                       if (note.trim()) body.note = note.trim();
@@ -613,12 +665,32 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                     });
                   }}
                 >
-                  <TextField label="What should change?" multiline rows={3} value={note} onChange={setNote} max={500} placeholder="For example: make Pip look more surprised when the car slides" />
+                  <TextField
+                    id="st-changes-note"
+                    label="What should change?"
+                    multiline
+                    rows={3}
+                    value={note}
+                    onChange={(v) => {
+                      setNote(v);
+                      setChangesProblem(null);
+                    }}
+                    max={500}
+                    problem={changesProblem}
+                    placeholder="For example: make Pip look more surprised when the car slides"
+                  />
                   <div className="st-s-field">
                     <span className="st-s-field__label">Only these scenes (you can skip this)</span>
                     <div className="st-s-chips">
                       {story.scenes.map((sc, i) => (
-                        <Chip key={sc.sceneId} on={picked.includes(sc.sceneId)} onToggle={() => setPicked((p) => (p.includes(sc.sceneId) ? p.filter((x) => x !== sc.sceneId) : [...p, sc.sceneId]))}>
+                        <Chip
+                          key={sc.sceneId}
+                          on={picked.includes(sc.sceneId)}
+                          onToggle={() => {
+                            setChangesProblem(null);
+                            setPicked((p) => (p.includes(sc.sceneId) ? p.filter((x) => x !== sc.sceneId) : [...p, sc.sceneId]));
+                          }}
+                        >
                           {i + 1}. {sc.title}
                         </Chip>
                       ))}
@@ -643,11 +715,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   aria-label="Reject"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    void act("reject", async () => {
-                      setStory(await storiesApi().reject(ws, storyId, reason.trim() || undefined));
-                      setForm("none");
-                      toast.info("Rejected. It won't be posted.");
-                    });
+                    if (!busy) setSureReject(true);
                   }}
                 >
                   <TextField label="Why? (you can skip this)" multiline rows={2} value={reason} onChange={setReason} max={500} placeholder="For example: the ending was flat" />
@@ -737,7 +805,23 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
       ) : null}
 
       {stale ? (
-        <Notice tone="bad" action={<button type="button" className="st-btn" onClick={() => void loaded.reload().then(() => setStale(false))}>Reload</button>}>
+        <Notice
+          tone="bad"
+          action={
+            <button
+              type="button"
+              className="st-btn"
+              onClick={() =>
+                void loaded.reload().then(() => {
+                  setStale(false);
+                  setSaves((n) => ({ ...n, reloads: n.reloads + 1 }));
+                })
+              }
+            >
+              Reload
+            </button>
+          }
+        >
           This video changed while you were editing. Tap Reload to get the newest version, then make your change again.
         </Notice>
       ) : null}
@@ -748,13 +832,13 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
             <h2 className="st-s-panel__title" id="st-captions-title">
               Captions
             </h2>
-            <CaptionEditor key={`c:${story.scriptVersion}:${story.version}`} ws={ws} info={info} story={story} script={script} saving={saving} onSave={(e) => void save(e)} tab={captionTab} onTab={setCaptionTab} />
+            <CaptionEditor key={`c:${storyId}:${saves.reloads}:${saves.captions}`} ws={ws} info={info} story={story} script={script} saving={saving} onSave={(e) => void save(e, "captions")} tab={captionTab} onTab={setCaptionTab} />
           </section>
           <section className="st-s-panel st-glass" aria-labelledby="st-sfx-title">
             <h2 className="st-s-panel__title" id="st-sfx-title">
               Sound effects and music
             </h2>
-            <SfxEditor key={`s:${story.scriptVersion}:${story.version}`} story={story} script={script} saving={saving} onSave={(e) => void save(e)} />
+            <SfxEditor key={`s:${storyId}:${saves.reloads}:${saves.sounds}`} story={story} script={script} saving={saving} onSave={(e) => void save(e, "sounds")} />
           </section>
         </>
       ) : done ? (
@@ -779,6 +863,37 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
             void act(u.name, () => u.run({ override: insteadPick(info, u.ask, pick) }));
           }}
         />
+      ) : null}
+      {sureReject ? (
+        <StSheet
+          title="Reject this video?"
+          onClose={() => setSureReject(false)}
+          actions={
+            <>
+              <button type="button" className="st-btn" onClick={() => setSureReject(false)}>
+                Keep it
+              </button>
+              <button
+                type="button"
+                className="st-btn st-s-danger"
+                aria-disabled={busy !== null || undefined}
+                onClick={() =>
+                  !busy &&
+                  void act("reject", async () => {
+                    setStory(await storiesApi().reject(ws, storyId, reason.trim() || undefined));
+                    setSureReject(false);
+                    setForm("none");
+                    toast.info("Rejected. It won't be posted.");
+                  })
+                }
+              >
+                {busy === "reject" ? "Rejecting…" : "Reject it"}
+              </button>
+            </>
+          }
+        >
+          <p>It won&apos;t be posted. You can&apos;t undo this.</p>
+        </StSheet>
       ) : null}
       {asking === "whole" ? (
         <StSheet

@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { A } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { storiesGoLater, useAppActive } from "../pane.tsx";
+import { storiesReduceMotion } from "../prefs.ts";
 import { useLoad, usePoll } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
 import { starBurst } from "../ui.tsx";
@@ -43,9 +44,10 @@ import { ArcDial, MediaRow, StatNumeral } from "../glass/index.ts";
 import { usePaged, useReferenceList, useSameScript, useWorkspace } from "../studio/hooks.ts";
 import { formatOf, formatWords, sameFormat, ShapePicker } from "../studio/shape.tsx";
 import { Busy, celebrate, Notice, Pick, ShowMore, Slider, Switch, Tag, TechDetails, TextField } from "../studio/kit.tsx";
+import { useLeaveGuard } from "../studio/leaveGuard.tsx";
 import { showFace } from "../studio/looks.ts";
 import { currentStep, nowLine, StepTrack, stepsOf } from "../studio/StepTrack.tsx";
-import { ago, CATEGORY_LABEL, helpersLine, isConflict, NO_GUIDANCE, say, seconds, STATUS_LABEL, STATUS_TONE, STORAGE_WORDS } from "../studio/words.ts";
+import { ago, CATEGORY_LABEL, helpersLine, isConflict, NO_GUIDANCE, notMadeYet, say, seconds, STATUS_TONE, statusLabel, STORAGE_WORDS } from "../studio/words.ts";
 import { KIND_OPTIONS } from "./Ideas.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
@@ -92,8 +94,11 @@ async function runsPage(ws: string, cursor?: string): Promise<{ items: Run[]; ne
 function ProductionList({ ws }: { ws: string }) {
   const list = usePaged((cursor) => runsPage(ws, cursor), ws, "st-production-runs", (r) => r.story.storyId);
   const all = list.data ?? [];
-  const making = all.filter((r) => r.story.status === "producing" || r.story.status === "draft" || r.story.status === "failed");
-  const made = all.filter((r) => !making.includes(r));
+  // Being made: a run is on (a draft whose run is queued too). A draft nothing is making (never started, or stopped
+  // with Cancel) and a stopped one wait for the owner's tap, under "Not made yet".
+  const making = all.filter((r) => r.story.status === "producing" || (r.story.status === "draft" && !notMadeYet(r.story)));
+  const waiting = all.filter((r) => r.story.status === "failed" || notMadeYet(r.story));
+  const made = all.filter((r) => !making.includes(r) && !waiting.includes(r));
   // Not while Clip Factory is on screen (this page stays kept behind it): coming back reads it again at once.
   const active = useAppActive();
   usePoll(() => list.reload(), active && making.some((r) => r.story.status === "producing"), 2000);
@@ -136,6 +141,16 @@ function ProductionList({ ws }: { ws: string }) {
               </ul>
             </>
           ) : null}
+          {waiting.length ? (
+            <>
+              <h2 className="st-s-section st-plate">Not made yet</h2>
+              <ul className="st-s-runs">
+                {waiting.map((r) => (
+                  <RunRow key={r.story.storyId} story={r.story} job={r.job} />
+                ))}
+              </ul>
+            </>
+          ) : null}
           {made.length ? (
             <>
               <h2 className="st-s-section st-plate">Made</h2>
@@ -166,7 +181,7 @@ function RunRow({ story, job }: { story: Story; job: ProductionJob | null }) {
           <A href={href} className="st-s-run__title">
             {story.title}
           </A>
-          <Tag tone={STATUS_TONE[story.status]}>{STATUS_LABEL[story.status]}</Tag>
+          <Tag tone={STATUS_TONE[story.status]}>{statusLabel(story)}</Tag>
         </span>
         <span className="st-s-run__meta">
           {CATEGORY_LABEL[story.category]} · {seconds(story.actualDurationSec ?? story.durationSec)} · {ago(story.updatedAt)}
@@ -180,7 +195,7 @@ function RunRow({ story, job }: { story: Story; job: ProductionJob | null }) {
           </A>
         ) : (
           <A href={href} className="st-btn">
-            Open
+            {notMadeYet(story) ? "Make it" : "Open"}
           </A>
         )}
       </span>
@@ -225,6 +240,22 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
   const refs = useReferenceList(ws);
   /** The address's reference ids were checked against a list read just now (never a remembered one, §45.36 E2). */
   const refsChecked = useRef(false);
+  /** The owner picked the cast himself (a pick to keep when he leaves). */
+  const [castPicked, setCastPicked] = useState(false);
+  // Picks and typing not made into a video yet: leaving asks first (never while it starts: it goes to its page).
+  const dirty =
+    !!title.trim() ||
+    !!logline.trim() ||
+    category !== "" ||
+    picked !== (ideaId ?? "") ||
+    castPicked ||
+    length !== durationSec ||
+    shape !== null ||
+    captions !== null ||
+    mood !== null ||
+    ai !== null ||
+    refIds.join(",") !== givenRefs.slice(0, 3).join(",");
+  const leave = useLeaveGuard(dirty && !busy);
 
   useEffect(() => {
     let live = true;
@@ -286,6 +317,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
 
   function toggleCast(id: string) {
     castTouched.current = true;
+    setCastPicked(true);
     setProblem(null);
     setCast((c) => (c.includes(id) ? c.filter((x) => x !== id) : c.length >= 3 ? c : [...c, id]));
   }
@@ -303,10 +335,26 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
     return null;
   }
 
+  /** A missing pick: its part comes into view with the focus (on a phone it is far above the pinned button). */
+  function showFix(why: string) {
+    const part = document.getElementById(why === "Pick at least one character." ? "st-nv-2" : "st-nv-1");
+    const box = part?.closest("section");
+    if (!part || !box) return;
+    box.scrollIntoView?.({ block: "start", behavior: storiesReduceMotion() ? "auto" : "smooth" });
+    const field = source === "own" ? box.querySelector<HTMLElement>(!title.trim() ? "input.st-s-input" : !logline.trim() ? "textarea" : "input[type=radio]") : null;
+    if (field && why !== "Pick at least one character.") return field.focus({ preventScroll: true });
+    part.setAttribute("tabindex", "-1");
+    part.focus({ preventScroll: true });
+  }
+
   async function make(pickNow: ModelOverride | null = ai, sure = false) {
     const why = check();
     setNoAdvice(why === NO_GUIDANCE);
-    if (why) return setProblem(why);
+    if (why) {
+      setProblem(why);
+      showFix(why);
+      return;
+    }
     // A model picked on purpose that the studio knows cannot be used: ask first, never swap it by itself.
     const ask = sure ? null : unusableAsk(info, usualFor(info, "storyboard"), pickNow);
     if (ask) return setAsking(ask);
@@ -486,17 +534,18 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
             </div>
           </section>
 
-          {problem ? (
-            <Notice tone="bad">
-              {problem}
-              {noAdvice && topics?.length ? (
-                <span className="st-s-topics">
-                  Checked advice covers: {topics.map((t) => t.title).join(" · ")}.
-                </span>
-              ) : null}
-            </Notice>
-          ) : null}
           <div className="st-s-actionbar st-s-actionbar--pin">
+            {/* In the pinned bar, by the button: on a phone the part to fix is far above (it comes into view too). */}
+            {problem ? (
+              <Notice tone="bad">
+                {problem}
+                {noAdvice && topics?.length ? (
+                  <span className="st-s-topics">
+                    Checked advice covers: {topics.map((t) => t.title).join(" · ")}.
+                  </span>
+                ) : null}
+              </Notice>
+            ) : null}
             <button type="button" className="st-btn st-btn--main st-s-big st-make" aria-disabled={busy || undefined} onClick={() => !busy && void make()}>
               {busy ? "Starting…" : "Make the video"}
             </button>
@@ -517,6 +566,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
           }}
         />
       ) : null}
+      {leave}
     </section>
   );
 }
@@ -746,7 +796,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
           </A>
           <h1 className="st-s-head__title">{story.title}</h1>
           <p className="st-s-head__lede">
-            <Tag tone={STATUS_TONE[story.status]}>{STATUS_LABEL[story.status]}</Tag> {CATEGORY_LABEL[story.category]} · {seconds(story.actualDurationSec ?? story.durationSec)}
+            <Tag tone={STATUS_TONE[story.status]}>{statusLabel(story)}</Tag> {CATEGORY_LABEL[story.category]} · {seconds(story.actualDurationSec ?? story.durationSec)}
           </p>
         </div>
       </header>
@@ -909,7 +959,7 @@ function Preview({ story, job, actions, notice }: { story: Story; job: Productio
   const progress = job ? job.progress : steps.filter((s) => s.status === "done" || s.status === "skipped").length / steps.length;
   const pct = Math.round(Math.max(0, Math.min(1, progress)) * 100);
   const now = currentStep(steps);
-  const line = nowLine(job, steps);
+  const line = nowLine(job, steps, story.status);
   const cover = story.coverUrl ?? story.scenes.find((sc) => sc.stillUrl)?.stillUrl ?? null;
   // The step working through the scenes ("scene 3 of 6") has its own bar in the row; otherwise the row's bar is the video's.
   const sceneBar = now?.status === "running" && now.n && now.n > 1 ? Math.min(1, (now.i ?? 0) / now.n) : null;
@@ -917,13 +967,13 @@ function Preview({ story, job, actions, notice }: { story: Story; job: Productio
   return (
     <div className={`st-s-preview st-glass st-glass--hero st-lens${job?.status === "failed" ? " is-bad" : ""}`}>
       <ArcDial value={progress} label={`Making ${story.title}`} valueText={`${pct}% done`} className="st-s-preview__dial">
-        <StatNumeral value={pct} unit="%" label={now ? now.label : STATUS_LABEL[story.status]} />
+        <StatNumeral value={pct} unit="%" label={now ? now.label : statusLabel(story)} />
       </ArcDial>
       <div className="st-s-preview__main">
         <MediaRow
           className="st-s-preview__row"
           thumb={cover ?? <span className="st-s-preview__blank" />}
-          title={line || STATUS_LABEL[story.status]}
+          title={line || statusLabel(story)}
           meta={`${CATEGORY_LABEL[story.category]} · ${seconds(story.actualDurationSec ?? story.durationSec)}`}
           progress={bar}
           progressLabel={sceneBar !== null && now ? now.label : `Making ${story.title}`}

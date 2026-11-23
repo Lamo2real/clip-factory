@@ -14,7 +14,7 @@ let fake: Partial<Api> = {};
 vi.mock("../src/api/index.ts", () => ({ api: () => fake }));
 
 const { ToastProvider, UNDO_MS, useToast } = await import("../src/components/Toasts.tsx");
-const { ALREADY_DECIDED, isThrownAway, onClipBack, resetThrownAway, throwAwayWithUndo } = await import("../src/lib/throwAways.ts");
+const { ALREADY_DECIDED, ALREADY_UPLOADING, isThrownAway, onClipBack, resetThrownAway, throwAwayWithUndo } = await import("../src/lib/throwAways.ts");
 const { AUTO_ALREADY_SENT } = await import("../src/lib/autopost.ts");
 const { seed } = await import("../src/api/mock/fixtures.ts");
 
@@ -227,6 +227,53 @@ describe("Throw away holds the clip for its Undo (§46.13)", () => {
     });
     act(() => throwAwayWithUndo(clip, toast));
     await wait(UNDO_MS);
+    expect(texts()).toEqual([`info:${ALREADY_DECIDED}`]);
+  });
+});
+
+describe("a clip whose Upload already went through (bug hunt, 23 Nov)", () => {
+  it("the hold's 409 on an uploaded clip: no Undo, no decline, and it says it is uploading, never 'somewhere else'", async () => {
+    for (const status of ["confirmed", "publishing", "posted", "failed"] as const) {
+      resetThrownAway();
+      const calls = api({
+        holdClip: vi.fn(async () => Promise.reject(new ApiError(409, "conflict", DECIDED_ELSEWHERE))),
+        getClip: vi.fn(async () => ({ ...clip, status })),
+      });
+      const back = vi.fn();
+      const stop = onClipBack(back);
+      act(() => throwAwayWithUndo(clip, toast));
+      await wait();
+      expect(undoButton(), status).toBeNull();
+      expect(texts()).toEqual([`info:${ALREADY_UPLOADING}`]);
+      await wait(UNDO_MS * 2);
+      expect(calls.declineClip).not.toHaveBeenCalled();
+      expect(texts().join(" ")).not.toContain("somewhere else");
+      expect(back).not.toHaveBeenCalled();
+      stop();
+      await wait(10_000);
+    }
+    expect(ALREADY_UPLOADING).toBe("This clip is already uploading, so it can't be thrown away.");
+  });
+
+  it("a decline refused because the clip is uploading says so too", async () => {
+    api({
+      declineClip: vi.fn(async () => Promise.reject(new ApiError(409, "conflict", DECIDED_ELSEWHERE))),
+      getClip: vi.fn(async () => ({ ...clip, status: "confirmed" as const })),
+    });
+    act(() => throwAwayWithUndo(clip, toast));
+    await wait(UNDO_MS);
+    await wait();
+    expect(texts()).toEqual([`info:${ALREADY_UPLOADING}`]);
+    // Declined elsewhere: the calm note as before.
+    resetThrownAway();
+    await wait(10_000);
+    api({
+      declineClip: vi.fn(async () => Promise.reject(new ApiError(409, "conflict", DECIDED_ELSEWHERE))),
+      getClip: vi.fn(async () => ({ ...clip, status: "declined" as const })),
+    });
+    act(() => throwAwayWithUndo(clip, toast));
+    await wait(UNDO_MS);
+    await wait();
     expect(texts()).toEqual([`info:${ALREADY_DECIDED}`]);
   });
 });

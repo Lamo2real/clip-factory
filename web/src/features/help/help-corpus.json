@@ -1,5 +1,5 @@
 {
-  "version": "95191ae479af",
+  "version": "952c7a50b8b3",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -4552,6 +4552,8 @@
         "cancel",
         "upload",
         "check",
+        "stay",
+        "leave",
         "make",
         "normal",
         "instead",
@@ -4559,9 +4561,7 @@
         "clear",
         "link",
         "progress",
-        "many",
-        "number",
-        "videos"
+        "many"
       ],
       "answer": "Paste a link to a stream or a video. Clip Factory finds the best moments and makes short clips. You pick the ones to upload.",
       "steps": [
@@ -4587,6 +4587,7 @@
       "keywords": [
         "jobs list",
         "keep",
+        "done",
         "select",
         "make",
         "cancel",
@@ -4643,12 +4644,12 @@
         "source",
         "delete",
         "stop",
+        "new",
         "use",
         "video",
         "file",
         "check",
-        "gone",
-        "stopping"
+        "gone"
       ],
       "answer": "A job's page shows each step as your clips are made. Tap a job in Jobs to open it.",
       "steps": [
@@ -4697,11 +4698,11 @@
         "stitch",
         "commercial",
         "content",
-        "uploaded",
         "show",
         "every",
-        "make",
-        "check"
+        "set",
+        "up",
+        "posting"
       ],
       "answer": "These clips all come from one job. Tap Upload to post one, or Throw away if you do not like it. Tap Show every job to see the rest.",
       "steps": [

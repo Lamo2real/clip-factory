@@ -30,6 +30,7 @@ import {
   MAC_OFF_LINE,
   MAC_ON_LINE,
   MAC_SEND_CONFIRM,
+  MAC_SENT_WAITS,
   MAC_STOP_LINE,
   macHelperBeats,
   macOn,
@@ -118,9 +119,10 @@ async function sendable(): Promise<string[]> {
 
 /**
  * Send these to my Mac (§47.2): one tap shows the confirm line, Yes sends them (25 at a time, without `now`, so they
- * wait as the backlog), Not now closes it. `clipIds`: the clips to send (oldest first).
+ * wait as the backlog), Not now closes it. `clipIds`: the clips to send (oldest first). `waits`: the Mac never checked
+ * in, so the confirm line and the toast say they wait for it (MAC_SENT_WAITS).
  */
-export function SendToMac({ clipIds, onSent }: { clipIds: readonly string[]; onSent: () => void }) {
+export function SendToMac({ clipIds, onSent, waits = false }: { clipIds: readonly string[]; onSent: () => void; waits?: boolean }) {
   const toast = useToast();
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -138,7 +140,7 @@ export function SendToMac({ clipIds, onSent }: { clipIds: readonly string[]; onS
         why ||= results.find((r) => !r.sent)?.reason ?? "";
       }
       setAsking(false);
-      if (sent) toast.success(sentLine(sent));
+      if (sent) toast.success(sentLine(sent, waits));
       else {
         act.fail({ sound: false });
         toast.error(why || "Nothing could go to your Mac.");
@@ -155,6 +157,7 @@ export function SendToMac({ clipIds, onSent }: { clipIds: readonly string[]; onS
   return asking ? (
     <div className="mac-send" role="group" aria-label="Send these to my Mac">
       <p className="mac-send__confirm">{MAC_SEND_CONFIRM}</p>
+      {waits ? <p className="mac-send__confirm">{MAC_SENT_WAITS}</p> : null}
       <div className="mac-send__buttons">
         <Button variant="primary" icon="monitor" act={act} loading={busy} onClick={() => void send()}>
           Yes, send them
@@ -168,6 +171,33 @@ export function SendToMac({ clipIds, onSent }: { clipIds: readonly string[]; onS
     <Button variant="glass" icon="monitor" onClick={() => setAsking(true)}>
       Send these to my Mac
     </Button>
+  );
+}
+
+/**
+ * The Mac never checked in: how to set it up (mac/tiktok-helper/README.md, "Setup"), right under that line, so this
+ * page always says what to do next. The helper's own steps, typed in Terminal on the Mac.
+ */
+export const MAC_SETUP_STEPS: readonly { type: string; then?: string }[] = [
+  { type: "./install.sh --no-start" },
+  { type: 'node "$HOME/Library/Application Support/Clip Factory TikTok/app/src/cli.js" setup', then: "Log in to TikTok and to Clip Factory in the window that opens." },
+  { type: "./install.sh" },
+];
+
+function MacSetUp() {
+  return (
+    <div className="autopost__where" data-mac="setup">
+      <p className="autopost__line">To set it up, open Terminal on your Mac in Clip Factory&apos;s mac/tiktok-helper folder and type:</p>
+      <ol className="autopost__where">
+        {MAC_SETUP_STEPS.map((step, i) => (
+          <li key={step.type}>
+            {i + 1}. <code className="user-text">{step.type}</code>
+            {step.then ? <span className="small"> {step.then}</span> : null}
+          </li>
+        ))}
+      </ol>
+      <p className="small">Your Mac checks in within a minute, and this page says so.</p>
+    </div>
   );
 }
 
@@ -367,7 +397,7 @@ export function TikTokMacBranch() {
               <p className="autopost__line" data-mac="helper">
                 {helperLine(status.helper)}
               </p>
-              {status.helper ? <MacAsks helper={status.helper} /> : null}
+              {status.helper ? <MacAsks helper={status.helper} /> : <MacSetUp />}
               {on ? (
                 <p className="autopost__line" data-mac="when">
                   {whenLine(autoOn, nextRunAt, waiting)}
@@ -397,9 +427,10 @@ export function TikTokMacBranch() {
               <Skeleton className="line-skel" />
             ) : (
               <div className="autopost__where">
-                <p className="autopost__line">{sendableLine(ids.length)}</p>
+                <p className="autopost__line">{sendableLine(ids.length, waiting)}</p>
                 <SendToMac
                   clipIds={ids}
+                  waits={!!status && !status.helper}
                   onSent={() => {
                     readSendable();
                     void reload();

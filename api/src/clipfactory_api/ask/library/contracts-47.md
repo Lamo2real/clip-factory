@@ -313,7 +313,7 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
     `holdBefore`) → "Held on your Mac: made before {time}" with **Post with my Mac**; else the queue words below.
 
   The not-yet rows (`notReady`): switch off → "Your Mac posts TikTok is off" with **Turn on**; never checked in →
-  "Your Mac isn't set up yet" with **Turn on**; not seen for 30 minutes → "Your Mac hasn't checked in since {time}"
+  "Your Mac isn't set up yet" with **Open Your Mac posts TikTok** (the setup steps are there); not seen for 30 minutes → "Your Mac hasn't checked in since {time}"
   with **Open Your Mac posts TikTok** (the switch is already on); (not a stopped row) `needs_you` → "Your Mac needs
   you: {short reason} · look at your Mac" with **Open the stopped clip** (→ `/clips/{needsYouClipId}`; Open Your Mac
   posts TikTok when there is none or it is this clip); paused → the paused words with **Start my Mac again** (a
@@ -403,8 +403,11 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
   clips."; on: "On. Upload and auto-posting hand TikTok to your Mac."); the status line "Your Mac checked in {Sun
   14:03}.", "Your Mac hasn't checked in yet. Set it up on your Mac.", "Your Mac needs you: {reason}", or paused with
   what comes next ("Paused after the 3 trial posts. Your Mac goes on once their views are checked.", else "Paused on
-  your Mac. Your clips wait until it's started again."); while on, "{n} waiting for your Mac" and **Send these to my Mac** for the clips that aren't on TikTok yet
-  ("3 clips aren't on TikTok yet."; its confirm line: "They go one at a time, oldest first."), sent without `now`, so
+  your Mac. Your clips wait until it's started again."); while the Mac has never checked in, the three setup steps of
+  `mac/tiktok-helper/README.md` (`MAC_SETUP_STEPS`); while on, "{n} waiting for your Mac" and **Send these to my Mac** for the clips that aren't on TikTok yet
+  ("3 clips aren't on TikTok yet."; with clips already waiting `sendableLine` says "2 clips already wait for your
+  Mac."; its confirm line: "They go one at a time, oldest first.", plus "They wait until your Mac checks in." while it
+  never has), sent without `now`, so
   one goes after each auto-posting run (§47.8), never a campaign clip (`canSendToMac`); and one quiet line: "To stop
   it, turn the switch off. Your Mac stops at once." Round 3 (D5), inside the status panel under the status line:
   paused → **Start my Mac again** (once asked: "Your Mac starts again the next time it checks in, within a minute.");

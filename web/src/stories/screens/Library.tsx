@@ -25,7 +25,7 @@ import { HELPER_KIND, helperName, STORAGE_WORDS, topicTitle, type ModelLookup } 
 import { Glass, GlassPill, MediaRow, cx } from "../glass/index.ts";
 import { storiesReduceMotion } from "../prefs.ts";
 import { storiesHref } from "../routes.ts";
-import { STATUS_WORDS, StButton, StError, StIcon, StLinkButton, StLoading, StMascot, StPageHead, type MascotMood, type StIconName, type StTone } from "../ui.tsx";
+import { statusWords, StButton, StError, StIcon, StLinkButton, StLoading, StMascot, StPageHead, type MascotMood, type StIconName, type StTone } from "../ui.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
 export type LibraryTab = "projects" | "videos" | "storyboards" | "characters" | "pictures" | "sounds" | "scenes";
@@ -347,8 +347,8 @@ export function storyProgress(status: Story["status"]): number | null {
 }
 
 /** A story's state in words with a small dot of its colour (the colour is a mark; the words keep their own ink). */
-function StateLabel({ status }: { status: Story["status"] }) {
-  const s = STATUS_WORDS[status];
+function StateLabel({ story }: { story: Pick<Story, "status" | "currentJobId"> }) {
+  const s = statusWords(story);
   return (
     <span className={`st-state st-state--${s.tone}`}>
       <span className="st-state__dot" aria-hidden="true" />
@@ -381,7 +381,7 @@ function ProjectCard({ story, cover, cast, featured = false }: { story: Story; c
   const length = story.actualDurationSec ?? story.durationSec;
   const picture = cover ?? story.coverUrl;
   const progress = storyProgress(story.status);
-  const chip = <StateLabel status={story.status} />;
+  const chip = <StateLabel story={story} />;
   return (
     <li className={cx("st-project", featured && "st-project--featured")}>
       <A href={storiesHref({ name: "library", kind: null, storyId: story.storyId })} className={cx("st-project__link st-glass", featured && "st-glass--hero st-lens")}>
@@ -620,7 +620,7 @@ function Project({ ws, story, cast, stories }: { ws: string; story: Story; cast:
     }
     return map;
   }, [files.data, story.storyId]);
-  const status = STATUS_WORDS[story.status];
+  const status = statusWords(story);
   const cover = pictures.get(`cover:${story.storyId}`) ?? story.coverUrl;
   const progress = storyProgress(story.status);
   // The hero, its files by group, and "How it was made": from 1100 px the card stands beside the hero and the files,
@@ -641,7 +641,7 @@ function Project({ ws, story, cast, stories }: { ws: string; story: Story; cast:
           <div className="st-projectview__text">
             <h2 className="st-projectview__title st-display">{story.title}</h2>
             <p className="st-projectview__meta">
-              <StateLabel status={story.status} />
+              <StateLabel story={story} />
               <span>{castNames(story, cast)}</span>
               {story.status === "review" || story.status === "needs_check" || story.status === "approved" || story.status === "published" ? (
                 <A href={`/stories/review/${encodeURIComponent(story.storyId)}`} className="st-textlink">

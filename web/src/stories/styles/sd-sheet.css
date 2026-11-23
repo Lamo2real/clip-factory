@@ -103,6 +103,15 @@
   background: rgb(var(--st-well-rgb) / 0.32);
 }
 
+/* Why the main button can't go yet, said by it once it was tapped (a whole line above the buttons). */
+.st-s-sheet__why {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
+  text-align: right;
+}
+
 /* ---------- Where to post: account tiles (radius control); a picked one solid cream with the orange tick ---------- */
 .st-s-places {
   display: grid;
@@ -150,6 +159,11 @@ button.st-s-place:focus-visible {
 
 button.st-s-place.is-on:hover {
   background: var(--st-cream-hover);
+}
+
+/* Upload was tapped before a place was picked: the places to tap wear the ring. */
+.st-s-places.is-nudged button.st-s-place {
+  box-shadow: var(--st-focus-ring);
 }
 
 .st-s-place--off {
@@ -670,6 +684,11 @@ button.st-s-place.is-on:hover {
 
 .st-s-actionbar:empty {
   display: none;
+}
+
+/* A problem in the bar (Make the video's missing pick) takes the whole line above the button. */
+.st-s-actionbar > .st-s-notice {
+  flex: 1 1 100%;
 }
 
 @media (max-width: 767.98px) {

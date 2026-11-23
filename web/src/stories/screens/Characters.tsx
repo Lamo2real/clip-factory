@@ -2,15 +2,16 @@
 // character (the five-part stepper with a live preview, and Design with AI: the character agent's first try from the
 // owner's words and/or a picture, which the owner changes and saves), and each character's own page: edit with its
 // version (a 409 means it changed elsewhere: a friendly Reload), Design with AI from words or its own pictures (a
-// redesign of this character, §45.34: which parts change is shown before "Use this" puts it in the editor), the
-// reference pictures, the AI picture when it is on (else the way to Settings › Video › Picture maker), and Delete.
+// redesign of this character, §45.34: which parts change is shown before "Use this" puts only those parts into the
+// editor, on top of the changes not saved yet), the reference pictures, the AI picture when it is on (else the way to
+// Settings › Video › Picture maker), and Delete.
 import "../styles/studio.css";
 import { useState, type ReactNode } from "react";
 import { A } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
-import type { Character, CharacterInput, StoriesConfig } from "../api/types.ts";
+import type { Character, CharacterInput, CharacterLook, StoriesConfig } from "../api/types.ts";
 import { CATALOG } from "../engine/catalog.ts";
 import { Glass, GlassPill } from "../glass/index.ts";
 import { storiesGoLater } from "../pane.tsx";
@@ -105,9 +106,34 @@ function Gallery({ ws }: { ws: string }) {
   );
 }
 
+/** The look's parts a redesign changes as one ("body" is its shape, height and width; "face shape" its eyes to mouth). */
+const LOOK_GROUPS: (keyof CharacterLook)[][] = [["body", "height", "width"], ["skin"], ["hair"], ["eyes", "brows", "nose", "mouth"], ["outfit"], ["accessory"], ["outline"]];
+const OTHER_PARTS = ["expressions", "movementStyle", "voice", "name", "description", "personality", "traits"] as const;
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * "Use this" on a redesign (§45.34): only the parts the redesign changed from the saved character (`before`) go into
+ * the editor, on top of what the editor has now (`now`, with its changes not saved yet); every other part stays as
+ * the owner left it.
+ */
+export function mergeRedesign(now: CharacterInput, before: CharacterInput, next: CharacterInput): CharacterInput {
+  const out = inputOf(now);
+  const look = out.look as unknown as Record<string, unknown>;
+  const was = before.look as unknown as Record<string, unknown>;
+  const to = next.look as unknown as Record<string, unknown>;
+  const grouped = new Set<string>(LOOK_GROUPS.flat());
+  const groups: string[][] = [...LOOK_GROUPS, ...Object.keys(to).filter((k) => !grouped.has(k)).map((k) => [k])];
+  for (const g of groups) if (g.some((k) => !same(was[k], to[k]))) for (const k of g) look[k] = structuredClone(to[k]);
+  const all = out as unknown as Record<string, unknown>;
+  for (const k of OTHER_PARTS) if (!same(before[k], next[k])) all[k] = structuredClone(next[k]);
+  return out;
+}
+
 function NewCharacter({ ws }: { ws: string }) {
   const toast = useToast();
   const info = useAiInfo(ws);
+  /** Nothing is saved yet: anything in the editor is unsaved (it asks before the page changes). */
+  const [blank] = useState(newCharacter);
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   /** The editor starts again from the AI's first try (each try is a new round). */
@@ -141,7 +167,8 @@ function NewCharacter({ ws }: { ws: string }) {
       <DesignPanel ws={ws} info={info} startOpen={design} onDraft={(input) => setDraft((d) => ({ round: (d?.round ?? 0) + 1, input }))} />
       <CharacterEditor
         key={`new:${draft?.round ?? 0}`}
-        initial={draft?.input ?? newCharacter()}
+        initial={draft?.input ?? blank}
+        saved={blank}
         startPart={draft ? "name" : undefined}
         mode="new"
         saving={saving}
@@ -158,6 +185,8 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
   const workspace = useWorkspace(ws);
   const info = useAiInfo(ws);
   const [draft, setDraft] = useState<CharacterInput | null>(null);
+  /** The character as the editor has it now (its changes not saved yet too). */
+  const [current, setCurrent] = useState<CharacterInput | null>(null);
   /** A redesign the owner has not taken yet: shown beside the character as it is (§45.34). */
   const [proposal, setProposal] = useState<CharacterInput | null>(null);
   // The picked AI picture maker makes the portraits (§45.37: Stability AI or the owner's own; Amazon ended Nova Canvas).
@@ -183,6 +212,8 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
   const c = loaded.data;
 
   const replace = (next: Character) => loaded.setData(() => next);
+  const savedNow = c ? inputOf(c) : null;
+  const inEditor = current ?? draft ?? savedNow;
 
   async function save(input: CharacterInput) {
     if (!c) return;
@@ -262,13 +293,13 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
         pictures={c.references.map((r) => ({ assetId: r.assetId, url: r.url }))}
         onDraft={(input) => setProposal(input)}
       />
-      {proposal ? (
+      {proposal && inEditor && savedNow ? (
         <RedesignCompare
-          now={draft ?? inputOf(c)}
-          next={proposal}
+          now={inEditor}
+          next={mergeRedesign(inEditor, savedNow, proposal)}
           onDrop={() => setProposal(null)}
           onUse={() => {
-            setDraft(proposal);
+            setDraft(mergeRedesign(inEditor, savedNow, proposal));
             setProposal(null);
             setRound((n) => n + 1);
           }}
@@ -278,6 +309,9 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
       <CharacterEditor
         key={`${c.characterId}:${round}`}
         initial={draft ?? inputOf(c)}
+        saved={savedNow ?? undefined}
+        onChange={setCurrent}
+        hold={!deleting}
         mode="edit"
         saving={saving}
         onSave={(input) => void save(input)}

@@ -506,8 +506,13 @@ test("round 3: Analyze this reference video carries the model menu, starting fro
     const page = await ctx.newPage();
     await open(page, `/stories/chat/${CONV.winter}`);
     await knobs(page, { chatChunkMs: 20, chatThinkMs: 50, refSeconds: 2 });
-    await page.getByRole("button", { name: "Just for this message" }).click();
     const sheet = page.getByRole("dialog", { name: "Model and effort" });
+    if (w < 360) {
+      // Under 360 px the model and effort are one chip; its sheet has "Just for this message".
+      await page.locator(".st-chat-compose .st-chat-ai__part--model").click();
+      await sheet.getByRole("radio", { name: "Just for this message" }).check({ force: true });
+      await expect(sheet.getByRole("radio", { name: "Just for this message" })).toBeChecked();
+    } else await page.getByRole("button", { name: "Just for this message" }).click();
     await sheet.getByRole("radio", { name: /Claude Sonnet 5\.5/ }).click();
     await sheet.getByRole("button", { name: "Done" }).click();
     await page.getByRole("textbox", { name: "Your message" }).fill("Can you analyze my reference video?");

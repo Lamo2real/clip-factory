@@ -1,13 +1,17 @@
 // Making and changing a character (docs/CONTRACTS.md §45.8, §45.16.5): a stepper of five parts (Looks, Face, Moves,
 // Sounds, Name and personality) beside a live preview drawn by the same engine as the videos. Every look choice the
-// rig has is here; each face and each move can be tried on the preview. Save stays at the bottom right.
-import { useState, type ReactNode } from "react";
+// rig has is here; each face and each move can be tried on the preview. Save stays at the bottom right. Next and Back
+// open the next part at its top; Try brings the preview into view on a phone; unsaved changes ask "Leave without
+// saving?" before the page changes.
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { CharacterInput } from "../api/types.ts";
 import { CATALOG } from "../engine/catalog.ts";
 import type { ActionId, CharacterLook, Expression, NoiseId, SfxId } from "../engine/types.ts";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
+import { storiesReduceMotion } from "../prefs.ts";
 import { useWidth } from "./hooks.ts";
 import { Chip, Notice, Pick, Slider, Swatches, TextField } from "./kit.tsx";
+import { useLeaveGuard } from "./leaveGuard.tsx";
 import {
   ACCESSORY,
   BODY,
@@ -49,6 +53,21 @@ function partFor(problem: string): EditorPart {
 
 const sizeWords = (n: number, small: string, big: string) => (n < 0.95 ? small : n > 1.05 ? big : "Just right");
 
+/** The same words in a stable order, so two inputs compare by what they say (the order of their keys aside). */
+function stable(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(stable);
+  if (v && typeof v === "object") return Object.fromEntries(Object.keys(v as object).sort().map((k) => [k, stable((v as Record<string, unknown>)[k])]));
+  return v;
+}
+
+/** What Save would send: the name and traits trimmed, as save() sends them. */
+const cleaned = (c: CharacterInput): CharacterInput => ({ ...c, name: c.name.trim(), traits: c.traits.map((t) => t.trim()).filter(Boolean) });
+
+/** True when the two characters would save the same. */
+export function sameCharacter(a: CharacterInput, b: CharacterInput): boolean {
+  return JSON.stringify(stable(cleaned(a))) === JSON.stringify(stable(cleaned(b)));
+}
+
 export function CharacterEditor({
   initial,
   mode,
@@ -57,8 +76,17 @@ export function CharacterEditor({
   serverProblem,
   aside,
   startPart,
+  saved,
+  onChange,
+  hold = true,
 }: {
   initial: CharacterInput;
+  /** what is saved now (a new character: nothing yet), so unsaved changes ask before the page changes; else `initial` */
+  saved?: CharacterInput;
+  /** the character as the editor has it now, after every change */
+  onChange?: (c: CharacterInput) => void;
+  /** false while the page leaves on purpose (the character is being deleted): unsaved changes do not ask then */
+  hold?: boolean;
   /** the part to open first (after Design with AI: the name and personality, to check them) */
   startPart?: EditorPart;
   mode: "new" | "edit";
@@ -78,6 +106,40 @@ export function CharacterEditor({
   const [trait, setTrait] = useState("");
   const [box, width] = useWidth<HTMLDivElement>(220);
   const size = Math.max(140, Math.min(260, width - 24));
+  const preview = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  /** Set by Next and Back: the part they open comes into view at its top, with the focus. */
+  const jumped = useRef(false);
+  const leave = useLeaveGuard(hold && !saving && !sameCharacter(c, saved ?? initial));
+  const changed = useRef(onChange);
+  changed.current = onChange;
+
+  useEffect(() => {
+    changed.current?.(c);
+  }, [c]);
+
+  useEffect(() => {
+    if (!jumped.current) return;
+    jumped.current = false;
+    const top = panel.current?.querySelector<HTMLElement>(".st-s-editor__parts");
+    top?.scrollIntoView?.({ block: "start", behavior: storiesReduceMotion() ? "auto" : "smooth" });
+    panel.current?.querySelector<HTMLElement>(".st-s-editor__part")?.focus({ preventScroll: true });
+  }, [part]);
+
+  /** Next or Back: the other part, from its top. */
+  const goTo = (next: EditorPart) => {
+    jumped.current = true;
+    setPart(next);
+  };
+
+  /** Try a face or a move: on a phone the preview is far above, so it comes into view to show it. */
+  const showPreview = () => {
+    const el = preview.current;
+    if (!el || typeof window === "undefined") return;
+    const r = el.getBoundingClientRect();
+    if (r.top >= 0 && r.bottom <= window.innerHeight) return;
+    el.scrollIntoView?.({ block: "nearest", behavior: storiesReduceMotion() ? "auto" : "smooth" });
+  };
 
   const set = (patch: Partial<CharacterInput>) => {
     setProblem(null);
@@ -125,7 +187,7 @@ export function CharacterEditor({
     <div className="st-s-editor">
       <div className="st-s-editor__stage" ref={box}>
         {/* The editor's hero: its rim may bend (glass/lens.ts decides). */}
-        <div className="st-s-editor__preview st-lens">
+        <div className="st-s-editor__preview st-lens" ref={preview}>
           <CharacterPreview look={c.look} movementStyle={c.movementStyle} expression={face} action={move} size={size} label={`${name}, ${faceLabel} face, ${moveLabel}`} />
           <p className="st-s-editor__now">
             <strong>{name}</strong>
@@ -137,11 +199,11 @@ export function CharacterEditor({
         {aside}
       </div>
 
-      <div className="st-s-editor__panel">
+      <div className="st-s-editor__panel" ref={panel}>
         <Pick label="Make your character" hideLabel value={part} options={PARTS} onChange={setPart} className="st-s-editor__parts" />
 
         {part === "looks" ? (
-          <div className="st-s-editor__part" aria-label="Looks">
+          <div className="st-s-editor__part" aria-label="Looks" tabIndex={-1}>
             <fieldset className="st-s-group">
               <legend className="st-s-group__title">Body</legend>
               <Pick label="Shape" value={c.look.body} options={BODY} onChange={(body) => setLook({ body })} />
@@ -178,7 +240,7 @@ export function CharacterEditor({
         ) : null}
 
         {part === "face" ? (
-          <div className="st-s-editor__part" aria-label="Face">
+          <div className="st-s-editor__part" aria-label="Face" tabIndex={-1}>
             <p className="st-s-editor__lede">Pick the faces {name} can make. Tap Try to see one. Neutral is always there.</p>
             <ul className="st-s-faces">
               {CATALOG.expressions.map((e) => {
@@ -191,7 +253,15 @@ export function CharacterEditor({
                       <Chip on={on} onToggle={() => toggleFace(e.id)} locked={e.id === "neutral"} lockedWhy="Every character keeps the Neutral face.">
                         {on ? "Uses it" : "Use it"}
                       </Chip>
-                      <button type="button" className="st-btn st-s-small" aria-pressed={face === e.id} onClick={() => setFace(e.id)}>
+                      <button
+                        type="button"
+                        className="st-btn st-s-small"
+                        aria-pressed={face === e.id}
+                        onClick={() => {
+                          setFace(e.id);
+                          showPreview();
+                        }}
+                      >
                         Try<span className="st-s-sr"> {e.label}</span>
                       </button>
                     </span>
@@ -206,7 +276,7 @@ export function CharacterEditor({
         ) : null}
 
         {part === "moves" ? (
-          <div className="st-s-editor__part" aria-label="Moves">
+          <div className="st-s-editor__part" aria-label="Moves" tabIndex={-1}>
             <Pick
               label={`How ${name} moves`}
               big
@@ -214,12 +284,21 @@ export function CharacterEditor({
               options={CATALOG.movementStyles.map((m) => ({ value: m.id, label: m.label, line: MOVE_LINE[m.id] }))}
               onChange={(movementStyle) => set({ movementStyle })}
             />
-            <Pick label="Try a move" value={move} options={CATALOG.actions.map((a) => ({ value: a.id, label: a.label }))} onChange={setMove} className="st-s-moves" />
+            <Pick
+              label="Try a move"
+              value={move}
+              options={CATALOG.actions.map((a) => ({ value: a.id, label: a.label }))}
+              onChange={(m) => {
+                setMove(m);
+                showPreview();
+              }}
+              className="st-s-moves"
+            />
           </div>
         ) : null}
 
         {part === "sounds" ? (
-          <div className="st-s-editor__part" aria-label="Sounds">
+          <div className="st-s-editor__part" aria-label="Sounds" tabIndex={-1}>
             <p className="st-s-editor__lede">Clips Funded videos have no talking. {name} makes little noises instead. You will hear them in the video.</p>
             <Pick label="Voice" value={c.voice.style} options={VOICE_STYLE} onChange={(style) => set({ voice: { ...c.voice, style } })} />
             <Slider
@@ -259,7 +338,7 @@ export function CharacterEditor({
         ) : null}
 
         {part === "name" ? (
-          <div className="st-s-editor__part" aria-label="Name and personality">
+          <div className="st-s-editor__part" aria-label="Name and personality" tabIndex={-1}>
             <TextField label="Name" value={c.name} max={CHAR_LIMITS.name} placeholder="For example: Pip" onChange={(name) => set({ name })} />
             <TextField
               label="What they look like"
@@ -320,12 +399,12 @@ export function CharacterEditor({
 
         <div className="st-s-actionbar">
           {at > 0 ? (
-            <button type="button" className="st-btn" onClick={() => setPart(PARTS[at - 1]!.value)}>
+            <button type="button" className="st-btn" onClick={() => goTo(PARTS[at - 1]!.value)}>
               Back
             </button>
           ) : null}
           {!last ? (
-            <button type="button" className={`st-btn${mode === "new" ? " st-btn--main" : ""}`} onClick={() => setPart(PARTS[at + 1]!.value)}>
+            <button type="button" className={`st-btn${mode === "new" ? " st-btn--main" : ""}`} onClick={() => goTo(PARTS[at + 1]!.value)}>
               Next: {PARTS[at + 1]!.label}
             </button>
           ) : null}
@@ -336,6 +415,7 @@ export function CharacterEditor({
           ) : null}
         </div>
       </div>
+      {leave}
     </div>
   );
 }

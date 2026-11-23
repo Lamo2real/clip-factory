@@ -323,6 +323,10 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       publishClip(c);
       return c.clipId;
     },
+    /** The clip as the server holds it (its saved captions, its status). */
+    clip(clipId: string): Clip {
+      return clone(clip(clipId));
+    },
     /** The clip's posts, as the server holds them. */
     posts(clipId: string): Post[] {
       return clone(store.posts.filter((p) => p.clipId === clipId));

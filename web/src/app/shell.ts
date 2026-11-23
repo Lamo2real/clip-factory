@@ -51,6 +51,11 @@ export function useShellHosted(): boolean {
   return useContext(PaneContext).hosted;
 }
 
+/** An in-app address (path, maybe with ?query or #hash) that is one of Clips Funded's pages. */
+export function storiesAddress(to: string): boolean {
+  return isStoriesPath(to.split(/[?#]/)[0] ?? "");
+}
+
 /** A Lamo Stories page is on screen (never while Lamo Stories is switched off). */
 export function storiesOnScreen(): boolean {
   return typeof location !== "undefined" && isStoriesPath(location.pathname) && storiesEnabled();

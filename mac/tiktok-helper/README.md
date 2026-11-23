@@ -152,6 +152,10 @@ node "$HOME/Library/Application Support/Clip Factory TikTok/app/src/cli.js" setu
 ./install.sh
 ```
 
+Clip Factory's Settings › Posting › Your Mac posts TikTok shows these same three steps while the Mac has never
+checked in (`MAC_SETUP_STEPS` in `web/src/screens/settings/TikTokMacBranch.tsx`), so that page is never a dead end.
+Change both together.
+
 `setup` shows the helper's Chrome window, the only time it is shown. In it he logs in to TikTok (the phone's QR code
 is easiest) and signs in to Clip Factory. The helper keeps that Clip Factory sign-in in the login keychain
 ("Clip Factory TikTok helper") and refreshes it itself.

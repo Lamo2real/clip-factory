@@ -1,7 +1,7 @@
 // The eight production steps of a story (docs/CONTRACTS.md §45.9, §45.16.5): Write the story, Check the facts, Draw
 // the scenes, Animate, Add sounds and music, Add captions, Put it together, Ready to watch. Each shows done, now,
 // waiting, skipped or stopped, with "Scene 3 of 6" while a step works through the scenes, and the eased progress bar.
-import { STEP_LABEL, STEP_ORDER, type ProductionJob, type StepKey, type Story, type StoryStep } from "../api/types.ts";
+import { STEP_LABEL, STEP_ORDER, type ProductionJob, type StepKey, type Story, type StoryStatus, type StoryStep } from "../api/types.ts";
 import { ProgressBar } from "./kit.tsx";
 import { STEP_WORD } from "./words.ts";
 
@@ -20,9 +20,10 @@ export function currentStep(steps: StoryStep[]): StoryStep | null {
   return steps.find((s) => s.status === "running") ?? steps.find((s) => s.status === "failed") ?? null;
 }
 
-/** One plain line: what is happening now. */
-export function nowLine(job: ProductionJob | null, steps: StoryStep[]): string {
+/** One plain line: what is happening now (a rejected video's last run is never "ready to watch"). */
+export function nowLine(job: ProductionJob | null, steps: StoryStep[], status?: StoryStatus): string {
   if (!job) return "";
+  if (status === "rejected") return "Not used. It won't be posted.";
   if (job.status === "queued") return "Getting ready to start…";
   if (job.status === "failed") return job.error ?? "Making the video stopped. Tap Try again.";
   if (job.status === "canceled") return "You stopped this one.";
@@ -77,7 +78,7 @@ export function StepTrack({
         ))}
       </ol>
       {bar ? <ProgressBar value={progress} label={`${label}: ${Math.round(progress * 100)}% done`} /> : null}
-      {job && line ? <p className={`st-s-track__now${job.status === "failed" ? " is-bad" : ""}`}>{nowLine(job, steps)}</p> : null}
+      {job && line ? <p className={`st-s-track__now${job.status === "failed" ? " is-bad" : ""}`}>{nowLine(job, steps, story?.status)}</p> : null}
     </div>
   );
 }

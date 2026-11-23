@@ -8,18 +8,19 @@
 // and kind, and the parts of its full idea (what it is about, the steps, the lesson, the ending, the feel, the length
 // and the words on screen), saved with PATCH …/ideas/{ideaId}.
 import "../styles/studio.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad } from "../../lib/hooks.ts";
-import { navigate } from "../../lib/router.ts";
+import { navigate, setLeaveGuard } from "../../lib/router.ts";
 import { storiesApi } from "../api/client.ts";
 import type { AiTask, GuidanceTopic, Idea, IdeaCategory, IdeaInput, ModelOverride, StoriesConfig, VideoConcept } from "../api/types.ts";
 import { cx, Glass, GlassPill, Stepper } from "../glass/index.ts";
 import { storiesReduceMotion } from "../prefs.ts";
-import { storiesHref } from "../routes.ts";
+import { isStoriesPath, storiesHref } from "../routes.ts";
+import { useAppActive } from "../pane.tsx";
 import { merged, ModelMenu, sendPick, TaskLine, useAiInfo, useAiTask, usualFor, type AiInfo } from "../studio/ai.tsx";
 import { useWorkspace } from "../studio/hooks.ts";
-import { Busy, celebrate, Notice, Pick, Tag, TextField } from "../studio/kit.tsx";
+import { Busy, celebrate, Notice, Pick, StSheet, Tag, TextField } from "../studio/kit.tsx";
 import { CATEGORIES, CATEGORY_LABEL, CATEGORY_LINE, NO_GUIDANCE, say, seconds, TONE_LABEL } from "../studio/words.ts";
 import type { StoriesScreenProps } from "./types.ts";
 
@@ -36,13 +37,22 @@ const CATEGORY_TONE: Record<IdeaCategory, "sun" | "coral" | "mint" | "sky"> = {
 /** The four kinds as big buttons. */
 export const KIND_OPTIONS = CATEGORIES.map((c) => ({ value: c, label: CATEGORY_LABEL[c], line: CATEGORY_LINE[c] }));
 
-interface DraftSet {
-  from: string;
-  drafts: { input: IdeaInput; saved: boolean; saving: boolean }[];
+/** An offered draft: the idea it saves as, and whether a driving one would need checked advice once saved. */
+export interface Offered {
+  input: IdeaInput;
+  needsAdvice: boolean;
 }
 
-/** The drafts a finished task carries (result.drafts), kept to the fields an idea has. */
-export function draftsOf(task: AiTask): IdeaInput[] {
+interface DraftSet {
+  from: string;
+  drafts: (Offered & { saved: boolean; saving: boolean })[];
+}
+
+/**
+ * The drafts a finished task carries (result.drafts), kept to the fields an idea has, with `needsAdvice` when the task
+ * says a driving-safety draft matches no checked advice (it would save as "Needs checked advice").
+ */
+export function offeredOf(task: AiTask): Offered[] {
   const raw = (task.result as { drafts?: unknown } | null)?.drafts;
   if (!Array.isArray(raw)) return [];
   return raw
@@ -52,9 +62,31 @@ export function draftsOf(task: AiTask): IdeaInput[] {
       if (d.characterIds?.length) out.characterIds = [...d.characterIds];
       if (d.parentIdeaId) out.parentIdeaId = d.parentIdeaId;
       if (d.concept) out.concept = d.concept;
-      return out;
+      return { input: out, needsAdvice: d.category === "driving_safety" && (d as { needsGuidance?: unknown }).needsGuidance === true };
     });
 }
+
+/** The drafts a finished task carries (result.drafts), kept to the fields an idea has. */
+export function draftsOf(task: AiTask): IdeaInput[] {
+  return offeredOf(task).map((o) => o.input);
+}
+
+/** What New idea holds while it is typed (kept here, so switching to Ask for ideas and back keeps it). */
+export interface NewDraft {
+  title: string;
+  logline: string;
+  category: IdeaCategory | "";
+}
+
+const EMPTY_DRAFT: NewDraft = { title: "", logline: "", category: "" };
+
+/** True when New idea holds words that are not saved yet. */
+export function draftTyped(d: NewDraft): boolean {
+  return !!(d.title.trim() || d.logline.trim());
+}
+
+/** The next step for a driving-safety idea without checked advice (it cannot become a video as it is). */
+export const BLOCKED_NEXT = "Tap Edit it to make it another kind of video, or pick another idea.";
 
 /** The checked advice an idea is based on, in one line. */
 export function adviceLine(idea: Pick<Idea, "category" | "safetyTopicId" | "needsGuidance">, topics: GuidanceTopic[] | null): string | null {
@@ -74,10 +106,68 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
   const info = useAiInfo(ws);
   const length = ((workspace?.configuration ?? {}) as Partial<StoriesConfig>).defaultDurationSec ?? 45;
   const [filter, setFilter] = useState<Filter>("all");
-  const [open, setOpen] = useState<"none" | "new" | "ask">("none");
+  // The dashboard's New idea opens the form at once (/stories/ideas?new=1).
+  const [open, setOpen] = useState<"none" | "new" | "ask">(() => (typeof location !== "undefined" && new URLSearchParams(location.search).get("new") === "1" ? "new" : "none"));
+  // Ask for ideas stays on the page (hidden) once opened, so its topic and a running ask survive a switch to New idea.
+  const [askKept, setAskKept] = useState(false);
+  const [draft, setDraft] = useState<NewDraft>(EMPTY_DRAFT);
+  // The ideas whose Edit holds changes that are not saved.
+  const [edited, setEdited] = useState<ReadonlySet<string>>(new Set());
+  const [question, setQuestion] = useState<{ kind: "close" } | { kind: "leave"; proceed: () => void } | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [drafts, setDrafts] = useState<DraftSet | null>(null);
   const draftsRef = useRef<HTMLElement>(null);
+  // Drafts whose Save is on its way (a double tap reads the same render, so state alone cannot stop the second one).
+  const savingDrafts = useRef(new Set<IdeaInput>());
+  const typed = draftTyped(draft);
+  const unsaved = typed || edited.size > 0;
+  const active = useAppActive();
+
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get("new") === "1") navigate(location.pathname + location.hash, { replace: true });
+  }, []);
+
+  useEffect(() => {
+    if (open === "ask") setAskKept(true);
+  }, [open]);
+
+  // Unsaved typing: ask before leaving (in-app links, Back), and let the browser ask on reload or close.
+  // Only while Clips Funded is on screen: Ideas kept behind Clip Factory never holds Clip Factory's page changes, and the
+  // switch to Clip Factory keeps this page (typing included) as it is (§45.34), so it asks nothing.
+  useEffect(() => {
+    if (!unsaved) return;
+    const off = active
+      ? setLeaveGuard((to, proceed) => {
+          if (!isStoriesPath(to.split(/[?#]/)[0] ?? "")) return false;
+          setQuestion({ kind: "leave", proceed });
+          return true;
+        })
+      : null;
+    const unload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", unload);
+    return () => {
+      off?.();
+      window.removeEventListener("beforeunload", unload);
+    };
+  }, [unsaved, active]);
+
+  const markEdited = useCallback((ideaId: string, changed: boolean) => {
+    setEdited((s) => {
+      if (s.has(ideaId) === changed) return s;
+      const n = new Set(s);
+      if (changed) n.add(ideaId);
+      else n.delete(ideaId);
+      return n;
+    });
+  }, []);
+
+  /** Closing New idea: typing that is not saved is asked about first. */
+  const closeNew = () => {
+    if (typed) setQuestion({ kind: "close" });
+    else setOpen("none");
+  };
 
   useEffect(() => {
     let live = true;
@@ -102,7 +192,8 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
 
   async function saveDraft(k: number) {
     const d = drafts?.drafts[k];
-    if (!d || d.saved || d.saving) return;
+    if (!d || d.saved || d.saving || savingDrafts.current.has(d.input)) return;
+    savingDrafts.current.add(d.input);
     setDrafts((s) => (s ? { ...s, drafts: s.drafts.map((x, i) => (i === k ? { ...x, saving: true } : x)) } : s));
     try {
       const idea = await storiesApi().createIdea(ws, d.input);
@@ -111,6 +202,7 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
       celebrate(document.querySelector(`[data-draft="${k}"]`), 50);
       toast.success(`Saved “${idea.title}”.`);
     } catch (e) {
+      savingDrafts.current.delete(d.input);
       setDrafts((s) => (s ? { ...s, drafts: s.drafts.map((x, i) => (i === k ? { ...x, saving: false } : x)) } : s));
       toast.error(say(e));
     }
@@ -151,7 +243,7 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
           <button type="button" className="st-btn" aria-expanded={open === "ask"} onClick={() => setOpen((o) => (o === "ask" ? "none" : "ask"))}>
             Ask for ideas
           </button>
-          <button type="button" className="st-btn st-btn--main" aria-expanded={open === "new"} onClick={() => setOpen((o) => (o === "new" ? "none" : "new"))}>
+          <button type="button" className="st-btn st-btn--main" aria-expanded={open === "new"} onClick={() => (open === "new" ? closeNew() : setOpen("new"))}>
             New idea
           </button>
         </div>
@@ -159,10 +251,13 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
 
       {open === "new" ? (
         <NewIdeaForm
-          onCancel={() => setOpen("none")}
+          draft={draft}
+          onDraft={setDraft}
+          onCancel={closeNew}
           onSave={async (input) => {
             const idea = await storiesApi().createIdea(ws, input);
             put(idea);
+            setDraft(EMPTY_DRAFT);
             setOpen("none");
             setFilter("all");
             celebrate(document.querySelector(".st-s-head__actions"), 80);
@@ -170,7 +265,18 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
           }}
         />
       ) : null}
-      {open === "ask" ? <AskForIdeas ws={ws} info={info} onCancel={() => setOpen("none")} onDrafts={(list, from) => showDrafts({ from, drafts: list.map((input) => ({ input, saved: false, saving: false })) })} /> : null}
+      {askKept || open === "ask" ? (
+        <AskForIdeas
+          ws={ws}
+          info={info}
+          shown={open === "ask"}
+          onCancel={() => {
+            setOpen("none");
+            setAskKept(false);
+          }}
+          onDrafts={(list, from) => showDrafts({ from, drafts: list.map((o) => ({ ...o, saved: false, saving: false })) })}
+        />
+      ) : null}
 
       {drafts ? (
         <section className="st-glass st-lens st-s-drafts" ref={draftsRef} aria-labelledby="st-drafts-title">
@@ -187,6 +293,7 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
             {drafts.drafts.map((d, k) => (
               <li key={k} className={cx("st-s-draft", d.saved && "is-saved")} data-draft={k}>
                 <Tag tone={CATEGORY_TONE[d.input.category]}>{CATEGORY_LABEL[d.input.category]}</Tag>
+                {d.needsAdvice ? <Tag tone="coral">Needs checked advice</Tag> : null}
                 <h3 className="st-s-draft__title">{d.input.title}</h3>
                 <p className="st-s-draft__line">{d.input.logline}</p>
                 <button type="button" className={`st-btn${d.saved ? "" : " st-btn--main"}`} aria-disabled={d.saved || d.saving || undefined} onClick={() => void saveDraft(k)}>
@@ -234,35 +341,103 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
               topics={topics}
               length={length}
               onChange={put}
+              onEdited={markEdited}
               onDelete={() => remove(idea)}
-              onDrafts={(list) => showDrafts({ from: `More like “${idea.title}”`, drafts: list.map((input) => ({ input, saved: false, saving: false })) })}
+              onDrafts={(list) => showDrafts({ from: `More like “${idea.title}”`, drafts: list.map((o) => ({ ...o, saved: false, saving: false })) })}
             />
           ))}
         </ul>
       )}
+
+      {question?.kind === "close" ? (
+        <StSheet
+          title="Throw away this idea?"
+          onClose={() => setQuestion(null)}
+          actions={
+            <>
+              <button
+                type="button"
+                className="st-btn"
+                onClick={() => {
+                  setQuestion(null);
+                  setDraft(EMPTY_DRAFT);
+                  setOpen("none");
+                }}
+              >
+                Yes, throw it away
+              </button>
+              <button type="button" className="st-btn st-btn--main" onClick={() => setQuestion(null)}>
+                No, keep it
+              </button>
+            </>
+          }
+        >
+          <p>What you typed is not saved yet.</p>
+        </StSheet>
+      ) : null}
+      {question?.kind === "leave" ? (
+        <StSheet
+          title="Leave without saving?"
+          onClose={() => setQuestion(null)}
+          actions={
+            <>
+              <button
+                type="button"
+                className="st-btn"
+                onClick={() => {
+                  const go = question.proceed;
+                  setQuestion(null);
+                  go();
+                }}
+              >
+                Leave without saving
+              </button>
+              <button
+                type="button"
+                className="st-btn st-btn--main"
+                onClick={() => {
+                  setQuestion(null);
+                  // Back to the typing that is not saved: New idea opens again when it holds it.
+                  if (typed && !edited.size) setOpen("new");
+                }}
+              >
+                Stay here
+              </button>
+            </>
+          }
+        >
+          <p>What you typed is not saved yet.</p>
+        </StSheet>
+      ) : null}
     </section>
   );
 }
 
-function NewIdeaForm({ onSave, onCancel }: { onSave: (i: IdeaInput) => Promise<void>; onCancel: () => void }) {
-  const [title, setTitle] = useState("");
-  const [logline, setLogline] = useState("");
-  const [category, setCategory] = useState<IdeaCategory | "">("");
+function NewIdeaForm({ draft, onDraft, onSave, onCancel }: { draft: NewDraft; onDraft: (d: NewDraft) => void; onSave: (i: IdeaInput) => Promise<void>; onCancel: () => void }) {
+  const { title, logline, category } = draft;
+  const setTitle = (v: string) => onDraft({ ...draft, title: v });
+  const setLogline = (v: string) => onDraft({ ...draft, logline: v });
+  const setCategory = (v: IdeaCategory | "") => onDraft({ ...draft, category: v });
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Set at once on the first tap (or Enter): a second one before the answer saves nothing more.
+  const busyRef = useRef(false);
 
   async function save() {
+    if (busyRef.current) return;
     if (!title.trim()) return setProblem("Give the idea a title.");
     if (title.trim().length > 80) return setProblem("Keep the title to 80 letters.");
     if (!logline.trim()) return setProblem("Write one line about what happens.");
     if (logline.trim().length > 280) return setProblem("Keep the line to 280 letters.");
     if (!category) return setProblem("Pick what kind of video it is.");
+    busyRef.current = true;
     setBusy(true);
     setProblem(null);
     try {
       await onSave({ title: title.trim(), logline: logline.trim(), category, source: "manual" });
     } catch (e) {
       setProblem(say(e));
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -306,6 +481,9 @@ export function ideaProblem(i: Pick<IdeaInput, "title" | "logline"> & { category
   if (!c) return null;
   if (!c.premise.trim()) return "Say what the full idea is about.";
   if (c.premise.trim().length > 600) return "Keep what it is about to 600 letters.";
+  // An empty step is named by its number (at 3 steps it cannot be removed: a full idea needs 3).
+  const emptyBeat = c.beats.findIndex((b) => !b.trim());
+  if (emptyBeat >= 0) return `Step ${emptyBeat + 1} is empty: write what happens${c.beats.length > 3 ? ", or remove it" : ""}.`;
   const beats = c.beats.map((b) => b.trim()).filter(Boolean);
   if (beats.length < 3 || beats.length > 8) return "A full idea needs 3 to 8 steps.";
   const longBeat = c.beats.findIndex((b) => b.trim().length > 160);
@@ -327,18 +505,23 @@ export function ideaPatch(idea: Idea, next: { title: string; logline: string; ca
   if (next.logline.trim() !== idea.logline) patch.logline = next.logline.trim();
   if (next.category !== idea.category) patch.category = next.category;
   if (concept && idea.concept) {
-    const clean: VideoConcept = {
-      premise: concept.premise.trim(),
-      beats: concept.beats.map((b) => b.trim()).filter(Boolean),
-      lesson: (concept.lesson ?? "").trim() || null,
-      ending: concept.ending.trim(),
-      tone: concept.tone,
-      durationSec: concept.durationSec,
-      onScreenText: concept.onScreenText.map((t) => t.trim()).filter(Boolean),
-    };
-    if (JSON.stringify(clean) !== JSON.stringify(idea.concept)) patch.concept = clean;
+    const clean = cleanConcept(concept);
+    // Both sides in the same shape and order, so an idea the server sent in another key order is not "changed".
+    if (JSON.stringify(clean) !== JSON.stringify(cleanConcept(idea.concept))) patch.concept = clean;
   }
   return patch;
+}
+
+function cleanConcept(concept: VideoConcept): VideoConcept {
+  return {
+    premise: concept.premise.trim(),
+    beats: concept.beats.map((b) => b.trim()).filter(Boolean),
+    lesson: (concept.lesson ?? "").trim() || null,
+    ending: concept.ending.trim(),
+    tone: concept.tone,
+    durationSec: concept.durationSec,
+    onScreenText: concept.onScreenText.map((t) => t.trim()).filter(Boolean),
+  };
 }
 
 /** A list of short lines with Add and Remove (the full idea's steps, the words on screen). */
@@ -364,29 +547,40 @@ function Lines({ label, item, lines, max, most, least = 0, onChange }: { label: 
 }
 
 /** Edit a saved idea (§45.34): its title, line and kind, and an expanded idea's parts. */
-function EditIdeaForm({ idea, onSave, onCancel }: { idea: Idea; onSave: (patch: Partial<IdeaInput>) => Promise<void>; onCancel: () => void }) {
+function EditIdeaForm({ idea, onSave, onCancel, onChanged }: { idea: Idea; onSave: (patch: Partial<IdeaInput>) => Promise<void>; onCancel: () => void; onChanged?: (changed: boolean) => void }) {
   const [title, setTitle] = useState(idea.title);
   const [logline, setLogline] = useState(idea.logline);
   const [category, setCategory] = useState<IdeaCategory | "">(idea.category);
   const [concept, setConcept] = useState<VideoConcept | null>(() => (idea.concept ? structuredClone(idea.concept) : null));
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Set at once on the first tap (or Enter): a second one before the answer sends nothing more.
+  const busyRef = useRef(false);
   const setPart = (part: Partial<VideoConcept>) => {
     setProblem(null);
     setConcept((c) => (c ? { ...c, ...part } : c));
   };
+  // Changes not saved yet: the page asks before it is left.
+  const changed = !!category && Object.keys(ideaPatch(idea, { title, logline, category }, concept)).length > 0;
+  useEffect(() => {
+    onChanged?.(changed);
+  }, [changed, onChanged]);
+  useEffect(() => () => onChanged?.(false), [onChanged]);
 
   async function save() {
+    if (busyRef.current) return;
     const why = ideaProblem({ title, logline, category }, concept);
     if (why) return setProblem(why);
     const patch = ideaPatch(idea, { title, logline, category: category as IdeaCategory }, concept);
     if (!Object.keys(patch).length) return onCancel();
+    busyRef.current = true;
     setBusy(true);
     setProblem(null);
     try {
       await onSave(patch);
     } catch (e) {
       setProblem(say(e));
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -436,14 +630,14 @@ function EditIdeaForm({ idea, onSave, onCancel }: { idea: Idea; onSave: (patch: 
   );
 }
 
-function AskForIdeas({ ws, info, onDrafts, onCancel }: { ws: string; info: AiInfo; onDrafts: (d: IdeaInput[], from: string) => void; onCancel: () => void }) {
+function AskForIdeas({ ws, info, shown, onDrafts, onCancel }: { ws: string; info: AiInfo; shown: boolean; onDrafts: (d: Offered[], from: string) => void; onCancel: () => void }) {
   const [topic, setTopic] = useState("");
   const [kind, setKind] = useState<Kind>("any");
   const [pick, setPick] = useState<ModelOverride | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const asked = useRef("");
   const run = useAiTask(ws, (task) => {
-    const drafts = draftsOf(task);
+    const drafts = offeredOf(task);
     if (!drafts.length) setProblem("No ideas came back. Try another topic.");
     else onDrafts(drafts, asked.current ? `Ideas about “${asked.current}”` : "Fresh ideas");
   }, () => ask());
@@ -466,6 +660,7 @@ function AskForIdeas({ ws, info, onDrafts, onCancel }: { ws: string; info: AiInf
     <form
       className="st-glass st-lens st-s-panel st-s-make-panel"
       aria-label="Ask for ideas"
+      hidden={!shown}
       onSubmit={(e) => {
         e.preventDefault();
         if (!busy) ask();
@@ -475,7 +670,6 @@ function AskForIdeas({ ws, info, onDrafts, onCancel }: { ws: string; info: AiInf
       <TextField label="What about? (you can leave this empty)" value={topic} onChange={setTopic} max={200} placeholder="For example: a snowy day" />
       <Pick label="What kind?" big value={kind} options={[{ value: "any", label: "Any kind", line: "A mix of everything" }, ...KIND_OPTIONS]} onChange={setKind} />
       {problem ? <Notice tone="bad">{problem}</Notice> : null}
-      <TaskLine info={info} kind="brainstorm" run={run} expected={merged(info, usual, pick)} />
       <div className="st-s-actionbar">
         <button type="button" className="st-btn" onClick={onCancel}>
           Cancel
@@ -485,6 +679,8 @@ function AskForIdeas({ ws, info, onDrafts, onCancel }: { ws: string; info: AiInf
           {busy ? "Thinking…" : "Get ideas"}
         </button>
       </div>
+      {/* Under the buttons: the line that appears once the ask starts never moves them (a double tap stays on Get ideas). */}
+      <TaskLine info={info} kind="brainstorm" run={run} expected={merged(info, usual, pick)} />
     </form>
   );
 }
@@ -496,6 +692,7 @@ function IdeaCard({
   topics,
   length,
   onChange,
+  onEdited,
   onDelete,
   onDrafts,
 }: {
@@ -505,8 +702,10 @@ function IdeaCard({
   topics: GuidanceTopic[] | null;
   length: number;
   onChange: (i: Idea) => void;
+  /** the idea's Edit holds changes that are not saved (true), or not any more */
+  onEdited?: (ideaId: string, changed: boolean) => void;
   onDelete: () => void;
-  onDrafts: (d: IdeaInput[]) => void;
+  onDrafts: (d: Offered[]) => void;
 }) {
   const toast = useToast();
   const [problem, setProblem] = useState<string | null>(null);
@@ -525,7 +724,7 @@ function IdeaCard({
     } else setProblem("The full idea did not come back. Tap Try again.");
   }, () => expand());
   const varying = useAiTask(ws, (task) => {
-    const drafts = draftsOf(task);
+    const drafts = offeredOf(task);
     if (drafts.length) onDrafts(drafts);
     else setProblem("No ideas came back. Tap More like this again.");
   }, () => more());
@@ -533,8 +732,12 @@ function IdeaCard({
   const expandUsual = usualFor(info, "expand_idea");
   const moreUsual = usualFor(info, "variations");
 
+  const ideaId = idea.ideaId;
+  const changedHere = useCallback((changed: boolean) => onEdited?.(ideaId, changed), [onEdited, ideaId]);
+
   function expand() {
-    if (blocked || busy) return;
+    if (blocked) return setProblem(BLOCKED_NEXT);
+    if (busy) return;
     setProblem(null);
     varying.reset();
     // "Write it again" keeps the full idea's own length (§45.35 D21); a first try starts from the workspace's length.
@@ -545,6 +748,7 @@ function IdeaCard({
   }
 
   function more() {
+    if (blocked) return setProblem(BLOCKED_NEXT);
     if (busy) return;
     setProblem(null);
     expanding.reset();
@@ -571,6 +775,7 @@ function IdeaCard({
         <h2 className="st-s-idea__title">Edit “{idea.title}”</h2>
         <EditIdeaForm
           idea={idea}
+          onChanged={changedHere}
           onCancel={() => setEditing(false)}
           onSave={async (patch) => {
             const next = await storiesApi().patchIdea(ws, idea.ideaId, patch);
@@ -605,20 +810,29 @@ function IdeaCard({
         <h2 className="st-s-idea__title">{idea.title}</h2>
         <p className="st-s-idea__line">{idea.logline}</p>
         {advice ? <p className="st-s-idea__advice">{advice}</p> : null}
-        {blocked ? <p className="st-s-idea__advice is-bad">{NO_GUIDANCE}</p> : null}
+        {blocked ? (
+          <>
+            <p className="st-s-idea__advice is-bad">{NO_GUIDANCE}</p>
+            <button type="button" className="st-btn st-s-small st-s-idea__fix" aria-disabled={busy || undefined} onClick={() => !busy && setEditing(true)}>
+              <MakeIcon name="edit" size={18} />
+              Edit it
+            </button>
+          </>
+        ) : null}
 
         {problem ? <Notice tone="bad">{problem}</Notice> : null}
         <TaskLine info={info} kind="expand_idea" run={expanding} expected={merged(info, expandUsual, expandPick)} />
         <TaskLine info={info} kind="variations" run={varying} expected={merged(info, moreUsual, morePick)} />
 
         <span className="st-s-idea__actions">
+          {/* A blocked idea has no orange button: it cannot become a video, and a tap says what to do instead. */}
           <button
             type="button"
-            className="st-btn st-btn--main"
+            className={cx("st-btn", !blocked && "st-btn--main")}
             aria-disabled={blocked || undefined}
-            title={blocked ? NO_GUIDANCE : undefined}
             onClick={() => {
-              if (!blocked) navigate(storiesHref({ name: "production_new", ideaId: idea.ideaId }));
+              if (blocked) setProblem(BLOCKED_NEXT);
+              else navigate(storiesHref({ name: "production_new", ideaId: idea.ideaId }));
             }}
           >
             Make the video
@@ -630,14 +844,14 @@ function IdeaCard({
           ) : null}
           {!c || showConcept ? (
             <span className="st-s-aipair">
-              <button type="button" className="st-btn" aria-disabled={blocked || busy || undefined} title={blocked ? NO_GUIDANCE : undefined} onClick={expand}>
+              <button type="button" className="st-btn" aria-disabled={blocked || busy || undefined} onClick={expand}>
                 {expanding.phase === "working" ? "Writing…" : c ? "Write it again" : "Make it a full idea"}
               </button>
               <ModelMenu info={info} usual={expandUsual} value={expandPick} onChange={setExpandPick} compact />
             </span>
           ) : null}
           <span className="st-s-aipair">
-            <button type="button" className="st-btn" aria-disabled={busy || undefined} onClick={more}>
+            <button type="button" className="st-btn" aria-disabled={blocked || busy || undefined} onClick={more}>
               {varying.phase === "working" ? "Thinking…" : "More like this"}
             </button>
             <ModelMenu info={info} usual={moreUsual} value={morePick} onChange={setMorePick} compact />

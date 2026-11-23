@@ -242,6 +242,8 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
       const connection = await api().crPatchConnection({ finance: v });
       patchCr((o) => ({ ...o, connection }));
       scheduleGetPaid(0);
+      // The answer (or the question again) takes the tapped control's place: the focus stays on the question.
+      setTimeout(() => document.getElementById(CR_FINANCE)?.focus({ preventScroll: true }), 0);
       return true;
     } catch (e) {
       toast.error(friendlyMessage(e));

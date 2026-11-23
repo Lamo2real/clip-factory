@@ -17,7 +17,7 @@ import { useToast } from "../../components/Toasts.tsx";
 import { Glide } from "../../components/Glide.tsx";
 import { storiesGoLater } from "../pane.tsx";
 import { useLoad } from "../../lib/hooks.ts";
-import { storiesSound } from "../prefs.ts";
+import { storiesReduceMotion, storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
 import { EFFORT_LABEL, type Effort, type ModelInfo, type Onboarding, type OnboardStep, type Platform, type SocialAccount, type StoriesAiConfig, type StoriesConfig } from "../api/types.ts";
 import { madeBy, MODEL_STATUS } from "../settings/bits.tsx";
@@ -148,7 +148,17 @@ function CheckRow({ checking, busy, onCheck }: { checking: boolean; busy: boolea
 const STATE_CHIP: Record<ModelInfo["status"], { label: string; tone: string }> = MODEL_STATUS;
 
 /** Step 1: what Lamo Stories uses, the models and their state, Check models, and "These look right" (§45.34). */
-function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy }: { ws: string; ai: Ai; onSaved: (next: StoriesAiConfig) => void; onChecked: (models: ModelInfo[]) => void; busy: boolean; setBusy: (b: boolean) => void }) {
+/** What every step that saves gets: `done` (it was saved before: its save is then not the orange one) and `onChanged`. */
+type StepDone = { done?: boolean; onChanged?: (changed: boolean) => void };
+
+/** Tells the setup whether the open step holds a pick that is not saved yet (its save is then the orange one). */
+function useChanged(changed: boolean, onChanged?: (changed: boolean) => void) {
+  useEffect(() => {
+    onChanged?.(changed);
+  }, [changed, onChanged]);
+}
+
+function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy, done = false }: { ws: string; ai: Ai; onSaved: (next: StoriesAiConfig) => void; onChecked: (models: ModelInfo[]) => void; busy: boolean; setBusy: (b: boolean) => void } & StepDone) {
   const toast = useToast();
   const { checking, models, check } = useCheckModels(ws, ai.models, onChecked);
   return (
@@ -183,6 +193,7 @@ function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy }: { ws: st
       <CheckRow checking={checking} busy={busy} onCheck={() => void check()} />
       <SaveBar
         busy={busy}
+        quiet={done}
         label="These look right"
         onSave={async (el) => {
           setBusy(true);
@@ -211,6 +222,8 @@ function ModelStep({
   onChecked,
   busy,
   setBusy,
+  done = false,
+  onChanged,
 }: {
   ws: string;
   ai: Ai;
@@ -220,12 +233,14 @@ function ModelStep({
   onChecked: (models: ModelInfo[]) => void;
   busy: boolean;
   setBusy: (b: boolean) => void;
-}) {
+} & StepDone) {
   const toast = useToast();
   const [pick, setPick] = useState(ai.ai.defaultModel);
   const { checking, models, check } = useCheckModels(ws, ai.models, onChecked);
   const chosen = models.find((m) => m.key === pick);
   const needsLevel = !!chosen && chosen.efforts.length > 0 && !chosen.efforts.includes(ai.ai.defaultEffort);
+  const changed = !!chosen && chosen.key !== ai.ai.defaultModel;
+  useChanged(changed, onChanged);
 
   const save = async (el: HTMLElement) => {
     if (!chosen) return;
@@ -273,18 +288,21 @@ function ModelStep({
         </p>
       ) : null}
       <CheckRow checking={checking} busy={busy} onCheck={() => void check()} />
-      <SaveBar busy={busy} label={chosen ? (needsLevel ? `Use ${chosen.label}: pick its level next` : `Use ${chosen.label}`) : "Use this model"} onSave={save} />
+      <SaveBar busy={busy} quiet={done && !changed} label={chosen ? (needsLevel ? `Use ${chosen.label}: pick its level next` : `Use ${chosen.label}`) : "Use this model"} onSave={save} />
     </>
   );
 }
 
 /** Step 3: the default effort (`picked: ["effort"]`), or the held model with the level the owner picks for it. */
-function EffortStep({ ws, ai, held, onSaved, busy, setBusy }: { ws: string; ai: Ai; held: string | null; onSaved: (next: StoriesAiConfig) => void; busy: boolean; setBusy: (b: boolean) => void }) {
+function EffortStep({ ws, ai, held, onSaved, busy, setBusy, done = false, onChanged }: { ws: string; ai: Ai; held: string | null; onSaved: (next: StoriesAiConfig) => void; busy: boolean; setBusy: (b: boolean) => void } & StepDone) {
   const toast = useToast();
   const model = ai.models.find((m) => m.key === (held ?? ai.ai.defaultModel));
   const offers = model?.efforts ?? [];
   // A held model starts with nothing picked: the owner chooses its level himself.
   const [pick, setPick] = useState<Effort | null>(held ? null : offers.includes(ai.ai.defaultEffort) ? ai.ai.defaultEffort : (model?.defaultEffort ?? offers[0] ?? "high"));
+  // A held model is always a change (it is saved only with its level); else a level other than the saved one.
+  const changed = offers.length > 0 && (!!held || (!!pick && pick !== ai.ai.defaultEffort));
+  useChanged(changed, onChanged);
   if (!offers.length)
     return (
       <>
@@ -294,6 +312,7 @@ function EffortStep({ ws, ai, held, onSaved, busy, setBusy }: { ws: string; ai: 
         </p>
         <SaveBar
           busy={busy}
+          quiet={done}
           label="Use its own level"
           onSave={async (el) => {
             setBusy(true);
@@ -330,6 +349,7 @@ function EffortStep({ ws, ai, held, onSaved, busy, setBusy }: { ws: string; ai: 
       />
       <SaveBar
         busy={busy}
+        quiet={done && !changed}
         label={pick ? `Use ${EFFORT_LABEL[pick]}` : "Pick a level first"}
         off={!pick}
         onSave={async (el) => {
@@ -354,11 +374,12 @@ function EffortStep({ ws, ai, held, onSaved, busy, setBusy }: { ws: string; ai: 
   );
 }
 
-function SaveBar({ busy, label, onSave, off = false }: { busy: boolean; label: string; onSave: (el: HTMLElement) => void | Promise<void>; off?: boolean }) {
+/** A step's save. `quiet`: the step is done and nothing changed, so Next is the one orange button (one main action). */
+function SaveBar({ busy, label, onSave, off = false, quiet = false }: { busy: boolean; label: string; onSave: (el: HTMLElement) => void | Promise<void>; off?: boolean; quiet?: boolean }) {
   return (
     <div className="st-setup__save">
       <StButton
-        main
+        main={!quiet}
         disabled={busy}
         aria-disabled={off || undefined}
         onClick={(e) => {
@@ -377,7 +398,7 @@ function SaveBar({ busy, label, onSave, off = false }: { busy: boolean; label: s
 export const BUILTIN_LINE = "On. Cartoons drawn right here, tall, square or wide, 30 frames a second.";
 
 /** Step 4: how videos are made (the video provider, §45.31), saved in the workspace's own settings. */
-function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => void; busy: boolean; setBusy: (b: boolean) => void }) {
+function VideoStep({ ws, onSaved, busy, setBusy, done = false, onChanged }: { ws: string; onSaved: () => void; busy: boolean; setBusy: (b: boolean) => void } & StepDone) {
   const toast = useToast();
   const w = useLoad(() => storiesApi().getWorkspace(ws), ws, "st-setup-ws");
   const providers = useLoad(() => storiesApi().providers(ws).catch(() => []), ws, "st-setup-providers");
@@ -388,6 +409,8 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
   // §45.37 G7: Amazon ended Nova Reel on 30 Sep 2026, so it is never offered; Luma AI Ray2 makes the AI cut-aways.
   const luma = providers.data?.find((p) => p.id === "luma-ray");
   const ended = value === "nova-reel";
+  const changed = !!config && pick !== null && pick !== config.providers.video;
+  useChanged(changed, onChanged);
   if (w.error && !w.data) return <StError message={w.error} onRetry={() => void w.reload()} />;
   if (!config) return <StLoading label="Reading the video settings…" />;
   return (
@@ -442,6 +465,7 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
       ) : null}
       <SaveBar
         busy={busy}
+        quiet={done && !changed && !ended}
         label="Use this"
         onSave={async (el) => {
           // An ended maker is never saved again: the API would keep an older pick, and nothing could make a video.
@@ -567,12 +591,21 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
   const [busy, setBusy] = useState(false);
   // Step 2's model, waiting for the owner's own effort in step 3 (nothing is saved until then).
   const [held, setHeld] = useState<string | null>(null);
+  // The open step holds a pick that is not saved yet: its save is the orange button, not Next.
+  const [changed, setChanged] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
+  // The step on screen right now (set at once on every tap): a save that ends after the child opened another step
+  // never pulls them away from it.
+  const open = useRef<OnboardStep | null>(null);
   const data = ob.data;
 
   // Open at the first step still to do, once the server said where things are.
   useEffect(() => {
-    if (data && at === null) setAt(firstOpen(data));
+    if (data && at === null) {
+      const first = firstOpen(data);
+      open.current = first;
+      setAt(first);
+    }
   }, [data, at]);
 
   const step = at ?? "ai";
@@ -580,8 +613,20 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
   const left = useMemo(() => (data ? leftOf(data) : []), [data]);
 
   const go = (to: OnboardStep) => {
+    open.current = to;
+    setChanged(false);
     setAt(to);
-    requestAnimationFrame(() => panel.current?.focus({ preventScroll: false }));
+    requestAnimationFrame(() => {
+      const el = panel.current;
+      if (!el) return;
+      // On a phone the step list and the last step's buttons sit above: the new step's title comes into view first.
+      if (!inView(el.querySelector("#st-setup-step") ?? el)) el.scrollIntoView?.({ block: "start", behavior: storiesReduceMotion() ? "auto" : "smooth" });
+      el.focus({ preventScroll: true });
+    });
+  };
+  /** After a save or a skip of `from`: on to the next step, only while the child is still on `from`. */
+  const onFrom = (from: OnboardStep) => {
+    if ((open.current ?? "ai") === from) go(nextStep(from));
   };
 
   const patch = async (body: Parameters<ReturnType<typeof storiesApi>["patchOnboarding"]>[1]) => {
@@ -591,11 +636,12 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
   };
 
   const skip = async () => {
+    const from = step;
     setBusy(true);
     try {
-      await patch({ step, skipped: true });
+      await patch({ step: from, skipped: true });
       toast.success("Skipped. It stays on the list for later.");
-      go(nextStep(step));
+      onFrom(from);
     } catch (e) {
       toast.error(friendlyMessage(e));
     } finally {
@@ -604,10 +650,11 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
   };
 
   const afterSave = async () => {
+    const from = step;
     await ob.reload();
     void ai.reload();
     void refreshDashboard(ws).catch(() => undefined);
-    go(nextStep(step));
+    onFrom(from);
   };
   // Steps 2 and 3: the saved AI setup (with its new version) is what the next step starts from at once, never the one
   // from before the save while the reload is on its way (a stale version would be refused).
@@ -655,7 +702,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
         ) : !ai.data ? (
           <StLoading label="Reading the models…" />
         ) : step === "ai" ? (
-          <EnvironmentStep key={`a${ai.data.ai.version}`} ws={ws} ai={ai.data} busy={busy} setBusy={setBusy} onSaved={afterAiSave} onChecked={afterCheck} />
+          <EnvironmentStep key={`a${ai.data.ai.version}`} ws={ws} ai={ai.data} busy={busy} setBusy={setBusy} done={state === "done"} onSaved={afterAiSave} onChecked={afterCheck} />
         ) : step === "model" ? (
           <ModelStep
             key={`m${ai.data.ai.version}`}
@@ -663,6 +710,8 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
             ai={ai.data}
             busy={busy}
             setBusy={setBusy}
+            done={state === "done"}
+            onChanged={setChanged}
             onSaved={afterAiSave}
             onChecked={afterCheck}
             onHold={(key) => {
@@ -671,13 +720,13 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
             }}
           />
         ) : (
-          <EffortStep key={`e${ai.data.ai.version}${held ?? ""}`} ws={ws} ai={ai.data} held={held} busy={busy} setBusy={setBusy} onSaved={afterAiSave} />
+          <EffortStep key={`e${ai.data.ai.version}${held ?? ""}`} ws={ws} ai={ai.data} held={held} busy={busy} setBusy={setBusy} done={state === "done"} onChanged={setChanged} onSaved={afterAiSave} />
         );
-      foot = state === "done" ? <NextButton onClick={() => go(nextStep(step))} /> : null;
+      foot = state === "done" ? <NextButton main={!changed} onClick={() => go(nextStep(step))} /> : null;
       break;
     case "video":
-      body = <VideoStep ws={ws} busy={busy} setBusy={setBusy} onSaved={() => void afterSave()} />;
-      foot = state === "done" ? <NextButton onClick={() => go(nextStep(step))} /> : null;
+      body = <VideoStep ws={ws} busy={busy} setBusy={setBusy} done={state === "done"} onChanged={setChanged} onSaved={() => void afterSave()} />;
+      foot = state === "done" ? <NextButton main={!changed} onClick={() => go(nextStep(step))} /> : null;
       break;
     case "agents":
       body = <AgentsStep ws={ws} />;
@@ -693,7 +742,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
                 await patch({ step: "agents", done: true });
                 celebrate(centerOf(el));
               }
-              go(nextStep(step));
+              onFrom("agents");
             } catch (err) {
               toast.error(friendlyMessage(err));
             } finally {
@@ -755,7 +804,8 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
       break;
     default:
       body = <ConnectStep ws={ws} platform={step as Platform} line={data.steps.find((s) => s.step === step)?.line} />;
-      foot = <NextButton onClick={() => go(nextStep(step))} main={state === "done"} />;
+      // One way on: Skip for now while it is to do, Next once it is connected.
+      foot = state === "done" ? <NextButton onClick={() => go(nextStep(step))} /> : null;
   }
 
   return (
@@ -863,6 +913,13 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
       </div>
     </section>
   );
+}
+
+/** True when the element's top is on screen (not above it, nor in the lower part a thumb covers). */
+function inView(el: Element): boolean {
+  if (typeof window === "undefined") return true;
+  const r = el.getBoundingClientRect();
+  return r.top >= 0 && r.bottom <= window.innerHeight * 0.6;
 }
 
 function NextButton({ onClick, main = true }: { onClick: () => void; main?: boolean }) {
