@@ -1,5 +1,5 @@
 {
- "version": "7ebc61ff3266",
+ "version": "bd0659ce4b85",
  "parts": [
   {
    "id": "app-map",
@@ -123,7 +123,7 @@
    "id": "contracts-16",
    "title": "CONTRACTS: 16. Clip performance, stats refresh and weekly best (owner request, 2026-11-16)",
    "line": "The owner's words: \"click on any video and see how they performed for each social media platform ... the video on",
-   "chars": 59483
+   "chars": 60326
   },
   {
    "id": "contracts-17",
@@ -159,7 +159,7 @@
    "id": "contracts-22",
    "title": "CONTRACTS: 22. Background modes and see-through glass (owner request, 2026-11-16)",
    "line": "The owner wants the whole app to feel like liquid glass you can almost see through: \"if there's a car behind it, I",
-   "chars": 58453
+   "chars": 73524
   },
   {
    "id": "contracts-23",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 246075
+   "chars": 246194
   },
   {
    "id": "contracts-46",
@@ -483,7 +483,7 @@
    "id": "adr-29",
    "title": "DECISIONS: ADR-29 Stats refresh intervals per platform",
    "line": "Context. The owner wants each clip's numbers per platform, refreshed \"every 15 minutes or 30 minutes. Or",
-   "chars": 4777
+   "chars": 4856
   },
   {
    "id": "adr-30",
@@ -1065,19 +1065,19 @@
    "id": "ux-colour-tokens",
    "title": "UX_DESIGN_SYSTEM: Colour tokens",
    "line": "The palette is the November 2026 bottle-green look ([DECISIONS.md ADR-43](DECISIONS.md#adr-43-bottle-green-glass-bone-words-vermilion-actions)):",
-   "chars": 7598
+   "chars": 7989
   },
   {
    "id": "ux-the-liquid-glass-recipe",
    "title": "UX_DESIGN_SYSTEM: The liquid glass recipe",
    "line": "glass-tint: var(--glass-tint-panel); / flat green: --panel-veil + --light-pay /",
-   "chars": 6748
+   "chars": 7542
   },
   {
    "id": "ux-the-logic-of-light",
    "title": "UX_DESIGN_SYSTEM: The logic of light",
    "line": "The owner (2026-11-23): \"the top layer is always brighter than the bottom, and it grows gradually in between ... make",
-   "chars": 16052
+   "chars": 16133
   },
   {
    "id": "ux-typography",
@@ -1119,7 +1119,7 @@
    "id": "ux-clip-performance-page",
    "title": "UX_DESIGN_SYSTEM: Clip performance page",
    "line": "The owner's picture: \"the video on top, like the preview of it ... and then there's like ... lines that go, in a smooth",
-   "chars": 11291
+   "chars": 11573
   },
   {
    "id": "ux-set-up-posting",

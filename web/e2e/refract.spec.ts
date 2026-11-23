@@ -55,7 +55,7 @@ for (const size of [
       expect(bending.length, `${path} at ${size.width}: ${bending.join(", ")}`).toBeLessThanOrEqual(3);
       // Each one blurs before it bends (with url() first Chromium leaves what is behind sharp, above).
       for (const filter of await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>(".glass--refract")).map((el) => getComputedStyle(el).backdropFilter)))
-        if (filter.includes("url(")) expect(filter, path).toMatch(/^blur\(14px\) url\("?#cf-refract"?\) saturate\(1\.75\)$/);
+        if (filter.includes("url(")) expect(filter, path).toMatch(/^blur\(1[48]px\) url\("?#cf-refract"?\) saturate\(1\.75\) brightness\([\d.]+\)$/);
       // The page title plates hold their words by their tint: no blur and no bend of their own.
       for (const filter of await page.locator(".page-head__text, .dash-head__text").evaluateAll((els) => els.map((el) => getComputedStyle(el).backdropFilter))) expect(filter, path).toBe("none");
     }

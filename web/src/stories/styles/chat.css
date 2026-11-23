@@ -212,7 +212,8 @@
   background: var(--st-fill-control-hover);
 }
 
-/* Controls loose on the page frost what is behind them over a picture or the desktop (nothing over the colours). */
+/* Controls loose on the page frost and dim what is behind them, as every glass (glass-tokens.css 5); inside glass or a
+   filtered plate they have none (glass.css). */
 .st-chat-back,
 .st-ref-actions--more > .st-chat-btn:not(.st-chat-btn--main) {
   -webkit-backdrop-filter: var(--st-filter-glass);
