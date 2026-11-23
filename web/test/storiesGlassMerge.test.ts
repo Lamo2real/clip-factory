@@ -11,7 +11,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { FONTS_ATTR, addStoriesFonts } from "../src/stories/fonts.ts";
-import { FROSTED, MEASURED, PRESETS, WHITE, contrast, hexToRgb, luminance, mix, stageSpots, type Rgb } from "../src/stories/look.ts";
+import { CONTROL_TARGET, FROSTED, MEASURED, PRESETS, WHITE, contrast, controlSpots, hexToRgb, luminance, mix, stageSpots, type Rgb } from "../src/stories/look.ts";
 
 const DIR = join(import.meta.dirname, "..", "src", "stories", "styles");
 const read = (f: string) => readFileSync(join(DIR, f), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
@@ -46,6 +46,18 @@ describe("a glass control loose on the colours", () => {
       const under = lightest(stageSpots(preset.colours));
       expect(contrast(text, mix(rest.rgb, under, rest.a)), "at rest").toBeGreaterThanOrEqual(4.5);
       expect(contrast(text, mix(hover.rgb, under, hover.a)), "hovered").toBeGreaterThanOrEqual(4.5);
+    });
+
+  for (const preset of PRESETS)
+    it(`with its level-4 light (--st-light-4) at its top, keeps its words at CONTROL_TARGET at rest and hovered over ${preset.name}, wherever a control sits`, () => {
+      // --st-light-4: cream at --st-elev-grad-4 at the very top, over the fill (glass.css .st-glass--control, .st-btn)
+      const light = Number(token("--st-elev-grad-4"));
+      expect(token("--st-light-4")).toContain("rgb(var(--st-cream-rgb) / var(--st-elev-grad-4))");
+      const cream = channels("--st-cream-rgb");
+      for (const under of controlSpots(preset.colours)) {
+        expect(contrast(text, mix(cream, mix(rest.rgb, under, rest.a), light)), `at rest over ${under}`).toBeGreaterThanOrEqual(CONTROL_TARGET);
+        expect(contrast(text, mix(cream, mix(hover.rgb, under, hover.a), light)), `hovered over ${under}`).toBeGreaterThanOrEqual(CONTROL_TARGET);
+      }
     });
 
   it("still shows the hover on a dark glass card, where the card's veil is under it: the cream lift", () => {
