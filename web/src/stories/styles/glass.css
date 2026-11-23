@@ -92,8 +92,10 @@
   backdrop-filter: var(--st-filter-float);
   box-shadow: var(--st-sheen-float), var(--st-depth-3), var(--st-glow-5);
 }
-/* A card inside a card (or inside the hero) is one level up from it. */
-.st-glass .st-glass:not(.st-glass--hero, .st-glass--bar, .st-glass--float, .st-glass--control, .st-glass--tinted) {
+/* A card inside a card (or inside the hero) is one level up from it. Anywhere inside a sheet, a bar, a tinted tile or a
+   control a card stays a plain card: its own measured veil over that parent keeps its words at 4.5:1 there (a lift of
+   light alone over a sheet would not: test/storiesLight.test.ts). */
+.st-glass .st-glass:not(.st-glass--hero, .st-glass--bar, .st-glass--float, .st-glass--control, .st-glass--tinted, :is(.st-glass--bar, .st-glass--float, .st-glass--control, .st-glass--tinted) *) {
   background: var(--st-tint-raised);
   box-shadow: var(--st-sheen-raised), var(--st-depth-1), var(--st-glow-3);
 }

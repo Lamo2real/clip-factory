@@ -322,6 +322,9 @@ glass.css:
 - `.st-glass .st-glass` (a plain card inside a card): one level up (`--st-tint-raised`, `--st-sheen-raised`), painted
   over its card: over the colours the hero's veil and level 3's light; over a picture or the desktop only a lift of light
   (`--st-elev-raised-lift`, 0.06) and no veil of its own, so over white it is a step up from its card (0.041 to 0.059).
+  Inside the hero the same. Anywhere inside a sheet, a bar, a tinted tile or a control it stays a plain card (its own
+  measured veil over that parent), so its words, the muted ones too, keep 4.5:1 there (a lift alone over a sheet over a
+  white picture left `--st-text-muted` at 4.19:1).
 - `.st-glass--control`: a glass control or inactive pill (radius control, control fill, hover deepens).
 - `.st-cream`: the solid cream surface with espresso words (the one highlighted card).
 - `.st-plate`: the backing plate for loose words (rule 6).

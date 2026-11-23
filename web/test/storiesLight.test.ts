@@ -465,6 +465,87 @@ describe("every word stays readable at the brightest part of every surface", () 
   });
 });
 
+describe("a card inside other glass (glass.css .st-glass .st-glass)", () => {
+  // Inside a card or a hero a card is one level up (--st-tint-raised), laid over its parent. Inside a sheet, a bar, a
+  // tinted tile or a control (anywhere inside one) it is a plain card (--st-tint-card): its own measured veil over that
+  // parent, so its words hold whatever the parent is. (A lift of light alone over a sheet would leave the muted words
+  // under 4.5:1 over a white picture: 4.19 to 4.40.)
+  const ink = (name: string) => hexToRgb(BASE.get(name)!);
+  const INKS_ON = [...GLASS_INKS, "--st-text-muted"];
+  const busy: Rgb[] = [WHITE, [255, 255, 0], [0, 255, 255], [255, 0, 255], [255, 64, 64], [64, 255, 64], [80, 140, 255], [255, 200, 150], [128, 128, 128], BLACK];
+  const behind = (look: Look): Rgb[] => {
+    if (look.kind === "colours") {
+      const spots = stageSpots(look.colours ?? EMBER);
+      return [...spots, ...spots.map((s) => saturateRgb(s, 1.35)), ESPRESSO];
+    }
+    return busy.flatMap((b) => [b, saturateRgb(b, 1.35)]);
+  };
+  type Nested = { name: string; parent: Surface; at: (under: Rgb, at: "top" | "bottom") => Rgb; raised: boolean };
+  function nestedOf(look: Look): Nested[] {
+    const env = envOf(look);
+    const all = surfacesOf(look);
+    const raised = layers("var(--st-tint-raised)", env);
+    const plain = layers("var(--st-tint-card)", env);
+    const inside = (name: string, parent: Surface, ls: Layer[], up: boolean): Nested => ({ name, parent, at: (b, at) => over(ls, parent.at(b, at), at), raised: up });
+    const by = (n: string) => all.find((x) => x.name === n)!;
+    return [
+      inside("a card inside a card", by("a card"), raised, true),
+      inside("a card inside a hero", by("a hero"), raised, true),
+      inside("a card inside a sheet", by("a sheet"), plain, false),
+      inside("a card inside a bar", by("a bar"), plain, false),
+      ...all.filter((x) => x.name.startsWith("a tinted")).map((t) => inside(`a card inside ${t.name}`, t, plain, false)),
+    ];
+  }
+
+  it("the rule: one level up inside a card or a hero, never inside a sheet, a bar, a tinted tile or a control", () => {
+    const css = read("glass.css").replace(/\/\*[\s\S]*?\*\//g, "");
+    const NOT = ".st-glass--hero, .st-glass--bar, .st-glass--float, .st-glass--control, .st-glass--tinted";
+    const sel = `.st-glass .st-glass:not(${NOT}, :is(.st-glass--bar, .st-glass--float, .st-glass--control, .st-glass--tinted) *)`;
+    expect(css).toContain(`${sel} {`);
+    // the only rule that lays --st-tint-raised
+    expect(css.match(/var\(--st-tint-raised\)/g)).toHaveLength(1);
+    // in the DOM: which glass is a raised card
+    document.body.innerHTML = `
+      <div class="st-glass" id="card"><div class="st-glass" data-want="1"></div><div><div class="st-glass" data-want="1"></div></div></div>
+      <div class="st-glass st-glass--hero" id="hero"><div class="st-glass" data-want="1"></div><div class="st-glass st-glass--control" data-want="0"></div></div>
+      <div class="st-glass st-glass--hero st-glass--float"><div class="st-glass" data-want="0"></div></div>
+      <div class="st-glass"><div class="st-glass st-glass--float"><div class="st-glass" data-want="0"></div><div class="st-glass"><div class="st-glass" data-want="0"></div></div></div></div>
+      <div class="st-glass st-glass--bar"><div class="st-glass st-glass--float"><div class="st-glass" data-want="0"></div></div></div>
+      <div class="st-glass st-glass--tinted"><div class="st-glass" data-want="0"></div></div>
+      <div class="st-glass" data-want="0"></div>`;
+    for (const el of document.querySelectorAll<HTMLElement>("[data-want]")) expect(el.matches(sel), el.outerHTML).toBe(el.dataset.want === "1");
+    document.body.innerHTML = "";
+  });
+
+  for (const look of LOOKS)
+    it(`${look.name}: its words hold at 4.5:1 inside every parent, and inside a card or a hero it is a step up`, () => {
+      const low: string[] = [];
+      for (const n of nestedOf(look)) {
+        for (const under of behind(look))
+          for (const at of ["top", "bottom"] as const)
+            for (const i of INKS_ON) {
+              const r = contrast(ink(i), n.at(under, at));
+              if (r < 4.5) low.push(`${n.name} at the ${at} over ${under.map(Math.round)}: ${i} ${r.toFixed(2)}`);
+            }
+        if (!n.raised) continue;
+        // a step up from the parent it is laid over: over white by LIGHT_STEP on a picture or the desktop, brighter
+        // anyhow (in solid glass over the colours a card inside the hero is the hero's own solid veil: never darker)
+        const least = look.solid && look.kind === "colours" && n.parent.name === "a hero" ? -1e-4 : 1e-4;
+        for (const [under, step] of [
+          [ESPRESSO, least],
+          [BLACK, least],
+          ...(look.kind !== "colours" && !look.solid ? ([[WHITE, LIGHT_STEP]] as const) : []),
+        ] as const)
+          for (const at of ["top", "bottom"] as const) {
+            const up = luminance(n.at(under, at));
+            const down = luminance(n.parent.at(under, at));
+            if (!(up >= down + step)) low.push(`${n.name} at the ${at} over ${under}: ${up.toFixed(4)} is not ${step} above ${n.parent.name} (${down.toFixed(4)})`);
+          }
+      }
+      expect([...new Set(low)], [...new Set(low)].slice(0, 30).join("\n")).toEqual([]);
+    });
+});
+
 describe("the glass classes and the screens' surfaces lay their level's light", () => {
   const body = (css: string, selector: string) => {
     const at = css.indexOf(`${selector} {`);
@@ -478,7 +559,7 @@ describe("the glass classes and the screens' surfaces lay their level's light", 
       [".st-glass--hero", "--st-tint-hero", "--st-sheen-hero", "--st-glow-3"],
       [".st-glass--bar", "--st-tint-bar", "--st-sheen-raised", "--st-glow-3"],
       [".st-glass--float", "--st-tint-float", "--st-sheen-float", "--st-glow-5"],
-      [".st-glass .st-glass:not(.st-glass--hero, .st-glass--bar, .st-glass--float, .st-glass--control, .st-glass--tinted)", "--st-tint-raised", "--st-sheen-raised", "--st-glow-3"],
+      [".st-glass .st-glass:not(.st-glass--hero, .st-glass--bar, .st-glass--float, .st-glass--control, .st-glass--tinted, :is(.st-glass--bar, .st-glass--float, .st-glass--control, .st-glass--tinted) *)", "--st-tint-raised", "--st-sheen-raised", "--st-glow-3"],
       ['.stories-app:is([data-look="window"], [data-look="picture"]) .st-plate', "--st-tint-plate", "--st-sheen-panel", "--st-glow-1"],
     ];
     for (const [sel, fill, sheen, glow] of want) {
