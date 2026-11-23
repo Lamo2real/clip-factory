@@ -124,13 +124,15 @@ function MakerPriceRow({ maker, ai, open, setOpen }: { maker: (typeof PRICED_MAK
   );
 }
 
-/** Each maker that can carry a price, with its form; `open` is the maker whose form is open (the usage card opens one). */
-export function MakerPrices({ ai, open, setOpen }: { ai: Ai; open: string | null; setOpen: (id: string | null) => void }) {
+/** Each maker that can carry a price, with its form; `open` is the maker whose form is open (the usage card opens one).
+ *  A row closing its own form says which it is (`from`): a save that lands after another maker's form was opened
+ *  leaves that form open (the owner is typing in it). */
+export function MakerPrices({ ai, open, setOpen }: { ai: Ai; open: string | null; setOpen: (id: string | null, from?: string) => void }) {
   if (!ai.data) return ai.error ? <p className="st-stg-small">{ai.error}</p> : null;
   return (
     <ul className="st-stg-prices" aria-label="Each maker's price">
       {PRICED_MAKERS.map((m) => (
-        <MakerPriceRow key={m.id} maker={m} ai={ai} open={open === m.id} setOpen={(v) => setOpen(v ? m.id : null)} />
+        <MakerPriceRow key={m.id} maker={m} ai={ai} open={open === m.id} setOpen={(v) => setOpen(v ? m.id : null, m.id)} />
       ))}
     </ul>
   );

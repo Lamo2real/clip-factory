@@ -277,8 +277,9 @@ export function VideoSection({ ws }: { ws: string }) {
         <MakerPrices
           ai={ai}
           open={priceOpen}
-          setOpen={(id) => {
-            setPriceOpen(id);
+          setOpen={(id, from) => {
+            // Closing is the row's own form only: another maker's form opened meanwhile stays open.
+            setPriceOpen((now) => (id === null && from !== undefined && now !== from ? now : id));
             if (id === null) void usage.reload();
           }}
         />
