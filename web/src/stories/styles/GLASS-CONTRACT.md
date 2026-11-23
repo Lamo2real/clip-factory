@@ -302,11 +302,14 @@ motion); `--st-ease-out`, `--st-ease-glide`, `--st-ease-progress` (slow start, f
 
 ### 13. The logo (the shell draws it; Stories only sets its colours here, on `.stories-app`)
 The mark is a shell element (the rename branch: `web/src/components/WorkspaceMark.tsx` and `web/src/styles/ws-mark.css`,
-in Clip Factory's main bundle, where ci.yml forbids any `--st-` or `.st-`), coloured by the shell's four names with
-today's colours as fallbacks: `--ws-mark-tile` (cream tile gradient), `--ws-mark-letter` (espresso "C", 14.6:1),
-`--ws-mark-dot` (#ff8a3d), `--ws-wordmark` (#fff6ea; the rail's and the phone top bar's `.st-brand` words use it
-too). The old `--st-mark-tile`, `--st-mark-letter`, `--st-mark-dot`, `--st-wordmark` are gone. Also the shell's
-`--focus` and `--mark-cut` in Stories' colours.
+in Clip Factory's main bundle, where ci.yml forbids any `--st-` or `.st-`), coloured by the shell's four names:
+`--ws-mark-tile` (cream tile gradient), `--ws-mark-letter` (espresso "C", 14.6:1), `--ws-mark-dot` (#ff8a3d),
+`--ws-wordmark` (#fff6ea; the rail's and the phone top bar's `.st-brand` words use it too). Their fallbacks in
+ws-mark.css are these very colours written out (test/workspaceMark.test.tsx keeps the two the same), so the mark is
+warm wherever it stands for Stories, also outside `.stories-app`: Clip Factory's round toggle that goes to Stories and
+the start-up card. The toggle back to Clip Factory shows Clip Factory's real mark (WorkspaceMark `workspace="clips"`,
+Clip Factory's own colours). The old `--st-mark-tile`, `--st-mark-letter`, `--st-mark-dot`, `--st-wordmark` are gone.
+Also the shell's `--focus` and `--mark-cut` in Stories' colours.
 
 ## Classes
 

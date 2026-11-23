@@ -400,8 +400,9 @@
 
   /* ========== 13. The logo: Clip Factory's own "C" mark with its dot, in the Stories colours ==========
      The mark is a shell element (the rename branch: components/WorkspaceMark.tsx and styles/ws-mark.css, in Clip
-     Factory's main bundle, where no --st- name may appear), coloured by the shell's four names with today's colours
-     as fallbacks. Stories only sets them here, on .stories-app, with the warm palette. */
+     Factory's main bundle, where no --st- name may appear), coloured by the shell's four names. Stories sets them
+     here, on .stories-app, with the warm palette; ws-mark.css's fallbacks are the very same colours written out, so
+     the mark is warm outside .stories-app too (test/workspaceMark.test.tsx keeps the two the same). */
   --ws-mark-tile: linear-gradient(150deg, #fff3e4, #f2dcc2); /* the cream tile */
   --ws-mark-letter: rgb(42 22 11); /* the espresso "C" on the cream tile (14.6:1) */
   --ws-mark-dot: #ff8a3d; /* the orange dot */
