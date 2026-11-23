@@ -93,7 +93,11 @@ export function RefPlayer({ videoRef, src, title }: { videoRef: RefObject<HTMLVi
             <Icon name={playing ? "pause" : "play"} size={20} />
           </RoundGlassButton>
           <span className="st-ref-controls__time" aria-hidden="true">
-            {clock(at)} / {clock(length)}
+            {/* As wide as the length's clock: 0 is the widest digit, so the time never pushes " / 0:45" about. */}
+            <span className="st-ref-controls__now" style={{ minWidth: `${clock(length).length}ch` }}>
+              {clock(at)}
+            </span>{" "}
+            / {clock(length)}
           </span>
           <RoundGlassButton title="" label={muted ? "Sound on" : "Sound off"} onClick={mute}>
             <Icon name={muted ? "muted" : "sound"} size={20} />

@@ -28,7 +28,9 @@
 }
 .st-head__title {
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h1);
+  font-weight: 400;
   overflow-wrap: anywhere;
 }
 .st-head__lede {
@@ -70,6 +72,8 @@
   min-height: var(--st-tap);
   padding: 0 var(--st-space-5);
   font: var(--st-weight-ui) 1rem/1.1 var(--st-font);
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 0, "WONK" 0;
   color: var(--st-text);
   background-color: var(--st-fill-control);
   /* level 4 (glass-tokens.css 5a): its light over the surface it sits on, lighter at the top, a bright top rim */
@@ -207,6 +211,8 @@
   padding: 0 12px;
   border-radius: var(--st-r-round);
   font: var(--st-weight-ui) var(--st-fs-chip)/1 var(--st-font);
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 0, "WONK" 0;
   color: var(--st-text);
   background: var(--st-fill-control);
   white-space: nowrap;
@@ -353,7 +359,9 @@
 }
 .st-empty__title {
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
+  font-weight: 400;
 }
 .st-empty__text {
   max-width: 46ch;

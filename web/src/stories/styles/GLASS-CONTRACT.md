@@ -279,17 +279,63 @@ surfaces (12 → 28 px), `--st-inset` inside a surface (16 → 28 px).
 `--st-dial` 168px, `--st-dial-track` 10px.
 
 ### 10. Type
-`--st-font` Playfair (OFL, opsz 5-1200, wdth 87.5-112.5, wght 300-900, read from the files' fvar table; the Latin file
-covers å ä ö Å Ä Ö and − – ’ … · ›), `--st-font-caps` Jost
-(OFL; short wide-tracked caps captions only), `--st-font-mark` (the logo's "C" stays Clip Factory's Times).
-Sizes: `--st-fs-hero` 34 → 72 px, `--st-fs-h1` 32 → 56, `--st-fs-h2` 24 → 36, `--st-fs-h3` 20 → 26, `--st-fs-body`
-17, `--st-fs-small` 15, `--st-fs-chip` 14, `--st-fs-caps` 13, **`--st-fs-min` 13 px: the floor**, `--st-fs-num`
-40 → 68 (big light numerals), `--st-fs-unit` 0.42em (the unit beside a numeral). Axes and weights:
-`--st-opsz-display` 600 (`.st-display` uses it: Womack-like hairlines and wedge serifs; reading sizes keep opsz
-auto, sturdy for a 6-8-year-old), `--st-opsz-num` 900, `--st-wdth-display` 92%, `--st-weight-display` 500 (Womack is a
-regular weight),
-`--st-weight-num` 300, `--st-weight-body` 450, `--st-weight-ui` 650, `--st-lh-head` 1.08, `--st-lh-body` 1.5,
-`--st-track-caps` 0.14em.
+Fugaz One for the large text, Fraunces for the smaller text: the owner, 23 Nov, "i want to you to use Fugaz One font
+style in combination with Fraunces on the smaller text", and asked which app, "Funded Clips only". **Funded Clips
+only:** Clip Factory keeps Inter and Times, untouched.
+
+- `--st-font-display`: "Fugaz One", "Arial Black", "Helvetica Neue", system-ui, sans-serif. The **large** text:
+  headings and titles (h1-h3, `.st-display` and the other display classes), the hero, the big stat numerals, section
+  names, and anything about 20 px or larger. Fugaz One is one upright weight (400) with no variable axes. Its file
+  maps å ä ö Å Ä Ö and – ’ … · ›, but not the minus sign − (U+2212) and only nine Latin Extended-A letters
+  (Ł ł Œ œ Š š Ÿ Ž ž); its `unicode-range` is exactly the 226 code points it maps, and the next font in the stack
+  draws every other character. A unit beside a big numeral ("videos", "seconds", 0.42em of it) is the smaller text
+  of the pair, so Fraunces at every size, and so is an h3 at 15 px that only labels the list under it (Social
+  accounts' "What TikTok allows for a second account").
+- `--st-font`: "Fraunces", "Iowan Old Style", Georgia, serif. The **smaller** text: body, labels, buttons, chips,
+  pills, captions, inputs, hints and toasts. Fraunces is variable: opsz 9-144, wght 100-900, SOFT 0-100, WONK 0-1,
+  and it maps å ä ö Å Ä Ö and − – ’ … · ›. Here it runs with `font-optical-sizing: auto` (sturdy shapes at reading
+  sizes), a weight of at least 400 (450 at 13 px and under), and `"SOFT" 0, "WONK" 0` wherever
+  `font-variation-settings` is set (plain upright letters, no leaning "wonky" ones, for 6-8-year-old readers).
+- `--st-font-caps`: the same family as `--st-font` (Fraunces). The short caps captions keep their `text-transform`
+  and their `--st-track-caps` tracking.
+- **Never changed:** `--st-font-mark` (the logo's "C" stays Clip Factory's Times), the "Funded Clips" wordmark (as it
+  is today), the shell's workspace switch, and Clip Factory's toasts and the shell's own (the shell's `--font-ui`).
+- **Toasts:** the shell draws every toast in its one `.toasts` box, outside `.stories-app`. The toasts Funded Clips'
+  screens raise (its `ToastScope` in `App.tsx`, undo toasts too) carry the class `st-toast`, and only those are
+  Fraunces: `glass-tokens.css` gives `.toasts .st-toast` the same `--st-font` stack as `.stories-app`
+  (test/storiesStyles.test.ts keeps the two the same) and `st-end.css` sets them in it, at the shell's sizes and
+  weights. A toast drawn inside `.stories-app` (Chat's "Deleted. Undo") is Fraunces like the rest of its text.
+- **Numbers that tick:** neither face has tabular figures (no `tnum` or `lnum`), so `font-variant-numeric:
+  tabular-nums` reaches only a fallback face. A number that changes while it is on screen gets a box as wide as its
+  widest value, end-aligned, with a min-width in `ch` (0 is the widest digit in both faces): the progress percent
+  (`.st-media__time`, 4ch), the reference player's time (`.st-ref-controls__now`, the length's clock), the AI's
+  seconds (`.st-s-ai-secs`, one ch a digit and the " s") and Settings › Video's length (`.st-stg-length__value
+  strong`, 2ch). What sits beside them never moves as they tick.
+- **Loading:** both families are self-hosted from `web/public/fonts/stories/` on the app's own origin (no font CDN; the
+  Mac and Windows app loads the deployed web app, so it gets them from there too) and precached by the service
+  worker, each with its OFL licence text beside its files. The faces load only through `stories/fonts.ts`
+  (`addStoriesFonts`, `fonts.css?inline`), never in the chunk Clip Factory prefetches, and the names are used only
+  under `.stories-app` and on its own toasts (`.st-toast`), both in Funded Clips' own style sheet, so ci.yml's "Funded
+  Clips is not in the main bundle" check still holds.
+- **Sources and licences:**
+
+  | family | for | designer | source | licence |
+  |---|---|---|---|---|
+  | Fugaz One | large text | LatinoType (2011) | google/fonts `ofl/fugazone`, from github.com/googlefonts/fugazone | SIL Open Font License 1.1, Reserved Font Name "Fugaz One" |
+  | Fraunces | smaller text, caps captions | Undercase Type: Phaedra Charles and Flavia Zimbardi (2018-2020) | google/fonts `ofl/fraunces`, from github.com/undercasetype/Fraunces | SIL Open Font License 1.1 |
+
+  Before 23 Nov, Funded Clips used Playfair (OFL) for all text and Jost (OFL) for the caps captions. Neither is
+  used in Funded Clips' type any more, and their files are gone from `web/public/fonts/stories/`.
+
+Sizes (unchanged; nothing goes under today's floors, the users are 6-8 years old): `--st-fs-hero` 34 → 72 px,
+`--st-fs-h1` 32 → 56, `--st-fs-h2` 24 → 36, `--st-fs-h3` 20 → 26, `--st-fs-body` 17, `--st-fs-small` 15,
+`--st-fs-chip` 14, `--st-fs-caps` 13, **`--st-fs-min` 13 px: the floor**, `--st-fs-num` 40 → 68 (big numerals),
+`--st-fs-unit` 0.42em (the unit beside a numeral). Axes and weights (the names stay, rule 2; the values are in
+glass-tokens.css §10): `--st-opsz-display` and `--st-opsz-num` 144 (Fraunces' largest optical size; Fugaz One has no
+axes), `--st-wdth-display` 100% (neither face has a width axis), `--st-weight-display` and `--st-weight-num` 400
+(Fugaz One's one weight), `--st-weight-body` and
+`--st-weight-ui` (Fraunces: 400 or more, 450 or more at 13 px and under), `--st-lh-head`, `--st-lh-body`,
+`--st-track-caps`.
 
 ### 11. Motion
 `--st-dur-tap` 110ms, `--st-dur-hover` 160ms, `--st-dur-glide` 340ms, `--st-dur-enter` 420ms, `--st-dur-progress`
@@ -335,7 +381,9 @@ glass.css:
 - `.st-lens` (+ `.is-liquid` from the lens code), `.st-lens__defs`: the liquid rim.
 - `.st-lens--tinted` (set `--st-tone-rgb` on it): a liquid hero that keeps its colour, cut to `--st-tint-cut` from the
   top left, over the rim's tint (the cards that need the owner); without the rim it is the card's own tint.
-- `.st-display` (Playfair display), `.st-caps` (Jost caps caption), `.st-num` (lining tabular figures).
+- `.st-display` (Fugaz One display, `--st-font-display`), `.st-caps` (Fraunces caps caption, `--st-font-caps`),
+  `.st-num` (asks for lining tabular figures, which only a fallback face has: a number that ticks gets its own box,
+  §10 "Numbers that tick").
 - `.st-look`, `.st-look__picture`, `.st-look__art` (`--window`, `--picture`, `--colours`), `.st-look__pane`,
   `.st-look__swatches`, `.st-look__swatch`, `.st-look__thumb`, `.st-look__actions`, `.st-look__modes`: Settings › Look
   (foundation only).

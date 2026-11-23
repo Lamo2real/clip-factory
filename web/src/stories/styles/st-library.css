@@ -205,6 +205,8 @@
   font-family: var(--st-font);
   font-size: var(--st-fs-body);
   font-weight: var(--st-weight-ui);
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 0, "WONK" 0;
   line-height: 1.3;
   text-decoration: none;
   overflow-wrap: anywhere;
@@ -367,8 +369,9 @@ a.st-file__title:hover {
   align-self: start;
 }
 .st-project--featured .st-project__title {
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
-  font-weight: var(--st-weight-display);
+  font-weight: 400;
   line-height: var(--st-lh-head);
 }
 .st-project--featured .st-project__bar {
@@ -385,6 +388,8 @@ a.st-file__title:hover {
   font-family: var(--st-font);
   font-size: var(--st-fs-chip);
   font-weight: var(--st-weight-ui);
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 0, "WONK" 0;
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -449,7 +454,9 @@ a.st-file__title:hover {
 }
 .st-shelf__title {
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h2);
+  font-weight: 400;
   overflow-wrap: anywhere;
 }
 .st-shelf__text {
@@ -558,7 +565,9 @@ a.st-file__title:hover {
 }
 .st-projectview__title {
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h2);
+  font-weight: 400;
   overflow-wrap: anywhere;
 }
 .st-projectview__meta {
@@ -613,7 +622,9 @@ a.st-file__title:hover {
   justify-self: start;
   max-width: 100%;
   color: var(--st-text-amber);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
+  font-weight: 400;
   overflow-wrap: anywhere;
 }
 
@@ -639,7 +650,9 @@ a.st-file__title:hover {
   align-items: center;
   gap: var(--st-space-3);
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
+  font-weight: 400;
 }
 /* A round glass puck for the clock (decoration: the reference's round icons). */
 .st-details__icon {
@@ -670,6 +683,8 @@ a.st-file__title:hover {
   font-family: var(--st-font-caps);
   font-size: var(--st-fs-caps);
   font-weight: 500;
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 0, "WONK" 0;
   letter-spacing: var(--st-track-caps);
   line-height: 1.3;
   text-transform: uppercase;

@@ -239,7 +239,7 @@ function BothApps() {
           </KeptSearchProvider>
         }
         stories={
-          <ToastScope active={inStories} onScreen={storiesOnScreen} onError={storiesDeniedSound}>
+          <ToastScope active={inStories} onScreen={storiesOnScreen} onError={storiesDeniedSound} className="st-toast">
             <StoriesPaneBoundary onClips={() => navigate(chooseClips())}>
               <StoriesHost page={lastStories.current} />
             </StoriesPaneBoundary>

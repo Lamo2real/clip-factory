@@ -22,6 +22,8 @@
   font-family: var(--st-font);
   font-size: var(--st-fs-chip);
   font-weight: var(--st-weight-ui);
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 0, "WONK" 0;
   line-height: 1.2;
   white-space: nowrap;
   transition:
@@ -115,21 +117,23 @@ a.st-pill.is-on:hover {
   align-items: baseline;
   gap: 0.08em;
   color: var(--st-text-strong);
-  font-family: var(--st-font);
+  /* A big numeral: Fugaz One, its one weight, no stretch or variation axis. */
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-num);
-  font-weight: var(--st-weight-num);
-  font-variation-settings: "opsz" var(--st-opsz-num);
-  font-stretch: var(--st-wdth-display);
+  font-weight: 400;
+  font-variation-settings: normal;
   font-variant-numeric: lining-nums tabular-nums;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
-/* The unit is small text: never under the floor (a screen may set a smaller numeral), and its own optical size, not
-   the numeral's display one (thin hairlines at 13-17 px). */
+/* The unit is small text: never under the floor (a screen may set a smaller numeral), in Fraunces at its own optical
+   size, not the numeral's display face. */
 .st-stat__unit {
+  font-family: var(--st-font);
   font-size: max(var(--st-fs-caps), var(--st-fs-unit));
   font-weight: var(--st-weight-body);
-  font-variation-settings: normal;
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 0, "WONK" 0;
   letter-spacing: 0;
 }
 .st-stat__label {
@@ -201,8 +205,9 @@ a.st-pill.is-on:hover {
 }
 .st-dial__value {
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h2);
-  font-weight: var(--st-weight-num);
+  font-weight: 400;
   font-variant-numeric: lining-nums tabular-nums;
   line-height: 1;
 }
@@ -216,6 +221,8 @@ a.st-pill.is-on:hover {
 .st-stepper__btn {
   display: inline-grid;
   place-items: center;
+  /* Never squeezed under the tap size by a wide value beside it (Fugaz One is wider than the face before it). */
+  flex: none;
   width: var(--st-tap);
   height: var(--st-tap);
   border-radius: var(--st-r-control);
@@ -245,7 +252,9 @@ a.st-pill.is-on:hover {
 .st-stepper__value {
   min-width: 3ch;
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
+  font-weight: 400;
   font-variant-numeric: lining-nums tabular-nums;
   text-align: center;
 }
@@ -318,8 +327,9 @@ a.st-pill.is-on:hover {
 .st-cream-card__title {
   margin: 0;
   color: var(--st-on-cream);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
-  font-weight: var(--st-weight-display);
+  font-weight: 400;
   line-height: var(--st-lh-head);
 }
 .st-cream-card__body {
@@ -361,13 +371,17 @@ a.st-pill.is-on:hover {
   display: grid;
   min-width: 0;
 }
+/* The title gets two lines before it is cut (Fraunces is wider than the face before it, and a 6-8 year old should see
+   the whole name where it can fit). */
 .st-media__title {
+  display: -webkit-box;
   overflow: hidden;
   color: var(--st-text);
   font-size: var(--st-fs-body);
   font-weight: var(--st-weight-ui);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .st-media__meta {
   color: var(--st-text-soft);
@@ -395,10 +409,14 @@ a.st-pill.is-on:hover {
   background: var(--st-accent);
   transition: width var(--st-dur-progress) var(--st-ease-progress);
 }
+/* The percent ticks while a video is being made. Neither Fugaz One nor Fraunces has tabular figures, so the box is as
+   wide as "100%" (0 is the widest digit; 4ch holds 100% with room) and the track beside it never changes length. */
 .st-media__time {
+  min-width: 4ch;
   color: var(--st-text-soft);
   font-size: var(--st-fs-chip);
   font-variant-numeric: lining-nums tabular-nums;
+  text-align: end;
 }
 .st-media__controls {
   grid-area: controls;
