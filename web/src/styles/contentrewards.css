@@ -894,7 +894,10 @@
   gap: 12px;
 }
 
+/* Less motion: the fold's question takes its hover light at once, so a pointer resting where the last tap was (a fold
+   drawn under it on arrival) starts no transition either (e2e/cr-fit.spec.ts: nothing in the fit moves). */
 @media (prefers-reduced-motion: reduce) {
+  .cr-fold__q,
   .cr-fold__chev {
     transition: none;
   }
