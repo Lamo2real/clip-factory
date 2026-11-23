@@ -1,5 +1,5 @@
 {
- "version": "2431aac09668",
+ "version": "7a9b0f75c68f",
  "parts": [
   {
    "id": "app-map",
@@ -159,7 +159,7 @@
    "id": "contracts-22",
    "title": "CONTRACTS: 22. Background modes and see-through glass (owner request, 2026-11-16)",
    "line": "The owner wants the whole app to feel like liquid glass you can almost see through: \"if there's a car behind it, I",
-   "chars": 72115
+   "chars": 73524
   },
   {
    "id": "contracts-23",
@@ -1071,7 +1071,7 @@
    "id": "ux-the-liquid-glass-recipe",
    "title": "UX_DESIGN_SYSTEM: The liquid glass recipe",
    "line": "glass-tint: var(--glass-tint-panel); / flat green: --panel-veil + --light-pay /",
-   "chars": 7523
+   "chars": 7542
   },
   {
    "id": "ux-the-logic-of-light",

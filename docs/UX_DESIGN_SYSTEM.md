@@ -128,7 +128,7 @@ loose words get a scrim at the panel tint.
 
 `--panel-veil` is 0.20 over the app's own living backdrop (worked out over every blob subset, both field ends, every
 `saturate()` the CSS uses and the grain at its peak, as the pane's own `brightness(0.87)` dims it, `lib/background.ts`;
-70 % of the backdrop shows through, 67 % on main), 0.29 over a white photo (dimmed to half: 33 % shows, 22 % on main),
+70 % of the backdrop shows through, 67 % on main), 0.29 over a white photo (dimmed to half, and 0.10 of pay: 30.5 % shows, 22 % on main),
 0.73 over a white desktop (no web filter dims the window's glass; 0.62 under Frosted's frost), and between for the
 owner's colours. Each look takes the veil and dimming that show the most (`bestGlass`): what shows is
 (1 − green) × brightness, so dimming only pays where the green itself is much of what the words have to beat.

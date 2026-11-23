@@ -136,8 +136,9 @@ test.describe("the shell's parts over a white picture and a white desktop", () =
         // Hover still shows itself, and its words keep 4.5:1 (test/storiesShellGlass.test.tsx works out every fill).
         const quiet = page.locator(".st-head__actions .st-btn:not(.st-btn--main)").first();
         await quiet.hover();
-        await page.waitForTimeout(300);
-        expect(await quiet.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe("rgba(255, 243, 228, 0.16)");
+        // The hover's fill eases in (--st-dur-hover); a slow frame (a busy CI machine) left it at its first step, the
+        // resting 0.12, 300 ms after the hover. Waited for, it must still end on exactly the light lift.
+        await expect(quiet, "hovered: the light cream lift").toHaveCSS("background-color", "rgba(255, 243, 228, 0.16)", { timeout: 3000 });
         await page.mouse.move(0, 0);
       });
 });

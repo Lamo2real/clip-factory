@@ -438,11 +438,12 @@ export function showThrough(veil: number, brightness = 1, pay = 0, page = 0): nu
  * The pane's glass over a backdrop (`spots`, as drawn, through each saturate()): for a `brightness()` from 1 down to
  * `MIN_GLASS_BRIGHTNESS` the least veil that holds there (`veilOver`: every text colour at AA over every spot as the
  * glass sees it, dimmed, and the ladder's first rung), and the pair that shows the most of the backdrop with the
- * look's pay on top (`showThrough`; `pay` is what the look plans to carry: `MAX_LIGHT_PAY` where it pays for the
- * light, the most `lightPay` gives); a tie goes to the less dimmed. Over a dark backdrop that is no dimming at all
- * (b = 1: dimming takes away as much as the thinner green gives back); over a light one, where the green itself is
- * most of what the words have to beat, dimming wins. Searched every 0.05, then every 0.01 around the best (lib/look.ts
- * runs it before the first paint).
+ * look's pay on top (`showThrough`; `pay` is what the look plans to carry on a surface it does not dim:
+ * `MAX_LIGHT_PAY` where it pays for the light; a dimmed pane then carries up to that / b, `mostPay`, which is left
+ * out of the choice so the glass each look takes stays as it was); a tie goes to the less dimmed. Over a dark backdrop
+ * that is no dimming at all (b = 1: dimming takes away as much as the thinner green gives back); over a light one,
+ * where the green itself is most of what the words have to beat, dimming wins. Searched every 0.05, then every 0.01
+ * around the best (lib/look.ts runs it before the first paint).
  */
 export function bestGlass(spots: readonly Rgb[], pay = 0): { panelVeil: number; brightness: number } {
   const least = Math.round(MIN_GLASS_BRIGHTNESS * 100);
@@ -473,9 +474,9 @@ export function bestGlass(spots: readonly Rgb[], pay = 0): { panelVeil: number; 
 /**
  * The picture look: no veil over the owner's picture, so it shows at full strength between the panels. A pane plans
  * for a white photo under it, dimmed by its own `brightness()` (`PICTURE_BRIGHTNESS`: 0.5, a white photo reads as
- * mid grey through it), so it carries 0.29 green where it carried 0.73, and shows 33 % of the photo where it showed
- * 22 % (`bestGlass`, with the pay); the title and line plates, with no filter, carry what a white photo needs as it
- * is (`PICTURE_PLATE_VEIL`).
+ * mid grey through it), so it carries 0.29 green where it carried 0.73, and with its pay (0.10, `mostPay`) shows 30.5 %
+ * of the photo where it showed 22 % (`bestGlass`); the title and line plates, with no filter, carry what a white photo
+ * needs as it is (`PICTURE_PLATE_VEIL`).
  */
 export const PICTURE_PAGE_VEIL = 0;
 /** Every spot a pane over a photo is held to: a white one, as it is and through the strongest saturate(). */
@@ -559,11 +560,17 @@ export const LIGHT_PAY_OWN = 0;
  * flat ladder at 0.73 + 0 broke; Clips Funded's See-through Clear keeps main's veils for the same reason).
  */
 /**
- * Where a white photo or desktop can be behind (Picture, the window look's Clear): the most a light look may add over
- * its veil (`MAX_LIGHT_PAY`), and never 0.82 or more in all.
+ * Where a white photo or desktop can be behind (the window look's Clear and Frosted; Picture until lib/look.ts sets its
+ * own): the most an undimmed surface of a light look adds over its veil (`MAX_LIGHT_PAY`), and never 0.82 or more in
+ * all.
  */
 export const LIGHT_PAY_WHITE = 0.05;
-/** The most green a light look (the window look and Picture over white, the light colours) adds over its veil. */
+/**
+ * The most of what shows through a surface a light look's pay (the window look and Picture over white, the light
+ * colours) takes (`showThrough`: b × the pay): this much green over its veil where the backdrop shows at its full
+ * light (the window look's panes, nothing dims a desktop, and every plate, no filter of its own: `platePay`), and
+ * this / b on a pane whose glass dims what it sees to b (`mostPay`).
+ */
 export const MAX_LIGHT_PAY = 0.05;
 /** A pane is never this much green or more ("did not feel see-through" at 0.86; spec.md rejects 0.82 or more). */
 export const SEE_THROUGH_LIMIT = 0.82;
@@ -878,7 +885,7 @@ export const PLATE_WORDS_LIGHT = 1 - (1 - PANEL_LIGHT * 0.5) * (1 - SPECULAR * 0
 export function windowPlateVeil(glass: NativeGlass, scheme: Scheme, strength: GlassStrength): number {
   const v = seeThroughVeils(glass, scheme, strength);
   const under = mix(VEIL, glassCeiling(glass, scheme), v.page);
-  const pay = lightPay({ kind: "window", pageVeil: v.page, panelVeil: v.panel, plateVeil: v.panel, brightness: WINDOW_BRIGHTNESS });
+  const pay = platePay(lightPay({ kind: "window", pageVeil: v.page, panelVeil: v.panel, plateVeil: v.panel, brightness: WINDOW_BRIGHTNESS }));
   let veil = v.panel;
   while (veil < 1 && !TEXT_COLOURS_WINDOW.every((t) => contrast(t, lit(under, veil + pay, PLATE_WORDS_LIGHT)) >= AA)) veil = round2(veil + 0.01);
   return veil;
@@ -946,9 +953,28 @@ const PICTURE_SPOTS: readonly Rgb[] = [...PICTURE_WORST, BLACK];
 const PAYS = new Map<string, number>();
 
 /**
+ * The most a pane of a light look pays (`lightPay`) for its glass's `brightness()` b: `MAX_LIGHT_PAY` / b (0.01 steps,
+ * rounded down), so the pay never takes more than `MAX_LIGHT_PAY` of what shows through it (b × the pay), as on an
+ * undimmed pane. Green laid over what a pane sees lowers it under the AA cap by about the light it covers, and through
+ * a glass that dims to b that light is b of the backdrop's, so 0.05 alone lowered a dimmed pane only b as far: at half
+ * the light (a white photo, cream) it left the new-clip card on the hero +0.003 at its words and +0.014 in its top
+ * padding (Chromium on Linux, under the whole step); 0.10 leaves it +0.009 at its words (main: +0.010). 0.05 where
+ * nothing dims (the window look, dark colours). A plate draws no filter and keeps `MAX_LIGHT_PAY` (`platePay`).
+ */
+export function mostPay(brightness: number): number {
+  return Math.floor((MAX_LIGHT_PAY / Math.min(1, Math.max(MIN_GLASS_BRIGHTNESS, brightness))) * 100 + 1e-9) / 100;
+}
+
+/** What a plate (no filter of its own: the backdrop at its full light under it) carries of a look's pay. */
+export function platePay(pay: number): number {
+  return Math.min(pay, MAX_LIGHT_PAY);
+}
+
+/**
  * The green that pays for the light (`--light-pay`, set on <html> by lib/look.ts): for each look the least that leaves
  * room for the ladder over every spot it can show (`ladderPay`), on its panes (over the backdrop as their glass sees
- * it) and on its plates (over the backdrop as it is). `LIGHT_PAY_REDUCED` under reduced transparency.
+ * it) and on its plates (over the backdrop as it is), up to `mostPay` on a pane and `MAX_LIGHT_PAY` on a plate
+ * (`platePay`; tokens.css caps it in `--glass-tint-plate`). `LIGHT_PAY_REDUCED` under reduced transparency.
  */
 export function lightPay(look: LightLook, reducedTransparency = false): number {
   if (reducedTransparency) return LIGHT_PAY_REDUCED;
@@ -959,11 +985,13 @@ export function lightPay(look: LightLook, reducedTransparency = false): number {
   let pay = PAYS.get(key);
   if (pay === undefined) {
     const spots = look.kind === "window" ? WINDOW_SPOTS : look.kind === "picture" ? PICTURE_SPOTS : look.colours ? coloursMeshSpots(look.colours) : [WHITE];
-    // The least green at which every level climbs a whole step (no room exemption), up to MAX_LIGHT_PAY over the
-    // look's veils, and a pane never reaches SEE_THROUGH_LIMIT. Where even that leaves no room (white behind), the cap wins.
-    const room = Math.floor((SEE_THROUGH_LIMIT - 0.01 - Math.max(look.panelVeil, look.plateVeil)) * 100 + 1e-9) / 100;
+    // The least green at which every level climbs a whole step (no room exemption), up to mostPay over a pane's veil
+    // (MAX_LIGHT_PAY over a plate's), and no surface reaches SEE_THROUGH_LIMIT. Where even that leaves no room (white
+    // behind), the cap wins.
+    const room = (veil: number) => Math.floor((SEE_THROUGH_LIMIT - 0.01 - veil) * 100 + 1e-9) / 100;
     const need = Math.max(ladderPay(spots, look.panelVeil, pv, true, look.brightness), ladderPay(spots, look.plateVeil, pv, true));
-    pay = Math.max(0, Math.min(MAX_LIGHT_PAY, room, need));
+    pay = Math.max(0, Math.min(mostPay(look.brightness), room(look.panelVeil), need));
+    if (platePay(pay) > room(look.plateVeil)) pay = Math.max(0, room(look.plateVeil));
     PAYS.set(key, pay);
   }
   return pay;
@@ -997,10 +1025,11 @@ export function panelWords(look: LightLook, behind: Rgb, lead = false, pay = lig
 
 /**
  * What the words of a title or line plate sit on (E1 with no filter of its own): the backdrop as it is under the
- * look's page veil, the plate veil plus the pay (`--glass-tint-plate`), at the height of its words.
+ * look's page veil, the plate veil plus the pay as a plate carries it (`platePay`, `--glass-tint-plate`), at the
+ * height of its words. `pay` is the look's (`lightPay`).
  */
 export function plateWords(look: LightLook, behind: Rgb, pay = lightPay(look)): Rgb {
-  return lit(onThePage(look, behind), look.plateVeil + pay, PANEL_LIGHT * WORDS_LIGHT);
+  return lit(onThePage(look, behind), look.plateVeil + platePay(pay), PANEL_LIGHT * WORDS_LIGHT);
 }
 
 /** OKLab a (green − / red +) of a colour. */
@@ -1208,8 +1237,8 @@ const PICTURE_PLATE_FLOOR = veilOver(PICTURE_WORST);
 /**
  * The picture look's glass: the veil and the dimming that show the most of a white photo with the ladder's pay on
  * top (`bestGlass`): a pane dims it to half its light (`MIN_GLASS_BRIGHTNESS`) and carries 0.29 green and the pay
- * over it (it carried 0.73), so it shows 33 % of the photo (22 % before); a plate, with no filter, carries what a white
- * photo needs as it is (0.73, and the pay).
+ * over it (0.10, `mostPay`; it carried 0.73 + 0.05), so it shows 30.5 % of the photo (22 % before); a plate, with no
+ * filter, carries what a white photo needs as it is (0.73, and 0.05 of the pay: `platePay`).
  */
 const PICTURE_PANE = bestGlass(PICTURE_WORST, MAX_LIGHT_PAY);
 export const PICTURE_BRIGHTNESS = PICTURE_PANE.brightness;

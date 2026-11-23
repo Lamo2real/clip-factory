@@ -63,6 +63,8 @@ import {
   mix,
   minVeil,
   MAX_LIGHT_PAY,
+  mostPay,
+  platePay,
   veilOver,
   normaliseColours,
   oklabL,
@@ -99,6 +101,7 @@ import {
   resolveLook,
   SATURATIONS,
   saturateRgb,
+  SEE_THROUGH_LIMIT,
   SELECTED_ALPHA,
   seeThroughChipBackground,
   seeThroughNote,
@@ -308,7 +311,7 @@ describe("see-through veil", () => {
     const low: string[] = [];
     for (const [name, look, spots] of checks) {
       const pay = lightPay(look);
-      for (const spot of spots) if (worst(lit(underGlass(look, spot), look.plateVeil + pay, PLATE_WORDS_LIGHT)) < AA) low.push(`${name} over ${spot.map(Math.round)}`);
+      for (const spot of spots) if (worst(lit(underGlass(look, spot), look.plateVeil + platePay(pay), PLATE_WORDS_LIGHT)) < AA) low.push(`${name} over ${spot.map(Math.round)}`);
     }
     expect(low).toEqual([]);
   }, 60_000);
@@ -395,9 +398,10 @@ describe("see-through veil", () => {
     expect(PICTURE_GLASS).toEqual({ pageVeil: PICTURE_PAGE_VEIL, panelVeil: PICTURE_PANEL_VEIL, plateVeil: PICTURE_PLATE_VEIL, brightness: PICTURE_BRIGHTNESS });
     // The pair that shows the most of a white photo, the pay on top.
     expect(bestGlass([WHITE, saturateRgb(WHITE, GLASS_SATURATE_MAX)], MAX_LIGHT_PAY)).toEqual({ panelVeil: PICTURE_PANEL_VEIL, brightness: PICTURE_BRIGHTNESS });
-    // 33 % of the photo shows through a pane; main's 0.73 + 0.05 with no dimming showed 22 %.
-    expect(showThrough(PICTURE_PANEL_VEIL, PICTURE_BRIGHTNESS, lightPay({ kind: "picture", ...PICTURE_GLASS }))).toBeCloseTo(0.33, 10);
-    expect(showThrough(PICTURE_PANEL_VEIL, PICTURE_BRIGHTNESS, LIGHT_PAY_WHITE)).toBeGreaterThan(showThrough(0.73, 1, LIGHT_PAY_WHITE) + 0.1);
+    // 30.5 % of the photo shows through a pane (0.29 + 0.10 at 0.5: a pane dimmed to half pays MAX_LIGHT_PAY / 0.5,
+    // mostPay, so the levels on it still climb); main's 0.73 + 0.05 with no dimming showed 22 %.
+    expect(showThrough(PICTURE_PANEL_VEIL, PICTURE_BRIGHTNESS, lightPay({ kind: "picture", ...PICTURE_GLASS }))).toBeCloseTo(0.305, 10);
+    expect(showThrough(PICTURE_PANEL_VEIL, PICTURE_BRIGHTNESS, lightPay({ kind: "picture", ...PICTURE_GLASS }))).toBeGreaterThan(showThrough(0.73, 1, LIGHT_PAY_WHITE) + 0.08);
     // A pane: a white photo as its glass sees it (dimmed), and 0.01 less is under AA there.
     const seen = dimRgb(WHITE, PICTURE_BRIGHTNESS);
     expect(PICTURE_PANEL_VEIL).toBe(minVeil(seen));
@@ -666,14 +670,16 @@ describe("colours", () => {
   it("the glass takes the veil and dimming that show the most of the mesh, and the veils keep every text colour at AA over the lightest spot", () => {
     // [colours, page veil, panel veil, plate veil, brightness, what shows through a pane with the pay]. Before: page
     // 0 / 0.03 / 0.08 / 0.28 / 0.33 and panels 0.30 / 0.30 / 0.60 / 0.60 / 0.60 / 0.60 with no dimming (a pane
-    // showed 65 % of the default colours, 25 % of cream, 23 % of white). Dark colours take no dimming at all.
+    // showed 65 % of the default colours, 25 % of cream, 23 % of white). Dark colours take no dimming at all. The glass
+    // is chosen with an undimmed surface's pay (MAX_LIGHT_PAY); a dimmed pane then pays MAX_LIGHT_PAY / b (mostPay,
+    // rounded down: the pay takes no more than 0.05 of what shows): 0.08 at 0.62 and 0.58, 0.10 at 0.5.
     const TABLE: [string[], number, number, number, number, number][] = [
       [[...DEFAULT_COLOURS], 0, 0.2, 0.24, 1, 0.75],
       [["#2b6cb0", "#8e6cc9"], 0, 0.2, 0.25, 0.97, 0.7275],
-      [["#9caf88", "#f7f5ef", "#e8412c"], 0, 0.2, 0.61, 0.62, 0.465],
-      [["#f6c945", "#f49ac1"], 0, 0.21, 0.63, 0.58, 0.4292],
-      [["#f7f5ef"], 0, 0.24, 0.71, 0.5, 0.355],
-      [["#ffffff"], 0, 0.29, 0.73, 0.5, 0.33],
+      [["#9caf88", "#f7f5ef", "#e8412c"], 0, 0.2, 0.61, 0.62, 0.4464],
+      [["#f6c945", "#f49ac1"], 0, 0.21, 0.63, 0.58, 0.4118],
+      [["#f7f5ef"], 0, 0.24, 0.71, 0.5, 0.33],
+      [["#ffffff"], 0, 0.29, 0.73, 0.5, 0.305],
     ];
     for (const [cs, page, panel, plate, brightness, shows] of TABLE) {
       const at = cs.join(" ");
@@ -1075,7 +1081,9 @@ describe("the logic of light (ADR-87): the top layer is brighter, and every lift
     for (const glassName of GLASSES)
       for (const scheme of SCHEMES)
         for (const strength of STRENGTHS) expect(lightPay({ kind: "window", ...windowGlass(glassName, scheme, strength) }), `${glassName} ${scheme} ${strength}`).toBe(LIGHT_PAY_WHITE);
-    expect(lightPay({ kind: "picture", ...PICTURE_GLASS })).toBe(LIGHT_PAY_WHITE);
+    // A photo's panes dim it to half, so they pay MAX_LIGHT_PAY / 0.5 (mostPay); its plates (no filter) LIGHT_PAY_WHITE.
+    expect(lightPay({ kind: "picture", ...PICTURE_GLASS })).toBe(mostPay(PICTURE_BRIGHTNESS));
+    expect(platePay(lightPay({ kind: "picture", ...PICTURE_GLASS }))).toBe(LIGHT_PAY_WHITE);
     expect(lightPay({ kind: "window", panelVeil: 0.73, plateVeil: 0.73, brightness: 1 }, true)).toBe(LIGHT_PAY_REDUCED);
     // Colours with no colours named plan for a white mesh: never less than the colours themselves need.
     for (const cs of [DEFAULT_COLOURS, ["#f7f5ef"], ["#8e6cc9", "#0f372b", "#e8392b"]]) {
@@ -1115,7 +1123,8 @@ describe("the logic of light (ADR-87): the top layer is brighter, and every lift
     // Two flat stops of bottle green (the tests read their alphas), and the pay on the veil.
     const flat = (alpha: string) => `linear-gradient(rgb(var(--green-rgb) / ${alpha}), rgb(var(--green-rgb) / ${alpha}))`;
     expect(root.get("--glass-tint-panel")).toBe(flat("min(1, var(--panel-veil) + var(--light-pay))"));
-    expect(root.get("--glass-tint-plate")).toBe(flat("min(1, var(--plate-veil) + var(--light-pay))"));
+    // A plate draws no filter: it carries the pay as an undimmed surface does, at most MAX_LIGHT_PAY (platePay).
+    expect(root.get("--glass-tint-plate")).toBe(flat(`min(1, var(--plate-veil) + min(var(--light-pay), ${MAX_LIGHT_PAY}))`));
     expect(root.get("--glass-tint-lead")).toBe(flat("min(0.97, var(--panel-veil) + var(--light-pay) + var(--light-lead-pay))"));
     expect(root.get("--glass-tint-float")).toBe(flat("min(1, max(var(--float-veil), var(--panel-veil)) + var(--light-float-pay))"));
     expect(root.get("--glass-tint-tabbar")).toBe(flat("min(1, var(--tabbar-veil) + var(--light-tabbar-pay))"));
@@ -1288,10 +1297,46 @@ describe("the logic of light (ADR-87): the top layer is brighter, and every lift
       const panes = spots.map((s) => underGlass(look, s));
       const plates = spots.map((s) => mix(VEIL, s, look.pageVeil ?? 0));
       expect(panes.flatMap((pg) => ladderFaults(pg, look.panelVeil, pay)), name).toEqual([]);
-      expect(plates.flatMap((pg) => ladderFaults(pg, look.plateVeil, pay)), `${name}, a plate`).toEqual([]);
+      expect(plates.flatMap((pg) => ladderFaults(pg, look.plateVeil, platePay(pay))), `${name}, a plate`).toEqual([]);
       const less = Math.round((pay - 0.01) * 100) / 100;
-      if (pay > 0) expect(panes.some((pg) => ladderFaults(pg, look.panelVeil, less, false, true).length > 0) || plates.some((pg) => ladderFaults(pg, look.plateVeil, less, false, true).length > 0), `${name} at ${less}`).toBe(true);
+      if (pay > 0) expect(panes.some((pg) => ladderFaults(pg, look.panelVeil, less, false, true).length > 0) || plates.some((pg) => ladderFaults(pg, look.plateVeil, platePay(less), false, true).length > 0), `${name} at ${less}`).toBe(true);
     }
+  });
+
+  it("a pane whose glass dims what it sees pays for that light (MAX_LIGHT_PAY / b): the new-clip card climbs over the hero in Cream and over a white photo, and the plates keep MAX_LIGHT_PAY", () => {
+    // MAX_LIGHT_PAY / b, rounded down to 0.01; undimmed (the window look, dark colours) it is 0.05 as before.
+    expect([1, 0.97, 0.91, 0.87, 0.7, 0.62, 0.58, 0.51, 0.5].map(mostPay)).toEqual([0.05, 0.05, 0.05, 0.05, 0.07, 0.08, 0.08, 0.09, 0.1]);
+    expect(mostPay(WINDOW_BRIGHTNESS)).toBe(LIGHT_PAY_WHITE);
+    expect(mostPay(MIN_GLASS_BRIGHTNESS)).toBe(0.1);
+    for (const pay of [0, LIGHT_PAY_REDUCED, MAX_LIGHT_PAY, 0.1]) expect(platePay(pay)).toBe(Math.min(pay, MAX_LIGHT_PAY));
+    // Through a glass at half the light a pane at its AA floor is near the raise's fixed point: with 0.05 the card on
+    // the hero read +0.003 at its words, and e2e/light.spec.ts read +0.014 in its top padding (Chromium on Linux),
+    // under the whole step. 0.10 leaves it about main's room at its words (+0.010 there on main).
+    const dimmed: [string, LightLook, Rgb[]][] = [
+      ["cream", { kind: "colours", ...coloursVeils(["#f7f5ef"]), colours: ["#f7f5ef"] }, coloursMeshSpots(["#f7f5ef"])],
+      ["white", { kind: "colours", ...coloursVeils(["#ffffff"]), colours: ["#ffffff"] }, coloursMeshSpots(["#ffffff"])],
+      ["a white photo", { kind: "picture", ...PICTURE_GLASS }, [WHITE, saturateRgb(WHITE, GLASS_SATURATE_MAX)]],
+    ];
+    for (const [name, look, spots] of dimmed) {
+      const pay = lightPay(look);
+      expect(look.brightness, name).toBe(MIN_GLASS_BRIGHTNESS);
+      expect(pay, name).toBe(0.1);
+      expect(look.panelVeil + pay, name).toBeLessThan(SEE_THROUGH_LIMIT);
+      for (const spot of spots) {
+        const hero = panelWords(look, spot, true, pay);
+        expect(oklabL(raised(hero)) - oklabL(hero), `${name} over ${spot.map(Math.round)}`).toBeGreaterThanOrEqual(0.0085);
+        expect(worst(raised(hero)), name).toBeGreaterThanOrEqual(AA);
+        // A plate draws no filter, so it carries what it did (MAX_LIGHT_PAY), and shows as much of the backdrop.
+        expect(plateWords(look, spot, pay), name).toEqual(plateWords(look, spot, MAX_LIGHT_PAY));
+      }
+    }
+    // The pay never takes more than MAX_LIGHT_PAY of what shows through a pane (b × the pay), in any look, as before.
+    const all: LightLook[] = [{ kind: "picture", ...PICTURE_GLASS }, ...SWATCH_MIXES.map((cs): LightLook => ({ kind: "colours", ...coloursVeils(cs), colours: cs }))];
+    for (const glassName of GLASSES) for (const scheme of SCHEMES) for (const strength of STRENGTHS) all.push({ kind: "window", ...windowGlass(glassName, scheme, strength) });
+    for (const look of all) expect(look.brightness * lightPay(look), `${look.kind} ${look.colours?.join(" ") ?? ""}`).toBeLessThanOrEqual(MAX_LIGHT_PAY + 1e-9);
+    // Where nothing dims, nothing changes: the window look and the default colours pay 0.05.
+    expect(lightPay({ kind: "window", ...windowGlass("liquid", "light", "clear") })).toBe(MAX_LIGHT_PAY);
+    expect(lightPay({ kind: "colours", ...coloursVeils(DEFAULT_COLOURS), colours: [...DEFAULT_COLOURS] })).toBe(MAX_LIGHT_PAY);
   });
 
   it("what shows through a pane, (1 − page)(1 − green)(b), is at least main's in every look, and more where AA leaves room (§22.4)", () => {
@@ -1304,10 +1349,10 @@ describe("the logic of light (ADR-87): the top layer is brighter, and every lift
       ["the app's own backdrop", { kind: "frosted", ...BRAND_GLASS }, 0.696, 0.67],
       ["the window look, Clear", { kind: "window", ...windowGlass("liquid", "light", "clear") }, 0.22, 0.22],
       ["the window look, Frosted", { kind: "window", ...windowGlass("liquid", "light", "frosted") }, 0.231, 0.7 * 0.12],
-      ["a picture", { kind: "picture", ...PICTURE_GLASS }, 0.33, 0.22],
+      ["a picture", { kind: "picture", ...PICTURE_GLASS }, 0.305, 0.22],
       ["the default colours", colours(DEFAULT_COLOURS), 0.75, 0.65],
-      ["cream", colours(["#f7f5ef"]), 0.355, 0.72 * 0.35],
-      ["white", colours(["#ffffff"]), 0.33, 0.67 * 0.35],
+      ["cream", colours(["#f7f5ef"]), 0.33, 0.72 * 0.35],
+      ["white", colours(["#ffffff"]), 0.305, 0.67 * 0.35],
     ];
     for (const [name, look, now, main] of ROWS) {
       expect(shows(look), name).toBeCloseTo(now, 3);

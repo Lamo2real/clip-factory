@@ -90,7 +90,10 @@
   /* The logic of light: one key light above. Every bone lift is paid for with green under it. --light-pay is the
      ladder's pay (lib/background.ts lightPay: the least green that leaves room under the AA ceiling for every level
      above a pane to read a step brighter, over everything the look can show). lib/look.ts sets it on <html> for each
-     look; this is the app's own backdrop (LIGHT_PAY_OWN) until it does, and glass.css has the white looks' number. */
+     look; this is the app's own backdrop (LIGHT_PAY_OWN) until it does, and glass.css has the white looks' number. A
+     pane whose glass dims what it sees to b pays up to 0.05 / b (mostPay: green over a dimmed backdrop lowers it only
+     b as far, and costs it b x the pay of what shows, so never more than 0.05); a plate (no filter of its own) carries
+     at most 0.05 of it (MAX_LIGHT_PAY, platePay: --glass-tint-plate). */
   --light-pay: 0; /* LIGHT_PAY_OWN: see-through first, a pane carries no pay */
   --light-panel: 0.04; /* PANEL_LIGHT: E1 top lift, gone by 65 % of the height */
   --light-lead: 0.075; /* LEAD_LIGHT: the hero, the sign-in card, learnings: a whole step over a panel */
@@ -107,8 +110,9 @@
 
   /* Per-level tints (bottle green, flat, two stops) and lights (bone, 180deg, top brighter). */
   --glass-tint-panel: linear-gradient(rgb(var(--green-rgb) / min(1, var(--panel-veil) + var(--light-pay))), rgb(var(--green-rgb) / min(1, var(--panel-veil) + var(--light-pay))));
-  /* A title or line plate: E1 with no filter of its own, so its words take the plate veil (nothing dims under them). */
-  --glass-tint-plate: linear-gradient(rgb(var(--green-rgb) / min(1, var(--plate-veil) + var(--light-pay))), rgb(var(--green-rgb) / min(1, var(--plate-veil) + var(--light-pay))));
+  /* A title or line plate: E1 with no filter of its own, so its words take the plate veil (nothing dims under them),
+     and the pay as an undimmed surface carries it (at most MAX_LIGHT_PAY, platePay). */
+  --glass-tint-plate: linear-gradient(rgb(var(--green-rgb) / min(1, var(--plate-veil) + min(var(--light-pay), 0.05))), rgb(var(--green-rgb) / min(1, var(--plate-veil) + min(var(--light-pay), 0.05))));
   --glass-tint-lead: linear-gradient(rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + var(--light-pay) + var(--light-lead-pay))), rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + var(--light-pay) + var(--light-lead-pay))));
   --glass-tint-float: linear-gradient(rgb(var(--green-rgb) / min(1, max(var(--float-veil), var(--panel-veil)) + var(--light-float-pay))), rgb(var(--green-rgb) / min(1, max(var(--float-veil), var(--panel-veil)) + var(--light-float-pay))));
   --glass-tint-overlay: linear-gradient(rgb(var(--green-rgb) / max(0.86, var(--panel-veil))), rgb(var(--green-rgb) / max(0.86, var(--panel-veil))));

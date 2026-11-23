@@ -316,8 +316,9 @@ html[data-strength="frosted"] .backdrop__frost {
 /* ---------- The window look and the picture look: tints (docs/CONTRACTS.md §22.3) ---------- */
 
 /* Where white can be behind (a white desktop, a white photo), the ladder's pay on top of the panel veil
-   (LIGHT_PAY_WHITE, Clear and Picture over white) until lib/look.ts sets each look's own on <html>: over white a pane
-   at the AA floor leaves the levels above it no room to read brighter, so the pay lowers it a step. */
+   (LIGHT_PAY_WHITE, Clear and Picture over white) until lib/look.ts sets each look's own on <html> (a photo's panes,
+   dimmed to half, then pay 0.10: lib/background.ts mostPay): over white a pane at the AA floor leaves the levels above
+   it no room to read brighter, so the pay lowers it a step. */
 html:is(.see-through, [data-backdrop="picture"]) {
   --light-pay: 0.05; /* LIGHT_PAY_WHITE */
 }

@@ -4728,9 +4728,10 @@ everywhere.
   `brightness()` from 1 down to `MIN_GLASS_BRIGHTNESS` 0.5, the least veil that keeps AA and the ladder's first rung
   over the backdrop as the pane sees it, `veilOver`, with the look's pay on top), and `b` = 1 where dimming gains
   nothing. `dimRgb` is the sRGB `brightness()` Chromium and WebKit draw (each channel × b; Clips Funded models it the
-  same way). The app's own backdrop: 0.20 at 0.87 (70 %; main 67 %); a photo: 0.29 + 0.05 at 0.5 (33 %; main 22 %);
+  same way). The app's own backdrop: 0.20 at 0.87 (70 %; main 67 %); a photo: 0.29 + 0.10 at 0.5 (30.5 %; main 22 %);
   the owner's colours: 1 for dark mixes (the default trio 0.20 + 0.05, 75 %; main 65 %) down to 0.5 for light ones
-  (cream 36 %, white 33 %; main 25 % and 23 %). The window look draws none (`--glass-brightness: 1`): the native glass
+  (cream 33 %, white 30.5 %; main 25 % and 23 %). A pane dimmed to b pays up to 0.05 / b (`mostPay`, §22.7), so the
+  pay takes 0.05 of what shows through it at most, as on an undimmed pane. The window look draws none (`--glass-brightness: 1`): the native glass
   is behind the page, where no web filter reaches. Layers planned for white as it is (toasts, the setup pill, rail and
   list, the Ask launcher and panel, the money dock, the overlays, the update bar and the tab bar) set
   `--glass-brightness: 1` on themselves, so they keep main's see-through. **Plates** (the title and line plates,
@@ -4876,8 +4877,8 @@ everywhere.
 
   | Surface | Tint | Light (bone, top → base, §22.7) | Worst text contrast (at the top) |
   |---|---|---|---|
-  | `.glass` panels, the sidebar, `.glass--clear` | `--panel-veil` + `--light-pay` (§22.7) over the backdrop as the pane's own `brightness()` dims it: 0.20 + 0 over the app's backdrop, Clear and Frosted (`BRAND_PANEL_VEIL`, dimmed by 0.87; `LIGHT_PAY_OWN` 0); 0.29 + 0.05 over a white photo (dimmed by 0.5; `LIGHT_PAY_WHITE`); 0.73 + 0.05 over a white desktop in the window's Clear and 0.62 + 0.05 in its Frosted (no web filter dims it); in Colours 0.20 to 0.29 + 0 to 0.05 (`MAX_LIGHT_PAY`) at `brightness()` 1 to 0.5, never 0.82 or more | 0.04 at the top edge → 0 at 14 px, inside the top padding (`PANEL_LIGHT`), plus the catch light (`SPECULAR`) | 4.67 over the app's backdrop at its very brightest corner; 5.39 over white (window Clear), 5.21 (Frosted); 4.83 over a white photo; 4.74 in Colours |
-  | The loose-text plates (every look: `html:is(.see-through, [data-backdrop])`; `--glass-tint-plate`, no filter of their own) | `--plate-veil` + `--light-pay`: 0.33 over the app's backdrop (`BRAND_PLATE_VEIL`, main's), 0.73 over a white photo (`PICTURE_PLATE_VEIL`), the panels' 0.73 and 0.62 in the window's Clear and Frosted (`windowPlateVeil`: the pay covers the light under a plate's words), 0.24 to 0.73 in Colours | as a panel | 4.52 over the app's backdrop (as on main); 5.39 over a white photo; 4.77 in Colours |
+  | `.glass` panels, the sidebar, `.glass--clear` | `--panel-veil` + `--light-pay` (§22.7) over the backdrop as the pane's own `brightness()` dims it: 0.20 + 0 over the app's backdrop, Clear and Frosted (`BRAND_PANEL_VEIL`, dimmed by 0.87; `LIGHT_PAY_OWN` 0); 0.29 + 0.10 over a white photo (dimmed by 0.5; `mostPay`, 0.05 / 0.5); 0.73 + 0.05 over a white desktop in the window's Clear and 0.62 + 0.05 in its Frosted (no web filter dims it); in Colours 0.20 to 0.29 + 0 to 0.10 (`MAX_LIGHT_PAY` / b, `mostPay`) at `brightness()` 1 to 0.5, never 0.82 or more | 0.04 at the top edge → 0 at 14 px, inside the top padding (`PANEL_LIGHT`), plus the catch light (`SPECULAR`) | 4.67 over the app's backdrop at its very brightest corner; 5.39 over white (window Clear), 5.21 (Frosted); 5.14 over a white photo; 4.75 in Colours |
+  | The loose-text plates (every look: `html:is(.see-through, [data-backdrop])`; `--glass-tint-plate`, no filter of their own) | `--plate-veil` + `--light-pay`, at most 0.05 of it (`platePay`: no filter, so the backdrop shows at its full light under a plate): 0.33 over the app's backdrop (`BRAND_PLATE_VEIL`, main's), 0.73 over a white photo (`PICTURE_PLATE_VEIL`), the panels' 0.73 and 0.62 in the window's Clear and Frosted (`windowPlateVeil`: the pay covers the light under a plate's words), 0.24 to 0.73 in Colours | as a panel | 4.52 over the app's backdrop (as on main); 5.39 over a white photo; 4.77 in Colours |
   | `.glass--green` (the lead panel: hero, sign-in, learnings) | the panel's (`LEAD_EXTRA_VEIL` 0) | 0.075 at the top edge → 0 at 14 px (`LEAD_LIGHT`) | as the panel where its words are |
   | Nested `.glass`, rows, cards and controls inside a surface | the relative raise: green 0.34 over the parent (`RAISE_VEIL`) | flat 0.13 (`RAISE_LIFT`); hover 0.37 / 0.145 | 4.64 on hover at the brightest corner of the app's backdrop, 4.95 over a white desktop (4.63 in Colours) |
   | Pick-one tracks and every control straight on the page (`--fill` at `:root`, such as the Library tabs) | plate veil + 0.22 (`TRACK_EXTRA_VEIL`; no filter, so nothing dims under it) | flat 0.08 (`TRACK_LIFT`); hover 0.09 | 4.98 on hover (4.80 in Colours); an option's hover over it 4.71 |
@@ -4892,26 +4893,27 @@ everywhere.
   The CTA is the one solid saturated surface on the glass. Every bone light on a pane is paid for with more green
   (§22.7): a sheen with no pay (bone 0.06 over the worst panel) would be 4.18:1, under AA, so a pane's light lies in
   its top padding, never under its words. Over the app's own backdrop the pay is 0 (see-through first); the window
-  look, Picture and the owner's colours pay, at most 0.05, to leave the levels above a pane room to climb under the AA
-  cap.
+  look, Picture and the owner's colours pay, at most 0.05 of what shows through a pane (0.05 of green where nothing
+  dims, 0.05 / b on a pane dimmed to b), to leave the levels above a pane room to climb under the AA cap.
 * **Colours** (`coloursMeshSpots`, `coloursVeils`): the mesh as drawn: the field is the first colour (its gradient
   end 78 % first + 22 % third), the second colour a blob at 30 %, the third at 45 %, opacity 1; the corners are each
   field end with and without each blob, through every saturation. The glass takes the veil and dimming that show the
-  most of the mesh with the pay on top (`bestGlass`, `MAX_LIGHT_PAY`): the panels carry what the dimmed corners need
+  most of the mesh with an undimmed surface's pay on top (`bestGlass`, `MAX_LIGHT_PAY`; a dimmed pane then pays
+  0.05 / b, `mostPay`, which leaves the choice as it was): the panels carry what the dimmed corners need
   (`veilOver`, never under 0.20) and the page nothing, up to 0.60; past that the panels stay at 0.60 and the page
   takes the least that covers it (no mix needs it any more: white needs 0.29 at half the light). The plates carry what
   the corners need as they are, and what the Live chip's words in its top light need under its dimming. Page / panel /
   plate / dimming, and what a pane shows (main): the default trio 0 / 0.20 / 0.24 / 1, 75 % (0 / 0.30, 65 %); Ocean +
-  Grape 0 / 0.20 / 0.25 / 0.97, 73 % (65 %); the old Sage trio 0 / 0.20 / 0.61 / 0.62, 47 % (0.03 / 0.60); Sunny +
-  Bubblegum 0 / 0.21 / 0.63 / 0.58, 43 % (0.08 / 0.60); Cream 0 / 0.24 / 0.71 / 0.5, 36 % (0.28 / 0.60, 25 %); white
-  0 / 0.29 / 0.73 / 0.5, 33 % (0.33 / 0.60, 23 %). Dark mixes take no dimming at all. `applyLook` sets all four. The bone and deep-vermilion blobs are left out over the owner's colours. The Colours
+  Grape 0 / 0.20 / 0.25 / 0.97, 73 % (65 %); the old Sage trio 0 / 0.20 / 0.61 / 0.62, 45 % with its 0.08 pay
+  (0.03 / 0.60); Sunny + Bubblegum 0 / 0.21 / 0.63 / 0.58, 41 % with 0.08 (0.08 / 0.60); Cream 0 / 0.24 / 0.71 / 0.5,
+  33 % with 0.10 (0.28 / 0.60, 25 %); white 0 / 0.29 / 0.73 / 0.5, 30.5 % with 0.10 (0.33 / 0.60, 23 %). Dark mixes take no dimming at all. `applyLook` sets all four. The bone and deep-vermilion blobs are left out over the owner's colours. The Colours
   tile and strip wear the page veil (`--preview-veil`); when it is above 0 the card adds "Light colours show soft,
   so words stay easy to read." `coloursVeil` (deprecated) returns the combined green.
 * **Picture:** no veil over the photo (`PICTURE_PAGE_VEIL` 0), so it shows at full strength between the panels;
   a pane dims a white photo to half (`PICTURE_BRIGHTNESS` 0.5, `bestGlass`) and carries 0.29 over it
-  (`PICTURE_PANEL_VEIL`, it was 0.73) and the pay, 4.83:1 at its brightest, so it shows 33 % of the photo (22 % on
-  main); the loose-text plates carry 0.73 (`PICTURE_PLATE_VEIL`, `minVeil(white)`) and the pay, with nothing dimmed
-  under them (22 %, as on main). The blur stays main's (18 px, 14 px where it bends).
+  (`PICTURE_PANEL_VEIL`, it was 0.73) and the pay (0.10: 0.05 / 0.5, `mostPay`), 5.14:1 at its brightest, so it
+  shows 30.5 % of the photo (22 % on main); the loose-text plates carry 0.73 (`PICTURE_PLATE_VEIL`, `minVeil(white)`)
+  and 0.05 of the pay (`platePay`), with nothing dimmed under them (22 %, as on main). The blur stays main's (18 px, 14 px where it bends).
 * **The living backdrop** (`brand` and `frosted`, `BRAND_MESH`): the page owns it. A field from `#0f3d31` to
   `#08221b`; blobs (blur 56 px, opacity 1, drifting 24–28 s): deep teal `rgb(22 89 77 / 0.9)`, vermilion 0.62, leaf
   0.30, bone 0.06 and a deep vermilion `rgb(196 42 30 / 0.55)`; two soft lenses (70 and 46 vmax, a blurred bone glow
@@ -4943,7 +4945,8 @@ everywhere.
 being the pane's veil and the look's pay, `b` its own `brightness()`; a black and white edge behind a pane reads
 exactly this much through it in Chromium; the pane's light from above is the same in every look and left out).
 See-through first (coordinator 2026-11-23: the light ladder may not be paid for by darkening panes; a light look may
-add at most 0.05 and never reach 0.82). Owner, 2026-11-23: "make sure everything is more see through in a liquid
+add at most 0.05 and never reach 0.82; a pane its own glass dims to b takes 0.05 / b of green, which costs it the
+same 0.05 of what shows through, `mostPay`). Owner, 2026-11-23: "make sure everything is more see through in a liquid
 glassy style". The first pass of this work (ccc3cb1c) counted only `1 − green`: it dimmed every pane and lowered the
 green, and the dimming took away more than the thinner green gave back over the app's own backdrop, a photo, the
 light colours and the floating layers. Each look now takes the pair that shows the most (§22.3, `bestGlass`), and
@@ -4955,12 +4958,12 @@ test/background.test.ts holds every row at or above main.
 | The title and line plates over the app's backdrop (no filter of their own) | 67 % (0.33) | 67 % | 67 % (0.33, unchanged) | none; 4.52:1 as on main |
 | Window Clear (liquid, every glass), panels and plates, over a white desktop | 22 % (0.73 + 0.05) | 27 % (0.73 + 0), the ladder flat | 22 % (0.73 + 0.05, unchanged) | `brightness(1)`: the desktop cannot be dimmed; the AA floor (0.72 gives 4.47:1) and the ladder's pay leave no room |
 | Window Frosted (0.30 frost over the whole window), panels and plates | 8 % (0.88) | 27 % (0.62 + 0), the ladder flat | **23 %** (0.62 + 0.05) | `brightness(1)`; 5.21:1 over the frost on white |
-| Picture (white or busy photo), panels | 22 % (0.73 + 0.05) | 18 % (0.59 + 0.05 at 0.5) | **33 %** (0.29 + 0.05 at 0.5) | `brightness(0.5)`; 4.83:1 over a white photo; blur 18 px as on main |
+| Picture (white or busy photo), panels | 22 % (0.73 + 0.05) | 18 % (0.59 + 0.05 at 0.5) | **30.5 %** (0.29 + 0.10 at 0.5) | `brightness(0.5)`; 5.14:1 over a white photo; blur 18 px as on main |
 | Picture, the plates | 22 % (0.73 + 0.05) | 22 % | 22 % (unchanged) | none |
 | Colours, default trio | 65 % (0.30 + 0.05) | 75 % | **75 %** (0.20 + 0.05) | `brightness(1)`: dimming gains nothing over dark colours |
 | Colours, Ocean + Grape | 65 % (0.30 + 0.05) | 71 % (0.20 + 0.05 at 0.94) | **73 %** (0.20 + 0.05 at 0.97) | `brightness(0.97)` |
-| Colours, Cream (`#f7f5ef`) | 25 % (0.65 on a 0.28 page veil) | 19 % (0.62 at 0.5) | **36 %** (0.24 + 0.05 at 0.5), no page veil | `brightness(0.5)` |
-| Colours, white | 23 % (0.65 on a 0.33 page veil) | 18 % (0.64 at 0.5) | **33 %** (0.29 + 0.05 at 0.5), no page veil | `brightness(0.5)` |
+| Colours, Cream (`#f7f5ef`) | 25 % (0.65 on a 0.28 page veil) | 19 % (0.62 at 0.5) | **33 %** (0.24 + 0.10 at 0.5), no page veil | `brightness(0.5)` |
+| Colours, white | 23 % (0.65 on a 0.33 page veil) | 18 % (0.64 at 0.5) | **30.5 %** (0.29 + 0.10 at 0.5), no page veil | `brightness(0.5)` |
 | Floating layers (toasts, setup pill and rail, Ask launcher and panel, money dock) | 25 % (0.75) | 18 % brand, 13 % Picture (dimmed, tint unchanged) | 25 % (0.75, unchanged) | `brightness(1)` on themselves: they plan for a white thumbnail as it is |
 | Floating layers in the window's Frosted | 7 % (0.90) | 18 % (0.75) | **18 %** (0.75: the larger of 0.73 and the 0.62 panel, + 0.02) | `brightness(1)` |
 | The update bar | 5 % (0.95) | 4 % | 5 % (0.95, unchanged: `UPDATE_EXTRA_VEIL`, test/buttonLight.test.ts) | `brightness(1)` |
@@ -5135,12 +5138,18 @@ re-declares the raise inside every lit surface. Brightness is OKLab L.
   at luminance 0.140 (4.5:1, about OKLab L 0.52). Panes carry no pay over the app's own backdrop, Clear and Frosted
   (`LIGHT_PAY_OWN` 0: 0.20 over the mesh dimmed by 0.87). Floating layers plan for a white thumbnail, so they take only the least the AA cap over white
   needs (`FLOAT_EXTRA_VEIL` 0.02, 0.75: at main's 0.73 the setup pill's word read 4.49:1 in WebKit and a chip on the
-  Ask sheet 4.48:1). The window look, Picture and Colours, where a light backdrop can be behind, add at most 0.05
-  green (`MAX_LIGHT_PAY`), never 0.82 or more in all (`SEE_THROUGH_LIMIT`): `lightPay` takes the least at which every
-  level climbs a whole step with no exemption, on the panes (over the backdrop as their glass sees it) and on the
-  plates (over it as it is) (`ladderPay(..., strict)`), capped there, so the window's Clear is 0.78 as on main
-  (0.73 + `LIGHT_PAY_WHITE` 0.05) and its Frosted 0.67, Picture 0.34 on its panes (0.29 + 0.05, dimmed by 0.5) and 0.78
-  on its plates, the default Colours 0.25, Cream 0.29 with no page veil; 0.04 under reduced transparency. (With no pay
+  Ask sheet 4.48:1). The window look, Picture and Colours, where a light backdrop can be behind, pay at most 0.05 of
+  what shows through a surface (`MAX_LIGHT_PAY`): 0.05 of green where the backdrop shows at its full light (the
+  window look's panes, every plate: `platePay`, which `--glass-tint-plate` caps with `min()`), and 0.05 / b on a pane
+  whose own glass dims it to b (`mostPay`, rounded down to 0.01: 0.10 at half the light). Green over a dimmed backdrop
+  covers only b of its light, so 0.05 alone lowered such a pane only b as far under the AA cap: in Cream the new-clip
+  card read +0.003 over the hero at its words and +0.014 in its top padding (e2e, Chromium on Linux, under the whole
+  step); with 0.10 it reads +0.009 at its words (main +0.010). Never 0.82 or more in all (`SEE_THROUGH_LIMIT`):
+  `lightPay` takes the least at which every level climbs a whole step with no exemption, on the panes (over the
+  backdrop as their glass sees it) and on the plates (over it as it is) (`ladderPay(..., strict)`), capped there, so
+  the window's Clear is 0.78 as on main (0.73 + `LIGHT_PAY_WHITE` 0.05) and its Frosted 0.67, Picture 0.39 on its panes
+  (0.29 + 0.10, dimmed by 0.5) and 0.78 on its plates, the default Colours 0.25, Cream 0.34 on its panes (0.24 + 0.10)
+  and 0.76 on its plates, with no page veil; 0.04 under reduced transparency. (With no pay
   in the window look a row read +0.000 L over its pane over a white desktop: the logic of light flat.) `lib/look.ts` sets `--light-pay` on `<html>`. The pane light lies in the top padding, so the words of
   every pane and float sit on its plain glass and keep main's AA (`WORDS_LIGHT` 0, `FLOAT_WORDS_LIGHT` 0).
 * **Where the AA cap leaves no room** (`noRoom`, `LADDER_ROOM_L` 0.44, `LADDER_RED_A` 0.06 over `LADDER_RED_L` 0.38,
@@ -5152,9 +5161,9 @@ re-declares the raise inside every lit surface. Brightness is OKLab L.
   pane at the height of its words, with its words at 5.50:1; 71 of the model's 256 brand placements read darker than
   their pane, by at most that: `veilOver`'s first rung, `rowRoom`, keeps it inside the slack), white under the
   window's Clear and Frosted at the 0.05 cap (row +0.016 and +0.012, mark +0.009 and +0.007), a white photo under
-  Picture at the 0.05 cap (row +0.004, mark +0.002: with a third of the photo showing through, the cap leaves less
-  room than main's +0.016 at 22 %; see-through first), Cream and white (+0.003), vivid vermilion meshes and a float over
-  a white thumbnail (0). Everywhere else every level climbs +0.015 or more (over the brand field +0.124 then +0.067;
+  Picture at its 0.10 cap (row +0.010, mark +0.006: with 30 % of the photo showing through, the cap leaves less room
+  than main's +0.016 at 22 %; see-through first), Cream and white at 0.10 (row +0.009 and +0.010, mark +0.005 and
+  +0.006), vivid vermilion meshes and a float over a white thumbnail (0). Everywhere else every level climbs +0.015 or more (over the brand field +0.124 then +0.067;
   the window over mid grey +0.060 then +0.034). Each raised thing's own base green (`RAISE_VEIL` 0.34 under `RAISE_LIFT` 0.13) is the
   least that keeps that fixed point at the cap: it is what lets the step be light over a dark parent and still keep
   AA over a bright one.
@@ -5231,14 +5240,14 @@ halo never counts):
 
 | Surface | App's backdrop (every corner, every `saturate()`) | Window Clear (white) | Window Frosted (white) | Picture (white) | Colours (all 1,464 swatch mixes) | Reduced transparency |
 |---|---|---|---|---|---|---|
-| E1 panel and E1 lead | 4.67 | 5.39 | 5.21 | 4.83 | 4.74 | 9.51 |
+| E1 panel and E1 lead | 4.67 | 5.39 | 5.21 | 5.14 | 4.75 | 9.51 |
 | E1 plate (no filter) | 4.52 | 5.39 | 5.21 | 5.39 | 4.78 | 9.51 |
-| E2 on E1 / hover | 4.70 / 4.64 | 5.04 / 4.95 | 4.94 / 4.86 | 4.74 / 4.67 | 4.69 / 4.63 | 7.00 / 6.74 |
-| E3 on E2 / hover | 4.67 / 4.62 | 4.85 / 4.78 | 4.79 / 4.73 | 4.68 / 4.62 | 4.65 / 4.60 | 5.85 / 5.69 |
-| E4 on E3 / hover | 4.65 / 4.59 | 4.74 / 4.68 | 4.71 / 4.65 | 4.65 / 4.59 | 4.63 / 4.58 | 5.28 / 5.17 |
-| E2–E4 on the lead, hover | 4.59 | 4.68 | 4.65 | 4.59 | 4.58 | 5.17 |
+| E2 on E1 / hover | 4.70 / 4.64 | 5.04 / 4.95 | 4.94 / 4.86 | 4.90 / 4.83 | 4.69 / 4.63 | 7.00 / 6.74 |
+| E3 on E2 / hover | 4.67 / 4.62 | 4.85 / 4.78 | 4.79 / 4.73 | 4.77 / 4.71 | 4.65 / 4.60 | 5.85 / 5.69 |
+| E4 on E3 / hover | 4.65 / 4.59 | 4.74 / 4.68 | 4.71 / 4.65 | 4.70 / 4.64 | 4.63 / 4.58 | 5.28 / 5.17 |
+| E2–E4 on the lead, hover | 4.59 | 4.68 | 4.65 | 4.64 | 4.58 | 5.17 |
 | E2 on a plate, hover | 4.55 | 4.95 | 4.86 | 4.95 | 4.65 | 6.74 |
-| A quiet fill / a ghost inside glass, rest | 4.72 | 5.07 | 4.96 | 4.76 | 4.71 | 7.09 |
+| A quiet fill / a ghost inside glass, rest | 4.72 | 5.07 | 4.96 | 4.93 | 4.71 | 7.09 |
 | A control straight on the page, hover / an option over its track, hover | 4.98 / 4.82 | 7.29 / 5.90 | 6.09 / 5.35 | 7.29 / 5.90 | 4.80 / 4.71 | 8.42 / 6.39 |
 | The Live chip and "All set!" (the plate's tint under their own dimming, words in their top light) | 5.02 | 5.01 | 4.85 | 7.61 | 4.73 | 9.51 |
 | Float over a white thumbnail / hover | 4.91 / 4.81 | 4.91 / 4.81 | 4.91 / 4.81 | 4.91 / 4.81 | 4.91 / 4.81 | 8.95 / 8.72 |
@@ -5258,7 +5267,7 @@ lightest thing its look can show, as its own glass sees it (over the app's backd
 | The brightest teal corner of the mesh `48 147 114` | 0.597 | 0.493 → 0.511 | 0.526 | 0.498 (0.501) | 0.502 | 0.494 | 0.501 | 0.898 | +0.004 / +0.004 |
 | The window over mid grey (`#999`) | 0.683 | 0.411 → 0.433 | 0.453 | 0.453 (0.460) | 0.477 | 0.494 | 0.501 | 0.897 | +0.043 / +0.024 |
 | The window's Clear over white (no pay; Frosted +0.001 / +0.001) | 1.000 | 0.509 → 0.527 | 0.543 | 0.509 (0.512) | 0.509 | 0.494 | 0.501 | 0.899 | +0.000 / +0.000 |
-| Picture over a white photo (dimmed to half, pay at its 0.05 cap) | 1.000 | 0.490 → 0.509 | 0.525 | 0.498 (0.502) | 0.503 | 0.494 | 0.501 | 0.898 | +0.008 / +0.005 |
+| Picture over a white photo (dimmed to half, pay at its 0.10 cap) | 1.000 | 0.486 → 0.505 | 0.522 | 0.496 (0.500) | 0.502 | 0.494 | 0.501 | 0.898 | +0.010 / +0.006 |
 
 (Floats plan for a white thumbnail under them, so their column is the same in every row.) The update bar over white:
 bar 0.369, Later 0.406 (+0.037), Reload 0.493 (+0.087), Reload on hover 0.510.
@@ -5288,7 +5297,7 @@ two whole steps above a pane, the lead panel's step and a hover on top. So:
 **The see-through cost**: none, measured as `showThrough` (the pane's own dimming counted). Over the app's own
 backdrop, Clear and Frosted, 70 % shows through a panel (67 % on main, the most a veil alone can there); 22 % of a
 white desktop in the window's Clear (as on main: the AA floor and the ladder's pay) and 23 % in its Frosted (8 %);
-33 % of a white photo (22 %); 75 % of the default Colours (65 %), 36 % of cream (25 %), 33 % of white (23 %); the
+30.5 % of a white photo (22 %); 75 % of the default Colours (65 %), 33 % of cream (25 %), 30.5 % of white (23 %); the
 plates keep main's tints (67 % over the app's backdrop); floating layers 25 % in every look (Frosted 7 % before);
 only the update bar 5 % (§22.4 has every look). The
 owner judges the real see-through window; a browser cannot show it (§22.4), so it is checked with these maths and the
