@@ -1,18 +1,16 @@
 {
-  "1234567890123456": {
-    "video_insights": {
-      "data": [
-        { "name": "blue_reels_play_count", "period": "lifetime", "values": [{ "value": 5200 }], "title": "Reels initial plays", "id": "1234567890123456/video_insights/blue_reels_play_count/lifetime" },
-        { "name": "fb_reels_total_plays", "period": "lifetime", "values": [{ "value": 6900 }], "title": "Reels total plays", "id": "1234567890123456/video_insights/fb_reels_total_plays/lifetime" },
-        { "name": "fb_reels_replay_count", "period": "lifetime", "values": [{ "value": 1700 }], "title": "Reels replays", "id": "1234567890123456/video_insights/fb_reels_replay_count/lifetime" },
-        { "name": "post_video_avg_time_watched", "period": "lifetime", "values": [{ "value": 6400 }], "title": "Average time watched", "id": "1234567890123456/video_insights/post_video_avg_time_watched/lifetime" },
-        { "name": "post_video_view_time", "period": "lifetime", "values": [{ "value": 44160000 }], "title": "Total time watched", "id": "1234567890123456/video_insights/post_video_view_time/lifetime" },
-        { "name": "post_video_followers", "period": "lifetime", "values": [{ "value": 14 }], "title": "New followers", "id": "1234567890123456/video_insights/post_video_followers/lifetime" },
-        { "name": "post_video_likes_by_reaction_type", "period": "lifetime", "values": [{ "value": { "REACTION_LIKE": 280, "REACTION_LOVE": 41, "REACTION_HAHA": 66 } }], "title": "Reactions", "id": "1234567890123456/video_insights/post_video_likes_by_reaction_type/lifetime" },
-        { "name": "post_video_social_actions", "period": "lifetime", "values": [{ "value": { "COMMENT": 25, "SHARE": 19 } }], "title": "Comments and shares", "id": "1234567890123456/video_insights/post_video_social_actions/lifetime" }
-      ],
-      "paging": {}
-    },
-    "id": "1234567890123456"
-  }
+  "video_insights": {
+    "data": [
+      { "name": "blue_reels_play_count", "period": "lifetime", "values": [{ "value": 5200 }], "title": "Reels initial plays", "id": "1234567890123456/video_insights/blue_reels_play_count/lifetime" },
+      { "name": "fb_reels_total_plays", "period": "lifetime", "values": [{ "value": 6900 }], "title": "Reels total plays", "id": "1234567890123456/video_insights/fb_reels_total_plays/lifetime" },
+      { "name": "fb_reels_replay_count", "period": "lifetime", "values": [{ "value": 1700 }], "title": "Reels replays", "id": "1234567890123456/video_insights/fb_reels_replay_count/lifetime" },
+      { "name": "post_video_avg_time_watched", "period": "lifetime", "values": [{ "value": 6400 }], "title": "Average time watched", "id": "1234567890123456/video_insights/post_video_avg_time_watched/lifetime" },
+      { "name": "post_video_view_time", "period": "lifetime", "values": [{ "value": 44160000 }], "title": "Total time watched", "id": "1234567890123456/video_insights/post_video_view_time/lifetime" },
+      { "name": "post_video_followers", "period": "lifetime", "values": [{ "value": 14 }], "title": "New followers", "id": "1234567890123456/video_insights/post_video_followers/lifetime" },
+      { "name": "post_video_likes_by_reaction_type", "period": "lifetime", "values": [{ "value": { "REACTION_LIKE": 280, "REACTION_LOVE": 41, "REACTION_HAHA": 66 } }], "title": "Reactions", "id": "1234567890123456/video_insights/post_video_likes_by_reaction_type/lifetime" },
+      { "name": "post_video_social_actions", "period": "lifetime", "values": [{ "value": { "COMMENT": 25, "SHARE": 19 } }], "title": "Comments and shares", "id": "1234567890123456/video_insights/post_video_social_actions/lifetime" }
+    ],
+    "paging": {}
+  },
+  "id": "1234567890123456"
 }
