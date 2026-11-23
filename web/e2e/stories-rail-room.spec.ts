@@ -29,7 +29,11 @@ async function room(page: Page) {
     // the list's own room (its box less its padding) and how tall its rows are
     const room = list.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
     const row = document.querySelector<HTMLElement>(".st-rail .st-rail__item")!.getBoundingClientRect().height;
-    return { bottom: r.bottom, dockTop: Math.min(...parts.map((b) => b.top)), scrolls: list.scrollHeight > list.clientHeight + 1, room, row };
+    // the room between each page's link and the next one's (the pages stay packed under the brand: --st-gap-control)
+    const links = [...document.querySelectorAll<HTMLElement>(".st-rail .st-rail__item")].map((a) => a.getBoundingClientRect());
+    const gaps = links.slice(1).map((b, i) => Math.round((b.top - links[i]!.bottom) * 10) / 10);
+    const gap = parseFloat(getComputedStyle(list).rowGap);
+    return { bottom: r.bottom, dockTop: Math.min(...parts.map((b) => b.top)), scrolls: list.scrollHeight > list.clientHeight + 1, room, row, gaps, gap };
   });
 }
 
@@ -63,6 +67,9 @@ for (const [w, h] of [
   [1280, 840],
   [1920, 845],
   [1440, 900],
+  // tall windows, where the list has far more room than its pages need (they stay packed under the brand)
+  [1920, 1080],
+  [1440, 1200],
 ] as const)
   test(`${w}x${h}: the rail's pages end above the switch, every one can be reached, the chosen one is in view`, async ({ page }) => {
     await on(page);
@@ -74,6 +81,9 @@ for (const [w, h] of [
       if (h >= 768) expect(r.scrolls, `${path}: all the pages fit from 768 px high`).toBe(false);
       // 48 px rows wherever the ten fit at 48 (10 × 48 + 9 × 4 = 516 px of room), the lower 40 px only where not
       expect(r.row, `${path}: rows of ${r.row} px in ${r.room} px of room`).toBe(r.room >= 516 ? 48 : 40);
+      // The pages packed under the brand, 4 px apart, never spread down the rail's room.
+      expect(r.gap, `${path}: --st-gap-control`).toBe(4);
+      expect(r.gaps, `${path}: the room between the pages`).toEqual(r.gaps.map(() => 4));
       // The chosen page is wholly inside the list's view as the page opens, nothing scrolled by hand.
       const shown = await page.evaluate(() => {
         const list = document.querySelector<HTMLElement>(".st-rail .st-rail__list")!.getBoundingClientRect();
@@ -109,6 +119,7 @@ for (const [w, h] of [
       expect(r.bottom, `${path}: the list ends above the switch`).toBeLessThanOrEqual(r.dockTop);
       expect(r.scrolls, `${path}: all the pages fit`).toBe(false);
       expect(r.row, `${path}: rows of ${r.row} px in ${r.room} px of room`).toBe(r.room >= 516 ? 48 : 40);
+      expect(r.gaps, `${path}: the room between the pages`).toEqual(r.gaps.map(() => 4));
       expect(await reachable(page), `${path}: every page can be reached`).toEqual([]);
     }
   });

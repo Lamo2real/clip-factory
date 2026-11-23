@@ -389,6 +389,9 @@
     flex: 1 1 0;
     min-height: 0;
     container: st-rail-list / size;
+    /* Its pages stay packed under the brand, 4 px apart (--st-gap-control), whatever room is left below them: a grid
+       taller than its rows would otherwise stretch each row and spread the pages down the whole rail. */
+    align-content: start;
     /* Its scroll box reaches the rail's own edges, so the highlight's glow and focus rings are not cut short. */
     margin: -6px calc(-1 * var(--st-gap-surface));
     padding: 6px var(--st-gap-surface);
